@@ -2,9 +2,20 @@ import { Router } from 'express';
 import { readdir, stat } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
+import { homedir } from 'os';
 
 export function createFilesystemRoutes(): Router {
   const router = Router();
+
+  // Return the current user's home directory
+  router.get('/home', async (_req, res) => {
+    try {
+      const home = homedir();
+      res.json({ path: home });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to resolve home directory' });
+    }
+  });
 
   router.get('/browse', async (req, res) => {
     try {

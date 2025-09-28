@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Routes, Route, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { Repository, ClaudeInstance, Worktree } from './types';
 import { api } from './api';
@@ -47,40 +47,8 @@ function MainApp() {
   const [instanceError, setInstanceError] = useState<string | null>(null);
   const [selectedWorktreeId, setSelectedWorktreeId] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadData();
-    const interval = setInterval(loadData, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Handle URL parameters for direct worktree linking
-  useEffect(() => {
-    const worktreeParam = searchParams.get('worktree');
-
-    if (!worktreeParam) {
-      // No worktree in URL, ensure nothing is selected
-      if (selectedWorktreeId) {
-        setSelectedWorktreeId(null);
-      }
-      return;
-    }
-
-    if (repositories.length > 0) {
-      // Find worktree by ID
-      const allWorktrees = repositories.flatMap(repo => repo.worktrees);
-      const targetWorktree = allWorktrees.find(w => w.id === worktreeParam);
-
-      if (targetWorktree && selectedWorktreeId !== worktreeParam) {
-        // Only select if it's different from current selection
-        handleSelectWorktree(targetWorktree.id);
-      } else if (!targetWorktree && selectedWorktreeId) {
-        // Worktree not found, clear selection
-        setSelectedWorktreeId(null);
-      }
-    }
-  }, [repositories, searchParams]);
-
-  const loadData = async () => {
+  // Define all callbacks first, before any useEffect that uses them
+  const loadData = useCallback(async () => {
     try {
       const [reposData, instancesData] = await Promise.all([
         api.getRepositories(),
@@ -96,44 +64,9 @@ function MainApp() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const handleAddRepository = async (repositoryPath: string) => {
-    try {
-      await api.addRepository(repositoryPath);
-      await loadData();
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add repository');
-    }
-  };
-
-  const handleCreateWorktreeAndStartInstance = async (repositoryId: string, branchName: string) => {
-    try {
-      const worktree = await api.createWorktree(repositoryId, branchName);
-      await api.startInstance(worktree.id);
-      await loadData();
-      setSelectedWorktreeId(worktree.id);
-      setError(null);
-      setInstanceError(null);
-    } catch (err) {
-      setInstanceError(err instanceof Error ? err.message : 'Failed to create worktree and start instance');
-      // Clear error after 10 seconds
-      setTimeout(() => setInstanceError(null), 10000);
-    }
-  };
-
-  const handleRefreshMainBranch = async (repositoryId: string) => {
-    try {
-      await api.refreshMainBranch(repositoryId);
-      await loadData();
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to refresh main branch');
-    }
-  };
-
-  const handleStartInstance = async (worktreeId: string) => {
+  const handleStartInstance = useCallback(async (worktreeId: string) => {
     try {
       await api.startInstance(worktreeId);
       await loadData();
@@ -141,42 +74,9 @@ function MainApp() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start instance');
     }
-  };
+  }, [loadData]);
 
-
-  const handleCreateTerminalSession = async (instanceId: string): Promise<string> => {
-    try {
-      const { sessionId } = await api.createTerminalSession(instanceId);
-      setInstanceError(null);
-      return sessionId;
-    } catch (err) {
-      setInstanceError(err instanceof Error ? err.message : 'Failed to create terminal session');
-      setTimeout(() => setInstanceError(null), 10000);
-      throw err;
-    }
-  };
-
-  const handleCreateDirectoryTerminalSession = async (instanceId: string): Promise<string> => {
-    try {
-      const { sessionId } = await api.createDirectoryTerminalSession(instanceId);
-      setInstanceError(null);
-      return sessionId;
-    } catch (err) {
-      setInstanceError(err instanceof Error ? err.message : 'Failed to create directory terminal session');
-      setTimeout(() => setInstanceError(null), 10000);
-      throw err;
-    }
-  };
-
-  const handleCloseTerminalSession = async (sessionId: string) => {
-    try {
-      await api.closeTerminalSession(sessionId);
-    } catch (err) {
-      console.error('Failed to close terminal session:', err);
-    }
-  };
-
-  const handleRestartInstance = async (instanceId: string) => {
+  const handleRestartInstance = useCallback(async (instanceId: string) => {
     try {
       await api.restartInstance(instanceId);
       await loadData();
@@ -185,37 +85,9 @@ function MainApp() {
       setInstanceError(err instanceof Error ? err.message : 'Failed to restart instance');
       setTimeout(() => setInstanceError(null), 10000);
     }
-  };
+  }, [loadData]);
 
-  const handleStopInstance = async (instanceId: string) => {
-    try {
-      await api.stopInstance(instanceId);
-      await loadData();
-      setInstanceError(null);
-    } catch (err) {
-      setInstanceError(err instanceof Error ? err.message : 'Failed to stop instance');
-      setTimeout(() => setInstanceError(null), 10000);
-    }
-  };
-
-  const handleDeleteWorktree = async (worktreeId: string, force: boolean) => {
-    try {
-      await api.removeWorktree(worktreeId, force);
-      await loadData();
-      
-      // If the deleted worktree was selected, clear the selection
-      if (selectedWorktreeId === worktreeId) {
-        setSelectedWorktreeId(null);
-      }
-      
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete worktree');
-      throw err; // Re-throw so the modal can handle it
-    }
-  };
-
-  const handleSelectWorktree = async (worktreeId: string) => {
+  const handleSelectWorktree = useCallback(async (worktreeId: string) => {
     setSelectedWorktreeId(worktreeId);
 
     // Update URL to reflect selected worktree
@@ -254,6 +126,135 @@ function MainApp() {
 
     // Only refresh if no instance operations were performed
     await loadData();
+  }, [setSearchParams, handleRestartInstance, handleStartInstance, loadData]);
+
+  // Now the useEffects can safely use the callbacks defined above
+  useEffect(() => {
+    loadData();
+    const interval = setInterval(loadData, 5000);
+    return () => clearInterval(interval);
+  }, [loadData]);
+
+  // Handle URL parameters for direct worktree linking
+  useEffect(() => {
+    const worktreeParam = searchParams.get('worktree');
+
+    if (!worktreeParam) {
+      // No worktree in URL, ensure nothing is selected
+      if (selectedWorktreeId) {
+        setSelectedWorktreeId(null);
+      }
+      return;
+    }
+
+    if (repositories.length > 0) {
+      // Find worktree by ID
+      const allWorktrees = repositories.flatMap(repo => repo.worktrees);
+      const targetWorktree = allWorktrees.find(w => w.id === worktreeParam);
+
+      if (targetWorktree && selectedWorktreeId !== worktreeParam) {
+        // Only select if it's different from current selection
+        handleSelectWorktree(targetWorktree.id);
+      } else if (!targetWorktree && selectedWorktreeId) {
+        // Worktree not found, clear selection
+        setSelectedWorktreeId(null);
+      }
+    }
+  }, [repositories, searchParams, selectedWorktreeId, handleSelectWorktree]);
+
+  const handleAddRepository = async (repositoryPath: string) => {
+    try {
+      await api.addRepository(repositoryPath);
+      await loadData();
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add repository');
+    }
+  };
+
+  const handleCreateWorktreeAndStartInstance = async (repositoryId: string, branchName: string) => {
+    try {
+      const worktree = await api.createWorktree(repositoryId, branchName);
+      await api.startInstance(worktree.id);
+      await loadData();
+      setSelectedWorktreeId(worktree.id);
+      setError(null);
+      setInstanceError(null);
+    } catch (err) {
+      setInstanceError(err instanceof Error ? err.message : 'Failed to create worktree and start instance');
+      // Clear error after 10 seconds
+      setTimeout(() => setInstanceError(null), 10000);
+    }
+  };
+
+  const handleRefreshMainBranch = async (repositoryId: string) => {
+    try {
+      await api.refreshMainBranch(repositoryId);
+      await loadData();
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to refresh main branch');
+    }
+  };
+
+  const handleCreateTerminalSession = async (instanceId: string): Promise<string> => {
+    try {
+      const { sessionId } = await api.createTerminalSession(instanceId);
+      setInstanceError(null);
+      return sessionId;
+    } catch (err) {
+      setInstanceError(err instanceof Error ? err.message : 'Failed to create terminal session');
+      setTimeout(() => setInstanceError(null), 10000);
+      throw err;
+    }
+  };
+
+  const handleCreateDirectoryTerminalSession = async (instanceId: string): Promise<string> => {
+    try {
+      const { sessionId } = await api.createDirectoryTerminalSession(instanceId);
+      setInstanceError(null);
+      return sessionId;
+    } catch (err) {
+      setInstanceError(err instanceof Error ? err.message : 'Failed to create directory terminal session');
+      setTimeout(() => setInstanceError(null), 10000);
+      throw err;
+    }
+  };
+
+  const handleCloseTerminalSession = async (sessionId: string) => {
+    try {
+      await api.closeTerminalSession(sessionId);
+    } catch (err) {
+      console.error('Failed to close terminal session:', err);
+    }
+  };
+
+  const handleStopInstance = async (instanceId: string) => {
+    try {
+      await api.stopInstance(instanceId);
+      await loadData();
+      setInstanceError(null);
+    } catch (err) {
+      setInstanceError(err instanceof Error ? err.message : 'Failed to stop instance');
+      setTimeout(() => setInstanceError(null), 10000);
+    }
+  };
+
+  const handleDeleteWorktree = async (worktreeId: string, force: boolean) => {
+    try {
+      await api.removeWorktree(worktreeId, force);
+      await loadData();
+      
+      // If the deleted worktree was selected, clear the selection
+      if (selectedWorktreeId === worktreeId) {
+        setSelectedWorktreeId(null);
+      }
+      
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete worktree');
+      throw err; // Re-throw so the modal can handle it
+    }
   };
 
   const toggleLeftPanel = () => {
@@ -297,7 +298,7 @@ function MainApp() {
               onMouseEnter={(e) => (e.target as HTMLElement).style.color = '#58a6ff'}
               onMouseLeave={(e) => (e.target as HTMLElement).style.color = ''}
             >
-              Bob
+              Gob
             </h1>
             <nav style={{ display: 'flex', gap: '16px' }}>
               <button

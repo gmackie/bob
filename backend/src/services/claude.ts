@@ -9,6 +9,7 @@ export class ClaudeService {
   private processes = new Map<string, ChildProcess>();
   private ptyProcesses = new Map<string, IPty>();
   private nextPort = 3100;
+  private disableUsage = process.env.DISABLE_USAGE_COLLECTION === '1' || process.env.DISABLE_USAGE_COLLECTION === 'true';
 
   // Real-time token usage tracking
   private instanceTokenUsage = new Map<string, { input: number; output: number; cost: number }>();
@@ -554,6 +555,9 @@ export class ClaudeService {
 
   // Real-time token usage collection methods
   private startUsageCollection(instanceId: string): void {
+    if (this.disableUsage) {
+      return; // diagnostics: allow disabling background usage polling
+    }
     // Clear any existing interval for this instance
     this.stopUsageCollection(instanceId);
 

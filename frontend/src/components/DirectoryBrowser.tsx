@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 interface DirectoryItem {
   name: string;
@@ -22,16 +22,36 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
   onSelectDirectory,
   onClose
 }) => {
-  const [currentPath, setCurrentPath] = useState('/home');
+  // Initialize lazily: load last path from localStorage, otherwise query backend for OS home
+  const [currentPath, setCurrentPath] = useState<string | null>(null);
   const [data, setData] = useState<DirectoryBrowserData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Determine initial path on mount
   useEffect(() => {
-    browseDirectory(currentPath);
-  }, [currentPath]);
+    const init = async () => {
+      const saved = localStorage.getItem('bob:lastDirectoryPath');
+      if (saved) {
+        setCurrentPath(saved);
+        return;
+      }
+      try {
+        const resp = await fetch('/api/filesystem/home');
+        if (resp.ok) {
+          const json = await resp.json();
+          setCurrentPath(json.path || '/');
+        } else {
+          setCurrentPath('/');
+        }
+      } catch {
+        setCurrentPath('/');
+      }
+    };
+    init();
+  }, []);
 
-  const browseDirectory = async (path: string) => {
+  const browseDirectory = useCallback(async (path: string) => {
     setLoading(true);
     setError(null);
     try {
@@ -41,12 +61,29 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
       }
       const data = await response.json();
       setData(data);
+      try { localStorage.setItem('bob:lastDirectoryPath', data.currentPath); } catch {}
     } catch (err) {
+      // Fallback: if the requested path is invalid, try the OS home directory once
+      try {
+        const resp = await fetch('/api/filesystem/home');
+        if (resp.ok) {
+          const json = await resp.json();
+          try { localStorage.removeItem('bob:lastDirectoryPath'); } catch {}
+          setLoading(false);
+          setCurrentPath(json.path || '/');
+          return;
+        }
+      } catch {}
       setError(err instanceof Error ? err.message : 'Failed to browse directory');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // Browse whenever currentPath changes and is known
+  useEffect(() => {
+    if (currentPath) browseDirectory(currentPath);
+  }, [currentPath, browseDirectory]);
 
   const handleDirectoryClick = (item: DirectoryItem) => {
     setCurrentPath(item.path);
@@ -67,6 +104,7 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
   };
 
   const handleSelectCurrent = () => {
+    if (!currentPath) return;
     onSelectDirectory(currentPath);
     onClose();
   };
@@ -124,11 +162,12 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
             fontFamily: 'monospace',
             wordBreak: 'break-all'
           }}>
-            {currentPath}
+            {currentPath ?? 'Loading path...'}
           </div>
           <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
             <button 
-              onClick={handleSelectCurrent} 
+              onClick={handleSelectCurrent}
+              disabled={!currentPath}
               className="button"
               style={{ fontSize: '12px' }}
             >

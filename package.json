@@ -7,7 +7,7 @@
   "license": "GPL-3.0",
   "homepage": "https://github.com/your-org/bob",
   "scripts": {
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev": "concurrently -k \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:clean": "lsof -ti:47285 | xargs -r kill -9; lsof -ti:43829 | xargs -r kill -9; npm run dev",
     "dev:stop": "lsof -ti:47285 | xargs -r kill -9; lsof -ti:43829 | xargs -r kill -9",
     "dev:backend": "cd backend && npm run dev",

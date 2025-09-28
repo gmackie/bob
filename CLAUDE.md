@@ -30,19 +30,40 @@ node --version      # Node.js runtime
 
 3. **Start Development Servers**
    ```bash
-   npm run dev:clean  # Recommended first start
+   # Important: do NOT run dev:clean automatically.
+   npm run dev         # Start backend + frontend (preferred)
+   # or, to include Electron shell during development:
+   npm run dev:app
    ```
+
+> Important for agents: Never run `npm run dev:clean` or `npm run dev:stop` automatically.
+> These scripts send kill -9 to dev ports and can terminate active processes.
+> Only execute them if a human explicitly instructs you to do so.
+
+#### If explicitly requested to run dev:clean
+When a human operator asks you to run `dev:clean`, follow this checklist:
+1) Confirm intent in writing ("Proceeding to run dev:clean now").
+2) Announce which ports will be killed: 47285 (frontend) and 43829 (backend).
+3) Execute: `npm run dev:clean` in the repo root.
+4) Verify processes restart cleanly: front-end at http://localhost:47285 and backend at http://localhost:43829/api/health.
+5) Report success or any errors observed.
 
 ## Development Commands
 
 ### Starting Development Servers
 
 ```bash
-# Clean start (recommended when switching branches)
-npm run dev:clean
-
-# Regular start (only if no conflicts exist)
+# Standard start for development
 npm run dev
+
+# Electron + backend + frontend in one
+npm run dev:app
+
+# Never auto-run these (destructive):
+# npm run dev:clean
+# npm run dev:stop
+
+# Allowed when explicitly requested by a human (see checklist above).
 ```
 
 ### Project Structure
@@ -172,12 +193,10 @@ gh auth login  # Authenticate with GitHub
 
 ### Branch Switching Notes
 
-When switching branches, always run `npm run dev:clean` to:
-1. Kill any existing development processes
-2. Clear port conflicts
-3. Start fresh development environment
-
-This prevents conflicts when multiple dev servers try to use the same ports.
+Avoid running `npm run dev:clean` on branch switches. Instead:
+1. Stop dev servers gracefully (Ctrl+C in their terminals) and restart with `npm run dev` or `npm run dev:app`.
+2. If a port conflict persists, resolve it manually or ask a human before using any kill script.
+3. Agents must not invoke `dev:clean` or `dev:stop` without explicit human approval.
 
 ### Worktree Management
 
@@ -228,9 +247,10 @@ gh auth status  # Verify authentication
 ```
 
 **Port Conflicts:**
-```bash
-npm run dev:clean  # Always use clean start
-```
+- Prefer graceful restarts. If conflicts persist, consult a human before running any kill scripts.
+
+**Diagnostics:**
+- You can disable background usage polling during troubleshooting by starting the backend with `DISABLE_USAGE_COLLECTION=1`.
 
 **Worktree Issues:**
 - Check System Status dashboard for dependency issues
