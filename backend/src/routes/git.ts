@@ -961,4 +961,73 @@ Return only the complete file content with the requested improvements applied.`;
   }
 });
 
+// Get notes for a worktree
+router.get('/:worktreeId/notes', async (req, res) => {
+  try {
+    const { worktreeId } = req.params;
+
+    const gitService = req.app.locals.gitService;
+    const worktree = gitService.getWorktree(worktreeId);
+
+    if (!worktree) {
+      return res.status(404).json({ error: 'Worktree not found' });
+    }
+
+    // Get current branch name
+    const { stdout: currentBranch } = await execAsync('git branch --show-current', {
+      cwd: worktree.path
+    });
+
+    const branchName = currentBranch.trim();
+    const notesFileName = `.bob-notes-${branchName}.md`;
+    const notesFilePath = path.join(worktree.path, notesFileName);
+
+    try {
+      const notesContent = await fs.promises.readFile(notesFilePath, 'utf8');
+      res.json({ content: notesContent, fileName: notesFileName });
+    } catch (error) {
+      // File doesn't exist, return empty content
+      res.json({ content: '', fileName: notesFileName });
+    }
+  } catch (error) {
+    console.error('Error getting notes:', error);
+    res.status(500).json({ error: 'Failed to get notes' });
+  }
+});
+
+// Save notes for a worktree
+router.post('/:worktreeId/notes', async (req, res) => {
+  try {
+    const { worktreeId } = req.params;
+    const { content } = req.body;
+
+    const gitService = req.app.locals.gitService;
+    const worktree = gitService.getWorktree(worktreeId);
+
+    if (!worktree) {
+      return res.status(404).json({ error: 'Worktree not found' });
+    }
+
+    // Get current branch name
+    const { stdout: currentBranch } = await execAsync('git branch --show-current', {
+      cwd: worktree.path
+    });
+
+    const branchName = currentBranch.trim();
+    const notesFileName = `.bob-notes-${branchName}.md`;
+    const notesFilePath = path.join(worktree.path, notesFileName);
+
+    await fs.promises.writeFile(notesFilePath, content || '', 'utf8');
+
+    res.json({ 
+      message: 'Notes saved successfully',
+      fileName: notesFileName,
+      path: notesFilePath
+    });
+  } catch (error) {
+    console.error('Error saving notes:', error);
+    res.status(500).json({ error: 'Failed to save notes' });
+  }
+});
+
 export default router;
