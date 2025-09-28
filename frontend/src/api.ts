@@ -257,6 +257,25 @@ class ApiClient {
     });
   }
 
+  // Notes operations
+  async getNotes(worktreeId: string): Promise<{
+    content: string;
+    fileName: string;
+  }> {
+    return this.request(`/git/${worktreeId}/notes`);
+  }
+
+  async saveNotes(worktreeId: string, content: string): Promise<{
+    message: string;
+    fileName: string;
+    path: string;
+  }> {
+    return this.request(`/git/${worktreeId}/notes`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    });
+  }
+
   // System status and metrics
   async getSystemStatus(): Promise<{
     claude: {

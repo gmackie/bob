@@ -904,7 +904,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   
   const [claudeTerminalSessionId, setClaudeTerminalSessionId] = useState<string | null>(null);
   const [directoryTerminalSessionId, setDirectoryTerminalSessionId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'claude' | 'directory' | 'git'>('claude');
+  const [activeTab, setActiveTab] = useState<'claude' | 'directory' | 'git' | 'notes'>('claude');
   const [isCreatingClaudeSession, setIsCreatingClaudeSession] = useState(false);
   const [isCreatingDirectorySession, setIsCreatingDirectorySession] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
@@ -931,6 +931,14 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   const [currentAnalysisId, setCurrentAnalysisId] = useState<string | null>(null);
   const [isApplyingFixes, setIsApplyingFixes] = useState(false);
 
+  // Notes state
+  const [notesContent, setNotesContent] = useState<string>('');
+  const [notesFileName, setNotesFileName] = useState<string>('');
+  const [isLoadingNotes, setIsLoadingNotes] = useState(false);
+  const [isSavingNotes, setIsSavingNotes] = useState(false);
+  const [unsavedChanges, setUnsavedChanges] = useState(false);
+  const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     // Clear frontend terminal state when switching instances (but keep backend sessions alive)
     console.log(`Switching to instance: ${selectedInstance?.id}, clearing session state`);
@@ -944,6 +952,14 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     setAnalysisComplete(false);
     setAnalysisSummary('');
     setCurrentAnalysisId(null);
+    // Clear notes state when switching
+    setNotesContent('');
+    setNotesFileName('');
+    setUnsavedChanges(false);
+    if (autoSaveTimeout) {
+      clearTimeout(autoSaveTimeout);
+      setAutoSaveTimeout(null);
+    }
   }, [selectedInstance?.id]);
 
   // Auto-connect to existing terminal sessions or create new ones when instance first becomes running
@@ -1267,7 +1283,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       if (deleteWorktreeOnDeny) {
         // Comprehensive cleanup: stop instance, revert changes, and delete worktree
 
-        // 1. Stop the Claude instance if running
+        // 1. Stop the Agent instance if running
         if (selectedInstance) {
           console.log('Stopping instance before worktree deletion...');
           await onStopInstance(selectedInstance.id);
@@ -1436,6 +1452,58 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     }
   };
 
+  // Notes operations
+  const loadNotes = async () => {
+    if (!selectedWorktree) return;
+
+    setIsLoadingNotes(true);
+    try {
+      const notesData = await api.getNotes(selectedWorktree.id);
+      setNotesContent(notesData.content);
+      setNotesFileName(notesData.fileName);
+      setUnsavedChanges(false);
+    } catch (error) {
+      console.error('Failed to load notes:', error);
+      setNotesContent('');
+      setNotesFileName('');
+    } finally {
+      setIsLoadingNotes(false);
+    }
+  };
+
+  const saveNotes = async (content: string) => {
+    if (!selectedWorktree) return;
+
+    setIsSavingNotes(true);
+    try {
+      const result = await api.saveNotes(selectedWorktree.id, content);
+      setNotesFileName(result.fileName);
+      setUnsavedChanges(false);
+      console.log('Notes saved:', result.message);
+    } catch (error) {
+      console.error('Failed to save notes:', error);
+    } finally {
+      setIsSavingNotes(false);
+    }
+  };
+
+  const handleNotesChange = (content: string) => {
+    setNotesContent(content);
+    setUnsavedChanges(true);
+
+    // Clear existing timeout
+    if (autoSaveTimeout) {
+      clearTimeout(autoSaveTimeout);
+    }
+
+    // Set new auto-save timeout (save after 2 seconds of no typing)
+    const timeout = setTimeout(() => {
+      saveNotes(content);
+    }, 2000);
+
+    setAutoSaveTimeout(timeout);
+  };
+
 
   // Load git diff when switching to git tab
   useEffect(() => {
@@ -1443,6 +1511,22 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       loadGitDiff();
     }
   }, [activeTab, selectedWorktree?.id]);
+
+  // Load notes when switching to notes tab
+  useEffect(() => {
+    if (activeTab === 'notes' && selectedWorktree) {
+      loadNotes();
+    }
+  }, [activeTab, selectedWorktree?.id]);
+
+  // Cleanup autosave timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimeout) {
+        clearTimeout(autoSaveTimeout);
+      }
+    };
+  }, [autoSaveTimeout]);
 
   if (!selectedWorktree) {
     return (
@@ -1481,7 +1565,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       <div className="panel-header">
         <div>
           <h3 style={{ margin: 0, color: '#ffffff' }}>
-            Claude Instance
+            Agent Instance
             <span 
               className={`status ${selectedInstance.status}`}
               style={{ 
@@ -1514,7 +1598,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
               className="button danger"
               style={{ fontSize: '12px', padding: '6px 12px' }}
             >
-              {isStopping ? 'Stopping...' : 'Stop Claude'}
+              {isStopping ? 'Stopping...' : 'Stop Agent'}
             </button>
           )}
           
@@ -1525,7 +1609,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
               className="button"
               style={{ fontSize: '12px', padding: '6px 12px' }}
             >
-              {isRestarting ? 'Restarting...' : 'Restart Claude'}
+              {isRestarting ? 'Restarting...' : 'Restart Agent'}
             </button>
           )}
         </div>
@@ -1564,7 +1648,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             fontSize: '13px'
           }}
         >
-          Claude {claudeTerminalSessionId && '●'}
+          Agent {claudeTerminalSessionId && '●'}
         </button>
         <button
           onClick={() => {
@@ -1602,10 +1686,26 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         >
           Git {gitDiff && gitDiff.trim() && '●'}
         </button>
+        <button
+          onClick={() => {
+            setActiveTab('notes');
+          }}
+          style={{
+            background: activeTab === 'notes' ? '#444' : 'transparent',
+            border: 'none',
+            color: '#fff',
+            padding: '12px 24px',
+            cursor: 'pointer',
+            borderBottom: activeTab === 'notes' ? '2px solid #007acc' : '2px solid transparent',
+            fontSize: '13px'
+          }}
+        >
+          Notes {unsavedChanges && '●'}
+        </button>
       </div>
 
       <div className="terminal-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        {/* Claude Terminal */}
+        {/* Agent Terminal */}
         <div style={{ 
           display: activeTab === 'claude' ? 'flex' : 'none', 
           flexDirection: 'column', 
@@ -1614,7 +1714,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         }}>
           {claudeTerminalSessionId ? (
             <>
-              {console.log(`Rendering Claude TerminalComponent with sessionId: ${claudeTerminalSessionId}`)}
+              {console.log(`Rendering Agent TerminalComponent with sessionId: ${claudeTerminalSessionId}`)}
               <TerminalComponent
                 key={claudeTerminalSessionId}
                 sessionId={claudeTerminalSessionId}
@@ -1624,7 +1724,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           ) : selectedInstance.status === 'running' ? (
             <div className="empty-terminal" style={{ flex: 1 }}>
               <div style={{ textAlign: 'center' }}>
-                <h4 style={{ color: '#666', marginBottom: '8px' }}>Claude Terminal</h4>
+                <h4 style={{ color: '#666', marginBottom: '8px' }}>Agent Terminal</h4>
                 {isCreatingClaudeSession ? (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', color: '#888' }}>
                     <div style={{ 
@@ -1635,19 +1735,19 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
                       borderRadius: '50%',
                       animation: 'spin 1s linear infinite' 
                     }}></div>
-                    Connecting to Claude...
+                    Connecting to Agent...
                   </div>
                 ) : (
                   <>
                     <p style={{ color: '#888', fontSize: '14px', marginBottom: '16px' }}>
-                      Connect to the running Claude instance for AI assistance
+                      Connect to the running Agent instance for AI assistance
                     </p>
                     <button
                       onClick={handleOpenClaudeTerminal}
                       className="button"
                       style={{ fontSize: '14px', padding: '8px 16px' }}
                     >
-                      Connect to Claude
+                      Connect to Agent
                     </button>
                   </>
                 )}
@@ -1656,7 +1756,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           ) : selectedInstance.status === 'starting' ? (
             <div className="empty-terminal" style={{ flex: 1 }}>
               <div style={{ textAlign: 'center' }}>
-                <h4 style={{ color: '#666', marginBottom: '8px' }}>Claude Terminal</h4>
+                <h4 style={{ color: '#666', marginBottom: '8px' }}>Agent Terminal</h4>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', color: '#888' }}>
                   <div style={{ 
                     width: '16px', 
@@ -1666,16 +1766,16 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
                     borderRadius: '50%',
                     animation: 'spin 1s linear infinite' 
                   }}></div>
-                  Starting Claude instance...
+                  Starting Agent instance...
                 </div>
               </div>
             </div>
           ) : (
             <div className="empty-terminal" style={{ flex: 1 }}>
               <div style={{ textAlign: 'center' }}>
-                <h4 style={{ color: '#666', marginBottom: '8px' }}>Claude Terminal</h4>
+                <h4 style={{ color: '#666', marginBottom: '8px' }}>Agent Terminal</h4>
                 <p style={{ color: '#888', fontSize: '14px' }}>
-                  Claude instance must be running to connect
+                  Agent instance must be running to connect
                 </p>
               </div>
             </div>
@@ -2055,147 +2155,256 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             </div>
           )}
 
-          {/* Denial Confirmation Modal */}
-          {showDenyConfirmation && (
+        </div>
+
+        {/* Notes Tab */}
+        <div style={{
+          display: activeTab === 'notes' ? 'flex' : 'none',
+          flexDirection: 'column',
+          flex: 1,
+          minHeight: 0,
+          padding: '16px'
+        }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '16px',
+            borderBottom: '1px solid #444',
+            paddingBottom: '12px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <h4 style={{ color: '#fff', margin: 0 }}>Notes</h4>
+              {notesFileName && (
+                <span style={{ color: '#888', fontSize: '12px' }}>
+                  {notesFileName}
+                </span>
+              )}
+              {unsavedChanges && (
+                <span style={{ color: '#ffc107', fontSize: '12px' }}>
+                  ● Unsaved changes
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => saveNotes(notesContent)}
+                disabled={isSavingNotes || !unsavedChanges}
+                style={{
+                  backgroundColor: unsavedChanges ? '#28a745' : '#555',
+                  border: 'none',
+                  color: '#fff',
+                  padding: '8px 16px',
+                  borderRadius: '4px',
+                  cursor: isSavingNotes || !unsavedChanges ? 'not-allowed' : 'pointer',
+                  fontSize: '13px',
+                  opacity: isSavingNotes || !unsavedChanges ? 0.6 : 1
+                }}
+              >
+                {isSavingNotes ? 'Saving...' : 'Save Notes'}
+              </button>
+            </div>
+          </div>
+
+          {isLoadingNotes ? (
             <div style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              flex: 1,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              zIndex: 1000
+              color: '#888'
             }}>
-              <div style={{
-                backgroundColor: '#2d3748',
-                border: '1px solid #4a5568',
-                borderRadius: '8px',
-                padding: '24px',
-                minWidth: '450px',
-                maxWidth: '550px'
-              }}>
-                <h3 style={{ color: '#fff', marginBottom: '16px', marginTop: 0 }}>
-                  ⚠️ Confirm Deny Changes
-                </h3>
-                <p style={{ color: '#a0aec0', marginBottom: '16px', lineHeight: '1.5' }}>
-                  Choose how to handle the denial of changes:
-                </p>
-
-                {/* Option Selection */}
-                <div style={{ marginBottom: '20px' }}>
-                  <label style={{
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: '8px',
-                    marginBottom: '12px',
-                    cursor: 'pointer',
-                    padding: '8px',
-                    borderRadius: '4px',
-                    backgroundColor: !deleteWorktreeOnDeny ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
-                    border: !deleteWorktreeOnDeny ? '1px solid #3b82f6' : '1px solid transparent'
-                  }}>
-                    <input
-                      type="radio"
-                      name="denyOption"
-                      checked={!deleteWorktreeOnDeny}
-                      onChange={() => setDeleteWorktreeOnDeny(false)}
-                      style={{ marginTop: '2px' }}
-                    />
-                    <div>
-                      <div style={{ color: '#fff', fontWeight: 'bold', marginBottom: '4px' }}>
-                        🔄 Revert Changes Only
-                      </div>
-                      <div style={{ color: '#a0aec0', fontSize: '13px' }}>
-                        Reset all files to their last committed state, but keep the worktree and instance running.
-                      </div>
-                    </div>
-                  </label>
-
-                  <label style={{
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: '8px',
-                    cursor: 'pointer',
-                    padding: '8px',
-                    borderRadius: '4px',
-                    backgroundColor: deleteWorktreeOnDeny ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
-                    border: deleteWorktreeOnDeny ? '1px solid #ef4444' : '1px solid transparent'
-                  }}>
-                    <input
-                      type="radio"
-                      name="denyOption"
-                      checked={deleteWorktreeOnDeny}
-                      onChange={() => setDeleteWorktreeOnDeny(true)}
-                      style={{ marginTop: '2px' }}
-                    />
-                    <div>
-                      <div style={{ color: '#fff', fontWeight: 'bold', marginBottom: '4px' }}>
-                        🗑️ Delete Entire Worktree
-                      </div>
-                      <div style={{ color: '#a0aec0', fontSize: '13px' }}>
-                        Stop the instance, close terminals, and completely remove this worktree and all its contents.
-                      </div>
-                    </div>
-                  </label>
-                </div>
-
-                <div style={{
-                  color: deleteWorktreeOnDeny ? '#ef4444' : '#f59e0b',
-                  fontSize: '13px',
-                  marginBottom: '20px',
-                  padding: '8px',
-                  backgroundColor: 'rgba(0, 0, 0, 0.2)',
+              Loading notes...
+            </div>
+          ) : (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+              <textarea
+                value={notesContent}
+                onChange={(e) => handleNotesChange(e.target.value)}
+                placeholder="Add your notes here... Notes will be automatically saved as you type and stored in .bob-notes-<branch>.md in your worktree."
+                style={{
+                  flex: 1,
+                  minHeight: '400px',
+                  backgroundColor: '#1a1a1a',
+                  border: '1px solid #444',
                   borderRadius: '4px',
-                  fontWeight: 'bold'
-                }}>
-                  ⚠️ {deleteWorktreeOnDeny ? 'This will permanently delete the entire worktree!' : 'This will permanently revert all changes!'}
-                </div>
-                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                  <button
-                    onClick={() => {
-                      setShowDenyConfirmation(false);
-                      setDeleteWorktreeOnDeny(false); // Reset checkbox when cancelling
-                    }}
-                    style={{
-                      backgroundColor: 'transparent',
-                      border: '1px solid #4a5568',
-                      color: '#a0aec0',
-                      padding: '8px 16px',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '14px'
-                    }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={confirmDenyChanges}
-                    disabled={isReverting}
-                    style={{
-                      backgroundColor: deleteWorktreeOnDeny ? '#dc3545' : '#f59e0b',
-                      border: 'none',
-                      color: '#fff',
-                      padding: '8px 16px',
-                      borderRadius: '4px',
-                      cursor: isReverting ? 'not-allowed' : 'pointer',
-                      fontSize: '14px',
-                      opacity: isReverting ? 0.6 : 1
-                    }}
-                  >
-                    {isReverting
-                      ? (deleteWorktreeOnDeny ? 'Deleting Worktree...' : 'Reverting Changes...')
-                      : (deleteWorktreeOnDeny ? 'Yes, Delete Worktree' : 'Yes, Revert Changes')
-                    }
-                  </button>
-                </div>
+                  color: '#e5e5e5',
+                  padding: '16px',
+                  fontSize: '14px',
+                  fontFamily: 'Monaco, Menlo, "Ubuntu Mono", Consolas, "Droid Sans Mono", monospace',
+                  lineHeight: '1.5',
+                  resize: 'vertical',
+                  outline: 'none',
+                  width: '100%',
+                  boxSizing: 'border-box'
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#007acc';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '#444';
+                }}
+              />
+              <div style={{
+                marginTop: '12px',
+                fontSize: '12px',
+                color: '#666',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <span>
+                  Auto-save enabled • Markdown supported
+                </span>
+                <span>
+                  {notesContent.length} characters
+                </span>
               </div>
             </div>
           )}
         </div>
+
       </div>
+      
+      {/* Denial Confirmation Modal for Git tab */}
+      {activeTab === 'git' && showDenyConfirmation && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: '#2d3748',
+            border: '1px solid #4a5568',
+            borderRadius: '8px',
+            padding: '24px',
+            minWidth: '450px',
+            maxWidth: '550px'
+          }}>
+            <h3 style={{ color: '#fff', marginBottom: '16px', marginTop: 0 }}>
+              ⚠️ Confirm Deny Changes
+            </h3>
+            <p style={{ color: '#a0aec0', marginBottom: '16px', lineHeight: '1.5' }}>
+              Choose how to handle the denial of changes:
+            </p>
+
+            {/* Option Selection */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '8px',
+                marginBottom: '12px',
+                cursor: 'pointer',
+                padding: '8px',
+                borderRadius: '4px',
+                backgroundColor: !deleteWorktreeOnDeny ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                border: !deleteWorktreeOnDeny ? '1px solid #3b82f6' : '1px solid transparent'
+              }}>
+                <input
+                  type="radio"
+                  name="denyOption"
+                  checked={!deleteWorktreeOnDeny}
+                  onChange={() => setDeleteWorktreeOnDeny(false)}
+                  style={{ marginTop: '2px' }}
+                />
+                <div>
+                  <div style={{ color: '#fff', fontWeight: 'bold', marginBottom: '4px' }}>
+                    🔄 Revert Changes Only
+                  </div>
+                  <div style={{ color: '#a0aec0', fontSize: '13px' }}>
+                    Reset all files to their last committed state, but keep the worktree and instance running.
+                  </div>
+                </div>
+              </label>
+
+              <label style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '8px',
+                cursor: 'pointer',
+                padding: '8px',
+                borderRadius: '4px',
+                backgroundColor: deleteWorktreeOnDeny ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
+                border: deleteWorktreeOnDeny ? '1px solid #ef4444' : '1px solid transparent'
+              }}>
+                <input
+                  type="radio"
+                  name="denyOption"
+                  checked={deleteWorktreeOnDeny}
+                  onChange={() => setDeleteWorktreeOnDeny(true)}
+                  style={{ marginTop: '2px' }}
+                />
+                <div>
+                  <div style={{ color: '#fff', fontWeight: 'bold', marginBottom: '4px' }}>
+                    🗑️ Delete Entire Worktree
+                  </div>
+                  <div style={{ color: '#a0aec0', fontSize: '13px' }}>
+                    Stop the instance, close terminals, and completely remove this worktree and all its contents.
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <div style={{
+              color: deleteWorktreeOnDeny ? '#ef4444' : '#f59e0b',
+              fontSize: '13px',
+              marginBottom: '20px',
+              padding: '8px',
+              backgroundColor: 'rgba(0, 0, 0, 0.2)',
+              borderRadius: '4px',
+              fontWeight: 'bold'
+            }}>
+              ⚠️ {deleteWorktreeOnDeny ? 'This will permanently delete the entire worktree!' : 'This will permanently revert all changes!'}
+            </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setShowDenyConfirmation(false);
+                  setDeleteWorktreeOnDeny(false); // Reset checkbox when cancelling
+                }}
+                style={{
+                  backgroundColor: 'transparent',
+                  border: '1px solid #4a5568',
+                  color: '#a0aec0',
+                  padding: '8px 16px',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDenyChanges}
+                disabled={isReverting}
+                style={{
+                  backgroundColor: deleteWorktreeOnDeny ? '#dc3545' : '#f59e0b',
+                  border: 'none',
+                  color: '#fff',
+                  padding: '8px 16px',
+                  borderRadius: '4px',
+                  cursor: isReverting ? 'not-allowed' : 'pointer',
+                  fontSize: '14px',
+                  opacity: isReverting ? 0.6 : 1
+                }}
+              >
+                {isReverting
+                  ? (deleteWorktreeOnDeny ? 'Deleting Worktree...' : 'Reverting Changes...')
+                  : (deleteWorktreeOnDeny ? 'Yes, Delete Worktree' : 'Yes, Revert Changes')
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
