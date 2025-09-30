@@ -6,6 +6,9 @@ interface WebSocketConnection {
   lastReconnectTime: number;
   isConnecting: boolean;
   isDestroyed: boolean;
+  buffer: string[]; // ring buffer of recent chunks
+  bufferSize: number; // current size in bytes
+  idleTimer?: ReturnType<typeof setTimeout>;
 }
 
 interface ConnectionPoolConfig {
@@ -14,6 +17,8 @@ interface ConnectionPoolConfig {
   maxReconnectAttempts: number;
   heartbeatInterval: number;
   connectionTimeout: number;
+  bufferMaxBytes: number;
+  idleTtlMs: number;
 }
 
 class WebSocketManager {
@@ -23,7 +28,9 @@ class WebSocketManager {
     reconnectDelay: 1000,
     maxReconnectAttempts: 3,
     heartbeatInterval: 30000,
-    connectionTimeout: 10000
+    connectionTimeout: 10000,
+    bufferMaxBytes: 256 * 1024, // 256KB per session
+    idleTtlMs: 30 * 60 * 1000 // 30 minutes
   };
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private isShuttingDown = false;
@@ -117,7 +124,18 @@ class WebSocketManager {
 
   private async createConnection(sessionId: string, onMessage: (message: any) => void): Promise<void> {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.hostname}:3001?sessionId=${sessionId}`;
+    // Match Terminal.tsx logic for dev/electron
+    const isElectron = (window as any).electronAPI !== undefined;
+    const isDevelopment = window.location.port === '47285';
+
+    let wsPort: string;
+    if (isElectron && !isDevelopment) {
+      wsPort = window.location.port || '43829';
+    } else {
+      wsPort = '43829';
+    }
+
+    const wsUrl = `${wsProtocol}//${window.location.hostname}:${wsPort}?sessionId=${sessionId}`;
     console.log('[WebSocketManager] Creating connection to:', wsUrl);
 
     const conn: WebSocketConnection = {
@@ -127,7 +145,9 @@ class WebSocketManager {
       reconnectAttempts: 0,
       lastReconnectTime: Date.now(),
       isConnecting: true,
-      isDestroyed: false
+      isDestroyed: false,
+      buffer: [],
+      bufferSize: 0
     };
 
     this.connections.set(sessionId, conn);
@@ -156,6 +176,11 @@ class WebSocketManager {
           // Handle internal messages
           if (message.type === 'pong') {
             return; // Heartbeat response
+          }
+
+          // Append to ring buffer
+          if (typeof message?.type === 'string' && message.type === 'data' && typeof message.data === 'string') {
+            this.appendToBuffer(conn, message.data);
           }
 
           // Broadcast to all callbacks
@@ -285,15 +310,20 @@ class WebSocketManager {
       }
     }
 
-    // Close connection if no more callbacks
-    conn.isDestroyed = true;
-    conn.callbacks.clear();
-
-    if (conn.ws.readyState !== WebSocket.CLOSED) {
-      conn.ws.close(1000, 'Client disconnecting');
+    // No more subscribers: keep the connection warm with idle TTL
+    if (conn.idleTimer) {
+      clearTimeout(conn.idleTimer);
     }
-
-    this.connections.delete(sessionId);
+    conn.idleTimer = setTimeout(() => {
+      // Double check still no subscribers
+      const latest = this.connections.get(sessionId);
+      if (!latest || latest.callbacks.size > 0) return;
+      latest.isDestroyed = true;
+      if (latest.ws.readyState !== WebSocket.CLOSED) {
+        try { latest.ws.close(1000, 'Idle TTL elapsed'); } catch {}
+      }
+      this.connections.delete(sessionId);
+    }, this.config.idleTtlMs);
   }
 
   private cleanupStaleConnections(): void {
@@ -368,6 +398,21 @@ class WebSocketManager {
       connecting,
       closed
     };
+  }
+
+  getSnapshot(sessionId: string): string {
+    const conn = this.connections.get(sessionId);
+    if (!conn) return '';
+    return conn.buffer.join('');
+  }
+
+  private appendToBuffer(conn: WebSocketConnection, chunk: string): void {
+    conn.buffer.push(chunk);
+    conn.bufferSize += chunk.length;
+    while (conn.bufferSize > this.config.bufferMaxBytes && conn.buffer.length > 0) {
+      const removed = conn.buffer.shift()!;
+      conn.bufferSize -= removed.length;
+    }
   }
 
   shutdown(): void {
