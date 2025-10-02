@@ -14,35 +14,26 @@
     "migrate:down": "tsx src/cli/migrate.ts down",
     "migrate:reset": "tsx src/cli/migrate.ts reset",
     "migrate:create": "tsx src/cli/migrate.ts create",
-    "test": "npx vitest run",
-    "test:ui": "vitest"
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage"
   },
   "dependencies": {
-    "@types/better-sqlite3": "^7.6.13",
-    "@types/express-session": "^1.18.2",
-    "@types/passport": "^1.0.17",
-    "@types/passport-github2": "^1.2.9",
-    "better-sqlite3": "^12.4.1",
     "cors": "^2.8.5",
-    "dotenv": "^17.2.2",
     "express": "^4.18.2",
-    "express-session": "^1.18.2",
     "node-pty": "^1.0.0",
-    "passport": "^0.7.0",
-    "passport-github2": "^0.1.12",
     "sqlite3": "^5.1.6",
     "ws": "^8.16.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^4.17.23",
-    "@types/node": "^20.19.19",
+    "@types/node": "^20.19.15",
     "@types/sqlite3": "^3.1.11",
-    "@types/supertest": "^6.0.3",
     "@types/ws": "^8.18.1",
-    "supertest": "^7.1.4",
+    "@vitest/ui": "^3.2.4",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3",
-    "vitest": "^2.1.9"
+    "vitest": "^3.2.4"
   }
 }
