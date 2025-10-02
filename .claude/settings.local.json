@@ -124,7 +124,8 @@
       "Bash(package.json )",
       "Bash(package-lock.json )",
       "Bash(frontend/src/index.css )",
-      "Bash(.claude/settings.local.json)"
+      "Bash(.claude/settings.local.json)",
+      "Bash(log show:*)"
     ],
     "deny": [],
     "ask": [],

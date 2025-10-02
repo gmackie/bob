@@ -7,6 +7,9 @@
   "license": "GPL-3.0",
   "homepage": "https://github.com/your-org/bob",
   "scripts": {
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "cd backend && tsx tests/filesystem-routes.test.ts",
+    "test:frontend": "cd frontend && tsx tests/initialDir.test.ts",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:clean": "lsof -ti:47285 | xargs -r kill -9; lsof -ti:43829 | xargs -r kill -9; npm run dev",
     "dev:stop": "lsof -ti:47285 | xargs -r kill -9; lsof -ti:43829 | xargs -r kill -9",

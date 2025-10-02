@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getInitialDirectoryPath } from '../utils/initialDir';
 
 interface DirectoryItem {
   name: string;
@@ -22,12 +23,30 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
   onSelectDirectory,
   onClose
 }) => {
-  const [currentPath, setCurrentPath] = useState('/home');
+  const [currentPath, setCurrentPath] = useState<string>('');
   const [data, setData] = useState<DirectoryBrowserData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Initialize starting directory: last visited or user's home directory
   useEffect(() => {
+    let cancelled = false;
+
+    const init = async () => {
+      const path = await getInitialDirectoryPath();
+      if (!cancelled) setCurrentPath(path);
+    };
+
+    init();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Persist last visited directory and trigger browse when path changes
+  useEffect(() => {
+    if (!currentPath) return;
+    localStorage.setItem('bob:lastDirectory', currentPath);
     browseDirectory(currentPath);
   }, [currentPath]);
 
@@ -78,11 +97,15 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
   };
 
   const handleSelectCurrent = () => {
-    onSelectDirectory(currentPath);
+    if (currentPath) {
+      localStorage.setItem('bob:lastDirectory', currentPath);
+      onSelectDirectory(currentPath);
+    }
     onClose();
   };
 
   const handleSelectDirectory = (path: string) => {
+    localStorage.setItem('bob:lastDirectory', path);
     onSelectDirectory(path);
     onClose();
   };

@@ -5,7 +5,7 @@
   "main": "dist/server.js",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "turbowatch",
     "build": "tsc",
     "start": "node dist/server.js",
     "test": "vitest",
@@ -37,7 +37,41 @@
     "@types/ws": "^8.18.1",
     "@vitest/ui": "^3.2.4",
     "tsx": "^4.7.0",
+    "turbowatch": "^8.0.0",
     "typescript": "^5.3.3",
     "vitest": "^3.2.4"
+  },
+  "turbowatch": {
+    "project": "src",
+    "triggers": [
+      {
+        "expression": [
+          "allof",
+          [
+            "not",
+            [
+              "dirname",
+              "__tests__"
+            ]
+          ],
+          [
+            "anyof",
+            [
+              "match",
+              "*.ts",
+              "basename"
+            ],
+            [
+              "match",
+              "*.js",
+              "basename"
+            ]
+          ]
+        ],
+        "name": "dev",
+        "onChange": "tsx src/server.ts",
+        "interruptible": true
+      }
+    ]
   }
 }
