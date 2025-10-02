@@ -81,7 +81,7 @@ console.log('Database initialized');
 const gitService = new GitService(db);
 const agentService = new AgentService(gitService, db);
 const terminalService = new TerminalService();
-const authService = new AuthService();
+const authService = new AuthService(db);
 
 console.log('Services initialized');
 

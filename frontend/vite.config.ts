@@ -29,11 +29,11 @@ export default defineConfig(({ mode }) => {
           ? 'https://api.claude.gmac.io'
           : 'http://localhost:43829'
       )
+    },
+    test: {
+      globals: true,
+      environment: 'jsdom',
+      setupFiles: './src/test/setup.ts',
     }
-  },
-  test: {
-    globals: true,
-    environment: 'jsdom',
-    setupFiles: './src/test/setup.ts',
   }
 })

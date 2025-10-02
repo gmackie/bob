@@ -11,13 +11,14 @@ const __dirname = dirname(__filename);
 export class DatabaseService {
   private db: sqlite3.Database;
   private migrationRunner: MigrationRunner;
-  private run: (sql: string, params?: any[]) => Promise<sqlite3.RunResult>;
-  private get: (sql: string, params?: any[]) => Promise<any>;
-  private all: (sql: string, params?: any[]) => Promise<any[]>;
+  public run: (sql: string, params?: any[]) => Promise<sqlite3.RunResult>;
+  public get: (sql: string, params?: any[]) => Promise<any>;
+  public all: (sql: string, params?: any[]) => Promise<any[]>;
+  public exec: (sql: string) => Promise<void>;
 
   constructor(dbPath: string = 'bob.db') {
     this.db = new sqlite3.Database(dbPath);
-    
+
     // Custom promisify for run method to properly handle the callback signature
     this.run = (sql: string, params?: any[]) => {
       return new Promise<sqlite3.RunResult>((resolve, reject) => {
@@ -30,9 +31,10 @@ export class DatabaseService {
         });
       });
     };
-    
+
     this.get = promisify(this.db.get.bind(this.db));
     this.all = promisify(this.db.all.bind(this.db));
+    this.exec = promisify(this.db.exec.bind(this.db));
     this.migrationRunner = new MigrationRunner(this.db);
     this.initialize();
   }

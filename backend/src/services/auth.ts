@@ -1,7 +1,7 @@
 import passport from 'passport';
 import { Strategy as GitHubStrategy } from 'passport-github2';
-import Database from 'better-sqlite3';
 import { authConfig } from '../config/auth.config.js';
+import { DatabaseService } from '../database/database.js';
 
 export interface User {
   id: string;
@@ -14,17 +14,17 @@ export interface User {
 }
 
 export class AuthService {
-  private db: Database.Database;
+  private db: DatabaseService;
 
-  constructor(dbPath: string = 'bob.db') {
-    this.db = new Database(dbPath);
+  constructor(db: DatabaseService) {
+    this.db = db;
     this.initializeDatabase();
     this.configurePassport();
   }
 
-  private initializeDatabase() {
+  private async initializeDatabase() {
     // Create users table if it doesn't exist
-    this.db.exec(`
+    await this.db.exec(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
         username TEXT NOT NULL,
@@ -39,7 +39,7 @@ export class AuthService {
     `);
 
     // Create sessions table if it doesn't exist
-    this.db.exec(`
+    await this.db.exec(`
       CREATE TABLE IF NOT EXISTS sessions (
         id TEXT PRIMARY KEY,
         userId TEXT NOT NULL,
@@ -82,7 +82,7 @@ export class AuthService {
         };
 
         // Upsert user in database
-        const stmt = this.db.prepare(`
+        await this.db.run(`
           INSERT INTO users (id, username, displayName, email, avatarUrl, accessToken, provider, lastLogin)
           VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
           ON CONFLICT(id) DO UPDATE SET
@@ -92,9 +92,7 @@ export class AuthService {
             avatarUrl = excluded.avatarUrl,
             accessToken = excluded.accessToken,
             lastLogin = CURRENT_TIMESTAMP
-        `);
-
-        stmt.run(
+        `, [
           user.id,
           user.username,
           user.displayName || null,
@@ -102,7 +100,7 @@ export class AuthService {
           user.avatarUrl || null,
           user.accessToken || null,
           user.provider
-        );
+        ]);
 
         return done(null, user);
       } catch (error) {
@@ -114,13 +112,12 @@ export class AuthService {
       done(null, user.id);
     });
 
-    passport.deserializeUser((id: string, done) => {
+    passport.deserializeUser(async (id: string, done) => {
       try {
-        const stmt = this.db.prepare(`
+        const user = await this.db.get(`
           SELECT id, username, displayName, email, avatarUrl, provider
           FROM users WHERE id = ?
-        `);
-        const user = stmt.get(id) as User | undefined;
+        `, [id]) as User | undefined;
         done(null, user || false);
       } catch (error) {
         done(error);
@@ -128,41 +125,36 @@ export class AuthService {
     });
   }
 
-  createSession(userId: string): string {
+  async createSession(userId: string): Promise<string> {
     const token = this.generateToken();
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
-    const stmt = this.db.prepare(`
+    const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    await this.db.run(`
       INSERT INTO sessions (id, userId, token, expiresAt)
       VALUES (?, ?, ?, ?)
-    `);
-
-    const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    stmt.run(sessionId, userId, token, expiresAt.toISOString());
+    `, [sessionId, userId, token, expiresAt.toISOString()]);
 
     return token;
   }
 
-  validateSession(token: string): User | null {
-    const stmt = this.db.prepare(`
+  async validateSession(token: string): Promise<User | null> {
+    const user = await this.db.get(`
       SELECT u.id, u.username, u.displayName, u.email, u.avatarUrl, u.provider
       FROM sessions s
       JOIN users u ON s.userId = u.id
       WHERE s.token = ? AND s.expiresAt > datetime('now')
-    `);
+    `, [token]) as User | undefined;
 
-    const user = stmt.get(token) as User | undefined;
     return user || null;
   }
 
-  deleteSession(token: string): void {
-    const stmt = this.db.prepare('DELETE FROM sessions WHERE token = ?');
-    stmt.run(token);
+  async deleteSession(token: string): Promise<void> {
+    await this.db.run('DELETE FROM sessions WHERE token = ?', [token]);
   }
 
-  cleanupExpiredSessions(): void {
-    const stmt = this.db.prepare('DELETE FROM sessions WHERE expiresAt < datetime("now")');
-    stmt.run();
+  async cleanupExpiredSessions(): Promise<void> {
+    await this.db.run('DELETE FROM sessions WHERE expiresAt < datetime("now")');
   }
 
   private generateToken(): string {
@@ -171,12 +163,11 @@ export class AuthService {
     ).join('');
   }
 
-  getUserById(userId: string): User | null {
-    const stmt = this.db.prepare(`
+  async getUserById(userId: string): Promise<User | null> {
+    const user = await this.db.get(`
       SELECT id, username, displayName, email, avatarUrl, provider
       FROM users WHERE id = ?
-    `);
-    const user = stmt.get(userId) as User | undefined;
+    `, [userId]) as User | undefined;
     return user || null;
   }
 
