@@ -55,7 +55,9 @@
       "Bash(JEFF_MODE=true node /root/.bob/bob-amazon/scripts/set-product-name.js)",
       "Bash(APP_NAME=\"CustomName\" node /root/.bob/bob-amazon/scripts/set-product-name.js)",
       "Bash(ENABLE_GITHUB_AUTH=false node -e '\nconst config = {\n  name: process.env.APP_NAME || \"\"Bob\"\",\n  enableGithubAuth: process.env.ENABLE_GITHUB_AUTH !== \"\"false\"\",\n  jeffMode: process.env.JEFF_MODE === \"\"true\"\"\n};\nconsole.log(\"\"No-Auth mode:\"\", JSON.stringify(config, null, 2));\n')",
-      "Bash(JEFF_MODE=true node -e '\nconst config = {\n  name: process.env.JEFF_MODE === \"\"true\"\" ? \"\"Jeff\"\" : (process.env.APP_NAME || \"\"Bob\"\"),\n  enableGithubAuth: process.env.ENABLE_GITHUB_AUTH !== \"\"false\"\",\n  jeffMode: process.env.JEFF_MODE === \"\"true\"\"\n};\nconsole.log(\"\"Jeff mode:\"\", JSON.stringify(config, null, 2));\n')"
+      "Bash(JEFF_MODE=true node -e '\nconst config = {\n  name: process.env.JEFF_MODE === \"\"true\"\" ? \"\"Jeff\"\" : (process.env.APP_NAME || \"\"Bob\"\"),\n  enableGithubAuth: process.env.ENABLE_GITHUB_AUTH !== \"\"false\"\",\n  jeffMode: process.env.JEFF_MODE === \"\"true\"\"\n};\nconsole.log(\"\"Jeff mode:\"\", JSON.stringify(config, null, 2));\n')",
+      "Bash(npm run install:dependencies:*)",
+      "Bash(npm test:*)"
     ],
     "deny": [],
     "ask": [],

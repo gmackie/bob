@@ -474,6 +474,64 @@ class ApiClient {
     }
     return response.text();
   }
+
+  // File-level git operations
+  async getGitFiles(worktreeId: string): Promise<{
+    files: Array<{
+      path: string;
+      status: 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked' | 'unmodified';
+      staged: boolean;
+      hasStaged: boolean;
+      hasUnstaged: boolean;
+    }>;
+  }> {
+    return this.request(`/git/${worktreeId}/files`);
+  }
+
+  async getFileDiff(worktreeId: string, filePath: string): Promise<string> {
+    const token = localStorage.getItem('authToken');
+    const headers: Record<string, string> = {};
+
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE}/git/${worktreeId}/file-diff/${encodeURIComponent(filePath)}`, {
+      headers,
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.text();
+  }
+
+  async stageFile(worktreeId: string, filePath: string): Promise<{ message: string }> {
+    return this.request(`/git/${worktreeId}/stage`, {
+      method: 'POST',
+      body: JSON.stringify({ filePath }),
+    });
+  }
+
+  async unstageFile(worktreeId: string, filePath: string): Promise<{ message: string }> {
+    return this.request(`/git/${worktreeId}/unstage`, {
+      method: 'POST',
+      body: JSON.stringify({ filePath }),
+    });
+  }
+
+  async revertFile(worktreeId: string, filePath: string): Promise<{ message: string }> {
+    return this.request(`/git/${worktreeId}/revert-file`, {
+      method: 'POST',
+      body: JSON.stringify({ filePath }),
+    });
+  }
+
+  async commitAmend(worktreeId: string): Promise<{ message: string }> {
+    return this.request(`/git/${worktreeId}/commit-amend`, {
+      method: 'POST',
+    });
+  }
 }
 
 export const api = new ApiClient();
