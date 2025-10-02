@@ -5,42 +5,20 @@ import { api } from './api';
 import { RepositoryPanel } from './components/RepositoryPanel';
 import { AgentPanel } from './components/AgentPanel';
 import { DatabaseManager } from './components/DatabaseManager';
-import { Dashboard } from './components/Dashboard';
 import { AuthButton } from './components/AuthButton';
 import { SettingsMenu } from './components/SettingsMenu';
 import { WebSocketDebugPanel } from './components/WebSocketDebugPanel';
 import { RepositoryDashboardPanel } from './components/RepositoryDashboardPanel';
 import { useCheatCode } from './contexts/CheatCodeContext';
+import { getAppConfig } from './config/app.config';
 
 function App() {
   return (
     <Routes>
       <Route path="/" element={<MainApp />} />
-      <Route path="/dashboard" element={<DashboardRoute />} />
       <Route path="/database" element={<DatabaseRoute />} />
     </Routes>
   );
-}
-
-function DashboardRoute() {
-  const [repositories, setRepositories] = useState<Repository[]>([]);
-
-  useEffect(() => {
-    const loadRepositories = async () => {
-      try {
-        const repos = await api.getRepositories();
-        setRepositories(repos);
-      } catch (error) {
-        console.error('Failed to load repositories:', error);
-      }
-    };
-
-    loadRepositories();
-    const interval = setInterval(loadRepositories, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
-  return <Dashboard repositories={repositories} />;
 }
 
 function DatabaseRoute() {
@@ -75,8 +53,16 @@ function MainApp() {
   const [instanceError, setInstanceError] = useState<string | null>(null);
   const [selectedWorktreeId, setSelectedWorktreeId] = useState<string | null>(null);
   const [selectedRepositoryId, setSelectedRepositoryId] = useState<string | null>(null);
+  const [appName, setAppName] = useState('Bob');
+  const [enableGithubAuth, setEnableGithubAuth] = useState(true);
 
   useEffect(() => {
+    // Load app config first
+    getAppConfig().then(config => {
+      setAppName(config.appName);
+      setEnableGithubAuth(config.enableGithubAuth);
+    });
+
     loadData();
     const interval = setInterval(loadData, 5000);
     return () => clearInterval(interval);
@@ -313,35 +299,23 @@ function MainApp() {
               onMouseEnter={(e) => (e.target as HTMLElement).style.color = '#58a6ff'}
               onMouseLeave={(e) => (e.target as HTMLElement).style.color = ''}
             >
-              Bob
+              {appName}
             </h1>
-            <nav style={{ display: 'flex', gap: '16px' }}>
-              <button
-                onClick={() => navigate('/')}
-                className={`nav-button ${location.pathname === '/' ? 'active' : ''}`}
-              >
-                Home
-              </button>
-              <button
-                onClick={() => navigate('/dashboard')}
-                className={`nav-button ${location.pathname === '/dashboard' ? 'active' : ''}`}
-              >
-                Dashboard
-              </button>
-              {isDatabaseUnlocked && (
+            {isDatabaseUnlocked && (
+              <nav style={{ display: 'flex', gap: '16px' }}>
                 <button
                   onClick={() => navigate('/database')}
                   className={`nav-button ${location.pathname === '/database' ? 'active' : ''}`}
                 >
                   Database
                 </button>
-              )}
-            </nav>
+              </nav>
+            )}
           </div>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
             {import.meta.env.DEV && <WebSocketDebugPanel />}
             <SettingsMenu />
-            <AuthButton />
+            {enableGithubAuth && <AuthButton />}
           </div>
         </div>
       </div>

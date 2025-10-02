@@ -5,6 +5,7 @@ import { GeminiAdapter } from './gemini-adapter.js';
 import { AmazonQAdapter } from './amazon-q-adapter.js';
 import { OpenCodeAdapter } from './opencode-adapter.js';
 import { CursorAgentAdapter } from './cursor-agent-adapter.js';
+import { appConfig } from '../config/app.config.js';
 
 export class AgentFactory {
   private adapters: Map<AgentType, AgentAdapter> = new Map();
@@ -16,12 +17,21 @@ export class AgentFactory {
 
   private registerAdapters(): void {
     // Register all available agent adapters
-    this.adapters.set('claude', new ClaudeAdapter());
-    this.adapters.set('codex', new CodexAdapter());
-    this.adapters.set('gemini', new GeminiAdapter());
-    this.adapters.set('amazon-q', new AmazonQAdapter());
-    this.adapters.set('opencode', new OpenCodeAdapter());
-    this.adapters.set('cursor-agent', new CursorAgentAdapter());
+    const allAdapters: [AgentType, AgentAdapter][] = [
+      ['claude', new ClaudeAdapter()],
+      ['codex', new CodexAdapter()],
+      ['gemini', new GeminiAdapter()],
+      ['amazon-q', new AmazonQAdapter()],
+      ['opencode', new OpenCodeAdapter()],
+      ['cursor-agent', new CursorAgentAdapter()]
+    ];
+
+    // Filter adapters based on app configuration
+    for (const [type, adapter] of allAdapters) {
+      if (appConfig.isAgentAllowed(type)) {
+        this.adapters.set(type, adapter);
+      }
+    }
   }
 
   /**
