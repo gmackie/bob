@@ -8,9 +8,11 @@ interface RepositoryPanelProps {
   repositories: Repository[];
   instances: ClaudeInstance[];
   selectedWorktreeId: string | null;
+  selectedRepositoryId?: string | null;
   onAddRepository: (path: string) => void;
   onCreateWorktreeAndStartInstance: (repositoryId: string, branchName: string, agentType?: AgentType) => void;
   onSelectWorktree: (worktreeId: string) => Promise<void>;
+  onSelectRepository?: (repositoryId: string) => void;
   onDeleteWorktree: (worktreeId: string, force: boolean) => Promise<void>;
   onRefreshMainBranch: (repositoryId: string) => Promise<void>;
   isCollapsed: boolean;
@@ -22,9 +24,11 @@ export const RepositoryPanel: React.FC<RepositoryPanelProps> = ({
   repositories,
   instances,
   selectedWorktreeId,
+  selectedRepositoryId,
   onAddRepository,
   onCreateWorktreeAndStartInstance,
   onSelectWorktree,
+  onSelectRepository,
   onDeleteWorktree,
   onRefreshMainBranch,
   isCollapsed,
@@ -215,7 +219,18 @@ export const RepositoryPanel: React.FC<RepositoryPanelProps> = ({
                   <div key={repo.id} className="repository-item">
                     <div className="repository-header">
                       <div className="repository-info">
-                        <h4>{repo.name}</h4>
+                        <h4
+                          onClick={() => onSelectRepository?.(repo.id)}
+                          style={{
+                            cursor: 'pointer',
+                            color: selectedRepositoryId === repo.id ? '#58a6ff' : 'inherit',
+                            transition: 'color 0.2s'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.color = '#58a6ff'}
+                          onMouseLeave={(e) => e.currentTarget.style.color = selectedRepositoryId === repo.id ? '#58a6ff' : ''}
+                        >
+                          {repo.name}
+                        </h4>
                         <p>{repo.path}</p>
                         <div style={{ 
                           fontSize: '12px', 

@@ -15,31 +15,9 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<MainApp />} />
-      <Route path="/dashboard" element={<DashboardRoute />} />
       <Route path="/database" element={<DatabaseRoute />} />
     </Routes>
   );
-}
-
-function DashboardRoute() {
-  const [repositories, setRepositories] = useState<Repository[]>([]);
-
-  useEffect(() => {
-    const loadRepositories = async () => {
-      try {
-        const repos = await api.getRepositories();
-        setRepositories(repos);
-      } catch (error) {
-        console.error('Failed to load repositories:', error);
-      }
-    };
-
-    loadRepositories();
-    const interval = setInterval(loadRepositories, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
-  return <Dashboard repositories={repositories} />;
 }
 
 function DatabaseRoute() {
@@ -73,6 +51,7 @@ function MainApp() {
   const [, setError] = useState<string | null>(null);
   const [instanceError, setInstanceError] = useState<string | null>(null);
   const [selectedWorktreeId, setSelectedWorktreeId] = useState<string | null>(null);
+  const [selectedRepositoryId, setSelectedRepositoryId] = useState<string | null>(null);
   const defaultAgentType: AgentType | undefined = (() => {
     const ready = agents.filter(a => a.isAvailable && (a.isAuthenticated ?? true));
     const claude = ready.find(a => a.type === 'claude');
@@ -249,44 +228,20 @@ function MainApp() {
     }
   };
 
+  const handleSelectRepository = (repositoryId: string) => {
+    setSelectedRepositoryId(repositoryId);
+    setSelectedWorktreeId(null);
+    setSearchParams({});
+  };
+
   const handleSelectWorktree = async (worktreeId: string) => {
     setSelectedWorktreeId(worktreeId);
+    setSelectedRepositoryId(null);
 
     // Update URL to reflect selected worktree
     setSearchParams({ worktree: worktreeId });
 
-    // Get fresh instance data directly from API to avoid stale state
-    try {
-      const freshInstances = await api.getInstances();
-      const existingInstance = freshInstances.find(instance => instance.worktreeId === worktreeId);
-
-      if (existingInstance) {
-        // If instance exists but is stopped/error, restart it
-        if (existingInstance.status === 'stopped' || existingInstance.status === 'error') {
-          try {
-            await handleRestartInstance(existingInstance.id);
-            // handleRestartInstance already calls loadData(), so no need to call it again
-            return;
-          } catch (error) {
-            console.error('Failed to restart instance when selecting worktree:', error);
-          }
-        }
-        // If it's running or starting, do nothing - instance is already active
-      } else {
-        // No instance exists, create a new one
-        try {
-          await handleStartInstance(worktreeId, defaultAgentType);
-          // handleStartInstance already calls loadData(), so no need to call it again
-          return;
-        } catch (error) {
-          console.error('Failed to start instance when selecting worktree:', error);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to get fresh instance data:', error);
-    }
-
-    // Only refresh if no instance operations were performed
+    // Just refresh data, don't automatically start instances
     await loadData();
   };
 
@@ -334,18 +289,6 @@ function MainApp() {
               Bob
             </h1>
             <nav style={{ display: 'flex', gap: '16px' }}>
-              <button
-                onClick={() => navigate('/')}
-                className={`nav-button ${location.pathname === '/' ? 'active' : ''}`}
-              >
-                Home
-              </button>
-              <button
-                onClick={() => navigate('/dashboard')}
-                className={`nav-button ${location.pathname === '/dashboard' ? 'active' : ''}`}
-              >
-                Dashboard
-              </button>
               {isDatabaseUnlocked && (
                 <button
                   onClick={() => navigate('/database')}
@@ -369,28 +312,34 @@ function MainApp() {
           repositories={repositories}
           instances={instances}
           selectedWorktreeId={selectedWorktreeId}
+          selectedRepositoryId={selectedRepositoryId}
           onAddRepository={handleAddRepository}
           onCreateWorktreeAndStartInstance={handleCreateWorktreeAndStartInstance}
           onSelectWorktree={handleSelectWorktree}
+          onSelectRepository={handleSelectRepository}
           onDeleteWorktree={handleDeleteWorktree}
           onRefreshMainBranch={handleRefreshMainBranch}
           isCollapsed={isLeftPanelCollapsed}
           onToggleCollapse={toggleLeftPanel}
           agents={agents}
         />
-        
-        <AgentPanel
-          selectedWorktree={selectedWorktree}
-          selectedInstance={selectedInstance}
-          onCreateTerminalSession={handleCreateTerminalSession}
-          onCreateDirectoryTerminalSession={handleCreateDirectoryTerminalSession}
-          onCloseTerminalSession={handleCloseTerminalSession}
-          onRestartInstance={handleRestartInstance}
-          onStopInstance={handleStopInstance}
-          onDeleteWorktree={handleDeleteWorktree}
-          error={instanceError}
-          isLeftPanelCollapsed={isLeftPanelCollapsed}
-        />
+
+        {selectedRepositoryId ? (
+          <Dashboard repositories={repositories.filter(r => r.id === selectedRepositoryId)} />
+        ) : (
+          <AgentPanel
+            selectedWorktree={selectedWorktree}
+            selectedInstance={selectedInstance}
+            onCreateTerminalSession={handleCreateTerminalSession}
+            onCreateDirectoryTerminalSession={handleCreateDirectoryTerminalSession}
+            onCloseTerminalSession={handleCloseTerminalSession}
+            onRestartInstance={handleRestartInstance}
+            onStopInstance={handleStopInstance}
+            onDeleteWorktree={handleDeleteWorktree}
+            error={instanceError}
+            isLeftPanelCollapsed={isLeftPanelCollapsed}
+          />
+        )}
       </div>
     </div>
   );
