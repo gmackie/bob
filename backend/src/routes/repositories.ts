@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { GitService } from '../services/git.js';
-import { ClaudeService } from '../services/claude.js';
+import { AgentService } from '../services/agent.js';
 import { CreateWorktreeRequest } from '../types.js';
 
-export function createRepositoryRoutes(gitService: GitService, claudeService: ClaudeService): Router {
+export function createRepositoryRoutes(gitService: GitService, agentService: AgentService): Router {
   const router = Router();
 
   router.get('/', async (req, res) => {
@@ -61,13 +61,13 @@ export function createRepositoryRoutes(gitService: GitService, claudeService: Cl
 
   router.post('/:id/worktrees', async (req, res) => {
     try {
-      const { branchName, baseBranch } = req.body as CreateWorktreeRequest;
-      
+      const { branchName, baseBranch, agentType } = req.body as CreateWorktreeRequest;
+
       if (!branchName) {
         return res.status(400).json({ error: 'branchName is required' });
       }
 
-      const worktree = await gitService.createWorktree(req.params.id, branchName, baseBranch);
+      const worktree = await gitService.createWorktree(req.params.id, branchName, baseBranch, agentType);
       res.status(201).json(worktree);
     } catch (error) {
       res.status(500).json({ error: `Failed to create worktree: ${error}` });
@@ -90,11 +90,11 @@ export function createRepositoryRoutes(gitService: GitService, claudeService: Cl
       
       // If force delete, stop all instances first
       if (force) {
-        const instances = claudeService.getInstancesByWorktree(worktreeId);
+        const instances = agentService.getInstancesByWorktree(worktreeId);
         for (const instance of instances) {
           if (instance.status === 'running' || instance.status === 'starting') {
-            console.log(`Force delete: stopping instance ${instance.id} for worktree ${worktreeId}`);
-            await claudeService.stopInstance(instance.id);
+            console.log(`Force delete: stopping instance ${instance.id} (${instance.agentType}) for worktree ${worktreeId}`);
+            await agentService.stopInstance(instance.id);
           }
         }
         
@@ -105,7 +105,7 @@ export function createRepositoryRoutes(gitService: GitService, claudeService: Cl
         const worktree = gitService.getWorktree(worktreeId);
         if (worktree) {
           // Update instances from claude service
-          const updatedInstances = claudeService.getInstancesByWorktree(worktreeId);
+          const updatedInstances = agentService.getInstancesByWorktree(worktreeId);
           worktree.instances = updatedInstances;
         }
       }

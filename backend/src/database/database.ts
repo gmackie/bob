@@ -2,7 +2,7 @@ import sqlite3 from 'sqlite3';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { promisify } from 'util';
-import { Repository, Worktree, ClaudeInstance } from '../types.js';
+import { Repository, Worktree, AgentInstance, ClaudeInstance } from '../types.js';
 import { MigrationRunner } from './migration-runner.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -101,8 +101,8 @@ export class DatabaseService {
   // Worktree methods
   async saveWorktree(worktree: Worktree): Promise<void> {
     await this.run(
-      `INSERT OR REPLACE INTO worktrees (id, repository_id, path, branch) VALUES (?, ?, ?, ?)`,
-      [worktree.id, worktree.repositoryId, worktree.path, worktree.branch]
+      `INSERT OR REPLACE INTO worktrees (id, repository_id, path, branch, preferred_agent) VALUES (?, ?, ?, ?, ?)`,
+      [worktree.id, worktree.repositoryId, worktree.path, worktree.branch, worktree.preferredAgent || 'claude']
     );
   }
 
@@ -118,6 +118,7 @@ export class DatabaseService {
       repositoryId: row.repository_id,
       path: row.path,
       branch: row.branch,
+      preferredAgent: row.preferred_agent || 'claude',
       instances,
       isMainWorktree: false // All worktrees in the database are non-main worktrees
     };
@@ -131,6 +132,7 @@ export class DatabaseService {
       repositoryId: row.repository_id,
       path: row.path,
       branch: row.branch,
+      preferredAgent: row.preferred_agent || 'claude',
       instances: await this.getInstancesByWorktree(row.id),
       isMainWorktree: false // All worktrees in the database are non-main worktrees
     })));
@@ -142,94 +144,104 @@ export class DatabaseService {
     await this.run('DELETE FROM worktrees WHERE id = ?', [id]);
   }
 
-  // Claude instance methods
-  async saveInstance(instance: ClaudeInstance): Promise<void> {
+  // Agent instance methods
+  async saveInstance(instance: AgentInstance): Promise<void> {
     await this.run(
-      `INSERT OR REPLACE INTO claude_instances 
-       (id, repository_id, worktree_id, status, pid, port, last_activity)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO agent_instances
+       (id, repository_id, worktree_id, agent_type, status, pid, port, error_message, last_activity)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         instance.id,
         instance.repositoryId,
         instance.worktreeId,
+        instance.agentType,
         instance.status,
         instance.pid || null,
         instance.port || null,
+        instance.errorMessage || null,
         instance.lastActivity ? new Date(instance.lastActivity).toISOString() : null
       ]
     );
   }
 
-  async getInstance(id: string): Promise<ClaudeInstance | null> {
-    const row = await this.get('SELECT * FROM claude_instances WHERE id = ?', [id]);
-    
+  async getInstance(id: string): Promise<AgentInstance | null> {
+    const row = await this.get('SELECT * FROM agent_instances WHERE id = ?', [id]);
+
     if (!row) return null;
 
     return {
       id: row.id,
       repositoryId: row.repository_id,
       worktreeId: row.worktree_id,
+      agentType: row.agent_type,
       status: row.status,
       pid: row.pid || undefined,
       port: row.port || undefined,
+      errorMessage: row.error_message || undefined,
       createdAt: new Date(row.created_at),
       lastActivity: row.last_activity ? new Date(row.last_activity) : undefined
     };
   }
 
-  async getAllInstances(): Promise<ClaudeInstance[]> {
-    const rows = await this.all('SELECT * FROM claude_instances ORDER BY created_at DESC');
-    
+  async getAllInstances(): Promise<AgentInstance[]> {
+    const rows = await this.all('SELECT * FROM agent_instances ORDER BY created_at DESC');
+
     return rows.map(row => ({
       id: row.id,
       repositoryId: row.repository_id,
       worktreeId: row.worktree_id,
+      agentType: row.agent_type,
       status: row.status,
       pid: row.pid || undefined,
       port: row.port || undefined,
+      errorMessage: row.error_message || undefined,
       createdAt: new Date(row.created_at),
       lastActivity: row.last_activity ? new Date(row.last_activity) : undefined
     }));
   }
 
-  async getInstancesByRepository(repositoryId: string): Promise<ClaudeInstance[]> {
-    const rows = await this.all('SELECT * FROM claude_instances WHERE repository_id = ? ORDER BY created_at DESC', [repositoryId]);
-    
+  async getInstancesByRepository(repositoryId: string): Promise<AgentInstance[]> {
+    const rows = await this.all('SELECT * FROM agent_instances WHERE repository_id = ? ORDER BY created_at DESC', [repositoryId]);
+
     return rows.map(row => ({
       id: row.id,
       repositoryId: row.repository_id,
       worktreeId: row.worktree_id,
+      agentType: row.agent_type,
       status: row.status,
       pid: row.pid || undefined,
       port: row.port || undefined,
+      errorMessage: row.error_message || undefined,
       createdAt: new Date(row.created_at),
       lastActivity: row.last_activity ? new Date(row.last_activity) : undefined
     }));
   }
 
-  async getInstancesByWorktree(worktreeId: string): Promise<ClaudeInstance[]> {
-    const rows = await this.all('SELECT * FROM claude_instances WHERE worktree_id = ? ORDER BY created_at DESC', [worktreeId]);
-    
+  async getInstancesByWorktree(worktreeId: string): Promise<AgentInstance[]> {
+    const rows = await this.all('SELECT * FROM agent_instances WHERE worktree_id = ? ORDER BY created_at DESC', [worktreeId]);
+
     return rows.map(row => ({
       id: row.id,
       repositoryId: row.repository_id,
       worktreeId: row.worktree_id,
+      agentType: row.agent_type,
       status: row.status,
       pid: row.pid || undefined,
       port: row.port || undefined,
+      errorMessage: row.error_message || undefined,
       createdAt: new Date(row.created_at),
       lastActivity: row.last_activity ? new Date(row.last_activity) : undefined
     }));
   }
 
   async deleteInstance(id: string): Promise<void> {
-    await this.run('DELETE FROM claude_instances WHERE id = ?', [id]);
+    await this.run('DELETE FROM agent_instances WHERE id = ?', [id]);
   }
 
-  async updateInstanceStatus(id: string, status: ClaudeInstance['status'], pid?: number): Promise<void> {
+  async updateInstanceStatus(id: string, status: AgentInstance['status'], pid?: number): Promise<void> {
     await this.run(
-      `UPDATE claude_instances 
-       SET status = ?, pid = ?, last_activity = CURRENT_TIMESTAMP 
+      `UPDATE agent_instances
+       SET status = ?, pid = ?, last_activity = CURRENT_TIMESTAMP
        WHERE id = ?`,
       [status, pid || null, id]
     );
@@ -237,8 +249,8 @@ export class DatabaseService {
 
   async updateInstanceActivity(id: string): Promise<void> {
     await this.run(
-      `UPDATE claude_instances 
-       SET last_activity = CURRENT_TIMESTAMP 
+      `UPDATE agent_instances
+       SET last_activity = CURRENT_TIMESTAMP
        WHERE id = ?`,
       [id]
     );
@@ -247,8 +259,8 @@ export class DatabaseService {
   // Cleanup methods
   async cleanupStoppedInstances(): Promise<void> {
     await this.run(
-      `DELETE FROM claude_instances 
-       WHERE status IN ('stopped', 'error') 
+      `DELETE FROM agent_instances
+       WHERE status IN ('stopped', 'error')
        AND datetime(updated_at) < datetime('now', '-1 hour')`
     );
   }
@@ -415,9 +427,9 @@ export class DatabaseService {
     }
 
     return await this.all(
-      `SELECT ius.*, ci.status, ci.last_activity
+      `SELECT ius.*, ai.status, ai.last_activity, ai.agent_type
        FROM instance_usage_summary ius
-       LEFT JOIN claude_instances ci ON ius.instance_id = ci.id
+       LEFT JOIN agent_instances ai ON ius.instance_id = ai.id
        ORDER BY ius.last_usage DESC`
     );
   }

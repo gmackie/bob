@@ -1,0 +1,168 @@
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import request from 'supertest';
+import express from 'express';
+import { GitService } from '../src/services/git';
+import { AgentService } from '../src/services/agent';
+import { DatabaseService } from '../src/database/database';
+import { createRepositoryRoutes } from '../src/routes/repositories';
+import { createInstanceRoutes } from '../src/routes/instances';
+import { createAgentRoutes } from '../src/routes/agents';
+import { AgentFactory } from '../src/agents/agent-factory';
+import { AgentType } from '../src/types';
+
+describe('API Integration Tests', () => {
+  let app: express.Application;
+  let db: DatabaseService;
+  let gitService: GitService;
+  let agentService: AgentService;
+  let agentFactory: AgentFactory;
+
+  beforeAll(async () => {
+    // Setup test database
+    db = new DatabaseService(':memory:');
+    await db.init();
+
+    // Setup services
+    gitService = new GitService(db);
+    agentService = new AgentService(gitService, db);
+    agentFactory = new AgentFactory();
+
+    // Setup express app
+    app = express();
+    app.use(express.json());
+    app.use('/api/repositories', createRepositoryRoutes(gitService, agentService));
+    app.use('/api/instances', createInstanceRoutes(gitService, agentService));
+    app.use('/api/agents', createAgentRoutes(agentFactory));
+  });
+
+  afterAll(async () => {
+    await db.close();
+  });
+
+  describe('Multi-Agent Workflow', () => {
+    it('should list available agents', async () => {
+      const response = await request(app)
+        .get('/api/agents')
+        .expect(200);
+
+      expect(response.body).toBeInstanceOf(Array);
+      expect(response.body.length).toBeGreaterThan(0);
+
+      const agentTypes = response.body.map((a: any) => a.type);
+      expect(agentTypes).toContain('claude');
+      expect(agentTypes).toContain('codex');
+      expect(agentTypes).toContain('gemini');
+    });
+
+    it('should create worktree with preferred agent', async () => {
+      // First add a repository (mocked)
+      const mockRepoPath = '/test/repo';
+      vi.mock('fs', () => ({
+        existsSync: vi.fn(() => true),
+        statSync: vi.fn(() => ({ isDirectory: () => true }))
+      }));
+
+      // Mock git commands
+      vi.mock('child_process', () => ({
+        exec: vi.fn((cmd, opts, cb) => {
+          if (cmd.includes('git worktree add')) {
+            cb(null, { stdout: 'Preparing worktree', stderr: '' });
+          } else {
+            cb(null, { stdout: 'main', stderr: '' });
+          }
+        })
+      }));
+
+      const addRepoResponse = await request(app)
+        .post('/api/repositories/add')
+        .send({ repositoryPath: mockRepoPath })
+        .expect(201);
+
+      const repoId = addRepoResponse.body.id;
+
+      // Create worktree with Codex agent
+      const createWorktreeResponse = await request(app)
+        .post(`/api/repositories/${repoId}/worktrees`)
+        .send({
+          branchName: 'test-branch',
+          agentType: 'codex' as AgentType
+        })
+        .expect(201);
+
+      expect(createWorktreeResponse.body.preferredAgent).toBe('codex');
+    });
+
+    it('should start instance with specified agent type', async () => {
+      const worktreeId = 'test-worktree-id';
+
+      // Mock worktree exists
+      vi.spyOn(gitService, 'getWorktree').mockResolvedValue({
+        id: worktreeId,
+        path: '/test/worktree',
+        branch: 'test-branch',
+        repositoryId: 'test-repo',
+        preferredAgent: 'gemini',
+        instances: [],
+        isMainWorktree: false
+      });
+
+      const response = await request(app)
+        .post('/api/instances')
+        .send({
+          worktreeId,
+          agentType: 'gemini'
+        })
+        .expect(201);
+
+      expect(response.body.agentType).toBe('gemini');
+      expect(response.body.worktreeId).toBe(worktreeId);
+    });
+
+    it('should verify agent availability before starting', async () => {
+      const response = await request(app)
+        .get('/api/agents/verify')
+        .expect(200);
+
+      expect(response.body).toBeInstanceOf(Array);
+      response.body.forEach((result: any) => {
+        expect(result).toHaveProperty('type');
+        expect(result).toHaveProperty('ok');
+        if (!result.ok) {
+          expect(result).toHaveProperty('error');
+        }
+      });
+    });
+  });
+
+  describe('Agent-specific Features', () => {
+    it('should handle Claude-specific operations', async () => {
+      const agentInfo = await agentFactory.getAgentInfo();
+      const claudeAgent = agentInfo.find(a => a.type === 'claude');
+
+      if (claudeAgent?.isAvailable) {
+        expect(claudeAgent.version).toBeTruthy();
+        expect(claudeAgent.name).toBe('Claude');
+      }
+    });
+
+    it('should handle Codex-specific operations', async () => {
+      const agentInfo = await agentFactory.getAgentInfo();
+      const codexAgent = agentInfo.find(a => a.type === 'codex');
+
+      if (codexAgent?.isAvailable) {
+        expect(codexAgent.name).toBe('Codex');
+        expect(codexAgent).toHaveProperty('costPerMillionTokens');
+      }
+    });
+
+    it('should handle Gemini-specific operations', async () => {
+      const agentInfo = await agentFactory.getAgentInfo();
+      const geminiAgent = agentInfo.find(a => a.type === 'gemini');
+
+      if (geminiAgent?.isAvailable) {
+        expect(geminiAgent.name).toBe('Gemini');
+        expect(geminiAgent).toHaveProperty('statusMessage');
+      }
+    });
+  });
+});
