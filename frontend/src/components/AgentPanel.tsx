@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ClaudeInstance, Worktree, AgentType, AgentInfo } from '../types';
 import { TerminalComponent } from './Terminal';
 import { api } from '../api';
+import { sessionCache } from '../services/SessionCache';
 
 interface AgentPanelProps {
   selectedWorktree: Worktree | null;
@@ -1044,25 +1045,26 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const currentInstance = allInstances.find(i => i.id === currentInstanceId) || null;
 
   useEffect(() => {
-    // Clear frontend terminal state when switching instances (but keep backend sessions alive)
-    console.log(`Switching to instance: ${currentInstance?.id}, clearing session state`);
-    setClaudeTerminalSessionId(null);
-    setDirectoryTerminalSessionId(null);
-    // Clear git state when switching
-    setGitDiff('');
-    setGitCommitMessage('');
-    // Clear analysis state when switching
-    setComments([]);
-    setAnalysisComplete(false);
-    setAnalysisSummary('');
-    setCurrentAnalysisId(null);
-    // Clear notes state when switching
-    setNotesContent('');
-    setNotesFileName('');
-    setUnsavedChanges(false);
-    if (autoSaveTimeout) {
-      clearTimeout(autoSaveTimeout);
-      setAutoSaveTimeout(null);
+    // On instance switch, reuse cached sessionIds if present; do not clear
+    if (currentInstance?.id) {
+      const cached = sessionCache.get(currentInstance.id);
+      if (cached?.claude) setClaudeTerminalSessionId(cached.claude);
+      if (cached?.directory) setDirectoryTerminalSessionId(cached.directory);
+      // Reset git and analysis UI only; terminals persist via wsManager
+      setGitDiff('');
+      setGitCommitMessage('');
+      setComments([]);
+      setAnalysisComplete(false);
+      setAnalysisSummary('');
+      setCurrentAnalysisId(null);
+      // Clear notes state when switching
+      setNotesContent('');
+      setNotesFileName('');
+      setUnsavedChanges(false);
+      if (autoSaveTimeout) {
+        clearTimeout(autoSaveTimeout);
+        setAutoSaveTimeout(null);
+      }
     }
   }, [currentInstance?.id]);
 
@@ -1105,10 +1107,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       if (claudeSession) {
         // Rejoin existing session
         setClaudeTerminalSessionId(claudeSession.id);
+        if (selectedInstance) sessionCache.setClaude(selectedInstance.id, claudeSession.id);
       } else {
         // Create new session
         const sessionId = await onCreateTerminalSession(currentInstance.id);
         setClaudeTerminalSessionId(sessionId);
+        sessionCache.setClaude(selectedInstance.id, sessionId);
       }
       setActiveTab('claude');
     } catch (error) {
@@ -1131,10 +1135,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       if (directorySession) {
         // Rejoin existing session
         setDirectoryTerminalSessionId(directorySession.id);
+        if (selectedInstance) sessionCache.setDirectory(selectedInstance.id, directorySession.id);
       } else {
         // Create new session
         const sessionId = await onCreateDirectoryTerminalSession(currentInstance.id);
         setDirectoryTerminalSessionId(sessionId);
+        sessionCache.setDirectory(selectedInstance.id, sessionId);
       }
       setActiveTab('directory');
     } catch (error) {
@@ -1148,9 +1154,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     if (terminalType === 'claude' && claudeTerminalSessionId) {
       onCloseTerminalSession(claudeTerminalSessionId);
       setClaudeTerminalSessionId(null);
+      if (selectedInstance) sessionCache.clearClaude(selectedInstance.id);
     } else if (terminalType === 'directory' && directoryTerminalSessionId) {
       onCloseTerminalSession(directoryTerminalSessionId);
       setDirectoryTerminalSessionId(null);
+      if (selectedInstance) sessionCache.clearDirectory(selectedInstance.id);
     }
   };
 
@@ -1163,10 +1171,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       if (claudeTerminalSessionId) {
         onCloseTerminalSession(claudeTerminalSessionId);
         setClaudeTerminalSessionId(null);
+        if (currentInstance) sessionCache.clearClaude(currentInstance.id);
       }
       if (directoryTerminalSessionId) {
         onCloseTerminalSession(directoryTerminalSessionId);
         setDirectoryTerminalSessionId(null);
+        if (currentInstance) sessionCache.clearDirectory(currentInstance.id);
       }
 
       await onRestartInstance(currentInstance.id);
@@ -1186,10 +1196,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       if (claudeTerminalSessionId) {
         onCloseTerminalSession(claudeTerminalSessionId);
         setClaudeTerminalSessionId(null);
+        if (currentInstance) sessionCache.clearClaude(currentInstance.id);
       }
       if (directoryTerminalSessionId) {
         onCloseTerminalSession(directoryTerminalSessionId);
         setDirectoryTerminalSessionId(null);
+         if (currentInstance) sessionCache.clearDirectory(currentInstance.id);
       }
 
       await onStopInstance(currentInstance.id);
@@ -1418,10 +1430,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         if (claudeTerminalSessionId) {
           onCloseTerminalSession(claudeTerminalSessionId);
           setClaudeTerminalSessionId(null);
+          if (selectedInstance) sessionCache.clearClaude(selectedInstance.id);
         }
         if (directoryTerminalSessionId) {
           onCloseTerminalSession(directoryTerminalSessionId);
           setDirectoryTerminalSessionId(null);
+          if (selectedInstance) sessionCache.clearDirectory(selectedInstance.id);
         }
 
         // 3. Delete the worktree entirely (this also reverts changes)

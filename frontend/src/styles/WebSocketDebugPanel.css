@@ -1,0 +1,182 @@
+.ws-debug-panel {
+  position: relative;
+  display: inline-block;
+}
+
+.ws-debug-toggle {
+  position: relative;
+  background: transparent;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 6px 10px;
+  color: #c9d1d9;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.ws-debug-toggle:hover {
+  background-color: #30363d;
+  border-color: #58a6ff;
+}
+
+.ws-debug-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #58a6ff;
+  color: #0d1117;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 2px 5px;
+  border-radius: 10px;
+  min-width: 16px;
+  text-align: center;
+}
+
+.ws-debug-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 0;
+  min-width: 400px;
+  max-width: 500px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+  max-height: 600px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.ws-debug-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid #30363d;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #0d1117;
+}
+
+.ws-debug-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #c9d1d9;
+}
+
+.ws-debug-count {
+  font-size: 12px;
+  color: #8b949e;
+}
+
+.ws-debug-content {
+  overflow-y: auto;
+  max-height: 500px;
+}
+
+.ws-debug-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: #8b949e;
+  font-size: 14px;
+}
+
+.ws-debug-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.ws-debug-item {
+  padding: 12px 16px;
+  border-bottom: 1px solid #30363d;
+}
+
+.ws-debug-item:last-child {
+  border-bottom: none;
+}
+
+.ws-debug-item-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ws-debug-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ws-debug-session-id {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+  font-size: 12px;
+  color: #c9d1d9;
+  flex: 1;
+}
+
+.ws-debug-status-text {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ws-debug-item-details {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ws-debug-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ws-debug-detail-label {
+  font-size: 11px;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.ws-debug-detail-value {
+  font-size: 13px;
+  color: #c9d1d9;
+  font-weight: 500;
+}
+
+.ws-debug-destroyed {
+  color: #f85149;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Scrollbar styling */
+.ws-debug-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.ws-debug-content::-webkit-scrollbar-track {
+  background: #0d1117;
+}
+
+.ws-debug-content::-webkit-scrollbar-thumb {
+  background: #30363d;
+  border-radius: 4px;
+}
+
+.ws-debug-content::-webkit-scrollbar-thumb:hover {
+  background: #484f58;
+}

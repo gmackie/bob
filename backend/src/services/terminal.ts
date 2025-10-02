@@ -14,6 +14,7 @@ export interface TerminalSession {
 
 export class TerminalService {
   private sessions = new Map<string, TerminalSession>();
+  private instanceToSessionMap = new Map<string, string>(); // instanceId -> sessionId for Claude PTY sessions
 
   createSession(instanceId: string, cwd: string): TerminalSession {
     const sessionId = `terminal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -148,6 +149,11 @@ export class TerminalService {
                 console.warn(`Invalid resize dimensions: cols=${msg.cols}, rows=${msg.rows}`);
               }
               break;
+            case 'ping':
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'pong' }));
+              }
+              break;
           }
         } catch (error) {
           console.error('Error processing terminal message:', error);
@@ -175,6 +181,11 @@ export class TerminalService {
             case 'data':
               if (session.claudeProcess?.stdin?.writable) {
                 session.claudeProcess.stdin.write(msg.data);
+              }
+              break;
+            case 'ping':
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'pong' }));
               }
               break;
             // Claude processes don't support resize
@@ -207,6 +218,11 @@ export class TerminalService {
                 session.claudePty!.resize(msg.cols, msg.rows);
               } else {
                 console.warn(`Invalid resize dimensions: cols=${msg.cols}, rows=${msg.rows}`);
+              }
+              break;
+            case 'ping':
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'pong' }));
               }
               break;
           }

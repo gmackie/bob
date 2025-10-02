@@ -30,5 +30,10 @@ export default defineConfig(({ mode }) => {
           : 'http://localhost:43829'
       )
     }
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.ts',
   }
 })
