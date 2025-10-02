@@ -150,6 +150,13 @@ router.get('/:worktreeId/diff', async (req, res) => {
 
       for (const file of untrackedFiles) {
         try {
+          // Skip directories
+          const fullPath = path.join(worktree.path, file);
+          const stats = await fs.promises.stat(fullPath);
+          if (!stats.isFile()) {
+            continue;
+          }
+
           const { stdout: fileContent } = await execAsync(`cat "${file}"`, {
             cwd: worktree.path
           });
@@ -608,6 +615,13 @@ router.post('/:worktreeId/analyze-diff', async (req, res) => {
 
       for (const file of untrackedFiles) {
         try {
+          // Skip directories
+          const fullPath = path.join(worktree.path, file);
+          const stats = await fs.promises.stat(fullPath);
+          if (!stats.isFile()) {
+            continue;
+          }
+
           const { stdout: fileContent } = await execAsync(`cat "${file}"`, {
             cwd: worktree.path
           });
@@ -1199,6 +1213,270 @@ router.get('/:worktreeId/pr-status', async (req, res) => {
   } catch (error: any) {
     console.error('Error getting PR status:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Get file list with status for a worktree
+router.get('/:worktreeId/files', async (req, res) => {
+  try {
+    const { worktreeId } = req.params;
+
+    const gitService = req.app.locals.gitService;
+    const worktree = gitService.getWorktree(worktreeId);
+
+    if (!worktree) {
+      return res.status(404).json({ error: 'Worktree not found' });
+    }
+
+    // Get status in porcelain format
+    const { stdout: statusOutput } = await execAsync('git status --porcelain', {
+      cwd: worktree.path
+    });
+
+    const files = statusOutput
+      .split('\n')
+      .filter(line => line.trim())
+      .map(line => {
+        const statusCode = line.substring(0, 2);
+        const filePath = line.substring(3).trim();
+
+        // Parse git status codes
+        const stagedStatus = statusCode[0];
+        const unstagedStatus = statusCode[1];
+
+        let status = 'unmodified';
+        let staged = false;
+
+        if (stagedStatus === 'A') {
+          status = 'added';
+          staged = true;
+        } else if (stagedStatus === 'M') {
+          status = 'modified';
+          staged = true;
+        } else if (stagedStatus === 'D') {
+          status = 'deleted';
+          staged = true;
+        } else if (stagedStatus === 'R') {
+          status = 'renamed';
+          staged = true;
+        }
+
+        if (unstagedStatus === 'M') {
+          if (!staged) status = 'modified';
+          staged = false; // Has unstaged changes
+        } else if (unstagedStatus === 'D') {
+          if (!staged) status = 'deleted';
+          staged = false;
+        }
+
+        if (statusCode === '??') {
+          status = 'untracked';
+          staged = false;
+        }
+
+        return {
+          path: filePath,
+          status,
+          staged,
+          hasStaged: stagedStatus !== ' ' && stagedStatus !== '?',
+          hasUnstaged: unstagedStatus !== ' ' && unstagedStatus !== '?'
+        };
+      });
+
+    res.json({ files });
+  } catch (error) {
+    console.error('Error getting file list:', error);
+    res.status(500).json({ error: 'Failed to get file list' });
+  }
+});
+
+// Get diff for a specific file
+router.get('/:worktreeId/file-diff/:filePath(*)', async (req, res) => {
+  try {
+    const { worktreeId, filePath } = req.params;
+
+    const gitService = req.app.locals.gitService;
+    const worktree = gitService.getWorktree(worktreeId);
+
+    if (!worktree) {
+      return res.status(404).json({ error: 'Worktree not found' });
+    }
+
+    // Check if file is untracked
+    const { stdout: status } = await execAsync('git status --porcelain', {
+      cwd: worktree.path
+    });
+
+    const isUntracked = status.split('\n').some(line =>
+      line.startsWith('??') && line.substring(3).trim() === filePath
+    );
+
+    let diff = '';
+
+    if (isUntracked) {
+      // For untracked files, show the entire content as added
+      try {
+        // Skip directories
+        const fullPath = path.join(worktree.path, filePath);
+        const stats = await fs.promises.stat(fullPath);
+        if (!stats.isFile()) {
+          return res.status(400).json({ error: 'Cannot diff a directory' });
+        }
+
+        const { stdout: fileContent } = await execAsync(`cat "${filePath}"`, {
+          cwd: worktree.path
+        });
+
+        diff = `diff --git a/${filePath} b/${filePath}\n`;
+        diff += `new file mode 100644\n`;
+        diff += `index 0000000..${Math.random().toString(36).substr(2, 7)}\n`;
+        diff += `--- /dev/null\n`;
+        diff += `+++ b/${filePath}\n`;
+        diff += `@@ -0,0 +1,${fileContent.split('\n').length} @@\n`;
+
+        fileContent.split('\n').forEach(line => {
+          diff += `+${line}\n`;
+        });
+      } catch (error) {
+        console.error('Failed to read untracked file:', error);
+        return res.status(500).json({ error: 'Failed to read file' });
+      }
+    } else {
+      // For tracked files, get the diff
+      try {
+        const { stdout } = await execAsync(`git diff HEAD -- "${filePath}"`, {
+          cwd: worktree.path
+        });
+        diff = stdout;
+      } catch (error) {
+        console.error('Failed to get diff:', error);
+        diff = '';
+      }
+    }
+
+    res.set('Content-Type', 'text/plain');
+    res.send(diff);
+  } catch (error) {
+    console.error('Error getting file diff:', error);
+    res.status(500).json({ error: 'Failed to get file diff' });
+  }
+});
+
+// Stage a file
+router.post('/:worktreeId/stage', async (req, res) => {
+  try {
+    const { worktreeId } = req.params;
+    const { filePath } = req.body;
+
+    const gitService = req.app.locals.gitService;
+    const worktree = gitService.getWorktree(worktreeId);
+
+    if (!worktree) {
+      return res.status(404).json({ error: 'Worktree not found' });
+    }
+
+    await execAsync(`git add "${filePath}"`, {
+      cwd: worktree.path
+    });
+
+    res.json({ message: 'File staged successfully' });
+  } catch (error) {
+    console.error('Error staging file:', error);
+    res.status(500).json({ error: 'Failed to stage file' });
+  }
+});
+
+// Unstage a file
+router.post('/:worktreeId/unstage', async (req, res) => {
+  try {
+    const { worktreeId } = req.params;
+    const { filePath } = req.body;
+
+    const gitService = req.app.locals.gitService;
+    const worktree = gitService.getWorktree(worktreeId);
+
+    if (!worktree) {
+      return res.status(404).json({ error: 'Worktree not found' });
+    }
+
+    await execAsync(`git reset HEAD "${filePath}"`, {
+      cwd: worktree.path
+    });
+
+    res.json({ message: 'File unstaged successfully' });
+  } catch (error) {
+    console.error('Error unstaging file:', error);
+    res.status(500).json({ error: 'Failed to unstage file' });
+  }
+});
+
+// Revert a file
+router.post('/:worktreeId/revert-file', async (req, res) => {
+  try {
+    const { worktreeId } = req.params;
+    const { filePath } = req.body;
+
+    const gitService = req.app.locals.gitService;
+    const worktree = gitService.getWorktree(worktreeId);
+
+    if (!worktree) {
+      return res.status(404).json({ error: 'Worktree not found' });
+    }
+
+    // Check if file is untracked
+    const { stdout: status } = await execAsync('git status --porcelain', {
+      cwd: worktree.path
+    });
+
+    const isUntracked = status.split('\n').some(line =>
+      line.startsWith('??') && line.substring(3).trim() === filePath
+    );
+
+    if (isUntracked) {
+      // For untracked files, just delete them
+      await execAsync(`rm "${filePath}"`, {
+        cwd: worktree.path
+      });
+    } else {
+      // For tracked files, checkout from HEAD
+      await execAsync(`git checkout HEAD -- "${filePath}"`, {
+        cwd: worktree.path
+      });
+    }
+
+    res.json({ message: 'File reverted successfully' });
+  } catch (error) {
+    console.error('Error reverting file:', error);
+    res.status(500).json({ error: 'Failed to revert file' });
+  }
+});
+
+// Commit with amend
+router.post('/:worktreeId/commit-amend', async (req, res) => {
+  try {
+    const { worktreeId } = req.params;
+
+    const gitService = req.app.locals.gitService;
+    const worktree = gitService.getWorktree(worktreeId);
+
+    if (!worktree) {
+      return res.status(404).json({ error: 'Worktree not found' });
+    }
+
+    // Stage all changes first
+    await execAsync('git add .', {
+      cwd: worktree.path
+    });
+
+    // Commit with --amend --no-edit
+    await execAsync('git commit --amend --no-edit', {
+      cwd: worktree.path
+    });
+
+    res.json({ message: 'Changes amended to last commit successfully' });
+  } catch (error: any) {
+    console.error('Error amending commit:', error);
+    res.status(500).json({ error: error.message || 'Failed to amend commit' });
   }
 });
 
