@@ -8,7 +8,12 @@ export class CodexAdapter extends BaseAgentAdapter {
 
   getSpawnArgs(options?: { interactive?: boolean; port?: number }): { command: string; args: string[]; env?: Record<string, string> } {
     const args: string[] = [];
-    const env: Record<string, string> = {};
+    const env: Record<string, string> = {
+      // Set proper terminal type to prevent cursor position read errors
+      TERM: 'xterm-256color',
+      // Disable any terminal features that might cause initialization issues
+      TERM_PROGRAM: 'node-pty'
+    };
 
     if (options?.interactive) {
       // Interactive mode - just start codex with default settings
