@@ -6,6 +6,8 @@ import { RepositoryPanel } from './components/RepositoryPanel';
 import { AgentPanel } from './components/AgentPanel';
 import { DatabaseManager } from './components/DatabaseManager';
 import { AuthButton } from './components/AuthButton';
+import { SettingsMenu } from './components/SettingsMenu';
+import { WebSocketDebugPanel } from './components/WebSocketDebugPanel';
 import { useCheatCode } from './contexts/CheatCodeContext';
 
 function App() {
@@ -325,7 +327,11 @@ function MainApp() {
               )}
             </nav>
           </div>
-          <AuthButton />
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            {import.meta.env.DEV && <WebSocketDebugPanel />}
+            <SettingsMenu />
+            <AuthButton />
+          </div>
         </div>
       </div>
 

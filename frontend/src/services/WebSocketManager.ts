@@ -310,6 +310,20 @@ class WebSocketManager {
       }
     }
 
+    // Check if "Keep agent terminals warm" setting is enabled
+    const keepWarm = localStorage.getItem('keepAgentTerminalsWarm');
+    const shouldKeepWarm = keepWarm === null || keepWarm === 'true'; // Default to true
+
+    if (!shouldKeepWarm) {
+      // Setting disabled: close immediately
+      conn.isDestroyed = true;
+      if (conn.ws.readyState !== WebSocket.CLOSED) {
+        try { conn.ws.close(1000, 'Keep warm disabled'); } catch {}
+      }
+      this.connections.delete(sessionId);
+      return;
+    }
+
     // No more subscribers: keep the connection warm with idle TTL
     if (conn.idleTimer) {
       clearTimeout(conn.idleTimer);
@@ -373,31 +387,46 @@ class WebSocketManager {
     return this.connections.size;
   }
 
-  getConnectionStats(): { total: number; open: number; connecting: number; closed: number } {
-    let open = 0;
-    let connecting = 0;
-    let closed = 0;
+  getConnectionStats(): Array<{
+    sessionId: string;
+    status: 'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED';
+    subscribers: number;
+    reconnectAttempts: number;
+    bufferSize: number;
+    isDestroyed: boolean;
+  }> {
+    const stats = [];
 
-    for (const conn of this.connections.values()) {
+    for (const [sessionId, conn] of this.connections) {
+      let status: 'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED';
       switch (conn.ws.readyState) {
-        case WebSocket.OPEN:
-          open++;
-          break;
         case WebSocket.CONNECTING:
-          connecting++;
+          status = 'CONNECTING';
+          break;
+        case WebSocket.OPEN:
+          status = 'OPEN';
+          break;
+        case WebSocket.CLOSING:
+          status = 'CLOSING';
           break;
         case WebSocket.CLOSED:
-          closed++;
+          status = 'CLOSED';
           break;
+        default:
+          status = 'CLOSED';
       }
+
+      stats.push({
+        sessionId,
+        status,
+        subscribers: conn.callbacks.size,
+        reconnectAttempts: conn.reconnectAttempts,
+        bufferSize: conn.bufferSize,
+        isDestroyed: conn.isDestroyed
+      });
     }
 
-    return {
-      total: this.connections.size,
-      open,
-      connecting,
-      closed
-    };
+    return stats;
   }
 
   getSnapshot(sessionId: string): string {
