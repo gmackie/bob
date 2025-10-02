@@ -2,6 +2,9 @@ import { Router } from 'express';
 import { GitService } from '../services/git.js';
 import { AgentService } from '../services/agent.js';
 import { CreateWorktreeRequest } from '../types.js';
+import { promises as fs } from 'fs';
+import path from 'path';
+import { listRepositoryDocs, readRepositoryDoc } from '../utils/repositoryDocs.js';
 
 export function createRepositoryRoutes(gitService: GitService, agentService: AgentService): Router {
   const router = Router();
@@ -114,6 +117,108 @@ export function createRepositoryRoutes(gitService: GitService, agentService: Age
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: `Failed to remove worktree: ${error}` });
+    }
+  });
+
+  // -------- Repository Dashboard Endpoints --------
+  router.get('/:id/remotes', async (req, res) => {
+    try {
+      const remotes = await gitService.getGitRemotes(req.params.id);
+      res.json(remotes);
+    } catch (error) {
+      res.status(500).json({ error: `Failed to get remotes: ${error}` });
+    }
+  });
+
+  router.get('/:id/branches', async (req, res) => {
+    try {
+      const branches = await gitService.getGitBranches(req.params.id);
+      res.json(branches);
+    } catch (error) {
+      res.status(500).json({ error: `Failed to get branches: ${error}` });
+    }
+  });
+
+  router.get('/:id/graph', async (req, res) => {
+    try {
+      const graph = await gitService.getGitGraph(req.params.id);
+      res.json(graph);
+    } catch (error) {
+      res.status(500).json({ error: `Failed to get git graph: ${error}` });
+    }
+  });
+
+  router.get('/:id/notes', async (req, res) => {
+    try {
+      const repository = gitService.getRepository(req.params.id);
+      if (!repository) {
+        return res.status(404).json({ error: 'Repository not found' });
+      }
+      const notesPath = path.join(repository.path, 'docs', 'notes', '.bob-repo.md');
+      try {
+        const content = await fs.readFile(notesPath, 'utf-8');
+        res.set('Content-Type', 'text/plain');
+        return res.send(content);
+      } catch (readErr: any) {
+        if (readErr && readErr.code === 'ENOENT') {
+          return res.status(404).send('');
+        }
+        throw readErr;
+      }
+    } catch (error) {
+      res.status(500).json({ error: `Failed to get project notes: ${error}` });
+    }
+  });
+
+  router.post('/:id/notes', async (req, res) => {
+    try {
+      const repository = gitService.getRepository(req.params.id);
+      if (!repository) {
+        return res.status(404).json({ error: 'Repository not found' });
+      }
+      const { notes } = req.body as { notes?: string };
+      if (typeof notes !== 'string') {
+        return res.status(400).json({ error: 'notes must be a string' });
+      }
+      const notesDir = path.join(repository.path, 'docs', 'notes');
+      const notesPath = path.join(notesDir, '.bob-repo.md');
+      await fs.mkdir(notesDir, { recursive: true });
+      await fs.writeFile(notesPath, notes, 'utf-8');
+      return res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: `Failed to save project notes: ${error}` });
+    }
+  });
+
+  // -------- Repository Docs Endpoints --------
+  router.get('/:id/docs', async (req, res) => {
+    try {
+      const repository = gitService.getRepository(req.params.id);
+      if (!repository) {
+        return res.status(404).json({ error: 'Repository not found' });
+      }
+
+      const list = await listRepositoryDocs(repository.path);
+      res.json(list);
+    } catch (error) {
+      res.status(500).json({ error: `Failed to list docs: ${error}` });
+    }
+  });
+
+  router.get('/:id/docs/content', async (req, res) => {
+    try {
+      const repository = gitService.getRepository(req.params.id);
+      if (!repository) {
+        return res.status(404).json({ error: 'Repository not found' });
+      }
+      const rel = String(req.query.path || '');
+      if (!rel) return res.status(400).json({ error: 'path is required' });
+
+      const content = await readRepositoryDoc(repository.path, rel);
+      res.set('Content-Type', 'text/plain');
+      res.send(content);
+    } catch (error) {
+      res.status(500).json({ error: `Failed to read doc content: ${error}` });
     }
   });
 
