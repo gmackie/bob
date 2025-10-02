@@ -35,7 +35,18 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/filesystem/browse?path=${encodeURIComponent(path)}`);
+      const token = localStorage.getItem('authToken');
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`/api/filesystem/browse?path=${encodeURIComponent(path)}`, {
+        headers,
+      });
       if (!response.ok) {
         throw new Error('Failed to browse directory');
       }

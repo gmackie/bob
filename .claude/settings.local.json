@@ -17,9 +17,37 @@
       "Bash(npm install:*)",
       "Bash(npx vitest run:*)",
       "Read(//root/.bob/**)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(chmod:*)",
+      "Bash(bash:*)",
+      "Bash(sudo:*)",
+      "Bash(certbot certonly:*)",
+      "Bash(ln:*)",
+      "Bash(nginx:*)",
+      "Bash(systemctl reload:*)",
+      "Bash(curl:*)",
+      "Bash(systemctl restart:*)",
+      "Bash(iptables:*)",
+      "Bash(systemctl stop:*)",
+      "Bash(lsof:*)",
+      "Bash(ss:*)",
+      "Bash(systemctl start:*)",
+      "Bash(systemctl:*)",
+      "Read(//etc/nginx/sites-available/**)",
+      "Bash(cat:*)",
+      "Bash(certbot:*)",
+      "Bash(pkill:*)",
+      "Bash(kill:*)",
+      "Bash(npx shadcn@latest init:*)",
+      "Bash(npx tailwindcss init:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(git rebase:*)"
     ],
     "deny": [],
-    "ask": []
+    "ask": [],
+    "additionalDirectories": [
+      "/var/www/html/.well-known/acme-challenge",
+      "/etc/nginx/sites-enabled"
+    ]
   }
 }

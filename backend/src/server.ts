@@ -1,28 +1,77 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import session from 'express-session';
+import passport from 'passport';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { GitService } from './services/git.js';
 import { AgentService } from './services/agent.js';
 import { TerminalService } from './services/terminal.js';
+import { AuthService } from './services/auth.js';
 import { DatabaseService } from './database/database.js';
 import { createRepositoryRoutes } from './routes/repositories.js';
 import { createInstanceRoutes } from './routes/instances.js';
 import { createFilesystemRoutes } from './routes/filesystem.js';
 import { createDatabaseRoutes } from './routes/database.js';
+import { createAuthRoutes, requireAuth } from './routes/auth.js';
 import gitRoutes from './routes/git.js';
 import { createAgentsRoutes } from './routes/agents.js';
 import { agentFactory } from './agents/agent-factory.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
-const PORT = process.env.PORT || 43829;
+const PORT = parseInt(process.env.PORT || '43829', 10);
 
-app.use(cors());
+// Configure CORS with specific origins
+const corsOptions = {
+  origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
+    const allowedOrigins = [
+      'https://claude.gmac.io',
+      'http://localhost:47285',
+      'http://localhost:5173',
+      'http://127.0.0.1:47285',
+      'http://127.0.0.1:5173'
+    ];
+
+    // Allow requests with no origin (e.g., mobile apps, Postman)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
+
+// Session configuration
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'change-this-secret-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+  }
+}));
+
+// Initialize Passport
+app.use(passport.initialize());
+app.use(passport.session());
 
 // Initialize database
 const db = new DatabaseService();
@@ -32,8 +81,20 @@ console.log('Database initialized');
 const gitService = new GitService(db);
 const agentService = new AgentService(gitService, db);
 const terminalService = new TerminalService();
+const authService = new AuthService();
 
 console.log('Services initialized');
+
+// Auth routes (public)
+app.use('/api/auth', createAuthRoutes(authService));
+
+// Health check endpoint (public)
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Require authentication for all other API routes
+app.use('/api', requireAuth(authService));
 
 app.use('/api/repositories', createRepositoryRoutes(gitService, agentService));
 app.use('/api/instances', createInstanceRoutes(agentService, terminalService, gitService));
@@ -45,11 +106,8 @@ app.use('/api/database', createDatabaseRoutes(db));
 app.locals.gitService = gitService;
 app.locals.agentService = agentService;
 app.locals.databaseService = db;
+app.locals.authService = authService;
 app.use('/api/git', gitRoutes);
-
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
 
 app.get('/api/system-status', async (req, res) => {
   try {
@@ -175,7 +233,8 @@ const gracefulShutdown = async () => {
 process.on('SIGTERM', gracefulShutdown);
 process.on('SIGINT', gracefulShutdown);
 
-server.listen(PORT, () => {
+// Bind to localhost only; nginx terminates TLS and proxies to this backend
+server.listen(PORT, '127.0.0.1', () => {
   console.log(`Bob server running on port ${PORT}`);
   console.log(`WebSocket server ready for terminal connections`);
 });

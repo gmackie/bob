@@ -5,6 +5,7 @@ import { api } from './api';
 import { RepositoryPanel } from './components/RepositoryPanel';
 import { AgentPanel } from './components/AgentPanel';
 import { DatabaseManager } from './components/DatabaseManager';
+import { AuthButton } from './components/AuthButton';
 import { useCheatCode } from './contexts/CheatCodeContext';
 
 function App() {
@@ -324,6 +325,7 @@ function MainApp() {
               )}
             </nav>
           </div>
+          <AuthButton />
         </div>
       </div>
 
