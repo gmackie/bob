@@ -41,7 +41,9 @@
       "Bash(npx shadcn@latest init:*)",
       "Bash(npx tailwindcss init:*)",
       "Bash(npm uninstall:*)",
-      "Bash(git rebase:*)"
+      "Bash(git rebase:*)",
+      "Bash(git fetch:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": [],
