@@ -21,6 +21,7 @@ import { createAuthRoutes, requireAuth } from './routes/auth.js';
 import gitRoutes from './routes/git.js';
 import { createAgentsRoutes } from './routes/agents.js';
 import { agentFactory } from './agents/agent-factory.js';
+import { appConfig } from './config/app.config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -81,20 +82,34 @@ console.log('Database initialized');
 const gitService = new GitService(db);
 const agentService = new AgentService(gitService, db);
 const terminalService = new TerminalService();
-const authService = new AuthService();
+const authService = new AuthService(db);
 
 console.log('Services initialized');
 
-// Auth routes (public)
-app.use('/api/auth', createAuthRoutes(authService));
+// Auth routes (conditionally enabled)
+if (appConfig.enableGithubAuth) {
+  app.use('/api/auth', createAuthRoutes(authService));
+}
 
 // Health check endpoint (public)
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Require authentication for all other API routes
-app.use('/api', requireAuth(authService));
+// App config endpoint (public)
+app.get('/api/config', (req, res) => {
+  res.json({
+    appName: appConfig.getAppName(),
+    enableGithubAuth: appConfig.enableGithubAuth,
+    jeffMode: appConfig.jeffMode,
+    allowedAgents: appConfig.getAllowedAgents()
+  });
+});
+
+// Require authentication for all other API routes (only if auth is enabled)
+if (appConfig.enableGithubAuth) {
+  app.use('/api', requireAuth(authService));
+}
 
 app.use('/api/repositories', createRepositoryRoutes(gitService, agentService));
 app.use('/api/instances', createInstanceRoutes(agentService, terminalService, gitService));

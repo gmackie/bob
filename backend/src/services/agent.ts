@@ -115,7 +115,7 @@ export class AgentService {
 
   private setupPtyHandlers(instance: AgentInstance, agentPty: IPty): void {
     agentPty.onExit((exitCode) => {
-      console.log(`${instance.agentType} PTY ${instance.id} exited with code ${exitCode}`);
+      console.log(`${instance.agentType} PTY ${instance.id} exited with code ${JSON.stringify(exitCode)}`);
       instance.status = 'stopped';
       this.ptyProcesses.delete(instance.id);
 
@@ -172,6 +172,18 @@ export class AgentService {
 
     instance.status = 'stopped';
     await this.db.saveInstance(instance);
+  }
+
+  async deleteInstance(instanceId: string): Promise<void> {
+    // First stop the instance if it's running
+    const instance = this.instances.get(instanceId);
+    if (instance) {
+      await this.stopInstance(instanceId);
+      this.instances.delete(instanceId);
+    }
+
+    // Delete from database
+    await this.db.deleteInstance(instanceId);
   }
 
   async restartInstance(instanceId: string): Promise<AgentInstance> {

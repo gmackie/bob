@@ -1,12 +1,16 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
-import { Repository, ClaudeInstance, Worktree } from './types';
+import { Repository, ClaudeInstance, Worktree, AgentInfo, AgentType } from './types';
 import { api } from './api';
 import { RepositoryPanel } from './components/RepositoryPanel';
-import { TerminalPanel } from './components/TerminalPanel';
+import { AgentPanel } from './components/AgentPanel';
 import { DatabaseManager } from './components/DatabaseManager';
+import { AuthButton } from './components/AuthButton';
+import { SettingsMenu } from './components/SettingsMenu';
+import { WebSocketDebugPanel } from './components/WebSocketDebugPanel';
 import { RepositoryDashboardPanel } from './components/RepositoryDashboardPanel';
 import { useCheatCode } from './contexts/CheatCodeContext';
+import { getAppConfig } from './config/app.config';
 
 function App() {
   return (
@@ -43,13 +47,22 @@ function MainApp() {
 
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [instances, setInstances] = useState<ClaudeInstance[]>([]);
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [, setError] = useState<string | null>(null);
   const [instanceError, setInstanceError] = useState<string | null>(null);
   const [selectedWorktreeId, setSelectedWorktreeId] = useState<string | null>(null);
   const [selectedRepositoryId, setSelectedRepositoryId] = useState<string | null>(null);
+  const [appName, setAppName] = useState('Bob');
+  const [enableGithubAuth, setEnableGithubAuth] = useState(true);
 
   useEffect(() => {
+    // Load app config first
+    getAppConfig().then(config => {
+      setAppName(config.appName);
+      setEnableGithubAuth(config.enableGithubAuth);
+    });
+
     loadData();
     const interval = setInterval(loadData, 5000);
     return () => clearInterval(interval);
@@ -99,13 +112,15 @@ function MainApp() {
 
   const loadData = async () => {
     try {
-      const [reposData, instancesData] = await Promise.all([
+      const [reposData, instancesData, agentsData] = await Promise.all([
         api.getRepositories(),
-        api.getInstances()
+        api.getInstances(),
+        api.getAgents().catch(() => [])
       ]);
-      
+
       setRepositories(reposData);
       setInstances(instancesData);
+      setAgents(agentsData as AgentInfo[]);
       setError(null);
     } catch (err) {
       console.error('Failed to load data:', err);
@@ -125,10 +140,10 @@ function MainApp() {
     }
   };
 
-  const handleCreateWorktreeAndStartInstance = async (repositoryId: string, branchName: string) => {
+  const handleCreateWorktreeAndStartInstance = async (repositoryId: string, branchName: string, agentType?: AgentType) => {
     try {
       const worktree = await api.createWorktree(repositoryId, branchName);
-      await api.startInstance(worktree.id);
+      await api.startInstance(worktree.id, agentType);
       await loadData();
       setSelectedWorktreeId(worktree.id);
       setError(null);
@@ -149,17 +164,6 @@ function MainApp() {
       setError(err instanceof Error ? err.message : 'Failed to refresh main branch');
     }
   };
-
-  const handleStartInstance = async (worktreeId: string) => {
-    try {
-      await api.startInstance(worktreeId);
-      await loadData();
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start instance');
-    }
-  };
-
 
   const handleCreateTerminalSession = async (instanceId: string): Promise<string> => {
     try {
@@ -295,24 +299,23 @@ function MainApp() {
               onMouseEnter={(e) => (e.target as HTMLElement).style.color = '#58a6ff'}
               onMouseLeave={(e) => (e.target as HTMLElement).style.color = ''}
             >
-              Bob
+              {appName}
             </h1>
-            <nav style={{ display: 'flex', gap: '16px' }}>
-              <button
-                onClick={() => navigate('/')}
-                className={`nav-button ${location.pathname === '/' ? 'active' : ''}`}
-              >
-                Home
-              </button>
-              {isDatabaseUnlocked && (
+            {isDatabaseUnlocked && (
+              <nav style={{ display: 'flex', gap: '16px' }}>
                 <button
                   onClick={() => navigate('/database')}
                   className={`nav-button ${location.pathname === '/database' ? 'active' : ''}`}
                 >
                   Database
                 </button>
-              )}
-            </nav>
+              </nav>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            {import.meta.env.DEV && <WebSocketDebugPanel />}
+            <SettingsMenu />
+            {enableGithubAuth && <AuthButton />}
           </div>
         </div>
       </div>
@@ -331,6 +334,7 @@ function MainApp() {
           onRefreshMainBranch={handleRefreshMainBranch}
           isCollapsed={isLeftPanelCollapsed}
           onToggleCollapse={toggleLeftPanel}
+          agents={agents}
         />
 
         {selectedRepository ? (
@@ -339,7 +343,7 @@ function MainApp() {
             isLeftPanelCollapsed={isLeftPanelCollapsed}
           />
         ) : (
-          <TerminalPanel
+          <AgentPanel
             selectedWorktree={selectedWorktree}
             selectedInstance={selectedInstance}
             onCreateTerminalSession={handleCreateTerminalSession}

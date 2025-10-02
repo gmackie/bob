@@ -58,10 +58,10 @@ export function createInstanceRoutes(
 
   router.delete('/:id', async (req, res) => {
     try {
-      await agentService.stopInstance(req.params.id);
+      await agentService.deleteInstance(req.params.id);
       res.status(204).send();
     } catch (error) {
-      res.status(500).json({ error: `Failed to stop instance: ${error}` });
+      res.status(500).json({ error: `Failed to delete instance: ${error}` });
     }
   });
 

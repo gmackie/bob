@@ -129,7 +129,17 @@ class ApiClient {
 
   // Git operations
   async getGitDiff(worktreeId: string): Promise<string> {
-    const response = await fetch(`${API_BASE}/git/${worktreeId}/diff`);
+    const token = localStorage.getItem('authToken');
+    const headers: Record<string, string> = {};
+
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE}/git/${worktreeId}/diff`, {
+      headers,
+    });
+
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }

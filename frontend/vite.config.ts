@@ -19,6 +19,12 @@ export default defineConfig(({ mode }) => {
     server: {
       allowedHosts: ['claude.gmac.io'],
       port: 47285,
+      hmr: {
+        protocol: 'wss',
+        host: 'claude.gmac.io',
+        // Don't specify port - let it use the default HTTPS port (443)
+        // Nginx will proxy the WebSocket connection
+      },
       proxy: {
         '/api': 'http://localhost:43829'
       }
@@ -29,11 +35,11 @@ export default defineConfig(({ mode }) => {
           ? 'https://api.claude.gmac.io'
           : 'http://localhost:43829'
       )
+    },
+    test: {
+      globals: true,
+      environment: 'jsdom',
+      setupFiles: './src/test/setup.ts',
     }
-  },
-  test: {
-    globals: true,
-    environment: 'jsdom',
-    setupFiles: './src/test/setup.ts',
   }
 })

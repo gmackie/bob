@@ -35,18 +35,26 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
   async startProcess(worktreePath: string, port?: number): Promise<IPty> {
     const { command, args, env } = this.getSpawnArgs({ interactive: true, port });
 
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       console.log(`Starting ${this.name} PTY in directory: ${worktreePath}`);
 
       const ptyProcess = spawnPty(command, args, {
         cwd: worktreePath,
-        cols: 80,
-        rows: 30,
+        cols: 120,
+        rows: 40,
         env: {
           ...process.env,
           ...env
         } as { [key: string]: string }
       });
+
+      // Give the PTY a moment to fully initialize before the agent starts
+      // This prevents cursor position query errors during startup
+      await new Promise(r => setTimeout(r, 500));
+
+      // Pre-warm the terminal by sending a cursor position response
+      // This helps tools like Codex that query terminal capabilities immediately
+      ptyProcess.write('\x1b[1;1R');
 
       let spawned = false;
       let output = '';
