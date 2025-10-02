@@ -3,7 +3,7 @@ import { promisify } from 'util';
 import { existsSync, statSync, mkdirSync } from 'fs';
 import { join, basename } from 'path';
 import { homedir } from 'os';
-import { Repository, Worktree } from '../types.js';
+import { Repository, Worktree, AgentType } from '../types.js';
 import { DatabaseService } from '../database/database.js';
 
 const execAsync = promisify(exec);
@@ -187,7 +187,7 @@ export class GitService {
     }
   }
 
-  async createWorktree(repositoryId: string, branchName: string, baseBranch?: string): Promise<Worktree> {
+  async createWorktree(repositoryId: string, branchName: string, baseBranch?: string, agentType?: AgentType): Promise<Worktree> {
     const repository = this.repositories.get(repositoryId);
     if (!repository) {
       throw new Error(`Repository ${repositoryId} not found`);
@@ -234,11 +234,13 @@ export class GitService {
       });
 
       const worktreeId = Buffer.from(worktreePath).toString('base64');
+      const preferredAgent = agentType || 'claude';
       const worktree: Worktree = {
         id: worktreeId,
         path: worktreePath,
         branch: branchName,
         repositoryId,
+        preferredAgent,
         instances: [],
         isMainWorktree: false
       };

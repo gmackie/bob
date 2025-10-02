@@ -1,4 +1,4 @@
-import { Repository, ClaudeInstance, Worktree } from './types';
+import { Repository, ClaudeInstance, Worktree, AgentType, AgentInfo } from './types';
 
 const API_BASE = '/api';
 
@@ -71,10 +71,10 @@ class ApiClient {
     return this.request(`/instances/repository/${repositoryId}`);
   }
 
-  async startInstance(worktreeId: string): Promise<ClaudeInstance> {
+  async startInstance(worktreeId: string, agentType?: AgentType): Promise<ClaudeInstance> {
     return this.request('/instances', {
       method: 'POST',
-      body: JSON.stringify({ worktreeId }),
+      body: JSON.stringify({ worktreeId, agentType }),
     });
   }
 
@@ -104,6 +104,11 @@ class ApiClient {
 
   async getTerminalSessions(instanceId: string): Promise<{ id: string; createdAt: string; type: 'claude' | 'directory' | 'unknown' }[]> {
     return this.request(`/instances/${instanceId}/terminals`);
+  }
+
+  // Agents
+  async getAgents(): Promise<AgentInfo[]> {
+    return this.request('/agents');
   }
 
   async closeTerminalSession(sessionId: string): Promise<void> {

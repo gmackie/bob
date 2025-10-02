@@ -8,7 +8,7 @@ import { tmpdir } from 'os';
 const router = express.Router();
 const execAsync = promisify(exec);
 
-// Helper function to call Claude CLI safely with file input
+// Helper to call Claude CLI safely with stdin input
 async function callClaude(prompt: string, input: string, cwd: string): Promise<string> {
   return new Promise((resolve, reject) => {
     // Use spawn to avoid shell interpretation issues
@@ -52,6 +52,68 @@ async function callClaude(prompt: string, input: string, cwd: string): Promise<s
     claudeProcess.stdin.write(input);
     claudeProcess.stdin.end();
   });
+}
+
+// Generic agent call with graceful fallback to Claude
+async function callAgent(agentType: string | undefined, prompt: string, input: string, cwd: string): Promise<string> {
+  const type = agentType || 'claude';
+
+  // Direct Claude path
+  if (type === 'claude') {
+    return callClaude(prompt, input, cwd);
+  }
+
+  // Attempt other agents with best-effort non-interactive invocation
+  try {
+    return await new Promise((resolve, reject) => {
+      let command = '';
+      let args: string[] = [];
+
+      switch (type) {
+        case 'gemini':
+          command = 'gemini';
+          args = ['--prompt', prompt];
+          break;
+        case 'codex':
+          command = 'codex';
+          // Best-effort: pass prompt as first arg; many CLIs read stdin content
+          args = [prompt];
+          break;
+        case 'amazon-q':
+          // Amazon Q is primarily interactive; fall back immediately
+          throw new Error('Amazon Q non-interactive commit generation not supported');
+        default:
+          throw new Error(`Unsupported agent type: ${type}`);
+      }
+
+      const child = spawn(command, args, { cwd, stdio: ['pipe', 'pipe', 'pipe'] });
+      let stdout = '';
+      let stderr = '';
+
+      const timeout = setTimeout(() => {
+        child.kill('SIGTERM');
+        reject(new Error(`${type} CLI timeout after 2 minutes`));
+      }, 120000);
+
+      child.stdout.on('data', (d) => (stdout += d.toString()));
+      child.stderr.on('data', (d) => (stderr += d.toString()));
+      child.on('close', (code) => {
+        clearTimeout(timeout);
+        if (code === 0) resolve(stdout.trim());
+        else reject(new Error(`${type} CLI exited with code ${code}. stderr: ${stderr}`));
+      });
+      child.on('error', (err) => {
+        clearTimeout(timeout);
+        reject(new Error(`Failed to spawn ${type} CLI: ${err.message}`));
+      });
+
+      child.stdin.write(input);
+      child.stdin.end();
+    });
+  } catch (err) {
+    // Fallback to Claude on any error
+    return callClaude(prompt, input, cwd);
+  }
 }
 
 // Get git diff for a worktree
@@ -125,6 +187,7 @@ router.post('/:worktreeId/generate-commit-message', async (req, res) => {
     const { worktreeId } = req.params;
 
     const gitService = req.app.locals.gitService;
+    const agentService = req.app.locals.agentService;
     const worktree = gitService.getWorktree(worktreeId);
 
     if (!worktree) {
@@ -186,12 +249,18 @@ ${comments && comments.length > 0 ? '5. Consider the code review comments provid
 
 Only return the body content, no subject line. Focus on the actual code changes, not just file counts.`;
 
-      const commitBody = await callClaude(bodyPrompt, diffWithComments, worktree.path);
+      // Choose agent: use running instance agent type if available, else default to Claude
+      const instances = agentService?.getInstancesByWorktree
+        ? agentService.getInstancesByWorktree(worktreeId)
+        : [];
+      const agentType = instances[0]?.agentType || 'claude';
+
+      const commitBody = await callAgent(agentType, bodyPrompt, diffWithComments, worktree.path);
 
       // Step 2: Generate concise subject from the body
       const subjectPrompt = `Based on this commit body, generate a concise subject line following conventional commit format (type: description). Subject should be under 72 characters. Types: feat, fix, docs, style, refactor, test, chore. Only return the subject line.`;
 
-      const commitSubject = await callClaude(subjectPrompt, commitBody, worktree.path);
+      const commitSubject = await callAgent(agentType, subjectPrompt, commitBody, worktree.path);
 
       // Combine subject and body
       const aiCommitMessage = `${commitSubject}\n\n${commitBody}`;
@@ -203,8 +272,8 @@ Only return the body content, no subject line. Focus on the actual code changes,
         changedFiles: changedFiles.split('\n').filter(f => f.trim()),
         fileCount: changedFiles.split('\n').filter(f => f.trim()).length
       });
-    } catch (claudeError) {
-      console.error('Error calling Claude:', claudeError);
+    } catch (agentError) {
+      console.error('Error calling agent for commit message:', agentError);
 
       // Fallback to simple commit message
       const files = status.split('\n').filter(line => line.trim()).length;
@@ -1019,7 +1088,7 @@ router.post('/:worktreeId/notes', async (req, res) => {
 
     await fs.promises.writeFile(notesFilePath, content || '', 'utf8');
 
-    res.json({ 
+    res.json({
       message: 'Notes saved successfully',
       fileName: notesFileName,
       path: notesFilePath

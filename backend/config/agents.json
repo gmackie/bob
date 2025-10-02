@@ -1,0 +1,80 @@
+{
+  "agents": {
+    "claude": {
+      "enabled": true,
+      "default": true,
+      "priority": 1,
+      "settings": {
+        "autoStart": true,
+        "restartOnCrash": true,
+        "maxRestarts": 3
+      }
+    },
+    "codex": {
+      "enabled": true,
+      "default": false,
+      "priority": 2,
+      "settings": {
+        "autoStart": true,
+        "restartOnCrash": true,
+        "maxRestarts": 3,
+        "sandbox": true,
+        "autoApproval": false
+      }
+    },
+    "gemini": {
+      "enabled": true,
+      "default": false,
+      "priority": 3,
+      "settings": {
+        "autoStart": true,
+        "restartOnCrash": true,
+        "maxRestarts": 3
+      }
+    },
+    "amazon-q": {
+      "enabled": true,
+      "default": false,
+      "priority": 4,
+      "settings": {
+        "autoStart": true,
+        "restartOnCrash": false,
+        "maxRestarts": 1
+      }
+    },
+    "cursor-agent": {
+      "enabled": true,
+      "default": false,
+      "priority": 5,
+      "settings": {
+        "autoStart": false,
+        "restartOnCrash": false,
+        "maxRestarts": 1
+      }
+    },
+    "opencode": {
+      "enabled": true,
+      "default": false,
+      "priority": 6,
+      "settings": {
+        "autoStart": false,
+        "restartOnCrash": false,
+        "maxRestarts": 1
+      }
+    }
+  },
+  "preferences": {
+    "defaultAgent": "claude",
+    "fallbackOrder": ["claude", "codex", "gemini", "amazon-q", "cursor-agent", "opencode"],
+    "autoSelectAvailable": true,
+    "showUnavailableAgents": true,
+    "persistAgentSelection": true
+  },
+  "ui": {
+    "showAgentBadges": true,
+    "compactBadges": true,
+    "showAgentTooltips": true,
+    "showAgentStatus": true,
+    "groupByAvailability": false
+  }
+}
