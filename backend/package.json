@@ -8,6 +8,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
+    "test": "tsx src/tests/run-dashboard-tests.ts",
     "migrate": "tsx src/cli/migrate.ts",
     "migrate:status": "tsx src/cli/migrate.ts status",
     "migrate:up": "tsx src/cli/migrate.ts up",

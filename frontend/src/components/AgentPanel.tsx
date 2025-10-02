@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ClaudeInstance, Worktree, AgentType, AgentInfo } from '../types';
+import { ClaudeInstance, Worktree } from '../types';
 import { TerminalComponent } from './Terminal';
 import { api } from '../api';
-import { sessionCache } from '../services/SessionCache';
 
-interface AgentPanelProps {
+interface TerminalPanelProps {
   selectedWorktree: Worktree | null;
   selectedInstance: ClaudeInstance | null;
   onCreateTerminalSession: (instanceId: string) => Promise<string>;
@@ -242,12 +241,11 @@ const UnifiedDiffView: React.FC<{
     return null;
   };
 
-  const lines = gitDiff.split('\n');
-
   // Pre-process lines to avoid state updates during render
   const processedLines = React.useMemo(() => {
+    const lines = gitDiff.split('\n');
     let currentFile = '';
-    return lines.map((line, index) => {
+    const result = lines.map((line, index) => {
       if (line.startsWith('diff --git')) {
         const match = line.match(/diff --git a\/(.+) b\/(.+)/);
         if (match) {
@@ -261,6 +259,7 @@ const UnifiedDiffView: React.FC<{
         actualLineNumber: getActualLineNumber(index, lines)
       };
     });
+    return result;
   }, [gitDiff]);
 
   return (
@@ -273,7 +272,7 @@ const UnifiedDiffView: React.FC<{
       fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace'
     }}>
       {processedLines.map(({ line, index, currentFile, actualLineNumber }) => {
-        let lineStyle: React.CSSProperties = {
+        const baseStyle: React.CSSProperties = {
           padding: '0 8px',
           margin: 0,
           minHeight: '20px',
@@ -286,9 +285,12 @@ const UnifiedDiffView: React.FC<{
           c.file === currentFile && c.line === actualLineNumber
         );
 
+        // Determine line-specific styles
+        let lineStyle: React.CSSProperties;
+
         if (line.startsWith('diff --git')) {
           lineStyle = {
-            ...lineStyle,
+            ...baseStyle,
             backgroundColor: '#21262d',
             color: '#f0f6fc',
             fontWeight: 'bold',
@@ -296,36 +298,36 @@ const UnifiedDiffView: React.FC<{
           };
         } else if (line.startsWith('@@')) {
           lineStyle = {
-            ...lineStyle,
+            ...baseStyle,
             backgroundColor: '#0969da1a',
             color: '#58a6ff'
           };
         } else if (line.startsWith('+') && !line.startsWith('+++')) {
           lineStyle = {
-            ...lineStyle,
+            ...baseStyle,
             backgroundColor: '#0361491a',
             color: '#3fb950'
           };
         } else if (line.startsWith('-') && !line.startsWith('---')) {
           lineStyle = {
-            ...lineStyle,
+            ...baseStyle,
             backgroundColor: '#67060c1a',
             color: '#f85149'
           };
         } else if (line.startsWith('+++') || line.startsWith('---')) {
           lineStyle = {
-            ...lineStyle,
+            ...baseStyle,
             color: '#8b949e',
             fontWeight: 'bold'
           };
         } else if (line.startsWith('new file mode') || line.startsWith('index')) {
           lineStyle = {
-            ...lineStyle,
+            ...baseStyle,
             color: '#8b949e'
           };
         } else {
           lineStyle = {
-            ...lineStyle,
+            ...baseStyle,
             color: '#e6edf3'
           };
         }
@@ -707,89 +709,41 @@ const SystemStatusDashboard: React.FC = () => {
         <h3 style={{ color: '#fff', margin: 0, marginBottom: '20px', fontSize: '18px' }}>System Dependencies</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-          {/* Agents Status */}
-          {(systemStatus.agents && Array.isArray(systemStatus.agents) ? systemStatus.agents : [])
-            .map((agent: any, idx: number) => {
-              const status = !agent.isAvailable
-                ? 'not_available'
-                : agent.isAuthenticated === false
-                ? 'not_authenticated'
-                : 'available';
-              return (
-                <div key={agent.type || idx} style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '16px',
-                  backgroundColor: '#0d1117',
-                  borderRadius: '6px',
-                  border: '1px solid #21262d'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span style={{ fontSize: '20px' }}>{getStatusIcon(status)}</span>
-                    <div>
-                      <div style={{ color: '#fff', fontSize: '14px', fontWeight: 'bold' }}>{agent.name}</div>
-                      <div style={{ color: '#888', fontSize: '12px' }}>
-                        {status === 'available' ? 'Ready for AI-powered features' : (agent.statusMessage || 'Unavailable')}
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{
-                      color: getStatusColor(status),
-                      fontSize: '12px',
-                      fontWeight: 'bold',
-                      marginBottom: '2px'
-                    }}>
-                      {String(status).replace('_', ' ').toUpperCase()}
-                    </div>
-                    {agent.version && (
-                      <div style={{ color: '#666', fontSize: '10px' }}>
-                        {agent.version}
-                      </div>
-                    )}
-                  </div>
+          {/* Claude CLI Status */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '16px',
+            backgroundColor: '#0d1117',
+            borderRadius: '6px',
+            border: '1px solid #21262d'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ fontSize: '20px' }}>{getStatusIcon(systemStatus.claude.status)}</span>
+              <div>
+                <div style={{ color: '#fff', fontSize: '14px', fontWeight: 'bold' }}>Claude CLI</div>
+                <div style={{ color: '#888', fontSize: '12px' }}>
+                  {systemStatus.claude.status === 'available' ? 'Ready for AI-powered features' : 'Required for git analysis and PR generation'}
                 </div>
-              );
-            })}
-
-          {/* Fallback Claude status if agents array not present */}
-          {(!systemStatus.agents || !Array.isArray(systemStatus.agents)) && systemStatus.claude && (
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '16px',
-              backgroundColor: '#0d1117',
-              borderRadius: '6px',
-              border: '1px solid #21262d'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span style={{ fontSize: '20px' }}>{getStatusIcon(systemStatus.claude.status)}</span>
-                <div>
-                  <div style={{ color: '#fff', fontSize: '14px', fontWeight: 'bold' }}>Claude CLI</div>
-                  <div style={{ color: '#888', fontSize: '12px' }}>
-                    {systemStatus.claude.status === 'available' ? 'Ready for AI-powered features' : 'Required for git analysis and PR generation'}
-                  </div>
-                </div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{
-                  color: getStatusColor(systemStatus.claude.status),
-                  fontSize: '12px',
-                  fontWeight: 'bold',
-                  marginBottom: '2px'
-                }}>
-                  {systemStatus.claude.status.replace('_', ' ').toUpperCase()}
-                </div>
-                {systemStatus.claude.version && (
-                  <div style={{ color: '#666', fontSize: '10px' }}>
-                    {systemStatus.claude.version}
-                  </div>
-                )}
               </div>
             </div>
-          )}
+            <div style={{ textAlign: 'right' }}>
+              <div style={{
+                color: getStatusColor(systemStatus.claude.status),
+                fontSize: '12px',
+                fontWeight: 'bold',
+                marginBottom: '2px'
+              }}>
+                {systemStatus.claude.status.replace('_', ' ').toUpperCase()}
+              </div>
+              {systemStatus.claude.version && (
+                <div style={{ color: '#666', fontSize: '10px' }}>
+                  {systemStatus.claude.version}
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* GitHub CLI Status */}
           <div style={{
@@ -935,7 +889,7 @@ const SystemStatusDashboard: React.FC = () => {
   );
 };
 
-export const AgentPanel: React.FC<AgentPanelProps> = ({
+export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   selectedWorktree,
   selectedInstance,
   onCreateTerminalSession,
@@ -950,26 +904,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   // Suppress TypeScript warning for unused parameter
   // This parameter is part of the interface for future UI responsiveness features
   void isLeftPanelCollapsed;
-
-  // Agent instance selection state
-  const [allInstances, setAllInstances] = useState<ClaudeInstance[]>([]);
-  const [currentInstanceId, setCurrentInstanceId] = useState<string | null>(null);
-  const [availableAgents, setAvailableAgents] = useState<AgentInfo[]>([]);
-  const [showNewAgentDropdown, setShowNewAgentDropdown] = useState(false);
-  const [isStartingNewAgent, setIsStartingNewAgent] = useState(false);
-
+  
   const [claudeTerminalSessionId, setClaudeTerminalSessionId] = useState<string | null>(null);
   const [directoryTerminalSessionId, setDirectoryTerminalSessionId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'claude' | 'directory' | 'git' | 'notes'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'claude' | 'directory' | 'git'>('dashboard');
   const [isCreatingClaudeSession, setIsCreatingClaudeSession] = useState(false);
   const [isCreatingDirectorySession, setIsCreatingDirectorySession] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
-  const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const lastAutoConnectInstance = useRef<string>('');
-
-  // Track all session IDs for all instances to keep them warm
-  const [allInstanceSessions, setAllInstanceSessions] = useState<Map<string, { claude: string | null; directory: string | null }>>(new Map());
 
   // Git state
   const [gitDiff, setGitDiff] = useState<string>('');
@@ -991,178 +934,46 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const [currentAnalysisId, setCurrentAnalysisId] = useState<string | null>(null);
   const [isApplyingFixes, setIsApplyingFixes] = useState(false);
 
-  // Notes state
-  const [notesContent, setNotesContent] = useState<string>('');
-  const [notesFileName, setNotesFileName] = useState<string>('');
-  const [isLoadingNotes, setIsLoadingNotes] = useState(false);
-  const [isSavingNotes, setIsSavingNotes] = useState(false);
-  const [unsavedChanges, setUnsavedChanges] = useState(false);
-  const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
-
-  // Load available agents on mount
   useEffect(() => {
-    const loadAgents = async () => {
-      try {
-        const agents = await api.getAgents();
-        setAvailableAgents(agents as AgentInfo[]);
-      } catch (error) {
-        console.error('Failed to load agents:', error);
-      }
-    };
-    loadAgents();
-  }, []);
+    // Clear frontend terminal state when switching instances (but keep backend sessions alive)
+    console.log(`Switching to instance: ${selectedInstance?.id}, clearing session state`);
+    setClaudeTerminalSessionId(null);
+    setDirectoryTerminalSessionId(null);
+    // Clear git state when switching
+    setGitDiff('');
+    setGitCommitMessage('');
+    // Clear analysis state when switching
+    setComments([]);
+    setAnalysisComplete(false);
+    setAnalysisSummary('');
+    setCurrentAnalysisId(null);
+    // Reset to dashboard tab when switching worktrees
+    setActiveTab('dashboard');
+  }, [selectedInstance?.id]);
 
-  // Load all instances for the worktree and select the first one
+  // Auto-connect disabled - user must manually click tabs to connect
+  // This prevents auto-connecting when selecting a worktree, allowing the dashboard to show first
   useEffect(() => {
-    const loadInstances = async () => {
-      if (!selectedWorktree) {
-        setAllInstances([]);
-        setCurrentInstanceId(null);
-        return;
-      }
-
-      try {
-        const instances = await api.getInstances();
-        const worktreeInstances = instances.filter(i => i.worktreeId === selectedWorktree.id);
-        setAllInstances(worktreeInstances);
-
-        // Auto-select: prefer running instance, or first instance, or null
-        if (currentInstanceId && worktreeInstances.some(i => i.id === currentInstanceId)) {
-          // Keep current selection if still valid
-        } else if (worktreeInstances.length > 0) {
-          const runningInstance = worktreeInstances.find(i => i.status === 'running');
-          setCurrentInstanceId(runningInstance?.id || worktreeInstances[0].id);
-        } else {
-          setCurrentInstanceId(null);
-        }
-      } catch (error) {
-        console.error('Failed to load instances:', error);
-      }
-    };
-
-    loadInstances();
-    const interval = setInterval(loadInstances, 3000); // Refresh every 3 seconds
-    return () => clearInterval(interval);
-  }, [selectedWorktree?.id]);
-
-  // Get the currently selected instance object
-  const currentInstance = allInstances.find(i => i.id === currentInstanceId) || null;
-
-  // Keep all running instances warm with terminal sessions
-  useEffect(() => {
-    const ensureInstanceSessions = async () => {
-      const runningInstances = allInstances.filter(i => i.status === 'running');
-
-      for (const instance of runningInstances) {
-        const cached = sessionCache.get(instance.id);
-        const sessions = allInstanceSessions.get(instance.id) || { claude: null, directory: null };
-
-        // Create Claude session if it doesn't exist
-        if (!sessions.claude && !cached?.claude) {
-          try {
-            const sessionId = await onCreateTerminalSession(instance.id);
-            sessionCache.setClaude(instance.id, sessionId);
-            setAllInstanceSessions(prev => new Map(prev).set(instance.id, { ...sessions, claude: sessionId }));
-          } catch (error) {
-            console.error(`Failed to create Claude session for instance ${instance.id}:`, error);
-          }
-        } else if (cached?.claude && !sessions.claude) {
-          setAllInstanceSessions(prev => new Map(prev).set(instance.id, { ...sessions, claude: cached.claude }));
-        }
-      }
-    };
-
-    ensureInstanceSessions();
-  }, [allInstances]);
-
-  useEffect(() => {
-    // On instance switch, reuse cached sessionIds if present; do not clear
-    if (currentInstance?.id) {
-      const cached = sessionCache.get(currentInstance.id);
-      const instanceSessions = allInstanceSessions.get(currentInstance.id);
-
-      // Prioritize cached sessions, then check allInstanceSessions
-      if (cached?.claude) {
-        setClaudeTerminalSessionId(cached.claude);
-      } else if (instanceSessions?.claude) {
-        setClaudeTerminalSessionId(instanceSessions.claude);
-        sessionCache.setClaude(currentInstance.id, instanceSessions.claude);
-      } else {
-        setClaudeTerminalSessionId(null);
-      }
-
-      if (cached?.directory) {
-        setDirectoryTerminalSessionId(cached.directory);
-      } else if (instanceSessions?.directory) {
-        setDirectoryTerminalSessionId(instanceSessions.directory);
-        sessionCache.setDirectory(currentInstance.id, instanceSessions.directory);
-      } else {
-        setDirectoryTerminalSessionId(null);
-      }
-
-      // Reset git and analysis UI only; terminals persist via wsManager
-      setGitDiff('');
-      setGitCommitMessage('');
-      setComments([]);
-      setAnalysisComplete(false);
-      setAnalysisSummary('');
-      setCurrentAnalysisId(null);
-      // Clear notes state when switching
-      setNotesContent('');
-      setNotesFileName('');
-      setUnsavedChanges(false);
-      if (autoSaveTimeout) {
-        clearTimeout(autoSaveTimeout);
-        setAutoSaveTimeout(null);
-      }
-    }
-  }, [currentInstance?.id, allInstanceSessions]);
-
-  // Auto-connect to existing terminal sessions or create new ones when instance first becomes running
-  useEffect(() => {
-    if (currentInstance &&
-        currentInstance.status === 'running' &&
-        !claudeTerminalSessionId &&
-        !directoryTerminalSessionId &&
-        !isCreatingClaudeSession &&
-        !isCreatingDirectorySession) {
-
-      // Only proceed if this is a new instance or status change to running
-      const currentInstanceKey = `${currentInstance.id}-${currentInstance.status}`;
-
-      if (lastAutoConnectInstance.current !== currentInstanceKey) {
-        lastAutoConnectInstance.current = currentInstanceKey;
-
-        console.log(`Auto-connecting to instance ${currentInstance.id} (status: ${currentInstance.status})`);
-
-        // Add a small delay to ensure state has settled after instance switch
-        const timeoutId = setTimeout(() => {
-          checkExistingSessionsOrConnect();
-        }, 100);
-
-        return () => clearTimeout(timeoutId);
-      }
-    }
-  }, [currentInstance?.status, currentInstance?.id]); // Remove session IDs from dependencies
+    // Disabled: Auto-connect interferes with dashboard-first UX
+    // Users can manually switch to Claude or Terminal tabs when needed
+  }, [selectedInstance?.status, selectedInstance?.id]);
 
   const handleOpenClaudeTerminal = async () => {
-    if (!currentInstance || currentInstance.status !== 'running') return;
-
+    if (!selectedInstance || selectedInstance.status !== 'running') return;
+    
     setIsCreatingClaudeSession(true);
     try {
       // First check for existing Claude session
-      const existingSessions = await api.getTerminalSessions(currentInstance.id);
+      const existingSessions = await api.getTerminalSessions(selectedInstance.id);
       const claudeSession = existingSessions.find(s => s.type === 'claude');
-
+      
       if (claudeSession) {
         // Rejoin existing session
         setClaudeTerminalSessionId(claudeSession.id);
-        if (selectedInstance) sessionCache.setClaude(selectedInstance.id, claudeSession.id);
       } else {
         // Create new session
-        const sessionId = await onCreateTerminalSession(currentInstance.id);
+        const sessionId = await onCreateTerminalSession(selectedInstance.id);
         setClaudeTerminalSessionId(sessionId);
-        sessionCache.setClaude(selectedInstance.id, sessionId);
       }
       setActiveTab('claude');
     } catch (error) {
@@ -1174,23 +985,21 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   };
 
   const handleOpenDirectoryTerminal = async () => {
-    if (!currentInstance) return;
-
+    if (!selectedInstance) return;
+    
     setIsCreatingDirectorySession(true);
     try {
       // First check for existing directory session
-      const existingSessions = await api.getTerminalSessions(currentInstance.id);
+      const existingSessions = await api.getTerminalSessions(selectedInstance.id);
       const directorySession = existingSessions.find(s => s.type === 'directory');
-
+      
       if (directorySession) {
         // Rejoin existing session
         setDirectoryTerminalSessionId(directorySession.id);
-        if (selectedInstance) sessionCache.setDirectory(selectedInstance.id, directorySession.id);
       } else {
         // Create new session
-        const sessionId = await onCreateDirectoryTerminalSession(currentInstance.id);
+        const sessionId = await onCreateDirectoryTerminalSession(selectedInstance.id);
         setDirectoryTerminalSessionId(sessionId);
-        sessionCache.setDirectory(selectedInstance.id, sessionId);
       }
       setActiveTab('directory');
     } catch (error) {
@@ -1204,32 +1013,28 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     if (terminalType === 'claude' && claudeTerminalSessionId) {
       onCloseTerminalSession(claudeTerminalSessionId);
       setClaudeTerminalSessionId(null);
-      if (selectedInstance) sessionCache.clearClaude(selectedInstance.id);
     } else if (terminalType === 'directory' && directoryTerminalSessionId) {
       onCloseTerminalSession(directoryTerminalSessionId);
       setDirectoryTerminalSessionId(null);
-      if (selectedInstance) sessionCache.clearDirectory(selectedInstance.id);
     }
   };
 
   const handleRestartInstance = async () => {
-    if (!currentInstance) return;
-
+    if (!selectedInstance) return;
+    
     setIsRestarting(true);
     try {
       // Close any existing terminal sessions
       if (claudeTerminalSessionId) {
         onCloseTerminalSession(claudeTerminalSessionId);
         setClaudeTerminalSessionId(null);
-        if (currentInstance) sessionCache.clearClaude(currentInstance.id);
       }
       if (directoryTerminalSessionId) {
         onCloseTerminalSession(directoryTerminalSessionId);
         setDirectoryTerminalSessionId(null);
-        if (currentInstance) sessionCache.clearDirectory(currentInstance.id);
       }
-
-      await onRestartInstance(currentInstance.id);
+      
+      await onRestartInstance(selectedInstance.id);
     } catch (error) {
       console.error('Failed to restart instance:', error);
     } finally {
@@ -1238,23 +1043,21 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   };
 
   const handleStopInstance = async () => {
-    if (!currentInstance) return;
-
+    if (!selectedInstance) return;
+    
     setIsStopping(true);
     try {
       // Close any existing terminal sessions
       if (claudeTerminalSessionId) {
         onCloseTerminalSession(claudeTerminalSessionId);
         setClaudeTerminalSessionId(null);
-        if (currentInstance) sessionCache.clearClaude(currentInstance.id);
       }
       if (directoryTerminalSessionId) {
         onCloseTerminalSession(directoryTerminalSessionId);
         setDirectoryTerminalSessionId(null);
-         if (currentInstance) sessionCache.clearDirectory(currentInstance.id);
       }
-
-      await onStopInstance(currentInstance.id);
+      
+      await onStopInstance(selectedInstance.id);
     } catch (error) {
       console.error('Failed to stop instance:', error);
     } finally {
@@ -1262,150 +1065,52 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     }
   };
 
-  const handleStartNewAgent = async (agentType: AgentType) => {
-    if (!selectedWorktree) return;
-
-    setIsStartingNewAgent(true);
-    setShowNewAgentDropdown(false);
-
-    try {
-      const newInstance = await api.startInstance(selectedWorktree.id, agentType);
-      // Refresh instances list
-      const instances = await api.getInstances();
-      const worktreeInstances = instances.filter(i => i.worktreeId === selectedWorktree.id);
-      setAllInstances(worktreeInstances);
-      // Select the new instance
-      setCurrentInstanceId(newInstance.id);
-    } catch (error) {
-      console.error('Failed to start new agent:', error);
-    } finally {
-      setIsStartingNewAgent(false);
-    }
-  };
-
-  const handleDeleteInstance = async (instanceId: string) => {
-    setIsDeleting(instanceId);
-    try {
-      // Close any cached sessions
-      const cached = sessionCache.get(instanceId);
-      if (cached?.claude) {
-        onCloseTerminalSession(cached.claude);
-        sessionCache.clearClaude(instanceId);
-      }
-      if (cached?.directory) {
-        onCloseTerminalSession(cached.directory);
-        sessionCache.clearDirectory(instanceId);
-      }
-
-      // Remove from allInstanceSessions
-      setAllInstanceSessions(prev => {
-        const newMap = new Map(prev);
-        newMap.delete(instanceId);
-        return newMap;
-      });
-
-      // Delete the instance
-      await api.stopInstance(instanceId);
-
-      // Refresh instances list
-      const instances = await api.getInstances();
-      const worktreeInstances = instances.filter(i => i.worktreeId === selectedWorktree?.id);
-      setAllInstances(worktreeInstances);
-
-      // If the deleted instance was selected, select another one
-      if (currentInstanceId === instanceId) {
-        const runningInstance = worktreeInstances.find(i => i.status === 'running');
-        setCurrentInstanceId(runningInstance?.id || worktreeInstances[0]?.id || null);
-        setClaudeTerminalSessionId(null);
-        setDirectoryTerminalSessionId(null);
-      }
-    } catch (error) {
-      console.error('Failed to delete instance:', error);
-    } finally {
-      setIsDeleting(null);
-    }
-  };
-
-  const handleClearStoppedInstances = async () => {
-    const stoppedInstances = allInstances.filter(i => i.status === 'stopped' || i.status === 'error');
-
-    if (stoppedInstances.length === 0) return;
-
-    if (!confirm(`Clear ${stoppedInstances.length} stopped/error instance(s)?`)) {
-      return;
-    }
-
-    try {
-      // Delete all stopped instances
-      await Promise.all(stoppedInstances.map(instance => {
-        // Close any cached sessions
-        const cached = sessionCache.get(instance.id);
-        if (cached?.claude) {
-          onCloseTerminalSession(cached.claude);
-          sessionCache.clearClaude(instance.id);
-        }
-        if (cached?.directory) {
-          onCloseTerminalSession(cached.directory);
-          sessionCache.clearDirectory(instance.id);
-        }
-
-        // Remove from allInstanceSessions
-        setAllInstanceSessions(prev => {
-          const newMap = new Map(prev);
-          newMap.delete(instance.id);
-          return newMap;
-        });
-
-        return api.stopInstance(instance.id);
-      }));
-
-      // Refresh instances list
-      const instances = await api.getInstances();
-      const worktreeInstances = instances.filter(i => i.worktreeId === selectedWorktree?.id);
-      setAllInstances(worktreeInstances);
-
-      // If the current instance was deleted, select another one
-      if (currentInstanceId && stoppedInstances.some(i => i.id === currentInstanceId)) {
-        const runningInstance = worktreeInstances.find(i => i.status === 'running');
-        setCurrentInstanceId(runningInstance?.id || worktreeInstances[0]?.id || null);
-        setClaudeTerminalSessionId(null);
-        setDirectoryTerminalSessionId(null);
-      }
-    } catch (error) {
-      console.error('Failed to clear stopped instances:', error);
-    }
-  };
-
   const checkExistingSessionsOrConnect = async () => {
-    if (!currentInstance) return;
-
-    console.log(`checkExistingSessionsOrConnect called for instance ${currentInstance.id}`);
-
+    if (!selectedInstance) return;
+    
+    console.log(`checkExistingSessionsOrConnect called for instance ${selectedInstance.id}`);
+    
     try {
       // Check for existing terminal sessions
-      const existingSessions = await api.getTerminalSessions(currentInstance.id);
-      console.log(`Found ${existingSessions.length} existing sessions for instance ${currentInstance.id}:`, existingSessions);
+      const existingSessions = await api.getTerminalSessions(selectedInstance.id);
+      console.log(`Found ${existingSessions.length} existing sessions for instance ${selectedInstance.id}:`, existingSessions);
       
       // Look for existing Claude and directory sessions
       const claudeSession = existingSessions.find(s => s.type === 'claude');
       const directorySession = existingSessions.find(s => s.type === 'directory');
       
       if (claudeSession) {
-        // Rejoin existing Claude session without changing tabs
+        // Rejoin existing Claude session
         console.log(`Rejoining existing Claude session: ${claudeSession.id}, current activeTab: ${activeTab}`);
         setClaudeTerminalSessionId(claudeSession.id);
-      }
-
-      if (directorySession) {
-        // Rejoin existing directory session without changing tabs
+        // Ensure we're on the Claude tab to show the reconnected session
+        if (activeTab !== 'claude') {
+          console.log(`Setting activeTab to claude (was ${activeTab})`);
+          setActiveTab('claude');
+        } else {
+          console.log(`Already on claude tab, session should be visible`);
+        }
+      } else if (directorySession) {
+        // Rejoin existing directory session
         console.log(`Rejoining existing directory session: ${directorySession.id}, current activeTab: ${activeTab}`);
         setDirectoryTerminalSessionId(directorySession.id);
+        if (activeTab !== 'directory') {
+          console.log(`Setting activeTab to directory (was ${activeTab})`);
+          setActiveTab('directory');
+        } else {
+          console.log(`Already on directory tab, session should be visible`);
+        }
+      } else {
+        // No existing sessions, create new Claude session
+        console.log('No existing sessions found, creating new Claude session');
+        setActiveTab('claude');
+        await handleOpenClaudeTerminal();
       }
-
-      // Don't automatically create sessions or switch tabs - let user choose from dashboard
     } catch (error) {
       console.error('Failed to check existing sessions:', error);
-      // Don't create sessions automatically on error - stay on dashboard
+      // Fallback to creating new Claude session
+      setActiveTab('claude');
+      await handleOpenClaudeTerminal();
     }
   };
 
@@ -1547,22 +1252,20 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       if (deleteWorktreeOnDeny) {
         // Comprehensive cleanup: stop instance, revert changes, and delete worktree
 
-        // 1. Stop the Agent instance if running
-        if (currentInstance) {
+        // 1. Stop the Claude instance if running
+        if (selectedInstance) {
           console.log('Stopping instance before worktree deletion...');
-          await onStopInstance(currentInstance.id);
+          await onStopInstance(selectedInstance.id);
         }
 
         // 2. Close any terminal sessions
         if (claudeTerminalSessionId) {
           onCloseTerminalSession(claudeTerminalSessionId);
           setClaudeTerminalSessionId(null);
-          if (selectedInstance) sessionCache.clearClaude(selectedInstance.id);
         }
         if (directoryTerminalSessionId) {
           onCloseTerminalSession(directoryTerminalSessionId);
           setDirectoryTerminalSessionId(null);
-          if (selectedInstance) sessionCache.clearDirectory(selectedInstance.id);
         }
 
         // 3. Delete the worktree entirely (this also reverts changes)
@@ -1718,58 +1421,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     }
   };
 
-  // Notes operations
-  const loadNotes = async () => {
-    if (!selectedWorktree) return;
-
-    setIsLoadingNotes(true);
-    try {
-      const notesData = await api.getNotes(selectedWorktree.id);
-      setNotesContent(notesData.content);
-      setNotesFileName(notesData.fileName);
-      setUnsavedChanges(false);
-    } catch (error) {
-      console.error('Failed to load notes:', error);
-      setNotesContent('');
-      setNotesFileName('');
-    } finally {
-      setIsLoadingNotes(false);
-    }
-  };
-
-  const saveNotes = async (content: string) => {
-    if (!selectedWorktree) return;
-
-    setIsSavingNotes(true);
-    try {
-      const result = await api.saveNotes(selectedWorktree.id, content);
-      setNotesFileName(result.fileName);
-      setUnsavedChanges(false);
-      console.log('Notes saved:', result.message);
-    } catch (error) {
-      console.error('Failed to save notes:', error);
-    } finally {
-      setIsSavingNotes(false);
-    }
-  };
-
-  const handleNotesChange = (content: string) => {
-    setNotesContent(content);
-    setUnsavedChanges(true);
-
-    // Clear existing timeout
-    if (autoSaveTimeout) {
-      clearTimeout(autoSaveTimeout);
-    }
-
-    // Set new auto-save timeout (save after 2 seconds of no typing)
-    const timeout = setTimeout(() => {
-      saveNotes(content);
-    }, 2000);
-
-    setAutoSaveTimeout(timeout);
-  };
-
 
   // Load git diff when switching to git tab
   useEffect(() => {
@@ -1777,22 +1428,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       loadGitDiff();
     }
   }, [activeTab, selectedWorktree?.id]);
-
-  // Load notes when switching to notes tab
-  useEffect(() => {
-    if (activeTab === 'notes' && selectedWorktree) {
-      loadNotes();
-    }
-  }, [activeTab, selectedWorktree?.id]);
-
-  // Cleanup autosave timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (autoSaveTimeout) {
-        clearTimeout(autoSaveTimeout);
-      }
-    };
-  }, [autoSaveTimeout]);
 
   if (!selectedWorktree) {
     return (
@@ -1805,84 +1440,20 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     );
   }
 
-  // Determine available agents that are ready to start
-  const readyAgents = availableAgents.filter(a => a.isAvailable && (a.isAuthenticated ?? true));
-
-  if (allInstances.length === 0 && !isStartingNewAgent) {
+  if (!selectedInstance) {
     return (
       <div className="right-panel">
         <div className="panel-header">
-          <div>
-            <h3 style={{ margin: 0, color: '#ffffff' }}>Agent Instances</h3>
-            <span style={{ fontSize: '12px', color: '#888' }}>
-              {selectedWorktree.branch} • {selectedWorktree.path}
-            </span>
-          </div>
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={() => setShowNewAgentDropdown(!showNewAgentDropdown)}
-              style={{
-                backgroundColor: '#28a745',
-                border: 'none',
-                color: '#fff',
-                padding: '6px 12px',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '12px'
-              }}
-            >
-              + New Agent
-            </button>
-            {showNewAgentDropdown && (
-              <div style={{
-                position: 'absolute',
-                top: '100%',
-                right: 0,
-                marginTop: '4px',
-                backgroundColor: '#2d3748',
-                border: '1px solid #4a5568',
-                borderRadius: '6px',
-                zIndex: 1000,
-                minWidth: '200px',
-                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)'
-              }}>
-                {readyAgents.length > 0 ? readyAgents.map(agent => (
-                  <button
-                    key={agent.type}
-                    onClick={() => handleStartNewAgent(agent.type)}
-                    style={{
-                      width: '100%',
-                      padding: '10px 16px',
-                      backgroundColor: 'transparent',
-                      border: 'none',
-                      color: '#fff',
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                      fontSize: '13px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '4px'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4a5568'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                  >
-                    <div style={{ fontWeight: 'bold' }}>{agent.name}</div>
-                    <div style={{ fontSize: '11px', color: '#888' }}>{agent.statusMessage || 'Ready'}</div>
-                  </button>
-                )) : (
-                  <div style={{ padding: '12px', color: '#888', fontSize: '12px' }}>
-                    No agents available
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <h3 style={{ margin: 0, color: '#ffffff' }}>Terminal</h3>
+          <span style={{ fontSize: '12px', color: '#888' }}>
+            {selectedWorktree.branch} • {selectedWorktree.path}
+          </span>
         </div>
         <div className="empty-terminal">
           <div>
-            <h4 style={{ color: '#666', marginBottom: '8px' }}>No Agent instances</h4>
+            <h4 style={{ color: '#666', marginBottom: '8px' }}>No Claude instance</h4>
             <p style={{ color: '#888', fontSize: '14px' }}>
-              Start a new agent instance to begin working
+              This worktree doesn't have a running Claude instance
             </p>
           </div>
         </div>
@@ -1890,280 +1461,58 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     );
   }
 
-  if (!currentInstance) {
-    return null; // Loading state
-  }
-
   return (
     <div className="right-panel">
-      <div className="panel-header" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '12px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div style={{ flex: 1 }}>
-            <h3 style={{ margin: 0, color: '#ffffff', marginBottom: '4px' }}>Agent Instances</h3>
-            <div style={{ fontSize: '12px', color: '#888' }}>
-              {selectedWorktree.branch} • {selectedWorktree.path}
-            </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div style={{ display: 'flex', gap: '8px' }}>
-            {/* Clear Stopped Button */}
-            {allInstances.some(i => i.status === 'stopped' || i.status === 'error') && (
-              <button
-                onClick={handleClearStoppedInstances}
-                style={{
-                  backgroundColor: '#6c757d',
-                  border: 'none',
-                  color: '#fff',
-                  padding: '6px 12px',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '12px'
-                }}
-                title="Clear all stopped/error instances"
-              >
-                Clear Stopped
-              </button>
-            )}
-
-            {/* New Agent Button */}
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => setShowNewAgentDropdown(!showNewAgentDropdown)}
-                disabled={isStartingNewAgent}
-                style={{
-                  backgroundColor: '#28a745',
-                  border: 'none',
-                  color: '#fff',
-                  padding: '6px 12px',
-                  borderRadius: '4px',
-                  cursor: isStartingNewAgent ? 'not-allowed' : 'pointer',
-                  fontSize: '12px',
-                  opacity: isStartingNewAgent ? 0.6 : 1
-                }}
-              >
-                {isStartingNewAgent ? 'Starting...' : '+ New Agent'}
-              </button>
-            {showNewAgentDropdown && (
-              <div style={{
-                position: 'absolute',
-                top: '100%',
-                right: 0,
-                marginTop: '4px',
-                backgroundColor: '#2d3748',
-                border: '1px solid #4a5568',
-                borderRadius: '6px',
-                zIndex: 1000,
-                minWidth: '200px',
-                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)'
-              }}>
-                {readyAgents.length > 0 ? readyAgents.map(agent => (
-                  <button
-                    key={agent.type}
-                    onClick={() => handleStartNewAgent(agent.type)}
-                    style={{
-                      width: '100%',
-                      padding: '10px 16px',
-                      backgroundColor: 'transparent',
-                      border: 'none',
-                      color: '#fff',
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                      fontSize: '13px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '4px'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4a5568'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                  >
-                    <div style={{ fontWeight: 'bold' }}>{agent.name}</div>
-                    <div style={{ fontSize: '11px', color: '#888' }}>{agent.statusMessage || 'Ready'}</div>
-                  </button>
-                )) : (
-                  <div style={{ padding: '12px', color: '#888', fontSize: '12px' }}>
-                    No agents available
-                  </div>
-                )}
-              </div>
-            )}
-            </div>
+      <div className="panel-header">
+        <div>
+          <h3 style={{ margin: 0, color: '#ffffff' }}>
+            Claude Instance
+            <span 
+              className={`status ${selectedInstance.status}`}
+              style={{ 
+                marginLeft: '12px',
+                fontSize: '11px',
+                padding: '2px 6px',
+                borderRadius: '3px',
+                backgroundColor: 
+                  selectedInstance.status === 'running' ? '#28a745' :
+                  selectedInstance.status === 'starting' ? '#ffc107' :
+                  selectedInstance.status === 'stopped' ? '#6c757d' : '#dc3545',
+                color: selectedInstance.status === 'starting' ? '#000' : '#fff'
+              }}
+            >
+              {selectedInstance.status}
+            </span>
+          </h3>
+          <div style={{ fontSize: '12px', color: '#888', marginTop: '2px' }}>
+            {selectedWorktree.branch} • {selectedWorktree.path}
+            {selectedInstance.pid && <span> • PID: {selectedInstance.pid}</span>}
+            {selectedInstance.port && <span> • Port: {selectedInstance.port}</span>}
           </div>
         </div>
-
-        {/* Agent Instance List */}
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '8px',
-          maxHeight: '200px',
-          overflowY: 'auto',
-          padding: '8px',
-          backgroundColor: '#0d1117',
-          borderRadius: '6px',
-          border: '1px solid #30363d'
-        }}>
-          {allInstances.map(instance => {
-            const isSelected = instance.id === currentInstanceId;
-            const isConnected = (instance.id === currentInstanceId &&
-                                (claudeTerminalSessionId || directoryTerminalSessionId));
-
-            return (
-              <div
-                key={instance.id}
-                onClick={() => setCurrentInstanceId(instance.id)}
-                style={{
-                  padding: '12px',
-                  backgroundColor: isSelected ? '#21262d' : 'transparent',
-                  border: `1px solid ${isSelected ? '#58a6ff' : '#30363d'}`,
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}
-                onMouseEnter={(e) => {
-                  if (!isSelected) e.currentTarget.style.backgroundColor = '#161b22';
-                }}
-                onMouseLeave={(e) => {
-                  if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-              >
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    <span style={{
-                      fontWeight: 'bold',
-                      color: '#fff',
-                      fontSize: '13px',
-                      textTransform: 'uppercase'
-                    }}>
-                      {instance.agentType}
-                    </span>
-
-                    {/* Status Badge */}
-                    <span style={{
-                      fontSize: '10px',
-                      padding: '2px 6px',
-                      borderRadius: '3px',
-                      backgroundColor:
-                        instance.status === 'running' ? '#28a745' :
-                        instance.status === 'starting' ? '#ffc107' :
-                        instance.status === 'stopped' ? '#6c757d' : '#dc3545',
-                      color: instance.status === 'starting' ? '#000' : '#fff'
-                    }}>
-                      {instance.status}
-                    </span>
-
-                    {/* Connected Badge */}
-                    {isConnected && (
-                      <span style={{
-                        fontSize: '10px',
-                        padding: '2px 6px',
-                        borderRadius: '3px',
-                        backgroundColor: '#0969da',
-                        color: '#fff'
-                      }}>
-                        ● connected
-                      </span>
-                    )}
-
-                    {/* Selected Indicator */}
-                    {isSelected && (
-                      <span style={{
-                        fontSize: '10px',
-                        color: '#58a6ff'
-                      }}>
-                        ◄ active
-                      </span>
-                    )}
-                  </div>
-
-                  <div style={{ fontSize: '11px', color: '#8b949e' }}>
-                    ID: {instance.id.slice(-8)}
-                    {instance.pid && <span> • PID: {instance.pid}</span>}
-                    {instance.port && <span> • Port: {instance.port}</span>}
-                    {(() => {
-                      const cached = sessionCache.get(instance.id);
-                      const sessions = allInstanceSessions.get(instance.id);
-                      const terminalId = cached?.claude || sessions?.claude;
-                      return terminalId ? <span> • Terminal: {terminalId.slice(-8)}</span> : null;
-                    })()}
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                <div style={{ display: 'flex', gap: '6px', marginLeft: '12px' }}>
-                  {instance.status === 'running' && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setCurrentInstanceId(instance.id);
-                        handleStopInstance();
-                      }}
-                      disabled={isStopping && instance.id === currentInstanceId}
-                      style={{
-                        backgroundColor: '#dc3545',
-                        border: 'none',
-                        color: '#fff',
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '10px',
-                        opacity: (isStopping && instance.id === currentInstanceId) ? 0.6 : 1
-                      }}
-                    >
-                      {(isStopping && instance.id === currentInstanceId) ? 'Stopping...' : 'Stop'}
-                    </button>
-                  )}
-
-                  {(instance.status === 'stopped' || instance.status === 'error') && (
-                    <>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setCurrentInstanceId(instance.id);
-                          handleRestartInstance();
-                        }}
-                        disabled={isRestarting && instance.id === currentInstanceId}
-                        style={{
-                          backgroundColor: '#238636',
-                          border: 'none',
-                          color: '#fff',
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '10px',
-                          opacity: (isRestarting && instance.id === currentInstanceId) ? 0.6 : 1
-                        }}
-                      >
-                        {(isRestarting && instance.id === currentInstanceId) ? 'Restarting...' : 'Restart'}
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteInstance(instance.id);
-                        }}
-                        disabled={isDeleting === instance.id}
-                        style={{
-                          backgroundColor: '#6c757d',
-                          border: 'none',
-                          color: '#fff',
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '10px',
-                          opacity: isDeleting === instance.id ? 0.6 : 1
-                        }}
-                      >
-                        {isDeleting === instance.id ? 'Removing...' : 'Remove'}
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+        
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {selectedInstance.status === 'running' && (
+            <button
+              onClick={handleStopInstance}
+              disabled={isStopping}
+              className="button danger"
+              style={{ fontSize: '12px', padding: '6px 12px' }}
+            >
+              {isStopping ? 'Stopping...' : 'Stop Claude'}
+            </button>
+          )}
+          
+          {(selectedInstance.status === 'stopped' || selectedInstance.status === 'error') && (
+            <button
+              onClick={handleRestartInstance}
+              disabled={isRestarting}
+              className="button"
+              style={{ fontSize: '12px', padding: '6px 12px' }}
+            >
+              {isRestarting ? 'Restarting...' : 'Restart Claude'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -2183,9 +1532,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       {/* Tabbed interface */}
       <div style={{ display: 'flex', borderBottom: '1px solid #444' }}>
         <button
-          onClick={() => {
-            setActiveTab('dashboard');
-          }}
+          onClick={() => setActiveTab('dashboard')}
           style={{
             background: activeTab === 'dashboard' ? '#444' : 'transparent',
             border: 'none',
@@ -2202,7 +1549,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           onClick={() => {
             setActiveTab('claude');
             // If switching to Claude tab but no session exists, check for existing sessions
-            if (!claudeTerminalSessionId && currentInstance?.status === 'running') {
+            if (!claudeTerminalSessionId && selectedInstance?.status === 'running') {
               setTimeout(() => handleOpenClaudeTerminal(), 100);
             }
           }}
@@ -2216,13 +1563,13 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             fontSize: '13px'
           }}
         >
-          Agent {claudeTerminalSessionId && '●'}
+          Claude {claudeTerminalSessionId && '●'}
         </button>
         <button
           onClick={() => {
             setActiveTab('directory');
             // If switching to Terminal tab but no session exists, check for existing sessions
-            if (!directoryTerminalSessionId && currentInstance?.status === 'running') {
+            if (!directoryTerminalSessionId && selectedInstance?.status === 'running') {
               setTimeout(() => handleOpenDirectoryTerminal(), 100);
             }
           }}
@@ -2254,184 +1601,130 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         >
           Git {gitDiff && gitDiff.trim() && '●'}
         </button>
-        <button
-          onClick={() => {
-            setActiveTab('notes');
-          }}
-          style={{
-            background: activeTab === 'notes' ? '#444' : 'transparent',
-            border: 'none',
-            color: '#fff',
-            padding: '12px 24px',
-            cursor: 'pointer',
-            borderBottom: activeTab === 'notes' ? '2px solid #007acc' : '2px solid transparent',
-            fontSize: '13px'
-          }}
-        >
-          Notes {unsavedChanges && '●'}
-        </button>
       </div>
 
       <div className="terminal-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        {/* Dashboard Tab */}
+        {/* Dashboard */}
         <div style={{
           display: activeTab === 'dashboard' ? 'flex' : 'none',
           flexDirection: 'column',
           flex: 1,
-          minHeight: 0,
-          padding: '20px',
-          overflowY: 'auto'
+          padding: '24px',
+          overflow: 'auto'
         }}>
-          <div style={{ maxWidth: '800px' }}>
-            <h2 style={{ color: '#fff', marginBottom: '20px' }}>Worktree Overview</h2>
-
-            {/* Worktree Info */}
+          <h3 style={{ color: '#fff', marginTop: 0 }}>Worktree Dashboard</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px', marginBottom: '24px' }}>
             <div style={{
-              background: '#2d2d2d',
-              border: '1px solid #444',
-              borderRadius: '6px',
-              padding: '16px',
-              marginBottom: '20px'
+              backgroundColor: '#1a1a1a',
+              border: '1px solid #333',
+              borderRadius: '8px',
+              padding: '20px'
             }}>
-              <h3 style={{ color: '#fff', marginBottom: '12px', fontSize: '16px' }}>Branch Information</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ color: '#8b949e', fontSize: '13px' }}>
-                  <strong style={{ color: '#fff' }}>Branch:</strong> {selectedWorktree?.branch}
-                </div>
-                <div style={{ color: '#8b949e', fontSize: '13px' }}>
-                  <strong style={{ color: '#fff' }}>Path:</strong> {selectedWorktree?.path}
-                </div>
+              <div style={{ color: '#888', fontSize: '12px', marginBottom: '4px' }}>BRANCH</div>
+              <div style={{ color: '#58a6ff', fontSize: '20px', fontWeight: 'bold' }}>
+                {selectedWorktree.branch.replace(/^refs\/heads\//, '')}
               </div>
             </div>
-
-            {/* Agent Status */}
             <div style={{
-              background: '#2d2d2d',
-              border: '1px solid #444',
-              borderRadius: '6px',
-              padding: '16px',
-              marginBottom: '20px'
+              backgroundColor: '#1a1a1a',
+              border: '1px solid #333',
+              borderRadius: '8px',
+              padding: '20px'
             }}>
-              <h3 style={{ color: '#fff', marginBottom: '12px', fontSize: '16px' }}>Agent Status</h3>
-              {currentInstance ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ color: '#8b949e', fontSize: '13px' }}>
-                    <strong style={{ color: '#fff' }}>Status:</strong>{' '}
-                    <span style={{
-                      color: currentInstance.status === 'running' ? '#3fb950' :
-                             currentInstance.status === 'starting' ? '#f59e0b' :
-                             currentInstance.status === 'error' ? '#f85149' : '#8b949e'
-                    }}>
-                      {currentInstance.status}
-                    </span>
-                  </div>
-                  <div style={{ color: '#8b949e', fontSize: '13px' }}>
-                    <strong style={{ color: '#fff' }}>Type:</strong> {currentInstance.agentType}
-                  </div>
-                  {currentInstance.pid && (
-                    <div style={{ color: '#8b949e', fontSize: '13px' }}>
-                      <strong style={{ color: '#fff' }}>PID:</strong> {currentInstance.pid}
-                    </div>
-                  )}
-                  {currentInstance.port && (
-                    <div style={{ color: '#8b949e', fontSize: '13px' }}>
-                      <strong style={{ color: '#fff' }}>Port:</strong> {currentInstance.port}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div style={{ color: '#8b949e', fontSize: '13px' }}>
-                  No agent instance running
-                </div>
-              )}
+              <div style={{ color: '#888', fontSize: '12px', marginBottom: '4px' }}>STATUS</div>
+              <div style={{
+                color: selectedInstance?.status === 'running' ? '#3fb950' :
+                       selectedInstance?.status === 'starting' ? '#f59e0b' : '#f85149',
+                fontSize: '20px',
+                fontWeight: 'bold'
+              }}>
+                {selectedInstance?.status || 'No Instance'}
+              </div>
             </div>
-
-            {/* Quick Actions */}
             <div style={{
-              background: '#2d2d2d',
-              border: '1px solid #444',
-              borderRadius: '6px',
-              padding: '16px'
+              backgroundColor: '#1a1a1a',
+              border: '1px solid #333',
+              borderRadius: '8px',
+              padding: '20px'
             }}>
-              <h3 style={{ color: '#fff', marginBottom: '12px', fontSize: '16px' }}>Quick Actions</h3>
-              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                <button
-                  onClick={() => {
-                    setActiveTab('claude');
-                    // If switching to Claude tab but no session exists, create one
-                    if (!claudeTerminalSessionId && currentInstance?.status === 'running') {
-                      setTimeout(() => handleOpenClaudeTerminal(), 100);
-                    }
-                  }}
-                  disabled={!currentInstance || currentInstance.status !== 'running'}
-                  style={{
-                    background: '#007acc',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '8px 16px',
-                    borderRadius: '4px',
-                    cursor: !currentInstance || currentInstance.status !== 'running' ? 'not-allowed' : 'pointer',
-                    opacity: !currentInstance || currentInstance.status !== 'running' ? 0.5 : 1,
-                    fontSize: '13px'
-                  }}
-                >
-                  Open Agent Terminal
-                </button>
-                <button
-                  onClick={() => {
-                    setActiveTab('directory');
-                    // If switching to Terminal tab but no session exists, create one
-                    if (!directoryTerminalSessionId && currentInstance?.status === 'running') {
-                      setTimeout(() => handleOpenDirectoryTerminal(), 100);
-                    }
-                  }}
-                  style={{
-                    background: '#6c757d',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '8px 16px',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '13px'
-                  }}
-                >
-                  Open Directory Terminal
-                </button>
-                <button
-                  onClick={() => setActiveTab('git')}
-                  style={{
-                    background: '#f59e0b',
-                    color: '#000',
-                    border: 'none',
-                    padding: '8px 16px',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '13px'
-                  }}
-                >
-                  View Git Changes
-                </button>
-                <button
-                  onClick={() => setActiveTab('notes')}
-                  style={{
-                    background: '#8b5cf6',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '8px 16px',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '13px'
-                  }}
-                >
-                  View Notes
-                </button>
+              <div style={{ color: '#888', fontSize: '12px', marginBottom: '4px' }}>PATH</div>
+              <div style={{ color: '#d2a8ff', fontSize: '14px', fontWeight: 'bold', wordBreak: 'break-all' }}>
+                {selectedWorktree.path}
               </div>
             </div>
           </div>
+
+          <div style={{
+            backgroundColor: '#1a1a1a',
+            border: '1px solid #333',
+            borderRadius: '8px',
+            padding: '24px',
+            marginBottom: '16px'
+          }}>
+            <h4 style={{ color: '#fff', marginTop: 0 }}>Quick Actions</h4>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => setActiveTab('claude')}
+                className="button"
+                style={{ fontSize: '14px', padding: '10px 20px' }}
+              >
+                Open Claude Terminal
+              </button>
+              <button
+                onClick={() => setActiveTab('directory')}
+                className="button"
+                style={{ fontSize: '14px', padding: '10px 20px' }}
+              >
+                Open Directory Terminal
+              </button>
+              <button
+                onClick={() => setActiveTab('git')}
+                className="button"
+                style={{ fontSize: '14px', padding: '10px 20px' }}
+              >
+                View Git Changes
+              </button>
+            </div>
+          </div>
+
+          {selectedInstance && (
+            <div style={{
+              backgroundColor: '#1a1a1a',
+              border: '1px solid #333',
+              borderRadius: '8px',
+              padding: '24px'
+            }}>
+              <h4 style={{ color: '#fff', marginTop: 0 }}>Instance Details</h4>
+              <div style={{ display: 'grid', gap: '12px' }}>
+                {selectedInstance.pid && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#888' }}>Process ID:</span>
+                    <span style={{ color: '#fff', fontFamily: 'monospace' }}>{selectedInstance.pid}</span>
+                  </div>
+                )}
+                {selectedInstance.port && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#888' }}>Port:</span>
+                    <span style={{ color: '#fff', fontFamily: 'monospace' }}>{selectedInstance.port}</span>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#888' }}>Status:</span>
+                  <span style={{
+                    color: selectedInstance.status === 'running' ? '#3fb950' :
+                           selectedInstance.status === 'starting' ? '#f59e0b' : '#f85149',
+                    fontWeight: 'bold'
+                  }}>
+                    {selectedInstance.status}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Agent Terminal */}
-        <div style={{
+        {/* Claude Terminal */}
+        <div style={{ 
           display: activeTab === 'claude' ? 'flex' : 'none', 
           flexDirection: 'column', 
           flex: 1,
@@ -2439,49 +1732,49 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         }}>
           {claudeTerminalSessionId ? (
             <>
-              {console.log(`Rendering Agent TerminalComponent with sessionId: ${claudeTerminalSessionId}`)}
+              {console.log(`Rendering Claude TerminalComponent with sessionId: ${claudeTerminalSessionId}`)}
               <TerminalComponent
                 key={claudeTerminalSessionId}
                 sessionId={claudeTerminalSessionId}
                 onClose={() => handleCloseTerminal('claude')}
               />
             </>
-          ) : currentInstance.status === 'running' ? (
+          ) : selectedInstance.status === 'running' ? (
             <div className="empty-terminal" style={{ flex: 1 }}>
               <div style={{ textAlign: 'center' }}>
-                <h4 style={{ color: '#666', marginBottom: '8px' }}>Agent Terminal</h4>
+                <h4 style={{ color: '#666', marginBottom: '8px' }}>Claude Terminal</h4>
                 {isCreatingClaudeSession ? (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', color: '#888' }}>
-                    <div style={{
-                      width: '16px',
-                      height: '16px',
-                      border: '2px solid #444',
-                      borderTop: '2px solid #888',
+                    <div style={{ 
+                      width: '16px', 
+                      height: '16px', 
+                      border: '2px solid #444', 
+                      borderTop: '2px solid #888', 
                       borderRadius: '50%',
-                      animation: 'spin 1s linear infinite'
+                      animation: 'spin 1s linear infinite' 
                     }}></div>
-                    Connecting to Agent...
+                    Connecting to Claude...
                   </div>
                 ) : (
                   <>
                     <p style={{ color: '#888', fontSize: '14px', marginBottom: '16px' }}>
-                      Connect to the running Agent instance for AI assistance
+                      Connect to the running Claude instance for AI assistance
                     </p>
                     <button
                       onClick={handleOpenClaudeTerminal}
                       className="button"
                       style={{ fontSize: '14px', padding: '8px 16px' }}
                     >
-                      Connect to Agent
+                      Connect to Claude
                     </button>
                   </>
                 )}
               </div>
             </div>
-          ) : currentInstance.status === 'starting' ? (
+          ) : selectedInstance.status === 'starting' ? (
             <div className="empty-terminal" style={{ flex: 1 }}>
               <div style={{ textAlign: 'center' }}>
-                <h4 style={{ color: '#666', marginBottom: '8px' }}>Agent Terminal</h4>
+                <h4 style={{ color: '#666', marginBottom: '8px' }}>Claude Terminal</h4>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', color: '#888' }}>
                   <div style={{ 
                     width: '16px', 
@@ -2491,16 +1784,16 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                     borderRadius: '50%',
                     animation: 'spin 1s linear infinite' 
                   }}></div>
-                  Starting Agent instance...
+                  Starting Claude instance...
                 </div>
               </div>
             </div>
           ) : (
             <div className="empty-terminal" style={{ flex: 1 }}>
               <div style={{ textAlign: 'center' }}>
-                <h4 style={{ color: '#666', marginBottom: '8px' }}>Agent Terminal</h4>
+                <h4 style={{ color: '#666', marginBottom: '8px' }}>Claude Terminal</h4>
                 <p style={{ color: '#888', fontSize: '14px' }}>
-                  Agent instance must be running to connect
+                  Claude instance must be running to connect
                 </p>
               </div>
             </div>
@@ -2880,273 +2173,147 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             </div>
           )}
 
-        </div>
-
-        {/* Notes Tab */}
-        <div style={{
-          display: activeTab === 'notes' ? 'flex' : 'none',
-          flexDirection: 'column',
-          flex: 1,
-          minHeight: 0,
-          padding: '16px'
-        }}>
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '16px',
-            borderBottom: '1px solid #444',
-            paddingBottom: '12px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <h4 style={{ color: '#fff', margin: 0 }}>Notes</h4>
-              {notesFileName && (
-                <span style={{ color: '#888', fontSize: '12px' }}>
-                  {notesFileName}
-                </span>
-              )}
-              {unsavedChanges && (
-                <span style={{ color: '#ffc107', fontSize: '12px' }}>
-                  ● Unsaved changes
-                </span>
-              )}
-            </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={() => saveNotes(notesContent)}
-                disabled={isSavingNotes || !unsavedChanges}
-                style={{
-                  backgroundColor: unsavedChanges ? '#28a745' : '#555',
-                  border: 'none',
-                  color: '#fff',
-                  padding: '8px 16px',
-                  borderRadius: '4px',
-                  cursor: isSavingNotes || !unsavedChanges ? 'not-allowed' : 'pointer',
-                  fontSize: '13px',
-                  opacity: isSavingNotes || !unsavedChanges ? 0.6 : 1
-                }}
-              >
-                {isSavingNotes ? 'Saving...' : 'Save Notes'}
-              </button>
-            </div>
-          </div>
-
-          {isLoadingNotes ? (
+          {/* Denial Confirmation Modal */}
+          {showDenyConfirmation && (
             <div style={{
-              flex: 1,
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.7)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#888'
+              zIndex: 1000
             }}>
-              Loading notes...
-            </div>
-          ) : (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-              <textarea
-                value={notesContent}
-                onChange={(e) => handleNotesChange(e.target.value)}
-                placeholder="Add your notes here... Notes will be automatically saved as you type and stored in .bob-notes-<branch>.md in your worktree."
-                style={{
-                  flex: 1,
-                  minHeight: '400px',
-                  backgroundColor: '#1a1a1a',
-                  border: '1px solid #444',
-                  borderRadius: '4px',
-                  color: '#e5e5e5',
-                  padding: '16px',
-                  fontSize: '14px',
-                  fontFamily: 'Monaco, Menlo, "Ubuntu Mono", Consolas, "Droid Sans Mono", monospace',
-                  lineHeight: '1.5',
-                  resize: 'vertical',
-                  outline: 'none',
-                  width: '100%',
-                  boxSizing: 'border-box'
-                }}
-                onFocus={(e) => {
-                  e.target.style.borderColor = '#007acc';
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = '#444';
-                }}
-              />
               <div style={{
-                marginTop: '12px',
-                fontSize: '12px',
-                color: '#666',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
+                backgroundColor: '#2d3748',
+                border: '1px solid #4a5568',
+                borderRadius: '8px',
+                padding: '24px',
+                minWidth: '450px',
+                maxWidth: '550px'
               }}>
-                <span>
-                  Auto-save enabled • Markdown supported
-                </span>
-                <span>
-                  {notesContent.length} characters
-                </span>
+                <h3 style={{ color: '#fff', marginBottom: '16px', marginTop: 0 }}>
+                  ⚠️ Confirm Deny Changes
+                </h3>
+                <p style={{ color: '#a0aec0', marginBottom: '16px', lineHeight: '1.5' }}>
+                  Choose how to handle the denial of changes:
+                </p>
+
+                {/* Option Selection */}
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '8px',
+                    marginBottom: '12px',
+                    cursor: 'pointer',
+                    padding: '8px',
+                    borderRadius: '4px',
+                    backgroundColor: !deleteWorktreeOnDeny ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                    border: !deleteWorktreeOnDeny ? '1px solid #3b82f6' : '1px solid transparent'
+                  }}>
+                    <input
+                      type="radio"
+                      name="denyOption"
+                      checked={!deleteWorktreeOnDeny}
+                      onChange={() => setDeleteWorktreeOnDeny(false)}
+                      style={{ marginTop: '2px' }}
+                    />
+                    <div>
+                      <div style={{ color: '#fff', fontWeight: 'bold', marginBottom: '4px' }}>
+                        🔄 Revert Changes Only
+                      </div>
+                      <div style={{ color: '#a0aec0', fontSize: '13px' }}>
+                        Reset all files to their last committed state, but keep the worktree and instance running.
+                      </div>
+                    </div>
+                  </label>
+
+                  <label style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '8px',
+                    cursor: 'pointer',
+                    padding: '8px',
+                    borderRadius: '4px',
+                    backgroundColor: deleteWorktreeOnDeny ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
+                    border: deleteWorktreeOnDeny ? '1px solid #ef4444' : '1px solid transparent'
+                  }}>
+                    <input
+                      type="radio"
+                      name="denyOption"
+                      checked={deleteWorktreeOnDeny}
+                      onChange={() => setDeleteWorktreeOnDeny(true)}
+                      style={{ marginTop: '2px' }}
+                    />
+                    <div>
+                      <div style={{ color: '#fff', fontWeight: 'bold', marginBottom: '4px' }}>
+                        🗑️ Delete Entire Worktree
+                      </div>
+                      <div style={{ color: '#a0aec0', fontSize: '13px' }}>
+                        Stop the instance, close terminals, and completely remove this worktree and all its contents.
+                      </div>
+                    </div>
+                  </label>
+                </div>
+
+                <div style={{
+                  color: deleteWorktreeOnDeny ? '#ef4444' : '#f59e0b',
+                  fontSize: '13px',
+                  marginBottom: '20px',
+                  padding: '8px',
+                  backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                  borderRadius: '4px',
+                  fontWeight: 'bold'
+                }}>
+                  ⚠️ {deleteWorktreeOnDeny ? 'This will permanently delete the entire worktree!' : 'This will permanently revert all changes!'}
+                </div>
+                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => {
+                      setShowDenyConfirmation(false);
+                      setDeleteWorktreeOnDeny(false); // Reset checkbox when cancelling
+                    }}
+                    style={{
+                      backgroundColor: 'transparent',
+                      border: '1px solid #4a5568',
+                      color: '#a0aec0',
+                      padding: '8px 16px',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '14px'
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmDenyChanges}
+                    disabled={isReverting}
+                    style={{
+                      backgroundColor: deleteWorktreeOnDeny ? '#dc3545' : '#f59e0b',
+                      border: 'none',
+                      color: '#fff',
+                      padding: '8px 16px',
+                      borderRadius: '4px',
+                      cursor: isReverting ? 'not-allowed' : 'pointer',
+                      fontSize: '14px',
+                      opacity: isReverting ? 0.6 : 1
+                    }}
+                  >
+                    {isReverting
+                      ? (deleteWorktreeOnDeny ? 'Deleting Worktree...' : 'Reverting Changes...')
+                      : (deleteWorktreeOnDeny ? 'Yes, Delete Worktree' : 'Yes, Revert Changes')
+                    }
+                  </button>
+                </div>
               </div>
             </div>
           )}
         </div>
-
       </div>
-      
-      {/* Denial Confirmation Modal for Git tab */}
-      {activeTab === 'git' && showDenyConfirmation && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.7)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            backgroundColor: '#2d3748',
-            border: '1px solid #4a5568',
-            borderRadius: '8px',
-            padding: '24px',
-            minWidth: '450px',
-            maxWidth: '550px'
-          }}>
-            <h3 style={{ color: '#fff', marginBottom: '16px', marginTop: 0 }}>
-              ⚠️ Confirm Deny Changes
-            </h3>
-            <p style={{ color: '#a0aec0', marginBottom: '16px', lineHeight: '1.5' }}>
-              Choose how to handle the denial of changes:
-            </p>
-
-            {/* Option Selection */}
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: '8px',
-                marginBottom: '12px',
-                cursor: 'pointer',
-                padding: '8px',
-                borderRadius: '4px',
-                backgroundColor: !deleteWorktreeOnDeny ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
-                border: !deleteWorktreeOnDeny ? '1px solid #3b82f6' : '1px solid transparent'
-              }}>
-                <input
-                  type="radio"
-                  name="denyOption"
-                  checked={!deleteWorktreeOnDeny}
-                  onChange={() => setDeleteWorktreeOnDeny(false)}
-                  style={{ marginTop: '2px' }}
-                />
-                <div>
-                  <div style={{ color: '#fff', fontWeight: 'bold', marginBottom: '4px' }}>
-                    🔄 Revert Changes Only
-                  </div>
-                  <div style={{ color: '#a0aec0', fontSize: '13px' }}>
-                    Reset all files to their last committed state, but keep the worktree and instance running.
-                  </div>
-                </div>
-              </label>
-
-              <label style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: '8px',
-                cursor: 'pointer',
-                padding: '8px',
-                borderRadius: '4px',
-                backgroundColor: deleteWorktreeOnDeny ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
-                border: deleteWorktreeOnDeny ? '1px solid #ef4444' : '1px solid transparent'
-              }}>
-                <input
-                  type="radio"
-                  name="denyOption"
-                  checked={deleteWorktreeOnDeny}
-                  onChange={() => setDeleteWorktreeOnDeny(true)}
-                  style={{ marginTop: '2px' }}
-                />
-                <div>
-                  <div style={{ color: '#fff', fontWeight: 'bold', marginBottom: '4px' }}>
-                    🗑️ Delete Entire Worktree
-                  </div>
-                  <div style={{ color: '#a0aec0', fontSize: '13px' }}>
-                    Stop the instance, close terminals, and completely remove this worktree and all its contents.
-                  </div>
-                </div>
-              </label>
-            </div>
-
-            <div style={{
-              color: deleteWorktreeOnDeny ? '#ef4444' : '#f59e0b',
-              fontSize: '13px',
-              marginBottom: '20px',
-              padding: '8px',
-              backgroundColor: 'rgba(0, 0, 0, 0.2)',
-              borderRadius: '4px',
-              fontWeight: 'bold'
-            }}>
-              ⚠️ {deleteWorktreeOnDeny ? 'This will permanently delete the entire worktree!' : 'This will permanently revert all changes!'}
-            </div>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => {
-                  setShowDenyConfirmation(false);
-                  setDeleteWorktreeOnDeny(false); // Reset checkbox when cancelling
-                }}
-                style={{
-                  backgroundColor: 'transparent',
-                  border: '1px solid #4a5568',
-                  color: '#a0aec0',
-                  padding: '8px 16px',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '14px'
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDenyChanges}
-                disabled={isReverting}
-                style={{
-                  backgroundColor: deleteWorktreeOnDeny ? '#dc3545' : '#f59e0b',
-                  border: 'none',
-                  color: '#fff',
-                  padding: '8px 16px',
-                  borderRadius: '4px',
-                  cursor: isReverting ? 'not-allowed' : 'pointer',
-                  fontSize: '14px',
-                  opacity: isReverting ? 0.6 : 1
-                }}
-              >
-                {isReverting
-                  ? (deleteWorktreeOnDeny ? 'Deleting Worktree...' : 'Reverting Changes...')
-                  : (deleteWorktreeOnDeny ? 'Yes, Delete Worktree' : 'Yes, Revert Changes')
-                }
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Hidden terminals for all instances to keep them warm */}
-      {allInstances.map(instance => {
-        const sessions = allInstanceSessions.get(instance.id);
-        if (!sessions?.claude || instance.id === currentInstanceId) {
-          // Skip if no session or this is the currently visible instance
-          return null;
-        }
-        return (
-          <div key={`hidden-${instance.id}`} style={{ display: 'none' }}>
-            <TerminalComponent
-              sessionId={sessions.claude}
-              onClose={() => {}}
-            />
-          </div>
-        );
-      })}
     </div>
   );
 };
