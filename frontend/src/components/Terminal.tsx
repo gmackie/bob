@@ -25,23 +25,23 @@ export const TerminalComponent: React.FC<TerminalComponentProps> = ({ sessionId,
 
     setConnectionState('connecting');
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // In Electron production mode, use the same port as the web server
-    // In development mode, use the backend port (43829)
-    const isElectron = window.electronAPI !== undefined;
-    const isDevelopment = window.location.port === '47285';
 
-    let wsPort;
-    if (isElectron && !isDevelopment) {
-      // Production Electron app - use the same port as the current page
-      wsPort = window.location.port || '43829';
+    // Determine WebSocket URL based on environment
+    let wsUrl: string;
+    if (import.meta.env.MODE === 'production' && import.meta.env.VITE_API_URL) {
+      // Production: Use the API domain
+      const apiUrl = new URL(import.meta.env.VITE_API_URL as string);
+      wsUrl = `${apiUrl.protocol === 'https:' ? 'wss:' : 'ws:'}//${apiUrl.host}/socket.io/?sessionId=${sessionId}`;
+    } else if (window.location.port === '47285') {
+      // Development: Direct connection to backend port
+      wsUrl = `${wsProtocol}//${window.location.hostname}:43829/socket.io/?sessionId=${sessionId}`;
     } else {
-      // Development mode or web browser - use backend port
-      wsPort = '43829';
+      // Fallback: Use same-origin (for backward compatibility)
+      wsUrl = `${wsProtocol}//${window.location.host}/socket.io/?sessionId=${sessionId}`;
     }
 
-    const wsUrl = `${wsProtocol}//${window.location.hostname}:${wsPort}?sessionId=${sessionId}`;
     console.log(`Attempting WebSocket connection to: ${wsUrl}`);
-    console.log(`Connection details: electron=${isElectron}, development=${isDevelopment}, port=${wsPort}`);
+    console.log(`Connection details: mode=${import.meta.env.MODE}`);
     websocket.current = new WebSocket(wsUrl);
 
     websocket.current.onopen = () => {
