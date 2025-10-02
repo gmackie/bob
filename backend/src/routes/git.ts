@@ -1099,4 +1099,107 @@ router.post('/:worktreeId/notes', async (req, res) => {
   }
 });
 
+// Get git status for a worktree
+router.get('/:worktreeId/status', async (req, res) => {
+  try {
+    const { worktreeId } = req.params;
+
+    // Get worktree from database
+    const db = (req as any).db;
+    const worktree = db.prepare('SELECT * FROM worktrees WHERE id = ?').get(worktreeId);
+
+    if (!worktree) {
+      return res.status(404).json({ error: 'Worktree not found' });
+    }
+
+    // Get git status
+    const { stdout: statusOutput } = await execAsync('git status --porcelain --branch', { cwd: worktree.path });
+    const lines = statusOutput.split('\n').filter(l => l.trim());
+
+    // Parse branch info
+    const branchLine = lines[0] || '';
+    const branchMatch = branchLine.match(/## ([^\s.]+)(?:\.\.\.([^\s]+))?(?: \[(.+)\])?/);
+    const branch = branchMatch?.[1] || worktree.branch;
+    const tracking = branchMatch?.[2] || '';
+    const status = branchMatch?.[3] || '';
+
+    // Parse ahead/behind
+    let ahead = 0;
+    let behind = 0;
+    if (status) {
+      const aheadMatch = status.match(/ahead (\d+)/);
+      const behindMatch = status.match(/behind (\d+)/);
+      if (aheadMatch) ahead = parseInt(aheadMatch[1]);
+      if (behindMatch) behind = parseInt(behindMatch[1]);
+    }
+
+    // Count file changes
+    const fileLines = lines.slice(1);
+    const staged = fileLines.filter(l => l[0] !== ' ' && l[0] !== '?').length;
+    const unstaged = fileLines.filter(l => l[1] !== ' ' && l[0] !== '?').length;
+    const untracked = fileLines.filter(l => l.startsWith('??')).length;
+    const hasChanges = fileLines.length > 0;
+
+    res.json({
+      branch,
+      ahead,
+      behind,
+      hasChanges,
+      files: {
+        staged,
+        unstaged,
+        untracked
+      }
+    });
+  } catch (error: any) {
+    console.error('Error getting git status:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get PR status for a worktree
+router.get('/:worktreeId/pr-status', async (req, res) => {
+  try {
+    const { worktreeId } = req.params;
+
+    // Get worktree from database
+    const db = (req as any).db;
+    const worktree = db.prepare('SELECT * FROM worktrees WHERE id = ?').get(worktreeId);
+
+    if (!worktree) {
+      return res.status(404).json({ error: 'Worktree not found' });
+    }
+
+    // Check if gh is available
+    try {
+      await execAsync('gh --version');
+    } catch {
+      return res.json({ exists: false });
+    }
+
+    // Get PR info using GitHub CLI
+    try {
+      const { stdout } = await execAsync(
+        `gh pr view ${worktree.branch} --json number,title,url,state`,
+        { cwd: worktree.path }
+      );
+
+      const prData = JSON.parse(stdout);
+      res.json({
+        exists: true,
+        number: prData.number,
+        title: prData.title,
+        url: prData.url,
+        state: prData.state.toLowerCase()
+      });
+    } catch (error: any) {
+      // PR doesn't exist or branch isn't pushed
+      res.json({ exists: false });
+    }
+  } catch (error: any) {
+    console.error('Error getting PR status:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

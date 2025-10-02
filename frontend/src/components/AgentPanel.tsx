@@ -965,7 +965,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const [isCreatingDirectorySession, setIsCreatingDirectorySession] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const lastAutoConnectInstance = useRef<string>('');
+
+  // Track all session IDs for all instances to keep them warm
+  const [allInstanceSessions, setAllInstanceSessions] = useState<Map<string, { claude: string | null; directory: string | null }>>(new Map());
 
   // Git state
   const [gitDiff, setGitDiff] = useState<string>('');
@@ -1044,12 +1048,58 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   // Get the currently selected instance object
   const currentInstance = allInstances.find(i => i.id === currentInstanceId) || null;
 
+  // Keep all running instances warm with terminal sessions
+  useEffect(() => {
+    const ensureInstanceSessions = async () => {
+      const runningInstances = allInstances.filter(i => i.status === 'running');
+
+      for (const instance of runningInstances) {
+        const cached = sessionCache.get(instance.id);
+        const sessions = allInstanceSessions.get(instance.id) || { claude: null, directory: null };
+
+        // Create Claude session if it doesn't exist
+        if (!sessions.claude && !cached?.claude) {
+          try {
+            const sessionId = await onCreateTerminalSession(instance.id);
+            sessionCache.setClaude(instance.id, sessionId);
+            setAllInstanceSessions(prev => new Map(prev).set(instance.id, { ...sessions, claude: sessionId }));
+          } catch (error) {
+            console.error(`Failed to create Claude session for instance ${instance.id}:`, error);
+          }
+        } else if (cached?.claude && !sessions.claude) {
+          setAllInstanceSessions(prev => new Map(prev).set(instance.id, { ...sessions, claude: cached.claude }));
+        }
+      }
+    };
+
+    ensureInstanceSessions();
+  }, [allInstances]);
+
   useEffect(() => {
     // On instance switch, reuse cached sessionIds if present; do not clear
     if (currentInstance?.id) {
       const cached = sessionCache.get(currentInstance.id);
-      if (cached?.claude) setClaudeTerminalSessionId(cached.claude);
-      if (cached?.directory) setDirectoryTerminalSessionId(cached.directory);
+      const instanceSessions = allInstanceSessions.get(currentInstance.id);
+
+      // Prioritize cached sessions, then check allInstanceSessions
+      if (cached?.claude) {
+        setClaudeTerminalSessionId(cached.claude);
+      } else if (instanceSessions?.claude) {
+        setClaudeTerminalSessionId(instanceSessions.claude);
+        sessionCache.setClaude(currentInstance.id, instanceSessions.claude);
+      } else {
+        setClaudeTerminalSessionId(null);
+      }
+
+      if (cached?.directory) {
+        setDirectoryTerminalSessionId(cached.directory);
+      } else if (instanceSessions?.directory) {
+        setDirectoryTerminalSessionId(instanceSessions.directory);
+        sessionCache.setDirectory(currentInstance.id, instanceSessions.directory);
+      } else {
+        setDirectoryTerminalSessionId(null);
+      }
+
       // Reset git and analysis UI only; terminals persist via wsManager
       setGitDiff('');
       setGitCommitMessage('');
@@ -1066,7 +1116,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         setAutoSaveTimeout(null);
       }
     }
-  }, [currentInstance?.id]);
+  }, [currentInstance?.id, allInstanceSessions]);
 
   // Auto-connect to existing terminal sessions or create new ones when instance first becomes running
   useEffect(() => {
@@ -1230,6 +1280,99 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       console.error('Failed to start new agent:', error);
     } finally {
       setIsStartingNewAgent(false);
+    }
+  };
+
+  const handleDeleteInstance = async (instanceId: string) => {
+    setIsDeleting(instanceId);
+    try {
+      // Close any cached sessions
+      const cached = sessionCache.get(instanceId);
+      if (cached?.claude) {
+        onCloseTerminalSession(cached.claude);
+        sessionCache.clearClaude(instanceId);
+      }
+      if (cached?.directory) {
+        onCloseTerminalSession(cached.directory);
+        sessionCache.clearDirectory(instanceId);
+      }
+
+      // Remove from allInstanceSessions
+      setAllInstanceSessions(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(instanceId);
+        return newMap;
+      });
+
+      // Delete the instance
+      await api.stopInstance(instanceId);
+
+      // Refresh instances list
+      const instances = await api.getInstances();
+      const worktreeInstances = instances.filter(i => i.worktreeId === selectedWorktree?.id);
+      setAllInstances(worktreeInstances);
+
+      // If the deleted instance was selected, select another one
+      if (currentInstanceId === instanceId) {
+        const runningInstance = worktreeInstances.find(i => i.status === 'running');
+        setCurrentInstanceId(runningInstance?.id || worktreeInstances[0]?.id || null);
+        setClaudeTerminalSessionId(null);
+        setDirectoryTerminalSessionId(null);
+      }
+    } catch (error) {
+      console.error('Failed to delete instance:', error);
+    } finally {
+      setIsDeleting(null);
+    }
+  };
+
+  const handleClearStoppedInstances = async () => {
+    const stoppedInstances = allInstances.filter(i => i.status === 'stopped' || i.status === 'error');
+
+    if (stoppedInstances.length === 0) return;
+
+    if (!confirm(`Clear ${stoppedInstances.length} stopped/error instance(s)?`)) {
+      return;
+    }
+
+    try {
+      // Delete all stopped instances
+      await Promise.all(stoppedInstances.map(instance => {
+        // Close any cached sessions
+        const cached = sessionCache.get(instance.id);
+        if (cached?.claude) {
+          onCloseTerminalSession(cached.claude);
+          sessionCache.clearClaude(instance.id);
+        }
+        if (cached?.directory) {
+          onCloseTerminalSession(cached.directory);
+          sessionCache.clearDirectory(instance.id);
+        }
+
+        // Remove from allInstanceSessions
+        setAllInstanceSessions(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(instance.id);
+          return newMap;
+        });
+
+        return api.stopInstance(instance.id);
+      }));
+
+      // Refresh instances list
+      const instances = await api.getInstances();
+      const worktreeInstances = instances.filter(i => i.worktreeId === selectedWorktree?.id);
+      setAllInstances(worktreeInstances);
+
+      // If the current instance was deleted, select another one
+      if (currentInstanceId && stoppedInstances.some(i => i.id === currentInstanceId)) {
+        const runningInstance = worktreeInstances.find(i => i.status === 'running');
+        setCurrentInstanceId(runningInstance?.id || worktreeInstances[0]?.id || null);
+        setClaudeTerminalSessionId(null);
+        setDirectoryTerminalSessionId(null);
+      }
+    } catch (error) {
+      console.error('Failed to clear stopped instances:', error);
     }
   };
 
@@ -1778,24 +1921,45 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             </div>
           </div>
 
-          {/* New Agent Button */}
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={() => setShowNewAgentDropdown(!showNewAgentDropdown)}
-              disabled={isStartingNewAgent}
-              style={{
-                backgroundColor: '#28a745',
-                border: 'none',
-                color: '#fff',
-                padding: '6px 12px',
-                borderRadius: '4px',
-                cursor: isStartingNewAgent ? 'not-allowed' : 'pointer',
-                fontSize: '12px',
-                opacity: isStartingNewAgent ? 0.6 : 1
-              }}
-            >
-              {isStartingNewAgent ? 'Starting...' : '+ New Agent'}
-            </button>
+          {/* Action Buttons */}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {/* Clear Stopped Button */}
+            {allInstances.some(i => i.status === 'stopped' || i.status === 'error') && (
+              <button
+                onClick={handleClearStoppedInstances}
+                style={{
+                  backgroundColor: '#6c757d',
+                  border: 'none',
+                  color: '#fff',
+                  padding: '6px 12px',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '12px'
+                }}
+                title="Clear all stopped/error instances"
+              >
+                Clear Stopped
+              </button>
+            )}
+
+            {/* New Agent Button */}
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => setShowNewAgentDropdown(!showNewAgentDropdown)}
+                disabled={isStartingNewAgent}
+                style={{
+                  backgroundColor: '#28a745',
+                  border: 'none',
+                  color: '#fff',
+                  padding: '6px 12px',
+                  borderRadius: '4px',
+                  cursor: isStartingNewAgent ? 'not-allowed' : 'pointer',
+                  fontSize: '12px',
+                  opacity: isStartingNewAgent ? 0.6 : 1
+                }}
+              >
+                {isStartingNewAgent ? 'Starting...' : '+ New Agent'}
+              </button>
             {showNewAgentDropdown && (
               <div style={{
                 position: 'absolute',
@@ -1839,6 +2003,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 )}
               </div>
             )}
+            </div>
           </div>
         </div>
 
@@ -1934,6 +2099,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                     ID: {instance.id.slice(-8)}
                     {instance.pid && <span> • PID: {instance.pid}</span>}
                     {instance.port && <span> • Port: {instance.port}</span>}
+                    {(() => {
+                      const cached = sessionCache.get(instance.id);
+                      const sessions = allInstanceSessions.get(instance.id);
+                      const terminalId = cached?.claude || sessions?.claude;
+                      return terminalId ? <span> • Terminal: {terminalId.slice(-8)}</span> : null;
+                    })()}
                   </div>
                 </div>
 
@@ -1963,26 +2134,47 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                   )}
 
                   {(instance.status === 'stopped' || instance.status === 'error') && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setCurrentInstanceId(instance.id);
-                        handleRestartInstance();
-                      }}
-                      disabled={isRestarting && instance.id === currentInstanceId}
-                      style={{
-                        backgroundColor: '#238636',
-                        border: 'none',
-                        color: '#fff',
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '10px',
-                        opacity: (isRestarting && instance.id === currentInstanceId) ? 0.6 : 1
-                      }}
-                    >
-                      {(isRestarting && instance.id === currentInstanceId) ? 'Restarting...' : 'Restart'}
-                    </button>
+                    <>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCurrentInstanceId(instance.id);
+                          handleRestartInstance();
+                        }}
+                        disabled={isRestarting && instance.id === currentInstanceId}
+                        style={{
+                          backgroundColor: '#238636',
+                          border: 'none',
+                          color: '#fff',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '10px',
+                          opacity: (isRestarting && instance.id === currentInstanceId) ? 0.6 : 1
+                        }}
+                      >
+                        {(isRestarting && instance.id === currentInstanceId) ? 'Restarting...' : 'Restart'}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteInstance(instance.id);
+                        }}
+                        disabled={isDeleting === instance.id}
+                        style={{
+                          backgroundColor: '#6c757d',
+                          border: 'none',
+                          color: '#fff',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '10px',
+                          opacity: isDeleting === instance.id ? 0.6 : 1
+                        }}
+                      >
+                        {isDeleting === instance.id ? 'Removing...' : 'Remove'}
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -2781,6 +2973,23 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           </div>
         </div>
       )}
+
+      {/* Hidden terminals for all instances to keep them warm */}
+      {allInstances.map(instance => {
+        const sessions = allInstanceSessions.get(instance.id);
+        if (!sessions?.claude || instance.id === currentInstanceId) {
+          // Skip if no session or this is the currently visible instance
+          return null;
+        }
+        return (
+          <div key={`hidden-${instance.id}`} style={{ display: 'none' }}>
+            <TerminalComponent
+              sessionId={sessions.claude}
+              onClose={() => {}}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 };
