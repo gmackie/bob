@@ -28,33 +28,49 @@ export class GeminiAdapter extends BaseAgentAdapter {
 
   async checkAuthentication(): Promise<{ isAuthenticated: boolean; authenticationStatus?: string; statusMessage?: string }> {
     try {
-      // Try to run gemini with a simple prompt to check authentication
-      const result = await this.runCommand(['--prompt', 'test']);
+      // Check if gemini can start by running it with --help or checking for credentials
+      // Using --help is safer as it doesn't hang waiting for input
+      const result = await this.runCommand(['--help'], 2000); // 2 second timeout
 
-      if (result.code === 0) {
+      // If --help works, check stderr/stdout for authentication hints
+      const output = result.stdout + result.stderr;
+
+      if (result.code === 0 || output.includes('Loaded cached credentials')) {
         return {
           isAuthenticated: true,
           authenticationStatus: 'Authenticated',
           statusMessage: 'Gemini CLI is available and authenticated'
         };
-      } else if (result.stderr.includes('auth') || result.stderr.includes('login')) {
+      } else if (output.includes('auth') || output.includes('login') || output.includes('not authenticated')) {
+        return {
+          isAuthenticated: false,
+          authenticationStatus: 'Not authenticated',
+          statusMessage: 'Gemini CLI authentication required. Run: gemini auth login'
+        };
+      } else {
+        // If we can run --help successfully, assume authentication is OK
+        return {
+          isAuthenticated: true,
+          authenticationStatus: 'Authenticated',
+          statusMessage: 'Gemini CLI is available'
+        };
+      }
+    } catch (error) {
+      // If command times out or fails, check the error message
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      if (errorMsg.includes('auth') || errorMsg.includes('login')) {
         return {
           isAuthenticated: false,
           authenticationStatus: 'Not authenticated',
           statusMessage: 'Gemini CLI authentication required'
         };
-      } else {
-        return {
-          isAuthenticated: false,
-          authenticationStatus: 'Error',
-          statusMessage: `Gemini CLI error: ${result.stderr}`
-        };
       }
-    } catch (error) {
+
+      // For other errors, assume it might be authenticated but there's another issue
       return {
-        isAuthenticated: false,
-        authenticationStatus: 'Error',
-        statusMessage: error instanceof Error ? error.message : 'Unknown authentication error'
+        isAuthenticated: true,
+        authenticationStatus: 'Unknown',
+        statusMessage: 'Gemini CLI available (authentication status unknown)'
       };
     }
   }

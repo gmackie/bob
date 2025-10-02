@@ -57,21 +57,7 @@ export class AgentService {
       throw new Error(`Agent '${agentType}' is not authenticated: ${agentInfo.statusMessage || 'Authentication required'}`);
     }
 
-    // Check for any existing instance (regardless of status)
-    const existingInstance = Array.from(this.instances.values())
-      .find(i => i.worktreeId === worktreeId);
-
-    if (existingInstance) {
-      if (existingInstance.status === 'running') {
-        throw new Error(`Agent instance already running for this worktree. Stop the existing instance first.`);
-      } else if (existingInstance.status === 'starting') {
-        throw new Error(`Agent instance is already starting for this worktree. Please wait for it to finish.`);
-      } else {
-        // If instance exists but is stopped/error, restart it instead of creating new one
-        console.log(`Found existing stopped instance ${existingInstance.id}, restarting instead of creating new one`);
-        return await this.restartInstance(existingInstance.id);
-      }
-    }
+    // Allow multiple agents per worktree - no restriction check here
 
     const instanceId = `${agentType}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const port = this.nextPort++;

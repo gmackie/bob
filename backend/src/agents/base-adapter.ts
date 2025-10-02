@@ -111,7 +111,7 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
   }
 
   // Helper methods for subclasses
-  protected async runCommand(args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
+  protected async runCommand(args: string[], timeoutMs: number = 10000): Promise<{ stdout: string; stderr: string; code: number }> {
     return new Promise((resolve, reject) => {
       const child = spawn(this.command, args, { stdio: 'pipe' });
       let stdout = '';
@@ -133,11 +133,11 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
         reject(error);
       });
 
-      // Timeout after 10 seconds
+      // Timeout after specified milliseconds
       setTimeout(() => {
         child.kill();
         reject(new Error('Command timeout'));
-      }, 10000);
+      }, timeoutMs);
     });
   }
 
