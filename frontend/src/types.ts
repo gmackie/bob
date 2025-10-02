@@ -16,10 +16,24 @@ export interface Worktree {
   isMainWorktree: boolean;
 }
 
+export type AgentType = 'claude' | 'cursor-agent' | 'codex' | 'gemini' | 'amazon-q' | 'opencode';
+
+export interface AgentInfo {
+  type: AgentType;
+  name: string;
+  command: string;
+  version?: string;
+  isAvailable: boolean;
+  isAuthenticated?: boolean;
+  authenticationStatus?: string;
+  statusMessage?: string;
+}
+
 export interface ClaudeInstance {
   id: string;
   worktreeId: string;
   repositoryId: string;
+  agentType: AgentType; // multi-agent support
   status: 'starting' | 'running' | 'stopped' | 'error';
   pid?: number;
   port?: number;
@@ -37,4 +51,5 @@ export interface CreateWorktreeRequest {
 export interface StartInstanceRequest {
   worktreeId: string;
   repositoryId: string;
+  agentType?: AgentType;
 }

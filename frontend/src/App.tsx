@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
-import { Repository, ClaudeInstance, Worktree } from './types';
+import { Repository, ClaudeInstance, Worktree, AgentInfo, AgentType } from './types';
 import { api } from './api';
 import { RepositoryPanel } from './components/RepositoryPanel';
-import { TerminalPanel } from './components/TerminalPanel';
+import { AgentPanel } from './components/AgentPanel';
 import { DatabaseManager } from './components/DatabaseManager';
 import { useCheatCode } from './contexts/CheatCodeContext';
 
@@ -42,10 +42,16 @@ function MainApp() {
 
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [instances, setInstances] = useState<ClaudeInstance[]>([]);
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [, setError] = useState<string | null>(null);
   const [instanceError, setInstanceError] = useState<string | null>(null);
   const [selectedWorktreeId, setSelectedWorktreeId] = useState<string | null>(null);
+  const defaultAgentType: AgentType | undefined = (() => {
+    const ready = agents.filter(a => a.isAvailable && (a.isAuthenticated ?? true));
+    const claude = ready.find(a => a.type === 'claude');
+    return claude?.type || ready[0]?.type;
+  })();
 
   useEffect(() => {
     loadData();
@@ -82,13 +88,15 @@ function MainApp() {
 
   const loadData = async () => {
     try {
-      const [reposData, instancesData] = await Promise.all([
+      const [reposData, instancesData, agentsData] = await Promise.all([
         api.getRepositories(),
-        api.getInstances()
+        api.getInstances(),
+        api.getAgents().catch(() => [])
       ]);
       
       setRepositories(reposData);
       setInstances(instancesData);
+      setAgents(agentsData as AgentInfo[]);
       setError(null);
     } catch (err) {
       console.error('Failed to load data:', err);
@@ -108,10 +116,10 @@ function MainApp() {
     }
   };
 
-  const handleCreateWorktreeAndStartInstance = async (repositoryId: string, branchName: string) => {
+  const handleCreateWorktreeAndStartInstance = async (repositoryId: string, branchName: string, agentType?: AgentType) => {
     try {
       const worktree = await api.createWorktree(repositoryId, branchName);
-      await api.startInstance(worktree.id);
+      await api.startInstance(worktree.id, agentType);
       await loadData();
       setSelectedWorktreeId(worktree.id);
       setError(null);
@@ -133,9 +141,9 @@ function MainApp() {
     }
   };
 
-  const handleStartInstance = async (worktreeId: string) => {
+  const handleStartInstance = async (worktreeId: string, agentType?: AgentType) => {
     try {
-      await api.startInstance(worktreeId);
+      await api.startInstance(worktreeId, agentType);
       await loadData();
       setError(null);
     } catch (err) {
@@ -241,7 +249,7 @@ function MainApp() {
       } else {
         // No instance exists, create a new one
         try {
-          await handleStartInstance(worktreeId);
+          await handleStartInstance(worktreeId, defaultAgentType);
           // handleStartInstance already calls loadData(), so no need to call it again
           return;
         } catch (error) {
@@ -331,9 +339,10 @@ function MainApp() {
           onRefreshMainBranch={handleRefreshMainBranch}
           isCollapsed={isLeftPanelCollapsed}
           onToggleCollapse={toggleLeftPanel}
+          agents={agents}
         />
         
-        <TerminalPanel
+        <AgentPanel
           selectedWorktree={selectedWorktree}
           selectedInstance={selectedInstance}
           onCreateTerminalSession={handleCreateTerminalSession}

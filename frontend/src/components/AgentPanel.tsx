@@ -3,7 +3,7 @@ import { ClaudeInstance, Worktree } from '../types';
 import { TerminalComponent } from './Terminal';
 import { api } from '../api';
 
-interface TerminalPanelProps {
+interface AgentPanelProps {
   selectedWorktree: Worktree | null;
   selectedInstance: ClaudeInstance | null;
   onCreateTerminalSession: (instanceId: string) => Promise<string>;
@@ -706,41 +706,89 @@ const SystemStatusDashboard: React.FC = () => {
         <h3 style={{ color: '#fff', margin: 0, marginBottom: '20px', fontSize: '18px' }}>System Dependencies</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-          {/* Claude CLI Status */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '16px',
-            backgroundColor: '#0d1117',
-            borderRadius: '6px',
-            border: '1px solid #21262d'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span style={{ fontSize: '20px' }}>{getStatusIcon(systemStatus.claude.status)}</span>
-              <div>
-                <div style={{ color: '#fff', fontSize: '14px', fontWeight: 'bold' }}>Claude CLI</div>
-                <div style={{ color: '#888', fontSize: '12px' }}>
-                  {systemStatus.claude.status === 'available' ? 'Ready for AI-powered features' : 'Required for git analysis and PR generation'}
+          {/* Agents Status */}
+          {(systemStatus.agents && Array.isArray(systemStatus.agents) ? systemStatus.agents : [])
+            .map((agent: any, idx: number) => {
+              const status = !agent.isAvailable
+                ? 'not_available'
+                : agent.isAuthenticated === false
+                ? 'not_authenticated'
+                : 'available';
+              return (
+                <div key={agent.type || idx} style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '16px',
+                  backgroundColor: '#0d1117',
+                  borderRadius: '6px',
+                  border: '1px solid #21262d'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{ fontSize: '20px' }}>{getStatusIcon(status)}</span>
+                    <div>
+                      <div style={{ color: '#fff', fontSize: '14px', fontWeight: 'bold' }}>{agent.name}</div>
+                      <div style={{ color: '#888', fontSize: '12px' }}>
+                        {status === 'available' ? 'Ready for AI-powered features' : (agent.statusMessage || 'Unavailable')}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{
+                      color: getStatusColor(status),
+                      fontSize: '12px',
+                      fontWeight: 'bold',
+                      marginBottom: '2px'
+                    }}>
+                      {String(status).replace('_', ' ').toUpperCase()}
+                    </div>
+                    {agent.version && (
+                      <div style={{ color: '#666', fontSize: '10px' }}>
+                        {agent.version}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+          {/* Fallback Claude status if agents array not present */}
+          {(!systemStatus.agents || !Array.isArray(systemStatus.agents)) && systemStatus.claude && (
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '16px',
+              backgroundColor: '#0d1117',
+              borderRadius: '6px',
+              border: '1px solid #21262d'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '20px' }}>{getStatusIcon(systemStatus.claude.status)}</span>
+                <div>
+                  <div style={{ color: '#fff', fontSize: '14px', fontWeight: 'bold' }}>Claude CLI</div>
+                  <div style={{ color: '#888', fontSize: '12px' }}>
+                    {systemStatus.claude.status === 'available' ? 'Ready for AI-powered features' : 'Required for git analysis and PR generation'}
+                  </div>
                 </div>
               </div>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{
-                color: getStatusColor(systemStatus.claude.status),
-                fontSize: '12px',
-                fontWeight: 'bold',
-                marginBottom: '2px'
-              }}>
-                {systemStatus.claude.status.replace('_', ' ').toUpperCase()}
-              </div>
-              {systemStatus.claude.version && (
-                <div style={{ color: '#666', fontSize: '10px' }}>
-                  {systemStatus.claude.version}
+              <div style={{ textAlign: 'right' }}>
+                <div style={{
+                  color: getStatusColor(systemStatus.claude.status),
+                  fontSize: '12px',
+                  fontWeight: 'bold',
+                  marginBottom: '2px'
+                }}>
+                  {systemStatus.claude.status.replace('_', ' ').toUpperCase()}
                 </div>
-              )}
+                {systemStatus.claude.version && (
+                  <div style={{ color: '#666', fontSize: '10px' }}>
+                    {systemStatus.claude.version}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* GitHub CLI Status */}
           <div style={{
@@ -886,7 +934,7 @@ const SystemStatusDashboard: React.FC = () => {
   );
 };
 
-export const TerminalPanel: React.FC<TerminalPanelProps> = ({
+export const AgentPanel: React.FC<AgentPanelProps> = ({
   selectedWorktree,
   selectedInstance,
   onCreateTerminalSession,
@@ -1550,9 +1598,9 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         </div>
         <div className="empty-terminal">
           <div>
-            <h4 style={{ color: '#666', marginBottom: '8px' }}>No Claude instance</h4>
+            <h4 style={{ color: '#666', marginBottom: '8px' }}>No Agent instance</h4>
             <p style={{ color: '#888', fontSize: '14px' }}>
-              This worktree doesn't have a running Claude instance
+              This worktree doesn't have a running Agent instance
             </p>
           </div>
         </div>
@@ -1581,6 +1629,21 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
               }}
             >
               {selectedInstance.status}
+            </span>
+            <span
+              style={{
+                marginLeft: '8px',
+                fontSize: '10px',
+                padding: '2px 6px',
+                borderRadius: '3px',
+                backgroundColor: '#21262d',
+                color: '#8b949e',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}
+              title={`Active agent: ${selectedInstance.agentType}`}
+            >
+              {selectedInstance.agentType.toUpperCase()}
             </span>
           </h3>
           <div style={{ fontSize: '12px', color: '#888', marginTop: '2px' }}>

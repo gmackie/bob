@@ -1,19 +1,21 @@
-import React, { useState } from 'react';
-import { Repository, Worktree, ClaudeInstance } from '../types';
+import React, { useMemo, useState } from 'react';
+import { Repository, Worktree, ClaudeInstance, AgentInfo, AgentType } from '../types';
 import { DirectoryBrowser } from './DirectoryBrowser';
 import { DeleteWorktreeModal } from './DeleteWorktreeModal';
+import { AgentSelector, AgentBadge } from './AgentSelector';
 
 interface RepositoryPanelProps {
   repositories: Repository[];
   instances: ClaudeInstance[];
   selectedWorktreeId: string | null;
   onAddRepository: (path: string) => void;
-  onCreateWorktreeAndStartInstance: (repositoryId: string, branchName: string) => void;
+  onCreateWorktreeAndStartInstance: (repositoryId: string, branchName: string, agentType?: AgentType) => void;
   onSelectWorktree: (worktreeId: string) => Promise<void>;
   onDeleteWorktree: (worktreeId: string, force: boolean) => Promise<void>;
   onRefreshMainBranch: (repositoryId: string) => Promise<void>;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
+  agents?: AgentInfo[];
 }
 
 export const RepositoryPanel: React.FC<RepositoryPanelProps> = ({
@@ -26,11 +28,18 @@ export const RepositoryPanel: React.FC<RepositoryPanelProps> = ({
   onDeleteWorktree,
   onRefreshMainBranch,
   isCollapsed,
-  onToggleCollapse
+  onToggleCollapse,
+  agents = []
 }) => {
   const [showDirectoryBrowser, setShowDirectoryBrowser] = useState(false);
   const [showNewWorktreeForm, setShowNewWorktreeForm] = useState<string | null>(null);
   const [newBranchName, setNewBranchName] = useState('');
+  const defaultAgent = useMemo<AgentType | undefined>(() => {
+    const ready = agents.filter(a => a.isAvailable && a.isAuthenticated);
+    if (ready.find(a => a.type === 'claude')) return 'claude';
+    return ready[0]?.type;
+  }, [agents]);
+  const [selectedAgent, setSelectedAgent] = useState<AgentType | undefined>(defaultAgent);
   const [worktreeToDelete, setWorktreeToDelete] = useState<Worktree | null>(null);
   const [startingInstances, setStartingInstances] = useState<Set<string>>(new Set());
   const [copiedWorktreeId, setCopiedWorktreeId] = useState<string | null>(null);
@@ -43,9 +52,10 @@ export const RepositoryPanel: React.FC<RepositoryPanelProps> = ({
 
   const handleCreateWorktree = (repositoryId: string) => {
     if (newBranchName.trim()) {
-      onCreateWorktreeAndStartInstance(repositoryId, newBranchName.trim());
+      onCreateWorktreeAndStartInstance(repositoryId, newBranchName.trim(), selectedAgent);
       setNewBranchName('');
       setShowNewWorktreeForm(null);
+      setSelectedAgent(defaultAgent);
     }
   };
 
@@ -58,14 +68,14 @@ export const RepositoryPanel: React.FC<RepositoryPanelProps> = ({
     
     switch (instance.status) {
       case 'running':
-        return { status: 'running', label: 'Running' };
+        return { status: 'running', label: `Running · ${instance.agentType.toUpperCase()}` };
       case 'starting':
-        return { status: 'starting', label: 'Starting' };
+        return { status: 'starting', label: `Starting · ${instance.agentType.toUpperCase()}` };
       case 'error':
-        return { status: 'error', label: 'Error' };
+        return { status: 'error', label: `Error · ${instance.agentType.toUpperCase()}` };
       case 'stopped':
       default:
-        return { status: 'stopped', label: 'Stopped' };
+        return { status: 'stopped', label: `Stopped · ${instance.agentType.toUpperCase()}` };
     }
   };
 
@@ -212,9 +222,9 @@ export const RepositoryPanel: React.FC<RepositoryPanelProps> = ({
                         </div>
                       </div>
                       <button
-                        onClick={() => setShowNewWorktreeForm(repo.id)}
+                        onClick={() => { setShowNewWorktreeForm(repo.id); setSelectedAgent(defaultAgent); }}
                         className="add-worktree-btn"
-                        title="Create new worktree and start Claude instance"
+                        title="Create new worktree and start agent instance"
                       >
                         +
                       </button>
@@ -232,6 +242,12 @@ export const RepositoryPanel: React.FC<RepositoryPanelProps> = ({
                             style={{ flex: 1, fontSize: '12px', padding: '6px 8px' }}
                             onKeyPress={(e) => e.key === 'Enter' && handleCreateWorktree(repo.id)}
                             autoFocus
+                          />
+                          <AgentSelector
+                            agents={agents}
+                            value={selectedAgent}
+                            onChange={setSelectedAgent}
+                            style={{ flex: 0 }}
                           />
                           <button
                             onClick={() => handleCreateWorktree(repo.id)}
@@ -278,10 +294,21 @@ export const RepositoryPanel: React.FC<RepositoryPanelProps> = ({
                                   alignItems: 'center' 
                                 }}
                               >
-                                <div className="worktree-info">
+                                <div className="worktree-info" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                   <div className="worktree-name">{getBranchDisplayName(worktree.branch)}</div>
-                                  <div className="worktree-path">{worktree.path}</div>
+                                  {(() => {
+                                    const inst = instances.find(i => i.worktreeId === worktree.id);
+                                    const agentType = inst?.agentType || worktree.preferredAgent;
+                                    return agentType ? (
+                                      <AgentBadge
+                                        agentType={agentType}
+                                        agents={agents}
+                                        compact={true}
+                                      />
+                                    ) : null;
+                                  })()}
                                 </div>
+                                <div className="worktree-path">{worktree.path}</div>
                                 <div
                                   className={`instance-status ${isStarting ? 'starting' : status.status}`}
                                   style={{

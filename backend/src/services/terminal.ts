@@ -45,6 +45,30 @@ export class TerminalService {
     return session;
   }
 
+  // Generic agent PTY session (alias to Claude PTY session machinery)
+  createAgentPtySession(instanceId: string, agentPty: IPty): TerminalSession {
+    const sessionId = `terminal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    const session: TerminalSession = {
+      id: sessionId,
+      instanceId,
+      // Reuse existing field to avoid wider changes while migrating
+      claudePty: agentPty,
+      createdAt: new Date()
+    };
+
+    this.sessions.set(sessionId, session);
+
+    agentPty.onExit(() => {
+      this.sessions.delete(sessionId);
+      if (session.websocket) {
+        session.websocket.close();
+      }
+    });
+
+    return session;
+  }
+
   createClaudeSession(instanceId: string, claudeProcess: ChildProcess): TerminalSession {
     const sessionId = `terminal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     

@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(q:*)",
+      "Bash(opencode:*)",
+      "Bash(claude --version)",
+      "Bash(cursor-agent status:*)",
+      "Bash(gemini:*)",
+      "Bash(codex:*)",
+      "Bash(cursor-agent:*)",
+      "Read(//usr/local/bin/**)",
+      "Read(//root/.local/bin/**)",
+      "Read(//usr/**)",
+      "Bash(mkdir:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm test)",
+      "Bash(npm install:*)",
+      "Bash(npx vitest run:*)",
+      "Read(//root/.bob/**)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
