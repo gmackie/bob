@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ClaudeInstance, Worktree, AgentType, AgentInfo } from '../types';
 import { TerminalComponent } from './Terminal';
+import { DeleteWorktreeModal } from './DeleteWorktreeModal';
 import { api } from '../api';
 import { sessionCache } from '../services/SessionCache';
 
@@ -960,12 +961,13 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
   const [claudeTerminalSessionId, setClaudeTerminalSessionId] = useState<string | null>(null);
   const [directoryTerminalSessionId, setDirectoryTerminalSessionId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'claude' | 'directory' | 'git' | 'notes'>('claude');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'claude' | 'directory' | 'git' | 'notes'>('dashboard');
   const [isCreatingClaudeSession, setIsCreatingClaudeSession] = useState(false);
   const [isCreatingDirectorySession, setIsCreatingDirectorySession] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [worktreeToDelete, setWorktreeToDelete] = useState<Worktree | null>(null);
   const lastAutoConnectInstance = useRef<string>('');
 
   // Track all session IDs for all instances to keep them warm
@@ -1067,7 +1069,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             console.error(`Failed to create Claude session for instance ${instance.id}:`, error);
           }
         } else if (cached?.claude && !sessions.claude) {
-          setAllInstanceSessions(prev => new Map(prev).set(instance.id, { ...sessions, claude: cached.claude }));
+          setAllInstanceSessions(prev => new Map(prev).set(instance.id, { ...sessions, claude: cached.claude || null }));
         }
       }
     };
@@ -1162,7 +1164,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         // Create new session
         const sessionId = await onCreateTerminalSession(currentInstance.id);
         setClaudeTerminalSessionId(sessionId);
-        sessionCache.setClaude(selectedInstance.id, sessionId);
+        sessionCache.setClaude(currentInstance.id, sessionId);
       }
       setActiveTab('claude');
     } catch (error) {
@@ -1190,7 +1192,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         // Create new session
         const sessionId = await onCreateDirectoryTerminalSession(currentInstance.id);
         setDirectoryTerminalSessionId(sessionId);
-        sessionCache.setDirectory(selectedInstance.id, sessionId);
+        sessionCache.setDirectory(currentInstance.id, sessionId);
       }
       setActiveTab('directory');
     } catch (error) {
@@ -1374,6 +1376,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     } catch (error) {
       console.error('Failed to clear stopped instances:', error);
     }
+  };
+
+  const handleDeleteWorktreeConfirm = async (worktreeId: string, force: boolean) => {
+    await onDeleteWorktree(worktreeId, force);
+    setWorktreeToDelete(null);
   };
 
   const checkExistingSessionsOrConnect = async () => {
@@ -1824,91 +1831,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   // Determine available agents that are ready to start
   const readyAgents = availableAgents.filter(a => a.isAvailable && (a.isAuthenticated ?? true));
 
-  if (allInstances.length === 0 && !isStartingNewAgent) {
-    return (
-      <div className="right-panel">
-        <div className="panel-header">
-          <div>
-            <h3 style={{ margin: 0, color: '#ffffff' }}>Agent Instances</h3>
-            <span style={{ fontSize: '12px', color: '#888' }}>
-              {selectedWorktree.branch} • {selectedWorktree.path}
-            </span>
-          </div>
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={() => setShowNewAgentDropdown(!showNewAgentDropdown)}
-              style={{
-                backgroundColor: '#28a745',
-                border: 'none',
-                color: '#fff',
-                padding: '6px 12px',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '12px'
-              }}
-            >
-              + New Agent
-            </button>
-            {showNewAgentDropdown && (
-              <div style={{
-                position: 'absolute',
-                top: '100%',
-                right: 0,
-                marginTop: '4px',
-                backgroundColor: '#2d3748',
-                border: '1px solid #4a5568',
-                borderRadius: '6px',
-                zIndex: 1000,
-                minWidth: '200px',
-                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)'
-              }}>
-                {readyAgents.length > 0 ? readyAgents.map(agent => (
-                  <button
-                    key={agent.type}
-                    onClick={() => handleStartNewAgent(agent.type)}
-                    style={{
-                      width: '100%',
-                      padding: '10px 16px',
-                      backgroundColor: 'transparent',
-                      border: 'none',
-                      color: '#fff',
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                      fontSize: '13px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '4px'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4a5568'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                  >
-                    <div style={{ fontWeight: 'bold' }}>{agent.name}</div>
-                    <div style={{ fontSize: '11px', color: '#888' }}>{agent.statusMessage || 'Ready'}</div>
-                  </button>
-                )) : (
-                  <div style={{ padding: '12px', color: '#888', fontSize: '12px' }}>
-                    No agents available
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="empty-terminal">
-          <div>
-            <h4 style={{ color: '#666', marginBottom: '8px' }}>No Agent instances</h4>
-            <p style={{ color: '#888', fontSize: '14px' }}>
-              Start a new agent instance to begin working
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!currentInstance) {
-    return null; // Loading state
-  }
+  // Set currentInstance to null if no instances, but still show the panel
+  // Only the agent tab will be disabled without an instance
 
   return (
     <div className="right-panel">
@@ -2199,21 +2123,38 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       {/* Tabbed interface */}
       <div style={{ display: 'flex', borderBottom: '1px solid #444' }}>
         <button
+          onClick={() => setActiveTab('dashboard')}
+          style={{
+            background: activeTab === 'dashboard' ? '#444' : 'transparent',
+            border: 'none',
+            color: '#fff',
+            padding: '12px 24px',
+            cursor: 'pointer',
+            borderBottom: activeTab === 'dashboard' ? '2px solid #007acc' : '2px solid transparent',
+            fontSize: '13px'
+          }}
+        >
+          Dashboard
+        </button>
+        <button
           onClick={() => {
+            if (!currentInstance) return; // Don't switch if no instance
             setActiveTab('claude');
             // If switching to Claude tab but no session exists, check for existing sessions
             if (!claudeTerminalSessionId && currentInstance?.status === 'running') {
               setTimeout(() => handleOpenClaudeTerminal(), 100);
             }
           }}
+          disabled={!currentInstance}
           style={{
             background: activeTab === 'claude' ? '#444' : 'transparent',
             border: 'none',
-            color: '#fff',
+            color: !currentInstance ? '#666' : '#fff',
             padding: '12px 24px',
-            cursor: 'pointer',
+            cursor: !currentInstance ? 'not-allowed' : 'pointer',
             borderBottom: activeTab === 'claude' ? '2px solid #007acc' : '2px solid transparent',
-            fontSize: '13px'
+            fontSize: '13px',
+            opacity: !currentInstance ? 0.5 : 1
           }}
         >
           Agent {claudeTerminalSessionId && '●'}
@@ -2273,12 +2214,85 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       </div>
 
       <div className="terminal-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        {/* Agent Terminal */}
-        <div style={{ 
-          display: activeTab === 'claude' ? 'flex' : 'none', 
-          flexDirection: 'column', 
+        {/* Dashboard Tab */}
+        <div style={{
+          display: activeTab === 'dashboard' ? 'flex' : 'none',
+          flexDirection: 'column',
           flex: 1,
-          minHeight: 0 
+          minHeight: 0,
+          padding: '20px',
+          overflow: 'auto'
+        }}>
+          {selectedWorktree ? (
+            <div>
+              <h3 style={{ marginBottom: '20px', color: '#e6edf3' }}>Worktree Dashboard</h3>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+                <div style={{ background: '#21262d', padding: '16px', borderRadius: '6px', border: '1px solid #30363d' }}>
+                  <h4 style={{ color: '#8b949e', fontSize: '12px', marginBottom: '8px', textTransform: 'uppercase' }}>Branch</h4>
+                  <p style={{ color: '#e6edf3', fontSize: '16px', margin: 0 }}>{selectedWorktree.branch}</p>
+                </div>
+
+                <div style={{ background: '#21262d', padding: '16px', borderRadius: '6px', border: '1px solid #30363d' }}>
+                  <h4 style={{ color: '#8b949e', fontSize: '12px', marginBottom: '8px', textTransform: 'uppercase' }}>Location</h4>
+                  <p style={{ color: '#e6edf3', fontSize: '14px', margin: 0, fontFamily: 'monospace' }}>{selectedWorktree.path}</p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+                <button
+                  onClick={() => {
+                    const url = `${window.location.origin}/?worktree=${selectedWorktree.id}`;
+                    navigator.clipboard.writeText(url);
+                    // You could add a toast notification here
+                  }}
+                  style={{
+                    background: '#238636',
+                    border: 'none',
+                    color: '#fff',
+                    padding: '10px 20px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  🔗 Copy Worktree Link
+                </button>
+                <button
+                  onClick={() => setWorktreeToDelete(selectedWorktree)}
+                  style={{
+                    background: '#dc3545',
+                    border: 'none',
+                    color: '#fff',
+                    padding: '10px 20px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  🗑️ Delete Worktree
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#8b949e' }}>
+              <p>Select a worktree to view its dashboard</p>
+            </div>
+          )}
+        </div>
+
+        {/* Agent Terminal */}
+        <div style={{
+          display: activeTab === 'claude' ? 'flex' : 'none',
+          flexDirection: 'column',
+          flex: 1,
+          minHeight: 0
         }}>
           {claudeTerminalSessionId ? (
             <>
@@ -2289,7 +2303,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 onClose={() => handleCloseTerminal('claude')}
               />
             </>
-          ) : currentInstance.status === 'running' ? (
+          ) : currentInstance?.status === 'running' ? (
             <div className="empty-terminal" style={{ flex: 1 }}>
               <div style={{ textAlign: 'center' }}>
                 <h4 style={{ color: '#666', marginBottom: '8px' }}>Agent Terminal</h4>
@@ -2321,7 +2335,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 )}
               </div>
             </div>
-          ) : currentInstance.status === 'starting' ? (
+          ) : currentInstance?.status === 'starting' ? (
             <div className="empty-terminal" style={{ flex: 1 }}>
               <div style={{ textAlign: 'center' }}>
                 <h4 style={{ color: '#666', marginBottom: '8px' }}>Agent Terminal</h4>
@@ -2990,6 +3004,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           </div>
         );
       })}
+
+      {/* Delete Worktree Modal */}
+      {worktreeToDelete && (
+        <DeleteWorktreeModal
+          worktree={worktreeToDelete}
+          onClose={() => setWorktreeToDelete(null)}
+          onConfirm={handleDeleteWorktreeConfirm}
+        />
+      )}
     </div>
   );
 };

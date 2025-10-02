@@ -144,7 +144,14 @@ export class TerminalService {
               if (msg.cols && msg.rows &&
                   Number.isInteger(msg.cols) && Number.isInteger(msg.rows) &&
                   msg.cols > 0 && msg.rows > 0) {
-                session.pty!.resize(msg.cols, msg.rows);
+                try {
+                  // Check if PTY is still alive before resizing
+                  if (session.pty && session.pty.pid !== undefined) {
+                    session.pty.resize(msg.cols, msg.rows);
+                  }
+                } catch (err) {
+                  console.warn(`Failed to resize terminal (PTY may have exited): ${err}`);
+                }
               } else {
                 console.warn(`Invalid resize dimensions: cols=${msg.cols}, rows=${msg.rows}`);
               }
@@ -215,7 +222,14 @@ export class TerminalService {
               if (msg.cols && msg.rows &&
                   Number.isInteger(msg.cols) && Number.isInteger(msg.rows) &&
                   msg.cols > 0 && msg.rows > 0) {
-                session.claudePty!.resize(msg.cols, msg.rows);
+                try {
+                  // Check if PTY is still alive before resizing
+                  if (session.claudePty && session.claudePty.pid !== undefined) {
+                    session.claudePty.resize(msg.cols, msg.rows);
+                  }
+                } catch (err) {
+                  console.warn(`Failed to resize terminal (PTY may have exited): ${err}`);
+                }
               } else {
                 console.warn(`Invalid resize dimensions: cols=${msg.cols}, rows=${msg.rows}`);
               }

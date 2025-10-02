@@ -1,18 +1,83 @@
 import { BaseAgentAdapter } from './base-adapter.js';
 import { AgentType } from '../types.js';
+import { spawn } from 'child_process';
 
 export class CursorAgentAdapter extends BaseAgentAdapter {
   readonly type: AgentType = 'cursor-agent';
   readonly name = 'Cursor Agent';
   readonly command = 'cursor-agent';
+  private chatIdMap = new Map<string, string>(); // worktreePath -> chatId
+  private currentChatId: string | null = null; // Temporary storage for getSpawnArgs
 
-  getSpawnArgs(options?: { interactive?: boolean; port?: number }): { command: string; args: string[]; env?: Record<string, string> } {
+  private async createChat(): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const child = spawn(this.command, ['create-chat'], { stdio: 'pipe' });
+      let chatId = '';
+
+      child.stdout?.on('data', (data) => {
+        chatId += data.toString().trim();
+      });
+
+      child.on('close', (code) => {
+        if (code === 0 && chatId) {
+          resolve(chatId);
+        } else {
+          reject(new Error('Failed to create cursor-agent chat'));
+        }
+      });
+
+      child.on('error', (error) => {
+        reject(error);
+      });
+
+      setTimeout(() => {
+        child.kill();
+        reject(new Error('Create chat timeout'));
+      }, 5000);
+    });
+  }
+
+  async startProcess(worktreePath: string, port?: number) {
+    // Create a chat session for this worktree if one doesn't exist
+    if (!this.chatIdMap.has(worktreePath)) {
+      try {
+        const chatId = await this.createChat();
+        this.chatIdMap.set(worktreePath, chatId);
+        console.log(`Created cursor-agent chat ${chatId} for worktree ${worktreePath}`);
+      } catch (error) {
+        console.error(`Failed to create cursor-agent chat:`, error);
+        throw error;
+      }
+    }
+
+    // Set current chat ID for getSpawnArgs to use
+    this.currentChatId = this.chatIdMap.get(worktreePath)!;
+
+    // Call parent startProcess which will use getSpawnArgs
+    try {
+      return await super.startProcess(worktreePath, port);
+    } finally {
+      // Clear current chat ID after process starts
+      this.currentChatId = null;
+    }
+  }
+
+  getSpawnArgs(options?: { interactive?: boolean; port?: number; worktreePath?: string }): { command: string; args: string[]; env?: Record<string, string> } {
     const args: string[] = [];
-    const env: Record<string, string> = {};
+    const env: Record<string, string> = {
+      // Full terminal support with colors
+      TERM: 'xterm-256color',
+      TERM_PROGRAM: 'node-pty',
+      COLORTERM: 'truecolor'
+    };
 
     if (options?.interactive) {
-      // Interactive mode - start in fullscreen mode for better UX
-      args.push('--fullscreen');
+      // Interactive mode - resume existing chat session
+      if (this.currentChatId) {
+        args.push('--resume', this.currentChatId);
+      } else {
+        throw new Error('No chat ID available for cursor-agent interactive mode');
+      }
     } else {
       // Non-interactive mode - use print mode for scripting
       args.push('--print');

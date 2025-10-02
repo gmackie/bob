@@ -130,7 +130,7 @@ class ApiClient {
   // Git operations
   async getGitDiff(worktreeId: string): Promise<string> {
     const token = localStorage.getItem('authToken');
-    const headers: HeadersInit = {};
+    const headers: Record<string, string> = {};
 
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;

@@ -47,10 +47,11 @@ export const RepositoryDashboard: React.FC = () => {
   const [creatingFromBranch, setCreatingFromBranch] = useState<string | null>(null);
   const [newBranchName, setNewBranchName] = useState<string>('');
   const [creatingWorktree, setCreatingWorktree] = useState<boolean>(false);
-  const [docsList, setDocsList] = useState<Array<{ name: string; relativePath: string; size: number; mtime: number }>>([]);
-  const [selectedDoc, setSelectedDoc] = useState<string | null>(null);
-  const [docContent, setDocContent] = useState<string>('');
-  const [loadingDocs, setLoadingDocs] = useState<boolean>(false);
+  // Docs state - currently unused but kept for future docs feature
+  const [, setDocsList] = useState<Array<{ name: string; relativePath: string; size: number; mtime: number }>>([]);
+  const [, setSelectedDoc] = useState<string | null>(null);
+  const [, setDocContent] = useState<string>('');
+  const [, setLoadingDocs] = useState<boolean>(false);
 
   useEffect(() => {
     loadRepositoryData();
@@ -113,6 +114,8 @@ export const RepositoryDashboard: React.FC = () => {
     }
   }, [activeTab, repositoryId]);
 
+  // Currently unused but kept for future docs feature
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const loadDocContent = async (relativePath: string) => {
     if (!repositoryId) return;
     try {
@@ -481,47 +484,3 @@ function renderMarkdown(text: string): string {
     .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank">$1</a>')
     .replace(/\n/g, '<br/>');
 }
-        <button
-          className={`tab ${activeTab === 'docs' ? 'active' : ''}`}
-          onClick={() => setActiveTab('docs')}
-        >
-          Docs
-        </button>
-        {activeTab === 'docs' && (
-          <div className="docs-section" style={{ display: 'flex', gap: 16 }}>
-            <div style={{ width: '280px', borderRight: '1px solid #333', paddingRight: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <h3>Project Docs</h3>
-                <button className="refresh-button" onClick={() => setActiveTab('docs')}>⟳</button>
-              </div>
-              {loadingDocs ? (
-                <div className="loading">Loading docs…</div>
-              ) : docsList.length === 0 ? (
-                <div className="empty-state">No docs found</div>
-              ) : (
-                <div className="docs-list">
-                  {docsList.map(doc => (
-                    <div
-                      key={doc.relativePath}
-                      onClick={() => loadDocContent(doc.relativePath)}
-                      className={`doc-item ${selectedDoc === doc.relativePath ? 'active' : ''}`}
-                      style={{ cursor: 'pointer', padding: '6px 8px', borderRadius: 4 }}
-                    >
-                      {doc.name}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div style={{ flex: 1 }}>
-              {selectedDoc ? (
-                <div className="doc-content">
-                  <h3 style={{ marginTop: 0 }}>{selectedDoc}</h3>
-                  <div dangerouslySetInnerHTML={{ __html: renderMarkdown(docContent) }} />
-                </div>
-              ) : (
-                <div className="empty-state">Select a document to view</div>
-              )}
-            </div>
-          </div>
-        )}

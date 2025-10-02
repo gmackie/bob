@@ -124,18 +124,10 @@ class WebSocketManager {
 
   private async createConnection(sessionId: string, onMessage: (message: any) => void): Promise<void> {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // Match Terminal.tsx logic for dev/electron
-    const isElectron = (window as any).electronAPI !== undefined;
-    const isDevelopment = window.location.port === '47285' || window.location.port === '5173';
 
-    let wsUrl: string;
-    if (isDevelopment) {
-      // Development: connect directly to backend port
-      wsUrl = `${wsProtocol}//${window.location.hostname}:43829?sessionId=${sessionId}`;
-    } else {
-      // Production: use same host without port (nginx proxies WebSocket)
-      wsUrl = `${wsProtocol}//${window.location.host}?sessionId=${sessionId}`;
-    }
+    // Use same host - nginx proxies WebSocket to backend based on ?sessionId= pattern
+    // Don't specify port - it uses the default port for the protocol (443 for wss, 80 for ws)
+    const wsUrl = `${wsProtocol}//${window.location.hostname}?sessionId=${sessionId}`;
 
     console.log('[WebSocketManager] Creating connection to:', wsUrl);
 

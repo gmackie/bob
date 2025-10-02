@@ -3,7 +3,7 @@ import { Routes, Route, useSearchParams, useNavigate, useLocation } from 'react-
 import { Repository, ClaudeInstance, Worktree, AgentInfo, AgentType } from './types';
 import { api } from './api';
 import { RepositoryPanel } from './components/RepositoryPanel';
-import { TerminalPanel } from './components/TerminalPanel';
+import { AgentPanel } from './components/AgentPanel';
 import { DatabaseManager } from './components/DatabaseManager';
 import { Dashboard } from './components/Dashboard';
 import { AuthButton } from './components/AuthButton';
@@ -75,11 +75,6 @@ function MainApp() {
   const [instanceError, setInstanceError] = useState<string | null>(null);
   const [selectedWorktreeId, setSelectedWorktreeId] = useState<string | null>(null);
   const [selectedRepositoryId, setSelectedRepositoryId] = useState<string | null>(null);
-  const defaultAgentType: AgentType | undefined = (() => {
-    const ready = agents.filter(a => a.isAvailable && (a.isAuthenticated ?? true));
-    const claude = ready.find(a => a.type === 'claude');
-    return claude?.type || ready[0]?.type;
-  })();
 
   useEffect(() => {
     loadData();
@@ -183,17 +178,6 @@ function MainApp() {
       setError(err instanceof Error ? err.message : 'Failed to refresh main branch');
     }
   };
-
-  const handleStartInstance = async (worktreeId: string, agentType?: AgentType) => {
-    try {
-      await api.startInstance(worktreeId, agentType);
-      await loadData();
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start instance');
-    }
-  };
-
 
   const handleCreateTerminalSession = async (instanceId: string): Promise<string> => {
     try {
@@ -385,7 +369,7 @@ function MainApp() {
             isLeftPanelCollapsed={isLeftPanelCollapsed}
           />
         ) : (
-          <TerminalPanel
+          <AgentPanel
             selectedWorktree={selectedWorktree}
             selectedInstance={selectedInstance}
             onCreateTerminalSession={handleCreateTerminalSession}

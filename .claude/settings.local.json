@@ -46,7 +46,10 @@
       "Bash(git commit:*)",
       "Bash(git merge-base:*)",
       "Bash(git diff:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Read(//var/log/nginx/**)",
+      "Bash(timeout:*)",
+      "Bash(TERM=xterm-256color timeout 3 cursor-agent)"
     ],
     "deny": [],
     "ask": [],

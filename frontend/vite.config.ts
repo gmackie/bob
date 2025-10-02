@@ -19,6 +19,12 @@ export default defineConfig(({ mode }) => {
     server: {
       allowedHosts: ['claude.gmac.io'],
       port: 47285,
+      hmr: {
+        protocol: 'wss',
+        host: 'claude.gmac.io',
+        // Don't specify port - let it use the default HTTPS port (443)
+        // Nginx will proxy the WebSocket connection
+      },
       proxy: {
         '/api': 'http://localhost:43829'
       }

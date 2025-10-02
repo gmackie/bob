@@ -9,10 +9,10 @@ export class CodexAdapter extends BaseAgentAdapter {
   getSpawnArgs(options?: { interactive?: boolean; port?: number }): { command: string; args: string[]; env?: Record<string, string> } {
     const args: string[] = [];
     const env: Record<string, string> = {
-      // Set proper terminal type to prevent cursor position read errors
+      // Full terminal support with colors
       TERM: 'xterm-256color',
-      // Disable any terminal features that might cause initialization issues
-      TERM_PROGRAM: 'node-pty'
+      TERM_PROGRAM: 'node-pty',
+      COLORTERM: 'truecolor'
     };
 
     if (options?.interactive) {
