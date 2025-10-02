@@ -960,7 +960,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
   const [claudeTerminalSessionId, setClaudeTerminalSessionId] = useState<string | null>(null);
   const [directoryTerminalSessionId, setDirectoryTerminalSessionId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'claude' | 'directory' | 'git' | 'notes'>('claude');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'claude' | 'directory' | 'git' | 'notes'>('dashboard');
   const [isCreatingClaudeSession, setIsCreatingClaudeSession] = useState(false);
   const [isCreatingDirectorySession, setIsCreatingDirectorySession] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
@@ -1391,37 +1391,21 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       const directorySession = existingSessions.find(s => s.type === 'directory');
       
       if (claudeSession) {
-        // Rejoin existing Claude session
+        // Rejoin existing Claude session without changing tabs
         console.log(`Rejoining existing Claude session: ${claudeSession.id}, current activeTab: ${activeTab}`);
         setClaudeTerminalSessionId(claudeSession.id);
-        // Ensure we're on the Claude tab to show the reconnected session
-        if (activeTab !== 'claude') {
-          console.log(`Setting activeTab to claude (was ${activeTab})`);
-          setActiveTab('claude');
-        } else {
-          console.log(`Already on claude tab, session should be visible`);
-        }
-      } else if (directorySession) {
-        // Rejoin existing directory session
+      }
+
+      if (directorySession) {
+        // Rejoin existing directory session without changing tabs
         console.log(`Rejoining existing directory session: ${directorySession.id}, current activeTab: ${activeTab}`);
         setDirectoryTerminalSessionId(directorySession.id);
-        if (activeTab !== 'directory') {
-          console.log(`Setting activeTab to directory (was ${activeTab})`);
-          setActiveTab('directory');
-        } else {
-          console.log(`Already on directory tab, session should be visible`);
-        }
-      } else {
-        // No existing sessions, create new Claude session
-        console.log('No existing sessions found, creating new Claude session');
-        setActiveTab('claude');
-        await handleOpenClaudeTerminal();
       }
+
+      // Don't automatically create sessions or switch tabs - let user choose from dashboard
     } catch (error) {
       console.error('Failed to check existing sessions:', error);
-      // Fallback to creating new Claude session
-      setActiveTab('claude');
-      await handleOpenClaudeTerminal();
+      // Don't create sessions automatically on error - stay on dashboard
     }
   };
 
@@ -2200,6 +2184,22 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       <div style={{ display: 'flex', borderBottom: '1px solid #444' }}>
         <button
           onClick={() => {
+            setActiveTab('dashboard');
+          }}
+          style={{
+            background: activeTab === 'dashboard' ? '#444' : 'transparent',
+            border: 'none',
+            color: '#fff',
+            padding: '12px 24px',
+            cursor: 'pointer',
+            borderBottom: activeTab === 'dashboard' ? '2px solid #007acc' : '2px solid transparent',
+            fontSize: '13px'
+          }}
+        >
+          Dashboard
+        </button>
+        <button
+          onClick={() => {
             setActiveTab('claude');
             // If switching to Claude tab but no session exists, check for existing sessions
             if (!claudeTerminalSessionId && currentInstance?.status === 'running') {
@@ -2273,8 +2273,165 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       </div>
 
       <div className="terminal-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        {/* Dashboard Tab */}
+        <div style={{
+          display: activeTab === 'dashboard' ? 'flex' : 'none',
+          flexDirection: 'column',
+          flex: 1,
+          minHeight: 0,
+          padding: '20px',
+          overflowY: 'auto'
+        }}>
+          <div style={{ maxWidth: '800px' }}>
+            <h2 style={{ color: '#fff', marginBottom: '20px' }}>Worktree Overview</h2>
+
+            {/* Worktree Info */}
+            <div style={{
+              background: '#2d2d2d',
+              border: '1px solid #444',
+              borderRadius: '6px',
+              padding: '16px',
+              marginBottom: '20px'
+            }}>
+              <h3 style={{ color: '#fff', marginBottom: '12px', fontSize: '16px' }}>Branch Information</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ color: '#8b949e', fontSize: '13px' }}>
+                  <strong style={{ color: '#fff' }}>Branch:</strong> {selectedWorktree?.branch}
+                </div>
+                <div style={{ color: '#8b949e', fontSize: '13px' }}>
+                  <strong style={{ color: '#fff' }}>Path:</strong> {selectedWorktree?.path}
+                </div>
+              </div>
+            </div>
+
+            {/* Agent Status */}
+            <div style={{
+              background: '#2d2d2d',
+              border: '1px solid #444',
+              borderRadius: '6px',
+              padding: '16px',
+              marginBottom: '20px'
+            }}>
+              <h3 style={{ color: '#fff', marginBottom: '12px', fontSize: '16px' }}>Agent Status</h3>
+              {currentInstance ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ color: '#8b949e', fontSize: '13px' }}>
+                    <strong style={{ color: '#fff' }}>Status:</strong>{' '}
+                    <span style={{
+                      color: currentInstance.status === 'running' ? '#3fb950' :
+                             currentInstance.status === 'starting' ? '#f59e0b' :
+                             currentInstance.status === 'error' ? '#f85149' : '#8b949e'
+                    }}>
+                      {currentInstance.status}
+                    </span>
+                  </div>
+                  <div style={{ color: '#8b949e', fontSize: '13px' }}>
+                    <strong style={{ color: '#fff' }}>Type:</strong> {currentInstance.agentType}
+                  </div>
+                  {currentInstance.pid && (
+                    <div style={{ color: '#8b949e', fontSize: '13px' }}>
+                      <strong style={{ color: '#fff' }}>PID:</strong> {currentInstance.pid}
+                    </div>
+                  )}
+                  {currentInstance.port && (
+                    <div style={{ color: '#8b949e', fontSize: '13px' }}>
+                      <strong style={{ color: '#fff' }}>Port:</strong> {currentInstance.port}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ color: '#8b949e', fontSize: '13px' }}>
+                  No agent instance running
+                </div>
+              )}
+            </div>
+
+            {/* Quick Actions */}
+            <div style={{
+              background: '#2d2d2d',
+              border: '1px solid #444',
+              borderRadius: '6px',
+              padding: '16px'
+            }}>
+              <h3 style={{ color: '#fff', marginBottom: '12px', fontSize: '16px' }}>Quick Actions</h3>
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => {
+                    setActiveTab('claude');
+                    // If switching to Claude tab but no session exists, create one
+                    if (!claudeTerminalSessionId && currentInstance?.status === 'running') {
+                      setTimeout(() => handleOpenClaudeTerminal(), 100);
+                    }
+                  }}
+                  disabled={!currentInstance || currentInstance.status !== 'running'}
+                  style={{
+                    background: '#007acc',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '8px 16px',
+                    borderRadius: '4px',
+                    cursor: !currentInstance || currentInstance.status !== 'running' ? 'not-allowed' : 'pointer',
+                    opacity: !currentInstance || currentInstance.status !== 'running' ? 0.5 : 1,
+                    fontSize: '13px'
+                  }}
+                >
+                  Open Agent Terminal
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveTab('directory');
+                    // If switching to Terminal tab but no session exists, create one
+                    if (!directoryTerminalSessionId && currentInstance?.status === 'running') {
+                      setTimeout(() => handleOpenDirectoryTerminal(), 100);
+                    }
+                  }}
+                  style={{
+                    background: '#6c757d',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '8px 16px',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '13px'
+                  }}
+                >
+                  Open Directory Terminal
+                </button>
+                <button
+                  onClick={() => setActiveTab('git')}
+                  style={{
+                    background: '#f59e0b',
+                    color: '#000',
+                    border: 'none',
+                    padding: '8px 16px',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '13px'
+                  }}
+                >
+                  View Git Changes
+                </button>
+                <button
+                  onClick={() => setActiveTab('notes')}
+                  style={{
+                    background: '#8b5cf6',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '8px 16px',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '13px'
+                  }}
+                >
+                  View Notes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Agent Terminal */}
-        <div style={{ 
+        <div style={{
           display: activeTab === 'claude' ? 'flex' : 'none', 
           flexDirection: 'column', 
           flex: 1,
