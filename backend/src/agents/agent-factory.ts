@@ -3,6 +3,8 @@ import { ClaudeAdapter } from './claude-adapter.js';
 import { CodexAdapter } from './codex-adapter.js';
 import { GeminiAdapter } from './gemini-adapter.js';
 import { AmazonQAdapter } from './amazon-q-adapter.js';
+import { OpenCodeAdapter } from './opencode-adapter.js';
+import { CursorAgentAdapter } from './cursor-agent-adapter.js';
 
 export class AgentFactory {
   private adapters: Map<AgentType, AgentAdapter> = new Map();
@@ -18,6 +20,8 @@ export class AgentFactory {
     this.adapters.set('codex', new CodexAdapter());
     this.adapters.set('gemini', new GeminiAdapter());
     this.adapters.set('amazon-q', new AmazonQAdapter());
+    this.adapters.set('opencode', new OpenCodeAdapter());
+    this.adapters.set('cursor-agent', new CursorAgentAdapter());
   }
 
   /**

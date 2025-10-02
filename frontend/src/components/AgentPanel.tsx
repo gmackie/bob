@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ClaudeInstance, Worktree } from '../types';
+import { ClaudeInstance, Worktree, AgentType, AgentInfo } from '../types';
 import { TerminalComponent } from './Terminal';
 import { api } from '../api';
 
@@ -949,7 +949,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   // Suppress TypeScript warning for unused parameter
   // This parameter is part of the interface for future UI responsiveness features
   void isLeftPanelCollapsed;
-  
+
+  // Agent instance selection state
+  const [allInstances, setAllInstances] = useState<ClaudeInstance[]>([]);
+  const [currentInstanceId, setCurrentInstanceId] = useState<string | null>(null);
+  const [availableAgents, setAvailableAgents] = useState<AgentInfo[]>([]);
+  const [showNewAgentDropdown, setShowNewAgentDropdown] = useState(false);
+  const [isStartingNewAgent, setIsStartingNewAgent] = useState(false);
+
   const [claudeTerminalSessionId, setClaudeTerminalSessionId] = useState<string | null>(null);
   const [directoryTerminalSessionId, setDirectoryTerminalSessionId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'claude' | 'directory' | 'git' | 'notes'>('claude');
@@ -987,9 +994,58 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const [unsavedChanges, setUnsavedChanges] = useState(false);
   const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
 
+  // Load available agents on mount
+  useEffect(() => {
+    const loadAgents = async () => {
+      try {
+        const agents = await api.getAgents();
+        setAvailableAgents(agents as AgentInfo[]);
+      } catch (error) {
+        console.error('Failed to load agents:', error);
+      }
+    };
+    loadAgents();
+  }, []);
+
+  // Load all instances for the worktree and select the first one
+  useEffect(() => {
+    const loadInstances = async () => {
+      if (!selectedWorktree) {
+        setAllInstances([]);
+        setCurrentInstanceId(null);
+        return;
+      }
+
+      try {
+        const instances = await api.getInstances();
+        const worktreeInstances = instances.filter(i => i.worktreeId === selectedWorktree.id);
+        setAllInstances(worktreeInstances);
+
+        // Auto-select: prefer running instance, or first instance, or null
+        if (currentInstanceId && worktreeInstances.some(i => i.id === currentInstanceId)) {
+          // Keep current selection if still valid
+        } else if (worktreeInstances.length > 0) {
+          const runningInstance = worktreeInstances.find(i => i.status === 'running');
+          setCurrentInstanceId(runningInstance?.id || worktreeInstances[0].id);
+        } else {
+          setCurrentInstanceId(null);
+        }
+      } catch (error) {
+        console.error('Failed to load instances:', error);
+      }
+    };
+
+    loadInstances();
+    const interval = setInterval(loadInstances, 3000); // Refresh every 3 seconds
+    return () => clearInterval(interval);
+  }, [selectedWorktree?.id]);
+
+  // Get the currently selected instance object
+  const currentInstance = allInstances.find(i => i.id === currentInstanceId) || null;
+
   useEffect(() => {
     // Clear frontend terminal state when switching instances (but keep backend sessions alive)
-    console.log(`Switching to instance: ${selectedInstance?.id}, clearing session state`);
+    console.log(`Switching to instance: ${currentInstance?.id}, clearing session state`);
     setClaudeTerminalSessionId(null);
     setDirectoryTerminalSessionId(null);
     // Clear git state when switching
@@ -1008,50 +1064,50 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       clearTimeout(autoSaveTimeout);
       setAutoSaveTimeout(null);
     }
-  }, [selectedInstance?.id]);
+  }, [currentInstance?.id]);
 
   // Auto-connect to existing terminal sessions or create new ones when instance first becomes running
   useEffect(() => {
-    if (selectedInstance && 
-        selectedInstance.status === 'running' && 
-        !claudeTerminalSessionId && 
+    if (currentInstance &&
+        currentInstance.status === 'running' &&
+        !claudeTerminalSessionId &&
         !directoryTerminalSessionId &&
         !isCreatingClaudeSession &&
         !isCreatingDirectorySession) {
-      
+
       // Only proceed if this is a new instance or status change to running
-      const currentInstanceKey = `${selectedInstance.id}-${selectedInstance.status}`;
-      
+      const currentInstanceKey = `${currentInstance.id}-${currentInstance.status}`;
+
       if (lastAutoConnectInstance.current !== currentInstanceKey) {
         lastAutoConnectInstance.current = currentInstanceKey;
-        
-        console.log(`Auto-connecting to instance ${selectedInstance.id} (status: ${selectedInstance.status})`);
-        
+
+        console.log(`Auto-connecting to instance ${currentInstance.id} (status: ${currentInstance.status})`);
+
         // Add a small delay to ensure state has settled after instance switch
         const timeoutId = setTimeout(() => {
           checkExistingSessionsOrConnect();
         }, 100);
-        
+
         return () => clearTimeout(timeoutId);
       }
     }
-  }, [selectedInstance?.status, selectedInstance?.id]); // Remove session IDs from dependencies
+  }, [currentInstance?.status, currentInstance?.id]); // Remove session IDs from dependencies
 
   const handleOpenClaudeTerminal = async () => {
-    if (!selectedInstance || selectedInstance.status !== 'running') return;
-    
+    if (!currentInstance || currentInstance.status !== 'running') return;
+
     setIsCreatingClaudeSession(true);
     try {
       // First check for existing Claude session
-      const existingSessions = await api.getTerminalSessions(selectedInstance.id);
+      const existingSessions = await api.getTerminalSessions(currentInstance.id);
       const claudeSession = existingSessions.find(s => s.type === 'claude');
-      
+
       if (claudeSession) {
         // Rejoin existing session
         setClaudeTerminalSessionId(claudeSession.id);
       } else {
         // Create new session
-        const sessionId = await onCreateTerminalSession(selectedInstance.id);
+        const sessionId = await onCreateTerminalSession(currentInstance.id);
         setClaudeTerminalSessionId(sessionId);
       }
       setActiveTab('claude');
@@ -1064,20 +1120,20 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   };
 
   const handleOpenDirectoryTerminal = async () => {
-    if (!selectedInstance) return;
-    
+    if (!currentInstance) return;
+
     setIsCreatingDirectorySession(true);
     try {
       // First check for existing directory session
-      const existingSessions = await api.getTerminalSessions(selectedInstance.id);
+      const existingSessions = await api.getTerminalSessions(currentInstance.id);
       const directorySession = existingSessions.find(s => s.type === 'directory');
-      
+
       if (directorySession) {
         // Rejoin existing session
         setDirectoryTerminalSessionId(directorySession.id);
       } else {
         // Create new session
-        const sessionId = await onCreateDirectoryTerminalSession(selectedInstance.id);
+        const sessionId = await onCreateDirectoryTerminalSession(currentInstance.id);
         setDirectoryTerminalSessionId(sessionId);
       }
       setActiveTab('directory');
@@ -1099,8 +1155,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   };
 
   const handleRestartInstance = async () => {
-    if (!selectedInstance) return;
-    
+    if (!currentInstance) return;
+
     setIsRestarting(true);
     try {
       // Close any existing terminal sessions
@@ -1112,8 +1168,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         onCloseTerminalSession(directoryTerminalSessionId);
         setDirectoryTerminalSessionId(null);
       }
-      
-      await onRestartInstance(selectedInstance.id);
+
+      await onRestartInstance(currentInstance.id);
     } catch (error) {
       console.error('Failed to restart instance:', error);
     } finally {
@@ -1122,8 +1178,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   };
 
   const handleStopInstance = async () => {
-    if (!selectedInstance) return;
-    
+    if (!currentInstance) return;
+
     setIsStopping(true);
     try {
       // Close any existing terminal sessions
@@ -1135,8 +1191,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         onCloseTerminalSession(directoryTerminalSessionId);
         setDirectoryTerminalSessionId(null);
       }
-      
-      await onStopInstance(selectedInstance.id);
+
+      await onStopInstance(currentInstance.id);
     } catch (error) {
       console.error('Failed to stop instance:', error);
     } finally {
@@ -1144,15 +1200,36 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     }
   };
 
+  const handleStartNewAgent = async (agentType: AgentType) => {
+    if (!selectedWorktree) return;
+
+    setIsStartingNewAgent(true);
+    setShowNewAgentDropdown(false);
+
+    try {
+      const newInstance = await api.startInstance(selectedWorktree.id, agentType);
+      // Refresh instances list
+      const instances = await api.getInstances();
+      const worktreeInstances = instances.filter(i => i.worktreeId === selectedWorktree.id);
+      setAllInstances(worktreeInstances);
+      // Select the new instance
+      setCurrentInstanceId(newInstance.id);
+    } catch (error) {
+      console.error('Failed to start new agent:', error);
+    } finally {
+      setIsStartingNewAgent(false);
+    }
+  };
+
   const checkExistingSessionsOrConnect = async () => {
-    if (!selectedInstance) return;
-    
-    console.log(`checkExistingSessionsOrConnect called for instance ${selectedInstance.id}`);
-    
+    if (!currentInstance) return;
+
+    console.log(`checkExistingSessionsOrConnect called for instance ${currentInstance.id}`);
+
     try {
       // Check for existing terminal sessions
-      const existingSessions = await api.getTerminalSessions(selectedInstance.id);
-      console.log(`Found ${existingSessions.length} existing sessions for instance ${selectedInstance.id}:`, existingSessions);
+      const existingSessions = await api.getTerminalSessions(currentInstance.id);
+      console.log(`Found ${existingSessions.length} existing sessions for instance ${currentInstance.id}:`, existingSessions);
       
       // Look for existing Claude and directory sessions
       const claudeSession = existingSessions.find(s => s.type === 'claude');
@@ -1332,9 +1409,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         // Comprehensive cleanup: stop instance, revert changes, and delete worktree
 
         // 1. Stop the Agent instance if running
-        if (selectedInstance) {
+        if (currentInstance) {
           console.log('Stopping instance before worktree deletion...');
-          await onStopInstance(selectedInstance.id);
+          await onStopInstance(currentInstance.id);
         }
 
         // 2. Close any terminal sessions
@@ -1587,20 +1664,84 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     );
   }
 
-  if (!selectedInstance) {
+  // Determine available agents that are ready to start
+  const readyAgents = availableAgents.filter(a => a.isAvailable && (a.isAuthenticated ?? true));
+
+  if (allInstances.length === 0 && !isStartingNewAgent) {
     return (
       <div className="right-panel">
         <div className="panel-header">
-          <h3 style={{ margin: 0, color: '#ffffff' }}>Terminal</h3>
-          <span style={{ fontSize: '12px', color: '#888' }}>
-            {selectedWorktree.branch} • {selectedWorktree.path}
-          </span>
+          <div>
+            <h3 style={{ margin: 0, color: '#ffffff' }}>Agent Instances</h3>
+            <span style={{ fontSize: '12px', color: '#888' }}>
+              {selectedWorktree.branch} • {selectedWorktree.path}
+            </span>
+          </div>
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowNewAgentDropdown(!showNewAgentDropdown)}
+              style={{
+                backgroundColor: '#28a745',
+                border: 'none',
+                color: '#fff',
+                padding: '6px 12px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px'
+              }}
+            >
+              + New Agent
+            </button>
+            {showNewAgentDropdown && (
+              <div style={{
+                position: 'absolute',
+                top: '100%',
+                right: 0,
+                marginTop: '4px',
+                backgroundColor: '#2d3748',
+                border: '1px solid #4a5568',
+                borderRadius: '6px',
+                zIndex: 1000,
+                minWidth: '200px',
+                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)'
+              }}>
+                {readyAgents.length > 0 ? readyAgents.map(agent => (
+                  <button
+                    key={agent.type}
+                    onClick={() => handleStartNewAgent(agent.type)}
+                    style={{
+                      width: '100%',
+                      padding: '10px 16px',
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      color: '#fff',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4a5568'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                  >
+                    <div style={{ fontWeight: 'bold' }}>{agent.name}</div>
+                    <div style={{ fontSize: '11px', color: '#888' }}>{agent.statusMessage || 'Ready'}</div>
+                  </button>
+                )) : (
+                  <div style={{ padding: '12px', color: '#888', fontSize: '12px' }}>
+                    No agents available
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
         <div className="empty-terminal">
           <div>
-            <h4 style={{ color: '#666', marginBottom: '8px' }}>No Agent instance</h4>
+            <h4 style={{ color: '#666', marginBottom: '8px' }}>No Agent instances</h4>
             <p style={{ color: '#888', fontSize: '14px' }}>
-              This worktree doesn't have a running Agent instance
+              Start a new agent instance to begin working
             </p>
           </div>
         </div>
@@ -1608,73 +1749,231 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     );
   }
 
+  if (!currentInstance) {
+    return null; // Loading state
+  }
+
   return (
     <div className="right-panel">
-      <div className="panel-header">
-        <div>
-          <h3 style={{ margin: 0, color: '#ffffff' }}>
-            Agent Instance
-            <span 
-              className={`status ${selectedInstance.status}`}
-              style={{ 
-                marginLeft: '12px',
-                fontSize: '11px',
-                padding: '2px 6px',
-                borderRadius: '3px',
-                backgroundColor: 
-                  selectedInstance.status === 'running' ? '#28a745' :
-                  selectedInstance.status === 'starting' ? '#ffc107' :
-                  selectedInstance.status === 'stopped' ? '#6c757d' : '#dc3545',
-                color: selectedInstance.status === 'starting' ? '#000' : '#fff'
-              }}
-            >
-              {selectedInstance.status}
-            </span>
-            <span
+      <div className="panel-header" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div style={{ flex: 1 }}>
+            <h3 style={{ margin: 0, color: '#ffffff', marginBottom: '4px' }}>Agent Instances</h3>
+            <div style={{ fontSize: '12px', color: '#888' }}>
+              {selectedWorktree.branch} • {selectedWorktree.path}
+            </div>
+          </div>
+
+          {/* New Agent Button */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowNewAgentDropdown(!showNewAgentDropdown)}
+              disabled={isStartingNewAgent}
               style={{
-                marginLeft: '8px',
-                fontSize: '10px',
-                padding: '2px 6px',
-                borderRadius: '3px',
-                backgroundColor: '#21262d',
-                color: '#8b949e',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px'
+                backgroundColor: '#28a745',
+                border: 'none',
+                color: '#fff',
+                padding: '6px 12px',
+                borderRadius: '4px',
+                cursor: isStartingNewAgent ? 'not-allowed' : 'pointer',
+                fontSize: '12px',
+                opacity: isStartingNewAgent ? 0.6 : 1
               }}
-              title={`Active agent: ${selectedInstance.agentType}`}
             >
-              {selectedInstance.agentType.toUpperCase()}
-            </span>
-          </h3>
-          <div style={{ fontSize: '12px', color: '#888', marginTop: '2px' }}>
-            {selectedWorktree.branch} • {selectedWorktree.path}
-            {selectedInstance.pid && <span> • PID: {selectedInstance.pid}</span>}
-            {selectedInstance.port && <span> • Port: {selectedInstance.port}</span>}
+              {isStartingNewAgent ? 'Starting...' : '+ New Agent'}
+            </button>
+            {showNewAgentDropdown && (
+              <div style={{
+                position: 'absolute',
+                top: '100%',
+                right: 0,
+                marginTop: '4px',
+                backgroundColor: '#2d3748',
+                border: '1px solid #4a5568',
+                borderRadius: '6px',
+                zIndex: 1000,
+                minWidth: '200px',
+                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)'
+              }}>
+                {readyAgents.length > 0 ? readyAgents.map(agent => (
+                  <button
+                    key={agent.type}
+                    onClick={() => handleStartNewAgent(agent.type)}
+                    style={{
+                      width: '100%',
+                      padding: '10px 16px',
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      color: '#fff',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4a5568'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                  >
+                    <div style={{ fontWeight: 'bold' }}>{agent.name}</div>
+                    <div style={{ fontSize: '11px', color: '#888' }}>{agent.statusMessage || 'Ready'}</div>
+                  </button>
+                )) : (
+                  <div style={{ padding: '12px', color: '#888', fontSize: '12px' }}>
+                    No agents available
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
-        
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {selectedInstance.status === 'running' && (
-            <button
-              onClick={handleStopInstance}
-              disabled={isStopping}
-              className="button danger"
-              style={{ fontSize: '12px', padding: '6px 12px' }}
-            >
-              {isStopping ? 'Stopping...' : 'Stop Agent'}
-            </button>
-          )}
-          
-          {(selectedInstance.status === 'stopped' || selectedInstance.status === 'error') && (
-            <button
-              onClick={handleRestartInstance}
-              disabled={isRestarting}
-              className="button"
-              style={{ fontSize: '12px', padding: '6px 12px' }}
-            >
-              {isRestarting ? 'Restarting...' : 'Restart Agent'}
-            </button>
-          )}
+
+        {/* Agent Instance List */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          maxHeight: '200px',
+          overflowY: 'auto',
+          padding: '8px',
+          backgroundColor: '#0d1117',
+          borderRadius: '6px',
+          border: '1px solid #30363d'
+        }}>
+          {allInstances.map(instance => {
+            const isSelected = instance.id === currentInstanceId;
+            const isConnected = (instance.id === currentInstanceId &&
+                                (claudeTerminalSessionId || directoryTerminalSessionId));
+
+            return (
+              <div
+                key={instance.id}
+                onClick={() => setCurrentInstanceId(instance.id)}
+                style={{
+                  padding: '12px',
+                  backgroundColor: isSelected ? '#21262d' : 'transparent',
+                  border: `1px solid ${isSelected ? '#58a6ff' : '#30363d'}`,
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}
+                onMouseEnter={(e) => {
+                  if (!isSelected) e.currentTarget.style.backgroundColor = '#161b22';
+                }}
+                onMouseLeave={(e) => {
+                  if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+              >
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <span style={{
+                      fontWeight: 'bold',
+                      color: '#fff',
+                      fontSize: '13px',
+                      textTransform: 'uppercase'
+                    }}>
+                      {instance.agentType}
+                    </span>
+
+                    {/* Status Badge */}
+                    <span style={{
+                      fontSize: '10px',
+                      padding: '2px 6px',
+                      borderRadius: '3px',
+                      backgroundColor:
+                        instance.status === 'running' ? '#28a745' :
+                        instance.status === 'starting' ? '#ffc107' :
+                        instance.status === 'stopped' ? '#6c757d' : '#dc3545',
+                      color: instance.status === 'starting' ? '#000' : '#fff'
+                    }}>
+                      {instance.status}
+                    </span>
+
+                    {/* Connected Badge */}
+                    {isConnected && (
+                      <span style={{
+                        fontSize: '10px',
+                        padding: '2px 6px',
+                        borderRadius: '3px',
+                        backgroundColor: '#0969da',
+                        color: '#fff'
+                      }}>
+                        ● connected
+                      </span>
+                    )}
+
+                    {/* Selected Indicator */}
+                    {isSelected && (
+                      <span style={{
+                        fontSize: '10px',
+                        color: '#58a6ff'
+                      }}>
+                        ◄ active
+                      </span>
+                    )}
+                  </div>
+
+                  <div style={{ fontSize: '11px', color: '#8b949e' }}>
+                    ID: {instance.id.slice(-8)}
+                    {instance.pid && <span> • PID: {instance.pid}</span>}
+                    {instance.port && <span> • Port: {instance.port}</span>}
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div style={{ display: 'flex', gap: '6px', marginLeft: '12px' }}>
+                  {instance.status === 'running' && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCurrentInstanceId(instance.id);
+                        handleStopInstance();
+                      }}
+                      disabled={isStopping && instance.id === currentInstanceId}
+                      style={{
+                        backgroundColor: '#dc3545',
+                        border: 'none',
+                        color: '#fff',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '10px',
+                        opacity: (isStopping && instance.id === currentInstanceId) ? 0.6 : 1
+                      }}
+                    >
+                      {(isStopping && instance.id === currentInstanceId) ? 'Stopping...' : 'Stop'}
+                    </button>
+                  )}
+
+                  {(instance.status === 'stopped' || instance.status === 'error') && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCurrentInstanceId(instance.id);
+                        handleRestartInstance();
+                      }}
+                      disabled={isRestarting && instance.id === currentInstanceId}
+                      style={{
+                        backgroundColor: '#238636',
+                        border: 'none',
+                        color: '#fff',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '10px',
+                        opacity: (isRestarting && instance.id === currentInstanceId) ? 0.6 : 1
+                      }}
+                    >
+                      {(isRestarting && instance.id === currentInstanceId) ? 'Restarting...' : 'Restart'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -1697,7 +1996,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           onClick={() => {
             setActiveTab('claude');
             // If switching to Claude tab but no session exists, check for existing sessions
-            if (!claudeTerminalSessionId && selectedInstance?.status === 'running') {
+            if (!claudeTerminalSessionId && currentInstance?.status === 'running') {
               setTimeout(() => handleOpenClaudeTerminal(), 100);
             }
           }}
@@ -1717,7 +2016,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           onClick={() => {
             setActiveTab('directory');
             // If switching to Terminal tab but no session exists, check for existing sessions
-            if (!directoryTerminalSessionId && selectedInstance?.status === 'running') {
+            if (!directoryTerminalSessionId && currentInstance?.status === 'running') {
               setTimeout(() => handleOpenDirectoryTerminal(), 100);
             }
           }}
@@ -1784,19 +2083,19 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 onClose={() => handleCloseTerminal('claude')}
               />
             </>
-          ) : selectedInstance.status === 'running' ? (
+          ) : currentInstance.status === 'running' ? (
             <div className="empty-terminal" style={{ flex: 1 }}>
               <div style={{ textAlign: 'center' }}>
                 <h4 style={{ color: '#666', marginBottom: '8px' }}>Agent Terminal</h4>
                 {isCreatingClaudeSession ? (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', color: '#888' }}>
-                    <div style={{ 
-                      width: '16px', 
-                      height: '16px', 
-                      border: '2px solid #444', 
-                      borderTop: '2px solid #888', 
+                    <div style={{
+                      width: '16px',
+                      height: '16px',
+                      border: '2px solid #444',
+                      borderTop: '2px solid #888',
                       borderRadius: '50%',
-                      animation: 'spin 1s linear infinite' 
+                      animation: 'spin 1s linear infinite'
                     }}></div>
                     Connecting to Agent...
                   </div>
@@ -1816,7 +2115,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 )}
               </div>
             </div>
-          ) : selectedInstance.status === 'starting' ? (
+          ) : currentInstance.status === 'starting' ? (
             <div className="empty-terminal" style={{ flex: 1 }}>
               <div style={{ textAlign: 'center' }}>
                 <h4 style={{ color: '#666', marginBottom: '8px' }}>Agent Terminal</h4>
