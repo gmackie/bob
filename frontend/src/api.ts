@@ -136,6 +136,30 @@ class ApiClient {
     return response.text();
   }
 
+  async getGitStatus(worktreeId: string): Promise<{
+    branch: string;
+    ahead: number;
+    behind: number;
+    hasChanges: boolean;
+    files: {
+      staged: number;
+      unstaged: number;
+      untracked: number;
+    };
+  }> {
+    return this.request(`/git/${worktreeId}/status`);
+  }
+
+  async getPRStatus(worktreeId: string): Promise<{
+    exists: boolean;
+    number?: number;
+    title?: string;
+    url?: string;
+    state?: 'open' | 'closed' | 'merged';
+  }> {
+    return this.request(`/git/${worktreeId}/pr-status`);
+  }
+
   async generateCommitMessage(worktreeId: string, comments?: any[]): Promise<{
     commitMessage: string;
     commitSubject?: string;

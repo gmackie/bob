@@ -44,6 +44,7 @@ export const RepositoryPanel: React.FC<RepositoryPanelProps> = ({
   const [startingInstances, setStartingInstances] = useState<Set<string>>(new Set());
   const [copiedWorktreeId, setCopiedWorktreeId] = useState<string | null>(null);
   const [refreshingRepositories, setRefreshingRepositories] = useState<Set<string>>(new Set());
+  const [expandedWorktrees, setExpandedWorktrees] = useState<Set<string>>(new Set());
 
   const handleDirectorySelect = (path: string) => {
     onAddRepository(path);
@@ -82,6 +83,29 @@ export const RepositoryPanel: React.FC<RepositoryPanelProps> = ({
   const getBranchDisplayName = (branch: string) => {
     // Extract the branch name from refs/heads/branch-name or just return branch name
     return branch.replace(/^refs\/heads\//, '');
+  };
+
+  const toggleWorktreeExpansion = (worktreeId: string) => {
+    setExpandedWorktrees(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(worktreeId)) {
+        newSet.delete(worktreeId);
+      } else {
+        newSet.add(worktreeId);
+      }
+      return newSet;
+    });
+  };
+
+  const getWorktreeInstanceCounts = (worktreeId: string) => {
+    const worktreeInstances = instances.filter(i => i.worktreeId === worktreeId);
+    return {
+      running: worktreeInstances.filter(i => i.status === 'running').length,
+      starting: worktreeInstances.filter(i => i.status === 'starting').length,
+      stopped: worktreeInstances.filter(i => i.status === 'stopped').length,
+      error: worktreeInstances.filter(i => i.status === 'error').length,
+      total: worktreeInstances.length
+    };
   };
 
   const handleWorktreeSelect = async (worktreeId: string) => {
@@ -232,14 +256,14 @@ export const RepositoryPanel: React.FC<RepositoryPanelProps> = ({
 
                     {showNewWorktreeForm === repo.id && (
                       <div style={{ padding: '12px 16px', background: '#2a2a2a', borderTop: '1px solid #444' }}>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           <input
                             type="text"
                             value={newBranchName}
                             onChange={(e) => setNewBranchName(e.target.value)}
                             placeholder="Branch name (e.g., feature-xyz)"
                             className="input"
-                            style={{ flex: 1, fontSize: '12px', padding: '6px 8px' }}
+                            style={{ width: '100%', fontSize: '12px', padding: '6px 8px' }}
                             onKeyPress={(e) => e.key === 'Enter' && handleCreateWorktree(repo.id)}
                             autoFocus
                           />
@@ -247,124 +271,191 @@ export const RepositoryPanel: React.FC<RepositoryPanelProps> = ({
                             agents={agents}
                             value={selectedAgent}
                             onChange={setSelectedAgent}
-                            style={{ flex: 0 }}
+                            style={{ width: '100%' }}
                           />
-                          <button
-                            onClick={() => handleCreateWorktree(repo.id)}
-                            disabled={!newBranchName.trim()}
-                            className="button"
-                            style={{ fontSize: '12px', padding: '6px 12px' }}
-                          >
-                            Create
-                          </button>
-                          <button
-                            onClick={() => {
-                              setShowNewWorktreeForm(null);
-                              setNewBranchName('');
-                            }}
-                            className="button secondary"
-                            style={{ fontSize: '12px', padding: '6px 12px' }}
-                          >
-                            Cancel
-                          </button>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              onClick={() => handleCreateWorktree(repo.id)}
+                              disabled={!newBranchName.trim()}
+                              className="button"
+                              style={{ flex: 1, fontSize: '12px', padding: '6px 12px' }}
+                            >
+                              Create
+                            </button>
+                            <button
+                              onClick={() => {
+                                setShowNewWorktreeForm(null);
+                                setNewBranchName('');
+                              }}
+                              className="button secondary"
+                              style={{ flex: 1, fontSize: '12px', padding: '6px 12px' }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
                         </div>
                       </div>
                     )}
 
                     {/* Show all Bob-managed worktrees (main worktrees are excluded from data) */}
                     {repo.worktrees.length > 0 && (
-                      <div className="worktrees-list">
+                      <div className="worktrees-list" style={{ maxHeight: 'none' }}>
                         {repo.worktrees.map(worktree => {
-                          const status = getWorktreeStatus(worktree);
                           const isSelected = selectedWorktreeId === worktree.id;
-                          const isStarting = startingInstances.has(worktree.id);
-                          
+                          const isExpanded = expandedWorktrees.has(worktree.id);
+                          const counts = getWorktreeInstanceCounts(worktree.id);
+                          const worktreeInstances = instances.filter(i => i.worktreeId === worktree.id);
+
                           return (
                             <div
                               key={worktree.id}
-                              className={`worktree-item ${isSelected ? 'active' : ''}`}
+                              style={{
+                                borderTop: '1px solid #444',
+                                background: isSelected ? '#007acc15' : 'transparent'
+                              }}
                             >
-                              <div 
+                              {/* Worktree Header */}
+                              <div
                                 onClick={() => handleWorktreeSelect(worktree.id)}
-                                style={{ 
-                                  cursor: 'pointer', 
-                                  flex: 1, 
-                                  display: 'flex', 
-                                  justifyContent: 'space-between', 
-                                  alignItems: 'center' 
+                                style={{
+                                  padding: '12px 16px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '6px'
                                 }}
                               >
-                                <div className="worktree-info" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <div className="worktree-name">{getBranchDisplayName(worktree.branch)}</div>
-                                  {(() => {
-                                    const inst = instances.find(i => i.worktreeId === worktree.id);
-                                    const agentType = inst?.agentType || worktree.preferredAgent;
-                                    return agentType ? (
-                                      <AgentBadge
-                                        agentType={agentType}
-                                        agents={agents}
-                                        compact={true}
-                                      />
-                                    ) : null;
-                                  })()}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleWorktreeExpansion(worktree.id);
+                                      }}
+                                      style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#888',
+                                        cursor: 'pointer',
+                                        fontSize: '10px',
+                                        padding: '0 4px',
+                                        display: counts.total > 0 ? 'block' : 'none'
+                                      }}
+                                    >
+                                      {isExpanded ? '▼' : '▶'}
+                                    </button>
+                                    <div className="worktree-name" style={{ fontSize: '13px', fontWeight: 500 }}>
+                                      {getBranchDisplayName(worktree.branch)}
+                                    </div>
+                                  </div>
+
+                                  {/* Status count badges */}
+                                  <div style={{ display: 'flex', gap: '4px' }}>
+                                    {counts.running > 0 && (
+                                      <span style={{
+                                        fontSize: '10px',
+                                        padding: '2px 6px',
+                                        borderRadius: '10px',
+                                        background: '#28a745',
+                                        color: '#fff',
+                                        fontWeight: 'bold'
+                                      }}>
+                                        {counts.running}
+                                      </span>
+                                    )}
+                                    {counts.starting > 0 && (
+                                      <span style={{
+                                        fontSize: '10px',
+                                        padding: '2px 6px',
+                                        borderRadius: '10px',
+                                        background: '#ffc107',
+                                        color: '#000',
+                                        fontWeight: 'bold'
+                                      }}>
+                                        {counts.starting}
+                                      </span>
+                                    )}
+                                    {counts.stopped > 0 && (
+                                      <span style={{
+                                        fontSize: '10px',
+                                        padding: '2px 6px',
+                                        borderRadius: '10px',
+                                        background: '#6c757d',
+                                        color: '#fff',
+                                        fontWeight: 'bold'
+                                      }}>
+                                        {counts.stopped}
+                                      </span>
+                                    )}
+                                    {counts.error > 0 && (
+                                      <span style={{
+                                        fontSize: '10px',
+                                        padding: '2px 6px',
+                                        borderRadius: '10px',
+                                        background: '#dc3545',
+                                        color: '#fff',
+                                        fontWeight: 'bold'
+                                      }}>
+                                        {counts.error}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
-                                <div className="worktree-path">{worktree.path}</div>
-                                <div
-                                  className={`instance-status ${isStarting ? 'starting' : status.status}`}
-                                  style={{
-                                    backgroundColor:
-                                      isStarting ? '#ffc107' :
-                                      status.status === 'running' ? '#28a745' :
-                                      status.status === 'starting' ? '#ffc107' :
-                                      status.status === 'error' ? '#dc3545' :
-                                      status.status === 'stopped' ? '#6c757d' :
-                                      status.status === 'none' ? '#888' : '#444',
-                                    color:
-                                      isStarting || status.status === 'starting' ? '#000' :
-                                      status.status === 'none' ? '#fff' :
-                                      '#fff'
-                                  }}
-                                >
-                                  {isStarting ? 'Starting...' : status.label}
+
+                                {/* Repository location */}
+                                <div className="worktree-path" style={{ fontSize: '11px', color: '#888', paddingLeft: counts.total > 0 ? '20px' : '0' }}>
+                                  {worktree.path}
                                 </div>
                               </div>
-                              <button
-                                onClick={(e) => handleCopyWorktreeLink(worktree.id, e)}
-                                style={{
-                                  background: copiedWorktreeId === worktree.id ? '#28a745' : '#6c757d',
-                                  color: '#fff',
-                                  border: 'none',
-                                  padding: '4px 8px',
-                                  borderRadius: '3px',
-                                  cursor: 'pointer',
-                                  fontSize: '12px',
-                                  marginLeft: '8px',
-                                  flexShrink: 0
-                                }}
-                                title={copiedWorktreeId === worktree.id ? "Link copied!" : "Copy direct link to this worktree"}
-                              >
-                                {copiedWorktreeId === worktree.id ? '✓' : '🔗'}
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setWorktreeToDelete(worktree);
-                                }}
-                                style={{
-                                  background: '#dc3545',
-                                  color: '#fff',
-                                  border: 'none',
-                                  padding: '4px 8px',
-                                  borderRadius: '3px',
-                                  cursor: 'pointer',
-                                  fontSize: '12px',
-                                  marginLeft: '8px',
-                                  flexShrink: 0
-                                }}
-                                title="Delete worktree"
-                              >
-                                ×
-                              </button>
+
+                              {/* Agent instances dropdown */}
+                              {isExpanded && worktreeInstances.length > 0 && (
+                                <div style={{
+                                  background: '#1a1a1a',
+                                  borderTop: '1px solid #333',
+                                  padding: '8px 16px 8px 36px'
+                                }}>
+                                  {worktreeInstances.map(instance => (
+                                    <div
+                                      key={instance.id}
+                                      style={{
+                                        padding: '6px 8px',
+                                        marginBottom: '4px',
+                                        background: '#2a2a2a',
+                                        borderRadius: '4px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        fontSize: '11px'
+                                      }}
+                                    >
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <AgentBadge
+                                          agentType={instance.agentType}
+                                          agents={agents}
+                                          compact={true}
+                                        />
+                                        <span style={{ color: '#888' }}>•</span>
+                                        <span style={{ color: '#e5e5e5' }}>
+                                          {instance.id.slice(-8)}
+                                        </span>
+                                      </div>
+                                      <span style={{
+                                        fontSize: '10px',
+                                        padding: '2px 6px',
+                                        borderRadius: '3px',
+                                        background:
+                                          instance.status === 'running' ? '#28a745' :
+                                          instance.status === 'starting' ? '#ffc107' :
+                                          instance.status === 'error' ? '#dc3545' : '#6c757d',
+                                        color: instance.status === 'starting' ? '#000' : '#fff'
+                                      }}>
+                                        {instance.status}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           );
                         })}

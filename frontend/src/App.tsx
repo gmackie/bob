@@ -5,6 +5,7 @@ import { api } from './api';
 import { RepositoryPanel } from './components/RepositoryPanel';
 import { AgentPanel } from './components/AgentPanel';
 import { DatabaseManager } from './components/DatabaseManager';
+import { Dashboard } from './components/Dashboard';
 import { AuthButton } from './components/AuthButton';
 import { SettingsMenu } from './components/SettingsMenu';
 import { WebSocketDebugPanel } from './components/WebSocketDebugPanel';
@@ -14,9 +15,31 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<MainApp />} />
+      <Route path="/dashboard" element={<DashboardRoute />} />
       <Route path="/database" element={<DatabaseRoute />} />
     </Routes>
   );
+}
+
+function DashboardRoute() {
+  const [repositories, setRepositories] = useState<Repository[]>([]);
+
+  useEffect(() => {
+    const loadRepositories = async () => {
+      try {
+        const repos = await api.getRepositories();
+        setRepositories(repos);
+      } catch (error) {
+        console.error('Failed to load repositories:', error);
+      }
+    };
+
+    loadRepositories();
+    const interval = setInterval(loadRepositories, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return <Dashboard repositories={repositories} />;
 }
 
 function DatabaseRoute() {
@@ -316,6 +339,12 @@ function MainApp() {
                 className={`nav-button ${location.pathname === '/' ? 'active' : ''}`}
               >
                 Home
+              </button>
+              <button
+                onClick={() => navigate('/dashboard')}
+                className={`nav-button ${location.pathname === '/dashboard' ? 'active' : ''}`}
+              >
+                Dashboard
               </button>
               {isDatabaseUnlocked && (
                 <button
