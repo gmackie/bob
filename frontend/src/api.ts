@@ -129,7 +129,17 @@ class ApiClient {
 
   // Git operations
   async getGitDiff(worktreeId: string): Promise<string> {
-    const response = await fetch(`${API_BASE}/git/${worktreeId}/diff`);
+    const token = localStorage.getItem('authToken');
+    const headers: HeadersInit = {};
+
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE}/git/${worktreeId}/diff`, {
+      headers,
+    });
+
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -390,6 +400,79 @@ class ApiClient {
       method: 'PUT',
       body: JSON.stringify({ setClause, whereClause, confirm }),
     });
+  }
+
+  // Repository dashboard specific APIs
+  async getGitRemotes(repositoryId: string): Promise<Array<{
+    name: string;
+    url: string;
+    type: 'fetch' | 'push';
+  }>> {
+    return this.request(`/repositories/${repositoryId}/remotes`);
+  }
+
+  async getGitBranches(repositoryId: string): Promise<Array<{
+    name: string;
+    isLocal: boolean;
+    isRemote: boolean;
+    isCurrent: boolean;
+    lastCommit?: {
+      hash: string;
+      message: string;
+      author: string;
+      date: string;
+    };
+  }>> {
+    return this.request(`/repositories/${repositoryId}/branches`);
+  }
+
+  async getGitGraph(repositoryId: string): Promise<Array<{
+    hash: string;
+    parents: string[];
+    message: string;
+    author: string;
+    date: string;
+    branch?: string;
+    x: number;
+    y: number;
+  }>> {
+    return this.request(`/repositories/${repositoryId}/graph`);
+  }
+
+  async getProjectNotes(repositoryId: string): Promise<string> {
+    const response = await fetch(`${API_BASE}/repositories/${repositoryId}/notes`);
+    if (!response.ok) {
+      if (response.status === 404) {
+        return ''; // No notes file exists yet
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.text();
+  }
+
+  async saveProjectNotes(repositoryId: string, notes: string): Promise<void> {
+    return this.request(`/repositories/${repositoryId}/notes`, {
+      method: 'POST',
+      body: JSON.stringify({ notes }),
+    });
+  }
+
+  // Repository docs
+  async getRepositoryDocs(repositoryId: string): Promise<Array<{
+    name: string;
+    relativePath: string;
+    size: number;
+    mtime: number;
+  }>> {
+    return this.request(`/repositories/${repositoryId}/docs`);
+  }
+
+  async getRepositoryDocContent(repositoryId: string, relativePath: string): Promise<string> {
+    const response = await fetch(`${API_BASE}/repositories/${repositoryId}/docs/content?path=${encodeURIComponent(relativePath)}`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.text();
   }
 }
 

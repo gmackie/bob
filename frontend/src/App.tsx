@@ -3,12 +3,13 @@ import { Routes, Route, useSearchParams, useNavigate, useLocation } from 'react-
 import { Repository, ClaudeInstance, Worktree, AgentInfo, AgentType } from './types';
 import { api } from './api';
 import { RepositoryPanel } from './components/RepositoryPanel';
-import { AgentPanel } from './components/AgentPanel';
+import { TerminalPanel } from './components/TerminalPanel';
 import { DatabaseManager } from './components/DatabaseManager';
 import { Dashboard } from './components/Dashboard';
 import { AuthButton } from './components/AuthButton';
 import { SettingsMenu } from './components/SettingsMenu';
 import { WebSocketDebugPanel } from './components/WebSocketDebugPanel';
+import { RepositoryDashboardPanel } from './components/RepositoryDashboardPanel';
 import { useCheatCode } from './contexts/CheatCodeContext';
 
 function App() {
@@ -73,6 +74,7 @@ function MainApp() {
   const [, setError] = useState<string | null>(null);
   const [instanceError, setInstanceError] = useState<string | null>(null);
   const [selectedWorktreeId, setSelectedWorktreeId] = useState<string | null>(null);
+  const [selectedRepositoryId, setSelectedRepositoryId] = useState<string | null>(null);
   const defaultAgentType: AgentType | undefined = (() => {
     const ready = agents.filter(a => a.isAvailable && (a.isAuthenticated ?? true));
     const claude = ready.find(a => a.type === 'claude');
@@ -85,30 +87,45 @@ function MainApp() {
     return () => clearInterval(interval);
   }, []);
 
-  // Handle URL parameters for direct worktree linking
+  // Handle URL parameters for direct worktree and repository linking
   useEffect(() => {
     const worktreeParam = searchParams.get('worktree');
+    const repositoryParam = searchParams.get('repository');
 
-    if (!worktreeParam) {
-      // No worktree in URL, ensure nothing is selected
-      if (selectedWorktreeId) {
-        setSelectedWorktreeId(null);
+    // Handle repository selection
+    if (repositoryParam) {
+      if (repositories.length > 0) {
+        const targetRepo = repositories.find(r => r.id === repositoryParam);
+        if (targetRepo && selectedRepositoryId !== repositoryParam) {
+          handleSelectRepository(repositoryParam);
+        } else if (!targetRepo && selectedRepositoryId) {
+          setSelectedRepositoryId(null);
+        }
+      }
+      return; // Repository takes precedence over worktree
+    }
+
+    // Handle worktree selection
+    if (worktreeParam) {
+      if (repositories.length > 0) {
+        const allWorktrees = repositories.flatMap(repo => repo.worktrees);
+        const targetWorktree = allWorktrees.find(w => w.id === worktreeParam);
+
+        if (targetWorktree && selectedWorktreeId !== worktreeParam) {
+          handleSelectWorktree(targetWorktree.id);
+        } else if (!targetWorktree && selectedWorktreeId) {
+          setSelectedWorktreeId(null);
+        }
       }
       return;
     }
 
-    if (repositories.length > 0) {
-      // Find worktree by ID
-      const allWorktrees = repositories.flatMap(repo => repo.worktrees);
-      const targetWorktree = allWorktrees.find(w => w.id === worktreeParam);
-
-      if (targetWorktree && selectedWorktreeId !== worktreeParam) {
-        // Only select if it's different from current selection
-        handleSelectWorktree(targetWorktree.id);
-      } else if (!targetWorktree && selectedWorktreeId) {
-        // Worktree not found, clear selection
-        setSelectedWorktreeId(null);
-      }
+    // No params - clear selections
+    if (selectedWorktreeId) {
+      setSelectedWorktreeId(null);
+    }
+    if (selectedRepositoryId) {
+      setSelectedRepositoryId(null);
     }
   }, [repositories, searchParams]);
 
@@ -119,7 +136,7 @@ function MainApp() {
         api.getInstances(),
         api.getAgents().catch(() => [])
       ]);
-      
+
       setRepositories(reposData);
       setInstances(instancesData);
       setAgents(agentsData as AgentInfo[]);
@@ -251,43 +268,21 @@ function MainApp() {
 
   const handleSelectWorktree = async (worktreeId: string) => {
     setSelectedWorktreeId(worktreeId);
+    setSelectedRepositoryId(null); // Clear repository selection
 
     // Update URL to reflect selected worktree
     setSearchParams({ worktree: worktreeId });
 
-    // Get fresh instance data directly from API to avoid stale state
-    try {
-      const freshInstances = await api.getInstances();
-      const existingInstance = freshInstances.find(instance => instance.worktreeId === worktreeId);
-
-      if (existingInstance) {
-        // If instance exists but is stopped/error, restart it
-        if (existingInstance.status === 'stopped' || existingInstance.status === 'error') {
-          try {
-            await handleRestartInstance(existingInstance.id);
-            // handleRestartInstance already calls loadData(), so no need to call it again
-            return;
-          } catch (error) {
-            console.error('Failed to restart instance when selecting worktree:', error);
-          }
-        }
-        // If it's running or starting, do nothing - instance is already active
-      } else {
-        // No instance exists, create a new one
-        try {
-          await handleStartInstance(worktreeId, defaultAgentType);
-          // handleStartInstance already calls loadData(), so no need to call it again
-          return;
-        } catch (error) {
-          console.error('Failed to start instance when selecting worktree:', error);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to get fresh instance data:', error);
-    }
-
-    // Only refresh if no instance operations were performed
+    // Just refresh data to show current state - don't auto-start instances
     await loadData();
+  };
+
+  const handleSelectRepository = (repositoryId: string) => {
+    setSelectedRepositoryId(repositoryId);
+    setSelectedWorktreeId(null); // Clear worktree selection
+
+    // Update URL to reflect selected repository
+    setSearchParams({ repository: repositoryId });
   };
 
   const toggleLeftPanel = () => {
@@ -298,10 +293,13 @@ function MainApp() {
   const selectedWorktree: Worktree | null = repositories
     .flatMap(repo => repo.worktrees)
     .find(worktree => worktree.id === selectedWorktreeId) || null;
-  
-  const selectedInstance: ClaudeInstance | null = selectedWorktree 
+
+  const selectedInstance: ClaudeInstance | null = selectedWorktree
     ? instances.find(instance => instance.worktreeId === selectedWorktree.id) || null
     : null;
+
+  // Get selected repository
+  const selectedRepository: Repository | null = repositories.find(repo => repo.id === selectedRepositoryId) || null;
 
   if (loading) {
     return (
@@ -369,28 +367,37 @@ function MainApp() {
           repositories={repositories}
           instances={instances}
           selectedWorktreeId={selectedWorktreeId}
+          selectedRepositoryId={selectedRepositoryId}
           onAddRepository={handleAddRepository}
           onCreateWorktreeAndStartInstance={handleCreateWorktreeAndStartInstance}
           onSelectWorktree={handleSelectWorktree}
+          onSelectRepository={handleSelectRepository}
           onDeleteWorktree={handleDeleteWorktree}
           onRefreshMainBranch={handleRefreshMainBranch}
           isCollapsed={isLeftPanelCollapsed}
           onToggleCollapse={toggleLeftPanel}
           agents={agents}
         />
-        
-        <AgentPanel
-          selectedWorktree={selectedWorktree}
-          selectedInstance={selectedInstance}
-          onCreateTerminalSession={handleCreateTerminalSession}
-          onCreateDirectoryTerminalSession={handleCreateDirectoryTerminalSession}
-          onCloseTerminalSession={handleCloseTerminalSession}
-          onRestartInstance={handleRestartInstance}
-          onStopInstance={handleStopInstance}
-          onDeleteWorktree={handleDeleteWorktree}
-          error={instanceError}
-          isLeftPanelCollapsed={isLeftPanelCollapsed}
-        />
+
+        {selectedRepository ? (
+          <RepositoryDashboardPanel
+            repository={selectedRepository}
+            isLeftPanelCollapsed={isLeftPanelCollapsed}
+          />
+        ) : (
+          <TerminalPanel
+            selectedWorktree={selectedWorktree}
+            selectedInstance={selectedInstance}
+            onCreateTerminalSession={handleCreateTerminalSession}
+            onCreateDirectoryTerminalSession={handleCreateDirectoryTerminalSession}
+            onCloseTerminalSession={handleCloseTerminalSession}
+            onRestartInstance={handleRestartInstance}
+            onStopInstance={handleStopInstance}
+            onDeleteWorktree={handleDeleteWorktree}
+            error={instanceError}
+            isLeftPanelCollapsed={isLeftPanelCollapsed}
+          />
+        )}
       </div>
     </div>
   );

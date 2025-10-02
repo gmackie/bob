@@ -6,7 +6,7 @@ export function createAuthRoutes(authService: AuthService): Router {
   const router = Router();
 
   // Check auth status
-  router.get('/status', (req: Request, res: Response) => {
+  router.get('/status', async (req: Request, res: Response) => {
     const authToken = req.headers.authorization?.replace('Bearer ', '') ||
                      req.cookies?.authToken;
 
@@ -17,7 +17,7 @@ export function createAuthRoutes(authService: AuthService): Router {
       });
     }
 
-    const user = authService.validateSession(authToken);
+    const user = await authService.validateSession(authToken);
     if (!user) {
       return res.json({
         authenticated: false,
@@ -60,7 +60,7 @@ export function createAuthRoutes(authService: AuthService): Router {
       next();
     },
     passport.authenticate('github', { session: false }),
-    (req: Request, res: Response) => {
+    async (req: Request, res: Response) => {
       const user = req.user as any;
 
       // Determine the frontend URL based on environment
@@ -80,7 +80,7 @@ export function createAuthRoutes(authService: AuthService): Router {
       }
 
       // Create session token
-      const token = authService.createSession(user.id);
+      const token = await authService.createSession(user.id);
 
       // Redirect with token as query parameter
       // Frontend will handle storing it
@@ -89,19 +89,19 @@ export function createAuthRoutes(authService: AuthService): Router {
   );
 
   // Logout
-  router.post('/logout', (req: Request, res: Response) => {
+  router.post('/logout', async (req: Request, res: Response) => {
     const authToken = req.headers.authorization?.replace('Bearer ', '') ||
                      req.cookies?.authToken;
 
     if (authToken) {
-      authService.deleteSession(authToken);
+      await authService.deleteSession(authToken);
     }
 
     res.json({ success: true });
   });
 
   // Middleware to validate authentication
-  router.get('/validate', (req: Request, res: Response) => {
+  router.get('/validate', async (req: Request, res: Response) => {
     const authToken = req.headers.authorization?.replace('Bearer ', '') ||
                      req.cookies?.authToken;
 
@@ -109,7 +109,7 @@ export function createAuthRoutes(authService: AuthService): Router {
       return res.status(401).json({ error: 'No auth token provided' });
     }
 
-    const user = authService.validateSession(authToken);
+    const user = await authService.validateSession(authToken);
     if (!user) {
       return res.status(401).json({ error: 'Invalid or expired token' });
     }
@@ -122,7 +122,7 @@ export function createAuthRoutes(authService: AuthService): Router {
 
 // Middleware function to protect routes
 export function requireAuth(authService: AuthService) {
-  return (req: Request & { user?: any }, res: Response, next: Function) => {
+  return async (req: Request & { user?: any }, res: Response, next: Function) => {
     const authToken = req.headers.authorization?.replace('Bearer ', '') ||
                      (req as any).cookies?.authToken;
 
@@ -130,7 +130,7 @@ export function requireAuth(authService: AuthService) {
       return res.status(401).json({ error: 'Authentication required' });
     }
 
-    const user = authService.validateSession(authToken);
+    const user = await authService.validateSession(authToken);
     if (!user) {
       return res.status(401).json({ error: 'Invalid or expired token' });
     }

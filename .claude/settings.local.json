@@ -43,7 +43,10 @@
       "Bash(npm uninstall:*)",
       "Bash(git rebase:*)",
       "Bash(git fetch:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git merge-base:*)",
+      "Bash(git diff:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": [],

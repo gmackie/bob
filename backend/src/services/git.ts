@@ -413,4 +413,162 @@ export class GitService {
       throw new Error(`Failed to refresh main branch: ${error instanceof Error ? error.message : error}`);
     }
   }
+
+  // ----- Repository Dashboard helpers -----
+  async getGitRemotes(repositoryId: string): Promise<Array<{ name: string; url: string; type: 'fetch' | 'push' }>> {
+    const repository = this.repositories.get(repositoryId);
+    if (!repository) {
+      throw new Error(`Repository ${repositoryId} not found`);
+    }
+
+    const { stdout } = await execAsync('git remote -v', { cwd: repository.path });
+    const lines = stdout.trim().split('\n').filter(Boolean);
+    const remotes: Array<{ name: string; url: string; type: 'fetch' | 'push' }> = [];
+    for (const line of lines) {
+      // Format: origin\tgit@github.com:user/repo.git (fetch)
+      const match = line.match(/^(\S+)\s+(\S+)\s+\((fetch|push)\)$/);
+      if (match) {
+        const [, name, url, type] = match;
+        remotes.push({ name, url, type: type as 'fetch' | 'push' });
+      }
+    }
+    return remotes;
+  }
+
+  async getGitBranches(repositoryId: string): Promise<Array<{
+    name: string;
+    isLocal: boolean;
+    isRemote: boolean;
+    isCurrent: boolean;
+    lastCommit?: { hash: string; message: string; author: string; date: string };
+  }>> {
+    const repository = this.repositories.get(repositoryId);
+    if (!repository) {
+      throw new Error(`Repository ${repositoryId} not found`);
+    }
+
+    // Current branch
+    const { stdout: currentOut } = await execAsync('git branch --show-current', { cwd: repository.path });
+    const currentBranch = (currentOut || '').trim();
+
+    // Local branches with last commit details
+    const { stdout: localOut } = await execAsync(
+      "git for-each-ref --sort=-committerdate --format='%(refname:short)|%(objectname)|%(authorname)|%(authordate:iso-strict)|%(contents:subject)' refs/heads",
+      { cwd: repository.path }
+    );
+    const locals = localOut
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map(line => {
+        const [name, hash, author, date, message] = line.replace(/^'|'$/g, '').split('|');
+        return {
+          name,
+          isLocal: true,
+          isRemote: false,
+          isCurrent: name === currentBranch,
+          lastCommit: {
+            hash: hash || '',
+            message: message || '',
+            author: author || '',
+            date: date || ''
+          }
+        };
+      });
+
+    // Remote branches (names only)
+    let remotes: string[] = [];
+    try {
+      const { stdout: remoteOut } = await execAsync("git for-each-ref --format='%(refname:short)' refs/remotes/origin", {
+        cwd: repository.path
+      });
+      remotes = remoteOut
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map(s => s.replace(/^'|'$/g, ''))
+        .filter(name => !name.endsWith('/HEAD'));
+    } catch {}
+
+    // Merge local and remote into unique list by name
+    const branchMap = new Map<string, any>();
+    for (const b of locals) branchMap.set(b.name, b);
+    for (const r of remotes) {
+      const rn = r.replace(/^origin\//, '');
+      if (branchMap.has(rn)) {
+        branchMap.set(rn, { ...branchMap.get(rn), isRemote: true });
+      } else {
+        branchMap.set(rn, {
+          name: rn,
+          isLocal: false,
+          isRemote: true,
+          isCurrent: rn === currentBranch
+        });
+      }
+    }
+
+    return Array.from(branchMap.values());
+  }
+
+  async getGitGraph(repositoryId: string): Promise<Array<{
+    hash: string;
+    parents: string[];
+    message: string;
+    author: string;
+    date: string;
+    branch?: string;
+    x: number;
+    y: number;
+  }>> {
+    const repository = this.repositories.get(repositoryId);
+    if (!repository) {
+      throw new Error(`Repository ${repositoryId} not found`);
+    }
+
+    // Map head commits to branch names (approximate for positioning)
+    const branchHeads = new Map<string, string>();
+    try {
+      const { stdout: headsOut } = await execAsync("git for-each-ref --format='%(objectname)|%(refname:short)' refs/heads", {
+        cwd: repository.path
+      });
+      headsOut
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .forEach(line => {
+          const [h, b] = line.replace(/^'|'$/g, '').split('|');
+          if (h && b) branchHeads.set(h, b);
+        });
+    } catch {}
+
+    // Get recent commit graph
+    const { stdout: logOut } = await execAsync(
+      "git log --all --date-order --pretty=format:'%H|%P|%s|%an|%ad' --date=iso-strict -n 200",
+      { cwd: repository.path }
+    );
+
+    const commits = logOut
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map((line, idx) => {
+        const [hash, parentsStr, message, author, date] = line.replace(/^'|'$/g, '').split('|');
+        const branch = branchHeads.get(hash);
+        // Simple layout: main branch at x=200, others at x=400
+        const x = branch === repository.mainBranch ? 200 : 400;
+        const y = 30 + idx * 20;
+        return {
+          hash,
+          parents: parentsStr ? parentsStr.split(' ').filter(Boolean) : [],
+          message: message || '',
+          author: author || '',
+          date: date || '',
+          branch,
+          x,
+          y
+        };
+      });
+
+    return commits;
+  }
 }
