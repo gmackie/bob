@@ -6,6 +6,9 @@ interface WebSocketConnection {
   lastReconnectTime: number;
   isConnecting: boolean;
   isDestroyed: boolean;
+  buffer: string[]; // ring buffer of recent chunks
+  bufferSize: number; // current size in bytes
+  idleTimer?: ReturnType<typeof setTimeout>;
 }
 
 interface ConnectionPoolConfig {
@@ -14,6 +17,8 @@ interface ConnectionPoolConfig {
   maxReconnectAttempts: number;
   heartbeatInterval: number;
   connectionTimeout: number;
+  bufferMaxBytes: number;
+  idleTtlMs: number;
 }
 
 class WebSocketManager {
@@ -23,7 +28,9 @@ class WebSocketManager {
     reconnectDelay: 1000,
     maxReconnectAttempts: 3,
     heartbeatInterval: 30000,
-    connectionTimeout: 10000
+    connectionTimeout: 10000,
+    bufferMaxBytes: 256 * 1024, // 256KB per session
+    idleTtlMs: 30 * 60 * 1000 // 30 minutes
   };
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private isShuttingDown = false;
@@ -117,7 +124,11 @@ class WebSocketManager {
 
   private async createConnection(sessionId: string, onMessage: (message: any) => void): Promise<void> {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.hostname}:3001?sessionId=${sessionId}`;
+
+    // Use same host - nginx proxies WebSocket to backend based on ?sessionId= pattern
+    // Don't specify port - it uses the default port for the protocol (443 for wss, 80 for ws)
+    const wsUrl = `${wsProtocol}//${window.location.hostname}?sessionId=${sessionId}`;
+
     console.log('[WebSocketManager] Creating connection to:', wsUrl);
 
     const conn: WebSocketConnection = {
@@ -127,7 +138,9 @@ class WebSocketManager {
       reconnectAttempts: 0,
       lastReconnectTime: Date.now(),
       isConnecting: true,
-      isDestroyed: false
+      isDestroyed: false,
+      buffer: [],
+      bufferSize: 0
     };
 
     this.connections.set(sessionId, conn);
@@ -156,6 +169,11 @@ class WebSocketManager {
           // Handle internal messages
           if (message.type === 'pong') {
             return; // Heartbeat response
+          }
+
+          // Append to ring buffer
+          if (typeof message?.type === 'string' && message.type === 'data' && typeof message.data === 'string') {
+            this.appendToBuffer(conn, message.data);
           }
 
           // Broadcast to all callbacks
@@ -285,15 +303,34 @@ class WebSocketManager {
       }
     }
 
-    // Close connection if no more callbacks
-    conn.isDestroyed = true;
-    conn.callbacks.clear();
+    // Check if "Keep agent terminals warm" setting is enabled
+    const keepWarm = localStorage.getItem('keepAgentTerminalsWarm');
+    const shouldKeepWarm = keepWarm === null || keepWarm === 'true'; // Default to true
 
-    if (conn.ws.readyState !== WebSocket.CLOSED) {
-      conn.ws.close(1000, 'Client disconnecting');
+    if (!shouldKeepWarm) {
+      // Setting disabled: close immediately
+      conn.isDestroyed = true;
+      if (conn.ws.readyState !== WebSocket.CLOSED) {
+        try { conn.ws.close(1000, 'Keep warm disabled'); } catch {}
+      }
+      this.connections.delete(sessionId);
+      return;
     }
 
-    this.connections.delete(sessionId);
+    // No more subscribers: keep the connection warm with idle TTL
+    if (conn.idleTimer) {
+      clearTimeout(conn.idleTimer);
+    }
+    conn.idleTimer = setTimeout(() => {
+      // Double check still no subscribers
+      const latest = this.connections.get(sessionId);
+      if (!latest || latest.callbacks.size > 0) return;
+      latest.isDestroyed = true;
+      if (latest.ws.readyState !== WebSocket.CLOSED) {
+        try { latest.ws.close(1000, 'Idle TTL elapsed'); } catch {}
+      }
+      this.connections.delete(sessionId);
+    }, this.config.idleTtlMs);
   }
 
   private cleanupStaleConnections(): void {
@@ -343,31 +380,61 @@ class WebSocketManager {
     return this.connections.size;
   }
 
-  getConnectionStats(): { total: number; open: number; connecting: number; closed: number } {
-    let open = 0;
-    let connecting = 0;
-    let closed = 0;
+  getConnectionStats(): Array<{
+    sessionId: string;
+    status: 'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED';
+    subscribers: number;
+    reconnectAttempts: number;
+    bufferSize: number;
+    isDestroyed: boolean;
+  }> {
+    const stats = [];
 
-    for (const conn of this.connections.values()) {
+    for (const [sessionId, conn] of this.connections) {
+      let status: 'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED';
       switch (conn.ws.readyState) {
-        case WebSocket.OPEN:
-          open++;
-          break;
         case WebSocket.CONNECTING:
-          connecting++;
+          status = 'CONNECTING';
+          break;
+        case WebSocket.OPEN:
+          status = 'OPEN';
+          break;
+        case WebSocket.CLOSING:
+          status = 'CLOSING';
           break;
         case WebSocket.CLOSED:
-          closed++;
+          status = 'CLOSED';
           break;
+        default:
+          status = 'CLOSED';
       }
+
+      stats.push({
+        sessionId,
+        status,
+        subscribers: conn.callbacks.size,
+        reconnectAttempts: conn.reconnectAttempts,
+        bufferSize: conn.bufferSize,
+        isDestroyed: conn.isDestroyed
+      });
     }
 
-    return {
-      total: this.connections.size,
-      open,
-      connecting,
-      closed
-    };
+    return stats;
+  }
+
+  getSnapshot(sessionId: string): string {
+    const conn = this.connections.get(sessionId);
+    if (!conn) return '';
+    return conn.buffer.join('');
+  }
+
+  private appendToBuffer(conn: WebSocketConnection, chunk: string): void {
+    conn.buffer.push(chunk);
+    conn.bufferSize += chunk.length;
+    while (conn.bufferSize > this.config.bufferMaxBytes && conn.buffer.length > 0) {
+      const removed = conn.buffer.shift()!;
+      conn.bufferSize -= removed.length;
+    }
   }
 
   shutdown(): void {

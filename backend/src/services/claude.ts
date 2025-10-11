@@ -1,6 +1,6 @@
 import { spawn, ChildProcess } from 'child_process';
 import { spawn as spawnPty, IPty } from 'node-pty';
-import { ClaudeInstance, Worktree } from '../types.js';
+import { ClaudeInstance, Worktree, AgentType } from '../types.js';
 import { GitService } from './git.js';
 import { DatabaseService } from '../database/database.js';
 
@@ -65,6 +65,7 @@ export class ClaudeService {
       id: instanceId,
       worktreeId,
       repositoryId: worktree.repositoryId,
+      agentType: 'claude' as AgentType,
       status: 'starting',
       port,
       createdAt: new Date(),

@@ -8,7 +8,7 @@ import { tmpdir } from 'os';
 const router = express.Router();
 const execAsync = promisify(exec);
 
-// Helper function to call Claude CLI safely with file input
+// Helper to call Claude CLI safely with stdin input
 async function callClaude(prompt: string, input: string, cwd: string): Promise<string> {
   return new Promise((resolve, reject) => {
     // Use spawn to avoid shell interpretation issues
@@ -52,6 +52,68 @@ async function callClaude(prompt: string, input: string, cwd: string): Promise<s
     claudeProcess.stdin.write(input);
     claudeProcess.stdin.end();
   });
+}
+
+// Generic agent call with graceful fallback to Claude
+async function callAgent(agentType: string | undefined, prompt: string, input: string, cwd: string): Promise<string> {
+  const type = agentType || 'claude';
+
+  // Direct Claude path
+  if (type === 'claude') {
+    return callClaude(prompt, input, cwd);
+  }
+
+  // Attempt other agents with best-effort non-interactive invocation
+  try {
+    return await new Promise((resolve, reject) => {
+      let command = '';
+      let args: string[] = [];
+
+      switch (type) {
+        case 'gemini':
+          command = 'gemini';
+          args = ['--prompt', prompt];
+          break;
+        case 'codex':
+          command = 'codex';
+          // Best-effort: pass prompt as first arg; many CLIs read stdin content
+          args = [prompt];
+          break;
+        case 'amazon-q':
+          // Amazon Q is primarily interactive; fall back immediately
+          throw new Error('Amazon Q non-interactive commit generation not supported');
+        default:
+          throw new Error(`Unsupported agent type: ${type}`);
+      }
+
+      const child = spawn(command, args, { cwd, stdio: ['pipe', 'pipe', 'pipe'] });
+      let stdout = '';
+      let stderr = '';
+
+      const timeout = setTimeout(() => {
+        child.kill('SIGTERM');
+        reject(new Error(`${type} CLI timeout after 2 minutes`));
+      }, 120000);
+
+      child.stdout.on('data', (d) => (stdout += d.toString()));
+      child.stderr.on('data', (d) => (stderr += d.toString()));
+      child.on('close', (code) => {
+        clearTimeout(timeout);
+        if (code === 0) resolve(stdout.trim());
+        else reject(new Error(`${type} CLI exited with code ${code}. stderr: ${stderr}`));
+      });
+      child.on('error', (err) => {
+        clearTimeout(timeout);
+        reject(new Error(`Failed to spawn ${type} CLI: ${err.message}`));
+      });
+
+      child.stdin.write(input);
+      child.stdin.end();
+    });
+  } catch (err) {
+    // Fallback to Claude on any error
+    return callClaude(prompt, input, cwd);
+  }
 }
 
 // Get git diff for a worktree
@@ -125,6 +187,7 @@ router.post('/:worktreeId/generate-commit-message', async (req, res) => {
     const { worktreeId } = req.params;
 
     const gitService = req.app.locals.gitService;
+    const agentService = req.app.locals.agentService;
     const worktree = gitService.getWorktree(worktreeId);
 
     if (!worktree) {
@@ -186,12 +249,18 @@ ${comments && comments.length > 0 ? '5. Consider the code review comments provid
 
 Only return the body content, no subject line. Focus on the actual code changes, not just file counts.`;
 
-      const commitBody = await callClaude(bodyPrompt, diffWithComments, worktree.path);
+      // Choose agent: use running instance agent type if available, else default to Claude
+      const instances = agentService?.getInstancesByWorktree
+        ? agentService.getInstancesByWorktree(worktreeId)
+        : [];
+      const agentType = instances[0]?.agentType || 'claude';
+
+      const commitBody = await callAgent(agentType, bodyPrompt, diffWithComments, worktree.path);
 
       // Step 2: Generate concise subject from the body
       const subjectPrompt = `Based on this commit body, generate a concise subject line following conventional commit format (type: description). Subject should be under 72 characters. Types: feat, fix, docs, style, refactor, test, chore. Only return the subject line.`;
 
-      const commitSubject = await callClaude(subjectPrompt, commitBody, worktree.path);
+      const commitSubject = await callAgent(agentType, subjectPrompt, commitBody, worktree.path);
 
       // Combine subject and body
       const aiCommitMessage = `${commitSubject}\n\n${commitBody}`;
@@ -203,8 +272,8 @@ Only return the body content, no subject line. Focus on the actual code changes,
         changedFiles: changedFiles.split('\n').filter(f => f.trim()),
         fileCount: changedFiles.split('\n').filter(f => f.trim()).length
       });
-    } catch (claudeError) {
-      console.error('Error calling Claude:', claudeError);
+    } catch (agentError) {
+      console.error('Error calling agent for commit message:', agentError);
 
       // Fallback to simple commit message
       const files = status.split('\n').filter(line => line.trim()).length;
@@ -958,6 +1027,178 @@ Return only the complete file content with the requested improvements applied.`;
   } catch (error) {
     console.error('Error applying fixes:', error);
     res.status(500).json({ error: 'Failed to apply code fixes' });
+  }
+});
+
+// Get notes for a worktree
+router.get('/:worktreeId/notes', async (req, res) => {
+  try {
+    const { worktreeId } = req.params;
+
+    const gitService = req.app.locals.gitService;
+    const worktree = gitService.getWorktree(worktreeId);
+
+    if (!worktree) {
+      return res.status(404).json({ error: 'Worktree not found' });
+    }
+
+    // Get current branch name
+    const { stdout: currentBranch } = await execAsync('git branch --show-current', {
+      cwd: worktree.path
+    });
+
+    const branchName = currentBranch.trim();
+    const notesFileName = `.bob-notes-${branchName}.md`;
+    const notesFilePath = path.join(worktree.path, notesFileName);
+
+    try {
+      const notesContent = await fs.promises.readFile(notesFilePath, 'utf8');
+      res.json({ content: notesContent, fileName: notesFileName });
+    } catch (error) {
+      // File doesn't exist, return empty content
+      res.json({ content: '', fileName: notesFileName });
+    }
+  } catch (error) {
+    console.error('Error getting notes:', error);
+    res.status(500).json({ error: 'Failed to get notes' });
+  }
+});
+
+// Save notes for a worktree
+router.post('/:worktreeId/notes', async (req, res) => {
+  try {
+    const { worktreeId } = req.params;
+    const { content } = req.body;
+
+    const gitService = req.app.locals.gitService;
+    const worktree = gitService.getWorktree(worktreeId);
+
+    if (!worktree) {
+      return res.status(404).json({ error: 'Worktree not found' });
+    }
+
+    // Get current branch name
+    const { stdout: currentBranch } = await execAsync('git branch --show-current', {
+      cwd: worktree.path
+    });
+
+    const branchName = currentBranch.trim();
+    const notesFileName = `.bob-notes-${branchName}.md`;
+    const notesFilePath = path.join(worktree.path, notesFileName);
+
+    await fs.promises.writeFile(notesFilePath, content || '', 'utf8');
+
+    res.json({
+      message: 'Notes saved successfully',
+      fileName: notesFileName,
+      path: notesFilePath
+    });
+  } catch (error) {
+    console.error('Error saving notes:', error);
+    res.status(500).json({ error: 'Failed to save notes' });
+  }
+});
+
+// Get git status for a worktree
+router.get('/:worktreeId/status', async (req, res) => {
+  try {
+    const { worktreeId } = req.params;
+
+    // Get worktree from database
+    const db = (req as any).db;
+    const worktree = db.prepare('SELECT * FROM worktrees WHERE id = ?').get(worktreeId);
+
+    if (!worktree) {
+      return res.status(404).json({ error: 'Worktree not found' });
+    }
+
+    // Get git status
+    const { stdout: statusOutput } = await execAsync('git status --porcelain --branch', { cwd: worktree.path });
+    const lines = statusOutput.split('\n').filter(l => l.trim());
+
+    // Parse branch info
+    const branchLine = lines[0] || '';
+    const branchMatch = branchLine.match(/## ([^\s.]+)(?:\.\.\.([^\s]+))?(?: \[(.+)\])?/);
+    const branch = branchMatch?.[1] || worktree.branch;
+    const tracking = branchMatch?.[2] || '';
+    const status = branchMatch?.[3] || '';
+
+    // Parse ahead/behind
+    let ahead = 0;
+    let behind = 0;
+    if (status) {
+      const aheadMatch = status.match(/ahead (\d+)/);
+      const behindMatch = status.match(/behind (\d+)/);
+      if (aheadMatch) ahead = parseInt(aheadMatch[1]);
+      if (behindMatch) behind = parseInt(behindMatch[1]);
+    }
+
+    // Count file changes
+    const fileLines = lines.slice(1);
+    const staged = fileLines.filter(l => l[0] !== ' ' && l[0] !== '?').length;
+    const unstaged = fileLines.filter(l => l[1] !== ' ' && l[0] !== '?').length;
+    const untracked = fileLines.filter(l => l.startsWith('??')).length;
+    const hasChanges = fileLines.length > 0;
+
+    res.json({
+      branch,
+      ahead,
+      behind,
+      hasChanges,
+      files: {
+        staged,
+        unstaged,
+        untracked
+      }
+    });
+  } catch (error: any) {
+    console.error('Error getting git status:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get PR status for a worktree
+router.get('/:worktreeId/pr-status', async (req, res) => {
+  try {
+    const { worktreeId } = req.params;
+
+    // Get worktree from database
+    const db = (req as any).db;
+    const worktree = db.prepare('SELECT * FROM worktrees WHERE id = ?').get(worktreeId);
+
+    if (!worktree) {
+      return res.status(404).json({ error: 'Worktree not found' });
+    }
+
+    // Check if gh is available
+    try {
+      await execAsync('gh --version');
+    } catch {
+      return res.json({ exists: false });
+    }
+
+    // Get PR info using GitHub CLI
+    try {
+      const { stdout } = await execAsync(
+        `gh pr view ${worktree.branch} --json number,title,url,state`,
+        { cwd: worktree.path }
+      );
+
+      const prData = JSON.parse(stdout);
+      res.json({
+        exists: true,
+        number: prData.number,
+        title: prData.title,
+        url: prData.url,
+        state: prData.state.toLowerCase()
+      });
+    } catch (error: any) {
+      // PR doesn't exist or branch isn't pushed
+      res.json({ exists: false });
+    }
+  } catch (error: any) {
+    console.error('Error getting PR status:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 

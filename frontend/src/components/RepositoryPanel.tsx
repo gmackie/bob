@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Repository, Worktree, ClaudeInstance } from '../types';
 import { DirectoryBrowser } from './DirectoryBrowser';
 import { DeleteWorktreeModal } from './DeleteWorktreeModal';
@@ -7,9 +8,11 @@ interface RepositoryPanelProps {
   repositories: Repository[];
   instances: ClaudeInstance[];
   selectedWorktreeId: string | null;
+  selectedRepositoryId: string | null;
   onAddRepository: (path: string) => void;
   onCreateWorktreeAndStartInstance: (repositoryId: string, branchName: string) => void;
   onSelectWorktree: (worktreeId: string) => Promise<void>;
+  onSelectRepository: (repositoryId: string) => void;
   onDeleteWorktree: (worktreeId: string, force: boolean) => Promise<void>;
   onRefreshMainBranch: (repositoryId: string) => Promise<void>;
   isCollapsed: boolean;
@@ -20,9 +23,11 @@ export const RepositoryPanel: React.FC<RepositoryPanelProps> = ({
   repositories,
   instances,
   selectedWorktreeId,
+  selectedRepositoryId,
   onAddRepository,
   onCreateWorktreeAndStartInstance,
   onSelectWorktree,
+  onSelectRepository,
   onDeleteWorktree,
   onRefreshMainBranch,
   isCollapsed,
@@ -181,7 +186,23 @@ export const RepositoryPanel: React.FC<RepositoryPanelProps> = ({
                   <div key={repo.id} className="repository-item">
                     <div className="repository-header">
                       <div className="repository-info">
-                        <h4>{repo.name}</h4>
+                        <h4
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectRepository(repo.id);
+                          }}
+                          style={{
+                            cursor: 'pointer',
+                            color: selectedRepositoryId === repo.id ? '#79c0ff' : '#58a6ff',
+                            margin: 0,
+                            transition: 'color 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => (e.target as HTMLElement).style.color = '#79c0ff'}
+                          onMouseLeave={(e) => (e.target as HTMLElement).style.color = selectedRepositoryId === repo.id ? '#79c0ff' : '#58a6ff'}
+                          title="View repository dashboard"
+                        >
+                          {repo.name} 📊
+                        </h4>
                         <p>{repo.path}</p>
                         <div style={{ 
                           fontSize: '12px', 

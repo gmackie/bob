@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+import { wsManager } from '../services/WebSocketManager';
 
 interface TerminalComponentProps {
   sessionId: string;
@@ -12,113 +13,8 @@ export const TerminalComponent: React.FC<TerminalComponentProps> = ({ sessionId,
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminal = useRef<Terminal | null>(null);
   const fitAddon = useRef<FitAddon | null>(null);
-  const websocket = useRef<WebSocket | null>(null);
   const [connectionState, setConnectionState] = useState<'connecting' | 'connected' | 'error' | 'closed'>('connecting');
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const maxReconnectAttempts = 3;
-  const reconnectAttemptsRef = useRef(0);
-
-  const connectWebSocket = () => {
-    if (websocket.current?.readyState === WebSocket.CONNECTING || websocket.current?.readyState === WebSocket.OPEN) {
-      return; // Already connecting or connected
-    }
-
-    setConnectionState('connecting');
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // In Electron production mode, use the same port as the web server
-    // In development mode, use the backend port (43829)
-    const isElectron = window.electronAPI !== undefined;
-    const isDevelopment = window.location.port === '47285';
-
-    let wsPort;
-    if (isElectron && !isDevelopment) {
-      // Production Electron app - use the same port as the current page
-      wsPort = window.location.port || '43829';
-    } else {
-      // Development mode or web browser - use backend port
-      wsPort = '43829';
-    }
-
-    const wsUrl = `${wsProtocol}//${window.location.hostname}:${wsPort}?sessionId=${sessionId}`;
-    console.log(`Attempting WebSocket connection to: ${wsUrl}`);
-    console.log(`Connection details: electron=${isElectron}, development=${isDevelopment}, port=${wsPort}`);
-    websocket.current = new WebSocket(wsUrl);
-
-    websocket.current.onopen = () => {
-      console.log('WebSocket connected');
-      setConnectionState('connected');
-      reconnectAttemptsRef.current = 0; // Reset reconnect attempts on successful connection
-      
-      // Fit terminal when connection is established
-      setTimeout(() => {
-        if (fitAddon.current && terminal.current) {
-          try {
-            fitAddon.current.fit();
-          } catch (error) {
-            console.warn('Connection fit error:', error);
-          }
-        }
-      }, 100);
-    };
-
-    websocket.current.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-        
-        switch (message.type) {
-          case 'data':
-            terminal.current?.write(message.data);
-            break;
-          case 'ready':
-            terminal.current?.focus();
-            break;
-        }
-      } catch (error) {
-        console.error('Error parsing WebSocket message:', error);
-      }
-    };
-
-    websocket.current.onclose = (event) => {
-      console.log('WebSocket disconnected', event.code, event.reason);
-      setConnectionState('closed');
-      
-      // Only show error message if it's not a normal closure or session not found
-      if (event.code !== 1000 && event.reason !== 'Session not found') {
-        // Don't show the error message immediately, try to reconnect first
-        if (reconnectAttemptsRef.current < maxReconnectAttempts) {
-          attemptReconnect();
-        } else {
-          terminal.current?.write('\r\n\x1b[31mConnection closed\x1b[0m\r\n');
-        }
-      }
-    };
-
-    websocket.current.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      setConnectionState('error');
-      
-      // Don't show error message immediately if we haven't tried reconnecting
-      if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-        terminal.current?.write('\r\n\x1b[31mConnection error\x1b[0m\r\n');
-      }
-    };
-  };
-
-  const attemptReconnect = () => {
-    if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-      terminal.current?.write('\r\n\x1b[31mFailed to establish connection after multiple attempts\x1b[0m\r\n');
-      return;
-    }
-
-    reconnectAttemptsRef.current++;
-    const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current - 1), 5000); // Exponential backoff, max 5s
-    
-    console.log(`Attempting to reconnect (${reconnectAttemptsRef.current}/${maxReconnectAttempts}) in ${delay}ms`);
-    
-    reconnectTimeoutRef.current = setTimeout(() => {
-      connectWebSocket();
-    }, delay);
-  };
+  const subscriptionRef = useRef<((message: any) => void) | null>(null);
 
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -156,15 +52,45 @@ export const TerminalComponent: React.FC<TerminalComponentProps> = ({ sessionId,
     setTimeout(fitTerminal, 600);
     setTimeout(fitTerminal, 1000);
 
-    // Delay the WebSocket connection slightly to ensure the session is ready
-    setTimeout(() => {
-      connectWebSocket();
-    }, 100);
+    // Write any buffered snapshot immediately
+    const snapshot = wsManager.getSnapshot(sessionId);
+    if (snapshot) {
+      try {
+        terminal.current.write(snapshot);
+      } catch {}
+    }
+
+    // Establish or reuse persistent WS connection via manager
+    setConnectionState('connecting');
+    const onMessage = (message: any) => {
+      try {
+        switch (message.type) {
+          case 'data':
+            terminal.current?.write(message.data);
+            break;
+          case 'ready':
+            terminal.current?.focus();
+            break;
+        }
+      } catch (e) {
+        console.error('Terminal write error:', e);
+      }
+    };
+    subscriptionRef.current = onMessage;
+    wsManager
+      .connect(sessionId, onMessage)
+      .then(() => {
+        setConnectionState('connected');
+        setTimeout(() => {
+          if (fitAddon.current && terminal.current) {
+            try { fitAddon.current.fit(); } catch {}
+          }
+        }, 100);
+      })
+      .catch(() => setConnectionState('error'));
 
     terminal.current.onData((data) => {
-      if (websocket.current?.readyState === WebSocket.OPEN) {
-        websocket.current.send(JSON.stringify({ type: 'data', data }));
-      }
+      wsManager.send(sessionId, { type: 'data', data });
     });
 
     const handleResize = () => {
@@ -172,12 +98,8 @@ export const TerminalComponent: React.FC<TerminalComponentProps> = ({ sessionId,
         try {
           fitAddon.current.fit();
           const dims = fitAddon.current.proposeDimensions();
-          if (dims && websocket.current?.readyState === WebSocket.OPEN) {
-            websocket.current.send(JSON.stringify({ 
-              type: 'resize', 
-              cols: dims.cols, 
-              rows: dims.rows 
-            }));
+          if (dims) {
+            wsManager.send(sessionId, { type: 'resize', cols: dims.cols, rows: dims.rows });
           }
         } catch (error) {
           console.warn('Resize fit error:', error);
@@ -203,14 +125,11 @@ export const TerminalComponent: React.FC<TerminalComponentProps> = ({ sessionId,
     }
 
     return () => {
-      // Clean up timeouts
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      
       window.removeEventListener('resize', handleResize);
       resizeObserver.disconnect();
-      websocket.current?.close();
+      if (subscriptionRef.current) {
+        wsManager.disconnect(sessionId, subscriptionRef.current);
+      }
       terminal.current?.dispose();
     };
   }, [sessionId]);

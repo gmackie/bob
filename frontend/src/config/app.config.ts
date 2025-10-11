@@ -1,7 +1,7 @@
 // Frontend app configuration
 // These values should be fetched from the backend /api/config endpoint at runtime
 
-interface AppConfig {
+export interface AppConfig {
   appName: string;
   enableGithubAuth: boolean;
   jeffMode: boolean;

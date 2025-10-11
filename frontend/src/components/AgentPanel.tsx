@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ClaudeInstance, Worktree } from '../types';
 import { TerminalComponent } from './Terminal';
+import { DeleteWorktreeModal } from './DeleteWorktreeModal';
 import { api } from '../api';
 
-interface TerminalPanelProps {
+interface AgentPanelProps {
   selectedWorktree: Worktree | null;
   selectedInstance: ClaudeInstance | null;
   onCreateTerminalSession: (instanceId: string) => Promise<string>;
@@ -241,12 +242,11 @@ const UnifiedDiffView: React.FC<{
     return null;
   };
 
-  const lines = gitDiff.split('\n');
-
   // Pre-process lines to avoid state updates during render
   const processedLines = React.useMemo(() => {
+    const lines = gitDiff.split('\n');
     let currentFile = '';
-    return lines.map((line, index) => {
+    const result = lines.map((line, index) => {
       if (line.startsWith('diff --git')) {
         const match = line.match(/diff --git a\/(.+) b\/(.+)/);
         if (match) {
@@ -260,6 +260,7 @@ const UnifiedDiffView: React.FC<{
         actualLineNumber: getActualLineNumber(index, lines)
       };
     });
+    return result;
   }, [gitDiff]);
 
   return (
@@ -272,7 +273,7 @@ const UnifiedDiffView: React.FC<{
       fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace'
     }}>
       {processedLines.map(({ line, index, currentFile, actualLineNumber }) => {
-        let lineStyle: React.CSSProperties = {
+        const baseStyle: React.CSSProperties = {
           padding: '0 8px',
           margin: 0,
           minHeight: '20px',
@@ -285,9 +286,12 @@ const UnifiedDiffView: React.FC<{
           c.file === currentFile && c.line === actualLineNumber
         );
 
+        // Determine line-specific styles
+        let lineStyle: React.CSSProperties;
+
         if (line.startsWith('diff --git')) {
           lineStyle = {
-            ...lineStyle,
+            ...baseStyle,
             backgroundColor: '#21262d',
             color: '#f0f6fc',
             fontWeight: 'bold',
@@ -295,36 +299,36 @@ const UnifiedDiffView: React.FC<{
           };
         } else if (line.startsWith('@@')) {
           lineStyle = {
-            ...lineStyle,
+            ...baseStyle,
             backgroundColor: '#0969da1a',
             color: '#58a6ff'
           };
         } else if (line.startsWith('+') && !line.startsWith('+++')) {
           lineStyle = {
-            ...lineStyle,
+            ...baseStyle,
             backgroundColor: '#0361491a',
             color: '#3fb950'
           };
         } else if (line.startsWith('-') && !line.startsWith('---')) {
           lineStyle = {
-            ...lineStyle,
+            ...baseStyle,
             backgroundColor: '#67060c1a',
             color: '#f85149'
           };
         } else if (line.startsWith('+++') || line.startsWith('---')) {
           lineStyle = {
-            ...lineStyle,
+            ...baseStyle,
             color: '#8b949e',
             fontWeight: 'bold'
           };
         } else if (line.startsWith('new file mode') || line.startsWith('index')) {
           lineStyle = {
-            ...lineStyle,
+            ...baseStyle,
             color: '#8b949e'
           };
         } else {
           lineStyle = {
-            ...lineStyle,
+            ...baseStyle,
             color: '#e6edf3'
           };
         }
@@ -893,7 +897,7 @@ const SystemStatusDashboard: React.FC = () => {
   );
 };
 
-export const TerminalPanel: React.FC<TerminalPanelProps> = ({
+export const AgentPanel: React.FC<AgentPanelProps> = ({
   selectedWorktree,
   selectedInstance,
   onCreateTerminalSession,
@@ -911,11 +915,16 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   
   const [claudeTerminalSessionId, setClaudeTerminalSessionId] = useState<string | null>(null);
   const [directoryTerminalSessionId, setDirectoryTerminalSessionId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'claude' | 'directory' | 'git'>('claude');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'claude' | 'directory' | 'git' | 'notes'>('dashboard');
   const [isCreatingClaudeSession, setIsCreatingClaudeSession] = useState(false);
   const [isCreatingDirectorySession, setIsCreatingDirectorySession] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [worktreeToDelete, setWorktreeToDelete] = useState<Worktree | null>(null);
+  const [allInstances, setAllInstances] = useState<ClaudeInstance[]>([]);
+  const [currentInstanceId, setCurrentInstanceId] = useState<string | null>(null);
+  const [allInstanceSessions, setAllInstanceSessions] = useState<Map<string, { claude: string | null; directory: string | null }>>(new Map());
   const lastAutoConnectInstance = useRef<string>('');
 
   // Git state
@@ -951,34 +960,143 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     setAnalysisComplete(false);
     setAnalysisSummary('');
     setCurrentAnalysisId(null);
+    // Reset to dashboard tab when switching worktrees
+    setActiveTab('dashboard');
   }, [selectedInstance?.id]);
+
+  // Auto-connect disabled - user must manually click tabs to connect
+  // This prevents auto-connecting when selecting a worktree, allowing the dashboard to show first
+  useEffect(() => {
+    const loadInstances = async () => {
+      if (!selectedWorktree) {
+        setAllInstances([]);
+        setCurrentInstanceId(null);
+        return;
+      }
+
+      try {
+        const instances = await api.getInstances();
+        const worktreeInstances = instances.filter(i => i.worktreeId === selectedWorktree.id);
+        setAllInstances(worktreeInstances);
+
+        // Auto-select: prefer running instance, or first instance, or null
+        if (currentInstanceId && worktreeInstances.some(i => i.id === currentInstanceId)) {
+          // Keep current selection if still valid
+        } else if (worktreeInstances.length > 0) {
+          const runningInstance = worktreeInstances.find(i => i.status === 'running');
+          setCurrentInstanceId(runningInstance?.id || worktreeInstances[0].id);
+        } else {
+          setCurrentInstanceId(null);
+        }
+      } catch (error) {
+        console.error('Failed to load instances:', error);
+      }
+    };
+
+    loadInstances();
+    const interval = setInterval(loadInstances, 3000); // Refresh every 3 seconds
+    return () => clearInterval(interval);
+  }, [selectedWorktree?.id]);
+
+  // Get the currently selected instance object
+  const currentInstance = allInstances.find(i => i.id === currentInstanceId) || null;
+
+  // Keep all running instances warm with terminal sessions
+  useEffect(() => {
+    const ensureInstanceSessions = async () => {
+      const runningInstances = allInstances.filter(i => i.status === 'running');
+
+      for (const instance of runningInstances) {
+        const cached = sessionCache.get(instance.id);
+        const sessions = allInstanceSessions.get(instance.id) || { claude: null, directory: null };
+
+        // Create Claude session if it doesn't exist
+        if (!sessions.claude && !cached?.claude) {
+          try {
+            const sessionId = await onCreateTerminalSession(instance.id);
+            sessionCache.setClaude(instance.id, sessionId);
+            setAllInstanceSessions(prev => new Map(prev).set(instance.id, { ...sessions, claude: sessionId }));
+          } catch (error) {
+            console.error(`Failed to create Claude session for instance ${instance.id}:`, error);
+          }
+        } else if (cached?.claude && !sessions.claude) {
+          setAllInstanceSessions(prev => new Map(prev).set(instance.id, { ...sessions, claude: cached.claude || null }));
+        }
+      }
+    };
+
+    ensureInstanceSessions();
+  }, [allInstances]);
+
+  useEffect(() => {
+    // On instance switch, reuse cached sessionIds if present; do not clear
+    if (currentInstance?.id) {
+      const cached = sessionCache.get(currentInstance.id);
+      const instanceSessions = allInstanceSessions.get(currentInstance.id);
+
+      // Prioritize cached sessions, then check allInstanceSessions
+      if (cached?.claude) {
+        setClaudeTerminalSessionId(cached.claude);
+      } else if (instanceSessions?.claude) {
+        setClaudeTerminalSessionId(instanceSessions.claude);
+        sessionCache.setClaude(currentInstance.id, instanceSessions.claude);
+      } else {
+        setClaudeTerminalSessionId(null);
+      }
+
+      if (cached?.directory) {
+        setDirectoryTerminalSessionId(cached.directory);
+      } else if (instanceSessions?.directory) {
+        setDirectoryTerminalSessionId(instanceSessions.directory);
+        sessionCache.setDirectory(currentInstance.id, instanceSessions.directory);
+      } else {
+        setDirectoryTerminalSessionId(null);
+      }
+
+      // Reset git and analysis UI only; terminals persist via wsManager
+      setGitDiff('');
+      setGitCommitMessage('');
+      setComments([]);
+      setAnalysisComplete(false);
+      setAnalysisSummary('');
+      setCurrentAnalysisId(null);
+      // Clear notes state when switching
+      setNotesContent('');
+      setNotesFileName('');
+      setUnsavedChanges(false);
+      if (autoSaveTimeout) {
+        clearTimeout(autoSaveTimeout);
+        setAutoSaveTimeout(null);
+      }
+    }
+  }, [currentInstance?.id, allInstanceSessions]);
 
   // Auto-connect to existing terminal sessions or create new ones when instance first becomes running
   useEffect(() => {
-    if (selectedInstance && 
-        selectedInstance.status === 'running' && 
-        !claudeTerminalSessionId && 
+    if (currentInstance &&
+        currentInstance.status === 'running' &&
+        !claudeTerminalSessionId &&
         !directoryTerminalSessionId &&
         !isCreatingClaudeSession &&
         !isCreatingDirectorySession) {
-      
+
       // Only proceed if this is a new instance or status change to running
-      const currentInstanceKey = `${selectedInstance.id}-${selectedInstance.status}`;
-      
+      const currentInstanceKey = `${currentInstance.id}-${currentInstance.status}`;
+
       if (lastAutoConnectInstance.current !== currentInstanceKey) {
         lastAutoConnectInstance.current = currentInstanceKey;
-        
-        console.log(`Auto-connecting to instance ${selectedInstance.id} (status: ${selectedInstance.status})`);
-        
+
+        console.log(`Auto-connecting to instance ${currentInstance.id} (status: ${currentInstance.status})`);
+
         // Add a small delay to ensure state has settled after instance switch
         const timeoutId = setTimeout(() => {
           checkExistingSessionsOrConnect();
         }, 100);
-        
+
         return () => clearTimeout(timeoutId);
       }
     }
-  }, [selectedInstance?.status, selectedInstance?.id]); // Remove session IDs from dependencies
+  }, [currentInstance?.status, currentInstance?.id]); // Remove session IDs from dependencies
 
   const handleOpenClaudeTerminal = async () => {
     if (!selectedInstance || selectedInstance.status !== 'running') return;
@@ -996,6 +1114,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         // Create new session
         const sessionId = await onCreateTerminalSession(selectedInstance.id);
         setClaudeTerminalSessionId(sessionId);
+        sessionCache.setClaude(currentInstance.id, sessionId);
       }
       setActiveTab('claude');
     } catch (error) {
@@ -1022,6 +1141,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         // Create new session
         const sessionId = await onCreateDirectoryTerminalSession(selectedInstance.id);
         setDirectoryTerminalSessionId(sessionId);
+        sessionCache.setDirectory(currentInstance.id, sessionId);
       }
       setActiveTab('directory');
     } catch (error) {
@@ -1085,6 +1205,125 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     } finally {
       setIsStopping(false);
     }
+  };
+
+  const handleStartNewAgent = async (agentType: AgentType) => {
+    if (!selectedWorktree) return;
+
+    setIsStartingNewAgent(true);
+    setShowNewAgentDropdown(false);
+
+    try {
+      const newInstance = await api.startInstance(selectedWorktree.id, agentType);
+      // Refresh instances list
+      const instances = await api.getInstances();
+      const worktreeInstances = instances.filter(i => i.worktreeId === selectedWorktree.id);
+      setAllInstances(worktreeInstances);
+      // Select the new instance
+      setCurrentInstanceId(newInstance.id);
+    } catch (error) {
+      console.error('Failed to start new agent:', error);
+    } finally {
+      setIsStartingNewAgent(false);
+    }
+  };
+
+  const handleDeleteInstance = async (instanceId: string) => {
+    setIsDeleting(instanceId);
+    try {
+      // Close any cached sessions
+      const cached = sessionCache.get(instanceId);
+      if (cached?.claude) {
+        onCloseTerminalSession(cached.claude);
+        sessionCache.clearClaude(instanceId);
+      }
+      if (cached?.directory) {
+        onCloseTerminalSession(cached.directory);
+        sessionCache.clearDirectory(instanceId);
+      }
+
+      // Remove from allInstanceSessions
+      setAllInstanceSessions(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(instanceId);
+        return newMap;
+      });
+
+      // Delete the instance
+      await api.stopInstance(instanceId);
+
+      // Refresh instances list
+      const instances = await api.getInstances();
+      const worktreeInstances = instances.filter(i => i.worktreeId === selectedWorktree?.id);
+      setAllInstances(worktreeInstances);
+
+      // If the deleted instance was selected, select another one
+      if (currentInstanceId === instanceId) {
+        const runningInstance = worktreeInstances.find(i => i.status === 'running');
+        setCurrentInstanceId(runningInstance?.id || worktreeInstances[0]?.id || null);
+        setClaudeTerminalSessionId(null);
+        setDirectoryTerminalSessionId(null);
+      }
+    } catch (error) {
+      console.error('Failed to delete instance:', error);
+    } finally {
+      setIsDeleting(null);
+    }
+  };
+
+  const handleClearStoppedInstances = async () => {
+    const stoppedInstances = allInstances.filter(i => i.status === 'stopped' || i.status === 'error');
+
+    if (stoppedInstances.length === 0) return;
+
+    if (!confirm(`Clear ${stoppedInstances.length} stopped/error instance(s)?`)) {
+      return;
+    }
+
+    try {
+      // Delete all stopped instances
+      await Promise.all(stoppedInstances.map(instance => {
+        // Close any cached sessions
+        const cached = sessionCache.get(instance.id);
+        if (cached?.claude) {
+          onCloseTerminalSession(cached.claude);
+          sessionCache.clearClaude(instance.id);
+        }
+        if (cached?.directory) {
+          onCloseTerminalSession(cached.directory);
+          sessionCache.clearDirectory(instance.id);
+        }
+
+        // Remove from allInstanceSessions
+        setAllInstanceSessions(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(instance.id);
+          return newMap;
+        });
+
+        return api.stopInstance(instance.id);
+      }));
+
+      // Refresh instances list
+      const instances = await api.getInstances();
+      const worktreeInstances = instances.filter(i => i.worktreeId === selectedWorktree?.id);
+      setAllInstances(worktreeInstances);
+
+      // If the current instance was deleted, select another one
+      if (currentInstanceId && stoppedInstances.some(i => i.id === currentInstanceId)) {
+        const runningInstance = worktreeInstances.find(i => i.status === 'running');
+        setCurrentInstanceId(runningInstance?.id || worktreeInstances[0]?.id || null);
+        setClaudeTerminalSessionId(null);
+        setDirectoryTerminalSessionId(null);
+      }
+    } catch (error) {
+      console.error('Failed to clear stopped instances:', error);
+    }
+  };
+
+  const handleDeleteWorktreeConfirm = async (worktreeId: string, force: boolean) => {
+    await onDeleteWorktree(worktreeId, force);
+    setWorktreeToDelete(null);
   };
 
   const checkExistingSessionsOrConnect = async () => {
@@ -1462,26 +1701,11 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     );
   }
 
-  if (!selectedInstance) {
-    return (
-      <div className="right-panel">
-        <div className="panel-header">
-          <h3 style={{ margin: 0, color: '#ffffff' }}>Terminal</h3>
-          <span style={{ fontSize: '12px', color: '#888' }}>
-            {selectedWorktree.branch} • {selectedWorktree.path}
-          </span>
-        </div>
-        <div className="empty-terminal">
-          <div>
-            <h4 style={{ color: '#666', marginBottom: '8px' }}>No Claude instance</h4>
-            <p style={{ color: '#888', fontSize: '14px' }}>
-              This worktree doesn't have a running Claude instance
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Determine available agents that are ready to start
+  const readyAgents = availableAgents.filter(a => a.isAvailable && (a.isAuthenticated ?? true));
+
+  // Set currentInstance to null if no instances, but still show the panel
+  // Only the agent tab will be disabled without an instance
 
   return (
     <div className="right-panel">
@@ -1554,21 +1778,38 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       {/* Tabbed interface */}
       <div style={{ display: 'flex', borderBottom: '1px solid #444' }}>
         <button
+          onClick={() => setActiveTab('dashboard')}
+          style={{
+            background: activeTab === 'dashboard' ? '#444' : 'transparent',
+            border: 'none',
+            color: '#fff',
+            padding: '12px 24px',
+            cursor: 'pointer',
+            borderBottom: activeTab === 'dashboard' ? '2px solid #007acc' : '2px solid transparent',
+            fontSize: '13px'
+          }}
+        >
+          Dashboard
+        </button>
+        <button
           onClick={() => {
+            if (!currentInstance) return; // Don't switch if no instance
             setActiveTab('claude');
             // If switching to Claude tab but no session exists, check for existing sessions
             if (!claudeTerminalSessionId && selectedInstance?.status === 'running') {
               setTimeout(() => handleOpenClaudeTerminal(), 100);
             }
           }}
+          disabled={!currentInstance}
           style={{
             background: activeTab === 'claude' ? '#444' : 'transparent',
             border: 'none',
-            color: '#fff',
+            color: !currentInstance ? '#666' : '#fff',
             padding: '12px 24px',
-            cursor: 'pointer',
+            cursor: !currentInstance ? 'not-allowed' : 'pointer',
             borderBottom: activeTab === 'claude' ? '2px solid #007acc' : '2px solid transparent',
-            fontSize: '13px'
+            fontSize: '13px',
+            opacity: !currentInstance ? 0.5 : 1
           }}
         >
           Claude {claudeTerminalSessionId && '●'}
@@ -1612,12 +1853,85 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       </div>
 
       <div className="terminal-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        {/* Claude Terminal */}
-        <div style={{ 
-          display: activeTab === 'claude' ? 'flex' : 'none', 
-          flexDirection: 'column', 
+        {/* Dashboard Tab */}
+        <div style={{
+          display: activeTab === 'dashboard' ? 'flex' : 'none',
+          flexDirection: 'column',
           flex: 1,
-          minHeight: 0 
+          minHeight: 0,
+          padding: '20px',
+          overflow: 'auto'
+        }}>
+          {selectedWorktree ? (
+            <div>
+              <h3 style={{ marginBottom: '20px', color: '#e6edf3' }}>Worktree Dashboard</h3>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+                <div style={{ background: '#21262d', padding: '16px', borderRadius: '6px', border: '1px solid #30363d' }}>
+                  <h4 style={{ color: '#8b949e', fontSize: '12px', marginBottom: '8px', textTransform: 'uppercase' }}>Branch</h4>
+                  <p style={{ color: '#e6edf3', fontSize: '16px', margin: 0 }}>{selectedWorktree.branch}</p>
+                </div>
+
+                <div style={{ background: '#21262d', padding: '16px', borderRadius: '6px', border: '1px solid #30363d' }}>
+                  <h4 style={{ color: '#8b949e', fontSize: '12px', marginBottom: '8px', textTransform: 'uppercase' }}>Location</h4>
+                  <p style={{ color: '#e6edf3', fontSize: '14px', margin: 0, fontFamily: 'monospace' }}>{selectedWorktree.path}</p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+                <button
+                  onClick={() => {
+                    const url = `${window.location.origin}/?worktree=${selectedWorktree.id}`;
+                    navigator.clipboard.writeText(url);
+                    // You could add a toast notification here
+                  }}
+                  style={{
+                    background: '#238636',
+                    border: 'none',
+                    color: '#fff',
+                    padding: '10px 20px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  🔗 Copy Worktree Link
+                </button>
+                <button
+                  onClick={() => setWorktreeToDelete(selectedWorktree)}
+                  style={{
+                    background: '#dc3545',
+                    border: 'none',
+                    color: '#fff',
+                    padding: '10px 20px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  🗑️ Delete Worktree
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#8b949e' }}>
+              <p>Select a worktree to view its dashboard</p>
+            </div>
+          )}
+        </div>
+
+        {/* Agent Terminal */}
+        <div style={{
+          display: activeTab === 'claude' ? 'flex' : 'none',
+          flexDirection: 'column',
+          flex: 1,
+          minHeight: 0
         }}>
           {claudeTerminalSessionId ? (
             <>
@@ -1628,7 +1942,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
                 onClose={() => handleCloseTerminal('claude')}
               />
             </>
-          ) : selectedInstance.status === 'running' ? (
+          ) : currentInstance?.status === 'running' ? (
             <div className="empty-terminal" style={{ flex: 1 }}>
               <div style={{ textAlign: 'center' }}>
                 <h4 style={{ color: '#666', marginBottom: '8px' }}>Claude Terminal</h4>
@@ -1660,7 +1974,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
                 )}
               </div>
             </div>
-          ) : selectedInstance.status === 'starting' ? (
+          ) : currentInstance?.status === 'starting' ? (
             <div className="empty-terminal" style={{ flex: 1 }}>
               <div style={{ textAlign: 'center' }}>
                 <h4 style={{ color: '#666', marginBottom: '8px' }}>Claude Terminal</h4>
@@ -2203,6 +2517,172 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           )}
         </div>
       </div>
+
+      {/* Denial Confirmation Modal for Git tab */}
+      {activeTab === 'git' && showDenyConfirmation && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: '#2d3748',
+            border: '1px solid #4a5568',
+            borderRadius: '8px',
+            padding: '24px',
+            minWidth: '450px',
+            maxWidth: '550px'
+          }}>
+            <h3 style={{ color: '#fff', marginBottom: '16px', marginTop: 0 }}>
+              ⚠️ Confirm Deny Changes
+            </h3>
+            <p style={{ color: '#a0aec0', marginBottom: '16px', lineHeight: '1.5' }}>
+              Choose how to handle the denial of changes:
+            </p>
+
+            {/* Option Selection */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '8px',
+                marginBottom: '12px',
+                cursor: 'pointer',
+                padding: '8px',
+                borderRadius: '4px',
+                backgroundColor: !deleteWorktreeOnDeny ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                border: !deleteWorktreeOnDeny ? '1px solid #3b82f6' : '1px solid transparent'
+              }}>
+                <input
+                  type="radio"
+                  name="denyOption"
+                  checked={!deleteWorktreeOnDeny}
+                  onChange={() => setDeleteWorktreeOnDeny(false)}
+                  style={{ marginTop: '2px' }}
+                />
+                <div>
+                  <div style={{ color: '#fff', fontWeight: 'bold', marginBottom: '4px' }}>
+                    🔄 Revert Changes Only
+                  </div>
+                  <div style={{ color: '#a0aec0', fontSize: '13px' }}>
+                    Reset all files to their last committed state, but keep the worktree and instance running.
+                  </div>
+                </div>
+              </label>
+
+              <label style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '8px',
+                cursor: 'pointer',
+                padding: '8px',
+                borderRadius: '4px',
+                backgroundColor: deleteWorktreeOnDeny ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
+                border: deleteWorktreeOnDeny ? '1px solid #ef4444' : '1px solid transparent'
+              }}>
+                <input
+                  type="radio"
+                  name="denyOption"
+                  checked={deleteWorktreeOnDeny}
+                  onChange={() => setDeleteWorktreeOnDeny(true)}
+                  style={{ marginTop: '2px' }}
+                />
+                <div>
+                  <div style={{ color: '#fff', fontWeight: 'bold', marginBottom: '4px' }}>
+                    🗑️ Delete Entire Worktree
+                  </div>
+                  <div style={{ color: '#a0aec0', fontSize: '13px' }}>
+                    Stop the instance, close terminals, and completely remove this worktree and all its contents.
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <div style={{
+              color: deleteWorktreeOnDeny ? '#ef4444' : '#f59e0b',
+              fontSize: '13px',
+              marginBottom: '20px',
+              padding: '8px',
+              backgroundColor: 'rgba(0, 0, 0, 0.2)',
+              borderRadius: '4px',
+              fontWeight: 'bold'
+            }}>
+              ⚠️ {deleteWorktreeOnDeny ? 'This will permanently delete the entire worktree!' : 'This will permanently revert all changes!'}
+            </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setShowDenyConfirmation(false);
+                  setDeleteWorktreeOnDeny(false); // Reset checkbox when cancelling
+                }}
+                style={{
+                  backgroundColor: 'transparent',
+                  border: '1px solid #4a5568',
+                  color: '#a0aec0',
+                  padding: '8px 16px',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDenyChanges}
+                disabled={isReverting}
+                style={{
+                  backgroundColor: deleteWorktreeOnDeny ? '#dc3545' : '#f59e0b',
+                  border: 'none',
+                  color: '#fff',
+                  padding: '8px 16px',
+                  borderRadius: '4px',
+                  cursor: isReverting ? 'not-allowed' : 'pointer',
+                  fontSize: '14px',
+                  opacity: isReverting ? 0.6 : 1
+                }}
+              >
+                {isReverting
+                  ? (deleteWorktreeOnDeny ? 'Deleting Worktree...' : 'Reverting Changes...')
+                  : (deleteWorktreeOnDeny ? 'Yes, Delete Worktree' : 'Yes, Revert Changes')
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hidden terminals for all instances to keep them warm */}
+      {allInstances.map(instance => {
+        const sessions = allInstanceSessions.get(instance.id);
+        if (!sessions?.claude || instance.id === currentInstanceId) {
+          // Skip if no session or this is the currently visible instance
+          return null;
+        }
+        return (
+          <div key={`hidden-${instance.id}`} style={{ display: 'none' }}>
+            <TerminalComponent
+              sessionId={sessions.claude}
+              onClose={() => {}}
+            />
+          </div>
+        );
+      })}
+
+      {/* Delete Worktree Modal */}
+      {worktreeToDelete && (
+        <DeleteWorktreeModal
+          worktree={worktreeToDelete}
+          onClose={() => setWorktreeToDelete(null)}
+          onConfirm={handleDeleteWorktreeConfirm}
+        />
+      )}
     </div>
   );
 };
