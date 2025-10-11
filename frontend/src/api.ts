@@ -1,14 +1,24 @@
-import { Repository, ClaudeInstance, Worktree } from './types';
+import { Repository, ClaudeInstance, Worktree, AgentType, AgentInfo } from './types';
 
-const API_BASE = '/api';
+// Use environment variable in production, otherwise use proxy path
+const API_BASE = import.meta.env.MODE === 'production' && import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : '/api';
 
 class ApiClient {
   private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
+    const token = localStorage.getItem('authToken');
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      ...options?.headers,
+    };
+
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     const response = await fetch(`${API_BASE}${endpoint}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options?.headers,
-      },
+      headers,
       ...options,
     });
 
@@ -71,10 +81,10 @@ class ApiClient {
     return this.request(`/instances/repository/${repositoryId}`);
   }
 
-  async startInstance(worktreeId: string): Promise<ClaudeInstance> {
+  async startInstance(worktreeId: string, agentType?: AgentType): Promise<ClaudeInstance> {
     return this.request('/instances', {
       method: 'POST',
-      body: JSON.stringify({ worktreeId }),
+      body: JSON.stringify({ worktreeId, agentType }),
     });
   }
 
@@ -106,6 +116,11 @@ class ApiClient {
     return this.request(`/instances/${instanceId}/terminals`);
   }
 
+  // Agents
+  async getAgents(): Promise<AgentInfo[]> {
+    return this.request('/agents');
+  }
+
   async closeTerminalSession(sessionId: string): Promise<void> {
     return this.request(`/instances/terminals/${sessionId}`, {
       method: 'DELETE',
@@ -114,11 +129,45 @@ class ApiClient {
 
   // Git operations
   async getGitDiff(worktreeId: string): Promise<string> {
-    const response = await fetch(`${API_BASE}/git/${worktreeId}/diff`);
+    const token = localStorage.getItem('authToken');
+    const headers: Record<string, string> = {};
+
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE}/git/${worktreeId}/diff`, {
+      headers,
+    });
+
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.text();
+  }
+
+  async getGitStatus(worktreeId: string): Promise<{
+    branch: string;
+    ahead: number;
+    behind: number;
+    hasChanges: boolean;
+    files: {
+      staged: number;
+      unstaged: number;
+      untracked: number;
+    };
+  }> {
+    return this.request(`/git/${worktreeId}/status`);
+  }
+
+  async getPRStatus(worktreeId: string): Promise<{
+    exists: boolean;
+    number?: number;
+    title?: string;
+    url?: string;
+    state?: 'open' | 'closed' | 'merged';
+  }> {
+    return this.request(`/git/${worktreeId}/pr-status`);
   }
 
   async generateCommitMessage(worktreeId: string, comments?: any[]): Promise<{
@@ -257,8 +306,37 @@ class ApiClient {
     });
   }
 
+  // Notes operations
+  async getNotes(worktreeId: string): Promise<{
+    content: string;
+    fileName: string;
+  }> {
+    return this.request(`/git/${worktreeId}/notes`);
+  }
+
+  async saveNotes(worktreeId: string, content: string): Promise<{
+    message: string;
+    fileName: string;
+    path: string;
+  }> {
+    return this.request(`/git/${worktreeId}/notes`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    });
+  }
+
   // System status and metrics
   async getSystemStatus(): Promise<{
+    agents: Array<{
+      type: string;
+      name: string;
+      command: string;
+      isAvailable: boolean;
+      version?: string;
+      isAuthenticated?: boolean;
+      authenticationStatus?: string;
+      statusMessage?: string;
+    }>;
     claude: {
       status: 'available' | 'not_available' | 'unknown';
       version: string;
@@ -332,6 +410,79 @@ class ApiClient {
       method: 'PUT',
       body: JSON.stringify({ setClause, whereClause, confirm }),
     });
+  }
+
+  // Repository dashboard specific APIs
+  async getGitRemotes(repositoryId: string): Promise<Array<{
+    name: string;
+    url: string;
+    type: 'fetch' | 'push';
+  }>> {
+    return this.request(`/repositories/${repositoryId}/remotes`);
+  }
+
+  async getGitBranches(repositoryId: string): Promise<Array<{
+    name: string;
+    isLocal: boolean;
+    isRemote: boolean;
+    isCurrent: boolean;
+    lastCommit?: {
+      hash: string;
+      message: string;
+      author: string;
+      date: string;
+    };
+  }>> {
+    return this.request(`/repositories/${repositoryId}/branches`);
+  }
+
+  async getGitGraph(repositoryId: string): Promise<Array<{
+    hash: string;
+    parents: string[];
+    message: string;
+    author: string;
+    date: string;
+    branch?: string;
+    x: number;
+    y: number;
+  }>> {
+    return this.request(`/repositories/${repositoryId}/graph`);
+  }
+
+  async getProjectNotes(repositoryId: string): Promise<string> {
+    const response = await fetch(`${API_BASE}/repositories/${repositoryId}/notes`);
+    if (!response.ok) {
+      if (response.status === 404) {
+        return ''; // No notes file exists yet
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.text();
+  }
+
+  async saveProjectNotes(repositoryId: string, notes: string): Promise<void> {
+    return this.request(`/repositories/${repositoryId}/notes`, {
+      method: 'POST',
+      body: JSON.stringify({ notes }),
+    });
+  }
+
+  // Repository docs
+  async getRepositoryDocs(repositoryId: string): Promise<Array<{
+    name: string;
+    relativePath: string;
+    size: number;
+    mtime: number;
+  }>> {
+    return this.request(`/repositories/${repositoryId}/docs`);
+  }
+
+  async getRepositoryDocContent(repositoryId: string, relativePath: string): Promise<string> {
+    const response = await fetch(`${API_BASE}/repositories/${repositoryId}/docs/content?path=${encodeURIComponent(relativePath)}`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.text();
   }
 }
 

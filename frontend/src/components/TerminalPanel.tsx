@@ -706,41 +706,48 @@ const SystemStatusDashboard: React.FC = () => {
         <h3 style={{ color: '#fff', margin: 0, marginBottom: '20px', fontSize: '18px' }}>System Dependencies</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-          {/* Claude CLI Status */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '16px',
-            backgroundColor: '#0d1117',
-            borderRadius: '6px',
-            border: '1px solid #21262d'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span style={{ fontSize: '20px' }}>{getStatusIcon(systemStatus.claude.status)}</span>
-              <div>
-                <div style={{ color: '#fff', fontSize: '14px', fontWeight: 'bold' }}>Claude CLI</div>
-                <div style={{ color: '#888', fontSize: '12px' }}>
-                  {systemStatus.claude.status === 'available' ? 'Ready for AI-powered features' : 'Required for git analysis and PR generation'}
-                </div>
-              </div>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{
-                color: getStatusColor(systemStatus.claude.status),
-                fontSize: '12px',
-                fontWeight: 'bold',
-                marginBottom: '2px'
+          {/* AI Agent CLIs */}
+          {systemStatus.agents && systemStatus.agents.map((agent: any) => {
+            const agentStatus = agent.isAvailable ? 'available' : 'not_available';
+            return (
+              <div key={agent.type} style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '16px',
+                backgroundColor: '#0d1117',
+                borderRadius: '6px',
+                border: '1px solid #21262d'
               }}>
-                {systemStatus.claude.status.replace('_', ' ').toUpperCase()}
-              </div>
-              {systemStatus.claude.version && (
-                <div style={{ color: '#666', fontSize: '10px' }}>
-                  {systemStatus.claude.version}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ fontSize: '20px' }}>{getStatusIcon(agentStatus)}</span>
+                  <div>
+                    <div style={{ color: '#fff', fontSize: '14px', fontWeight: 'bold' }}>{agent.name}</div>
+                    <div style={{ color: '#888', fontSize: '12px' }}>
+                      {agent.isAvailable
+                        ? agent.statusMessage || 'Ready for AI-powered code assistance'
+                        : agent.statusMessage || `Install ${agent.command} to enable this agent`}
+                    </div>
+                  </div>
                 </div>
-              )}
-            </div>
-          </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{
+                    color: getStatusColor(agentStatus),
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    marginBottom: '2px'
+                  }}>
+                    {agentStatus.replace('_', ' ').toUpperCase()}
+                  </div>
+                  {agent.version && (
+                    <div style={{ color: '#666', fontSize: '10px' }}>
+                      {agent.version}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
 
           {/* GitHub CLI Status */}
           <div style={{

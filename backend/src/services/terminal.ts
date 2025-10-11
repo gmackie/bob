@@ -14,6 +14,7 @@ export interface TerminalSession {
 
 export class TerminalService {
   private sessions = new Map<string, TerminalSession>();
+  private instanceToSessionMap = new Map<string, string>(); // instanceId -> sessionId for Claude PTY sessions
 
   createSession(instanceId: string, cwd: string): TerminalSession {
     const sessionId = `terminal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -36,6 +37,30 @@ export class TerminalService {
     this.sessions.set(sessionId, session);
 
     pty.onExit(() => {
+      this.sessions.delete(sessionId);
+      if (session.websocket) {
+        session.websocket.close();
+      }
+    });
+
+    return session;
+  }
+
+  // Generic agent PTY session (alias to Claude PTY session machinery)
+  createAgentPtySession(instanceId: string, agentPty: IPty): TerminalSession {
+    const sessionId = `terminal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    const session: TerminalSession = {
+      id: sessionId,
+      instanceId,
+      // Reuse existing field to avoid wider changes while migrating
+      claudePty: agentPty,
+      createdAt: new Date()
+    };
+
+    this.sessions.set(sessionId, session);
+
+    agentPty.onExit(() => {
       this.sessions.delete(sessionId);
       if (session.websocket) {
         session.websocket.close();
@@ -119,9 +144,21 @@ export class TerminalService {
               if (msg.cols && msg.rows &&
                   Number.isInteger(msg.cols) && Number.isInteger(msg.rows) &&
                   msg.cols > 0 && msg.rows > 0) {
-                session.pty!.resize(msg.cols, msg.rows);
+                try {
+                  // Check if PTY is still alive before resizing
+                  if (session.pty && session.pty.pid !== undefined) {
+                    session.pty.resize(msg.cols, msg.rows);
+                  }
+                } catch (err) {
+                  console.warn(`Failed to resize terminal (PTY may have exited): ${err}`);
+                }
               } else {
                 console.warn(`Invalid resize dimensions: cols=${msg.cols}, rows=${msg.rows}`);
+              }
+              break;
+            case 'ping':
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'pong' }));
               }
               break;
           }
@@ -153,6 +190,11 @@ export class TerminalService {
                 session.claudeProcess.stdin.write(msg.data);
               }
               break;
+            case 'ping':
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'pong' }));
+              }
+              break;
             // Claude processes don't support resize
           }
         } catch (error) {
@@ -180,9 +222,21 @@ export class TerminalService {
               if (msg.cols && msg.rows &&
                   Number.isInteger(msg.cols) && Number.isInteger(msg.rows) &&
                   msg.cols > 0 && msg.rows > 0) {
-                session.claudePty!.resize(msg.cols, msg.rows);
+                try {
+                  // Check if PTY is still alive before resizing
+                  if (session.claudePty && session.claudePty.pid !== undefined) {
+                    session.claudePty.resize(msg.cols, msg.rows);
+                  }
+                } catch (err) {
+                  console.warn(`Failed to resize terminal (PTY may have exited): ${err}`);
+                }
               } else {
                 console.warn(`Invalid resize dimensions: cols=${msg.cols}, rows=${msg.rows}`);
+              }
+              break;
+            case 'ping':
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'pong' }));
               }
               break;
           }

@@ -1,11 +1,11 @@
 import { Router } from 'express';
-import { ClaudeService } from '../services/claude.js';
+import { AgentService } from '../services/agent.js';
 import { TerminalService } from '../services/terminal.js';
 import { GitService } from '../services/git.js';
 import { StartInstanceRequest } from '../types.js';
 
 export function createInstanceRoutes(
-  claudeService: ClaudeService, 
+  agentService: AgentService,
   terminalService: TerminalService,
   gitService: GitService
 ): Router {
@@ -13,7 +13,7 @@ export function createInstanceRoutes(
 
   router.get('/', (req, res) => {
     try {
-      const instances = claudeService.getInstances();
+      const instances = agentService.getInstances();
       res.json(instances);
     } catch (error) {
       res.status(500).json({ error: 'Failed to get instances' });
@@ -22,7 +22,7 @@ export function createInstanceRoutes(
 
   router.get('/repository/:repositoryId', (req, res) => {
     try {
-      const instances = claudeService.getInstancesByRepository(req.params.repositoryId);
+      const instances = agentService.getInstancesByRepository(req.params.repositoryId);
       res.json(instances);
     } catch (error) {
       res.status(500).json({ error: 'Failed to get instances for repository' });
@@ -31,13 +31,13 @@ export function createInstanceRoutes(
 
   router.post('/', async (req, res) => {
     try {
-      const { worktreeId } = req.body as StartInstanceRequest;
+      const { worktreeId, agentType } = req.body as StartInstanceRequest;
       
       if (!worktreeId) {
         return res.status(400).json({ error: 'worktreeId is required' });
       }
 
-      const instance = await claudeService.startInstance(worktreeId);
+      const instance = await agentService.startInstance(worktreeId, agentType || 'claude');
       res.status(201).json(instance);
     } catch (error) {
       res.status(500).json({ error: `Failed to start instance: ${error}` });
@@ -46,7 +46,7 @@ export function createInstanceRoutes(
 
   router.get('/:id', (req, res) => {
     try {
-      const instance = claudeService.getInstance(req.params.id);
+      const instance = agentService.getInstance(req.params.id);
       if (!instance) {
         return res.status(404).json({ error: 'Instance not found' });
       }
@@ -58,16 +58,16 @@ export function createInstanceRoutes(
 
   router.delete('/:id', async (req, res) => {
     try {
-      await claudeService.stopInstance(req.params.id);
+      await agentService.deleteInstance(req.params.id);
       res.status(204).send();
     } catch (error) {
-      res.status(500).json({ error: `Failed to stop instance: ${error}` });
+      res.status(500).json({ error: `Failed to delete instance: ${error}` });
     }
   });
 
   router.post('/:id/restart', async (req, res) => {
     try {
-      const instance = await claudeService.restartInstance(req.params.id);
+      const instance = await agentService.restartInstance(req.params.id);
       res.json(instance);
     } catch (error) {
       res.status(500).json({ error: `Failed to restart instance: ${error}` });
@@ -76,26 +76,26 @@ export function createInstanceRoutes(
 
   router.post('/:id/terminal', (req, res) => {
     try {
-      const instance = claudeService.getInstance(req.params.id);
+      const instance = agentService.getInstance(req.params.id);
       if (!instance) {
         return res.status(404).json({ error: 'Instance not found' });
       }
 
       if (instance.status !== 'running') {
         return res.status(400).json({ 
-          error: `Cannot connect to Claude terminal. Instance is ${instance.status}. Please start the instance first.` 
+          error: `Cannot connect to agent terminal. Instance is ${instance.status}. Please start the instance first.` 
         });
       }
 
-      const claudePty = claudeService.getClaudePty(req.params.id);
-      if (!claudePty) {
+      const agentPty = agentService.getAgentPty(req.params.id);
+      if (!agentPty) {
         return res.status(404).json({ 
-          error: 'Claude terminal not available. The Claude process may have stopped unexpectedly.' 
+          error: 'Agent terminal not available. The process may have stopped unexpectedly.' 
         });
       }
 
-      const session = terminalService.createClaudePtySession(req.params.id, claudePty);
-      res.json({ sessionId: session.id });
+      const session = terminalService.createAgentPtySession(req.params.id, agentPty);
+      res.json({ sessionId: session.id, agentType: instance.agentType });
     } catch (error) {
       res.status(500).json({ error: `Failed to create terminal session: ${error}` });
     }
@@ -103,7 +103,7 @@ export function createInstanceRoutes(
 
   router.post('/:id/terminal/directory', (req, res) => {
     try {
-      const instance = claudeService.getInstance(req.params.id);
+      const instance = agentService.getInstance(req.params.id);
       if (!instance) {
         return res.status(404).json({ error: 'Instance not found' });
       }
@@ -126,6 +126,7 @@ export function createInstanceRoutes(
       res.json(sessions.map(s => ({ 
         id: s.id, 
         createdAt: s.createdAt,
+        // Back-compat: keep 'claude' label for agent PTY until UI is refactored
         type: s.claudePty ? 'claude' : s.pty ? 'directory' : 'unknown'
       })));
     } catch (error) {

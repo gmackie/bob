@@ -1,26 +1,78 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import session from 'express-session';
+import passport from 'passport';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { GitService } from './services/git.js';
-import { ClaudeService } from './services/claude.js';
+import { AgentService } from './services/agent.js';
 import { TerminalService } from './services/terminal.js';
+import { AuthService } from './services/auth.js';
 import { DatabaseService } from './database/database.js';
 import { createRepositoryRoutes } from './routes/repositories.js';
 import { createInstanceRoutes } from './routes/instances.js';
 import { createFilesystemRoutes } from './routes/filesystem.js';
 import { createDatabaseRoutes } from './routes/database.js';
+import { createAuthRoutes, requireAuth } from './routes/auth.js';
 import gitRoutes from './routes/git.js';
+import { createAgentsRoutes } from './routes/agents.js';
+import { agentFactory } from './agents/agent-factory.js';
+import { appConfig } from './config/app.config.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
-const PORT = process.env.PORT || 43829;
+const PORT = parseInt(process.env.PORT || '43829', 10);
 
-app.use(cors());
+// Configure CORS with specific origins
+const corsOptions = {
+  origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
+    const allowedOrigins = [
+      'https://claude.gmac.io',
+      'http://localhost:47285',
+      'http://localhost:5173',
+      'http://127.0.0.1:47285',
+      'http://127.0.0.1:5173'
+    ];
+
+    // Allow requests with no origin (e.g., mobile apps, Postman)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
+
+// Session configuration
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'change-this-secret-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+  }
+}));
+
+// Initialize Passport
+app.use(passport.initialize());
+app.use(passport.session());
 
 // Initialize database
 const db = new DatabaseService();
@@ -28,25 +80,49 @@ console.log('Database initialized');
 
 // Initialize services
 const gitService = new GitService(db);
-const claudeService = new ClaudeService(gitService, db);
+const agentService = new AgentService(gitService, db);
 const terminalService = new TerminalService();
+const authService = new AuthService(db);
 
 console.log('Services initialized');
 
-app.use('/api/repositories', createRepositoryRoutes(gitService, claudeService));
-app.use('/api/instances', createInstanceRoutes(claudeService, terminalService, gitService));
+// Auth routes (conditionally enabled)
+if (appConfig.enableGithubAuth) {
+  app.use('/api/auth', createAuthRoutes(authService));
+}
+
+// Health check endpoint (public)
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// App config endpoint (public)
+app.get('/api/config', (req, res) => {
+  res.json({
+    appName: appConfig.getAppName(),
+    enableGithubAuth: appConfig.enableGithubAuth,
+    jeffMode: appConfig.jeffMode,
+    allowedAgents: appConfig.getAllowedAgents()
+  });
+});
+
+// Require authentication for all other API routes (only if auth is enabled)
+if (appConfig.enableGithubAuth) {
+  app.use('/api', requireAuth(authService));
+}
+
+app.use('/api/repositories', createRepositoryRoutes(gitService, agentService));
+app.use('/api/instances', createInstanceRoutes(agentService, terminalService, gitService));
+app.use('/api/agents', createAgentsRoutes());
 app.use('/api/filesystem', createFilesystemRoutes());
 app.use('/api/database', createDatabaseRoutes(db));
 
 // Make services available to git routes
 app.locals.gitService = gitService;
-app.locals.claudeService = claudeService;
+app.locals.agentService = agentService;
 app.locals.databaseService = db;
+app.locals.authService = authService;
 app.use('/api/git', gitRoutes);
-
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
 
 app.get('/api/system-status', async (req, res) => {
   try {
@@ -54,16 +130,15 @@ app.get('/api/system-status', async (req, res) => {
     const { promisify } = await import('util');
     const execAsync = promisify(exec);
 
-    // Check Claude CLI availability
-    let claudeStatus = 'unknown';
-    let claudeVersion = '';
-    try {
-      const { stdout } = await execAsync('claude --version');
-      claudeVersion = stdout.trim();
-      claudeStatus = 'available';
-    } catch (error) {
-      claudeStatus = 'not_available';
-    }
+    // Collect agent statuses via factory
+    const agents = await agentFactory.getAgentInfo();
+
+    // Back-compat: expose a top-level `claude` status alongside agents array
+    const claudeInfo = agents.find(a => a.type === 'claude');
+    const claude = {
+      status: claudeInfo ? (claudeInfo.isAvailable ? 'available' : 'not_available') : 'unknown',
+      version: claudeInfo?.version || ''
+    };
 
     // Check GitHub CLI availability
     let githubStatus = 'unknown';
@@ -86,7 +161,7 @@ app.get('/api/system-status', async (req, res) => {
 
     // Get system metrics
     const gitService = req.app.locals.gitService;
-    const claudeService = req.app.locals.claudeService;
+    const agentService = req.app.locals.agentService;
 
     const repositories = gitService.getRepositories();
     // Count only actual worktrees (exclude main working trees)
@@ -94,14 +169,12 @@ app.get('/api/system-status', async (req, res) => {
       const actualWorktrees = repo.worktrees.filter((worktree: any) => !worktree.isMainWorktree);
       return count + actualWorktrees.length;
     }, 0);
-    const instances = claudeService.getInstances();
+    const instances = agentService.getInstances();
     const activeInstances = instances.filter((i: any) => i.status === 'running' || i.status === 'starting').length;
 
     res.json({
-      claude: {
-        status: claudeStatus,
-        version: claudeVersion
-      },
+      agents,
+      claude,
       github: {
         status: githubStatus,
         version: githubVersion,
@@ -162,7 +235,7 @@ wss.on('connection', (ws, req) => {
 const gracefulShutdown = async () => {
   console.log('Shutting down gracefully...');
   
-  await claudeService.cleanup();
+  await agentService.cleanup();
   terminalService.cleanup();
   db.close();
   
@@ -175,7 +248,8 @@ const gracefulShutdown = async () => {
 process.on('SIGTERM', gracefulShutdown);
 process.on('SIGINT', gracefulShutdown);
 
-server.listen(PORT, () => {
+// Bind to localhost only; nginx terminates TLS and proxies to this backend
+server.listen(PORT, '127.0.0.1', () => {
   console.log(`Bob server running on port ${PORT}`);
   console.log(`WebSocket server ready for terminal connections`);
 });
