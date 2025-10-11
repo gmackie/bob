@@ -3,9 +3,14 @@ import { Routes, Route, useSearchParams, useNavigate, useLocation } from 'react-
 import { Repository, ClaudeInstance, Worktree } from './types';
 import { api } from './api';
 import { RepositoryPanel } from './components/RepositoryPanel';
-import { TerminalPanel } from './components/TerminalPanel';
+import { AgentPanel } from './components/AgentPanel';
 import { DatabaseManager } from './components/DatabaseManager';
+import { AuthButton } from './components/AuthButton';
+import { SettingsMenu } from './components/SettingsMenu';
+import { WebSocketDebugPanel } from './components/WebSocketDebugPanel';
+import { RepositoryDashboardPanel } from './components/RepositoryDashboardPanel';
 import { useCheatCode } from './contexts/CheatCodeContext';
+import { getAppConfig } from './config/app.config';
 
 function App() {
   return (
@@ -46,37 +51,61 @@ function MainApp() {
   const [, setError] = useState<string | null>(null);
   const [instanceError, setInstanceError] = useState<string | null>(null);
   const [selectedWorktreeId, setSelectedWorktreeId] = useState<string | null>(null);
+  const [selectedRepositoryId, setSelectedRepositoryId] = useState<string | null>(null);
+  const [appName, setAppName] = useState('Bob');
+  const [enableGithubAuth, setEnableGithubAuth] = useState(true);
 
   useEffect(() => {
+    // Load app config first
+    getAppConfig().then(config => {
+      setAppName(config.appName);
+      setEnableGithubAuth(config.enableGithubAuth);
+    });
+
     loadData();
     const interval = setInterval(loadData, 5000);
     return () => clearInterval(interval);
   }, []);
 
-  // Handle URL parameters for direct worktree linking
+  // Handle URL parameters for direct worktree and repository linking
   useEffect(() => {
     const worktreeParam = searchParams.get('worktree');
+    const repositoryParam = searchParams.get('repository');
 
-    if (!worktreeParam) {
-      // No worktree in URL, ensure nothing is selected
-      if (selectedWorktreeId) {
-        setSelectedWorktreeId(null);
+    // Handle repository selection
+    if (repositoryParam) {
+      if (repositories.length > 0) {
+        const targetRepo = repositories.find(r => r.id === repositoryParam);
+        if (targetRepo && selectedRepositoryId !== repositoryParam) {
+          handleSelectRepository(repositoryParam);
+        } else if (!targetRepo && selectedRepositoryId) {
+          setSelectedRepositoryId(null);
+        }
+      }
+      return; // Repository takes precedence over worktree
+    }
+
+    // Handle worktree selection
+    if (worktreeParam) {
+      if (repositories.length > 0) {
+        const allWorktrees = repositories.flatMap(repo => repo.worktrees);
+        const targetWorktree = allWorktrees.find(w => w.id === worktreeParam);
+
+        if (targetWorktree && selectedWorktreeId !== worktreeParam) {
+          handleSelectWorktree(targetWorktree.id);
+        } else if (!targetWorktree && selectedWorktreeId) {
+          setSelectedWorktreeId(null);
+        }
       }
       return;
     }
 
-    if (repositories.length > 0) {
-      // Find worktree by ID
-      const allWorktrees = repositories.flatMap(repo => repo.worktrees);
-      const targetWorktree = allWorktrees.find(w => w.id === worktreeParam);
-
-      if (targetWorktree && selectedWorktreeId !== worktreeParam) {
-        // Only select if it's different from current selection
-        handleSelectWorktree(targetWorktree.id);
-      } else if (!targetWorktree && selectedWorktreeId) {
-        // Worktree not found, clear selection
-        setSelectedWorktreeId(null);
-      }
+    // No params - clear selections
+    if (selectedWorktreeId) {
+      setSelectedWorktreeId(null);
+    }
+    if (selectedRepositoryId) {
+      setSelectedRepositoryId(null);
     }
   }, [repositories, searchParams]);
 
@@ -132,17 +161,6 @@ function MainApp() {
       setError(err instanceof Error ? err.message : 'Failed to refresh main branch');
     }
   };
-
-  const handleStartInstance = async (worktreeId: string) => {
-    try {
-      await api.startInstance(worktreeId);
-      await loadData();
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start instance');
-    }
-  };
-
 
   const handleCreateTerminalSession = async (instanceId: string): Promise<string> => {
     try {
@@ -217,43 +235,21 @@ function MainApp() {
 
   const handleSelectWorktree = async (worktreeId: string) => {
     setSelectedWorktreeId(worktreeId);
+    setSelectedRepositoryId(null); // Clear repository selection
 
     // Update URL to reflect selected worktree
     setSearchParams({ worktree: worktreeId });
 
-    // Get fresh instance data directly from API to avoid stale state
-    try {
-      const freshInstances = await api.getInstances();
-      const existingInstance = freshInstances.find(instance => instance.worktreeId === worktreeId);
-
-      if (existingInstance) {
-        // If instance exists but is stopped/error, restart it
-        if (existingInstance.status === 'stopped' || existingInstance.status === 'error') {
-          try {
-            await handleRestartInstance(existingInstance.id);
-            // handleRestartInstance already calls loadData(), so no need to call it again
-            return;
-          } catch (error) {
-            console.error('Failed to restart instance when selecting worktree:', error);
-          }
-        }
-        // If it's running or starting, do nothing - instance is already active
-      } else {
-        // No instance exists, create a new one
-        try {
-          await handleStartInstance(worktreeId);
-          // handleStartInstance already calls loadData(), so no need to call it again
-          return;
-        } catch (error) {
-          console.error('Failed to start instance when selecting worktree:', error);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to get fresh instance data:', error);
-    }
-
-    // Only refresh if no instance operations were performed
+    // Just refresh data to show current state - don't auto-start instances
     await loadData();
+  };
+
+  const handleSelectRepository = (repositoryId: string) => {
+    setSelectedRepositoryId(repositoryId);
+    setSelectedWorktreeId(null); // Clear worktree selection
+
+    // Update URL to reflect selected repository
+    setSearchParams({ repository: repositoryId });
   };
 
   const toggleLeftPanel = () => {
@@ -264,10 +260,13 @@ function MainApp() {
   const selectedWorktree: Worktree | null = repositories
     .flatMap(repo => repo.worktrees)
     .find(worktree => worktree.id === selectedWorktreeId) || null;
-  
-  const selectedInstance: ClaudeInstance | null = selectedWorktree 
+
+  const selectedInstance: ClaudeInstance | null = selectedWorktree
     ? instances.find(instance => instance.worktreeId === selectedWorktree.id) || null
     : null;
+
+  // Get selected repository
+  const selectedRepository: Repository | null = repositories.find(repo => repo.id === selectedRepositoryId) || null;
 
   if (loading) {
     return (
@@ -297,24 +296,23 @@ function MainApp() {
               onMouseEnter={(e) => (e.target as HTMLElement).style.color = '#58a6ff'}
               onMouseLeave={(e) => (e.target as HTMLElement).style.color = ''}
             >
-              Bob
+              {appName}
             </h1>
-            <nav style={{ display: 'flex', gap: '16px' }}>
-              <button
-                onClick={() => navigate('/')}
-                className={`nav-button ${location.pathname === '/' ? 'active' : ''}`}
-              >
-                Home
-              </button>
-              {isDatabaseUnlocked && (
+            {isDatabaseUnlocked && (
+              <nav style={{ display: 'flex', gap: '16px' }}>
                 <button
                   onClick={() => navigate('/database')}
                   className={`nav-button ${location.pathname === '/database' ? 'active' : ''}`}
                 >
                   Database
                 </button>
-              )}
-            </nav>
+              </nav>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            {import.meta.env.DEV && <WebSocketDebugPanel />}
+            <SettingsMenu />
+            {enableGithubAuth && <AuthButton />}
           </div>
         </div>
       </div>
@@ -324,27 +322,36 @@ function MainApp() {
           repositories={repositories}
           instances={instances}
           selectedWorktreeId={selectedWorktreeId}
+          selectedRepositoryId={selectedRepositoryId}
           onAddRepository={handleAddRepository}
           onCreateWorktreeAndStartInstance={handleCreateWorktreeAndStartInstance}
           onSelectWorktree={handleSelectWorktree}
+          onSelectRepository={handleSelectRepository}
           onDeleteWorktree={handleDeleteWorktree}
           onRefreshMainBranch={handleRefreshMainBranch}
           isCollapsed={isLeftPanelCollapsed}
           onToggleCollapse={toggleLeftPanel}
         />
-        
-        <TerminalPanel
-          selectedWorktree={selectedWorktree}
-          selectedInstance={selectedInstance}
-          onCreateTerminalSession={handleCreateTerminalSession}
-          onCreateDirectoryTerminalSession={handleCreateDirectoryTerminalSession}
-          onCloseTerminalSession={handleCloseTerminalSession}
-          onRestartInstance={handleRestartInstance}
-          onStopInstance={handleStopInstance}
-          onDeleteWorktree={handleDeleteWorktree}
-          error={instanceError}
-          isLeftPanelCollapsed={isLeftPanelCollapsed}
-        />
+
+        {selectedRepository ? (
+          <RepositoryDashboardPanel
+            repository={selectedRepository}
+            isLeftPanelCollapsed={isLeftPanelCollapsed}
+          />
+        ) : (
+          <AgentPanel
+            selectedWorktree={selectedWorktree}
+            selectedInstance={selectedInstance}
+            onCreateTerminalSession={handleCreateTerminalSession}
+            onCreateDirectoryTerminalSession={handleCreateDirectoryTerminalSession}
+            onCloseTerminalSession={handleCloseTerminalSession}
+            onRestartInstance={handleRestartInstance}
+            onStopInstance={handleStopInstance}
+            onDeleteWorktree={handleDeleteWorktree}
+            error={instanceError}
+            isLeftPanelCollapsed={isLeftPanelCollapsed}
+          />
+        )}
       </div>
     </div>
   );

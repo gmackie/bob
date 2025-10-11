@@ -36,12 +36,16 @@ const PORT = parseInt(process.env.PORT || '43829', 10);
 const corsOptions = {
   origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
     const allowedOrigins = [
-      'https://claude.gmac.io',
       'http://localhost:47285',
       'http://localhost:5173',
       'http://127.0.0.1:47285',
       'http://127.0.0.1:5173'
     ];
+
+    // Add production frontend URL if configured
+    if (process.env.FRONTEND_URL) {
+      allowedOrigins.push(process.env.FRONTEND_URL);
+    }
 
     // Allow requests with no origin (e.g., mobile apps, Postman)
     if (!origin || allowedOrigins.includes(origin)) {
