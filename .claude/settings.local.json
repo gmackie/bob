@@ -42,6 +42,7 @@
       "Bash(npx tailwindcss init:*)",
       "Bash(npm uninstall:*)",
       "Bash(git rebase:*)",
+<<<<<<< HEAD
       "Bash(git fetch:*)",
       "Bash(git commit:*)",
       "Bash(git merge-base:*)",
@@ -125,13 +126,14 @@
       "Bash(package-lock.json )",
       "Bash(frontend/src/index.css )",
       "Bash(.claude/settings.local.json)",
-      "Bash(log show:*)"
+      "Bash(log show:*)",
+      "Bash(npm view:*)"
     ],
     "deny": [],
-    "ask": [],
     "additionalDirectories": [
       "/var/www/html/.well-known/acme-challenge",
       "/etc/nginx/sites-enabled"
-    ]
+    ],
+    "ask": []
   }
 }

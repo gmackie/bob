@@ -5,7 +5,7 @@
   "main": "dist/server.js",
   "type": "module",
   "scripts": {
-    "dev": "turbowatch",
+    "dev": "turbowatch turbowatch.config.js",
     "build": "tsc",
     "start": "node dist/server.js",
     "test": "vitest",
@@ -36,42 +36,10 @@
     "@types/sqlite3": "^3.1.11",
     "@types/ws": "^8.18.1",
     "@vitest/ui": "^3.2.4",
+    "supertest": "^7.1.4",
+    "turbowatch": "^2.29.4",
     "tsx": "^4.7.0",
-    "turbowatch": "^8.0.0",
     "typescript": "^5.3.3",
     "vitest": "^3.2.4"
-  },
-  "turbowatch": {
-    "project": "src",
-    "triggers": [
-      {
-        "expression": [
-          "allof",
-          [
-            "not",
-            [
-              "dirname",
-              "__tests__"
-            ]
-          ],
-          [
-            "anyof",
-            [
-              "match",
-              "*.ts",
-              "basename"
-            ],
-            [
-              "match",
-              "*.js",
-              "basename"
-            ]
-          ]
-        ],
-        "name": "dev",
-        "onChange": "tsx src/server.ts",
-        "interruptible": true
-      }
-    ]
   }
 }
