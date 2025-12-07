@@ -11,7 +11,7 @@ vi.mock('node-pty', () => ({
 import { ClaudeAdapter } from '../src/agents/claude-adapter';
 import { CodexAdapter } from '../src/agents/codex-adapter';
 import { GeminiAdapter } from '../src/agents/gemini-adapter';
-import { AmazonQAdapter } from '../src/agents/amazon-q-adapter';
+import { KiroAdapter } from '../src/agents/kiro-adapter';
 
 describe('adapter parseOutput', () => {
   it('parses Claude JSON usage', () => {
@@ -39,8 +39,8 @@ describe('adapter parseOutput', () => {
     expect(res.outputTokens).toBe(100);
   });
 
-  it('parses Amazon Q JSON usage', () => {
-    const adapter = new AmazonQAdapter();
+  it('parses Kiro JSON usage', () => {
+    const adapter = new KiroAdapter();
     const output = JSON.stringify({ tokens: { prompt_tokens: 50, completion_tokens: 20 } });
     const res = adapter.parseOutput!(output)!;
     expect(res.inputTokens).toBe(50);

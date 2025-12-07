@@ -1,16 +1,16 @@
-# 🤖 Bob - Your Claude Code Multi-Instance Manager
+# 🤖 Bob - Your AI Agent Multi-Instance Manager
 
-Meet **Bob**, your friendly neighborhood assistant for managing multiple Claude Code instances across git repositories and worktrees!
+Meet **Bob**, your friendly neighborhood assistant for managing multiple AI coding agent instances across git repositories and worktrees!
 
-Bob helps you juggle multiple projects simultaneously by spinning up isolated Claude Code environments for each git branch or worktree. Think of Bob as your personal dev environment concierge - he keeps your Claude instances organized, running, and ready to help with whatever project you're working on.
+Bob helps you juggle multiple projects simultaneously by spinning up isolated AI agent environments (Claude, Kiro, Codex, Gemini) for each git branch or worktree. Think of Bob as your personal dev environment concierge - he keeps your AI agent instances organized, running, and ready to help with whatever project you're working on.
 
 ## ✨ What Bob Does
 
 **Bob is a web-based management interface that:**
 
-- 🏗️ **Manages Multiple Claude Instances** - Run Claude Code in parallel across different projects and branches
+- 🏗️ **Manages Multiple AI Agent Instances** - Run Claude, Kiro, Codex, or Gemini in parallel across different projects and branches
 - 🌳 **Git Worktree Integration** - Automatically creates and manages git worktrees for branch isolation
-- 🖥️ **Interactive Terminals** - Built-in terminal access to both Claude and your project directories
+- 🖥️ **Interactive Terminals** - Built-in terminal access to AI agents and your project directories
 - 📊 **Real-time Monitoring** - Live status updates, process monitoring, and resource tracking
 - 🚀 **One-Click Operations** - Start, stop, restart, and manage instances with simple clicks
 - 🔄 **Auto-reconnection** - Persistent terminal sessions that survive browser refreshes
@@ -32,14 +32,15 @@ Bob helps you juggle multiple projects simultaneously by spinning up isolated Cl
 ## 🎯 Perfect For
 
 - **Multi-project Developers** working on several codebases simultaneously
-- **Feature Branch Development** where each branch needs its own Claude instance
+- **Feature Branch Development** where each branch needs its own AI agent instance
 - **Code Review Workflows** comparing implementations across branches
-- **Team Environments** sharing access to managed Claude instances
+- **Team Environments** sharing access to managed agent instances
 - **CI/CD Integration** automated testing with isolated environments
+- **Multi-Agent Workflows** comparing different AI agents on the same codebase
 
-## 📊 Bob vs. Manual Claude Management
+## 📊 Bob vs. Manual AI Agent Management
 
-| Feature | Manual Claude CLI | Bob |
+| Feature | Manual Agent CLI | Bob |
 |---------|------------------|-----|
 | **Multiple Instances** | ❌ Manual terminal juggling | ✅ Web-based dashboard |
 | **Project Switching** | ❌ Manual `cd` commands | ✅ One-click selection |
@@ -56,7 +57,11 @@ Bob helps you juggle multiple projects simultaneously by spinning up isolated Cl
 
 - Node.js (v18+)
 - Git with worktree support
-- [Claude Code CLI](https://claude.ai/code) installed and configured
+- At least one AI agent CLI installed:
+  - **Kiro**: `npm install -g kiro-cli`
+  - **Claude Code**: Install from [claude.ai/code](https://claude.ai/code)
+  - **Codex**: Install GitHub Codex CLI
+  - **Gemini**: Install Google Gemini CLI
 - [GitHub CLI](https://cli.github.com/) for pull request automation (optional)
 
 ### Option 1: Desktop App (Recommended)
@@ -124,19 +129,19 @@ Bob helps you juggle multiple projects simultaneously by spinning up isolated Cl
 1. Select a repository from the left panel
 2. Click **"Create Worktree"**
 3. Enter a branch name (new or existing)
-4. Bob creates the worktree and starts a Claude instance automatically
+4. Bob creates the worktree and starts an AI agent instance automatically
 
 **Option 2: Existing Worktree**
 1. Select an existing worktree from the repository tree
-2. Click to select it - Bob automatically starts a Claude instance if needed
+2. Click to select it - Bob automatically starts an agent instance if needed
 
 ### Using the Terminal Interface
 
 Bob provides two types of terminal access for each instance:
 
-**Claude Terminal** 🤖
-- Direct interaction with Claude Code
-- Full Claude capabilities (code analysis, generation, file operations)
+**Agent Terminal** 🤖
+- Direct interaction with your chosen AI agent (Claude, Kiro, Codex, Gemini)
+- Full agent capabilities (code analysis, generation, file operations)
 - Persistent across browser sessions
 
 **Directory Terminal** 📁
@@ -147,7 +152,7 @@ Bob provides two types of terminal access for each instance:
 ### Instance Management
 
 **Starting/Stopping Instances**
-- Use the ⚡ **Start** button to launch Claude in a worktree
+- Use the ⚡ **Start** button to launch an AI agent in a worktree
 - Use the ⏸️ **Stop** button to gracefully shutdown an instance
 - Use the 🔄 **Restart** button to reboot a problematic instance
 
@@ -183,10 +188,11 @@ Bob is built with a modern, scalable architecture:
 
 ### Key Services
 
-**ClaudeService**
-- Manages Claude Code process lifecycle
+**AgentService**
+- Manages AI agent process lifecycle (Claude, Kiro, Codex, Gemini)
 - Handles instance creation, monitoring, and cleanup
 - Implements process isolation and resource management
+- Multi-agent adapter system for pluggable agent support
 
 **TerminalService**
 - Creates and manages PTY sessions
@@ -344,13 +350,13 @@ terminal.current = new Terminal({
 - `DELETE /api/repositories/:id` - Remove repository
 
 **Instances**
-- `GET /api/instances` - List all Claude instances
+- `GET /api/instances` - List all AI agent instances
 - `POST /api/instances/start/:worktreeId` - Start instance
 - `POST /api/instances/stop/:instanceId` - Stop instance
 - `POST /api/instances/restart/:instanceId` - Restart instance
 
 **Terminal Sessions**
-- `POST /api/instances/terminal/:instanceId` - Create Claude terminal session
+- `POST /api/instances/terminal/:instanceId` - Create agent terminal session
 - `POST /api/instances/directory/:instanceId` - Create directory terminal session
 - `GET /api/instances/sessions/:instanceId` - List active sessions
 - `DELETE /api/instances/sessions/:sessionId` - Close session
@@ -391,13 +397,18 @@ Bob welcomes contributions! Here's how to get involved:
 
 ### Common Issues
 
-**Claude Code Not Found**
+**AI Agent CLI Not Found**
+Install at least one AI agent CLI:
 ```bash
-# Install Claude Code CLI
-curl -fsSL https://claude.ai/install.sh | sh
+# Kiro
+npm install -g kiro-cli
+kiro-cli --version
 
-# Verify installation
+# Claude Code
+curl -fsSL https://claude.ai/install.sh | sh
 claude --version
+
+# Check other agents based on their documentation
 ```
 
 **Permission Errors**

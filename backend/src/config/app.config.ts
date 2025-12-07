@@ -5,11 +5,11 @@ export const appConfig = {
   // Application name - can be overridden via APP_NAME env var
   name: process.env.APP_NAME || 'Bob',
 
-  // GitHub auth - disabled for Electron builds by default
-  enableGithubAuth: process.env.ENABLE_GITHUB_AUTH !== 'false',
+  // GitHub auth - disabled by default, enabled only when explicitly requested
+  enableGithubAuth: process.env.USE_GITHUB_AUTH === 'true',
 
-  // Jeff mode - restricts to Amazon Q agent only
-  // When enabled: renames app to "Jeff" and shows only Amazon Q
+  // Jeff mode - restricts to Kiro agent only
+  // When enabled: renames app to "Jeff" and shows only Kiro
   jeffMode: process.env.JEFF_MODE === 'true',
 
   // Get the effective app name (respects Jeff mode)
@@ -23,7 +23,7 @@ export const appConfig = {
   // Get allowed agent types based on mode
   getAllowedAgents(): string[] {
     if (this.jeffMode) {
-      return ['amazon-q'];
+      return ['kiro'];
     }
     // Return null to indicate all agents are allowed
     return [];

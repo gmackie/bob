@@ -121,7 +121,11 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
   // Helper methods for subclasses
   protected async runCommand(args: string[], timeoutMs: number = 10000): Promise<{ stdout: string; stderr: string; code: number }> {
     return new Promise((resolve, reject) => {
-      const child = spawn(this.command, args, { stdio: 'pipe' });
+      const child = spawn(this.command, args, {
+        stdio: 'pipe',
+        env: process.env as { [key: string]: string },
+        shell: true // Use shell to properly resolve commands and handle shebangs
+      });
       let stdout = '';
       let stderr = '';
 

@@ -73,7 +73,7 @@ describe('GitService', () => {
       const repo = await gitService.addRepository('/test/repo');
       const repoId = repo.id;
 
-      const agents: AgentType[] = ['claude', 'codex', 'gemini', 'amazon-q', 'cursor-agent', 'opencode'];
+      const agents: AgentType[] = ['claude', 'codex', 'gemini', 'kiro', 'cursor-agent', 'opencode'];
 
       for (const agent of agents) {
         const worktree = await gitService.createWorktree(repoId, `branch-${agent}`, undefined, agent);

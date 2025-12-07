@@ -15,7 +15,7 @@ const migration: Migration = {
         id TEXT PRIMARY KEY,
         repository_id TEXT NOT NULL,
         worktree_id TEXT NOT NULL,
-        agent_type TEXT NOT NULL DEFAULT 'claude' CHECK (agent_type IN ('claude', 'codex', 'gemini', 'amazon-q', 'cursor-agent', 'opencode')),
+        agent_type TEXT NOT NULL DEFAULT 'claude' CHECK (agent_type IN ('claude', 'codex', 'gemini', 'kiro', 'cursor-agent', 'opencode')),
         status TEXT NOT NULL CHECK (status IN ('starting', 'running', 'stopped', 'error')),
         pid INTEGER,
         port INTEGER,
@@ -47,7 +47,7 @@ const migration: Migration = {
     // Step 4: Add preferred_agent column to worktrees table
     await run(`
       ALTER TABLE worktrees ADD COLUMN preferred_agent TEXT DEFAULT 'claude'
-      CHECK (preferred_agent IN ('claude', 'codex', 'gemini', 'amazon-q', 'cursor-agent', 'opencode'))
+      CHECK (preferred_agent IN ('claude', 'codex', 'gemini', 'kiro', 'cursor-agent', 'opencode'))
     `);
 
     // Step 5: Create indexes for the new table

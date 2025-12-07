@@ -176,7 +176,7 @@ APP_NAME="CustomName" node scripts/set-product-name.js
 
 | Variable | Values | Tested | Works |
 |----------|--------|--------|-------|
-| `ENABLE_GITHUB_AUTH` | `true`, `false` | ✓ | ✓ |
+| `USE_GITHUB_AUTH` | `true`, `false` | ✓ | ✓ |
 | `JEFF_MODE` | `true`, `false` | ✓ | ✓ |
 | `APP_NAME` | Any string | ✓ | ✓ |
 
@@ -188,12 +188,12 @@ All new scripts added to package.json:
 
 ```json
 {
-  "dev:jeff": "JEFF_MODE=true ENABLE_GITHUB_AUTH=false ...",
+  "dev:jeff": "JEFF_MODE=true USE_GITHUB_AUTH=false ...",
   "set-product-name": "node scripts/set-product-name.js",
-  "build:app:no-auth": "ENABLE_GITHUB_AUTH=false ...",
-  "build:app:jeff": "JEFF_MODE=true ENABLE_GITHUB_AUTH=false ...",
-  "start:jeff": "JEFF_MODE=true ENABLE_GITHUB_AUTH=false ...",
-  "dist:jeff": "JEFF_MODE=true ENABLE_GITHUB_AUTH=false ..."
+  "build:app:no-auth": "USE_GITHUB_AUTH=false ...",
+  "build:app:jeff": "JEFF_MODE=true USE_GITHUB_AUTH=false ...",
+  "start:jeff": "JEFF_MODE=true USE_GITHUB_AUTH=false ...",
+  "dist:jeff": "JEFF_MODE=true USE_GITHUB_AUTH=false ..."
 }
 ```
 

@@ -1,16 +1,16 @@
 import { BaseAgentAdapter } from './base-adapter.js';
 import { AgentType } from '../types.js';
 
-export class AmazonQAdapter extends BaseAgentAdapter {
-  readonly type: AgentType = 'amazon-q';
-  readonly name = 'Amazon Q';
-  readonly command = 'q';
+export class KiroAdapter extends BaseAgentAdapter {
+  readonly type: AgentType = 'kiro';
+  readonly name = 'Kiro';
+  readonly command = 'kiro-cli';
 
   getSpawnArgs(options?: { interactive?: boolean; port?: number }): { command: string; args: string[]; env?: Record<string, string> } {
     const args: string[] = ['chat'];
     const env: Record<string, string> = {};
 
-    // Amazon Q chat is primarily interactive
+    // Kiro chat is primarily interactive
     // Add any additional configuration if needed
 
     return {
@@ -22,7 +22,7 @@ export class AmazonQAdapter extends BaseAgentAdapter {
 
   async checkAvailability(): Promise<{ isAvailable: boolean; version?: string; statusMessage?: string }> {
     try {
-      // Amazon Q might not have a --version flag, so try --help or the basic command
+      // kiro-cli might not have a --version flag, so try --help or the basic command
       const result = await this.runCommand(['--help']);
       return {
         isAvailable: result.code === 0,
@@ -39,27 +39,26 @@ export class AmazonQAdapter extends BaseAgentAdapter {
 
   async checkAuthentication(): Promise<{ isAuthenticated: boolean; authenticationStatus?: string; statusMessage?: string }> {
     try {
-      // Try to run q chat command to check authentication
-      // This might require AWS CLI authentication
+      // Try to run kiro-cli chat command to check authentication
       const result = await this.runCommand(['chat', '--help']);
 
       if (result.code === 0) {
         return {
           isAuthenticated: true,
           authenticationStatus: 'Authenticated',
-          statusMessage: 'Amazon Q is available and authenticated'
+          statusMessage: 'Kiro is available and authenticated'
         };
       } else if (result.stderr.includes('auth') || result.stderr.includes('credential')) {
         return {
           isAuthenticated: false,
           authenticationStatus: 'Not authenticated',
-          statusMessage: 'Amazon Q requires AWS authentication'
+          statusMessage: 'Kiro requires authentication'
         };
       } else {
         return {
           isAuthenticated: false,
           authenticationStatus: 'Error',
-          statusMessage: `Amazon Q error: ${result.stderr}`
+          statusMessage: `Kiro error: ${result.stderr}`
         };
       }
     } catch (error) {
@@ -73,7 +72,7 @@ export class AmazonQAdapter extends BaseAgentAdapter {
 
   parseOutput(output: string): { inputTokens?: number; outputTokens?: number; cost?: number } | null {
     try {
-      // Amazon Q may have different output formats
+      // Kiro may have different output formats
       const lines = output.split('\n');
       for (const line of lines) {
         const trimmed = line.trim();
@@ -94,7 +93,7 @@ export class AmazonQAdapter extends BaseAgentAdapter {
           }
         }
 
-        // Look for AWS-style usage reporting
+        // Look for usage reporting
         const usageMatch = line.match(/Usage:\s*(\d+)\s*input,?\s*(\d+)\s*output/i);
         if (usageMatch) {
           const inputTokens = parseInt(usageMatch[1]);
@@ -107,15 +106,15 @@ export class AmazonQAdapter extends BaseAgentAdapter {
         }
       }
     } catch (error) {
-      console.log(`Failed to parse Amazon Q output:`, error);
+      console.log(`Failed to parse Kiro output:`, error);
     }
     return null;
   }
 
   protected isAgentReady(data: string, fullOutput: string): boolean {
-    // Amazon Q is ready when it shows its chat interface
-    return data.includes('Amazon Q') ||
-           data.includes('Q:') ||
+    // Kiro is ready when it shows its chat interface
+    return data.includes('Kiro') ||
+           data.includes('kiro') ||
            data.includes('chat') ||
            data.includes('>') ||
            data.includes('Welcome') ||
@@ -123,9 +122,10 @@ export class AmazonQAdapter extends BaseAgentAdapter {
   }
 
   protected parseVersion(output: string): string | undefined {
-    // Amazon Q might not follow standard version patterns
+    // Kiro might not follow standard version patterns
     const versionPatterns = [
-      /Amazon Q.*?([0-9]+\.[0-9]+\.[0-9]+)/i,
+      /Kiro.*?([0-9]+\.[0-9]+\.[0-9]+)/i,
+      /kiro-cli.*?([0-9]+\.[0-9]+\.[0-9]+)/i,
       /version\s+([^\s\n]+)/i,
       /v?(\d+\.\d+\.\d+[^\s]*)/,
       /(\d+\.\d+\.\d+)/
@@ -139,14 +139,11 @@ export class AmazonQAdapter extends BaseAgentAdapter {
     }
 
     // If no version found, return a generic indicator
-    return 'AWS CLI';
+    return 'Installed';
   }
 
   private calculateCost(inputTokens: number, outputTokens: number): number {
-    // Amazon Q pricing varies by plan
-    // Using approximate pricing for conversation usage
-    // Professional plan: approximately $20/user/month with usage limits
-    // For calculation purposes, estimate per-token costs
+    // Kiro pricing - using approximate per-token costs
     const inputCost = (inputTokens / 1000000) * 1.00;
     const outputCost = (outputTokens / 1000000) * 3.00;
     return inputCost + outputCost;

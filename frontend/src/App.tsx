@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
-import { Repository, ClaudeInstance, Worktree } from './types';
+import { Repository, ClaudeInstance, Worktree, AgentType } from './types';
 import { api } from './api';
 import { RepositoryPanel } from './components/RepositoryPanel';
 import { AgentPanel } from './components/AgentPanel';
@@ -53,7 +53,7 @@ function MainApp() {
   const [selectedWorktreeId, setSelectedWorktreeId] = useState<string | null>(null);
   const [selectedRepositoryId, setSelectedRepositoryId] = useState<string | null>(null);
   const [appName, setAppName] = useState('Bob');
-  const [enableGithubAuth, setEnableGithubAuth] = useState(true);
+  const [enableGithubAuth, setEnableGithubAuth] = useState(false);
 
   useEffect(() => {
     // Load app config first
@@ -137,10 +137,10 @@ function MainApp() {
     }
   };
 
-  const handleCreateWorktreeAndStartInstance = async (repositoryId: string, branchName: string) => {
+  const handleCreateWorktreeAndStartInstance = async (repositoryId: string, branchName: string, agentType?: AgentType) => {
     try {
       const worktree = await api.createWorktree(repositoryId, branchName);
-      await api.startInstance(worktree.id);
+      await api.startInstance(worktree.id, agentType);
       await loadData();
       setSelectedWorktreeId(worktree.id);
       setError(null);

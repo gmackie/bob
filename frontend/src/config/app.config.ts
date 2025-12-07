@@ -16,7 +16,9 @@ export const getAppConfig = async (): Promise<AppConfig> => {
   }
 
   try {
-    const apiBase = import.meta.env.MODE === 'production' && import.meta.env.VITE_API_URL
+    const mode = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.MODE : undefined;
+    const apiUrl = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_API_URL : undefined;
+    const apiBase = mode === 'production' && apiUrl
       ? import.meta.env.VITE_API_URL
       : '';
 
@@ -30,12 +32,13 @@ export const getAppConfig = async (): Promise<AppConfig> => {
   } catch (error) {
     console.error('Failed to load app config, using defaults:', error);
     // Return defaults if config fetch fails
-    return {
+    cachedConfig = {
       appName: 'Bob',
-      enableGithubAuth: true,
+      enableGithubAuth: false,
       jeffMode: false,
       allowedAgents: []
     };
+    return cachedConfig;
   }
 };
 

@@ -15,6 +15,6 @@ import { agentFactory } from '../src/agents/agent-factory';
 describe('agentFactory', () => {
   it('includes expected agent types', () => {
     const types = agentFactory.getAvailableTypes();
-    expect(types).toEqual(expect.arrayContaining(['claude', 'codex', 'gemini', 'amazon-q']));
+    expect(types).toEqual(expect.arrayContaining(['claude', 'codex', 'gemini', 'kiro']));
   });
 });

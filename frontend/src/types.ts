@@ -16,7 +16,7 @@ export interface Worktree {
   isMainWorktree: boolean;
 }
 
-export type AgentType = 'claude' | 'cursor-agent' | 'codex' | 'gemini' | 'amazon-q' | 'opencode';
+export type AgentType = 'claude' | 'cursor-agent' | 'codex' | 'gemini' | 'kiro' | 'opencode';
 
 export interface AgentInfo {
   type: AgentType;

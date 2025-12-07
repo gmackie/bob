@@ -21,8 +21,11 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.18.2",
+    "express-session": "^1.18.2",
     "lightningcss": "^1.30.2",
     "node-pty": "^1.0.0",
+    "passport": "^0.7.0",
+    "passport-github2": "^0.1.12",
     "sqlite3": "^5.1.6",
     "ws": "^8.16.0"
   },
@@ -37,8 +40,8 @@
     "@types/ws": "^8.18.1",
     "@vitest/ui": "^3.2.4",
     "supertest": "^7.1.4",
-    "turbowatch": "^2.29.4",
     "tsx": "^4.7.0",
+    "turbowatch": "^2.29.4",
     "typescript": "^5.3.3",
     "vitest": "^3.2.4"
   }

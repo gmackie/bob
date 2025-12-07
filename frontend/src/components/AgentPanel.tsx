@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ClaudeInstance, Worktree } from '../types';
+import { ClaudeInstance, Worktree, AgentInfo } from '../types';
 import { TerminalComponent } from './Terminal';
 import { DeleteWorktreeModal } from './DeleteWorktreeModal';
 import { api } from '../api';
@@ -927,6 +927,32 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const [allInstanceSessions, setAllInstanceSessions] = useState<Map<string, { claude: string | null; directory: string | null }>>(new Map());
   const lastAutoConnectInstance = useRef<string>('');
 
+  // Session cache for storing terminal session IDs per instance
+  const sessionCacheRef = useRef<Map<string, { claude: string | null; directory: string | null }>>(new Map());
+  const sessionCacheHelpers = {
+    get: (instanceId: string) => sessionCacheRef.current.get(instanceId),
+    setClaude: (instanceId: string, sessionId: string) => {
+      const existing = sessionCacheRef.current.get(instanceId) || { claude: null, directory: null };
+      sessionCacheRef.current.set(instanceId, { ...existing, claude: sessionId });
+    },
+    setDirectory: (instanceId: string, sessionId: string) => {
+      const existing = sessionCacheRef.current.get(instanceId) || { claude: null, directory: null };
+      sessionCacheRef.current.set(instanceId, { ...existing, directory: sessionId });
+    },
+    clearClaude: (instanceId: string) => {
+      const existing = sessionCacheRef.current.get(instanceId);
+      if (existing) {
+        sessionCacheRef.current.set(instanceId, { ...existing, claude: null });
+      }
+    },
+    clearDirectory: (instanceId: string) => {
+      const existing = sessionCacheRef.current.get(instanceId);
+      if (existing) {
+        sessionCacheRef.current.set(instanceId, { ...existing, directory: null });
+      }
+    }
+  };
+
   // Git state
   const [gitDiff, setGitDiff] = useState<string>('');
   const [gitLoading, setGitLoading] = useState(false);
@@ -946,6 +972,29 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const [analysisSummary, setAnalysisSummary] = useState<string>('');
   const [currentAnalysisId, setCurrentAnalysisId] = useState<string | null>(null);
   const [isApplyingFixes, setIsApplyingFixes] = useState(false);
+
+  // Available agents state
+  const [availableAgents, setAvailableAgents] = useState<AgentInfo[]>([]);
+
+  // Notes state
+  const [notesContent, setNotesContent] = useState<string>('');
+  const [notesFileName, setNotesFileName] = useState<string>('');
+  const [unsavedChanges, setUnsavedChanges] = useState<boolean>(false);
+  const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
+
+  // Fetch available agents on mount
+  useEffect(() => {
+    const fetchAgents = async () => {
+      try {
+        const agents = await api.getAgents();
+        setAvailableAgents(agents);
+      } catch (error) {
+        console.error('Failed to fetch available agents:', error);
+        setAvailableAgents([]);
+      }
+    };
+    fetchAgents();
+  }, []);
 
   useEffect(() => {
     // Clear frontend terminal state when switching instances (but keep backend sessions alive)
@@ -1007,14 +1056,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       const runningInstances = allInstances.filter(i => i.status === 'running');
 
       for (const instance of runningInstances) {
-        const cached = sessionCache.get(instance.id);
+        const cached = sessionCacheHelpers.get(instance.id);
         const sessions = allInstanceSessions.get(instance.id) || { claude: null, directory: null };
 
         // Create Claude session if it doesn't exist
         if (!sessions.claude && !cached?.claude) {
           try {
             const sessionId = await onCreateTerminalSession(instance.id);
-            sessionCache.setClaude(instance.id, sessionId);
+            sessionCacheHelpers.setClaude(instance.id, sessionId);
             setAllInstanceSessions(prev => new Map(prev).set(instance.id, { ...sessions, claude: sessionId }));
           } catch (error) {
             console.error(`Failed to create Claude session for instance ${instance.id}:`, error);
@@ -1031,7 +1080,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   useEffect(() => {
     // On instance switch, reuse cached sessionIds if present; do not clear
     if (currentInstance?.id) {
-      const cached = sessionCache.get(currentInstance.id);
+      const cached = sessionCacheHelpers.get(currentInstance.id);
       const instanceSessions = allInstanceSessions.get(currentInstance.id);
 
       // Prioritize cached sessions, then check allInstanceSessions
@@ -1039,7 +1088,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         setClaudeTerminalSessionId(cached.claude);
       } else if (instanceSessions?.claude) {
         setClaudeTerminalSessionId(instanceSessions.claude);
-        sessionCache.setClaude(currentInstance.id, instanceSessions.claude);
+        sessionCacheHelpers.setClaude(currentInstance.id, instanceSessions.claude);
       } else {
         setClaudeTerminalSessionId(null);
       }
@@ -1048,7 +1097,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         setDirectoryTerminalSessionId(cached.directory);
       } else if (instanceSessions?.directory) {
         setDirectoryTerminalSessionId(instanceSessions.directory);
-        sessionCache.setDirectory(currentInstance.id, instanceSessions.directory);
+        sessionCacheHelpers.setDirectory(currentInstance.id, instanceSessions.directory);
       } else {
         setDirectoryTerminalSessionId(null);
       }
@@ -1114,7 +1163,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         // Create new session
         const sessionId = await onCreateTerminalSession(selectedInstance.id);
         setClaudeTerminalSessionId(sessionId);
-        sessionCache.setClaude(currentInstance.id, sessionId);
+        sessionCacheHelpers.setClaude(currentInstance.id, sessionId);
       }
       setActiveTab('claude');
     } catch (error) {
@@ -1141,7 +1190,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         // Create new session
         const sessionId = await onCreateDirectoryTerminalSession(selectedInstance.id);
         setDirectoryTerminalSessionId(sessionId);
-        sessionCache.setDirectory(currentInstance.id, sessionId);
+        sessionCacheHelpers.setDirectory(currentInstance.id, sessionId);
       }
       setActiveTab('directory');
     } catch (error) {
@@ -1232,14 +1281,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     setIsDeleting(instanceId);
     try {
       // Close any cached sessions
-      const cached = sessionCache.get(instanceId);
+      const cached = sessionCacheHelpers.get(instanceId);
       if (cached?.claude) {
         onCloseTerminalSession(cached.claude);
-        sessionCache.clearClaude(instanceId);
+        sessionCacheHelpers.clearClaude(instanceId);
       }
       if (cached?.directory) {
         onCloseTerminalSession(cached.directory);
-        sessionCache.clearDirectory(instanceId);
+        sessionCacheHelpers.clearDirectory(instanceId);
       }
 
       // Remove from allInstanceSessions
@@ -1284,14 +1333,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       // Delete all stopped instances
       await Promise.all(stoppedInstances.map(instance => {
         // Close any cached sessions
-        const cached = sessionCache.get(instance.id);
+        const cached = sessionCacheHelpers.get(instance.id);
         if (cached?.claude) {
           onCloseTerminalSession(cached.claude);
-          sessionCache.clearClaude(instance.id);
+          sessionCacheHelpers.clearClaude(instance.id);
         }
         if (cached?.directory) {
           onCloseTerminalSession(cached.directory);
-          sessionCache.clearDirectory(instance.id);
+          sessionCacheHelpers.clearDirectory(instance.id);
         }
 
         // Remove from allInstanceSessions
@@ -1704,6 +1753,13 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   // Determine available agents that are ready to start
   const readyAgents = availableAgents.filter(a => a.isAvailable && (a.isAuthenticated ?? true));
 
+  // Get agent display name
+  const getAgentDisplayName = () => {
+    if (!selectedInstance) return 'Agent';
+    const agent = availableAgents.find(a => a.type === selectedInstance.agentType);
+    return agent?.name || selectedInstance.agentType.charAt(0).toUpperCase() + selectedInstance.agentType.slice(1);
+  };
+
   // Set currentInstance to null if no instances, but still show the panel
   // Only the agent tab will be disabled without an instance
 
@@ -1712,51 +1768,53 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       <div className="panel-header">
         <div>
           <h3 style={{ margin: 0, color: '#ffffff' }}>
-            Claude Instance
-            <span 
-              className={`status ${selectedInstance.status}`}
-              style={{ 
-                marginLeft: '12px',
-                fontSize: '11px',
-                padding: '2px 6px',
-                borderRadius: '3px',
-                backgroundColor: 
-                  selectedInstance.status === 'running' ? '#28a745' :
-                  selectedInstance.status === 'starting' ? '#ffc107' :
-                  selectedInstance.status === 'stopped' ? '#6c757d' : '#dc3545',
-                color: selectedInstance.status === 'starting' ? '#000' : '#fff'
-              }}
-            >
-              {selectedInstance.status}
-            </span>
+            {getAgentDisplayName()} Instance
+            {selectedInstance && (
+              <span
+                className={`status ${selectedInstance.status}`}
+                style={{
+                  marginLeft: '12px',
+                  fontSize: '11px',
+                  padding: '2px 6px',
+                  borderRadius: '3px',
+                  backgroundColor:
+                    selectedInstance.status === 'running' ? '#28a745' :
+                    selectedInstance.status === 'starting' ? '#ffc107' :
+                    selectedInstance.status === 'stopped' ? '#6c757d' : '#dc3545',
+                  color: selectedInstance.status === 'starting' ? '#000' : '#fff'
+                }}
+              >
+                {selectedInstance.status}
+              </span>
+            )}
           </h3>
           <div style={{ fontSize: '12px', color: '#888', marginTop: '2px' }}>
             {selectedWorktree.branch} • {selectedWorktree.path}
-            {selectedInstance.pid && <span> • PID: {selectedInstance.pid}</span>}
-            {selectedInstance.port && <span> • Port: {selectedInstance.port}</span>}
+            {selectedInstance?.pid && <span> • PID: {selectedInstance.pid}</span>}
+            {selectedInstance?.port && <span> • Port: {selectedInstance.port}</span>}
           </div>
         </div>
-        
+
         <div style={{ display: 'flex', gap: '8px' }}>
-          {selectedInstance.status === 'running' && (
+          {selectedInstance?.status === 'running' && (
             <button
               onClick={handleStopInstance}
               disabled={isStopping}
               className="button danger"
               style={{ fontSize: '12px', padding: '6px 12px' }}
             >
-              {isStopping ? 'Stopping...' : 'Stop Claude'}
+              {isStopping ? 'Stopping...' : `Stop ${getAgentDisplayName()}`}
             </button>
           )}
-          
-          {(selectedInstance.status === 'stopped' || selectedInstance.status === 'error') && (
+
+          {(selectedInstance?.status === 'stopped' || selectedInstance?.status === 'error') && (
             <button
               onClick={handleRestartInstance}
               disabled={isRestarting}
               className="button"
               style={{ fontSize: '12px', padding: '6px 12px' }}
             >
-              {isRestarting ? 'Restarting...' : 'Restart Claude'}
+              {isRestarting ? 'Restarting...' : `Restart ${getAgentDisplayName()}`}
             </button>
           )}
         </div>
@@ -1945,30 +2003,30 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           ) : currentInstance?.status === 'running' ? (
             <div className="empty-terminal" style={{ flex: 1 }}>
               <div style={{ textAlign: 'center' }}>
-                <h4 style={{ color: '#666', marginBottom: '8px' }}>Claude Terminal</h4>
+                <h4 style={{ color: '#666', marginBottom: '8px' }}>{getAgentDisplayName()} Terminal</h4>
                 {isCreatingClaudeSession ? (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', color: '#888' }}>
-                    <div style={{ 
-                      width: '16px', 
-                      height: '16px', 
-                      border: '2px solid #444', 
-                      borderTop: '2px solid #888', 
+                    <div style={{
+                      width: '16px',
+                      height: '16px',
+                      border: '2px solid #444',
+                      borderTop: '2px solid #888',
                       borderRadius: '50%',
-                      animation: 'spin 1s linear infinite' 
+                      animation: 'spin 1s linear infinite'
                     }}></div>
-                    Connecting to Claude...
+                    Connecting to {getAgentDisplayName()}...
                   </div>
                 ) : (
                   <>
                     <p style={{ color: '#888', fontSize: '14px', marginBottom: '16px' }}>
-                      Connect to the running Claude instance for AI assistance
+                      Connect to the running {getAgentDisplayName()} instance for AI assistance
                     </p>
                     <button
                       onClick={handleOpenClaudeTerminal}
                       className="button"
                       style={{ fontSize: '14px', padding: '8px 16px' }}
                     >
-                      Connect to Claude
+                      Connect to {getAgentDisplayName()}
                     </button>
                   </>
                 )}
@@ -1977,26 +2035,26 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           ) : currentInstance?.status === 'starting' ? (
             <div className="empty-terminal" style={{ flex: 1 }}>
               <div style={{ textAlign: 'center' }}>
-                <h4 style={{ color: '#666', marginBottom: '8px' }}>Claude Terminal</h4>
+                <h4 style={{ color: '#666', marginBottom: '8px' }}>{getAgentDisplayName()} Terminal</h4>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', color: '#888' }}>
-                  <div style={{ 
-                    width: '16px', 
-                    height: '16px', 
-                    border: '2px solid #444', 
-                    borderTop: '2px solid #ffc107', 
+                  <div style={{
+                    width: '16px',
+                    height: '16px',
+                    border: '2px solid #444',
+                    borderTop: '2px solid #ffc107',
                     borderRadius: '50%',
-                    animation: 'spin 1s linear infinite' 
+                    animation: 'spin 1s linear infinite'
                   }}></div>
-                  Starting Claude instance...
+                  Starting {getAgentDisplayName()} instance...
                 </div>
               </div>
             </div>
           ) : (
             <div className="empty-terminal" style={{ flex: 1 }}>
               <div style={{ textAlign: 'center' }}>
-                <h4 style={{ color: '#666', marginBottom: '8px' }}>Claude Terminal</h4>
+                <h4 style={{ color: '#666', marginBottom: '8px' }}>{getAgentDisplayName()} Terminal</h4>
                 <p style={{ color: '#888', fontSize: '14px' }}>
-                  Claude instance must be running to connect
+                  {getAgentDisplayName()} instance must be running to connect
                 </p>
               </div>
             </div>

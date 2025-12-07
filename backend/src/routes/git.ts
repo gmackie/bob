@@ -79,9 +79,9 @@ async function callAgent(agentType: string | undefined, prompt: string, input: s
           // Best-effort: pass prompt as first arg; many CLIs read stdin content
           args = [prompt];
           break;
-        case 'amazon-q':
-          // Amazon Q is primarily interactive; fall back immediately
-          throw new Error('Amazon Q non-interactive commit generation not supported');
+        case 'kiro':
+          // Kiro is primarily interactive; fall back immediately
+          throw new Error('Kiro non-interactive commit generation not supported');
         default:
           throw new Error(`Unsupported agent type: ${type}`);
       }

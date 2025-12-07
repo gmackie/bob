@@ -4,19 +4,19 @@
 
 ### 1. 🔵 Standard Bob Mode (Production Web)
 ```bash
-npm run dev
+USE_GITHUB_AUTH=true npm run dev
 npm run build:app
 npm run dist
 ```
 - **Name**: Bob
-- **Auth**: GitHub OAuth enabled
+- **Auth**: GitHub OAuth enabled when `USE_GITHUB_AUTH=true`
 - **Agents**: All available (Claude, Codex, Gemini, Amazon Q, OpenCode, Cursor)
 - **Use Case**: Production web deployment with authentication
 
 ### 2. 🟢 No-Auth Bob Mode (Electron Desktop)
 ```bash
-ENABLE_GITHUB_AUTH=false npm run dev
 npm run build:app:no-auth
+npm run dev
 ```
 - **Name**: Bob
 - **Auth**: Disabled
@@ -40,7 +40,7 @@ npm run dist:jeff
 
 | Variable | Default | Jeff Mode | Description |
 |----------|---------|-----------|-------------|
-| `ENABLE_GITHUB_AUTH` | `true` | `false` | Enable/disable GitHub OAuth |
+| `USE_GITHUB_AUTH` | `false` | `false` | Enable/disable GitHub OAuth |
 | `JEFF_MODE` | `false` | `true` | Enable Jeff mode (renames app, filters agents) |
 | `APP_NAME` | `Bob` | `Bob` | Custom app name (overridden by JEFF_MODE) |
 
@@ -131,8 +131,8 @@ node /tmp/comprehensive-test.js
 
 **Issue**: Auth still shows when disabled
 ```bash
-# Ensure exact value
-ENABLE_GITHUB_AUTH=false npm run dev
+# Ensure the flag is off
+USE_GITHUB_AUTH=false npm run dev
 ```
 
 **Issue**: Wrong app name in Electron build

@@ -125,9 +125,14 @@ class WebSocketManager {
   private async createConnection(sessionId: string, onMessage: (message: any) => void): Promise<void> {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 
-    // Use same host - nginx proxies WebSocket to backend based on ?sessionId= pattern
-    // Don't specify port - it uses the default port for the protocol (443 for wss, 80 for ws)
-    const wsUrl = `${wsProtocol}//${window.location.hostname}?sessionId=${sessionId}`;
+    // In development, connect directly to backend WebSocket server
+    // In production, use same host as frontend (nginx proxies WebSocket)
+    const isDevelopment = import.meta.env.MODE === 'development';
+    const backendUrl = isDevelopment
+      ? 'localhost:43829'  // Backend server port
+      : window.location.host;  // Use host (includes port if specified)
+
+    const wsUrl = `${wsProtocol}//${backendUrl}?sessionId=${sessionId}`;
 
     console.log('[WebSocketManager] Creating connection to:', wsUrl);
 

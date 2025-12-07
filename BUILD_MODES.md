@@ -12,17 +12,17 @@ Bob supports multiple build configurations to accommodate different deployment s
 
 ## Environment Variables
 
-### `ENABLE_GITHUB_AUTH`
+### `USE_GITHUB_AUTH`
 
 Controls whether GitHub OAuth authentication is enabled.
 
-- **Default**: `true` (enabled)
+- **Default**: `false` (disabled)
 - **Values**: `true` | `false`
-- **Use Case**: Set to `false` for Electron builds where GitHub OAuth isn't needed
+- **Use Case**: Set to `true` for deployments that should require GitHub OAuth
 
 **Example**:
 ```bash
-ENABLE_GITHUB_AUTH=false npm run dev
+USE_GITHUB_AUTH=true npm run dev
 ```
 
 ### `JEFF_MODE`
@@ -119,7 +119,7 @@ The backend reads configuration from environment variables in `/backend/src/conf
 ```typescript
 {
   name: process.env.APP_NAME || 'Bob',
-  enableGithubAuth: process.env.ENABLE_GITHUB_AUTH !== 'false',
+  enableGithubAuth: process.env.USE_GITHUB_AUTH === 'true',
   jeffMode: process.env.JEFF_MODE === 'true',
   // ... methods for filtering agents
 }
@@ -174,7 +174,7 @@ When building with custom modes:
 
 ```bash
 # Terminal 1: Start with Jeff mode
-JEFF_MODE=true ENABLE_GITHUB_AUTH=false npm run dev
+JEFF_MODE=true USE_GITHUB_AUTH=false npm run dev
 
 # Access at http://localhost:47285
 # - App title shows "Jeff"
@@ -186,7 +186,7 @@ JEFF_MODE=true ENABLE_GITHUB_AUTH=false npm run dev
 
 ```bash
 # Build for distribution
-ENABLE_GITHUB_AUTH=false npm run build:app
+USE_GITHUB_AUTH=false npm run build:app
 
 # Result: Bob.exe (or .dmg, .AppImage) without GitHub auth
 ```
@@ -208,7 +208,7 @@ npm run dist:jeff
 ```bash
 # Set environment variables
 export JEFF_MODE=true
-export ENABLE_GITHUB_AUTH=false
+export USE_GITHUB_AUTH=false
 
 # Start production server
 npm start
@@ -242,7 +242,7 @@ npm run dev:jeff
 # Verify: title = "Jeff", only Amazon Q available
 
 # Test no-auth mode
-ENABLE_GITHUB_AUTH=false npm run dev:clean
+USE_GITHUB_AUTH=false npm run dev:clean
 # Verify: no auth button, all agents available
 ```
 
@@ -272,14 +272,13 @@ npm run dev:clean
 
 ### Auth Still Appearing
 
-Make sure ENABLE_GITHUB_AUTH is exactly `false`:
+Confirm `USE_GITHUB_AUTH` is only set when you want auth turned on:
 ```bash
-# Correct
-ENABLE_GITHUB_AUTH=false npm run dev
+# Disable GitHub auth (default)
+USE_GITHUB_AUTH=false npm run dev
 
-# Incorrect (will enable auth)
-ENABLE_GITHUB_AUTH=0 npm run dev
-ENABLE_GITHUB_AUTH=no npm run dev
+# Enable GitHub auth explicitly
+USE_GITHUB_AUTH=true npm run dev
 ```
 
 ## Notes

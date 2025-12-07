@@ -32,7 +32,7 @@
         "maxRestarts": 3
       }
     },
-    "amazon-q": {
+    "kiro": {
       "enabled": true,
       "default": false,
       "priority": 4,
@@ -65,7 +65,7 @@
   },
   "preferences": {
     "defaultAgent": "claude",
-    "fallbackOrder": ["claude", "codex", "gemini", "amazon-q", "cursor-agent", "opencode"],
+    "fallbackOrder": ["claude", "codex", "gemini", "kiro", "cursor-agent", "opencode"],
     "autoSelectAvailable": true,
     "showUnavailableAgents": true,
     "persistAgentSelection": true

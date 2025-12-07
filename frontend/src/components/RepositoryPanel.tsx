@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Repository, Worktree, ClaudeInstance } from '../types';
+import { Repository, Worktree, ClaudeInstance, AgentInfo, AgentType } from '../types';
 import { DirectoryBrowser } from './DirectoryBrowser';
 import { DeleteWorktreeModal } from './DeleteWorktreeModal';
+import { api } from '../api';
 
 interface RepositoryPanelProps {
   repositories: Repository[];
@@ -10,7 +11,7 @@ interface RepositoryPanelProps {
   selectedWorktreeId: string | null;
   selectedRepositoryId: string | null;
   onAddRepository: (path: string) => void;
-  onCreateWorktreeAndStartInstance: (repositoryId: string, branchName: string) => void;
+  onCreateWorktreeAndStartInstance: (repositoryId: string, branchName: string, agentType?: AgentType) => void;
   onSelectWorktree: (worktreeId: string) => Promise<void>;
   onSelectRepository: (repositoryId: string) => void;
   onDeleteWorktree: (worktreeId: string, force: boolean) => Promise<void>;
@@ -40,6 +41,27 @@ export const RepositoryPanel: React.FC<RepositoryPanelProps> = ({
   const [startingInstances, setStartingInstances] = useState<Set<string>>(new Set());
   const [copiedWorktreeId, setCopiedWorktreeId] = useState<string | null>(null);
   const [refreshingRepositories, setRefreshingRepositories] = useState<Set<string>>(new Set());
+  const [availableAgents, setAvailableAgents] = useState<AgentInfo[]>([]);
+  const [selectedAgentType, setSelectedAgentType] = useState<AgentType | undefined>(undefined);
+
+  // Fetch available agents on mount
+  useEffect(() => {
+    const fetchAgents = async () => {
+      try {
+        const agents = await api.getAgents();
+        setAvailableAgents(agents);
+        // Set default agent (first available and authenticated)
+        const defaultAgent = agents.find(a => a.isAvailable && (a.isAuthenticated ?? true));
+        if (defaultAgent) {
+          setSelectedAgentType(defaultAgent.type);
+        }
+      } catch (error) {
+        console.error('Failed to fetch available agents:', error);
+        setAvailableAgents([]);
+      }
+    };
+    fetchAgents();
+  }, []);
 
   const handleDirectorySelect = (path: string) => {
     onAddRepository(path);
@@ -48,7 +70,7 @@ export const RepositoryPanel: React.FC<RepositoryPanelProps> = ({
 
   const handleCreateWorktree = (repositoryId: string) => {
     if (newBranchName.trim()) {
-      onCreateWorktreeAndStartInstance(repositoryId, newBranchName.trim());
+      onCreateWorktreeAndStartInstance(repositoryId, newBranchName.trim(), selectedAgentType);
       setNewBranchName('');
       setShowNewWorktreeForm(null);
     }
@@ -243,35 +265,49 @@ export const RepositoryPanel: React.FC<RepositoryPanelProps> = ({
 
                     {showNewWorktreeForm === repo.id && (
                       <div style={{ padding: '12px 16px', background: '#2a2a2a', borderTop: '1px solid #444' }}>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           <input
                             type="text"
                             value={newBranchName}
                             onChange={(e) => setNewBranchName(e.target.value)}
                             placeholder="Branch name (e.g., feature-xyz)"
                             className="input"
-                            style={{ flex: 1, fontSize: '12px', padding: '6px 8px' }}
+                            style={{ fontSize: '12px', padding: '6px 8px' }}
                             onKeyPress={(e) => e.key === 'Enter' && handleCreateWorktree(repo.id)}
                             autoFocus
                           />
-                          <button
-                            onClick={() => handleCreateWorktree(repo.id)}
-                            disabled={!newBranchName.trim()}
-                            className="button"
-                            style={{ fontSize: '12px', padding: '6px 12px' }}
-                          >
-                            Create
-                          </button>
-                          <button
-                            onClick={() => {
-                              setShowNewWorktreeForm(null);
-                              setNewBranchName('');
-                            }}
-                            className="button secondary"
-                            style={{ fontSize: '12px', padding: '6px 12px' }}
-                          >
-                            Cancel
-                          </button>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            <select
+                              value={selectedAgentType || ''}
+                              onChange={(e) => setSelectedAgentType(e.target.value as AgentType)}
+                              className="input"
+                              style={{ flex: 1, fontSize: '12px', padding: '6px 8px' }}
+                            >
+                              {availableAgents.filter(a => a.isAvailable && (a.isAuthenticated ?? true)).map(agent => (
+                                <option key={agent.type} value={agent.type}>
+                                  {agent.name} {agent.version ? `(${agent.version})` : ''}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => handleCreateWorktree(repo.id)}
+                              disabled={!newBranchName.trim()}
+                              className="button"
+                              style={{ fontSize: '12px', padding: '6px 12px' }}
+                            >
+                              Create
+                            </button>
+                            <button
+                              onClick={() => {
+                                setShowNewWorktreeForm(null);
+                                setNewBranchName('');
+                              }}
+                              className="button secondary"
+                              style={{ fontSize: '12px', padding: '6px 12px' }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
                         </div>
                       </div>
                     )}

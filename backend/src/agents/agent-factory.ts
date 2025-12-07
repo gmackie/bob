@@ -2,7 +2,7 @@ import { AgentAdapter, AgentType, AgentInfo } from '../types.js';
 import { ClaudeAdapter } from './claude-adapter.js';
 import { CodexAdapter } from './codex-adapter.js';
 import { GeminiAdapter } from './gemini-adapter.js';
-import { AmazonQAdapter } from './amazon-q-adapter.js';
+import { KiroAdapter } from './kiro-adapter.js';
 import { OpenCodeAdapter } from './opencode-adapter.js';
 import { CursorAgentAdapter } from './cursor-agent-adapter.js';
 import { appConfig } from '../config/app.config.js';
@@ -21,7 +21,7 @@ export class AgentFactory {
       ['claude', new ClaudeAdapter()],
       ['codex', new CodexAdapter()],
       ['gemini', new GeminiAdapter()],
-      ['amazon-q', new AmazonQAdapter()],
+      ['kiro', new KiroAdapter()],
       ['opencode', new OpenCodeAdapter()],
       ['cursor-agent', new CursorAgentAdapter()]
     ];

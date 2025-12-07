@@ -46,7 +46,7 @@ export interface StartInstanceRequest {
   agentType?: AgentType;
 }
 
-export type AgentType = 'claude' | 'cursor-agent' | 'codex' | 'gemini' | 'amazon-q' | 'opencode';
+export type AgentType = 'claude' | 'cursor-agent' | 'codex' | 'gemini' | 'kiro' | 'opencode';
 
 export interface AgentInfo {
   type: AgentType;

@@ -10,7 +10,11 @@ Before using Bob, ensure you have the following installed:
 
 ```bash
 # Required Dependencies
-claude --version    # Claude CLI for AI features
+# Install at least one AI agent CLI:
+# - claude (Claude Code)
+# - kiro-cli (Kiro)
+# - codex (GitHub Codex)
+# - gemini (Google Gemini)
 gh --version        # GitHub CLI for PR operations
 git --version       # Git for repository management
 node --version      # Node.js runtime
@@ -70,10 +74,10 @@ npm run dev
 - Share links like `http://localhost:5173/?worktree=abc123` for instant access
 - Perfect for team collaboration and bookmarking
 
-### 2. Claude Code Integration
+### 2. AI Agent Integration
 
 **Automatic Instance Management:**
-- Each worktree gets its own isolated Claude Code instance
+- Each worktree gets its own isolated AI agent instance (Claude, Kiro, Codex, Gemini, etc.)
 - Instances auto-start when selecting worktrees
 - View instance status: Running, Starting, Stopped, Error
 - Manual controls: Start, Stop, Restart instances
@@ -127,14 +131,14 @@ gh auth login  # Authenticate with GitHub
 ### 5. System Status Dashboard
 
 **Dependency Monitoring:**
-- ✅ **Claude CLI Status**: Shows availability and version
+- ✅ **AI Agent Status**: Shows availability and version for all installed agents (Claude, Kiro, Codex, Gemini, etc.)
 - ✅ **GitHub CLI Status**: Shows installation, authentication, and user
 - ⚠️ **Authentication Warnings**: Helpful guidance when setup needed
 - ❌ **Missing Tools**: Clear indicators when dependencies unavailable
 
 **Real-time Metrics:**
 - Repository count and worktree statistics
-- Active vs total Claude instances
+- Active vs total AI agent instances
 - Server uptime and memory usage
 - Updates every 10 seconds
 
@@ -154,11 +158,11 @@ gh auth login  # Authenticate with GitHub
 3. **Create Feature Branch**
    - Click "+" next to repository
    - Enter branch name: `feature-awesome-feature`
-   - Bob creates worktree and starts Claude instance
+   - Bob creates worktree and starts an AI agent instance
 
 4. **Develop with AI Assistance**
    - Code in your worktree directory
-   - Use Claude tab for AI assistance
+   - Use the AI agent tab for assistance
    - Analyze changes with Git tab
 
 5. **Create/Update Pull Request**
@@ -183,8 +187,8 @@ This prevents conflicts when multiple dev servers try to use the same ports.
 
 **Worktree Lifecycle:**
 1. **Creation**: `git worktree add ~/.bob/repo-branch -b branch origin/main`
-2. **Claude Instance**: Automatically started for each worktree
-3. **Development**: Isolated environment with dedicated Claude session
+2. **AI Agent Instance**: Automatically started for each worktree
+3. **Development**: Isolated environment with dedicated agent session
 4. **Cleanup**: Safe deletion with merge status checking
 
 **Force Deletion:**
@@ -196,18 +200,18 @@ This prevents conflicts when multiple dev servers try to use the same ports.
 
 ### Backend Services
 - **GitService**: Repository and worktree management
-- **ClaudeService**: Instance lifecycle and communication
+- **AgentService**: Multi-agent instance lifecycle and communication
 - **TerminalService**: WebSocket-based terminal connections
 - **DatabaseService**: SQLite for persistence
 
 ### Frontend Components
 - **RepositoryPanel**: Repository and worktree management UI
-- **TerminalPanel**: Claude interface and git operations
+- **TerminalPanel**: AI agent interface and git operations
 - **SystemStatusDashboard**: Dependency monitoring and metrics
 
 ### API Endpoints
 - `/api/repositories` - Repository CRUD operations
-- `/api/instances` - Claude instance management
+- `/api/instances` - AI agent instance management
 - `/api/git/:worktreeId/*` - Git operations and analysis
 - `/api/system-status` - Dependency and system health checks
 
@@ -215,11 +219,12 @@ This prevents conflicts when multiple dev servers try to use the same ports.
 
 ### Common Issues
 
-**Claude CLI Not Available:**
-```bash
-# Install Claude CLI first
-curl -fsSL https://claude.ai/install.sh | sh
-```
+**AI Agent CLI Not Available:**
+Install at least one AI agent CLI:
+- **Kiro**: `npm install -g kiro-cli` (or follow Kiro installation instructions)
+- **Claude**: Follow Claude Code installation instructions
+- **Codex**: Follow GitHub Codex installation instructions
+- **Gemini**: Follow Google Gemini installation instructions
 
 **GitHub CLI Authentication:**
 ```bash
