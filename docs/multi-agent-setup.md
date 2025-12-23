@@ -122,6 +122,104 @@ Select the agent when creating the worktree.
 2. Start new instance with different agent
 3. Agent preference is saved automatically
 
+## Docker Authentication
+
+When running Bob in Docker, agents that require OAuth authentication (like Claude, Codex, and Gemini) need special handling since the container can't open a browser.
+
+### Recommended Approach: Copy Auth Files
+
+The easiest method is to authenticate locally first, then copy the auth files into the Docker container.
+
+#### Claude Code
+
+1. Authenticate locally:
+   ```bash
+   claude  # Follow the login prompts
+   ```
+
+2. Copy auth to Docker:
+   ```bash
+   docker cp ~/.claude bob:/home/bob/.claude
+   ```
+
+#### Codex (OpenAI)
+
+Codex uses OAuth with a callback to `localhost:1455`. Authenticate locally first:
+
+1. Authenticate locally:
+   ```bash
+   codex  # Select "Sign in with ChatGPT"
+   ```
+
+2. Copy auth to Docker:
+   ```bash
+   docker cp ~/.codex bob:/home/bob/.codex
+   ```
+
+#### Gemini
+
+1. Authenticate locally:
+   ```bash
+   gemini auth login
+   ```
+
+2. Copy auth to Docker:
+   ```bash
+   docker cp ~/.gemini bob:/home/bob/.gemini
+   ```
+
+#### OpenCode
+
+OpenCode is pre-configured to use Claude Opus 4.5 from Anthropic. To authenticate:
+
+1. Authenticate locally using the `/connect` command within OpenCode
+2. Copy auth to Docker:
+   ```bash
+   docker cp ~/.local/share/opencode/auth.json bob:/home/bob/.local/share/opencode/auth.json
+   ```
+
+#### Kiro
+
+1. Authenticate locally:
+   ```bash
+   kiro-cli  # Follow the login prompts
+   ```
+
+2. Copy auth to Docker:
+   ```bash
+   docker cp ~/.kiro bob:/home/bob/.kiro
+   ```
+
+### Persistent Auth with Docker Volumes
+
+The `docker-compose.yml` already mounts volumes for agent configs, so authentication persists across container restarts:
+
+```yaml
+volumes:
+  - claude-config:/home/bob/.claude
+  - gemini-config:/home/bob/.gemini
+  - opencode-config:/home/bob/.opencode
+  - kiro-config:/home/bob/.kiro
+  - codex-config:/home/bob/.codex
+```
+
+After copying auth files once, they will persist in these volumes.
+
+### OpenCode Configuration
+
+OpenCode is pre-configured in Docker to use Claude Opus 4.5 from Anthropic. The default config is at `/home/bob/.config/opencode/opencode.json`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-opus-4-5",
+  "small_model": "anthropic/claude-haiku-4-5",
+  "autoupdate": false
+}
+```
+
+To change the default model, edit this file or mount a custom config.
+
 ## Troubleshooting
 
 ### Agent Not Available
@@ -133,6 +231,7 @@ Select the agent when creating the worktree.
 - Run agent auth command directly
 - Check System Status for specific guidance
 - Some agents require browser authentication
+- For Docker, use the copy-auth-file approach described above
 
 ### Performance Issues
 - Limit concurrent instances to 3-4

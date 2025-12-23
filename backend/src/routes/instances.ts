@@ -143,5 +143,16 @@ export function createInstanceRoutes(
     }
   });
 
+  // System terminal - not tied to any instance
+  router.post('/system-terminal', (req, res) => {
+    try {
+      const { cwd, initialCommand } = req.body || {};
+      const session = terminalService.createSystemSession(cwd, initialCommand);
+      res.json({ sessionId: session.id });
+    } catch (error) {
+      res.status(500).json({ error: `Failed to create system terminal: ${error}` });
+    }
+  });
+
   return router;
 }

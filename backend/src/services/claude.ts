@@ -3,6 +3,7 @@ import { spawn as spawnPty, IPty } from 'node-pty';
 import { ClaudeInstance, Worktree, AgentType } from '../types.js';
 import { GitService } from './git.js';
 import { DatabaseService } from '../database/database.js';
+import { getAgentCommand } from '../utils/agentPaths.js';
 
 export class ClaudeService {
   private instances = new Map<string, ClaudeInstance>();
@@ -104,7 +105,7 @@ export class ClaudeService {
     return new Promise((resolve, reject) => {
       console.log(`Starting Claude Code in directory: ${worktree.path}`);
       
-      const claudeProcess = spawn('claude', [], {
+      const claudeProcess = spawn(getAgentCommand('claude'), [], {
         cwd: worktree.path,
         stdio: ['pipe', 'pipe', 'pipe'],
         shell: false,
@@ -196,7 +197,7 @@ export class ClaudeService {
     return new Promise((resolve, reject) => {
       console.log(`Starting Claude Code PTY in directory: ${worktree.path}`);
       
-      const claudePty = spawnPty('claude', [], {
+      const claudePty = spawnPty(getAgentCommand('claude'), [], {
         cwd: worktree.path,
         cols: 80,
         rows: 30,
@@ -603,7 +604,7 @@ export class ClaudeService {
       });
 
       // Pipe the echo output to claude
-      const claude = spawn('claude', ['--print', '--output-format', 'json'], {
+      const claude = spawn(getAgentCommand('claude'), ['--print', '--output-format', 'json'], {
         cwd: worktree.path,
         stdio: [child.stdout, 'pipe', 'pipe']
       });

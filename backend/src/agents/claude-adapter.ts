@@ -4,6 +4,7 @@ import { AgentType } from '../types.js';
 export class ClaudeAdapter extends BaseAgentAdapter {
   readonly type: AgentType = 'claude';
   readonly name = 'Claude Code';
+  // Command is resolved by getAgentCommand() in base adapter
   readonly command = 'claude';
 
   getSpawnArgs(options?: { interactive?: boolean; port?: number }): { command: string; args: string[]; env?: Record<string, string> } {

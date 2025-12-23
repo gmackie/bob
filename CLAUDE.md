@@ -15,6 +15,8 @@ Before using Bob, ensure you have the following installed:
 # - kiro-cli (Kiro)
 # - codex (GitHub Codex)
 # - gemini (Google Gemini)
+# - opencode (OpenCode)
+# - cursor-agent (Cursor Agent)
 gh --version        # GitHub CLI for PR operations
 git --version       # Git for repository management
 node --version      # Node.js runtime
@@ -221,10 +223,12 @@ This prevents conflicts when multiple dev servers try to use the same ports.
 
 **AI Agent CLI Not Available:**
 Install at least one AI agent CLI:
-- **Kiro**: `npm install -g kiro-cli` (or follow Kiro installation instructions)
 - **Claude**: Follow Claude Code installation instructions
+- **Kiro**: `npm install -g kiro-cli` (or follow Kiro installation instructions)
 - **Codex**: Follow GitHub Codex installation instructions
 - **Gemini**: Follow Google Gemini installation instructions
+- **OpenCode**: Follow OpenCode installation instructions
+- **Cursor Agent**: Install via Cursor IDE
 
 **GitHub CLI Authentication:**
 ```bash

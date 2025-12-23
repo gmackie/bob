@@ -1,6 +1,7 @@
-import { spawn, ChildProcess } from 'child_process';
+import { spawn } from 'child_process';
 import { spawn as spawnPty, IPty } from 'node-pty';
 import { AgentAdapter, AgentType } from '../types.js';
+import { getAgentCommand } from '../utils/agentPaths.js';
 
 export abstract class BaseAgentAdapter implements AgentAdapter {
   abstract readonly type: AgentType;
@@ -33,12 +34,13 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
   }
 
   async startProcess(worktreePath: string, port?: number): Promise<IPty> {
-    const { command, args, env } = this.getSpawnArgs({ interactive: true, port });
+    const { args, env } = this.getSpawnArgs({ interactive: true, port });
+    const resolvedCommand = getAgentCommand(this.type);
 
     return new Promise(async (resolve, reject) => {
-      console.log(`Starting ${this.name} PTY in directory: ${worktreePath}`);
+      console.log(`Starting ${this.name} PTY in directory: ${worktreePath} using ${resolvedCommand}`);
 
-      const ptyProcess = spawnPty(command, args, {
+      const ptyProcess = spawnPty(resolvedCommand, args, {
         cwd: worktreePath,
         cols: 120,
         rows: 40,
@@ -120,8 +122,9 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
 
   // Helper methods for subclasses
   protected async runCommand(args: string[], timeoutMs: number = 10000): Promise<{ stdout: string; stderr: string; code: number }> {
+    const resolvedCommand = getAgentCommand(this.type);
     return new Promise((resolve, reject) => {
-      const child = spawn(this.command, args, {
+      const child = spawn(resolvedCommand, args, {
         stdio: 'pipe',
         env: process.env as { [key: string]: string },
         shell: true // Use shell to properly resolve commands and handle shebangs

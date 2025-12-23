@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Repository, Worktree, ClaudeInstance, AgentInfo, AgentType } from '../types';
-import { DirectoryBrowser } from './DirectoryBrowser';
+import { GitHubRepoSelector } from './GitHubRepoSelector';
 import { DeleteWorktreeModal } from './DeleteWorktreeModal';
 import { api } from '../api';
 
@@ -25,7 +24,7 @@ export const RepositoryPanel: React.FC<RepositoryPanelProps> = ({
   instances,
   selectedWorktreeId,
   selectedRepositoryId,
-  onAddRepository,
+  onAddRepository: _onAddRepository, // Now handled by GitHubRepoSelector
   onCreateWorktreeAndStartInstance,
   onSelectWorktree,
   onSelectRepository,
@@ -63,9 +62,13 @@ export const RepositoryPanel: React.FC<RepositoryPanelProps> = ({
     fetchAgents();
   }, []);
 
-  const handleDirectorySelect = (path: string) => {
-    onAddRepository(path);
+  const handleGitHubRepoSelect = async (_repoFullName: string, _branch: string, _agentType: AgentType) => {
+    // The GitHubRepoSelector already clones and adds the repo via the API
+    // Just close the modal and let the parent refresh the repository list
     setShowDirectoryBrowser(false);
+    // Trigger a refresh by calling onAddRepository with empty string (will be ignored) 
+    // or we could emit a refresh event - for now the repo is already added
+    window.location.reload(); // Simple refresh to show the new repo
   };
 
   const handleCreateWorktree = (repositoryId: string) => {
@@ -475,9 +478,9 @@ export const RepositoryPanel: React.FC<RepositoryPanelProps> = ({
       )}
 
       {showDirectoryBrowser && (
-        <DirectoryBrowser
-          onSelectDirectory={handleDirectorySelect}
-          onClose={() => setShowDirectoryBrowser(false)}
+        <GitHubRepoSelector
+          onSelect={handleGitHubRepoSelect}
+          onCancel={() => setShowDirectoryBrowser(false)}
         />
       )}
       

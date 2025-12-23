@@ -4,6 +4,7 @@ import { AgentInstance, Worktree, AgentType } from '../types.js';
 import { GitService } from './git.js';
 import { DatabaseService } from '../database/database.js';
 import { agentFactory } from '../agents/agent-factory.js';
+import { getAgentCommand } from '../utils/agentPaths.js';
 
 export class AgentService {
   private instances = new Map<string, AgentInstance>();
@@ -464,7 +465,7 @@ export class AgentService {
       });
 
       // Pipe the echo output to claude
-      const claude = spawn('claude', ['--print', '--output-format', 'json'], {
+      const claude = spawn(getAgentCommand('claude'), ['--print', '--output-format', 'json'], {
         cwd: worktree.path,
         stdio: [child.stdout, 'pipe', 'pipe']
       });

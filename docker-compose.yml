@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  bob:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bob
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - SESSION_SECRET=${SESSION_SECRET}
+      - USE_GITHUB_AUTH=${USE_GITHUB_AUTH:-true}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - GITHUB_CALLBACK_URL=${GITHUB_CALLBACK_URL}
+      - FRONTEND_URL=${FRONTEND_URL:-https://claude.gmac.io}
+      - GITHUB_USER_ALLOWLIST=${GITHUB_USER_ALLOWLIST}
+    volumes:
+      # Persist Bob data (database, worktrees)
+      - bob-data:/data/bob
+      # Mount host repositories directory
+      - ${HOST_REPOS_DIR:-./repos}:/data/repos
+      # Persist GitHub CLI auth
+      - gh-config:/home/bob/.config/gh
+      # Persist SSH keys
+      - ssh-keys:/home/bob/.ssh
+      # Persist agent configs and auth
+      - claude-config:/home/bob/.claude
+      - gemini-config:/home/bob/.gemini
+      - opencode-config:/home/bob/.opencode
+      - kiro-config:/home/bob/.kiro
+      - codex-config:/home/bob/.codex
+    ports:
+      - "127.0.0.1:3001:3001"
+    networks:
+      - bob-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Optional: Nginx reverse proxy with SSL
+  # Uncomment if you want to run nginx in Docker instead of on the host
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: bob-nginx
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+  #     - ./deploy/ssl:/etc/nginx/ssl:ro
+  #     - certbot-webroot:/var/www/certbot:ro
+  #   depends_on:
+  #     - bob
+  #   networks:
+  #     - bob-network
+
+volumes:
+  bob-data:
+    driver: local
+  gh-config:
+    driver: local
+  ssh-keys:
+    driver: local
+  claude-config:
+    driver: local
+  gemini-config:
+    driver: local
+  opencode-config:
+    driver: local
+  kiro-config:
+    driver: local
+  codex-config:
+    driver: local
+
+networks:
+  bob-network:
+    driver: bridge

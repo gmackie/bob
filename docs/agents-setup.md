@@ -6,7 +6,9 @@ This project supports multiple CLI agents via adapters. Use this guide to instal
 - Claude Code (`claude`)
 - Codex CLI (`codex`)
 - Gemini CLI (`gemini`)
-- Amazon Q (`q chat`)
+- Kiro (`kiro-cli`)
+- OpenCode (`opencode`)
+- Cursor Agent (`cursor-agent`)
 
 ## Install & Authenticate
 
@@ -26,9 +28,22 @@ This project supports multiple CLI agents via adapters. Use this guide to instal
   - `--sandbox`
   - `--approval-mode auto_edit`
 
-### Amazon Q
-- Install AWS CLI and Amazon Q CLI (`q`), ensure `q chat --help` works.
-- Requires AWS credentials; see AWS docs for authentication.
+### Kiro
+- Install Kiro CLI and ensure `kiro-cli --version` works.
+- Default flags used by adapter:
+  - Interactive mode for TUI
+
+### OpenCode
+- Install OpenCode CLI and ensure `opencode --version` works.
+- Authentication may be required depending on configuration.
+- Default flags used by adapter:
+  - `.` for interactive TUI mode
+  - `run` for non-interactive mode
+
+### Cursor Agent
+- Install Cursor IDE which includes the cursor-agent CLI.
+- Ensure `cursor-agent --version` works.
+- Authentication via Cursor account.
 
 ## Verify Agents
 
@@ -52,7 +67,10 @@ Response example:
   "results": [
     { "type": "claude", "ok": true,  "outputPreview": "..." },
     { "type": "codex",  "ok": true,  "outputPreview": "..." },
-    { "type": "gemini", "ok": false, "reason": "not_authenticated" }
+    { "type": "gemini", "ok": false, "reason": "not_authenticated" },
+    { "type": "kiro",   "ok": true,  "outputPreview": "..." },
+    { "type": "opencode", "ok": true, "outputPreview": "..." },
+    { "type": "cursor-agent", "ok": false, "reason": "not_installed" }
   ]
 }
 ```

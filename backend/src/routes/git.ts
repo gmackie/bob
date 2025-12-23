@@ -3,7 +3,7 @@ import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs';
-import { tmpdir } from 'os';
+import { getAgentCommand } from '../utils/agentPaths.js';
 
 const router = express.Router();
 const execAsync = promisify(exec);
@@ -12,7 +12,7 @@ const execAsync = promisify(exec);
 async function callClaude(prompt: string, input: string, cwd: string): Promise<string> {
   return new Promise((resolve, reject) => {
     // Use spawn to avoid shell interpretation issues
-    const claudeProcess = spawn('claude', [prompt], {
+    const claudeProcess = spawn(getAgentCommand('claude'), [prompt], {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe']
     });
@@ -1198,6 +1198,109 @@ router.get('/:worktreeId/pr-status', async (req, res) => {
     }
   } catch (error: any) {
     console.error('Error getting PR status:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// List GitHub repositories for the authenticated user
+router.get('/github/repos', async (req, res) => {
+  try {
+    const { search, limit = '50' } = req.query;
+    
+    // Use gh CLI to list repositories
+    let cmd = `gh repo list --json name,nameWithOwner,description,isPrivate,url --limit ${limit}`;
+    
+    const { stdout } = await execAsync(cmd);
+    let repos = JSON.parse(stdout);
+    
+    // Filter by search term if provided
+    if (search && typeof search === 'string') {
+      const searchLower = search.toLowerCase();
+      repos = repos.filter((r: any) => 
+        r.name.toLowerCase().includes(searchLower) || 
+        r.nameWithOwner.toLowerCase().includes(searchLower) ||
+        (r.description && r.description.toLowerCase().includes(searchLower))
+      );
+    }
+    
+    res.json(repos);
+  } catch (error: any) {
+    console.error('Error listing GitHub repos:', error);
+    if (error.message.includes('gh: command not found') || error.message.includes('not logged in')) {
+      res.status(401).json({ error: 'GitHub CLI not authenticated. Run: gh auth login' });
+    } else {
+      res.status(500).json({ error: error.message });
+    }
+  }
+});
+
+// List branches for a GitHub repository
+router.get('/github/repos/:owner/:repo/branches', async (req, res) => {
+  try {
+    const { owner, repo } = req.params;
+    
+    // Use gh API to list branches
+    const { stdout } = await execAsync(`gh api repos/${owner}/${repo}/branches --paginate --jq '.[].name'`);
+    const branches = stdout.trim().split('\n').filter(b => b);
+    
+    res.json(branches);
+  } catch (error: any) {
+    console.error('Error listing branches:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Clone a GitHub repository and set it up
+router.post('/github/clone', async (req, res) => {
+  try {
+    const { repoFullName, branch } = req.body;
+    
+    if (!repoFullName) {
+      return res.status(400).json({ error: 'Repository name is required' });
+    }
+    
+    const gitService = req.app.locals.gitService;
+    
+    // Determine clone directory
+    const reposDir = process.env.BOB_REPOS_DIR || path.join(process.env.HOME || '/tmp', 'bob-repos');
+    const repoName = repoFullName.split('/')[1];
+    const clonePath = path.join(reposDir, repoName);
+    
+    // Create repos directory if it doesn't exist
+    if (!fs.existsSync(reposDir)) {
+      fs.mkdirSync(reposDir, { recursive: true });
+    }
+    
+    // Check if already cloned
+    if (fs.existsSync(clonePath)) {
+      // Repository already exists, just add it
+      const repository = await gitService.addRepository(clonePath);
+      return res.json({ 
+        message: 'Repository already exists, added to Bob',
+        repository,
+        clonePath
+      });
+    }
+    
+    // Clone the repository
+    let cloneCmd = `gh repo clone ${repoFullName} "${clonePath}"`;
+    await execAsync(cloneCmd);
+    
+    // Checkout specific branch if requested
+    if (branch && branch !== 'main' && branch !== 'master') {
+      await execAsync(`git checkout ${branch}`, { cwd: clonePath });
+    }
+    
+    // Add to Bob
+    const repository = await gitService.addRepository(clonePath);
+    
+    res.json({ 
+      message: 'Repository cloned and added successfully',
+      repository,
+      clonePath
+    });
+  } catch (error: any) {
+    console.error('Error cloning repository:', error);
     res.status(500).json({ error: error.message });
   }
 });
