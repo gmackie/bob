@@ -19,8 +19,8 @@ Consolidate progress updates into one mechanism:
 ## Phase 0 — Decisions + Scaffolding
 
 ### 0.1 Self-hosted Support Strategy
-**MVP (recommended)**: Support `github.com` + `gitlab.com` OAuth; self-hosted via PAT connection flow.
-**Later**: Admin-configured OAuth clients per instance URL.
+**Decision**: Support `github.com` + `gitlab.com` OAuth; self-hosted GitLab/Gitea via PAT connection flow.
+**Later**: Admin-configured OAuth clients per instance URL (if needed).
 **Complexity**: M
 
 ### 0.2 Background Job Runner
