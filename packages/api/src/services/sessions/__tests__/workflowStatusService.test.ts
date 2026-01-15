@@ -194,7 +194,8 @@ describe("awaiting input timeout calculation", () => {
   });
 
   it("should use default timeout when not specified", () => {
-    const timeoutMinutes = undefined ?? 30;
+    const optionalTimeout: number | undefined = undefined;
+    const timeoutMinutes = optionalTimeout ?? 30;
     expect(timeoutMinutes).toBe(30);
   });
 });

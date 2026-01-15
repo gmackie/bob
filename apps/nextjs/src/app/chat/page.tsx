@@ -1,53 +1,82 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import { useTRPC } from "~/trpc/react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { SessionList } from "./_components/session-list";
-import { MessageStream } from "./_components/message-stream";
+
+import type { SessionEvent, SessionStatus } from "~/hooks/use-session-socket";
+import { useSessionSocket } from "~/hooks/use-session-socket";
+import { useTRPC } from "~/trpc/react";
 import { InputComposer } from "./_components/input-composer";
-import { SessionHeader, ConnectionIndicator } from "./_components/session-header";
-import { useSessionSocket, type SessionEvent, type SessionStatus } from "~/hooks/use-session-socket";
+import { MessageStream } from "./_components/message-stream";
+import {
+  ConnectionIndicator,
+  SessionHeader,
+} from "./_components/session-header";
+import { SessionList } from "./_components/session-list";
 
 export default function ChatPage() {
+  return (
+    <Suspense fallback={<ChatPageSkeleton />}>
+      <ChatPageContent />
+    </Suspense>
+  );
+}
+
+function ChatPageSkeleton() {
+  return (
+    <div className="flex h-screen">
+      <div className="w-64 shrink-0 border-r bg-gray-50 p-4">
+        <div className="h-8 w-32 animate-pulse rounded bg-gray-200" />
+      </div>
+      <div className="flex flex-1 items-center justify-center">
+        <div className="text-gray-500">Loading...</div>
+      </div>
+    </div>
+  );
+}
+
+function ChatPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const trpc = useTRPC();
-  
+
   const sessionId = searchParams.get("session");
   const [events, setEvents] = useState<SessionEvent[]>([]);
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>("stopped");
-  
+
   const { data: gatewayInfo } = useQuery(
-    trpc.session.getGatewayWebSocketUrl.queryOptions()
+    trpc.session.getGatewayWebSocketUrl.queryOptions(),
   );
 
   const { data: sessionData } = useQuery(
-    trpc.session.get.queryOptions(
-      { id: sessionId! },
-      { enabled: !!sessionId }
-    )
+    trpc.session.get.queryOptions({ id: sessionId! }, { enabled: !!sessionId }),
   );
 
   const { data: sessionEvents } = useQuery(
     trpc.session.getEvents.queryOptions(
       { sessionId: sessionId!, limit: 500 },
-      { enabled: !!sessionId }
-    )
+      { enabled: !!sessionId },
+    ),
   );
 
-  const handleEvent = useCallback((event: SessionEvent) => {
-    if (event.sessionId === sessionId) {
-      setEvents(prev => [...prev, event]);
-    }
-  }, [sessionId]);
+  const handleEvent = useCallback(
+    (event: SessionEvent) => {
+      if (event.sessionId === sessionId) {
+        setEvents((prev) => [...prev, event]);
+      }
+    },
+    [sessionId],
+  );
 
-  const handleStatusChange = useCallback((sid: string, status: SessionStatus) => {
-    if (sid === sessionId) {
-      setSessionStatus(status);
-    }
-  }, [sessionId]);
+  const handleStatusChange = useCallback(
+    (sid: string, status: SessionStatus) => {
+      if (sid === sessionId) {
+        setSessionStatus(status);
+      }
+    },
+    [sessionId],
+  );
 
   const {
     connectionState,
@@ -65,15 +94,17 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (sessionEvents?.events) {
-      setEvents(sessionEvents.events.map(e => ({
-        type: "event" as const,
-        sessionId: e.sessionId,
-        seq: e.seq,
-        eventType: e.eventType as SessionEvent["eventType"],
-        direction: e.direction as SessionEvent["direction"],
-        payload: e.payload,
-        createdAt: e.createdAt.toISOString(),
-      })));
+      setEvents(
+        sessionEvents.events.map((e) => ({
+          type: "event" as const,
+          sessionId: e.sessionId,
+          seq: e.seq,
+          eventType: e.eventType as SessionEvent["eventType"],
+          direction: e.direction as SessionEvent["direction"],
+          payload: e.payload,
+          createdAt: e.createdAt.toISOString(),
+        })),
+      );
     }
   }, [sessionEvents]);
 
@@ -91,15 +122,21 @@ export default function ChatPage() {
     }
   }, [sessionData]);
 
-  const handleSelectSession = useCallback((id: string) => {
-    setEvents([]);
-    router.push(`/chat?session=${id}`);
-  }, [router]);
+  const handleSelectSession = useCallback(
+    (id: string) => {
+      setEvents([]);
+      router.push(`/chat?session=${id}`);
+    },
+    [router],
+  );
 
-  const handleSendMessage = useCallback((message: string) => {
-    if (!sessionId) return;
-    sendInput(sessionId, message);
-  }, [sessionId, sendInput]);
+  const handleSendMessage = useCallback(
+    (message: string) => {
+      if (!sessionId) return;
+      sendInput(sessionId, message);
+    },
+    [sessionId, sendInput],
+  );
 
   const handleStopSession = useCallback(() => {
     if (!sessionId) return;
@@ -107,7 +144,8 @@ export default function ChatPage() {
   }, [sessionId, stopSession]);
 
   const isConnected = connectionState.status === "connected";
-  const canSend = isConnected && (sessionStatus === "running" || sessionStatus === "idle");
+  const canSend =
+    isConnected && (sessionStatus === "running" || sessionStatus === "idle");
 
   return (
     <div className="flex h-screen">
@@ -130,27 +168,32 @@ export default function ChatPage() {
         {sessionId && sessionData ? (
           <>
             <SessionHeader
-              title={sessionData.title ?? `Session ${sessionData.id.slice(0, 8)}`}
+              title={
+                sessionData.title ?? `Session ${sessionData.id.slice(0, 8)}`
+              }
               status={sessionStatus}
               agentType={sessionData.agentType}
               workingDirectory={sessionData.workingDirectory ?? undefined}
               onStop={handleStopSession}
             />
-            
+
             <MessageStream
               sessionId={sessionId}
               events={events}
               isConnected={isConnected}
             />
-            
+
             <InputComposer
               onSend={handleSendMessage}
               disabled={!canSend}
               placeholder={
-                !isConnected ? "Connecting..." :
-                sessionStatus === "stopped" ? "Session stopped" :
-                sessionStatus === "error" ? "Session error" :
-                "Type a message..."
+                !isConnected
+                  ? "Connecting..."
+                  : sessionStatus === "stopped"
+                    ? "Session stopped"
+                    : sessionStatus === "error"
+                      ? "Session error"
+                      : "Type a message..."
               }
             />
           </>
