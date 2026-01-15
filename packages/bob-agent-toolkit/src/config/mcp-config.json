@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/modelcontextprotocol/specification/main/schema/mcp-server.json",
+  "mcpServers": {
+    "bob": {
+      "command": "npx",
+      "args": ["@bob/mcp-server"],
+      "env": {
+        "BOB_API_URL": "${BOB_API_URL}",
+        "BOB_API_KEY": "${BOB_API_KEY}",
+        "BOB_SESSION_ID": "${BOB_SESSION_ID}"
+      }
+    }
+  }
+}

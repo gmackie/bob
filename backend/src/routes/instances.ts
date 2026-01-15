@@ -13,7 +13,7 @@ export function createInstanceRoutes(
 
   router.get('/', (req, res) => {
     try {
-      const instances = agentService.getInstances();
+      const instances = agentService.getInstances(req.userId);
       res.json(instances);
     } catch (error) {
       res.status(500).json({ error: 'Failed to get instances' });
@@ -22,7 +22,7 @@ export function createInstanceRoutes(
 
   router.get('/repository/:repositoryId', (req, res) => {
     try {
-      const instances = agentService.getInstancesByRepository(req.params.repositoryId);
+      const instances = agentService.getInstancesByRepository(req.params.repositoryId, req.userId);
       res.json(instances);
     } catch (error) {
       res.status(500).json({ error: 'Failed to get instances for repository' });
@@ -37,7 +37,7 @@ export function createInstanceRoutes(
         return res.status(400).json({ error: 'worktreeId is required' });
       }
 
-      const instance = await agentService.startInstance(worktreeId, agentType || 'claude');
+      const instance = await agentService.startInstance(worktreeId, agentType || 'claude', req.userId);
       res.status(201).json(instance);
     } catch (error) {
       res.status(500).json({ error: `Failed to start instance: ${error}` });
@@ -46,7 +46,7 @@ export function createInstanceRoutes(
 
   router.get('/:id', (req, res) => {
     try {
-      const instance = agentService.getInstance(req.params.id);
+      const instance = agentService.getInstance(req.params.id, req.userId);
       if (!instance) {
         return res.status(404).json({ error: 'Instance not found' });
       }
@@ -76,7 +76,7 @@ export function createInstanceRoutes(
 
   router.post('/:id/terminal', (req, res) => {
     try {
-      const instance = agentService.getInstance(req.params.id);
+      const instance = agentService.getInstance(req.params.id, req.userId);
       if (!instance) {
         return res.status(404).json({ error: 'Instance not found' });
       }
@@ -103,12 +103,12 @@ export function createInstanceRoutes(
 
   router.post('/:id/terminal/directory', (req, res) => {
     try {
-      const instance = agentService.getInstance(req.params.id);
+      const instance = agentService.getInstance(req.params.id, req.userId);
       if (!instance) {
         return res.status(404).json({ error: 'Instance not found' });
       }
 
-      const worktree = gitService.getWorktree(instance.worktreeId);
+      const worktree = gitService.getWorktree(instance.worktreeId, req.userId);
       if (!worktree) {
         return res.status(404).json({ error: 'Worktree not found' });
       }

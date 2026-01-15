@@ -1,0 +1,37 @@
+{
+  "name": "@bob/legacy",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Legacy agent adapters and services from original Bob backend",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./src/index.ts"
+    },
+    "./agents": {
+      "types": "./dist/agents/index.d.ts",
+      "default": "./src/agents/index.ts"
+    },
+    "./services": {
+      "types": "./dist/services/index.d.ts",
+      "default": "./src/services/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "git clean -xdf .cache .turbo dist node_modules",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "node-pty": "^1.0.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@bob/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/ws": "^8.5.13",
+    "typescript": "catalog:"
+  }
+}

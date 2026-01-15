@@ -3,8 +3,9 @@ import { promisify } from 'util';
 import { existsSync, statSync, mkdirSync } from 'fs';
 import { join, basename } from 'path';
 import { homedir } from 'os';
-import { Repository, Worktree, AgentType } from '../types.js';
+import { Repository, Worktree, AgentType, DEFAULT_USER_ID } from '../types.js';
 import { DatabaseService } from '../database/database.js';
+import { getUserPathsService } from './user-paths.js';
 
 const execAsync = promisify(exec);
 
@@ -26,7 +27,7 @@ export class GitService {
     });
   }
 
-  async addRepository(repositoryPath: string): Promise<Repository> {
+  async addRepository(repositoryPath: string, userId?: string): Promise<Repository> {
     if (!existsSync(repositoryPath)) {
       throw new Error(`Directory ${repositoryPath} does not exist`);
     }
@@ -36,7 +37,7 @@ export class GitService {
       throw new Error(`${repositoryPath} is not a git repository`);
     }
 
-    const repo = await this.createRepositoryFromPath(repositoryPath);
+    const repo = await this.createRepositoryFromPath(repositoryPath, userId);
     if (!repo) {
       throw new Error(`Failed to create repository from ${repositoryPath}`);
     }
@@ -51,7 +52,7 @@ export class GitService {
     return repo;
   }
 
-  private async createRepositoryFromPath(repoPath: string): Promise<Repository | null> {
+  private async createRepositoryFromPath(repoPath: string, userId?: string): Promise<Repository | null> {
     try {
       const { stdout: branchOutput } = await execAsync('git branch --show-current', { cwd: repoPath });
       const currentBranch = branchOutput.trim();
@@ -60,6 +61,7 @@ export class GitService {
       const repoId = Buffer.from(repoPath).toString('base64');
       const repo: Repository = {
         id: repoId,
+        userId: userId || DEFAULT_USER_ID,
         name: basename(repoPath),
         path: repoPath,
         branch: currentBranch,
@@ -67,7 +69,7 @@ export class GitService {
         worktrees: []
       };
 
-      const existingWorktrees = await this.loadWorktrees(repo);
+      const existingWorktrees = await this.loadWorktrees(repo, userId);
       repo.worktrees = existingWorktrees;
 
       return repo;
@@ -124,7 +126,7 @@ export class GitService {
     }
   }
 
-  private async loadWorktrees(repository: Repository): Promise<Worktree[]> {
+  private async loadWorktrees(repository: Repository, userId?: string): Promise<Worktree[]> {
     try {
       const { stdout } = await execAsync('git worktree list --porcelain', { cwd: repository.path });
       const worktrees: Worktree[] = [];
@@ -132,6 +134,7 @@ export class GitService {
 
       let currentWorktree: Partial<Worktree> = {};
       let isFirstWorktree = true; // The first worktree is always the main worktree
+      const effectiveUserId = userId || repository.userId || DEFAULT_USER_ID;
 
       for (const line of lines) {
         if (line.startsWith('worktree ')) {
@@ -147,6 +150,7 @@ export class GitService {
               const worktreeId = Buffer.from(currentWorktree.path).toString('base64');
               const worktree: Worktree = {
                 id: worktreeId,
+                userId: effectiveUserId,
                 path: currentWorktree.path,
                 branch: currentWorktree.branch,
                 repositoryId: repository.id,
@@ -169,6 +173,7 @@ export class GitService {
           const worktreeId = Buffer.from(currentWorktree.path).toString('base64');
           const worktree: Worktree = {
             id: worktreeId,
+            userId: effectiveUserId,
             path: currentWorktree.path,
             branch: currentWorktree.branch,
             repositoryId: repository.id,
@@ -187,7 +192,7 @@ export class GitService {
     }
   }
 
-  async createWorktree(repositoryId: string, branchName: string, baseBranch?: string, agentType?: AgentType): Promise<Worktree> {
+  async createWorktree(repositoryId: string, branchName: string, baseBranch?: string, agentType?: AgentType, userId?: string): Promise<Worktree> {
     const repository = this.repositories.get(repositoryId);
     if (!repository) {
       throw new Error(`Repository ${repositoryId} not found`);
@@ -220,13 +225,10 @@ export class GitService {
       }
     }
 
-    // Create worktrees in ~/.bob directory
-    const bobDir = join(homedir(), '.bob');
-    if (!existsSync(bobDir)) {
-      mkdirSync(bobDir, { recursive: true });
-    }
-
-    const worktreePath = join(bobDir, `${repository.name}-${branchName}`);
+    const effectiveUserId = userId || repository.userId || DEFAULT_USER_ID;
+    const userPathsService = getUserPathsService();
+    userPathsService.ensureUserDirectories(effectiveUserId);
+    const worktreePath = userPathsService.getWorktreePath(effectiveUserId, repository.name, branchName);
 
     try {
       await execAsync(`git worktree add "${worktreePath}" -b "${branchName}" "${baseBranch}"`, {
@@ -237,6 +239,7 @@ export class GitService {
       const preferredAgent = agentType || 'claude';
       const worktree: Worktree = {
         id: worktreeId,
+        userId: effectiveUserId,
         path: worktreePath,
         branch: branchName,
         repositoryId,
@@ -366,20 +369,36 @@ export class GitService {
     }
   }
 
-  getRepositories(): Repository[] {
-    return Array.from(this.repositories.values());
+  getRepositories(userId?: string): Repository[] {
+    const repos = Array.from(this.repositories.values());
+    if (userId) {
+      return repos.filter(r => r.userId === userId || r.userId === DEFAULT_USER_ID);
+    }
+    return repos;
   }
 
-  getRepository(id: string): Repository | undefined {
-    return this.repositories.get(id);
+  getRepository(id: string, userId?: string): Repository | undefined {
+    const repo = this.repositories.get(id);
+    if (repo && userId && repo.userId !== userId && repo.userId !== DEFAULT_USER_ID) {
+      return undefined; // User doesn't have access
+    }
+    return repo;
   }
 
-  getWorktree(id: string): Worktree | undefined {
-    return this.worktrees.get(id);
+  getWorktree(id: string, userId?: string): Worktree | undefined {
+    const worktree = this.worktrees.get(id);
+    if (worktree && userId && worktree.userId !== userId && worktree.userId !== DEFAULT_USER_ID) {
+      return undefined; // User doesn't have access
+    }
+    return worktree;
   }
 
-  getWorktreesByRepository(repositoryId: string): Worktree[] {
-    return Array.from(this.worktrees.values()).filter(w => w.repositoryId === repositoryId);
+  getWorktreesByRepository(repositoryId: string, userId?: string): Worktree[] {
+    let worktrees = Array.from(this.worktrees.values()).filter(w => w.repositoryId === repositoryId);
+    if (userId) {
+      worktrees = worktrees.filter(w => w.userId === userId || w.userId === DEFAULT_USER_ID);
+    }
+    return worktrees;
   }
 
   async refreshMainBranch(repositoryId: string): Promise<Repository> {

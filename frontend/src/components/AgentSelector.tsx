@@ -5,9 +5,10 @@ interface AgentSelectorProps {
   agents: AgentInfo[];
   value: AgentType | undefined;
   onChange: (agentType: AgentType | undefined) => void;
+  onAuthenticate?: (agentType: AgentType) => void;
   disabled?: boolean;
   className?: string;
-  style?: React.CSSProperties;
+  style?: React.CSSProperties & { select?: React.CSSProperties };
   showBadges?: boolean;
 }
 
@@ -15,6 +16,7 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
   agents,
   value,
   onChange,
+  onAuthenticate,
   disabled = false,
   className = 'input',
   style,
@@ -31,6 +33,8 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
     if (agent.isAuthenticated === false) return '⚠️';
     return '✅';
   };
+
+  const selectedAgent = agents.find(a => a.type === value);
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', ...style }}>
@@ -52,13 +56,33 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
           <option
             key={agent.type}
             value={agent.type}
-            disabled={!(agent.isAvailable && (agent.isAuthenticated ?? true))}
+            disabled={!agent.isAvailable}
           >
             {agent.name} {agent.version ? `(${agent.version})` : ''}
-            {!(agent.isAvailable && (agent.isAuthenticated ?? true)) ? ' - unavailable' : ''}
+            {!agent.isAvailable ? ' - unavailable' : ''}
+            {agent.isAuthenticated === false ? ' - not authenticated' : ''}
           </option>
         ))}
       </select>
+
+      {onAuthenticate && selectedAgent?.isAuthenticated === false && (
+        <button
+          onClick={() => onAuthenticate(selectedAgent.type)}
+          style={{
+            padding: '4px 8px',
+            fontSize: '11px',
+            backgroundColor: '#f59e0b',
+            color: '#000',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontWeight: 'bold'
+          }}
+          title={`Authenticate ${selectedAgent.name}`}
+        >
+          Authenticate
+        </button>
+      )}
 
       {showBadges && value && (
         <div style={{

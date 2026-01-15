@@ -1,6 +1,6 @@
 import { ChildProcess } from 'child_process';
 import { IPty } from 'node-pty';
-import { AgentInstance, Worktree, AgentType } from '../types.js';
+import { AgentInstance, Worktree, AgentType, DEFAULT_USER_ID } from '../types.js';
 import { GitService } from './git.js';
 import { DatabaseService } from '../database/database.js';
 import { agentFactory } from '../agents/agent-factory.js';
@@ -38,8 +38,8 @@ export class AgentService {
     });
   }
 
-  async startInstance(worktreeId: string, agentType: AgentType = 'claude'): Promise<AgentInstance> {
-    const worktree = this.gitService.getWorktree(worktreeId);
+  async startInstance(worktreeId: string, agentType: AgentType = 'claude', userId?: string): Promise<AgentInstance> {
+    const worktree = this.gitService.getWorktree(worktreeId, userId);
     if (!worktree) {
       throw new Error(`Worktree ${worktreeId} not found`);
     }
@@ -58,13 +58,13 @@ export class AgentService {
       throw new Error(`Agent '${agentType}' is not authenticated: ${agentInfo.statusMessage || 'Authentication required'}`);
     }
 
-    // Allow multiple agents per worktree - no restriction check here
-
     const instanceId = `${agentType}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const port = this.nextPort++;
+    const effectiveUserId = userId || worktree.userId || DEFAULT_USER_ID;
 
     const instance: AgentInstance = {
       id: instanceId,
+      userId: effectiveUserId,
       worktreeId,
       repositoryId: worktree.repositoryId,
       agentType,
@@ -237,24 +237,44 @@ export class AgentService {
     }
   }
 
-  getInstances(): AgentInstance[] {
-    return Array.from(this.instances.values());
+  getInstances(userId?: string): AgentInstance[] {
+    const instances = Array.from(this.instances.values());
+    if (userId) {
+      return instances.filter(i => i.userId === userId || i.userId === DEFAULT_USER_ID);
+    }
+    return instances;
   }
 
-  getInstance(id: string): AgentInstance | undefined {
-    return this.instances.get(id);
+  getInstance(id: string, userId?: string): AgentInstance | undefined {
+    const instance = this.instances.get(id);
+    if (instance && userId && instance.userId !== userId && instance.userId !== DEFAULT_USER_ID) {
+      return undefined;
+    }
+    return instance;
   }
 
-  getInstancesByRepository(repositoryId: string): AgentInstance[] {
-    return Array.from(this.instances.values()).filter(i => i.repositoryId === repositoryId);
+  getInstancesByRepository(repositoryId: string, userId?: string): AgentInstance[] {
+    let instances = Array.from(this.instances.values()).filter(i => i.repositoryId === repositoryId);
+    if (userId) {
+      instances = instances.filter(i => i.userId === userId || i.userId === DEFAULT_USER_ID);
+    }
+    return instances;
   }
 
-  getInstancesByWorktree(worktreeId: string): AgentInstance[] {
-    return Array.from(this.instances.values()).filter(i => i.worktreeId === worktreeId);
+  getInstancesByWorktree(worktreeId: string, userId?: string): AgentInstance[] {
+    let instances = Array.from(this.instances.values()).filter(i => i.worktreeId === worktreeId);
+    if (userId) {
+      instances = instances.filter(i => i.userId === userId || i.userId === DEFAULT_USER_ID);
+    }
+    return instances;
   }
 
-  getInstancesByAgentType(agentType: AgentType): AgentInstance[] {
-    return Array.from(this.instances.values()).filter(i => i.agentType === agentType);
+  getInstancesByAgentType(agentType: AgentType, userId?: string): AgentInstance[] {
+    let instances = Array.from(this.instances.values()).filter(i => i.agentType === agentType);
+    if (userId) {
+      instances = instances.filter(i => i.userId === userId || i.userId === DEFAULT_USER_ID);
+    }
+    return instances;
   }
 
   getProcess(instanceId: string): ChildProcess | undefined {

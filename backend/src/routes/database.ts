@@ -1,8 +1,11 @@
 import express from 'express';
 import { DatabaseService } from '../database/database.js';
+import { adminOnlyMiddleware } from '../middleware/admin-only.js';
 
 export function createDatabaseRoutes(db: DatabaseService) {
   const router = express.Router();
+  
+  router.use(adminOnlyMiddleware);
 
   // Get all tables in the database
   router.get('/tables', async (req, res) => {

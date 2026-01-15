@@ -561,6 +561,39 @@ class ApiClient {
       method: 'DELETE',
     });
   }
+
+  // Agent Authentication
+  async startAgentAuth(agentType: string): Promise<{ sessionId: string; agentType: string; status: string }> {
+    return this.request('/agents/auth/start', {
+      method: 'POST',
+      body: JSON.stringify({ agentType, useLoginCommand: true }),
+    });
+  }
+
+  async createAuthTerminalSession(sessionId: string): Promise<{ sessionId: string }> {
+    return this.request(`/agents/auth/session/${sessionId}/terminal`, {
+      method: 'POST',
+    });
+  }
+
+  async cancelAuthSession(sessionId: string): Promise<void> {
+    return this.request(`/agents/auth/session/${sessionId}/cancel`, {
+      method: 'POST',
+    });
+  }
+
+  async verifyAgentAuth(agentType: string): Promise<{
+    type: string;
+    ok: boolean;
+    reason?: string;
+    outputPreview?: string;
+    error?: string;
+    info?: any;
+  }> {
+    return this.request(`/agents/auth/verify/${agentType}`, {
+      method: 'POST',
+    });
+  }
 }
 
 export const api = new ApiClient();

@@ -11,7 +11,7 @@ export function createRepositoryRoutes(gitService: GitService, agentService: Age
 
   router.get('/', async (req, res) => {
     try {
-      const repositories = gitService.getRepositories();
+      const repositories = gitService.getRepositories(req.userId);
       res.json(repositories);
     } catch (error) {
       res.status(500).json({ error: 'Failed to get repositories' });
@@ -25,7 +25,7 @@ export function createRepositoryRoutes(gitService: GitService, agentService: Age
         return res.status(400).json({ error: 'repositoryPath is required' });
       }
 
-      const repository = await gitService.addRepository(repositoryPath);
+      const repository = await gitService.addRepository(repositoryPath, req.userId);
       res.status(201).json(repository);
     } catch (error) {
       res.status(500).json({ error: `Failed to add repository: ${error}` });
@@ -34,7 +34,7 @@ export function createRepositoryRoutes(gitService: GitService, agentService: Age
 
   router.get('/:id', (req, res) => {
     try {
-      const repository = gitService.getRepository(req.params.id);
+      const repository = gitService.getRepository(req.params.id, req.userId);
       if (!repository) {
         return res.status(404).json({ error: 'Repository not found' });
       }
@@ -46,7 +46,7 @@ export function createRepositoryRoutes(gitService: GitService, agentService: Age
 
   router.get('/:id/worktrees', (req, res) => {
     try {
-      const worktrees = gitService.getWorktreesByRepository(req.params.id);
+      const worktrees = gitService.getWorktreesByRepository(req.params.id, req.userId);
       res.json(worktrees);
     } catch (error) {
       res.status(500).json({ error: 'Failed to get worktrees' });
@@ -70,7 +70,7 @@ export function createRepositoryRoutes(gitService: GitService, agentService: Age
         return res.status(400).json({ error: 'branchName is required' });
       }
 
-      const worktree = await gitService.createWorktree(req.params.id, branchName, baseBranch, agentType);
+      const worktree = await gitService.createWorktree(req.params.id, branchName, baseBranch, agentType, req.userId);
       res.status(201).json(worktree);
     } catch (error) {
       res.status(500).json({ error: `Failed to create worktree: ${error}` });
@@ -93,7 +93,7 @@ export function createRepositoryRoutes(gitService: GitService, agentService: Age
       
       // If force delete, stop all instances first
       if (force) {
-        const instances = agentService.getInstancesByWorktree(worktreeId);
+        const instances = agentService.getInstancesByWorktree(worktreeId, req.userId);
         for (const instance of instances) {
           if (instance.status === 'running' || instance.status === 'starting') {
             console.log(`Force delete: stopping instance ${instance.id} (${instance.agentType}) for worktree ${worktreeId}`);
@@ -105,10 +105,9 @@ export function createRepositoryRoutes(gitService: GitService, agentService: Age
         await new Promise(resolve => setTimeout(resolve, 1000));
         
         // Refresh the worktree to get updated instance statuses
-        const worktree = gitService.getWorktree(worktreeId);
+        const worktree = gitService.getWorktree(worktreeId, req.userId);
         if (worktree) {
-          // Update instances from claude service
-          const updatedInstances = agentService.getInstancesByWorktree(worktreeId);
+          const updatedInstances = agentService.getInstancesByWorktree(worktreeId, req.userId);
           worktree.instances = updatedInstances;
         }
       }
@@ -150,7 +149,7 @@ export function createRepositoryRoutes(gitService: GitService, agentService: Age
 
   router.get('/:id/notes', async (req, res) => {
     try {
-      const repository = gitService.getRepository(req.params.id);
+      const repository = gitService.getRepository(req.params.id, req.userId);
       if (!repository) {
         return res.status(404).json({ error: 'Repository not found' });
       }
@@ -172,7 +171,7 @@ export function createRepositoryRoutes(gitService: GitService, agentService: Age
 
   router.post('/:id/notes', async (req, res) => {
     try {
-      const repository = gitService.getRepository(req.params.id);
+      const repository = gitService.getRepository(req.params.id, req.userId);
       if (!repository) {
         return res.status(404).json({ error: 'Repository not found' });
       }
@@ -190,10 +189,9 @@ export function createRepositoryRoutes(gitService: GitService, agentService: Age
     }
   });
 
-  // -------- Repository Docs Endpoints --------
   router.get('/:id/docs', async (req, res) => {
     try {
-      const repository = gitService.getRepository(req.params.id);
+      const repository = gitService.getRepository(req.params.id, req.userId);
       if (!repository) {
         return res.status(404).json({ error: 'Repository not found' });
       }
@@ -207,7 +205,7 @@ export function createRepositoryRoutes(gitService: GitService, agentService: Age
 
   router.get('/:id/docs/content', async (req, res) => {
     try {
-      const repository = gitService.getRepository(req.params.id);
+      const repository = gitService.getRepository(req.params.id, req.userId);
       if (!repository) {
         return res.status(404).json({ error: 'Repository not found' });
       }

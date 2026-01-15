@@ -20,8 +20,12 @@ import { createDatabaseRoutes } from './routes/database.js';
 import { createAuthRoutes, requireAuth } from './routes/auth.js';
 import gitRoutes from './routes/git.js';
 import { createAgentsRoutes } from './routes/agents.js';
+import { createAgentAuthRoutes } from './routes/agent-auth.js';
+import { createTunnelRoutes } from './routes/tunnel.js';
+import { createOAuthCallbackRoutes } from './routes/oauth-callback.js';
 import { agentFactory } from './agents/agent-factory.js';
 import { appConfig } from './config/app.config.js';
+import { userContextMiddleware } from './middleware/user-context.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -117,9 +121,15 @@ if (appConfig.enableGithubAuth) {
   app.use('/api', requireAuth(authService));
 }
 
+// Add user context middleware to extract userId from session/headers
+app.use('/api', userContextMiddleware);
+
 app.use('/api/repositories', createRepositoryRoutes(gitService, agentService));
 app.use('/api/instances', createInstanceRoutes(agentService, terminalService, gitService));
 app.use('/api/agents', createAgentsRoutes());
+app.use('/api/agents/auth', createAgentAuthRoutes(terminalService));
+app.use('/api/system/tunnel', createTunnelRoutes());
+app.use('/api/oauth', createOAuthCallbackRoutes());
 app.use('/api/filesystem', createFilesystemRoutes());
 app.use('/api/database', createDatabaseRoutes(db));
 

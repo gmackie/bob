@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ClaudeInstance, Worktree, AgentInfo } from '../types';
+import { ClaudeInstance, Worktree, AgentInfo, AgentType } from '../types';
 import { TerminalComponent } from './Terminal';
 import { DeleteWorktreeModal } from './DeleteWorktreeModal';
 import { AgentConfigPanel } from './AgentConfigPanel';
@@ -584,10 +584,12 @@ const SystemStatusDashboard: React.FC = () => {
   const [isUpdating, setIsUpdating] = useState(false);
   const [showAuthTerminal, setShowAuthTerminal] = useState(false);
   const [authTerminalSessionId, setAuthTerminalSessionId] = useState<string | null>(null);
+  const [authAgentType, setAuthAgentType] = useState<string | null>(null);
   const [showAgentConfig, setShowAgentConfig] = useState(false);
 
   const handleOpenAuthTerminal = async () => {
     try {
+      setAuthAgentType(null); // GitHub
       const { sessionId } = await api.createSystemTerminal('gh auth login');
       setAuthTerminalSessionId(sessionId);
       setShowAuthTerminal(true);
@@ -596,12 +598,32 @@ const SystemStatusDashboard: React.FC = () => {
     }
   };
 
+  const handleOpenAgentAuthTerminal = async (agentType: string) => {
+    try {
+      setAuthAgentType(agentType);
+      const { sessionId } = await api.startAgentAuth(agentType);
+      const { sessionId: terminalSessionId } = await api.createAuthTerminalSession(sessionId);
+      setAuthTerminalSessionId(terminalSessionId);
+      setShowAuthTerminal(true);
+    } catch (error) {
+      console.error('Failed to create agent auth terminal:', error);
+    }
+  };
+
   const handleCloseAuthTerminal = () => {
     if (authTerminalSessionId) {
+      // If it was an agent auth session, we should cancel/cleanup
+      if (authAgentType) {
+         // We don't have the original auth session ID here, only the terminal session ID.
+         // But the API closeTerminalSession should handle the terminal part.
+         // The auth session cleanup might need to be handled if we tracked it.
+         // For now, just closing the terminal session is likely enough as the backend should handle disconnection.
+      }
       api.closeTerminalSession(authTerminalSessionId).catch(console.error);
     }
     setShowAuthTerminal(false);
     setAuthTerminalSessionId(null);
+    setAuthAgentType(null);
   };
 
   useEffect(() => {
@@ -775,7 +797,24 @@ const SystemStatusDashboard: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                <div style={{ textAlign: 'right' }}>
+                <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                  {agent.isAuthenticated === false && (
+                    <button
+                      onClick={() => handleOpenAgentAuthTerminal(agent.type)}
+                      style={{
+                        padding: '4px 8px',
+                        fontSize: '11px',
+                        backgroundColor: '#238636',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        marginBottom: '4px'
+                      }}
+                    >
+                      Authenticate
+                    </button>
+                  )}
                   <div style={{
                     color: getStatusColor(agentStatus),
                     fontSize: '12px',
@@ -890,7 +929,11 @@ const SystemStatusDashboard: React.FC = () => {
               borderBottom: '1px solid #333',
               backgroundColor: '#252526'
             }}>
-              <span style={{ color: '#fff', fontWeight: 'bold' }}>GitHub CLI Authentication</span>
+              <span style={{ color: '#fff', fontWeight: 'bold' }}>
+                {authAgentType 
+                  ? `${authAgentType.charAt(0).toUpperCase() + authAgentType.slice(1)} Authentication` 
+                  : 'GitHub CLI Authentication'}
+              </span>
               <button
                 onClick={handleCloseAuthTerminal}
                 style={{

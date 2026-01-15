@@ -64,102 +64,134 @@ export class DatabaseService {
 
   // Repository methods
   async saveRepository(repo: Repository): Promise<void> {
+    const userId = repo.userId || 'default-user';
     await this.run(
-      `INSERT OR REPLACE INTO repositories (id, name, path, branch, main_branch) VALUES (?, ?, ?, ?, ?)`,
-      [repo.id, repo.name, repo.path, repo.branch, repo.mainBranch]
+      `INSERT OR REPLACE INTO repositories (id, user_id, name, path, branch, main_branch) VALUES (?, ?, ?, ?, ?, ?)`,
+      [repo.id, userId, repo.name, repo.path, repo.branch, repo.mainBranch]
     );
   }
 
-  async getRepository(id: string): Promise<Repository | null> {
-    const row = await this.get('SELECT * FROM repositories WHERE id = ?', [id]);
+  async getRepository(id: string, userId?: string): Promise<Repository | null> {
+    const query = userId 
+      ? 'SELECT * FROM repositories WHERE id = ? AND user_id = ?'
+      : 'SELECT * FROM repositories WHERE id = ?';
+    const params = userId ? [id, userId] : [id];
+    const row = await this.get(query, params);
     
     if (!row) return null;
 
-    const worktrees = await this.getWorktreesByRepository(id);
+    const worktrees = await this.getWorktreesByRepository(id, row.user_id);
     
     return {
       id: row.id,
+      userId: row.user_id,
       name: row.name,
       path: row.path,
       branch: row.branch,
-      mainBranch: row.main_branch || row.branch, // Fallback to current branch if main_branch is null
+      mainBranch: row.main_branch || row.branch,
       worktrees
     };
   }
 
-  async getAllRepositories(): Promise<Repository[]> {
-    const rows = await this.all('SELECT * FROM repositories ORDER BY created_at DESC');
+  async getAllRepositories(userId?: string): Promise<Repository[]> {
+    const query = userId
+      ? 'SELECT * FROM repositories WHERE user_id = ? ORDER BY created_at DESC'
+      : 'SELECT * FROM repositories ORDER BY created_at DESC';
+    const params = userId ? [userId] : [];
+    const rows = await this.all(query, params);
     
     const repositories = await Promise.all(rows.map(async (row) => ({
       id: row.id,
+      userId: row.user_id,
       name: row.name,
       path: row.path,
       branch: row.branch,
-      mainBranch: row.main_branch || row.branch, // Fallback to current branch if main_branch is null
-      worktrees: await this.getWorktreesByRepository(row.id)
+      mainBranch: row.main_branch || row.branch,
+      worktrees: await this.getWorktreesByRepository(row.id, row.user_id)
     })));
 
     return repositories;
   }
 
-  async deleteRepository(id: string): Promise<void> {
-    await this.run('DELETE FROM repositories WHERE id = ?', [id]);
+  async deleteRepository(id: string, userId?: string): Promise<void> {
+    const query = userId
+      ? 'DELETE FROM repositories WHERE id = ? AND user_id = ?'
+      : 'DELETE FROM repositories WHERE id = ?';
+    const params = userId ? [id, userId] : [id];
+    await this.run(query, params);
   }
 
   // Worktree methods
   async saveWorktree(worktree: Worktree): Promise<void> {
+    const userId = worktree.userId || 'default-user';
     await this.run(
-      `INSERT OR REPLACE INTO worktrees (id, repository_id, path, branch, preferred_agent) VALUES (?, ?, ?, ?, ?)`,
-      [worktree.id, worktree.repositoryId, worktree.path, worktree.branch, worktree.preferredAgent || 'claude']
+      `INSERT OR REPLACE INTO worktrees (id, user_id, repository_id, path, branch, preferred_agent) VALUES (?, ?, ?, ?, ?, ?)`,
+      [worktree.id, userId, worktree.repositoryId, worktree.path, worktree.branch, worktree.preferredAgent || 'claude']
     );
   }
 
-  async getWorktree(id: string): Promise<Worktree | null> {
-    const row = await this.get('SELECT * FROM worktrees WHERE id = ?', [id]);
+  async getWorktree(id: string, userId?: string): Promise<Worktree | null> {
+    const query = userId
+      ? 'SELECT * FROM worktrees WHERE id = ? AND user_id = ?'
+      : 'SELECT * FROM worktrees WHERE id = ?';
+    const params = userId ? [id, userId] : [id];
+    const row = await this.get(query, params);
     
     if (!row) return null;
 
-    const instances = await this.getInstancesByWorktree(id);
+    const instances = await this.getInstancesByWorktree(id, row.user_id);
 
     return {
       id: row.id,
+      userId: row.user_id,
       repositoryId: row.repository_id,
       path: row.path,
       branch: row.branch,
       preferredAgent: row.preferred_agent || 'claude',
       instances,
-      isMainWorktree: false // All worktrees in the database are non-main worktrees
+      isMainWorktree: false
     };
   }
 
-  async getWorktreesByRepository(repositoryId: string): Promise<Worktree[]> {
-    const rows = await this.all('SELECT * FROM worktrees WHERE repository_id = ? ORDER BY created_at DESC', [repositoryId]);
+  async getWorktreesByRepository(repositoryId: string, userId?: string): Promise<Worktree[]> {
+    const query = userId
+      ? 'SELECT * FROM worktrees WHERE repository_id = ? AND user_id = ? ORDER BY created_at DESC'
+      : 'SELECT * FROM worktrees WHERE repository_id = ? ORDER BY created_at DESC';
+    const params = userId ? [repositoryId, userId] : [repositoryId];
+    const rows = await this.all(query, params);
     
     const worktrees = await Promise.all(rows.map(async (row) => ({
       id: row.id,
+      userId: row.user_id,
       repositoryId: row.repository_id,
       path: row.path,
       branch: row.branch,
       preferredAgent: row.preferred_agent || 'claude',
-      instances: await this.getInstancesByWorktree(row.id),
-      isMainWorktree: false // All worktrees in the database are non-main worktrees
+      instances: await this.getInstancesByWorktree(row.id, row.user_id),
+      isMainWorktree: false
     })));
 
     return worktrees;
   }
 
-  async deleteWorktree(id: string): Promise<void> {
-    await this.run('DELETE FROM worktrees WHERE id = ?', [id]);
+  async deleteWorktree(id: string, userId?: string): Promise<void> {
+    const query = userId
+      ? 'DELETE FROM worktrees WHERE id = ? AND user_id = ?'
+      : 'DELETE FROM worktrees WHERE id = ?';
+    const params = userId ? [id, userId] : [id];
+    await this.run(query, params);
   }
 
   // Agent instance methods
   async saveInstance(instance: AgentInstance): Promise<void> {
+    const userId = instance.userId || 'default-user';
     await this.run(
       `INSERT OR REPLACE INTO agent_instances
-       (id, repository_id, worktree_id, agent_type, status, pid, port, error_message, last_activity)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, user_id, repository_id, worktree_id, agent_type, status, pid, port, error_message, last_activity)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         instance.id,
+        userId,
         instance.repositoryId,
         instance.worktreeId,
         instance.agentType,
@@ -172,13 +204,18 @@ export class DatabaseService {
     );
   }
 
-  async getInstance(id: string): Promise<AgentInstance | null> {
-    const row = await this.get('SELECT * FROM agent_instances WHERE id = ?', [id]);
+  async getInstance(id: string, userId?: string): Promise<AgentInstance | null> {
+    const query = userId
+      ? 'SELECT * FROM agent_instances WHERE id = ? AND user_id = ?'
+      : 'SELECT * FROM agent_instances WHERE id = ?';
+    const params = userId ? [id, userId] : [id];
+    const row = await this.get(query, params);
 
     if (!row) return null;
 
     return {
       id: row.id,
+      userId: row.user_id,
       repositoryId: row.repository_id,
       worktreeId: row.worktree_id,
       agentType: row.agent_type,
@@ -191,11 +228,16 @@ export class DatabaseService {
     };
   }
 
-  async getAllInstances(): Promise<AgentInstance[]> {
-    const rows = await this.all('SELECT * FROM agent_instances ORDER BY created_at DESC');
+  async getAllInstances(userId?: string): Promise<AgentInstance[]> {
+    const query = userId
+      ? 'SELECT * FROM agent_instances WHERE user_id = ? ORDER BY created_at DESC'
+      : 'SELECT * FROM agent_instances ORDER BY created_at DESC';
+    const params = userId ? [userId] : [];
+    const rows = await this.all(query, params);
 
     return rows.map(row => ({
       id: row.id,
+      userId: row.user_id,
       repositoryId: row.repository_id,
       worktreeId: row.worktree_id,
       agentType: row.agent_type,
@@ -208,11 +250,16 @@ export class DatabaseService {
     }));
   }
 
-  async getInstancesByRepository(repositoryId: string): Promise<AgentInstance[]> {
-    const rows = await this.all('SELECT * FROM agent_instances WHERE repository_id = ? ORDER BY created_at DESC', [repositoryId]);
+  async getInstancesByRepository(repositoryId: string, userId?: string): Promise<AgentInstance[]> {
+    const query = userId
+      ? 'SELECT * FROM agent_instances WHERE repository_id = ? AND user_id = ? ORDER BY created_at DESC'
+      : 'SELECT * FROM agent_instances WHERE repository_id = ? ORDER BY created_at DESC';
+    const params = userId ? [repositoryId, userId] : [repositoryId];
+    const rows = await this.all(query, params);
 
     return rows.map(row => ({
       id: row.id,
+      userId: row.user_id,
       repositoryId: row.repository_id,
       worktreeId: row.worktree_id,
       agentType: row.agent_type,
@@ -225,11 +272,16 @@ export class DatabaseService {
     }));
   }
 
-  async getInstancesByWorktree(worktreeId: string): Promise<AgentInstance[]> {
-    const rows = await this.all('SELECT * FROM agent_instances WHERE worktree_id = ? ORDER BY created_at DESC', [worktreeId]);
+  async getInstancesByWorktree(worktreeId: string, userId?: string): Promise<AgentInstance[]> {
+    const query = userId
+      ? 'SELECT * FROM agent_instances WHERE worktree_id = ? AND user_id = ? ORDER BY created_at DESC'
+      : 'SELECT * FROM agent_instances WHERE worktree_id = ? ORDER BY created_at DESC';
+    const params = userId ? [worktreeId, userId] : [worktreeId];
+    const rows = await this.all(query, params);
 
     return rows.map(row => ({
       id: row.id,
+      userId: row.user_id,
       repositoryId: row.repository_id,
       worktreeId: row.worktree_id,
       agentType: row.agent_type,

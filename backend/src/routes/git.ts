@@ -116,14 +116,12 @@ async function callAgent(agentType: string | undefined, prompt: string, input: s
   }
 }
 
-// Get git diff for a worktree
 router.get('/:worktreeId/diff', async (req, res) => {
   try {
     const { worktreeId } = req.params;
 
-    // Get worktree path from git service
     const gitService = req.app.locals.gitService;
-    const worktree = gitService.getWorktree(worktreeId);
+    const worktree = gitService.getWorktree(worktreeId, req.userId);
 
     if (!worktree) {
       return res.status(404).json({ error: 'Worktree not found' });
@@ -180,7 +178,6 @@ router.get('/:worktreeId/diff', async (req, res) => {
   }
 });
 
-// Generate AI commit message with optional comments context
 router.post('/:worktreeId/generate-commit-message', async (req, res) => {
   const { comments } = req.body || {};
   try {
@@ -188,7 +185,7 @@ router.post('/:worktreeId/generate-commit-message', async (req, res) => {
 
     const gitService = req.app.locals.gitService;
     const agentService = req.app.locals.agentService;
-    const worktree = gitService.getWorktree(worktreeId);
+    const worktree = gitService.getWorktree(worktreeId, req.userId);
 
     if (!worktree) {
       return res.status(404).json({ error: 'Worktree not found' });
@@ -249,9 +246,8 @@ ${comments && comments.length > 0 ? '5. Consider the code review comments provid
 
 Only return the body content, no subject line. Focus on the actual code changes, not just file counts.`;
 
-      // Choose agent: use running instance agent type if available, else default to Claude
       const instances = agentService?.getInstancesByWorktree
-        ? agentService.getInstancesByWorktree(worktreeId)
+        ? agentService.getInstancesByWorktree(worktreeId, req.userId)
         : [];
       const agentType = instances[0]?.agentType || 'claude';
 
@@ -296,14 +292,13 @@ Only return the body content, no subject line. Focus on the actual code changes,
   }
 });
 
-// Commit changes with provided message
 router.post('/:worktreeId/commit', async (req, res) => {
   try {
     const { worktreeId } = req.params;
     const { message } = req.body;
 
     const gitService = req.app.locals.gitService;
-    const worktree = gitService.getWorktree(worktreeId);
+    const worktree = gitService.getWorktree(worktreeId, req.userId);
 
     if (!worktree) {
       return res.status(404).json({ error: 'Worktree not found' });
@@ -349,13 +344,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>`;
   }
 });
 
-// Revert all changes
 router.post('/:worktreeId/revert', async (req, res) => {
   try {
     const { worktreeId } = req.params;
 
     const gitService = req.app.locals.gitService;
-    const worktree = gitService.getWorktree(worktreeId);
+    const worktree = gitService.getWorktree(worktreeId, req.userId);
 
     if (!worktree) {
       return res.status(404).json({ error: 'Worktree not found' });
@@ -378,13 +372,12 @@ router.post('/:worktreeId/revert', async (req, res) => {
   }
 });
 
-// Create pull request
 router.post('/:worktreeId/create-pr', async (req, res) => {
   try {
     const { worktreeId } = req.params;
 
     const gitService = req.app.locals.gitService;
-    const worktree = gitService.getWorktree(worktreeId);
+    const worktree = gitService.getWorktree(worktreeId, req.userId);
 
     if (!worktree) {
       return res.status(404).json({ error: 'Worktree not found' });
@@ -477,13 +470,12 @@ router.post('/:worktreeId/create-pr', async (req, res) => {
   }
 });
 
-// Update pull request title and description
 router.post('/:worktreeId/update-pr', async (req, res) => {
   try {
     const { worktreeId } = req.params;
 
     const gitService = req.app.locals.gitService;
-    const worktree = gitService.getWorktree(worktreeId);
+    const worktree = gitService.getWorktree(worktreeId, req.userId);
 
     if (!worktree) {
       return res.status(404).json({ error: 'Worktree not found' });
@@ -576,13 +568,12 @@ router.post('/:worktreeId/update-pr', async (req, res) => {
   }
 });
 
-// Analyze git diff and generate inline comments
 router.post('/:worktreeId/analyze-diff', async (req, res) => {
   try {
     const { worktreeId } = req.params;
 
     const gitService = req.app.locals.gitService;
-    const worktree = gitService.getWorktree(worktreeId);
+    const worktree = gitService.getWorktree(worktreeId, req.userId);
 
     if (!worktree) {
       return res.status(404).json({ error: 'Worktree not found' });
@@ -731,12 +722,11 @@ Only include substantive comments that add value. Be concise but helpful.`;
   }
 });
 
-// Get analysis and comments for a worktree
 router.get('/:worktreeId/analysis', async (req, res) => {
   try {
     const { worktreeId } = req.params;
     const gitService = req.app.locals.gitService;
-    const worktree = gitService.getWorktree(worktreeId);
+    const worktree = gitService.getWorktree(worktreeId, req.userId);
 
     if (!worktree) {
       return res.status(404).json({ error: 'Worktree not found' });
@@ -788,14 +778,13 @@ router.get('/:worktreeId/analysis', async (req, res) => {
   }
 });
 
-// Save analysis and comments to database
 router.post('/:worktreeId/save-analysis', async (req, res) => {
   try {
     const { worktreeId } = req.params;
     const { analysis, comments } = req.body;
 
     const gitService = req.app.locals.gitService;
-    const worktree = gitService.getWorktree(worktreeId);
+    const worktree = gitService.getWorktree(worktreeId, req.userId);
 
     if (!worktree) {
       return res.status(404).json({ error: 'Worktree not found' });
@@ -896,14 +885,13 @@ router.put('/:worktreeId/comments/:commentId', async (req, res) => {
   }
 });
 
-// Apply code fixes based on non-dismissed comments
 router.post('/:worktreeId/apply-fixes', async (req, res) => {
   try {
     const { worktreeId } = req.params;
 
     const gitService = req.app.locals.gitService;
     const databaseService = req.app.locals.databaseService;
-    const worktree = gitService.getWorktree(worktreeId);
+    const worktree = gitService.getWorktree(worktreeId, req.userId);
 
     if (!worktree) {
       return res.status(404).json({ error: 'Worktree not found' });
@@ -1030,13 +1018,12 @@ Return only the complete file content with the requested improvements applied.`;
   }
 });
 
-// Get notes for a worktree
 router.get('/:worktreeId/notes', async (req, res) => {
   try {
     const { worktreeId } = req.params;
 
     const gitService = req.app.locals.gitService;
-    const worktree = gitService.getWorktree(worktreeId);
+    const worktree = gitService.getWorktree(worktreeId, req.userId);
 
     if (!worktree) {
       return res.status(404).json({ error: 'Worktree not found' });
@@ -1064,14 +1051,13 @@ router.get('/:worktreeId/notes', async (req, res) => {
   }
 });
 
-// Save notes for a worktree
 router.post('/:worktreeId/notes', async (req, res) => {
   try {
     const { worktreeId } = req.params;
     const { content } = req.body;
 
     const gitService = req.app.locals.gitService;
-    const worktree = gitService.getWorktree(worktreeId);
+    const worktree = gitService.getWorktree(worktreeId, req.userId);
 
     if (!worktree) {
       return res.status(404).json({ error: 'Worktree not found' });
@@ -1273,8 +1259,7 @@ router.post('/github/clone', async (req, res) => {
     
     // Check if already cloned
     if (fs.existsSync(clonePath)) {
-      // Repository already exists, just add it
-      const repository = await gitService.addRepository(clonePath);
+      const repository = await gitService.addRepository(clonePath, req.userId);
       return res.json({ 
         message: 'Repository already exists, added to Bob',
         repository,
@@ -1282,17 +1267,14 @@ router.post('/github/clone', async (req, res) => {
       });
     }
     
-    // Clone the repository
     let cloneCmd = `gh repo clone ${repoFullName} "${clonePath}"`;
     await execAsync(cloneCmd);
     
-    // Checkout specific branch if requested
     if (branch && branch !== 'main' && branch !== 'master') {
       await execAsync(`git checkout ${branch}`, { cwd: clonePath });
     }
     
-    // Add to Bob
-    const repository = await gitService.addRepository(clonePath);
+    const repository = await gitService.addRepository(clonePath, req.userId);
     
     res.json({ 
       message: 'Repository cloned and added successfully',

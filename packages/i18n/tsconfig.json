@@ -1,0 +1,10 @@
+{
+  "extends": "@bob/tsconfig/base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "resolveJsonModule": true
+  },
+  "include": ["src"]
+}

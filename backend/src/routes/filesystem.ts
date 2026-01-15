@@ -3,9 +3,12 @@ import { readdir, stat } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import os from 'os';
+import { restrictToUserPathsMiddleware } from '../middleware/admin-only.js';
 
 export function createFilesystemRoutes(): Router {
   const router = Router();
+  
+  router.use(restrictToUserPathsMiddleware);
 
   // Return the current user's home directory
   router.get('/home', (_req, res) => {

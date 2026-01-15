@@ -1,0 +1,84 @@
+{
+  "name": "@bob/api",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./src/index.ts"
+    },
+    "./openapi": {
+      "types": "./dist/openapi.d.ts",
+      "default": "./src/openapi.ts"
+    },
+    "./services/webhooks/verify": {
+      "types": "./dist/services/webhooks/verify.d.ts",
+      "default": "./src/services/webhooks/verify.ts"
+    },
+    "./services/webhooks/processWebhook": {
+      "types": "./dist/services/webhooks/processWebhook.d.ts",
+      "default": "./src/services/webhooks/processWebhook.ts"
+    },
+    "./services/git/providerConnectionService": {
+      "types": "./dist/services/git/providerConnectionService.d.ts",
+      "default": "./src/services/git/providerConnectionService.ts"
+    },
+    "./services/git/prService": {
+      "types": "./dist/services/git/prService.d.ts",
+      "default": "./src/services/git/prService.ts"
+    },
+    "./services/tasks/taskExecutor": {
+      "types": "./dist/services/tasks/taskExecutor.d.ts",
+      "default": "./src/services/tasks/taskExecutor.ts"
+    },
+    "./services/tasks/contextHeuristics": {
+      "types": "./dist/services/tasks/contextHeuristics.d.ts",
+      "default": "./src/services/tasks/contextHeuristics.ts"
+    },
+    "./services/tasks/taskAutoCreate": {
+      "types": "./dist/services/tasks/taskAutoCreate.d.ts",
+      "default": "./src/services/tasks/taskAutoCreate.ts"
+    },
+    "./services/push/pushService": {
+      "types": "./dist/services/push/pushService.d.ts",
+      "default": "./src/services/push/pushService.ts"
+    },
+    "./services/sessions/workflowStatusService": {
+      "types": "./dist/services/sessions/workflowStatusService.d.ts",
+      "default": "./src/services/sessions/workflowStatusService.ts"
+    }
+  },
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "clean": "git clean -xdf .cache .turbo dist node_modules",
+    "dev": "tsc",
+    "format": "prettier --check . --ignore-path ../../.gitignore",
+    "lint": "eslint --flag unstable_native_nodejs_ts_config",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit --emitDeclarationOnly false"
+  },
+  "dependencies": {
+    "@bob/auth": "workspace:*",
+    "@bob/config": "workspace:*",
+    "@bob/db": "workspace:*",
+    "@bob/validators": "workspace:*",
+    "@trpc/server": "catalog:",
+    "superjson": "2.2.3",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@bob/eslint-config": "workspace:*",
+    "@bob/prettier-config": "workspace:*",
+    "@bob/tsconfig": "workspace:*",
+    "@vitest/coverage-v8": "^4.0.0",
+    "eslint": "catalog:",
+    "openapi-types": "^12.1.3",
+    "prettier": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "^4.0.0"
+  },
+  "prettier": "@bob/prettier-config"
+}

@@ -62,11 +62,10 @@ export function createAgentsRoutes(): Router {
     const types = type ? [type] : agentFactory.getAvailableTypes();
     const results: any[] = [];
 
-    // Resolve working directory: use worktree path if provided, else current process cwd
     let cwd = process.cwd();
     if (worktreeId) {
       const gitService = (req.app as any).locals?.gitService;
-      const worktree = gitService?.getWorktree?.(worktreeId);
+      const worktree = gitService?.getWorktree?.(worktreeId, req.userId);
       if (worktree?.path) {
         cwd = worktree.path;
       }

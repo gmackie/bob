@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Repository, Worktree, ClaudeInstance, AgentInfo, AgentType } from '../types';
 import { GitHubRepoSelector } from './GitHubRepoSelector';
 import { DeleteWorktreeModal } from './DeleteWorktreeModal';
+import { AgentSelector } from './AgentSelector';
+import { TerminalComponent } from './Terminal';
 import { api } from '../api';
 
 interface RepositoryPanelProps {
@@ -42,6 +44,11 @@ export const RepositoryPanel: React.FC<RepositoryPanelProps> = ({
   const [refreshingRepositories, setRefreshingRepositories] = useState<Set<string>>(new Set());
   const [availableAgents, setAvailableAgents] = useState<AgentInfo[]>([]);
   const [selectedAgentType, setSelectedAgentType] = useState<AgentType | undefined>(undefined);
+  
+  // Auth terminal state
+  const [showAuthTerminal, setShowAuthTerminal] = useState(false);
+  const [authTerminalSessionId, setAuthTerminalSessionId] = useState<string | null>(null);
+  const [authAgentType, setAuthAgentType] = useState<string | null>(null);
 
   // Fetch available agents on mount
   useEffect(() => {
@@ -61,6 +68,30 @@ export const RepositoryPanel: React.FC<RepositoryPanelProps> = ({
     };
     fetchAgents();
   }, []);
+
+  const handleOpenAgentAuthTerminal = async (agentType: string) => {
+    try {
+      setAuthAgentType(agentType);
+      const { sessionId } = await api.startAgentAuth(agentType);
+      const { sessionId: terminalSessionId } = await api.createAuthTerminalSession(sessionId);
+      setAuthTerminalSessionId(terminalSessionId);
+      setShowAuthTerminal(true);
+    } catch (error) {
+      console.error('Failed to create agent auth terminal:', error);
+    }
+  };
+
+  const handleCloseAuthTerminal = () => {
+    if (authTerminalSessionId) {
+      api.closeTerminalSession(authTerminalSessionId).catch(console.error);
+    }
+    setShowAuthTerminal(false);
+    setAuthTerminalSessionId(null);
+    setAuthAgentType(null);
+    
+    // Refresh agents list to update status
+    api.getAgents().then(setAvailableAgents).catch(console.error);
+  };
 
   const handleGitHubRepoSelect = async (_repoFullName: string, _branch: string, _agentType: AgentType) => {
     // The GitHubRepoSelector already clones and adds the repo via the API
@@ -280,18 +311,14 @@ export const RepositoryPanel: React.FC<RepositoryPanelProps> = ({
                             autoFocus
                           />
                           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                            <select
-                              value={selectedAgentType || ''}
-                              onChange={(e) => setSelectedAgentType(e.target.value as AgentType)}
+                            <AgentSelector
+                              agents={availableAgents}
+                              value={selectedAgentType}
+                              onChange={(type) => setSelectedAgentType(type)}
+                              onAuthenticate={handleOpenAgentAuthTerminal}
                               className="input"
-                              style={{ flex: 1, fontSize: '12px', padding: '6px 8px' }}
-                            >
-                              {availableAgents.filter(a => a.isAvailable && (a.isAuthenticated ?? true)).map(agent => (
-                                <option key={agent.type} value={agent.type}>
-                                  {agent.name} {agent.version ? `(${agent.version})` : ''}
-                                </option>
-                              ))}
-                            </select>
+                              style={{ flex: 1 }}
+                            />
                             <button
                               onClick={() => handleCreateWorktree(repo.id)}
                               disabled={!newBranchName.trim()}
@@ -490,6 +517,65 @@ export const RepositoryPanel: React.FC<RepositoryPanelProps> = ({
           onClose={() => setWorktreeToDelete(null)}
           onConfirm={onDeleteWorktree}
         />
+      )}
+
+      {/* Auth Terminal Modal */}
+      {showAuthTerminal && authTerminalSessionId && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            width: '80%',
+            maxWidth: '900px',
+            height: '500px',
+            backgroundColor: '#1e1e1e',
+            borderRadius: '8px',
+            border: '1px solid #333',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '12px 16px',
+              borderBottom: '1px solid #333',
+              backgroundColor: '#252526'
+            }}>
+              <span style={{ color: '#fff', fontWeight: 'bold' }}>
+                {authAgentType 
+                  ? `${authAgentType.charAt(0).toUpperCase() + authAgentType.slice(1)} Authentication` 
+                  : 'Authentication'}
+              </span>
+              <button
+                onClick={handleCloseAuthTerminal}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#888',
+                  fontSize: '20px',
+                  cursor: 'pointer',
+                  padding: '0 8px'
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              <TerminalComponent sessionId={authTerminalSessionId} onClose={handleCloseAuthTerminal} />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

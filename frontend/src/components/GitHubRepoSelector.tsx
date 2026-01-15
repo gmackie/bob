@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../api';
 import { AgentInfo, AgentType } from '../types';
+import { AgentSelector } from './AgentSelector';
 
 interface GitHubRepo {
   name: string;
@@ -324,32 +325,31 @@ export const GitHubRepoSelector: React.FC<GitHubRepoSelectorProps> = ({ onSelect
             </div>
           )}
 
-          {/* Agent Select */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ display: 'block', color: '#888', fontSize: '12px', marginBottom: '6px' }}>
-              AI Agent
-            </label>
-            <select
-              value={selectedAgent}
-              onChange={(e) => setSelectedAgent(e.target.value as AgentType)}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                backgroundColor: '#2d2d2d',
-                border: '1px solid #404040',
-                borderRadius: '4px',
-                color: '#fff',
-                fontSize: '14px',
-                boxSizing: 'border-box'
-              }}
-            >
-              {agents.map(agent => (
-                <option key={agent.type} value={agent.type}>
-                  {agent.name} {agent.isAuthenticated === false ? '(not authenticated)' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
+            {/* Agent Select */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', color: '#888', fontSize: '12px', marginBottom: '6px' }}>
+                AI Agent
+              </label>
+              <AgentSelector
+                agents={agents}
+                value={selectedAgent}
+                onChange={(type) => type && setSelectedAgent(type)}
+                className="input"
+                style={{
+                  select: {
+                    width: '100%',
+                    padding: '10px 12px',
+                    backgroundColor: '#2d2d2d',
+                    border: '1px solid #404040',
+                    borderRadius: '4px',
+                    color: '#fff',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }
+                }}
+              />
+            </div>
+
         </div>
 
         {/* Footer */}

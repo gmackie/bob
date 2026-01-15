@@ -1,0 +1,28 @@
+services:
+  gateway:
+    build:
+      context: ./apps/gateway
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - GATEWAY_PORT=3002
+      - AGENT_IMAGE=bob-agent:latest
+    restart: unless-stopped
+    networks:
+      - bob-dev
+    depends_on:
+      - agent-base
+
+  agent-base:
+    build:
+      context: ./apps/gateway/docker
+      dockerfile: Dockerfile.user-agent
+    image: bob-agent:latest
+    command: ["echo", "Base image built"]
+
+networks:
+  bob-dev:
+    driver: bridge

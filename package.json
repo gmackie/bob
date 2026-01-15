@@ -1,150 +1,53 @@
 {
   "name": "bob",
-  "version": "0.0.3",
-  "description": "Bob - Claude Code Manager Desktop App",
-  "main": "electron/main.js",
+  "version": "0.0.4",
+  "private": true,
+  "description": "Bob - AI Agent Multi-Instance Manager",
   "author": "Bob Team <sean@reedster.llc>",
   "license": "GPL-3.0",
   "homepage": "https://github.com/your-org/bob",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": "^10.19.0"
+  },
+  "packageManager": "pnpm@10.19.0",
   "scripts": {
-    "test": "npm run test:backend && npm run test:frontend",
-    "test:backend": "cd backend && tsx tests/filesystem-routes.test.ts",
-    "test:frontend": "cd frontend && tsx tests/initialDir.test.ts",
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "dev:clean": "lsof -ti:47285 | xargs -r kill -9; lsof -ti:43829 | xargs -r kill -9; npm run dev",
-    "dev:stop": "lsof -ti:47285 | xargs -r kill -9; lsof -ti:43829 | xargs -r kill -9",
-    "dev:backend": "cd backend && npm run dev",
-    "dev:frontend": "cd frontend && npm run dev",
-    "dev:electron": "NODE_ENV=development electron .",
-    "dev:app": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"wait-on http://localhost:47285 && npm run dev:electron\"",
-    "dev:jeff": "JEFF_MODE=true USE_GITHUB_AUTH=false concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "sync-version": "node scripts/sync-version.js",
-    "set-product-name": "node scripts/set-product-name.js",
-    "build": "npm run sync-version && npm run build:frontend && npm run build:backend",
-    "build:backend": "cd backend && npm run build",
-    "build:frontend": "cd frontend && npm run build",
-    "build:app": "npm run set-product-name && npm run build && electron-builder",
-    "build:app:dir": "npm run set-product-name && npm run build && electron-builder --dir",
-    "build:app:no-auth": "USE_GITHUB_AUTH=false npm run set-product-name && npm run build && electron-builder",
-    "build:app:jeff": "JEFF_MODE=true USE_GITHUB_AUTH=false npm run set-product-name && npm run build && electron-builder",
-    "start": "cd backend && NODE_ENV=production npm run start",
-    "start:electron": "electron .",
-    "start:jeff": "JEFF_MODE=true USE_GITHUB_AUTH=false npm run start",
-    "install:dependencies": "npm install && cd backend && npm install && cd ../frontend && npm install",
-    "install:dependencies:ci": "npm ci && cd backend && npm ci && cd ../frontend && npm ci",
-    "install:dependencies:win": "npm install --ignore-scripts && cd backend && npm install --ignore-scripts && cd ../frontend && npm install && cd .. && npm run rebuild:native",
-    "install:dependencies:mac": "npm install --ignore-scripts && cd backend && npm install --ignore-scripts && cd ../frontend && npm install && cd .. && npm run rebuild:native:mac",
-    "rebuild:native": "cd backend && npm rebuild node-pty || echo 'Warning: node-pty rebuild failed, terminal features may not work'",
-    "rebuild:native:mac": "cd backend && npm rebuild node-pty || echo 'Warning: node-pty rebuild failed, terminal features may not work'",
+    "build": "turbo run build",
+    "clean": "git clean -xdf node_modules",
+    "clean:workspaces": "turbo run clean",
+    "auth:generate": "pnpm -F @bob/auth generate",
+    "db:push": "turbo -F @bob/db push",
+    "db:studio": "turbo -F @bob/db studio",
+    "dev": "turbo watch dev --continue",
+    "dev:next": "turbo watch dev -F @bob/nextjs...",
+    "dev:expo": "turbo watch dev -F @bob/expo...",
+    "format": "turbo run format --continue -- --cache --cache-location .cache/.prettiercache",
+    "format:fix": "turbo run format --continue -- --write --cache --cache-location .cache/.prettiercache",
+    "lint": "turbo run lint --continue -- --cache --cache-location .cache/.eslintcache",
+    "lint:fix": "turbo run lint --continue -- --fix --cache --cache-location .cache/.eslintcache",
+    "lint:ws": "pnpm dlx sherif@latest",
+    "typecheck": "turbo run typecheck",
+    "ui-add": "turbo run ui-add",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+
+    "dev:legacy": "concurrently \"npm run dev:legacy:backend\" \"npm run dev:legacy:frontend\"",
+    "dev:legacy:clean": "lsof -ti:47285 | xargs -r kill -9; lsof -ti:43829 | xargs -r kill -9; npm run dev:legacy",
+    "dev:legacy:backend": "cd backend && npm run dev",
+    "dev:legacy:frontend": "cd frontend && npm run dev",
+    "dev:gateway": "pnpm -F @bob/gateway dev",
+    "dev:nextjs": "turbo watch dev -F @bob/nextjs... -F @bob/gateway",
     "migrate:up": "cd backend && npm run migrate:up",
-    "migrate:status": "cd backend && npm run migrate:status",
-    "dist": "npm run set-product-name && npm run build && electron-builder --publish=never",
-    "dist:linux": "npm run set-product-name && npm run build && electron-builder --linux --publish=never",
-    "dist:mac": "npm run set-product-name && npm run build && electron-builder --mac --publish=never",
-    "dist:win": "npm run set-product-name && npm run build && electron-builder --win --publish=never",
-    "dist:jeff": "JEFF_MODE=true USE_GITHUB_AUTH=false npm run set-product-name && npm run build && electron-builder --publish=never",
-    "release": "npm run build && electron-builder --publish=always"
+    "migrate:status": "cd backend && npm run migrate:status"
   },
   "devDependencies": {
+    "@bob/prettier-config": "workspace:*",
+    "@turbo/gen": "^2.5.8",
     "concurrently": "^8.2.2",
-    "electron": "^28.0.0",
-    "electron-builder": "^24.9.1",
-    "electron-reload": "^2.0.0-alpha.1",
-    "wait-on": "^7.2.0"
+    "dotenv-cli": "^10.0.0",
+    "prettier": "catalog:",
+    "turbo": "^2.5.8",
+    "typescript": "catalog:"
   },
-  "build": {
-    "appId": "com.bob.claude-manager",
-    "productName": "Bob",
-    "directories": {
-      "output": "dist-electron"
-    },
-    "files": [
-      "electron/**/*",
-      "backend/dist/**/*",
-      "frontend/dist/**/*",
-      "package.json"
-    ],
-    "extraResources": [
-      {
-        "from": "backend/dist",
-        "to": "backend/dist"
-      },
-      {
-        "from": "frontend/dist",
-        "to": "frontend/dist"
-      }
-    ],
-    "mac": {
-      "category": "public.app-category.developer-tools",
-      "icon": "electron/assets/icon.icns",
-      "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        }
-      ]
-    },
-    "win": {
-      "icon": "electron/assets/icon.ico",
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "portable",
-          "arch": [
-            "x64"
-          ]
-        }
-      ]
-    },
-    "linux": {
-      "icon": "electron/assets/icon.png",
-      "category": "Development",
-      "maintainer": "Bob Team <sean@reedster.llc>",
-      "target": [
-        {
-          "target": "AppImage",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "deb",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "rpm",
-          "arch": [
-            "x64"
-          ]
-        }
-      ]
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
-    }
-  },
-  "workspaces": [
-    "backend",
-    "frontend"
-  ]
+  "prettier": "@bob/prettier-config"
 }

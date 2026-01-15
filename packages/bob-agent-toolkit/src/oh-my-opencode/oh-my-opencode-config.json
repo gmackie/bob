@@ -1,0 +1,33 @@
+{
+  "$schema": "https://oh-my-opencode.ai/schemas/config.json",
+  "mcpServers": {
+    "bob": {
+      "command": "npx",
+      "args": ["@bob/mcp-server"],
+      "env": {
+        "BOB_API_URL": "${env:BOB_API_URL}",
+        "BOB_API_KEY": "${env:BOB_API_KEY}",
+        "BOB_SESSION_ID": "${env:BOB_SESSION_ID}"
+      }
+    }
+  },
+  "skills": {
+    "bob-workflow": {
+      "name": "bob-workflow",
+      "description": "Workflow and status reporting for Bob-managed sessions",
+      "source": "@bob/agent-toolkit/oh-my-opencode/bob-workflow-skill"
+    }
+  },
+  "hooks": {
+    "PostToolUse": {
+      "bob-status-reporter": {
+        "description": "Automatically report progress after significant tool operations",
+        "enabled": false,
+        "match": {
+          "toolNames": ["Edit", "Write", "Bash"]
+        },
+        "action": "continue"
+      }
+    }
+  }
+}

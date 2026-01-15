@@ -1,0 +1,26 @@
+{
+  "name": "@bob/agent-toolkit",
+  "version": "0.1.0",
+  "description": "Skills and configuration templates for AI agents working with Bob",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./skills/*": "./src/skills/*.md",
+    "./config/*": "./src/config/*",
+    "./oh-my-opencode": "./src/oh-my-opencode/index.ts",
+    "./oh-my-opencode/bob-workflow-skill": "./src/oh-my-opencode/bob-workflow-skill.ts",
+    "./oh-my-opencode/config": "./src/oh-my-opencode/oh-my-opencode-config.json"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@bob/tsconfig": "workspace:*",
+    "typescript": "catalog:"
+  }
+}

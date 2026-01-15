@@ -1,0 +1,7 @@
+{
+  "extends": "@bob/tsconfig/compiled-package.json",
+  "compilerOptions": {
+    "outDir": "./dist"
+  },
+  "include": ["src"]
+}

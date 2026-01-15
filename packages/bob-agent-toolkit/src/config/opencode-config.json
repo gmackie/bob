@@ -1,0 +1,22 @@
+{
+  "$schema": "https://opencode.ai/schemas/config.json",
+  "mcpServers": {
+    "bob": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["@bob/mcp-server"],
+      "env": {
+        "BOB_API_URL": "${env:BOB_API_URL}",
+        "BOB_API_KEY": "${env:BOB_API_KEY}",
+        "BOB_SESSION_ID": "${env:BOB_SESSION_ID}"
+      }
+    }
+  },
+  "skills": [
+    {
+      "name": "bob-workflow",
+      "description": "Workflow and status reporting for Bob-managed sessions",
+      "path": "./skills/bob-workflow.md"
+    }
+  ]
+}
