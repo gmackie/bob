@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 
 import type { ClaudeInstance, Worktree } from "~/lib/legacy/types";
 import { api } from "~/lib/rest/api";
+import { SystemStatusPanel } from "./SystemStatusPanel";
 import { TerminalComponent } from "./Terminal";
 
 interface AgentPanelProps {
@@ -262,12 +263,15 @@ export function AgentPanel({
             : "calc(100% - 360px)",
         }}
       >
-        <div className="empty-terminal">
-          <h2>Welcome to Bob</h2>
-          <p>Select a worktree from the left panel to get started.</p>
-          <p>
-            Or add a new repository using the &quot;Add Repository&quot; button.
-          </p>
+        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+          <SystemStatusPanel />
+          <div className="empty-terminal" style={{ flex: 1 }}>
+            <p>Select a worktree from the left panel to get started.</p>
+            <p>
+              If you don't see any repositories yet, add one using the
+              &quot;Add Repository&quot; button.
+            </p>
+          </div>
         </div>
       </div>
     );
