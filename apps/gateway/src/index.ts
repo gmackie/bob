@@ -1331,6 +1331,14 @@ async function validateToken(token: string): Promise<string | null> {
 async function startAgentForSession(actor: ReturnType<typeof sessionManager.getSession>, userId: string): Promise<void> {
   if (!actor) return;
 
+  // Skip PTY session creation for non-PTY agents (e.g., elevenlabs, opencode chat)
+  const ptyAgents = ["claude", "codex", "gemini", "kiro", "cursor-agent"];
+  if (!ptyAgents.includes(actor.agentType)) {
+    console.log(`[Gateway] Agent ${actor.agentType} is not PTY-based, skipping container setup`);
+    actor.setStatus("running");
+    return;
+  }
+
   actor.setStatus("starting");
 
   try {

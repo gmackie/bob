@@ -46,6 +46,10 @@
     "./services/sessions/workflowStatusService": {
       "types": "./dist/services/sessions/workflowStatusService.d.ts",
       "default": "./src/services/sessions/workflowStatusService.ts"
+    },
+    "./services/opencode/opencodeClient": {
+      "types": "./dist/services/opencode/opencodeClient.d.ts",
+      "default": "./src/services/opencode/opencodeClient.ts"
     }
   },
   "license": "MIT",
@@ -65,6 +69,7 @@
     "@bob/config": "workspace:*",
     "@bob/db": "workspace:*",
     "@bob/validators": "workspace:*",
+    "@elevenlabs/client": "^0.13.0",
     "@trpc/server": "catalog:",
     "superjson": "2.2.3",
     "zod": "catalog:"

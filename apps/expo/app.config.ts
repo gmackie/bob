@@ -10,16 +10,16 @@ const POSTHOG_HOST = process.env.POSTHOG_HOST ?? "https://us.i.posthog.com";
 const getAppName = (): string => {
   switch (APP_ENV) {
     case "production":
-      return "Gmacko";
+      return "Bob";
     case "staging":
-      return "Gmacko (Beta)";
+      return "Bob (Beta)";
     default:
-      return "Gmacko (Dev)";
+      return "Bob (Dev)";
   }
 };
 
 const getBundleId = (): string => {
-  const base = "com.gmacko.app";
+  const base = "com.gmacko.bob";
   switch (APP_ENV) {
     case "production":
       return base;
@@ -68,15 +68,15 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   return {
     ...config,
     name: getAppName(),
-    slug: "gmacko",
-    scheme: "gmacko",
+    slug: "bob",
+    scheme: "bob",
     version: "0.1.0",
     orientation: "portrait",
-    icon: "./assets/icon-light.png",
+    icon: "./assets/icon.png",
     userInterfaceStyle: "automatic",
     updates: {
       fallbackToCacheTimeout: 0,
-      url: "https://u.expo.dev/your-project-id",
+      url: "https://u.expo.dev/e1dd0ab0-4dc1-40f8-b066-7cb91fde1759",
     },
     runtimeVersion: {
       policy: "appVersion",
@@ -86,19 +86,17 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ios: {
       bundleIdentifier: getBundleId(),
       supportsTablet: true,
-      icon: {
-        light: "./assets/icon-light.png",
-        dark: "./assets/icon-dark.png",
-      },
+      icon: "./assets/icon.png",
       infoPlist: {
         CFBundleDisplayName: getAppName(),
+        ITSAppUsesNonExemptEncryption: false,
       },
     },
     android: {
       package: getBundleId(),
       adaptiveIcon: {
-        foregroundImage: "./assets/icon-light.png",
-        backgroundColor: "#1F104A",
+        foregroundImage: "./assets/icon.png",
+        backgroundColor: "#18181b",
       },
       edgeToEdgeEnabled: true,
     },
@@ -109,10 +107,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       POSTHOG_KEY,
       POSTHOG_HOST,
       eas: {
-        projectId: process.env.EAS_PROJECT_ID,
+        projectId: "e1dd0ab0-4dc1-40f8-b066-7cb91fde1759",
       },
     },
-    owner: process.env.EXPO_OWNER,
+    owner: "gmacko",
     experiments: {
       tsconfigPaths: true,
       typedRoutes: true,

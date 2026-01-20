@@ -10,6 +10,7 @@ import {
 } from "@bob/db/schema";
 
 import type { WorkflowStatus } from "../services/sessions/workflowStatusService";
+import type { ElevenLabsSessionService } from "../services/voice/elevenlabsSession";
 import {
   getSessionWorkflowState,
   reportWorkflowStatus,
@@ -17,9 +18,32 @@ import {
   resolveAwaitingInput,
   workflowStatusValues,
 } from "../services/sessions/workflowStatusService";
+import { createElevenLabsSessionService } from "../services/voice/elevenlabsSession";
 import { protectedProcedure } from "../trpc";
 
 const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:3002";
+
+// Initialize ElevenLabs session service (singleton)
+let elevenlabsService: ElevenLabsSessionService | null = null;
+function getElevenLabsService(): ElevenLabsSessionService | null {
+  if (!elevenlabsService) {
+    const apiKey = process.env.ELEVENLABS_API_KEY;
+    const agentId = process.env.ELEVENLABS_AGENT_ID;
+
+    if (!apiKey || !agentId) {
+      console.warn(
+        "[Session] ElevenLabs not configured: ELEVENLABS_API_KEY and ELEVENLABS_AGENT_ID required",
+      );
+      return null;
+    }
+
+    elevenlabsService = createElevenLabsSessionService({
+      apiKey,
+      agentId,
+    });
+  }
+  return elevenlabsService;
+}
 
 const sessionStatusValues = [
   "provisioning",
@@ -606,5 +630,136 @@ export const sessionRouter = {
         });
       }
       return state;
+    }),
+
+  createVoiceSession: protectedProcedure
+    .input(z.object({ sessionId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const service = getElevenLabsService();
+      if (!service) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "ElevenLabs service not configured",
+        });
+      }
+
+      // Verify session belongs to user
+      const session = await ctx.db.query.chatConversations.findFirst({
+        where: and(
+          eq(chatConversations.id, input.sessionId),
+          eq(chatConversations.userId, ctx.session.user.id),
+        ),
+      });
+
+      if (!session) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Session not found",
+        });
+      }
+
+      if (session.agentType !== "elevenlabs") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Session agent type must be 'elevenlabs'",
+        });
+      }
+
+      const voiceSession = await service.createVoiceSession(input.sessionId);
+
+      // Register transcript callback to persist events
+      service.onTranscript(input.sessionId, async (event) => {
+        const nextSeq = session.nextSeq;
+        await ctx.db.insert(sessionEvents).values({
+          sessionId: input.sessionId,
+          seq: nextSeq,
+          direction: event.type === "user" ? "client" : "agent",
+          eventType: "transcript",
+          payload: {
+            type: event.type,
+            text: event.text,
+            timestamp: event.timestamp.toISOString(),
+          },
+        });
+
+        await ctx.db
+          .update(chatConversations)
+          .set({
+            nextSeq: sql`GREATEST(${chatConversations.nextSeq}, ${nextSeq + 1})`,
+            lastActivityAt: new Date(),
+          })
+          .where(eq(chatConversations.id, input.sessionId));
+      });
+
+      return voiceSession;
+    }),
+
+  stopVoiceSession: protectedProcedure
+    .input(z.object({ sessionId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const service = getElevenLabsService();
+      if (!service) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "ElevenLabs service not configured",
+        });
+      }
+
+      // Verify session belongs to user
+      const session = await ctx.db.query.chatConversations.findFirst({
+        where: and(
+          eq(chatConversations.id, input.sessionId),
+          eq(chatConversations.userId, ctx.session.user.id),
+        ),
+      });
+
+      if (!session) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Session not found",
+        });
+      }
+
+      await service.stopVoiceSession(input.sessionId);
+      return { success: true };
+    }),
+
+  handleVoiceTranscript: protectedProcedure
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        transcript: z.string(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const service = getElevenLabsService();
+      if (!service) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "ElevenLabs service not configured",
+        });
+      }
+
+      // Verify session belongs to user
+      const session = await ctx.db.query.chatConversations.findFirst({
+        where: and(
+          eq(chatConversations.id, input.sessionId),
+          eq(chatConversations.userId, ctx.session.user.id),
+        ),
+      });
+
+      if (!session) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Session not found",
+        });
+      }
+
+      const assistantText = await service.handleUserTranscript(
+        input.sessionId,
+        input.transcript,
+      );
+
+      return { assistantText };
     }),
 } satisfies TRPCRouterRecord;

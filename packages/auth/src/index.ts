@@ -51,7 +51,7 @@ export function initAuth<
       ...(options.extraPlugins ?? []),
     ],
     socialProviders,
-    trustedOrigins: ["expo://"],
+    trustedOrigins: ["expo://", "bob://"],
     onAPIError: {
       onError(error, ctx) {
         console.error("BETTER AUTH API ERROR", error, ctx);

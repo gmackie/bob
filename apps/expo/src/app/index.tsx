@@ -1,172 +1,314 @@
-import { useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Link, Stack } from "expo-router";
-import { LegendList } from "@legendapp/list";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useState } from "react";
+import { Dimensions, Pressable, ScrollView, Text, View } from "react-native";
 
-import type { RouterOutputs } from "~/utils/api";
-import { trpc } from "~/utils/api";
+import { Badge, Button, Card, ListRow, Screen } from "~/components/ui";
+import { hasSeenOnboarding, setOnboardingComplete } from "~/lib/storage";
 import { authClient } from "~/utils/auth";
 
-function PostCard(props: {
-  post: RouterOutputs["post"]["all"][number];
-  onDelete: () => void;
-}) {
+const { width } = Dimensions.get("window");
+
+const ONBOARDING_SLIDES = [
+  {
+    title: "Run multiple agents.\nStay in control.",
+    bullets: [
+      "Track every worktree and instance at a glance",
+      "See what's running, stalled, or needs attention",
+    ],
+  },
+  {
+    title: "Built for real\nGit workflows.",
+    bullets: [
+      "Review diffs and PR status on the go",
+      "Keep your AI sessions organized per branch",
+    ],
+  },
+  {
+    title: "Secure sign-in\nwith GitHub.",
+    bullets: [
+      "Authenticate once with your GitHub account",
+      "Your credentials stay safe and encrypted",
+    ],
+  },
+];
+
+function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
+  const [currentSlide, setCurrentSlide] = useState(0);
+
+  const handleNext = useCallback(async () => {
+    if (currentSlide < ONBOARDING_SLIDES.length - 1) {
+      setCurrentSlide(currentSlide + 1);
+    } else {
+      await setOnboardingComplete();
+      onComplete();
+    }
+  }, [currentSlide, onComplete]);
+
+  const handleSkip = useCallback(async () => {
+    await setOnboardingComplete();
+    onComplete();
+  }, [onComplete]);
+
+  const slide = ONBOARDING_SLIDES[currentSlide];
+
   return (
-    <View className="bg-muted flex flex-row rounded-lg p-4">
-      <View className="grow">
-        <Link
-          asChild
-          href={{
-            pathname: "/post/[id]",
-            params: { id: props.post.id },
-          }}
-        >
-          <Pressable className="">
-            <Text className="text-primary text-xl font-semibold">
-              {props.post.title}
-            </Text>
-            <Text className="text-foreground mt-2">{props.post.content}</Text>
+    <Screen className="justify-between pt-16 pb-10">
+      <View className="flex-row justify-end">
+        {currentSlide < ONBOARDING_SLIDES.length - 1 && (
+          <Pressable onPress={handleSkip} className="active:opacity-70">
+            <Text className="text-muted text-base">Skip</Text>
           </Pressable>
-        </Link>
+        )}
       </View>
-      <Pressable onPress={props.onDelete}>
-        <Text className="text-primary font-bold uppercase">Delete</Text>
-      </Pressable>
-    </View>
+
+      <View className="flex-1 items-center justify-center px-4">
+        <View className="bg-primary/20 mb-8 h-20 w-20 items-center justify-center rounded-2xl">
+          <Text className="text-4xl">🤖</Text>
+        </View>
+
+        <Text className="text-foreground mb-6 text-center text-3xl font-semibold tracking-tight">
+          {slide?.title}
+        </Text>
+
+        <View className="space-y-3">
+          {slide?.bullets.map((bullet, i) => (
+            <View key={i} className="flex-row items-start">
+              <View className="bg-primary mt-2 mr-3 h-1.5 w-1.5 rounded-full" />
+              <Text className="text-muted flex-1 text-base">{bullet}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      <View>
+        <View className="mb-6 flex-row justify-center space-x-2">
+          {ONBOARDING_SLIDES.map((_, i) => (
+            <View
+              key={i}
+              className={`h-1.5 rounded-full ${i === currentSlide ? "bg-primary w-6" : "bg-border w-1.5"}`}
+            />
+          ))}
+        </View>
+
+        <Button onPress={handleNext} variant="primary">
+          {currentSlide < ONBOARDING_SLIDES.length - 1
+            ? "Continue"
+            : "Continue to Sign In"}
+        </Button>
+      </View>
+    </Screen>
   );
 }
 
-function CreatePost() {
-  const queryClient = useQueryClient();
-
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-
-  const { mutate, error } = useMutation(
-    trpc.post.create.mutationOptions({
-      async onSuccess() {
-        setTitle("");
-        setContent("");
-        await queryClient.invalidateQueries(trpc.post.all.queryFilter());
-      },
-    }),
-  );
+function SignInScreen() {
+  const handleSignIn = useCallback(() => {
+    authClient.signIn
+      .social({
+        provider: "github",
+        callbackURL: "bob://",
+      })
+      .then((res) => {
+        console.log("Sign in result:", res);
+      })
+      .catch((err) => {
+        console.error("Sign in error:", err);
+      });
+  }, []);
 
   return (
-    <View className="mt-4 flex gap-2">
-      <TextInput
-        className="border-input bg-background text-foreground items-center rounded-md border px-3 text-lg leading-tight"
-        value={title}
-        onChangeText={setTitle}
-        placeholder="Title"
-      />
-      {error?.data?.zodError?.fieldErrors.title && (
-        <Text className="text-destructive mb-2">
-          {error.data.zodError.fieldErrors.title}
+    <Screen className="pt-16 pb-10">
+      <View className="flex-1">
+        <Text className="text-foreground text-4xl font-semibold tracking-tight">
+          Welcome to Bob
         </Text>
-      )}
-      <TextInput
-        className="border-input bg-background text-foreground items-center rounded-md border px-3 text-lg leading-tight"
-        value={content}
-        onChangeText={setContent}
-        placeholder="Content"
-      />
-      {error?.data?.zodError?.fieldErrors.content && (
-        <Text className="text-destructive mb-2">
-          {error.data.zodError.fieldErrors.content}
+        <Text className="text-muted mt-2 text-base leading-6">
+          Your AI agent command center for repos and worktrees.
         </Text>
-      )}
-      <Pressable
-        className="bg-primary flex items-center rounded-sm p-2"
-        onPress={() => {
-          mutate({
-            title,
-            content,
-          });
-        }}
-      >
-        <Text className="text-foreground">Create</Text>
-      </Pressable>
-      {error?.data?.code === "UNAUTHORIZED" && (
-        <Text className="text-destructive mt-2">
-          You need to be logged in to create a post
+
+        <View className="mt-10 space-y-3">
+          <Card>
+            <View className="flex-row items-center">
+              <View className="bg-accent/10 mr-3 h-10 w-10 items-center justify-center rounded-xl">
+                <Text className="text-lg">📊</Text>
+              </View>
+              <View className="flex-1">
+                <Text className="text-foreground text-base font-semibold">
+                  Multi-instance overview
+                </Text>
+                <Text className="text-muted text-sm">
+                  See all your agents at a glance
+                </Text>
+              </View>
+            </View>
+          </Card>
+
+          <Card>
+            <View className="flex-row items-center">
+              <View className="bg-accent/10 mr-3 h-10 w-10 items-center justify-center rounded-xl">
+                <Text className="text-lg">🌳</Text>
+              </View>
+              <View className="flex-1">
+                <Text className="text-foreground text-base font-semibold">
+                  Worktree-aware sessions
+                </Text>
+                <Text className="text-muted text-sm">
+                  Isolated agents per branch
+                </Text>
+              </View>
+            </View>
+          </Card>
+
+          <Card>
+            <View className="flex-row items-center">
+              <View className="bg-accent/10 mr-3 h-10 w-10 items-center justify-center rounded-xl">
+                <Text className="text-lg">🔀</Text>
+              </View>
+              <View className="flex-1">
+                <Text className="text-foreground text-base font-semibold">
+                  PR & diff visibility
+                </Text>
+                <Text className="text-muted text-sm">
+                  Track changes across branches
+                </Text>
+              </View>
+            </View>
+          </Card>
+        </View>
+      </View>
+
+      <View className="mt-auto">
+        <Button onPress={handleSignIn} variant="primary">
+          Continue with GitHub
+        </Button>
+        <Text className="text-muted2 mt-3 text-center text-xs">
+          We only request basic account access
         </Text>
-      )}
-    </View>
+      </View>
+    </Screen>
   );
 }
 
-function MobileAuth() {
-  const { data: session } = authClient.useSession();
+function DashboardScreen({
+  session,
+}: {
+  session: NonNullable<ReturnType<typeof authClient.useSession>["data"]>;
+}) {
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 18) return "Good afternoon";
+    return "Good evening";
+  };
+
+  const handleSignOut = useCallback(() => {
+    authClient.signOut();
+  }, []);
 
   return (
-    <>
-      <Text className="text-foreground pb-2 text-center text-xl font-semibold">
-        {session?.user.name ? `Hello, ${session.user.name}` : "Not logged in"}
-      </Text>
-      <Pressable
-        onPress={() =>
-          session
-            ? authClient.signOut()
-            : authClient.signIn.social({
-                provider: "discord",
-                callbackURL: "/",
-              })
-        }
-        className="bg-primary flex items-center rounded-sm p-2"
-      >
-        <Text>{session ? "Sign Out" : "Sign In With Discord"}</Text>
-      </Pressable>
-    </>
+    <Screen className="pt-8">
+      <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
+        <View className="mb-6 flex-row items-center justify-between">
+          <View>
+            <Text className="text-foreground text-2xl font-semibold tracking-tight">
+              {getGreeting()}, {session.user.name?.split(" ")[0] ?? "there"}
+            </Text>
+            <Text className="text-muted mt-0.5 text-sm">
+              {session.user.email}
+            </Text>
+          </View>
+          <Badge variant="success">Connected</Badge>
+        </View>
+
+        <View className="mb-6 flex-row space-x-3">
+          <Card className="flex-1">
+            <Text className="text-foreground text-2xl font-semibold">0</Text>
+            <Text className="text-muted2 mt-1 text-xs tracking-widest uppercase">
+              Active Agents
+            </Text>
+          </Card>
+          <Card className="flex-1">
+            <Text className="text-foreground text-2xl font-semibold">0</Text>
+            <Text className="text-muted2 mt-1 text-xs tracking-widest uppercase">
+              Worktrees
+            </Text>
+          </Card>
+          <Card className="flex-1">
+            <Text className="text-foreground text-2xl font-semibold">0</Text>
+            <Text className="text-muted2 mt-1 text-xs tracking-widest uppercase">
+              Open PRs
+            </Text>
+          </Card>
+        </View>
+
+        <Text className="text-foreground mb-3 text-lg font-semibold tracking-tight">
+          Quick Actions
+        </Text>
+        <View className="mb-6 space-y-2">
+          <Button variant="secondary" onPress={() => {}}>
+            Open Worktrees
+          </Button>
+          <Button variant="secondary" onPress={() => {}}>
+            View Running Agents
+          </Button>
+          <Button variant="secondary" onPress={() => {}}>
+            Recent Diffs
+          </Button>
+        </View>
+
+        <Text className="text-foreground mb-3 text-lg font-semibold tracking-tight">
+          Recent Activity
+        </Text>
+        <Card>
+          <View className="items-center py-6">
+            <Text className="text-muted2 text-sm">No recent activity</Text>
+            <Text className="text-muted mt-1 text-xs">
+              Connect a repository to get started
+            </Text>
+          </View>
+        </Card>
+
+        <View className="mt-8 mb-4">
+          <Button variant="ghost" onPress={handleSignOut}>
+            Sign Out
+          </Button>
+        </View>
+      </ScrollView>
+    </Screen>
   );
 }
 
 export default function Index() {
-  const queryClient = useQueryClient();
+  const { data: session, isPending } = authClient.useSession();
+  const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
 
-  const postQuery = useQuery(trpc.post.all.queryOptions());
+  useEffect(() => {
+    hasSeenOnboarding().then((seen) => {
+      setShowOnboarding(!seen);
+    });
+  }, []);
 
-  const deletePostMutation = useMutation(
-    trpc.post.delete.mutationOptions({
-      onSettled: () =>
-        queryClient.invalidateQueries(trpc.post.all.queryFilter()),
-    }),
-  );
-
-  return (
-    <SafeAreaView className="bg-background">
-      {/* Changes page title visible on the header */}
-      <Stack.Screen options={{ title: "Home Page" }} />
-      <View className="bg-background h-full w-full p-4">
-        <Text className="text-foreground pb-2 text-center text-5xl font-bold">
-          Create <Text className="text-primary">T3</Text> Turbo
-        </Text>
-
-        <MobileAuth />
-
-        <View className="py-2">
-          <Text className="text-primary font-semibold italic">
-            Press on a post
+  if (isPending || showOnboarding === null) {
+    return (
+      <Screen className="items-center justify-center">
+        <View className="items-center">
+          <View className="bg-primary/20 mb-4 h-16 w-16 items-center justify-center rounded-2xl">
+            <Text className="text-3xl">🤖</Text>
+          </View>
+          <Text className="text-foreground text-2xl font-semibold tracking-tight">
+            Bob
           </Text>
+          <Text className="text-muted mt-1 text-sm">Agent command center</Text>
         </View>
+      </Screen>
+    );
+  }
 
-        <LegendList
-          data={postQuery.data ?? []}
-          estimatedItemSize={20}
-          keyExtractor={(item) => item.id}
-          ItemSeparatorComponent={() => <View className="h-2" />}
-          renderItem={(p) => (
-            <PostCard
-              post={p.item}
-              onDelete={() => deletePostMutation.mutate(p.item.id)}
-            />
-          )}
-        />
+  if (showOnboarding) {
+    return <OnboardingScreen onComplete={() => setShowOnboarding(false)} />;
+  }
 
-        <CreatePost />
-      </View>
-    </SafeAreaView>
-  );
+  if (!session) {
+    return <SignInScreen />;
+  }
+
+  return <DashboardScreen session={session} />;
 }

@@ -293,7 +293,7 @@ async function refreshAccessToken(
           refresh_token: refreshToken,
           client_id: process.env.AUTH_GITLAB_ID!,
           client_secret: process.env.AUTH_GITLAB_SECRET!,
-        }),
+        }).toString(),
       });
 
       if (!response.ok) {

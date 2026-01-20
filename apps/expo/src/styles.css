@@ -4,4 +4,24 @@
 
 @import "nativewind/theme";
 
-@import "@bob/tailwind-config/theme";
+@theme {
+  --color-background: #0b0f14;
+  --color-foreground: #e6edf3;
+  --color-card: #111827;
+  --color-card-elevated: #162033;
+  --color-card-foreground: #e6edf3;
+  --color-primary: #7c3aed;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #162033;
+  --color-secondary-foreground: #e6edf3;
+  --color-muted: #8b949e;
+  --color-muted2: #667085;
+  --color-accent: #22d3ee;
+  --color-accent-foreground: #0b0f14;
+  --color-border: #233047;
+  --color-input: #111827;
+  --color-ring: #7c3aed;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+}

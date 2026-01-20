@@ -17,7 +17,7 @@ export type DeepLinkRoute =
   | { type: "auth_callback"; params: Record<string, string> }
   | { type: "unknown"; path: string };
 
-const SCHEME = "gmacko";
+const SCHEME = "bob";
 
 export function parseDeepLink(url: string): DeepLinkRoute | null {
   try {

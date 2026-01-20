@@ -80,6 +80,7 @@ export const agentTypeEnum = [
   "gemini",
   "opencode",
   "cursor-agent",
+  "elevenlabs",
 ] as const;
 export type AgentType = (typeof agentTypeEnum)[number];
 
@@ -337,6 +338,7 @@ export const chatConversations = pgTable(
     title: t.varchar({ length: 256 }),
     workingDirectory: t.text(),
     agentType: t.varchar({ length: 50 }).notNull().default("opencode"),
+    opencodeSessionId: t.text(),
     status: t.varchar({ length: 20 }).notNull().default("stopped"),
     nextSeq: t.bigint({ mode: "number" }).notNull().default(1),
     lastActivityAt: t.timestamp({ mode: "date", withTimezone: true }),
@@ -360,9 +362,7 @@ export const chatConversations = pgTable(
       .json()
       .$type<{ type: "human" | "timeout"; value: string }>(),
     createdAt: t.timestamp().defaultNow().notNull(),
-    updatedAt: t
-      .timestamp({ mode: "date", withTimezone: true })
-      .$onUpdateFn(() => sql`now()`),
+    updatedAt: t.timestamp({ mode: "date", withTimezone: true }),
   }),
   (table) => [
     {

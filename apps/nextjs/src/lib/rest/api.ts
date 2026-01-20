@@ -83,7 +83,8 @@ class ApiClient {
   async checkWorktreeMergeStatus(
     worktreeId: string,
   ): Promise<{ isMerged: boolean; targetBranch: string }> {
-    return this.request(`/repositories/worktrees/${worktreeId}/merge-status`);
+    // Hosted Next.js legacy API exposes merge status at /worktrees/:id
+    return this.request(`/worktrees/${worktreeId}`);
   }
 
   async removeWorktree(
@@ -91,7 +92,7 @@ class ApiClient {
     force: boolean = false,
   ): Promise<void> {
     return this.request(
-      `/repositories/worktrees/${worktreeId}${force ? "?force=true" : ""}`,
+      `/worktrees/${worktreeId}${force ? "?force=true" : ""}`,
       {
         method: "DELETE",
       },

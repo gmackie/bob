@@ -390,32 +390,29 @@ export class GitService {
       throw new Error(`Repository ${worktree.repositoryId} not found`);
     }
 
-    try {
-      const { stdout: mergedOutput } = await execAsync(
-        `git branch --merged main`,
-        { cwd: repository.path },
-      );
+    const branchName = worktree.branch.replace(/^refs\/heads\//, "");
 
-      const branchName = worktree.branch.replace(/^refs\/heads\//, "");
-      const isMerged = mergedOutput.includes(branchName);
+    // Prefer the repository's detected default branch (origin/HEAD), then fall back to common names.
+    const candidates = Array.from(
+      new Set([repository.mainBranch, "main", "master"].filter(Boolean)),
+    );
 
-      return { isMerged, targetBranch: "main" };
-    } catch (error) {
-      // If main doesn't exist, try master
+    let lastError: unknown;
+    for (const targetBranch of candidates) {
       try {
         const { stdout: mergedOutput } = await execAsync(
-          `git branch --merged master`,
+          `git branch --merged ${targetBranch}`,
           { cwd: repository.path },
         );
 
-        const branchName = worktree.branch.replace(/^refs\/heads\//, "");
         const isMerged = mergedOutput.includes(branchName);
-
-        return { isMerged, targetBranch: "master" };
-      } catch (masterError) {
-        throw new Error(`Failed to check merge status: ${error}`);
+        return { isMerged, targetBranch };
+      } catch (error) {
+        lastError = error;
       }
     }
+
+    throw new Error(`Failed to check merge status: ${lastError}`);
   }
 
   async removeWorktree(
@@ -444,10 +441,11 @@ export class GitService {
 
     // Check if branch is merged unless forcing deletion
     if (!force) {
-      const { isMerged } = await this.checkBranchMergeStatus(worktreeId);
+      const { isMerged, targetBranch } =
+        await this.checkBranchMergeStatus(worktreeId);
       if (!isMerged) {
         throw new Error(
-          "Branch has not been merged into main. Use force deletion if you want to delete anyway.",
+          `Branch has not been merged into ${targetBranch}. Use force deletion if you want to delete anyway.`,
         );
       }
     }

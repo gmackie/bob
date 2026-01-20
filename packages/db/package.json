@@ -11,6 +11,10 @@
       "types": "./dist/client.d.ts",
       "default": "./src/client.ts"
     },
+    "./client-neon": {
+      "types": "./dist/client-neon.d.ts",
+      "default": "./src/client-neon.ts"
+    },
     "./schema": {
       "types": "./dist/schema.d.ts",
       "default": "./src/schema.ts"
@@ -32,12 +36,14 @@
     "@neondatabase/serverless": "^0.10.4",
     "drizzle-orm": "^0.44.7",
     "drizzle-zod": "^0.8.3",
+    "pg": "^8.17.1",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@bob/eslint-config": "workspace:*",
     "@bob/prettier-config": "workspace:*",
     "@bob/tsconfig": "workspace:*",
+    "@types/pg": "8.11.6",
     "drizzle-kit": "^0.31.5",
     "eslint": "catalog:",
     "prettier": "catalog:",
