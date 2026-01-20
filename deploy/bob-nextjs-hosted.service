@@ -1,0 +1,27 @@
+[Unit]
+Description=Bob (Next.js hosted + WebSocket)
+After=network.target
+
+[Service]
+Type=simple
+User=bob
+Group=bob
+WorkingDirectory=/opt/bob-nextjs
+
+# Repo expects Node >=22. Ensure server has Node 22+ installed.
+Environment=NODE_ENV=production
+Environment=NEXT_PORT=3100
+Environment=NEXT_PUBLIC_SITE_URL=https://claude.gmac.io
+
+# nvm-based node/pnpm (installed under bob's home)
+Environment=NVM_DIR=/home/bob/.nvm
+
+# Load secrets/config (DATABASE_URL, AUTH_*, etc)
+EnvironmentFile=/opt/bob-nextjs/.env
+
+ExecStart=/bin/bash -lc 'source "$NVM_DIR/nvm.sh" && nvm use 22 && corepack enable && pnpm -F @bob/nextjs start:hosted'
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

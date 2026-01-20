@@ -5,7 +5,6 @@ import { cn } from "@bob/ui";
 import { ThemeProvider, ThemeToggle } from "@bob/ui/theme";
 import { Toaster } from "@bob/ui/toast";
 
-import { env } from "~/env";
 import { TRPCReactProvider } from "~/trpc/react";
 import { Providers } from "./providers";
 
@@ -13,9 +12,10 @@ import "~/app/styles.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL(
-    env.VERCEL_ENV === "production"
-      ? "https://bob.app"
-      : "http://localhost:43829",
+    process.env.NEXT_PUBLIC_SITE_URL ??
+      (process.env.NODE_ENV === "production"
+        ? "https://claude.gmac.io"
+        : "http://localhost:3000"),
   ),
   title: "Bob - AI Agent Manager",
   description: "Manage multiple AI agent instances across git repositories and worktrees",
