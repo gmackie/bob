@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@bob/ui/button";
 import { Label } from "@bob/ui/label";
@@ -13,16 +13,19 @@ export function PreferencesSection() {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
 
-  const { data: preferences, isLoading } =
-    trpc.settings.getPreferences.useQuery();
+  const { data: preferences, isLoading } = useQuery(
+    trpc.settings.getPreferences.queryOptions(undefined),
+  );
 
-  const updatePreferences = trpc.settings.updatePreferences.useMutation({
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: trpc.settings.getPreferences.queryKey(),
-      });
-    },
-  });
+  const updatePreferences = useMutation(
+    trpc.settings.updatePreferences.mutationOptions({
+      onSuccess: () => {
+        void queryClient.invalidateQueries({
+          queryKey: trpc.settings.getPreferences.queryKey(),
+        });
+      },
+    }),
+  );
 
   const handleThemeChange = (theme: "light" | "dark" | "system") => {
     startTransition(() => {

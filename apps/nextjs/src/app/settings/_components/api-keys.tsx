@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@bob/ui/button";
 import { Input } from "@bob/ui/input";
@@ -32,9 +32,12 @@ export function ApiKeysSection() {
 
   const trpc = useTRPC();
   const queryClient = useQueryClient();
-  const { data: apiKeys, isLoading } = trpc.settings.listApiKeys.useQuery();
+  const { data: apiKeys, isLoading } = useQuery(
+    trpc.settings.listApiKeys.queryOptions(undefined),
+  );
 
-  const createKey = trpc.settings.createApiKey.useMutation({
+  const createKey = useMutation(
+    trpc.settings.createApiKey.mutationOptions({
     onSuccess: (data: { key: string }) => {
       setNewKey(data.key);
       setNewKeyName("");
@@ -43,15 +46,18 @@ export function ApiKeysSection() {
         queryKey: trpc.settings.listApiKeys.queryKey(),
       });
     },
-  });
+    }),
+  );
 
-  const revokeKey = trpc.settings.revokeApiKey.useMutation({
+  const revokeKey = useMutation(
+    trpc.settings.revokeApiKey.mutationOptions({
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: trpc.settings.listApiKeys.queryKey(),
       });
     },
-  });
+    }),
+  );
 
   const handleCreateKey = () => {
     if (!newKeyName.trim() || selectedPermissions.length === 0) return;

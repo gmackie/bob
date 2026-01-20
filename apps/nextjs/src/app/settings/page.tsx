@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { getSession } from "~/auth/server";
 import { ApiKeysSection } from "./_components/api-keys";
+import { ConfigFilesSection } from "./_components/config-files";
 import { PreferencesSection } from "./_components/preferences";
 
 export default async function SettingsPage() {
@@ -17,6 +18,7 @@ export default async function SettingsPage() {
 
       <div className="space-y-8">
         <PreferencesSection />
+        <ConfigFilesSection />
         <ApiKeysSection />
       </div>
     </main>
