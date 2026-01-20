@@ -41,6 +41,7 @@
     "react": "catalog:react19",
     "react-dom": "catalog:react19",
     "superjson": "2.2.3",
+    "ws": "^8.18.0",
     "zod": "catalog:"
   },
   "devDependencies": {
