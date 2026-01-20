@@ -48,6 +48,7 @@ interface SessionHeaderProps {
   linkedPr?: LinkedPullRequest | null;
   linkedTask?: LinkedTask | null;
   workflowState?: WorkflowState | null;
+  voiceStatus?: "disconnected" | "connecting" | "connected" | "error";
   onStop?: () => void;
   onRestart?: () => void;
   onRename?: () => void;
@@ -292,6 +293,34 @@ function TaskBadge({ task }: { task: LinkedTask }) {
   return content;
 }
 
+function VoiceStatusBadge({ status }: { status: "disconnected" | "connecting" | "connected" | "error" }) {
+  const config = {
+    disconnected: { label: "Voice Off", color: "text-gray-600", bgColor: "bg-gray-100 dark:bg-gray-800" },
+    connecting: { label: "Connecting...", color: "text-blue-600", bgColor: "bg-blue-100 dark:bg-blue-900/30" },
+    connected: { label: "Voice On", color: "text-green-600", bgColor: "bg-green-100 dark:bg-green-900/30" },
+    error: { label: "Voice Error", color: "text-red-600", bgColor: "bg-red-100 dark:bg-red-900/30" },
+  };
+
+  const { label, color, bgColor } = config[status];
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-xs font-medium",
+        color,
+        bgColor
+      )}
+      title={`Voice status: ${label}`}
+    >
+      <span className={cn(
+        "h-1.5 w-1.5 rounded-full",
+        status === "connected" ? "bg-green-500 animate-pulse" : status === "connecting" ? "bg-blue-500 animate-pulse" : "bg-gray-400"
+      )} />
+      {label}
+    </span>
+  );
+}
+
 export function SessionHeader({
   title,
   status,
@@ -301,6 +330,7 @@ export function SessionHeader({
   linkedPr,
   linkedTask,
   workflowState,
+  voiceStatus,
   onStop,
   onRestart,
   onRename,
@@ -322,6 +352,7 @@ export function SessionHeader({
             {title}
           </h1>
           <StatusBadge status={status} />
+          {voiceStatus && agentType === "elevenlabs" && <VoiceStatusBadge status={voiceStatus} />}
           {workflowState && <WorkflowStatusBadge state={workflowState} />}
           {linkedPr && <PrBadge pr={linkedPr} />}
           {linkedTask && <TaskBadge task={linkedTask} />}

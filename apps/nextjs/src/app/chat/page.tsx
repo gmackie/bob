@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import type { SessionEvent, SessionStatus } from "~/hooks/use-session-socket";
 import { useSessionSocket } from "~/hooks/use-session-socket";
+import { useVoiceSession } from "~/hooks/use-voice-session";
 import { useTRPC } from "~/trpc/react";
 import { InputComposer } from "./_components/input-composer";
 import { MessageStream } from "./_components/message-stream";
@@ -147,6 +148,12 @@ function ChatPageContent() {
   const canSend =
     isConnected && (sessionStatus === "running" || sessionStatus === "idle");
 
+  // Get voice status for ElevenLabs sessions
+  const { state: voiceState } = useVoiceSession(
+    sessionId ?? null,
+    sessionData?.agentType
+  );
+
   return (
     <div className="flex h-screen">
       <div className="w-64 shrink-0">
@@ -174,6 +181,7 @@ function ChatPageContent() {
               status={sessionStatus}
               agentType={sessionData.agentType}
               workingDirectory={sessionData.workingDirectory ?? undefined}
+              voiceStatus={sessionData.agentType === "elevenlabs" ? voiceState.status : undefined}
               onStop={handleStopSession}
             />
 
@@ -186,6 +194,8 @@ function ChatPageContent() {
             <InputComposer
               onSend={handleSendMessage}
               disabled={!canSend}
+              agentType={sessionData.agentType}
+              sessionId={sessionId}
               placeholder={
                 !isConnected
                   ? "Connecting..."

@@ -1,18 +1,20 @@
 import path from 'path';
-import os from 'os';
-import { existsSync } from 'fs';
-import { AgentType } from '../types.js';
+import os from "os";
+import path from "path";
+import { existsSync } from "fs";
 
-const isDocker = process.env.DOCKER_ENV === 'true';
+import { AgentType } from "../types.js";
+
+const isDocker = process.env.DOCKER_ENV === "true";
 
 // Agent binary names
 const AGENT_COMMANDS: Record<AgentType, string> = {
-  'claude': 'claude',
-  'codex': 'codex',
-  'gemini': 'gemini',
-  'opencode': 'opencode',
-  'kiro': 'kiro-cli',
-  'cursor-agent': 'cursor-agent'
+  claude: "claude",
+  codex: "codex",
+  gemini: "gemini",
+  opencode: "opencode",
+  kiro: "kiro-cli",
+  "cursor-agent": "cursor-agent",
 };
 
 /**

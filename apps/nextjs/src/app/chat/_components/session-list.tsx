@@ -6,6 +6,7 @@ import { useTRPC } from "~/trpc/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@bob/ui";
 import { Button } from "@bob/ui/button";
+import { getAvailableAgentTypes } from "~/utils/platform";
 
 type SessionStatus = "provisioning" | "starting" | "running" | "idle" | "stopping" | "stopped" | "error";
 
@@ -52,6 +53,8 @@ function formatRelativeTime(date: Date | null): string {
   return "now";
 }
 
+// Agent types are now determined by platform (see getAvailableAgentTypes)
+
 export function SessionList({
   selectedId,
   onSelect,
@@ -62,6 +65,8 @@ export function SessionList({
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<SessionStatus | "all">("all");
+  const [showNewSessionModal, setShowNewSessionModal] = useState(false);
+  const [selectedAgentType, setSelectedAgentType] = useState<string>("opencode");
 
   const { data, isLoading, error } = useQuery(
     trpc.session.list.queryOptions({
@@ -74,15 +79,20 @@ export function SessionList({
     trpc.session.create.mutationOptions({
       onSuccess: (newSession) => {
         queryClient.invalidateQueries({ queryKey: trpc.session.list.queryKey() });
+        setShowNewSessionModal(false);
         onSelect(newSession!.id);
       },
     })
   );
 
   const handleNewSession = () => {
+    setShowNewSessionModal(true);
+  };
+
+  const handleCreateSession = () => {
     createMutation.mutate({
       workingDirectory: process.cwd(),
-      agentType: "opencode",
+      agentType: selectedAgentType,
     });
   };
 
@@ -100,6 +110,44 @@ export function SessionList({
           {createMutation.isPending ? "..." : "+ New"}
         </Button>
       </div>
+
+      {showNewSessionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
+            <h3 className="mb-4 text-lg font-semibold">Create New Session</h3>
+            <div className="mb-4">
+              <label className="mb-2 block text-sm font-medium">Agent Type</label>
+              <select
+                value={selectedAgentType}
+                onChange={(e) => setSelectedAgentType(e.target.value)}
+                className="w-full rounded border bg-white px-3 py-2 text-sm dark:bg-gray-700"
+              >
+                {getAvailableAgentTypes().map((agent) => (
+                  <option key={agent.value} value={agent.value}>
+                    {agent.icon} {agent.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowNewSessionModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleCreateSession}
+                disabled={createMutation.isPending}
+              >
+                {createMutation.isPending ? "Creating..." : "Create"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="border-b p-2">
         <select

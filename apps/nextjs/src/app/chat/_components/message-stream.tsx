@@ -100,6 +100,18 @@ function parseEventsToMessages(events: SessionEvent[]): Message[] {
         timestamp: new Date(event.createdAt),
       });
     }
+
+    if (event.eventType === "transcript") {
+      const transcriptType = event.payload.type as "user" | "assistant";
+      const transcriptText = event.payload.text as string;
+      
+      messages.push({
+        id: `transcript-${event.seq}`,
+        role: transcriptType === "user" ? "user" : "assistant",
+        content: transcriptText,
+        timestamp: new Date(event.payload.timestamp as string || event.createdAt),
+      });
+    }
   }
 
   if (currentAssistantContent || currentToolCalls.length > 0) {

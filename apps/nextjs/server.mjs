@@ -4,7 +4,96 @@ import { fileURLToPath, parse } from "node:url";
 import { WebSocketServer } from "ws";
 import next from "next";
 
-import { TerminalService } from "@bob/legacy/services";
+import { getAgentCommand } from "@bob/legacy";
+import { agentFactory } from "@bob/legacy/agents";
+import { AgentService, GitService, TerminalService } from "@bob/legacy/services";
+
+/**
+ * NOTE: Next.js route handlers and this custom server run in the same Node
+ * process. We intentionally share a single ServiceManager instance via
+ * globalThis so that:
+ * - HTTP endpoints can create terminal sessions
+ * - WebSocket upgrades can attach to the same in-memory session by id
+ */
+
+// eslint-disable-next-line no-var
+var __serviceManager;
+
+class ServiceManager {
+  constructor() {
+    this._gitService = null;
+    this._agentService = null;
+    this._terminalService = null;
+    this._initialized = false;
+  }
+
+  async initialize() {
+    if (this._initialized) return;
+
+    this._gitService = new GitService();
+    await this._gitService.initialize();
+
+    this._agentService = new AgentService({
+      gitService: this._gitService,
+      agentFactory,
+      getAgentCommand,
+    });
+    await this._agentService.initialize();
+
+    this._terminalService = new TerminalService();
+
+    this._initialized = true;
+    console.log("[ServiceManager] Services initialized");
+  }
+
+  get gitService() {
+    if (!this._gitService) {
+      throw new Error("ServiceManager not initialized. Call initialize() first.");
+    }
+    return this._gitService;
+  }
+
+  get agentService() {
+    if (!this._agentService) {
+      throw new Error("ServiceManager not initialized. Call initialize() first.");
+    }
+    return this._agentService;
+  }
+
+  get terminalService() {
+    if (!this._terminalService) {
+      throw new Error("ServiceManager not initialized. Call initialize() first.");
+    }
+    return this._terminalService;
+  }
+
+  async cleanup() {
+    if (this._agentService) {
+      await this._agentService.cleanup();
+    }
+    if (this._terminalService) {
+      this._terminalService.cleanup();
+    }
+    this._initialized = false;
+  }
+}
+
+function getServiceManager() {
+  if (!globalThis.__serviceManager) {
+    globalThis.__serviceManager = new ServiceManager();
+  }
+  return globalThis.__serviceManager;
+}
+
+async function getServices() {
+  const manager = getServiceManager();
+  await manager.initialize();
+  return {
+    gitService: manager.gitService,
+    agentService: manager.agentService,
+    terminalService: manager.terminalService,
+  };
+}
 
 // NOTE: The monorepo commonly uses `PORT` for other services (legacy backend).
 // To avoid collisions, this server uses `NEXT_PORT` (or `NEXTJS_PORT`) instead.
@@ -22,26 +111,6 @@ const handle = app.getRequestHandler();
 
 await app.prepare();
 
-/**
- * @typedef {Object} Services
- * @property {import("@bob/legacy/services").TerminalService} terminalService
- */
-
-/** @type {Promise<Services> | undefined} */
-let servicesPromise;
-
-async function getServices() {
-  if (!servicesPromise) {
-    servicesPromise = (async () => {
-      const terminalService = new TerminalService();
-
-      console.log("[server] Terminal service initialized");
-
-      return { terminalService };
-    })();
-  }
-  return servicesPromise;
-}
 
 const server = createServer((req, res) => {
   try {
@@ -96,6 +165,7 @@ async function gracefulShutdown() {
     wss.close();
 
     const services = await getServices();
+    await services.agentService.cleanup();
     services.terminalService.cleanup();
   } catch (error) {
     console.error("[server] Error during shutdown", error);
