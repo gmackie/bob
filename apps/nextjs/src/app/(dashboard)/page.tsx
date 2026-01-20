@@ -13,6 +13,7 @@ import {
   AgentPanel,
   RepositoryDashboardPanel,
   RepositoryPanel,
+  SystemStatusPanel,
 } from "~/components/dashboard";
 import { useCheatCode } from "~/contexts";
 import { getAppConfig } from "~/lib/legacy/config";
@@ -287,6 +288,8 @@ function DashboardContent() {
           ></div>
         </div>
       </div>
+
+      <SystemStatusPanel />
 
       <div className="main-layout">
         <RepositoryPanel
