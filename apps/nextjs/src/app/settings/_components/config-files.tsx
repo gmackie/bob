@@ -30,6 +30,48 @@ export function ConfigFilesSection() {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
 
+  const OPENCODE_JSON_TEMPLATE =
+    "{\n" +
+    "  \"$schema\": \"https://opencode.ai/config.json\",\n" +
+    "  \"model\": \"anthropic/claude-opus-4-5\",\n" +
+    "  \"small_model\": \"anthropic/claude-haiku-4-5\",\n" +
+    "  \"autoupdate\": false\n" +
+    "}\n";
+
+  const OPENCODE_CONFIG_JSON_TEMPLATE =
+    "{\n" +
+    "  \"$schema\": \"https://opencode.ai/schemas/config.json\",\n" +
+    "  \"mcpServers\": {\n" +
+    "    \"bob\": {\n" +
+    "      \"type\": \"stdio\",\n" +
+    "      \"command\": \"npx\",\n" +
+    "      \"args\": [\"@bob/mcp-server\"],\n" +
+    "      \"env\": {\n" +
+    "        \"BOB_API_URL\": \"\\${env:BOB_API_URL}\",\n" +
+    "        \"BOB_API_KEY\": \"\\${env:BOB_API_KEY}\",\n" +
+    "        \"BOB_SESSION_ID\": \"\\${env:BOB_SESSION_ID}\"\n" +
+    "      }\n" +
+    "    }\n" +
+    "  },\n" +
+    "  \"skills\": [\n" +
+    "    {\n" +
+    "      \"name\": \"bob-workflow\",\n" +
+    "      \"description\": \"Workflow and status reporting for Bob-managed sessions\",\n" +
+    "      \"path\": \"./skills/bob-workflow.md\"\n" +
+    "    }\n" +
+    "  ]\n" +
+    "}\n";
+
+  const BOB_WORKFLOW_SKILL_TEMPLATE =
+    "# Bob Workflow Skill\n\n" +
+    "This is a starter skill file for Bob + OpenCode.\n\n" +
+    "Typical flow:\n" +
+    "- Call update_status regularly while working\n" +
+    "- Use request_input when you need a decision (with a sensible default_action)\n" +
+    "- Use mark_blocked when you cannot proceed\n" +
+    "- Use submit_for_review when a PR is ready\n\n" +
+    "Required env (for bob MCP server): BOB_API_URL, BOB_API_KEY, BOB_SESSION_ID\n";
+
   const [selectedRootId, setSelectedRootId] = React.useState<ConfigRootId | "">(
     "",
   );
@@ -84,19 +126,19 @@ export function ConfigFilesSection() {
   const saveMutation = useMutation(
     trpc.settings.writeConfigFile.mutationOptions({
       onSuccess: (data) => {
-      if (isCreating) {
-        setIsCreating(false);
-        setNewFileName("");
-        setSelectedFile(data.path);
-        invalidateEntries();
-      }
+        if (isCreating) {
+          setIsCreating(false);
+          setNewFileName("");
+          setSelectedFile(data.path);
+          invalidateEntries();
+        }
 
-      void queryClient.invalidateQueries({
-        queryKey: trpc.settings.readConfigFile.queryKey({
-          rootId: selectedRootId as ConfigRootId,
-          path: data.path,
-        }),
-      });
+        void queryClient.invalidateQueries({
+          queryKey: trpc.settings.readConfigFile.queryKey({
+            rootId: selectedRootId as ConfigRootId,
+            path: data.path,
+          }),
+        });
       },
     }),
   );
@@ -104,12 +146,45 @@ export function ConfigFilesSection() {
   const deleteMutation = useMutation(
     trpc.settings.deleteConfigFile.mutationOptions({
       onSuccess: () => {
-      setSelectedFile(null);
-      setFileContent("");
-      invalidateEntries();
+        setSelectedFile(null);
+        setFileContent("");
+        invalidateEntries();
       },
     }),
   );
+
+  const templateMutation = useMutation(
+    trpc.settings.writeConfigFile.mutationOptions({
+      onSuccess: (data) => {
+        invalidateEntries();
+        void queryClient.invalidateQueries({
+          queryKey: trpc.settings.readConfigFile.queryKey({
+            rootId: selectedRootId as ConfigRootId,
+            path: data.path,
+          }),
+        });
+        setSelectedFile(data.path);
+        setIsCreating(false);
+      },
+    }),
+  );
+
+  const handleWriteTemplate = async (
+    files: { path: string; content: string }[],
+  ) => {
+    if (!selectedRootId) return;
+    if (canSave) {
+      if (!confirm("You have unsaved changes. Overwrite?")) return;
+    }
+
+    for (const file of files) {
+      await templateMutation.mutateAsync({
+        rootId: selectedRootId as ConfigRootId,
+        path: file.path,
+        content: file.content,
+      });
+    }
+  };
 
   const handleRootChange = (id: ConfigRootId) => {
     setSelectedRootId(id);
@@ -192,7 +267,9 @@ export function ConfigFilesSection() {
               {!root.exists && " (new)"}
             </Button>
           ))}
-          {!roots && <div className="bg-muted h-8 w-full animate-pulse rounded" />}
+          {!roots && (
+            <div className="bg-muted h-8 w-full animate-pulse rounded" />
+          )}
         </div>
 
         <div className="grid h-[500px] grid-cols-1 gap-4 md:grid-cols-2">
@@ -288,15 +365,61 @@ export function ConfigFilesSection() {
                   )}
                 </div>
               ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => setIsCreating(true)}
-                  disabled={!selectedRootId}
-                >
-                  + New File
-                </Button>
+                <div className="space-y-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setIsCreating(true)}
+                    disabled={!selectedRootId}
+                  >
+                    + New File
+                  </Button>
+
+                  <div className="border-t pt-2">
+                    <p className="text-muted-foreground mb-2 text-xs font-medium">
+                      Starter templates
+                    </p>
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto justify-start px-2 py-1 text-xs"
+                        onClick={() =>
+                          handleWriteTemplate([
+                            {
+                              path: "opencode.json",
+                              content: OPENCODE_JSON_TEMPLATE,
+                            },
+                          ])
+                        }
+                        disabled={!selectedRootId || templateMutation.isPending}
+                      >
+                        Write opencode.json
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto justify-start px-2 py-1 text-xs"
+                        onClick={() =>
+                          handleWriteTemplate([
+                            {
+                              path: "skills/bob-workflow.md",
+                              content: BOB_WORKFLOW_SKILL_TEMPLATE,
+                            },
+                            {
+                              path: "opencode-config.json",
+                              content: OPENCODE_CONFIG_JSON_TEMPLATE,
+                            },
+                          ])
+                        }
+                        disabled={!selectedRootId || templateMutation.isPending}
+                      >
+                        Write opencode-config.json + skill
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -322,7 +445,9 @@ export function ConfigFilesSection() {
                       size="sm"
                       className="h-7 px-3"
                       onClick={handleSave}
-                      disabled={saveMutation.isPending || isLoadingFile || !canSave}
+                      disabled={
+                        saveMutation.isPending || isLoadingFile || !canSave
+                      }
                     >
                       Save
                     </Button>
