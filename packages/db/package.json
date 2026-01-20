@@ -43,7 +43,7 @@
     "@bob/eslint-config": "workspace:*",
     "@bob/prettier-config": "workspace:*",
     "@bob/tsconfig": "workspace:*",
-    "@types/pg": "8.11.6",
+    "@types/pg": "8.16.0",
     "drizzle-kit": "^0.31.5",
     "eslint": "catalog:",
     "prettier": "catalog:",
