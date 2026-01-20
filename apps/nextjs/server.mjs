@@ -4,9 +4,7 @@ import { fileURLToPath, parse } from "node:url";
 import { WebSocketServer } from "ws";
 import next from "next";
 
-import { getAgentCommand } from "@bob/legacy";
-import { agentFactory } from "@bob/legacy/agents";
-import { AgentService, GitService, TerminalService } from "@bob/legacy/services";
+import { TerminalService } from "@bob/legacy/services";
 
 // NOTE: The monorepo commonly uses `PORT` for other services (legacy backend).
 // To avoid collisions, this server uses `NEXT_PORT` (or `NEXTJS_PORT`) instead.
@@ -26,8 +24,6 @@ await app.prepare();
 
 /**
  * @typedef {Object} Services
- * @property {import("@bob/legacy/services").GitService} gitService
- * @property {import("@bob/legacy/services").AgentService} agentService
  * @property {import("@bob/legacy/services").TerminalService} terminalService
  */
 
@@ -37,21 +33,11 @@ let servicesPromise;
 async function getServices() {
   if (!servicesPromise) {
     servicesPromise = (async () => {
-      const gitService = new GitService();
-      await gitService.initialize();
-
-      const agentService = new AgentService({
-        gitService,
-        agentFactory,
-        getAgentCommand,
-      });
-      await agentService.initialize();
-
       const terminalService = new TerminalService();
 
-      console.log("[server] Legacy services initialized");
+      console.log("[server] Terminal service initialized");
 
-      return { gitService, agentService, terminalService };
+      return { terminalService };
     })();
   }
   return servicesPromise;
@@ -110,7 +96,6 @@ async function gracefulShutdown() {
     wss.close();
 
     const services = await getServices();
-    await services.agentService.cleanup();
     services.terminalService.cleanup();
   } catch (error) {
     console.error("[server] Error during shutdown", error);
