@@ -7,15 +7,15 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "default": "./src/index.ts"
+      "default": "./dist/index.js"
     },
     "./agents": {
       "types": "./dist/agents/index.d.ts",
-      "default": "./src/agents/index.ts"
+      "default": "./dist/agents/index.js"
     },
     "./services": {
       "types": "./dist/services/index.d.ts",
-      "default": "./src/services/index.ts"
+      "default": "./dist/services/index.js"
     }
   },
   "scripts": {
