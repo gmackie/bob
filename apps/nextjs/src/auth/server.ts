@@ -8,16 +8,30 @@ import { initAuth } from "@bob/auth";
 
 import { env } from "~/env";
 
-const baseUrl =
-  env.VERCEL_ENV === "production"
+function safeOrigin(input: string): string {
+  try {
+    return new URL(input).origin;
+  } catch {
+    return input;
+  }
+}
+
+const publicSiteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  process.env.FRONTEND_URL ??
+  // Vercel (not used in hosted VPS mode, but keep as fallback)
+  (env.VERCEL_ENV === "production"
     ? `https://${env.VERCEL_PROJECT_PRODUCTION_URL}`
     : env.VERCEL_ENV === "preview"
       ? `https://${env.VERCEL_URL}`
-      : "http://localhost:3000";
+      : undefined) ??
+  "http://localhost:3000";
+
+const baseUrl = safeOrigin(publicSiteUrl);
 
 export const auth = initAuth({
   baseUrl,
-  productionUrl: `https://${env.VERCEL_PROJECT_PRODUCTION_URL ?? "bob.app"}`,
+  productionUrl: safeOrigin(publicSiteUrl),
   secret: env.AUTH_SECRET,
   githubClientId: env.AUTH_GITHUB_ID,
   githubClientSecret: env.AUTH_GITHUB_SECRET,

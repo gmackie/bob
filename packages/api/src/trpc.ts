@@ -8,6 +8,8 @@ import { and, eq, gt, isNull } from "@bob/db";
 import { db } from "@bob/db/client";
 import { apiKeys, user } from "@bob/db/schema";
 
+const DEFAULT_USER_ID = "default-user";
+
 export type ApiKeyPermission = "read" | "write" | "delete" | "admin";
 
 export interface ApiKeyAuth {
@@ -87,6 +89,24 @@ export const createTRPCContext = async (opts: {
   const session = await authApi.getSession({
     headers: opts.headers,
   });
+
+  // Desktop/single-user mode: when auth is not required, treat the default user as logged-in.
+  if (process.env.REQUIRE_AUTH !== "true" && !session?.user) {
+    const [userRecord] = await db
+      .select()
+      .from(user)
+      .where(eq(user.id, DEFAULT_USER_ID))
+      .limit(1);
+
+    if (userRecord) {
+      return {
+        authApi,
+        session: { user: userRecord, session: null },
+        apiKeyAuth: null as ApiKeyAuth | null,
+        db,
+      };
+    }
+  }
 
   return {
     authApi,

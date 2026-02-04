@@ -1,4 +1,19 @@
+import { NextRequest, NextResponse } from "next/server";
+
 import { auth } from "~/auth/server";
 
-export const GET = auth.handler;
-export const POST = auth.handler;
+function maybeRedirectLegacyGitHubCallback(request: NextRequest) {
+  // Back-compat for older deployments/docs that used /api/auth/github/callback.
+  // Better Auth uses /api/auth/callback/github.
+  if (request.nextUrl.pathname === "/api/auth/github/callback") {
+    const target = request.nextUrl.clone();
+    target.pathname = "/api/auth/callback/github";
+    return NextResponse.redirect(target, { status: 307 });
+  }
+  return null;
+}
+
+export const GET = (request: NextRequest) =>
+  maybeRedirectLegacyGitHubCallback(request) ?? auth.handler(request);
+
+export const POST = (request: NextRequest) => auth.handler(request);
