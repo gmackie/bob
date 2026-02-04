@@ -112,9 +112,15 @@ const taskPriorityEnum = [
 
 export const kanbangerRouter = {
   listWorkspaces: protectedProcedure.query(async () => {
-    return kanbangerQuery<Array<{ id: string; name: string; slug: string }>>(
-      "workspace.list",
-    );
+    const memberships = await kanbangerQuery<any[]>("workspace.list");
+    return memberships
+      .map((m) => m?.workspace ?? m)
+      .filter(Boolean)
+      .map((w) => ({
+        id: w.id as string,
+        name: w.name as string,
+        slug: w.slug as string,
+      }));
   }),
 
   listProjects: protectedProcedure

@@ -224,17 +224,25 @@ export async function syncKanbangerReposForBobUser(input: {
 
   const resolvedWorkspaceId = input.workspaceId
     ? input.workspaceId
-    : (await kanbangerRequest<Array<{ id: string }>>("workspace.list", {}))[0]
-        ?.id;
+    : (() => {
+        // workspace.list returns memberships (workspace nested) on tasks.gmac.io.
+        const first = (ws: any) => ws?.[0];
+        return kanbangerRequest<any[]>("workspace.list", {}).then((ws) => {
+          const item = first(ws);
+          return item?.id ?? item?.workspace?.id;
+        });
+      })();
 
-  if (!resolvedWorkspaceId) {
+  const workspaceIdValue = await resolvedWorkspaceId;
+
+  if (!workspaceIdValue) {
     throw new Error("No Kanbanger workspace found");
   }
 
   const projects = await kanbangerRequest<KanbangerProjectListItem[]>(
     "project.list",
     {
-      workspaceId: resolvedWorkspaceId,
+      workspaceId: workspaceIdValue,
     },
   );
 
@@ -345,7 +353,7 @@ export async function syncKanbangerReposForBobUser(input: {
   const errors = results.filter((r) => r.status === "error").length;
 
   return {
-    workspaceId: resolvedWorkspaceId,
+    workspaceId: workspaceIdValue,
     userId: targetUser.id,
     projects: projects.length,
     cloned,
