@@ -32,14 +32,19 @@ async function kanbangerRequest<T>(path: string, input: unknown): Promise<T> {
     throw new Error("KANBANGER_API_KEY not configured");
   }
 
-  const url = `${KANBANGER_URL}/api/trpc/${path}`;
+  // tasks.gmac.io (Kanbanger) rejects POST for query procedures; use GET batch format.
+  const inputObj = { "0": { json: input ?? {} } };
+  const qs = new URLSearchParams({
+    batch: "1",
+    input: JSON.stringify(inputObj),
+  });
+
+  const url = `${KANBANGER_URL}/api/trpc/${path}?${qs.toString()}`;
   const response = await fetch(url, {
-    method: "POST",
+    method: "GET",
     headers: {
-      "Content-Type": "application/json",
       "X-API-Key": KANBANGER_API_KEY,
     },
-    body: JSON.stringify({ "0": { json: input } }),
   });
 
   if (!response.ok) {
