@@ -19,6 +19,11 @@ export interface GitRepository {
   htmlUrl: string;
 }
 
+export interface ListRepositoriesInput {
+  page: number;
+  perPage: number;
+}
+
 export interface GitBranch {
   name: string;
   sha: string;
@@ -78,6 +83,9 @@ export interface GitProviderClient {
   getAuthenticatedUser(): Promise<GitUser>;
 
   getRepository(owner: string, repo: string): Promise<GitRepository>;
+
+  // Optional because not all providers are implemented yet.
+  listRepositories?: (input: ListRepositoriesInput) => Promise<GitRepository[]>;
 
   listBranches(owner: string, repo: string): Promise<GitBranch[]>;
 

@@ -15,7 +15,9 @@ export function isMobilePlatform(): boolean {
 
   // Client-side: check user agent
   const ua = navigator.userAgent.toLowerCase();
-  return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(ua);
+  return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(
+    ua,
+  );
 }
 
 /**
@@ -23,7 +25,11 @@ export function isMobilePlatform(): boolean {
  * Web: all agents including PTY-based
  * Mobile: chat and voice only (no PTY)
  */
-export function getAvailableAgentTypes(): Array<{ value: string; label: string; icon: string }> {
+export function getAvailableAgentTypes(): Array<{
+  value: string;
+  label: string;
+  icon: string;
+}> {
   const allAgents = [
     { value: "opencode", label: "OpenCode", icon: "💻" },
     { value: "elevenlabs", label: "ElevenLabs Voice", icon: "🎤" },
@@ -32,12 +38,12 @@ export function getAvailableAgentTypes(): Array<{ value: string; label: string; 
     { value: "gemini", label: "Gemini", icon: "✨" },
     { value: "kiro", label: "Kiro", icon: "🔮" },
     { value: "cursor-agent", label: "Cursor Agent", icon: "🖱️" },
-  ] as const;
+  ];
 
   if (isMobilePlatform()) {
     // Mobile: only chat and voice agents
     return allAgents.filter(
-      (agent) => agent.value === "opencode" || agent.value === "elevenlabs"
+      (agent) => agent.value === "opencode" || agent.value === "elevenlabs",
     );
   }
 

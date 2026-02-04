@@ -56,6 +56,55 @@ function DashboardContent() {
   }, []);
 
   useEffect(() => {
+    const key = "bob:kanbangerPreseed:lastRunAt";
+    const throttleMs = 6 * 60 * 60 * 1000;
+
+    try {
+      const last = localStorage.getItem(key);
+      if (last) {
+        const lastMs = Number(last);
+        if (!Number.isNaN(lastMs) && Date.now() - lastMs < throttleMs) {
+          return;
+        }
+      }
+    } catch {
+      // Best-effort: if localStorage is unavailable, just attempt once.
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch("/api/kanbanger/sync-repos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        });
+
+        if (!res.ok) {
+          // Expected when KANBANGER_API_KEY is not configured, or on network failures.
+          return;
+        }
+
+        if (cancelled) return;
+
+        try {
+          localStorage.setItem(key, String(Date.now()));
+        } catch {
+          // ignore
+        }
+
+        await loadData();
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadData]);
+
+  useEffect(() => {
     getAppConfig().then((config) => {
       setAppName(config.appName);
     });

@@ -1,6 +1,9 @@
+import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 
-import { getSession } from "~/auth/server";
+import { appRouter, createTRPCContext } from "@bob/api";
+
+import { auth, getSession } from "~/auth/server";
 import { HydrateClient, prefetch, trpc } from "~/trpc/server";
 import { PrTimeline } from "./_components/pr-timeline";
 import { RepositoryHeader } from "./_components/repository-header";
@@ -18,10 +21,18 @@ export default async function RepositoryPage({ params }: RepositoryPageProps) {
 
   const { repositoryId } = await params;
 
+  const heads = new Headers(await headers());
+  heads.set("x-trpc-source", "rsc");
+  const ctx = await createTRPCContext({
+    headers: heads,
+    auth,
+  });
+  const caller = appRouter.createCaller(ctx);
+
   const [repository, pullRequests] = await Promise.all([
-    trpc.repository.byId.query({ id: repositoryId }).catch(() => null),
-    trpc.pullRequest.listByRepository
-      .query({
+    caller.repository.byId({ id: repositoryId }).catch(() => null),
+    caller.pullRequest
+      .listByRepository({
         repositoryId,
         includeCommits: true,
         limit: 20,

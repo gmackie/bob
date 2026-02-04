@@ -6,6 +6,7 @@ import type {
   GitPullRequest,
   GitRepository,
   GitUser,
+  ListRepositoriesInput,
   UpdatePullRequestInput,
 } from "./types";
 
@@ -36,6 +37,36 @@ export function createGitHubClient(accessToken: string): GitProviderClient {
 
   return {
     provider: "github",
+
+    async listRepositories(
+      input: ListRepositoriesInput,
+    ): Promise<GitRepository[]> {
+      const repos = await request<
+        Array<{
+          id: number;
+          owner: { login: string };
+          name: string;
+          full_name: string;
+          default_branch: string;
+          private: boolean;
+          clone_url: string;
+          html_url: string;
+        }>
+      >(
+        `/user/repos?per_page=${input.perPage}&page=${input.page}&sort=updated`,
+      );
+
+      return repos.map((repository) => ({
+        id: String(repository.id),
+        owner: repository.owner.login,
+        name: repository.name,
+        fullName: repository.full_name,
+        defaultBranch: repository.default_branch,
+        isPrivate: repository.private,
+        cloneUrl: repository.clone_url,
+        htmlUrl: repository.html_url,
+      }));
+    },
 
     async getAuthenticatedUser(): Promise<GitUser> {
       const user = await request<{
