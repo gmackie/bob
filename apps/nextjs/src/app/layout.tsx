@@ -43,7 +43,7 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
 });
 
-export default function RootLayout(props: { children: React.ReactNode }) {
+export default function RootLayout(props: { children: React.ReactNode; params: Promise<any> }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body

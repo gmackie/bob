@@ -11,6 +11,18 @@ import { user } from "@bob/db/schema";
 
 import { env } from "~/env";
 
+type DefaultUser = NonNullable<
+  Awaited<ReturnType<typeof getOrCreateDefaultUser>>
+>;
+
+type DefaultSession = {
+  user: DefaultUser;
+  session: null;
+};
+
+type BetterAuthSession = Awaited<ReturnType<typeof auth.api.getSession>>;
+type SessionResult = BetterAuthSession | DefaultSession;
+
 function safeOrigin(input: string): string {
   try {
     return new URL(input).origin;
@@ -63,10 +75,10 @@ async function getOrCreateDefaultUser() {
   return db.query.user.findFirst({ where: eq(user.id, id) });
 }
 
-export const getSession = cache(async () => {
+export const getSession = cache(async (): Promise<SessionResult> => {
   if (process.env.REQUIRE_AUTH !== "true") {
     const u = await getOrCreateDefaultUser();
-    return u ? ({ user: u, session: null } as any) : null;
+    return u ? { user: u, session: null } : null;
   }
 
   return auth.api.getSession({ headers: await headers() });

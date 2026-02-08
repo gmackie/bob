@@ -1,5 +1,9 @@
 import "server-only";
 
+import { existsSync, readdirSync, statSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
+
 import { getAgentCommand } from "@bob/legacy";
 import { agentFactory } from "@bob/legacy/agents";
 import {
@@ -21,11 +25,43 @@ class ServiceManager {
   private _terminalService: TerminalService | null = null;
   private _initialized = false;
 
+  private async autoDiscoverRepositories(): Promise<void> {
+    if (!this._gitService) return;
+
+    const reposDir = process.env.BOB_REPOS_DIR || join(homedir(), "bob-repos");
+    if (!existsSync(reposDir)) return;
+
+    let entries: string[];
+    try {
+      entries = readdirSync(reposDir);
+    } catch (error) {
+      console.warn(
+        `[ServiceManager] Failed to read repos dir: ${reposDir}`,
+        error,
+      );
+      return;
+    }
+
+    for (const entry of entries) {
+      const repoPath = join(reposDir, entry);
+      try {
+        const st = statSync(repoPath);
+        if (!st.isDirectory()) continue;
+        if (!existsSync(join(repoPath, ".git"))) continue;
+
+        await this._gitService.addRepository(repoPath, DEFAULT_USER_ID);
+      } catch (error) {
+        console.warn(`[ServiceManager] Failed to add repo: ${repoPath}`, error);
+      }
+    }
+  }
+
   async initialize(): Promise<void> {
     if (this._initialized) return;
 
     this._gitService = new GitService();
     await this._gitService.initialize();
+    await this.autoDiscoverRepositories();
 
     this._agentService = new AgentService({
       gitService: this._gitService,

@@ -1,11 +1,11 @@
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 
 import { db } from "@bob/db/client";
 import { chatConversations } from "@bob/db/schema";
 
 export const runtime = "nodejs";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   const userId = request.headers.get("x-bob-user-id") ?? "default-user";
 
   const [row] = await db

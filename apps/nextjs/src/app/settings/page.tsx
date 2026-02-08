@@ -3,13 +3,16 @@ import { redirect } from "next/navigation";
 import { getSession } from "~/auth/server";
 import { ApiKeysSection } from "./_components/api-keys";
 import { ConfigFilesSection } from "./_components/config-files";
+import { GitProvidersSection } from "./_components/git-providers";
 import { PreferencesSection } from "./_components/preferences";
+
+export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   const session = await getSession();
 
   if (!session) {
-    redirect("/");
+    redirect("/login");
   }
 
   return (
@@ -18,6 +21,7 @@ export default async function SettingsPage() {
 
       <div className="space-y-8">
         <PreferencesSection />
+        <GitProvidersSection />
         <ConfigFilesSection />
         <ApiKeysSection />
       </div>

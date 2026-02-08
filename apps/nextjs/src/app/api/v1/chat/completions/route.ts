@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 
 import type { OpenCodeClient } from "@bob/api/services/opencode/opencodeClient";
 import { createOpenCodeClient } from "@bob/api/services/opencode/opencodeClient";
@@ -168,7 +168,7 @@ function sse(lines: string[]): Response {
   });
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     if (!requireBearer(request)) {
       return jsonError(401, "Unauthorized");

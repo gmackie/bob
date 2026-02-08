@@ -1,6 +1,6 @@
 import { and, eq, isNull } from "@bob/db";
 import { db } from "@bob/db/client";
-import { gitProviderConnections } from "@bob/db/schema";
+import { account, gitProviderConnections } from "@bob/db/schema";
 
 import type { EncryptedToken } from "../crypto/tokenVault";
 import type { GitProvider, GitProviderClient } from "./providers/types";
@@ -24,11 +24,44 @@ export interface ConnectionWithDecryptedToken {
   createdAt: Date;
 }
 
+async function ensureGitHubConnectionFromOAuth(userId: string): Promise<void> {
+  const existing = await db.query.gitProviderConnections.findFirst({
+    where: and(
+      eq(gitProviderConnections.userId, userId),
+      eq(gitProviderConnections.provider, "github"),
+      isNull(gitProviderConnections.instanceUrl),
+      isNull(gitProviderConnections.revokedAt),
+    ),
+  });
+  if (existing) return;
+
+  const oauthAccount = await db.query.account.findFirst({
+    where: and(eq(account.userId, userId), eq(account.providerId, "github")),
+  });
+  if (!oauthAccount?.accessToken) return;
+
+  await createConnection({
+    userId,
+    provider: "github",
+    providerAccountId: oauthAccount.accountId,
+    providerUsername: null,
+    scopes: oauthAccount.scope ?? null,
+    accessToken: oauthAccount.accessToken,
+    refreshToken: oauthAccount.refreshToken ?? null,
+    accessTokenExpiresAt: oauthAccount.accessTokenExpiresAt ?? null,
+    refreshTokenExpiresAt: oauthAccount.refreshTokenExpiresAt ?? null,
+  });
+}
+
 export async function getConnection(
   userId: string,
   provider: GitProvider,
   instanceUrl?: string | null,
 ): Promise<ConnectionWithDecryptedToken | null> {
+  if (provider === "github" && !instanceUrl) {
+    await ensureGitHubConnectionFromOAuth(userId);
+  }
+
   const conditions = [
     eq(gitProviderConnections.userId, userId),
     eq(gitProviderConnections.provider, provider),
@@ -98,6 +131,8 @@ export async function listConnections(userId: string): Promise<
     createdAt: Date;
   }>
 > {
+  await ensureGitHubConnectionFromOAuth(userId);
+
   const connections = await db.query.gitProviderConnections.findMany({
     where: and(
       eq(gitProviderConnections.userId, userId),

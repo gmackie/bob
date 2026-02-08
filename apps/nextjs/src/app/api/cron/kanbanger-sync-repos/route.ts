@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 
 import { syncKanbangerReposForBobUser } from "~/server/kanbanger/sync-repos";
 
+function getStatusCode(error: unknown): number | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const value = (error as { statusCode?: unknown }).statusCode;
+  return typeof value === "number" ? value : undefined;
+}
+
 const CRON_SECRET = process.env.CRON_SECRET;
 const KANBANGER_API_KEY = process.env.KANBANGER_API_KEY;
 
@@ -29,10 +35,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     });
     return NextResponse.json(result);
   } catch (error) {
-    const statusCode =
-      error && typeof error === "object" && "statusCode" in error
-        ? (error as any).statusCode
-        : undefined;
+    const statusCode = getStatusCode(error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown error" },
       { status: typeof statusCode === "number" ? statusCode : 500 },

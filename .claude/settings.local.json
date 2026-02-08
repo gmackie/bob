@@ -42,7 +42,6 @@
       "Bash(npx tailwindcss init:*)",
       "Bash(npm uninstall:*)",
       "Bash(git rebase:*)",
-<<<<<<< HEAD
       "Bash(git fetch:*)",
       "Bash(git commit:*)",
       "Bash(git merge-base:*)",
@@ -127,13 +126,25 @@
       "Bash(frontend/src/index.css )",
       "Bash(.claude/settings.local.json)",
       "Bash(log show:*)",
-      "Bash(npm view:*)"
+      "Bash(npm view:*)",
+      "Bash(ls:*)",
+      "WebSearch",
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:platform.openai.com)",
+      "Bash(pnpm add:*)",
+      "WebFetch(domain:support.anthropic.com)",
+      "WebFetch(domain:support.claude.com)",
+      "WebFetch(domain:cookbook.openai.com)",
+      "WebFetch(domain:community.openai.com)",
+      "WebFetch(domain:developers.openai.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:deepwiki.com)"
     ],
     "deny": [],
+    "ask": [],
     "additionalDirectories": [
       "/var/www/html/.well-known/acme-challenge",
       "/etc/nginx/sites-enabled"
-    ],
-    "ask": []
+    ]
   }
 }

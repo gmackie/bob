@@ -43,4 +43,5 @@ const handler = async (req: NextRequest) => {
   return response;
 };
 
-export { handler as GET, handler as POST };
+export const GET = (req: NextRequest, ctx: { params: Promise<{ trpc: string }> }) => handler(req);
+export const POST = (req: NextRequest, ctx: { params: Promise<{ trpc: string }> }) => handler(req);

@@ -98,6 +98,7 @@ export const repositories = pgTable("repositories", (t) => ({
     .text()
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
+  kanbangerProjectId: t.text(),
   name: t.varchar({ length: 256 }).notNull(),
   path: t.text().notNull(),
   branch: t.varchar({ length: 256 }).notNull(),

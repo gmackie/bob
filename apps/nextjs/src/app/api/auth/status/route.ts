@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 
 type AuthStatusResponse =
   | {
@@ -16,7 +16,7 @@ type AuthStatusResponse =
       user: null;
     };
 
-export async function GET(request: Request): Promise<NextResponse<AuthStatusResponse>> {
+export async function GET(request: NextRequest): Promise<NextResponse<AuthStatusResponse>> {
   const requireAuth = process.env.REQUIRE_AUTH === "true";
 
   // If auth is not required, treat all users as "authenticated" so the UI

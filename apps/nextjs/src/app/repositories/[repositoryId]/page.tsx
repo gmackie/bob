@@ -16,7 +16,7 @@ export default async function RepositoryPage({ params }: RepositoryPageProps) {
   const session = await getSession();
 
   if (!session) {
-    redirect("/");
+    redirect("/login");
   }
 
   const { repositoryId } = await params;

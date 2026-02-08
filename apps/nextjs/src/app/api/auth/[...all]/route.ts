@@ -21,7 +21,7 @@ function maybeRedirectLegacyGitHubCallback(request: NextRequest) {
   return null;
 }
 
-export const GET = (request: NextRequest) =>
+export const GET = (request: NextRequest, _ctx: { params: Promise<{ all: string[] }> }) =>
   maybeRedirectLegacyGitHubCallback(request) ?? auth.handler(request);
 
-export const POST = (request: NextRequest) => auth.handler(request);
+export const POST = (request: NextRequest, _ctx: { params: Promise<{ all: string[] }> }) => auth.handler(request);
