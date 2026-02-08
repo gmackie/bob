@@ -816,6 +816,33 @@ body {
   background: rgba(255, 255, 255, 0.04);
 }
 
+.dash-usageUtilGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dash-usageUtilRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 10px;
+  align-items: center;
+}
+
+.dash-usageUtilMeta {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dash-usageUtilLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dash-dim);
+}
+
 .dash-usageBudgetBar {
   display: flex;
   flex-direction: column;

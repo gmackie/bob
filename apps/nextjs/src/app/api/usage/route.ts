@@ -2,6 +2,22 @@ import { NextResponse } from "next/server";
 
 import { getSession } from "~/auth/server";
 
+// ---- Types ----
+
+type ClaudeUtilWindow = {
+  utilization: number; // percentage 0-100
+  resetsAt: string; // ISO timestamp
+} | null;
+
+type ClaudeUsage = {
+  configured: boolean;
+  fiveHour: ClaudeUtilWindow;
+  sevenDay: ClaudeUtilWindow;
+  sevenDaySonnet: ClaudeUtilWindow;
+  sevenDayOpus: ClaudeUtilWindow;
+  rateLimitTier: string | null;
+};
+
 type TimeBucket = {
   start: string;
   inputTokens: number;
@@ -11,7 +27,7 @@ type TimeBucket = {
   estimatedCost: number;
 };
 
-type ProviderUsage = {
+type CodexUsage = {
   configured: boolean;
   fiveHour: TimeBucket[];
   weekly: TimeBucket[];
@@ -22,169 +38,123 @@ type ProviderUsage = {
 
 type UsageResponse = {
   generatedAt: string;
-  claude: ProviderUsage;
-  codex: ProviderUsage;
+  claude: ClaudeUsage;
+  codex: CodexUsage;
 };
 
-// Anthropic pricing (USD per million tokens, approximate for claude-3.5/4 family)
-const ANTHROPIC_INPUT_COST_PER_M = 3.0;
-const ANTHROPIC_OUTPUT_COST_PER_M = 15.0;
-const ANTHROPIC_CACHE_READ_COST_PER_M = 0.3;
+// ---- Claude (claude.ai session cookie) ----
 
-// OpenAI pricing (USD per million tokens, approximate for gpt-4o family)
+const CLAUDE_ORG_ID = process.env.CLAUDE_ORG_ID;
+const CLAUDE_SESSION_COOKIE = process.env.CLAUDE_SESSION_COOKIE;
+
+function parseUtilWindow(
+  raw: { utilization?: number; resets_at?: string } | null | undefined,
+): ClaudeUtilWindow {
+  if (!raw || raw.utilization == null) return null;
+  return {
+    utilization: raw.utilization,
+    resetsAt: raw.resets_at ?? "",
+  };
+}
+
+async function getClaudeUsage(): Promise<ClaudeUsage> {
+  if (!CLAUDE_SESSION_COOKIE || !CLAUDE_ORG_ID) {
+    return {
+      configured: false,
+      fiveHour: null,
+      sevenDay: null,
+      sevenDaySonnet: null,
+      sevenDayOpus: null,
+      rateLimitTier: null,
+    };
+  }
+
+  try {
+    const [usageRes, limitsRes] = await Promise.all([
+      fetch(
+        `https://claude.ai/api/organizations/${CLAUDE_ORG_ID}/usage`,
+        {
+          headers: { Cookie: CLAUDE_SESSION_COOKIE },
+          cache: "no-store",
+        },
+      ),
+      fetch(
+        `https://claude.ai/api/organizations/${CLAUDE_ORG_ID}/rate_limits`,
+        {
+          headers: { Cookie: CLAUDE_SESSION_COOKIE },
+          cache: "no-store",
+        },
+      ),
+    ]);
+
+    if (!usageRes.ok) {
+      console.error(
+        `Claude usage API error: ${usageRes.status} ${await usageRes.text()}`,
+      );
+      return {
+        configured: true,
+        fiveHour: null,
+        sevenDay: null,
+        sevenDaySonnet: null,
+        sevenDayOpus: null,
+        rateLimitTier: null,
+      };
+    }
+
+    const usage = (await usageRes.json()) as Record<string, unknown>;
+    const limits = limitsRes.ok
+      ? ((await limitsRes.json()) as { rate_limit_tier?: string })
+      : null;
+
+    return {
+      configured: true,
+      fiveHour: parseUtilWindow(
+        usage.five_hour as { utilization?: number; resets_at?: string } | null,
+      ),
+      sevenDay: parseUtilWindow(
+        usage.seven_day as { utilization?: number; resets_at?: string } | null,
+      ),
+      sevenDaySonnet: parseUtilWindow(
+        usage.seven_day_sonnet as {
+          utilization?: number;
+          resets_at?: string;
+        } | null,
+      ),
+      sevenDayOpus: parseUtilWindow(
+        usage.seven_day_opus as {
+          utilization?: number;
+          resets_at?: string;
+        } | null,
+      ),
+      rateLimitTier: limits?.rate_limit_tier ?? null,
+    };
+  } catch (error) {
+    console.error("Claude usage fetch error:", error);
+    return {
+      configured: true,
+      fiveHour: null,
+      sevenDay: null,
+      sevenDaySonnet: null,
+      sevenDayOpus: null,
+      rateLimitTier: null,
+    };
+  }
+}
+
+// ---- Codex / OpenAI (admin API key) ----
+
 const OPENAI_INPUT_COST_PER_M = 2.5;
 const OPENAI_OUTPUT_COST_PER_M = 10.0;
 
 function estimateCost(
   inputTokens: number,
   outputTokens: number,
-  cacheReadTokens: number,
-  provider: "anthropic" | "openai",
 ): number {
-  if (provider === "anthropic") {
-    return (
-      (inputTokens / 1_000_000) * ANTHROPIC_INPUT_COST_PER_M +
-      (outputTokens / 1_000_000) * ANTHROPIC_OUTPUT_COST_PER_M +
-      (cacheReadTokens / 1_000_000) * ANTHROPIC_CACHE_READ_COST_PER_M
-    );
-  }
   return (
     (inputTokens / 1_000_000) * OPENAI_INPUT_COST_PER_M +
     (outputTokens / 1_000_000) * OPENAI_OUTPUT_COST_PER_M
   );
 }
-
-// ---- Anthropic ----
-
-async function fetchAnthropicUsage(
-  apiKey: string,
-  bucketWidth: "1h" | "1d",
-  startingAt: string,
-  endingAt: string,
-): Promise<TimeBucket[]> {
-  const url = new URL(
-    "https://api.anthropic.com/v1/organizations/usage_report/messages",
-  );
-  url.searchParams.set("bucket_width", bucketWidth);
-  url.searchParams.set("starting_at", startingAt);
-  url.searchParams.set("ending_at", endingAt);
-
-  const res = await fetch(url.toString(), {
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    cache: "no-store",
-  });
-
-  if (!res.ok) {
-    console.error(`Anthropic usage API error: ${res.status} ${await res.text()}`);
-    return [];
-  }
-
-  const data = (await res.json()) as {
-    data?: Array<{
-      starting_at?: string;
-      results?: Array<{
-        uncached_input_tokens?: number;
-        output_tokens?: number;
-        cache_read_input_tokens?: number;
-      }>;
-    }>;
-  };
-
-  return (data.data ?? []).map((b) => {
-    const results = b.results ?? [];
-    const input = results.reduce((s, r) => s + (r.uncached_input_tokens ?? 0), 0);
-    const output = results.reduce((s, r) => s + (r.output_tokens ?? 0), 0);
-    const cacheRead = results.reduce((s, r) => s + (r.cache_read_input_tokens ?? 0), 0);
-    return {
-      start: b.starting_at ?? "",
-      inputTokens: input,
-      outputTokens: output,
-      cacheReadTokens: cacheRead,
-      totalTokens: input + output + cacheRead,
-      estimatedCost: estimateCost(input, output, cacheRead, "anthropic"),
-    };
-  });
-}
-
-async function fetchAnthropicMonthSpend(apiKey: string): Promise<number> {
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const url = new URL(
-    "https://api.anthropic.com/v1/organizations/cost_report",
-  );
-  url.searchParams.set("bucket_width", "1d");
-  url.searchParams.set("starting_at", monthStart.toISOString());
-  url.searchParams.set("ending_at", now.toISOString());
-
-  const res = await fetch(url.toString(), {
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    cache: "no-store",
-  });
-
-  if (!res.ok) {
-    console.error(`Anthropic cost API error: ${res.status} ${await res.text()}`);
-    return 0;
-  }
-
-  // Cost report: each bucket has results[] with amount in cents as a decimal string
-  const data = (await res.json()) as {
-    data?: Array<{
-      results?: Array<{ amount?: string }>;
-    }>;
-  };
-
-  let totalCents = 0;
-  for (const bucket of data.data ?? []) {
-    for (const r of bucket.results ?? []) {
-      totalCents += Number(r.amount ?? 0);
-    }
-  }
-  // Convert cents to dollars
-  return totalCents / 100;
-}
-
-async function getAnthropicUsage(): Promise<ProviderUsage> {
-  const apiKey = process.env.ANTHROPIC_ADMIN_KEY;
-  const limit = Number(process.env.ANTHROPIC_MONTHLY_LIMIT) || 0;
-
-  if (!apiKey) {
-    return {
-      configured: false,
-      fiveHour: [],
-      weekly: [],
-      monthSpend: 0,
-      monthLimit: limit,
-      monthRemaining: limit,
-    };
-  }
-
-  const now = new Date();
-  const fiveHoursAgo = new Date(now.getTime() - 5 * 60 * 60 * 1000);
-  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-
-  const [fiveHour, weekly, monthSpend] = await Promise.all([
-    fetchAnthropicUsage(apiKey, "1h", fiveHoursAgo.toISOString(), now.toISOString()),
-    fetchAnthropicUsage(apiKey, "1d", sevenDaysAgo.toISOString(), now.toISOString()),
-    fetchAnthropicMonthSpend(apiKey),
-  ]);
-
-  return {
-    configured: true,
-    fiveHour,
-    weekly,
-    monthSpend,
-    monthLimit: limit,
-    monthRemaining: Math.max(0, limit - monthSpend),
-  };
-}
-
-// ---- OpenAI ----
 
 async function fetchOpenAIUsage(
   apiKey: string,
@@ -200,9 +170,7 @@ async function fetchOpenAIUsage(
   url.searchParams.set("end_time", String(endTime));
 
   const res = await fetch(url.toString(), {
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
+    headers: { Authorization: `Bearer ${apiKey}` },
     cache: "no-store",
   });
 
@@ -238,7 +206,7 @@ async function fetchOpenAIUsage(
       outputTokens: output,
       cacheReadTokens: cacheRead,
       totalTokens: input + output + cacheRead,
-      estimatedCost: estimateCost(input, output, cacheRead, "openai"),
+      estimatedCost: estimateCost(input, output),
     };
   });
 }
@@ -258,9 +226,7 @@ async function fetchOpenAIMonthSpend(apiKey: string): Promise<number> {
   );
 
   const res = await fetch(url.toString(), {
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
+    headers: { Authorization: `Bearer ${apiKey}` },
     cache: "no-store",
   });
 
@@ -284,7 +250,7 @@ async function fetchOpenAIMonthSpend(apiKey: string): Promise<number> {
   }, 0);
 }
 
-async function getOpenAIUsage(): Promise<ProviderUsage> {
+async function getCodexUsage(): Promise<CodexUsage> {
   const apiKey = process.env.OPEN_AI_ADMIN_KEY;
   const limit = Number(process.env.OPENAI_MONTHLY_LIMIT) || 0;
 
@@ -334,8 +300,8 @@ export async function GET() {
 
   try {
     const [claude, codex] = await Promise.all([
-      getAnthropicUsage(),
-      getOpenAIUsage(),
+      getClaudeUsage(),
+      getCodexUsage(),
     ]);
 
     const response: UsageResponse = {
