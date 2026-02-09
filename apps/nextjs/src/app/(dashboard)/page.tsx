@@ -3,7 +3,6 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-import type { ClaudeInstance } from "~/lib/legacy/types";
 import { TerminalComponent } from "~/components/dashboard/Terminal";
 import { useCheatCode } from "~/contexts";
 import { getAppConfig } from "~/lib/legacy/config";
@@ -31,6 +30,7 @@ type DashboardV2 = {
     kanbangerIssueIdentifier: string;
     status: string;
     blockedReason: string | null;
+    branch: string | null;
     updatedAt: string | null;
     repository: {
       id: string;
@@ -113,7 +113,6 @@ function DashboardContent() {
   const pathname = usePathname();
   const { isDatabaseUnlocked } = useCheatCode();
 
-  const [instances, setInstances] = useState<ClaudeInstance[]>([]);
   const [dash, setDash] = useState<DashboardV2 | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -171,11 +170,6 @@ function DashboardContent() {
     },
     [pathname, router, searchParams],
   );
-
-  const loadInstances = useCallback(async () => {
-    const instancesData = await api.getInstances();
-    setInstances(instancesData);
-  }, []);
 
   const loadDashboard = useCallback(async () => {
     const res = await fetch("/api/kanbanger/dashboard-v2", {
@@ -251,16 +245,10 @@ function DashboardContent() {
       }
     })();
 
-    void loadInstances().catch((e) => {
-      if (cancelled) return;
-      const message = e instanceof Error ? e.message : "Failed to load agents";
-      setError((prev) => prev ?? message);
-    });
-
     return () => {
       cancelled = true;
     };
-  }, [loadDashboard, loadInstances]);
+  }, [loadDashboard]);
 
   useEffect(() => {
     if (!repoPickerOpen) return;
@@ -338,13 +326,14 @@ function DashboardContent() {
     };
   }, [loadDashboard]);
 
-  const agentStats = useMemo(() => {
+  const activeRunStats = useMemo(() => {
+    const runs = dash?.activeRuns ?? [];
     return {
-      running: instances.filter((i) => i.status === "running").length,
-      starting: instances.filter((i) => i.status === "starting").length,
-      error: instances.filter((i) => i.status === "error").length,
+      running: runs.filter((r) => r.status === "running").length,
+      starting: runs.filter((r) => r.status === "starting").length,
+      blocked: runs.filter((r) => r.status === "blocked").length,
     };
-  }, [instances]);
+  }, [dash?.activeRuns]);
 
   const projects = dash?.projects ?? [];
 
@@ -511,7 +500,7 @@ function DashboardContent() {
       setBaseBranch("");
       setTaskIdentifier("");
 
-      await Promise.all([loadInstances(), loadDashboard()]);
+      await loadDashboard();
       if (taskId) {
         const createdTaskIdentifier =
           (typeof payload?.taskRun?.kanbangerIssueIdentifier === "string"
@@ -531,7 +520,6 @@ function DashboardContent() {
     baseBranch,
     dash?.workspace.id,
     loadDashboard,
-    loadInstances,
     newBranchName,
     selectedProjectId,
     taskIdentifier,
@@ -578,17 +566,6 @@ function DashboardContent() {
     );
   }, [dash?.activeRuns, selectedProjectId]);
 
-  const instancesForProject = useMemo(() => {
-    if (!selectedProject?.repository) return [];
-    return instances.filter(
-      (i) => i.repositoryId === selectedProject.repository!.id,
-    );
-  }, [instances, selectedProject]);
-
-  const runningInstancesForProject = useMemo(() => {
-    return instancesForProject.filter((i) => i.status === "running");
-  }, [instancesForProject]);
-
   if (loading) {
     return (
       <div className="container">
@@ -630,17 +607,17 @@ function DashboardContent() {
           </div>
 
           <div className="dash-meta">
-            <div className="dash-agentMeta" title="Agent instances">
-              <span className="dash-metaLabel">Agents</span>
+            <div className="dash-agentMeta" title="Active task runs">
+              <span className="dash-metaLabel">Runs</span>
               <span className="dash-metaValue">
-                {fmtCount(agentStats.running)} running
+                {fmtCount(activeRunStats.running)} running
               </span>
               <span className="dash-metaDim">
-                {fmtCount(agentStats.starting)} starting
+                {fmtCount(activeRunStats.starting)} starting
               </span>
-              {agentStats.error ? (
+              {activeRunStats.blocked ? (
                 <span className="dash-metaWarn">
-                  {fmtCount(agentStats.error)} error
+                  {fmtCount(activeRunStats.blocked)} blocked
                 </span>
               ) : null}
             </div>
@@ -1229,112 +1206,6 @@ function DashboardContent() {
                   </div>
                 </div>
 
-                {instancesForProject.length > 0 ? (
-                  <div className="dash-projectRow">
-                    <div className="dash-projectRowHeader">
-                      <div className="dash-projectRowTitle">Instances</div>
-                      <div className="dash-projectRowMeta">
-                        {fmtCount(instancesForProject.length)}
-                      </div>
-                    </div>
-                    <div style={{ padding: "10px 14px 14px 14px" }}>
-                      <div style={{ display: "grid", gap: "8px" }}>
-                        {instancesForProject.map((inst) => (
-                          <div
-                            key={inst.id}
-                            style={{
-                              border: "1px solid rgba(255,255,255,0.10)",
-                              borderRadius: "14px",
-                              background: "rgba(9, 12, 18, 0.55)",
-                              padding: "10px 12px",
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
-                              gap: "10px",
-                            }}
-                          >
-                            <div style={{ minWidth: 0 }}>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: "8px",
-                                }}
-                              >
-                                <span
-                                  style={{
-                                    width: "8px",
-                                    height: "8px",
-                                    borderRadius: 999,
-                                    background:
-                                      inst.status === "running"
-                                        ? "var(--dash-success)"
-                                        : inst.status === "starting"
-                                          ? "var(--dash-warn)"
-                                          : inst.status === "error"
-                                            ? "var(--dash-danger)"
-                                            : "var(--dash-dimmer)",
-                                    flex: "0 0 auto",
-                                  }}
-                                />
-                                <span
-                                  style={{
-                                    fontWeight: 700,
-                                    fontSize: "13px",
-                                  }}
-                                >
-                                  {inst.agentType}
-                                </span>
-                                <span
-                                  style={{
-                                    fontSize: "11px",
-                                    color: "rgba(232,238,248,0.5)",
-                                    fontFamily:
-                                      "ui-monospace, SFMono-Regular, Menlo, monospace",
-                                  }}
-                                >
-                                  {inst.id.slice(0, 8)}
-                                </span>
-                              </div>
-                              <div
-                                style={{
-                                  fontSize: "12px",
-                                  color: "rgba(232,238,248,0.55)",
-                                  marginTop: "2px",
-                                }}
-                              >
-                                {inst.status}
-                                {inst.worktreeId
-                                  ? ` · wt:${inst.worktreeId.slice(0, 8)}`
-                                  : ""}
-                              </div>
-                            </div>
-                            {inst.status === "running" ? (
-                              <button
-                                type="button"
-                                className="nav-button"
-                                style={{
-                                  fontSize: "11px",
-                                  padding: "4px 10px",
-                                }}
-                                onClick={() =>
-                                  void handleOpenTerminal(inst.id)
-                                }
-                                disabled={terminalBusy}
-                              >
-                                {terminalBusy &&
-                                activeTerminalInstanceId === inst.id
-                                  ? "Opening..."
-                                  : "Terminal"}
-                              </button>
-                            ) : null}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-
                 <div className="dash-projectRow">
                   <div className="dash-projectRowHeader">
                     <div className="dash-projectRowTitle">Active work</div>
@@ -1354,74 +1225,123 @@ function DashboardContent() {
                       </div>
                     ) : (
                       <div style={{ display: "grid", gap: "10px" }}>
-                        {activeRunsForSelectedProject.slice(0, 50).map((r) => (
-                          <div
-                            key={r.id}
-                            style={{
-                              border: "1px solid rgba(255,255,255,0.10)",
-                              borderRadius: "14px",
-                              background: "rgba(9, 12, 18, 0.55)",
-                              padding: "10px 12px",
-                              display: "flex",
-                              justifyContent: "space-between",
-                              gap: "10px",
-                              alignItems: "center",
-                            }}
-                          >
-                            <div>
-                              <div
-                                style={{ fontWeight: 700, fontSize: "13px" }}
-                              >
-                                {r.kanbangerIssueIdentifier}
+                        {activeRunsForSelectedProject.slice(0, 50).map((r) => {
+                          const canOpenTerminal =
+                            lastCreated?.instanceId &&
+                            r.status === "running";
+                          return (
+                            <div
+                              key={r.id}
+                              style={{
+                                border: "1px solid rgba(255,255,255,0.10)",
+                                borderRadius: "14px",
+                                background: "rgba(9, 12, 18, 0.55)",
+                                padding: "10px 12px",
+                                display: "flex",
+                                justifyContent: "space-between",
+                                gap: "10px",
+                                alignItems: "center",
+                              }}
+                            >
+                              <div style={{ minWidth: 0 }}>
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "8px",
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      width: "8px",
+                                      height: "8px",
+                                      borderRadius: 999,
+                                      background:
+                                        r.status === "running"
+                                          ? "var(--dash-success)"
+                                          : r.status === "starting"
+                                            ? "var(--dash-warn)"
+                                            : r.status === "blocked"
+                                              ? "var(--dash-danger)"
+                                              : "var(--dash-dimmer)",
+                                      flex: "0 0 auto",
+                                    }}
+                                  />
+                                  <span
+                                    style={{
+                                      fontWeight: 700,
+                                      fontSize: "13px",
+                                    }}
+                                  >
+                                    {r.kanbangerIssueIdentifier}
+                                  </span>
+                                </div>
+                                {r.branch ? (
+                                  <div
+                                    style={{
+                                      fontSize: "12px",
+                                      color: "rgba(232,238,248,0.55)",
+                                      marginTop: "2px",
+                                      fontFamily:
+                                        "ui-monospace, SFMono-Regular, Menlo, monospace",
+                                      overflow: "hidden",
+                                      textOverflow: "ellipsis",
+                                      whiteSpace: "nowrap",
+                                    }}
+                                  >
+                                    {r.branch}
+                                  </div>
+                                ) : null}
+                                {r.blockedReason ? (
+                                  <div
+                                    style={{
+                                      fontSize: "12px",
+                                      color: "rgba(255, 186, 110, 0.95)",
+                                      marginTop: "2px",
+                                    }}
+                                  >
+                                    {r.blockedReason}
+                                  </div>
+                                ) : null}
                               </div>
-                              {r.blockedReason ? (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "8px",
+                                  flex: "0 0 auto",
+                                }}
+                              >
+                                {canOpenTerminal ? (
+                                  <button
+                                    type="button"
+                                    className="nav-button"
+                                    style={{
+                                      fontSize: "11px",
+                                      padding: "3px 8px",
+                                    }}
+                                    onClick={() =>
+                                      void handleOpenTerminal(
+                                        lastCreated.instanceId,
+                                      )
+                                    }
+                                    disabled={terminalBusy}
+                                  >
+                                    Terminal
+                                  </button>
+                                ) : null}
                                 <div
                                   style={{
                                     fontSize: "12px",
-                                    color: "rgba(255, 186, 110, 0.95)",
-                                    marginTop: "2px",
+                                    color: "rgba(232,238,248,0.65)",
                                   }}
                                 >
-                                  {r.blockedReason}
+                                  {r.status}
                                 </div>
-                              ) : null}
-                            </div>
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "8px",
-                              }}
-                            >
-                              {runningInstancesForProject.length > 0 ? (
-                                <button
-                                  type="button"
-                                  className="nav-button"
-                                  style={{
-                                    fontSize: "11px",
-                                    padding: "3px 8px",
-                                  }}
-                                  onClick={() =>
-                                    void handleOpenTerminal(
-                                      runningInstancesForProject[0]!.id,
-                                    )
-                                  }
-                                  disabled={terminalBusy}
-                                >
-                                  Terminal
-                                </button>
-                              ) : null}
-                              <div
-                                style={{
-                                  fontSize: "12px",
-                                  color: "rgba(232,238,248,0.65)",
-                                }}
-                              >
-                                {r.status}
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>

@@ -342,6 +342,7 @@ export async function GET(request: Request) {
         kanbangerIssueIdentifier: r.kanbangerIssueIdentifier,
         status: r.status,
         blockedReason: r.blockedReason,
+        branch: r.branch,
         updatedAt: r.updatedAt,
         repository: r.repository
           ? {
