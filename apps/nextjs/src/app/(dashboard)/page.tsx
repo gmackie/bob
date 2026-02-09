@@ -578,14 +578,16 @@ function DashboardContent() {
     );
   }, [dash?.activeRuns, selectedProjectId]);
 
-  const runningInstancesForProject = useMemo(() => {
+  const instancesForProject = useMemo(() => {
     if (!selectedProject?.repository) return [];
     return instances.filter(
-      (i) =>
-        i.repositoryId === selectedProject.repository!.id &&
-        i.status === "running",
+      (i) => i.repositoryId === selectedProject.repository!.id,
     );
   }, [instances, selectedProject]);
+
+  const runningInstancesForProject = useMemo(() => {
+    return instancesForProject.filter((i) => i.status === "running");
+  }, [instancesForProject]);
 
   if (loading) {
     return (
@@ -1226,6 +1228,112 @@ function DashboardContent() {
                     <div className="dash-statHint">Project</div>
                   </div>
                 </div>
+
+                {instancesForProject.length > 0 ? (
+                  <div className="dash-projectRow">
+                    <div className="dash-projectRowHeader">
+                      <div className="dash-projectRowTitle">Instances</div>
+                      <div className="dash-projectRowMeta">
+                        {fmtCount(instancesForProject.length)}
+                      </div>
+                    </div>
+                    <div style={{ padding: "10px 14px 14px 14px" }}>
+                      <div style={{ display: "grid", gap: "8px" }}>
+                        {instancesForProject.map((inst) => (
+                          <div
+                            key={inst.id}
+                            style={{
+                              border: "1px solid rgba(255,255,255,0.10)",
+                              borderRadius: "14px",
+                              background: "rgba(9, 12, 18, 0.55)",
+                              padding: "10px 12px",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              gap: "10px",
+                            }}
+                          >
+                            <div style={{ minWidth: 0 }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "8px",
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    width: "8px",
+                                    height: "8px",
+                                    borderRadius: 999,
+                                    background:
+                                      inst.status === "running"
+                                        ? "var(--dash-success)"
+                                        : inst.status === "starting"
+                                          ? "var(--dash-warn)"
+                                          : inst.status === "error"
+                                            ? "var(--dash-danger)"
+                                            : "var(--dash-dimmer)",
+                                    flex: "0 0 auto",
+                                  }}
+                                />
+                                <span
+                                  style={{
+                                    fontWeight: 700,
+                                    fontSize: "13px",
+                                  }}
+                                >
+                                  {inst.agentType}
+                                </span>
+                                <span
+                                  style={{
+                                    fontSize: "11px",
+                                    color: "rgba(232,238,248,0.5)",
+                                    fontFamily:
+                                      "ui-monospace, SFMono-Regular, Menlo, monospace",
+                                  }}
+                                >
+                                  {inst.id.slice(0, 8)}
+                                </span>
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: "12px",
+                                  color: "rgba(232,238,248,0.55)",
+                                  marginTop: "2px",
+                                }}
+                              >
+                                {inst.status}
+                                {inst.worktreeId
+                                  ? ` · wt:${inst.worktreeId.slice(0, 8)}`
+                                  : ""}
+                              </div>
+                            </div>
+                            {inst.status === "running" ? (
+                              <button
+                                type="button"
+                                className="nav-button"
+                                style={{
+                                  fontSize: "11px",
+                                  padding: "4px 10px",
+                                }}
+                                onClick={() =>
+                                  void handleOpenTerminal(inst.id)
+                                }
+                                disabled={terminalBusy}
+                              >
+                                {terminalBusy &&
+                                activeTerminalInstanceId === inst.id
+                                  ? "Opening..."
+                                  : "Terminal"}
+                              </button>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="dash-projectRow">
                   <div className="dash-projectRowHeader">

@@ -346,12 +346,31 @@ export class GitService {
     );
 
     try {
-      await execAsync(
-        `git worktree add "${worktreePath}" -b "${branchName}" "${baseBranch}"`,
-        {
-          cwd: repository.path,
-        },
-      );
+      // Check if the branch already exists
+      let branchExists = false;
+      try {
+        await execAsync(
+          `git show-ref --verify --quiet refs/heads/${branchName}`,
+          { cwd: repository.path },
+        );
+        branchExists = true;
+      } catch {
+        // branch does not exist
+      }
+
+      if (branchExists) {
+        // Use existing branch (no -b flag)
+        await execAsync(
+          `git worktree add "${worktreePath}" "${branchName}"`,
+          { cwd: repository.path },
+        );
+      } else {
+        // Create new branch from base
+        await execAsync(
+          `git worktree add "${worktreePath}" -b "${branchName}" "${baseBranch}"`,
+          { cwd: repository.path },
+        );
+      }
 
       const worktreeId = Buffer.from(worktreePath).toString("base64");
       const preferredAgent = agentType || "claude";
