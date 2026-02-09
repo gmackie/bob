@@ -4,10 +4,10 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import type { ClaudeInstance } from "~/lib/legacy/types";
+import { TerminalComponent } from "~/components/dashboard/Terminal";
 import { useCheatCode } from "~/contexts";
 import { getAppConfig } from "~/lib/legacy/config";
 import { api } from "~/lib/rest/api";
-import { UsageGraphs } from "./_components/usage-graphs";
 
 type DashboardV2 = {
   workspace: { id: string; name: string; slug: string };
@@ -152,6 +152,14 @@ function DashboardContent() {
     taskRunId: string | null;
     taskIdentifier: string | null;
   }>(null);
+
+  const [activeTerminalSessionId, setActiveTerminalSessionId] = useState<
+    string | null
+  >(null);
+  const [activeTerminalInstanceId, setActiveTerminalInstanceId] = useState<
+    string | null
+  >(null);
+  const [terminalBusy, setTerminalBusy] = useState(false);
 
   const updateUrlWithSelection = useCallback(
     (key: string, value: string | null) => {
@@ -529,6 +537,30 @@ function DashboardContent() {
     taskIdentifier,
   ]);
 
+  const handleOpenTerminal = useCallback(async (instanceId: string) => {
+    if (terminalBusy) return;
+    setTerminalBusy(true);
+    try {
+      const sessions = await api.getTerminalSessions(instanceId);
+      const claudeSession = sessions.find((s) => s.type === "claude");
+      let sessionId: string;
+      if (claudeSession) {
+        sessionId = claudeSession.id;
+      } else {
+        const created = await api.createTerminalSession(instanceId);
+        sessionId = created.sessionId;
+      }
+      setActiveTerminalInstanceId(instanceId);
+      setActiveTerminalSessionId(sessionId);
+    } catch (e) {
+      setMappingMessage(
+        e instanceof Error ? e.message : "Failed to open terminal",
+      );
+    } finally {
+      setTerminalBusy(false);
+    }
+  }, [terminalBusy]);
+
   const mappingErrors = useMemo(() => {
     return projects
       .filter((p) => p.mappingError)
@@ -545,6 +577,15 @@ function DashboardContent() {
       (r) => r.repository?.kanbangerProjectId === selectedProjectId,
     );
   }, [dash?.activeRuns, selectedProjectId]);
+
+  const runningInstancesForProject = useMemo(() => {
+    if (!selectedProject?.repository) return [];
+    return instances.filter(
+      (i) =>
+        i.repositoryId === selectedProject.repository!.id &&
+        i.status === "running",
+    );
+  }, [instances, selectedProject]);
 
   if (loading) {
     return (
@@ -634,7 +675,6 @@ function DashboardContent() {
           </div>
         </div>
 
-        <UsageGraphs />
       </header>
 
       <div className="main-layout">
@@ -1099,8 +1139,30 @@ function DashboardContent() {
                           gap: "6px",
                         }}
                       >
-                        <div style={{ fontWeight: 800, fontSize: "12px" }}>
-                          Started
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                          }}
+                        >
+                          <div style={{ fontWeight: 800, fontSize: "12px" }}>
+                            Started
+                          </div>
+                          <button
+                            type="button"
+                            className="nav-button"
+                            style={{ fontSize: "11px", padding: "4px 10px" }}
+                            onClick={() =>
+                              void handleOpenTerminal(lastCreated.instanceId)
+                            }
+                            disabled={terminalBusy}
+                          >
+                            {terminalBusy &&
+                            activeTerminalInstanceId === lastCreated.instanceId
+                              ? "Opening..."
+                              : "View terminal"}
+                          </button>
                         </div>
                         <div
                           style={{
@@ -1195,6 +1257,7 @@ function DashboardContent() {
                               display: "flex",
                               justifyContent: "space-between",
                               gap: "10px",
+                              alignItems: "center",
                             }}
                           >
                             <div>
@@ -1217,11 +1280,37 @@ function DashboardContent() {
                             </div>
                             <div
                               style={{
-                                fontSize: "12px",
-                                color: "rgba(232,238,248,0.65)",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "8px",
                               }}
                             >
-                              {r.status}
+                              {runningInstancesForProject.length > 0 ? (
+                                <button
+                                  type="button"
+                                  className="nav-button"
+                                  style={{
+                                    fontSize: "11px",
+                                    padding: "3px 8px",
+                                  }}
+                                  onClick={() =>
+                                    void handleOpenTerminal(
+                                      runningInstancesForProject[0]!.id,
+                                    )
+                                  }
+                                  disabled={terminalBusy}
+                                >
+                                  Terminal
+                                </button>
+                              ) : null}
+                              <div
+                                style={{
+                                  fontSize: "12px",
+                                  color: "rgba(232,238,248,0.65)",
+                                }}
+                              >
+                                {r.status}
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -1399,6 +1488,66 @@ function DashboardContent() {
           </div>
         </main>
       </div>
+
+      {activeTerminalSessionId ? (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            zIndex: 40,
+            padding: "0 18px 18px 18px",
+          }}
+        >
+          <div className="dash-terminalPanel">
+            <div className="dash-terminalHeader">
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: "12px" }}>
+                  Terminal
+                </div>
+                <div
+                  style={{
+                    fontSize: "11px",
+                    color: "rgba(232,238,248,0.55)",
+                    fontFamily:
+                      "ui-monospace, SFMono-Regular, Menlo, monospace",
+                  }}
+                >
+                  {activeTerminalInstanceId}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="nav-button"
+                style={{ fontSize: "11px", padding: "4px 10px" }}
+                onClick={() => {
+                  setActiveTerminalSessionId(null);
+                  setActiveTerminalInstanceId(null);
+                }}
+              >
+                Close
+              </button>
+            </div>
+            <div className="dash-terminalBody">
+              <TerminalComponent
+                key={activeTerminalSessionId}
+                sessionId={activeTerminalSessionId}
+                onClose={() => {
+                  setActiveTerminalSessionId(null);
+                  setActiveTerminalInstanceId(null);
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {error && <div className="error-toast">{error}</div>}
 

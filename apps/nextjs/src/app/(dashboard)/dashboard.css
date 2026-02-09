@@ -761,162 +761,8 @@ body {
   filter: brightness(1.04);
 }
 
-/* ---- Usage graphs ---- */
-
-.dash-usageSection {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  padding: 0 18px 14px 18px;
-}
-
-.dash-usageCard {
-  border: 1px solid var(--dash-border);
-  border-radius: 16px;
-  padding: 14px;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.04) 0%,
-    rgba(255, 255, 255, 0.015) 100%
-  );
-  box-shadow: var(--dash-shadow-soft);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.dash-usageCardHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.dash-usageCardTitle {
-  font-size: 13px;
-  font-weight: 750;
-  color: var(--dash-text);
-  letter-spacing: 0.02em;
-}
-
-.dash-usageCardBadge {
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 3px 8px;
-  border-radius: 999px;
-  border: 1px solid rgba(59, 211, 127, 0.3);
-  color: var(--dash-success);
-  background: rgba(59, 211, 127, 0.08);
-}
-
-.dash-usageCardBadgeOff {
-  border-color: rgba(255, 255, 255, 0.12);
-  color: var(--dash-dimmer);
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.dash-usageUtilGrid {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.dash-usageUtilRow {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 6px 10px;
-  align-items: center;
-}
-
-.dash-usageUtilMeta {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.dash-usageUtilLabel {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--dash-dim);
-}
-
-.dash-usageBudgetBar {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.dash-usageBudgetMeta {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 12px;
-}
-
-.dash-usageBudgetTrack {
-  height: 6px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  overflow: hidden;
-}
-
-.dash-usageBudgetFill {
-  height: 100%;
-  border-radius: 999px;
-  transition: width 600ms ease;
-}
-
-.dash-usageChartSection {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.dash-usageChartLabel {
-  font-size: 11px;
-  color: var(--dash-dimmer);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.dash-usageEmpty {
-  padding: 16px 4px;
-  color: var(--dash-dimmer);
-  font-size: 12px;
-  text-align: center;
-}
-
-.dash-usageLoading {
-  grid-column: 1 / -1;
-  padding: 16px;
-  text-align: center;
-  color: var(--dash-dimmer);
-  font-size: 12px;
-}
-
-.dash-usageTooltip {
-  background: rgba(12, 16, 24, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 10px;
-  padding: 8px 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-}
-
-.dash-usageTooltipLabel {
-  font-size: 11px;
-  color: var(--dash-dim);
-  margin-bottom: 4px;
-}
-
 @media (max-width: 1100px) {
   .dash-statGrid {
-    grid-template-columns: 1fr;
-  }
-  .dash-usageSection {
     grid-template-columns: 1fr;
   }
   .left-panel {
@@ -1535,4 +1381,32 @@ body {
 
 .add-button:hover {
   background: #005c99;
+}
+
+.dash-terminalPanel {
+  border: 1px solid var(--dash-border);
+  border-radius: 16px;
+  background: rgba(9, 12, 18, 0.92);
+  overflow: hidden;
+  height: 420px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--dash-shadow);
+}
+
+.dash-terminalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--dash-border-2);
+  background: rgba(17, 23, 34, 0.66);
+  flex-shrink: 0;
+}
+
+.dash-terminalBody {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: #000;
 }
