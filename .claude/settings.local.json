@@ -138,7 +138,9 @@
       "WebFetch(domain:community.openai.com)",
       "WebFetch(domain:developers.openai.com)",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:deepwiki.com)"
+      "WebFetch(domain:deepwiki.com)",
+      "Bash(git config:*)",
+      "Bash(git pull:*)"
     ],
     "deny": [],
     "ask": [],
