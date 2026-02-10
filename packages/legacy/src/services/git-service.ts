@@ -345,6 +345,34 @@ export class GitService {
       branchName,
     );
 
+    const worktreeId = Buffer.from(worktreePath).toString("base64");
+    const preferredAgent = agentType || "claude";
+
+    // If the worktree path already exists, return the existing worktree
+    if (existsSync(worktreePath)) {
+      const existing = this.worktrees.get(worktreeId);
+      if (existing) {
+        return existing;
+      }
+
+      // Path exists but not tracked in memory — register it
+      const worktree: Worktree = {
+        id: worktreeId,
+        userId: effectiveUserId,
+        path: worktreePath,
+        branch: branchName,
+        repositoryId,
+        preferredAgent,
+        instances: [],
+        isMainWorktree: false,
+      };
+
+      this.worktrees.set(worktreeId, worktree);
+      repository.worktrees.push(worktree);
+      await this.storage.saveWorktree(worktree);
+      return worktree;
+    }
+
     try {
       // Check if the branch already exists
       let branchExists = false;
@@ -372,8 +400,6 @@ export class GitService {
         );
       }
 
-      const worktreeId = Buffer.from(worktreePath).toString("base64");
-      const preferredAgent = agentType || "claude";
       const worktree: Worktree = {
         id: worktreeId,
         userId: effectiveUserId,

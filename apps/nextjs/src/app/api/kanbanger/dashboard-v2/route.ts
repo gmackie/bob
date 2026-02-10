@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { and, eq, inArray, isNotNull } from "@bob/db";
 import { db } from "@bob/db/client";
-import { repositories, taskRuns } from "@bob/db/schema";
+import { agentInstances, repositories, taskRuns } from "@bob/db/schema";
 
 import { getSession } from "~/auth/server";
 
@@ -224,6 +224,20 @@ export async function GET(request: Request) {
           },
         })
       : Promise.resolve([]);
+    const activeInstancesPromise = session
+      ? db.query.agentInstances.findMany({
+          where: and(
+            eq(agentInstances.userId, session.user.id),
+            inArray(agentInstances.status, ["starting", "running"]),
+          ),
+          orderBy: (t, { desc }) => [desc(t.updatedAt)],
+          limit: 200,
+          with: {
+            worktree: true,
+            repository: true,
+          },
+        })
+      : Promise.resolve([]);
 
     const [
       projects,
@@ -232,6 +246,7 @@ export async function GET(request: Request) {
       doneIssues,
       mappedRepos,
       activeRuns,
+      activeInstances,
     ] = await Promise.all([
       projectsPromise,
       projectGetsPromise,
@@ -239,6 +254,7 @@ export async function GET(request: Request) {
       doneIssuesPromise,
       mappedReposPromise,
       activeRunsPromise,
+      activeInstancesPromise,
     ]);
 
     const reposByProject = new Map<string, typeof mappedRepos>();
@@ -350,6 +366,23 @@ export async function GET(request: Request) {
               name: r.repository.name,
               path: r.repository.path,
               kanbangerProjectId: r.repository.kanbangerProjectId,
+            }
+          : null,
+      })),
+      activeInstances: activeInstances.map((i) => ({
+        id: i.id,
+        agentType: i.agentType,
+        status: i.status,
+        worktreeId: i.worktreeId,
+        branch: i.worktree?.branch ?? null,
+        worktreePath: i.worktree?.path ?? null,
+        updatedAt: i.updatedAt,
+        repository: i.repository
+          ? {
+              id: i.repository.id,
+              name: i.repository.name,
+              path: i.repository.path,
+              kanbangerProjectId: i.repository.kanbangerProjectId,
             }
           : null,
       })),

@@ -39,6 +39,21 @@ type DashboardV2 = {
       kanbangerProjectId: string | null;
     } | null;
   }>;
+  activeInstances: Array<{
+    id: string;
+    agentType: string;
+    status: string;
+    worktreeId: string;
+    branch: string | null;
+    worktreePath: string | null;
+    updatedAt: string | null;
+    repository: {
+      id: string;
+      name: string;
+      path: string;
+      kanbangerProjectId: string | null;
+    } | null;
+  }>;
 };
 
 type AgentType =
@@ -328,12 +343,17 @@ function DashboardContent() {
 
   const activeRunStats = useMemo(() => {
     const runs = dash?.activeRuns ?? [];
+    const instances = dash?.activeInstances ?? [];
     return {
-      running: runs.filter((r) => r.status === "running").length,
-      starting: runs.filter((r) => r.status === "starting").length,
+      running:
+        runs.filter((r) => r.status === "running").length +
+        instances.filter((i) => i.status === "running").length,
+      starting:
+        runs.filter((r) => r.status === "starting").length +
+        instances.filter((i) => i.status === "starting").length,
       blocked: runs.filter((r) => r.status === "blocked").length,
     };
-  }, [dash?.activeRuns]);
+  }, [dash?.activeRuns, dash?.activeInstances]);
 
   const projects = dash?.projects ?? [];
 
@@ -565,6 +585,13 @@ function DashboardContent() {
       (r) => r.repository?.kanbangerProjectId === selectedProjectId,
     );
   }, [dash?.activeRuns, selectedProjectId]);
+
+  const activeInstancesForSelectedProject = useMemo(() => {
+    if (!selectedProjectId) return [];
+    return (dash?.activeInstances ?? []).filter(
+      (i) => i.repository?.kanbangerProjectId === selectedProjectId,
+    );
+  }, [dash?.activeInstances, selectedProjectId]);
 
   if (loading) {
     return (
@@ -1210,28 +1237,30 @@ function DashboardContent() {
                   <div className="dash-projectRowHeader">
                     <div className="dash-projectRowTitle">Active work</div>
                     <div className="dash-projectRowMeta">
-                      {fmtCount(activeRunsForSelectedProject.length)}
+                      {fmtCount(
+                        activeRunsForSelectedProject.length +
+                          activeInstancesForSelectedProject.length,
+                      )}
                     </div>
                   </div>
                   <div style={{ padding: "10px 14px 14px 14px" }}>
-                    {activeRunsForSelectedProject.length === 0 ? (
+                    {activeRunsForSelectedProject.length === 0 &&
+                    activeInstancesForSelectedProject.length === 0 ? (
                       <div
                         style={{
                           color: "rgba(232,238,248,0.55)",
                           fontSize: "13px",
                         }}
                       >
-                        No active task runs for this project.
+                        No active work for this project.
                       </div>
                     ) : (
                       <div style={{ display: "grid", gap: "10px" }}>
-                        {activeRunsForSelectedProject.slice(0, 50).map((r) => {
-                          const canOpenTerminal =
-                            lastCreated?.instanceId &&
-                            r.status === "running";
-                          return (
+                        {activeInstancesForSelectedProject
+                          .slice(0, 50)
+                          .map((inst) => (
                             <div
-                              key={r.id}
+                              key={inst.id}
                               style={{
                                 border: "1px solid rgba(255,255,255,0.10)",
                                 borderRadius: "14px",
@@ -1257,13 +1286,9 @@ function DashboardContent() {
                                       height: "8px",
                                       borderRadius: 999,
                                       background:
-                                        r.status === "running"
+                                        inst.status === "running"
                                           ? "var(--dash-success)"
-                                          : r.status === "starting"
-                                            ? "var(--dash-warn)"
-                                            : r.status === "blocked"
-                                              ? "var(--dash-danger)"
-                                              : "var(--dash-dimmer)",
+                                          : "var(--dash-warn)",
                                       flex: "0 0 auto",
                                     }}
                                   />
@@ -1273,10 +1298,10 @@ function DashboardContent() {
                                       fontSize: "13px",
                                     }}
                                   >
-                                    {r.kanbangerIssueIdentifier}
+                                    {inst.branch ?? inst.agentType}
                                   </span>
                                 </div>
-                                {r.branch ? (
+                                {inst.worktreePath ? (
                                   <div
                                     style={{
                                       fontSize: "12px",
@@ -1288,19 +1313,9 @@ function DashboardContent() {
                                       textOverflow: "ellipsis",
                                       whiteSpace: "nowrap",
                                     }}
+                                    title={inst.worktreePath}
                                   >
-                                    {r.branch}
-                                  </div>
-                                ) : null}
-                                {r.blockedReason ? (
-                                  <div
-                                    style={{
-                                      fontSize: "12px",
-                                      color: "rgba(255, 186, 110, 0.95)",
-                                      marginTop: "2px",
-                                    }}
-                                  >
-                                    {r.blockedReason}
+                                    {inst.worktreePath}
                                   </div>
                                 ) : null}
                               </div>
@@ -1312,36 +1327,125 @@ function DashboardContent() {
                                   flex: "0 0 auto",
                                 }}
                               >
-                                {canOpenTerminal ? (
-                                  <button
-                                    type="button"
-                                    className="nav-button"
-                                    style={{
-                                      fontSize: "11px",
-                                      padding: "3px 8px",
-                                    }}
-                                    onClick={() =>
-                                      void handleOpenTerminal(
-                                        lastCreated.instanceId,
-                                      )
-                                    }
-                                    disabled={terminalBusy}
-                                  >
-                                    Terminal
-                                  </button>
-                                ) : null}
+                                <button
+                                  type="button"
+                                  className="nav-button"
+                                  style={{
+                                    fontSize: "11px",
+                                    padding: "3px 8px",
+                                  }}
+                                  onClick={() =>
+                                    void handleOpenTerminal(inst.id)
+                                  }
+                                  disabled={terminalBusy}
+                                >
+                                  Terminal
+                                </button>
                                 <div
                                   style={{
                                     fontSize: "12px",
                                     color: "rgba(232,238,248,0.65)",
                                   }}
                                 >
-                                  {r.status}
+                                  {inst.status}
                                 </div>
                               </div>
                             </div>
-                          );
-                        })}
+                          ))}
+                        {activeRunsForSelectedProject.slice(0, 50).map((r) => (
+                          <div
+                            key={r.id}
+                            style={{
+                              border: "1px solid rgba(255,255,255,0.10)",
+                              borderRadius: "14px",
+                              background: "rgba(9, 12, 18, 0.55)",
+                              padding: "10px 12px",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              gap: "10px",
+                              alignItems: "center",
+                            }}
+                          >
+                            <div style={{ minWidth: 0 }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "8px",
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    width: "8px",
+                                    height: "8px",
+                                    borderRadius: 999,
+                                    background:
+                                      r.status === "running"
+                                        ? "var(--dash-success)"
+                                        : r.status === "starting"
+                                          ? "var(--dash-warn)"
+                                          : r.status === "blocked"
+                                            ? "var(--dash-danger)"
+                                            : "var(--dash-dimmer)",
+                                    flex: "0 0 auto",
+                                  }}
+                                />
+                                <span
+                                  style={{
+                                    fontWeight: 700,
+                                    fontSize: "13px",
+                                  }}
+                                >
+                                  {r.kanbangerIssueIdentifier}
+                                </span>
+                              </div>
+                              {r.branch ? (
+                                <div
+                                  style={{
+                                    fontSize: "12px",
+                                    color: "rgba(232,238,248,0.55)",
+                                    marginTop: "2px",
+                                    fontFamily:
+                                      "ui-monospace, SFMono-Regular, Menlo, monospace",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {r.branch}
+                                </div>
+                              ) : null}
+                              {r.blockedReason ? (
+                                <div
+                                  style={{
+                                    fontSize: "12px",
+                                    color: "rgba(255, 186, 110, 0.95)",
+                                    marginTop: "2px",
+                                  }}
+                                >
+                                  {r.blockedReason}
+                                </div>
+                              ) : null}
+                            </div>
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "8px",
+                                flex: "0 0 auto",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  fontSize: "12px",
+                                  color: "rgba(232,238,248,0.65)",
+                                }}
+                              >
+                                {r.status}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
