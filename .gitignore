@@ -72,3 +72,8 @@ dist-electron/
 
 # Logs
 *.log
+
+# Claude Code
+.claude/settings.local.json
+session-ses_*.md
+.creds

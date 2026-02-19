@@ -140,7 +140,13 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:deepwiki.com)",
       "Bash(git config:*)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "Bash(git push:*)",
+      "Bash(rsync:*)",
+      "Bash(ssh:*)",
+      "Bash(pnpm remove:*)",
+      "mcp__gitea-mcp__gitea_repo_search",
+      "mcp__kubernetes-mcp__pods_list"
     ],
     "deny": [],
     "ask": [],

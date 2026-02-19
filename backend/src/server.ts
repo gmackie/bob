@@ -23,10 +23,12 @@ import { createInstanceRoutes } from "./routes/instances.js";
 import { createOAuthCallbackRoutes } from "./routes/oauth-callback.js";
 import { createRepositoryRoutes } from "./routes/repositories.js";
 import { createTunnelRoutes } from "./routes/tunnel.js";
+import { createWorkspaceManagerRoutes } from "./routes/workspace-manager.js";
 import { AgentService } from "./services/agent.js";
 import { AuthService } from "./services/auth.js";
 import { GitService } from "./services/git.js";
 import { TerminalService } from "./services/terminal.js";
+import { WorkspaceManagerService } from "./services/workspace-manager.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -73,7 +75,7 @@ const corsOptions = {
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Idempotency-Key"],
 };
 
 app.use(cors(corsOptions));
@@ -107,6 +109,7 @@ const gitService = new GitService(db);
 const agentService = new AgentService(gitService, db);
 const terminalService = new TerminalService();
 const authService = new AuthService(db);
+const workspaceManagerService = new WorkspaceManagerService(db, gitService);
 
 console.log("Services initialized");
 
@@ -149,6 +152,10 @@ app.use("/api/system/tunnel", createTunnelRoutes());
 app.use("/api/oauth", createOAuthCallbackRoutes());
 app.use("/api/filesystem", createFilesystemRoutes());
 app.use("/api/database", createDatabaseRoutes(db));
+app.use(
+  "/api/workspace-manager",
+  createWorkspaceManagerRoutes(workspaceManagerService),
+);
 
 // Make services available to git routes
 app.locals.gitService = gitService;

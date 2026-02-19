@@ -1,10 +1,17 @@
-import { ChildProcess } from 'child_process';
-import { IPty } from 'node-pty';
-import { AgentInstance, Worktree, AgentType, DEFAULT_USER_ID } from '../types.js';
-import { GitService } from './git.js';
-import { DatabaseService } from '../database/database.js';
-import { agentFactory } from '../agents/agent-factory.js';
-import { getAgentCommand } from '../utils/agentPaths.js';
+import { ChildProcess } from "child_process";
+import { clearInterval, setInterval, setTimeout } from "node:timers";
+import { IPty } from "node-pty";
+
+import { agentFactory } from "../agents/agent-factory.js";
+import { DatabaseService } from "../database/database.js";
+import {
+  AgentInstance,
+  AgentType,
+  DEFAULT_USER_ID,
+  Worktree,
+} from "../types.js";
+import { getAgentCommand } from "../utils/agentPaths.js";
+import { GitService } from "./git.js";
 
 export class AgentService {
   private instances = new Map<string, AgentInstance>();
@@ -13,20 +20,29 @@ export class AgentService {
   private nextPort = 3100;
 
   // Real-time token usage tracking
-  private instanceTokenUsage = new Map<string, { input: number; output: number; cost: number }>();
-  private usageCollectionIntervals = new Map<string, NodeJS.Timeout>();
+  private instanceTokenUsage = new Map<
+    string,
+    { input: number; output: number; cost: number }
+  >();
+  private usageCollectionIntervals = new Map<
+    string,
+    ReturnType<typeof setInterval>
+  >();
   private cumulativeTokens = { input: 0, output: 0 };
   private sessionStartTimes = new Map<string, number>();
 
-  constructor(private gitService: GitService, private db: DatabaseService) {
+  constructor(
+    private gitService: GitService,
+    private db: DatabaseService,
+  ) {
     this.loadFromDatabase();
   }
 
   private async loadFromDatabase(): Promise<void> {
     const instances = await this.db.getAllInstances();
-    instances.forEach(instance => {
+    instances.forEach((instance) => {
       // Only load non-running instances (running instances need to be restarted)
-      if (instance.status !== 'running') {
+      if (instance.status !== "running") {
         this.instances.set(instance.id, instance);
 
         // Add instance to worktree
@@ -38,7 +54,11 @@ export class AgentService {
     });
   }
 
-  async startInstance(worktreeId: string, agentType: AgentType = 'claude', userId?: string): Promise<AgentInstance> {
+  async startInstance(
+    worktreeId: string,
+    agentType: AgentType = "claude",
+    userId?: string,
+  ): Promise<AgentInstance> {
     const worktree = this.gitService.getWorktree(worktreeId, userId);
     if (!worktree) {
       throw new Error(`Worktree ${worktreeId} not found`);
@@ -51,11 +71,15 @@ export class AgentService {
 
     const agentInfo = await agentFactory.getAgentInfoById(agentType);
     if (!agentInfo?.isAvailable) {
-      throw new Error(`Agent '${agentType}' is not available: ${agentInfo?.statusMessage || 'Unknown error'}`);
+      throw new Error(
+        `Agent '${agentType}' is not available: ${agentInfo?.statusMessage || "Unknown error"}`,
+      );
     }
 
     if (!agentInfo.isAuthenticated) {
-      throw new Error(`Agent '${agentType}' is not authenticated: ${agentInfo.statusMessage || 'Authentication required'}`);
+      throw new Error(
+        `Agent '${agentType}' is not authenticated: ${agentInfo.statusMessage || "Authentication required"}`,
+      );
     }
 
     const instanceId = `${agentType}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -68,10 +92,10 @@ export class AgentService {
       worktreeId,
       repositoryId: worktree.repositoryId,
       agentType,
-      status: 'starting',
+      status: "starting",
       port,
       createdAt: new Date(),
-      lastActivity: new Date()
+      lastActivity: new Date(),
     };
 
     this.instances.set(instanceId, instance);
@@ -84,7 +108,7 @@ export class AgentService {
       this.ptyProcesses.set(instanceId, agentPty);
 
       instance.pid = agentPty.pid;
-      instance.status = 'running';
+      instance.status = "running";
 
       await this.db.saveInstance(instance);
 
@@ -95,19 +119,29 @@ export class AgentService {
 
       return instance;
     } catch (error) {
-      instance.status = 'error';
-      instance.errorMessage = error instanceof Error ? error.message : String(error);
+      instance.status = "error";
+      instance.errorMessage =
+        error instanceof Error ? error.message : String(error);
       await this.db.saveInstance(instance);
       throw new Error(`Failed to start ${agentType} instance: ${error}`);
     }
   }
 
-  private async spawnAgentPty(instance: AgentInstance, worktree: Worktree): Promise<IPty> {
-    console.log(`Starting ${instance.agentType} PTY in directory: ${worktree.path}`);
+  private async spawnAgentPty(
+    instance: AgentInstance,
+    worktree: Worktree,
+  ): Promise<IPty> {
+    console.log(
+      `Starting ${instance.agentType} PTY in directory: ${worktree.path}`,
+    );
 
     // Use the agent factory to start the agent process
     try {
-      return await agentFactory.startAgent(instance.agentType, worktree.path, instance.port);
+      return await agentFactory.startAgent(
+        instance.agentType,
+        worktree.path,
+        instance.port,
+      );
     } catch (error) {
       console.error(`Failed to start ${instance.agentType} PTY:`, error);
       throw error;
@@ -116,8 +150,10 @@ export class AgentService {
 
   private setupPtyHandlers(instance: AgentInstance, agentPty: IPty): void {
     agentPty.onExit((exitCode) => {
-      console.log(`${instance.agentType} PTY ${instance.id} exited with code ${JSON.stringify(exitCode)}`);
-      instance.status = 'stopped';
+      console.log(
+        `${instance.agentType} PTY ${instance.id} exited with code ${JSON.stringify(exitCode)}`,
+      );
+      instance.status = "stopped";
       this.ptyProcesses.delete(instance.id);
 
       // Stop token usage collection
@@ -125,16 +161,22 @@ export class AgentService {
 
       const worktree = this.gitService.getWorktree(instance.worktreeId);
       if (worktree) {
-        worktree.instances = worktree.instances.filter(i => i.id !== instance.id);
+        worktree.instances = worktree.instances.filter(
+          (i) => i.id !== instance.id,
+        );
       }
 
       this.instances.delete(instance.id);
-      this.db.saveInstance(instance).catch(err => console.error('Failed to save instance:', err));
+      this.db
+        .saveInstance(instance)
+        .catch((err) => console.error("Failed to save instance:", err));
     });
 
     agentPty.onData((data: string) => {
       instance.lastActivity = new Date();
-      this.db.updateInstanceActivity(instance.id).catch(err => console.error('Failed to update activity:', err));
+      this.db
+        .updateInstanceActivity(instance.id)
+        .catch((err) => console.error("Failed to update activity:", err));
     });
   }
 
@@ -161,17 +203,17 @@ export class AgentService {
       agentProcess.removeAllListeners();
       agentProcess.stdout?.removeAllListeners();
       agentProcess.stderr?.removeAllListeners();
-      agentProcess.kill('SIGTERM');
+      agentProcess.kill("SIGTERM");
 
       setTimeout(() => {
         if (!agentProcess.killed) {
-          agentProcess.kill('SIGKILL');
+          agentProcess.kill("SIGKILL");
         }
       }, 5000);
       this.processes.delete(instanceId);
     }
 
-    instance.status = 'stopped';
+    instance.status = "stopped";
     await this.db.saveInstance(instance);
   }
 
@@ -201,11 +243,11 @@ export class AgentService {
     await this.stopInstance(instanceId);
 
     // Wait a moment for the process to fully terminate
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
 
     try {
       // Reset instance state for restart
-      instance.status = 'starting';
+      instance.status = "starting";
       instance.pid = undefined;
       instance.errorMessage = undefined;
       instance.lastActivity = new Date();
@@ -217,7 +259,7 @@ export class AgentService {
       this.ptyProcesses.set(instanceId, agentPty);
 
       instance.pid = agentPty.pid;
-      instance.status = 'running';
+      instance.status = "running";
 
       await this.db.saveInstance(instance);
 
@@ -229,50 +271,78 @@ export class AgentService {
       console.log(`Successfully restarted instance ${instanceId}`);
       return instance;
     } catch (error) {
-      instance.status = 'error';
-      instance.errorMessage = error instanceof Error ? error.message : String(error);
+      instance.status = "error";
+      instance.errorMessage =
+        error instanceof Error ? error.message : String(error);
       await this.db.saveInstance(instance);
       console.error(`Failed to restart instance ${instanceId}:`, error);
-      throw new Error(`Failed to restart ${instance.agentType} instance: ${error}`);
+      throw new Error(
+        `Failed to restart ${instance.agentType} instance: ${error}`,
+      );
     }
   }
 
   getInstances(userId?: string): AgentInstance[] {
     const instances = Array.from(this.instances.values());
     if (userId) {
-      return instances.filter(i => i.userId === userId || i.userId === DEFAULT_USER_ID);
+      return instances.filter(
+        (i) => i.userId === userId || i.userId === DEFAULT_USER_ID,
+      );
     }
     return instances;
   }
 
   getInstance(id: string, userId?: string): AgentInstance | undefined {
     const instance = this.instances.get(id);
-    if (instance && userId && instance.userId !== userId && instance.userId !== DEFAULT_USER_ID) {
+    if (
+      instance &&
+      userId &&
+      instance.userId !== userId &&
+      instance.userId !== DEFAULT_USER_ID
+    ) {
       return undefined;
     }
     return instance;
   }
 
-  getInstancesByRepository(repositoryId: string, userId?: string): AgentInstance[] {
-    let instances = Array.from(this.instances.values()).filter(i => i.repositoryId === repositoryId);
+  getInstancesByRepository(
+    repositoryId: string,
+    userId?: string,
+  ): AgentInstance[] {
+    let instances = Array.from(this.instances.values()).filter(
+      (i) => i.repositoryId === repositoryId,
+    );
     if (userId) {
-      instances = instances.filter(i => i.userId === userId || i.userId === DEFAULT_USER_ID);
+      instances = instances.filter(
+        (i) => i.userId === userId || i.userId === DEFAULT_USER_ID,
+      );
     }
     return instances;
   }
 
   getInstancesByWorktree(worktreeId: string, userId?: string): AgentInstance[] {
-    let instances = Array.from(this.instances.values()).filter(i => i.worktreeId === worktreeId);
+    let instances = Array.from(this.instances.values()).filter(
+      (i) => i.worktreeId === worktreeId,
+    );
     if (userId) {
-      instances = instances.filter(i => i.userId === userId || i.userId === DEFAULT_USER_ID);
+      instances = instances.filter(
+        (i) => i.userId === userId || i.userId === DEFAULT_USER_ID,
+      );
     }
     return instances;
   }
 
-  getInstancesByAgentType(agentType: AgentType, userId?: string): AgentInstance[] {
-    let instances = Array.from(this.instances.values()).filter(i => i.agentType === agentType);
+  getInstancesByAgentType(
+    agentType: AgentType,
+    userId?: string,
+  ): AgentInstance[] {
+    let instances = Array.from(this.instances.values()).filter(
+      (i) => i.agentType === agentType,
+    );
     if (userId) {
-      instances = instances.filter(i => i.userId === userId || i.userId === DEFAULT_USER_ID);
+      instances = instances.filter(
+        (i) => i.userId === userId || i.userId === DEFAULT_USER_ID,
+      );
     }
     return instances;
   }
@@ -320,17 +390,17 @@ export class AgentService {
   } {
     const now = Date.now();
     const instances = this.getInstances();
-    const runningInstances = instances.filter(i => i.status === 'running');
+    const runningInstances = instances.filter((i) => i.status === "running");
 
     // Track running sessions
-    runningInstances.forEach(instance => {
+    runningInstances.forEach((instance) => {
       if (!this.sessionStartTimes.has(instance.id)) {
         this.sessionStartTimes.set(instance.id, now);
       }
     });
 
     // Remove sessions that are no longer running
-    const runningIds = new Set(runningInstances.map(i => i.id));
+    const runningIds = new Set(runningInstances.map((i) => i.id));
     for (const [sessionId] of this.sessionStartTimes) {
       if (!runningIds.has(sessionId)) {
         this.sessionStartTimes.delete(sessionId);
@@ -339,7 +409,8 @@ export class AgentService {
     }
 
     // Use real token data from in-memory collection or fallback to simulated data
-    const hasRealTokenData = this.cumulativeTokens.input > 0 || this.cumulativeTokens.output > 0;
+    const hasRealTokenData =
+      this.cumulativeTokens.input > 0 || this.cumulativeTokens.output > 0;
 
     // Generate daily usage (simulate historical + real current data)
     const dailyUsage = [];
@@ -348,7 +419,7 @@ export class AgentService {
     for (let i = 6; i >= 0; i--) {
       const date = new Date(currentDate);
       date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = date.toISOString().split("T")[0];
       const isToday = i === 0;
 
       let inputTokens, outputTokens;
@@ -357,7 +428,7 @@ export class AgentService {
         outputTokens = this.cumulativeTokens.output;
       } else {
         // Historical simulation
-        const dayActivity = instances.filter(instance => {
+        const dayActivity = instances.filter((instance) => {
           const activityDate = new Date(instance.lastActivity || new Date());
           return activityDate.toDateString() === date.toDateString();
         }).length;
@@ -370,12 +441,12 @@ export class AgentService {
         date: dateStr,
         inputTokens,
         outputTokens,
-        sessions: Math.max(1, runningInstances.length || 1)
+        sessions: Math.max(1, runningInstances.length || 1),
       });
     }
 
     // Generate instance-specific usage from real data
-    const instanceUsage = instances.map(instance => {
+    const instanceUsage = instances.map((instance) => {
       const realUsage = this.instanceTokenUsage.get(instance.id);
 
       if (realUsage && (realUsage.input > 0 || realUsage.output > 0)) {
@@ -385,7 +456,7 @@ export class AgentService {
           agentType: instance.agentType,
           inputTokens: realUsage.input,
           outputTokens: realUsage.output,
-          lastActivity: instance.lastActivity || new Date()
+          lastActivity: instance.lastActivity || new Date(),
         };
       } else {
         return {
@@ -394,18 +465,18 @@ export class AgentService {
           agentType: instance.agentType,
           inputTokens: 0,
           outputTokens: 0,
-          lastActivity: instance.lastActivity || new Date()
+          lastActivity: instance.lastActivity || new Date(),
         };
       }
     });
 
-    const totalInputTokens = hasRealTokenData ?
-      instanceUsage.reduce((sum, instance) => sum + instance.inputTokens, 0) :
-      dailyUsage.reduce((sum, day) => sum + day.inputTokens, 0);
+    const totalInputTokens = hasRealTokenData
+      ? instanceUsage.reduce((sum, instance) => sum + instance.inputTokens, 0)
+      : dailyUsage.reduce((sum, day) => sum + day.inputTokens, 0);
 
-    const totalOutputTokens = hasRealTokenData ?
-      instanceUsage.reduce((sum, instance) => sum + instance.outputTokens, 0) :
-      dailyUsage.reduce((sum, day) => sum + day.outputTokens, 0);
+    const totalOutputTokens = hasRealTokenData
+      ? instanceUsage.reduce((sum, instance) => sum + instance.outputTokens, 0)
+      : dailyUsage.reduce((sum, day) => sum + day.outputTokens, 0);
 
     return {
       totalSessions: Math.max(instances.length, 1),
@@ -413,7 +484,7 @@ export class AgentService {
       totalOutputTokens,
       dailyUsage,
       instanceUsage,
-      hasRealData: hasRealTokenData
+      hasRealData: hasRealTokenData,
     };
   }
 
@@ -449,7 +520,7 @@ export class AgentService {
 
   private async collectInstanceUsage(instanceId: string): Promise<void> {
     const instance = this.instances.get(instanceId);
-    if (!instance || instance.status !== 'running') {
+    if (!instance || instance.status !== "running") {
       return;
     }
 
@@ -466,7 +537,7 @@ export class AgentService {
 
     try {
       // For Claude, use the existing method
-      if (instance.agentType === 'claude') {
+      if (instance.agentType === "claude") {
         await this.collectClaudeUsage(instanceId, worktree);
       }
       // For other agents, we might need different collection strategies
@@ -476,22 +547,29 @@ export class AgentService {
     }
   }
 
-  private async collectClaudeUsage(instanceId: string, worktree: Worktree): Promise<void> {
+  private async collectClaudeUsage(
+    instanceId: string,
+    worktree: Worktree,
+  ): Promise<void> {
     try {
-      const { spawn } = await import('child_process');
-      const child = spawn('echo', ['Usage check'], {
+      const { spawn } = await import("child_process");
+      const child = spawn("echo", ["Usage check"], {
         cwd: worktree.path,
-        stdio: ['pipe', 'pipe', 'pipe']
+        stdio: ["pipe", "pipe", "pipe"],
       });
 
       // Pipe the echo output to claude
-      const claude = spawn(getAgentCommand('claude'), ['--print', '--output-format', 'json'], {
-        cwd: worktree.path,
-        stdio: [child.stdout, 'pipe', 'pipe']
-      });
+      const claude = spawn(
+        getAgentCommand("claude"),
+        ["--print", "--output-format", "json"],
+        {
+          cwd: worktree.path,
+          stdio: [child.stdout, "pipe", "pipe"],
+        },
+      );
 
-      let output = '';
-      claude.stdout?.on('data', (data) => {
+      let output = "";
+      claude.stdout?.on("data", (data) => {
         const MAX_OUTPUT_LENGTH = 50000;
         output += data.toString();
         if (output.length > MAX_OUTPUT_LENGTH) {
@@ -499,22 +577,31 @@ export class AgentService {
         }
       });
 
-      claude.on('close', (code) => {
+      claude.on("close", (code) => {
         if (code === 0 && output.trim()) {
-          this.parseAgentOutput(instanceId, 'claude', output);
+          this.parseAgentOutput(instanceId, "claude", output);
         }
       });
 
-      claude.on('error', (error) => {
-        console.log(`Agent usage collection error for ${instanceId}:`, error.message);
+      claude.on("error", (error) => {
+        console.log(
+          `Agent usage collection error for ${instanceId}:`,
+          error.message,
+        );
       });
-
     } catch (error) {
-      console.log(`Failed to collect Claude usage for instance ${instanceId}:`, error);
+      console.log(
+        `Failed to collect Claude usage for instance ${instanceId}:`,
+        error,
+      );
     }
   }
 
-  private parseAgentOutput(instanceId: string, agentType: AgentType, output: string): void {
+  private parseAgentOutput(
+    instanceId: string,
+    agentType: AgentType,
+    output: string,
+  ): void {
     try {
       const usage = agentFactory.parseAgentOutput(agentType, output);
       if (!usage) {
@@ -524,20 +611,29 @@ export class AgentService {
       const { inputTokens = 0, outputTokens = 0, cost = 0 } = usage;
 
       // Update instance-specific tracking
-      const existing = this.instanceTokenUsage.get(instanceId) || { input: 0, output: 0, cost: 0 };
+      const existing = this.instanceTokenUsage.get(instanceId) || {
+        input: 0,
+        output: 0,
+        cost: 0,
+      };
       this.instanceTokenUsage.set(instanceId, {
         input: existing.input + inputTokens,
         output: existing.output + outputTokens,
-        cost: existing.cost + cost
+        cost: existing.cost + cost,
       });
 
       // Update cumulative totals
       this.cumulativeTokens.input += inputTokens;
       this.cumulativeTokens.output += outputTokens;
 
-      console.log(`Updated token usage for ${instanceId}: +${inputTokens} input, +${outputTokens} output`);
+      console.log(
+        `Updated token usage for ${instanceId}: +${inputTokens} input, +${outputTokens} output`,
+      );
     } catch (error) {
-      console.log(`Failed to parse ${agentType} output for ${instanceId}:`, error);
+      console.log(
+        `Failed to parse ${agentType} output for ${instanceId}:`,
+        error,
+      );
     }
   }
 
@@ -548,10 +644,10 @@ export class AgentService {
     }
     this.usageCollectionIntervals.clear();
 
-    const stopPromises = Array.from(this.instances.keys()).map(id =>
-      this.stopInstance(id).catch(error =>
-        console.error(`Error stopping instance ${id}:`, error)
-      )
+    const stopPromises = Array.from(this.instances.keys()).map((id) =>
+      this.stopInstance(id).catch((error) =>
+        console.error(`Error stopping instance ${id}:`, error),
+      ),
     );
 
     await Promise.allSettled(stopPromises);

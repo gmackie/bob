@@ -1,9 +1,11 @@
-import { spawn, ChildProcess } from 'child_process';
-import { spawn as spawnPty, IPty } from 'node-pty';
-import { ClaudeInstance, Worktree, AgentType } from '../types.js';
-import { GitService } from './git.js';
-import { DatabaseService } from '../database/database.js';
-import { getAgentCommand } from '../utils/agentPaths.js';
+import { ChildProcess, spawn } from "child_process";
+import { clearInterval, setInterval, setTimeout } from "node:timers";
+import { IPty, spawn as spawnPty } from "node-pty";
+
+import { DatabaseService } from "../database/database.js";
+import { AgentType, ClaudeInstance, Worktree } from "../types.js";
+import { getAgentCommand } from "../utils/agentPaths.js";
+import { GitService } from "./git.js";
 
 export class ClaudeService {
   private instances = new Map<string, ClaudeInstance>();
@@ -12,22 +14,31 @@ export class ClaudeService {
   private nextPort = 3100;
 
   // Real-time token usage tracking
-  private instanceTokenUsage = new Map<string, { input: number; output: number; cost: number }>();
-  private usageCollectionIntervals = new Map<string, NodeJS.Timeout>();
+  private instanceTokenUsage = new Map<
+    string,
+    { input: number; output: number; cost: number }
+  >();
+  private usageCollectionIntervals = new Map<
+    string,
+    ReturnType<typeof setInterval>
+  >();
   private cumulativeTokens = { input: 0, output: 0 };
   private sessionStartTimes = new Map<string, number>();
 
-  constructor(private gitService: GitService, private db: DatabaseService) {
+  constructor(
+    private gitService: GitService,
+    private db: DatabaseService,
+  ) {
     this.loadFromDatabase();
   }
 
   private async loadFromDatabase(): Promise<void> {
     const instances = await this.db.getAllInstances();
-    instances.forEach(instance => {
+    instances.forEach((instance) => {
       // Only load non-running instances (running instances need to be restarted)
-      if (instance.status !== 'running') {
+      if (instance.status !== "running") {
         this.instances.set(instance.id, instance);
-        
+
         // Add instance to worktree
         const worktree = this.gitService.getWorktree(instance.worktreeId);
         if (worktree) {
@@ -44,17 +55,24 @@ export class ClaudeService {
     }
 
     // Check for any existing instance (regardless of status)
-    const existingInstance = Array.from(this.instances.values())
-      .find(i => i.worktreeId === worktreeId);
-    
+    const existingInstance = Array.from(this.instances.values()).find(
+      (i) => i.worktreeId === worktreeId,
+    );
+
     if (existingInstance) {
-      if (existingInstance.status === 'running') {
-        throw new Error(`Claude instance already running for this worktree. Stop the existing instance first.`);
-      } else if (existingInstance.status === 'starting') {
-        throw new Error(`Claude instance is already starting for this worktree. Please wait for it to finish.`);
+      if (existingInstance.status === "running") {
+        throw new Error(
+          `Claude instance already running for this worktree. Stop the existing instance first.`,
+        );
+      } else if (existingInstance.status === "starting") {
+        throw new Error(
+          `Claude instance is already starting for this worktree. Please wait for it to finish.`,
+        );
       } else {
         // If instance exists but is stopped/error, restart it instead of creating new one
-        console.log(`Found existing stopped instance ${existingInstance.id}, restarting instead of creating new one`);
+        console.log(
+          `Found existing stopped instance ${existingInstance.id}, restarting instead of creating new one`,
+        );
         return await this.restartInstance(existingInstance.id);
       }
     }
@@ -66,27 +84,27 @@ export class ClaudeService {
       id: instanceId,
       worktreeId,
       repositoryId: worktree.repositoryId,
-      agentType: 'claude' as AgentType,
-      status: 'starting',
+      agentType: "claude" as AgentType,
+      status: "starting",
       port,
       createdAt: new Date(),
-      lastActivity: new Date()
+      lastActivity: new Date(),
     };
 
     this.instances.set(instanceId, instance);
     worktree.instances.push(instance);
-    
+
     await this.db.saveInstance(instance);
 
     try {
       const claudePty = await this.spawnClaudePty(instance, worktree);
       this.ptyProcesses.set(instanceId, claudePty);
-      
+
       instance.pid = claudePty.pid;
-      instance.status = 'running';
-      
+      instance.status = "running";
+
       await this.db.saveInstance(instance);
-      
+
       this.setupPtyHandlers(instance, claudePty);
 
       // Start token usage collection for this instance
@@ -94,33 +112,37 @@ export class ClaudeService {
 
       return instance;
     } catch (error) {
-      instance.status = 'error';
-      instance.errorMessage = error instanceof Error ? error.message : String(error);
+      instance.status = "error";
+      instance.errorMessage =
+        error instanceof Error ? error.message : String(error);
       await this.db.saveInstance(instance);
       throw new Error(`Failed to start Claude instance: ${error}`);
     }
   }
 
-  private async spawnClaudeProcess(instance: ClaudeInstance, worktree: Worktree): Promise<ChildProcess> {
+  private async spawnClaudeProcess(
+    instance: ClaudeInstance,
+    worktree: Worktree,
+  ): Promise<ChildProcess> {
     return new Promise((resolve, reject) => {
       console.log(`Starting Claude Code in directory: ${worktree.path}`);
-      
-      const claudeProcess = spawn(getAgentCommand('claude'), [], {
+
+      const claudeProcess = spawn(getAgentCommand("claude"), [], {
         cwd: worktree.path,
-        stdio: ['pipe', 'pipe', 'pipe'],
+        stdio: ["pipe", "pipe", "pipe"],
         shell: false,
         env: {
           ...process.env,
           CLAUDE_CODE_PORT: instance.port?.toString(),
-          PATH: process.env.PATH
-        }
+          PATH: process.env.PATH,
+        },
       });
 
       let spawned = false;
-      let output = '';
-      let errorOutput = '';
+      let output = "";
+      let errorOutput = "";
 
-      claudeProcess.stdout?.on('data', (data) => {
+      claudeProcess.stdout?.on("data", (data) => {
         const dataStr = data.toString();
         const MAX_OUTPUT_LENGTH = 10000;
         output += dataStr;
@@ -128,12 +150,20 @@ export class ClaudeService {
           output = output.slice(-MAX_OUTPUT_LENGTH / 2); // Keep last half
         }
         // Only log significant output to prevent memory issues
-        if (dataStr.length < 100 && (dataStr.includes('Claude') || dataStr.includes('error') || dataStr.includes('Error'))) {
-          console.log(`Claude ${instance.id} stdout:`, dataStr.substring(0, 200));
+        if (
+          dataStr.length < 100 &&
+          (dataStr.includes("Claude") ||
+            dataStr.includes("error") ||
+            dataStr.includes("Error"))
+        ) {
+          console.log(
+            `Claude ${instance.id} stdout:`,
+            dataStr.substring(0, 200),
+          );
         }
       });
 
-      claudeProcess.stderr?.on('data', (data) => {
+      claudeProcess.stderr?.on("data", (data) => {
         const dataStr = data.toString();
         const MAX_OUTPUT_LENGTH = 10000;
         errorOutput += dataStr;
@@ -141,33 +171,46 @@ export class ClaudeService {
           errorOutput = errorOutput.slice(-MAX_OUTPUT_LENGTH / 2); // Keep last half
         }
         // Always log errors, but limit the data size
-        console.error(`Claude ${instance.id} stderr:`, dataStr.substring(0, 500));
+        console.error(
+          `Claude ${instance.id} stderr:`,
+          dataStr.substring(0, 500),
+        );
       });
 
-      claudeProcess.on('spawn', () => {
-        console.log(`Process spawned for Claude instance ${instance.id} with PID ${claudeProcess.pid}`);
+      claudeProcess.on("spawn", () => {
+        console.log(
+          `Process spawned for Claude instance ${instance.id} with PID ${claudeProcess.pid}`,
+        );
         // Give Claude a moment to initialize, then assume it's running
         setTimeout(() => {
           if (!spawned && !claudeProcess.killed) {
             spawned = true;
-            console.log(`Claude Code assumed ready for worktree ${worktree.path}`);
+            console.log(
+              `Claude Code assumed ready for worktree ${worktree.path}`,
+            );
             resolve(claudeProcess);
           }
         }, 3000);
       });
 
-      claudeProcess.on('error', (error) => {
+      claudeProcess.on("error", (error) => {
         console.error(`Failed to start Claude Code process:`, error);
         if (!spawned) {
           reject(error);
         }
       });
 
-      claudeProcess.on('exit', (code, signal) => {
-        console.log(`Claude process exited with code ${code}, signal ${signal}`);
+      claudeProcess.on("exit", (code, signal) => {
+        console.log(
+          `Claude process exited with code ${code}, signal ${signal}`,
+        );
         if (!spawned) {
           if (code !== 0) {
-            reject(new Error(`Claude Code exited with code ${code}. Output: ${output}, Error: ${errorOutput}`));
+            reject(
+              new Error(
+                `Claude Code exited with code ${code}. Output: ${output}, Error: ${errorOutput}`,
+              ),
+            );
           } else {
             reject(new Error(`Claude Code process exited unexpectedly`));
           }
@@ -177,13 +220,17 @@ export class ClaudeService {
       // Timeout as fallback
       const timeout = setTimeout(() => {
         if (!spawned) {
-          claudeProcess.kill('SIGTERM');
-          reject(new Error(`Claude Code process failed to start within timeout. Output: ${output}, Error: ${errorOutput}`));
+          claudeProcess.kill("SIGTERM");
+          reject(
+            new Error(
+              `Claude Code process failed to start within timeout. Output: ${output}, Error: ${errorOutput}`,
+            ),
+          );
         }
       }, 10000);
 
       // Clear timeout when spawned
-      claudeProcess.on('spawn', () => {
+      claudeProcess.on("spawn", () => {
         setTimeout(() => {
           if (spawned) {
             clearTimeout(timeout);
@@ -193,23 +240,26 @@ export class ClaudeService {
     });
   }
 
-  private async spawnClaudePty(instance: ClaudeInstance, worktree: Worktree): Promise<IPty> {
+  private async spawnClaudePty(
+    instance: ClaudeInstance,
+    worktree: Worktree,
+  ): Promise<IPty> {
     return new Promise((resolve, reject) => {
       console.log(`Starting Claude Code PTY in directory: ${worktree.path}`);
-      
-      const claudePty = spawnPty(getAgentCommand('claude'), [], {
+
+      const claudePty = spawnPty(getAgentCommand("claude"), [], {
         cwd: worktree.path,
         cols: 80,
         rows: 30,
         env: {
           ...process.env,
           CLAUDE_CODE_PORT: instance.port?.toString(),
-          PATH: process.env.PATH
-        } as { [key: string]: string }
+          PATH: process.env.PATH,
+        } as { [key: string]: string },
       });
 
       let spawned = false;
-      let output = '';
+      let output = "";
 
       claudePty.onData((data: string) => {
         // Limit output buffer to prevent memory issues
@@ -220,13 +270,28 @@ export class ClaudeService {
         }
 
         // Only log significant output to prevent memory issues
-        if (data.length < 100 && (data.includes('Claude') || data.includes('error') || data.includes('Error'))) {
-          console.log(`Claude PTY ${instance.id} output:`, data.substring(0, 200));
+        if (
+          data.length < 100 &&
+          (data.includes("Claude") ||
+            data.includes("error") ||
+            data.includes("Error"))
+        ) {
+          console.log(
+            `Claude PTY ${instance.id} output:`,
+            data.substring(0, 200),
+          );
         }
 
-        if (!spawned && (data.includes('Claude') || data.includes('claude') || output.length > 100)) {
+        if (
+          !spawned &&
+          (data.includes("Claude") ||
+            data.includes("claude") ||
+            output.length > 100)
+        ) {
           spawned = true;
-          console.log(`Claude Code PTY ready for worktree ${worktree.path} with PID ${claudePty.pid}`);
+          console.log(
+            `Claude Code PTY ready for worktree ${worktree.path} with PID ${claudePty.pid}`,
+          );
           resolve(claudePty);
         }
       });
@@ -234,7 +299,11 @@ export class ClaudeService {
       claudePty.onExit(() => {
         console.log(`Claude PTY process exited`);
         if (!spawned) {
-          reject(new Error(`Claude Code PTY process exited unexpectedly. Output: ${output}`));
+          reject(
+            new Error(
+              `Claude Code PTY process exited unexpectedly. Output: ${output}`,
+            ),
+          );
         }
       });
 
@@ -242,7 +311,11 @@ export class ClaudeService {
       const timeout = setTimeout(() => {
         if (!spawned) {
           claudePty.kill();
-          reject(new Error(`Claude Code PTY failed to start within timeout. Output: ${output}`));
+          reject(
+            new Error(
+              `Claude Code PTY failed to start within timeout. Output: ${output}`,
+            ),
+          );
         }
       }, 10000);
 
@@ -250,7 +323,9 @@ export class ClaudeService {
         if (!spawned) {
           spawned = true;
           clearTimeout(timeout);
-          console.log(`Claude Code PTY assumed ready for worktree ${worktree.path}`);
+          console.log(
+            `Claude Code PTY assumed ready for worktree ${worktree.path}`,
+          );
           resolve(claudePty);
         }
       }, 3000);
@@ -261,8 +336,10 @@ export class ClaudeService {
     // Note: IPty doesn't have removeAllListeners, listeners are replaced when new ones are set
 
     claudePty.onExit((exitCode) => {
-      console.log(`Claude Code PTY ${instance.id} exited with code ${exitCode}`);
-      instance.status = 'stopped';
+      console.log(
+        `Claude Code PTY ${instance.id} exited with code ${exitCode}`,
+      );
+      instance.status = "stopped";
       this.ptyProcesses.delete(instance.id);
 
       // Stop token usage collection
@@ -270,28 +347,39 @@ export class ClaudeService {
 
       const worktree = this.gitService.getWorktree(instance.worktreeId);
       if (worktree) {
-        worktree.instances = worktree.instances.filter(i => i.id !== instance.id);
+        worktree.instances = worktree.instances.filter(
+          (i) => i.id !== instance.id,
+        );
       }
 
       this.instances.delete(instance.id);
-      this.db.saveInstance(instance).catch(err => console.error('Failed to save instance:', err));
+      this.db
+        .saveInstance(instance)
+        .catch((err) => console.error("Failed to save instance:", err));
     });
 
     claudePty.onData((data: string) => {
       instance.lastActivity = new Date();
-      this.db.updateInstanceActivity(instance.id).catch(err => console.error('Failed to update activity:', err));
+      this.db
+        .updateInstanceActivity(instance.id)
+        .catch((err) => console.error("Failed to update activity:", err));
     });
   }
 
-  private setupProcessHandlers(instance: ClaudeInstance, claudeProcess: ChildProcess): void {
+  private setupProcessHandlers(
+    instance: ClaudeInstance,
+    claudeProcess: ChildProcess,
+  ): void {
     // Remove any existing listeners first to prevent memory leaks
     claudeProcess.removeAllListeners();
     claudeProcess.stdout?.removeAllListeners();
     claudeProcess.stderr?.removeAllListeners();
 
-    claudeProcess.on('exit', (code, signal) => {
-      console.log(`Claude Code process ${instance.id} exited with code ${code}, signal ${signal}`);
-      instance.status = 'stopped';
+    claudeProcess.on("exit", (code, signal) => {
+      console.log(
+        `Claude Code process ${instance.id} exited with code ${code}, signal ${signal}`,
+      );
+      instance.status = "stopped";
       this.processes.delete(instance.id);
 
       // Stop token usage collection
@@ -299,28 +387,38 @@ export class ClaudeService {
 
       const worktree = this.gitService.getWorktree(instance.worktreeId);
       if (worktree) {
-        worktree.instances = worktree.instances.filter(i => i.id !== instance.id);
+        worktree.instances = worktree.instances.filter(
+          (i) => i.id !== instance.id,
+        );
       }
 
       this.instances.delete(instance.id);
-      this.db.saveInstance(instance).catch(err => console.error('Failed to save instance:', err));
+      this.db
+        .saveInstance(instance)
+        .catch((err) => console.error("Failed to save instance:", err));
     });
 
-    claudeProcess.on('error', (error) => {
+    claudeProcess.on("error", (error) => {
       console.error(`Claude Code process ${instance.id} error:`, error);
-      instance.status = 'error';
+      instance.status = "error";
       instance.errorMessage = error.message;
-      this.db.saveInstance(instance).catch(err => console.error('Failed to save instance:', err));
+      this.db
+        .saveInstance(instance)
+        .catch((err) => console.error("Failed to save instance:", err));
     });
 
-    claudeProcess.stdout?.on('data', (data) => {
+    claudeProcess.stdout?.on("data", (data) => {
       instance.lastActivity = new Date();
-      this.db.updateInstanceActivity(instance.id).catch(err => console.error('Failed to update activity:', err));
+      this.db
+        .updateInstanceActivity(instance.id)
+        .catch((err) => console.error("Failed to update activity:", err));
     });
 
-    claudeProcess.stderr?.on('data', (data) => {
+    claudeProcess.stderr?.on("data", (data) => {
       instance.lastActivity = new Date();
-      this.db.updateInstanceActivity(instance.id).catch(err => console.error('Failed to update activity:', err));
+      this.db
+        .updateInstanceActivity(instance.id)
+        .catch((err) => console.error("Failed to update activity:", err));
     });
   }
 
@@ -346,17 +444,17 @@ export class ClaudeService {
       claudeProcess.removeAllListeners(); // Remove listeners first
       claudeProcess.stdout?.removeAllListeners();
       claudeProcess.stderr?.removeAllListeners();
-      claudeProcess.kill('SIGTERM');
+      claudeProcess.kill("SIGTERM");
 
       setTimeout(() => {
         if (!claudeProcess.killed) {
-          claudeProcess.kill('SIGKILL');
+          claudeProcess.kill("SIGKILL");
         }
       }, 5000);
       this.processes.delete(instanceId);
     }
 
-    instance.status = 'stopped';
+    instance.status = "stopped";
     await this.db.saveInstance(instance);
   }
 
@@ -372,28 +470,28 @@ export class ClaudeService {
     }
 
     await this.stopInstance(instanceId);
-    
+
     // Wait a moment for the process to fully terminate
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
     try {
       // Reset instance state for restart
-      instance.status = 'starting';
+      instance.status = "starting";
       instance.pid = undefined;
       instance.errorMessage = undefined;
       instance.lastActivity = new Date();
-      
+
       await this.db.saveInstance(instance);
 
       // Start the process directly without going through startInstance to avoid loop
       const claudePty = await this.spawnClaudePty(instance, worktree);
       this.ptyProcesses.set(instanceId, claudePty);
-      
+
       instance.pid = claudePty.pid;
-      instance.status = 'running';
-      
+      instance.status = "running";
+
       await this.db.saveInstance(instance);
-      
+
       this.setupPtyHandlers(instance, claudePty);
 
       // Start token usage collection for restarted instance
@@ -402,8 +500,9 @@ export class ClaudeService {
       console.log(`Successfully restarted instance ${instanceId}`);
       return instance;
     } catch (error) {
-      instance.status = 'error';
-      instance.errorMessage = error instanceof Error ? error.message : String(error);
+      instance.status = "error";
+      instance.errorMessage =
+        error instanceof Error ? error.message : String(error);
       await this.db.saveInstance(instance);
       console.error(`Failed to restart instance ${instanceId}:`, error);
       throw new Error(`Failed to restart Claude instance: ${error}`);
@@ -419,11 +518,15 @@ export class ClaudeService {
   }
 
   getInstancesByRepository(repositoryId: string): ClaudeInstance[] {
-    return Array.from(this.instances.values()).filter(i => i.repositoryId === repositoryId);
+    return Array.from(this.instances.values()).filter(
+      (i) => i.repositoryId === repositoryId,
+    );
   }
 
   getInstancesByWorktree(worktreeId: string): ClaudeInstance[] {
-    return Array.from(this.instances.values()).filter(i => i.worktreeId === worktreeId);
+    return Array.from(this.instances.values()).filter(
+      (i) => i.worktreeId === worktreeId,
+    );
   }
 
   getProcess(instanceId: string): ChildProcess | undefined {
@@ -459,17 +562,17 @@ export class ClaudeService {
   } {
     const now = Date.now();
     const instances = this.getInstances();
-    const runningInstances = instances.filter(i => i.status === 'running');
+    const runningInstances = instances.filter((i) => i.status === "running");
 
     // Track running sessions
-    runningInstances.forEach(instance => {
+    runningInstances.forEach((instance) => {
       if (!this.sessionStartTimes.has(instance.id)) {
         this.sessionStartTimes.set(instance.id, now);
       }
     });
 
     // Remove sessions that are no longer running
-    const runningIds = new Set(runningInstances.map(i => i.id));
+    const runningIds = new Set(runningInstances.map((i) => i.id));
     for (const [sessionId] of this.sessionStartTimes) {
       if (!runningIds.has(sessionId)) {
         this.sessionStartTimes.delete(sessionId);
@@ -478,7 +581,8 @@ export class ClaudeService {
     }
 
     // Use real token data from in-memory collection or fallback to simulated data
-    const hasRealTokenData = this.cumulativeTokens.input > 0 || this.cumulativeTokens.output > 0;
+    const hasRealTokenData =
+      this.cumulativeTokens.input > 0 || this.cumulativeTokens.output > 0;
 
     // Generate daily usage (simulate historical + real current data)
     const dailyUsage = [];
@@ -487,7 +591,7 @@ export class ClaudeService {
     for (let i = 6; i >= 0; i--) {
       const date = new Date(currentDate);
       date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = date.toISOString().split("T")[0];
       const isToday = i === 0;
 
       let inputTokens, outputTokens;
@@ -496,7 +600,7 @@ export class ClaudeService {
         outputTokens = this.cumulativeTokens.output;
       } else {
         // Historical simulation
-        const dayActivity = instances.filter(instance => {
+        const dayActivity = instances.filter((instance) => {
           const activityDate = new Date(instance.lastActivity || new Date());
           return activityDate.toDateString() === date.toDateString();
         }).length;
@@ -509,12 +613,12 @@ export class ClaudeService {
         date: dateStr,
         inputTokens,
         outputTokens,
-        sessions: Math.max(1, runningInstances.length || 1)
+        sessions: Math.max(1, runningInstances.length || 1),
       });
     }
 
     // Generate instance-specific usage from real data
-    const instanceUsage = instances.map(instance => {
+    const instanceUsage = instances.map((instance) => {
       const realUsage = this.instanceTokenUsage.get(instance.id);
 
       if (realUsage && (realUsage.input > 0 || realUsage.output > 0)) {
@@ -523,7 +627,7 @@ export class ClaudeService {
           worktreeId: instance.worktreeId,
           inputTokens: realUsage.input,
           outputTokens: realUsage.output,
-          lastActivity: instance.lastActivity || new Date()
+          lastActivity: instance.lastActivity || new Date(),
         };
       } else {
         return {
@@ -531,18 +635,18 @@ export class ClaudeService {
           worktreeId: instance.worktreeId,
           inputTokens: 0,
           outputTokens: 0,
-          lastActivity: instance.lastActivity || new Date()
+          lastActivity: instance.lastActivity || new Date(),
         };
       }
     });
 
-    const totalInputTokens = hasRealTokenData ?
-      instanceUsage.reduce((sum, instance) => sum + instance.inputTokens, 0) :
-      dailyUsage.reduce((sum, day) => sum + day.inputTokens, 0);
+    const totalInputTokens = hasRealTokenData
+      ? instanceUsage.reduce((sum, instance) => sum + instance.inputTokens, 0)
+      : dailyUsage.reduce((sum, day) => sum + day.inputTokens, 0);
 
-    const totalOutputTokens = hasRealTokenData ?
-      instanceUsage.reduce((sum, instance) => sum + instance.outputTokens, 0) :
-      dailyUsage.reduce((sum, day) => sum + day.outputTokens, 0);
+    const totalOutputTokens = hasRealTokenData
+      ? instanceUsage.reduce((sum, instance) => sum + instance.outputTokens, 0)
+      : dailyUsage.reduce((sum, day) => sum + day.outputTokens, 0);
 
     return {
       totalSessions: Math.max(instances.length, 1),
@@ -550,7 +654,7 @@ export class ClaudeService {
       totalOutputTokens,
       dailyUsage,
       instanceUsage,
-      hasRealData: hasRealTokenData
+      hasRealData: hasRealTokenData,
     };
   }
 
@@ -586,7 +690,7 @@ export class ClaudeService {
 
   private async collectInstanceUsage(instanceId: string): Promise<void> {
     const instance = this.instances.get(instanceId);
-    if (!instance || instance.status !== 'running') {
+    if (!instance || instance.status !== "running") {
       return;
     }
 
@@ -597,20 +701,24 @@ export class ClaudeService {
 
     try {
       // Execute claude --print --output-format json in the worktree directory
-      const { spawn } = await import('child_process');
-      const child = spawn('echo', ['Usage check'], {
+      const { spawn } = await import("child_process");
+      const child = spawn("echo", ["Usage check"], {
         cwd: worktree.path,
-        stdio: ['pipe', 'pipe', 'pipe']
+        stdio: ["pipe", "pipe", "pipe"],
       });
 
       // Pipe the echo output to claude
-      const claude = spawn(getAgentCommand('claude'), ['--print', '--output-format', 'json'], {
-        cwd: worktree.path,
-        stdio: [child.stdout, 'pipe', 'pipe']
-      });
+      const claude = spawn(
+        getAgentCommand("claude"),
+        ["--print", "--output-format", "json"],
+        {
+          cwd: worktree.path,
+          stdio: [child.stdout, "pipe", "pipe"],
+        },
+      );
 
-      let output = '';
-      claude.stdout?.on('data', (data) => {
+      let output = "";
+      claude.stdout?.on("data", (data) => {
         const MAX_OUTPUT_LENGTH = 50000; // Higher limit for usage collection since we need the full JSON
         output += data.toString();
         if (output.length > MAX_OUTPUT_LENGTH) {
@@ -618,16 +726,18 @@ export class ClaudeService {
         }
       });
 
-      claude.on('close', (code) => {
+      claude.on("close", (code) => {
         if (code === 0 && output.trim()) {
           this.parseClaudeOutput(instanceId, output);
         }
       });
 
-      claude.on('error', (error) => {
-        console.log(`Claude usage collection error for ${instanceId}:`, error.message);
+      claude.on("error", (error) => {
+        console.log(
+          `Claude usage collection error for ${instanceId}:`,
+          error.message,
+        );
       });
-
     } catch (error) {
       console.log(`Failed to collect usage for instance ${instanceId}:`, error);
     }
@@ -635,31 +745,47 @@ export class ClaudeService {
 
   private parseClaudeOutput(instanceId: string, output: string): void {
     try {
-      const lines = output.split('\n');
+      const lines = output.split("\n");
       for (const line of lines) {
         const trimmed = line.trim();
-        if (trimmed.startsWith('{') && trimmed.includes('usage')) {
+        if (trimmed.startsWith("{") && trimmed.includes("usage")) {
           const json = JSON.parse(trimmed);
 
-          if (json.usage && (json.usage.input_tokens || json.usage.output_tokens)) {
+          if (
+            json.usage &&
+            (json.usage.input_tokens || json.usage.output_tokens)
+          ) {
             const inputTokens = json.usage.input_tokens || 0;
             const outputTokens = json.usage.output_tokens || 0;
             const cacheCreation = json.usage.cache_creation_input_tokens || 0;
             const cacheRead = json.usage.cache_read_input_tokens || 0;
 
             // Update instance-specific tracking
-            const existing = this.instanceTokenUsage.get(instanceId) || { input: 0, output: 0, cost: 0 };
+            const existing = this.instanceTokenUsage.get(instanceId) || {
+              input: 0,
+              output: 0,
+              cost: 0,
+            };
             this.instanceTokenUsage.set(instanceId, {
               input: existing.input + inputTokens,
               output: existing.output + outputTokens,
-              cost: existing.cost + this.calculateCost(inputTokens, outputTokens, cacheCreation, cacheRead)
+              cost:
+                existing.cost +
+                this.calculateCost(
+                  inputTokens,
+                  outputTokens,
+                  cacheCreation,
+                  cacheRead,
+                ),
             });
 
             // Update cumulative totals
             this.cumulativeTokens.input += inputTokens;
             this.cumulativeTokens.output += outputTokens;
 
-            console.log(`Updated token usage for ${instanceId}: +${inputTokens} input, +${outputTokens} output`);
+            console.log(
+              `Updated token usage for ${instanceId}: +${inputTokens} input, +${outputTokens} output`,
+            );
             break;
           }
         }
@@ -669,13 +795,18 @@ export class ClaudeService {
     }
   }
 
-  private calculateCost(inputTokens: number, outputTokens: number, cacheCreation: number = 0, cacheRead: number = 0): number {
+  private calculateCost(
+    inputTokens: number,
+    outputTokens: number,
+    cacheCreation: number = 0,
+    cacheRead: number = 0,
+  ): number {
     // Sonnet pricing: $3 per 1M input tokens, $15 per 1M output tokens
     // Cache creation: $3.75 per 1M tokens, Cache read: $0.30 per 1M tokens
-    const inputCost = (inputTokens / 1000000) * 3.00;
-    const outputCost = (outputTokens / 1000000) * 15.00;
+    const inputCost = (inputTokens / 1000000) * 3.0;
+    const outputCost = (outputTokens / 1000000) * 15.0;
     const cacheCreationCost = (cacheCreation / 1000000) * 3.75;
-    const cacheReadCost = (cacheRead / 1000000) * 0.30;
+    const cacheReadCost = (cacheRead / 1000000) * 0.3;
 
     return inputCost + outputCost + cacheCreationCost + cacheReadCost;
   }
@@ -687,10 +818,10 @@ export class ClaudeService {
     }
     this.usageCollectionIntervals.clear();
 
-    const stopPromises = Array.from(this.instances.keys()).map(id =>
-      this.stopInstance(id).catch(error =>
-        console.error(`Error stopping instance ${id}:`, error)
-      )
+    const stopPromises = Array.from(this.instances.keys()).map((id) =>
+      this.stopInstance(id).catch((error) =>
+        console.error(`Error stopping instance ${id}:`, error),
+      ),
     );
 
     await Promise.allSettled(stopPromises);

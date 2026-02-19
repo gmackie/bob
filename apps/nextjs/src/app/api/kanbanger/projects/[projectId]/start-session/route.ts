@@ -1,12 +1,25 @@
+import { exec } from "child_process";
+import { existsSync, mkdirSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
+import { promisify } from "util";
+
 import { NextRequest, NextResponse } from "next/server";
 
 import type { AgentType } from "@bob/legacy";
 import { and, eq, inArray } from "@bob/db";
 import { db } from "@bob/db/client";
-import { repositories, taskRuns } from "@bob/db/schema";
+import {
+  agentInstances,
+  repositories,
+  taskRuns,
+  worktrees,
+} from "@bob/db/schema";
 
 import { getSession } from "~/auth/server";
 import { getServices } from "~/server/services";
+
+const execAsync = promisify(exec);
 
 interface RouteParams {
   params: Promise<{ projectId: string }>;
@@ -68,6 +81,84 @@ async function kanbangerQuery<T>(path: string, input?: unknown): Promise<T> {
   return result[0]?.result?.data?.json as T;
 }
 
+/**
+ * Compute worktree path and ensure it exists on disk via git commands.
+ * Returns the filesystem path of the worktree.
+ */
+async function ensureWorktreeOnDisk(
+  repoPath: string,
+  userId: string,
+  repoName: string,
+  branchName: string,
+  baseBranch: string | undefined,
+): Promise<string> {
+  const safeBranch = branchName.replace(/[/\\:*?"<>|]/g, "-");
+  const baseDir = join(homedir(), ".bob", "worktrees");
+  const worktreePath = join(baseDir, userId, repoName, safeBranch);
+
+  // If it already exists on disk, nothing to do
+  if (existsSync(worktreePath)) {
+    return worktreePath;
+  }
+
+  // Ensure parent directory exists
+  const parentDir = join(baseDir, userId, repoName);
+  mkdirSync(parentDir, { recursive: true });
+
+  // Detect default base branch if not provided
+  if (!baseBranch) {
+    try {
+      const { stdout } = await execAsync("git rev-parse --abbrev-ref HEAD", {
+        cwd: repoPath,
+      });
+      baseBranch = stdout.trim();
+    } catch {
+      for (const candidate of ["main", "master"]) {
+        try {
+          await execAsync(
+            `git show-ref --verify --quiet refs/heads/${candidate}`,
+            { cwd: repoPath },
+          );
+          baseBranch = candidate;
+          break;
+        } catch {
+          // try next
+        }
+      }
+      if (!baseBranch) {
+        throw new Error(
+          "Could not determine default branch (tried HEAD, main, master)",
+        );
+      }
+    }
+  }
+
+  // Check if branch already exists
+  let branchExists = false;
+  try {
+    await execAsync(
+      `git show-ref --verify --quiet refs/heads/${branchName}`,
+      { cwd: repoPath },
+    );
+    branchExists = true;
+  } catch {
+    // branch does not exist
+  }
+
+  if (branchExists) {
+    await execAsync(`git worktree add "${worktreePath}" "${branchName}"`, {
+      cwd: repoPath,
+    });
+  } else {
+    await execAsync(
+      `git worktree add "${worktreePath}" -b "${branchName}" "${baseBranch}"`,
+      { cwd: repoPath },
+    );
+  }
+
+  return worktreePath;
+}
+
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const session = await getSession();
   const requireAuth = process.env.REQUIRE_AUTH === "true";
@@ -107,7 +198,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   try {
-    let task: (KanbangerIssueByIdentifier & { workspaceId: string }) | null = null;
+    let task: (KanbangerIssueByIdentifier & { workspaceId: string }) | null =
+      null;
     if (taskIdentifier) {
       let issue: KanbangerIssueByIdentifier;
       try {
@@ -197,6 +289,38 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const repoRow = mapped[0]!;
 
+    // --- Worktree: create on disk + persist to DB ---
+    const worktreePath = await ensureWorktreeOnDisk(
+      repoRow.path,
+      session.user.id,
+      repoRow.name,
+      branchName,
+      baseBranch,
+    );
+
+    // Upsert worktree in DB (find existing or insert new)
+    let worktreeRow = await db.query.worktrees.findFirst({
+      where: and(
+        eq(worktrees.userId, session.user.id),
+        eq(worktrees.repositoryId, repoRow.id),
+        eq(worktrees.branch, branchName),
+      ),
+    });
+    if (!worktreeRow) {
+      const [inserted] = await db
+        .insert(worktrees)
+        .values({
+          userId: session.user.id,
+          repositoryId: repoRow.id,
+          path: worktreePath,
+          branch: branchName,
+          preferredAgent: agentType,
+        })
+        .returning();
+      worktreeRow = inserted!;
+    }
+
+    // --- Register with legacy services for PTY spawning ---
     const { gitService, agentService } = await getServices();
 
     const existingLegacy = gitService
@@ -206,14 +330,31 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       existingLegacy ??
       (await gitService.addRepository(repoRow.path, session.user.id));
 
-    const worktree = await gitService.createWorktree(
-      legacyRepo.id,
-      branchName,
-      baseBranch,
-      agentType,
+    // Register the worktree in legacy in-memory map so agentService can find it
+    const legacyWorktreeId = Buffer.from(worktreePath).toString("base64");
+    const existingLegacyWorktree = gitService.getWorktree(
+      legacyWorktreeId,
       session.user.id,
     );
+    if (!existingLegacyWorktree) {
+      // Manually register - set it in the legacy map
+      const legacyWorktree = {
+        id: legacyWorktreeId,
+        userId: session.user.id,
+        path: worktreePath,
+        branch: branchName,
+        repositoryId: legacyRepo.id,
+        preferredAgent: agentType,
+        instances: [] as any[],
+        isMainWorktree: false,
+      };
+      // Access internal map via the public worktree loading mechanism
+      // We need to register it so agentService.startInstance can find it
+      (gitService as any).worktrees?.set(legacyWorktreeId, legacyWorktree);
+      legacyRepo.worktrees?.push(legacyWorktree);
+    }
 
+    // --- Task run (optional) ---
     let taskRun:
       | {
           id: string;
@@ -230,7 +371,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           kanbangerIssueId: task.id,
           kanbangerIssueIdentifier: task.identifier,
           repositoryId: repoRow.id,
-          worktreeId: worktree.id,
+          worktreeId: worktreeRow.id,
           status: "starting",
           branch: branchName,
         })
@@ -243,12 +384,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       taskRun = createdTaskRun ?? null;
     }
 
+    // --- Start agent instance ---
     try {
       const instance = await agentService.startInstance(
-        worktree.id,
+        legacyWorktreeId,
         agentType,
         session.user.id,
       );
+
+      // Persist agent instance to DB
+      await db
+        .insert(agentInstances)
+        .values({
+          userId: session.user.id,
+          repositoryId: repoRow.id,
+          worktreeId: worktreeRow.id,
+          agentType,
+          status: "running",
+          pid: instance.pid ?? null,
+        })
+        .onConflictDoNothing();
 
       if (taskRun) {
         const [updatedTaskRun] = await db
@@ -272,14 +427,36 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             kanbangerProjectId: repoRow.kanbangerProjectId,
           },
           taskRun,
-          worktree,
-          instance,
+          worktree: {
+            id: worktreeRow.id,
+            path: worktreePath,
+            branch: branchName,
+          },
+          instance: {
+            id: instance.id,
+            status: instance.status,
+            agentType: instance.agentType,
+          },
         },
         { status: 201 },
       );
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
+
+      // Persist failed instance to DB
+      await db
+        .insert(agentInstances)
+        .values({
+          userId: session.user.id,
+          repositoryId: repoRow.id,
+          worktreeId: worktreeRow.id,
+          agentType,
+          status: "error",
+          errorMessage: errorMessage,
+        })
+        .onConflictDoNothing();
+
       if (taskRun) {
         await db
           .update(taskRuns)

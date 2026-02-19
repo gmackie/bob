@@ -1,23 +1,31 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { GitService } from '../src/services/git';
-import { DatabaseService } from '../src/database/database';
-import { AgentType } from '../src/types';
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { DatabaseService } from "../src/database/database";
+import { GitService } from "../src/services/git";
+import { AgentType } from "../src/types";
 
 // Mock child_process
-vi.mock('child_process', () => ({
+vi.mock("child_process", () => ({
   exec: vi.fn((cmd, opts, callback) => {
-    if (callback) callback(null, { stdout: 'mock output', stderr: '' });
-  })
+    if (callback) callback(null, { stdout: "mock output", stderr: "" });
+  }),
 }));
 
 // Mock fs
-vi.mock('fs', () => ({
-  existsSync: vi.fn(() => true),
-  statSync: vi.fn(() => ({ isDirectory: () => true })),
-  mkdirSync: vi.fn()
-}));
+vi.mock("fs", () => {
+  const api = {
+    existsSync: vi.fn(() => true),
+    statSync: vi.fn(() => ({ isDirectory: () => true })),
+    mkdirSync: vi.fn(),
+  };
 
-describe('GitService', () => {
+  return {
+    ...api,
+    default: api,
+  };
+});
+
+describe("GitService", () => {
   let gitService: GitService;
   let mockDb: any;
 
@@ -28,55 +36,72 @@ describe('GitService', () => {
       getAllRepositories: vi.fn().mockResolvedValue([]),
       getRepositories: vi.fn().mockResolvedValue([]),
       getWorktreesByRepository: vi.fn().mockResolvedValue([]),
-      deleteWorktree: vi.fn()
+      deleteWorktree: vi.fn(),
     };
     gitService = new GitService(mockDb as DatabaseService);
   });
 
-  describe('createWorktree', () => {
-    it('should create worktree with default agent type (claude)', async () => {
-      const branchName = 'feature-test';
+  describe("createWorktree", () => {
+    it("should create worktree with default agent type (claude)", async () => {
+      const branchName = "feature-test";
 
       // Add a repository first - it will generate its own ID
-      const repo = await gitService.addRepository('/test/repo');
+      const repo = await gitService.addRepository("/test/repo");
       const repoId = repo.id;
 
       const worktree = await gitService.createWorktree(repoId, branchName);
 
       expect(worktree).toBeDefined();
       expect(worktree.branch).toBe(branchName);
-      expect(worktree.preferredAgent).toBe('claude');
+      expect(worktree.preferredAgent).toBe("claude");
       expect(mockDb.saveWorktree).toHaveBeenCalledWith(
-        expect.objectContaining({ preferredAgent: 'claude' })
+        expect.objectContaining({ preferredAgent: "claude" }),
       );
     });
 
-    it('should create worktree with specified agent type', async () => {
-      const branchName = 'feature-test';
-      const agentType: AgentType = 'codex';
+    it("should create worktree with specified agent type", async () => {
+      const branchName = "feature-test";
+      const agentType: AgentType = "codex";
 
       // Add a repository first
-      const repo = await gitService.addRepository('/test/repo');
+      const repo = await gitService.addRepository("/test/repo");
       const repoId = repo.id;
 
-      const worktree = await gitService.createWorktree(repoId, branchName, undefined, agentType);
+      const worktree = await gitService.createWorktree(
+        repoId,
+        branchName,
+        undefined,
+        agentType,
+      );
 
       expect(worktree).toBeDefined();
       expect(worktree.branch).toBe(branchName);
-      expect(worktree.preferredAgent).toBe('codex');
+      expect(worktree.preferredAgent).toBe("codex");
       expect(mockDb.saveWorktree).toHaveBeenCalledWith(
-        expect.objectContaining({ preferredAgent: 'codex' })
+        expect.objectContaining({ preferredAgent: "codex" }),
       );
     });
 
-    it('should handle different agent types', async () => {
-      const repo = await gitService.addRepository('/test/repo');
+    it("should handle different agent types", async () => {
+      const repo = await gitService.addRepository("/test/repo");
       const repoId = repo.id;
 
-      const agents: AgentType[] = ['claude', 'codex', 'gemini', 'kiro', 'cursor-agent', 'opencode'];
+      const agents: AgentType[] = [
+        "claude",
+        "codex",
+        "gemini",
+        "kiro",
+        "cursor-agent",
+        "opencode",
+      ];
 
       for (const agent of agents) {
-        const worktree = await gitService.createWorktree(repoId, `branch-${agent}`, undefined, agent);
+        const worktree = await gitService.createWorktree(
+          repoId,
+          `branch-${agent}`,
+          undefined,
+          agent,
+        );
         expect(worktree.preferredAgent).toBe(agent);
       }
     });
