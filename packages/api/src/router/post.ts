@@ -1,4 +1,3 @@
-import type { TRPCRouterRecord } from "@trpc/server";
 import { z } from "zod/v4";
 
 import { desc, eq } from "@bob/db";
@@ -6,7 +5,7 @@ import { CreatePostSchema, Post } from "@bob/db/schema";
 
 import { protectedProcedure, publicProcedure } from "../trpc";
 
-export const postRouter: TRPCRouterRecord = {
+export const postRouter = {
   all: publicProcedure.query(({ ctx }) => {
     return ctx.db.query.Post.findMany({
       orderBy: desc(Post.id),

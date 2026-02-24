@@ -20,6 +20,8 @@ interface AgentPanelProps {
 
 type ActiveTab = "dashboard" | "claude" | "directory" | "git";
 
+type SessionType = "claude" | "directory";
+
 export function AgentPanel({
   selectedWorktree,
   selectedInstance,
@@ -30,7 +32,6 @@ export function AgentPanel({
   error,
   isLeftPanelCollapsed,
 }: AgentPanelProps) {
-  // Terminal session state
   const [claudeTerminalSessionId, setClaudeTerminalSessionId] = useState<
     string | null
   >(null);
@@ -44,27 +45,22 @@ export function AgentPanel({
   const [isRestarting, setIsRestarting] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
 
-  // Git state
   const [gitDiff, setGitDiff] = useState<string>("");
   const [gitLoading, setGitLoading] = useState(false);
 
-  // Session cache for storing terminal session IDs per instance
   const sessionCacheRef = useRef<
     Map<string, { claude: string | null; directory: string | null }>
   >(new Map());
 
-  // Reset state when switching instances
   useEffect(() => {
-    console.log(
-      `Switching to instance: ${selectedInstance?.id}, clearing session state`,
-    );
     setClaudeTerminalSessionId(null);
     setDirectoryTerminalSessionId(null);
     setGitDiff("");
     setActiveTab("dashboard");
+    setIsCreatingClaudeSession(false);
+    setIsCreatingDirectorySession(false);
   }, [selectedInstance?.id]);
 
-  // Restore cached sessions when switching instances
   useEffect(() => {
     if (selectedInstance?.id) {
       const cached = sessionCacheRef.current.get(selectedInstance.id);
@@ -77,23 +73,43 @@ export function AgentPanel({
     }
   }, [selectedInstance?.id]);
 
+  const getBranchDisplayName = (branch: string) => {
+    return branch.replace(/^refs\/heads\//, "");
+  };
+
+  const getStatusClass = (status: string) => {
+    switch (status) {
+      case "running":
+        return "is-running";
+      case "starting":
+        return "is-warning";
+      case "error":
+        return "is-danger";
+      case "stopped":
+        return "is-muted";
+      default:
+        return "is-muted";
+    }
+  };
+
+  const getInstanceDisplayName = () => {
+    if (!selectedInstance) return "Idle";
+    const agentType = selectedInstance.agentType || "claude";
+    return agentType.charAt(0).toUpperCase() + agentType.slice(1);
+  };
+
   const handleOpenClaudeTerminal = useCallback(async () => {
     if (!selectedInstance || selectedInstance.status !== "running") return;
 
     setIsCreatingClaudeSession(true);
     try {
-      // First check for existing Claude session
-      const existingSessions = await api.getTerminalSessions(
-        selectedInstance.id,
-      );
+      const existingSessions = await api.getTerminalSessions(selectedInstance.id);
       const claudeSession = existingSessions.find((s) => s.type === "claude");
 
       if (claudeSession) {
         setClaudeTerminalSessionId(claudeSession.id);
       } else {
-        const { sessionId } = await api.createTerminalSession(
-          selectedInstance.id,
-        );
+        const { sessionId } = await api.createTerminalSession(selectedInstance.id);
         setClaudeTerminalSessionId(sessionId);
         const cached = sessionCacheRef.current.get(selectedInstance.id) || {
           claude: null,
@@ -117,10 +133,7 @@ export function AgentPanel({
 
     setIsCreatingDirectorySession(true);
     try {
-      // First check for existing directory session
-      const existingSessions = await api.getTerminalSessions(
-        selectedInstance.id,
-      );
+      const existingSessions = await api.getTerminalSessions(selectedInstance.id);
       const directorySession = existingSessions.find(
         (s) => s.type === "directory",
       );
@@ -150,7 +163,7 @@ export function AgentPanel({
   }, [selectedInstance]);
 
   const handleCloseTerminal = useCallback(
-    async (terminalType: "claude" | "directory") => {
+    async (terminalType: SessionType) => {
       if (terminalType === "claude" && claudeTerminalSessionId) {
         try {
           await api.closeTerminalSession(claudeTerminalSessionId);
@@ -193,7 +206,6 @@ export function AgentPanel({
 
     setIsRestarting(true);
     try {
-      // Close any existing terminal sessions
       if (claudeTerminalSessionId) {
         await handleCloseTerminal("claude");
       }
@@ -214,7 +226,6 @@ export function AgentPanel({
 
     setIsStopping(true);
     try {
-      // Close any existing terminal sessions
       if (claudeTerminalSessionId) {
         await handleCloseTerminal("claude");
       }
@@ -230,7 +241,6 @@ export function AgentPanel({
     }
   };
 
-  // Git operations
   const loadGitDiff = async () => {
     if (!selectedWorktree) return;
 
@@ -246,615 +256,452 @@ export function AgentPanel({
     }
   };
 
-  // Load git diff when switching to git tab
   useEffect(() => {
     if (activeTab === "git" && selectedWorktree) {
       loadGitDiff();
     }
   }, [activeTab, selectedWorktree?.id]);
 
+  const handleOpenSession = useCallback(
+    (session: SessionType) => {
+      setActiveTab(session);
+      if (session === "claude" && !claudeTerminalSessionId) {
+        if (selectedInstance?.status === "running") {
+          setTimeout(() => {
+            void handleOpenClaudeTerminal();
+          }, 80);
+        }
+        return;
+      }
+
+      if (session === "directory" && !directoryTerminalSessionId) {
+        setTimeout(() => {
+          void handleOpenDirectoryTerminal();
+        }, 80);
+      }
+    },
+    [
+      claudeTerminalSessionId,
+      directoryTerminalSessionId,
+      selectedInstance?.status,
+      handleOpenClaudeTerminal,
+      handleOpenDirectoryTerminal,
+    ],
+  );
+
   if (!selectedWorktree) {
     return (
       <div
-        className="right-panel"
-        style={{
-          width: isLeftPanelCollapsed
-            ? "calc(100% - 60px)"
-            : "calc(100% - 360px)",
-        }}
+        className={`dash-agentPanel ${
+          isLeftPanelCollapsed ? "is-collapsed" : "is-expanded"
+        }`}
       >
-        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+        <div className="dash-agentPanelContent">
           <SystemStatusPanel />
-          <div className="empty-terminal" style={{ flex: 1 }}>
-            <p>Select a worktree from the left panel to get started.</p>
-            <p>
-              If you don't see any repositories yet, add one using the
-              &quot;Add Repository&quot; button.
-            </p>
+          <div className="dash-agentEmptyState" style={{ flex: 1 }}>
+            <div className="dash-agentEmptyStateInner">
+              <h3 className="dash-agentEmptyStateTitle">Select a worktree</h3>
+              <p>Pick one from the left panel to continue.</p>
+              <p>
+                Add repositories with the <strong>Add Repository</strong> action to
+                get started.
+              </p>
+            </div>
           </div>
         </div>
       </div>
     );
   }
 
-  const getBranchDisplayName = (branch: string) => {
-    return branch.replace(/^refs\/heads\//, "");
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "running":
-        return "#28a745";
-      case "starting":
-        return "#ffc107";
-      case "error":
-        return "#dc3545";
-      case "stopped":
-        return "#6c757d";
-      default:
-        return "#888";
-    }
-  };
-
-  const getAgentDisplayName = () => {
-    if (!selectedInstance) return "Agent";
-    const agentType = selectedInstance.agentType || "claude";
-    return agentType.charAt(0).toUpperCase() + agentType.slice(1);
-  };
+  const isInstanceRunning = selectedInstance?.status === "running";
+  const canStartTerminal = selectedInstance?.status === "running";
 
   return (
     <div
-      className="right-panel"
+      className="dash-agentPanel"
       style={{
         width: isLeftPanelCollapsed
           ? "calc(100% - 60px)"
           : "calc(100% - 360px)",
       }}
     >
-      {/* Panel Header */}
-      <div
-        className="panel-header"
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          padding: "12px 16px",
-          borderBottom: "1px solid #333",
-          backgroundColor: "#1e1e1e",
-        }}
-      >
-        <div>
-          <h3 style={{ margin: 0, color: "#ffffff" }}>
-            {getAgentDisplayName()} Instance
-            {selectedInstance && (
+      <div className="dash-agentPanelHeader">
+        <div className="dash-agentPanelHeaderTop">
+          <div className="dash-agentPanelIdentity">
+            <div className="dash-agentPanelTitleRow">
+              <h2 className="dash-agentPanelTitle">
+                {getInstanceDisplayName()} Instance
+              </h2>
               <span
-                style={{
-                  marginLeft: "12px",
-                  fontSize: "11px",
-                  padding: "2px 6px",
-                  borderRadius: "3px",
-                  backgroundColor: getStatusColor(selectedInstance.status),
-                  color:
-                    selectedInstance.status === "starting" ? "#000" : "#fff",
-                }}
+                className={`dash-agentPanelStatus ${selectedInstance ? getStatusClass(selectedInstance.status) : "is-muted"}`}
               >
-                {selectedInstance.status}
+                {selectedInstance ? selectedInstance.status : "idle"}
               </span>
+            </div>
+            <div className="dash-agentPanelMeta">
+              <span>{getBranchDisplayName(selectedWorktree.branch)}</span>
+              <span className="dash-agentPanelMetaDot">•</span>
+              <span className="dash-truncateText">{selectedWorktree.path}</span>
+            </div>
+          </div>
+
+          <div className="dash-agentPanelActions">
+            {isInstanceRunning && (
+              <button
+                className="dash-agentPanelAction is-danger"
+                onClick={handleStopInstance}
+                disabled={isStopping}
+              >
+                {isStopping ? "Stopping..." : `Stop ${getInstanceDisplayName()}`}
+              </button>
             )}
-          </h3>
-          <div style={{ fontSize: "12px", color: "#888", marginTop: "2px" }}>
-            {getBranchDisplayName(selectedWorktree.branch)} •{" "}
-            {selectedWorktree.path}
+
+            {(selectedInstance?.status === "stopped" ||
+              selectedInstance?.status === "error") && (
+              <button
+                className="dash-agentPanelAction"
+                onClick={handleRestartInstance}
+                disabled={isRestarting}
+              >
+                {isRestarting
+                  ? "Restarting..."
+                  : `Restart ${getInstanceDisplayName()}`}
+              </button>
+            )}
+
+            {!selectedInstance && (
+              <button
+                className="dash-agentPanelAction is-primary"
+                onClick={() => onStartInstance(selectedWorktree.id)}
+              >
+                ▶ Start Agent
+              </button>
+            )}
+
+            <button
+              className="dash-agentPanelAction is-danger"
+              onClick={() => {
+                const confirmed = confirm(
+                  `Delete worktree "${getBranchDisplayName(selectedWorktree.branch)}"?`,
+                );
+                if (confirmed) {
+                  onDeleteWorktree(selectedWorktree.id, false);
+                }
+              }}
+            >
+              Delete worktree
+            </button>
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: "8px" }}>
-          {selectedInstance?.status === "running" && (
-            <button
-              onClick={handleStopInstance}
-              disabled={isStopping}
-              className="action-button danger"
-              style={{ fontSize: "12px", padding: "6px 12px" }}
-            >
-              {isStopping ? "Stopping..." : `Stop ${getAgentDisplayName()}`}
-            </button>
-          )}
+        <div className="dash-agentDockRow">
+          <div className="dash-agentDockTitle">Session shortcuts</div>
+          <div className="dash-agentDockChips">
+            <div className="dash-agentSessionChipWrap">
+              <button
+                className={`dash-agentSessionChip ${
+                  activeTab === "claude" ? "is-active" : ""
+                }`}
+                onClick={() => handleOpenSession("claude")}
+              >
+                <span
+                  className={`dash-sessionDot ${
+                    isInstanceRunning ? "is-running" : "is-muted"
+                  }`}
+                />
+                <span className="dash-agentSessionChipInfo">
+                  <span className="dash-agentSessionChipTitle">
+                    {getInstanceDisplayName()} Terminal
+                  </span>
+                  <span className="dash-agentSessionChipSubline">
+                    {claudeTerminalSessionId
+                      ? `Active ${claudeTerminalSessionId.slice(-8)}`
+                      : isInstanceRunning
+                        ? isCreatingClaudeSession
+                          ? "Connecting"
+                          : "Not connected"
+                        : "Unavailable"}
+                  </span>
+                </span>
+              </button>
+              {claudeTerminalSessionId ? (
+                <button
+                  className="dash-agentSessionChipClose"
+                  onClick={() => {
+                    void handleCloseTerminal("claude");
+                  }}
+                  title="Close Claude terminal session"
+                >
+                  ×
+                </button>
+              ) : null}
+            </div>
 
-          {(selectedInstance?.status === "stopped" ||
-            selectedInstance?.status === "error") && (
-            <button
-              onClick={handleRestartInstance}
-              disabled={isRestarting}
-              className="action-button"
-              style={{ fontSize: "12px", padding: "6px 12px" }}
-            >
-              {isRestarting
-                ? "Restarting..."
-                : `Restart ${getAgentDisplayName()}`}
-            </button>
-          )}
-
-          {!selectedInstance && (
-            <button
-              onClick={() => onStartInstance(selectedWorktree.id)}
-              className="action-button primary"
-              style={{ fontSize: "12px", padding: "6px 12px" }}
-            >
-              ▶ Start Agent
-            </button>
-          )}
-
-          <button
-            onClick={() => {
-              if (
-                confirm(
-                  `Delete worktree "${getBranchDisplayName(selectedWorktree.branch)}"?`,
-                )
-              ) {
-                onDeleteWorktree(selectedWorktree.id, false);
-              }
-            }}
-            className="action-button danger"
-            style={{ fontSize: "12px", padding: "6px 12px" }}
-          >
-            🗑 Delete
-          </button>
+            <div className="dash-agentSessionChipWrap">
+              <button
+                className={`dash-agentSessionChip ${
+                  activeTab === "directory" ? "is-active" : ""
+                }`}
+                onClick={() => handleOpenSession("directory")}
+              >
+                <span className={`dash-sessionDot ${selectedInstance ? "is-muted" : "is-muted"}`} />
+                <span className="dash-agentSessionChipInfo">
+                  <span className="dash-agentSessionChipTitle">
+                    Directory Terminal
+                  </span>
+                  <span className="dash-agentSessionChipSubline">
+                    {directoryTerminalSessionId
+                      ? `Active ${directoryTerminalSessionId.slice(-8)}`
+                      : selectedInstance
+                        ? isCreatingDirectorySession
+                          ? "Connecting"
+                          : "Not connected"
+                        : "Unavailable"}
+                  </span>
+                </span>
+              </button>
+              {directoryTerminalSessionId ? (
+                <button
+                  className="dash-agentSessionChipClose"
+                  onClick={() => {
+                    void handleCloseTerminal("directory");
+                  }}
+                  title="Close directory terminal session"
+                >
+                  ×
+                </button>
+              ) : null}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Error display */}
-      {error && (
-        <div
-          style={{
-            background: "#2d1b1b",
-            border: "1px solid #5a1f1f",
-            color: "#ff6b6b",
-            padding: "12px 16px",
-            fontSize: "14px",
-            borderBottom: "1px solid #333",
-          }}
-        >
-          <strong>Error:</strong> {error}
-        </div>
-      )}
+      {error ? <div className="dash-agentPanelError">{error}</div> : null}
 
-      {/* Tabbed interface */}
-      <div style={{ display: "flex", borderBottom: "1px solid #444" }}>
+      <div className="dash-agentTabs" role="tablist" aria-label="Worktree views">
         <button
+          className={`dash-agentTab ${activeTab === "dashboard" ? "is-active" : ""}`}
           onClick={() => setActiveTab("dashboard")}
-          style={{
-            background: activeTab === "dashboard" ? "#444" : "transparent",
-            border: "none",
-            color: "#fff",
-            padding: "12px 24px",
-            cursor: "pointer",
-            borderBottom:
-              activeTab === "dashboard"
-                ? "2px solid #007acc"
-                : "2px solid transparent",
-            fontSize: "13px",
-          }}
+          aria-label="Dashboard tab"
         >
           Dashboard
         </button>
         <button
+          className={`dash-agentTab ${activeTab === "claude" ? "is-active" : ""}`}
           onClick={() => {
-            if (!selectedInstance) return;
+            handleOpenSession("claude");
             setActiveTab("claude");
-            if (
-              !claudeTerminalSessionId &&
-              selectedInstance?.status === "running"
-            ) {
-              setTimeout(() => handleOpenClaudeTerminal(), 100);
-            }
           }}
-          disabled={!selectedInstance}
-          style={{
-            background: activeTab === "claude" ? "#444" : "transparent",
-            border: "none",
-            color: !selectedInstance ? "#666" : "#fff",
-            padding: "12px 24px",
-            cursor: !selectedInstance ? "not-allowed" : "pointer",
-            borderBottom:
-              activeTab === "claude"
-                ? "2px solid #007acc"
-                : "2px solid transparent",
-            fontSize: "13px",
-            opacity: !selectedInstance ? 0.5 : 1,
-          }}
+          disabled={!selectedInstance || !canStartTerminal}
+          aria-label="Claude tab"
         >
-          {getAgentDisplayName()} {claudeTerminalSessionId && "●"}
+          {getInstanceDisplayName()} Terminal
+          {claudeTerminalSessionId ? " • open" : ""}
         </button>
         <button
+          className={`dash-agentTab ${activeTab === "directory" ? "is-active" : ""}`}
           onClick={() => {
+            handleOpenSession("directory");
             setActiveTab("directory");
-            if (
-              !directoryTerminalSessionId &&
-              selectedInstance?.status === "running"
-            ) {
-              setTimeout(() => handleOpenDirectoryTerminal(), 100);
-            }
           }}
-          style={{
-            background: activeTab === "directory" ? "#444" : "transparent",
-            border: "none",
-            color: "#fff",
-            padding: "12px 24px",
-            cursor: "pointer",
-            borderBottom:
-              activeTab === "directory"
-                ? "2px solid #007acc"
-                : "2px solid transparent",
-            fontSize: "13px",
-          }}
+          aria-label="Directory terminal tab"
         >
-          Terminal {directoryTerminalSessionId && "●"}
+          Directory Terminal
+          {directoryTerminalSessionId ? " • open" : ""}
         </button>
         <button
+          className={`dash-agentTab ${activeTab === "git" ? "is-active" : ""}`}
           onClick={() => setActiveTab("git")}
-          style={{
-            background: activeTab === "git" ? "#444" : "transparent",
-            border: "none",
-            color: "#fff",
-            padding: "12px 24px",
-            cursor: "pointer",
-            borderBottom:
-              activeTab === "git"
-                ? "2px solid #007acc"
-                : "2px solid transparent",
-            fontSize: "13px",
-          }}
+          aria-label="Git diff tab"
         >
-          Git {gitDiff && gitDiff.trim() && "●"}
+          Git
+          {gitDiff && gitDiff.trim() ? " • changes" : ""}
         </button>
       </div>
 
-      {/* Tab Content */}
-      <div
-        className="terminal-content"
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          minHeight: 0,
-        }}
-      >
-        {/* Dashboard Tab */}
+      <div className="dash-agentPanelContent">
         <div
-          style={{
-            display: activeTab === "dashboard" ? "flex" : "none",
-            flexDirection: "column",
-            flex: 1,
-            minHeight: 0,
-            padding: "20px",
-            overflow: "auto",
-          }}
+          className={`dash-agentTabPanel ${
+            activeTab === "dashboard" ? "is-visible" : ""
+          }`}
         >
-          <h3 style={{ marginBottom: "20px", color: "#e6edf3" }}>
-            Worktree Dashboard
-          </h3>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
-              gap: "16px",
-              marginBottom: "20px",
-            }}
-          >
-            <div
-              style={{
-                background: "#21262d",
-                padding: "16px",
-                borderRadius: "6px",
-                border: "1px solid #30363d",
-              }}
-            >
-              <h4
-                style={{
-                  color: "#8b949e",
-                  fontSize: "12px",
-                  marginBottom: "8px",
-                  textTransform: "uppercase",
-                }}
-              >
-                Branch
-              </h4>
-              <p style={{ color: "#e6edf3", fontSize: "16px", margin: 0 }}>
+          <div className="dash-agentKpiGrid">
+            <article className="dash-agentKpiCard">
+              <h3 className="dash-agentKpiLabel">Branch</h3>
+              <p className="dash-agentKpiValue">
                 {getBranchDisplayName(selectedWorktree.branch)}
               </p>
-            </div>
-
-            <div
-              style={{
-                background: "#21262d",
-                padding: "16px",
-                borderRadius: "6px",
-                border: "1px solid #30363d",
-              }}
-            >
-              <h4
-                style={{
-                  color: "#8b949e",
-                  fontSize: "12px",
-                  marginBottom: "8px",
-                  textTransform: "uppercase",
-                }}
-              >
-                Location
-              </h4>
-              <p
-                style={{
-                  color: "#e6edf3",
-                  fontSize: "14px",
-                  margin: 0,
-                  fontFamily: "monospace",
-                }}
-              >
-                {selectedWorktree.path}
+            </article>
+            <article className="dash-agentKpiCard">
+              <h3 className="dash-agentKpiLabel">Location</h3>
+              <p className="dash-agentKpiCode">{selectedWorktree.path}</p>
+            </article>
+            <article className="dash-agentKpiCard">
+              <h3 className="dash-agentKpiLabel">Instance</h3>
+              <p className="dash-agentKpiValue">
+                {selectedInstance
+                  ? `${getInstanceDisplayName()}`
+                  : "Not started"}
               </p>
-            </div>
+            </article>
+            <article className="dash-agentKpiCard">
+              <h3 className="dash-agentKpiLabel">Worktree</h3>
+              <p className="dash-agentKpiCode">{selectedWorktree.id}</p>
+            </article>
           </div>
 
-          <div style={{ display: "flex", gap: "12px", marginTop: "24px" }}>
+          <div className="dash-agentActionRow">
             <button
+              className="dash-agentPanelAction is-success"
               onClick={() => {
                 const url = `${window.location.origin}/?worktree=${selectedWorktree.id}`;
-                navigator.clipboard.writeText(url);
-              }}
-              style={{
-                background: "#238636",
-                border: "none",
-                color: "#fff",
-                padding: "10px 20px",
-                borderRadius: "6px",
-                cursor: "pointer",
-                fontSize: "14px",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
+                void navigator.clipboard.writeText(url);
               }}
             >
-              🔗 Copy Worktree Link
+              🔗 Copy worktree deep-link
+            </button>
+            <button
+              className="dash-agentPanelAction"
+              onClick={() => setActiveTab("git")}
+            >
+              Inspect git changes
+            </button>
+            <button
+              className="dash-agentPanelAction"
+              onClick={() => setActiveTab("claude")}
+              disabled={!selectedInstance}
+            >
+              Open console
             </button>
           </div>
         </div>
 
-        {/* Agent Terminal Tab */}
         <div
-          style={{
-            display: activeTab === "claude" ? "flex" : "none",
-            flexDirection: "column",
-            flex: 1,
-            minHeight: 0,
-          }}
+          className={`dash-agentTabPanel ${
+            activeTab === "claude" ? "is-visible" : ""
+          }`}
         >
           {claudeTerminalSessionId ? (
             <TerminalComponent
               key={claudeTerminalSessionId}
               sessionId={claudeTerminalSessionId}
-              onClose={() => handleCloseTerminal("claude")}
+              onClose={() => {
+                void handleCloseTerminal("claude");
+              }}
             />
-          ) : selectedInstance?.status === "running" ? (
-            <div className="empty-terminal" style={{ flex: 1 }}>
-              <div style={{ textAlign: "center" }}>
-                <h4 style={{ color: "#666", marginBottom: "8px" }}>
-                  {getAgentDisplayName()} Terminal
-                </h4>
-                {isCreatingClaudeSession ? (
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "8px",
-                      color: "#888",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: "16px",
-                        height: "16px",
-                        border: "2px solid #444",
-                        borderTop: "2px solid #888",
-                        borderRadius: "50%",
-                        animation: "spin 1s linear infinite",
-                      }}
-                    />
-                    Connecting to {getAgentDisplayName()}...
-                  </div>
-                ) : (
-                  <>
-                    <p
-                      style={{
-                        color: "#888",
-                        fontSize: "14px",
-                        marginBottom: "16px",
-                      }}
-                    >
-                      Connect to the running {getAgentDisplayName()} instance
-                      for AI assistance
-                    </p>
-                    <button
-                      onClick={handleOpenClaudeTerminal}
-                      className="action-button primary"
-                      style={{ fontSize: "14px", padding: "8px 16px" }}
-                    >
-                      Connect to {getAgentDisplayName()}
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          ) : selectedInstance?.status === "starting" ? (
-            <div className="empty-terminal" style={{ flex: 1 }}>
-              <div style={{ textAlign: "center" }}>
-                <h4 style={{ color: "#666", marginBottom: "8px" }}>
-                  {getAgentDisplayName()} Terminal
-                </h4>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "8px",
-                    color: "#888",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: "16px",
-                      height: "16px",
-                      border: "2px solid #444",
-                      borderTop: "2px solid #ffc107",
-                      borderRadius: "50%",
-                      animation: "spin 1s linear infinite",
-                    }}
-                  />
-                  Starting {getAgentDisplayName()} instance...
+          ) : isInstanceRunning ? (
+            <div className="dash-emptyStateWrapper">
+              {isCreatingClaudeSession ? (
+                <div className="dash-agentSpinnerRow">
+                  <span className="dash-spinner" aria-hidden="true" />
+                  <p>Connecting to {getInstanceDisplayName()} terminal...</p>
                 </div>
-              </div>
+              ) : (
+                <>
+                  <h3 className="dash-agentEmptyStateTitle">
+                    Claude terminal unavailable
+                  </h3>
+                  <p className="dash-agentEmptyStateBody">
+                    Instance is running. Open a fresh session to continue.
+                  </p>
+                  <button
+                    className="dash-agentPanelAction is-success"
+                    onClick={handleOpenClaudeTerminal}
+                  >
+                    Connect terminal
+                  </button>
+                </>
+              )}
             </div>
           ) : (
-            <div className="empty-terminal" style={{ flex: 1 }}>
-              <div style={{ textAlign: "center" }}>
-                <h4 style={{ color: "#666", marginBottom: "8px" }}>
-                  {getAgentDisplayName()} Terminal
-                </h4>
-                <p style={{ color: "#888", fontSize: "14px" }}>
-                  {getAgentDisplayName()} instance must be running to connect
-                </p>
-              </div>
+            <div className="dash-emptyStateWrapper">
+              <h3 className="dash-agentEmptyStateTitle">
+                {getInstanceDisplayName()} terminal unavailable
+              </h3>
+              <p className="dash-agentEmptyStateBody">
+                Start the instance to launch a session.
+              </p>
+              {!selectedInstance ? (
+                <button
+                  className="dash-agentPanelAction is-primary"
+                  onClick={() => onStartInstance(selectedWorktree.id)}
+                >
+                  Start agent
+                </button>
+              ) : null}
             </div>
           )}
         </div>
 
-        {/* Directory Terminal Tab */}
         <div
-          style={{
-            display: activeTab === "directory" ? "flex" : "none",
-            flexDirection: "column",
-            flex: 1,
-            minHeight: 0,
-          }}
+          className={`dash-agentTabPanel ${
+            activeTab === "directory" ? "is-visible" : ""
+          }`}
         >
           {directoryTerminalSessionId ? (
             <TerminalComponent
+              key={directoryTerminalSessionId}
               sessionId={directoryTerminalSessionId}
-              onClose={() => handleCloseTerminal("directory")}
+              onClose={() => {
+                void handleCloseTerminal("directory");
+              }}
             />
           ) : (
-            <div className="empty-terminal" style={{ flex: 1 }}>
-              <div style={{ textAlign: "center" }}>
-                <h4 style={{ color: "#666", marginBottom: "8px" }}>
-                  Directory Terminal
-                </h4>
-                <p
-                  style={{
-                    color: "#888",
-                    fontSize: "14px",
-                    marginBottom: "16px",
-                  }}
-                >
-                  Open a bash shell in the worktree directory
-                </p>
-                {!isCreatingDirectorySession ? (
-                  <button
-                    onClick={handleOpenDirectoryTerminal}
-                    className="action-button primary"
-                    style={{ fontSize: "14px", padding: "8px 16px" }}
-                  >
-                    Open Terminal
-                  </button>
-                ) : (
-                  <div style={{ color: "#888" }}>Connecting...</div>
-                )}
-              </div>
+            <div className="dash-emptyStateWrapper">
+              {selectedInstance ? (
+                <>
+                  <h3 className="dash-agentEmptyStateTitle">
+                    Directory terminal unavailable
+                  </h3>
+                  <p className="dash-agentEmptyStateBody">
+                    This gives shell access to the selected worktree path.
+                  </p>
+                  {!isCreatingDirectorySession ? (
+                    <button
+                      className="dash-agentPanelAction is-success"
+                      onClick={handleOpenDirectoryTerminal}
+                    >
+                      Open directory shell
+                    </button>
+                  ) : (
+                    <div className="dash-agentSpinnerRow">
+                      <span className="dash-spinner" aria-hidden="true" />
+                      <p>Connecting shell...</p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="dash-agentEmptyStateTitle">No instance</div>
+              )}
             </div>
           )}
         </div>
 
-        {/* Git Tab */}
         <div
-          style={{
-            display: activeTab === "git" ? "flex" : "none",
-            flexDirection: "column",
-            flex: 1,
-            minHeight: 0,
-            padding: "16px",
-            overflow: "auto",
-          }}
+          className={`dash-agentTabPanel ${
+            activeTab === "git" ? "is-visible" : ""
+          }`}
         >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: "16px",
-              borderBottom: "1px solid #444",
-              paddingBottom: "12px",
-            }}
-          >
-            <h4 style={{ color: "#fff", margin: 0 }}>Git Changes</h4>
+          <div className="dash-agentGitHeader">
+            <h3 className="dash-agentGitHeaderTitle">Git changes</h3>
             <button
+              className="dash-agentPanelAction"
               onClick={loadGitDiff}
               disabled={gitLoading}
-              style={{
-                backgroundColor: "#007acc",
-                border: "none",
-                color: "#fff",
-                padding: "8px 16px",
-                borderRadius: "4px",
-                cursor: gitLoading ? "not-allowed" : "pointer",
-                fontSize: "13px",
-                opacity: gitLoading ? 0.6 : 1,
-              }}
             >
               {gitLoading ? "Loading..." : "Refresh"}
             </button>
           </div>
 
           {gitLoading ? (
-            <div
-              style={{ color: "#888", textAlign: "center", padding: "40px" }}
-            >
-              Loading git diff...
-            </div>
+            <div className="dash-agentEmptyStateWrapper">Loading diff...</div>
           ) : gitDiff && gitDiff.trim() ? (
-            <pre
-              style={{
-                background: "#0d1117",
-                border: "1px solid #30363d",
-                borderRadius: "6px",
-                padding: "16px",
-                overflow: "auto",
-                fontSize: "12px",
-                fontFamily:
-                  'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
-                color: "#e6edf3",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-all",
-              }}
-            >
-              {gitDiff}
-            </pre>
+            <pre className="dash-agentGitDiff">{gitDiff}</pre>
           ) : (
-            <div
-              style={{ color: "#888", textAlign: "center", padding: "40px" }}
-            >
-              No uncommitted changes
-            </div>
+            <div className="dash-agentEmptyStateWrapper">No uncommitted changes.</div>
           )}
         </div>
       </div>
-
-      {/* CSS for spinner animation */}
-      <style>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   );
 }

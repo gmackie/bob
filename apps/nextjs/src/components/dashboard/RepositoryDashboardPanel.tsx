@@ -14,245 +14,89 @@ export function RepositoryDashboardPanel({
   onSelectWorktree,
 }: RepositoryDashboardPanelProps) {
   return (
-    <div
-      className="right-panel"
-      style={{
-        width: isLeftPanelCollapsed
-          ? "calc(100% - 60px)"
-          : "calc(100% - 360px)",
-      }}
+    <main
+      className={`dash-repoDashboardPanel ${
+        isLeftPanelCollapsed ? "is-collapsed" : "is-expanded"
+      }`}
     >
-      <div className="panel-header">
+      <header className="dash-repoDashboardHeader">
         <div>
-          <h3 style={{ margin: 0, color: "#ffffff" }}>Repository Dashboard</h3>
-          <div style={{ fontSize: "12px", color: "#888", marginTop: "2px" }}>
-            {repository.name} &bull; {repository.path}
-          </div>
+          <div className="dash-repoDashboardTag">Repository dashboard</div>
+          <h1 className="dash-repoDashboardTitle">{repository.name}</h1>
+          <p className="dash-repoDashboardPath" title={repository.path}>
+            {repository.path}
+          </p>
         </div>
-      </div>
+        <div className="dash-repoDashboardCounter">
+          {repository.worktrees.length} worktree
+          {repository.worktrees.length === 1 ? "" : "s"}
+        </div>
+      </header>
 
-      <div
-        className="terminal-content"
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          padding: "24px",
-          overflow: "auto",
-        }}
-      >
-        {/* Repository Stats */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
-            gap: "16px",
-            marginBottom: "24px",
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: "#1a1a1a",
-              border: "1px solid #333",
-              borderRadius: "8px",
-              padding: "20px",
-            }}
-          >
-            <div
-              style={{ color: "#888", fontSize: "12px", marginBottom: "4px" }}
-            >
-              MAIN BRANCH
-            </div>
-            <div
-              style={{ color: "#58a6ff", fontSize: "20px", fontWeight: "bold" }}
-            >
-              {repository.mainBranch}
-            </div>
-          </div>
+      <section className="dash-repoDashboardContent">
+        <div className="dash-repoStatsGrid">
+          <article className="dash-repoStatCard">
+            <h3 className="dash-repoStatLabel">Main branch</h3>
+            <p className="dash-repoStatValue">{repository.mainBranch}</p>
+          </article>
 
-          <div
-            style={{
-              backgroundColor: "#1a1a1a",
-              border: "1px solid #333",
-              borderRadius: "8px",
-              padding: "20px",
-            }}
-          >
-            <div
-              style={{ color: "#888", fontSize: "12px", marginBottom: "4px" }}
-            >
-              CURRENT BRANCH
-            </div>
-            <div
-              style={{ color: "#3fb950", fontSize: "20px", fontWeight: "bold" }}
-            >
-              {repository.branch}
-            </div>
-          </div>
+          <article className="dash-repoStatCard">
+            <h3 className="dash-repoStatLabel">Current branch</h3>
+            <p className="dash-repoStatValue">{repository.branch}</p>
+          </article>
 
-          <div
-            style={{
-              backgroundColor: "#1a1a1a",
-              border: "1px solid #333",
-              borderRadius: "8px",
-              padding: "20px",
-            }}
-          >
-            <div
-              style={{ color: "#888", fontSize: "12px", marginBottom: "4px" }}
-            >
-              WORKTREES
-            </div>
-            <div
-              style={{ color: "#d2a8ff", fontSize: "20px", fontWeight: "bold" }}
-            >
+          <article className="dash-repoStatCard">
+            <h3 className="dash-repoStatLabel">Repository</h3>
+            <p className="dash-repoStatMono">{repository.id}</p>
+          </article>
+        </div>
+
+        <div className="dash-projectRow">
+          <div className="dash-projectRowHeader">
+            <div className="dash-projectRowTitle">Active worktrees</div>
+            <div className="dash-projectRowMeta">
               {repository.worktrees.length}
             </div>
           </div>
-        </div>
 
-        {/* Repository Info */}
-        <div
-          style={{
-            backgroundColor: "#1a1a1a",
-            border: "1px solid #333",
-            borderRadius: "8px",
-            padding: "24px",
-            marginBottom: "16px",
-          }}
-        >
-          <h4 style={{ color: "#fff", marginTop: 0 }}>
-            Repository Information
-          </h4>
-          <div style={{ display: "grid", gap: "12px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ color: "#888" }}>Repository ID:</span>
-              <span
-                style={{
-                  color: "#fff",
-                  fontFamily: "monospace",
-                  fontSize: "12px",
-                }}
-              >
-                {repository.id}
-              </span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ color: "#888" }}>Path:</span>
-              <span
-                style={{
-                  color: "#fff",
-                  fontFamily: "monospace",
-                  fontSize: "12px",
-                  textAlign: "right",
-                  wordBreak: "break-all",
-                }}
-              >
-                {repository.path}
-              </span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ color: "#888" }}>Main Branch:</span>
-              <span style={{ color: "#58a6ff", fontWeight: "bold" }}>
-                {repository.mainBranch}
-              </span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ color: "#888" }}>Current Branch:</span>
-              <span style={{ color: "#3fb950", fontWeight: "bold" }}>
-                {repository.branch}
-              </span>
-            </div>
+          <div className="dash-projectRowBody">
+            {repository.worktrees.length === 0 ? (
+              <div className="dash-repoDashboardEmpty">
+                <div className="dash-repoDashboardEmptyGlyph">🌳</div>
+                <p className="dash-repoDashboardEmptyTitle">
+                  No worktrees yet
+                </p>
+                <p className="dash-repoDashboardEmptyHint">
+                  Create a worktree from the repository panel to get started
+                </p>
+              </div>
+            ) : (
+              <div className="dash-repoWorktreeRail">
+                {repository.worktrees.map((worktree) => (
+                  <article
+                    key={worktree.id}
+                    className="dash-repoWorktreeCard"
+                  >
+                    <div className="dash-repoWorktreeInfo">
+                      <div className="dash-repoWorktreeBranch">
+                        {worktree.branch.replace(/^refs\/heads\//, "")}
+                      </div>
+                      <div className="dash-repoWorktreePath">{worktree.path}</div>
+                    </div>
+                    <button
+                      onClick={() => onSelectWorktree(worktree.id)}
+                      className="dash-agentPanelAction is-success"
+                      type="button"
+                    >
+                      Open
+                    </button>
+                  </article>
+                ))}
+              </div>
+            )}
           </div>
         </div>
-
-        {/* Active Worktrees */}
-        <div
-          style={{
-            backgroundColor: "#1a1a1a",
-            border: "1px solid #333",
-            borderRadius: "8px",
-            padding: "24px",
-          }}
-        >
-          <h4 style={{ color: "#fff", marginTop: 0, marginBottom: "16px" }}>
-            Active Worktrees ({repository.worktrees.length})
-          </h4>
-          {repository.worktrees.length === 0 ? (
-            <div
-              style={{
-                textAlign: "center",
-                color: "#666",
-                padding: "40px 20px",
-              }}
-            >
-              <div
-                style={{ fontSize: "48px", marginBottom: "16px", opacity: 0.5 }}
-              >
-                🌳
-              </div>
-              <p style={{ margin: 0 }}>No worktrees created yet</p>
-              <p style={{ fontSize: "12px", color: "#888", marginTop: "8px" }}>
-                Create a worktree from the repository panel to get started
-              </p>
-            </div>
-          ) : (
-            <div style={{ display: "grid", gap: "12px" }}>
-              {repository.worktrees.map((worktree) => (
-                <div
-                  key={worktree.id}
-                  style={{
-                    backgroundColor: "#0d1117",
-                    border: "1px solid #30363d",
-                    borderRadius: "6px",
-                    padding: "16px",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                >
-                  <div style={{ flex: 1 }}>
-                    <div
-                      style={{
-                        color: "#58a6ff",
-                        fontSize: "14px",
-                        fontWeight: "bold",
-                        marginBottom: "4px",
-                      }}
-                    >
-                      {worktree.branch.replace(/^refs\/heads\//, "")}
-                    </div>
-                    <div
-                      style={{
-                        color: "#8b949e",
-                        fontSize: "12px",
-                        fontFamily: "monospace",
-                      }}
-                    >
-                      {worktree.path}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => onSelectWorktree(worktree.id)}
-                    style={{
-                      backgroundColor: "#238636",
-                      border: "none",
-                      color: "#fff",
-                      padding: "8px 16px",
-                      borderRadius: "4px",
-                      cursor: "pointer",
-                      fontSize: "12px",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    Open &rarr;
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }

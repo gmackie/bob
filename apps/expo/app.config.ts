@@ -45,6 +45,12 @@ const getSentryConfig = () => {
 export default ({ config }: ConfigContext): ExpoConfig => {
   const sentryPlugin = getSentryConfig();
   const plugins: ExpoConfig["plugins"] = [
+    [
+      "expo-dev-client",
+      {
+        launchMode: "most-recent",
+      },
+    ],
     "expo-router",
     "expo-secure-store",
     "expo-web-browser",

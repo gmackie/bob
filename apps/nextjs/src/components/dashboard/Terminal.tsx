@@ -169,91 +169,30 @@ export function TerminalComponent({
     };
   }, [sessionId]);
 
-  const getStatusColor = () => {
-    switch (connectionState) {
-      case "connected":
-        return "#28a745";
-      case "connecting":
-        return "#ffc107";
-      case "error":
-        return "#dc3545";
-      default:
-        return "#6c757d";
-    }
-  };
-
   return (
-    <div
-      style={{
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        minHeight: 0,
-        height: "100%",
-      }}
-    >
-      <div
-        style={{
-          padding: "4px 8px",
-          background: "#333",
-          borderBottom: "1px solid #444",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexShrink: 0,
-          minHeight: "28px",
-          height: "28px",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <span style={{ fontSize: "12px", color: "#ccc" }}>
+    <div className="dash-terminalWidget">
+      <div className="dash-terminalWidgetHeader">
+        <div className="dash-terminalWidgetHeaderInfo">
+          <span className="dash-terminalWidgetTitle">
             Terminal Session: {sessionId.slice(-8)}
           </span>
-          <div
-            style={{
-              width: "8px",
-              height: "8px",
-              borderRadius: "50%",
-              backgroundColor: getStatusColor(),
-            }}
+          <span
+            className={`dash-terminalWidgetDot ${connectionState}`}
             title={`Connection: ${connectionState}`}
           />
         </div>
         <button
           onClick={onClose}
-          style={{
-            background: "none",
-            border: "none",
-            color: "#ccc",
-            cursor: "pointer",
-            fontSize: "16px",
-          }}
+          className="dash-terminalWidgetClose"
+          type="button"
+          title="Close terminal session"
         >
           ×
         </button>
       </div>
-      <div
-        ref={terminalRef}
-        style={{
-          flex: 1,
-          minHeight: 0,
-          width: "100%",
-          height: "100%",
-          backgroundColor: "#1a1a1a",
-        }}
-      />
+      <div ref={terminalRef} className="dash-terminalWidgetSurface" />
       {!isLoaded && (
-        <div
-          style={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            color: "#888",
-          }}
-        >
-          Loading terminal...
-        </div>
+        <div className="dash-terminalWidgetLoading">Loading terminal…</div>
       )}
     </div>
   );

@@ -155,66 +155,24 @@ export async function GET(request: Request) {
   if (requireAuth && !session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const userId = session?.user?.id ?? (requireAuth ? null : "local");
 
   try {
     const url = new URL(request.url);
     const workspaceIdParam = url.searchParams.get("workspaceId");
 
-    const memberships = await kanbangerQuery<any[]>("workspace.list");
-    const workspaces: KanbangerWorkspace[] = (memberships ?? [])
-      .map((m) => m?.workspace ?? m)
-      .filter(Boolean)
-      .map((w) => ({
-        id: String(w.id),
-        name: String(w.name),
-        slug: String(w.slug),
-      }));
-
-    const workspace =
-      (workspaceIdParam
-        ? workspaces.find((w) => w.id === workspaceIdParam)
-        : undefined) ?? workspaces[0];
-
-    if (!workspace) {
-      return NextResponse.json(
-        { error: "No Kanbanger workspaces found" },
-        { status: 404 },
-      );
-    }
-
-    const projectsPromise = kanbangerQuery<KanbangerProjectListItem[]>(
-      "project.list",
-      { workspaceId: workspace.id },
-    );
-    const projectGetsPromise = projectsPromise.then((list) =>
-      mapWithConcurrency(list ?? [], 8, async (item) =>
-        kanbangerQuery<KanbangerProjectGet>("project.get", {
-          id: item.project.id,
-        }),
-      ),
-    );
-    const inReviewIssuesPromise = listIssuesByStatus({
-      workspaceId: workspace.id,
-      status: "in_review",
-      max: 5000,
-    });
-    const doneIssuesPromise = listIssuesByStatus({
-      workspaceId: workspace.id,
-      status: "done",
-      max: 5000,
-    });
-    const mappedReposPromise = session
+    const mappedReposPromise = userId
       ? db.query.repositories.findMany({
           where: and(
-            eq(repositories.userId, session.user.id),
+            eq(repositories.userId, userId),
             isNotNull(repositories.kanbangerProjectId),
           ),
         })
       : Promise.resolve([]);
-    const activeRunsPromise = session
+    const activeRunsPromise = userId
       ? db.query.taskRuns.findMany({
           where: and(
-            eq(taskRuns.userId, session.user.id),
+            eq(taskRuns.userId, userId),
             inArray(taskRuns.status, ["starting", "running", "blocked"]),
           ),
           orderBy: (t, { desc }) => [desc(t.updatedAt)],
@@ -224,10 +182,10 @@ export async function GET(request: Request) {
           },
         })
       : Promise.resolve([]);
-    const activeInstancesPromise = session
+    const activeInstancesPromise = userId
       ? db.query.agentInstances.findMany({
           where: and(
-            eq(agentInstances.userId, session.user.id),
+            eq(agentInstances.userId, userId),
             inArray(agentInstances.status, ["starting", "running"]),
           ),
           orderBy: (t, { desc }) => [desc(t.updatedAt)],
@@ -239,23 +197,77 @@ export async function GET(request: Request) {
         })
       : Promise.resolve([]);
 
-    const [
-      projects,
-      projectGets,
-      inReviewIssues,
-      doneIssues,
-      mappedRepos,
-      activeRuns,
-      activeInstances,
-    ] = await Promise.all([
-      projectsPromise,
-      projectGetsPromise,
-      inReviewIssuesPromise,
-      doneIssuesPromise,
+    const [mappedRepos, activeRuns, activeInstances] = await Promise.all([
       mappedReposPromise,
       activeRunsPromise,
       activeInstancesPromise,
     ]);
+
+    let workspace: KanbangerWorkspace = {
+      id: "",
+      name: "Kanbanger unavailable",
+      slug: "",
+    };
+    let projects: KanbangerProjectListItem[] = [];
+    let projectGets: KanbangerProjectGet[] = [];
+    let inReviewIssues: KanbangerIssue[] = [];
+    let doneIssues: KanbangerIssue[] = [];
+    let kanbangerError: string | null = null;
+
+    if (!KANBANGER_API_KEY) {
+      kanbangerError = "KANBANGER_API_KEY not configured";
+    } else {
+      try {
+        const memberships = await kanbangerQuery<any[]>("workspace.list");
+        const workspaces: KanbangerWorkspace[] = (memberships ?? [])
+          .map((m) => m?.workspace ?? m)
+          .filter(Boolean)
+          .map((w) => ({
+            id: String(w.id),
+            name: String(w.name),
+            slug: String(w.slug),
+          }));
+
+        const selectedWorkspace =
+          (workspaceIdParam
+            ? workspaces.find((w) => w.id === workspaceIdParam)
+            : undefined) ?? workspaces[0];
+
+        if (!selectedWorkspace) {
+          kanbangerError = "No Kanbanger workspaces found";
+        } else {
+          workspace = selectedWorkspace;
+
+          projects = await kanbangerQuery<KanbangerProjectListItem[]>(
+            "project.list",
+            { workspaceId: workspace.id },
+          );
+          projectGets = await mapWithConcurrency(
+            projects ?? [],
+            8,
+            async (item) =>
+              kanbangerQuery<KanbangerProjectGet>("project.get", {
+                id: item.project.id,
+              }),
+          );
+          [inReviewIssues, doneIssues] = await Promise.all([
+            listIssuesByStatus({
+              workspaceId: workspace.id,
+              status: "in_review",
+              max: 5000,
+            }),
+            listIssuesByStatus({
+              workspaceId: workspace.id,
+              status: "done",
+              max: 5000,
+            }),
+          ]);
+        }
+      } catch (error) {
+        kanbangerError =
+          error instanceof Error ? error.message : "Kanbanger unavailable";
+      }
+    }
 
     const reposByProject = new Map<string, typeof mappedRepos>();
     for (const repo of mappedRepos) {
@@ -350,6 +362,10 @@ export async function GET(request: Request) {
         inProgress: totalInProgress,
         inReview: totalInReview,
         doneLast24h: totalDone24h,
+      },
+      kanbanger: {
+        available: kanbangerError === null,
+        error: kanbangerError,
       },
       projects: projectRows,
       activeRuns: activeRuns.map((r) => ({

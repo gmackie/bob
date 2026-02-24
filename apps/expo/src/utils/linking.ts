@@ -18,6 +18,25 @@ export type DeepLinkRoute =
   | { type: "unknown"; path: string };
 
 const SCHEME = "bob";
+const DEEP_LINK_DEBUG =
+  __DEV__ ||
+  process.env.EXPO_PUBLIC_DEEP_LINK_DEBUG === "1" ||
+  process.env.EXPO_PUBLIC_CESP_DEBUG === "1";
+
+function logDeepLink(message: string, payload?: Record<string, unknown>): void {
+  if (!DEEP_LINK_DEBUG) return;
+  if (payload) {
+    console.info(`[deep-link] ${message}`, payload);
+    return;
+  }
+  console.info(`[deep-link] ${message}`);
+}
+
+function pushKnownRoute(path: string): void {
+  // Expo router's generated route union currently does not include these
+  // deep-link targets, so we cast at the boundary here.
+  router.push(path as never);
+}
 
 export function parseDeepLink(url: string): DeepLinkRoute | null {
   try {
@@ -86,13 +105,14 @@ export function parseDeepLink(url: string): DeepLinkRoute | null {
 }
 
 export function navigateToDeepLink(route: DeepLinkRoute): void {
+  logDeepLink("navigating deep link route", { routeType: route.type });
   switch (route.type) {
     case "session":
-      router.push(`/session/${route.sessionId}`);
+      pushKnownRoute(`/session/${route.sessionId}`);
       break;
 
     case "repo":
-      router.push(`/repo/${route.repositoryId}`);
+      pushKnownRoute(`/repo/${route.repositoryId}`);
       break;
 
     case "pr":
@@ -100,13 +120,13 @@ export function navigateToDeepLink(route: DeepLinkRoute): void {
       break;
 
     case "pr_details":
-      router.push(
+      pushKnownRoute(
         `/pr/${route.provider}/${route.owner}/${route.repo}/${route.number}`,
       );
       break;
 
     case "task":
-      router.push(`/task/${route.taskId}`);
+      pushKnownRoute(`/task/${route.taskId}`);
       break;
 
     case "auth_callback":
@@ -121,9 +141,13 @@ export function navigateToDeepLink(route: DeepLinkRoute): void {
 export function handleDeepLinkUrl(url: string | null): void {
   if (!url) return;
 
+  logDeepLink("received deep link url", { url });
   const route = parseDeepLink(url);
   if (route) {
+    logDeepLink("parsed deep link route", { routeType: route.type });
     navigateToDeepLink(route);
+  } else {
+    logDeepLink("failed to parse deep link url", { url });
   }
 }
 
@@ -159,6 +183,9 @@ export function buildAuthCallbackLink(params: Record<string, string>): string {
 
 export async function getInitialDeepLink(): Promise<DeepLinkRoute | null> {
   const initialUrl = await Linking.getInitialURL();
+  logDeepLink("resolved initial deep link url", {
+    hasInitialUrl: Boolean(initialUrl),
+  });
   if (initialUrl) {
     return parseDeepLink(initialUrl);
   }
@@ -169,9 +196,15 @@ export function subscribeToDeepLinks(
   callback: (route: DeepLinkRoute) => void,
 ): () => void {
   const subscription = Linking.addEventListener("url", ({ url }) => {
+    logDeepLink("subscription received deep link url", { url });
     const route = parseDeepLink(url);
     if (route) {
+      logDeepLink("subscription parsed deep link route", {
+        routeType: route.type,
+      });
       callback(route);
+    } else {
+      logDeepLink("subscription could not parse deep link url", { url });
     }
   });
 

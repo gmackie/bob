@@ -104,6 +104,13 @@ export function RepositoryPanel({
     }
   };
 
+  const getWorktreeDotClass = (status: string) => {
+    if (status === "running") return "is-running";
+    if (status === "starting") return "is-warning";
+    if (status === "error") return "is-danger";
+    return "is-muted";
+  };
+
   const getBranchDisplayName = (branch: string) => {
     return branch.replace(/^refs\/heads\//, "");
   };
@@ -195,62 +202,24 @@ export function RepositoryPanel({
     }
   };
 
-  const getStatusColor = (status: string, isStarting: boolean) => {
-    if (isStarting) return "#ffc107";
-    switch (status) {
-      case "running":
-        return "#28a745";
-      case "starting":
-        return "#ffc107";
-      case "error":
-        return "#dc3545";
-      case "stopped":
-        return "#6c757d";
-      default:
-        return "#888";
-    }
-  };
-
   return (
     <div className={`left-panel ${isCollapsed ? "collapsed" : ""}`}>
       <div className="panel-header">
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          {!isCollapsed && (
-            <h3 style={{ margin: 0, color: "#ffffff" }}>Repositories</h3>
-          )}
+        <div className="dash-repoPanelHeaderBar">
+          {!isCollapsed && <h3 className="dash-repoPanelHeaderTitle">Repositories</h3>}
           <button
             onClick={onToggleCollapse}
-            className="collapse-toggle-btn"
+            className="collapse-toggle-btn dash-repoPanelToggle"
             title={isCollapsed ? "Expand panel" : "Collapse panel"}
-            style={{
-              background: "transparent",
-              border: "1px solid #555",
-              color: "#ffffff",
-              borderRadius: "4px",
-              cursor: "pointer",
-              fontSize: "14px",
-              padding: "4px 8px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: "28px",
-              height: "28px",
-            }}
           >
             {isCollapsed ? "▶" : "◀"}
           </button>
         </div>
       </div>
 
-      {!isCollapsed && (
-        <>
-          <div className="add-repo-section">
+        {!isCollapsed && (
+          <>
+            <div className="add-repo-section">
             <button
               onClick={() => setShowAddRepoModal(true)}
               className="add-repo-btn"
@@ -260,75 +229,42 @@ export function RepositoryPanel({
             </button>
           </div>
 
-          <div className="panel-content">
+              <div className="panel-content">
             {repositories.length === 0 ? (
-              <div
-                style={{
-                  textAlign: "center",
-                  color: "#666",
-                  marginTop: "40px",
-                }}
-              >
-                <p>No repositories added</p>
-                <p style={{ fontSize: "12px" }}>
-                  Click &quot;Add Repository&quot; to get started
-                </p>
+              <div className="dash-repoPanelEmpty">
+                <div>No repositories added</div>
+                <p>Click “Add Repository” to get started</p>
               </div>
             ) : (
-              <div className="repository-list">
+              <div className="dash-repoPanelStack">
                 {repositories.map((repo) => (
-                  <div key={repo.id} className="repository-item">
-                    <div className="repository-header">
-                      <div className="repository-info">
-                        <h4
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onSelectRepository(repo.id);
-                          }}
-                          style={{
-                            cursor: "pointer",
-                            color:
-                              selectedRepositoryId === repo.id
-                                ? "#79c0ff"
-                                : "#58a6ff",
-                            margin: 0,
-                            transition: "color 0.2s ease",
-                          }}
-                          title="View repository dashboard"
-                        >
-                          {repo.name} 📊
+                  <article
+                    key={repo.id}
+                    className={`dash-repoPanelCard ${selectedRepositoryId === repo.id ? "is-selected" : ""}`}
+                  >
+                    <header className="dash-repoPanelHeader">
+                      <button
+                        type="button"
+                        className="dash-repoPanelTitleButton"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectRepository(repo.id);
+                        }}
+                        title="View repository dashboard"
+                      >
+                        <h4 className="dash-repoPanelName">
+                          {repo.name}
                         </h4>
-                        <p>{repo.path}</p>
-                        <div
-                          style={{
-                            fontSize: "12px",
-                            color: "#888",
-                            marginTop: "4px",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "8px",
-                          }}
-                        >
+                        <p className="dash-repoPanelPath">{repo.path}</p>
+                        <div className="dash-repoPanelMetaRow">
                           <span>
                             Main: <strong>{repo.mainBranch}</strong>
                           </span>
                           <button
+                            type="button"
                             onClick={(e) => handleRefreshMainBranch(repo.id, e)}
                             disabled={refreshingRepositories.has(repo.id)}
-                            style={{
-                              background: "#6c757d",
-                              color: "#fff",
-                              border: "none",
-                              padding: "2px 6px",
-                              borderRadius: "3px",
-                              cursor: refreshingRepositories.has(repo.id)
-                                ? "not-allowed"
-                                : "pointer",
-                              fontSize: "10px",
-                              opacity: refreshingRepositories.has(repo.id)
-                                ? 0.6
-                                : 1,
-                            }}
+                            className="dash-repoPanelRefreshBtn"
                             title={
                               refreshingRepositories.has(repo.id)
                                 ? "Refreshing..."
@@ -338,50 +274,32 @@ export function RepositoryPanel({
                             {refreshingRepositories.has(repo.id) ? "↻" : "⟳"}
                           </button>
                         </div>
-                      </div>
+                      </button>
                       <button
+                        type="button"
                         onClick={() => setShowNewWorktreeForm(repo.id)}
-                        className="add-worktree-btn"
+                        className="dash-repoPanelAddBtn"
                         title="Create new worktree and start agent instance"
                       >
                         +
                       </button>
-                    </div>
+                    </header>
 
                     {showNewWorktreeForm === repo.id && (
-                      <div
-                        style={{
-                          padding: "12px 16px",
-                          background: "#2a2a2a",
-                          borderTop: "1px solid #444",
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "8px",
-                          }}
-                        >
+                      <div className="dash-repoPanelForm">
+                        <div className="dash-repoPanelFormInner">
                           <input
                             type="text"
                             value={newBranchName}
                             onChange={(e) => setNewBranchName(e.target.value)}
                             placeholder="Branch name (e.g., feature-xyz)"
-                            className="input"
-                            style={{ fontSize: "12px", padding: "6px 8px" }}
+                            className="dash-repoPanelInput dash-repoPanelFormField"
                             onKeyDown={(e) =>
                               e.key === "Enter" && handleCreateWorktree(repo.id)
                             }
                             autoFocus
                           />
-                          <div
-                            style={{
-                              display: "flex",
-                              gap: "8px",
-                              alignItems: "center",
-                            }}
-                          >
+                          <div className="dash-repoPanelFormRow">
                             <select
                               value={selectedAgentType ?? ""}
                               onChange={(e) =>
@@ -389,8 +307,7 @@ export function RepositoryPanel({
                                   e.target.value as AgentType | undefined,
                                 )
                               }
-                              className="input"
-                              style={{ flex: 1, fontSize: "12px" }}
+                              className="dash-repoPanelInput dash-repoPanelFormField"
                             >
                               <option value="">Select Agent</option>
                               {availableAgents
@@ -405,20 +322,20 @@ export function RepositoryPanel({
                                 ))}
                             </select>
                             <button
+                              type="button"
                               onClick={() => handleCreateWorktree(repo.id)}
                               disabled={!newBranchName.trim()}
-                              className="button"
-                              style={{ fontSize: "12px", padding: "6px 12px" }}
+                              className="dash-repoPanelAction"
                             >
                               Create
                             </button>
                             <button
+                              type="button"
                               onClick={() => {
                                 setShowNewWorktreeForm(null);
                                 setNewBranchName("");
                               }}
-                              className="button secondary"
-                              style={{ fontSize: "12px", padding: "6px 12px" }}
+                              className="dash-repoPanelAction dash-repoPanelActionSecondary"
                             >
                               Cancel
                             </button>
@@ -427,9 +344,11 @@ export function RepositoryPanel({
                       </div>
                     )}
 
-                    {repo.worktrees.length > 0 && (
-                      <div className="worktrees-list">
-                        {repo.worktrees.map((worktree) => {
+                    <div className="dash-repoWorktreeRail">
+                      {repo.worktrees.length === 0 ? (
+                        <div className="dash-emptyState">No worktrees yet</div>
+                      ) : (
+                        repo.worktrees.map((worktree) => {
                           const status = getWorktreeStatus(worktree);
                           const isSelected = selectedWorktreeId === worktree.id;
                           const isStarting = startingInstances.has(worktree.id);
@@ -437,102 +356,82 @@ export function RepositoryPanel({
                           return (
                             <div
                               key={worktree.id}
-                              className={`worktree-item ${isSelected ? "active" : ""}`}
+                              className="dash-repoWorktreeRow"
                             >
-                              <div
+                              <button
+                                type="button"
+                                className={`dash-liveSessionChip ${
+                                  isSelected ? "is-active" : ""
+                                }`}
                                 onClick={() =>
                                   handleWorktreeSelect(worktree.id)
                                 }
-                                style={{
-                                  cursor: "pointer",
-                                  flex: 1,
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  alignItems: "center",
-                                }}
                               >
-                                <div className="worktree-info">
-                                  <div className="worktree-name">
+                                <span
+                                  className={`dash-sessionDot ${getWorktreeDotClass(
+                                    status.status,
+                                  )}`}
+                                />
+                                <span className="dash-liveSessionChipInfo">
+                                  <span>
                                     {getBranchDisplayName(worktree.branch)}
-                                  </div>
-                                  <div className="worktree-path">
+                                  </span>
+                                  <span className="dash-terminalSessionSubline">
                                     {worktree.path}
-                                  </div>
-                                </div>
-                                <div
-                                  className={`instance-status ${isStarting ? "starting" : status.status}`}
-                                  style={{
-                                    backgroundColor: getStatusColor(
-                                      status.status,
-                                      isStarting,
-                                    ),
-                                    color:
-                                      isStarting || status.status === "starting"
-                                        ? "#000"
-                                        : "#fff",
-                                  }}
-                                >
-                                  {isStarting ? "Starting..." : status.label}
-                                </div>
-                              </div>
-                              <button
-                                onClick={(e) =>
-                                  handleCopyWorktreeLink(worktree.id, e)
-                                }
-                                style={{
-                                  background:
-                                    copiedWorktreeId === worktree.id
-                                      ? "#28a745"
-                                      : "#6c757d",
-                                  color: "#fff",
-                                  border: "none",
-                                  padding: "4px 8px",
-                                  borderRadius: "3px",
-                                  cursor: "pointer",
-                                  fontSize: "12px",
-                                  marginLeft: "8px",
-                                  flexShrink: 0,
-                                }}
-                                title={
-                                  copiedWorktreeId === worktree.id
-                                    ? "Link copied!"
-                                    : "Copy direct link to this worktree"
-                                }
-                              >
-                                {copiedWorktreeId === worktree.id ? "✓" : "🔗"}
+                                  </span>
+                                  <span className="dash-terminalSessionSubline">
+                                    {isStarting ? "Starting..." : status.label}
+                                  </span>
+                                </span>
+                                <span className="dash-sessionAction">
+                                  {isStarting ? "Opening..." : "Open"}
+                                </span>
                               </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (
-                                    confirm(
-                                      `Delete worktree "${getBranchDisplayName(worktree.branch)}"?`,
-                                    )
-                                  ) {
-                                    onDeleteWorktree(worktree.id, false);
+                              <div className="dash-repoWorktreeActions">
+                                <button
+                                  type="button"
+                                  onClick={(e) =>
+                                    handleCopyWorktreeLink(worktree.id, e)
                                   }
-                                }}
-                                style={{
-                                  background: "#dc3545",
-                                  color: "#fff",
-                                  border: "none",
-                                  padding: "4px 8px",
-                                  borderRadius: "3px",
-                                  cursor: "pointer",
-                                  fontSize: "12px",
-                                  marginLeft: "8px",
-                                  flexShrink: 0,
-                                }}
-                                title="Delete worktree"
-                              >
-                                ×
-                              </button>
+                                  className={`dash-repoWorktreeAction ${
+                                    copiedWorktreeId === worktree.id
+                                      ? "is-copied"
+                                      : ""
+                                  }`}
+                                  title={
+                                    copiedWorktreeId === worktree.id
+                                      ? "Link copied!"
+                                      : "Copy direct link to this worktree"
+                                  }
+                                >
+                                  {copiedWorktreeId === worktree.id
+                                    ? "✓"
+                                    : "🔗"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (
+                                      confirm(
+                                        `Delete worktree "${getBranchDisplayName(worktree.branch)}"?`,
+                                      )
+                                    ) {
+                                      onDeleteWorktree(worktree.id, false);
+                                    }
+                                  }}
+                                  className="dash-repoWorktreeAction is-danger"
+                                  title="Delete worktree"
+                                >
+                                  ×
+                                </button>
+                              </div>
                             </div>
                           );
-                        })}
-                      </div>
-                    )}
-                  </div>
+                        })
+                      )}
+                    </div>
+                  </article>
                 ))}
               </div>
             )}
@@ -542,96 +441,54 @@ export function RepositoryPanel({
 
       {isCollapsed && repositories.length > 0 && (
         <div className="collapsed-content">
-          {repositories.map((repo) =>
-            repo.worktrees.map((worktree) => {
-              const status = getWorktreeStatus(worktree);
-              const isSelected = selectedWorktreeId === worktree.id;
-              const isStarting = startingInstances.has(worktree.id);
-
-              return (
-                <div
-                  key={worktree.id}
-                  className={`collapsed-worktree-item ${isSelected ? "active" : ""}`}
-                  onClick={() => handleWorktreeSelect(worktree.id)}
-                  title={`${getBranchDisplayName(worktree.branch)} - ${worktree.path}`}
-                  style={{
-                    padding: "8px 12px",
-                    margin: "4px 0",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                    background: isSelected ? "#007acc" : "#2a2a2a",
-                    border: "1px solid #444",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexDirection: "column",
-                    gap: "4px",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: "11px",
-                      fontWeight: "bold",
-                      color: "#fff",
-                      textAlign: "center",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      width: "100%",
-                    }}
+          {repositories.every((repo) => repo.worktrees.length === 0) ? (
+            <div className="dash-emptyState">No worktrees yet</div>
+          ) : (
+            repositories.map((repo) =>
+              repo.worktrees.map((worktree) => {
+                const status = getWorktreeStatus(worktree);
+                const isSelected = selectedWorktreeId === worktree.id;
+                const isStarting = startingInstances.has(worktree.id);
+                return (
+                  <button
+                    key={`${repo.id}-${worktree.id}`}
+                    type="button"
+                    className={`dash-collapsedWorktreeItem ${
+                      isSelected ? "is-active" : ""
+                    }`}
+                    onClick={() => handleWorktreeSelect(worktree.id)}
+                    title={`${getBranchDisplayName(worktree.branch)} - ${worktree.path}`}
                   >
-                    {getBranchDisplayName(worktree.branch)}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "8px",
-                      padding: "1px 4px",
-                      borderRadius: "2px",
-                      backgroundColor: getStatusColor(
-                        status.status,
-                        isStarting,
-                      ),
-                      color:
-                        isStarting || status.status === "starting"
-                          ? "#000"
-                          : "#fff",
-                    }}
-                  >
-                    {isStarting ? "Starting..." : status.label}
-                  </div>
-                </div>
-              );
-            }),
+                    <span
+                      className={`dash-sessionDot ${getWorktreeDotClass(status.status)}`}
+                    />
+                    <div className="dash-collapsedWorktreeText">
+                      <span className="dash-collapsedWorktreeName">
+                        {getBranchDisplayName(worktree.branch)}
+                      </span>
+                      <span className="dash-collapsedWorktreeMeta">
+                        {repo.name}
+                      </span>
+                    </div>
+                    <span className="dash-collapsedWorktreeStatus">
+                      {isStarting ? "Starting..." : status.label}
+                    </span>
+                  </button>
+                );
+              }),
+            )
           )}
         </div>
       )}
 
       {showAddRepoModal && (
         <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0, 0, 0, 0.8)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-          }}
+          className="dash-repoModalBackdrop"
         >
           <div
-            style={{
-              backgroundColor: "#1e1e1e",
-              borderRadius: "8px",
-              border: "1px solid #333",
-              padding: "24px",
-              width: "90%",
-              maxWidth: "500px",
-            }}
+            className="dash-repoModalCard"
           >
-            <h3 style={{ margin: "0 0 16px 0", color: "#fff" }}>
+            <h3 className="dash-repoModalTitle">
               Add Repository
             </h3>
             <input
@@ -639,31 +496,26 @@ export function RepositoryPanel({
               value={newRepoPath}
               onChange={(e) => setNewRepoPath(e.target.value)}
               placeholder="Enter repository path (e.g., /path/to/repo)"
-              className="input"
-              style={{ width: "100%", marginBottom: "16px" }}
+              className="dash-repoPanelInput dash-repoModalInput"
               onKeyDown={(e) => e.key === "Enter" && handleAddRepository()}
               autoFocus
             />
             <div
-              style={{
-                display: "flex",
-                gap: "8px",
-                justifyContent: "flex-end",
-              }}
+              className="dash-repoModalFooter"
             >
               <button
                 onClick={() => {
                   setShowAddRepoModal(false);
                   setNewRepoPath("");
                 }}
-                className="button secondary"
+                className="dash-repoPanelAction dash-repoPanelActionSecondary"
                 disabled={addingRepo}
               >
                 Cancel
               </button>
               <button
                 onClick={handleAddRepository}
-                className="button"
+                className="dash-repoPanelAction"
                 disabled={!newRepoPath.trim() || addingRepo}
               >
                 {addingRepo ? "Adding..." : "Add"}

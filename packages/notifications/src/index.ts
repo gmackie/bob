@@ -9,6 +9,13 @@ export interface NotificationConfig {
   projectId?: string;
 }
 
+export type NotificationPayload = Record<string, unknown>;
+
+type LocalNotificationScheduleOptions = {
+  trigger?: Notifications.NotificationTriggerInput;
+  data?: NotificationPayload;
+};
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -66,7 +73,7 @@ export async function registerForPushNotifications(
 export async function scheduleLocalNotification(
   title: string,
   body: string,
-  trigger?: Notifications.NotificationTriggerInput,
+  options: LocalNotificationScheduleOptions = {},
 ): Promise<string | null> {
   if (!integrations.notifications) {
     return null;
@@ -74,8 +81,12 @@ export async function scheduleLocalNotification(
 
   try {
     return await Notifications.scheduleNotificationAsync({
-      content: { title, body },
-      trigger: trigger ?? null,
+      content: {
+        title,
+        body,
+        ...(options.data ? { data: options.data } : {}),
+      },
+      trigger: options.trigger ?? null,
     });
   } catch (error) {
     console.error("Failed to schedule notification:", error);

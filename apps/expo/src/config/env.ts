@@ -26,8 +26,31 @@ function getAppEnvironment(): AppEnvironment {
 }
 
 function getApiUrl(): string {
+  const debuggerHost = Constants.expoConfig?.hostUri?.split(":")[0];
+  const resolvedHost =
+    debuggerHost && debuggerHost !== "localhost" && debuggerHost !== "127.0.0.1"
+      ? debuggerHost
+      : undefined;
+
   const envApiUrl = Constants.expoConfig?.extra?.API_URL ?? process.env.API_URL;
-  if (envApiUrl) return envApiUrl;
+  if (envApiUrl) {
+    if (!resolvedHost) return envApiUrl;
+
+    try {
+      const parsed = new URL(envApiUrl);
+      if (
+        parsed.hostname === "localhost" ||
+        parsed.hostname === "127.0.0.1"
+      ) {
+        parsed.hostname = resolvedHost;
+        return parsed.toString().replace(/\/$/, "");
+      }
+    } catch {
+      return envApiUrl;
+    }
+
+    return envApiUrl;
+  }
 
   const environment = getAppEnvironment();
 
@@ -43,10 +66,8 @@ function getApiUrl(): string {
       );
     case "development":
     default:
-      const debuggerHost = Constants.expoConfig?.hostUri;
-      const localhost = debuggerHost?.split(":")[0];
-      if (localhost) {
-        return `http://${localhost}:3000`;
+      if (resolvedHost) {
+        return `http://${resolvedHost}:3000`;
       }
       return "http://localhost:3000";
   }
