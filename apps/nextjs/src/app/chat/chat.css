@@ -1327,6 +1327,16 @@
 }
 
 @media (max-width: 640px) {
+  .chat-sidebarHeader {
+    align-items: flex-start;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .chat-sidebarHeaderText {
+    max-width: calc(100% - 72px);
+  }
+
   .chat-shell {
     height: 100dvh;
   }
@@ -1355,6 +1365,8 @@
   }
 
   .chat-sessionHeaderBadges {
+    align-items: center;
+    justify-content: flex-start;
     width: 100%;
   }
 
