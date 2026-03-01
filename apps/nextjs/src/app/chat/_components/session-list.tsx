@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTRPC } from "~/trpc/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@bob/ui";
@@ -62,6 +62,13 @@ function StatusIndicator({ status }: { status: SessionStatus }) {
   return <span className={cn(className)} title={status} />;
 }
 
+function focusFilterButton(buttons: HTMLButtonElement[], targetIndex: number) {
+  const button = buttons[targetIndex];
+  if (button) {
+    button.focus();
+  }
+}
+
 export function SessionList({
   selectedId,
   onSelect,
@@ -75,6 +82,7 @@ export function SessionList({
   const [searchTerm, setSearchTerm] = useState("");
   const [showNewSessionModal, setShowNewSessionModal] = useState(false);
   const [selectedAgentType, setSelectedAgentType] = useState<string>("opencode");
+  const filterButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const { data, isLoading, error } = useQuery(
     trpc.session.list.queryOptions({
@@ -197,7 +205,7 @@ export function SessionList({
           role="tablist"
           aria-label="Session filters"
         >
-          {statusFilters.map((option) => {
+          {statusFilters.map((option, index) => {
             const isActive = filter === option.value;
 
             return (
@@ -205,8 +213,56 @@ export function SessionList({
                 key={option.value}
                 type="button"
                 role="tab"
+                tabIndex={isActive ? 0 : -1}
                 aria-selected={isActive}
+                aria-pressed={isActive}
+                ref={(el) => {
+                  filterButtonRefs.current[index] = el;
+                }}
                 onClick={() => setFilter(option.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowRight") {
+                    event.preventDefault();
+                    const nextIndex =
+                      (index + 1) % statusFilters.length;
+                    const nextFilter = statusFilters[nextIndex];
+                    focusFilterButton(filterButtonRefs.current, nextIndex);
+                    if (nextFilter) setFilter(nextFilter.value);
+                  }
+
+                  if (event.key === "ArrowLeft") {
+                    event.preventDefault();
+                    const prevIndex =
+                      (index - 1 + statusFilters.length) % statusFilters.length;
+                    const prevFilter = statusFilters[prevIndex];
+                    focusFilterButton(filterButtonRefs.current, prevIndex);
+                    if (prevFilter) setFilter(prevFilter.value);
+                  }
+
+                  if (event.key === "Home") {
+                    event.preventDefault();
+                    const firstFilter = statusFilters[0];
+                    if (firstFilter) {
+                      focusFilterButton(filterButtonRefs.current, 0);
+                      setFilter(firstFilter.value);
+                    }
+                  }
+
+                  if (event.key === "End") {
+                    event.preventDefault();
+                    const lastIndex = statusFilters.length - 1;
+                    const lastFilter = statusFilters[lastIndex];
+                    if (lastFilter) {
+                      focusFilterButton(filterButtonRefs.current, lastIndex);
+                      setFilter(lastFilter.value);
+                    }
+                  }
+
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setFilter(option.value);
+                  }
+                }}
                 className={cn("chat-filterChip", isActive && "is-active")}
               >
                 {option.label}
