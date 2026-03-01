@@ -708,6 +708,10 @@ function TestPage() {
     };
 
     const workflowState = workflowStatusMap[variant];
+    const title = searchParams.get("title") ?? "Test Session";
+    const agentType = searchParams.get("agentType") ?? "opencode";
+    const workingDirectory = searchParams.get("workingDirectory") ?? "/test/path";
+    const gitBranch = searchParams.get("gitBranch") ?? "feature/test";
     const sessionStatus =
       sessionStatusMap[searchParams.get("sessionStatus") ?? "running"] ??
       "running";
@@ -715,11 +719,11 @@ function TestPage() {
     return (
       <div data-testid="test-container">
         <SessionHeader
-          title="Test Session"
+          title={title}
           status={sessionStatus}
-          agentType="opencode"
-          workingDirectory="/test/path"
-          gitBranch="feature/test"
+          agentType={agentType}
+          workingDirectory={workingDirectory}
+          gitBranch={gitBranch}
           workflowState={workflowState}
           linkedPr={
             searchParams.get("withPr")

@@ -144,4 +144,44 @@ test.describe("SessionHeader", () => {
       await expect(page.locator("text=PROJ-123")).not.toBeVisible();
     });
   });
+
+  test("remains within narrow viewport with long metadata", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    const url = `${TEST_PAGE}`
+      + `&sessionStatus=running`
+      + `&title=${encodeURIComponent(
+        "This is a long-form session title that verifies wrapping and overflow behavior",
+      )}`
+      + `&agentType=${encodeURIComponent("opencode-ui")}`
+      + `&gitBranch=${encodeURIComponent("feature/very-long-and-detailed-branch-name-for-testing")}`
+      + `&workingDirectory=${encodeURIComponent(
+        "/Users/alice/projects/very-long-repository-directory-name/with/verbose/path/segments",
+      )}`
+      + "&withPr=true"
+      + "&withTask=true";
+
+    await page.goto(url);
+
+    const hasOverflow = await page.evaluate(() => {
+      const width = window.innerWidth;
+
+      return [
+        ".chat-sessionHeader",
+        ".chat-sessionHeaderMeta",
+        ".chat-sessionHeaderTopline",
+        ".chat-sessionHeaderMetaRow",
+        ".chat-sessionHeaderBadges",
+        ".chat-sessionHeaderActions",
+        ".chat-sessionHeaderMetaValue",
+      ].some((selector) => {
+        const element = document.querySelector(selector);
+        if (!element) return false;
+
+        const rect = element.getBoundingClientRect();
+        return rect.left < 0 || rect.right > width + 1;
+      });
+    });
+
+    expect(hasOverflow).toBeFalsy();
+  });
 });
