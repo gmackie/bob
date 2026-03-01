@@ -1,45 +1,36 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
 import { useTRPC } from "~/trpc/react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@bob/ui";
 import { Button } from "@bob/ui/button";
 import { getAvailableAgentTypes } from "~/utils/platform";
+import type { SessionStatus } from "~/hooks/use-session-socket";
 
-type SessionStatus = "provisioning" | "starting" | "running" | "idle" | "stopping" | "stopped" | "error";
-
-interface Session {
-  id: string;
-  title: string | null;
-  status: string;
-  agentType: string;
-  workingDirectory: string | null;
-  lastActivityAt: Date | null;
-  createdAt: Date;
+function normalizeSessionStatus(status: string): SessionStatus {
+  return [
+    "provisioning",
+    "starting",
+    "running",
+    "idle",
+    "stopping",
+    "stopped",
+    "error",
+  ].includes(status)
+    ? (status as SessionStatus)
+    : "stopped";
 }
 
-function StatusIndicator({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    running: "bg-green-500",
-    idle: "bg-yellow-500",
-    starting: "bg-blue-500 animate-pulse",
-    provisioning: "bg-blue-500 animate-pulse",
-    stopping: "bg-orange-500",
-    stopped: "bg-gray-400",
-    error: "bg-red-500",
-  };
+const statusFilters: { value: SessionStatus | "all"; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "running", label: "Running" },
+  { value: "idle", label: "Idle" },
+  { value: "stopped", label: "Stopped" },
+  { value: "error", label: "Error" },
+];
 
-  return (
-    <span
-      className={cn("inline-block h-2 w-2 rounded-full", colors[status] ?? "bg-gray-400")}
-      title={status}
-    />
-  );
-}
-
-function formatRelativeTime(date: Date | null): string {
+function formatRelativeTime(date: Date | string | null | undefined): string {
   if (!date) return "";
   const now = new Date();
   const diff = now.getTime() - new Date(date).getTime();
@@ -53,7 +44,23 @@ function formatRelativeTime(date: Date | null): string {
   return "now";
 }
 
-// Agent types are now determined by platform (see getAvailableAgentTypes)
+function StatusIndicator({ status }: { status: SessionStatus }) {
+  const className = `chat-sessionStatusDot chat-sessionStatusDot--${
+    status === "starting" || status === "provisioning"
+      ? status
+      : status === "running"
+        ? "running"
+        : status === "idle"
+          ? "idle"
+          : status === "stopping"
+            ? "stopping"
+            : status === "error"
+              ? "error"
+              : "stopped"
+  }`;
+
+  return <span className={cn(className)} title={status} />;
+}
 
 export function SessionList({
   selectedId,
@@ -65,6 +72,7 @@ export function SessionList({
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<SessionStatus | "all">("all");
+  const [searchTerm, setSearchTerm] = useState("");
   const [showNewSessionModal, setShowNewSessionModal] = useState(false);
   const [selectedAgentType, setSelectedAgentType] = useState<string>("opencode");
 
@@ -72,37 +80,63 @@ export function SessionList({
     trpc.session.list.queryOptions({
       status: filter === "all" ? undefined : filter,
       limit: 50,
-    })
+    }),
   );
 
   const createMutation = useMutation(
     trpc.session.create.mutationOptions({
       onSuccess: (newSession) => {
-        queryClient.invalidateQueries({ queryKey: trpc.session.list.queryKey() });
+        void queryClient.invalidateQueries({
+          queryKey: trpc.session.list.queryKey(),
+        });
+        if (!newSession) return;
         setShowNewSessionModal(false);
-        onSelect(newSession!.id);
+        onSelect(newSession.id);
       },
-    })
+    }),
   );
+
+  const sessions = useMemo(() => data?.items ?? [], [data?.items]);
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+
+  const filteredSessions = useMemo(() => {
+    if (!normalizedSearch) return sessions;
+
+    return sessions.filter((session) => {
+      const title = (session.title ?? `Session ${session.id.slice(0, 8)}`).toLowerCase();
+      const dir = (session.workingDirectory ?? "").toLowerCase();
+
+      return (
+        title.includes(normalizedSearch) ||
+        dir.includes(normalizedSearch) ||
+        session.id.toLowerCase().includes(normalizedSearch) ||
+        session.agentType.toLowerCase().includes(normalizedSearch)
+      );
+    });
+  }, [sessions, normalizedSearch]);
 
   const handleNewSession = () => {
     setShowNewSessionModal(true);
   };
 
   const handleCreateSession = () => {
-    createMutation.mutate({
+    void createMutation.mutate({
       workingDirectory: process.cwd(),
       agentType: selectedAgentType,
     });
   };
 
-  const sessions = data?.items ?? [];
-
   return (
-    <div className="flex h-full flex-col border-r">
-      <div className="flex items-center justify-between border-b p-3">
-        <h2 className="text-sm font-semibold">Sessions</h2>
+    <div className="chat-sidebar">
+      <div className="chat-sidebarHeader">
+        <div className="chat-sidebarHeaderText">
+          <h2 className="chat-sidebarTitle">Sessions</h2>
+          <div className="chat-sidebarSubtext">
+            {filteredSessions.length} of {sessions.length}
+          </div>
+        </div>
         <Button
+          className="chat-sidebarButton chat-sidebarButtonPrimary"
           size="sm"
           onClick={handleNewSession}
           disabled={createMutation.isPending}
@@ -112,15 +146,15 @@ export function SessionList({
       </div>
 
       {showNewSessionModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
-            <h3 className="mb-4 text-lg font-semibold">Create New Session</h3>
-            <div className="mb-4">
-              <label className="mb-2 block text-sm font-medium">Agent Type</label>
+        <div className="chat-modalBackdrop">
+          <div className="chat-modal">
+            <h3 className="chat-modalTitle">Create New Session</h3>
+            <div className="chat-modalRow">
+              <label className="chat-modalLabel">Agent Type</label>
               <select
                 value={selectedAgentType}
                 onChange={(e) => setSelectedAgentType(e.target.value)}
-                className="w-full rounded border bg-white px-3 py-2 text-sm dark:bg-gray-700"
+                className="chat-modalSelect"
               >
                 {getAvailableAgentTypes().map((agent) => (
                   <option key={agent.value} value={agent.value}>
@@ -129,15 +163,16 @@ export function SessionList({
                 ))}
               </select>
             </div>
-            <div className="flex justify-end gap-2">
+            <div className="chat-modalActions">
               <Button
-                variant="outline"
+                className="chat-actionButton"
                 size="sm"
                 onClick={() => setShowNewSessionModal(false)}
               >
                 Cancel
               </Button>
               <Button
+                className="chat-actionButton chat-sidebarButtonPrimary"
                 size="sm"
                 onClick={handleCreateSession}
                 disabled={createMutation.isPending}
@@ -149,61 +184,85 @@ export function SessionList({
         </div>
       )}
 
-      <div className="border-b p-2">
-        <select
-          value={filter}
-          onChange={(e) => setFilter(e.target.value as SessionStatus | "all")}
-          className="bg-background w-full rounded border px-2 py-1 text-xs"
+      <div className="chat-sidebarBody">
+        <input
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="chat-sidebarSearch"
+          placeholder="Search sessions"
+          aria-label="Search sessions"
+        />
+        <div
+          className="chat-filterRow"
+          role="tablist"
+          aria-label="Session filters"
         >
-          <option value="all">All Sessions</option>
-          <option value="running">Running</option>
-          <option value="idle">Idle</option>
-          <option value="stopped">Stopped</option>
-          <option value="error">Error</option>
-        </select>
+          {statusFilters.map((option) => {
+            const isActive = filter === option.value;
+
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setFilter(option.value)}
+                className={cn("chat-filterChip", isActive && "is-active")}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="chat-sidebarMeta">
+          {filter !== "all" ? `${filter} sessions` : "All sessions"} ·{" "}
+          {searchTerm.trim()
+            ? `filtered by "${searchTerm.trim()}"`
+            : "No filter"}
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
-        {isLoading && (
-          <div className="p-4 text-center text-sm text-gray-500">Loading...</div>
-        )}
+      <div className="chat-sessionList" aria-live="polite">
+        {isLoading && <div className="chat-emptyText">Loading...</div>}
 
         {error && (
-          <div className="p-4 text-center text-sm text-red-500">
-            Failed to load sessions
+          <div className="chat-emptyText is-error">Failed to load sessions</div>
+        )}
+
+        {!isLoading && !error && filteredSessions.length === 0 && (
+          <div className="chat-emptyText">
+            {searchTerm.trim() || filter !== "all"
+              ? "No sessions match these filters"
+              : "No sessions found"}
           </div>
         )}
 
-        {!isLoading && sessions.length === 0 && (
-          <div className="p-4 text-center text-sm text-gray-500">
-            No sessions found
-          </div>
-        )}
-
-        {sessions.map((session) => (
+        {filteredSessions.map((session) => (
           <button
             key={session.id}
             onClick={() => onSelect(session.id)}
             className={cn(
-              "w-full border-b p-3 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-800",
-              selectedId === session.id && "bg-gray-100 dark:bg-gray-800"
+              "chat-sessionItem",
+              selectedId === session.id && "is-active",
             )}
           >
-            <div className="flex items-center gap-2">
-              <StatusIndicator status={session.status} />
-              <span className="flex-1 truncate text-sm font-medium">
+            <div className="chat-sessionItemHead">
+              <StatusIndicator status={normalizeSessionStatus(session.status)} />
+              <span className="chat-sessionItemTitle chat-textTruncate">
                 {session.title ?? `Session ${session.id.slice(0, 8)}`}
               </span>
             </div>
-            <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
-              <span>{session.agentType}</span>
+            <div className="chat-sessionItemMeta">
+              <span className="chat-sessionItemMetaValue">{session.agentType}</span>
               <span>·</span>
-              <span>{formatRelativeTime(session.lastActivityAt ?? session.createdAt)}</span>
+              <span>
+                {formatRelativeTime(session.lastActivityAt ?? session.createdAt)}
+              </span>
             </div>
             {session.workingDirectory && (
-              <div className="mt-1 truncate text-xs text-gray-400">
+              <span className="chat-sessionItemDir" title={session.workingDirectory}>
                 {session.workingDirectory}
-              </div>
+              </span>
             )}
           </button>
         ))}

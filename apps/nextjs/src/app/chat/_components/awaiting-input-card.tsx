@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { cn } from "@bob/ui";
 import { Button } from "@bob/ui/button";
@@ -25,10 +25,13 @@ export function AwaitingInputCard({
   const [customResponse, setCustomResponse] = useState("");
   const [timeRemaining, setTimeRemaining] = useState<string>("");
 
-  const expiresDate = new Date(expiresAt);
+  const expiresDate = useMemo(() => new Date(expiresAt), [expiresAt]);
   const isExpired = expiresDate < new Date();
+  const isCustomResponseReady = customResponse.trim().length > 0;
+  const cardState = isExpired ? "expired" : "active";
+  const isSubmitDisabled = isResolving ? true : !isCustomResponseReady;
 
-  useState(() => {
+  useEffect(() => {
     const updateTime = () => {
       const now = new Date();
       const diff = expiresDate.getTime() - now.getTime();
@@ -44,7 +47,7 @@ export function AwaitingInputCard({
     updateTime();
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
-  });
+  }, [expiresDate]);
 
   const handleOptionClick = (option: string) => {
     if (onResolve && !isResolving) {
@@ -55,6 +58,7 @@ export function AwaitingInputCard({
   const handleCustomSubmit = () => {
     if (onResolve && !isResolving && customResponse.trim()) {
       onResolve(customResponse.trim());
+      setCustomResponse("");
     }
   };
 
@@ -63,39 +67,27 @@ export function AwaitingInputCard({
       data-testid="awaiting-input-card"
       data-expired={isExpired}
       className={cn(
-        "mx-4 my-3 rounded-lg border-2 p-4",
-        isExpired
-          ? "border-gray-300 bg-gray-50 dark:border-gray-700 dark:bg-gray-900"
-          : "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950",
+        "chat-awaitingInputCard",
+        `chat-awaitingInputCard--${cardState}`,
       )}
     >
-      <div className="mb-3 flex items-start justify-between gap-4">
-        <div className="flex items-center gap-2">
+      <div className="chat-awaitingInputCardHeader">
+        <div className="chat-awaitingInputCardHeaderTitle">
           <svg
-            className={cn(
-              "h-5 w-5",
-              isExpired ? "text-gray-500" : "animate-pulse text-amber-500",
-            )}
+            className={cn("chat-awaitingInputCardIcon", isExpired && "is-expired")}
             viewBox="0 0 24 24"
             fill="currentColor"
           >
             <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zm0-14a1 1 0 0 1 1 1v4a1 1 0 1 1-2 0V9a1 1 0 0 1 1-1zm0 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" />
           </svg>
-          <span
-            className={cn(
-              "text-sm font-medium",
-              isExpired
-                ? "text-gray-600"
-                : "text-amber-700 dark:text-amber-300",
-            )}
-          >
+          <span className="chat-awaitingInputCardTitle">
             {isExpired ? "Input Expired" : "Agent Needs Input"}
           </span>
         </div>
         {!isExpired && (
           <span
             data-testid="time-remaining"
-            className="rounded bg-amber-200 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-amber-800 dark:bg-amber-800 dark:text-amber-200"
+            className="chat-awaitingInputCardRemaining"
           >
             {timeRemaining} remaining
           </span>
@@ -104,18 +96,16 @@ export function AwaitingInputCard({
 
       <p
         data-testid="input-question"
-        className={cn(
-          "mb-4 text-sm",
-          isExpired
-            ? "text-gray-600 dark:text-gray-400"
-            : "text-gray-800 dark:text-gray-200",
-        )}
+        className="chat-awaitingInputCardQuestion"
       >
         {question}
       </p>
 
       {options && options.length > 0 && !isExpired && (
-        <div data-testid="input-options" className="mb-4 flex flex-wrap gap-2">
+        <div
+          data-testid="input-options"
+          className="chat-awaitingInputCardOptions"
+        >
           {options.map((option, idx) => (
             <Button
               key={idx}
@@ -124,7 +114,7 @@ export function AwaitingInputCard({
               size="sm"
               disabled={isResolving}
               onClick={() => handleOptionClick(option)}
-              className="border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-600 dark:text-amber-300 dark:hover:bg-amber-900"
+              className="chat-awaitingInputOptionButton"
             >
               {option}
             </Button>
@@ -135,22 +125,33 @@ export function AwaitingInputCard({
       {!isExpired && (
         <div
           data-testid="custom-response-section"
-          className="flex items-center gap-2"
+          className="chat-awaitingInputCustom"
         >
           <input
             type="text"
             data-testid="custom-response-input"
+            aria-label="Custom response input"
             value={customResponse}
             onChange={(e) => setCustomResponse(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleCustomSubmit()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && isSubmitDisabled) {
+                e.preventDefault();
+                return;
+              }
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleCustomSubmit();
+              }
+            }}
             placeholder="Or type a custom response..."
             disabled={isResolving}
-            className="flex-1 rounded border border-gray-300 bg-white px-3 py-1.5 text-sm placeholder:text-gray-400 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:placeholder:text-gray-500"
+            className="chat-awaitingInputField"
           />
           <Button
             size="sm"
             data-testid="custom-response-submit"
-            disabled={isResolving || !customResponse.trim()}
+            className="chat-awaitingInputSubmit"
+            disabled={isSubmitDisabled}
             onClick={handleCustomSubmit}
           >
             {isResolving ? "Sending..." : "Send"}
@@ -161,8 +162,8 @@ export function AwaitingInputCard({
       <div
         data-testid="default-action-info"
         className={cn(
-          "mt-3 text-xs",
-          isExpired ? "text-gray-500" : "text-amber-600 dark:text-amber-400",
+          "chat-awaitingInputCardDefaultAction",
+          isExpired ? "is-expired" : "is-active",
         )}
       >
         {isExpired ? (
@@ -191,13 +192,16 @@ export function ResolvedInputCard({
     <div
       data-testid="resolved-input-card"
       data-resolution-type={resolution.type}
-      className="mx-4 my-3 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900"
+      className={cn(
+        "chat-resolvedInputCard",
+        `chat-resolvedInputCard--${resolution.type}`,
+      )}
     >
-      <div className="mb-2 flex items-center gap-2">
+      <div className="chat-resolvedInputCardHeader">
         <svg
           className={cn(
-            "h-4 w-4",
-            resolution.type === "human" ? "text-green-500" : "text-gray-400",
+            "chat-resolvedInputCardIcon",
+            resolution.type === "human" ? "is-human" : "is-timeout",
           )}
           viewBox="0 0 24 24"
           fill="currentColor"
@@ -206,7 +210,7 @@ export function ResolvedInputCard({
         </svg>
         <span
           data-testid="resolution-type-label"
-          className="text-sm font-medium text-gray-600 dark:text-gray-400"
+          className="chat-resolvedInputCardTitle"
         >
           {resolution.type === "human"
             ? "Human Response"
@@ -215,13 +219,13 @@ export function ResolvedInputCard({
       </div>
       <p
         data-testid="resolved-question"
-        className="mb-2 text-xs text-gray-500 dark:text-gray-500"
+        className="chat-resolvedInputCardQuestion"
       >
         Q: {question}
       </p>
       <p
         data-testid="resolved-answer"
-        className="text-sm text-gray-800 dark:text-gray-200"
+        className="chat-resolvedInputCardAnswer"
       >
         A: {resolution.value}
       </p>
