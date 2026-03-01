@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+
 import "~/app/chat/chat.css";
 
 import { InputComposer } from "~/app/chat/_components/input-composer";
@@ -526,14 +527,35 @@ interface TestSession {
   id: string;
   title: string;
   status: Exclude<SessionFilterValue, "all">;
+  workingDirectory?: string;
 }
 
-const testSessions: TestSession[] = [
+const baseTestSessions: TestSession[] = [
   { id: "session-1", title: "Alpha Session", status: "running" },
   { id: "session-2", title: "Beta Session", status: "idle" },
   { id: "session-3", title: "Gamma Session", status: "stopped" },
   { id: "session-4", title: "Delta Session", status: "error" },
   { id: "session-5", title: "Epsilon Session", status: "running" },
+];
+
+const longTestSessions: TestSession[] = [
+  {
+    id: "session-6",
+    title:
+      "A significantly longer session title designed to stress wrapping and overflow behavior",
+    status: "running",
+    workingDirectory:
+      "/Users/alice/projects/very-verbose-repository-name-with-a-really-long-path/name-with-multiple-segments/feature",
+  },
+  {
+    id: "session-7",
+    title:
+      "Another extended title for mobile session list resilience and readability checks",
+    status: "error",
+    workingDirectory:
+      "/tmp/long/path/example/workspace/where-the-session-directory-is-extraordinarily-long",
+  },
+  { id: "session-8", title: "Short error", status: "error" },
 ];
 
 function focusFilterButton(buttons: HTMLButtonElement[], targetIndex: number) {
@@ -543,11 +565,14 @@ function focusFilterButton(buttons: HTMLButtonElement[], targetIndex: number) {
   }
 }
 
-function SessionListFilterFixture() {
-  const [filter, setFilter] =
-    useState<Exclude<SessionFilterValue, "all"> | "all">("all");
+function SessionListFilterFixture({ variant }: { variant: string | null }) {
+  const sessions = variant === "long" ? longTestSessions : baseTestSessions;
+
+  const [filter, setFilter] = useState<
+    Exclude<SessionFilterValue, "all"> | "all"
+  >("all");
   const filterButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const filteredSessions = testSessions.filter(
+  const filteredSessions = sessions.filter(
     (session) => filter === "all" || session.status === filter,
   );
 
@@ -557,7 +582,7 @@ function SessionListFilterFixture() {
         <div className="chat-sidebarHeaderText">
           <h2 className="chat-sidebarTitle">Sessions</h2>
           <div className="chat-sidebarSubtext">
-            {filteredSessions.length} of {testSessions.length}
+            {filteredSessions.length} of {sessions.length}
           </div>
         </div>
       </div>
@@ -637,7 +662,24 @@ function SessionListFilterFixture() {
       <div className="chat-sessionList">
         {filteredSessions.map((session) => (
           <div key={session.id} role="button" className="chat-sessionItem">
-            {session.title}
+            <div className="chat-sessionItemHead">
+              <span className="chat-sessionItemTitle">{session.title}</span>
+            </div>
+            <div className="chat-sessionItemMeta">
+              <span className="chat-sessionItemMetaValue">
+                placeholder-agent
+              </span>
+              <span>·</span>
+              <span>now</span>
+            </div>
+            {session.workingDirectory && (
+              <span
+                className="chat-sessionItemDir"
+                title={session.workingDirectory}
+              >
+                {session.workingDirectory}
+              </span>
+            )}
           </div>
         ))}
       </div>
@@ -649,6 +691,7 @@ function TestPage() {
   const searchParams = useSearchParams();
   const component = searchParams.get("component") as TestComponent | null;
   const variant = searchParams.get("variant") ?? "default";
+  const listVariant = searchParams.get("listVariant");
 
   const [resolving, setResolving] = useState(false);
   const [resolved, setResolved] = useState<string | null>(null);
@@ -710,7 +753,8 @@ function TestPage() {
     const workflowState = workflowStatusMap[variant];
     const title = searchParams.get("title") ?? "Test Session";
     const agentType = searchParams.get("agentType") ?? "opencode";
-    const workingDirectory = searchParams.get("workingDirectory") ?? "/test/path";
+    const workingDirectory =
+      searchParams.get("workingDirectory") ?? "/test/path";
     const gitBranch = searchParams.get("gitBranch") ?? "feature/test";
     const sessionStatus =
       sessionStatusMap[searchParams.get("sessionStatus") ?? "running"] ??
@@ -828,7 +872,7 @@ function TestPage() {
   if (component === "session-list") {
     return (
       <div data-testid="test-container">
-        <SessionListFilterFixture />
+        <SessionListFilterFixture variant={listVariant} />
       </div>
     );
   }
@@ -838,6 +882,7 @@ function TestPage() {
       <p>
         Use query params:
         ?component=session-header|awaiting-input|resolved-input|input-composer|session-list&variant=...
+        and optionally listVariant=long for long session content
       </p>
     </div>
   );
