@@ -1,7 +1,10 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import "~/app/chat/chat.css";
+
+import { InputComposer } from "~/app/chat/_components/input-composer";
 
 type WorkflowStatus =
   | "started"
@@ -502,7 +505,145 @@ function ResolvedInputCard({
   );
 }
 
-type TestComponent = "session-header" | "awaiting-input" | "resolved-input";
+type TestComponent =
+  | "session-header"
+  | "awaiting-input"
+  | "resolved-input"
+  | "input-composer"
+  | "session-list";
+
+const testSessionFilters = [
+  { value: "all" as const, label: "All" },
+  { value: "running" as const, label: "Running" },
+  { value: "idle" as const, label: "Idle" },
+  { value: "stopped" as const, label: "Stopped" },
+  { value: "error" as const, label: "Error" },
+] as const;
+
+type SessionFilterValue = (typeof testSessionFilters)[number]["value"];
+
+interface TestSession {
+  id: string;
+  title: string;
+  status: Exclude<SessionFilterValue, "all">;
+}
+
+const testSessions: TestSession[] = [
+  { id: "session-1", title: "Alpha Session", status: "running" },
+  { id: "session-2", title: "Beta Session", status: "idle" },
+  { id: "session-3", title: "Gamma Session", status: "stopped" },
+  { id: "session-4", title: "Delta Session", status: "error" },
+  { id: "session-5", title: "Epsilon Session", status: "running" },
+];
+
+function focusFilterButton(buttons: HTMLButtonElement[], targetIndex: number) {
+  const button = buttons[targetIndex];
+  if (button) {
+    button.focus();
+  }
+}
+
+function SessionListFilterFixture() {
+  const [filter, setFilter] =
+    useState<Exclude<SessionFilterValue, "all"> | "all">("all");
+  const filterButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const filteredSessions = testSessions.filter(
+    (session) => filter === "all" || session.status === filter,
+  );
+
+  return (
+    <div className="chat-sidebar">
+      <div className="chat-sidebarHeader">
+        <div className="chat-sidebarHeaderText">
+          <h2 className="chat-sidebarTitle">Sessions</h2>
+          <div className="chat-sidebarSubtext">
+            {filteredSessions.length} of {testSessions.length}
+          </div>
+        </div>
+      </div>
+      <div className="chat-sidebarBody">
+        <div
+          className="chat-sidebarSearch"
+          role="searchbox"
+          aria-label="Search sessions"
+        >
+          Search not used in this fixture
+        </div>
+        <div
+          className="chat-filterRow"
+          role="tablist"
+          aria-label="Session filters"
+        >
+          {testSessionFilters.map((option, index) => {
+            const isActive = filter === option.value;
+
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="tab"
+                tabIndex={isActive ? 0 : -1}
+                aria-selected={isActive}
+                aria-pressed={isActive}
+                ref={(el) => {
+                  filterButtonRefs.current[index] = el;
+                }}
+                onClick={() => setFilter(option.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowRight") {
+                    event.preventDefault();
+                    const nextIndex = (index + 1) % testSessionFilters.length;
+                    const nextFilter = testSessionFilters[nextIndex];
+                    focusFilterButton(filterButtonRefs.current, nextIndex);
+                    if (nextFilter) setFilter(nextFilter.value);
+                  }
+
+                  if (event.key === "ArrowLeft") {
+                    event.preventDefault();
+                    const prevIndex =
+                      (index - 1 + testSessionFilters.length) %
+                      testSessionFilters.length;
+                    const prevFilter = testSessionFilters[prevIndex];
+                    focusFilterButton(filterButtonRefs.current, prevIndex);
+                    if (prevFilter) setFilter(prevFilter.value);
+                  }
+
+                  if (event.key === "Home") {
+                    event.preventDefault();
+                    const firstFilter = testSessionFilters[0];
+                    focusFilterButton(filterButtonRefs.current, 0);
+                    setFilter(firstFilter.value);
+                  }
+
+                  if (event.key === "End") {
+                    event.preventDefault();
+                    const lastIndex = testSessionFilters.length - 1;
+                    const lastFilter = testSessionFilters[lastIndex];
+                    focusFilterButton(filterButtonRefs.current, lastIndex);
+                    setFilter(lastFilter.value);
+                  }
+                }}
+                className={cn("chat-filterChip", isActive && "is-active")}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="chat-sidebarMeta">
+          {filter !== "all" ? `${filter} sessions` : "All sessions"} · No filter
+        </div>
+      </div>
+      <div className="chat-sessionList">
+        {filteredSessions.map((session) => (
+          <div key={session.id} role="button" className="chat-sessionItem">
+            {session.title}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function TestPage() {
   const searchParams = useSearchParams();
@@ -511,6 +652,7 @@ function TestPage() {
 
   const [resolving, setResolving] = useState(false);
   const [resolved, setResolved] = useState<string | null>(null);
+  const [lastSentMessage, setLastSentMessage] = useState<string | null>(null);
 
   useEffect(() => {
     (window as unknown as Record<string, unknown>).__testState = {
@@ -664,11 +806,34 @@ function TestPage() {
     );
   }
 
+  if (component === "input-composer") {
+    return (
+      <div data-testid="test-container">
+        <InputComposer
+          onSend={(message) => {
+            setLastSentMessage(message);
+          }}
+        />
+        <div data-testid="input-composer-last-message">
+          {lastSentMessage ?? ""}
+        </div>
+      </div>
+    );
+  }
+
+  if (component === "session-list") {
+    return (
+      <div data-testid="test-container">
+        <SessionListFilterFixture />
+      </div>
+    );
+  }
+
   return (
     <div data-testid="test-container" className="p-4">
       <p>
         Use query params:
-        ?component=session-header|awaiting-input|resolved-input&variant=...
+        ?component=session-header|awaiting-input|resolved-input|input-composer|session-list&variant=...
       </p>
     </div>
   );
