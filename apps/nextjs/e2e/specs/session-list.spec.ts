@@ -33,4 +33,41 @@ test.describe("SessionList", () => {
     await expect(allFilter).toHaveAttribute("aria-selected", "true");
     await expect(page.getByText("All sessions · No filter")).toBeVisible();
   });
+
+  test("keeps layout within mobile viewport", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.goto(TEST_PAGE);
+
+    const hasContainerOverflow = await page.evaluate(() => {
+      const width = window.innerWidth;
+      const selectors = [
+        ".chat-root",
+        ".chat-shell",
+        ".chat-sidebar",
+        ".chat-sidebarBody",
+        ".chat-filterRow",
+        ".chat-sessionList",
+      ];
+
+      return selectors.some((selector) => {
+        const el = document.querySelector(selector);
+        if (!el) return false;
+        const rect = el.getBoundingClientRect();
+        return rect.left < 0 || rect.right > width + 1;
+      });
+    });
+
+    const hasElementOverflow = await page.evaluate(() => {
+      const width = window.innerWidth;
+      return Array.from(
+        document.querySelectorAll(".chat-filterChip, .chat-sessionItem"),
+      ).some((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.left < 0 || rect.right > width + 1;
+      });
+    });
+
+    expect(hasContainerOverflow).toBeFalsy();
+    expect(hasElementOverflow).toBeFalsy();
+  });
 });
