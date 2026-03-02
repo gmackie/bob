@@ -783,14 +783,16 @@ export function WorkspacePanel({
                   >
                     <span>{index + 1}.</span>
                     <span>{command}</span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleRemoveQueuedCommand(index)}
-                      aria-label={`Remove command ${command}`}
-                    >
-                      Remove
-                    </Button>
+                    <div className="chat-commandQueueItemActions">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleRemoveQueuedCommand(index)}
+                        aria-label={`Remove command ${command}`}
+                      >
+                        Remove
+                      </Button>
+                    </div>
                   </li>
                 ))}
               </ol>
@@ -803,9 +805,9 @@ export function WorkspacePanel({
               <p className="chat-workspaceListEmpty">No command history yet</p>
             ) : (
               <ol className="chat-commandQueueList">
-                {commandHistory.map((entry) => (
+                {commandHistory.map((entry, index) => (
                   <li
-                    key={entry}
+                    key={`${entry}-${index}`}
                     className="chat-commandQueueItem chat-commandQueueItem--muted"
                   >
                     <span>{entry}</span>
