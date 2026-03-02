@@ -314,6 +314,10 @@ export function WorkspacePanel({
     [separator, workingDirectory],
   );
 
+  const handleRemoveQueuedCommand = useCallback((index: number) => {
+    setCommandQueue((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
   const workingDirectoryShort =
     workingDirectory.split(separator).at(-1) ?? workingDirectory;
 
@@ -567,24 +571,61 @@ export function WorkspacePanel({
                   }
                   return a.name.localeCompare(b.name);
                 })
-                .map((entry) => (
-                  <button
-                    key={entry.path}
-                    type="button"
-                    className={cn(
-                      "chat-fileBrowserEntry",
-                      entry.isDirectory && "is-directory",
-                    )}
-                    onClick={() => handleSelectDirectory(entry)}
-                  >
-                    <span>
-                      {entry.isDirectory ? "📁" : "📄"} {entry.name}
-                    </span>
-                    <span className="chat-fileBrowserMeta">
-                      {entry.isFile ? formatBytes(entry.size) : "DIR"}
-                    </span>
-                  </button>
-                ))}
+                .map((entry) =>
+                  entry.isDirectory ? (
+                    <button
+                      key={entry.path}
+                      type="button"
+                      className={cn("chat-fileBrowserEntry", "is-directory")}
+                      onClick={() => handleSelectDirectory(entry)}
+                    >
+                      <span>📁 {entry.name}</span>
+                      <span className="chat-fileBrowserMeta">DIR</span>
+                    </button>
+                  ) : (
+                    <div
+                      key={entry.path}
+                      role="button"
+                      tabIndex={0}
+                      className="chat-fileBrowserEntry"
+                      onClick={() => handleOpenStatusFile(entry.path)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          handleOpenStatusFile(entry.path);
+                        }
+                      }}
+                    >
+                      <span>📄 {entry.name}</span>
+                      <span className="chat-fileBrowserMeta">
+                        {formatBytes(entry.size)}
+                      </span>
+                      <span className="chat-fileBrowserActions">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleQueueFileCommand(entry.path, "stage");
+                          }}
+                          disabled={!canSendCommands}
+                        >
+                          Stage
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleOpenStatusFile(entry.path);
+                          }}
+                        >
+                          Open
+                        </Button>
+                      </span>
+                    </div>
+                  ),
+                )}
             </div>
           )}
         </section>
@@ -742,6 +783,14 @@ export function WorkspacePanel({
                   >
                     <span>{index + 1}.</span>
                     <span>{command}</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleRemoveQueuedCommand(index)}
+                      aria-label={`Remove command ${command}`}
+                    >
+                      Remove
+                    </Button>
                   </li>
                 ))}
               </ol>

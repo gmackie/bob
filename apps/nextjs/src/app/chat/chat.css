@@ -745,8 +745,8 @@
 
 .chat-fileBrowserEntry {
   text-align: left;
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
@@ -762,6 +762,19 @@
 
 .chat-fileBrowserEntry.is-directory {
   font-weight: 600;
+  cursor: pointer;
+}
+
+.chat-fileBrowserActions {
+  display: flex;
+  gap: 4px;
+}
+
+.chat-fileBrowserActions button {
+  min-height: 22px;
+  min-width: 56px;
+  padding: 2px 6px;
+  font-size: 10px;
 }
 
 .chat-fileBrowserMeta {
@@ -898,9 +911,14 @@
 
 .chat-commandQueueItem {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto 1fr auto;
   gap: 6px;
   align-items: start;
+}
+
+.chat-commandQueueItemActions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .chat-commandQueueItem--muted {
