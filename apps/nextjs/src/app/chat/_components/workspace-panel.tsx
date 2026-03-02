@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@bob/ui";
 import { Button } from "@bob/ui/button";
@@ -21,15 +22,6 @@ interface FileBrowserEntry {
   isFile: boolean;
   size: number;
   modified: string;
-}
-
-interface GitStatus {
-  branch: string;
-  ahead: number;
-  behind: number;
-  staged: string[];
-  unstaged: string[];
-  untracked: string[];
 }
 
 type ActiveWorkspaceTab = "status" | "files" | "viewer" | "commands";
@@ -155,14 +147,6 @@ export function WorkspacePanel({
   const [customCommand, setCustomCommand] = useState("");
   const [commitMessage, setCommitMessage] = useState("");
 
-  useEffect(() => {
-    setBrowserPath(workingDirectory);
-    setSelectedFile(null);
-    setCommandQueue([]);
-    setCommandHistory([]);
-    setActiveTab("status");
-  }, [workingDirectory]);
-
   const { data: workspaceStatus, isLoading: isWorkspaceStatusLoading } =
     useQuery(
       trpc.git.status.queryOptions(
@@ -267,7 +251,8 @@ export function WorkspacePanel({
     [addQueuedCommand, canSendCommands],
   );
 
-  const workingDirectoryShort = workingDirectory.split(separator).at(-1) || workingDirectory;
+  const workingDirectoryShort =
+    workingDirectory.split(separator).at(-1) ?? workingDirectory;
 
   return (
     <aside className="chat-workspacePanel">
@@ -487,7 +472,7 @@ export function WorkspacePanel({
                   )}
                   dangerouslySetInnerHTML={{
                     __html: applySimpleHighlight(
-                      fileContent.content ?? "",
+                      fileContent.content,
                       getFileExtension(selectedFile),
                     ),
                   }}
