@@ -564,6 +564,324 @@
   background: var(--chat-bg);
 }
 
+.chat-mainLayout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 0;
+}
+
+.chat-mainWorkspaceArea {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-workspacePanel {
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 13, 22, 0.88);
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-workspaceTabs {
+  display: flex;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 8px;
+  gap: 6px;
+  background: rgba(12, 16, 24, 0.9);
+}
+
+.chat-workspaceTab {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 11px;
+  line-height: 1.1;
+  min-height: 26px;
+  color: rgba(232, 238, 248, 0.76);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.chat-workspaceTab.is-active {
+  border-color: rgba(100, 160, 255, 0.52);
+  color: rgba(232, 238, 248, 0.96);
+  background: rgba(100, 160, 255, 0.2);
+}
+
+.chat-workspaceTab:disabled {
+  opacity: 0.45;
+}
+
+.chat-workspacePanelBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.chat-workspaceSectionTitle {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.chat-workspaceSubTitle {
+  color: rgba(232, 238, 248, 0.8);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.chat-workspacePath {
+  margin-top: 4px;
+  max-width: 100%;
+  color: rgba(232, 238, 248, 0.95);
+  font-size: 11px;
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-workspacePathNav {
+  display: flex;
+  gap: 6px;
+}
+
+.chat-workspaceMeta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.chat-workspaceMetaLabel {
+  display: block;
+  color: rgba(232, 238, 248, 0.62);
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+
+.chat-workspaceMetaValue {
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, monospace;
+  color: rgba(236, 244, 255, 0.95);
+  font-size: 12px;
+}
+
+.chat-workspaceStatusLists {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.chat-workspaceListTitle {
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(232, 238, 248, 0.88);
+}
+
+.chat-workspaceListEmpty {
+  color: rgba(232, 238, 248, 0.58);
+  font-size: 11px;
+}
+
+.chat-workspaceList {
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  max-height: 170px;
+  overflow: auto;
+  padding: 6px 8px;
+  display: grid;
+  gap: 4px;
+}
+
+.chat-workspaceListItem {
+  font-size: 11px;
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.chat-fileBrowserList {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  display: grid;
+}
+
+.chat-fileBrowserEntry {
+  text-align: left;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 8px 10px;
+  font-size: 12px;
+  color: rgba(236, 244, 255, 0.95);
+  background: transparent;
+}
+
+.chat-fileBrowserEntry:hover {
+  background: rgba(122, 180, 255, 0.09);
+}
+
+.chat-fileBrowserEntry.is-directory {
+  font-weight: 600;
+}
+
+.chat-fileBrowserMeta {
+  font-size: 11px;
+  color: rgba(236, 244, 255, 0.62);
+}
+
+.chat-fileViewer {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(6, 10, 18, 0.75);
+  min-height: 0;
+  overflow: auto;
+}
+
+.chat-fileCode {
+  margin: 0;
+  padding: 10px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.chat-fileCodeBody {
+  display: block;
+  width: 100%;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: rgba(226, 232, 240, 0.95);
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, monospace;
+}
+
+.chat-fileCodeBody--typescript,
+.chat-fileCodeBody--javascript {
+  color: #e5edff;
+}
+
+.chat-fileCodeBody--css {
+  color: #fbf3cc;
+}
+
+.chat-fileCodeBody--markup,
+.chat-fileCodeBody--markdown,
+.chat-fileCodeBody--config,
+.chat-fileCodeBody--text,
+.chat-fileCodeBody--shell {
+  color: #e7f2ff;
+}
+
+.chat-fileCodeComment {
+  color: #64748b;
+}
+
+.chat-fileCodeString {
+  color: #fde68a;
+}
+
+.chat-fileCodeKeyword {
+  color: #93c5fd;
+}
+
+.chat-fileCodeNumber {
+  color: #c4b5fd;
+}
+
+.chat-commandQuickActions {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.chat-commandQuickHint {
+  margin-top: 8px;
+  margin-bottom: 4px;
+  color: rgba(232, 238, 248, 0.62);
+  font-size: 11px;
+}
+
+.chat-commandCompose {
+  display: grid;
+  gap: 6px;
+}
+
+.chat-commandLabel {
+  font-size: 11px;
+  color: rgba(232, 238, 248, 0.72);
+}
+
+.chat-commandInput {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(12, 17, 26, 0.9);
+  color: #e8eef8;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 11px;
+}
+
+.chat-commandComposeRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chat-commandQuickButton {
+  min-height: 28px;
+}
+
+.chat-commandQueue {
+  display: grid;
+  gap: 6px;
+}
+
+.chat-commandQueueTitle {
+  color: rgba(232, 238, 248, 0.86);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.chat-commandQueueList {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(12, 17, 26, 0.8);
+  padding: 8px;
+  display: grid;
+  gap: 4px;
+  max-height: 150px;
+  overflow: auto;
+  font-size: 11px;
+}
+
+.chat-commandQueueItem {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px;
+  align-items: start;
+}
+
+.chat-commandQueueItem--muted {
+  color: rgba(232, 238, 248, 0.68);
+}
+
 .chat-connectionBar {
   display: flex;
   align-items: center;
@@ -1340,6 +1658,24 @@
 
   .chat-stream {
     padding: 12px;
+  }
+
+  .chat-mainLayout {
+    display: block;
+  }
+
+  .chat-workspacePanel {
+    border-left: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    max-height: 48vh;
+  }
+
+  .chat-workspaceTabs {
+    flex-wrap: wrap;
+  }
+
+  .chat-workspacePanelBody {
+    max-height: calc(48vh - 42px);
   }
 }
 

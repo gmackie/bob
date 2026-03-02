@@ -81,3 +81,9 @@ dist-electron/
 .claude/settings.local.json
 session-ses_*.md
 .creds
+
+# Superpowers / agents metadata
+.agents/
+.claude/skills/
+skills/
+skills-lock.json

@@ -15,6 +15,7 @@ import {
   SessionHeader,
 } from "./_components/session-header";
 import { SessionList } from "./_components/session-list";
+import { WorkspacePanel } from "./_components/workspace-panel";
 
 import "./chat.css";
 
@@ -238,6 +239,14 @@ function ChatPageContent() {
     [sessionId, sendInput],
   );
 
+  const handleWorkspaceCommand = useCallback(
+    (command: string) => {
+      if (!sessionId) return;
+      sendInput(sessionId, command);
+    },
+    [sendInput, sessionId],
+  );
+
   const handleStopSession = useCallback(() => {
     if (!sessionId) return;
     stopSession(sessionId);
@@ -290,11 +299,24 @@ function ChatPageContent() {
                 onStop={handleStopSession}
               />
 
-              <MessageStream
-                sessionId={sessionId}
-                events={events}
-                isConnected={isConnected}
-              />
+              <div className="chat-mainLayout">
+                <div className="chat-mainWorkspaceArea">
+                  <MessageStream
+                    sessionId={sessionId}
+                    events={events}
+                    isConnected={isConnected}
+                  />
+                </div>
+
+                {activeSessionData.workingDirectory ? (
+                  <WorkspacePanel
+                    sessionId={sessionId}
+                    workingDirectory={activeSessionData.workingDirectory}
+                    canSendCommands={canSend}
+                    onSendCommand={handleWorkspaceCommand}
+                  />
+                ) : null}
+              </div>
 
               <InputComposer
                 onSend={handleSendMessage}
