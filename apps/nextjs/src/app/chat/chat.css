@@ -30,12 +30,11 @@
   position: absolute;
   inset: -30% -10% auto;
   height: 58%;
-  background:
-    radial-gradient(
-      480px 220px at 30% 20%,
-      rgba(100, 160, 255, 0.14),
-      rgba(0, 0, 0, 0)
-    );
+  background: radial-gradient(
+    480px 220px at 30% 20%,
+    rgba(100, 160, 255, 0.14),
+    rgba(0, 0, 0, 0)
+  );
   pointer-events: none;
 }
 
@@ -44,12 +43,11 @@
   position: absolute;
   inset: auto -20% -35%;
   height: 55%;
-  background:
-    radial-gradient(
-      520px 260px at 70% 30%,
-      rgba(16, 185, 129, 0.14),
-      rgba(0, 0, 0, 0)
-    );
+  background: radial-gradient(
+    520px 260px at 70% 30%,
+    rgba(16, 185, 129, 0.14),
+    rgba(0, 0, 0, 0)
+  );
   pointer-events: none;
 }
 
@@ -217,6 +215,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .chat-sessionItem:hover {
@@ -236,11 +235,14 @@
   gap: 7px;
   font-size: 11px;
   color: rgba(232, 238, 248, 0.64);
+  min-width: 0;
 }
 
 .chat-sessionItemMetaValue {
   font-size: 11px;
   color: rgba(232, 238, 248, 0.52);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .chat-sessionItemTitle {
@@ -248,6 +250,10 @@
   font-weight: 600;
   color: #e7efff;
   letter-spacing: 0.01em;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.25;
 }
 
 .chat-sessionStatusDot {
@@ -290,9 +296,9 @@
   display: block;
   font-size: 11px;
   color: rgba(232, 238, 248, 0.44);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
 }
 
 .chat-emptyText {
@@ -648,8 +654,9 @@
 }
 
 .chat-sessionHeaderCode {
-  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo,
-    Monaco, Consolas, monospace;
+  font-family:
+    var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, monospace;
   font-size: 11px;
 }
 
@@ -703,7 +710,8 @@
   font-size: 11px;
   color: rgba(232, 238, 248, 0.88);
   background: rgba(255, 255, 255, 0.04);
-  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
+  font-family:
+    var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
     Consolas, monospace;
 }
 
@@ -786,7 +794,6 @@
   color: #bfdbfe;
 }
 
-
 .chat-chip--blue {
   background: rgba(59, 130, 246, 0.18);
   color: #bfdbfe;
@@ -817,7 +824,10 @@
   border-radius: 10px;
   font-size: 11px;
   font-weight: 600;
-  transition: transform 140ms ease, border-color 140ms ease, color 140ms ease,
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
     background 140ms ease;
 }
 
@@ -944,7 +954,8 @@
 }
 
 .chat-messageBubble pre {
-  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
+  font-family:
+    var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
     Consolas, monospace;
   white-space: pre-wrap;
 }
@@ -986,7 +997,8 @@
 }
 
 .chat-toolCallName {
-  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
+  font-family:
+    var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
     Consolas, monospace;
   font-size: 11px;
   font-weight: 600;

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
@@ -16,6 +16,70 @@ import {
 } from "./_components/session-header";
 import { SessionList } from "./_components/session-list";
 
+import "./chat.css";
+
+interface SessionEventRecord {
+  sessionId: string;
+  seq: number;
+  eventType: string;
+  direction: string;
+  payload: Record<string, unknown>;
+  createdAt: string | Date;
+}
+
+interface SessionEventsResponse {
+  events: SessionEventRecord[];
+}
+
+function toSessionStatus(status: string): SessionStatus {
+  return [
+    "provisioning",
+    "starting",
+    "running",
+    "idle",
+    "stopping",
+    "stopped",
+    "error",
+  ].includes(status)
+    ? (status as SessionStatus)
+    : "stopped";
+}
+
+function toEventType(eventType: string): SessionEvent["eventType"] {
+  return [
+    "output_chunk",
+    "message_final",
+    "input",
+    "tool_call",
+    "tool_result",
+    "state",
+    "error",
+    "heartbeat",
+    "transcript",
+  ].includes(eventType)
+    ? (eventType as SessionEvent["eventType"])
+    : "error";
+}
+
+function toEventDirection(direction: string): SessionEvent["direction"] {
+  return ["client", "agent", "system"].includes(direction)
+    ? (direction as SessionEvent["direction"])
+    : "system";
+}
+
+function toSessionEvents(records?: SessionEventsResponse["events"]): SessionEvent[] {
+  return (records ?? []).map((e) => ({
+    type: "event",
+    sessionId: e.sessionId,
+    seq: e.seq,
+    eventType: toEventType(e.eventType),
+    direction: toEventDirection(e.direction),
+    payload: e.payload,
+    createdAt:
+      typeof e.createdAt === "string" ? e.createdAt : e.createdAt.toISOString(),
+  }));
+}
+
 export default function ChatPage() {
   return (
     <Suspense fallback={<ChatPageSkeleton />}>
@@ -26,12 +90,33 @@ export default function ChatPage() {
 
 function ChatPageSkeleton() {
   return (
-    <div className="flex h-screen">
-      <div className="w-64 shrink-0 border-r bg-gray-50 p-4">
-        <div className="h-8 w-32 animate-pulse rounded bg-gray-200" />
+    <div className="chat-root">
+      <div className="chat-shell">
+        <div className="chat-sidebar">
+          <div className="chat-sidebarHeader">
+            <div className="h-8 w-20 animate-pulse rounded bg-white/10" />
+          </div>
+          <div className="chat-emptyText">Loading sessions…</div>
+        </div>
+
+        <div className="chat-main">
+          <div className="chat-emptyState chat-emptyText">
+            <div className="chat-emptyStateTitle">Loading workspace…</div>
+          </div>
+        </div>
       </div>
-      <div className="flex flex-1 items-center justify-center">
-        <div className="text-gray-500">Loading...</div>
+    </div>
+  );
+}
+
+function ChatEmptyState() {
+  return (
+    <div className="chat-emptyState">
+      <div>
+        <div className="chat-emptyStateTitle">Select a session</div>
+        <div className="chat-emptyStateSubtext">
+          Choose a session from the sidebar or create one to begin
+        </div>
       </div>
     </div>
   );
@@ -43,40 +128,75 @@ function ChatPageContent() {
   const trpc = useTRPC();
 
   const sessionId = searchParams.get("session");
-  const [events, setEvents] = useState<SessionEvent[]>([]);
-  const [sessionStatus, setSessionStatus] = useState<SessionStatus>("stopped");
+  const hasSessionId = Boolean(sessionId);
+  const activeSessionId = sessionId ?? "";
+  const [liveEvents, setLiveEvents] = useState<SessionEvent[]>([]);
+  const [socketSessionStatus, setSocketSessionStatus] = useState<SessionStatus | null>(
+    null,
+  );
+  const latestSeqRef = useRef(0);
 
   const { data: gatewayInfo } = useQuery(
     trpc.session.getGatewayWebSocketUrl.queryOptions(),
   );
 
-  const { data: sessionData } = useQuery(
-    trpc.session.get.queryOptions({ id: sessionId! }, { enabled: !!sessionId }),
+  const { data: rawSessionData } = useQuery(
+    trpc.session.get.queryOptions({ id: activeSessionId }, { enabled: hasSessionId }),
   );
 
-  const { data: sessionEvents } = useQuery(
+  const activeSessionData = hasSessionId ? rawSessionData : null;
+
+  const { data: rawSessionEvents } = useQuery(
     trpc.session.getEvents.queryOptions(
-      { sessionId: sessionId!, limit: 500 },
-      { enabled: !!sessionId },
+      { sessionId: activeSessionId, limit: 500 },
+      { enabled: hasSessionId },
     ),
   );
 
+  const historicalEvents = useMemo(
+    () => toSessionEvents(rawSessionEvents?.events),
+    [rawSessionEvents?.events],
+  );
+  const liveEventsForSession = useMemo(
+    () => (activeSessionId ? liveEvents.filter((event) => event.sessionId === activeSessionId) : []),
+    [activeSessionId, liveEvents],
+  );
+  const events = useMemo(() => {
+    const eventsBySeq = new Map<string, SessionEvent>();
+
+    for (const event of historicalEvents) {
+      eventsBySeq.set(`${event.sessionId}:${event.seq}`, event);
+    }
+
+    for (const event of liveEventsForSession) {
+      eventsBySeq.set(`${event.sessionId}:${event.seq}`, event);
+    }
+
+    return [...eventsBySeq.values()].sort((a, b) => a.seq - b.seq);
+  }, [historicalEvents, liveEventsForSession]);
+
+  useEffect(() => {
+    latestSeqRef.current = activeSessionId
+      ? events.at(-1)?.seq ?? 0
+      : 0;
+  }, [activeSessionId, events]);
+
   const handleEvent = useCallback(
     (event: SessionEvent) => {
-      if (event.sessionId === sessionId) {
-        setEvents((prev) => [...prev, event]);
+      if (event.sessionId === activeSessionId) {
+        setLiveEvents((prev) => [...prev, event]);
       }
     },
-    [sessionId],
+    [activeSessionId, setLiveEvents],
   );
 
   const handleStatusChange = useCallback(
     (sid: string, status: SessionStatus) => {
-      if (sid === sessionId) {
-        setSessionStatus(status);
+      if (sid === activeSessionId) {
+        setSocketSessionStatus(status);
       }
     },
-    [sessionId],
+    [activeSessionId, setSocketSessionStatus],
   );
 
   const {
@@ -94,41 +214,20 @@ function ChatPageContent() {
   });
 
   useEffect(() => {
-    if (sessionEvents?.events) {
-      setEvents(
-        sessionEvents.events.map((e) => ({
-          type: "event" as const,
-          sessionId: e.sessionId,
-          seq: e.seq,
-          eventType: e.eventType as SessionEvent["eventType"],
-          direction: e.direction as SessionEvent["direction"],
-          payload: e.payload,
-          createdAt: e.createdAt.toISOString(),
-        })),
-      );
+    if (activeSessionId && connectionState.status === "connected") {
+      subscribe(activeSessionId, latestSeqRef.current);
+      return () => unsubscribe(activeSessionId);
     }
-  }, [sessionEvents]);
-
-  useEffect(() => {
-    if (sessionId && connectionState.status === "connected") {
-      const lastSeq = events.length > 0 ? events[events.length - 1]!.seq : 0;
-      subscribe(sessionId, lastSeq);
-      return () => unsubscribe(sessionId);
-    }
-  }, [sessionId, connectionState.status, subscribe, unsubscribe]);
-
-  useEffect(() => {
-    if (sessionData) {
-      setSessionStatus(sessionData.status as SessionStatus);
-    }
-  }, [sessionData]);
+  }, [activeSessionId, connectionState.status, subscribe, unsubscribe]);
 
   const handleSelectSession = useCallback(
     (id: string) => {
-      setEvents([]);
+      setLiveEvents([]);
+      latestSeqRef.current = 0;
+      setSocketSessionStatus(null);
       router.push(`/chat?session=${id}`);
     },
-    [router],
+    [router, setLiveEvents, setSocketSessionStatus],
   );
 
   const handleSendMessage = useCallback(
@@ -145,78 +244,78 @@ function ChatPageContent() {
   }, [sessionId, stopSession]);
 
   const isConnected = connectionState.status === "connected";
-  const canSend =
-    isConnected && (sessionStatus === "running" || sessionStatus === "idle");
+  const sessionStatus =
+    socketSessionStatus ??
+    (activeSessionData ? toSessionStatus(activeSessionData.status) : "stopped");
+  const canSend = isConnected && (sessionStatus === "running" || sessionStatus === "idle");
 
   // Get voice status for ElevenLabs sessions
   const { state: voiceState } = useVoiceSession(
     sessionId ?? null,
-    sessionData?.agentType
+    activeSessionData?.agentType,
   );
 
   return (
-    <div className="flex h-screen">
-      <div className="w-64 shrink-0">
+    <div className="chat-root">
+      <div className="chat-shell">
         <SessionList
           selectedId={sessionId ?? undefined}
           onSelect={handleSelectSession}
         />
-      </div>
 
-      <div className="flex flex-1 flex-col">
-        <ConnectionIndicator
-          status={connectionState.status}
-          error={connectionState.error}
-          reconnectAttempt={connectionState.reconnectAttempt}
-          reconnectIn={connectionState.reconnectIn}
-          onReconnect={reconnect}
-        />
+        <div className="chat-main">
+          <ConnectionIndicator
+            status={connectionState.status}
+            error={connectionState.error}
+            reconnectAttempt={connectionState.reconnectAttempt}
+            reconnectIn={connectionState.reconnectIn}
+            onReconnect={reconnect}
+          />
 
-        {sessionId && sessionData ? (
-          <>
-            <SessionHeader
-              title={
-                sessionData.title ?? `Session ${sessionData.id.slice(0, 8)}`
-              }
-              status={sessionStatus}
-              agentType={sessionData.agentType}
-              workingDirectory={sessionData.workingDirectory ?? undefined}
-              voiceStatus={sessionData.agentType === "elevenlabs" ? voiceState.status : undefined}
-              onStop={handleStopSession}
-            />
+          {sessionId && activeSessionData ? (
+            <>
+              <SessionHeader
+                title={
+                  activeSessionData.title ??
+                  `Session ${activeSessionData.id.slice(0, 8)}`
+                }
+                status={sessionStatus}
+                agentType={activeSessionData.agentType}
+                workingDirectory={activeSessionData.workingDirectory ?? undefined}
+                voiceStatus={
+                  activeSessionData.agentType === "elevenlabs"
+                    ? voiceState.status
+                    : undefined
+                }
+                onStop={handleStopSession}
+              />
 
-            <MessageStream
-              sessionId={sessionId}
-              events={events}
-              isConnected={isConnected}
-            />
+              <MessageStream
+                sessionId={sessionId}
+                events={events}
+                isConnected={isConnected}
+              />
 
-            <InputComposer
-              onSend={handleSendMessage}
-              disabled={!canSend}
-              agentType={sessionData.agentType}
-              sessionId={sessionId}
-              placeholder={
-                !isConnected
-                  ? "Connecting..."
-                  : sessionStatus === "stopped"
-                    ? "Session stopped"
-                    : sessionStatus === "error"
-                      ? "Session error"
-                      : "Type a message..."
-              }
-            />
-          </>
-        ) : (
-          <div className="flex flex-1 items-center justify-center text-gray-500">
-            <div className="text-center">
-              <div className="text-lg font-medium">Select a session</div>
-              <div className="mt-1 text-sm">
-                Choose a session from the sidebar or create a new one
-              </div>
-            </div>
-          </div>
-        )}
+              <InputComposer
+                onSend={handleSendMessage}
+                disabled={!canSend}
+                agentType={activeSessionData.agentType}
+                sessionId={sessionId}
+                placeholder={
+                  !isConnected
+                    ? "Connecting..."
+                    : sessionStatus === "stopped"
+                      ? "Session stopped"
+                      : sessionStatus === "error"
+                        ? "Session error"
+                        : "Type a message..."
+                }
+              />
+            </>
+          ) : (
+            <ChatEmptyState />
+          )}
+        </div>
       </div>
     </div>
   );

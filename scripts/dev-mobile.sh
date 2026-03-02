@@ -94,12 +94,8 @@ pick_expo_port() {
     return 1
 }
 
-is_next_lock_present() {
-    [ -f /Volumes/dev/bob/apps/nextjs/.next/dev/lock ]
-}
-
 find_bob_next_dev_pids() {
-    ps aux | awk 'BEGIN{p=0} /\/Volumes\/dev\/bob\/apps\/nextjs\/node_modules\/.bin\/next dev/ {print $2}'
+    pgrep -f '/Volumes/dev/bob/node_modules/.bin/next dev|/Volumes/dev/bob/node_modules/.bin/dotenv -e ../../.env -- next dev|pnpm --filter @bob/nextjs dev|pnpm with-env next dev' || true
 }
 
 kill_bob_next_dev() {
@@ -126,33 +122,24 @@ kill_bob_next_dev() {
 # ============================================
 echo -e "${YELLOW}[1/3] Starting Next.js server...${NC}"
 
-if is_next_lock_present; then
-    echo -e "${YELLOW}      Detected Next.js dev lock file.${NC}"
-    echo -e "${YELLOW}      This usually means another Bob Next.js dev server is running.${NC}"
-
-    EXISTING_PIDS=$(find_bob_next_dev_pids)
-    if [ -n "$EXISTING_PIDS" ]; then
-        echo -e "${YELLOW}      Detected running Next.js dev PID(s):${NC} $EXISTING_PIDS"
-    else
-        echo -e "${YELLOW}      No Bob Next.js dev processes detected, but lock still exists.${NC}"
-    fi
+EXISTING_PIDS=$(find_bob_next_dev_pids)
+if [ -n "$EXISTING_PIDS" ]; then
+    echo -e "${YELLOW}      Detected running Bob dev server PID(s):${NC} $EXISTING_PIDS"
 
     if [ "${BOB_DEV_MOBILE_AUTO_KILL:-}" = "1" ]; then
         kill_bob_next_dev
-        rm -f /Volumes/dev/bob/apps/nextjs/.next/dev/lock 2>/dev/null || true
     else
         if [ ! -t 0 ]; then
-            echo -e "${RED}Error: Next.js dev lock present and script is running non-interactively.${NC}"
+            echo -e "${RED}Error: Bob dev server already running and script is non-interactive.${NC}"
             echo -e "${YELLOW}      Re-run in an interactive terminal, or set BOB_DEV_MOBILE_AUTO_KILL=1.${NC}"
             exit 1
         fi
 
-        read -p "Kill existing Bob Next.js dev process(es) and continue? [y/N] " -r
+        read -p "Kill existing Bob dev process(es) and continue? [y/N] " -r
         if [[ "$REPLY" =~ ^[Yy]$ ]]; then
             kill_bob_next_dev
-            rm -f /Volumes/dev/bob/apps/nextjs/.next/dev/lock 2>/dev/null || true
         else
-            echo -e "${RED}Error: Next.js dev lock present; refusing to start a second instance.${NC}"
+            echo -e "${RED}Error: Existing Bob dev process detected; refusing to start a second instance.${NC}"
             exit 1
         fi
     fi
@@ -166,13 +153,6 @@ echo -e "      Waiting for Next.js to be ready..."
 NEXT_PORT=""
 for i in {1..60}; do
     if ! kill -0 "$NEXT_PID" 2>/dev/null; then
-        if grep -q "Unable to acquire lock" "$NEXT_LOG" 2>/dev/null; then
-            echo -e "${RED}Error: Next.js failed to acquire dev lock (another instance running).${NC}"
-            echo "Last log output:"
-            tail -50 "$NEXT_LOG"
-            exit 1
-        fi
-
         echo -e "${RED}Error: Next.js process exited early${NC}"
         echo "Last log output:"
         tail -50 "$NEXT_LOG"

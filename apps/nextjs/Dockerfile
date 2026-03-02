@@ -42,9 +42,15 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/apps/nextjs/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/apps/nextjs/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/apps/nextjs/.next/static ./apps/nextjs/.next/static
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/nextjs ./apps/nextjs
+COPY --from=builder /app/apps/nextjs/node_modules ./apps/nextjs/node_modules
+COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
+
+RUN chown -R nextjs:nodejs /app
+WORKDIR /app/apps/nextjs
 
 USER nextjs
 
@@ -52,4 +58,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "apps/nextjs/server.js"]
+CMD ["pnpm", "start"]

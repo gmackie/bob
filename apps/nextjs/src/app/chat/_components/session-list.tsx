@@ -1,12 +1,14 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { useTRPC } from "~/trpc/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
 import { cn } from "@bob/ui";
 import { Button } from "@bob/ui/button";
-import { getAvailableAgentTypes } from "~/utils/platform";
+
 import type { SessionStatus } from "~/hooks/use-session-socket";
+import { useTRPC } from "~/trpc/react";
+import { getAvailableAgentTypes } from "~/utils/platform";
 
 function normalizeSessionStatus(status: string): SessionStatus {
   return [
@@ -81,7 +83,8 @@ export function SessionList({
   const [filter, setFilter] = useState<SessionStatus | "all">("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [showNewSessionModal, setShowNewSessionModal] = useState(false);
-  const [selectedAgentType, setSelectedAgentType] = useState<string>("opencode");
+  const [selectedAgentType, setSelectedAgentType] =
+    useState<string>("opencode");
   const filterButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const { data, isLoading, error } = useQuery(
@@ -111,7 +114,9 @@ export function SessionList({
     if (!normalizedSearch) return sessions;
 
     return sessions.filter((session) => {
-      const title = (session.title ?? `Session ${session.id.slice(0, 8)}`).toLowerCase();
+      const title = (
+        session.title ?? `Session ${session.id.slice(0, 8)}`
+      ).toLowerCase();
       const dir = (session.workingDirectory ?? "").toLowerCase();
 
       return (
@@ -223,8 +228,7 @@ export function SessionList({
                 onKeyDown={(event) => {
                   if (event.key === "ArrowRight") {
                     event.preventDefault();
-                    const nextIndex =
-                      (index + 1) % statusFilters.length;
+                    const nextIndex = (index + 1) % statusFilters.length;
                     const nextFilter = statusFilters[nextIndex];
                     focusFilterButton(filterButtonRefs.current, nextIndex);
                     if (nextFilter) setFilter(nextFilter.value);
@@ -303,20 +307,29 @@ export function SessionList({
             )}
           >
             <div className="chat-sessionItemHead">
-              <StatusIndicator status={normalizeSessionStatus(session.status)} />
-              <span className="chat-sessionItemTitle chat-textTruncate">
+              <StatusIndicator
+                status={normalizeSessionStatus(session.status)}
+              />
+              <span className="chat-sessionItemTitle">
                 {session.title ?? `Session ${session.id.slice(0, 8)}`}
               </span>
             </div>
             <div className="chat-sessionItemMeta">
-              <span className="chat-sessionItemMetaValue">{session.agentType}</span>
+              <span className="chat-sessionItemMetaValue">
+                {session.agentType}
+              </span>
               <span>·</span>
               <span>
-                {formatRelativeTime(session.lastActivityAt ?? session.createdAt)}
+                {formatRelativeTime(
+                  session.lastActivityAt ?? session.createdAt,
+                )}
               </span>
             </div>
             {session.workingDirectory && (
-              <span className="chat-sessionItemDir" title={session.workingDirectory}>
+              <span
+                className="chat-sessionItemDir"
+                title={session.workingDirectory}
+              >
                 {session.workingDirectory}
               </span>
             )}

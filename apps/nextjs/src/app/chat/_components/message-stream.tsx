@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@bob/ui";
-import type { SessionEvent, SessionEventType } from "~/hooks/use-session-socket";
+import type { SessionEvent } from "~/hooks/use-session-socket";
 
 interface Message {
   id: string;
@@ -25,6 +25,51 @@ interface MessageStreamProps {
   sessionId: string;
   events: SessionEvent[];
   isConnected: boolean;
+}
+
+function toDisplayText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    typeof value === "bigint"
+  ) {
+    return String(value);
+  }
+  if (value instanceof Date) return value.toISOString();
+  if (value === null || value === undefined) return "";
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "";
+  }
+}
+
+function formatTimestamp(value: Date): string {
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(value);
+}
+
+function timestampForTranscript(
+  timestamp: unknown,
+  fallback: string,
+): string {
+  const parsed = toDisplayText(timestamp);
+  return parsed.trim() || fallback;
+}
+
+function toolCallIndicatorClass({
+  result,
+  isError,
+}: {
+  result?: string;
+  isError?: boolean;
+}) {
+  if (!result) return "chat-toolCallIndicator--loading";
+  return isError ? "chat-toolCallIndicator--error" : "chat-toolCallIndicator--success";
 }
 
 function parseEventsToMessages(events: SessionEvent[]): Message[] {
@@ -50,66 +95,81 @@ function parseEventsToMessages(events: SessionEvent[]): Message[] {
       messages.push({
         id: `user-${event.seq}`,
         role: "user",
-        content: event.payload.data as string,
+        content: toDisplayText(event.payload.data),
         timestamp: new Date(event.createdAt),
       });
     }
 
     if (event.eventType === "output_chunk" && event.direction === "agent") {
-      currentAssistantContent += event.payload.data as string;
+      currentAssistantContent += toDisplayText(event.payload.data);
       lastAssistantSeq = event.seq;
     }
 
     if (event.eventType === "message_final" && event.direction === "agent") {
-      currentAssistantContent = event.payload.content as string;
+      currentAssistantContent = toDisplayText(event.payload.content);
       lastAssistantSeq = event.seq;
     }
 
     if (event.eventType === "tool_call" && event.direction === "agent") {
+      const toolCallId = toDisplayText(event.payload.toolCallId);
+      if (!toolCallId) continue;
+
       currentToolCalls.push({
-        id: event.payload.toolCallId as string,
-        name: event.payload.name as string,
-        arguments: event.payload.arguments as string,
+        id: toolCallId,
+        name: toDisplayText(event.payload.name) || "tool",
+        arguments: toDisplayText(event.payload.arguments),
       });
       lastAssistantSeq = event.seq;
     }
 
     if (event.eventType === "tool_result" && event.direction === "agent") {
-      const toolCall = currentToolCalls.find(tc => tc.id === event.payload.toolCallId);
+      const toolCall = currentToolCalls.find(
+        (tc) => tc.id === toDisplayText(event.payload.toolCallId),
+      );
       if (toolCall) {
-        toolCall.result = event.payload.result as string;
-        toolCall.isError = event.payload.isError as boolean;
+        toolCall.result = toDisplayText(event.payload.result);
+        toolCall.isError = event.payload.isError === true;
       }
       lastAssistantSeq = event.seq;
     }
 
     if (event.eventType === "state" && event.direction === "system") {
+      const status = toDisplayText(event.payload.status) || "Update";
+      const reason = toDisplayText(event.payload.reason);
+      const reasonSuffix = reason ? `: ${reason}` : "";
+
       messages.push({
         id: `system-${event.seq}`,
         role: "system",
-        content: `Session ${event.payload.status}${event.payload.reason ? `: ${event.payload.reason}` : ""}`,
+        content: `Session ${status}${reasonSuffix}`,
         timestamp: new Date(event.createdAt),
       });
     }
 
     if (event.eventType === "error") {
+      const message = toDisplayText(event.payload.message) || "Unknown error";
+
       messages.push({
         id: `error-${event.seq}`,
         role: "system",
-        content: `Error: ${event.payload.message}`,
+        content: `Error: ${message}`,
         timestamp: new Date(event.createdAt),
       });
     }
 
     if (event.eventType === "transcript") {
-      const transcriptType = event.payload.type as "user" | "assistant";
-      const transcriptText = event.payload.text as string;
-      
+      const transcriptTypeRaw = toDisplayText(event.payload.type);
+      const transcriptType =
+        transcriptTypeRaw === "user" ? "user" : "assistant";
+      const transcriptText = toDisplayText(event.payload.text);
+
       messages.push({
         id: `transcript-${event.seq}`,
-        role: transcriptType === "user" ? "user" : "assistant",
+        role: transcriptType,
         content: transcriptText,
-        timestamp: new Date(event.payload.timestamp as string || event.createdAt),
+        timestamp: new Date(
+          timestampForTranscript(event.payload.timestamp, event.createdAt),
+        ),
       });
     }
   }
@@ -132,44 +192,50 @@ function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="my-2 rounded border bg-gray-50 dark:bg-gray-900">
+    <div className="chat-toolCall">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-2 p-2 text-left text-sm"
+        className="chat-toolCallToggle"
+        type="button"
       >
-        <span className={cn(
-          "inline-block h-2 w-2 rounded-full",
-          toolCall.result === undefined ? "bg-blue-500 animate-pulse" :
-          toolCall.isError ? "bg-red-500" : "bg-green-500"
-        )} />
-        <span className="font-mono font-medium">{toolCall.name}</span>
-        <span className="ml-auto text-gray-400">{expanded ? "▼" : "▶"}</span>
+        <span
+          className={cn(
+            "chat-toolCallIndicator",
+            toolCallIndicatorClass({
+              result: toolCall.result,
+              isError: toolCall.isError,
+            }),
+          )}
+        />
+        <span className="chat-toolCallName">{toolCall.name}</span>
+        <span className="chat-toolCallChevron">{expanded ? "▼" : "▶"}</span>
       </button>
-      
+
       {expanded && (
-        <div className="border-t p-2">
+        <div className="chat-toolCallBody">
           <div className="mb-2">
-            <div className="mb-1 text-xs font-medium text-gray-500">Arguments:</div>
-            <pre className="overflow-x-auto rounded bg-gray-100 p-2 text-xs dark:bg-gray-800">
+            <div className="chat-toolCallTitle">Arguments:</div>
+            <pre className="chat-toolCode">
               {(() => {
                 try {
-                  return JSON.stringify(JSON.parse(toolCall.arguments), null, 2);
+                  return JSON.stringify(
+                    JSON.parse(toolCall.arguments),
+                    null,
+                    2,
+                  );
                 } catch {
                   return toolCall.arguments;
                 }
               })()}
             </pre>
           </div>
-          
+
           {toolCall.result !== undefined && (
             <div>
-              <div className="mb-1 text-xs font-medium text-gray-500">
+              <div className="chat-toolCallTitle">
                 {toolCall.isError ? "Error:" : "Result:"}
               </div>
-              <pre className={cn(
-                "overflow-x-auto rounded p-2 text-xs",
-                toolCall.isError ? "bg-red-50 dark:bg-red-900/20" : "bg-gray-100 dark:bg-gray-800"
-              )}>
+              <pre className={cn("chat-toolCode", toolCall.isError && "is-error")}>
                 {toolCall.result.slice(0, 1000)}
                 {toolCall.result.length > 1000 && "..."}
               </pre>
@@ -183,40 +249,48 @@ function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
 
 function MessageBubble({ message }: { message: Message }) {
   if (message.role === "system") {
-    return (
-      <div className="my-2 text-center text-xs text-gray-500">
-        {message.content}
-      </div>
-    );
+    return <div className="chat-systemMessage">{message.content}</div>;
   }
 
   const isUser = message.role === "user";
+  const roleLabel = isUser ? "You" : "Agent";
 
   return (
-    <div className={cn("my-3 flex", isUser ? "justify-end" : "justify-start")}>
+    <div className={cn("chat-messageRow", isUser && "is-user")}>
       <div
         className={cn(
-          "max-w-[80%] rounded-lg px-4 py-2",
+          "chat-messageBubble",
           isUser
-            ? "bg-blue-600 text-white"
-            : "bg-gray-100 dark:bg-gray-800"
+            ? "chat-messageBubble--user"
+            : "chat-messageBubble--assistant",
         )}
       >
-        <div className="whitespace-pre-wrap text-sm">{message.content}</div>
-        
+        <div className="chat-messageMeta">
+          <span>{roleLabel}</span>
+          <time
+            dateTime={message.timestamp.toISOString()}
+            className="chat-messageTime"
+          >
+            {formatTimestamp(message.timestamp)}
+          </time>
+        </div>
+        <div className="chat-messageText">{message.content}</div>
+
         {message.toolCalls?.map((tc) => (
           <ToolCallDisplay key={tc.id} toolCall={tc} />
         ))}
-        
-        {message.isStreaming && (
-          <span className="ml-1 inline-block h-2 w-2 animate-pulse rounded-full bg-blue-500" />
-        )}
+
+        {message.isStreaming && <span className="chat-streamingDot" />}
       </div>
     </div>
   );
 }
 
-export function MessageStream({ sessionId, events, isConnected }: MessageStreamProps) {
+export function MessageStream({
+  sessionId,
+  events,
+  isConnected,
+}: MessageStreamProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const messages = parseEventsToMessages(events);
 
@@ -229,19 +303,22 @@ export function MessageStream({ sessionId, events, isConnected }: MessageStreamP
   return (
     <div
       ref={containerRef}
-      className="flex-1 overflow-y-auto p-4"
+      className="chat-stream"
+      data-session-id={sessionId}
     >
       {!isConnected && (
-        <div className="mb-4 rounded bg-yellow-50 p-2 text-center text-sm text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400">
+        <div className="chat-banner chat-banner--disconnect">
           Disconnected - reconnecting...
         </div>
       )}
 
       {messages.length === 0 ? (
-        <div className="flex h-full items-center justify-center text-gray-500">
-          <div className="text-center">
-            <div className="text-lg font-medium">Start a conversation</div>
-            <div className="mt-1 text-sm">Type a message below to begin</div>
+        <div className="chat-emptyState">
+          <div>
+            <div className="chat-emptyStateTitle">Start a conversation</div>
+            <div className="chat-emptyStateSubtext">
+              Type a message below to begin
+            </div>
           </div>
         </div>
       ) : (

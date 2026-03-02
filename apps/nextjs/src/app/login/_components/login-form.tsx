@@ -37,9 +37,12 @@ export function LoginForm() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-sm rounded-xl border bg-white p-6 shadow-sm">
-      <h1 className="text-2xl font-semibold">Sign in</h1>
-      <p className="mt-1 text-sm text-gray-600">
+    <div className="relative w-full overflow-hidden rounded-[26px] border border-white/15 bg-black/30 p-7 shadow-[0_18px_60px_rgba(0,0,0,.55)] backdrop-blur-md">
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-200/70 to-transparent" />
+      <h1 className="text-3xl font-semibold tracking-tight text-white">
+        Sign in
+      </h1>
+      <p className="mt-2 text-sm leading-relaxed text-slate-200/85">
         Sign in with GitHub to access Bob.
       </p>
 
@@ -48,11 +51,15 @@ export function LoginForm() {
           type="button"
           onClick={signInWithGitHub}
           disabled={loading}
-          className="w-full"
+          className="group flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-gradient-to-r from-cyan-400/95 to-blue-400/90 px-4 py-3 text-sm font-medium text-slate-950 shadow-[0_14px_38px_rgba(56,189,248,.35)] transition hover:from-cyan-300 hover:to-blue-300 active:translate-y-[1px]"
         >
           {loading ? "Redirecting..." : "Continue with GitHub"}
         </Button>
-        {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+        {error ? (
+          <p className="mt-3 rounded-md border border-rose-400/30 bg-rose-500/12 px-3 py-2 text-sm text-rose-200">
+            {error}
+          </p>
+        ) : null}
       </div>
     </div>
   );

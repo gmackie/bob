@@ -56,4 +56,6 @@ export const selectors = {
   resolutionTypeLabel: "[data-testid='resolution-type-label']",
   resolvedQuestion: "[data-testid='resolved-question']",
   resolvedAnswer: "[data-testid='resolved-answer']",
+  inputComposerLastMessage: "[data-testid='input-composer-last-message']",
+  composerTextarea: "[aria-label='Message input']",
 };
