@@ -2,17 +2,19 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { cn } from "@bob/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { SessionEvent, SessionStatus } from "~/hooks/use-session-socket";
 import { useSessionSocket } from "~/hooks/use-session-socket";
 import { useVoiceSession } from "~/hooks/use-voice-session";
 import { useTRPC } from "~/trpc/react";
-import { InputComposer } from "./_components/input-composer";
 import { AwaitingInputCard } from "./_components/awaiting-input-card";
+import { InputComposer } from "./_components/input-composer";
 import { MessageStream } from "./_components/message-stream";
 import {
   ConnectionIndicator,
+  type WorkflowState,
   SessionHeader,
 } from "./_components/session-header";
 import { SessionList } from "./_components/session-list";
@@ -32,6 +34,8 @@ interface SessionEventRecord {
 interface SessionEventsResponse {
   events: SessionEventRecord[];
 }
+
+type InteractionMode = "web" | "headless";
 
 function toSessionStatus(status: string): SessionStatus {
   return [
@@ -80,6 +84,21 @@ function toSessionEvents(records?: SessionEventsResponse["events"]): SessionEven
     createdAt:
       typeof e.createdAt === "string" ? e.createdAt : e.createdAt.toISOString(),
   }));
+}
+
+function buildChatPath(
+  baseSearch: URLSearchParams,
+  mode: InteractionMode,
+  sessionId?: string,
+): string {
+  const params = new URLSearchParams(baseSearch.toString());
+  params.set("mode", mode);
+
+  if (sessionId) {
+    params.set("session", sessionId);
+  }
+
+  return params.toString().length > 0 ? `/chat?${params.toString()}` : "/chat";
 }
 
 export default function ChatPage() {
@@ -134,11 +153,17 @@ function ChatPageContent() {
   const hasSessionId = Boolean(sessionId);
   const activeSessionId = sessionId ?? "";
   const [liveEvents, setLiveEvents] = useState<SessionEvent[]>([]);
-  const [socketSessionStatus, setSocketSessionStatus] = useState<SessionStatus | null>(
-    null,
-  );
+  const [socketSessionStatus, setSocketSessionStatus] =
+    useState<SessionStatus | null>(null);
   const startedSessionsRef = useRef(new Set<string>());
   const latestSeqRef = useRef(0);
+  const [headlessFromSeq, setHeadlessFromSeq] = useState(0);
+
+  const interactionMode = useMemo<InteractionMode>(() => {
+    const mode = searchParams.get("mode");
+    return mode === "headless" ? "headless" : "web";
+  }, [searchParams]);
+  const isHeadlessMode = interactionMode === "headless";
 
   const { data: gatewayInfo } = useQuery(
     trpc.session.getGatewayWebSocketUrl.queryOptions(),
@@ -147,15 +172,30 @@ function ChatPageContent() {
   const { data: rawSessionData } = useQuery(
     trpc.session.get.queryOptions({ id: activeSessionId }, { enabled: hasSessionId }),
   );
-
   const activeSessionData = hasSessionId ? rawSessionData : null;
 
-  const { data: rawSessionEvents } = useQuery(
+  const eventQueryInput = useMemo(
+    () =>
+      isHeadlessMode
+        ? {
+            sessionId: activeSessionId,
+            fromSeq: headlessFromSeq,
+            limit: 200,
+          }
+        : { sessionId: activeSessionId, limit: 500 },
+    [activeSessionId, headlessFromSeq, isHeadlessMode],
+  );
+
+  const { data: rawSessionEvents, refetch: refetchSessionEvents } = useQuery(
     trpc.session.getEvents.queryOptions(
-      { sessionId: activeSessionId, limit: 500 },
-      { enabled: hasSessionId },
+      eventQueryInput,
+      {
+        enabled: hasSessionId,
+        refetchInterval: isHeadlessMode ? 1500 : false,
+      },
     ),
   );
+
   const { data: rawWorkflowState } = useQuery(
     trpc.session.getWorkflowState.queryOptions(
       { sessionId: activeSessionId },
@@ -163,19 +203,32 @@ function ChatPageContent() {
     ),
   );
 
-  const workflowState = useMemo(() => {
+  const workflowState = useMemo<WorkflowState | null>(() => {
     if (!rawWorkflowState) return null;
 
-    if (!rawWorkflowState.awaitingInput) return rawWorkflowState;
+    const awaitingInput = rawWorkflowState.awaitingInput;
+    if (!awaitingInput) {
+      return {
+        workflowStatus: rawWorkflowState.workflowStatus,
+        statusMessage: rawWorkflowState.statusMessage,
+        awaitingInput: null,
+      };
+    }
+
+    const expiresAtValue = awaitingInput.expiresAt;
+    const normalizedExpiresAt =
+      typeof expiresAtValue === "string"
+        ? expiresAtValue
+        : expiresAtValue instanceof Date
+          ? expiresAtValue.toISOString()
+          : null;
 
     return {
-      ...rawWorkflowState,
+      workflowStatus: rawWorkflowState.workflowStatus,
+      statusMessage: rawWorkflowState.statusMessage,
       awaitingInput: {
-        ...rawWorkflowState.awaitingInput,
-        expiresAt:
-          typeof rawWorkflowState.awaitingInput.expiresAt === "string"
-            ? rawWorkflowState.awaitingInput.expiresAt
-            : new Date(rawWorkflowState.awaitingInput.expiresAt).toISOString(),
+        ...awaitingInput,
+        expiresAt: normalizedExpiresAt ?? "",
       },
     };
   }, [rawWorkflowState]);
@@ -196,12 +249,63 @@ function ChatPageContent() {
     }),
   );
 
+  const stopSessionMutation = useMutation(
+    trpc.session.stop.mutationOptions({
+      onSuccess: () => {
+        if (!hasSessionId) return;
+        void queryClient.invalidateQueries({
+          queryKey: trpc.session.get.queryKey({
+            id: activeSessionId,
+          }),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: trpc.session.getEvents.queryKey({
+            sessionId: activeSessionId,
+          }),
+        });
+      },
+      onError: (error) => {
+        console.error("[ChatPage] Failed to stop session:", error);
+      },
+    }),
+  );
+
+  const sendHeadlessInputMutation = useMutation(
+    trpc.session.sendHeadlessInput.mutationOptions({
+      onSuccess: () => {
+        if (!hasSessionId) return;
+        void queryClient.invalidateQueries({
+          queryKey: trpc.session.get.queryKey({
+            id: activeSessionId,
+          }),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: trpc.session.getEvents.queryKey({
+            sessionId: activeSessionId,
+          }),
+        });
+        void refetchSessionEvents();
+      },
+      onError: (error) => {
+        console.error("[ChatPage] Failed to send headless input:", error);
+        void queryClient.invalidateQueries({
+          queryKey: trpc.session.getEvents.queryKey({
+            sessionId: activeSessionId,
+          }),
+        });
+      },
+    }),
+  );
+
   const historicalEvents = useMemo(
     () => toSessionEvents(rawSessionEvents?.events),
     [rawSessionEvents?.events],
   );
   const liveEventsForSession = useMemo(
-    () => (activeSessionId ? liveEvents.filter((event) => event.sessionId === activeSessionId) : []),
+    () =>
+      activeSessionId
+        ? liveEvents.filter((event) => event.sessionId === activeSessionId)
+        : [],
     [activeSessionId, liveEvents],
   );
   const events = useMemo(() => {
@@ -219,25 +323,43 @@ function ChatPageContent() {
   }, [historicalEvents, liveEventsForSession]);
 
   useEffect(() => {
-    latestSeqRef.current = activeSessionId
-      ? events.at(-1)?.seq ?? 0
-      : 0;
+    latestSeqRef.current = activeSessionId ? events.at(-1)?.seq ?? 0 : 0;
   }, [activeSessionId, events]);
+
+  useEffect(() => {
+    setHeadlessFromSeq(0);
+    setLiveEvents([]);
+    setSocketSessionStatus(null);
+  }, [activeSessionId]);
+
+  useEffect(() => {
+    if (!isHeadlessMode || !rawSessionEvents) return;
+
+    const nextSeq = rawSessionEvents.latestSeq;
+    if (typeof nextSeq === "number" && nextSeq > headlessFromSeq) {
+      setHeadlessFromSeq(nextSeq);
+    }
+  }, [headlessFromSeq, isHeadlessMode, rawSessionEvents?.latestSeq]);
 
   const handleEvent = useCallback(
     (event: SessionEvent) => {
       if (event.sessionId === activeSessionId) {
         setLiveEvents((prev) => [...prev, event]);
-        if (event.eventType === "state" && event.payload.workflowStatus) {
-          void queryClient.invalidateQueries({
-            queryKey: trpc.session.getWorkflowState.queryKey({
-              sessionId: activeSessionId,
-            }),
-          });
-        }
+      }
+
+      if (
+        event.eventType === "state" &&
+        event.payload.workflowStatus &&
+        event.sessionId === activeSessionId
+      ) {
+        void queryClient.invalidateQueries({
+          queryKey: trpc.session.getWorkflowState.queryKey({
+            sessionId: activeSessionId,
+          }),
+        });
       }
     },
-    [activeSessionId, queryClient, setLiveEvents, trpc.session.getWorkflowState],
+    [activeSessionId, queryClient, trpc.session.getWorkflowState],
   );
 
   const handleStatusChange = useCallback(
@@ -246,7 +368,7 @@ function ChatPageContent() {
         setSocketSessionStatus(status);
       }
     },
-    [activeSessionId, setSocketSessionStatus],
+    [activeSessionId],
   );
 
   const {
@@ -259,32 +381,51 @@ function ChatPageContent() {
     reconnect,
   } = useSessionSocket({
     gatewayUrl: gatewayInfo?.url ?? "",
-    token: "session-token",
+    token: isHeadlessMode ? "" : "session-token",
     onEvent: handleEvent,
     onStatusChange: handleStatusChange,
+    enabled: !isHeadlessMode,
   });
 
-  useEffect(() => {
-    if (activeSessionId && connectionState.status === "connected") {
-      subscribe(activeSessionId, latestSeqRef.current);
-      return () => unsubscribe(activeSessionId);
-    }
-  }, [activeSessionId, connectionState.status, subscribe, unsubscribe]);
+  const updateUrl = useCallback(
+    (mode: InteractionMode, selectedSessionId?: string) => {
+      const nextPath = buildChatPath(
+        new URLSearchParams(searchParams.toString()),
+        mode,
+        selectedSessionId ?? activeSessionId,
+      );
+      router.push(nextPath);
+    },
+    [activeSessionId, router, searchParams],
+  );
 
   useEffect(() => {
-    if (connectionState.status !== "connected" || !activeSessionData || !sessionId) {
+    if (isHeadlessMode || !activeSessionId || connectionState.status !== "connected") {
       return;
     }
 
-    if ([
-      "running",
-      "idle",
-    ].includes(activeSessionData.status)) {
+    subscribe(activeSessionId, latestSeqRef.current);
+    return () => unsubscribe(activeSessionId);
+  }, [activeSessionId, connectionState.status, isHeadlessMode, subscribe, unsubscribe]);
+
+  useEffect(() => {
+    if (
+      isHeadlessMode ||
+      connectionState.status !== "connected" ||
+      !activeSessionData ||
+      !sessionId
+    ) {
+      return;
+    }
+
+    if (["running", "idle"].includes(activeSessionData.status)) {
       startedSessionsRef.current.delete(sessionId);
       return;
     }
 
-    if (startedSessionsRef.current.has(sessionId)) return;
+    if (startedSessionsRef.current.has(sessionId)) {
+      return;
+    }
 
     createSession({
       sessionId,
@@ -294,50 +435,91 @@ function ChatPageContent() {
       worktreeId: activeSessionData.worktreeId ?? undefined,
       title: activeSessionData.title ?? undefined,
     });
-
     startedSessionsRef.current.add(sessionId);
-  }, [activeSessionData, connectionState.status, createSession, sessionId]);
+  }, [
+    activeSessionData,
+    connectionState.status,
+    createSession,
+    isHeadlessMode,
+    sessionId,
+  ]);
 
   useEffect(() => {
+    if (isHeadlessMode) return;
     if (connectionState.status !== "connected") {
       startedSessionsRef.current.clear();
     }
-  }, [connectionState.status]);
+  }, [connectionState.status, isHeadlessMode]);
+
+  const handleSelectMode = useCallback(
+    (mode: InteractionMode) => {
+      if (mode === interactionMode) return;
+
+      const nextPath = buildChatPath(
+        new URLSearchParams(searchParams.toString()),
+        mode,
+        activeSessionId,
+      );
+      router.replace(nextPath);
+    },
+    [activeSessionId, interactionMode, router, searchParams],
+  );
 
   const handleSelectSession = useCallback(
-    (id: string) => {
+    (id: string, mode: InteractionMode = interactionMode) => {
       setLiveEvents([]);
       latestSeqRef.current = 0;
       setSocketSessionStatus(null);
-      router.push(`/chat?session=${id}`);
+      updateUrl(mode, id);
     },
-    [router, setLiveEvents, setSocketSessionStatus],
+    [interactionMode, setLiveEvents, setSocketSessionStatus, updateUrl],
+  );
+
+  const sendMessageOrCommand = useCallback(
+    (message: string) => {
+      if (!activeSessionId) return;
+
+      if (isHeadlessMode) {
+        sendHeadlessInputMutation.mutate({
+          sessionId: activeSessionId,
+          message,
+        });
+        return;
+      }
+
+      sendInput(activeSessionId, message);
+    },
+    [activeSessionId, isHeadlessMode, sendHeadlessInputMutation, sendInput],
   );
 
   const handleSendMessage = useCallback(
     (message: string) => {
-      if (!sessionId) return;
-      sendInput(sessionId, message);
+      sendMessageOrCommand(message);
     },
-    [sessionId, sendInput],
+    [sendMessageOrCommand],
   );
 
   const handleWorkspaceCommand = useCallback(
     (command: string) => {
-      if (!sessionId) return;
-      sendInput(sessionId, command);
+      sendMessageOrCommand(command);
     },
-    [sendInput, sessionId],
+    [sendMessageOrCommand],
   );
 
   const handleStopSession = useCallback(() => {
-    if (!sessionId) return;
-    stopSession(sessionId);
-  }, [sessionId, stopSession]);
+    if (!activeSessionId) return;
+
+    if (isHeadlessMode) {
+      stopSessionMutation.mutate({ id: activeSessionId });
+      return;
+    }
+
+    stopSession(activeSessionId);
+  }, [activeSessionId, isHeadlessMode, stopSession, stopSessionMutation]);
 
   const handleResolveWorkflowInput = useCallback(
     (response: string) => {
-      if (!sessionId || !workflowState?.awaitingInput) return;
+      if (!activeSessionId || !workflowState?.awaitingInput) return;
 
       resolveAwaitingInputMutation.mutate({
         sessionId: activeSessionId,
@@ -347,17 +529,19 @@ function ChatPageContent() {
         },
       });
     },
-    [activeSessionId, resolveAwaitingInputMutation, sessionId, workflowState],
+    [activeSessionId, resolveAwaitingInputMutation, workflowState],
   );
 
-  const isConnected = connectionState.status === "connected";
+  const isConnected = !isHeadlessMode && connectionState.status === "connected";
   const sessionStatus =
     socketSessionStatus ??
     (activeSessionData ? toSessionStatus(activeSessionData.status) : "stopped");
-  const canSend = isConnected && (sessionStatus === "running" || sessionStatus === "idle");
+  const canSend =
+    (isHeadlessMode || isConnected) &&
+    (sessionStatus === "running" || sessionStatus === "idle") &&
+    !sendHeadlessInputMutation.isPending;
   const isAwaitingInput = workflowState?.workflowStatus === "awaiting_input";
 
-  // Get voice status for ElevenLabs sessions
   const { state: voiceState } = useVoiceSession(
     sessionId ?? null,
     activeSessionData?.agentType,
@@ -368,17 +552,49 @@ function ChatPageContent() {
       <div className="chat-shell">
         <SessionList
           selectedId={sessionId ?? undefined}
+          selectedMode={interactionMode}
           onSelect={handleSelectSession}
         />
 
         <div className="chat-main">
-          <ConnectionIndicator
-            status={connectionState.status}
-            error={connectionState.error}
-            reconnectAttempt={connectionState.reconnectAttempt}
-            reconnectIn={connectionState.reconnectIn}
-            onReconnect={reconnect}
-          />
+          <div className="chat-modeSwitch" role="tablist" aria-label="Interaction mode">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={interactionMode === "web"}
+              onClick={() => handleSelectMode("web")}
+              className={cn("chat-modeSwitchButton", {
+                "is-active": interactionMode === "web",
+              })}
+            >
+              Web Terminal
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={interactionMode === "headless"}
+              onClick={() => handleSelectMode("headless")}
+              className={cn("chat-modeSwitchButton", {
+                "is-active": interactionMode === "headless",
+              })}
+            >
+              Headless Chat
+            </button>
+          </div>
+
+          {isHeadlessMode ? (
+            <div className="chat-connectionBar chat-connectionBar--connecting">
+              Headless mode active
+            </div>
+          ) : (
+            <ConnectionIndicator
+              status={connectionState.status}
+              error={connectionState.error}
+              reconnectAttempt={connectionState.reconnectAttempt}
+              reconnectIn={connectionState.reconnectIn}
+              onReconnect={reconnect}
+            />
+          )}
 
           {sessionId && activeSessionData ? (
             <>
@@ -417,7 +633,7 @@ function ChatPageContent() {
                   <MessageStream
                     sessionId={sessionId}
                     events={events}
-                    isConnected={isConnected}
+                    isConnected={isHeadlessMode ? true : isConnected}
                   />
                 </div>
 
@@ -440,13 +656,15 @@ function ChatPageContent() {
                 placeholder={
                   isAwaitingInput
                     ? "Please resolve the input prompt above"
-                    : !isConnected
-                      ? "Connecting..."
-                      : sessionStatus === "stopped"
-                        ? "Session stopped"
-                        : sessionStatus === "error"
-                          ? "Session error"
-                          : "Type a message..."
+                    : isHeadlessMode
+                      ? "Type a message..."
+                      : !isConnected
+                        ? "Connecting..."
+                        : sessionStatus === "stopped"
+                          ? "Session stopped"
+                          : sessionStatus === "error"
+                            ? "Session error"
+                            : "Type a message..."
                 }
               />
             </>

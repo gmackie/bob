@@ -10,6 +10,8 @@ import type { SessionStatus } from "~/hooks/use-session-socket";
 import { useTRPC } from "~/trpc/react";
 import { getAvailableAgentTypes } from "~/utils/platform";
 
+type InteractionMode = "web" | "headless";
+
 function normalizeSessionStatus(status: string): SessionStatus {
   return [
     "provisioning",
@@ -64,7 +66,10 @@ function StatusIndicator({ status }: { status: SessionStatus }) {
   return <span className={cn(className)} title={status} />;
 }
 
-function focusFilterButton(buttons: HTMLButtonElement[], targetIndex: number) {
+function focusFilterButton(
+  buttons: Array<HTMLButtonElement | null>,
+  targetIndex: number,
+) {
   const button = buttons[targetIndex];
   if (button) {
     button.focus();
@@ -73,10 +78,12 @@ function focusFilterButton(buttons: HTMLButtonElement[], targetIndex: number) {
 
 export function SessionList({
   selectedId,
+  selectedMode = "web",
   onSelect,
 }: {
   selectedId?: string;
-  onSelect: (id: string) => void;
+  selectedMode?: InteractionMode;
+  onSelect: (id: string, mode?: InteractionMode) => void;
 }) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
@@ -97,14 +104,14 @@ export function SessionList({
   const createMutation = useMutation(
     trpc.session.bootstrapForChat.mutationOptions({
       onSuccess: (bootstrapResult) => {
-        const newSessionId = bootstrapResult.id ?? bootstrapResult.session?.id;
+        const newSessionId = bootstrapResult.id;
 
         void queryClient.invalidateQueries({
           queryKey: trpc.session.list.queryKey(),
         });
         if (!newSessionId) return;
         setShowNewSessionModal(false);
-        onSelect(newSessionId);
+        onSelect(newSessionId, selectedMode);
       },
     }),
   );
@@ -302,7 +309,7 @@ export function SessionList({
         {filteredSessions.map((session) => (
           <button
             key={session.id}
-            onClick={() => onSelect(session.id)}
+            onClick={() => onSelect(session.id, selectedMode)}
             className={cn(
               "chat-sessionItem",
               selectedId === session.id && "is-active",

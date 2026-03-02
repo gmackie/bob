@@ -56,6 +56,7 @@ interface UseSessionSocketOptions {
   onEvent?: (event: SessionEvent) => void;
   onStatusChange?: (sessionId: string, status: SessionStatus) => void;
   onConnectionChange?: (state: ConnectionState) => void;
+  enabled?: boolean;
   maxReconnectAttempts?: number;
   baseReconnectDelayMs?: number;
 }
@@ -66,6 +67,7 @@ export function useSessionSocket({
   onEvent,
   onStatusChange,
   onConnectionChange,
+  enabled = true,
   maxReconnectAttempts = 10,
   baseReconnectDelayMs = 1000,
 }: UseSessionSocketOptions) {
@@ -126,6 +128,7 @@ export function useSessionSocket({
   }, []);
 
   const connect = useCallback(() => {
+    if (!enabled) return;
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
     if (!gatewayUrl || !token) return;
 
@@ -163,7 +166,7 @@ export function useSessionSocket({
       console.error("[SessionSocket] WebSocket error:", error);
       updateConnectionState({ status: "error", error: "Connection error" });
     };
-  }, [gatewayUrl, token, updateConnectionState, send]);
+  }, [enabled, gatewayUrl, token, updateConnectionState, send]);
 
   const handleMessage = useCallback(
     (msg: Record<string, unknown>) => {
@@ -291,6 +294,8 @@ export function useSessionSocket({
 
   const subscribe = useCallback(
     (sessionId: string, lastAckSeq = 0) => {
+      if (!enabled) return;
+
       subscribedSessionsRef.current.set(sessionId, {
         sessionId,
         status: "stopped",
@@ -301,22 +306,25 @@ export function useSessionSocket({
         send({ type: "subscribe", sessionId, lastAckSeq });
       }
     },
-    [connectionState.status, send],
+    [connectionState.status, enabled, send],
   );
 
   const unsubscribe = useCallback(
     (sessionId: string) => {
+      if (!enabled) return;
       subscribedSessionsRef.current.delete(sessionId);
 
       if (connectionState.status === "connected") {
         send({ type: "unsubscribe", sessionId });
       }
     },
-    [connectionState.status, send],
+    [connectionState.status, enabled, send],
   );
 
   const sendInput = useCallback(
     (sessionId: string, data: string) => {
+      if (!enabled) return null;
+
       const clientInputId = crypto.randomUUID();
       send({
         type: "input",
@@ -326,7 +334,7 @@ export function useSessionSocket({
       });
       return clientInputId;
     },
-    [send],
+    [enabled, send],
   );
 
   const createSession = useCallback(
@@ -338,26 +346,33 @@ export function useSessionSocket({
       repositoryId?: string;
       title?: string;
     }) => {
+      if (!enabled) return;
       send({
         type: "create_session",
         ...(config.sessionId ? { sessionId: config.sessionId } : {}),
         ...config,
       });
     },
-    [send],
+    [enabled, send],
   );
 
   const stopSession = useCallback(
     (sessionId: string) => {
+      if (!enabled) return;
       send({ type: "stop_session", sessionId });
     },
-    [send],
+    [enabled, send],
   );
 
   useEffect(() => {
+    if (!enabled) {
+      disconnect();
+      return;
+    }
+
     connect();
     return () => disconnect();
-  }, [connect, disconnect]);
+  }, [connect, disconnect, enabled]);
 
   return {
     connectionState,

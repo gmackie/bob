@@ -19,6 +19,7 @@ import {
   workflowStatusValues,
 } from "../services/sessions/workflowStatusService";
 import { createElevenLabsSessionService } from "../services/voice/elevenlabsSession";
+import { createOpenCodeClient } from "../services/opencode/opencodeClient";
 import { protectedProcedure } from "../trpc";
 
 const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:3002";
@@ -55,6 +56,11 @@ const sessionStatusValues = [
   "stopped",
   "error",
 ] as const;
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return "Unknown error";
+}
 
 export const sessionRouter = {
   list: protectedProcedure
@@ -343,6 +349,136 @@ export const sessionRouter = {
         .orderBy(desc(sessionConnections.connectedAt));
 
       return connections;
+    }),
+
+  sendHeadlessInput: protectedProcedure
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        message: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const session = await ctx.db.query.chatConversations.findFirst({
+        where: and(
+          eq(chatConversations.id, input.sessionId),
+          eq(chatConversations.userId, ctx.session.user.id),
+        ),
+        columns: {
+          status: true,
+          agentType: true,
+          opencodeSessionId: true,
+          nextSeq: true,
+        },
+      });
+
+      if (!session) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Session not found",
+        });
+      }
+
+      if (session.agentType !== "opencode") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Headless mode currently supports opencode sessions only",
+        });
+      }
+
+      const opencodeClient = createOpenCodeClient();
+      let opencodeSessionId = session.opencodeSessionId;
+
+      if (!opencodeSessionId?.trim()) {
+        const created = await opencodeClient.createSession({
+          bobConversationId: input.sessionId,
+        });
+        opencodeSessionId = created.id;
+
+        await ctx.db.update(chatConversations).set({
+          opencodeSessionId,
+        }).where(eq(chatConversations.id, input.sessionId));
+      }
+
+      const [updatedSession] = await ctx.db
+        .update(chatConversations)
+        .set({
+          status: "running",
+          lastActivityAt: new Date(),
+          nextSeq: sql`${chatConversations.nextSeq} + 2`,
+        })
+        .where(eq(chatConversations.id, input.sessionId))
+        .returning({ nextSeq: chatConversations.nextSeq });
+
+      const inputSeq = (updatedSession?.nextSeq ?? session.nextSeq) - 2;
+      const outputSeq = inputSeq + 1;
+
+      await ctx.db.insert(sessionEvents).values({
+        sessionId: input.sessionId,
+        seq: inputSeq,
+        direction: "client",
+        eventType: "input",
+        payload: { data: input.message },
+      });
+
+      try {
+        let content = "";
+        const stream = await opencodeClient.sendMessage(
+          opencodeSessionId,
+          {
+            role: "user",
+            content: input.message,
+          },
+          { stream: true },
+        );
+
+        for await (const chunk of stream) {
+          content += chunk.content;
+        }
+
+        await ctx.db.insert(sessionEvents).values({
+          sessionId: input.sessionId,
+          seq: outputSeq,
+          direction: "agent",
+          eventType: "message_final",
+          payload: {
+            content,
+          },
+        });
+
+        return {
+          sessionId: input.sessionId,
+          seq: { input: inputSeq, assistant: outputSeq },
+        };
+      } catch (error) {
+        const errorMessage = toErrorMessage(error);
+
+        await ctx.db.insert(sessionEvents).values({
+          sessionId: input.sessionId,
+          seq: outputSeq,
+          direction: "system",
+          eventType: "error",
+          payload: { message: errorMessage },
+        });
+
+        await ctx.db
+          .update(chatConversations)
+          .set({
+            status: "error",
+            lastError: {
+              code: "HEADLESS_INPUT_ERROR",
+              message: errorMessage,
+              timestamp: new Date().toISOString(),
+            },
+            lastActivityAt: new Date(),
+          })
+          .where(eq(chatConversations.id, input.sessionId));
+
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: errorMessage,
+        });
+      }
     }),
 
   updateStatus: protectedProcedure
