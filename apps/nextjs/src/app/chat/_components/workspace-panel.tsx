@@ -576,6 +576,7 @@ export function WorkspacePanel({
                     <button
                       key={entry.path}
                       type="button"
+                      aria-label={`Open directory ${entry.name}`}
                       className={cn("chat-fileBrowserEntry", "is-directory")}
                       onClick={() => handleSelectDirectory(entry)}
                     >
@@ -587,6 +588,7 @@ export function WorkspacePanel({
                       key={entry.path}
                       role="button"
                       tabIndex={0}
+                      aria-label={`Open file ${entry.name}`}
                       className="chat-fileBrowserEntry"
                       onClick={() => handleOpenStatusFile(entry.path)}
                       onKeyDown={(event) => {
