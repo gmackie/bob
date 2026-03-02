@@ -5,6 +5,7 @@ import type { CSSProperties } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { TerminalComponent } from "~/components/dashboard/Terminal";
+import { SystemStatusPanel } from "~/components/dashboard";
 import { useCheatCode } from "~/contexts";
 import { getAppConfig } from "~/lib/legacy/config";
 import { api } from "~/lib/rest/api";
@@ -2180,6 +2181,10 @@ if (loading) {
             </div>
           </div>
         </div>
+
+        <section className="dash-statusSection">
+          <SystemStatusPanel />
+        </section>
 
         <div className="dash-overview">
           <div className="dash-overviewTitle">

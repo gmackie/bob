@@ -133,6 +133,7 @@ export function AwaitingInputCard({
             aria-label="Custom response input"
             value={customResponse}
             onChange={(e) => setCustomResponse(e.target.value)}
+            onInput={(e) => setCustomResponse(e.currentTarget.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && isSubmitDisabled) {
                 e.preventDefault();

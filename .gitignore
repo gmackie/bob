@@ -9,6 +9,8 @@ node_modules
 coverage
 apps/nextjs/playwright-report
 apps/nextjs/test-results
+playwright-report
+test-results
 
 # next.js
 .next/

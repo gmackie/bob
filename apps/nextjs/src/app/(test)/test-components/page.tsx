@@ -422,6 +422,7 @@ function AwaitingInputCard({
             data-testid="custom-response-input"
             value={customResponse}
             onChange={(e) => setCustomResponse(e.target.value)}
+            onInput={(e) => setCustomResponse(e.currentTarget.value)}
             onKeyDown={(e) => e.key === "Enter" && handleCustomSubmit()}
             placeholder="Or type a custom response..."
             disabled={isResolving}
