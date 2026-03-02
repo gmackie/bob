@@ -331,6 +331,7 @@ export function useSessionSocket({
 
   const createSession = useCallback(
     (config: {
+      sessionId?: string;
       workingDirectory: string;
       agentType: string;
       worktreeId?: string;
@@ -339,6 +340,7 @@ export function useSessionSocket({
     }) => {
       send({
         type: "create_session",
+        ...(config.sessionId ? { sessionId: config.sessionId } : {}),
         ...config,
       });
     },

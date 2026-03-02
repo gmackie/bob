@@ -91,6 +91,7 @@ export interface ServerError {
 
 export interface ClientCreateSession {
   type: "create_session";
+  sessionId?: string;
   worktreeId?: string;
   repositoryId?: string;
   workingDirectory: string;

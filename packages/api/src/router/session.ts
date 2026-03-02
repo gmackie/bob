@@ -22,6 +22,7 @@ import { createElevenLabsSessionService } from "../services/voice/elevenlabsSess
 import { protectedProcedure } from "../trpc";
 
 const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:3002";
+const getGatewaySocketUrl = (): string => `${GATEWAY_URL.replace(/^http/, "ws")}/sessions`;
 
 // Initialize ElevenLabs session service (singleton)
 let elevenlabsService: ElevenLabsSessionService | null = null;
@@ -158,6 +159,46 @@ export const sessionRouter = {
         .returning();
 
       return session;
+    }),
+
+  bootstrapForChat: protectedProcedure
+    .input(
+      z.object({
+        repositoryId: z.string().uuid().optional(),
+        worktreeId: z.string().uuid().optional(),
+        workingDirectory: z.string(),
+        agentType: z.string().default("opencode"),
+        title: z.string().max(256).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const [session] = await ctx.db
+        .insert(chatConversations)
+        .values({
+          userId: ctx.session.user.id,
+          repositoryId: input.repositoryId ?? null,
+          worktreeId: input.worktreeId ?? null,
+          workingDirectory: input.workingDirectory,
+          agentType: input.agentType,
+          title: input.title ?? null,
+          status: "provisioning",
+        })
+        .returning();
+
+      if (!session) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to create chat session",
+        });
+      }
+
+      return {
+        ...session,
+        gateway: {
+          url: getGatewaySocketUrl(),
+          shouldStartOnConnect: true,
+        },
+      };
     }),
 
   updateTitle: protectedProcedure
@@ -519,11 +560,11 @@ export const sessionRouter = {
     }),
 
   getGatewayWebSocketUrl: protectedProcedure.query(async () => {
-    const wsUrl = GATEWAY_URL.replace(/^http/, "ws");
     return {
-      url: `${wsUrl}/sessions`,
+      url: getGatewaySocketUrl(),
     };
   }),
+
 
   reportWorkflowStatus: protectedProcedure
     .input(

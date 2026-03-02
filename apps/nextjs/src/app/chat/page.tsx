@@ -137,6 +137,7 @@ function ChatPageContent() {
   const [socketSessionStatus, setSocketSessionStatus] = useState<SessionStatus | null>(
     null,
   );
+  const startedSessionsRef = useRef(new Set<string>());
   const latestSeqRef = useRef(0);
 
   const { data: gatewayInfo } = useQuery(
@@ -252,6 +253,7 @@ function ChatPageContent() {
     connectionState,
     subscribe,
     unsubscribe,
+    createSession,
     sendInput,
     stopSession,
     reconnect,
@@ -268,6 +270,39 @@ function ChatPageContent() {
       return () => unsubscribe(activeSessionId);
     }
   }, [activeSessionId, connectionState.status, subscribe, unsubscribe]);
+
+  useEffect(() => {
+    if (connectionState.status !== "connected" || !activeSessionData || !sessionId) {
+      return;
+    }
+
+    if ([
+      "running",
+      "idle",
+    ].includes(activeSessionData.status)) {
+      startedSessionsRef.current.delete(sessionId);
+      return;
+    }
+
+    if (startedSessionsRef.current.has(sessionId)) return;
+
+    createSession({
+      sessionId,
+      workingDirectory: activeSessionData.workingDirectory ?? "/",
+      agentType: activeSessionData.agentType,
+      repositoryId: activeSessionData.repositoryId ?? undefined,
+      worktreeId: activeSessionData.worktreeId ?? undefined,
+      title: activeSessionData.title ?? undefined,
+    });
+
+    startedSessionsRef.current.add(sessionId);
+  }, [activeSessionData, connectionState.status, createSession, sessionId]);
+
+  useEffect(() => {
+    if (connectionState.status !== "connected") {
+      startedSessionsRef.current.clear();
+    }
+  }, [connectionState.status]);
 
   const handleSelectSession = useCallback(
     (id: string) => {

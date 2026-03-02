@@ -4,9 +4,14 @@ import { spawn, execSync } from "child_process";
 import { promises as fs } from "fs";
 import { join, dirname, basename } from "path";
 import { SessionManager, SessionRecord, SessionManagerCallbacks } from "./sessions/SessionManager.js";
-import { SessionConfig } from "./sessions/SessionActor.js";
 import { PersistenceWriter, SessionEventRecord } from "./persistence/PersistenceWriter.js";
 import { SessionCleanup } from "./sessions/SessionCleanup.js";
+import { and, eq, sql } from "@bob/db";
+import { db } from "@bob/db/client";
+import {
+  chatConversations,
+  sessionEvents,
+} from "@bob/db/schema";
 import {
   parseClientMessage,
   encodeServerMessage,
@@ -105,7 +110,28 @@ const persistenceWriter = new PersistenceWriter({
   batchSize: 50,
   flushIntervalMs: 100,
   onBatchWrite: async (events: SessionEventRecord[]) => {
-    console.log(`[Gateway] Persisting ${events.length} session events (TODO: write to DB)`);
+    if (events.length === 0) return;
+
+    await db.insert(sessionEvents).values(
+      events.map((event) => ({
+        sessionId: event.sessionId,
+        seq: event.seq,
+        direction: event.direction,
+        eventType: event.eventType,
+        payload: event.payload,
+      })),
+    );
+
+    const lastEvent = events.at(-1);
+    if (!lastEvent) return;
+
+    await db
+      .update(chatConversations)
+      .set({
+        nextSeq: sql`GREATEST(${chatConversations.nextSeq}, ${lastEvent.seq + 1})`,
+        lastActivityAt: new Date(),
+      })
+      .where(eq(chatConversations.id, lastEvent.sessionId));
   },
   onError: (error, events) => {
     console.error(`[Gateway] Failed to persist ${events.length} events:`, error);
@@ -124,30 +150,96 @@ const sessionManagerCallbacks: SessionManagerCallbacks = {
   },
   onSessionStatusChange: async (sessionId, status) => {
     console.log(`[Gateway] Session ${sessionId} status changed to ${status}`);
+    await db
+      .update(chatConversations)
+      .set({
+        status,
+        lastActivityAt: new Date(),
+      })
+      .where(eq(chatConversations.id, sessionId));
   },
   loadSession: async (sessionId): Promise<SessionRecord | null> => {
-    console.log(`[Gateway] Loading session ${sessionId} (TODO: from DB)`);
-    return null;
+    const row = await db.query.chatConversations.findFirst({
+      where: and(
+        eq(chatConversations.id, sessionId),
+      ),
+    });
+
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      userId: row.userId,
+      status: row.status,
+      agentType: row.agentType,
+      workingDirectory: row.workingDirectory ?? "",
+      worktreeId: row.worktreeId ?? undefined,
+      repositoryId: row.repositoryId ?? undefined,
+      nextSeq: row.nextSeq,
+      claimedByGatewayId: row.claimedByGatewayId ?? undefined,
+      leaseExpiresAt: row.leaseExpiresAt ?? undefined,
+    };
   },
   createSession: async (config): Promise<SessionRecord> => {
-    const id = generateId();
-    console.log(`[Gateway] Creating session ${id} (TODO: persist to DB)`);
+    const [row] = await db
+      .insert(chatConversations)
+      .values({
+        userId: config.userId,
+        agentType: config.agentType,
+        workingDirectory: config.workingDirectory,
+        worktreeId: config.worktreeId,
+        repositoryId: config.repositoryId,
+        status: "provisioning",
+      })
+      .returning({
+        id: chatConversations.id,
+      });
+
+    if (!row) {
+      throw new Error("Failed to persist session");
+    }
+
+    const created = await db.query.chatConversations.findFirst({
+      where: eq(chatConversations.id, row.id),
+    });
+
+    if (!created) {
+      throw new Error("Failed to load created session");
+    }
+
+    const id = created.id;
+    console.log(`[Gateway] Created and persisted session ${id}`);
+
     return {
       id,
-      userId: config.userId,
-      status: "provisioning",
-      agentType: config.agentType,
-      workingDirectory: config.workingDirectory,
-      worktreeId: config.worktreeId,
-      repositoryId: config.repositoryId,
-      nextSeq: 1,
+      userId: created.userId,
+      status: created.status,
+      agentType: created.agentType,
+      workingDirectory: created.workingDirectory ?? "",
+      worktreeId: created.worktreeId ?? undefined,
+      repositoryId: created.repositoryId ?? undefined,
+      nextSeq: created.nextSeq,
+      claimedByGatewayId: created.claimedByGatewayId ?? undefined,
+      leaseExpiresAt: created.leaseExpiresAt ?? undefined,
     };
   },
   updateSessionLease: async (sessionId, gatewayId, expiresAt) => {
-    console.log(`[Gateway] Updating lease for session ${sessionId}`);
+    await db
+      .update(chatConversations)
+      .set({
+        claimedByGatewayId: gatewayId,
+        leaseExpiresAt: expiresAt,
+      })
+      .where(eq(chatConversations.id, sessionId));
   },
   releaseSessionLease: async (sessionId) => {
-    console.log(`[Gateway] Releasing lease for session ${sessionId}`);
+    await db
+      .update(chatConversations)
+      .set({
+        claimedByGatewayId: null,
+        leaseExpiresAt: null,
+      })
+      .where(eq(chatConversations.id, sessionId));
   },
 };
 
@@ -1239,27 +1331,40 @@ function handleSessionsWebSocket(ws: WebSocket): void {
           }
 
           const create = msg as ClientCreateSession;
+          let actor = create.sessionId
+            ? sessionManager.getSession(create.sessionId) ??
+              (await sessionManager.getOrLoadSession(create.sessionId))
+            : null;
           
           try {
-            const actor = await sessionManager.createSession({
-              userId: connection.userId,
-              agentType: create.agentType,
-              workingDirectory: create.workingDirectory,
-              worktreeId: create.worktreeId,
-              repositoryId: create.repositoryId,
-            });
+            if (!actor) {
+              actor = await sessionManager.createSession({
+                userId: connection.userId,
+                agentType: create.agentType,
+                workingDirectory: create.workingDirectory,
+                worktreeId: create.worktreeId,
+                repositoryId: create.repositoryId,
+              });
+            }
+            if (!actor) {
+              throw new Error("Failed to create or load session");
+            }
+            const activeActor = actor;
 
-            actor.setStatus("provisioning");
+            activeActor.setStatus("provisioning");
 
             send({
               type: "session_created",
-              sessionId: actor.sessionId,
-              status: actor.getStatus(),
+              sessionId: activeActor.sessionId,
+              status: activeActor.getStatus(),
             });
 
-            startAgentForSession(actor, connection.userId).catch((error) => {
-              console.error(`[Gateway] Failed to start agent for session ${actor.sessionId}:`, error);
-              actor.setStatus("error", String(error));
+            startAgentForSession(activeActor, connection.userId).catch((error) => {
+              console.error(
+                `[Gateway] Failed to start agent for session ${activeActor.sessionId}:`,
+                error,
+              );
+              activeActor.setStatus("error", String(error));
             });
           } catch (error) {
             sendError("CREATE_FAILED", String(error), undefined, true);

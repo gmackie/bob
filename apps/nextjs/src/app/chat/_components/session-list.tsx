@@ -95,14 +95,16 @@ export function SessionList({
   );
 
   const createMutation = useMutation(
-    trpc.session.create.mutationOptions({
-      onSuccess: (newSession) => {
+    trpc.session.bootstrapForChat.mutationOptions({
+      onSuccess: (bootstrapResult) => {
+        const newSessionId = bootstrapResult.id ?? bootstrapResult.session?.id;
+
         void queryClient.invalidateQueries({
           queryKey: trpc.session.list.queryKey(),
         });
-        if (!newSession) return;
+        if (!newSessionId) return;
         setShowNewSessionModal(false);
-        onSelect(newSession.id);
+        onSelect(newSessionId);
       },
     }),
   );
