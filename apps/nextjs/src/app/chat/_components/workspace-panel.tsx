@@ -3,6 +3,7 @@
 import type { FormEvent } from "react";
 import { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+
 import { cn } from "@bob/ui";
 import { Button } from "@bob/ui/button";
 
@@ -92,6 +93,31 @@ function getLanguageClass(path: string): string {
   return "text";
 }
 
+function shellEscapedArg(value: string): string {
+  if (value.length === 0) return "''";
+
+  if (/^[A-Za-z0-9_.,\/-]+$/.test(value)) {
+    return value;
+  }
+
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function isAbsolutePath(path: string): boolean {
+  return path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path);
+}
+
+function toWorkspacePath(
+  value: string,
+  workingDirectory: string,
+  separator: "/" | "\\",
+): string {
+  if (isAbsolutePath(value)) return value;
+  const normalized = value.replace(/^\.{1,2}[\\/]*/, "");
+  if (!normalized) return workingDirectory;
+  return `${workingDirectory}${separator}${normalized}`;
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -147,15 +173,18 @@ export function WorkspacePanel({
   const [customCommand, setCustomCommand] = useState("");
   const [commitMessage, setCommitMessage] = useState("");
 
-  const { data: workspaceStatus, isLoading: isWorkspaceStatusLoading } =
-    useQuery(
-      trpc.git.status.queryOptions(
-        {
-          path: workingDirectory,
-        },
-        { enabled: Boolean(workingDirectory) },
-      ),
-    );
+  const {
+    data: workspaceStatus,
+    isLoading: isWorkspaceStatusLoading,
+    refetch: refetchWorkspaceStatus,
+  } = useQuery(
+    trpc.git.status.queryOptions(
+      {
+        path: workingDirectory,
+      },
+      { enabled: Boolean(workingDirectory) },
+    ),
+  );
 
   const {
     data: fileEntries,
@@ -184,16 +213,21 @@ export function WorkspacePanel({
 
     const commandsToRun = [...commandQueue];
     setCommandQueue([]);
-    setCommandHistory((prev) => [
-      ...commandsToRun.map((command) => `${new Date().toLocaleTimeString()}: ${command}`),
-      ...prev,
-    ].slice(0, 30));
+    setCommandHistory((prev) =>
+      [
+        ...commandsToRun.map(
+          (command) => `${new Date().toLocaleTimeString()}: ${command}`,
+        ),
+        ...prev,
+      ].slice(0, 30),
+    );
 
     for (const command of commandsToRun) {
       onSendCommand(command);
     }
 
     void refetchFileList();
+    void refetchWorkspaceStatus();
     void queryClient.invalidateQueries({
       queryKey: trpc.git.status.queryKey({ path: workingDirectory }),
     });
@@ -203,6 +237,7 @@ export function WorkspacePanel({
     onSendCommand,
     queryClient,
     refetchFileList,
+    refetchWorkspaceStatus,
     trpc.git.status,
     workingDirectory,
   ]);
@@ -240,7 +275,9 @@ export function WorkspacePanel({
   }, []);
 
   const handleNavigateUp = useCallback(() => {
-    setBrowserPath((current) => toParentPath(current, workingDirectory, separator));
+    setBrowserPath((current) =>
+      toParentPath(current, workingDirectory, separator),
+    );
   }, [workingDirectory, separator]);
 
   const handleRunCommand = useCallback(
@@ -251,16 +288,49 @@ export function WorkspacePanel({
     [addQueuedCommand, canSendCommands],
   );
 
+  const handleQueueFileCommand = useCallback(
+    (file: string, action: "stage" | "unstage") => {
+      if (!canSendCommands) return;
+
+      const absolutePath = toWorkspacePath(file, workingDirectory, separator);
+
+      if (action === "stage") {
+        addQueuedCommand(`git add -- ${shellEscapedArg(absolutePath)}`);
+        return;
+      }
+
+      addQueuedCommand(
+        `git restore --staged --worktree -- ${shellEscapedArg(absolutePath)}`,
+      );
+    },
+    [addQueuedCommand, canSendCommands, separator, workingDirectory],
+  );
+
+  const handleOpenStatusFile = useCallback(
+    (file: string) => {
+      setSelectedFile(toWorkspacePath(file, workingDirectory, separator));
+      setActiveTab("viewer");
+    },
+    [separator, workingDirectory],
+  );
+
   const workingDirectoryShort =
     workingDirectory.split(separator).at(-1) ?? workingDirectory;
 
   return (
     <aside className="chat-workspacePanel">
-      <div className="chat-workspaceTabs" role="tablist" aria-label="Workspace views">
+      <div
+        className="chat-workspaceTabs"
+        role="tablist"
+        aria-label="Workspace views"
+      >
         <button
           type="button"
           role="tab"
-          className={cn("chat-workspaceTab", activeTab === "status" && "is-active")}
+          className={cn(
+            "chat-workspaceTab",
+            activeTab === "status" && "is-active",
+          )}
           onClick={() => setActiveTab("status")}
         >
           Repo Status
@@ -268,7 +338,10 @@ export function WorkspacePanel({
         <button
           type="button"
           role="tab"
-          className={cn("chat-workspaceTab", activeTab === "files" && "is-active")}
+          className={cn(
+            "chat-workspaceTab",
+            activeTab === "files" && "is-active",
+          )}
           onClick={() => setActiveTab("files")}
         >
           Files
@@ -301,7 +374,17 @@ export function WorkspacePanel({
       {activeTab === "status" && (
         <section className="chat-workspacePanelBody">
           <div className="chat-workspaceSectionTitle">
-            {workingDirectoryShort}
+            <div className="chat-workspaceMetaValue">
+              {workingDirectoryShort}
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void refetchWorkspaceStatus()}
+              disabled={isWorkspaceStatusLoading}
+            >
+              Refresh
+            </Button>
           </div>
           {isWorkspaceStatusLoading ? (
             <div className="chat-emptyText">Loading repository status...</div>
@@ -312,10 +395,14 @@ export function WorkspacePanel({
               <div className="chat-workspaceMeta">
                 <div>
                   <span className="chat-workspaceMetaLabel">Branch</span>
-                  <span className="chat-workspaceMetaValue">{workspaceStatus.branch}</span>
+                  <span className="chat-workspaceMetaValue">
+                    {workspaceStatus.branch}
+                  </span>
                 </div>
                 <div>
-                  <span className="chat-workspaceMetaLabel">Ahead / Behind</span>
+                  <span className="chat-workspaceMetaLabel">
+                    Ahead / Behind
+                  </span>
                   <span className="chat-workspaceMetaValue">
                     {workspaceStatus.ahead} / {workspaceStatus.behind}
                   </span>
@@ -331,7 +418,26 @@ export function WorkspacePanel({
                     <ul className="chat-workspaceList">
                       {workspaceStatus.staged.map((file) => (
                         <li key={file} className="chat-workspaceListItem">
-                          {file}
+                          <span>{file}</span>
+                          <span className="chat-workspaceListActions">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                handleQueueFileCommand(file, "unstage")
+                              }
+                              disabled={!canSendCommands}
+                            >
+                              Unstage
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleOpenStatusFile(file)}
+                            >
+                              Open
+                            </Button>
+                          </span>
                         </li>
                       ))}
                     </ul>
@@ -346,7 +452,26 @@ export function WorkspacePanel({
                     <ul className="chat-workspaceList">
                       {workspaceStatus.unstaged.map((file) => (
                         <li key={file} className="chat-workspaceListItem">
-                          {file}
+                          <span>{file}</span>
+                          <span className="chat-workspaceListActions">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                handleQueueFileCommand(file, "stage")
+                              }
+                              disabled={!canSendCommands}
+                            >
+                              Stage
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleOpenStatusFile(file)}
+                            >
+                              Open
+                            </Button>
+                          </span>
                         </li>
                       ))}
                     </ul>
@@ -356,12 +481,33 @@ export function WorkspacePanel({
                 <div>
                   <h4 className="chat-workspaceListTitle">Untracked</h4>
                   {workspaceStatus.untracked.length === 0 ? (
-                    <p className="chat-workspaceListEmpty">No untracked files</p>
+                    <p className="chat-workspaceListEmpty">
+                      No untracked files
+                    </p>
                   ) : (
                     <ul className="chat-workspaceList">
                       {workspaceStatus.untracked.map((file) => (
                         <li key={file} className="chat-workspaceListItem">
-                          {file}
+                          <span>{file}</span>
+                          <span className="chat-workspaceListActions">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                handleQueueFileCommand(file, "stage")
+                              }
+                              disabled={!canSendCommands}
+                            >
+                              Stage
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleOpenStatusFile(file)}
+                            >
+                              Open
+                            </Button>
+                          </span>
                         </li>
                       ))}
                     </ul>
@@ -381,6 +527,14 @@ export function WorkspacePanel({
               <div className="chat-workspacePath">{browserPath}</div>
             </div>
             <div className="chat-workspacePathNav">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void refetchFileList()}
+                disabled={isFileListLoading}
+              >
+                Refresh
+              </Button>
               <Button
                 size="sm"
                 variant="outline"
@@ -488,7 +642,9 @@ export function WorkspacePanel({
           <div className="chat-workspaceSectionTitle">
             <div>
               <div className="chat-workspaceSubTitle">Command Queue</div>
-              <div className="chat-workspaceMetaValue">Session {sessionId.slice(0, 8)}</div>
+              <div className="chat-workspaceMetaValue">
+                Session {sessionId.slice(0, 8)}
+              </div>
             </div>
             <Button
               size="sm"
@@ -518,10 +674,7 @@ export function WorkspacePanel({
             {`Quick actions enqueue commands for the active agent session.`}
           </p>
 
-          <form
-            className="chat-commandCompose"
-            onSubmit={handleCommit}
-          >
+          <form className="chat-commandCompose" onSubmit={handleCommit}>
             <label className="chat-commandLabel">Commit message</label>
             <input
               type="text"
@@ -583,7 +736,10 @@ export function WorkspacePanel({
             ) : (
               <ol className="chat-commandQueueList">
                 {commandQueue.map((command, index) => (
-                  <li key={`${command}-${index}`} className="chat-commandQueueItem">
+                  <li
+                    key={`${command}-${index}`}
+                    className="chat-commandQueueItem"
+                  >
                     <span>{index + 1}.</span>
                     <span>{command}</span>
                   </li>
@@ -599,7 +755,10 @@ export function WorkspacePanel({
             ) : (
               <ol className="chat-commandQueueList">
                 {commandHistory.map((entry) => (
-                  <li key={entry} className="chat-commandQueueItem chat-commandQueueItem--muted">
+                  <li
+                    key={entry}
+                    className="chat-commandQueueItem chat-commandQueueItem--muted"
+                  >
                     <span>{entry}</span>
                   </li>
                 ))}

@@ -645,7 +645,8 @@
   max-width: 100%;
   color: rgba(232, 238, 248, 0.95);
   font-size: 11px;
-  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
+  font-family:
+    var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
     Consolas, monospace;
   white-space: nowrap;
   overflow: hidden;
@@ -671,7 +672,8 @@
 }
 
 .chat-workspaceMetaValue {
-  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
+  font-family:
+    var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
     Consolas, monospace;
   color: rgba(236, 244, 255, 0.95);
   font-size: 12px;
@@ -708,8 +710,30 @@
 
 .chat-workspaceListItem {
   font-size: 11px;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   padding: 2px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.chat-workspaceListItem span:first-child {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-workspaceListActions {
+  display: flex;
+  gap: 4px;
+}
+
+.chat-workspaceListActions button {
+  min-height: 22px;
+  min-width: 62px;
+  padding: 2px 6px;
+  font-size: 10px;
 }
 
 .chat-fileBrowserList {
@@ -767,7 +791,8 @@
   white-space: pre-wrap;
   word-break: break-word;
   color: rgba(226, 232, 240, 0.95);
-  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
+  font-family:
+    var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
     Consolas, monospace;
 }
 
