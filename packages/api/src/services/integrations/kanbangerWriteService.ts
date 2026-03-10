@@ -189,10 +189,76 @@ async function createIssueComment(
   idempotencyKey: string,
 ) {
   if (!issueId) {
-    return;
+    return null;
   }
 
-  await kanbangerMutation("comment.create", { issueId, body }, idempotencyKey);
+  return kanbangerMutation<{ id?: string }>(
+    "comment.create",
+    { issueId, body },
+    idempotencyKey,
+  );
+}
+
+async function syncBobRunProjection(
+  context: SessionTaskContext,
+  input: {
+    workflowStatus?: string;
+    runStatus?: "in_progress" | "completed" | "failed";
+    latestSummary?: string;
+    lastPromptCommentId?: string;
+    reviewUrl?: string;
+    issueStatus?: Exclude<KanbangerIssueStatus, "blocked">;
+  },
+  idempotencyKey: string,
+) {
+  if (!context.issueId || !context.taskRunId) {
+    return null;
+  }
+
+  return kanbangerMutation(
+    "agent.syncBobRun",
+    {
+      issueId: context.issueId,
+      taskRunId: context.taskRunId,
+      sessionId: context.sessionId,
+      executionBackend: "bob",
+      workflowStatus: input.workflowStatus,
+      runStatus: input.runStatus,
+      latestSummary: input.latestSummary,
+      lastPromptCommentId: input.lastPromptCommentId,
+      reviewUrl: input.reviewUrl,
+      issueStatus: input.issueStatus,
+      idempotencyKey,
+    },
+    idempotencyKey,
+  );
+}
+
+async function createCanonicalArtifact(
+  context: SessionTaskContext,
+  input: AttachArtifactInput,
+  idempotencyKey: string,
+) {
+  if (!context.issueId) {
+    return null;
+  }
+
+  return kanbangerMutation(
+    "issueArtifact.create",
+    {
+      issueId: context.issueId,
+      agentTaskRunId: context.taskRunId,
+      executionBackend: "bob",
+      producerType: "bob",
+      producerId: idempotencyKey,
+      artifactType: input.artifactType,
+      artifactRole: input.artifactRole ?? "other",
+      url: input.url,
+      title: input.title,
+      summary: input.summary,
+    },
+    idempotencyKey,
+  );
 }
 
 function formatMilestoneComment(input: ReportMilestoneInput): string | null {
@@ -229,20 +295,21 @@ export async function reportMilestone(input: ReportMilestoneInput) {
   }
 
   if (input.kind === "progress" && context.taskRunId) {
-    const progressMessage = [input.message, input.phase, input.progress]
-      .filter(Boolean)
-      .join(" · ");
-    await kanbangerMutation(
-      "agent.reportProgress",
+    const syncIdempotencyKey = createIdempotencyKey([
+      "agent.syncBobRun.progress",
+      context.taskRunId,
+      input.message,
+      input.phase,
+      input.progress,
+    ]);
+    await syncBobRunProjection(
+      context,
       {
-        taskRunId: context.taskRunId,
-        progress: progressMessage,
+        workflowStatus: "working",
+        runStatus: "in_progress",
+        latestSummary: input.message,
       },
-      createIdempotencyKey([
-        "agent.reportProgress",
-        context.taskRunId,
-        progressMessage,
-      ]),
+      syncIdempotencyKey,
     );
     return;
   }
@@ -269,7 +336,7 @@ export async function requestInputPrompt(input: RequestInputPromptInput) {
     `Default action: **${input.defaultAction}**\n` +
     `Timeout: ${input.timeoutMinutes} minutes (${input.expiresAt.toISOString()})`;
 
-  await createIssueComment(
+  const comment = await createIssueComment(
     context.issueId,
     body,
     createIdempotencyKey([
@@ -278,6 +345,21 @@ export async function requestInputPrompt(input: RequestInputPromptInput) {
       input.question,
       input.defaultAction,
       input.expiresAt.toISOString(),
+    ]),
+  );
+
+  await syncBobRunProjection(
+    context,
+    {
+      workflowStatus: "awaiting_input",
+      latestSummary: input.question,
+      lastPromptCommentId: comment?.id,
+    },
+    createIdempotencyKey([
+      "agent.syncBobRun.awaiting_input",
+      context.taskRunId,
+      input.question,
+      comment?.id,
     ]),
   );
 }
@@ -324,6 +406,20 @@ export async function setIssueStatus(input: SetIssueStatusInput) {
 
 export async function attachArtifact(input: AttachArtifactInput) {
   const context = await getSessionTaskContext(input.userId, input.sessionId);
+  const artifactIdempotencyKey = createIdempotencyKey([
+    "issueArtifact.create",
+    context.issueId,
+    context.taskRunId,
+    input.artifactType,
+    input.artifactRole,
+    input.url,
+  ]);
+
+  await createCanonicalArtifact(
+    context,
+    input,
+    artifactIdempotencyKey,
+  );
 
   await createIssueComment(
     context.issueId,
@@ -357,6 +453,23 @@ export async function markRunReviewReady(input: MarkRunReviewReadyInput) {
   const commentBody = input.notesForReviewer
     ? `${input.summary}\n\nNotes for reviewer:\n${input.notesForReviewer}`
     : input.summary;
+
+  await syncBobRunProjection(
+    await getSessionTaskContext(input.userId, input.sessionId),
+    {
+      workflowStatus: "awaiting_review",
+      runStatus: "in_progress",
+      latestSummary: input.summary,
+      reviewUrl: input.prUrl,
+      issueStatus: "in_review",
+    },
+    createIdempotencyKey([
+      "agent.syncBobRun.review_ready",
+      input.sessionId,
+      input.prUrl,
+      input.summary,
+    ]),
+  );
 
   await reportMilestone({
     userId: input.userId,
@@ -411,6 +524,21 @@ export async function completeTaskRun(input: CompleteTaskRunInput) {
       summary: input.summary,
     });
   }
+
+  await syncBobRunProjection(
+    context,
+    {
+      workflowStatus: "completed",
+      runStatus: "completed",
+      latestSummary: input.summary,
+    },
+    createIdempotencyKey([
+      "agent.syncBobRun.completed",
+      context.taskRunId,
+      input.summary,
+      input.prUrl,
+    ]),
+  );
 
   await reportMilestone({
     userId: input.userId,
