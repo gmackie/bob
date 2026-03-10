@@ -3,8 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 import type { ToolContext } from "../types.js";
 import {
   completeTaskTool,
+  linkTaskArtifactTool,
   linkTaskTool,
   postTaskCommentTool,
+  recordTaskProgressTool,
+  recordVerificationResultTool,
+  setTaskReviewReadyTool,
   updateTaskStatusTool,
 } from "../task.js";
 
@@ -160,10 +164,9 @@ describe("task tools", () => {
 
     it("should return error when no task run exists", async () => {
       const ctx = createMockContext();
-      ctx.mockCallTrpc.mockResolvedValue({
-        kanbangerTaskId: "task-123",
-        taskRunId: null,
-      });
+      ctx.mockCallTrpc.mockRejectedValue(
+        new Error("No active task run for this session"),
+      );
 
       const result = await completeTaskTool.handler(
         { summary: "Completed work" },
@@ -178,13 +181,7 @@ describe("task tools", () => {
 
     it("should complete task successfully", async () => {
       const ctx = createMockContext();
-      ctx.mockCallTrpc
-        .mockResolvedValueOnce({
-          kanbangerTaskId: "task-123",
-          taskRunId: "run-456",
-        })
-        .mockResolvedValueOnce({})
-        .mockResolvedValueOnce({});
+      ctx.mockCallTrpc.mockResolvedValueOnce({});
 
       const result = await completeTaskTool.handler(
         { summary: "Implemented user authentication" },
@@ -192,20 +189,12 @@ describe("task tools", () => {
       );
 
       expect(ctx.mockCallTrpc).toHaveBeenCalledWith(
-        "kanbanger.agentCompleteTask",
-        {
-          taskRunId: "run-456",
-          summary: "Implemented user authentication",
-          artifacts: undefined,
-          markIssueDone: true,
-        },
-      );
-      expect(ctx.mockCallTrpc).toHaveBeenCalledWith(
-        "session.reportWorkflowStatus",
+        "session.completeTask",
         {
           sessionId: "test-session-id",
-          status: "completed",
-          message: "Implemented user authentication",
+          summary: "Implemented user authentication",
+          prUrl: undefined,
+          markIssueDone: false,
         },
       );
       expect(result.isError).toBeFalsy();
@@ -213,36 +202,155 @@ describe("task tools", () => {
 
     it("should include PR artifact when provided", async () => {
       const ctx = createMockContext();
-      ctx.mockCallTrpc
-        .mockResolvedValueOnce({
-          kanbangerTaskId: "task-123",
-          taskRunId: "run-456",
-        })
-        .mockResolvedValueOnce({})
-        .mockResolvedValueOnce({});
+      ctx.mockCallTrpc.mockResolvedValueOnce({});
 
       const result = await completeTaskTool.handler(
         {
           summary: "Bug fix",
           pr_url: "https://github.com/org/repo/pull/789",
-          mark_issue_done: false,
         },
         ctx,
       );
 
       expect(ctx.mockCallTrpc).toHaveBeenCalledWith(
-        "kanbanger.agentCompleteTask",
+        "session.completeTask",
         {
-          taskRunId: "run-456",
+          sessionId: "test-session-id",
           summary: "Bug fix",
-          artifacts: [
-            {
-              type: "pr",
-              url: "https://github.com/org/repo/pull/789",
-              description: "Pull request",
-            },
-          ],
+          prUrl: "https://github.com/org/repo/pull/789",
           markIssueDone: false,
+        },
+      );
+      expect(result.isError).toBeFalsy();
+    });
+
+    it("should never mark the linked issue done by default", async () => {
+      const ctx = createMockContext();
+      ctx.mockCallTrpc.mockResolvedValueOnce({});
+
+      await completeTaskTool.handler(
+        {
+          summary: "Ready for merge",
+          mark_issue_done: true,
+        },
+        ctx,
+      );
+
+      expect(ctx.mockCallTrpc).toHaveBeenCalledWith("session.completeTask", {
+        sessionId: "test-session-id",
+        summary: "Ready for merge",
+        prUrl: undefined,
+        markIssueDone: false,
+      });
+    });
+  });
+
+  describe("reportTaskProgressTool", () => {
+    it("should report task progress through the shared session mutation", async () => {
+      const ctx = createMockContext();
+      ctx.mockCallTrpc.mockResolvedValue({});
+
+      const result = await recordTaskProgressTool.handler(
+        {
+          message: "Implemented API contract",
+          phase: "implementation",
+          progress: "2/4",
+        },
+        ctx,
+      );
+
+      expect(ctx.mockCallTrpc).toHaveBeenCalledWith(
+        "session.reportTaskProgress",
+        {
+          sessionId: "test-session-id",
+          message: "Implemented API contract",
+          phase: "implementation",
+          progress: "2/4",
+        },
+      );
+      expect(result.isError).toBeFalsy();
+    });
+  });
+
+  describe("linkTaskArtifactTool", () => {
+    it("should attach an artifact through the shared session mutation", async () => {
+      const ctx = createMockContext();
+      ctx.mockCallTrpc.mockResolvedValue({});
+
+      const result = await linkTaskArtifactTool.handler(
+        {
+          artifact_type: "doc",
+          artifact_role: "documentation",
+          url: "https://example.com/design-doc",
+          title: "Design doc",
+          summary: "Updated implementation notes",
+        },
+        ctx,
+      );
+
+      expect(ctx.mockCallTrpc).toHaveBeenCalledWith(
+        "session.linkTaskArtifact",
+        {
+          sessionId: "test-session-id",
+          artifactType: "doc",
+          artifactRole: "documentation",
+          url: "https://example.com/design-doc",
+          title: "Design doc",
+          summary: "Updated implementation notes",
+        },
+      );
+      expect(result.isError).toBeFalsy();
+    });
+  });
+
+  describe("setTaskReviewReadyTool", () => {
+    it("should mark the linked task run review ready through the shared session mutation", async () => {
+      const ctx = createMockContext();
+      ctx.mockCallTrpc.mockResolvedValue({});
+
+      const result = await setTaskReviewReadyTool.handler(
+        {
+          pr_url: "https://github.com/org/repo/pull/123",
+          summary: "Ready for review",
+          notes_for_reviewer: "Check the migration path",
+        },
+        ctx,
+      );
+
+      expect(ctx.mockCallTrpc).toHaveBeenCalledWith(
+        "session.markTaskReviewReady",
+        {
+          sessionId: "test-session-id",
+          prUrl: "https://github.com/org/repo/pull/123",
+          summary: "Ready for review",
+          notesForReviewer: "Check the migration path",
+        },
+      );
+      expect(result.isError).toBeFalsy();
+    });
+  });
+
+  describe("recordVerificationResultTool", () => {
+    it("should record verification results through the shared session mutation", async () => {
+      const ctx = createMockContext();
+      ctx.mockCallTrpc.mockResolvedValue({});
+
+      const result = await recordVerificationResultTool.handler(
+        {
+          result: "passed",
+          summary: "Unit and integration tests passed",
+          artifact_url: "https://example.com/test-report",
+        },
+        ctx,
+      );
+
+      expect(ctx.mockCallTrpc).toHaveBeenCalledWith(
+        "session.recordVerificationResult",
+        {
+          sessionId: "test-session-id",
+          result: "passed",
+          summary: "Unit and integration tests passed",
+          artifactUrl: "https://example.com/test-report",
         },
       );
       expect(result.isError).toBeFalsy();

@@ -1,6 +1,15 @@
 import { and, eq, sql } from "@bob/db";
 import { db } from "@bob/db/client";
 import { chatConversations, sessionEvents } from "@bob/db/schema";
+import {
+  attachArtifact,
+  completeTaskRun,
+  markRunReviewReady as writeReviewReady,
+  recordPromptResolution,
+  recordVerificationResult as writeVerificationResult,
+  reportMilestone,
+  requestInputPrompt,
+} from "../integrations/kanbangerWriteService";
 
 export const workflowStatusValues = [
   "started",
@@ -26,6 +35,54 @@ function isValidTransition(from: WorkflowStatus, to: WorkflowStatus): boolean {
   return VALID_TRANSITIONS[from]?.includes(to) ?? false;
 }
 
+async function getOwnedSession(userId: string, sessionId: string) {
+  const session = await db.query.chatConversations.findFirst({
+    where: and(
+      eq(chatConversations.id, sessionId),
+      eq(chatConversations.userId, userId),
+    ),
+  });
+
+  if (!session) {
+    throw new Error("Session not found");
+  }
+
+  return session;
+}
+
+async function updateWorkflowState(
+  session: Awaited<ReturnType<typeof getOwnedSession>>,
+  input: {
+    workflowStatus: WorkflowStatus;
+    message: string;
+    updates?: Record<string, unknown>;
+    eventPayload: Record<string, unknown>;
+  },
+) {
+  await db
+    .update(chatConversations)
+    .set({
+      workflowStatus: input.workflowStatus,
+      statusMessage: input.message,
+      ...(input.updates ?? {}),
+    })
+    .where(eq(chatConversations.id, session.id));
+
+  const nextSeq = session.nextSeq;
+  await db
+    .update(chatConversations)
+    .set({ nextSeq: nextSeq + 1 })
+    .where(eq(chatConversations.id, session.id));
+
+  await db.insert(sessionEvents).values({
+    sessionId: session.id,
+    seq: nextSeq,
+    direction: "system",
+    eventType: "state",
+    payload: input.eventPayload,
+  });
+}
+
 export interface ReportWorkflowStatusInput {
   sessionId: string;
   status: WorkflowStatus;
@@ -37,16 +94,7 @@ export async function reportWorkflowStatus(
   userId: string,
   input: ReportWorkflowStatusInput,
 ): Promise<void> {
-  const session = await db.query.chatConversations.findFirst({
-    where: and(
-      eq(chatConversations.id, input.sessionId),
-      eq(chatConversations.userId, userId),
-    ),
-  });
-
-  if (!session) {
-    throw new Error("Session not found");
-  }
+  const session = await getOwnedSession(userId, input.sessionId);
 
   const currentStatus = (session as Record<string, unknown>)
     .workflowStatus as WorkflowStatus;
@@ -60,25 +108,10 @@ export async function reportWorkflowStatus(
     );
   }
 
-  await db.execute(sql`
-    UPDATE chat_conversations
-    SET workflow_status = ${input.status},
-        status_message = ${input.message}
-    WHERE id = ${input.sessionId}
-  `);
-
-  const nextSeq = session.nextSeq;
-  await db
-    .update(chatConversations)
-    .set({ nextSeq: nextSeq + 1 })
-    .where(eq(chatConversations.id, input.sessionId));
-
-  await db.insert(sessionEvents).values({
-    sessionId: input.sessionId,
-    seq: nextSeq,
-    direction: "system",
-    eventType: "state",
-    payload: {
+  await updateWorkflowState(session, {
+    workflowStatus: input.status,
+    message: input.message,
+    eventPayload: {
       type: "workflow_status",
       workflowStatus: input.status,
       message: input.message,
@@ -86,14 +119,42 @@ export async function reportWorkflowStatus(
     },
   });
 
-  const kanbangerTaskId = (session as Record<string, unknown>)
-    .kanbangerTaskId as string | null;
-  if (kanbangerTaskId) {
-    await postKanbangerStatusUpdate(
-      kanbangerTaskId,
-      input.status,
-      input.message,
-    );
+  switch (input.status) {
+    case "working":
+      await reportMilestone({
+        userId,
+        sessionId: input.sessionId,
+        kind: "progress",
+        message: input.message,
+        phase: input.details?.phase,
+        progress: input.details?.progress,
+      });
+      break;
+    case "blocked":
+      await reportMilestone({
+        userId,
+        sessionId: input.sessionId,
+        kind: "blocked",
+        message: input.message,
+      });
+      break;
+    case "awaiting_review":
+      await reportMilestone({
+        userId,
+        sessionId: input.sessionId,
+        kind: "review_ready",
+        message: input.message,
+      });
+      break;
+    case "completed":
+      await completeTaskRun({
+        userId,
+        sessionId: input.sessionId,
+        summary: input.message,
+      });
+      break;
+    default:
+      break;
   }
 }
 
@@ -109,16 +170,7 @@ export async function requestInput(
   userId: string,
   input: RequestInputInput,
 ): Promise<{ expiresAt: Date }> {
-  const session = await db.query.chatConversations.findFirst({
-    where: and(
-      eq(chatConversations.id, input.sessionId),
-      eq(chatConversations.userId, userId),
-    ),
-  });
-
-  if (!session) {
-    throw new Error("Session not found");
-  }
+  const session = await getOwnedSession(userId, input.sessionId);
 
   const currentStatus = (session as Record<string, unknown>)
     .workflowStatus as WorkflowStatus;
@@ -128,33 +180,18 @@ export async function requestInput(
 
   const timeoutMinutes = input.timeoutMinutes ?? 30;
   const expiresAt = new Date(Date.now() + timeoutMinutes * 60 * 1000);
-  const optionsJson = input.options ? JSON.stringify(input.options) : null;
-
-  await db.execute(sql`
-    UPDATE chat_conversations
-    SET workflow_status = 'awaiting_input',
-        status_message = ${input.question},
-        awaiting_input_question = ${input.question},
-        awaiting_input_options = ${optionsJson}::jsonb,
-        awaiting_input_default = ${input.defaultAction},
-        awaiting_input_expires_at = ${expiresAt.toISOString()}::timestamptz,
-        awaiting_input_resolved_at = NULL,
-        awaiting_input_resolution = NULL
-    WHERE id = ${input.sessionId}
-  `);
-
-  const nextSeq = session.nextSeq;
-  await db
-    .update(chatConversations)
-    .set({ nextSeq: nextSeq + 1 })
-    .where(eq(chatConversations.id, input.sessionId));
-
-  await db.insert(sessionEvents).values({
-    sessionId: input.sessionId,
-    seq: nextSeq,
-    direction: "system",
-    eventType: "state",
-    payload: {
+  await updateWorkflowState(session, {
+    workflowStatus: "awaiting_input",
+    message: input.question,
+    updates: {
+      awaitingInputQuestion: input.question,
+      awaitingInputOptions: input.options ?? null,
+      awaitingInputDefault: input.defaultAction,
+      awaitingInputExpiresAt: expiresAt,
+      awaitingInputResolvedAt: null,
+      awaitingInputResolution: null,
+    },
+    eventPayload: {
       type: "workflow_status",
       workflowStatus: "awaiting_input",
       message: input.question,
@@ -167,15 +204,15 @@ export async function requestInput(
     },
   });
 
-  const kanbangerTaskId = (session as Record<string, unknown>)
-    .kanbangerTaskId as string | null;
-  if (kanbangerTaskId) {
-    const optionsText = input.options?.length
-      ? `\n\nOptions:\n${input.options.map((o) => `- ${o}`).join("\n")}`
-      : "";
-    const comment = `💭 **Question:** ${input.question}${optionsText}\n\nI'll proceed with **${input.defaultAction}** in ${timeoutMinutes} minutes unless you respond.`;
-    await postKanbangerComment(kanbangerTaskId, comment);
-  }
+  await requestInputPrompt({
+    userId,
+    sessionId: input.sessionId,
+    question: input.question,
+    options: input.options,
+    defaultAction: input.defaultAction,
+    timeoutMinutes,
+    expiresAt,
+  });
 
   return { expiresAt };
 }
@@ -189,16 +226,7 @@ export async function resolveAwaitingInput(
   userId: string,
   input: ResolveAwaitingInputInput,
 ): Promise<void> {
-  const session = await db.query.chatConversations.findFirst({
-    where: and(
-      eq(chatConversations.id, input.sessionId),
-      eq(chatConversations.userId, userId),
-    ),
-  });
-
-  if (!session) {
-    throw new Error("Session not found");
-  }
+  const session = await getOwnedSession(userId, input.sessionId);
 
   const currentStatus = (session as Record<string, unknown>)
     .workflowStatus as WorkflowStatus;
@@ -208,34 +236,26 @@ export async function resolveAwaitingInput(
     );
   }
 
-  const resolutionJson = JSON.stringify(input.resolution);
-
-  await db.execute(sql`
-    UPDATE chat_conversations
-    SET workflow_status = 'working',
-        status_message = ${"Resolved: " + input.resolution.value},
-        awaiting_input_resolved_at = NOW(),
-        awaiting_input_resolution = ${resolutionJson}::jsonb
-    WHERE id = ${input.sessionId}
-  `);
-
-  const nextSeq = session.nextSeq;
-  await db
-    .update(chatConversations)
-    .set({ nextSeq: nextSeq + 1 })
-    .where(eq(chatConversations.id, input.sessionId));
-
-  await db.insert(sessionEvents).values({
-    sessionId: input.sessionId,
-    seq: nextSeq,
-    direction: "system",
-    eventType: "state",
-    payload: {
+  await updateWorkflowState(session, {
+    workflowStatus: "working",
+    message: `Resolved: ${input.resolution.value}`,
+    updates: {
+      awaitingInputResolvedAt: new Date(),
+      awaitingInputResolution: input.resolution,
+    },
+    eventPayload: {
       type: "workflow_status",
       workflowStatus: "working",
       message: `Resolved: ${input.resolution.value}`,
       resolution: input.resolution,
     },
+  });
+
+  await recordPromptResolution({
+    userId,
+    sessionId: input.sessionId,
+    resolutionType: input.resolution.type,
+    value: input.resolution.value,
   });
 }
 
@@ -257,28 +277,188 @@ export async function submitForReview(
   prId: string,
   message?: string,
 ): Promise<void> {
-  const session = await db.query.chatConversations.findFirst({
-    where: and(
-      eq(chatConversations.id, sessionId),
-      eq(chatConversations.userId, userId),
-    ),
+  await markTaskReviewReady(userId, {
+    sessionId,
+    prUrl: prId,
+    summary: message ?? "PR submitted for review",
   });
+}
 
-  if (!session) {
-    throw new Error("Session not found");
+export interface ReportTaskProgressInput {
+  sessionId: string;
+  message: string;
+  phase?: string;
+  progress?: string;
+}
+
+export async function reportTaskProgress(
+  userId: string,
+  input: ReportTaskProgressInput,
+): Promise<void> {
+  await reportWorkflowStatus(userId, {
+    sessionId: input.sessionId,
+    status: "working",
+    message: input.message,
+    details: {
+      phase: input.phase,
+      progress: input.progress,
+    },
+  });
+}
+
+export interface LinkTaskArtifactInput {
+  sessionId: string;
+  artifactType:
+    | "pr"
+    | "verification"
+    | "build"
+    | "test_report"
+    | "doc"
+    | "deliverable"
+    | "other";
+  artifactRole?:
+    | "primary"
+    | "review"
+    | "verification"
+    | "documentation"
+    | "deliverable"
+    | "build"
+    | "test_report"
+    | "other";
+  url: string;
+  title?: string;
+  summary?: string;
+}
+
+export async function linkTaskArtifact(
+  userId: string,
+  input: LinkTaskArtifactInput,
+): Promise<void> {
+  await getOwnedSession(userId, input.sessionId);
+
+  await attachArtifact({
+    userId,
+    sessionId: input.sessionId,
+    artifactType: input.artifactType,
+    artifactRole: input.artifactRole,
+    url: input.url,
+    title: input.title,
+    summary: input.summary,
+  });
+}
+
+export interface MarkTaskReviewReadyInput {
+  sessionId: string;
+  summary: string;
+  prUrl: string;
+  notesForReviewer?: string;
+}
+
+export async function markTaskReviewReady(
+  userId: string,
+  input: MarkTaskReviewReadyInput,
+): Promise<void> {
+  const session = await getOwnedSession(userId, input.sessionId);
+  const currentStatus = (session as Record<string, unknown>)
+    .workflowStatus as WorkflowStatus;
+
+  if (
+    currentStatus !== "awaiting_review" &&
+    !isValidTransition(currentStatus, "awaiting_review")
+  ) {
+    throw new Error(
+      `Invalid workflow transition: ${currentStatus} → awaiting_review`,
+    );
   }
 
-  await reportWorkflowStatus(userId, {
-    sessionId,
-    status: "awaiting_review",
-    message: message ?? "PR submitted for review",
+  await updateWorkflowState(session, {
+    workflowStatus: "awaiting_review",
+    message: input.summary,
+    eventPayload: {
+      type: "workflow_status",
+      workflowStatus: "awaiting_review",
+      message: input.summary,
+      details: {
+        prUrl: input.prUrl,
+        notesForReviewer: input.notesForReviewer,
+      },
+    },
   });
 
-  await db.execute(sql`
-    UPDATE chat_conversations
-    SET pull_request_id = ${prId}::uuid
-    WHERE id = ${sessionId}
-  `);
+  await writeReviewReady({
+    userId,
+    sessionId: input.sessionId,
+    summary: input.summary,
+    prUrl: input.prUrl,
+    notesForReviewer: input.notesForReviewer,
+  });
+}
+
+export interface RecordVerificationResultInput {
+  sessionId: string;
+  result: "passed" | "failed";
+  summary: string;
+  artifactUrl?: string;
+}
+
+export async function recordVerificationResult(
+  userId: string,
+  input: RecordVerificationResultInput,
+): Promise<void> {
+  await getOwnedSession(userId, input.sessionId);
+
+  await writeVerificationResult({
+    userId,
+    sessionId: input.sessionId,
+    result: input.result,
+    summary: input.summary,
+    artifactUrl: input.artifactUrl,
+  });
+}
+
+export interface CompleteTaskInput {
+  sessionId: string;
+  summary: string;
+  prUrl?: string;
+  markIssueDone?: boolean;
+}
+
+export async function completeTask(
+  userId: string,
+  input: CompleteTaskInput,
+): Promise<void> {
+  const session = await getOwnedSession(userId, input.sessionId);
+  const currentStatus = (session as Record<string, unknown>)
+    .workflowStatus as WorkflowStatus;
+
+  if (
+    currentStatus !== "completed" &&
+    !isValidTransition(currentStatus, "completed")
+  ) {
+    throw new Error(`Invalid workflow transition: ${currentStatus} → completed`);
+  }
+
+  await updateWorkflowState(session, {
+    workflowStatus: "completed",
+    message: input.summary,
+    eventPayload: {
+      type: "workflow_status",
+      workflowStatus: "completed",
+      message: input.summary,
+      details: {
+        prUrl: input.prUrl,
+        markIssueDone: false,
+      },
+    },
+  });
+
+  await completeTaskRun({
+    userId,
+    sessionId: input.sessionId,
+    summary: input.summary,
+    prUrl: input.prUrl,
+    markIssueDone: false,
+  });
 }
 
 export async function findExpiredAwaitingInputSessions(): Promise<
@@ -310,64 +490,6 @@ export async function findExpiredAwaitingInputSessions(): Promise<
     awaitingInputDefault: row.awaiting_input_default ?? "proceed with default",
     kanbangerTaskId: row.kanbanger_task_id,
   }));
-}
-
-const KANBANGER_API_URL =
-  process.env.KANBANGER_API_URL ?? "https://tasks.gmac.io/api";
-const KANBANGER_API_KEY = process.env.KANBANGER_API_KEY;
-
-async function postKanbangerComment(
-  taskId: string,
-  body: string,
-): Promise<void> {
-  if (!KANBANGER_API_KEY) {
-    console.warn("KANBANGER_API_KEY not set, skipping comment");
-    return;
-  }
-
-  try {
-    const response = await fetch(
-      `${KANBANGER_API_URL}/issues/${taskId}/comments`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${KANBANGER_API_KEY}`,
-        },
-        body: JSON.stringify({ body }),
-      },
-    );
-
-    if (!response.ok) {
-      console.error("Failed to post Kanbanger comment:", await response.text());
-    }
-  } catch (error) {
-    console.error("Error posting Kanbanger comment:", error);
-  }
-}
-
-async function postKanbangerStatusUpdate(
-  taskId: string,
-  status: WorkflowStatus,
-  message: string,
-): Promise<void> {
-  const statusEmojis: Record<WorkflowStatus, string> = {
-    started: "🤖",
-    working: "⚙️",
-    awaiting_input: "💭",
-    blocked: "🚫",
-    awaiting_review: "👀",
-    completed: "✅",
-  };
-
-  const shouldPost = ["blocked", "awaiting_review", "completed"].includes(
-    status,
-  );
-  if (!shouldPost) return;
-
-  const emoji = statusEmojis[status] ?? "📝";
-  const body = `${emoji} **${status.replace("_", " ").toUpperCase()}**: ${message}`;
-  await postKanbangerComment(taskId, body);
 }
 
 export async function getSessionWorkflowState(

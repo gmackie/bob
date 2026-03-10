@@ -1,5 +1,5 @@
 import type { ToolContext, ToolDefinition } from "./types.js";
-import { createToolResult, errorResult, jsonResult } from "./types.js";
+import { createToolResult, errorResult } from "./types.js";
 
 export const linkTaskTool: ToolDefinition = {
   tool: {
@@ -124,37 +124,18 @@ export const completeTaskTool: ToolDefinition = {
       return errorResult("BOB_SESSION_ID not set - cannot complete task");
     }
 
-    const { summary, pr_url, mark_issue_done } = args as {
+    const { summary, pr_url } = args as {
       summary: string;
       pr_url?: string;
       mark_issue_done?: boolean;
     };
 
     try {
-      const session = await ctx.callTrpc<{
-        kanbangerTaskId: string | null;
-        taskRunId: string | null;
-      }>("session.get", { id: ctx.sessionId });
-
-      if (!session.taskRunId) {
-        return errorResult("No active task run for this session");
-      }
-
-      const artifacts = pr_url
-        ? [{ type: "pr" as const, url: pr_url, description: "Pull request" }]
-        : undefined;
-
-      await ctx.callTrpc("kanbanger.agentCompleteTask", {
-        taskRunId: session.taskRunId,
-        summary,
-        artifacts,
-        markIssueDone: mark_issue_done ?? true,
-      });
-
-      await ctx.callTrpc("session.reportWorkflowStatus", {
+      await ctx.callTrpc("session.completeTask", {
         sessionId: ctx.sessionId,
-        status: "completed",
-        message: summary,
+        summary,
+        prUrl: pr_url,
+        markIssueDone: false,
       });
 
       return createToolResult(`Task completed: ${summary}`);
@@ -209,9 +190,262 @@ export const updateTaskStatusTool: ToolDefinition = {
   },
 };
 
+export const recordTaskProgressTool: ToolDefinition = {
+  tool: {
+    name: "report_task_progress",
+    description:
+      "Report a milestone progress update for the linked task without posting a full chat transcript.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        message: {
+          type: "string",
+          description: "Short progress summary for the task",
+        },
+        phase: {
+          type: "string",
+          description: "Optional implementation phase label",
+        },
+        progress: {
+          type: "string",
+          description: "Optional coarse progress indicator such as '2/4'",
+        },
+      },
+      required: ["message"],
+    },
+  },
+  handler: async (args, ctx) => {
+    if (!ctx.sessionId) {
+      return errorResult("BOB_SESSION_ID not set - cannot report task progress");
+    }
+
+    const { message, phase, progress } = args as {
+      message: string;
+      phase?: string;
+      progress?: string;
+    };
+
+    try {
+      await ctx.callTrpc("session.reportTaskProgress", {
+        sessionId: ctx.sessionId,
+        message,
+        phase,
+        progress,
+      });
+
+      return createToolResult(`Task progress reported: ${message}`);
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+};
+
+export const linkTaskArtifactTool: ToolDefinition = {
+  tool: {
+    name: "link_task_artifact",
+    description:
+      "Attach a task artifact such as a PR, verification report, doc, or deliverable.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        artifact_type: {
+          type: "string",
+          enum: [
+            "pr",
+            "verification",
+            "build",
+            "test_report",
+            "doc",
+            "deliverable",
+            "other",
+          ],
+          description: "Artifact category",
+        },
+        artifact_role: {
+          type: "string",
+          enum: [
+            "primary",
+            "review",
+            "verification",
+            "documentation",
+            "deliverable",
+            "build",
+            "test_report",
+            "other",
+          ],
+          description: "Optional artifact role",
+        },
+        url: {
+          type: "string",
+          description: "Artifact URL",
+        },
+        title: {
+          type: "string",
+          description: "Optional artifact title",
+        },
+        summary: {
+          type: "string",
+          description: "Optional short artifact summary",
+        },
+      },
+      required: ["artifact_type", "url"],
+    },
+  },
+  handler: async (args, ctx) => {
+    if (!ctx.sessionId) {
+      return errorResult("BOB_SESSION_ID not set - cannot attach task artifact");
+    }
+
+    const { artifact_type, artifact_role, url, title, summary } = args as {
+      artifact_type:
+        | "pr"
+        | "verification"
+        | "build"
+        | "test_report"
+        | "doc"
+        | "deliverable"
+        | "other";
+      artifact_role?:
+        | "primary"
+        | "review"
+        | "verification"
+        | "documentation"
+        | "deliverable"
+        | "build"
+        | "test_report"
+        | "other";
+      url: string;
+      title?: string;
+      summary?: string;
+    };
+
+    try {
+      await ctx.callTrpc("session.linkTaskArtifact", {
+        sessionId: ctx.sessionId,
+        artifactType: artifact_type,
+        artifactRole: artifact_role,
+        url,
+        title,
+        summary,
+      });
+
+      return createToolResult(`Artifact linked: ${title ?? url}`);
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+};
+
+export const setTaskReviewReadyTool: ToolDefinition = {
+  tool: {
+    name: "set_task_review_ready",
+    description:
+      "Mark the linked task as ready for human review and attach the PR link.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pr_url: {
+          type: "string",
+          description: "Pull request URL",
+        },
+        summary: {
+          type: "string",
+          description: "Short review summary",
+        },
+        notes_for_reviewer: {
+          type: "string",
+          description: "Optional notes for the reviewer",
+        },
+      },
+      required: ["pr_url", "summary"],
+    },
+  },
+  handler: async (args, ctx) => {
+    if (!ctx.sessionId) {
+      return errorResult("BOB_SESSION_ID not set - cannot mark review ready");
+    }
+
+    const { pr_url, summary, notes_for_reviewer } = args as {
+      pr_url: string;
+      summary: string;
+      notes_for_reviewer?: string;
+    };
+
+    try {
+      await ctx.callTrpc("session.markTaskReviewReady", {
+        sessionId: ctx.sessionId,
+        prUrl: pr_url,
+        summary,
+        notesForReviewer: notes_for_reviewer,
+      });
+
+      return createToolResult(`Task submitted for review: ${pr_url}`);
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+};
+
+export const recordVerificationResultTool: ToolDefinition = {
+  tool: {
+    name: "record_verification_result",
+    description:
+      "Record the latest verification result and optionally attach the report artifact.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        result: {
+          type: "string",
+          enum: ["passed", "failed"],
+          description: "Verification outcome",
+        },
+        summary: {
+          type: "string",
+          description: "Verification summary",
+        },
+        artifact_url: {
+          type: "string",
+          description: "Optional verification artifact URL",
+        },
+      },
+      required: ["result", "summary"],
+    },
+  },
+  handler: async (args, ctx) => {
+    if (!ctx.sessionId) {
+      return errorResult(
+        "BOB_SESSION_ID not set - cannot record verification result",
+      );
+    }
+
+    const { result, summary, artifact_url } = args as {
+      result: "passed" | "failed";
+      summary: string;
+      artifact_url?: string;
+    };
+
+    try {
+      await ctx.callTrpc("session.recordVerificationResult", {
+        sessionId: ctx.sessionId,
+        result,
+        summary,
+        artifactUrl: artifact_url,
+      });
+
+      return createToolResult(`Verification result recorded: ${result}`);
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+};
+
 export const taskTools: ToolDefinition[] = [
   linkTaskTool,
   postTaskCommentTool,
   completeTaskTool,
   updateTaskStatusTool,
+  recordTaskProgressTool,
+  linkTaskArtifactTool,
+  setTaskReviewReadyTool,
+  recordVerificationResultTool,
 ];

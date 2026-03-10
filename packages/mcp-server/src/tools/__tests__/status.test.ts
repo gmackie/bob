@@ -323,12 +323,12 @@ describe("status tools", () => {
       );
 
       expect(ctx.mockCallTrpc).toHaveBeenCalledWith(
-        "session.reportWorkflowStatus",
+        "session.markTaskReviewReady",
         {
           sessionId: "test-session-id",
-          status: "awaiting_review",
-          message: "Implemented user authentication",
-          details: { prUrl: "https://github.com/org/repo/pull/123" },
+          prUrl: "https://github.com/org/repo/pull/123",
+          summary: "Implemented user authentication",
+          notesForReviewer: undefined,
         },
       );
       expect(result.isError).toBeFalsy();
@@ -354,13 +354,12 @@ describe("status tools", () => {
       );
 
       expect(ctx.mockCallTrpc).toHaveBeenCalledWith(
-        "session.reportWorkflowStatus",
+        "session.markTaskReviewReady",
         {
           sessionId: "test-session-id",
-          status: "awaiting_review",
-          message:
-            "Bug fix for login\n\nNotes for reviewer:\nPlease pay attention to edge cases",
-          details: { prUrl: "https://github.com/org/repo/pull/456" },
+          prUrl: "https://github.com/org/repo/pull/456",
+          summary: "Bug fix for login",
+          notesForReviewer: "Please pay attention to edge cases",
         },
       );
       expect(result.isError).toBeFalsy();

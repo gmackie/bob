@@ -12,7 +12,12 @@ import {
 import type { WorkflowStatus } from "../services/sessions/workflowStatusService";
 import type { ElevenLabsSessionService } from "../services/voice/elevenlabsSession";
 import {
+  completeTask,
   getSessionWorkflowState,
+  linkTaskArtifact,
+  markTaskReviewReady,
+  recordVerificationResult,
+  reportTaskProgress,
   reportWorkflowStatus,
   requestInput,
   resolveAwaitingInput,
@@ -732,6 +737,145 @@ export const sessionRouter = {
             error instanceof Error
               ? error.message
               : "Failed to update workflow status",
+        });
+      }
+    }),
+
+  reportTaskProgress: protectedProcedure
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        message: z.string().min(1),
+        phase: z.string().optional(),
+        progress: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        await reportTaskProgress(ctx.session.user.id, input);
+        return { success: true };
+      } catch (error) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to report task progress",
+        });
+      }
+    }),
+
+  linkTaskArtifact: protectedProcedure
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        artifactType: z.enum([
+          "pr",
+          "verification",
+          "build",
+          "test_report",
+          "doc",
+          "deliverable",
+          "other",
+        ]),
+        artifactRole: z
+          .enum([
+            "primary",
+            "review",
+            "verification",
+            "documentation",
+            "deliverable",
+            "build",
+            "test_report",
+            "other",
+          ])
+          .optional(),
+        url: z.string().url(),
+        title: z.string().optional(),
+        summary: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        await linkTaskArtifact(ctx.session.user.id, input);
+        return { success: true };
+      } catch (error) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to attach task artifact",
+        });
+      }
+    }),
+
+  markTaskReviewReady: protectedProcedure
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        prUrl: z.string().url(),
+        summary: z.string().min(1),
+        notesForReviewer: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        await markTaskReviewReady(ctx.session.user.id, input);
+        return { success: true };
+      } catch (error) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to mark task review ready",
+        });
+      }
+    }),
+
+  recordVerificationResult: protectedProcedure
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        result: z.enum(["passed", "failed"]),
+        summary: z.string().min(1),
+        artifactUrl: z.string().url().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        await recordVerificationResult(ctx.session.user.id, input);
+        return { success: true };
+      } catch (error) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to record verification result",
+        });
+      }
+    }),
+
+  completeTask: protectedProcedure
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        summary: z.string().min(1),
+        prUrl: z.string().url().optional(),
+        markIssueDone: z.boolean().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        await completeTask(ctx.session.user.id, input);
+        return { success: true };
+      } catch (error) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            error instanceof Error ? error.message : "Failed to complete task",
         });
       }
     }),

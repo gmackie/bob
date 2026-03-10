@@ -1,5 +1,5 @@
 import type { ToolContext, ToolDefinition } from "./types.js";
-import { createToolResult, errorResult, jsonResult } from "./types.js";
+import { createToolResult, errorResult } from "./types.js";
 
 export const updateStatusTool: ToolDefinition = {
   tool: {
@@ -220,15 +220,11 @@ export const submitForReviewTool: ToolDefinition = {
     };
 
     try {
-      const message = notes_for_reviewer
-        ? `${summary}\n\nNotes for reviewer:\n${notes_for_reviewer}`
-        : summary;
-
-      await ctx.callTrpc("session.reportWorkflowStatus", {
+      await ctx.callTrpc("session.markTaskReviewReady", {
         sessionId: ctx.sessionId,
-        status: "awaiting_review",
-        message,
-        details: { prUrl: pr_url },
+        prUrl: pr_url,
+        summary,
+        notesForReviewer: notes_for_reviewer,
       });
 
       return createToolResult(
