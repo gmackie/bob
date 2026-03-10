@@ -17,8 +17,9 @@ describe("OpenCodeClient", () => {
     it("should create a session successfully", async () => {
       const mockSession = {
         id: "session-123",
-        status: "active" as const,
-        createdAt: new Date().toISOString(),
+        time: {
+          created: "1710000000000",
+        },
       };
 
       (global.fetch as any).mockResolvedValueOnce({
@@ -32,9 +33,13 @@ describe("OpenCodeClient", () => {
 
       const result = await client.createSession();
 
-      expect(result).toEqual(mockSession);
+      expect(result).toEqual({
+        id: "session-123",
+        status: "active",
+        createdAt: "1710000000000",
+      });
       expect(global.fetch).toHaveBeenCalledWith(
-        "http://localhost:8080/sessions",
+        "http://localhost:8080/session",
         expect.objectContaining({
           method: "POST",
           headers: expect.objectContaining({
@@ -47,8 +52,9 @@ describe("OpenCodeClient", () => {
     it("should include API key in headers when provided", async () => {
       const mockSession = {
         id: "session-123",
-        status: "active" as const,
-        createdAt: new Date().toISOString(),
+        time: {
+          created: "1710000000000",
+        },
       };
 
       (global.fetch as any).mockResolvedValueOnce({
@@ -81,21 +87,18 @@ describe("OpenCodeClient", () => {
         'data: {"content": " World", "delta": " World"}\n',
       ];
 
-      const mockStream = {
-        body: {
-          getReader: () => ({
-            read: vi.fn()
-              .mockResolvedValueOnce({ done: false, value: new TextEncoder().encode(mockChunks[0]) })
-              .mockResolvedValueOnce({ done: false, value: new TextEncoder().encode(mockChunks[1]) })
-              .mockResolvedValueOnce({ done: true }),
-            releaseLock: vi.fn(),
-          }),
+      const mockStream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const chunk of mockChunks) {
+            controller.enqueue(new TextEncoder().encode(chunk));
+          }
+          controller.close();
         },
-      };
+      });
 
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        body: mockStream.body,
+        body: mockStream,
       });
 
       const client = new OpenCodeClient({

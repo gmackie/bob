@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { chatConversations } from "@bob/db/schema";
-import { appRouter } from "../../root";
+
+let appRouter: typeof import("../../root").appRouter;
 
 const dbInsertMock = vi.fn();
 const dbInsertValuesMock = vi.fn();
@@ -51,6 +52,12 @@ const createCaller = (session: { id: string }) =>
   });
 
 describe("session.bootstrapForChat", () => {
+  beforeAll(async () => {
+    process.env.DATABASE_URL ??=
+      "postgres://postgres:postgres@localhost:5432/test";
+    ({ appRouter } = await import("../../root"));
+  });
+
   beforeEach(() => {
     dbInsertMock.mockReset();
     dbInsertValuesMock.mockReset();
