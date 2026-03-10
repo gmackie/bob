@@ -15,6 +15,12 @@ export interface KanbangerTask {
   labels: string[];
   priority: number;
   url?: string;
+  repository?: {
+    id?: string;
+    fullName?: string;
+    url?: string;
+    defaultBranch?: string;
+  };
 }
 
 export interface TaskExecutionResult {
@@ -68,6 +74,42 @@ export async function findRepositoryForTask(
   });
 
   if (repos.length === 0) return null;
+
+  if (task.repository?.id) {
+    const exactMatch = repos.find((repo) => repo.id === task.repository?.id);
+    if (exactMatch) {
+      return {
+        repositoryId: exactMatch.id,
+        path: exactMatch.path,
+        mainBranch: exactMatch.mainBranch,
+      };
+    }
+  }
+
+  if (task.repository?.fullName) {
+    const [owner, name] = task.repository.fullName.split("/");
+    const fullNameMatch = repos.find(
+      (repo) => repo.remoteOwner === owner && repo.remoteName === name,
+    );
+    if (fullNameMatch) {
+      return {
+        repositoryId: fullNameMatch.id,
+        path: fullNameMatch.path,
+        mainBranch: fullNameMatch.mainBranch,
+      };
+    }
+  }
+
+  const projectMappedRepo = repos.find(
+    (repo) => repo.kanbangerProjectId === task.projectId,
+  );
+  if (projectMappedRepo) {
+    return {
+      repositoryId: projectMappedRepo.id,
+      path: projectMappedRepo.path,
+      mainBranch: projectMappedRepo.mainBranch,
+    };
+  }
 
   if (repos.length === 1) {
     const repo = repos[0]!;
