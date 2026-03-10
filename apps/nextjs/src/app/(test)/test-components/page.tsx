@@ -559,7 +559,10 @@ const longTestSessions: TestSession[] = [
   { id: "session-8", title: "Short error", status: "error" },
 ];
 
-function focusFilterButton(buttons: HTMLButtonElement[], targetIndex: number) {
+function focusFilterButton(
+  buttons: Array<HTMLButtonElement | null>,
+  targetIndex: number,
+) {
   const button = buttons[targetIndex];
   if (button) {
     button.focus();
@@ -638,7 +641,9 @@ function SessionListFilterFixture({ variant }: { variant: string | null }) {
                     event.preventDefault();
                     const firstFilter = testSessionFilters[0];
                     focusFilterButton(filterButtonRefs.current, 0);
-                    setFilter(firstFilter.value);
+                    if (firstFilter) {
+                      setFilter(firstFilter.value);
+                    }
                   }
 
                   if (event.key === "End") {
@@ -646,7 +651,9 @@ function SessionListFilterFixture({ variant }: { variant: string | null }) {
                     const lastIndex = testSessionFilters.length - 1;
                     const lastFilter = testSessionFilters[lastIndex];
                     focusFilterButton(filterButtonRefs.current, lastIndex);
-                    setFilter(lastFilter.value);
+                    if (lastFilter) {
+                      setFilter(lastFilter.value);
+                    }
                   }
                 }}
                 className={cn("chat-filterChip", isActive && "is-active")}
