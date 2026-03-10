@@ -26,8 +26,23 @@ const makeDbMock = () => ({
 const createCaller = (session: { id: string }) =>
   appRouter.createCaller({
     session: {
+      session: {
+        id: "auth-session-1",
+        createdAt: new Date("2026-03-10T00:00:00.000Z"),
+        updatedAt: new Date("2026-03-10T00:00:00.000Z"),
+        userId: session.id,
+        expiresAt: new Date("2026-03-11T00:00:00.000Z"),
+        token: "token-1",
+        ipAddress: null,
+        userAgent: null,
+      },
       user: {
         id: session.id,
+        createdAt: new Date("2026-03-10T00:00:00.000Z"),
+        updatedAt: new Date("2026-03-10T00:00:00.000Z"),
+        email: "test@example.com",
+        emailVerified: true,
+        name: "Test User",
       },
     },
     authApi: { getSession: vi.fn() } as any,

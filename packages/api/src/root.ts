@@ -1,3 +1,5 @@
+import type { TRPCRouterRecord } from "@trpc/server";
+
 import { authRouter } from "./router/auth";
 import { chatRouter } from "./router/chat";
 import { eventRouter } from "./router/event";
@@ -17,7 +19,7 @@ import { systemRouter } from "./router/system";
 import { terminalRouter } from "./router/terminal";
 import { createTRPCRouter } from "./trpc";
 
-export const appRouter = createTRPCRouter({
+const appRouterRecord = {
   auth: authRouter,
   chat: chatRouter,
   event: eventRouter,
@@ -35,6 +37,8 @@ export const appRouter = createTRPCRouter({
   settings: settingsRouter,
   system: systemRouter,
   terminal: terminalRouter,
-});
+} satisfies TRPCRouterRecord;
+
+export const appRouter = createTRPCRouter(appRouterRecord);
 
 export type AppRouter = typeof appRouter;
