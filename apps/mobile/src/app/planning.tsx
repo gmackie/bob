@@ -47,14 +47,14 @@ export default function PlanningScreen() {
   );
 
   const workItemsQuery = useQuery(
-    trpc.workItems.list.queryOptions(
+    trpc.workItem.list.queryOptions(
       { workspaceId: primaryWorkspace?.id ?? "", limit: 12 },
       { enabled: Boolean(primaryWorkspace?.id) },
     ),
   );
 
   const notificationsQuery = useQuery(
-    trpc.workItems.listNotifications.queryOptions(
+    trpc.notification.list.queryOptions(
       { limit: 12 },
       { enabled: Boolean(session) },
     ),

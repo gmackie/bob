@@ -13,13 +13,13 @@ export const dynamic = "force-dynamic";
 export default async function WorkItemPage({ params }: WorkItemPageProps) {
   const { workItemId } = await params;
   const caller = (await createPlanningCaller()) as any;
-  const detail = await caller.workItems.get({ id: workItemId });
+  const detail = await caller.workItem.get({ id: workItemId });
 
   if (!detail) {
     notFound();
   }
 
-  const comments = await caller.workItems.listComments({ workItemId });
+  const comments = await caller.comment.listByWorkItem({ workItemId });
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">

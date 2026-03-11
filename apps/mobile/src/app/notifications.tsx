@@ -1,5 +1,5 @@
 import { Redirect } from "expo-router";
-import { ActivityIndicator, ScrollView, Text } from "react-native";
+import { ActivityIndicator, Text } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Card, ListRow, Screen } from "~/components/ui";
@@ -10,17 +10,17 @@ export default function NotificationsScreen() {
   const { data: session, isPending } = authClient.useSession();
   const queryClient = useQueryClient();
   const notificationsQuery = useQuery(
-    trpc.workItems.listNotifications.queryOptions(
+    trpc.notification.list.queryOptions(
       { limit: 50 },
       { enabled: Boolean(session) },
     ),
   );
 
   const markReadMutation = useMutation(
-    trpc.workItems.markNotificationAsRead.mutationOptions({
+    trpc.notification.markAsRead.mutationOptions({
       onSuccess: async () => {
         await queryClient.invalidateQueries({
-          queryKey: trpc.workItems.listNotifications.queryKey({ limit: 50 }),
+          queryKey: trpc.notification.list.queryKey({ limit: 50 }),
         });
       },
     }),

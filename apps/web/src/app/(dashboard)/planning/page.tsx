@@ -33,7 +33,7 @@ export default async function PlanningPage() {
 
   const [projects, workItems] = await Promise.all([
     caller.project.list({ workspaceId: currentWorkspace.id }),
-    caller.workItems.list({ workspaceId: currentWorkspace.id, limit: 100 }),
+    caller.workItem.list({ workspaceId: currentWorkspace.id, limit: 100 }),
   ]);
   const projectCards = summarizeProjects(projects);
 

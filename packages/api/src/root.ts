@@ -18,13 +18,22 @@ import { sessionRouter } from "./router/session";
 import { settingsRouter } from "./router/settings";
 import { systemRouter } from "./router/system";
 import { terminalRouter } from "./router/terminal";
-import { workItemsRouter } from "./router/workItems";
+import {
+  artifactRouter,
+  commentRouter,
+  notificationRouter,
+  taskRunRouter,
+  workItemRouter,
+  workItemsRouter,
+} from "./router/workItems";
 import { workspaceRouter } from "./router/workspace";
 import { createTRPCRouter } from "./trpc";
 
 const appRouterRecord = {
+  artifact: artifactRouter,
   auth: authRouter,
   chat: chatRouter,
+  comment: commentRouter,
   event: eventRouter,
   filesystem: filesystemRouter,
   git: gitRouter,
@@ -40,7 +49,10 @@ const appRouterRecord = {
   session: sessionRouter,
   settings: settingsRouter,
   system: systemRouter,
+  taskRun: taskRunRouter,
   terminal: terminalRouter,
+  notification: notificationRouter,
+  workItem: workItemRouter,
   workItems: workItemsRouter,
   workspace: workspaceRouter,
 } satisfies TRPCRouterRecord;

@@ -23,25 +23,25 @@ export default function WorkItemDetailScreen() {
   const [commentDraft, setCommentDraft] = useState("");
 
   const workItemQuery = useQuery(
-    trpc.workItems.get.queryOptions(
+    trpc.workItem.get.queryOptions(
       { id: workItemId },
       { enabled: Boolean(session && workItemId) },
     ),
   );
 
   const commentsQuery = useQuery(
-    trpc.workItems.listComments.queryOptions(
+    trpc.comment.listByWorkItem.queryOptions(
       { workItemId },
       { enabled: Boolean(session && workItemId) },
     ),
   );
 
   const createCommentMutation = useMutation(
-    trpc.workItems.createComment.mutationOptions({
+    trpc.comment.create.mutationOptions({
       onSuccess: async () => {
         setCommentDraft("");
         await queryClient.invalidateQueries({
-          queryKey: trpc.workItems.listComments.queryKey({ workItemId }),
+          queryKey: trpc.comment.listByWorkItem.queryKey({ workItemId }),
         });
       },
     }),

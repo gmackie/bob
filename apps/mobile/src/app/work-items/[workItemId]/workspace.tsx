@@ -26,37 +26,37 @@ export default function TaskWorkspaceScreen() {
   const [messageDraft, setMessageDraft] = useState("");
 
   const workItemQuery = useQuery(
-    trpc.workItems.get.queryOptions(
+    trpc.workItem.get.queryOptions(
       { id: workItemId },
       { enabled: Boolean(session && workItemId) },
     ),
   );
 
-  const sessionsQuery = useQuery(
-    trpc.session.list.queryOptions(
-      { limit: 100 },
-      { enabled: Boolean(session) },
+  const taskRunsQuery = useQuery(
+    trpc.taskRun.listByWorkItem.queryOptions(
+      { workItemId },
+      { enabled: Boolean(session && workItemId) },
     ),
   );
 
-  const linkedSession = useMemo(
-    () =>
-      sessionsQuery.data?.items.find((item) => item.linkedTask?.id === workItemId) ??
-      null,
-    [sessionsQuery.data?.items, workItemId],
+  const activeTaskRun = useMemo(
+    () => taskRunsQuery.data?.find((run) => run.sessionId != null) ?? null,
+    [taskRunsQuery.data],
   );
+
+  const linkedSession = activeTaskRun?.sessionId ?? null;
 
   const workflowStateQuery = useQuery(
     trpc.session.getWorkflowState.queryOptions(
-      { sessionId: linkedSession?.id ?? "" },
-      { enabled: Boolean(linkedSession?.id) },
+      { sessionId: linkedSession ?? "" },
+      { enabled: Boolean(linkedSession) },
     ),
   );
 
   const eventsQuery = useQuery(
     trpc.session.getEvents.queryOptions(
-      { sessionId: linkedSession?.id ?? "", limit: 30 },
-      { enabled: Boolean(linkedSession?.id) },
+      { sessionId: linkedSession ?? "", limit: 30 },
+      { enabled: Boolean(linkedSession) },
     ),
   );
 
@@ -68,13 +68,13 @@ export default function TaskWorkspaceScreen() {
         await Promise.all([
           queryClient.invalidateQueries({
             queryKey: trpc.session.getEvents.queryKey({
-              sessionId: linkedSession.id,
+              sessionId: linkedSession,
               limit: 30,
             }),
           }),
           queryClient.invalidateQueries({
             queryKey: trpc.session.getWorkflowState.queryKey({
-              sessionId: linkedSession.id,
+              sessionId: linkedSession,
             }),
           }),
         ]);
@@ -88,7 +88,7 @@ export default function TaskWorkspaceScreen() {
         if (!linkedSession) return;
         await queryClient.invalidateQueries({
           queryKey: trpc.session.getWorkflowState.queryKey({
-            sessionId: linkedSession.id,
+            sessionId: linkedSession,
           }),
         });
       },
@@ -108,9 +108,9 @@ export default function TaskWorkspaceScreen() {
       },
       session: linkedSession
         ? {
-            id: linkedSession.id,
-            title: linkedSession.title,
-            status: linkedSession.status,
+            id: linkedSession,
+            title: `${workItemQuery.data.workItem.identifier} execution`,
+            status: activeTaskRun?.status ?? "running",
           }
         : null,
       workflowState: workflowStateQuery.data
@@ -141,7 +141,13 @@ export default function TaskWorkspaceScreen() {
         payload: event.payload as Record<string, unknown>,
       })),
     });
-  }, [eventsQuery.data?.events, linkedSession, workItemQuery.data, workflowStateQuery.data]);
+  }, [
+    activeTaskRun?.status,
+    eventsQuery.data?.events,
+    linkedSession,
+    workItemQuery.data,
+    workflowStateQuery.data,
+  ]);
 
   const eventRows = useMemo(
     () =>
@@ -247,7 +253,7 @@ export default function TaskWorkspaceScreen() {
                 }
 
                 resolveAwaitingInputMutation.mutate({
-                  sessionId: linkedSession.id,
+                  sessionId: linkedSession,
                   resolution: {
                     type: "human",
                     value: awaitingInputModel.defaultAction,
@@ -304,7 +310,7 @@ export default function TaskWorkspaceScreen() {
             onPress={() =>
               linkedSession &&
               sendInputMutation.mutate({
-                sessionId: linkedSession.id,
+                sessionId: linkedSession,
                 message: messageDraft,
               })
             }

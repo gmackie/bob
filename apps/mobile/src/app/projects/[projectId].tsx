@@ -28,7 +28,7 @@ export default function ProjectDetailScreen() {
   );
 
   const workItemsQuery = useQuery(
-    trpc.workItems.list.queryOptions(
+    trpc.workItem.list.queryOptions(
       {
         workspaceId: projectQuery.data?.project.workspaceId ?? "",
         projectId,
