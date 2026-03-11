@@ -1,11 +1,24 @@
 {
   "name": "@bob/execution",
   "private": true,
-  "version": "0.0.0",
+  "type": "module",
   "scripts": {
-    "build": "node -e \"process.exit(0)\"",
-    "dev": "node -e \"process.exit(0)\"",
-    "lint": "node -e \"process.exit(0)\"",
-    "typecheck": "node -e \"process.exit(0)\""
-  }
+    "build": "tsup src/index.ts --format esm --dts",
+    "dev": "tsx watch src/index.ts",
+    "lint": "eslint --flag unstable_native_nodejs_ts_config",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@bob/eslint-config": "workspace:*",
+    "@bob/prettier-config": "workspace:*",
+    "@bob/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "prettier": "catalog:",
+    "tsup": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:"
+  },
+  "prettier": "@bob/prettier-config"
 }
