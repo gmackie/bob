@@ -1,227 +1,296 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const {
+  executeMock,
+  insertCalls,
+  updateCalls,
+  chatConversationsTable,
+  chatMessagesTable,
+  sessionEventsTable,
+  taskRunsTable,
+} = vi.hoisted(() => ({
+  executeMock: vi.fn(),
+  insertCalls: [] as Array<{ table: unknown; value: unknown }>,
+  updateCalls: [] as Array<{
+    table: unknown;
+    patch: unknown;
+    predicate: unknown;
+  }>,
+  chatConversationsTable: {
+    id: { name: "id" },
+    nextSeq: { name: "next_seq" },
+  },
+  chatMessagesTable: { conversationId: { name: "conversation_id" } },
+  sessionEventsTable: { sessionId: { name: "session_id" } },
+  taskRunsTable: {
+    sessionId: { name: "session_id" },
+    status: { name: "status" },
+  },
+}));
 
 vi.mock("@bob/db/client", () => ({
   db: {
-    query: {
-      chatConversations: {
-        findFirst: vi.fn(),
-      },
-    },
-    update: vi.fn(() => ({
-      set: vi.fn(() => ({
-        where: vi.fn(() => ({
-          returning: vi.fn(),
-        })),
+    execute: executeMock,
+    insert: vi.fn((table: unknown) => ({
+      values: vi.fn(async (value: unknown) => {
+        insertCalls.push({ table, value });
+        return [];
+      }),
+    })),
+    update: vi.fn((table: unknown) => ({
+      set: vi.fn((patch: unknown) => ({
+        where: vi.fn(async (predicate: unknown) => {
+          updateCalls.push({ table, patch, predicate });
+          return [];
+        }),
       })),
     })),
-    insert: vi.fn(() => ({
-      values: vi.fn(() => ({
-        returning: vi.fn(),
-      })),
-    })),
-    execute: vi.fn(),
   },
 }));
 
 vi.mock("@bob/db", () => ({
-  and: vi.fn((...args) => args),
-  eq: vi.fn((a, b) => ({ field: a, value: b })),
-  sql: vi.fn((strings, ...values) => ({ strings, values })),
+  and: (...clauses: unknown[]) => ({ type: "and", clauses }),
+  eq: (field: unknown, value: unknown) => ({ type: "eq", field, value }),
+  isNull: (field: unknown) => ({ type: "isNull", field }),
+  sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
+    text: strings.join("?"),
+    strings,
+    values,
+  }),
 }));
 
-describe("Kanbanger webhook awaiting-input resolution", () => {
-  describe("resolveAwaitingInputFromComment logic", () => {
-    it("should identify valid comment payload structure", () => {
-      const validPayload = {
-        issue: {
-          id: "task-123",
-          identifier: "BOB-42",
-        },
-        comment: {
-          id: "comment-456",
-          body: "Proceed with option A",
-          user: {
-            id: "user-789",
-            email: "human@example.com",
-          },
-        },
-      };
+vi.mock("@bob/db/schema", () => ({
+  chatConversations: chatConversationsTable,
+  chatMessages: chatMessagesTable,
+  gitCommits: {},
+  pullRequests: {},
+  sessionEvents: sessionEventsTable,
+  taskRuns: taskRunsTable,
+  webhookDeliveries: {},
+}));
 
-      expect(validPayload.issue).toBeDefined();
-      expect(validPayload.comment).toBeDefined();
-      expect(validPayload.comment.user.email).toBe("human@example.com");
-    });
+import { handleKanbangerComment } from "../../webhooks/processWebhook";
 
-    it("should reject incomplete payloads", () => {
-      interface PartialPayload {
-        issue?: { id?: string };
-        comment?: { body?: string; user?: { id: string; email: string } };
-      }
-
-      const incompletePayloads: PartialPayload[] = [
-        {},
-        { issue: { id: "task-123" } },
-        { comment: { body: "test" } },
-        { issue: {}, comment: {} },
-      ];
-
-      incompletePayloads.forEach((payload) => {
-        const isValid =
-          payload.issue?.id && payload.comment?.body && payload.comment?.user;
-        expect(isValid).toBeFalsy();
-      });
-    });
-
-    it("should build correct resolution JSON", () => {
-      const commentPayload = {
-        issue: { id: "task-123", identifier: "BOB-42" },
-        comment: {
-          id: "comment-456",
-          body: "Proceed with option A",
-          user: { id: "user-789", email: "human@example.com" },
-        },
-      };
-
-      const resolution = {
-        type: "human",
-        value: commentPayload.comment.body.trim(),
-        commentId: commentPayload.comment.id,
-        userId: commentPayload.comment.user.id,
-        userEmail: commentPayload.comment.user.email,
-      };
-
-      expect(resolution.type).toBe("human");
-      expect(resolution.value).toBe("Proceed with option A");
-      expect(resolution.commentId).toBe("comment-456");
-      expect(resolution.userEmail).toBe("human@example.com");
-    });
-
-    it("should truncate long status messages", () => {
-      const longResponse =
-        "A".repeat(200) +
-        " This is a very long response that should be truncated";
-      const truncatedMessage = `Human response: ${longResponse.slice(0, 100)}`;
-
-      expect(truncatedMessage.length).toBeLessThanOrEqual(120);
-      expect(truncatedMessage).toContain("Human response: ");
-    });
+describe("Kanbanger webhook routing", () => {
+  beforeEach(() => {
+    executeMock.mockReset();
+    insertCalls.length = 0;
+    updateCalls.length = 0;
+    vi.restoreAllMocks();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        text: async () => "ok",
+      })),
+    );
   });
 
-  describe("comment created event handling", () => {
-    it("should correctly extract issue id from payload", () => {
-      const payload = {
-        issue: { id: "task-uuid-123", identifier: "BOB-42" },
-        comment: {
-          id: "comment-id",
-          body: "This is my response",
-          user: { id: "user-id", email: "user@example.com" },
+  it("ignores untargeted comments", async () => {
+    await handleKanbangerComment({
+      issue: { id: "issue-1", identifier: "ENG-1", status: "in_progress" },
+      comment: {
+        id: "comment-1",
+        body: "This is just a normal comment",
+        createdAt: new Date().toISOString(),
+        user: {
+          id: "user-1",
+          name: "Human",
+          email: "human@example.com",
         },
-      };
-
-      expect(payload.issue.id).toBe("task-uuid-123");
-    });
-
-    it("should use correct workflow state transition", () => {
-      const currentStatus = "awaiting_input";
-      const targetStatus = "working";
-
-      const validTransitions: Record<string, string[]> = {
-        started: ["working"],
-        working: ["awaiting_input", "blocked", "awaiting_review", "completed"],
-        awaiting_input: ["working"],
-        blocked: ["working"],
-        awaiting_review: ["working", "completed"],
-        completed: [],
-      };
-
-      expect(validTransitions[currentStatus]).toContain(targetStatus);
-    });
-  });
-
-  describe("session event recording", () => {
-    it("should build correct event payload structure", () => {
-      const sessionId = "session-123";
-      const seq = 5;
-      const responseValue = "User chose option B";
-
-      const eventPayload = {
-        sessionId,
-        seq,
-        direction: "system" as const,
-        eventType: "state",
-        payload: {
-          type: "workflow_status",
-          workflowStatus: "working",
-          message: `Human response: ${responseValue.slice(0, 100)}`,
-          resolution: {
-            type: "human",
-            value: responseValue,
-            source: "kanbanger_comment",
-            commentId: "comment-id",
-          },
-        },
-      };
-
-      expect(eventPayload.direction).toBe("system");
-      expect(eventPayload.eventType).toBe("state");
-      expect(eventPayload.payload.workflowStatus).toBe("working");
-      expect(eventPayload.payload.resolution.source).toBe("kanbanger_comment");
-    });
-  });
-});
-
-describe("Task assigned event handling", () => {
-  it("should validate required fields in task payload", () => {
-    const validPayload = {
-      issue: {
-        id: "issue-123",
-        identifier: "BOB-123",
-        title: "Implement feature",
-        description: "Detailed description",
       },
-      workspace: { id: "workspace-1" },
-      project: { id: "project-1" },
-      assignee: { id: "user-1", email: "dev@example.com" },
-      labels: [{ name: "bug" }, { name: "urgent" }],
-      priority: 2,
-    };
+      bobRouting: {
+        shouldRoute: false,
+        reason: "mention",
+        issueManaged: true,
+        promptCommentId: null,
+        taskRunId: "run-1",
+        sessionId: "session-1",
+      },
+    });
 
-    expect(validPayload.issue).toBeDefined();
-    expect(validPayload.workspace).toBeDefined();
-    expect(validPayload.assignee?.email).toBe("dev@example.com");
+    expect(executeMock).not.toHaveBeenCalled();
+    expect(insertCalls).toHaveLength(0);
+    expect(updateCalls).toHaveLength(0);
   });
 
-  it("should handle missing optional fields", () => {
-    const minimalPayload: {
-      issue: {
-        id: string;
-        identifier: string;
-        title: string;
-        description?: string;
-      };
-      workspace: { id: string };
-      project?: { id: string };
-      assignee: { id: string; email: string };
-      labels?: Array<{ name: string }>;
-      priority?: number;
-    } = {
-      issue: {
-        id: "issue-123",
-        identifier: "BOB-123",
-        title: "Implement feature",
+  it("accepts the first valid prompt reply and resumes the session", async () => {
+    executeMock
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "session-1",
+            user_id: "user-1",
+            next_seq: 7,
+            workflow_status: "awaiting_input",
+            awaiting_input_resolved_at: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [{ id: "session-1" }] });
+
+    await handleKanbangerComment({
+      issue: { id: "issue-1", identifier: "ENG-1", status: "blocked" },
+      comment: {
+        id: "comment-1",
+        parentId: "prompt-1",
+        body: "Use option A",
+        createdAt: new Date().toISOString(),
+        user: {
+          id: "user-1",
+          name: "Human",
+          email: "human@example.com",
+        },
       },
-      workspace: { id: "workspace-1" },
-      assignee: { id: "user-1", email: "dev@example.com" },
-    };
+      bobRouting: {
+        shouldRoute: true,
+        reason: "prompt_reply",
+        issueManaged: true,
+        promptCommentId: "prompt-1",
+        taskRunId: "run-1",
+        sessionId: "session-1",
+      },
+    });
 
-    const description = minimalPayload.issue.description ?? null;
-    const projectId = minimalPayload.project?.id ?? "";
-    const labels = minimalPayload.labels?.map((l) => l.name) ?? [];
-    const priority = minimalPayload.priority ?? 0;
+    expect(insertCalls).toHaveLength(2);
+    expect(insertCalls[0]?.table).toBe(chatMessagesTable);
+    expect(insertCalls[0]?.value).toMatchObject({
+      conversationId: "session-1",
+      role: "user",
+    });
+    expect(insertCalls[1]?.table).toBe(sessionEventsTable);
+    expect(insertCalls[1]?.value).toMatchObject({
+      sessionId: "session-1",
+      eventType: "state",
+      payload: expect.objectContaining({
+        workflowStatus: "working",
+        resolution: expect.objectContaining({
+          commentId: "comment-1",
+          source: "kanbanger_comment",
+        }),
+      }),
+    });
+    expect(updateCalls).toContainEqual(
+      expect.objectContaining({
+        table: chatConversationsTable,
+        patch: { nextSeq: 8 },
+      }),
+    );
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
 
-    expect(description).toBeNull();
-    expect(projectId).toBe("");
-    expect(labels).toEqual([]);
-    expect(priority).toBe(0);
+  it("records late prompt replies without reopening the session", async () => {
+    executeMock
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "session-1",
+            user_id: "user-1",
+            next_seq: 11,
+            workflow_status: "working",
+            awaiting_input_resolved_at: new Date(),
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] });
+
+    await handleKanbangerComment({
+      issue: { id: "issue-1", identifier: "ENG-1", status: "blocked" },
+      comment: {
+        id: "comment-2",
+        parentId: "prompt-1",
+        body: "Actually use option B",
+        createdAt: new Date().toISOString(),
+        user: {
+          id: "user-2",
+          name: "Reviewer",
+          email: "reviewer@example.com",
+        },
+      },
+      bobRouting: {
+        shouldRoute: true,
+        reason: "prompt_reply",
+        issueManaged: true,
+        promptCommentId: "prompt-1",
+        taskRunId: "run-1",
+        sessionId: "session-1",
+      },
+    });
+
+    expect(insertCalls).toHaveLength(1);
+    expect(insertCalls[0]?.table).toBe(sessionEventsTable);
+    expect(insertCalls[0]?.value).toMatchObject({
+      sessionId: "session-1",
+      eventType: "external_reply",
+      payload: expect.objectContaining({
+        type: "kanbanger_comment_late",
+        commentId: "comment-2",
+      }),
+    });
+    expect(updateCalls).toContainEqual(
+      expect.objectContaining({
+        table: chatConversationsTable,
+        patch: { nextSeq: 12 },
+      }),
+    );
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("routes explicit Bob mentions back into review runs", async () => {
+    executeMock
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "session-2",
+            user_id: "user-1",
+            next_seq: 4,
+            workflow_status: "awaiting_review",
+            awaiting_input_resolved_at: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] });
+
+    await handleKanbangerComment({
+      issue: { id: "issue-2", identifier: "ENG-2", status: "in_review" },
+      comment: {
+        id: "comment-3",
+        body: "@Bob please address the auth review note",
+        createdAt: new Date().toISOString(),
+        user: {
+          id: "user-3",
+          name: "Reviewer",
+          email: "reviewer@example.com",
+        },
+      },
+      bobRouting: {
+        shouldRoute: true,
+        reason: "mention",
+        issueManaged: true,
+        promptCommentId: null,
+        taskRunId: "run-2",
+        sessionId: "session-2",
+      },
+    });
+
+    expect(insertCalls).toHaveLength(2);
+    expect(insertCalls[0]?.table).toBe(chatMessagesTable);
+    expect(insertCalls[1]?.table).toBe(sessionEventsTable);
+    expect(insertCalls[1]?.value).toMatchObject({
+      sessionId: "session-2",
+      eventType: "state",
+      payload: expect.objectContaining({
+        workflowStatus: "working",
+        source: "kanbanger_comment",
+        commentId: "comment-3",
+      }),
+    });
+    expect(updateCalls).toContainEqual(
+      expect.objectContaining({
+        table: chatConversationsTable,
+        patch: { nextSeq: 5 },
+      }),
+    );
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 });

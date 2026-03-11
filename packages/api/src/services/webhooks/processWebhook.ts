@@ -2,9 +2,11 @@ import { and, eq, isNull, sql } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
   chatConversations,
+  chatMessages,
   gitCommits,
   pullRequests,
   sessionEvents,
+  taskRuns,
   webhookDeliveries,
 } from "@bob/db/schema";
 
@@ -468,11 +470,17 @@ async function handleGiteaPush(
 }
 
 interface KanbangerCommentPayload {
-  event: "comment.created";
-  issueId: string;
+  event?: "comment.created";
+  issueId?: string;
+  issue?: {
+    id: string;
+    identifier?: string;
+    status?: string;
+  };
   comment: {
     id: string;
     body: string;
+    parentId?: string | null;
     user: {
       id: string;
       name: string;
@@ -480,6 +488,277 @@ interface KanbangerCommentPayload {
     };
     createdAt: string;
   };
+  bobRouting?: {
+    shouldRoute: boolean;
+    reason: "prompt_reply" | "mention";
+    issueManaged: boolean;
+    promptCommentId: string | null;
+    taskRunId: string | null;
+    sessionId: string | null;
+  } | null;
+}
+
+interface NormalizedKanbangerCommentPayload {
+  issueId: string;
+  issueIdentifier: string | null;
+  issueStatus: string | null;
+  comment: KanbangerCommentPayload["comment"];
+  bobRouting: NonNullable<KanbangerCommentPayload["bobRouting"]> | null;
+}
+
+const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:3002";
+
+function truncateStatusMessage(value: string): string {
+  return value.slice(0, 100);
+}
+
+function buildExternalCommentMessage(
+  payload: NormalizedKanbangerCommentPayload,
+): string {
+  const author =
+    payload.comment.user.name ||
+    payload.comment.user.email ||
+    payload.comment.user.id;
+  return `Kanbanger comment from ${author}:\n\n${payload.comment.body.trim()}`;
+}
+
+function normalizeKanbangerCommentPayload(
+  payload: KanbangerCommentPayload,
+): NormalizedKanbangerCommentPayload | null {
+  const issueId = payload.issue?.id ?? payload.issueId ?? null;
+  const body = payload.comment?.body?.trim();
+
+  if (!issueId || !payload.comment?.id || !body || !payload.comment.user?.id) {
+    return null;
+  }
+
+  return {
+    issueId,
+    issueIdentifier: payload.issue?.identifier ?? null,
+    issueStatus: payload.issue?.status ?? null,
+    comment: {
+      ...payload.comment,
+      body,
+      parentId: payload.comment.parentId ?? null,
+    },
+    bobRouting: payload.bobRouting ?? null,
+  };
+}
+
+async function getLatestIssueSession(issueId: string) {
+  const result = await db.execute(sql`
+    SELECT c.id, c.user_id, c.next_seq, c.workflow_status, c.awaiting_input_resolved_at
+    FROM chat_conversations c
+    LEFT JOIN task_runs tr ON tr.session_id = c.id
+    WHERE c.kanbanger_task_id = ${issueId}
+       OR tr.kanbanger_issue_id = ${issueId}
+    ORDER BY c.updated_at DESC NULLS LAST, c.created_at DESC
+    LIMIT 1
+  `);
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0] as {
+    id: string;
+    user_id: string;
+    next_seq: number;
+    workflow_status: string;
+    awaiting_input_resolved_at: Date | null;
+  };
+}
+
+async function setNextSeq(sessionId: string, nextSeq: number) {
+  await db
+    .update(chatConversations)
+    .set({ nextSeq })
+    .where(eq(chatConversations.id, sessionId));
+}
+
+async function addSessionEvent(
+  sessionId: string,
+  seq: number,
+  eventType: string,
+  payload: Record<string, unknown>,
+) {
+  await db.insert(sessionEvents).values({
+    sessionId,
+    seq,
+    direction: "system",
+    eventType,
+    payload,
+  });
+}
+
+async function insertExternalUserMessage(
+  sessionId: string,
+  content: string,
+) {
+  await db.insert(chatMessages).values({
+    conversationId: sessionId,
+    role: "user",
+    content,
+  });
+}
+
+async function sendMessageToGateway(
+  userId: string,
+  sessionId: string,
+  message: string,
+) {
+  const response = await fetch(`${GATEWAY_URL}/session/send`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      userId,
+      sessionId,
+      message,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Gateway error: ${await response.text()}`);
+  }
+}
+
+async function recordLateCommentReply(
+  session: Awaited<ReturnType<typeof getLatestIssueSession>>,
+  payload: NormalizedKanbangerCommentPayload,
+) {
+  if (!session) {
+    return;
+  }
+
+  await addSessionEvent(session.id, session.next_seq, "external_reply", {
+    type: "kanbanger_comment_late",
+    reason: payload.bobRouting?.reason ?? "mention",
+    commentId: payload.comment.id,
+    parentId: payload.comment.parentId ?? null,
+    issueId: payload.issueId,
+    value: payload.comment.body,
+    source: "kanbanger_comment",
+  });
+  await setNextSeq(session.id, session.next_seq + 1);
+}
+
+export async function handleKanbangerComment(
+  rawPayload: KanbangerCommentPayload,
+): Promise<void> {
+  const payload = normalizeKanbangerCommentPayload(rawPayload);
+  if (!payload?.bobRouting?.shouldRoute) {
+    return;
+  }
+
+  const session = await getLatestIssueSession(payload.issueId);
+  if (!session) {
+    return;
+  }
+
+  const message = buildExternalCommentMessage(payload);
+
+  if (payload.bobRouting.reason === "prompt_reply") {
+    const resolutionJson = JSON.stringify({
+      type: "human",
+      value: payload.comment.body,
+      commentId: payload.comment.id,
+      parentId: payload.comment.parentId ?? null,
+      userId: payload.comment.user.id,
+      userName: payload.comment.user.name,
+      userEmail: payload.comment.user.email,
+    });
+
+    const updateResult = await db.execute(sql`
+      UPDATE chat_conversations
+      SET workflow_status = 'working',
+          status_message = ${"Human response: " + truncateStatusMessage(payload.comment.body)},
+          blocked_reason = NULL,
+          awaiting_input_resolved_at = NOW(),
+          awaiting_input_resolution = ${resolutionJson}::jsonb,
+          updated_at = NOW()
+      WHERE id = ${session.id}
+        AND workflow_status = 'awaiting_input'
+        AND awaiting_input_resolved_at IS NULL
+      RETURNING id
+    `);
+
+    if (updateResult.rows.length === 0) {
+      await recordLateCommentReply(session, payload);
+      return;
+    }
+
+    await insertExternalUserMessage(session.id, message);
+    await addSessionEvent(session.id, session.next_seq, "state", {
+      type: "workflow_status",
+      workflowStatus: "working",
+      message: `Human response: ${truncateStatusMessage(payload.comment.body)}`,
+      resolution: {
+        type: "human",
+        value: payload.comment.body,
+        source: "kanbanger_comment",
+        commentId: payload.comment.id,
+        parentId: payload.comment.parentId ?? null,
+      },
+    });
+    await setNextSeq(session.id, session.next_seq + 1);
+    await sendMessageToGateway(session.user_id, session.id, message);
+    return;
+  }
+
+  if (
+    payload.bobRouting.reason === "mention" &&
+    ["awaiting_review", "blocked", "working"].includes(session.workflow_status)
+  ) {
+    await insertExternalUserMessage(session.id, message);
+
+    if (session.workflow_status !== "working") {
+      await db.execute(sql`
+        UPDATE chat_conversations
+        SET workflow_status = 'working',
+            status_message = ${"External feedback received"},
+            blocked_reason = NULL,
+            updated_at = NOW()
+        WHERE id = ${session.id}
+      `);
+
+      if (session.workflow_status === "blocked") {
+        await db
+          .update(taskRuns)
+          .set({
+            status: "running",
+            blockedReason: null,
+          })
+          .where(
+            and(
+              eq(taskRuns.sessionId, session.id),
+              eq(taskRuns.status, "blocked"),
+            ),
+          );
+      }
+
+      await addSessionEvent(session.id, session.next_seq, "state", {
+        type: "workflow_status",
+        workflowStatus: "working",
+        message: "External feedback received",
+        source: "kanbanger_comment",
+        commentId: payload.comment.id,
+      });
+    } else {
+      await addSessionEvent(session.id, session.next_seq, "external_reply", {
+        type: "kanbanger_comment",
+        source: "kanbanger_comment",
+        commentId: payload.comment.id,
+        parentId: payload.comment.parentId ?? null,
+        value: payload.comment.body,
+      });
+    }
+
+    await setNextSeq(session.id, session.next_seq + 1);
+    await sendMessageToGateway(session.user_id, session.id, message);
+    return;
+  }
+
+  await recordLateCommentReply(session, payload);
 }
 
 export async function processKanbangerWebhook(
@@ -489,9 +768,7 @@ export async function processKanbangerWebhook(
 ): Promise<void> {
   try {
     if (eventType === "comment.created") {
-      await handleKanbangerComment(
-        payload as unknown as KanbangerCommentPayload,
-      );
+      await handleKanbangerComment(payload as unknown as KanbangerCommentPayload);
     }
     await markDeliveryProcessed(deliveryId);
   } catch (error) {
@@ -501,70 +778,4 @@ export async function processKanbangerWebhook(
     );
     throw error;
   }
-}
-
-async function handleKanbangerComment(
-  payload: KanbangerCommentPayload,
-): Promise<void> {
-  const result = await db.execute(sql`
-    SELECT id, user_id, next_seq, awaiting_input_question, awaiting_input_options
-    FROM chat_conversations
-    WHERE kanbanger_task_id = ${payload.issueId}
-      AND workflow_status = 'awaiting_input'
-      AND awaiting_input_resolved_at IS NULL
-    LIMIT 1
-  `);
-
-  if (result.rows.length === 0) {
-    return;
-  }
-
-  const session = result.rows[0] as {
-    id: string;
-    user_id: string;
-    next_seq: number;
-    awaiting_input_question: string | null;
-    awaiting_input_options: string[] | null;
-  };
-
-  const responseValue = payload.comment.body.trim();
-  const resolutionJson = JSON.stringify({
-    type: "human",
-    value: responseValue,
-    commentId: payload.comment.id,
-    userId: payload.comment.user.id,
-    userName: payload.comment.user.name,
-  });
-
-  await db.execute(sql`
-    UPDATE chat_conversations
-    SET workflow_status = 'working',
-        status_message = ${"Human response: " + responseValue.slice(0, 100)},
-        awaiting_input_resolved_at = NOW(),
-        awaiting_input_resolution = ${resolutionJson}::jsonb
-    WHERE id = ${session.id}
-  `);
-
-  await db
-    .update(chatConversations)
-    .set({ nextSeq: session.next_seq + 1 })
-    .where(eq(chatConversations.id, session.id));
-
-  await db.insert(sessionEvents).values({
-    sessionId: session.id,
-    seq: session.next_seq,
-    direction: "system",
-    eventType: "state",
-    payload: {
-      type: "workflow_status",
-      workflowStatus: "working",
-      message: `Human response: ${responseValue.slice(0, 100)}`,
-      resolution: {
-        type: "human",
-        value: responseValue,
-        source: "kanbanger_comment",
-        commentId: payload.comment.id,
-      },
-    },
-  });
 }

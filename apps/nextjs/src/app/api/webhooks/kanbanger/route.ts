@@ -3,28 +3,33 @@ import { NextResponse } from "next/server";
 import {
   markDeliveryFailed,
   markDeliveryProcessed,
+  processKanbangerWebhook as processSharedKanbangerWebhook,
   recordWebhookDelivery,
 } from "@bob/api/services/webhooks/processWebhook";
-import { eq, sql } from "@bob/db";
+import { eq } from "@bob/db";
 import { db } from "@bob/db/client";
-import { chatConversations, sessionEvents, user } from "@bob/db/schema";
+import { user } from "@bob/db/schema";
 
+import { env } from "~/env";
 import type { KanbangerTask } from "~/lib/tasks/taskExecutor";
-import {
-  executeTask,
-  getTaskRunByKanbangerId,
-  resumeBlockedTask,
-} from "~/lib/tasks/taskExecutor";
+import { executeTask } from "~/lib/tasks/taskExecutor";
 
-const KANBANGER_WEBHOOK_SECRET = process.env.KANBANGER_WEBHOOK_SECRET;
+const KANBANGER_WEBHOOK_SECRET = env.KANBANGER_WEBHOOK_SECRET;
 
 export async function POST(request: Request): Promise<NextResponse> {
-  const eventType = request.headers.get("X-Kanbanger-Event");
-  const signature = request.headers.get("X-Kanbanger-Signature");
+  const eventType =
+    request.headers.get("X-Webhook-Event") ??
+    request.headers.get("X-Kanbanger-Event");
+  const signature =
+    request.headers.get("X-Webhook-Signature") ??
+    request.headers.get("X-Kanbanger-Signature");
+  const deliveryId =
+    request.headers.get("X-Webhook-Delivery") ??
+    request.headers.get("X-Kanbanger-Delivery");
 
   if (!eventType) {
     return NextResponse.json(
-      { error: "Missing X-Kanbanger-Event header" },
+      { error: "Missing webhook event header" },
       { status: 400 },
     );
   }
@@ -34,15 +39,23 @@ export async function POST(request: Request): Promise<NextResponse> {
   let signatureValid = true;
   if (KANBANGER_WEBHOOK_SECRET && signature) {
     const { createHmac, timingSafeEqual } = await import("node:crypto");
-    const expectedSignature = createHmac("sha256", KANBANGER_WEBHOOK_SECRET)
+    const expectedDigest = createHmac("sha256", KANBANGER_WEBHOOK_SECRET)
       .update(body, "utf8")
       .digest("hex");
+    const expectedSignature = `sha256=${expectedDigest}`;
 
     try {
-      signatureValid = timingSafeEqual(
-        Buffer.from(signature, "hex"),
-        Buffer.from(expectedSignature, "hex"),
-      );
+      if (signature.startsWith("sha256=")) {
+        signatureValid = timingSafeEqual(
+          Buffer.from(signature),
+          Buffer.from(expectedSignature),
+        );
+      } else {
+        signatureValid = timingSafeEqual(
+          Buffer.from(signature, "hex"),
+          Buffer.from(expectedDigest, "hex"),
+        );
+      }
     } catch {
       signatureValid = false;
     }
@@ -66,14 +79,18 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const headers: Record<string, string> = {};
   request.headers.forEach((value, key) => {
-    if (key.startsWith("x-kanbanger") || key === "content-type") {
+    if (
+      key.startsWith("x-kanbanger") ||
+      key.startsWith("x-webhook") ||
+      key === "content-type"
+    ) {
       headers[key] = value;
     }
   });
 
   const recordId = await recordWebhookDelivery({
     provider: "kanbanger",
-    deliveryId: null,
+    deliveryId,
     eventType,
     action,
     signatureValid,
@@ -86,7 +103,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   try {
-    await processKanbangerWebhook(eventType, action, payload, recordId);
+    await processLegacyKanbangerWebhook(eventType, action, payload, recordId);
     return NextResponse.json({ status: "processed", deliveryId: recordId });
   } catch (error) {
     console.error("Kanbanger webhook processing error:", error);
@@ -97,7 +114,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 }
 
-async function processKanbangerWebhook(
+async function processLegacyKanbangerWebhook(
   eventType: string,
   action: string | null,
   payload: Record<string, unknown>,
@@ -105,6 +122,9 @@ async function processKanbangerWebhook(
 ): Promise<void> {
   try {
     switch (eventType) {
+      case "comment.created":
+        await processSharedKanbangerWebhook(eventType, payload, deliveryId);
+        return;
       case "task":
         if (action === "assigned") {
           await handleTaskAssigned(payload);
@@ -112,7 +132,8 @@ async function processKanbangerWebhook(
         break;
       case "comment":
         if (action === "created") {
-          await handleCommentCreated(payload);
+          await processSharedKanbangerWebhook("comment.created", payload, deliveryId);
+          return;
         }
         break;
       default:
@@ -129,23 +150,23 @@ async function processKanbangerWebhook(
 }
 
 interface KanbangerTaskPayload {
-  issue: {
+  issue?: {
     id: string;
     identifier: string;
     title: string;
     description?: string;
   };
-  workspace: {
+  workspace?: {
     id: string;
   };
-  project: {
+  project?: {
     id: string;
   };
   assignee?: {
     id: string;
     email: string;
   };
-  labels?: Array<{ name: string }>;
+  labels?: { name: string }[];
   priority?: number;
 }
 
@@ -154,7 +175,7 @@ async function handleTaskAssigned(
 ): Promise<void> {
   const data = payload as unknown as KanbangerTaskPayload;
 
-  if (!data.issue || !data.workspace || !data.assignee?.email) {
+  if (!(data.issue && data.workspace && data.assignee?.email)) {
     console.log("Task assigned webhook missing required fields");
     return;
   }
@@ -191,121 +212,4 @@ async function handleTaskAssigned(
       `Task ${task.identifier} blocked/failed: ${result.blockedReason}`,
     );
   }
-}
-
-interface KanbangerCommentPayload {
-  issue: {
-    id: string;
-    identifier: string;
-  };
-  comment: {
-    id: string;
-    body: string;
-    user: {
-      id: string;
-      email: string;
-    };
-  };
-}
-
-async function handleCommentCreated(
-  payload: Record<string, unknown>,
-): Promise<void> {
-  const data = payload as unknown as KanbangerCommentPayload;
-
-  if (!data.issue || !data.comment) {
-    console.log("Comment created webhook missing required fields");
-    return;
-  }
-
-  const resolvedAwaitingInput = await resolveAwaitingInputFromComment(data);
-
-  if (!resolvedAwaitingInput) {
-    const blockedTaskRun = await getTaskRunByKanbangerId(data.issue.id);
-
-    if (!blockedTaskRun) {
-      console.log(
-        `No blocked task run found for issue ${data.issue.identifier}`,
-      );
-      return;
-    }
-
-    const contextMessage = `**Comment from ${data.comment.user.email}:**\n\n${data.comment.body}`;
-
-    await resumeBlockedTask(blockedTaskRun.id, contextMessage);
-
-    console.log(
-      `Resumed blocked task ${data.issue.identifier} with comment from ${data.comment.user.email}`,
-    );
-  }
-}
-
-async function resolveAwaitingInputFromComment(
-  data: KanbangerCommentPayload,
-): Promise<boolean> {
-  const result = await db.execute(sql`
-    SELECT id, user_id, next_seq
-    FROM chat_conversations
-    WHERE kanbanger_task_id = ${data.issue.id}
-      AND workflow_status = 'awaiting_input'
-      AND awaiting_input_resolved_at IS NULL
-    LIMIT 1
-  `);
-
-  if (result.rows.length === 0) {
-    return false;
-  }
-
-  const session = result.rows[0] as {
-    id: string;
-    user_id: string;
-    next_seq: number;
-  };
-
-  const responseValue = data.comment.body.trim();
-  const resolutionJson = JSON.stringify({
-    type: "human",
-    value: responseValue,
-    commentId: data.comment.id,
-    userId: data.comment.user.id,
-    userEmail: data.comment.user.email,
-  });
-
-  await db.execute(sql`
-    UPDATE chat_conversations
-    SET workflow_status = 'working',
-        status_message = ${"Human response: " + responseValue.slice(0, 100)},
-        awaiting_input_resolved_at = NOW(),
-        awaiting_input_resolution = ${resolutionJson}::jsonb
-    WHERE id = ${session.id}
-  `);
-
-  await db
-    .update(chatConversations)
-    .set({ nextSeq: session.next_seq + 1 })
-    .where(eq(chatConversations.id, session.id));
-
-  await db.insert(sessionEvents).values({
-    sessionId: session.id,
-    seq: session.next_seq,
-    direction: "system",
-    eventType: "state",
-    payload: {
-      type: "workflow_status",
-      workflowStatus: "working",
-      message: `Human response: ${responseValue.slice(0, 100)}`,
-      resolution: {
-        type: "human",
-        value: responseValue,
-        source: "kanbanger_comment",
-        commentId: data.comment.id,
-      },
-    },
-  });
-
-  console.log(
-    `Resolved awaiting_input for session ${session.id} with comment from ${data.comment.user.email}`,
-  );
-
-  return true;
 }
