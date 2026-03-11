@@ -106,10 +106,10 @@ function SignInScreen() {
         provider: "github",
         callbackURL: "bob://",
       })
-      .then((res) => {
+      .then((res: unknown) => {
         console.log("Sign in result:", res);
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         console.error("Sign in error:", err);
       });
   }, []);

@@ -74,3 +74,6 @@ export function initAuth<
 
 export type Auth = ReturnType<typeof initAuth>;
 export type Session = Auth["$Infer"]["Session"];
+export * from "./api-key";
+export * from "./context";
+export * from "./session";

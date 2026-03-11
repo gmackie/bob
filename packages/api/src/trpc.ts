@@ -1,88 +1,38 @@
-import { createHash } from "crypto";
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { z, ZodError } from "zod/v4";
 
-import type { Auth } from "@bob/auth";
-import { and, eq, gt, isNull } from "@bob/db";
+import {
+  type ApiKeyPermission,
+  type ApiKeyAuth,
+  validateApiKey,
+  type Auth,
+} from "@bob/auth";
+import { eq } from "@bob/db";
 import { db } from "@bob/db/client";
-import { apiKeys, user } from "@bob/db/schema";
+import { user } from "@bob/db/schema";
 
 const DEFAULT_USER_ID = "default-user";
-
-export type ApiKeyPermission = "read" | "write" | "delete" | "admin";
-
-export interface ApiKeyAuth {
-  userId: string;
-  permissions: ApiKeyPermission[];
-  keyId: string;
-}
-
-function hashApiKey(key: string): string {
-  return createHash("sha256").update(key).digest("hex");
-}
-
-async function validateApiKey(key: string): Promise<ApiKeyAuth | null> {
-  const keyHash = hashApiKey(key);
-
-  const [keyRecord] = await db
-    .select({
-      id: apiKeys.id,
-      userId: apiKeys.userId,
-      permissions: apiKeys.permissions,
-      expiresAt: apiKeys.expiresAt,
-    })
-    .from(apiKeys)
-    .where(and(eq(apiKeys.keyHash, keyHash), isNull(apiKeys.revokedAt)))
-    .limit(1);
-
-  if (!keyRecord) return null;
-
-  if (keyRecord.expiresAt && keyRecord.expiresAt < new Date()) {
-    return null;
-  }
-
-  await db
-    .update(apiKeys)
-    .set({ lastUsedAt: new Date() })
-    .where(eq(apiKeys.id, keyRecord.id));
-
-  return {
-    userId: keyRecord.userId,
-    permissions: keyRecord.permissions as ApiKeyPermission[],
-    keyId: keyRecord.id,
-  };
-}
 
 export const createTRPCContext = async (opts: {
   headers: Headers;
   auth: Auth;
 }) => {
   const authApi = opts.auth.api;
-
   const authHeader = opts.headers.get("authorization");
-  if (authHeader?.startsWith("Bearer gmk_")) {
-    const apiKey = authHeader.slice(7);
-    const apiKeyAuth = await validateApiKey(apiKey);
+  if (authHeader?.startsWith("Bearer ")) {
+    const apiKeyAuth = await validateApiKey(authHeader.slice(7));
 
     if (apiKeyAuth) {
-      const [userRecord] = await db
-        .select()
-        .from(user)
-        .where(eq(user.id, apiKeyAuth.userId))
-        .limit(1);
-
-      if (userRecord) {
-        return {
-          authApi,
-          session: {
-            user: userRecord,
-            session: null,
-          },
-          apiKeyAuth,
-          db,
-        };
-      }
+      return {
+        authApi,
+        session: {
+          user: apiKeyAuth.user,
+          session: null,
+        },
+        apiKeyAuth,
+        db,
+      };
     }
   }
 
@@ -90,7 +40,6 @@ export const createTRPCContext = async (opts: {
     headers: opts.headers,
   });
 
-  // Desktop/single-user mode: when auth is not required, treat the default user as logged-in.
   if (process.env.REQUIRE_AUTH !== "true" && !session?.user) {
     const [userRecord] = await db
       .select()
