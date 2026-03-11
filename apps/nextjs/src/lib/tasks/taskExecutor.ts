@@ -1,8 +1,15 @@
 import { and, eq } from "@bob/db";
 import { db } from "@bob/db/client";
-import { chatConversations, repositories, taskRuns } from "@bob/db/schema";
+import {
+  chatConversations,
+  chatMessages,
+  repositories,
+  taskRuns,
+} from "@bob/db/schema";
 
-const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:3002";
+import { env } from "~/env";
+
+const GATEWAY_URL = env.GATEWAY_URL ?? "http://localhost:3002";
 
 export interface KanbangerTask {
   id: string;
@@ -30,6 +37,30 @@ export interface TaskExecutionResult {
   branch: string;
   status: "starting" | "running" | "blocked" | "failed";
   blockedReason?: string;
+}
+
+export interface IssueContextFieldChange {
+  field:
+    | "title"
+    | "description"
+    | "priority"
+    | "assigneeId"
+    | "projectId"
+    | "parentId"
+    | "epicId";
+  from: string | null;
+  to: string | null;
+}
+
+function expectInsertedRow<T>(
+  row: T | undefined,
+  message: string,
+): T {
+  if (!row) {
+    throw new Error(message);
+  }
+
+  return row;
 }
 
 async function gatewayRequest(
@@ -112,7 +143,10 @@ export async function findRepositoryForTask(
   }
 
   if (repos.length === 1) {
-    const repo = repos[0]!;
+    const repo = repos[0];
+    if (!repo) {
+      return null;
+    }
     return {
       repositoryId: repo.id,
       path: repo.path,
@@ -138,7 +172,10 @@ export async function findRepositoryForTask(
     }
   }
 
-  const firstRepo = repos[0]!;
+  const firstRepo = repos[0];
+  if (!firstRepo) {
+    return null;
+  }
   return {
     repositoryId: firstRepo.id,
     path: firstRepo.path,
@@ -149,6 +186,9 @@ export async function findRepositoryForTask(
 export async function executeTask(
   userId: string,
   task: KanbangerTask,
+  options?: {
+    contextPreamble?: string;
+  },
 ): Promise<TaskExecutionResult> {
   const repoInfo = await findRepositoryForTask(userId, task);
 
@@ -164,9 +204,13 @@ export async function executeTask(
         blockedReason: "No repository found for this task",
       })
       .returning();
+    const insertedTaskRun = expectInsertedRow(
+      taskRun,
+      "Failed to create blocked task run",
+    );
 
     return {
-      taskRunId: taskRun!.id,
+      taskRunId: insertedTaskRun.id,
       sessionId: "",
       worktreeId: null,
       branch: "",
@@ -203,9 +247,13 @@ export async function executeTask(
           branch,
         })
         .returning();
+      const insertedTaskRun = expectInsertedRow(
+        taskRun,
+        "Failed to create failed task run",
+      );
 
       return {
-        taskRunId: taskRun!.id,
+        taskRunId: insertedTaskRun.id,
         sessionId: "",
         worktreeId: null,
         branch,
@@ -215,7 +263,7 @@ export async function executeTask(
     }
   }
 
-  const prompt = buildInitialPrompt(task);
+  const prompt = buildInitialPrompt(task, options);
 
   const [session] = await db
     .insert(chatConversations)
@@ -231,6 +279,10 @@ export async function executeTask(
       kanbangerTaskId: task.id,
     })
     .returning();
+  const insertedSession = expectInsertedRow(
+    session,
+    "Failed to create task session",
+  );
 
   const [taskRun] = await db
     .insert(taskRuns)
@@ -239,17 +291,21 @@ export async function executeTask(
       kanbangerWorkspaceId: task.workspaceId,
       kanbangerIssueId: task.id,
       kanbangerIssueIdentifier: task.identifier,
-      sessionId: session!.id,
+      sessionId: insertedSession.id,
       repositoryId: repoInfo.repositoryId,
       worktreeId,
       status: "starting",
       branch,
     })
     .returning();
+  const insertedTaskRun = expectInsertedRow(
+    taskRun,
+    "Failed to create starting task run",
+  );
 
   try {
     await gatewayRequest(userId, "/session/start", {
-      sessionId: session!.id,
+      sessionId: insertedSession.id,
       workingDirectory: worktreePath,
       agentType: "opencode",
       initialPrompt: prompt,
@@ -264,7 +320,7 @@ export async function executeTask(
         status: "failed",
         blockedReason: `Failed to start session: ${errorMessage}`,
       })
-      .where(eq(taskRuns.id, taskRun!.id));
+      .where(eq(taskRuns.id, insertedTaskRun.id));
 
     await db
       .update(chatConversations)
@@ -276,11 +332,11 @@ export async function executeTask(
           timestamp: new Date().toISOString(),
         },
       })
-      .where(eq(chatConversations.id, session!.id));
+      .where(eq(chatConversations.id, insertedSession.id));
 
     return {
-      taskRunId: taskRun!.id,
-      sessionId: session!.id,
+      taskRunId: insertedTaskRun.id,
+      sessionId: insertedSession.id,
       worktreeId,
       branch,
       status: "failed",
@@ -289,19 +345,31 @@ export async function executeTask(
   }
 
   return {
-    taskRunId: taskRun!.id,
-    sessionId: session!.id,
+    taskRunId: insertedTaskRun.id,
+    sessionId: insertedSession.id,
     worktreeId,
     branch,
     status: "running",
   };
 }
 
-function buildInitialPrompt(task: KanbangerTask): string {
+function buildInitialPrompt(
+  task: KanbangerTask,
+  options?: {
+    contextPreamble?: string;
+  },
+): string {
   const lines: string[] = [];
 
   lines.push(`# Task: ${task.identifier} - ${task.title}`);
   lines.push("");
+
+  if (options?.contextPreamble) {
+    lines.push("## Handoff Context");
+    lines.push("");
+    lines.push(options.contextPreamble);
+    lines.push("");
+  }
 
   if (task.description) {
     lines.push("## Description");
@@ -365,7 +433,9 @@ export async function resumeBlockedTask(
     where: eq(taskRuns.id, taskRunId),
   });
 
-  if (!taskRun || taskRun.status !== "blocked" || !taskRun.sessionId) return;
+  if (!(taskRun?.status === "blocked" && taskRun.sessionId)) {
+    return;
+  }
 
   await db
     .update(taskRuns)
@@ -414,4 +484,116 @@ export async function getTaskRunByKanbangerId(
   });
 
   return taskRun ?? null;
+}
+
+export async function getLatestTaskRunByKanbangerId(
+  kanbangerIssueId: string,
+): Promise<typeof taskRuns.$inferSelect | null> {
+  const taskRun = await db.query.taskRuns.findFirst({
+    where: eq(taskRuns.kanbangerIssueId, kanbangerIssueId),
+    orderBy: (t, { desc }) => [desc(t.createdAt)],
+  });
+
+  return taskRun ?? null;
+}
+
+export function buildIssueContextUpdateMessage(
+  issueIdentifier: string,
+  changes: IssueContextFieldChange[],
+): string {
+  const lines = [
+    `Issue context update for ${issueIdentifier}:`,
+    "",
+    "Apply these updated requirements before continuing:",
+    "",
+    ...changes.map((change) => {
+      const fromValue = change.from ?? "(empty)";
+      const toValue = change.to ?? "(empty)";
+      return `- ${change.field}: ${fromValue} -> ${toValue}`;
+    }),
+  ];
+
+  return lines.join("\n");
+}
+
+async function appendUserContextMessage(sessionId: string, message: string) {
+  await db.insert(chatMessages).values({
+    conversationId: sessionId,
+    role: "user",
+    content: message,
+  });
+}
+
+export async function forwardIssueContextUpdate(
+  issueIdentifier: string,
+  taskRunId: string,
+  changes: IssueContextFieldChange[],
+): Promise<void> {
+  const taskRun = await db.query.taskRuns.findFirst({
+    where: eq(taskRuns.id, taskRunId),
+  });
+
+  if (!taskRun?.sessionId) {
+    return;
+  }
+
+  const message = buildIssueContextUpdateMessage(issueIdentifier, changes);
+  await appendUserContextMessage(taskRun.sessionId, message);
+  await gatewayRequest(taskRun.userId, "/session/send", {
+    sessionId: taskRun.sessionId,
+    message,
+  });
+}
+
+export async function supersedeAndRestartTask(
+  taskRunId: string,
+  task: KanbangerTask,
+  changes: IssueContextFieldChange[],
+): Promise<TaskExecutionResult | null> {
+  const taskRun = await db.query.taskRuns.findFirst({
+    where: eq(taskRuns.id, taskRunId),
+  });
+
+  if (!taskRun) {
+    return null;
+  }
+
+  const reason =
+    "Superseded by Kanbanger issue context update requiring a fresh run";
+
+  await db
+    .update(taskRuns)
+    .set({
+      status: "failed",
+      blockedReason: reason,
+      completedAt: new Date(),
+    })
+    .where(eq(taskRuns.id, taskRunId));
+
+  if (taskRun.sessionId) {
+    await db
+      .update(chatConversations)
+      .set({
+        status: "stopped",
+        blockedReason: reason,
+        statusMessage: reason,
+        updatedAt: new Date(),
+      })
+      .where(eq(chatConversations.id, taskRun.sessionId));
+  }
+
+  return executeTask(taskRun.userId, task, {
+    contextPreamble: [
+      reason,
+      "",
+      "Updated issue fields:",
+      ...changes.map((change) => {
+        const fromValue = change.from ?? "(empty)";
+        const toValue = change.to ?? "(empty)";
+        return `- ${change.field}: ${fromValue} -> ${toValue}`;
+      }),
+      "",
+      `Previous Bob run branch: ${taskRun.branch ?? "(unknown)"}`,
+    ].join("\n"),
+  });
 }

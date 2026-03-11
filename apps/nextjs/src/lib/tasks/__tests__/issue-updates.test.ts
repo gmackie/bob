@@ -1,0 +1,105 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { findFirstMock, insertCalls, chatMessagesTable, taskRunsTable } =
+  vi.hoisted(() => ({
+  findFirstMock: vi.fn(),
+  insertCalls: [] as { table: unknown; value: unknown }[],
+  chatMessagesTable: { conversationId: { name: "conversation_id" } },
+  taskRunsTable: { id: { name: "id" } },
+  }));
+
+vi.mock("@bob/db/client", () => ({
+  db: {
+    query: {
+      taskRuns: {
+        findFirst: findFirstMock,
+      },
+    },
+    insert: vi.fn((table: unknown) => ({
+      values: vi.fn((value: unknown) => {
+        insertCalls.push({ table, value });
+        return Promise.resolve([]);
+      }),
+    })),
+  },
+}));
+
+vi.mock("@bob/db", () => ({
+  and: (...clauses: unknown[]) => ({ type: "and", clauses }),
+  eq: (field: unknown, value: unknown) => ({ type: "eq", field, value }),
+}));
+
+vi.mock("@bob/db/schema", () => ({
+  chatConversations: {},
+  chatMessages: chatMessagesTable,
+  repositories: {},
+  taskRuns: taskRunsTable,
+}));
+
+vi.mock("~/env", () => ({
+  env: {
+    GATEWAY_URL: "http://localhost:3002",
+  },
+}));
+
+import {
+  buildIssueContextUpdateMessage,
+  forwardIssueContextUpdate,
+} from "../taskExecutor";
+
+describe("issue task updates", () => {
+  beforeEach(() => {
+    findFirstMock.mockReset();
+    insertCalls.length = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({}),
+          text: () => Promise.resolve("ok"),
+        }),
+      ),
+    );
+  });
+
+  it("formats structured issue context updates for the session", () => {
+    expect(
+      buildIssueContextUpdateMessage("ENG-42", [
+        {
+          field: "title",
+          from: "Old title",
+          to: "New title",
+        },
+        {
+          field: "projectId",
+          from: "project-1",
+          to: "project-2",
+        },
+      ]),
+    ).toContain("projectId: project-1 -> project-2");
+  });
+
+  it("forwards issue context updates into the current Bob session", async () => {
+    findFirstMock.mockResolvedValue({
+      id: "task-run-1",
+      userId: "user-1",
+      sessionId: "session-1",
+    });
+
+    await forwardIssueContextUpdate("ENG-42", "task-run-1", [
+      {
+        field: "description",
+        from: "before",
+        to: "after",
+      },
+    ]);
+
+    expect(insertCalls[0]?.table).toBe(chatMessagesTable);
+    expect(insertCalls[0]?.value).toMatchObject({
+      conversationId: "session-1",
+      role: "user",
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});

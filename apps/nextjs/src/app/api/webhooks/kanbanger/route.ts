@@ -11,8 +11,16 @@ import { db } from "@bob/db/client";
 import { user } from "@bob/db/schema";
 
 import { env } from "~/env";
-import type { KanbangerTask } from "~/lib/tasks/taskExecutor";
-import { executeTask } from "~/lib/tasks/taskExecutor";
+import type {
+  IssueContextFieldChange,
+  KanbangerTask,
+} from "~/lib/tasks/taskExecutor";
+import {
+  executeTask,
+  forwardIssueContextUpdate,
+  getLatestTaskRunByKanbangerId,
+  supersedeAndRestartTask,
+} from "~/lib/tasks/taskExecutor";
 
 const KANBANGER_WEBHOOK_SECRET = env.KANBANGER_WEBHOOK_SECRET;
 
@@ -125,6 +133,9 @@ async function processLegacyKanbangerWebhook(
       case "comment.created":
         await processSharedKanbangerWebhook(eventType, payload, deliveryId);
         return;
+      case "issue.updated":
+        await handleIssueUpdated(payload);
+        break;
       case "task":
         if (action === "assigned") {
           await handleTaskAssigned(payload);
@@ -170,6 +181,42 @@ interface KanbangerTaskPayload {
   priority?: number;
 }
 
+interface KanbangerIssueUpdatedPayload {
+  issue?: {
+    id: string;
+    identifier: string;
+    title: string;
+    description?: string | null;
+    priority?: string | null;
+    assigneeId?: string | null;
+  };
+  workspace?: {
+    id: string;
+  };
+  project?: {
+    id: string;
+  };
+  bobIssueUpdate?: {
+    changedFields: IssueContextFieldChange[];
+    forceNewRun: boolean;
+  } | null;
+}
+
+function mapPriority(priority: string | null | undefined): number {
+  switch (priority) {
+    case "urgent":
+      return 1;
+    case "high":
+      return 2;
+    case "medium":
+      return 3;
+    case "low":
+      return 4;
+    default:
+      return 0;
+  }
+}
+
 async function handleTaskAssigned(
   payload: Record<string, unknown>,
 ): Promise<void> {
@@ -212,4 +259,51 @@ async function handleTaskAssigned(
       `Task ${task.identifier} blocked/failed: ${result.blockedReason}`,
     );
   }
+}
+
+async function handleIssueUpdated(
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const data = payload as KanbangerIssueUpdatedPayload;
+
+  if (
+    !data.issue ||
+    !data.workspace ||
+    !data.project ||
+    !data.bobIssueUpdate?.changedFields.length
+  ) {
+    return;
+  }
+
+  const latestTaskRun = await getLatestTaskRunByKanbangerId(data.issue.id);
+  if (!latestTaskRun) {
+    return;
+  }
+
+  const task: KanbangerTask = {
+    id: data.issue.id,
+    identifier: data.issue.identifier,
+    title: data.issue.title,
+    description: data.issue.description ?? null,
+    workspaceId: data.workspace.id,
+    projectId: data.project.id,
+    assigneeId: data.issue.assigneeId ?? null,
+    labels: [],
+    priority: mapPriority(data.issue.priority),
+  };
+
+  if (data.bobIssueUpdate.forceNewRun) {
+    await supersedeAndRestartTask(
+      latestTaskRun.id,
+      task,
+      data.bobIssueUpdate.changedFields,
+    );
+    return;
+  }
+
+  await forwardIssueContextUpdate(
+    data.issue.identifier,
+    latestTaskRun.id,
+    data.bobIssueUpdate.changedFields,
+  );
 }
