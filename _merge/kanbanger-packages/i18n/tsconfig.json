@@ -1,8 +1,0 @@
-{
-  "extends": "@linear-clone/typescript-config/react-library.json",
-  "compilerOptions": {
-    "resolveJsonModule": true
-  },
-  "include": ["src", "locales"],
-  "exclude": ["node_modules"]
-}

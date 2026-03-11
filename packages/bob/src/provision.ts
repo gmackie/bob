@@ -198,7 +198,7 @@ export async function provisionVercel(
 
   const result = await runCommand(
     "vercel link --yes",
-    `${config.projectPath}/apps/nextjs`,
+    `${config.projectPath}/apps/web`,
   );
 
   if (result.success) {
@@ -209,7 +209,7 @@ export async function provisionVercel(
 
     const envResult = await runCommand(
       "vercel env pull .env.local",
-      `${config.projectPath}/apps/nextjs`,
+      `${config.projectPath}/apps/web`,
     );
 
     if (envResult.success) {
@@ -255,7 +255,7 @@ export async function provisionEAS(config: ProvisionConfig): Promise<boolean> {
 
   const initResult = await runCommand(
     "eas init --non-interactive",
-    `${config.projectPath}/apps/expo`,
+    `${config.projectPath}/apps/mobile`,
   );
 
   if (!initResult.success) {
@@ -266,12 +266,12 @@ export async function provisionEAS(config: ProvisionConfig): Promise<boolean> {
 
   const configResult = await runCommand(
     "eas build:configure --platform all",
-    `${config.projectPath}/apps/expo`,
+    `${config.projectPath}/apps/mobile`,
   );
 
   if (configResult.success) {
     spinner.stop("EAS configured!");
-    p.log.info("Run `eas build` in apps/expo when ready to build");
+    p.log.info("Run `eas build` in apps/mobile when ready to build");
     return true;
   } else {
     spinner.stop("EAS configure failed");

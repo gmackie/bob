@@ -1,9 +1,0 @@
-{
-  "extends": "@linear-clone/typescript-config/react-library.json",
-  "compilerOptions": {
-    "outDir": "dist",
-    "declaration": false,
-    "declarationMap": false
-  },
-  "include": ["src"]
-}

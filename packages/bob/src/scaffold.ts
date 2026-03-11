@@ -45,10 +45,10 @@ export async function scaffold(options: CliOptions): Promise<void> {
   createManifest(targetDir, options);
 
   if (!options.platforms.web) {
-    fs.removeSync(path.join(targetDir, "apps/nextjs"));
+    fs.removeSync(path.join(targetDir, "apps/web"));
   }
   if (!options.platforms.mobile) {
-    fs.removeSync(path.join(targetDir, "apps/expo"));
+    fs.removeSync(path.join(targetDir, "apps/mobile"));
   }
   if (!options.platforms.tanstackStart) {
     fs.removeSync(path.join(targetDir, "apps/tanstack-start"));
