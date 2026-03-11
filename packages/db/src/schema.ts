@@ -62,6 +62,28 @@ export const workItemKind = ["issue", "epic", "task"] as const;
 export type WorkItemKind = (typeof workItemKind)[number];
 export const workItemKindEnum = pgEnum("work_item_kind", workItemKind);
 
+export const workspaceMemberRole = [
+  "owner",
+  "admin",
+  "member",
+  "viewer",
+] as const;
+export type WorkspaceMemberRole = (typeof workspaceMemberRole)[number];
+export const workspaceMemberRoleEnum = pgEnum(
+  "workspace_member_role",
+  workspaceMemberRole,
+);
+
+export const projectStatus = [
+  "planned",
+  "in_progress",
+  "paused",
+  "completed",
+  "archived",
+] as const;
+export type ProjectStatus = (typeof projectStatus)[number];
+export const projectStatusEnum = pgEnum("project_status", projectStatus);
+
 export const workItemActivityType = [
   "comment_added",
   "status_changed",
@@ -122,6 +144,10 @@ export const workItems = pgTable("work_items", (t) => ({
     .text()
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
+  assigneeUserId: t.text(),
+  workspaceId: t.uuid(),
+  projectId: t.uuid(),
+  sequenceNumber: t.integer().notNull().default(0),
   kind: workItemKindEnum().notNull(),
   title: t.varchar({ length: 256 }).notNull(),
   description: t.text(),
@@ -151,6 +177,81 @@ export const CreateWorkItemSchema = createInsertSchema(workItems, {
   kind: z.enum(workItemKind),
   title: z.string().max(256),
   status: z.string().max(40).default("draft"),
+}).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const workspaces = pgTable("workspaces", (t) => ({
+  id: t.uuid().notNull().primaryKey().defaultRandom(),
+  ownerUserId: t
+    .text()
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  name: t.varchar({ length: 128 }).notNull(),
+  slug: t.varchar({ length: 64 }).notNull().unique(),
+  description: t.text(),
+  createdAt: t.timestamp().defaultNow().notNull(),
+  updatedAt: t
+    .timestamp({ mode: "date", withTimezone: true })
+    .$onUpdateFn(() => sql`now()`),
+}));
+
+export const CreateWorkspaceSchema = createInsertSchema(workspaces, {
+  name: z.string().min(1).max(128),
+  slug: z
+    .string()
+    .min(2)
+    .max(64)
+    .regex(/^[a-z0-9-]+$/),
+}).omit({
+  id: true,
+  ownerUserId: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const workspaceMembers = pgTable("workspace_members", (t) => ({
+  id: t.uuid().notNull().primaryKey().defaultRandom(),
+  workspaceId: t
+    .uuid()
+    .notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  userId: t
+    .text()
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  role: workspaceMemberRoleEnum().notNull().default("member"),
+  joinedAt: t.timestamp().defaultNow().notNull(),
+}));
+
+export const projects = pgTable("projects", (t) => ({
+  id: t.uuid().notNull().primaryKey().defaultRandom(),
+  workspaceId: t
+    .uuid()
+    .notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  leadUserId: t.text().references(() => user.id, { onDelete: "set null" }),
+  name: t.varchar({ length: 128 }).notNull(),
+  key: t.varchar({ length: 16 }).notNull(),
+  description: t.text(),
+  color: t.varchar({ length: 7 }),
+  status: projectStatusEnum().notNull().default("planned"),
+  createdAt: t.timestamp().defaultNow().notNull(),
+  updatedAt: t
+    .timestamp({ mode: "date", withTimezone: true })
+    .$onUpdateFn(() => sql`now()`),
+}));
+
+export const CreateProjectSchema = createInsertSchema(projects, {
+  name: z.string().min(1).max(128),
+  key: z
+    .string()
+    .min(2)
+    .max(16)
+    .regex(/^[A-Z][A-Z0-9]*$/),
+  status: z.enum(projectStatus).default("planned"),
 }).omit({
   id: true,
   createdAt: true,
@@ -357,6 +458,18 @@ export const workItemsRelations = relations(workItems, ({ one, many }) => ({
     fields: [workItems.ownerUserId],
     references: [user.id],
   }),
+  assigneeUser: one(user, {
+    fields: [workItems.assigneeUserId],
+    references: [user.id],
+  }),
+  workspace: one(workspaces, {
+    fields: [workItems.workspaceId],
+    references: [workspaces.id],
+  }),
+  project: one(projects, {
+    fields: [workItems.projectId],
+    references: [projects.id],
+  }),
   parent: one(workItems, {
     fields: [workItems.parentId],
     references: [workItems.id],
@@ -364,6 +477,40 @@ export const workItemsRelations = relations(workItems, ({ one, many }) => ({
   }),
   children: many(workItems, {
     relationName: "work_item_parent",
+  }),
+}));
+
+export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
+  ownerUser: one(user, {
+    fields: [workspaces.ownerUserId],
+    references: [user.id],
+  }),
+  members: many(workspaceMembers),
+  projects: many(projects),
+}));
+
+export const workspaceMembersRelations = relations(
+  workspaceMembers,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [workspaceMembers.workspaceId],
+      references: [workspaces.id],
+    }),
+    user: one(user, {
+      fields: [workspaceMembers.userId],
+      references: [user.id],
+    }),
+  }),
+);
+
+export const projectsRelations = relations(projects, ({ one }) => ({
+  workspace: one(workspaces, {
+    fields: [projects.workspaceId],
+    references: [workspaces.id],
+  }),
+  leadUser: one(user, {
+    fields: [projects.leadUserId],
+    references: [user.id],
   }),
 }));
 

@@ -8,8 +8,10 @@ export {
   gte,
   inArray,
   isNull,
+  isNotNull,
   lt,
   lte,
+  ne,
   or,
   sql,
 } from "drizzle-orm";

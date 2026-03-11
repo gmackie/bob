@@ -6,6 +6,7 @@ import {
   activities,
   comments,
   notifications,
+  projects,
   workItemArtifactProducerType,
   workItemArtifacts,
   workItemArtifactType,
@@ -15,7 +16,123 @@ import {
 
 import { protectedProcedure } from "../trpc";
 
+function formatWorkItemIdentifier(input: {
+  projectKey: string | null;
+  sequenceNumber: number | null | undefined;
+  id: string;
+}): string {
+  if (input.projectKey && input.sequenceNumber && input.sequenceNumber > 0) {
+    return `${input.projectKey}-${input.sequenceNumber}`;
+  }
+
+  const suffix = input.id.slice(0, 8).toUpperCase();
+  return input.projectKey ? `${input.projectKey}-${suffix}` : `TASK-${suffix}`;
+}
+
 export const workItemsRouter: TRPCRouterRecord = {
+  list: protectedProcedure
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+        projectId: z.string().uuid().optional(),
+        parentId: z.string().uuid().nullable().optional(),
+        kind: z.enum(["issue", "epic", "task"]).optional(),
+        status: z.string().optional(),
+        limit: z.number().min(1).max(100).default(50),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const items = await ctx.db.query.workItems.findMany({
+        where: and(
+          eq(workItems.workspaceId, input.workspaceId),
+          input.projectId ? eq(workItems.projectId, input.projectId) : undefined,
+          input.parentId === null
+            ? isNull(workItems.parentId)
+            : input.parentId
+              ? eq(workItems.parentId, input.parentId)
+              : undefined,
+          input.kind ? eq(workItems.kind, input.kind) : undefined,
+          input.status ? eq(workItems.status, input.status) : undefined,
+        ),
+        orderBy: desc(workItems.updatedAt),
+        limit: input.limit,
+      });
+
+      const projectIds = Array.from(
+        new Set(items.map((item) => item.projectId).filter(Boolean)),
+      ) as string[];
+      const projectRows =
+        projectIds.length > 0
+          ? await ctx.db.query.projects.findMany({
+              where: eq(projects.workspaceId, input.workspaceId),
+            })
+          : [];
+
+      const projectById = new Map(projectRows.map((project) => [project.id, project]));
+
+      return items.map((item) => {
+        const project = item.projectId ? projectById.get(item.projectId) ?? null : null;
+
+        return {
+          ...item,
+          identifier: formatWorkItemIdentifier({
+            projectKey: project?.key ?? null,
+            sequenceNumber: item.sequenceNumber,
+            id: item.id,
+          }),
+          project,
+        };
+      });
+    }),
+
+  get: protectedProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const workItem = await ctx.db.query.workItems.findFirst({
+        where: eq(workItems.id, input.id),
+      });
+
+      if (!workItem) {
+        return null;
+      }
+
+      const [project, currentArtifacts, children] = await Promise.all([
+        workItem.projectId
+          ? ctx.db.query.projects.findFirst({
+              where: eq(projects.id, workItem.projectId),
+            })
+          : Promise.resolve(null),
+        ctx.db.query.workItemArtifacts.findMany({
+          where: and(
+            eq(workItemArtifacts.workItemId, workItem.id),
+            eq(workItemArtifacts.isCurrent, true),
+          ),
+          orderBy: desc(workItemArtifacts.createdAt),
+        }),
+        ctx.db.query.workItems.findMany({
+          where: eq(workItems.parentId, workItem.id),
+        }),
+      ]);
+
+      return {
+        workItem: {
+          ...workItem,
+          identifier: formatWorkItemIdentifier({
+            projectKey: project?.key ?? null,
+            sequenceNumber: workItem.sequenceNumber,
+            id: workItem.id,
+          }),
+          project,
+        },
+        currentArtifacts,
+        childCount: children.length,
+      };
+    }),
+
   listComments: protectedProcedure
     .input(
       z.object({

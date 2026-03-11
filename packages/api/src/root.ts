@@ -11,6 +11,7 @@ import { kanbangerRouter } from "./router/kanbanger";
 import { linkRouter } from "./router/link";
 import { planRouter } from "./router/plan";
 import { postRouter } from "./router/post";
+import { projectRouter } from "./router/project";
 import { pullRequestRouter } from "./router/pullRequest";
 import { repositoryRouter } from "./router/repository";
 import { sessionRouter } from "./router/session";
@@ -18,6 +19,7 @@ import { settingsRouter } from "./router/settings";
 import { systemRouter } from "./router/system";
 import { terminalRouter } from "./router/terminal";
 import { workItemsRouter } from "./router/workItems";
+import { workspaceRouter } from "./router/workspace";
 import { createTRPCRouter } from "./trpc";
 
 const appRouterRecord = {
@@ -32,6 +34,7 @@ const appRouterRecord = {
   link: linkRouter,
   plan: planRouter,
   post: postRouter,
+  project: projectRouter,
   pullRequest: pullRequestRouter,
   repository: repositoryRouter,
   session: sessionRouter,
@@ -39,6 +42,7 @@ const appRouterRecord = {
   system: systemRouter,
   terminal: terminalRouter,
   workItems: workItemsRouter,
+  workspace: workspaceRouter,
 } satisfies TRPCRouterRecord;
 
 export const appRouter = createTRPCRouter(appRouterRecord);
