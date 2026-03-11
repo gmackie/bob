@@ -1,4 +1,3 @@
-import type { TRPCRouterRecord } from "@trpc/server";
 import { z } from "zod/v4";
 
 import { desc, eq } from "@bob/db";
@@ -10,7 +9,7 @@ import {
 
 import { protectedProcedure } from "../trpc";
 
-export const workspaceRouter: TRPCRouterRecord = {
+export const workspaceRouter = {
   list: protectedProcedure.query(({ ctx }) =>
     ctx.db.query.workspaceMembers.findMany({
       where: eq(workspaceMembers.userId, ctx.session.user.id),

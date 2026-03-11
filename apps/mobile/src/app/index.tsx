@@ -1,32 +1,32 @@
+import { Redirect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { Dimensions, Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
-import { Badge, Button, Card, ListRow, Screen } from "~/components/ui";
+import { Badge, Button, Card, Screen } from "~/components/ui";
+import { getPlanningHref } from "~/features/planning/navigation";
 import { hasSeenOnboarding, setOnboardingComplete } from "~/lib/storage";
 import { authClient } from "~/utils/auth";
 
-const { width } = Dimensions.get("window");
-
 const ONBOARDING_SLIDES = [
   {
-    title: "Run multiple agents.\nStay in control.",
+    title: "Capture the issue.\nScope the task.",
     bullets: [
-      "Track every worktree and instance at a glance",
-      "See what's running, stalled, or needs attention",
+      "Use work items to move from intake into execution",
+      "Keep planning, comments, and artifacts in one place",
     ],
   },
   {
-    title: "Built for real\nGit workflows.",
+    title: "Open the task.\nWork with Bob.",
     bullets: [
-      "Review diffs and PR status on the go",
-      "Keep your AI sessions organized per branch",
+      "Jump directly into the task workspace from mobile",
+      "Track blocked, review-ready, and verification states",
     ],
   },
   {
-    title: "Secure sign-in\nwith GitHub.",
+    title: "Stay aligned\nfrom anywhere.",
     bullets: [
-      "Authenticate once with your GitHub account",
-      "Your credentials stay safe and encrypted",
+      "Review notifications, comments, and artifacts on the go",
+      "Keep execution moving without the old dashboard sprawl",
     ],
   },
 ];
@@ -36,11 +36,12 @@ function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
 
   const handleNext = useCallback(async () => {
     if (currentSlide < ONBOARDING_SLIDES.length - 1) {
-      setCurrentSlide(currentSlide + 1);
-    } else {
-      await setOnboardingComplete();
-      onComplete();
+      setCurrentSlide((value) => value + 1);
+      return;
     }
+
+    await setOnboardingComplete();
+    onComplete();
   }, [currentSlide, onComplete]);
 
   const handleSkip = useCallback(async () => {
@@ -53,16 +54,16 @@ function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   return (
     <Screen className="justify-between pt-16 pb-10">
       <View className="flex-row justify-end">
-        {currentSlide < ONBOARDING_SLIDES.length - 1 && (
+        {currentSlide < ONBOARDING_SLIDES.length - 1 ? (
           <Pressable onPress={handleSkip} className="active:opacity-70">
             <Text className="text-muted text-base">Skip</Text>
           </Pressable>
-        )}
+        ) : null}
       </View>
 
       <View className="flex-1 items-center justify-center px-4">
         <View className="bg-primary/20 mb-8 h-20 w-20 items-center justify-center rounded-2xl">
-          <Text className="text-4xl">🤖</Text>
+          <Text className="text-4xl">🏗️</Text>
         </View>
 
         <Text className="text-foreground mb-6 text-center text-3xl font-semibold tracking-tight">
@@ -70,8 +71,8 @@ function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
         </Text>
 
         <View className="space-y-3">
-          {slide?.bullets.map((bullet, i) => (
-            <View key={i} className="flex-row items-start">
+          {slide?.bullets.map((bullet) => (
+            <View key={bullet} className="flex-row items-start">
               <View className="bg-primary mt-2 mr-3 h-1.5 w-1.5 rounded-full" />
               <Text className="text-muted flex-1 text-base">{bullet}</Text>
             </View>
@@ -81,10 +82,10 @@ function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
 
       <View>
         <View className="mb-6 flex-row justify-center space-x-2">
-          {ONBOARDING_SLIDES.map((_, i) => (
+          {ONBOARDING_SLIDES.map((item, index) => (
             <View
-              key={i}
-              className={`h-1.5 rounded-full ${i === currentSlide ? "bg-primary w-6" : "bg-border w-1.5"}`}
+              key={item.title}
+              className={`h-1.5 rounded-full ${index === currentSlide ? "bg-primary w-6" : "bg-border w-1.5"}`}
             />
           ))}
         </View>
@@ -106,11 +107,8 @@ function SignInScreen() {
         provider: "github",
         callbackURL: "bob://",
       })
-      .then((res: unknown) => {
-        console.log("Sign in result:", res);
-      })
-      .catch((err: unknown) => {
-        console.error("Sign in error:", err);
+      .catch((error: unknown) => {
+        console.error("Sign in error:", error);
       });
   }, []);
 
@@ -121,21 +119,21 @@ function SignInScreen() {
           Welcome to Bob
         </Text>
         <Text className="text-muted mt-2 text-base leading-6">
-          Your AI agent command center for repos and worktrees.
+          Planning stays primary. Task execution stays one tap away.
         </Text>
 
         <View className="mt-10 space-y-3">
           <Card>
             <View className="flex-row items-center">
               <View className="bg-accent/10 mr-3 h-10 w-10 items-center justify-center rounded-xl">
-                <Text className="text-lg">📊</Text>
+                <Text className="text-lg">🧱</Text>
               </View>
               <View className="flex-1">
                 <Text className="text-foreground text-base font-semibold">
-                  Multi-instance overview
+                  Workspaces, projects, and work items
                 </Text>
                 <Text className="text-muted text-sm">
-                  See all your agents at a glance
+                  One planning model across web and mobile
                 </Text>
               </View>
             </View>
@@ -144,14 +142,14 @@ function SignInScreen() {
           <Card>
             <View className="flex-row items-center">
               <View className="bg-accent/10 mr-3 h-10 w-10 items-center justify-center rounded-xl">
-                <Text className="text-lg">🌳</Text>
+                <Text className="text-lg">🤖</Text>
               </View>
               <View className="flex-1">
                 <Text className="text-foreground text-base font-semibold">
-                  Worktree-aware sessions
+                  Task-scoped Bob execution
                 </Text>
                 <Text className="text-muted text-sm">
-                  Isolated agents per branch
+                  Chat, status, and artifacts focused on one task
                 </Text>
               </View>
             </View>
@@ -160,14 +158,14 @@ function SignInScreen() {
           <Card>
             <View className="flex-row items-center">
               <View className="bg-accent/10 mr-3 h-10 w-10 items-center justify-center rounded-xl">
-                <Text className="text-lg">🔀</Text>
+                <Text className="text-lg">🔔</Text>
               </View>
               <View className="flex-1">
                 <Text className="text-foreground text-base font-semibold">
-                  PR & diff visibility
+                  Single inbox
                 </Text>
                 <Text className="text-muted text-sm">
-                  Track changes across branches
+                  Review-ready and needs-input updates in one place
                 </Text>
               </View>
             </View>
@@ -180,98 +178,27 @@ function SignInScreen() {
           Continue with GitHub
         </Button>
         <Text className="text-muted2 mt-3 text-center text-xs">
-          We only request basic account access
+          Workspace access uses the same shared Bob identity on web and mobile
         </Text>
       </View>
     </Screen>
   );
 }
 
-function DashboardScreen({
-  session,
-}: {
-  session: NonNullable<ReturnType<typeof authClient.useSession>["data"]>;
-}) {
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Good morning";
-    if (hour < 18) return "Good afternoon";
-    return "Good evening";
-  };
-
-  const handleSignOut = useCallback(() => {
-    authClient.signOut();
-  }, []);
-
+function SessionBootstrapScreen() {
   return (
-    <Screen className="pt-8">
-      <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
-        <View className="mb-6 flex-row items-center justify-between">
-          <View>
-            <Text className="text-foreground text-2xl font-semibold tracking-tight">
-              {getGreeting()}, {session.user.name?.split(" ")[0] ?? "there"}
-            </Text>
-            <Text className="text-muted mt-0.5 text-sm">
-              {session.user.email}
-            </Text>
-          </View>
-          <Badge variant="success">Connected</Badge>
+    <Screen className="items-center justify-center">
+      <View className="items-center">
+        <View className="bg-primary/20 mb-4 h-16 w-16 items-center justify-center rounded-2xl">
+          <Text className="text-3xl">🏗️</Text>
         </View>
-
-        <View className="mb-6 flex-row space-x-3">
-          <Card className="flex-1">
-            <Text className="text-foreground text-2xl font-semibold">0</Text>
-            <Text className="text-muted2 mt-1 text-xs tracking-widest uppercase">
-              Active Agents
-            </Text>
-          </Card>
-          <Card className="flex-1">
-            <Text className="text-foreground text-2xl font-semibold">0</Text>
-            <Text className="text-muted2 mt-1 text-xs tracking-widest uppercase">
-              Worktrees
-            </Text>
-          </Card>
-          <Card className="flex-1">
-            <Text className="text-foreground text-2xl font-semibold">0</Text>
-            <Text className="text-muted2 mt-1 text-xs tracking-widest uppercase">
-              Open PRs
-            </Text>
-          </Card>
-        </View>
-
-        <Text className="text-foreground mb-3 text-lg font-semibold tracking-tight">
-          Quick Actions
+        <Text className="text-foreground text-2xl font-semibold tracking-tight">
+          Bob Builder
         </Text>
-        <View className="mb-6 space-y-2">
-          <Button variant="secondary" onPress={() => {}}>
-            Open Worktrees
-          </Button>
-          <Button variant="secondary" onPress={() => {}}>
-            View Running Agents
-          </Button>
-          <Button variant="secondary" onPress={() => {}}>
-            Recent Diffs
-          </Button>
-        </View>
-
-        <Text className="text-foreground mb-3 text-lg font-semibold tracking-tight">
-          Recent Activity
+        <Text className="text-muted mt-1 text-sm">
+          Loading planning workspace…
         </Text>
-        <Card>
-          <View className="items-center py-6">
-            <Text className="text-muted2 text-sm">No recent activity</Text>
-            <Text className="text-muted mt-1 text-xs">
-              Connect a repository to get started
-            </Text>
-          </View>
-        </Card>
-
-        <View className="mt-8 mb-4">
-          <Button variant="ghost" onPress={handleSignOut}>
-            Sign Out
-          </Button>
-        </View>
-      </ScrollView>
+      </View>
     </Screen>
   );
 }
@@ -287,19 +214,7 @@ export default function Index() {
   }, []);
 
   if (isPending || showOnboarding === null) {
-    return (
-      <Screen className="items-center justify-center">
-        <View className="items-center">
-          <View className="bg-primary/20 mb-4 h-16 w-16 items-center justify-center rounded-2xl">
-            <Text className="text-3xl">🤖</Text>
-          </View>
-          <Text className="text-foreground text-2xl font-semibold tracking-tight">
-            Bob
-          </Text>
-          <Text className="text-muted mt-1 text-sm">Agent command center</Text>
-        </View>
-      </Screen>
-    );
+    return <SessionBootstrapScreen />;
   }
 
   if (showOnboarding) {
@@ -310,5 +225,5 @@ export default function Index() {
     return <SignInScreen />;
   }
 
-  return <DashboardScreen session={session} />;
+  return <Redirect href={getPlanningHref() as never} />;
 }

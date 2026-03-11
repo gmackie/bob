@@ -1,4 +1,3 @@
-import type { TRPCRouterRecord } from "@trpc/server";
 import { z } from "zod/v4";
 
 import { desc, eq } from "@bob/db";
@@ -6,7 +5,7 @@ import { projects, workItems } from "@bob/db/schema";
 
 import { protectedProcedure } from "../trpc";
 
-export const projectRouter: TRPCRouterRecord = {
+export const projectRouter = {
   list: protectedProcedure
     .input(
       z.object({

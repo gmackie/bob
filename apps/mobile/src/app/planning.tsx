@@ -1,0 +1,316 @@
+import { Redirect, router } from "expo-router";
+import { useMemo } from "react";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
+import { useQuery } from "@tanstack/react-query";
+
+import { Badge, Button, Card, ListRow, Screen } from "~/components/ui";
+import {
+  buildPlanningSections,
+  getNotificationsHref,
+  getProjectHref,
+  getTaskWorkspaceHref,
+  getWorkItemHref,
+} from "~/features/planning/navigation";
+import { authClient } from "~/utils/auth";
+import { trpc } from "~/utils/api";
+
+function formatWorkItemSubtitle(input: {
+  kind: string;
+  status: string;
+  projectKey: string | null;
+}) {
+  const project = input.projectKey ? `${input.projectKey} · ` : "";
+  return `${project}${input.kind} · ${input.status.replace(/_/g, " ")}`;
+}
+
+export default function PlanningScreen() {
+  const { data: session, isPending } = authClient.useSession();
+  const workspacesQuery = useQuery(
+    trpc.workspace.list.queryOptions(undefined, {
+      enabled: Boolean(session),
+    }),
+  );
+
+  const primaryWorkspace = workspacesQuery.data?.[0]?.workspace ?? null;
+
+  const projectsQuery = useQuery(
+    trpc.project.list.queryOptions(
+      { workspaceId: primaryWorkspace?.id ?? "" },
+      { enabled: Boolean(primaryWorkspace?.id) },
+    ),
+  );
+
+  const workItemsQuery = useQuery(
+    trpc.workItems.list.queryOptions(
+      { workspaceId: primaryWorkspace?.id ?? "", limit: 12 },
+      { enabled: Boolean(primaryWorkspace?.id) },
+    ),
+  );
+
+  const notificationsQuery = useQuery(
+    trpc.workItems.listNotifications.queryOptions(
+      { limit: 12 },
+      { enabled: Boolean(session) },
+    ),
+  );
+
+  const sections = useMemo(
+    () =>
+      buildPlanningSections({
+        workspaces: primaryWorkspace
+          ? [
+              {
+                id: primaryWorkspace.id,
+                name: primaryWorkspace.name,
+                projectCount: projectsQuery.data?.length ?? 0,
+                activeTaskCount:
+                  workItemsQuery.data?.filter(
+                    (item) =>
+                      item.kind === "task" &&
+                      (item.status === "in_progress" ||
+                        item.status === "in_review" ||
+                        item.status === "blocked"),
+                  ).length ?? 0,
+              },
+            ]
+          : [],
+        projects:
+          projectsQuery.data?.map((entry) => ({
+            id: entry.project.id,
+            name: entry.project.name,
+            key: entry.project.key,
+            activeCount: entry.counts.active,
+            issueCount: entry.counts.issues,
+            taskCount: entry.counts.tasks,
+          })) ?? [],
+        workItems:
+          workItemsQuery.data?.map((item) => ({
+            id: item.id,
+            identifier: item.identifier,
+            title: item.title,
+            kind: item.kind,
+            status: item.status,
+          })) ?? [],
+        notifications:
+          notificationsQuery.data?.items.map((item) => ({
+            id: item.id,
+            title: item.title,
+            body: item.body,
+            read: item.read,
+          })) ?? [],
+      }),
+    [
+      notificationsQuery.data?.items,
+      primaryWorkspace,
+      projectsQuery.data,
+      workItemsQuery.data,
+    ],
+  );
+
+  if (isPending) {
+    return (
+      <Screen className="items-center justify-center">
+        <ActivityIndicator />
+      </Screen>
+    );
+  }
+
+  if (!session) {
+    return <Redirect href="/" />;
+  }
+
+  if (workspacesQuery.isLoading) {
+    return (
+      <Screen className="items-center justify-center">
+        <ActivityIndicator />
+        <Text className="text-muted mt-3">Loading workspaces…</Text>
+      </Screen>
+    );
+  }
+
+  if (!primaryWorkspace) {
+    return (
+      <Screen className="justify-center">
+        <Card className="items-center">
+          <Text className="text-foreground text-xl font-semibold">
+            No workspace yet
+          </Text>
+          <Text className="text-muted mt-2 text-center text-sm">
+            Create your first workspace on web, then mobile will pick it up here.
+          </Text>
+        </Card>
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen className="pt-6">
+      <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
+        <View className="mb-6 flex-row items-start justify-between">
+          <View className="flex-1 pr-4">
+            <Text className="text-muted text-sm uppercase tracking-[0.18em]">
+              Workspace
+            </Text>
+            <Text className="text-foreground mt-1 text-3xl font-semibold tracking-tight">
+              {primaryWorkspace.name}
+            </Text>
+          </View>
+          <Pressable
+            className="active:opacity-80"
+            onPress={() => router.push(getNotificationsHref() as never)}
+          >
+            <Badge variant="accent">
+              {sections.unreadNotifications.length} unread
+            </Badge>
+          </Pressable>
+        </View>
+
+        <Card variant="elevated" className="mb-5">
+          <Text className="text-foreground text-lg font-semibold">
+            Execution snapshot
+          </Text>
+          <View className="mt-4 flex-row gap-3">
+            <View className="flex-1">
+              <Text className="text-muted2 text-xs uppercase tracking-[0.16em]">
+                In progress
+              </Text>
+              <Text className="text-foreground mt-1 text-2xl font-semibold">
+                {sections.executionSummary.inProgress}
+              </Text>
+            </View>
+            <View className="flex-1">
+              <Text className="text-muted2 text-xs uppercase tracking-[0.16em]">
+                In review
+              </Text>
+              <Text className="text-foreground mt-1 text-2xl font-semibold">
+                {sections.executionSummary.inReview}
+              </Text>
+            </View>
+            <View className="flex-1">
+              <Text className="text-muted2 text-xs uppercase tracking-[0.16em]">
+                Blocked
+              </Text>
+              <Text className="text-foreground mt-1 text-2xl font-semibold">
+                {sections.executionSummary.blocked}
+              </Text>
+            </View>
+          </View>
+          <Text className="text-muted mt-4 text-sm">
+            {sections.heroWorkspace?.projectCount ?? 0} projects,{" "}
+            {sections.heroWorkspace?.activeTaskCount ?? 0} active task runs
+          </Text>
+        </Card>
+
+        <View className="mb-5">
+          <View className="mb-3 flex-row items-center justify-between">
+            <Text className="text-foreground text-lg font-semibold">Projects</Text>
+            {sections.featuredProjects[0] ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onPress={() =>
+                  router.push(getProjectHref(sections.featuredProjects[0]!.id) as never)
+                }
+              >
+                Open latest
+              </Button>
+            ) : null}
+          </View>
+          <Card>
+            {sections.featuredProjects.length > 0 ? (
+              sections.featuredProjects.map((project, index) => (
+                <ListRow
+                  key={project.id}
+                  title={`${project.key} · ${project.name}`}
+                  subtitle={`${project.taskCount} tasks · ${project.issueCount} issues · ${project.activeCount} active`}
+                  right={<Text className="text-muted text-sm">Open</Text>}
+                  onPress={() => router.push(getProjectHref(project.id) as never)}
+                  showDivider={index < sections.featuredProjects.length - 1}
+                />
+              ))
+            ) : (
+              <Text className="text-muted text-sm">No projects yet.</Text>
+            )}
+          </Card>
+        </View>
+
+        <View className="mb-5">
+          <View className="mb-3 flex-row items-center justify-between">
+            <Text className="text-foreground text-lg font-semibold">
+              Recent work items
+            </Text>
+          </View>
+          <Card>
+            {sections.recentWorkItems.length > 0 ? (
+              sections.recentWorkItems.map((item, index) => (
+                <ListRow
+                  key={item.id}
+                  title={`${item.identifier} · ${item.title}`}
+                  subtitle={formatWorkItemSubtitle({
+                    kind: item.kind,
+                    status: item.status,
+                    projectKey:
+                      workItemsQuery.data?.find((entry) => entry.id === item.id)?.project
+                        ?.key ?? null,
+                  })}
+                  right={
+                    item.kind === "task" ? (
+                      <Text className="text-muted text-sm">Workspace</Text>
+                    ) : (
+                      <Text className="text-muted text-sm">Details</Text>
+                    )
+                  }
+                  onPress={() =>
+                    router.push(
+                      (item.kind === "task"
+                        ? getTaskWorkspaceHref(item.id)
+                        : getWorkItemHref(item.id)) as never,
+                    )
+                  }
+                  showDivider={index < sections.recentWorkItems.length - 1}
+                />
+              ))
+            ) : (
+              <Text className="text-muted text-sm">No work items yet.</Text>
+            )}
+          </Card>
+        </View>
+
+        <View className="mb-8">
+          <View className="mb-3 flex-row items-center justify-between">
+            <Text className="text-foreground text-lg font-semibold">Inbox</Text>
+            <Button
+              variant="ghost"
+              size="sm"
+              onPress={() => router.push(getNotificationsHref() as never)}
+            >
+              Open inbox
+            </Button>
+          </View>
+          <Card>
+            {sections.unreadNotifications.length > 0 ? (
+              sections.unreadNotifications.map((item, index) => (
+                <ListRow
+                  key={item.id}
+                  title={item.title}
+                  subtitle={item.body ?? "Open notification"}
+                  showDivider={index < sections.unreadNotifications.length - 1}
+                />
+              ))
+            ) : (
+              <Text className="text-muted text-sm">
+                No unread notifications. Execution milestones will land here.
+              </Text>
+            )}
+          </Card>
+        </View>
+      </ScrollView>
+    </Screen>
+  );
+}

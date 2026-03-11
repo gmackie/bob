@@ -1,4 +1,3 @@
-import type { TRPCRouterRecord } from "@trpc/server";
 import { z } from "zod/v4";
 import { and, desc, eq, isNull } from "@bob/db";
 
@@ -29,7 +28,7 @@ function formatWorkItemIdentifier(input: {
   return input.projectKey ? `${input.projectKey}-${suffix}` : `TASK-${suffix}`;
 }
 
-export const workItemsRouter: TRPCRouterRecord = {
+export const workItemsRouter = {
   list: protectedProcedure
     .input(
       z.object({

@@ -1,0 +1,341 @@
+import { Redirect, useLocalSearchParams } from "expo-router";
+import { useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+import { Badge, Button, Card, ListRow, Screen } from "~/components/ui";
+import {
+  buildTaskWorkspaceViewModel,
+  summarizeSessionEvents,
+} from "~/features/planning/task-workspace";
+import { authClient } from "~/utils/auth";
+import { trpc } from "~/utils/api";
+
+export default function TaskWorkspaceScreen() {
+  const { data: session, isPending } = authClient.useSession();
+  const params = useLocalSearchParams<{ workItemId: string }>();
+  const workItemId =
+    typeof params.workItemId === "string" ? params.workItemId : "";
+  const queryClient = useQueryClient();
+  const [messageDraft, setMessageDraft] = useState("");
+
+  const workItemQuery = useQuery(
+    trpc.workItems.get.queryOptions(
+      { id: workItemId },
+      { enabled: Boolean(session && workItemId) },
+    ),
+  );
+
+  const sessionsQuery = useQuery(
+    trpc.session.list.queryOptions(
+      { limit: 100 },
+      { enabled: Boolean(session) },
+    ),
+  );
+
+  const linkedSession = useMemo(
+    () =>
+      sessionsQuery.data?.items.find((item) => item.linkedTask?.id === workItemId) ??
+      null,
+    [sessionsQuery.data?.items, workItemId],
+  );
+
+  const workflowStateQuery = useQuery(
+    trpc.session.getWorkflowState.queryOptions(
+      { sessionId: linkedSession?.id ?? "" },
+      { enabled: Boolean(linkedSession?.id) },
+    ),
+  );
+
+  const eventsQuery = useQuery(
+    trpc.session.getEvents.queryOptions(
+      { sessionId: linkedSession?.id ?? "", limit: 30 },
+      { enabled: Boolean(linkedSession?.id) },
+    ),
+  );
+
+  const sendInputMutation = useMutation(
+    trpc.session.sendHeadlessInput.mutationOptions({
+      onSuccess: async () => {
+        setMessageDraft("");
+        if (!linkedSession) return;
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: trpc.session.getEvents.queryKey({
+              sessionId: linkedSession.id,
+              limit: 30,
+            }),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: trpc.session.getWorkflowState.queryKey({
+              sessionId: linkedSession.id,
+            }),
+          }),
+        ]);
+      },
+    }),
+  );
+
+  const resolveAwaitingInputMutation = useMutation(
+    trpc.session.resolveAwaitingInput.mutationOptions({
+      onSuccess: async () => {
+        if (!linkedSession) return;
+        await queryClient.invalidateQueries({
+          queryKey: trpc.session.getWorkflowState.queryKey({
+            sessionId: linkedSession.id,
+          }),
+        });
+      },
+    }),
+  );
+
+  const workspaceModel = useMemo(() => {
+    if (!workItemQuery.data) {
+      return null;
+    }
+
+    return buildTaskWorkspaceViewModel({
+      workItem: {
+        id: workItemQuery.data.workItem.id,
+        identifier: workItemQuery.data.workItem.identifier,
+        title: workItemQuery.data.workItem.title,
+      },
+      session: linkedSession
+        ? {
+            id: linkedSession.id,
+            title: linkedSession.title,
+            status: linkedSession.status,
+          }
+        : null,
+      workflowState: workflowStateQuery.data
+        ? {
+            workflowStatus: workflowStateQuery.data.workflowStatus,
+            statusMessage: workflowStateQuery.data.statusMessage ?? null,
+            awaitingInput: workflowStateQuery.data.awaitingInput
+              ? {
+                  question: workflowStateQuery.data.awaitingInput.question,
+                  defaultAction:
+                    workflowStateQuery.data.awaitingInput.defaultAction,
+                  expiresAt:
+                    workflowStateQuery.data.awaitingInput.expiresAt.toISOString(),
+                }
+              : null,
+          }
+        : null,
+      currentArtifacts: workItemQuery.data.currentArtifacts.map((artifact) => ({
+        id: artifact.id,
+        artifactRole: artifact.artifactRole,
+        title: artifact.title,
+        url: artifact.url,
+      })),
+      events: (eventsQuery.data?.events ?? []).map((event) => ({
+        seq: event.seq,
+        direction: event.direction,
+        eventType: event.eventType,
+        payload: event.payload as Record<string, unknown>,
+      })),
+    });
+  }, [eventsQuery.data?.events, linkedSession, workItemQuery.data, workflowStateQuery.data]);
+
+  const eventRows = useMemo(
+    () =>
+      summarizeSessionEvents(
+        (eventsQuery.data?.events ?? []).map((event) => ({
+          seq: event.seq,
+          direction: event.direction,
+          eventType: event.eventType,
+          payload: event.payload as Record<string, unknown>,
+        })),
+      ),
+    [eventsQuery.data?.events],
+  );
+
+  if (isPending) {
+    return (
+      <Screen className="items-center justify-center">
+        <ActivityIndicator />
+      </Screen>
+    );
+  }
+
+  if (!session) {
+    return <Redirect href="/" />;
+  }
+
+  if (workItemQuery.isLoading) {
+    return (
+      <Screen className="items-center justify-center">
+        <ActivityIndicator />
+      </Screen>
+    );
+  }
+
+  if (!workItemQuery.data) {
+    return (
+      <Screen className="justify-center">
+        <Card className="items-center">
+          <Text className="text-foreground text-lg font-semibold">
+            Task not found
+          </Text>
+        </Card>
+      </Screen>
+    );
+  }
+
+  const workItemData = workItemQuery.data;
+  const awaitingInputModel = workspaceModel?.awaitingInput ?? null;
+
+  return (
+    <Screen className="pt-6">
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <View className="mb-5">
+          <Text className="text-muted text-sm uppercase tracking-[0.18em]">
+            {workItemData.workItem.identifier}
+          </Text>
+          <Text className="text-foreground mt-1 text-3xl font-semibold tracking-tight">
+            {workItemData.workItem.title}
+          </Text>
+        </View>
+
+        <Card variant="elevated" className="mb-5">
+          <Text className="text-foreground text-lg font-semibold">
+            {workspaceModel?.title ?? "Task workspace"}
+          </Text>
+          <View className="mt-4 flex-row flex-wrap gap-2">
+            <Badge variant="accent">
+              {workspaceModel?.sessionStatus.replace(/_/g, " ") ?? "not started"}
+            </Badge>
+            <Badge>
+              {workspaceModel?.workflowStatus.replace(/_/g, " ") ?? "not started"}
+            </Badge>
+            <Badge variant="success">
+              {workspaceModel?.artifactCount ?? 0} artifacts
+            </Badge>
+          </View>
+          {workspaceModel?.statusMessage ? (
+            <Text className="text-muted mt-4 text-sm">
+              {workspaceModel.statusMessage}
+            </Text>
+          ) : null}
+        </Card>
+
+        {awaitingInputModel ? (
+          <Card className="mb-5">
+            <Text className="text-foreground text-base font-semibold">
+              Awaiting input
+            </Text>
+            <Text className="text-muted mt-3 text-sm leading-6">
+              {awaitingInputModel.question}
+            </Text>
+            <Text className="text-muted2 mt-3 text-xs uppercase tracking-[0.16em]">
+              Default: {awaitingInputModel.defaultAction}
+            </Text>
+            <Text className="text-muted2 mt-1 text-xs uppercase tracking-[0.16em]">
+              Expires: {new Date(awaitingInputModel.expiresAt).toLocaleString()}
+            </Text>
+            <Button
+              className="mt-4"
+              onPress={() => {
+                if (!linkedSession) {
+                  return;
+                }
+
+                resolveAwaitingInputMutation.mutate({
+                  sessionId: linkedSession.id,
+                  resolution: {
+                    type: "human",
+                    value: awaitingInputModel.defaultAction,
+                  },
+                });
+              }}
+              disabled={!linkedSession || resolveAwaitingInputMutation.isPending}
+            >
+              Accept default action
+            </Button>
+          </Card>
+        ) : null}
+
+        <View className="mb-3 flex-row items-center justify-between">
+          <Text className="text-foreground text-lg font-semibold">Conversation</Text>
+        </View>
+        <Card className="mb-5">
+          {eventRows.length > 0 ? (
+            eventRows.map((row, index) => (
+              <ListRow
+                key={row.id}
+                title={`${row.actor} · ${row.body}`}
+                showDivider={index < eventRows.length - 1}
+              />
+            ))
+          ) : (
+            <Text className="text-muted text-sm">
+              {linkedSession
+                ? "No visible messages yet."
+                : "No linked execution session yet for this task."}
+            </Text>
+          )}
+        </Card>
+
+        <Card className="mb-5">
+          <Text className="text-foreground text-base font-semibold">
+            Send message
+          </Text>
+          <TextInput
+            value={messageDraft}
+            onChangeText={setMessageDraft}
+            multiline
+            editable={Boolean(linkedSession)}
+            placeholder={
+              linkedSession
+                ? "Ask Bob for an update or provide guidance"
+                : "Execution chat will unlock when this task has a linked session"
+            }
+            placeholderTextColor="#7B8794"
+            className="text-foreground border-border mt-3 min-h-24 rounded-2xl border px-4 py-3"
+          />
+          <Button
+            className="mt-4"
+            onPress={() =>
+              linkedSession &&
+              sendInputMutation.mutate({
+                sessionId: linkedSession.id,
+                message: messageDraft,
+              })
+            }
+            disabled={
+              !linkedSession || !messageDraft.trim() || sendInputMutation.isPending
+            }
+          >
+            Send to Bob
+          </Button>
+        </Card>
+
+        <View className="mb-3 flex-row items-center justify-between">
+          <Text className="text-foreground text-lg font-semibold">Artifacts</Text>
+        </View>
+        <Card className="mb-8">
+          {workItemData.currentArtifacts.length > 0 ? (
+            workItemData.currentArtifacts.map((artifact, index) => (
+              <ListRow
+                key={artifact.id}
+                title={artifact.title ?? artifact.artifactRole}
+                subtitle={artifact.url}
+                showDivider={index < workItemData.currentArtifacts.length - 1}
+              />
+            ))
+          ) : (
+            <Text className="text-muted text-sm">
+              Verification and deliverable links will appear here.
+            </Text>
+          )}
+        </Card>
+      </ScrollView>
+    </Screen>
+  );
+}
