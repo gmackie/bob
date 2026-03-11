@@ -167,11 +167,11 @@ const sessionManagerCallbacks: SessionManagerCallbacks = {
 
     if (!row) return null;
 
-    return {
-      id: row.id,
-      userId: row.userId,
-      status: row.status,
-      agentType: row.agentType,
+      return {
+        id: row.id,
+        userId: row.userId,
+        status: row.status as SessionStatus,
+        agentType: row.agentType,
       workingDirectory: row.workingDirectory ?? "",
       worktreeId: row.worktreeId ?? undefined,
       repositoryId: row.repositoryId ?? undefined,
@@ -213,7 +213,7 @@ const sessionManagerCallbacks: SessionManagerCallbacks = {
     return {
       id,
       userId: created.userId,
-      status: created.status,
+      status: created.status as SessionStatus,
       agentType: created.agentType,
       workingDirectory: created.workingDirectory ?? "",
       worktreeId: created.worktreeId ?? undefined,
