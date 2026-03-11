@@ -20,7 +20,7 @@ Environment=NVM_DIR=/home/bob/.nvm
 EnvironmentFile=/opt/bob-nextjs/.env
 
 ExecStartPre=/bin/bash -lc 'source "$NVM_DIR/nvm.sh" && nvm use 22 && corepack enable && pnpm -F @bob/legacy build'
-ExecStart=/bin/bash -lc 'source "$NVM_DIR/nvm.sh" && nvm use 22 && corepack enable && pnpm -F @bob/nextjs start:hosted'
+ExecStart=/bin/bash -lc 'source "$NVM_DIR/nvm.sh" && nvm use 22 && corepack enable && pnpm -F @bob/web start:hosted'
 Restart=always
 RestartSec=3
 

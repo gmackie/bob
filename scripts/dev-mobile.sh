@@ -95,7 +95,7 @@ pick_expo_port() {
 }
 
 find_bob_next_dev_pids() {
-    pgrep -f '/Volumes/dev/bob/node_modules/.bin/next dev|/Volumes/dev/bob/node_modules/.bin/dotenv -e ../../.env -- next dev|pnpm --filter @bob/nextjs dev|pnpm with-env next dev' || true
+    pgrep -f '/Volumes/dev/bob/node_modules/.bin/next dev|/Volumes/dev/bob/node_modules/.bin/dotenv -e ../../.env -- next dev|pnpm --filter @bob/web dev|pnpm with-env next dev' || true
 }
 
 kill_bob_next_dev() {
@@ -146,7 +146,7 @@ if [ -n "$EXISTING_PIDS" ]; then
 fi
 
 > "$NEXT_LOG"
-pnpm --filter @bob/nextjs dev > "$NEXT_LOG" 2>&1 &
+pnpm --filter @bob/web dev > "$NEXT_LOG" 2>&1 &
 NEXT_PID=$!
 
 echo -e "      Waiting for Next.js to be ready..."
@@ -250,6 +250,6 @@ echo -e "${YELLOW}Press Ctrl+C to stop all servers${NC}"
 echo ""
 
 # Run Expo in foreground with the API URL and dev client
-cd apps/expo
+cd apps/mobile
 EXPO_PORT=$(pick_expo_port)
 APP_ENV=development API_URL="$API_URL" npx expo start --dev-client --tunnel --port "$EXPO_PORT"
