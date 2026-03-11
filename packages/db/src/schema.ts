@@ -1,5 +1,5 @@
 import { relations, sql } from "drizzle-orm";
-import { pgTable } from "drizzle-orm/pg-core";
+import { pgEnum, pgTable } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -58,6 +58,27 @@ export const apiKeys = pgTable("api_keys", (t) => ({
   revokedAt: t.timestamp({ mode: "date", withTimezone: true }),
 }));
 
+export const workItemKind = ["issue", "epic", "task"] as const;
+export type WorkItemKind = (typeof workItemKind)[number];
+export const workItemKindEnum = pgEnum("work_item_kind", workItemKind);
+
+export const workItems = pgTable("work_items", (t) => ({
+  id: t.uuid().notNull().primaryKey().defaultRandom(),
+  parentId: t.uuid(),
+  ownerUserId: t
+    .text()
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  kind: workItemKindEnum().notNull(),
+  title: t.varchar({ length: 256 }).notNull(),
+  description: t.text(),
+  status: t.varchar({ length: 40 }).notNull().default("draft"),
+  createdAt: t.timestamp().defaultNow().notNull(),
+  updatedAt: t
+    .timestamp({ mode: "date", withTimezone: true })
+    .$onUpdateFn(() => sql`now()`),
+}));
+
 export const CreateUserPreferencesSchema = createInsertSchema(userPreferences, {
   theme: z.enum(["light", "dark", "system"]).default("system"),
   language: z.string().max(10).default("en"),
@@ -72,6 +93,16 @@ export const UpdateUserPreferencesSchema =
   CreateUserPreferencesSchema.partial().omit({
     userId: true,
   });
+
+export const CreateWorkItemSchema = createInsertSchema(workItems, {
+  kind: z.enum(workItemKind),
+  title: z.string().max(256),
+  status: z.string().max(40).default("draft"),
+}).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 
 export const agentTypeEnum = [
   "claude",
@@ -267,6 +298,21 @@ export const repositoriesRelations = relations(
     instances: many(agentInstances),
   }),
 );
+
+export const workItemsRelations = relations(workItems, ({ one, many }) => ({
+  ownerUser: one(user, {
+    fields: [workItems.ownerUserId],
+    references: [user.id],
+  }),
+  parent: one(workItems, {
+    fields: [workItems.parentId],
+    references: [workItems.id],
+    relationName: "work_item_parent",
+  }),
+  children: many(workItems, {
+    relationName: "work_item_parent",
+  }),
+}));
 
 export const worktreesRelations = relations(worktrees, ({ one, many }) => ({
   user: one(user, {
