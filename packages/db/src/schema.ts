@@ -597,6 +597,8 @@ export const chatConversations = pgTable(
     gitBranch: t.text(),
     pullRequestId: t.uuid(),
     kanbangerTaskId: t.text(),
+    workItemId: t.uuid().references(() => workItems.id, { onDelete: "set null" }),
+    workItemIdentifierSnapshot: t.text(),
     blockedReason: t.text(),
     workflowStatus: t.varchar({ length: 30 }).notNull().default("started"),
     statusMessage: t.text(),
@@ -619,6 +621,10 @@ export const chatConversations = pgTable(
     {
       name: "chat_conversations_kanbanger_task_idx",
       columns: [table.kanbangerTaskId],
+    },
+    {
+      name: "chat_conversations_work_item_idx",
+      columns: [table.workItemId],
     },
   ],
 );
@@ -656,6 +662,10 @@ export const chatConversationsRelations = relations(
     agentInstance: one(agentInstances, {
       fields: [chatConversations.agentInstanceId],
       references: [agentInstances.id],
+    }),
+    workItem: one(workItems, {
+      fields: [chatConversations.workItemId],
+      references: [workItems.id],
     }),
     messages: many(chatMessages),
     events: many(sessionEvents),
@@ -1187,6 +1197,8 @@ export const taskRuns = pgTable("task_runs", (t) => ({
   kanbangerWorkspaceId: t.text().notNull(),
   kanbangerIssueId: t.text().notNull(),
   kanbangerIssueIdentifier: t.text().notNull(), // e.g., "PROJ-123"
+  workItemId: t.uuid().references(() => workItems.id, { onDelete: "set null" }),
+  workItemIdentifierSnapshot: t.text(),
   sessionId: t
     .uuid()
     .references(() => chatConversations.id, { onDelete: "set null" }),
@@ -1211,6 +1223,7 @@ export const CreateTaskRunSchema = createInsertSchema(taskRuns, {
   kanbangerWorkspaceId: z.string(),
   kanbangerIssueId: z.string(),
   kanbangerIssueIdentifier: z.string(),
+  workItemIdentifierSnapshot: z.string().optional(),
   status: z.enum(taskRunStatusEnum),
   blockedReason: z.string().optional(),
   branch: z.string().optional(),
@@ -1424,6 +1437,10 @@ export const taskRunsRelations = relations(taskRuns, ({ one }) => ({
   session: one(chatConversations, {
     fields: [taskRuns.sessionId],
     references: [chatConversations.id],
+  }),
+  workItem: one(workItems, {
+    fields: [taskRuns.workItemId],
+    references: [workItems.id],
   }),
   repository: one(repositories, {
     fields: [taskRuns.repositoryId],
