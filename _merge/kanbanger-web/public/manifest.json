@@ -1,0 +1,16 @@
+{
+  "name": "Tasks",
+  "short_name": "Tasks",
+  "description": "Linear-style task management",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#5E6AD2",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

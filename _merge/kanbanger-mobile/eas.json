@@ -1,0 +1,73 @@
+{
+  "cli": {
+    "version": ">= 12.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "APP_VARIANT": "development",
+        "EXPO_PUBLIC_API_URL": "https://tasks.gmac.io",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+      },
+      "ios": {
+        "simulator": false
+      },
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleDebug"
+      },
+      "channel": "development"
+    },
+    "simulator": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "APP_VARIANT": "development",
+        "EXPO_PUBLIC_API_URL": "https://tasks.gmac.io",
+        "EXPO_PUBLIC_E2E_AUTH_BYPASS": "true",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+      },
+      "ios": {
+        "simulator": true
+      },
+      "channel": "development"
+    },
+    "e2e": {
+      "developmentClient": false,
+      "distribution": "internal",
+      "env": {
+        "APP_VARIANT": "development",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+      },
+      "ios": {
+        "simulator": true
+      },
+      "channel": "e2e"
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "APP_VARIANT": "production",
+        "EXPO_PUBLIC_API_URL": "https://tasks.gmac.io",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+      },
+      "channel": "production"
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "mackieg@umich.edu",
+        "ascAppId": "6757654276",
+        "appleTeamId": "P4SWQXAB5H"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./play-store-credentials.json",
+        "track": "internal"
+      }
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "extends": "@linear-clone/typescript-config/base.json",
+  "compilerOptions": {
+    "strict": true,
+    "jsx": "react-native",
+    "lib": [
+      "ES2022"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "scripts"
+  ]
+}

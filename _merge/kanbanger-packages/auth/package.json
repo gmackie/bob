@@ -1,0 +1,28 @@
+{
+  "name": "@linear-clone/auth",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./api-key": "./src/api-key.ts",
+    "./session": "./src/session.ts",
+    "./oauth": "./src/oauth/index.ts",
+    "./oauth/entra": "./src/oauth/entra.ts",
+    "./oauth/github": "./src/oauth/github.ts",
+    "./oauth/gitea": "./src/oauth/gitea.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@linear-clone/db": "workspace:*",
+    "drizzle-orm": "^0.38.4",
+    "jose": "^5.9.6"
+  },
+  "devDependencies": {
+    "@linear-clone/typescript-config": "workspace:*",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}

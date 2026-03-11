@@ -1,0 +1,23 @@
+{
+  "name": "@linear-clone/funnel-agent-skills",
+  "version": "0.1.0",
+  "description": "Installable agent skills for writing funnel artifacts and working tasks across funnel stages.",
+  "license": "MIT",
+  "type": "module",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "funnel-agent-skills": "./bin/skills.js",
+    "skills": "./bin/skills.js"
+  },
+  "files": [
+    "bin",
+    "skills",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "node --check bin/skills.js"
+  }
+}

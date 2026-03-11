@@ -1,0 +1,30 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "error": "Something went wrong",
+    "retry": "Try again",
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "edit": "Edit",
+    "back": "Back",
+    "next": "Next"
+  },
+  "auth": {
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "signUp": "Sign up",
+    "forgotPassword": "Forgot password?",
+    "resetPassword": "Reset password"
+  },
+  "home": {
+    "title": "Welcome",
+    "subtitle": "Built with Next.js + Expo"
+  },
+  "errors": {
+    "notFound": "Page not found",
+    "unauthorized": "You must be signed in to view this page",
+    "serverError": "An unexpected error occurred"
+  }
+}
