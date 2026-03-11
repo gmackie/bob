@@ -7,6 +7,7 @@
     "dev": "tsx watch src/index.ts",
     "lint": "eslint --flag unstable_native_nodejs_ts_config",
     "start": "node dist/index.js",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
@@ -18,7 +19,8 @@
     "prettier": "catalog:",
     "tsup": "catalog:",
     "tsx": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "^4.0.0"
   },
   "prettier": "@bob/prettier-config"
 }

@@ -1,4 +1,7 @@
+import React from "react";
 import Link from "next/link";
+
+import { getTaskWorkspaceHref } from "~/lib/planning/task-workspace";
 
 interface WorkItemDetailCardProps {
   workItem: {
@@ -63,6 +66,17 @@ export function WorkItemDetailCard({
           <span>{childCount} child item{childCount === 1 ? "" : "s"}</span>
           <span>{comments.length} comments</span>
         </div>
+
+        {workItem.kind === "task" ? (
+          <div className="mt-5">
+            <Link
+              href={getTaskWorkspaceHref(workItem.id)}
+              className="inline-flex rounded-full bg-[#f59e0b] px-4 py-2 text-sm font-medium text-black transition hover:bg-[#f8b84b]"
+            >
+              Open execution workspace
+            </Link>
+          </div>
+        ) : null}
 
         <p className="mt-6 max-w-3xl whitespace-pre-wrap text-sm leading-7 text-white/72">
           {workItem.description?.trim() || "No description yet."}
