@@ -2,8 +2,6 @@ packages:
   - apps/*
   - packages/*
   - tooling/*
-  - backend
-  - frontend
 
 catalog:
   "@better-auth/cli": 1.4.0-beta.9
