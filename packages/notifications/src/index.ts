@@ -10,6 +10,21 @@ export interface NotificationConfig {
 }
 
 export type NotificationPayload = Record<string, unknown>;
+export const workItemNotificationKinds = [
+  "work_item_assigned",
+  "work_item_commented",
+  "work_item_needs_input",
+  "work_item_review_ready",
+] as const;
+export type WorkItemNotificationKind =
+  (typeof workItemNotificationKinds)[number];
+
+export interface WorkItemNotificationPayload extends NotificationPayload {
+  workItemId: string;
+  kind: WorkItemNotificationKind;
+  workspaceId?: string;
+  projectId?: string;
+}
 
 type LocalNotificationScheduleOptions = {
   trigger?: Notifications.NotificationTriggerInput;
@@ -124,6 +139,22 @@ export function addNotificationResponseReceivedListener(
 
 export function useLastNotificationResponse() {
   return Notifications.useLastNotificationResponse();
+}
+
+export function createWorkItemNotificationPayload(input: {
+  workItemId: string;
+  kind: WorkItemNotificationKind;
+  workspaceId?: string;
+  projectId?: string;
+  data?: NotificationPayload;
+}): WorkItemNotificationPayload {
+  return {
+    ...(input.data ?? {}),
+    workItemId: input.workItemId,
+    kind: input.kind,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+  };
 }
 
 export { Notifications };

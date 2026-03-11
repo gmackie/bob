@@ -1,7 +1,7 @@
 import type { TRPCRouterRecord } from "@trpc/server";
 import { z } from "zod/v4";
 
-import { desc, eq, and, gte, lte } from "@bob/db";
+import { and, desc, eq, gte, lte } from "@bob/db";
 import { eventLog, eventTypeEnum } from "@bob/db/schema";
 
 import { protectedProcedure } from "../trpc";

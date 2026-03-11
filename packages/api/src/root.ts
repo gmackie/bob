@@ -17,6 +17,7 @@ import { sessionRouter } from "./router/session";
 import { settingsRouter } from "./router/settings";
 import { systemRouter } from "./router/system";
 import { terminalRouter } from "./router/terminal";
+import { workItemsRouter } from "./router/workItems";
 import { createTRPCRouter } from "./trpc";
 
 const appRouterRecord = {
@@ -37,6 +38,7 @@ const appRouterRecord = {
   settings: settingsRouter,
   system: systemRouter,
   terminal: terminalRouter,
+  workItems: workItemsRouter,
 } satisfies TRPCRouterRecord;
 
 export const appRouter = createTRPCRouter(appRouterRecord);

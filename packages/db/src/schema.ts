@@ -62,6 +62,59 @@ export const workItemKind = ["issue", "epic", "task"] as const;
 export type WorkItemKind = (typeof workItemKind)[number];
 export const workItemKindEnum = pgEnum("work_item_kind", workItemKind);
 
+export const workItemActivityType = [
+  "comment_added",
+  "status_changed",
+  "artifact_added",
+  "notification_created",
+] as const;
+export type WorkItemActivityType = (typeof workItemActivityType)[number];
+export const workItemActivityTypeEnum = pgEnum(
+  "work_item_activity_type",
+  workItemActivityType,
+);
+
+export const workItemNotificationType = [
+  "work_item_assigned",
+  "work_item_commented",
+  "work_item_needs_input",
+  "work_item_review_ready",
+] as const;
+export type WorkItemNotificationType =
+  (typeof workItemNotificationType)[number];
+export const workItemNotificationTypeEnum = pgEnum(
+  "work_item_notification_type",
+  workItemNotificationType,
+);
+
+export const workItemArtifactType = [
+  "pr",
+  "verification",
+  "build",
+  "test_report",
+  "doc",
+  "deliverable",
+  "other",
+] as const;
+export type WorkItemArtifactType = (typeof workItemArtifactType)[number];
+export const workItemArtifactTypeEnum = pgEnum(
+  "work_item_artifact_type",
+  workItemArtifactType,
+);
+
+export const workItemArtifactProducerType = [
+  "bob",
+  "forgegraph",
+  "human",
+  "system",
+] as const;
+export type WorkItemArtifactProducerType =
+  (typeof workItemArtifactProducerType)[number];
+export const workItemArtifactProducerTypeEnum = pgEnum(
+  "work_item_artifact_producer_type",
+  workItemArtifactProducerType,
+);
+
 export const workItems = pgTable("work_items", (t) => ({
   id: t.uuid().notNull().primaryKey().defaultRandom(),
   parentId: t.uuid(),
@@ -1022,6 +1075,116 @@ export const CreateTaskRunSchema = createInsertSchema(taskRuns, {
   completedAt: true,
 });
 
+export const comments = pgTable("comments", (t) => ({
+  id: t.uuid().notNull().primaryKey().defaultRandom(),
+  workItemId: t
+    .uuid()
+    .notNull()
+    .references(() => workItems.id, { onDelete: "cascade" }),
+  userId: t
+    .text()
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  parentId: t.uuid(),
+  body: t.text().notNull(),
+  bodyHtml: t.text(),
+  edited: t.boolean().notNull().default(false),
+  createdAt: t.timestamp().defaultNow().notNull(),
+  updatedAt: t
+    .timestamp({ mode: "date", withTimezone: true })
+    .$onUpdateFn(() => sql`now()`),
+}));
+
+export const CreateCommentSchema = createInsertSchema(comments, {
+  body: z.string().min(1).max(10000),
+  bodyHtml: z.string().optional(),
+}).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const activities = pgTable("activities", (t) => ({
+  id: t.uuid().notNull().primaryKey().defaultRandom(),
+  workItemId: t
+    .uuid()
+    .notNull()
+    .references(() => workItems.id, { onDelete: "cascade" }),
+  userId: t.text().references(() => user.id, { onDelete: "set null" }),
+  type: workItemActivityTypeEnum().notNull(),
+  fromValue: t.text(),
+  toValue: t.text(),
+  metadata: t.json().$type<Record<string, unknown>>(),
+  createdAt: t.timestamp().defaultNow().notNull(),
+}));
+
+export const workItemArtifacts = pgTable("work_item_artifacts", (t) => ({
+  id: t.uuid().notNull().primaryKey().defaultRandom(),
+  workItemId: t
+    .uuid()
+    .notNull()
+    .references(() => workItems.id, { onDelete: "cascade" }),
+  taskRunId: t.uuid().references(() => taskRuns.id, { onDelete: "set null" }),
+  producerType: workItemArtifactProducerTypeEnum().notNull(),
+  producerId: t.text(),
+  artifactType: workItemArtifactTypeEnum().notNull(),
+  artifactRole: t.text().notNull(),
+  url: t.text().notNull(),
+  title: t.text(),
+  summary: t.text(),
+  metadata: t.json().$type<Record<string, unknown>>(),
+  isCurrent: t.boolean().notNull().default(true),
+  createdAt: t.timestamp().defaultNow().notNull(),
+}));
+
+export const CreateWorkItemArtifactSchema = createInsertSchema(
+  workItemArtifacts,
+  {
+    producerType: z.enum(workItemArtifactProducerType),
+    artifactType: z.enum(workItemArtifactType),
+    artifactRole: z.string().min(1),
+    url: z.string().url(),
+    title: z.string().optional(),
+    summary: z.string().optional(),
+  },
+).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const notifications = pgTable("notifications", (t) => ({
+  id: t.uuid().notNull().primaryKey().defaultRandom(),
+  userId: t
+    .text()
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  workItemId: t
+    .uuid()
+    .references(() => workItems.id, { onDelete: "cascade" }),
+  actorId: t.text().references(() => user.id, { onDelete: "set null" }),
+  type: workItemNotificationTypeEnum().notNull(),
+  title: t.text().notNull(),
+  body: t.text(),
+  url: t.text(),
+  read: t.boolean().notNull().default(false),
+  readAt: t.timestamp({ mode: "date", withTimezone: true }),
+  archivedAt: t.timestamp({ mode: "date", withTimezone: true }),
+  createdAt: t.timestamp().defaultNow().notNull(),
+}));
+
+export const CreateNotificationSchema = createInsertSchema(notifications, {
+  type: z.enum(workItemNotificationType),
+  title: z.string().min(1).max(256),
+  body: z.string().optional(),
+  url: z.string().url().optional(),
+}).omit({
+  id: true,
+  read: true,
+  readAt: true,
+  archivedAt: true,
+  createdAt: true,
+});
+
 // 6.1a Device Push Tokens (for mobile notifications)
 export const devicePushTokens = pgTable("device_push_tokens", (t) => ({
   id: t.uuid().notNull().primaryKey().defaultRandom(),
@@ -1126,6 +1289,57 @@ export const taskRunsRelations = relations(taskRuns, ({ one }) => ({
   pullRequest: one(pullRequests, {
     fields: [taskRuns.pullRequestId],
     references: [pullRequests.id],
+  }),
+}));
+
+export const commentsRelations = relations(comments, ({ one }) => ({
+  workItem: one(workItems, {
+    fields: [comments.workItemId],
+    references: [workItems.id],
+  }),
+  user: one(user, {
+    fields: [comments.userId],
+    references: [user.id],
+  }),
+}));
+
+export const activitiesRelations = relations(activities, ({ one }) => ({
+  workItem: one(workItems, {
+    fields: [activities.workItemId],
+    references: [workItems.id],
+  }),
+  user: one(user, {
+    fields: [activities.userId],
+    references: [user.id],
+  }),
+}));
+
+export const workItemArtifactsRelations = relations(
+  workItemArtifacts,
+  ({ one }) => ({
+    workItem: one(workItems, {
+      fields: [workItemArtifacts.workItemId],
+      references: [workItems.id],
+    }),
+    taskRun: one(taskRuns, {
+      fields: [workItemArtifacts.taskRunId],
+      references: [taskRuns.id],
+    }),
+  }),
+);
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(user, {
+    fields: [notifications.userId],
+    references: [user.id],
+  }),
+  workItem: one(workItems, {
+    fields: [notifications.workItemId],
+    references: [workItems.id],
+  }),
+  actor: one(user, {
+    fields: [notifications.actorId],
+    references: [user.id],
   }),
 }));
 

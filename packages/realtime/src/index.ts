@@ -3,6 +3,24 @@ import PusherClient from "pusher-js";
 
 import { integrations } from "@bob/config";
 
+export const WORK_ITEM_EVENTS = {
+  UPDATED: "work-item:updated",
+  COMMENT_CREATED: "work-item:comment_created",
+  ARTIFACT_UPDATED: "work-item:artifact_updated",
+  NOTIFICATION_CREATED: "notification:created",
+} as const;
+
+export function getWorkspaceRealtimeChannel(workspaceId: string): string {
+  return `workspace:${workspaceId}`;
+}
+
+export function getWorkItemRealtimeChannel(
+  workspaceId: string,
+  workItemId: string,
+): string {
+  return `${getWorkspaceRealtimeChannel(workspaceId)}:work-item:${workItemId}`;
+}
+
 let pusherServer: Pusher | null = null;
 let pusherClient: PusherClient | null = null;
 
@@ -98,6 +116,19 @@ export async function triggerEvent(
 
   await server.trigger(channel, event, data);
   return true;
+}
+
+export async function triggerWorkItemEvent(input: {
+  workspaceId: string;
+  workItemId: string;
+  event: (typeof WORK_ITEM_EVENTS)[keyof typeof WORK_ITEM_EVENTS];
+  data: Record<string, unknown>;
+}): Promise<boolean> {
+  return triggerEvent(
+    getWorkItemRealtimeChannel(input.workspaceId, input.workItemId),
+    input.event,
+    input.data,
+  );
 }
 
 export { Pusher, PusherClient };
