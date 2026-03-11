@@ -210,6 +210,7 @@ function SessionHeader({
   title,
   status,
   agentType,
+  issueManaged,
   workingDirectory,
   gitBranch,
   workflowState,
@@ -219,6 +220,7 @@ function SessionHeader({
   title: string;
   status: SessionStatus;
   agentType: string;
+  issueManaged?: boolean;
   workingDirectory?: string;
   gitBranch?: string;
   workflowState?: WorkflowState;
@@ -271,6 +273,12 @@ function SessionHeader({
           <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs dark:bg-gray-800">
             {agentType}
           </span>
+          {issueManaged && (
+            <>
+              <span>·</span>
+              <span>Issue-managed session</span>
+            </>
+          )}
           {gitBranch && (
             <>
               <span>·</span>
@@ -285,6 +293,16 @@ function SessionHeader({
           )}
         </div>
       </div>
+      {linkedTask?.url && (
+        <a
+          href={linkedTask.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded border px-3 py-1 text-sm"
+        >
+          Open in Kanbanger
+        </a>
+      )}
     </div>
   );
 }
@@ -774,6 +792,7 @@ function TestPage() {
           title={title}
           status={sessionStatus}
           agentType={agentType}
+          issueManaged={Boolean(searchParams.get("issueManaged"))}
           workingDirectory={workingDirectory}
           gitBranch={gitBranch}
           workflowState={workflowState}

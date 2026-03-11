@@ -605,7 +605,17 @@ function ChatPageContent() {
                 }
                 status={sessionStatus}
                 agentType={activeSessionData.agentType}
+                issueManaged={activeSessionData.issueManaged}
                 workingDirectory={activeSessionData.workingDirectory ?? undefined}
+                gitBranch={activeSessionData.gitBranch ?? undefined}
+                linkedTask={
+                  activeSessionData.linkedTask
+                    ? {
+                        ...activeSessionData.linkedTask,
+                        url: activeSessionData.linkedTask.url ?? undefined,
+                      }
+                    : null
+                }
                 voiceStatus={
                   activeSessionData.agentType === "elevenlabs"
                     ? voiceState.status

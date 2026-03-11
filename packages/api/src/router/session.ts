@@ -2,11 +2,12 @@ import type { TRPCRouterRecord } from "@trpc/server";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod/v4";
 
-import { and, asc, count, desc, eq, gt, lt, sql } from "@bob/db";
+import { and, asc, count, desc, eq, gt, inArray, lt, sql } from "@bob/db";
 import {
   chatConversations,
   sessionConnections,
   sessionEvents,
+  taskRuns,
 } from "@bob/db/schema";
 
 import type { WorkflowStatus } from "../services/sessions/workflowStatusService";
@@ -28,6 +29,7 @@ import { createOpenCodeClient } from "../services/opencode/opencodeClient";
 import { protectedProcedure } from "../trpc";
 
 const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:3002";
+const KANBANGER_URL = process.env.KANBANGER_URL ?? "";
 const getGatewaySocketUrl = (): string => `${GATEWAY_URL.replace(/^http/, "ws")}/sessions`;
 
 // Initialize ElevenLabs session service (singleton)
@@ -105,6 +107,7 @@ export const sessionRouter = {
           lastError: chatConversations.lastError,
           createdAt: chatConversations.createdAt,
           updatedAt: chatConversations.updatedAt,
+          kanbangerTaskId: chatConversations.kanbangerTaskId,
         })
         .from(chatConversations)
         .where(and(...conditions))
@@ -114,9 +117,45 @@ export const sessionRouter = {
       const hasMore = sessions.length > input.limit;
       const items = hasMore ? sessions.slice(0, -1) : sessions;
       const nextCursor = hasMore ? items[items.length - 1]?.id : undefined;
+      const sessionIds = items.map((session) => session.id);
+      const linkedTaskRows =
+        sessionIds.length > 0
+          ? await ctx.db
+              .select({
+                sessionId: taskRuns.sessionId,
+                issueId: taskRuns.kanbangerIssueId,
+                identifier: taskRuns.kanbangerIssueIdentifier,
+              })
+              .from(taskRuns)
+              .where(inArray(taskRuns.sessionId, sessionIds))
+              .orderBy(desc(taskRuns.createdAt))
+          : [];
+      const linkedTaskBySessionId = new Map<
+        string,
+        { id: string; identifier: string; url: string | null }
+      >();
+
+      for (const row of linkedTaskRows) {
+        if (!row.sessionId || linkedTaskBySessionId.has(row.sessionId)) {
+          continue;
+        }
+
+        linkedTaskBySessionId.set(row.sessionId, {
+          id: row.issueId,
+          identifier: row.identifier,
+          url:
+            KANBANGER_URL.length > 0
+              ? `${KANBANGER_URL}/issues/${row.issueId}`
+              : null,
+        });
+      }
 
       return {
-        items,
+        items: items.map((session) => ({
+          ...session,
+          linkedTask: linkedTaskBySessionId.get(session.id) ?? null,
+          issueManaged: Boolean(session.kanbangerTaskId),
+        })),
         nextCursor,
       };
     }),
@@ -142,7 +181,28 @@ export const sessionRouter = {
         });
       }
 
-      return session;
+      const latestTaskRun = await ctx.db.query.taskRuns.findFirst({
+        where: and(
+          eq(taskRuns.sessionId, session.id),
+          eq(taskRuns.userId, ctx.session.user.id),
+        ),
+        orderBy: desc(taskRuns.createdAt),
+      });
+
+      return {
+        ...session,
+        linkedTask: latestTaskRun
+          ? {
+              id: latestTaskRun.kanbangerIssueId,
+              identifier: latestTaskRun.kanbangerIssueIdentifier,
+              url:
+                KANBANGER_URL.length > 0
+                  ? `${KANBANGER_URL}/issues/${latestTaskRun.kanbangerIssueId}`
+                  : null,
+            }
+          : null,
+        issueManaged: Boolean(session.kanbangerTaskId),
+      };
     }),
 
   create: protectedProcedure

@@ -43,6 +43,7 @@ interface SessionHeaderProps {
   title: string;
   status: SessionStatus;
   agentType: string;
+  issueManaged?: boolean;
   workingDirectory?: string;
   gitBranch?: string;
   linkedPr?: LinkedPullRequest | null;
@@ -303,6 +304,7 @@ export function SessionHeader({
   title,
   status,
   agentType,
+  issueManaged,
   workingDirectory,
   gitBranch,
   linkedPr,
@@ -336,6 +338,14 @@ export function SessionHeader({
 
         <div className="chat-sessionHeaderMetaRow">
           <span className="chat-agentPill">{agentType}</span>
+          {issueManaged && (
+            <>
+              <span>·</span>
+              <span className="chat-sessionHeaderMetaValue">
+                Issue-managed session
+              </span>
+            </>
+          )}
           {gitBranch && (
             <>
               <span>·</span>
@@ -363,6 +373,24 @@ export function SessionHeader({
       </div>
 
       <div className="chat-sessionHeaderActions">
+        {linkedTask?.url && (
+          <Button
+            asChild
+            type="button"
+            variant="outline"
+            size="sm"
+            className="chat-headerAction"
+          >
+            <a
+              href={linkedTask.url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open in Kanbanger
+            </a>
+          </Button>
+        )}
+
         {onRename && (
           <Button
             type="button"

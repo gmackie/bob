@@ -145,6 +145,16 @@ test.describe("SessionHeader", () => {
     });
   });
 
+  test("shows linked issue session metadata and Kanbanger deep link", async ({
+    page,
+  }) => {
+    await page.goto(`${TEST_PAGE}&withTask=true&issueManaged=true`);
+    await expect(page.locator("text=Issue-managed session")).toBeVisible();
+    const link = page.getByRole("link", { name: "Open in Kanbanger" });
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute("href", /linear\.app|Kanbanger|issues/);
+  });
+
   test("remains within narrow viewport with long metadata", async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 800 });
     const url = `${TEST_PAGE}`

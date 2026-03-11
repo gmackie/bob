@@ -327,6 +327,20 @@ export function SessionList({
               <span className="chat-sessionItemMetaValue">
                 {session.agentType}
               </span>
+              {session.issueManaged && (
+                <>
+                  <span>·</span>
+                  <span className="chat-sessionItemMetaValue">Issue-managed</span>
+                </>
+              )}
+              {session.linkedTask && (
+                <>
+                  <span>·</span>
+                  <span className="chat-sessionItemMetaValue">
+                    {session.linkedTask.identifier}
+                  </span>
+                </>
+              )}
               <span>·</span>
               <span>
                 {formatRelativeTime(
