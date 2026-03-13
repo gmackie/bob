@@ -3,9 +3,10 @@ import { db } from "@bob/db/client";
 import { chatConversations, taskRuns } from "@bob/db/schema";
 
 import { createHash } from "node:crypto";
-
-const KANBANGER_URL = process.env.KANBANGER_URL ?? "https://tasks.gmac.io";
-const KANBANGER_API_KEY = process.env.KANBANGER_API_KEY;
+import {
+  getPlanningApiKey,
+  getPlanningBaseUrl,
+} from "./planningRemoteConfig";
 
 export type KanbangerIssueStatus =
   | "todo"
@@ -149,18 +150,20 @@ async function kanbangerMutation<T>(
   input: unknown,
   idempotencyKey: string,
 ): Promise<T | null> {
-  if (!KANBANGER_API_KEY) {
+  const planningApiKey = getPlanningApiKey();
+
+  if (!planningApiKey) {
     console.warn(
-      `[KanbangerWriteService] KANBANGER_API_KEY not set, skipping ${path}`,
+      `[KanbangerWriteService] PLANNING_API_KEY not set, skipping ${path}`,
     );
     return null;
   }
 
-  const response = await fetch(`${KANBANGER_URL}/api/trpc/${path}`, {
+  const response = await fetch(`${getPlanningBaseUrl()}/api/trpc/${path}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-API-Key": KANBANGER_API_KEY,
+      "X-API-Key": planningApiKey,
       "Idempotency-Key": idempotencyKey,
     },
     body: JSON.stringify({ "0": { json: input } }),
@@ -168,7 +171,7 @@ async function kanbangerMutation<T>(
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`Kanbanger API error for ${path}: ${text}`);
+    throw new Error(`Planning API error for ${path}: ${text}`);
   }
 
   const result = (await response.json()) as Array<{
@@ -177,7 +180,7 @@ async function kanbangerMutation<T>(
   }>;
 
   if (result[0]?.error) {
-    throw new Error(result[0].error.message ?? `Kanbanger error for ${path}`);
+    throw new Error(result[0].error.message ?? `Planning error for ${path}`);
   }
 
   return result[0]?.result?.data?.json ?? null;

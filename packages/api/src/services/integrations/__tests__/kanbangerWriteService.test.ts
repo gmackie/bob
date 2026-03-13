@@ -26,6 +26,8 @@ describe("kanbangerWriteService", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    delete process.env.PLANNING_URL;
+    delete process.env.PLANNING_API_KEY;
     process.env.KANBANGER_URL = "https://tasks.example.com";
     process.env.KANBANGER_API_KEY = "test-api-key";
 
@@ -231,5 +233,46 @@ describe("kanbangerWriteService", () => {
       lastPromptCommentId: "comment-123",
     });
     expect(syncBody["0"].json.idempotencyKey).toBeTruthy();
+  });
+
+  it("prefers planning env aliases when writing remote task updates", async () => {
+    delete process.env.KANBANGER_URL;
+    delete process.env.KANBANGER_API_KEY;
+    process.env.PLANNING_URL = "https://planning.example.com";
+    process.env.PLANNING_API_KEY = "planning-api-key";
+
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          {
+            result: {
+              data: {
+                json: {
+                  duplicated: false,
+                },
+              },
+            },
+          },
+        ]),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const { reportMilestone } = await import("../kanbangerWriteService");
+
+    await reportMilestone({
+      userId: "user-123",
+      sessionId: "session-123",
+      kind: "progress",
+      message: "Moved aliases to planning config",
+    });
+
+    const [url, init] = (global.fetch as unknown as ReturnType<typeof vi.fn>)
+      .mock.calls[0] as [string, { headers: Record<string, string> }];
+
+    expect(url).toBe(
+      "https://planning.example.com/api/trpc/agent.syncBobRun",
+    );
+    expect(init.headers["X-API-Key"]).toBe("planning-api-key");
   });
 });

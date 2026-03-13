@@ -26,10 +26,10 @@ import {
 } from "../services/sessions/workflowStatusService";
 import { createElevenLabsSessionService } from "../services/voice/elevenlabsSession";
 import { createOpenCodeClient } from "../services/opencode/opencodeClient";
+import { buildPlanningWorkItemUrl } from "../services/integrations/planningRemoteConfig";
 import { protectedProcedure } from "../trpc";
 
 const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:3002";
-const KANBANGER_URL = process.env.KANBANGER_URL ?? "";
 const getGatewaySocketUrl = (): string => `${GATEWAY_URL.replace(/^http/, "ws")}/sessions`;
 
 // Initialize ElevenLabs session service (singleton)
@@ -143,10 +143,7 @@ export const sessionRouter = {
         linkedTaskBySessionId.set(row.sessionId, {
           id: row.issueId,
           identifier: row.identifier,
-          url:
-            KANBANGER_URL.length > 0
-              ? `${KANBANGER_URL}/issues/${row.issueId}`
-              : null,
+          url: buildPlanningWorkItemUrl(row.issueId),
         });
       }
 
@@ -195,10 +192,7 @@ export const sessionRouter = {
           ? {
               id: latestTaskRun.kanbangerIssueId,
               identifier: latestTaskRun.kanbangerIssueIdentifier,
-              url:
-                KANBANGER_URL.length > 0
-                  ? `${KANBANGER_URL}/issues/${latestTaskRun.kanbangerIssueId}`
-                  : null,
+              url: buildPlanningWorkItemUrl(latestTaskRun.kanbangerIssueId),
             }
           : null,
         issueManaged: Boolean(session.kanbangerTaskId),

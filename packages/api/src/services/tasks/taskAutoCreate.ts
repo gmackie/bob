@@ -12,10 +12,10 @@ import {
   buildContextFromPR,
   evaluateContextReadiness,
 } from "./contextHeuristics";
-
-const KANBANGER_API_URL =
-  process.env.KANBANGER_API_URL ?? "https://tasks.gmac.io/api";
-const KANBANGER_API_KEY = process.env.KANBANGER_API_KEY;
+import {
+  getPlanningApiKey,
+  getPlanningApiUrl,
+} from "../integrations/planningRemoteConfig";
 
 export interface KanbangerCreateIssueInput {
   workspaceId: string;
@@ -50,22 +50,24 @@ async function kanbangerRequest<T>(
   method: "GET" | "POST" | "PATCH" = "GET",
   body?: Record<string, unknown>,
 ): Promise<T> {
-  if (!KANBANGER_API_KEY) {
-    throw new Error("KANBANGER_API_KEY is not configured");
+  const planningApiKey = getPlanningApiKey();
+
+  if (!planningApiKey) {
+    throw new Error("PLANNING_API_KEY is not configured");
   }
 
-  const response = await fetch(`${KANBANGER_API_URL}${endpoint}`, {
+  const response = await fetch(`${getPlanningApiUrl()}${endpoint}`, {
     method,
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${KANBANGER_API_KEY}`,
+      Authorization: `Bearer ${planningApiKey}`,
     },
     body: body ? JSON.stringify(body) : undefined,
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Kanbanger API error (${response.status}): ${errorText}`);
+    throw new Error(`Planning API error (${response.status}): ${errorText}`);
   }
 
   return response.json() as Promise<T>;

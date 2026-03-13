@@ -2,16 +2,19 @@ import type { TRPCRouterRecord } from "@trpc/server";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod/v4";
 
+import {
+  getPlanningApiKey,
+  getPlanningBaseUrl,
+} from "../services/integrations/planningRemoteConfig";
 import { protectedProcedure } from "../trpc";
 
-const KANBANGER_URL = process.env.KANBANGER_URL ?? "https://tasks.gmac.io";
-const KANBANGER_API_KEY = process.env.KANBANGER_API_KEY;
-
 async function kanbangerQuery<T>(path: string, input?: unknown): Promise<T> {
-  if (!KANBANGER_API_KEY) {
+  const planningApiKey = getPlanningApiKey();
+
+  if (!planningApiKey) {
     throw new TRPCError({
       code: "PRECONDITION_FAILED",
-      message: "KANBANGER_API_KEY not configured",
+      message: "PLANNING_API_KEY not configured",
     });
   }
 
@@ -22,11 +25,11 @@ async function kanbangerQuery<T>(path: string, input?: unknown): Promise<T> {
     input: JSON.stringify(inputObj),
   });
 
-  const url = `${KANBANGER_URL}/api/trpc/${path}?${qs.toString()}`;
+  const url = `${getPlanningBaseUrl()}/api/trpc/${path}?${qs.toString()}`;
   const response = await fetch(url, {
     method: "GET",
     headers: {
-      "X-API-Key": KANBANGER_API_KEY,
+      "X-API-Key": planningApiKey,
     },
   });
 
@@ -34,7 +37,7 @@ async function kanbangerQuery<T>(path: string, input?: unknown): Promise<T> {
     const text = await response.text();
     throw new TRPCError({
       code: "INTERNAL_SERVER_ERROR",
-      message: `Kanbanger API error: ${text}`,
+      message: `Planning API error: ${text}`,
     });
   }
 
@@ -45,7 +48,7 @@ async function kanbangerQuery<T>(path: string, input?: unknown): Promise<T> {
   if (result[0]?.error) {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: result[0].error.message ?? "Kanbanger error",
+      message: result[0].error.message ?? "Planning error",
     });
   }
 
@@ -53,19 +56,21 @@ async function kanbangerQuery<T>(path: string, input?: unknown): Promise<T> {
 }
 
 async function kanbangerMutation<T>(path: string, input?: unknown): Promise<T> {
-  if (!KANBANGER_API_KEY) {
+  const planningApiKey = getPlanningApiKey();
+
+  if (!planningApiKey) {
     throw new TRPCError({
       code: "PRECONDITION_FAILED",
-      message: "KANBANGER_API_KEY not configured",
+      message: "PLANNING_API_KEY not configured",
     });
   }
 
-  const url = `${KANBANGER_URL}/api/trpc/${path}`;
+  const url = `${getPlanningBaseUrl()}/api/trpc/${path}`;
   const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-API-Key": KANBANGER_API_KEY,
+      "X-API-Key": planningApiKey,
     },
     body: JSON.stringify(
       input ? { "0": { json: input } } : { "0": { json: {} } },
@@ -76,7 +81,7 @@ async function kanbangerMutation<T>(path: string, input?: unknown): Promise<T> {
     const text = await response.text();
     throw new TRPCError({
       code: "INTERNAL_SERVER_ERROR",
-      message: `Kanbanger API error: ${text}`,
+      message: `Planning API error: ${text}`,
     });
   }
 
@@ -87,7 +92,7 @@ async function kanbangerMutation<T>(path: string, input?: unknown): Promise<T> {
   if (result[0]?.error) {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: result[0].error.message ?? "Kanbanger error",
+      message: result[0].error.message ?? "Planning error",
     });
   }
 
