@@ -5,13 +5,13 @@ import { db } from "@bob/db/client";
 import { agentInstances, repositories, taskRuns } from "@bob/db/schema";
 
 import { getSession } from "~/auth/server";
-
-const KANBANGER_URL = process.env.KANBANGER_URL ?? "https://tasks.gmac.io";
-const KANBANGER_API_KEY = process.env.KANBANGER_API_KEY;
+import { getPlanningRemoteConfig } from "~/lib/planning/remote-config";
 
 async function kanbangerQuery<T>(path: string, input?: unknown): Promise<T> {
-  if (!KANBANGER_API_KEY) {
-    throw new Error("KANBANGER_API_KEY not configured");
+  const { baseUrl, apiKey } = getPlanningRemoteConfig();
+
+  if (!apiKey) {
+    throw new Error("PLANNING_API_KEY not configured");
   }
 
   const inputObj = { "0": { json: input ?? {} } };
@@ -20,18 +20,18 @@ async function kanbangerQuery<T>(path: string, input?: unknown): Promise<T> {
     input: JSON.stringify(inputObj),
   });
 
-  const url = `${KANBANGER_URL}/api/trpc/${path}?${qs.toString()}`;
+  const url = `${baseUrl}/api/trpc/${path}?${qs.toString()}`;
   const response = await fetch(url, {
     method: "GET",
     headers: {
-      "X-API-Key": KANBANGER_API_KEY,
+      "X-API-Key": apiKey,
     },
     cache: "no-store",
   });
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`Kanbanger API error: ${text}`);
+    throw new Error(`Planning API error: ${text}`);
   }
 
   const result = (await response.json()) as Array<{
@@ -39,7 +39,7 @@ async function kanbangerQuery<T>(path: string, input?: unknown): Promise<T> {
     error?: { message?: string };
   }>;
   if (result[0]?.error) {
-    throw new Error(result[0].error.message ?? "Kanbanger error");
+    throw new Error(result[0].error.message ?? "Planning error");
   }
 
   return result[0]?.result?.data?.json as T;
@@ -205,17 +205,17 @@ export async function GET(request: Request) {
 
     let workspace: KanbangerWorkspace = {
       id: "",
-      name: "Kanbanger unavailable",
+      name: "Planning unavailable",
       slug: "",
     };
     let projects: KanbangerProjectListItem[] = [];
     let projectGets: KanbangerProjectGet[] = [];
     let inReviewIssues: KanbangerIssue[] = [];
     let doneIssues: KanbangerIssue[] = [];
-    let kanbangerError: string | null = null;
+    let planningError: string | null = null;
 
-    if (!KANBANGER_API_KEY) {
-      kanbangerError = "KANBANGER_API_KEY not configured";
+    if (!getPlanningRemoteConfig().apiKey) {
+      planningError = "PLANNING_API_KEY not configured";
     } else {
       try {
         const memberships = await kanbangerQuery<any[]>("workspace.list");
@@ -234,7 +234,7 @@ export async function GET(request: Request) {
             : undefined) ?? workspaces[0];
 
         if (!selectedWorkspace) {
-          kanbangerError = "No Kanbanger workspaces found";
+          planningError = "No planning workspaces found";
         } else {
           workspace = selectedWorkspace;
 
@@ -264,8 +264,8 @@ export async function GET(request: Request) {
           ]);
         }
       } catch (error) {
-        kanbangerError =
-          error instanceof Error ? error.message : "Kanbanger unavailable";
+        planningError =
+          error instanceof Error ? error.message : "Planning unavailable";
       }
     }
 
@@ -363,9 +363,9 @@ export async function GET(request: Request) {
         inReview: totalInReview,
         doneLast24h: totalDone24h,
       },
-      kanbanger: {
-        available: kanbangerError === null,
-        error: kanbangerError,
+      planning: {
+        available: planningError === null,
+        error: planningError,
       },
       projects: projectRows,
       activeRuns: activeRuns.map((r) => ({

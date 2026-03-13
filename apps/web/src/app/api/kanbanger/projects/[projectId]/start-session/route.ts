@@ -17,6 +17,7 @@ import {
 } from "@bob/db/schema";
 
 import { getSession } from "~/auth/server";
+import { getPlanningRemoteConfig } from "~/lib/planning/remote-config";
 import { getServices } from "~/server/services";
 
 const execAsync = promisify(exec);
@@ -42,12 +43,11 @@ type KanbangerIssueByIdentifier = {
   projectId: string;
 };
 
-const KANBANGER_URL = process.env.KANBANGER_URL ?? "https://tasks.gmac.io";
-const KANBANGER_API_KEY = process.env.KANBANGER_API_KEY;
-
 async function kanbangerQuery<T>(path: string, input?: unknown): Promise<T> {
-  if (!KANBANGER_API_KEY) {
-    throw new Error("KANBANGER_API_KEY not configured");
+  const { baseUrl, apiKey } = getPlanningRemoteConfig();
+
+  if (!apiKey) {
+    throw new Error("PLANNING_API_KEY not configured");
   }
 
   const inputObj = { "0": { json: input ?? {} } };
@@ -56,18 +56,18 @@ async function kanbangerQuery<T>(path: string, input?: unknown): Promise<T> {
     input: JSON.stringify(inputObj),
   });
 
-  const url = `${KANBANGER_URL}/api/trpc/${path}?${qs.toString()}`;
+  const url = `${baseUrl}/api/trpc/${path}?${qs.toString()}`;
   const response = await fetch(url, {
     method: "GET",
     headers: {
-      "X-API-Key": KANBANGER_API_KEY,
+      "X-API-Key": apiKey,
     },
     cache: "no-store",
   });
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`Kanbanger API error: ${text}`);
+    throw new Error(`Planning API error: ${text}`);
   }
 
   const result = (await response.json()) as Array<{
@@ -75,7 +75,7 @@ async function kanbangerQuery<T>(path: string, input?: unknown): Promise<T> {
     error?: { message?: string };
   }>;
   if (result[0]?.error) {
-    throw new Error(result[0].error.message ?? "Kanbanger error");
+    throw new Error(result[0].error.message ?? "Planning error");
   }
 
   return result[0]?.result?.data?.json as T;

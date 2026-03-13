@@ -14,10 +14,8 @@ import { and, eq, isNotNull, ne } from "@bob/db";
 import { db } from "@bob/db/client";
 import { repositories, user } from "@bob/db/schema";
 
+import { getPlanningRemoteConfig } from "~/lib/planning/remote-config";
 import { getServices } from "~/server/services";
-
-const KANBANGER_URL = process.env.KANBANGER_URL ?? "https://tasks.gmac.io";
-const KANBANGER_API_KEY = process.env.KANBANGER_API_KEY;
 
 interface KanbangerProjectListItem {
   project: {
@@ -238,8 +236,10 @@ function pickBestByScore<T>(
 }
 
 async function kanbangerRequest<T>(path: string, input: unknown): Promise<T> {
-  if (!KANBANGER_API_KEY) {
-    throw new Error("KANBANGER_API_KEY not configured");
+  const { baseUrl, apiKey } = getPlanningRemoteConfig();
+
+  if (!apiKey) {
+    throw new Error("PLANNING_API_KEY not configured");
   }
 
   // tasks.gmac.io (Kanbanger) rejects POST for query procedures; use GET batch format.
@@ -249,16 +249,16 @@ async function kanbangerRequest<T>(path: string, input: unknown): Promise<T> {
     input: JSON.stringify(inputObj),
   });
 
-  const url = `${KANBANGER_URL}/api/trpc/${path}?${qs.toString()}`;
+  const url = `${baseUrl}/api/trpc/${path}?${qs.toString()}`;
   const response = await fetch(url, {
     method: "GET",
     headers: {
-      "X-API-Key": KANBANGER_API_KEY,
+      "X-API-Key": apiKey,
     },
   });
 
   if (!response.ok) {
-    throw new Error(`Kanbanger API error: ${await response.text()}`);
+    throw new Error(`Planning API error: ${await response.text()}`);
   }
 
   const result = (await response.json()) as Array<{
@@ -267,7 +267,7 @@ async function kanbangerRequest<T>(path: string, input: unknown): Promise<T> {
   }>;
 
   if (result[0]?.error) {
-    throw new Error(result[0].error.message ?? "Kanbanger error");
+    throw new Error(result[0].error.message ?? "Planning error");
   }
 
   return result[0]?.result?.data?.json as T;
@@ -577,9 +577,9 @@ export async function syncKanbangerReposForBobUser(input: {
   dryRun?: boolean;
   includeCandidates?: boolean;
 }): Promise<KanbangerSyncReposResult> {
-  if (!KANBANGER_API_KEY) {
+  if (!getPlanningRemoteConfig().apiKey) {
     const err: ErrorWithStatusCode = new Error(
-      "KANBANGER_API_KEY not configured",
+      "PLANNING_API_KEY not configured",
     );
     err.statusCode = 412;
     throw err;
