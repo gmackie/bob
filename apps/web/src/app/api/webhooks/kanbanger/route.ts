@@ -21,18 +21,26 @@ import {
   getLatestTaskRunByKanbangerId,
   supersedeAndRestartTask,
 } from "~/lib/tasks/taskExecutor";
+import {
+  getPlanningWebhookSecret,
+  isPlanningWebhookHeader,
+} from "~/lib/planning/webhook-config";
 
-const KANBANGER_WEBHOOK_SECRET = env.KANBANGER_WEBHOOK_SECRET;
+const KANBANGER_WEBHOOK_SECRET =
+  getPlanningWebhookSecret(process.env) ?? env.PLANNING_WEBHOOK_SECRET ?? env.KANBANGER_WEBHOOK_SECRET;
 
 export async function POST(request: Request): Promise<NextResponse> {
   const eventType =
     request.headers.get("X-Webhook-Event") ??
+    request.headers.get("X-Planning-Event") ??
     request.headers.get("X-Kanbanger-Event");
   const signature =
     request.headers.get("X-Webhook-Signature") ??
+    request.headers.get("X-Planning-Signature") ??
     request.headers.get("X-Kanbanger-Signature");
   const deliveryId =
     request.headers.get("X-Webhook-Delivery") ??
+    request.headers.get("X-Planning-Delivery") ??
     request.headers.get("X-Kanbanger-Delivery");
 
   if (!eventType) {
@@ -87,11 +95,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const headers: Record<string, string> = {};
   request.headers.forEach((value, key) => {
-    if (
-      key.startsWith("x-kanbanger") ||
-      key.startsWith("x-webhook") ||
-      key === "content-type"
-    ) {
+    if (isPlanningWebhookHeader(key)) {
       headers[key] = value;
     }
   });
