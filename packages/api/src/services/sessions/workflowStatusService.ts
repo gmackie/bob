@@ -9,7 +9,7 @@ import {
   recordVerificationResult as writeVerificationResult,
   reportMilestone,
   requestInputPrompt,
-} from "../integrations/kanbangerWriteService";
+} from "../integrations/planningWriteService";
 
 export const workflowStatusValues = [
   "started",

@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import type { ZodType } from "zod";
 import { ZodError } from "zod";
 
-import { getKanbangerControlConfig } from "@bob/api/services/integrations/kanbangerConfig";
-import { verifyKanbangerControlRequest } from "@bob/api/services/integrations/kanbangerVerifier";
+import { getPlanningControlConfig } from "@bob/api/services/integrations/planningControlConfig";
+import { verifyPlanningControlRequest } from "@bob/api/services/integrations/planningControlVerifier";
 
 interface SignedJsonRequestResult<T> {
   payload: T;
@@ -61,8 +61,8 @@ export async function parseSignedJsonRequest<T>(
   schema: ZodType<T>,
 ): Promise<SignedJsonRequestResult<T>> {
   const body = await request.text();
-  const config = getKanbangerControlConfig();
-  const requestId = verifyKanbangerControlRequest(
+  const config = getPlanningControlConfig();
+  const requestId = verifyPlanningControlRequest(
     {
       method: request.method,
       path: getRequestPath(request),
@@ -98,8 +98,8 @@ export async function parseSignedJsonRequest<T>(
 export function verifySignedQueryRequest(
   request: Request,
 ): SignedQueryRequestResult {
-  const config = getKanbangerControlConfig();
-  const requestId = verifyKanbangerControlRequest(
+  const config = getPlanningControlConfig();
+  const requestId = verifyPlanningControlRequest(
     {
       method: request.method,
       path: getRequestPath(request),

@@ -1,27 +1,27 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  buildKanbangerControlSignature,
-  verifyKanbangerControlRequest,
-} from "../../services/integrations/kanbangerVerifier";
-import type { KanbangerControlAuthError } from "../../services/integrations/kanbangerVerifier";
-import { getKanbangerControlConfig } from "../../services/integrations/kanbangerConfig";
+  buildPlanningControlSignature,
+  verifyPlanningControlRequest,
+} from "../../services/integrations/planningControlVerifier";
+import type { PlanningControlAuthError } from "../../services/integrations/planningControlVerifier";
+import { getPlanningControlConfig } from "../../services/integrations/planningControlConfig";
 
 describe("Kanbanger control request verification", () => {
-  const config = getKanbangerControlConfig({
+  const config = getPlanningControlConfig({
     KANBANGER_URL: "https://tasks.example.internal",
     KANBANGER_CONTROL_SHARED_SECRET: "super-secret",
     KANBANGER_CONTROL_MAX_SKEW_MS: "300000",
   });
 
-  function getAuthError(fn: () => void): KanbangerControlAuthError {
+  function getAuthError(fn: () => void): PlanningControlAuthError {
     try {
       fn();
     } catch (error) {
-      return error as KanbangerControlAuthError;
+      return error as PlanningControlAuthError;
     }
 
-    throw new Error("Expected KanbangerControlAuthError to be thrown");
+    throw new Error("Expected PlanningControlAuthError to be thrown");
   }
 
   it("accepts valid signed requests", () => {
@@ -35,7 +35,7 @@ describe("Kanbanger control request verification", () => {
     const headers = new Headers({
       "X-Kanbanger-Timestamp": timestamp,
       "Idempotency-Key": idempotencyKey,
-      "X-Kanbanger-Signature": buildKanbangerControlSignature(
+      "X-Kanbanger-Signature": buildPlanningControlSignature(
         {
           method: "POST",
           path: "/api/integrations/kanbanger/issues/start",
@@ -48,7 +48,7 @@ describe("Kanbanger control request verification", () => {
     });
 
     expect(
-      verifyKanbangerControlRequest(
+      verifyPlanningControlRequest(
         {
           method: "POST",
           path: "/api/integrations/kanbanger/issues/start",
@@ -67,7 +67,7 @@ describe("Kanbanger control request verification", () => {
   });
 
   it("accepts planning-named env vars and headers", () => {
-    const planningConfig = getKanbangerControlConfig({
+    const planningConfig = getPlanningControlConfig({
       PLANNING_URL: "https://planning.example.internal",
       PLANNING_CONTROL_SHARED_SECRET: "planning-secret",
       PLANNING_CONTROL_MAX_SKEW_MS: "600000",
@@ -82,7 +82,7 @@ describe("Kanbanger control request verification", () => {
     const headers = new Headers({
       "X-Planning-Timestamp": timestamp,
       "Idempotency-Key": idempotencyKey,
-      "X-Planning-Signature": buildKanbangerControlSignature(
+      "X-Planning-Signature": buildPlanningControlSignature(
         {
           method: "POST",
           path: "/api/integrations/planning/tasks/start",
@@ -100,7 +100,7 @@ describe("Kanbanger control request verification", () => {
       maxSkewMs: 600000,
     });
     expect(
-      verifyKanbangerControlRequest(
+      verifyPlanningControlRequest(
         {
           method: "POST",
           path: "/api/integrations/planning/tasks/start",
@@ -128,7 +128,7 @@ describe("Kanbanger control request verification", () => {
     const headers = new Headers({
       "X-Kanbanger-Timestamp": timestamp,
       "Idempotency-Key": idempotencyKey,
-      "X-Kanbanger-Signature": buildKanbangerControlSignature(
+      "X-Kanbanger-Signature": buildPlanningControlSignature(
         {
           method: "POST",
           path: "/api/integrations/kanbanger/issues/start",
@@ -141,7 +141,7 @@ describe("Kanbanger control request verification", () => {
     });
 
     const error = getAuthError(() =>
-      verifyKanbangerControlRequest(
+      verifyPlanningControlRequest(
         {
           method: "POST",
           path: "/api/integrations/kanbanger/issues/start",
@@ -168,7 +168,7 @@ describe("Kanbanger control request verification", () => {
     const headers = new Headers({
       "X-Kanbanger-Timestamp": timestamp,
       "Idempotency-Key": idempotencyKey,
-      "X-Kanbanger-Signature": buildKanbangerControlSignature(
+      "X-Kanbanger-Signature": buildPlanningControlSignature(
         {
           method: "POST",
           path: "/api/integrations/kanbanger/issues/start",
@@ -181,7 +181,7 @@ describe("Kanbanger control request verification", () => {
     });
 
     const error = getAuthError(() =>
-      verifyKanbangerControlRequest(
+      verifyPlanningControlRequest(
         {
           method: "POST",
           path: "/api/integrations/kanbanger/issues/start",
@@ -208,7 +208,7 @@ describe("Kanbanger control request verification", () => {
 
     const headers = new Headers({
       "X-Kanbanger-Timestamp": timestamp,
-      "X-Kanbanger-Signature": buildKanbangerControlSignature(
+      "X-Kanbanger-Signature": buildPlanningControlSignature(
         {
           method: "POST",
           path: "/api/integrations/kanbanger/issues/start",
@@ -221,7 +221,7 @@ describe("Kanbanger control request verification", () => {
     });
 
     const error = getAuthError(() =>
-      verifyKanbangerControlRequest(
+      verifyPlanningControlRequest(
         {
           method: "POST",
           path: "/api/integrations/kanbanger/issues/start",

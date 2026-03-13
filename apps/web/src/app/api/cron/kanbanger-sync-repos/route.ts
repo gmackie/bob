@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { syncKanbangerReposForBobUser } from "~/server/kanbanger/sync-repos";
+import { syncPlanningReposForBobUser } from "~/server/planning/sync-repos";
 import { getPlanningRemoteConfig } from "~/lib/planning/remote-config";
 
 function getStatusCode(error: unknown): number | undefined {
@@ -31,7 +31,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   const userIdParam = url.searchParams.get("userId");
 
   try {
-    const result = await syncKanbangerReposForBobUser({
+    const result = await syncPlanningReposForBobUser({
       workspaceId,
       userId: userIdParam,
     });

@@ -8,7 +8,7 @@ import {
 } from "../services/integrations/planningRemoteConfig";
 import { protectedProcedure } from "../trpc";
 
-async function kanbangerQuery<T>(path: string, input?: unknown): Promise<T> {
+async function planningQuery<T>(path: string, input?: unknown): Promise<T> {
   const planningApiKey = getPlanningApiKey();
 
   if (!planningApiKey) {
@@ -55,7 +55,7 @@ async function kanbangerQuery<T>(path: string, input?: unknown): Promise<T> {
   return result[0]?.result?.data?.json as T;
 }
 
-async function kanbangerMutation<T>(path: string, input?: unknown): Promise<T> {
+async function planningMutation<T>(path: string, input?: unknown): Promise<T> {
   const planningApiKey = getPlanningApiKey();
 
   if (!planningApiKey) {
@@ -115,9 +115,9 @@ const taskPriorityEnum = [
   "low",
 ] as const;
 
-export const kanbangerRouter = {
+export const planningRouter = {
   listWorkspaces: protectedProcedure.query(async () => {
-    const memberships = await kanbangerQuery<any[]>("workspace.list");
+    const memberships = await planningQuery<any[]>("workspace.list");
     return memberships
       .map((m) => m?.workspace ?? m)
       .filter(Boolean)
@@ -131,7 +131,7 @@ export const kanbangerRouter = {
   listProjects: protectedProcedure
     .input(z.object({ workspaceId: z.string().uuid() }))
     .query(async ({ input }) => {
-      return kanbangerQuery<
+      return planningQuery<
         Array<{
           project: {
             id: string;
@@ -149,7 +149,7 @@ export const kanbangerRouter = {
   getProject: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ input }) => {
-      return kanbangerQuery<{
+      return planningQuery<{
         project: {
           id: string;
           name: string;
@@ -187,7 +187,7 @@ export const kanbangerRouter = {
         search,
         limit,
       } = input;
-      return kanbangerQuery<
+      return planningQuery<
         Array<{
           id: string;
           identifier: string;
@@ -222,7 +222,7 @@ export const kanbangerRouter = {
   getTask: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ input }) => {
-      return kanbangerQuery<{
+      return planningQuery<{
         id: string;
         identifier: string;
         title: string;
@@ -247,7 +247,7 @@ export const kanbangerRouter = {
       }),
     )
     .query(async ({ input }) => {
-      return kanbangerQuery<{
+      return planningQuery<{
         id: string;
         identifier: string;
         title: string;
@@ -275,7 +275,7 @@ export const kanbangerRouter = {
       }),
     )
     .mutation(async ({ input }) => {
-      return kanbangerMutation<{
+      return planningMutation<{
         id: string;
         identifier: string;
         title: string;
@@ -301,7 +301,7 @@ export const kanbangerRouter = {
     )
     .mutation(async ({ input }) => {
       const { dueDate, ...rest } = input;
-      return kanbangerMutation<{
+      return planningMutation<{
         id: string;
         identifier: string;
         title: string;
@@ -325,7 +325,7 @@ export const kanbangerRouter = {
       }),
     )
     .mutation(async ({ input }) => {
-      return kanbangerMutation<{
+      return planningMutation<{
         id: string;
         body: string;
         createdAt: string;
@@ -340,7 +340,7 @@ export const kanbangerRouter = {
       }),
     )
     .query(async ({ input }) => {
-      return kanbangerQuery<
+      return planningQuery<
         Array<{
           id: string;
           body: string;
@@ -365,7 +365,7 @@ export const kanbangerRouter = {
       }),
     )
     .query(async ({ input }) => {
-      return kanbangerQuery<
+      return planningQuery<
         Array<{
           id: string;
           identifier: string;
@@ -390,7 +390,7 @@ export const kanbangerRouter = {
   listLabels: protectedProcedure
     .input(z.object({ workspaceId: z.string().uuid() }))
     .query(async ({ input }) => {
-      return kanbangerQuery<
+      return planningQuery<
         Array<{
           id: string;
           name: string;
@@ -408,7 +408,7 @@ export const kanbangerRouter = {
       }),
     )
     .query(async ({ input }) => {
-      return kanbangerQuery<
+      return planningQuery<
         Array<{
           id: string;
           name: string;
@@ -424,7 +424,7 @@ export const kanbangerRouter = {
     }),
 
   getCurrentUser: protectedProcedure.query(async () => {
-    return kanbangerQuery<{
+    return planningQuery<{
       id: string;
       email: string;
       name: string;
@@ -441,7 +441,7 @@ export const kanbangerRouter = {
       }),
     )
     .mutation(async ({ input }) => {
-      return kanbangerMutation<{
+      return planningMutation<{
         id: string;
         issueId: string;
         status: string;
@@ -457,7 +457,7 @@ export const kanbangerRouter = {
       }),
     )
     .mutation(async ({ input }) => {
-      return kanbangerMutation<{
+      return planningMutation<{
         id: string;
         status: string;
       }>("agent.reportProgress", input);
@@ -481,7 +481,7 @@ export const kanbangerRouter = {
       }),
     )
     .mutation(async ({ input }) => {
-      return kanbangerMutation<{
+      return planningMutation<{
         id: string;
         status: string;
         completedAt: string;
@@ -507,7 +507,7 @@ export const kanbangerRouter = {
       }),
     )
     .mutation(async ({ input }) => {
-      return kanbangerMutation<{
+      return planningMutation<{
         id: string;
         status: string;
       }>("agent.failTask", input);
@@ -522,7 +522,7 @@ export const kanbangerRouter = {
       }),
     )
     .query(async ({ input }) => {
-      return kanbangerQuery<
+      return planningQuery<
         Array<{
           id: string;
           identifier: string;
@@ -544,7 +544,7 @@ export const kanbangerRouter = {
       }),
     )
     .mutation(async ({ input }) => {
-      return kanbangerMutation<{
+      return planningMutation<{
         id: string;
         startedAt: string;
       }>("agent.startSession", input);
@@ -553,7 +553,7 @@ export const kanbangerRouter = {
   agentEndSession: protectedProcedure
     .input(z.object({ sessionId: z.string().uuid() }))
     .mutation(async ({ input }) => {
-      return kanbangerMutation<{
+      return planningMutation<{
         id: string;
         endedAt: string;
       }>("agent.endSession", input);

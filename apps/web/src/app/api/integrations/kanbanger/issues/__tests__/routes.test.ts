@@ -5,30 +5,30 @@ const {
   resumeIssueSessionMock,
   stopIssueSessionMock,
   getIssueSessionSnapshotMock,
-  getKanbangerControlConfigMock,
-  verifyKanbangerControlRequestMock,
+  getPlanningControlConfigMock,
+  verifyPlanningControlRequestMock,
 } = vi.hoisted(() => ({
   startIssueSessionMock: vi.fn(),
   resumeIssueSessionMock: vi.fn(),
   stopIssueSessionMock: vi.fn(),
   getIssueSessionSnapshotMock: vi.fn(),
-  getKanbangerControlConfigMock: vi.fn(),
-  verifyKanbangerControlRequestMock: vi.fn(),
+  getPlanningControlConfigMock: vi.fn(),
+  verifyPlanningControlRequestMock: vi.fn(),
 }));
 
-vi.mock("~/lib/tasks/kanbangerControl", () => ({
+vi.mock("~/lib/tasks/planningControl", () => ({
   startIssueSession: startIssueSessionMock,
   resumeIssueSession: resumeIssueSessionMock,
   stopIssueSession: stopIssueSessionMock,
   getIssueSessionSnapshot: getIssueSessionSnapshotMock,
 }));
 
-vi.mock("@bob/api/services/integrations/kanbangerConfig", () => ({
-  getKanbangerControlConfig: getKanbangerControlConfigMock,
+vi.mock("@bob/api/services/integrations/planningControlConfig", () => ({
+  getPlanningControlConfig: getPlanningControlConfigMock,
 }));
 
-vi.mock("@bob/api/services/integrations/kanbangerVerifier", () => ({
-  verifyKanbangerControlRequest: verifyKanbangerControlRequestMock,
+vi.mock("@bob/api/services/integrations/planningControlVerifier", () => ({
+  verifyPlanningControlRequest: verifyPlanningControlRequestMock,
 }));
 
 import { GET as getSessionRoute } from "../session/route";
@@ -62,12 +62,12 @@ const snapshot = {
 describe("Kanbanger issue control routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    getKanbangerControlConfigMock.mockReturnValue({
+    getPlanningControlConfigMock.mockReturnValue({
       baseUrl: "https://tasks.example.internal",
       sharedSecret: "super-secret",
       maxSkewMs: 300000,
     });
-    verifyKanbangerControlRequestMock.mockReturnValue({
+    verifyPlanningControlRequestMock.mockReturnValue({
       timestamp: "1710000000000",
       idempotencyKey: "idem-123",
     });

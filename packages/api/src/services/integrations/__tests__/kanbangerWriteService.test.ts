@@ -22,7 +22,7 @@ vi.mock("@bob/db", () => ({
   eq: vi.fn((left, right) => ({ left, right })),
 }));
 
-describe("kanbangerWriteService", () => {
+describe("planningWriteService", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
@@ -64,7 +64,7 @@ describe("kanbangerWriteService", () => {
       ),
     );
 
-    const { reportMilestone } = await import("../kanbangerWriteService");
+    const { reportMilestone } = await import("../planningWriteService");
 
     await reportMilestone({
       userId: "user-123",
@@ -131,7 +131,7 @@ describe("kanbangerWriteService", () => {
         ),
       );
 
-    const { attachArtifact } = await import("../kanbangerWriteService");
+    const { attachArtifact } = await import("../planningWriteService");
 
     await attachArtifact({
       userId: "user-123",
@@ -201,7 +201,7 @@ describe("kanbangerWriteService", () => {
         ),
       );
 
-    const { requestInputPrompt } = await import("../kanbangerWriteService");
+    const { requestInputPrompt } = await import("../planningWriteService");
 
     await requestInputPrompt({
       userId: "user-123",
@@ -258,7 +258,7 @@ describe("kanbangerWriteService", () => {
       ),
     );
 
-    const { reportMilestone } = await import("../kanbangerWriteService");
+    const { reportMilestone } = await import("../planningWriteService");
 
     await reportMilestone({
       userId: "user-123",

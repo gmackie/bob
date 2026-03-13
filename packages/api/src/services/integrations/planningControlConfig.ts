@@ -1,4 +1,4 @@
-export interface KanbangerControlConfig {
+export interface PlanningControlConfig {
   baseUrl: string;
   sharedSecret: string;
   maxSkewMs: number;
@@ -7,9 +7,9 @@ export interface KanbangerControlConfig {
 const DEFAULT_KANBANGER_URL = "https://tasks.gmac.io";
 const DEFAULT_MAX_SKEW_MS = 300_000;
 
-export function getKanbangerControlConfig(
+export function getPlanningControlConfig(
   env: Record<string, string | undefined> = process.env,
-): KanbangerControlConfig {
+): PlanningControlConfig {
   const baseUrl =
     env.PLANNING_URL ??
     env.KANBANGER_URL ??

@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const syncKanbangerReposForBobUser = vi.fn();
+const syncPlanningReposForBobUser = vi.fn();
 
-vi.mock("~/server/kanbanger/sync-repos", () => ({
-  syncKanbangerReposForBobUser,
+vi.mock("~/server/planning/sync-repos", () => ({
+  syncPlanningReposForBobUser,
 }));
 
 describe("cron planning repo sync route", () => {
@@ -16,7 +16,7 @@ describe("cron planning repo sync route", () => {
   });
 
   it("accepts planning api key aliases when invoking the sync route", async () => {
-    syncKanbangerReposForBobUser.mockResolvedValueOnce({
+    syncPlanningReposForBobUser.mockResolvedValueOnce({
       synced: 2,
       skipped: 0,
     });
@@ -39,7 +39,7 @@ describe("cron planning repo sync route", () => {
       synced: 2,
       skipped: 0,
     });
-    expect(syncKanbangerReposForBobUser).toHaveBeenCalledWith({
+    expect(syncPlanningReposForBobUser).toHaveBeenCalledWith({
       workspaceId: "workspace-123",
       userId: null,
     });

@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-import type { KanbangerControlConfig } from "./kanbangerConfig";
+import type { PlanningControlConfig } from "./planningControlConfig";
 
 export const KANBANGER_CONTROL_SIGNATURE_HEADER = "x-kanbanger-signature";
 export const KANBANGER_CONTROL_TIMESTAMP_HEADER = "x-kanbanger-timestamp";
@@ -8,7 +8,7 @@ export const KANBANGER_CONTROL_IDEMPOTENCY_HEADER = "idempotency-key";
 export const PLANNING_CONTROL_SIGNATURE_HEADER = "x-planning-signature";
 export const PLANNING_CONTROL_TIMESTAMP_HEADER = "x-planning-timestamp";
 
-export interface KanbangerControlSignatureInput {
+export interface PlanningControlSignatureInput {
   method: string;
   path: string;
   timestamp: string;
@@ -16,25 +16,25 @@ export interface KanbangerControlSignatureInput {
   body: string;
 }
 
-export interface KanbangerControlRequestLike {
+export interface PlanningControlRequestLike {
   method: string;
   path: string;
   body: string;
   headers: Headers | Record<string, string | null | undefined>;
 }
 
-export interface VerifiedKanbangerControlRequest {
+export interface VerifiedPlanningControlRequest {
   timestamp: string;
   idempotencyKey: string;
 }
 
-export class KanbangerControlAuthError extends Error {
+export class PlanningControlAuthError extends Error {
   readonly code: string;
   readonly status: number;
 
   constructor(message: string, options: { code: string; status: number }) {
     super(message);
-    this.name = "KanbangerControlAuthError";
+    this.name = "PlanningControlAuthError";
     this.code = options.code;
     this.status = options.status;
   }
@@ -49,8 +49,8 @@ function getCanonicalPath(input: string): string {
   return input.startsWith("/") ? input : `/${input}`;
 }
 
-function buildKanbangerControlCanonicalString(
-  input: KanbangerControlSignatureInput,
+function buildPlanningControlCanonicalString(
+  input: PlanningControlSignatureInput,
 ): string {
   return [
     input.method.toUpperCase(),
@@ -61,12 +61,12 @@ function buildKanbangerControlCanonicalString(
   ].join("\n");
 }
 
-export function buildKanbangerControlSignature(
-  input: KanbangerControlSignatureInput,
+export function buildPlanningControlSignature(
+  input: PlanningControlSignatureInput,
   secret: string,
 ): string {
   const digest = createHmac("sha256", secret)
-    .update(buildKanbangerControlCanonicalString(input), "utf8")
+    .update(buildPlanningControlCanonicalString(input), "utf8")
     .digest("hex");
   return `sha256=${digest}`;
 }
@@ -101,7 +101,7 @@ function requireHeader(
   const value = keys.map((header) => getHeader(headers, header)?.trim()).find(Boolean);
 
   if (!value) {
-    throw new KanbangerControlAuthError(message, {
+    throw new PlanningControlAuthError(message, {
       code,
       status: 400,
     });
@@ -124,13 +124,13 @@ function verifySignature(
   }
 }
 
-export function verifyKanbangerControlRequest(
-  request: KanbangerControlRequestLike,
-  config: KanbangerControlConfig,
+export function verifyPlanningControlRequest(
+  request: PlanningControlRequestLike,
+  config: PlanningControlConfig,
   deps: {
     now?: () => number;
   } = {},
-): VerifiedKanbangerControlRequest {
+): VerifiedPlanningControlRequest {
   const timestamp = requireHeader(
     request.headers,
     [KANBANGER_CONTROL_TIMESTAMP_HEADER, PLANNING_CONTROL_TIMESTAMP_HEADER],
@@ -153,7 +153,7 @@ export function verifyKanbangerControlRequest(
   const timestampMs = Number(timestamp);
 
   if (!Number.isFinite(timestampMs)) {
-    throw new KanbangerControlAuthError(
+    throw new PlanningControlAuthError(
       "Invalid planning control timestamp",
       {
         code: "INVALID_TIMESTAMP",
@@ -164,13 +164,13 @@ export function verifyKanbangerControlRequest(
 
   const now = deps.now ?? Date.now;
   if (Math.abs(now() - timestampMs) > config.maxSkewMs) {
-    throw new KanbangerControlAuthError("Stale planning control request", {
+    throw new PlanningControlAuthError("Stale planning control request", {
       code: "STALE_REQUEST",
       status: 401,
     });
   }
 
-  const expectedSignature = buildKanbangerControlSignature(
+  const expectedSignature = buildPlanningControlSignature(
     {
       method: request.method,
       path: request.path,
@@ -182,7 +182,7 @@ export function verifyKanbangerControlRequest(
   );
 
   if (!verifySignature(expectedSignature, signature)) {
-    throw new KanbangerControlAuthError(
+    throw new PlanningControlAuthError(
       "Invalid planning control signature",
       {
         code: "INVALID_SIGNATURE",

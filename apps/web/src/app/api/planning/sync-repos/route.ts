@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getSession } from "~/auth/server";
-import { syncKanbangerReposForBobUser } from "~/server/kanbanger/sync-repos";
+import { syncPlanningReposForBobUser } from "~/server/planning/sync-repos";
 
 function getStatusCode(error: unknown): number | undefined {
   if (!error || typeof error !== "object") return undefined;
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     url.searchParams.get("debug") === "1";
 
   try {
-    const result = await syncKanbangerReposForBobUser({
+    const result = await syncPlanningReposForBobUser({
       workspaceId,
       userId: session?.user?.id ?? null,
       dryRun,

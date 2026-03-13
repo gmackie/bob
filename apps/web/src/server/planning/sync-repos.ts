@@ -571,7 +571,7 @@ export type KanbangerSyncReposResult = {
 
 type ErrorWithStatusCode = Error & { statusCode?: number };
 
-export async function syncKanbangerReposForBobUser(input: {
+export async function syncPlanningReposForBobUser(input: {
   workspaceId?: string | null;
   userId?: string | null;
   dryRun?: boolean;

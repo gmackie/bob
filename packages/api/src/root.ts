@@ -7,7 +7,7 @@ import { filesystemRouter } from "./router/filesystem";
 import { gitRouter } from "./router/git";
 import { gitProvidersRouter } from "./router/gitProviders";
 import { instanceRouter } from "./router/instance";
-import { kanbangerRouter } from "./router/kanbanger";
+import { planningRouter } from "./router/planning";
 import { linkRouter } from "./router/link";
 import { planRouter } from "./router/plan";
 import { postRouter } from "./router/post";
@@ -39,8 +39,8 @@ const appRouterRecord = {
   git: gitRouter,
   gitProviders: gitProvidersRouter,
   instance: instanceRouter,
-  kanbanger: kanbangerRouter,
-  planning: kanbangerRouter,
+  kanbanger: planningRouter,
+  planning: planningRouter,
   link: linkRouter,
   plan: planRouter,
   post: postRouter,

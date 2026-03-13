@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { getIssueSessionSnapshot } from "~/lib/tasks/kanbangerControl";
+import { getIssueSessionSnapshot } from "~/lib/tasks/planningControl";
 
 import {
   respondWithControlError,
