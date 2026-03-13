@@ -1,8 +1,12 @@
-import { Redirect } from "expo-router";
+import { Redirect, router } from "expo-router";
 import { ActivityIndicator, Text } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Card, ListRow, Screen } from "~/components/ui";
+import {
+  getNotificationDestination,
+  getNotificationPreviewSubtitle,
+} from "~/features/planning/notifications";
 import { authClient } from "~/utils/auth";
 import { trpc } from "~/utils/api";
 
@@ -57,7 +61,10 @@ export default function NotificationsScreen() {
             <ListRow
               key={item.id}
               title={item.title}
-              subtitle={item.body ?? item.type.replace(/_/g, " ")}
+              subtitle={getNotificationPreviewSubtitle({
+                body: item.body,
+                type: item.type,
+              })}
               right={
                 <Text className="text-muted text-sm">
                   {item.read ? "Read" : "Mark read"}
@@ -67,6 +74,13 @@ export default function NotificationsScreen() {
                 if (!item.read) {
                   markReadMutation.mutate({ id: item.id });
                 }
+
+                router.push(
+                  getNotificationDestination({
+                    url: item.url,
+                    workItemId: item.workItemId,
+                  }) as never,
+                );
               }}
               showDivider={index < notificationsQuery.data.items.length - 1}
             />

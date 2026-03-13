@@ -17,6 +17,10 @@ import {
   getTaskWorkspaceHref,
   getWorkItemHref,
 } from "~/features/planning/navigation";
+import {
+  getNotificationDestination,
+  getNotificationPreviewSubtitle,
+} from "~/features/planning/notifications";
 import { authClient } from "~/utils/auth";
 import { trpc } from "~/utils/api";
 
@@ -58,6 +62,19 @@ export default function PlanningScreen() {
       { limit: 12 },
       { enabled: Boolean(session) },
     ),
+  );
+
+  const projectKeyByWorkItemId = useMemo(
+    () =>
+      new Map(
+        (workItemsQuery.data ?? []).map((item) => [item.id, item.project?.key ?? null]),
+      ),
+    [workItemsQuery.data],
+  );
+
+  const notificationById = useMemo(
+    () => new Map((notificationsQuery.data?.items ?? []).map((item) => [item.id, item])),
+    [notificationsQuery.data?.items],
   );
 
   const sections = useMemo(
@@ -255,9 +272,7 @@ export default function PlanningScreen() {
                   subtitle={formatWorkItemSubtitle({
                     kind: item.kind,
                     status: item.status,
-                    projectKey:
-                      workItemsQuery.data?.find((entry) => entry.id === item.id)?.project
-                        ?.key ?? null,
+                    projectKey: projectKeyByWorkItemId.get(item.id) ?? null,
                   })}
                   right={
                     item.kind === "task" ? (
@@ -299,7 +314,20 @@ export default function PlanningScreen() {
                 <ListRow
                   key={item.id}
                   title={item.title}
-                  subtitle={item.body ?? "Open notification"}
+                  subtitle={getNotificationPreviewSubtitle({
+                    body: item.body,
+                    type: notificationById.get(item.id)?.type ?? "notification",
+                  })}
+                  onPress={() => {
+                    const source = notificationById.get(item.id) ?? null;
+
+                    router.push(
+                      getNotificationDestination({
+                        url: source?.url ?? null,
+                        workItemId: source?.workItemId ?? null,
+                      }) as never,
+                    );
+                  }}
                   showDivider={index < sections.unreadNotifications.length - 1}
                 />
               ))
