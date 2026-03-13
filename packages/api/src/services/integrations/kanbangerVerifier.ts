@@ -5,6 +5,8 @@ import type { KanbangerControlConfig } from "./kanbangerConfig";
 export const KANBANGER_CONTROL_SIGNATURE_HEADER = "x-kanbanger-signature";
 export const KANBANGER_CONTROL_TIMESTAMP_HEADER = "x-kanbanger-timestamp";
 export const KANBANGER_CONTROL_IDEMPOTENCY_HEADER = "idempotency-key";
+export const PLANNING_CONTROL_SIGNATURE_HEADER = "x-planning-signature";
+export const PLANNING_CONTROL_TIMESTAMP_HEADER = "x-planning-timestamp";
 
 export interface KanbangerControlSignatureInput {
   method: string;
@@ -91,11 +93,12 @@ function getHeader(
 
 function requireHeader(
   headers: Headers | Record<string, string | null | undefined>,
-  key: string,
+  key: string | string[],
   code: string,
   message: string,
 ): string {
-  const value = getHeader(headers, key)?.trim();
+  const keys = Array.isArray(key) ? key : [key];
+  const value = keys.map((header) => getHeader(headers, header)?.trim()).find(Boolean);
 
   if (!value) {
     throw new KanbangerControlAuthError(message, {
@@ -130,9 +133,9 @@ export function verifyKanbangerControlRequest(
 ): VerifiedKanbangerControlRequest {
   const timestamp = requireHeader(
     request.headers,
-    KANBANGER_CONTROL_TIMESTAMP_HEADER,
+    [KANBANGER_CONTROL_TIMESTAMP_HEADER, PLANNING_CONTROL_TIMESTAMP_HEADER],
     "MISSING_TIMESTAMP",
-    "Missing Kanbanger control timestamp header",
+    "Missing planning control timestamp header",
   );
   const idempotencyKey = requireHeader(
     request.headers,
@@ -142,16 +145,16 @@ export function verifyKanbangerControlRequest(
   );
   const signature = requireHeader(
     request.headers,
-    KANBANGER_CONTROL_SIGNATURE_HEADER,
+    [KANBANGER_CONTROL_SIGNATURE_HEADER, PLANNING_CONTROL_SIGNATURE_HEADER],
     "MISSING_SIGNATURE",
-    "Missing Kanbanger control signature",
+    "Missing planning control signature",
   );
 
   const timestampMs = Number(timestamp);
 
   if (!Number.isFinite(timestampMs)) {
     throw new KanbangerControlAuthError(
-      "Invalid Kanbanger control timestamp",
+      "Invalid planning control timestamp",
       {
         code: "INVALID_TIMESTAMP",
         status: 400,
@@ -161,7 +164,7 @@ export function verifyKanbangerControlRequest(
 
   const now = deps.now ?? Date.now;
   if (Math.abs(now() - timestampMs) > config.maxSkewMs) {
-    throw new KanbangerControlAuthError("Stale Kanbanger control request", {
+    throw new KanbangerControlAuthError("Stale planning control request", {
       code: "STALE_REQUEST",
       status: 401,
     });
@@ -180,7 +183,7 @@ export function verifyKanbangerControlRequest(
 
   if (!verifySignature(expectedSignature, signature)) {
     throw new KanbangerControlAuthError(
-      "Invalid Kanbanger control signature",
+      "Invalid planning control signature",
       {
         code: "INVALID_SIGNATURE",
         status: 401,

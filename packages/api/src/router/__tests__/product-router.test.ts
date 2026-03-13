@@ -103,6 +103,8 @@ describe("product-facing app router", () => {
   });
 
   it("exposes the unified planning and collaboration subrouters", async () => {
+    expect((appRouter as any)._def.record.planning).toBeDefined();
+
     queryMocks.workspaceMembersFindMany.mockResolvedValueOnce([
       {
         role: "owner",
@@ -200,6 +202,8 @@ describe("product-facing app router", () => {
     ]);
 
     const caller = createCaller() as any;
+
+    expect(typeof caller.planning.listWorkspaces).toBe("function");
 
     const workspaces = await caller.workspace.list();
     const projects = await caller.project.list({ workspaceId });

@@ -66,6 +66,58 @@ describe("Kanbanger control request verification", () => {
     });
   });
 
+  it("accepts planning-named env vars and headers", () => {
+    const planningConfig = getKanbangerControlConfig({
+      PLANNING_URL: "https://planning.example.internal",
+      PLANNING_CONTROL_SHARED_SECRET: "planning-secret",
+      PLANNING_CONTROL_MAX_SKEW_MS: "600000",
+    });
+    const timestamp = "1710000000000";
+    const idempotencyKey = "idem-planning-123";
+    const body = JSON.stringify({
+      taskId: "550e8400-e29b-41d4-a716-446655440000",
+      taskIdentifier: "BUILD-123",
+    });
+
+    const headers = new Headers({
+      "X-Planning-Timestamp": timestamp,
+      "Idempotency-Key": idempotencyKey,
+      "X-Planning-Signature": buildKanbangerControlSignature(
+        {
+          method: "POST",
+          path: "/api/integrations/planning/tasks/start",
+          timestamp,
+          idempotencyKey,
+          body,
+        },
+        planningConfig.sharedSecret,
+      ),
+    });
+
+    expect(planningConfig).toEqual({
+      baseUrl: "https://planning.example.internal",
+      sharedSecret: "planning-secret",
+      maxSkewMs: 600000,
+    });
+    expect(
+      verifyKanbangerControlRequest(
+        {
+          method: "POST",
+          path: "/api/integrations/planning/tasks/start",
+          headers,
+          body,
+        },
+        planningConfig,
+        {
+          now: () => Number(timestamp),
+        },
+      ),
+    ).toEqual({
+      timestamp,
+      idempotencyKey,
+    });
+  });
+
   it("rejects stale requests", () => {
     const timestamp = "1710000000000";
     const idempotencyKey = "idem-123";
