@@ -12,7 +12,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge, Button, Card, ListRow, Screen } from "~/components/ui";
 import {
   buildTaskWorkspaceViewModel,
+  deriveTaskWorkspaceValidationState,
   summarizeSessionEvents,
+  summarizeTaskRuns,
 } from "~/features/planning/task-workspace";
 import { authClient } from "~/utils/auth";
 import { trpc } from "~/utils/api";
@@ -131,6 +133,7 @@ export default function TaskWorkspaceScreen() {
       currentArtifacts: workItemQuery.data.currentArtifacts.map((artifact) => ({
         id: artifact.id,
         artifactRole: artifact.artifactRole,
+        artifactType: artifact.artifactType,
         title: artifact.title,
         url: artifact.url,
       })),
@@ -160,6 +163,35 @@ export default function TaskWorkspaceScreen() {
         })),
       ),
     [eventsQuery.data?.events],
+  );
+
+  const validationState = useMemo(
+    () =>
+      deriveTaskWorkspaceValidationState(
+        (workItemQuery.data?.currentArtifacts ?? []).map((artifact) => ({
+          id: artifact.id,
+          artifactRole: artifact.artifactRole,
+          artifactType: artifact.artifactType,
+          title: artifact.title,
+          summary: artifact.summary,
+          url: artifact.url,
+          metadata: artifact.metadata ?? null,
+        })),
+      ),
+    [workItemQuery.data?.currentArtifacts],
+  );
+
+  const runRows = useMemo(
+    () =>
+      summarizeTaskRuns(
+        (taskRunsQuery.data ?? []).map((run) => ({
+          id: run.id,
+          status: run.status,
+          branch: run.branch,
+          sessionId: run.sessionId,
+        })),
+      ),
+    [taskRunsQuery.data],
   );
 
   if (isPending) {
@@ -229,6 +261,31 @@ export default function TaskWorkspaceScreen() {
               {workspaceModel.statusMessage}
             </Text>
           ) : null}
+        </Card>
+
+        <Card className="mb-5">
+          <Text className="text-foreground text-base font-semibold">
+            Validation state
+          </Text>
+          <View className="mt-4 flex-row flex-wrap gap-2">
+            <Badge
+              variant={
+                validationState.tone === "positive"
+                  ? "success"
+                  : validationState.tone === "critical"
+                    ? "danger"
+                    : validationState.tone === "warning"
+                      ? "warning"
+                      : "default"
+              }
+            >
+              {validationState.label}
+            </Badge>
+            <Badge>{workspaceModel?.artifactCount ?? 0} artifacts</Badge>
+          </View>
+          <Text className="text-muted mt-3 text-sm leading-6">
+            {validationState.detail}
+          </Text>
         </Card>
 
         {awaitingInputModel ? (
@@ -320,6 +377,31 @@ export default function TaskWorkspaceScreen() {
           >
             Send to Bob
           </Button>
+        </Card>
+
+        <View className="mb-3 flex-row items-center justify-between">
+          <Text className="text-foreground text-lg font-semibold">Run history</Text>
+        </View>
+        <Card className="mb-5">
+          {runRows.length > 0 ? (
+            runRows.map((run, index) => (
+              <ListRow
+                key={run.id}
+                title={run.label}
+                subtitle={run.branch}
+                right={
+                  <Text className="text-muted text-sm">
+                    {run.hasSession ? "Open run" : "Recorded"}
+                  </Text>
+                }
+                showDivider={index < runRows.length - 1}
+              />
+            ))
+          ) : (
+            <Text className="text-muted text-sm">
+              No runs have been recorded for this task yet.
+            </Text>
+          )}
         </Card>
 
         <View className="mb-3 flex-row items-center justify-between">

@@ -25,8 +25,11 @@ interface TaskWorkspaceWorkflowState {
 interface TaskWorkspaceArtifact {
   id: string;
   artifactRole: string;
+  artifactType: string;
   title: string | null;
+  summary?: string | null;
   url: string;
+  metadata?: Record<string, unknown> | null;
 }
 
 interface TaskWorkspaceEvent {
@@ -34,6 +37,13 @@ interface TaskWorkspaceEvent {
   direction: string;
   eventType: string;
   payload: Record<string, unknown>;
+}
+
+interface TaskWorkspaceRun {
+  id: string;
+  status: string;
+  branch: string | null;
+  sessionId: string | null;
 }
 
 export function summarizeSessionEvents(events: TaskWorkspaceEvent[]) {
@@ -79,4 +89,93 @@ export function buildTaskWorkspaceViewModel(input: {
     latestEventPreview: visibleEvents.at(-1)?.body ?? null,
     inputEnabled: input.session !== null,
   };
+}
+
+function readArtifactResult(
+  artifact: TaskWorkspaceArtifact,
+): "passed" | "failed" | null {
+  const metadataResult =
+    typeof artifact.metadata?.result === "string"
+      ? artifact.metadata.result.toLowerCase()
+      : null;
+
+  if (metadataResult === "passed" || metadataResult === "failed") {
+    return metadataResult;
+  }
+
+  const text = `${artifact.title ?? ""} ${artifact.summary ?? ""}`.toLowerCase();
+  if (text.includes("pass")) return "passed";
+  if (text.includes("fail")) return "failed";
+
+  return null;
+}
+
+export function deriveTaskWorkspaceValidationState(
+  artifacts: TaskWorkspaceArtifact[],
+) {
+  const verificationArtifact = artifacts.find(
+    (artifact) =>
+      artifact.artifactRole === "verification" ||
+      artifact.artifactType === "verification",
+  );
+
+  if (verificationArtifact) {
+    const result = readArtifactResult(verificationArtifact);
+
+    if (result === "passed") {
+      return {
+        label: "Validation passed",
+        detail:
+          verificationArtifact.summary?.trim() ||
+          "The latest verification run passed.",
+        tone: "positive" as const,
+      };
+    }
+
+    if (result === "failed") {
+      return {
+        label: "Validation failed",
+        detail:
+          verificationArtifact.summary?.trim() ||
+          "The latest verification run failed.",
+        tone: "critical" as const,
+      };
+    }
+
+    return {
+      label: "Validation in progress",
+      detail:
+        verificationArtifact.summary?.trim() ||
+        "A verification artifact is attached, but it does not report a final result yet.",
+      tone: "warning" as const,
+    };
+  }
+
+  const reviewArtifact = artifacts.find(
+    (artifact) =>
+      artifact.artifactRole === "review" || artifact.artifactType === "pr",
+  );
+
+  if (reviewArtifact) {
+    return {
+      label: "Awaiting review",
+      detail: "A review artifact is attached for the current handoff.",
+      tone: "warning" as const,
+    };
+  }
+
+  return {
+    label: "Validation not started",
+    detail: "No verification or review artifact is attached to the current task yet.",
+    tone: "default" as const,
+  };
+}
+
+export function summarizeTaskRuns(runs: TaskWorkspaceRun[]) {
+  return runs.map((run) => ({
+    id: run.id,
+    label: run.status.replace(/_/g, " "),
+    branch: run.branch?.trim() || "No branch recorded",
+    hasSession: run.sessionId != null,
+  }));
 }

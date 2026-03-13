@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildTaskWorkspaceViewModel,
+  deriveTaskWorkspaceValidationState,
   summarizeSessionEvents,
+  summarizeTaskRuns,
 } from "./task-workspace";
 
 describe("task workspace view model", () => {
@@ -32,6 +34,7 @@ describe("task workspace view model", () => {
           {
             id: "artifact-1",
             artifactRole: "verification",
+            artifactType: "verification",
             title: "Verification summary",
             url: "https://example.com/verification",
           },
@@ -89,6 +92,58 @@ describe("task workspace view model", () => {
         id: "10",
         actor: "Bob",
         body: "Yes, rerunning now.",
+      },
+    ]);
+  });
+
+  it("derives validation state from the latest verification artifact", () => {
+    expect(
+      deriveTaskWorkspaceValidationState([
+        {
+          id: "artifact-1",
+          artifactRole: "verification",
+          artifactType: "verification",
+          title: "Verification passed",
+          summary: "All acceptance checks passed.",
+          url: "https://example.com/verification",
+          metadata: { result: "passed" },
+        },
+      ]),
+    ).toEqual({
+      label: "Validation passed",
+      detail: "All acceptance checks passed.",
+      tone: "positive",
+    });
+  });
+
+  it("summarizes task runs for the mobile execution history", () => {
+    expect(
+      summarizeTaskRuns([
+        {
+          id: "run-1",
+          status: "awaiting_review",
+          branch: "bob/mob-42-review",
+          sessionId: "session-1",
+        },
+        {
+          id: "run-2",
+          status: "completed",
+          branch: null,
+          sessionId: null,
+        },
+      ]),
+    ).toEqual([
+      {
+        id: "run-1",
+        label: "awaiting review",
+        branch: "bob/mob-42-review",
+        hasSession: true,
+      },
+      {
+        id: "run-2",
+        label: "completed",
+        branch: "No branch recorded",
+        hasSession: false,
       },
     ]);
   });
