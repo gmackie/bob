@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { syncKanbangerReposForBobUser } from "~/server/kanbanger/sync-repos";
+import { getPlanningRemoteConfig } from "~/lib/planning/remote-config";
 
 function getStatusCode(error: unknown): number | undefined {
   if (!error || typeof error !== "object") return undefined;
@@ -9,7 +10,6 @@ function getStatusCode(error: unknown): number | undefined {
 }
 
 const CRON_SECRET = process.env.CRON_SECRET;
-const KANBANGER_API_KEY = process.env.KANBANGER_API_KEY;
 
 export async function GET(request: Request): Promise<NextResponse> {
   const authHeader = request.headers.get("authorization");
@@ -17,9 +17,11 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!KANBANGER_API_KEY) {
+  const { apiKey } = getPlanningRemoteConfig();
+
+  if (!apiKey) {
     return NextResponse.json(
-      { error: "KANBANGER_API_KEY not configured" },
+      { error: "PLANNING_API_KEY not configured" },
       { status: 412 },
     );
   }

@@ -4,11 +4,9 @@ import { findExpiredAwaitingInputSessions } from "@bob/api/services/sessions/wor
 import { eq, sql } from "@bob/db";
 import { db } from "@bob/db/client";
 import { chatConversations, sessionEvents } from "@bob/db/schema";
+import { getPlanningRemoteConfig } from "~/lib/planning/remote-config";
 
 const CRON_SECRET = process.env.CRON_SECRET;
-const KANBANGER_API_URL =
-  process.env.KANBANGER_API_URL ?? "https://tasks.gmac.io/api";
-const KANBANGER_API_KEY = process.env.KANBANGER_API_KEY;
 
 export async function GET(request: Request): Promise<NextResponse> {
   const authHeader = request.headers.get("authorization");
@@ -114,31 +112,30 @@ async function postKanbangerComment(
   taskId: string,
   body: string,
 ): Promise<void> {
-  if (!KANBANGER_API_KEY) {
-    console.warn("KANBANGER_API_KEY not set, skipping timeout comment");
+  const { apiKey, apiUrl } = getPlanningRemoteConfig();
+
+  if (!apiKey) {
+    console.warn("PLANNING_API_KEY not set, skipping timeout comment");
     return;
   }
 
   try {
-    const response = await fetch(
-      `${KANBANGER_API_URL}/issues/${taskId}/comments`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${KANBANGER_API_KEY}`,
-        },
-        body: JSON.stringify({ body }),
+    const response = await fetch(`${apiUrl}/issues/${taskId}/comments`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
       },
-    );
+      body: JSON.stringify({ body }),
+    });
 
     if (!response.ok) {
       console.error(
-        "Failed to post Kanbanger timeout comment:",
+        "Failed to post planning timeout comment:",
         await response.text(),
       );
     }
   } catch (error) {
-    console.error("Error posting Kanbanger timeout comment:", error);
+    console.error("Error posting planning timeout comment:", error);
   }
 }
