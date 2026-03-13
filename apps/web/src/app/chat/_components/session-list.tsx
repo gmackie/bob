@@ -9,6 +9,7 @@ import { Button } from "@bob/ui/button";
 import type { SessionStatus } from "~/hooks/use-session-socket";
 import { useTRPC } from "~/trpc/react";
 import { getAvailableAgentTypes } from "~/utils/platform";
+import { getManagedSessionLabel } from "./session-copy";
 
 type InteractionMode = "web" | "headless";
 
@@ -306,58 +307,64 @@ export function SessionList({
           </div>
         )}
 
-        {filteredSessions.map((session) => (
-          <button
-            key={session.id}
-            onClick={() => onSelect(session.id, selectedMode)}
-            className={cn(
-              "chat-sessionItem",
-              selectedId === session.id && "is-active",
-            )}
-          >
-            <div className="chat-sessionItemHead">
-              <StatusIndicator
-                status={normalizeSessionStatus(session.status)}
-              />
-              <span className="chat-sessionItemTitle">
-                {session.title ?? `Session ${session.id.slice(0, 8)}`}
-              </span>
-            </div>
-            <div className="chat-sessionItemMeta">
-              <span className="chat-sessionItemMetaValue">
-                {session.agentType}
-              </span>
-              {session.issueManaged && (
-                <>
-                  <span>·</span>
-                  <span className="chat-sessionItemMetaValue">Issue-managed</span>
-                </>
+        {filteredSessions.map((session) => {
+          const managedSessionLabel = getManagedSessionLabel(session.issueManaged);
+
+          return (
+            <button
+              key={session.id}
+              onClick={() => onSelect(session.id, selectedMode)}
+              className={cn(
+                "chat-sessionItem",
+                selectedId === session.id && "is-active",
               )}
-              {session.linkedTask && (
-                <>
-                  <span>·</span>
-                  <span className="chat-sessionItemMetaValue">
-                    {session.linkedTask.identifier}
-                  </span>
-                </>
-              )}
-              <span>·</span>
-              <span>
-                {formatRelativeTime(
-                  session.lastActivityAt ?? session.createdAt,
+            >
+              <div className="chat-sessionItemHead">
+                <StatusIndicator
+                  status={normalizeSessionStatus(session.status)}
+                />
+                <span className="chat-sessionItemTitle">
+                  {session.title ?? `Session ${session.id.slice(0, 8)}`}
+                </span>
+              </div>
+              <div className="chat-sessionItemMeta">
+                <span className="chat-sessionItemMetaValue">
+                  {session.agentType}
+                </span>
+                {managedSessionLabel && (
+                  <>
+                    <span>·</span>
+                    <span className="chat-sessionItemMetaValue">
+                      {managedSessionLabel}
+                    </span>
+                  </>
                 )}
-              </span>
-            </div>
-            {session.workingDirectory && (
-              <span
-                className="chat-sessionItemDir"
-                title={session.workingDirectory}
-              >
-                {session.workingDirectory}
-              </span>
-            )}
-          </button>
-        ))}
+                {session.linkedTask && (
+                  <>
+                    <span>·</span>
+                    <span className="chat-sessionItemMetaValue">
+                      {session.linkedTask.identifier}
+                    </span>
+                  </>
+                )}
+                <span>·</span>
+                <span>
+                  {formatRelativeTime(
+                    session.lastActivityAt ?? session.createdAt,
+                  )}
+                </span>
+              </div>
+              {session.workingDirectory && (
+                <span
+                  className="chat-sessionItemDir"
+                  title={session.workingDirectory}
+                >
+                  {session.workingDirectory}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

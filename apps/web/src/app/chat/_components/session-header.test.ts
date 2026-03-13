@@ -23,4 +23,18 @@ describe("SessionHeader", () => {
     expect(html).toContain("Open work item");
     expect(html).not.toContain("Kanbanger");
   });
+
+  it("uses task-linked copy for managed sessions", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(SessionHeader, {
+        title: "MOB-42 execution",
+        status: "running",
+        agentType: "bob",
+        issueManaged: true,
+      }),
+    );
+
+    expect(html).toContain("Task-linked session");
+    expect(html).not.toContain("Issue-managed session");
+  });
 });

@@ -5,6 +5,7 @@ import { cn } from "@bob/ui";
 import { Button } from "@bob/ui/button";
 
 import type { SessionStatus } from "~/hooks/use-session-socket";
+import { getManagedSessionLabel } from "./session-copy";
 
 interface LinkedPullRequest {
   id: string;
@@ -318,6 +319,7 @@ export function SessionHeader({
 }: SessionHeaderProps) {
   const canStop = status === "running" || status === "idle";
   const canRestart = status === "stopped" || status === "error";
+  const managedSessionLabel = getManagedSessionLabel(issueManaged);
 
   return (
     <div data-testid="session-header" className="chat-sessionHeader">
@@ -339,11 +341,11 @@ export function SessionHeader({
 
         <div className="chat-sessionHeaderMetaRow">
           <span className="chat-agentPill">{agentType}</span>
-          {issueManaged && (
+          {managedSessionLabel && (
             <>
               <span>·</span>
               <span className="chat-sessionHeaderMetaValue">
-                Issue-managed session
+                {managedSessionLabel}
               </span>
             </>
           )}
