@@ -30,7 +30,7 @@ export const linkTaskTool: ToolDefinition = {
         id: string;
         identifier: string;
         title: string;
-      }>("kanbanger.getTaskByIdentifier", { identifier: task_identifier });
+      }>("planning.getTaskByIdentifier", { identifier: task_identifier });
 
       await ctx.callTrpc("session.linkTask", {
         sessionId: ctx.sessionId,
@@ -72,17 +72,17 @@ export const postTaskCommentTool: ToolDefinition = {
 
     try {
       const session = await ctx.callTrpc<{
-        kanbangerTaskId: string | null;
+        workItemId: string | null;
       }>("session.get", { id: ctx.sessionId });
 
-      if (!session.kanbangerTaskId) {
+      if (!session.workItemId) {
         return errorResult(
           "No task linked to this session. Use link_task first.",
         );
       }
 
-      await ctx.callTrpc("kanbanger.addComment", {
-        issueId: session.kanbangerTaskId,
+      await ctx.callTrpc("planning.addComment", {
+        issueId: session.workItemId,
         body: comment,
       });
 
@@ -171,15 +171,15 @@ export const updateTaskStatusTool: ToolDefinition = {
 
     try {
       const session = await ctx.callTrpc<{
-        kanbangerTaskId: string | null;
+        workItemId: string | null;
       }>("session.get", { id: ctx.sessionId });
 
-      if (!session.kanbangerTaskId) {
+      if (!session.workItemId) {
         return errorResult("No task linked to this session");
       }
 
-      await ctx.callTrpc("kanbanger.updateTask", {
-        id: session.kanbangerTaskId,
+      await ctx.callTrpc("planning.updateTask", {
+        id: session.workItemId,
         status,
       });
 

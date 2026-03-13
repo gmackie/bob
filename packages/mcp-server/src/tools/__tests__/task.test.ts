@@ -61,7 +61,7 @@ describe("task tools", () => {
       );
 
       expect(ctx.mockCallTrpc).toHaveBeenCalledWith(
-        "kanbanger.getTaskByIdentifier",
+        "planning.getTaskByIdentifier",
         { identifier: "BOB-123" },
       );
       expect(ctx.mockCallTrpc).toHaveBeenCalledWith("session.linkTask", {
@@ -111,7 +111,7 @@ describe("task tools", () => {
 
     it("should return error when no task is linked", async () => {
       const ctx = createMockContext();
-      ctx.mockCallTrpc.mockResolvedValue({ kanbangerTaskId: null });
+      ctx.mockCallTrpc.mockResolvedValue({ workItemId: null });
 
       const result = await postTaskCommentTool.handler(
         { comment: "Test comment" },
@@ -127,7 +127,7 @@ describe("task tools", () => {
     it("should post comment successfully", async () => {
       const ctx = createMockContext();
       ctx.mockCallTrpc
-        .mockResolvedValueOnce({ kanbangerTaskId: "task-123" })
+        .mockResolvedValueOnce({ workItemId: "task-123" })
         .mockResolvedValueOnce({});
 
       const result = await postTaskCommentTool.handler(
@@ -135,7 +135,7 @@ describe("task tools", () => {
         ctx,
       );
 
-      expect(ctx.mockCallTrpc).toHaveBeenCalledWith("kanbanger.addComment", {
+      expect(ctx.mockCallTrpc).toHaveBeenCalledWith("planning.addComment", {
         issueId: "task-123",
         body: "Progress update: 50% done",
       });
@@ -377,7 +377,7 @@ describe("task tools", () => {
 
     it("should return error when no task is linked", async () => {
       const ctx = createMockContext();
-      ctx.mockCallTrpc.mockResolvedValue({ kanbangerTaskId: null });
+      ctx.mockCallTrpc.mockResolvedValue({ workItemId: null });
 
       const result = await updateTaskStatusTool.handler(
         { status: "in_review" },
@@ -393,7 +393,7 @@ describe("task tools", () => {
     it("should update task status successfully", async () => {
       const ctx = createMockContext();
       ctx.mockCallTrpc
-        .mockResolvedValueOnce({ kanbangerTaskId: "task-123" })
+        .mockResolvedValueOnce({ workItemId: "task-123" })
         .mockResolvedValueOnce({});
 
       const result = await updateTaskStatusTool.handler(
@@ -401,7 +401,7 @@ describe("task tools", () => {
         ctx,
       );
 
-      expect(ctx.mockCallTrpc).toHaveBeenCalledWith("kanbanger.updateTask", {
+      expect(ctx.mockCallTrpc).toHaveBeenCalledWith("planning.updateTask", {
         id: "task-123",
         status: "in_review",
       });

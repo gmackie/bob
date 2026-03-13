@@ -1,4 +1,4 @@
-import { desc, eq } from "@bob/db";
+import { desc, eq, or } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
   chatConversations,
@@ -122,7 +122,10 @@ async function ensureControlUserId(
 
 async function getLatestTaskRunForIssue(kanbangerIssueId: string) {
   return db.query.taskRuns.findFirst({
-    where: eq(taskRuns.kanbangerIssueId, kanbangerIssueId),
+    where: or(
+      eq(taskRuns.workItemId, kanbangerIssueId),
+      eq(taskRuns.kanbangerIssueId, kanbangerIssueId),
+    ),
     with: {
       repository: true,
       session: true,
@@ -170,9 +173,10 @@ function buildIssueSessionSnapshot(
   }
 
   return {
-    issueId: taskRun.kanbangerIssueId,
+    issueId: taskRun.workItemId ?? taskRun.kanbangerIssueId,
     issueIdentifier:
       fallback.issueIdentifier ??
+      taskRun.workItemIdentifierSnapshot ??
       taskRun.kanbangerIssueIdentifier,
     executionBackend: "bob",
     taskRunId: taskRun.id,

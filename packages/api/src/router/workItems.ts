@@ -1,5 +1,5 @@
 import { z } from "zod/v4";
-import { and, desc, eq, isNull } from "@bob/db";
+import { and, desc, eq, isNull, or } from "@bob/db";
 
 import {
   activities,
@@ -410,15 +410,19 @@ export const taskRunRouter = {
       const runs = await ctx.db.query.taskRuns.findMany({
         where: and(
           eq(taskRuns.userId, ctx.session.user.id),
-          eq(taskRuns.kanbangerIssueId, input.workItemId),
+          or(
+            eq(taskRuns.workItemId, input.workItemId),
+            eq(taskRuns.kanbangerIssueId, input.workItemId),
+          ),
         ),
         orderBy: desc(taskRuns.createdAt),
       });
 
       return runs.map((run) => ({
         ...run,
-        workItemId: run.kanbangerIssueId,
-        workItemIdentifier: run.kanbangerIssueIdentifier,
+        workItemId: run.workItemId ?? run.kanbangerIssueId,
+        workItemIdentifier:
+          run.workItemIdentifierSnapshot ?? run.kanbangerIssueIdentifier,
       }));
     }),
 };

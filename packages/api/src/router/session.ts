@@ -107,6 +107,8 @@ export const sessionRouter = {
           lastError: chatConversations.lastError,
           createdAt: chatConversations.createdAt,
           updatedAt: chatConversations.updatedAt,
+          workItemId: chatConversations.workItemId,
+          workItemIdentifierSnapshot: chatConversations.workItemIdentifierSnapshot,
           kanbangerTaskId: chatConversations.kanbangerTaskId,
         })
         .from(chatConversations)
@@ -123,6 +125,8 @@ export const sessionRouter = {
           ? await ctx.db
               .select({
                 sessionId: taskRuns.sessionId,
+                workItemId: taskRuns.workItemId,
+                workItemIdentifierSnapshot: taskRuns.workItemIdentifierSnapshot,
                 issueId: taskRuns.kanbangerIssueId,
                 identifier: taskRuns.kanbangerIssueIdentifier,
               })
@@ -140,18 +144,27 @@ export const sessionRouter = {
           continue;
         }
 
+        const workItemId = row.workItemId ?? row.issueId;
+        const workItemIdentifier =
+          row.workItemIdentifierSnapshot ?? row.identifier;
+
         linkedTaskBySessionId.set(row.sessionId, {
-          id: row.issueId,
-          identifier: row.identifier,
-          url: buildPlanningWorkItemUrl(row.issueId),
+          id: workItemId,
+          identifier: workItemIdentifier,
+          url: buildPlanningWorkItemUrl(workItemId),
         });
       }
 
       return {
         items: items.map((session) => ({
           ...session,
+          workItemId: session.workItemId ?? session.kanbangerTaskId,
+          workItemIdentifier:
+            session.workItemIdentifierSnapshot ??
+            linkedTaskBySessionId.get(session.id)?.identifier ??
+            null,
           linkedTask: linkedTaskBySessionId.get(session.id) ?? null,
-          issueManaged: Boolean(session.kanbangerTaskId),
+          issueManaged: Boolean(session.workItemId ?? session.kanbangerTaskId),
         })),
         nextCursor,
       };
@@ -188,14 +201,31 @@ export const sessionRouter = {
 
       return {
         ...session,
+        workItemId:
+          session.workItemId ??
+          latestTaskRun?.workItemId ??
+          session.kanbangerTaskId,
+        workItemIdentifier:
+          session.workItemIdentifierSnapshot ??
+          latestTaskRun?.workItemIdentifierSnapshot ??
+          latestTaskRun?.kanbangerIssueIdentifier ??
+          null,
         linkedTask: latestTaskRun
           ? {
-              id: latestTaskRun.kanbangerIssueId,
-              identifier: latestTaskRun.kanbangerIssueIdentifier,
-              url: buildPlanningWorkItemUrl(latestTaskRun.kanbangerIssueId),
+              id: latestTaskRun.workItemId ?? latestTaskRun.kanbangerIssueId,
+              identifier:
+                latestTaskRun.workItemIdentifierSnapshot ??
+                latestTaskRun.kanbangerIssueIdentifier,
+              url: buildPlanningWorkItemUrl(
+                latestTaskRun.workItemId ?? latestTaskRun.kanbangerIssueId,
+              ),
             }
           : null,
-        issueManaged: Boolean(session.kanbangerTaskId),
+        issueManaged: Boolean(
+          session.workItemId ??
+            latestTaskRun?.workItemId ??
+            session.kanbangerTaskId,
+        ),
       };
     }),
 

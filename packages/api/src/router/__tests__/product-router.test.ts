@@ -142,6 +142,8 @@ describe("product-facing app router", () => {
           id: taskId,
           userId: "user-1",
           sessionId: "session-1",
+          workItemId: taskId,
+          workItemIdentifierSnapshot: "MERGE-12",
           kanbangerIssueId: taskId,
           kanbangerIssueIdentifier: "MERGE-12",
           status: "running",
@@ -228,6 +230,7 @@ describe("product-facing app router", () => {
     expect(taskRuns[0]).toEqual(
       expect.objectContaining({
         workItemId: taskId,
+        workItemIdentifier: "MERGE-12",
         sessionId: "session-1",
         status: "running",
       }),

@@ -67,13 +67,13 @@ export const getTaskContextTool: ToolDefinition = {
 
     try {
       const session = await ctx.callTrpc<{
-        kanbangerTaskId: string | null;
+        workItemId: string | null;
       }>("session.get", { id: ctx.sessionId });
 
-      if (!session.kanbangerTaskId) {
+      if (!session.workItemId) {
         return jsonResult({
           hasTask: false,
-          message: "No Kanbanger task linked to this session",
+          message: "No task linked to this session",
         });
       }
 
@@ -86,7 +86,7 @@ export const getTaskContextTool: ToolDefinition = {
         priority: string;
         labels?: Array<{ name: string; color: string }>;
         dueDate?: string;
-      }>("kanbanger.getTask", { id: session.kanbangerTaskId });
+      }>("planning.getTask", { id: session.workItemId });
 
       return jsonResult({
         hasTask: true,

@@ -68,6 +68,8 @@ describe("session router linked task URLs", () => {
       userId: "user-1",
       workingDirectory: "/repo/demo",
       status: "running",
+      workItemId,
+      workItemIdentifierSnapshot: "PLAN-123",
       kanbangerTaskId: workItemId,
       repository: null,
       worktree: null,
@@ -76,6 +78,8 @@ describe("session router linked task URLs", () => {
       id: "run-1",
       sessionId,
       userId: "user-1",
+      workItemId,
+      workItemIdentifierSnapshot: "PLAN-123",
       kanbangerIssueId: workItemId,
       kanbangerIssueIdentifier: "PLAN-123",
     });
@@ -88,5 +92,7 @@ describe("session router linked task URLs", () => {
       identifier: "PLAN-123",
       url: `https://planning.example.internal/work-items/${workItemId}`,
     });
+    expect(result.workItemId).toBe(workItemId);
+    expect(result.workItemIdentifier).toBe("PLAN-123");
   });
 });

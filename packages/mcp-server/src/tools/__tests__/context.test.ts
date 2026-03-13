@@ -109,20 +109,20 @@ describe("context tools", () => {
 
     it("should indicate when no task is linked", async () => {
       const ctx = createMockContext();
-      ctx.mockCallTrpc.mockResolvedValue({ kanbangerTaskId: null });
+      ctx.mockCallTrpc.mockResolvedValue({ workItemId: null });
 
       const result = await getTaskContextTool.handler({}, ctx);
 
       expect(result.isError).toBeFalsy();
       const data = JSON.parse((result.content[0] as { text: string }).text);
       expect(data.hasTask).toBe(false);
-      expect(data.message).toContain("No Kanbanger task");
+      expect(data.message).toContain("No task");
     });
 
     it("should return task details when linked", async () => {
       const ctx = createMockContext();
       ctx.mockCallTrpc
-        .mockResolvedValueOnce({ kanbangerTaskId: "task-123" })
+        .mockResolvedValueOnce({ workItemId: "task-123" })
         .mockResolvedValueOnce({
           id: "task-123",
           identifier: "BOB-42",
@@ -140,6 +140,11 @@ describe("context tools", () => {
       const result = await getTaskContextTool.handler({}, ctx);
 
       expect(result.isError).toBeFalsy();
+      expect(ctx.mockCallTrpc).toHaveBeenNthCalledWith(
+        2,
+        "planning.getTask",
+        { id: "task-123" },
+      );
       const data = JSON.parse((result.content[0] as { text: string }).text);
       expect(data.hasTask).toBe(true);
       expect(data.task.identifier).toBe("BOB-42");

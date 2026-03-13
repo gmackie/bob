@@ -120,6 +120,8 @@ export async function executeTask(
       .insert(taskRuns)
       .values({
         userId,
+        workItemId: task.id,
+        workItemIdentifierSnapshot: task.identifier,
         kanbangerWorkspaceId: task.workspaceId,
         kanbangerIssueId: task.id,
         kanbangerIssueIdentifier: task.identifier,
@@ -158,6 +160,8 @@ export async function executeTask(
         .insert(taskRuns)
         .values({
           userId,
+          workItemId: task.id,
+          workItemIdentifierSnapshot: task.identifier,
           kanbangerWorkspaceId: task.workspaceId,
           kanbangerIssueId: task.id,
           kanbangerIssueIdentifier: task.identifier,
@@ -191,6 +195,8 @@ export async function executeTask(
       agentType: "opencode",
       title: `${task.identifier}: ${task.title}`,
       status: "provisioning",
+      workItemId: task.id,
+      workItemIdentifierSnapshot: task.identifier,
       gitBranch: branch,
       kanbangerTaskId: task.id,
     })
@@ -200,6 +206,8 @@ export async function executeTask(
     .insert(taskRuns)
     .values({
       userId,
+      workItemId: task.id,
+      workItemIdentifierSnapshot: task.identifier,
       kanbangerWorkspaceId: task.workspaceId,
       kanbangerIssueId: task.id,
       kanbangerIssueIdentifier: task.identifier,
