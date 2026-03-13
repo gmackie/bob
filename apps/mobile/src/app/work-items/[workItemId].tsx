@@ -10,7 +10,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Badge, Button, Card, ListRow, Screen } from "~/components/ui";
-import { getTaskWorkspaceHref } from "~/features/planning/navigation";
+import { getWorkItemDetailPresentation } from "~/features/planning/work-item-detail";
 import { authClient } from "~/utils/auth";
 import { trpc } from "~/utils/api";
 
@@ -42,6 +42,16 @@ export default function WorkItemDetailScreen() {
         setCommentDraft("");
         await queryClient.invalidateQueries({
           queryKey: trpc.comment.listByWorkItem.queryKey({ workItemId }),
+        });
+      },
+    }),
+  );
+
+  const promoteToTaskMutation = useMutation(
+    trpc.workItem.promoteToTask.mutationOptions({
+      onSuccess: async () => {
+        await queryClient.invalidateQueries({
+          queryKey: trpc.workItem.get.queryKey({ id: workItemId }),
         });
       },
     }),
@@ -80,6 +90,10 @@ export default function WorkItemDetailScreen() {
   }
 
   const { workItem, currentArtifacts, childCount } = workItemQuery.data;
+  const detailPresentation = getWorkItemDetailPresentation({
+    id: workItem.id,
+    kind: workItem.kind,
+  });
 
   return (
     <Screen className="pt-6">
@@ -118,16 +132,29 @@ export default function WorkItemDetailScreen() {
           <Text className="text-muted mt-3 text-sm">
             {childCount} child items · {currentArtifacts.length} current artifacts
           </Text>
-          {workItem.kind === "task" ? (
-            <Button
-              className="mt-4"
-              onPress={() =>
-                router.push(getTaskWorkspaceHref(workItem.id) as never)
+          <Text className="text-foreground mt-4 text-sm font-semibold">
+            {detailPresentation.semanticSummary}
+          </Text>
+          <Text className="text-muted mt-2 text-sm leading-6">
+            {detailPresentation.semanticHint}
+          </Text>
+          <Button
+            className="mt-4"
+            variant={workItem.kind === "task" ? "primary" : "secondary"}
+            onPress={() => {
+              if (workItem.kind === "task") {
+                router.push(detailPresentation.executionHref as never);
+                return;
               }
-            >
-              Open task workspace
-            </Button>
-          ) : null}
+
+              promoteToTaskMutation.mutate({ id: workItem.id });
+            }}
+            disabled={promoteToTaskMutation.isPending}
+          >
+            {promoteToTaskMutation.isPending && workItem.kind !== "task"
+              ? "Promoting..."
+              : detailPresentation.primaryActionLabel}
+          </Button>
         </Card>
 
         <View className="mb-3 flex-row items-center justify-between">

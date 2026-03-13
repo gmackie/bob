@@ -22,6 +22,14 @@ export default defineConfig({
         replacement: path.resolve(__dirname, "../../packages/db/src/index.ts"),
       },
       {
+        find: /^@bob\/execution\/(.*)$/,
+        replacement: path.resolve(__dirname, "../execution/src/$1"),
+      },
+      {
+        find: "@bob/execution",
+        replacement: path.resolve(__dirname, "../execution/src/runtime/index.ts"),
+      },
+      {
         find: "~",
         replacement: path.resolve(__dirname, "src"),
       },
@@ -31,5 +39,6 @@ export default defineConfig({
     environment: "node",
     include: ["src/**/*.test.ts", "src/**/__tests__/**/*.ts"],
     exclude: ["e2e/**", "node_modules/**", ".next/**"],
+    setupFiles: ["./vitest.setup.ts"],
   },
 });

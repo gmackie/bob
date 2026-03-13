@@ -1,6 +1,10 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("../promote-to-task-button", () => ({
+  PromoteToTaskButton: () => React.createElement("button", null, "Promote to task"),
+}));
 
 import { WorkItemDetailCard } from "../work-item-detail-card";
 
@@ -33,6 +37,7 @@ describe("WorkItemDetailCard", () => {
 
     expect(html).toContain("/work-items/task-123/workspace");
     expect(html).toContain("Open execution workspace");
+    expect(html).toContain("Tasks are the executable unit for Bob Builder.");
   });
 
   it("does not show the execution workspace CTA for non-task work items", () => {
@@ -40,5 +45,9 @@ describe("WorkItemDetailCard", () => {
 
     expect(html).not.toContain("/work-items/task-123/workspace");
     expect(html).not.toContain("Open execution workspace");
+    expect(html).toContain("Promote to task");
+    expect(html).toContain(
+      "Issues capture work to be shaped before execution.",
+    );
   });
 });

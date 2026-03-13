@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { cn } from "@bob/ui";
 import { Button } from "@bob/ui/button";
 
@@ -386,7 +387,7 @@ export function SessionHeader({
               target="_blank"
               rel="noopener noreferrer"
             >
-              Open in Kanbanger
+              Open work item
             </a>
           </Button>
         )}

@@ -250,6 +250,50 @@ const createArtifactProcedure = protectedProcedure
     return artifact;
   });
 
+const promoteToTaskProcedure = protectedProcedure
+  .input(
+    z.object({
+      id: z.string().uuid(),
+    }),
+  )
+  .mutation(async ({ ctx, input }) => {
+    const existing = await ctx.db.query.workItems.findFirst({
+      where: eq(workItems.id, input.id),
+    });
+
+    if (!existing) {
+      return null;
+    }
+
+    if (existing.kind === "task") {
+      return existing;
+    }
+
+    const [workItem] = await ctx.db
+      .update(workItems)
+      .set({
+        kind: "task",
+      })
+      .where(eq(workItems.id, input.id))
+      .returning();
+
+    await ctx.db
+      .insert(activities)
+      .values({
+        workItemId: input.id,
+        userId: ctx.session.user.id,
+        type: "status_changed",
+        fromValue: existing.kind,
+        toValue: "task",
+        metadata: {
+          field: "kind",
+        },
+      })
+      .returning();
+
+    return workItem ?? existing;
+  });
+
 const listCurrentArtifactsProcedure = protectedProcedure
   .input(
     z.object({
@@ -380,6 +424,7 @@ const markNotificationAsReadProcedure = protectedProcedure
 export const workItemRouter = {
   list: listWorkItemsProcedure,
   get: getWorkItemProcedure,
+  promoteToTask: promoteToTaskProcedure,
 };
 
 export const commentRouter = {
@@ -430,6 +475,7 @@ export const taskRunRouter = {
 export const workItemsRouter = {
   list: listWorkItemsProcedure,
   get: getWorkItemProcedure,
+  promoteToTask: promoteToTaskProcedure,
   listComments: listCommentsProcedure,
   createComment: createCommentProcedure,
   createArtifact: createArtifactProcedure,

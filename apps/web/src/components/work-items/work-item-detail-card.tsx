@@ -2,6 +2,7 @@ import React from "react";
 import Link from "next/link";
 
 import { getTaskWorkspaceHref } from "~/lib/planning/task-workspace";
+import { PromoteToTaskButton } from "./promote-to-task-button";
 
 interface WorkItemDetailCardProps {
   workItem: {
@@ -32,12 +33,36 @@ interface WorkItemDetailCardProps {
   }>;
 }
 
+function getWorkItemSemanticCopy(kind: string) {
+  if (kind === "task") {
+    return {
+      summary: "Tasks are the executable unit for Bob Builder.",
+      hint:
+        "Open the execution workspace to chat with Bob, review status, and inspect artifacts.",
+    };
+  }
+
+  if (kind === "epic") {
+    return {
+      summary: "Epics organize work before execution begins.",
+      hint: "Promote this work item to a task when it is ready to run with Bob.",
+    };
+  }
+
+  return {
+    summary: "Issues capture work to be shaped before execution.",
+    hint: "Promote this work item to a task when it is ready for Bob.",
+  };
+}
+
 export function WorkItemDetailCard({
   workItem,
   childCount,
   comments,
   currentArtifacts,
 }: WorkItemDetailCardProps) {
+  const semanticCopy = getWorkItemSemanticCopy(workItem.kind);
+
   return (
     <div className="space-y-6">
       <section className="rounded-3xl border border-white/10 bg-white/[0.05] p-6">
@@ -67,16 +92,23 @@ export function WorkItemDetailCard({
           <span>{comments.length} comments</span>
         </div>
 
-        {workItem.kind === "task" ? (
-          <div className="mt-5">
+        <div className="mt-5 space-y-2">
+          <div className="text-sm font-medium text-white">{semanticCopy.summary}</div>
+          <div className="text-sm text-white/55">{semanticCopy.hint}</div>
+        </div>
+
+        <div className="mt-5">
+          {workItem.kind === "task" ? (
             <Link
               href={getTaskWorkspaceHref(workItem.id)}
               className="inline-flex rounded-full bg-[#f59e0b] px-4 py-2 text-sm font-medium text-black transition hover:bg-[#f8b84b]"
             >
               Open execution workspace
             </Link>
-          </div>
-        ) : null}
+          ) : (
+            <PromoteToTaskButton workItemId={workItem.id} />
+          )}
+        </div>
 
         <p className="mt-6 max-w-3xl whitespace-pre-wrap text-sm leading-7 text-white/72">
           {workItem.description?.trim() || "No description yet."}

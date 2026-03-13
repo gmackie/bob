@@ -14,10 +14,15 @@ const findManyMocks = {
   notifications: vi.fn(),
 };
 
+const findFirstMocks = {
+  workItems: vi.fn(),
+};
+
 const makeDbMock = () => ({
   query: {
     workItems: {
       findMany: findManyMocks.workItems,
+      findFirst: findFirstMocks.workItems,
     },
     workItemArtifacts: {
       findMany: findManyMocks.workItemArtifacts,
@@ -85,6 +90,7 @@ describe("workItems router", () => {
     updateWhereMock.mockReset();
     updateReturningMock.mockReset();
     findManyMocks.workItems.mockReset();
+    findFirstMocks.workItems.mockReset();
     findManyMocks.workItemArtifacts.mockReset();
     findManyMocks.notifications.mockReset();
   });
@@ -246,6 +252,59 @@ describe("workItems router", () => {
           type: "work_item_needs_input",
         }),
       ],
+    });
+  });
+
+  it("promotes an issue into a task while preserving its parent linkage", async () => {
+    findFirstMocks.workItems.mockResolvedValueOnce({
+      id: workItemId,
+      parentId: parentWorkItemId,
+      projectId: "44444444-4444-4444-8444-444444444444",
+      sequenceNumber: 17,
+      kind: "issue",
+      title: "Investigate flaky deploy preview",
+      status: "draft",
+    });
+    updateReturningMock.mockResolvedValueOnce([
+      {
+        id: workItemId,
+        parentId: parentWorkItemId,
+        projectId: "44444444-4444-4444-8444-444444444444",
+        sequenceNumber: 17,
+        kind: "task",
+        title: "Investigate flaky deploy preview",
+        status: "draft",
+      },
+    ]);
+    insertReturningMock.mockResolvedValueOnce([{ id: "activity-1" }]);
+
+    const caller = createCaller() as any;
+
+    const result = await caller.workItems.promoteToTask({
+      id: workItemId,
+    });
+
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "task",
+      }),
+    );
+    expect(insertValuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workItemId,
+        userId: "user-1",
+        type: "status_changed",
+        fromValue: "issue",
+        toValue: "task",
+        metadata: expect.objectContaining({
+          field: "kind",
+        }),
+      }),
+    );
+    expect(result).toMatchObject({
+      id: workItemId,
+      parentId: parentWorkItemId,
+      kind: "task",
     });
   });
 });

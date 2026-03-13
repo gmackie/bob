@@ -4,51 +4,47 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./dist/api/src/index.d.ts",
       "default": "./src/index.ts"
     },
     "./openapi": {
-      "types": "./dist/openapi.d.ts",
+      "types": "./dist/api/src/openapi.d.ts",
       "default": "./src/openapi.ts"
     },
     "./services/webhooks/verify": {
-      "types": "./dist/services/webhooks/verify.d.ts",
+      "types": "./dist/api/src/services/webhooks/verify.d.ts",
       "default": "./src/services/webhooks/verify.ts"
     },
     "./services/webhooks/processWebhook": {
-      "types": "./dist/services/webhooks/processWebhook.d.ts",
+      "types": "./dist/api/src/services/webhooks/processWebhook.d.ts",
       "default": "./src/services/webhooks/processWebhook.ts"
     },
     "./services/git/providerConnectionService": {
-      "types": "./dist/services/git/providerConnectionService.d.ts",
+      "types": "./dist/api/src/services/git/providerConnectionService.d.ts",
       "default": "./src/services/git/providerConnectionService.ts"
     },
     "./services/git/prService": {
-      "types": "./dist/services/git/prService.d.ts",
+      "types": "./dist/api/src/services/git/prService.d.ts",
       "default": "./src/services/git/prService.ts"
     },
-    "./services/tasks/taskExecutor": {
-      "types": "./dist/services/tasks/taskExecutor.d.ts",
-      "default": "./src/services/tasks/taskExecutor.ts"
-    },
     "./services/tasks/contextHeuristics": {
-      "types": "./dist/services/tasks/contextHeuristics.d.ts",
+      "types": "./dist/api/src/services/tasks/contextHeuristics.d.ts",
       "default": "./src/services/tasks/contextHeuristics.ts"
     },
     "./services/tasks/taskAutoCreate": {
-      "types": "./dist/services/tasks/taskAutoCreate.d.ts",
+      "types": "./dist/api/src/services/tasks/taskAutoCreate.d.ts",
       "default": "./src/services/tasks/taskAutoCreate.ts"
     },
     "./services/push/pushService": {
-      "types": "./dist/services/push/pushService.d.ts",
+      "types": "./dist/api/src/services/push/pushService.d.ts",
       "default": "./src/services/push/pushService.ts"
     },
     "./services/sessions/workflowStatusService": {
-      "types": "./dist/services/sessions/workflowStatusService.d.ts",
+      "types": "./dist/api/src/services/sessions/workflowStatusService.d.ts",
       "default": "./src/services/sessions/workflowStatusService.ts"
     },
     "./services/opencode/opencodeClient": {
-      "types": "./dist/services/opencode/opencodeClient.d.ts",
+      "types": "./dist/api/src/services/opencode/opencodeClient.d.ts",
       "default": "./src/services/opencode/opencodeClient.ts"
     }
   },
