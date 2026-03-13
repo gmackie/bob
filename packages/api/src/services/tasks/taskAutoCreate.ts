@@ -302,10 +302,10 @@ export async function autoCreateTaskFromPR(
       .where(eq(pullRequests.id, pr.id));
 
     if (pr.sessionId) {
-      await db
-        .update(chatConversations)
-        .set({ kanbangerTaskId: issue.id })
-        .where(eq(chatConversations.id, pr.sessionId));
+    await db
+      .update(chatConversations)
+      .set({ planningTaskId: issue.id })
+      .where(eq(chatConversations.id, pr.sessionId));
     }
 
     return {

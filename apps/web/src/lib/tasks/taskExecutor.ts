@@ -132,7 +132,7 @@ export async function findRepositoryForTask(
   }
 
   const projectMappedRepo = repos.find(
-    (repo) => repo.kanbangerProjectId === task.projectId,
+    (repo) => repo.planningProjectId === task.projectId,
   );
   if (projectMappedRepo) {
     return {
@@ -199,9 +199,9 @@ export async function executeTask(
         userId,
         workItemId: task.id,
         workItemIdentifierSnapshot: task.identifier,
-        kanbangerWorkspaceId: task.workspaceId,
-        kanbangerIssueId: task.id,
-        kanbangerIssueIdentifier: task.identifier,
+        planningWorkspaceId: task.workspaceId,
+        planningItemId: task.id,
+        planningItemIdentifier: task.identifier,
         status: "blocked",
         blockedReason: "No repository found for this task",
       })
@@ -242,9 +242,9 @@ export async function executeTask(
           userId,
           workItemId: task.id,
           workItemIdentifierSnapshot: task.identifier,
-          kanbangerWorkspaceId: task.workspaceId,
-          kanbangerIssueId: task.id,
-          kanbangerIssueIdentifier: task.identifier,
+          planningWorkspaceId: task.workspaceId,
+          planningItemId: task.id,
+          planningItemIdentifier: task.identifier,
           repositoryId: repoInfo.repositoryId,
           status: "failed",
           blockedReason: `Failed to create branch: ${errorMessage}`,
@@ -282,7 +282,7 @@ export async function executeTask(
       workItemId: task.id,
       workItemIdentifierSnapshot: task.identifier,
       gitBranch: branch,
-      kanbangerTaskId: task.id,
+      planningTaskId: task.id,
     })
     .returning();
   const insertedSession = expectInsertedRow(
@@ -296,9 +296,9 @@ export async function executeTask(
       userId,
       workItemId: task.id,
       workItemIdentifierSnapshot: task.identifier,
-      kanbangerWorkspaceId: task.workspaceId,
-      kanbangerIssueId: task.id,
-      kanbangerIssueIdentifier: task.identifier,
+      planningWorkspaceId: task.workspaceId,
+      planningItemId: task.id,
+      planningItemIdentifier: task.identifier,
       sessionId: insertedSession.id,
       repositoryId: repoInfo.repositoryId,
       worktreeId,
@@ -481,11 +481,11 @@ export async function completeTask(taskRunId: string): Promise<void> {
 }
 
 export async function getTaskRunByKanbangerId(
-  kanbangerIssueId: string,
+  planningItemId: string,
 ): Promise<typeof taskRuns.$inferSelect | null> {
   const taskRun = await db.query.taskRuns.findFirst({
     where: and(
-      eq(taskRuns.kanbangerIssueId, kanbangerIssueId),
+      eq(taskRuns.planningItemId, planningItemId),
       eq(taskRuns.status, "blocked"),
     ),
     orderBy: (t, { desc }) => [desc(t.createdAt)],
@@ -495,10 +495,10 @@ export async function getTaskRunByKanbangerId(
 }
 
 export async function getLatestTaskRunByKanbangerId(
-  kanbangerIssueId: string,
+  planningItemId: string,
 ): Promise<typeof taskRuns.$inferSelect | null> {
   const taskRun = await db.query.taskRuns.findFirst({
-    where: eq(taskRuns.kanbangerIssueId, kanbangerIssueId),
+    where: eq(taskRuns.planningItemId, planningItemId),
     orderBy: (t, { desc }) => [desc(t.createdAt)],
   });
 

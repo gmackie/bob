@@ -162,10 +162,10 @@ export async function GET(request: Request) {
     const workspaceIdParam = url.searchParams.get("workspaceId");
 
     const mappedReposPromise = userId
-      ? db.query.repositories.findMany({
+        ? db.query.repositories.findMany({
           where: and(
             eq(repositories.userId, userId),
-            isNotNull(repositories.kanbangerProjectId),
+            isNotNull(repositories.planningProjectId),
           ),
         })
       : Promise.resolve([]);
@@ -271,10 +271,10 @@ export async function GET(request: Request) {
 
     const reposByProject = new Map<string, typeof mappedRepos>();
     for (const repo of mappedRepos) {
-      if (!repo.kanbangerProjectId) continue;
-      const list = reposByProject.get(repo.kanbangerProjectId) ?? [];
+      if (!repo.planningProjectId) continue;
+      const list = reposByProject.get(repo.planningProjectId) ?? [];
       list.push(repo);
-      reposByProject.set(repo.kanbangerProjectId, list);
+      reposByProject.set(repo.planningProjectId, list);
     }
 
     const inReviewByProject = new Map<string, number>();
@@ -370,8 +370,11 @@ export async function GET(request: Request) {
       projects: projectRows,
       activeRuns: activeRuns.map((r) => ({
         id: r.id,
-        kanbangerIssueId: r.kanbangerIssueId,
-        kanbangerIssueIdentifier: r.kanbangerIssueIdentifier,
+        kanbangerIssueId: r.planningItemId,
+        kanbangerIssueIdentifier: r.planningItemIdentifier,
+        workItemId: r.workItemId ?? r.planningItemId,
+        workItemIdentifier:
+          r.workItemIdentifierSnapshot ?? r.planningItemIdentifier,
         status: r.status,
         blockedReason: r.blockedReason,
         branch: r.branch,
@@ -381,7 +384,8 @@ export async function GET(request: Request) {
               id: r.repository.id,
               name: r.repository.name,
               path: r.repository.path,
-              kanbangerProjectId: r.repository.kanbangerProjectId,
+              kanbangerProjectId: r.repository.planningProjectId,
+              planningProjectId: r.repository.planningProjectId,
             }
           : null,
       })),
@@ -398,7 +402,8 @@ export async function GET(request: Request) {
               id: i.repository.id,
               name: i.repository.name,
               path: i.repository.path,
-              kanbangerProjectId: i.repository.kanbangerProjectId,
+              kanbangerProjectId: i.repository.planningProjectId,
+              planningProjectId: i.repository.planningProjectId,
             }
           : null,
       })),

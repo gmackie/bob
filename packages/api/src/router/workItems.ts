@@ -412,7 +412,7 @@ export const taskRunRouter = {
           eq(taskRuns.userId, ctx.session.user.id),
           or(
             eq(taskRuns.workItemId, input.workItemId),
-            eq(taskRuns.kanbangerIssueId, input.workItemId),
+            eq(taskRuns.planningItemId, input.workItemId),
           ),
         ),
         orderBy: desc(taskRuns.createdAt),
@@ -420,9 +420,9 @@ export const taskRunRouter = {
 
       return runs.map((run) => ({
         ...run,
-        workItemId: run.workItemId ?? run.kanbangerIssueId,
+        workItemId: run.workItemId ?? run.planningItemId,
         workItemIdentifier:
-          run.workItemIdentifierSnapshot ?? run.kanbangerIssueIdentifier,
+          run.workItemIdentifierSnapshot ?? run.planningItemIdentifier,
       }));
     }),
 };

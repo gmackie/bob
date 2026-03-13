@@ -136,15 +136,15 @@ async function getSessionTaskContext(
     sessionId: session.id,
     issueId:
       session.workItemId ??
-      session.kanbangerTaskId ??
+      session.planningTaskId ??
       taskRun?.workItemId ??
-      taskRun?.kanbangerIssueId ??
+      taskRun?.planningItemId ??
       null,
     taskRunId: taskRun?.id ?? null,
     issueIdentifier:
       session.workItemIdentifierSnapshot ??
       taskRun?.workItemIdentifierSnapshot ??
-      taskRun?.kanbangerIssueIdentifier ??
+      taskRun?.planningItemIdentifier ??
       null,
   };
 }

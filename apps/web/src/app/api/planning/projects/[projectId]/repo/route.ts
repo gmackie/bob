@@ -114,7 +114,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const existingForProject = await db.query.repositories.findFirst({
       where: and(
         eq(repositories.userId, session.user.id),
-        eq(repositories.kanbangerProjectId, projectId),
+        eq(repositories.planningProjectId, projectId),
       ),
     });
 
@@ -135,12 +135,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     });
 
     if (
-      existingByPath?.kanbangerProjectId &&
-      existingByPath.kanbangerProjectId !== projectId
+      existingByPath?.planningProjectId &&
+      existingByPath.planningProjectId !== projectId
     ) {
       return NextResponse.json(
         {
-          error: `Repo path already mapped to a different project (${existingByPath.kanbangerProjectId})`,
+          error: `Repo path already mapped to a different project (${existingByPath.planningProjectId})`,
         },
         { status: 409 },
       );
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const [updated] = await db
         .update(repositories)
         .set({
-          kanbangerProjectId: projectId,
+          planningProjectId: projectId,
           remoteUrl,
           remoteProvider: provider,
           remoteOwner,
@@ -183,7 +183,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       .insert(repositories)
       .values({
         userId: session.user.id,
-        kanbangerProjectId: projectId,
+        planningProjectId: projectId,
         name: legacyRepo.name,
         path: legacyRepo.path,
         branch: legacyRepo.branch,
@@ -220,11 +220,11 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   try {
     const updated = await db
       .update(repositories)
-      .set({ kanbangerProjectId: null })
+      .set({ planningProjectId: null })
       .where(
         and(
           eq(repositories.userId, session.user.id),
-          eq(repositories.kanbangerProjectId, projectId),
+          eq(repositories.planningProjectId, projectId),
         ),
       )
       .returning({ id: repositories.id });

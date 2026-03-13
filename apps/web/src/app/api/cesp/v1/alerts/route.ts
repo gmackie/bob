@@ -32,6 +32,7 @@ type CespAlert = {
     name: string;
     path: string;
     kanbangerProjectId: string | null;
+    planningProjectId?: string | null;
   } | null;
   metadata: Record<string, unknown>;
 };
@@ -66,15 +67,15 @@ function asTimestamp(value: Date | null): string {
 
 function buildProjectId(
   repository:
-    | (typeof repositories.$inferSelect & { kanbangerProjectId: string | null })
+    | (typeof repositories.$inferSelect & { planningProjectId: string | null })
     | null,
 ): string | null {
-  return repository ? repository.kanbangerProjectId ?? null : null;
+  return repository ? repository.planningProjectId ?? null : null;
 }
 
 function buildRepositorySummary(
   repository:
-    | (typeof repositories.$inferSelect & { kanbangerProjectId: string | null })
+    | (typeof repositories.$inferSelect & { planningProjectId: string | null })
     | null,
 ) {
   if (!repository) return null;
@@ -82,25 +83,26 @@ function buildRepositorySummary(
     id: repository.id,
     name: repository.name,
     path: repository.path,
-    kanbangerProjectId: repository.kanbangerProjectId ?? null,
+    kanbangerProjectId: repository.planningProjectId ?? null,
+    planningProjectId: repository.planningProjectId ?? null,
   };
 }
 
 function mapTaskRun(run: {
   id: string;
-  kanbangerIssueIdentifier: string;
-  kanbangerIssueId: string;
+  planningItemIdentifier: string;
+  planningItemId: string;
   status: string;
   blockedReason: string | null;
   branch: string | null;
   updatedAt: Date | null;
   createdAt: Date;
   repository:
-    | (typeof repositories.$inferSelect & { kanbangerProjectId: string | null })
+    | (typeof repositories.$inferSelect & { planningProjectId: string | null })
     | null;
 }): CespAlert | null {
   const occurredAt = asTimestamp(run.updatedAt ?? run.createdAt);
-  const issueLabel = run.kanbangerIssueIdentifier || run.kanbangerIssueId;
+  const issueLabel = run.planningItemIdentifier || run.planningItemId;
   if (run.status === "running" || run.status === "starting") {
     return {
       id: `task-run:${run.id}:acknowledge:${occurredAt}`,
@@ -114,7 +116,7 @@ function mapTaskRun(run: {
       projectId: buildProjectId(run.repository),
       repository: buildRepositorySummary(run.repository),
       metadata: {
-        issueId: run.kanbangerIssueId,
+        issueId: run.planningItemId,
         branch: run.branch ?? null,
         status: run.status,
       },
@@ -136,7 +138,7 @@ function mapTaskRun(run: {
       projectId: buildProjectId(run.repository),
       repository: buildRepositorySummary(run.repository),
       metadata: {
-        issueId: run.kanbangerIssueId,
+        issueId: run.planningItemId,
         branch: run.branch ?? null,
         status: run.status,
         blockedReason: run.blockedReason ?? null,
@@ -157,7 +159,7 @@ function mapTaskRun(run: {
       projectId: buildProjectId(run.repository),
       repository: buildRepositorySummary(run.repository),
       metadata: {
-        issueId: run.kanbangerIssueId,
+        issueId: run.planningItemId,
         branch: run.branch ?? null,
         status: run.status,
       },
@@ -179,7 +181,7 @@ function mapTaskRun(run: {
       projectId: buildProjectId(run.repository),
       repository: buildRepositorySummary(run.repository),
       metadata: {
-        issueId: run.kanbangerIssueId,
+        issueId: run.planningItemId,
         branch: run.branch ?? null,
         status: run.status,
         blockedReason: run.blockedReason ?? null,
@@ -199,7 +201,7 @@ function mapTaskRun(run: {
     projectId: buildProjectId(run.repository),
     repository: buildRepositorySummary(run.repository),
     metadata: {
-      issueId: run.kanbangerIssueId,
+      issueId: run.planningItemId,
       branch: run.branch ?? null,
       status: run.status,
     },
@@ -215,7 +217,7 @@ function mapInstance(instance: {
   updatedAt: Date | null;
   createdAt: Date;
   repository:
-    | (typeof repositories.$inferSelect & { kanbangerProjectId: string | null })
+    | (typeof repositories.$inferSelect & { planningProjectId: string | null })
     | null;
 }): CespAlert | null {
   const occurredAt = asTimestamp(instance.updatedAt ?? instance.createdAt);
@@ -293,7 +295,7 @@ function mapEvent(record: {
   payload: Record<string, unknown>;
   createdAt: Date;
   repository: (typeof repositories.$inferSelect & {
-    kanbangerProjectId: string | null;
+    planningProjectId: string | null;
   }) | null;
 }): CespAlert | null {
   const occurredAt = asTimestamp(record.createdAt);

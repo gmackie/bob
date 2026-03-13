@@ -743,7 +743,7 @@ export async function syncPlanningReposForBobUser(input: {
       const existingForProject = await db.query.repositories.findFirst({
         where: and(
           eq(repositories.userId, targetUser.id),
-          eq(repositories.kanbangerProjectId, p.project.id),
+          eq(repositories.planningProjectId, p.project.id),
         ),
       });
 
@@ -767,8 +767,8 @@ export async function syncPlanningReposForBobUser(input: {
       });
 
       if (
-        existingByPath?.kanbangerProjectId &&
-        existingByPath.kanbangerProjectId !== p.project.id
+        existingByPath?.planningProjectId &&
+        existingByPath.planningProjectId !== p.project.id
       ) {
         results.push({
           projectId: p.project.id,
@@ -776,7 +776,7 @@ export async function syncPlanningReposForBobUser(input: {
           status: "error",
           repoFullName,
           candidates: candidatesPayload,
-          error: `Repo path already mapped to a different project (${existingByPath.kanbangerProjectId})`,
+          error: `Repo path already mapped to a different project (${existingByPath.planningProjectId})`,
         });
         continue;
       }
@@ -805,7 +805,7 @@ export async function syncPlanningReposForBobUser(input: {
         await db
           .update(repositories)
           .set({
-            kanbangerProjectId: p.project.id,
+            planningProjectId: p.project.id,
             remoteUrl,
             remoteProvider,
             remoteOwner,
@@ -830,7 +830,7 @@ export async function syncPlanningReposForBobUser(input: {
 
       await db.insert(repositories).values({
         userId: targetUser.id,
-        kanbangerProjectId: p.project.id,
+        planningProjectId: p.project.id,
         name: legacyRepo.name,
         path: legacyRepo.path,
         branch: legacyRepo.branch,

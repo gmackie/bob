@@ -122,9 +122,9 @@ export async function executeTask(
         userId,
         workItemId: task.id,
         workItemIdentifierSnapshot: task.identifier,
-        kanbangerWorkspaceId: task.workspaceId,
-        kanbangerIssueId: task.id,
-        kanbangerIssueIdentifier: task.identifier,
+        planningWorkspaceId: task.workspaceId,
+        planningItemId: task.id,
+        planningItemIdentifier: task.identifier,
         status: "blocked",
         blockedReason: "No repository found for this task",
       })
@@ -162,9 +162,9 @@ export async function executeTask(
           userId,
           workItemId: task.id,
           workItemIdentifierSnapshot: task.identifier,
-          kanbangerWorkspaceId: task.workspaceId,
-          kanbangerIssueId: task.id,
-          kanbangerIssueIdentifier: task.identifier,
+          planningWorkspaceId: task.workspaceId,
+          planningItemId: task.id,
+          planningItemIdentifier: task.identifier,
           repositoryId: repoInfo.repositoryId,
           status: "failed",
           blockedReason: `Failed to create branch: ${errorMessage}`,
@@ -198,7 +198,7 @@ export async function executeTask(
       workItemId: task.id,
       workItemIdentifierSnapshot: task.identifier,
       gitBranch: branch,
-      kanbangerTaskId: task.id,
+      planningTaskId: task.id,
     })
     .returning();
 
@@ -208,9 +208,9 @@ export async function executeTask(
       userId,
       workItemId: task.id,
       workItemIdentifierSnapshot: task.identifier,
-      kanbangerWorkspaceId: task.workspaceId,
-      kanbangerIssueId: task.id,
-      kanbangerIssueIdentifier: task.identifier,
+      planningWorkspaceId: task.workspaceId,
+      planningItemId: task.id,
+      planningItemIdentifier: task.identifier,
       sessionId: session!.id,
       repositoryId: repoInfo.repositoryId,
       worktreeId,
@@ -375,11 +375,11 @@ export async function completeTask(taskRunId: string): Promise<void> {
 }
 
 export async function getTaskRunByKanbangerId(
-  kanbangerIssueId: string,
+  planningItemId: string,
 ): Promise<typeof taskRuns.$inferSelect | null> {
   const taskRun = await db.query.taskRuns.findFirst({
     where: and(
-      eq(taskRuns.kanbangerIssueId, kanbangerIssueId),
+      eq(taskRuns.planningItemId, planningItemId),
       eq(taskRuns.status, "blocked"),
     ),
     orderBy: (t, { desc }) => [desc(t.createdAt)],

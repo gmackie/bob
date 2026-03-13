@@ -138,19 +138,19 @@ describe("product-facing app router", () => {
       },
     ]);
     queryMocks.taskRunsFindMany.mockResolvedValue([
-        {
-          id: taskId,
-          userId: "user-1",
-          sessionId: "session-1",
-          workItemId: taskId,
-          workItemIdentifierSnapshot: "MERGE-12",
-          kanbangerIssueId: taskId,
-          kanbangerIssueIdentifier: "MERGE-12",
-          status: "running",
-          createdAt: new Date("2026-03-11T11:00:00.000Z"),
-          updatedAt: new Date("2026-03-11T11:05:00.000Z"),
-        },
-      ]);
+      {
+        id: taskId,
+        userId: "user-1",
+        sessionId: "session-1",
+        workItemId: taskId,
+        workItemIdentifierSnapshot: "MERGE-12",
+        planningItemId: taskId,
+        planningItemIdentifier: "MERGE-12",
+        status: "running",
+        createdAt: new Date("2026-03-11T11:00:00.000Z"),
+        updatedAt: new Date("2026-03-11T11:05:00.000Z"),
+      },
+    ]);
     queryMocks.projectsFindFirst.mockResolvedValueOnce({
       id: projectId,
       workspaceId,

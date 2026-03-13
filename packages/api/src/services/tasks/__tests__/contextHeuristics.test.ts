@@ -21,7 +21,7 @@ function createMockRepository(overrides = {}) {
     remoteName: null,
     remoteInstanceUrl: null,
     gitProviderConnectionId: null,
-    kanbangerProjectId: null,
+    planningProjectId: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,

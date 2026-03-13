@@ -34,14 +34,14 @@ describe("planningWriteService", () => {
     findConversationMock.mockResolvedValue({
       id: "session-123",
       userId: "user-123",
-      kanbangerTaskId: "issue-123",
+      planningTaskId: "issue-123",
     });
     findTaskRunMock.mockResolvedValue({
       id: "run-123",
       sessionId: "session-123",
       userId: "user-123",
-      kanbangerIssueId: "issue-123",
-      kanbangerIssueIdentifier: "ENG-123",
+      planningItemId: "issue-123",
+      planningItemIdentifier: "ENG-123",
     });
     global.fetch = vi.fn();
   });

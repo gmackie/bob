@@ -336,7 +336,7 @@ export const repositoryRouter = {
           title: input.planning.title,
           goal: input.planning.goal,
           status: "active",
-          kanbangerTaskId: input.planning.kanbangerTaskId,
+          planningTaskId: input.planning.kanbangerTaskId,
           lastSyncedAt: new Date(),
         });
       }
@@ -433,7 +433,8 @@ export const repositoryRouter = {
         contentToWrite = generatePlanningMd({
           title: input.title ?? plan?.title ?? undefined,
           goal: input.goal ?? plan?.goal ?? undefined,
-          kanbangerTaskId: input.kanbangerTaskId ?? plan?.kanbangerTaskId ?? undefined,
+          kanbangerTaskId:
+            input.kanbangerTaskId ?? plan?.planningTaskId ?? undefined,
           worktreeId: input.worktreeId,
           tasks: input.tasks,
         });
@@ -457,7 +458,7 @@ export const repositoryRouter = {
             title: input.title,
             goal: input.goal,
             status: input.status ?? "active",
-            kanbangerTaskId: input.kanbangerTaskId,
+            planningTaskId: input.kanbangerTaskId,
             lastSyncedAt: new Date(),
           })
           .returning();
@@ -467,7 +468,9 @@ export const repositoryRouter = {
         if (input.title !== undefined) updates.title = input.title;
         if (input.goal !== undefined) updates.goal = input.goal;
         if (input.status !== undefined) updates.status = input.status;
-        if (input.kanbangerTaskId !== undefined) updates.kanbangerTaskId = input.kanbangerTaskId;
+        if (input.kanbangerTaskId !== undefined) {
+          updates.planningTaskId = input.kanbangerTaskId;
+        }
 
         const [updated] = await ctx.db
           .update(worktreePlans)

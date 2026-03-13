@@ -283,7 +283,7 @@ export const repositories = pgTable("repositories", (t) => ({
     .text()
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
-  kanbangerProjectId: t.text(),
+  planningProjectId: t.text("kanbanger_project_id"),
   name: t.varchar({ length: 256 }).notNull(),
   path: t.text().notNull(),
   branch: t.varchar({ length: 256 }).notNull(),
@@ -596,7 +596,7 @@ export const chatConversations = pgTable(
     leaseExpiresAt: t.timestamp({ mode: "date", withTimezone: true }),
     gitBranch: t.text(),
     pullRequestId: t.uuid(),
-    kanbangerTaskId: t.text(),
+    planningTaskId: t.text("kanbanger_task_id"),
     workItemId: t.uuid().references(() => workItems.id, { onDelete: "set null" }),
     workItemIdentifierSnapshot: t.text(),
     blockedReason: t.text(),
@@ -620,7 +620,7 @@ export const chatConversations = pgTable(
     },
     {
       name: "chat_conversations_kanbanger_task_idx",
-      columns: [table.kanbangerTaskId],
+      columns: [table.planningTaskId],
     },
     {
       name: "chat_conversations_work_item_idx",
@@ -743,7 +743,7 @@ export const worktreePlans = pgTable("worktree_plans", (t) => ({
   title: t.varchar({ length: 256 }),
   goal: t.text(),
   status: t.varchar({ length: 20 }).notNull().default("draft"),
-  kanbangerTaskId: t.varchar({ length: 100 }),
+  planningTaskId: t.varchar("kanbanger_task_id", { length: 100 }),
   lastSyncedAt: t.timestamp({ mode: "date", withTimezone: true }),
   createdAt: t.timestamp().defaultNow().notNull(),
   updatedAt: t
@@ -756,7 +756,7 @@ export const CreateWorktreePlanSchema = createInsertSchema(worktreePlans, {
   title: z.string().max(256).optional(),
   goal: z.string().optional(),
   status: z.enum(planStatusEnum).default("draft"),
-  kanbangerTaskId: z.string().max(100).optional(),
+  planningTaskId: z.string().max(100).optional(),
 }).omit({
   id: true,
   userId: true,
@@ -1194,9 +1194,9 @@ export const taskRuns = pgTable("task_runs", (t) => ({
     .text()
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
-  kanbangerWorkspaceId: t.text().notNull(),
-  kanbangerIssueId: t.text().notNull(),
-  kanbangerIssueIdentifier: t.text().notNull(), // e.g., "PROJ-123"
+  planningWorkspaceId: t.text("kanbanger_workspace_id").notNull(),
+  planningItemId: t.text("kanbanger_issue_id").notNull(),
+  planningItemIdentifier: t.text("kanbanger_issue_identifier").notNull(), // e.g., "PROJ-123"
   workItemId: t.uuid().references(() => workItems.id, { onDelete: "set null" }),
   workItemIdentifierSnapshot: t.text(),
   sessionId: t
@@ -1220,9 +1220,9 @@ export const taskRuns = pgTable("task_runs", (t) => ({
 }));
 
 export const CreateTaskRunSchema = createInsertSchema(taskRuns, {
-  kanbangerWorkspaceId: z.string(),
-  kanbangerIssueId: z.string(),
-  kanbangerIssueIdentifier: z.string(),
+  planningWorkspaceId: z.string(),
+  planningItemId: z.string(),
+  planningItemIdentifier: z.string(),
   workItemIdentifierSnapshot: z.string().optional(),
   status: z.enum(taskRunStatusEnum),
   blockedReason: z.string().optional(),

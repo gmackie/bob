@@ -120,11 +120,11 @@ async function ensureControlUserId(
   return DEFAULT_CONTROL_USER_ID;
 }
 
-async function getLatestTaskRunForIssue(kanbangerIssueId: string) {
+async function getLatestTaskRunForIssue(planningItemId: string) {
   return db.query.taskRuns.findFirst({
     where: or(
-      eq(taskRuns.workItemId, kanbangerIssueId),
-      eq(taskRuns.kanbangerIssueId, kanbangerIssueId),
+      eq(taskRuns.workItemId, planningItemId),
+      eq(taskRuns.planningItemId, planningItemId),
     ),
     with: {
       repository: true,
@@ -173,11 +173,11 @@ function buildIssueSessionSnapshot(
   }
 
   return {
-    issueId: taskRun.workItemId ?? taskRun.kanbangerIssueId,
+    issueId: taskRun.workItemId ?? taskRun.planningItemId,
     issueIdentifier:
       fallback.issueIdentifier ??
       taskRun.workItemIdentifierSnapshot ??
-      taskRun.kanbangerIssueIdentifier,
+      taskRun.planningItemIdentifier,
     executionBackend: "bob",
     taskRunId: taskRun.id,
     sessionId: taskRun.sessionId,

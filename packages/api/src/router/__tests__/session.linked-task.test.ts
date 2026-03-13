@@ -70,7 +70,7 @@ describe("session router linked task URLs", () => {
       status: "running",
       workItemId,
       workItemIdentifierSnapshot: "PLAN-123",
-      kanbangerTaskId: workItemId,
+      planningTaskId: workItemId,
       repository: null,
       worktree: null,
     });
@@ -80,8 +80,8 @@ describe("session router linked task URLs", () => {
       userId: "user-1",
       workItemId,
       workItemIdentifierSnapshot: "PLAN-123",
-      kanbangerIssueId: workItemId,
-      kanbangerIssueIdentifier: "PLAN-123",
+      planningItemId: workItemId,
+      planningItemIdentifier: "PLAN-123",
     });
 
     const caller = createCaller() as any;

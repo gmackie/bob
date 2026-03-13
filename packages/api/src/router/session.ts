@@ -109,7 +109,7 @@ export const sessionRouter = {
           updatedAt: chatConversations.updatedAt,
           workItemId: chatConversations.workItemId,
           workItemIdentifierSnapshot: chatConversations.workItemIdentifierSnapshot,
-          kanbangerTaskId: chatConversations.kanbangerTaskId,
+          planningTaskId: chatConversations.planningTaskId,
         })
         .from(chatConversations)
         .where(and(...conditions))
@@ -127,8 +127,8 @@ export const sessionRouter = {
                 sessionId: taskRuns.sessionId,
                 workItemId: taskRuns.workItemId,
                 workItemIdentifierSnapshot: taskRuns.workItemIdentifierSnapshot,
-                issueId: taskRuns.kanbangerIssueId,
-                identifier: taskRuns.kanbangerIssueIdentifier,
+                planningItemId: taskRuns.planningItemId,
+                planningItemIdentifier: taskRuns.planningItemIdentifier,
               })
               .from(taskRuns)
               .where(inArray(taskRuns.sessionId, sessionIds))
@@ -144,9 +144,9 @@ export const sessionRouter = {
           continue;
         }
 
-        const workItemId = row.workItemId ?? row.issueId;
+        const workItemId = row.workItemId ?? row.planningItemId;
         const workItemIdentifier =
-          row.workItemIdentifierSnapshot ?? row.identifier;
+          row.workItemIdentifierSnapshot ?? row.planningItemIdentifier;
 
         linkedTaskBySessionId.set(row.sessionId, {
           id: workItemId,
@@ -158,13 +158,15 @@ export const sessionRouter = {
       return {
         items: items.map((session) => ({
           ...session,
-          workItemId: session.workItemId ?? session.kanbangerTaskId,
+          workItemId: session.workItemId ?? session.planningTaskId,
           workItemIdentifier:
             session.workItemIdentifierSnapshot ??
             linkedTaskBySessionId.get(session.id)?.identifier ??
             null,
           linkedTask: linkedTaskBySessionId.get(session.id) ?? null,
-          issueManaged: Boolean(session.workItemId ?? session.kanbangerTaskId),
+          issueManaged: Boolean(session.workItemId ?? session.planningTaskId),
+          planningTaskId: session.planningTaskId,
+          kanbangerTaskId: session.planningTaskId,
         })),
         nextCursor,
       };
@@ -204,28 +206,30 @@ export const sessionRouter = {
         workItemId:
           session.workItemId ??
           latestTaskRun?.workItemId ??
-          session.kanbangerTaskId,
+          session.planningTaskId,
         workItemIdentifier:
           session.workItemIdentifierSnapshot ??
           latestTaskRun?.workItemIdentifierSnapshot ??
-          latestTaskRun?.kanbangerIssueIdentifier ??
+          latestTaskRun?.planningItemIdentifier ??
           null,
         linkedTask: latestTaskRun
           ? {
-              id: latestTaskRun.workItemId ?? latestTaskRun.kanbangerIssueId,
+              id: latestTaskRun.workItemId ?? latestTaskRun.planningItemId,
               identifier:
                 latestTaskRun.workItemIdentifierSnapshot ??
-                latestTaskRun.kanbangerIssueIdentifier,
+                latestTaskRun.planningItemIdentifier,
               url: buildPlanningWorkItemUrl(
-                latestTaskRun.workItemId ?? latestTaskRun.kanbangerIssueId,
+                latestTaskRun.workItemId ?? latestTaskRun.planningItemId,
               ),
             }
           : null,
         issueManaged: Boolean(
           session.workItemId ??
             latestTaskRun?.workItemId ??
-            session.kanbangerTaskId,
+            session.planningTaskId,
         ),
+        planningTaskId: session.planningTaskId,
+        kanbangerTaskId: session.planningTaskId,
       };
     }),
 

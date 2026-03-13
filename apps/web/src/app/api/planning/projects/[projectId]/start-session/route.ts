@@ -243,7 +243,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const existingRun = await db.query.taskRuns.findFirst({
         where: and(
           eq(taskRuns.userId, session.user.id),
-          eq(taskRuns.kanbangerIssueId, issue.id),
+          eq(taskRuns.planningItemId, issue.id),
           inArray(taskRuns.status, ["starting", "running", "blocked"]),
         ),
         columns: {
@@ -269,7 +269,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const mapped = await db.query.repositories.findMany({
       where: and(
         eq(repositories.userId, session.user.id),
-        eq(repositories.kanbangerProjectId, projectId),
+        eq(repositories.planningProjectId, projectId),
       ),
       limit: 2,
     });
@@ -367,9 +367,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         .insert(taskRuns)
         .values({
           userId: session.user.id,
-          kanbangerWorkspaceId: task.workspaceId,
-          kanbangerIssueId: task.id,
-          kanbangerIssueIdentifier: task.identifier,
+          planningWorkspaceId: task.workspaceId,
+          planningItemId: task.id,
+          planningItemIdentifier: task.identifier,
           repositoryId: repoRow.id,
           worktreeId: worktreeRow.id,
           status: "starting",
@@ -378,7 +378,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         .returning({
           id: taskRuns.id,
           status: taskRuns.status,
-          kanbangerIssueIdentifier: taskRuns.kanbangerIssueIdentifier,
+          kanbangerIssueIdentifier: taskRuns.planningItemIdentifier,
         });
 
       taskRun = createdTaskRun ?? null;
@@ -413,7 +413,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           .returning({
             id: taskRuns.id,
             status: taskRuns.status,
-            kanbangerIssueIdentifier: taskRuns.kanbangerIssueIdentifier,
+            kanbangerIssueIdentifier: taskRuns.planningItemIdentifier,
           });
         taskRun = updatedTaskRun ?? taskRun;
       }
@@ -424,7 +424,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             id: repoRow.id,
             name: repoRow.name,
             path: repoRow.path,
-            kanbangerProjectId: repoRow.kanbangerProjectId,
+            kanbangerProjectId: repoRow.planningProjectId,
+            planningProjectId: repoRow.planningProjectId,
           },
           taskRun,
           worktree: {
