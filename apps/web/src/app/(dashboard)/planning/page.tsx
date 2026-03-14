@@ -1,3 +1,4 @@
+import React from "react";
 import Link from "next/link";
 
 import { ProjectCard } from "~/components/projects/project-card";
@@ -50,7 +51,7 @@ export default async function PlanningPage() {
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-white/62">
               Intake, scope, and execution now live in one shell. Use this view to
-              scan active work before jumping into a task workspace.
+              scan active work before opening a task&apos;s execution workspace.
             </p>
           </div>
           <Link

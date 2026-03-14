@@ -4,32 +4,9 @@ import { Pressable, Text, View } from "react-native";
 
 import { Badge, Button, Card, Screen } from "~/components/ui";
 import { getPlanningHref } from "~/features/planning/navigation";
+import { ONBOARDING_SLIDES } from "~/features/planning/onboarding-copy";
 import { hasSeenOnboarding, setOnboardingComplete } from "~/lib/storage";
 import { authClient } from "~/utils/auth";
-
-const ONBOARDING_SLIDES = [
-  {
-    title: "Capture the issue.\nScope the task.",
-    bullets: [
-      "Use work items to move from intake into execution",
-      "Keep planning, comments, and artifacts in one place",
-    ],
-  },
-  {
-    title: "Open the task.\nWork with Bob.",
-    bullets: [
-      "Jump directly into the task workspace from mobile",
-      "Track blocked, review-ready, and verification states",
-    ],
-  },
-  {
-    title: "Stay aligned\nfrom anywhere.",
-    bullets: [
-      "Review notifications, comments, and artifacts on the go",
-      "Keep execution moving without the old dashboard sprawl",
-    ],
-  },
-];
 
 function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   const [currentSlide, setCurrentSlide] = useState(0);
