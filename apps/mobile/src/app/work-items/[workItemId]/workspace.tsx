@@ -13,6 +13,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge, Button, Card, ListRow, Screen } from "~/components/ui";
 import { buildHeadlessSessionDestination } from "~/features/planning/execution-links";
 import {
+  DEFAULT_EXECUTION_WORKSPACE_TITLE,
   buildTaskWorkspaceViewModel,
   deriveTaskWorkspaceValidationState,
   summarizeSessionEvents,
@@ -247,7 +248,7 @@ export default function TaskWorkspaceScreen() {
 
         <Card variant="elevated" className="mb-5">
           <Text className="text-foreground text-lg font-semibold">
-            {workspaceModel?.title ?? "Task workspace"}
+            {workspaceModel?.title ?? DEFAULT_EXECUTION_WORKSPACE_TITLE}
           </Text>
           <View className="mt-4 flex-row flex-wrap gap-2">
             <Badge variant="accent">

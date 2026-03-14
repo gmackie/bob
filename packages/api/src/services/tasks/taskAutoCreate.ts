@@ -252,7 +252,7 @@ export async function autoCreateTaskFromPR(
         score: 100,
         suggestions: [],
       },
-      reason: "PR already linked to a Kanbanger task",
+      reason: "PR already linked to a planning task",
     };
   }
 

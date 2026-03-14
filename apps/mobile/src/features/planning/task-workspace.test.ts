@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  DEFAULT_EXECUTION_WORKSPACE_TITLE,
   buildTaskWorkspaceViewModel,
   deriveTaskWorkspaceValidationState,
   summarizeSessionEvents,
@@ -148,5 +149,9 @@ describe("task workspace view model", () => {
         sessionId: null,
       },
     ]);
+  });
+
+  it("exposes an execution workspace fallback title for empty state rendering", () => {
+    expect(DEFAULT_EXECUTION_WORKSPACE_TITLE).toBe("Execution workspace");
   });
 });

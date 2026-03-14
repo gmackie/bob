@@ -46,6 +46,8 @@ interface TaskWorkspaceRun {
   sessionId: string | null;
 }
 
+export const DEFAULT_EXECUTION_WORKSPACE_TITLE = "Execution workspace";
+
 export function summarizeSessionEvents(events: TaskWorkspaceEvent[]) {
   return events
     .map((event) => {
