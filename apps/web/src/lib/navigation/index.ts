@@ -3,10 +3,13 @@
 import { useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+const EMPTY_SEARCH_PARAMS = new URLSearchParams();
+
 export function useAppNavigation() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const params = searchParams ?? EMPTY_SEARCH_PARAMS;
 
   const navigate = useCallback(
     (path: string) => {
@@ -38,12 +41,12 @@ export function useAppNavigation() {
   }, [router]);
 
   const getWorktreeIdFromUrl = useCallback(() => {
-    return searchParams.get("worktree");
-  }, [searchParams]);
+    return params.get("worktree");
+  }, [params]);
 
   const getRepositoryIdFromUrl = useCallback(() => {
-    return searchParams.get("repository");
-  }, [searchParams]);
+    return params.get("repository");
+  }, [params]);
 
   return {
     navigate,
@@ -54,7 +57,7 @@ export function useAppNavigation() {
     getWorktreeIdFromUrl,
     getRepositoryIdFromUrl,
     pathname,
-    searchParams,
+    searchParams: params,
     router,
   };
 }

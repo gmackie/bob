@@ -143,13 +143,16 @@ function ChatEmptyState() {
   );
 }
 
+const EMPTY_SEARCH_PARAMS = new URLSearchParams();
+
 function ChatPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const params = searchParams ?? EMPTY_SEARCH_PARAMS;
   const trpc = useTRPC();
   const queryClient = useQueryClient();
 
-  const sessionId = searchParams.get("session");
+  const sessionId = params.get("session");
   const hasSessionId = Boolean(sessionId);
   const activeSessionId = sessionId ?? "";
   const [liveEvents, setLiveEvents] = useState<SessionEvent[]>([]);
@@ -160,9 +163,9 @@ function ChatPageContent() {
   const [headlessFromSeq, setHeadlessFromSeq] = useState(0);
 
   const interactionMode = useMemo<InteractionMode>(() => {
-    const mode = searchParams.get("mode");
+    const mode = params.get("mode");
     return mode === "headless" ? "headless" : "web";
-  }, [searchParams]);
+  }, [params]);
   const isHeadlessMode = interactionMode === "headless";
 
   const { data: gatewayInfo } = useQuery(
@@ -390,13 +393,13 @@ function ChatPageContent() {
   const updateUrl = useCallback(
     (mode: InteractionMode, selectedSessionId?: string) => {
       const nextPath = buildChatPath(
-        new URLSearchParams(searchParams.toString()),
+        new URLSearchParams(params.toString()),
         mode,
         selectedSessionId ?? activeSessionId,
       );
       router.push(nextPath);
     },
-    [activeSessionId, router, searchParams],
+    [activeSessionId, params, router],
   );
 
   useEffect(() => {
@@ -456,13 +459,13 @@ function ChatPageContent() {
       if (mode === interactionMode) return;
 
       const nextPath = buildChatPath(
-        new URLSearchParams(searchParams.toString()),
+        new URLSearchParams(params.toString()),
         mode,
         activeSessionId,
       );
       router.replace(nextPath);
     },
-    [activeSessionId, interactionMode, router, searchParams],
+    [activeSessionId, interactionMode, params, router],
   );
 
   const handleSelectSession = useCallback(

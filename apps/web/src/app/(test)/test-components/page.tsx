@@ -3,9 +3,8 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-import "~/app/chat/chat.css";
-
 import { InputComposer } from "~/app/chat/_components/input-composer";
+import { SystemStatusPanel } from "~/components/dashboard/SystemStatusPanel";
 
 type WorkflowStatus =
   | "started"
@@ -14,6 +13,8 @@ type WorkflowStatus =
   | "blocked"
   | "awaiting_review"
   | "completed";
+
+const EMPTY_SEARCH_PARAMS = new URLSearchParams();
 
 type SessionStatus =
   | "provisioning"
@@ -530,7 +531,8 @@ type TestComponent =
   | "awaiting-input"
   | "resolved-input"
   | "input-composer"
-  | "session-list";
+  | "session-list"
+  | "system-status";
 
 const testSessionFilters = [
   { value: "all" as const, label: "All" },
@@ -715,9 +717,10 @@ function SessionListFilterFixture({ variant }: { variant: string | null }) {
 
 function TestPage() {
   const searchParams = useSearchParams();
-  const component = searchParams.get("component") as TestComponent | null;
-  const variant = searchParams.get("variant") ?? "default";
-  const listVariant = searchParams.get("listVariant");
+  const params = searchParams ?? EMPTY_SEARCH_PARAMS;
+  const component = params.get("component") as TestComponent | null;
+  const variant = params.get("variant") ?? "default";
+  const listVariant = params.get("listVariant");
 
   const [resolving, setResolving] = useState(false);
   const [resolved, setResolved] = useState<string | null>(null);
@@ -777,14 +780,12 @@ function TestPage() {
     };
 
     const workflowState = workflowStatusMap[variant];
-    const title = searchParams.get("title") ?? "Test Session";
-    const agentType = searchParams.get("agentType") ?? "opencode";
-    const workingDirectory =
-      searchParams.get("workingDirectory") ?? "/test/path";
-    const gitBranch = searchParams.get("gitBranch") ?? "feature/test";
+    const title = params.get("title") ?? "Test Session";
+    const agentType = params.get("agentType") ?? "opencode";
+    const workingDirectory = params.get("workingDirectory") ?? "/test/path";
+    const gitBranch = params.get("gitBranch") ?? "feature/test";
     const sessionStatus =
-      sessionStatusMap[searchParams.get("sessionStatus") ?? "running"] ??
-      "running";
+      sessionStatusMap[params.get("sessionStatus") ?? "running"] ?? "running";
 
     return (
       <div data-testid="test-container">
@@ -792,12 +793,12 @@ function TestPage() {
           title={title}
           status={sessionStatus}
           agentType={agentType}
-          issueManaged={Boolean(searchParams.get("issueManaged"))}
+          issueManaged={Boolean(params.get("issueManaged"))}
           workingDirectory={workingDirectory}
           gitBranch={gitBranch}
           workflowState={workflowState}
           linkedPr={
-            searchParams.get("withPr")
+            params.get("withPr")
               ? {
                   id: "pr-1",
                   number: 42,
@@ -808,7 +809,7 @@ function TestPage() {
               : undefined
           }
           linkedTask={
-            searchParams.get("withTask")
+            params.get("withTask")
               ? {
                   id: "task-1",
                   identifier: "PROJ-123",
@@ -904,11 +905,19 @@ function TestPage() {
     );
   }
 
+  if (component === "system-status") {
+    return (
+      <div data-testid="test-container">
+        <SystemStatusPanel />
+      </div>
+    );
+  }
+
   return (
     <div data-testid="test-container" className="p-4">
       <p>
         Use query params:
-        ?component=session-header|awaiting-input|resolved-input|input-composer|session-list&variant=...
+        ?component=session-header|awaiting-input|resolved-input|input-composer|session-list|system-status&variant=...
         and optionally listVariant=long for long session content
       </p>
     </div>
