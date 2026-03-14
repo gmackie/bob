@@ -95,6 +95,10 @@ describe("context tools", () => {
   describe("getTaskContextTool", () => {
     it("should have correct tool definition", () => {
       expect(getTaskContextTool.tool.name).toBe("get_task_context");
+      expect(getTaskContextTool.tool.description).toContain(
+        "Get details about the task assigned to this session",
+      );
+      expect(getTaskContextTool.tool.description).not.toContain("Kanbanger");
     });
 
     it("should return error when sessionId is not set", async () => {

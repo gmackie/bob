@@ -52,7 +52,7 @@ export const getTaskContextTool: ToolDefinition = {
   tool: {
     name: "get_task_context",
     description:
-      "Get details about the Kanbanger task assigned to this session, if any. " +
+      "Get details about the task assigned to this session, if any. " +
       "Includes task description, labels, priority, and any related context.",
     inputSchema: {
       type: "object",

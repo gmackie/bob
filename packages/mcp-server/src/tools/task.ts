@@ -5,7 +5,7 @@ export const linkTaskTool: ToolDefinition = {
   tool: {
     name: "link_task",
     description:
-      "Link a Kanbanger task to this session. Use this when you start working " +
+      "Link a task to this session. Use this when you start working " +
       "on a specific task.",
     inputSchema: {
       type: "object",
@@ -50,7 +50,7 @@ export const postTaskCommentTool: ToolDefinition = {
   tool: {
     name: "post_task_comment",
     description:
-      "Post a comment on the linked Kanbanger task. Use this to provide " +
+      "Post a comment on the linked task. Use this to provide " +
       "status updates, ask questions, or share information with the team.",
     inputSchema: {
       type: "object",
@@ -97,7 +97,7 @@ export const completeTaskTool: ToolDefinition = {
   tool: {
     name: "complete_task",
     description:
-      "Mark the linked Kanbanger task as complete. Use this when you have " +
+      "Mark the linked task as complete. Use this when you have " +
       "finished all work on the task.",
     inputSchema: {
       type: "object",
@@ -149,7 +149,7 @@ export const updateTaskStatusTool: ToolDefinition = {
   tool: {
     name: "update_task_status",
     description:
-      "Update the status of the linked Kanbanger task (e.g., move to 'in_review').",
+      "Update the status of the linked task (e.g., move to 'in_review').",
     inputSchema: {
       type: "object",
       properties: {

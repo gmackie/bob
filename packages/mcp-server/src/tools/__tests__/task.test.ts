@@ -30,6 +30,10 @@ describe("task tools", () => {
       expect(linkTaskTool.tool.inputSchema.required).toContain(
         "task_identifier",
       );
+      expect(linkTaskTool.tool.description).toContain(
+        "Link a task to this session.",
+      );
+      expect(linkTaskTool.tool.description).not.toContain("Kanbanger");
     });
 
     it("should return error when sessionId is not set", async () => {
@@ -97,6 +101,10 @@ describe("task tools", () => {
       expect(postTaskCommentTool.tool.inputSchema.required).toContain(
         "comment",
       );
+      expect(postTaskCommentTool.tool.description).toContain(
+        "Post a comment on the linked task.",
+      );
+      expect(postTaskCommentTool.tool.description).not.toContain("Kanbanger");
     });
 
     it("should return error when sessionId is not set", async () => {
@@ -150,6 +158,10 @@ describe("task tools", () => {
     it("should have correct tool definition", () => {
       expect(completeTaskTool.tool.name).toBe("complete_task");
       expect(completeTaskTool.tool.inputSchema.required).toContain("summary");
+      expect(completeTaskTool.tool.description).toContain(
+        "Mark the linked task as complete.",
+      );
+      expect(completeTaskTool.tool.description).not.toContain("Kanbanger");
     });
 
     it("should return error when sessionId is not set", async () => {
@@ -269,6 +281,15 @@ describe("task tools", () => {
         },
       );
       expect(result.isError).toBeFalsy();
+    });
+  });
+
+  describe("updateTaskStatusTool", () => {
+    it("should describe status updates without legacy product naming", () => {
+      expect(updateTaskStatusTool.tool.description).toContain(
+        "Update the status of the linked task",
+      );
+      expect(updateTaskStatusTool.tool.description).not.toContain("Kanbanger");
     });
   });
 
