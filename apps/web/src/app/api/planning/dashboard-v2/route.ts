@@ -7,7 +7,7 @@ import { agentInstances, repositories, taskRuns } from "@bob/db/schema";
 import { getSession } from "~/auth/server";
 import { getPlanningRemoteConfig } from "~/lib/planning/remote-config";
 
-async function kanbangerQuery<T>(path: string, input?: unknown): Promise<T> {
+async function planningQuery<T>(path: string, input?: unknown): Promise<T> {
   const { baseUrl, apiKey } = getPlanningRemoteConfig();
 
   if (!apiKey) {
@@ -45,13 +45,13 @@ async function kanbangerQuery<T>(path: string, input?: unknown): Promise<T> {
   return result[0]?.result?.data?.json as T;
 }
 
-type KanbangerWorkspace = {
+type PlanningWorkspace = {
   id: string;
   name: string;
   slug: string;
 };
 
-type KanbangerProjectListItem = {
+type PlanningProjectListItem = {
   project: {
     id: string;
     name: string;
@@ -61,7 +61,7 @@ type KanbangerProjectListItem = {
   };
 };
 
-type KanbangerProjectGet = {
+type PlanningProjectGet = {
   project: {
     id: string;
     name: string;
@@ -72,7 +72,7 @@ type KanbangerProjectGet = {
   inProgressCount: number | string;
 };
 
-type KanbangerIssue = {
+type PlanningIssue = {
   id: string;
   identifier: string;
   title: string;
@@ -102,12 +102,12 @@ async function listIssuesByStatus(input: {
   workspaceId: string;
   status: "in_progress" | "in_review" | "done";
   max: number;
-}): Promise<KanbangerIssue[]> {
-  const out: KanbangerIssue[] = [];
+}): Promise<PlanningIssue[]> {
+  const out: PlanningIssue[] = [];
   const limit = 100;
 
   for (let offset = 0; out.length < input.max; offset += limit) {
-    const page = await kanbangerQuery<KanbangerIssue[]>("issue.list", {
+    const page = await planningQuery<PlanningIssue[]>("issue.list", {
       workspaceId: input.workspaceId,
       filter: { status: [input.status] },
       pagination: {
@@ -203,23 +203,23 @@ export async function GET(request: Request) {
       activeInstancesPromise,
     ]);
 
-    let workspace: KanbangerWorkspace = {
+    let workspace: PlanningWorkspace = {
       id: "",
       name: "Planning unavailable",
       slug: "",
     };
-    let projects: KanbangerProjectListItem[] = [];
-    let projectGets: KanbangerProjectGet[] = [];
-    let inReviewIssues: KanbangerIssue[] = [];
-    let doneIssues: KanbangerIssue[] = [];
+    let projects: PlanningProjectListItem[] = [];
+    let projectGets: PlanningProjectGet[] = [];
+    let inReviewIssues: PlanningIssue[] = [];
+    let doneIssues: PlanningIssue[] = [];
     let planningError: string | null = null;
 
     if (!getPlanningRemoteConfig().apiKey) {
       planningError = "PLANNING_API_KEY not configured";
     } else {
       try {
-        const memberships = await kanbangerQuery<any[]>("workspace.list");
-        const workspaces: KanbangerWorkspace[] = (memberships ?? [])
+        const memberships = await planningQuery<any[]>("workspace.list");
+        const workspaces: PlanningWorkspace[] = (memberships ?? [])
           .map((m) => m?.workspace ?? m)
           .filter(Boolean)
           .map((w) => ({
@@ -238,7 +238,7 @@ export async function GET(request: Request) {
         } else {
           workspace = selectedWorkspace;
 
-          projects = await kanbangerQuery<KanbangerProjectListItem[]>(
+          projects = await planningQuery<PlanningProjectListItem[]>(
             "project.list",
             { workspaceId: workspace.id },
           );
@@ -246,7 +246,7 @@ export async function GET(request: Request) {
             projects ?? [],
             8,
             async (item) =>
-              kanbangerQuery<KanbangerProjectGet>("project.get", {
+              planningQuery<PlanningProjectGet>("project.get", {
                 id: item.project.id,
               }),
           );
@@ -370,8 +370,8 @@ export async function GET(request: Request) {
       projects: projectRows,
       activeRuns: activeRuns.map((r) => ({
         id: r.id,
-        kanbangerIssueId: r.planningItemId,
-        kanbangerIssueIdentifier: r.planningItemIdentifier,
+        planningIssueId: r.planningItemId,
+        planningIssueIdentifier: r.planningItemIdentifier,
         workItemId: r.workItemId ?? r.planningItemId,
         workItemIdentifier:
           r.workItemIdentifierSnapshot ?? r.planningItemIdentifier,
@@ -380,13 +380,12 @@ export async function GET(request: Request) {
         branch: r.branch,
         updatedAt: r.updatedAt,
         repository: r.repository
-          ? {
-              id: r.repository.id,
-              name: r.repository.name,
-              path: r.repository.path,
-              kanbangerProjectId: r.repository.planningProjectId,
-              planningProjectId: r.repository.planningProjectId,
-            }
+            ? {
+                id: r.repository.id,
+                name: r.repository.name,
+                path: r.repository.path,
+                planningProjectId: r.repository.planningProjectId,
+              }
           : null,
       })),
       activeInstances: activeInstances.map((i) => ({
@@ -398,13 +397,12 @@ export async function GET(request: Request) {
         worktreePath: i.worktree?.path ?? null,
         updatedAt: i.updatedAt,
         repository: i.repository
-          ? {
-              id: i.repository.id,
-              name: i.repository.name,
-              path: i.repository.path,
-              kanbangerProjectId: i.repository.planningProjectId,
-              planningProjectId: i.repository.planningProjectId,
-            }
+            ? {
+                id: i.repository.id,
+                name: i.repository.name,
+                path: i.repository.path,
+                planningProjectId: i.repository.planningProjectId,
+              }
           : null,
       })),
     });

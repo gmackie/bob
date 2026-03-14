@@ -258,6 +258,40 @@ As of this document, the repo has three naming layers:
 
 This is acceptable temporarily, but not acceptable for MVP launch. The remaining work below is largely about removing layer 2 and minimizing layer 3.
 
+## Review Amendments
+
+This section records decisions made during the CEO and engineering plan reviews (2026-03-13). These decisions are load-bearing constraints for implementation.
+
+### Naming and data migration decisions
+
+- **Stored DB values require backfill migration.** The `linkTypeEnum` value `"kanbanger_task"`, the `webhookDeliveries.provider` value `"kanbanger"`, and the `webhookDeliveries.eventType` values `"kanbanger_comment"` / `"kanbanger_comment_late"` are all stored as VARCHAR strings in Postgres. Renaming the TS constants without backfilling the DB causes silent query failures. A Drizzle migration with `UPDATE ... SET ... WHERE` statements must run BEFORE deploying renamed code.
+- **Deploy order is migrate-first.** Run the backfill migration, verify with `SELECT count(*) FROM worktree_links WHERE link_type = 'kanbanger_task'` returning 0, then deploy the renamed code.
+- **HTTP header rename requires coordinated deploy.** The planning service sends `x-kanbanger-signature` and `x-kanbanger-timestamp` headers. Rename to `x-planning-*` on both Bob and the planning service in the same deploy window.
+- **tRPC zod fields rename atomically.** All clients (web, mobile) are controlled. Rename zod input fields like `kanbangerTaskId` → `planningTaskId` and all call sites in the same commit. Typecheck catches any missed call site.
+- **Delete `/api/kanbanger/*` routes immediately.** No redirect shims — all external configs (webhook URLs) are controlled and can be updated in the same deploy.
+
+### Architecture decisions
+
+- **Delete duplicate `packages/api/src/services/tasks/taskExecutor.ts`** in Phase 1. The `apps/web/src/lib/tasks/taskExecutor.ts` (584 lines) is the canonical, feature-complete copy. The packages/api copy (390 lines) is older and simpler. Remove it to avoid confusion.
+- **Add `planningTaskId` alias** for `pullRequests.kanbangerTaskId` in `schema.ts`. This is the one remaining schema property with no Drizzle alias.
+- **Dashboard surgery strategy: extract + delete.**
+  - Extract system controls (Terminal, AgentPanel, SystemStatusPanel) to a new `(dashboard)/system/page.tsx` route inside the existing dashboard layout group (reuses DashboardProviders and dashboard.css).
+  - Merge the existing `(dashboard)/system-status/page.tsx` into the new `/system` route.
+  - Move RepositoryPanel and RepositoryDashboardPanel to the project detail view (`projects/[projectId]/page.tsx`), adapting them to accept project context instead of global dashboard state.
+  - Redirect `/` to `/planning`.
+  - Delete `apps/web/src/app/(dashboard)/page.tsx` (3384 lines) entirely.
+- **Rename legacy test files** during Phase 1: `kanbangerWriteService.test.ts` → `planningWriteService.test.ts`, `kanbanger-control-auth.test.ts` → `planning-control-auth.test.ts`, `kanbangerWebhook.test.ts` → `planningWebhook.test.ts`.
+
+### Testing decisions
+
+- **Add regression test for backfill migration.** In `planning-schema-aliases.test.ts`, insert rows with old values, run migration logic, verify new values are queryable.
+- **Add smoke tests for Phase 2 route changes:** (1) `GET /` returns 301 to `/planning`, (2) `/system` renders without error, (3) old dashboard path returns 404.
+
+### Scope decisions
+
+- **Full auth (better-auth token validation) is in scope for v1.** There is a pre-existing TODO at `apps/web/src/app/api/auth/status/route.ts:39`. This becomes a new phase between Phase 2 and Phase 3.
+- **SQL column renames are NOT in scope.** Drizzle aliases handle the TS layer; actual `ALTER TABLE ... RENAME COLUMN` migrations are deferred.
+
 ## Remaining Work
 
 The rest of the work is organized into the execution phases that should get us to MVP. This is the active plan from here.
@@ -266,24 +300,81 @@ The rest of the work is organized into the execution phases that should get us t
 
 **Why this matters:** We have the right architecture in place, but the codebase still leaks old names across API payloads, UI state, integration services, and link models. This adds cognitive overhead and makes future changes more error-prone.
 
+**Rename scope by risk tier:**
+
+```
+  TIER 1: SAFE INTERNAL (79 refs across ~30 files)
+  ──────────────────────────────────────────────────
+  Type defs, function names, variable names, comments.
+  Mechanical search-and-replace. Caught entirely by typecheck.
+
+  TIER 2: EXTERNAL-TOUCHING (15 refs)
+  ────────────────────────────────────
+  ┌──────────────────────────┬───────────────────────────────────┐
+  │ Env vars (4 refs)        │ KANBANGER_URL                     │
+  │                          │ KANBANGER_CONTROL_SHARED_SECRET    │
+  │                          │ KANBANGER_CONTROL_MAX_SKEW_MS      │
+  │                          │ KANBANGER_WEBHOOK_SECRET            │
+  ├──────────────────────────┼───────────────────────────────────┤
+  │ HTTP headers (3 refs)    │ x-kanbanger-signature              │
+  │                          │ x-kanbanger-timestamp              │
+  ├──────────────────────────┼───────────────────────────────────┤
+  │ Webhook provider (1)     │ "kanbanger" literal in DB          │
+  ├──────────────────────────┼───────────────────────────────────┤
+  │ SQL columns in raw (4)   │ kanbanger_task_id etc in raw SQL   │
+  ├──────────────────────────┼───────────────────────────────────┤
+  │ Exported functions (3)   │ linkPrToKanbangerTask              │
+  │                          │ processKanbangerWebhook            │
+  │                          │ addCommentToKanbangerIssue         │
+  └──────────────────────────┴───────────────────────────────────┘
+
+  TIER 3: DB STORED VALUES (backfill migration)
+  ──────────────────────────────────────────────
+  linkTypeEnum "kanbanger_task" → "planning_task"
+  webhookDeliveries.provider "kanbanger" → "planning"
+  webhookDeliveries.eventType "kanbanger_comment" → "planning_comment"
+  webhookDeliveries.eventType "kanbanger_comment_late" → "planning_comment_late"
+```
+
 #### Task 1.1: Remove remaining `kanbanger*` naming above the schema boundary
 
 Primary areas:
 
-- `/Volumes/dev/bob/packages/api/src/router/repository.ts`
-- `/Volumes/dev/bob/packages/api/src/router/pullRequest.ts`
+- `/Volumes/dev/bob/packages/api/src/router/repository.ts` — 12 refs: zod schemas, param maps, DB writes
+- `/Volumes/dev/bob/packages/api/src/router/pullRequest.ts` — 7 refs: zod schemas, `linkPrToKanbangerTask`
 - `/Volumes/dev/bob/packages/api/src/router/git.ts`
-- `/Volumes/dev/bob/packages/mcp-server/src/tools/pr.ts`
-- `/Volumes/dev/bob/apps/web/src/app/(dashboard)/page.tsx`
-- `/Volumes/dev/bob/apps/web/src/app/api/cron/awaiting-input-expiry/route.ts`
-- `/Volumes/dev/bob/apps/web/src/app/cesp-notifications-provider.tsx`
-- `/Volumes/dev/bob/apps/mobile/src/providers/cesp-notifications-provider.tsx`
+- `/Volumes/dev/bob/packages/api/src/services/tasks/taskAutoCreate.ts` — 23 refs: `KanbangerCreateIssueInput`, `KanbangerIssue`, `kanbangerRequest`, param names
+- `/Volumes/dev/bob/packages/api/src/services/webhooks/processWebhook.ts` — 24 refs: `WebhookProvider` type, `KanbangerCommentPayload`, handler functions, event type literals
+- `/Volumes/dev/bob/packages/api/src/services/integrations/planningWriteService.ts` — 16 refs: type defs (`KanbangerIssueStatus`, etc.), header constants
+- `/Volumes/dev/bob/packages/api/src/services/integrations/planningControlVerifier.ts` — 7 refs: header constant imports
+- `/Volumes/dev/bob/packages/api/src/services/integrations/planningControlConfig.ts` — 5 refs: env var names, default URL
+- `/Volumes/dev/bob/packages/api/src/services/git/prService.ts` — 6 refs: `linkPrToKanbangerTask`, param fields
+- `/Volumes/dev/bob/packages/api/src/services/sessions/workflowStatusService.ts` — 4 refs: type fields, raw SQL column
+- `/Volumes/dev/bob/packages/mcp-server/src/tools/pr.ts` — 2 refs: type fields
+- `/Volumes/dev/bob/packages/mcp-server/src/tools/task.ts` — 4 refs: comments
+- `/Volumes/dev/bob/packages/mcp-server/src/tools/context.ts` — 1 ref: comment
+- `/Volumes/dev/bob/packages/bob-agent-toolkit/src/oh-my-opencode/bob-workflow-skill.ts` — 5 refs: comments
+- `/Volumes/dev/bob/apps/web/src/app/cesp-notifications-provider.tsx` — 2 refs: type fields
+- `/Volumes/dev/bob/apps/mobile/src/providers/cesp-notifications-provider.tsx` — 3 refs: type fields
+- `/Volumes/dev/bob/apps/web/src/app/api/cron/awaiting-input-expiry/route.ts` — 5 refs: type fields, conditional
+- `/Volumes/dev/bob/apps/web/src/env.ts` — 1 ref: `KANBANGER_WEBHOOK_SECRET` env var
+
+Also in this task:
+
+- **Delete** `/Volumes/dev/bob/packages/api/src/services/tasks/taskExecutor.ts` (duplicate, 390 lines)
+- **Add** `planningTaskId` alias for `pullRequests.kanbangerTaskId` in `/Volumes/dev/bob/packages/db/src/schema.ts`
+- **Rename test files:**
+  - `kanbangerWriteService.test.ts` → `planningWriteService.test.ts`
+  - `kanbanger-control-auth.test.ts` → `planning-control-auth.test.ts`
+  - `kanbangerWebhook.test.ts` → `planningWebhook.test.ts`
 
 Deliverables:
 
-- rename remaining payload fields to planning/work-item terminology
-- keep compatibility aliases only where an external contract still truly needs them
-- remove internal references to `kanbangerTaskId`, `kanbangerIssueId`, `kanbangerProjectId`, and similar fields
+- rename all 79 internal references (type defs, function names, variable names, comments) to planning/work-item terminology
+- rename 15 external-touching references (env vars, headers, exported functions) with coordinated planning-service deploy
+- rename tRPC zod input fields atomically across all call sites
+- delete duplicate taskExecutor in packages/api
+- add planningTaskId schema alias
 
 Verification:
 
@@ -296,56 +387,163 @@ pnpm -C /Volumes/dev/bob --filter @bob/mobile typecheck
 
 Expected state:
 
-- remaining hits are either migration docs, SQL column names, or explicit compatibility shims
+- remaining hits are only: migration SQL files, `schema.ts` SQL column name strings, and plan docs
 
-#### Task 1.2: Replace legacy link types and planning-file metadata names
+#### Task 1.2: Backfill stored DB values and replace legacy link types
 
 Primary areas:
 
-- `/Volumes/dev/bob/packages/db/src/schema.ts`
+- `/Volumes/dev/bob/packages/db/src/schema.ts` — `linkTypeEnum` array
+- `/Volumes/dev/bob/packages/db/drizzle/` — new migration file
 - `/Volumes/dev/bob/packages/api/src/router/link.ts`
 - `/Volumes/dev/bob/packages/api/src/router/repository.ts`
-- any planning file parsing/writing helpers
+- `/Volumes/dev/bob/packages/api/src/services/webhooks/processWebhook.ts`
 
 Deliverables:
 
-- replace `kanbanger_task` link types with a Bob Builder term
+- add Drizzle migration with backfill UPDATEs:
+  ```sql
+  UPDATE worktree_links SET link_type = 'planning_task' WHERE link_type = 'kanbanger_task';
+  UPDATE webhook_deliveries SET provider = 'planning' WHERE provider = 'kanbanger';
+  UPDATE webhook_deliveries SET event_type = 'planning_comment' WHERE event_type = 'kanbanger_comment';
+  UPDATE webhook_deliveries SET event_type = 'planning_comment_late' WHERE event_type = 'kanbanger_comment_late';
+  ```
+- update `linkTypeEnum` array: `"kanbanger_task"` → `"planning_task"`
+- update `WebhookProvider` type: `"kanbanger"` → `"planning"`
+- update event type string literals in `processWebhook.ts`
 - replace any remaining planning-file metadata keys that still encode the old naming
+- add regression test in `planning-schema-aliases.test.ts` that inserts rows with old values, runs migration logic, and verifies new values are queryable
+
+Deploy requirement:
+
+- **Run migration BEFORE deploying renamed code**
+- Verify: `SELECT count(*) FROM worktree_links WHERE link_type = 'kanbanger_task'` returns 0
+- Verify: `SELECT count(*) FROM webhook_deliveries WHERE provider = 'kanbanger'` returns 0
+- Then deploy renamed application code
 
 Verification:
 
 ```bash
-rg -n "kanbanger_task|kanbanger_task_id" /Volumes/dev/bob
-pnpm -C /Volumes/dev/bob --filter @bob/api test -- link repository
+rg -n "kanbanger_task|kanbanger_comment" /Volumes/dev/bob/packages --glob '!*.sql' --glob '!*migration*' --glob '!*plan*'
+pnpm -C /Volumes/dev/bob --filter @bob/api test -- link repository planning-schema-aliases
 ```
 
-### Phase 2: Finish the task-scoped execution experience
-
-**Why this matters:** The product architecture is correct, but the user-facing execution experience still carries old Bob dashboard assumptions. MVP needs a cleaner task workspace.
-
-#### Task 2.1: Trim the old dashboard and make the task workspace the default execution surface
+#### Task 1.3: Delete old `/api/kanbanger/*` route files
 
 Primary areas:
 
-- `/Volumes/dev/bob/apps/web/src/app/(dashboard)/page.tsx`
-- `/Volumes/dev/bob/apps/web/src/app/(dashboard)/work-items/[workItemId]/workspace/page.tsx`
-- `/Volumes/dev/bob/apps/web/src/components/dashboard`
-- `/Volumes/dev/bob/apps/web/src/components/work-items`
+- `/Volumes/dev/bob/apps/web/src/app/api/webhooks/kanbanger/route.ts`
+- `/Volumes/dev/bob/apps/web/src/app/api/integrations/kanbanger/`
+- `/Volumes/dev/bob/apps/web/src/app/api/cron/kanbanger-sync-repos/`
+- associated test files
 
 Deliverables:
 
-- reduce or remove the old Bob-wide dashboard as a primary surface
-- make task-linked execution the canonical desktop/web execution entry point
-- keep only the system-level controls that are still needed operationally
+- delete all `/api/kanbanger/*` route files (the `/api/planning/*` equivalents are already canonical)
+- update any external webhook configurations to point to `/api/planning/*` URLs
+
+Verification:
+
+```bash
+ls /Volumes/dev/bob/apps/web/src/app/api/webhooks/kanbanger 2>/dev/null && echo "STILL EXISTS" || echo "DELETED"
+ls /Volumes/dev/bob/apps/web/src/app/api/integrations/kanbanger 2>/dev/null && echo "STILL EXISTS" || echo "DELETED"
+pnpm -C /Volumes/dev/bob --filter @bob/web typecheck
+```
+
+### Phase 2: Replace the dashboard with task-scoped surfaces
+
+**Why this matters:** The product architecture is correct, but the user-facing execution experience still carries old Bob dashboard assumptions. The 3384-line dashboard page is the single largest source of legacy UX and legacy naming. MVP needs the task workspace as the primary execution surface and a clean operational view for system controls.
+
+**Dashboard surgery architecture:**
+
+```
+  BEFORE                                    AFTER
+  ──────                                    ─────
+  / → (dashboard)/page.tsx (3384 lines)     / → redirect 301 to /planning
+      ├── TerminalComponent
+      ├── SystemStatusPanel                 (dashboard)/system/page.tsx (NEW)
+      ├── AgentPanel                            ├── TerminalComponent
+      ├── RepositoryPanel                       ├── SystemStatusPanel
+      ├── RepositoryDashboardPanel              └── AgentPanel
+      ├── 47 kanbanger refs
+      ├── WebSocket session mgmt            projects/[projectId]/page.tsx (UPDATED)
+      └── project/run/instance state            └── RepositoryPanel (adapted to project scope)
+
+  DELETED:
+  ├── (dashboard)/page.tsx (3384 lines)
+  ├── (dashboard)/system-status/page.tsx (merged into /system)
+  └── RepositoryDashboardPanel (subsumed by RepositoryPanel in project view)
+
+  KEPT UNCHANGED:
+  ├── (dashboard)/layout.tsx + DashboardProviders + dashboard.css
+  ├── (dashboard)/planning/page.tsx
+  ├── (dashboard)/projects/*/page.tsx
+  ├── (dashboard)/work-items/*/page.tsx
+  ├── (dashboard)/database/page.tsx
+  └── All shared infra: WebSocket, API client, contexts
+```
+
+#### Task 2.1: Create the `/system` operational route
+
+Primary areas:
+
+- `/Volumes/dev/bob/apps/web/src/app/(dashboard)/system/page.tsx` — new file
+- `/Volumes/dev/bob/apps/web/src/app/(dashboard)/system-status/page.tsx` — merge into above
+- `/Volumes/dev/bob/apps/web/src/components/dashboard/Terminal.tsx`
+- `/Volumes/dev/bob/apps/web/src/components/dashboard/AgentPanel.tsx`
+- `/Volumes/dev/bob/apps/web/src/components/dashboard/SystemStatusPanel.tsx`
+
+Deliverables:
+
+- new `(dashboard)/system/page.tsx` that renders Terminal, AgentPanel, and SystemStatusPanel
+- the page lives inside the `(dashboard)` layout group, reusing DashboardProviders and dashboard.css
+- merge content from existing `system-status/page.tsx` into the new route
+- delete `(dashboard)/system-status/page.tsx` after merge
+
+#### Task 2.2: Move repository controls to project detail view
+
+Primary areas:
+
+- `/Volumes/dev/bob/apps/web/src/components/dashboard/RepositoryPanel.tsx` — adapt to project scope
+- `/Volumes/dev/bob/apps/web/src/app/(dashboard)/projects/[projectId]/page.tsx`
+
+Deliverables:
+
+- RepositoryPanel adapted to accept a `projectId` prop instead of managing global dashboard state
+- integrated into the project detail page
+- RepositoryDashboardPanel deleted (functionality subsumed)
+
+#### Task 2.3: Redirect landing and delete old dashboard
+
+Primary areas:
+
+- `/Volumes/dev/bob/apps/web/src/app/(dashboard)/page.tsx` — delete
+- `/Volumes/dev/bob/apps/web/src/app/(dashboard)/dashboard/page.tsx` — delete (re-export)
+- root redirect configuration
+
+Deliverables:
+
+- `/` redirects (301) to `/planning`
+- `apps/web/src/app/(dashboard)/page.tsx` (3384 lines) deleted entirely
+- `apps/web/src/app/(dashboard)/dashboard/page.tsx` deleted
+- API endpoints under `/api/kanbanger/dashboard-v2`, `/api/kanbanger/repo-options`, `/api/kanbanger/sync-repos` evaluated for deletion (only kept if needed by the new project-scoped RepositoryPanel or `/system` route)
+
+#### Task 2.4: Add smoke tests for route changes
+
+Deliverables:
+
+- test: `GET /` returns 301 redirect to `/planning`
+- test: `/system` renders without error (components present)
+- test: old dashboard path returns 404
 
 Verification:
 
 ```bash
 pnpm -C /Volumes/dev/bob --filter @bob/web typecheck
-pnpm -C /Volumes/dev/bob --filter @bob/web test -- task-workspace planning-utils
+pnpm -C /Volumes/dev/bob --filter @bob/web test -- task-workspace planning-utils system
 ```
 
-#### Task 2.2: Finish task context, artifacts, and run history inside the workspace
+#### Task 2.5: Finish task context, artifacts, and run history inside the workspace
 
 Primary areas:
 
@@ -360,9 +558,44 @@ Deliverables:
 - current artifacts and validation state surfaced in the workspace
 - run history and handoff context presented cleanly
 
+### Phase 2.5: Implement full auth
+
+**Why this matters:** Auth is partially wired. `apps/web/src/app/api/auth/status/route.ts:39` has a TODO: "wire real token validation (better-auth) when REQUIRE_AUTH is enabled." Full auth is required for v1 launch.
+
+Primary areas:
+
+- `/Volumes/dev/bob/apps/web/src/app/api/auth/`
+- `/Volumes/dev/bob/packages/auth/`
+- `/Volumes/dev/bob/apps/web/src/app/(dashboard)/layout.tsx`
+
+Deliverables:
+
+- wire better-auth token validation so REQUIRE_AUTH is functional
+- all product routes require authenticated sessions
+- auth flows work consistently on web and mobile
+
+Verification:
+
+```bash
+pnpm -C /Volumes/dev/bob --filter @bob/web typecheck
+pnpm -C /Volumes/dev/bob --filter @bob/auth test
+pnpm -C /Volumes/dev/bob --filter @bob/web test -- auth
+```
+
 ### Phase 3: Finish the execution service split
 
-**Why this matters:** The target architecture includes a dedicated execution runtime. Some of the code has already moved, but the operational boundary still needs to be completed and simplified.
+**Why this matters:** The target architecture includes a dedicated execution runtime. Some of the code has already moved, but the operational boundary still needs to be completed and simplified. Currently `apps/execution` is only a process supervisor that spawns `apps/gateway`; the actual long-running task orchestration still lives in `apps/web/src/lib/tasks/`.
+
+**Current execution architecture:**
+
+```
+  apps/execution/          → Process supervisor only (spawns gateway)
+  apps/web/src/lib/tasks/  → ACTUAL task orchestration (584 lines)
+    taskExecutor.ts          executeTask, resumeBlockedTask, supersedeAndRestart
+    planningControl.ts       startIssueSession, resumeIssueSession, stopIssueSession
+  apps/web/src/server/     → Service singletons (GitService, AgentService, TerminalService)
+  packages/api/services/   → Request/response task logic (taskAutoCreate, contextHeuristics)
+```
 
 #### Task 3.1: Audit all long-running task/session runtime responsibilities
 
@@ -449,8 +682,7 @@ pnpm -C /Volumes/dev/bob --filter @bob/mobile test
 
 Primary areas:
 
-- old `kanbanger` route wrappers
-- old env alias handling once planning names are canonical everywhere
+- any remaining `kanbanger` env alias fallback handling (once planning names are canonical everywhere)
 - any remaining migration-only helpers
 
 #### Task 6.2: Expand end-to-end verification
@@ -481,12 +713,13 @@ Known cleanup target:
 
 ## Recommended Execution Order From Here
 
-1. Finish the remaining naming cleanup.
-2. Collapse the old dashboard into the task-scoped workspace model.
-3. Complete the execution-service operational split.
-4. Finish issue/epic/task progression and UI copy convergence.
-5. Bring mobile to MVP parity.
-6. Remove compatibility shims and run full hardening.
+1. Finish the remaining naming cleanup (Phase 1.1, 1.2, 1.3).
+2. Replace the dashboard with task-scoped surfaces (Phase 2.1–2.5).
+3. Implement full auth (Phase 2.5).
+4. Complete the execution-service operational split (Phase 3).
+5. Finish issue/epic/task progression and UI copy convergence (Phase 4).
+6. Bring mobile to MVP parity (Phase 5).
+7. Remove compatibility shims and run full hardening (Phase 6).
 
 ## Definition Of Done For MVP
 
@@ -500,13 +733,16 @@ The merge should be considered MVP-complete when all of the following are true:
 6. Remaining `kanbanger` naming is gone from product-facing code except for temporary storage-level compatibility where explicitly justified.
 7. The execution runtime is cleanly separated from product UI request handling.
 8. Repo-wide verification is reliable enough to ship from the merged tree.
+9. Full auth is functional — all product routes require authenticated sessions.
 
 ## Immediate Next Batch Recommendation
 
 If continuing right away, the next batch should be:
 
-1. remove remaining `kanbanger*` payload names from repository/PR/task-control flows,
-2. replace the `kanbanger_task` link type and planning metadata naming,
-3. clean the old dashboard page so the task workspace becomes the obvious primary execution surface.
+1. delete the duplicate `packages/api/src/services/tasks/taskExecutor.ts`,
+2. add the `planningTaskId` alias for `pullRequests.kanbangerTaskId` in schema.ts,
+3. remove remaining `kanbanger*` payload names from repository/PR/task-control/webhook flows (Task 1.1),
+4. write and run the backfill migration for stored DB values (Task 1.2),
+5. delete old `/api/kanbanger/*` route files (Task 1.3).
 
-That is the shortest path from "architecturally merged" to "product-coherent."
+That completes Phase 1 and is the shortest path from "architecturally merged" to "naming-coherent."

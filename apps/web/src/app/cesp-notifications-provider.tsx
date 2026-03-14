@@ -34,7 +34,7 @@ interface CespAlert {
     id: string;
     name: string;
     path: string;
-    kanbangerProjectId: string | null;
+    planningProjectId: string | null;
   } | null;
   metadata: Record<string, unknown>;
 }
@@ -88,7 +88,7 @@ function getProjectLabel(alert: CespAlert): string | null {
 
 function getAlertDestination(alert: CespAlert): string {
   const projectId =
-    alert.projectId ?? alert.repository?.kanbangerProjectId ?? null;
+    alert.projectId ?? alert.repository?.planningProjectId ?? null;
   const taskId =
     typeof alert.metadata?.issueId === "string"
       ? alert.metadata.issueId.trim()
@@ -101,9 +101,9 @@ function getAlertDestination(alert: CespAlert): string {
     search.set("task", taskId);
   }
   if (search.size === 0) {
-    return "/dashboard";
+    return "/planning";
   }
-  return `/dashboard?${search.toString()}`;
+  return `/planning?${search.toString()}`;
 }
 
 function getNotificationTitle(alert: CespAlert): string {

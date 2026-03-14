@@ -31,8 +31,7 @@ type CespAlert = {
     id: string;
     name: string;
     path: string;
-    kanbangerProjectId: string | null;
-    planningProjectId?: string | null;
+    planningProjectId: string | null;
   } | null;
   metadata: Record<string, unknown>;
 };
@@ -83,7 +82,6 @@ function buildRepositorySummary(
     id: repository.id,
     name: repository.name,
     path: repository.path,
-    kanbangerProjectId: repository.planningProjectId ?? null,
     planningProjectId: repository.planningProjectId ?? null,
   };
 }

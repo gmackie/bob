@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "~/auth/server";
 import { getPlanningRemoteConfig } from "~/lib/planning/remote-config";
 
-async function kanbangerQuery<T>(path: string, input?: unknown): Promise<T> {
+async function planningQuery<T>(path: string, input?: unknown): Promise<T> {
   const { baseUrl, apiKey } = getPlanningRemoteConfig();
 
   if (!apiKey) {
@@ -41,13 +41,13 @@ async function kanbangerQuery<T>(path: string, input?: unknown): Promise<T> {
   return result[0]?.result?.data?.json as T;
 }
 
-type KanbangerWorkspace = {
+type PlanningWorkspace = {
   id: string;
   name: string;
   slug: string;
 };
 
-type KanbangerProjectListItem = {
+type PlanningProjectListItem = {
   project: {
     id: string;
     name: string;
@@ -59,7 +59,7 @@ type KanbangerProjectListItem = {
   completedCount: number;
 };
 
-type KanbangerProjectGet = {
+type PlanningProjectGet = {
   project: {
     id: string;
     name: string;
@@ -74,7 +74,7 @@ type KanbangerProjectGet = {
   backlogCount: number | string;
 };
 
-type KanbangerIssue = {
+type PlanningIssue = {
   id: string;
   identifier: string;
   title: string;
@@ -89,12 +89,12 @@ async function listIssuesByStatus(input: {
   projectId: string;
   status: "in_review" | "done";
   max: number;
-}): Promise<KanbangerIssue[]> {
-  const out: KanbangerIssue[] = [];
+}): Promise<PlanningIssue[]> {
+  const out: PlanningIssue[] = [];
   const limit = 100;
 
   for (let offset = 0; out.length < input.max; offset += limit) {
-    const page = await kanbangerQuery<KanbangerIssue[]>("issue.list", {
+    const page = await planningQuery<PlanningIssue[]>("issue.list", {
       workspaceId: input.workspaceId,
       filter: { projectId: input.projectId, status: [input.status] },
       pagination: {
@@ -140,8 +140,8 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const workspaceIdParam = url.searchParams.get("workspaceId");
 
-    const memberships = await kanbangerQuery<any[]>("workspace.list");
-    const workspaces: KanbangerWorkspace[] = memberships
+    const memberships = await planningQuery<any[]>("workspace.list");
+    const workspaces: PlanningWorkspace[] = memberships
       .map((m) => m?.workspace ?? m)
       .filter(Boolean)
       .map((w) => ({
@@ -161,7 +161,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const list = await kanbangerQuery<KanbangerProjectListItem[]>(
+    const list = await planningQuery<PlanningProjectListItem[]>(
       "project.list",
       {
         workspaceId: workspace.id,
@@ -169,7 +169,7 @@ export async function GET(request: Request) {
     );
 
     const projects = [] as Array<{
-      project: KanbangerProjectGet["project"];
+      project: PlanningProjectGet["project"];
       issueCount: number;
       completedCount: number;
       inProgressCount: number;
@@ -182,7 +182,7 @@ export async function GET(request: Request) {
     let totalDoneLast24h = 0;
 
     for (const item of list ?? []) {
-      const pg = await kanbangerQuery<KanbangerProjectGet>("project.get", {
+      const pg = await planningQuery<PlanningProjectGet>("project.get", {
         id: item.project.id,
       });
 

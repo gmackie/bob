@@ -8,8 +8,6 @@ describe("planning remote config", () => {
       getPlanningRemoteConfig({
         PLANNING_URL: "https://planning.example.internal",
         PLANNING_API_KEY: "planning-api-key",
-        KANBANGER_URL: "https://legacy.example.internal",
-        KANBANGER_API_KEY: "legacy-api-key",
       }),
     ).toEqual({
       apiUrl: "https://planning.example.internal/api",
@@ -18,7 +16,7 @@ describe("planning remote config", () => {
     });
   });
 
-  it("falls back to legacy remote API env names", () => {
+  it("uses the explicit planning API URL when provided", () => {
     expect(
       getPlanningRemoteConfig({
         PLANNING_API_URL: "https://planning-api.example.internal/v1",
@@ -32,17 +30,13 @@ describe("planning remote config", () => {
     });
   });
 
-  it("falls back to legacy remote API env names", () => {
+  it("uses the default planning URL when no env is set", () => {
     expect(
-      getPlanningRemoteConfig({
-        KANBANGER_API_URL: "https://legacy-api.example.internal/v1",
-        KANBANGER_URL: "https://legacy.example.internal",
-        KANBANGER_API_KEY: "legacy-api-key",
-      }),
+      getPlanningRemoteConfig(),
     ).toEqual({
-      apiUrl: "https://legacy-api.example.internal/v1",
-      baseUrl: "https://legacy.example.internal",
-      apiKey: "legacy-api-key",
+      apiUrl: "https://tasks.gmac.io/api",
+      baseUrl: "https://tasks.gmac.io",
+      apiKey: null,
     });
   });
 });

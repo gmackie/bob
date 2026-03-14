@@ -15,7 +15,7 @@ import { db } from "@bob/db/client";
 import { repositories, user } from "@bob/db/schema";
 
 import { getPlanningRemoteConfig } from "~/lib/planning/remote-config";
-import { getServices } from "~/server/services";
+import { getServices } from "@bob/execution/services";
 
 interface PlanningProjectListItem {
   project: {

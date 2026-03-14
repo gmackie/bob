@@ -36,7 +36,7 @@ interface CespAlert {
     id: string;
     name: string;
     path: string;
-    kanbangerProjectId: string | null;
+    planningProjectId: string | null;
   } | null;
   metadata: Record<string, unknown>;
 }
@@ -54,7 +54,7 @@ const CESP_POLL_INTERVAL_MS = 20_000;
 const CESP_POLL_LIMIT = 80;
 const CESP_SEEN_LIMIT = 300;
 const MAX_TIME_TOLERANCE_MS = 1500;
-const DASHBOARD_PATH_PREFIX = "/dashboard";
+const PLANNING_PATH_PREFIX = "/planning";
 const CESP_DEBUG =
   __DEV__ ||
   process.env.EXPO_PUBLIC_CESP_DEBUG === "1" ||
@@ -77,8 +77,8 @@ type CESPDestPayload = {
 };
 
 function getProjectFromAlert(alert: CespAlert): string | null {
-  if (alert.repository?.kanbangerProjectId) {
-    return alert.repository.kanbangerProjectId;
+  if (alert.repository?.planningProjectId) {
+    return alert.repository.planningProjectId;
   }
   if (alert.projectId) {
     return alert.projectId;
@@ -94,7 +94,7 @@ function getTaskFromAlert(alert: CespAlert): string | null {
   return null;
 }
 
-function buildDashboardDestination(alert: CespAlert): string {
+function buildPlanningDestination(alert: CespAlert): string {
   const projectId = getProjectFromAlert(alert);
   const taskId = getTaskFromAlert(alert);
   const search = new URLSearchParams();
@@ -107,11 +107,11 @@ function buildDashboardDestination(alert: CespAlert): string {
   }
 
   return search.size === 0
-    ? DASHBOARD_PATH_PREFIX
-    : `${DASHBOARD_PATH_PREFIX}?${search.toString()}`;
+    ? PLANNING_PATH_PREFIX
+    : `${PLANNING_PATH_PREFIX}?${search.toString()}`;
 }
 
-function toAbsoluteDashboardUrl(path: string): string {
+function toAbsolutePlanningUrl(path: string): string {
   if (path.startsWith("http://") || path.startsWith("https://")) {
     return path;
   }
@@ -120,19 +120,19 @@ function toAbsoluteDashboardUrl(path: string): string {
   return `${base}${normalizedPath}`;
 }
 
-function parseDashboardPathFromDestination(value: string): string | null {
+function parsePlanningPathFromDestination(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
 
-  if (trimmed.startsWith(DASHBOARD_PATH_PREFIX)) {
+  if (trimmed.startsWith(PLANNING_PATH_PREFIX)) {
     return trimmed;
   }
 
   try {
     const parsed = new URL(trimmed);
-    if (parsed.pathname !== DASHBOARD_PATH_PREFIX) return null;
+    if (parsed.pathname !== PLANNING_PATH_PREFIX) return null;
     const search = parsed.search ?? "";
-    return `${DASHBOARD_PATH_PREFIX}${search}`;
+    return `${PLANNING_PATH_PREFIX}${search}`;
   } catch {
     return null;
   }
@@ -144,12 +144,12 @@ function buildDestinationFromPayload(
   if (!data) return null;
 
   if (typeof data.destinationPath === "string") {
-    const fromPath = parseDashboardPathFromDestination(data.destinationPath);
+    const fromPath = parsePlanningPathFromDestination(data.destinationPath);
     if (fromPath) return fromPath;
   }
 
   if (typeof data.destination === "string") {
-    const fromDestination = parseDashboardPathFromDestination(data.destination);
+    const fromDestination = parsePlanningPathFromDestination(data.destination);
     if (fromDestination) return fromDestination;
   }
 
@@ -159,7 +159,7 @@ function buildDestinationFromPayload(
   if (project) search.set("project", project);
   if (task) search.set("task", task);
   if (search.size > 0) {
-    return `${DASHBOARD_PATH_PREFIX}?${search.toString()}`;
+    return `${PLANNING_PATH_PREFIX}?${search.toString()}`;
   }
 
   return null;
@@ -243,7 +243,7 @@ export function CESPNotificationsProvider({ children }: ProvidersProps) {
   const lastHandledResponseIdRef = useRef<string | null>(null);
 
   const notify = useCallback((alert: CespAlert) => {
-    const destinationPath = buildDashboardDestination(alert);
+    const destinationPath = buildPlanningDestination(alert);
     logCespDebug("scheduling local notification", {
       alertId: alert.id,
       category: alert.category,
@@ -255,7 +255,7 @@ export function CESPNotificationsProvider({ children }: ProvidersProps) {
       {
         data: {
           destinationPath,
-          destination: toAbsoluteDashboardUrl(destinationPath),
+          destination: toAbsolutePlanningUrl(destinationPath),
           destinationProject: getProjectFromAlert(alert),
           destinationTask: getTaskFromAlert(alert),
         } satisfies CESPDestPayload,
@@ -285,7 +285,7 @@ export function CESPNotificationsProvider({ children }: ProvidersProps) {
       return;
     }
 
-    const absoluteDestination = toAbsoluteDashboardUrl(destinationPath);
+    const absoluteDestination = toAbsolutePlanningUrl(destinationPath);
     logCespDebug("opening destination from notification response", {
       responseId,
       destinationPath,

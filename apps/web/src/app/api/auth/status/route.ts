@@ -1,4 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { validateSessionToken } from "@bob/auth";
+
+import { auth } from "~/auth/server";
 
 type AuthStatusResponse =
   | {
@@ -28,17 +31,40 @@ export async function GET(request: NextRequest): Promise<NextResponse<AuthStatus
     });
   }
 
-  const auth = request.headers.get("authorization") ?? "";
-  const m = auth.match(/^Bearer\s+(.+)$/i);
-  const token = m?.[1];
+  const session = await auth.api.getSession({
+    headers: request.headers,
+  });
 
-  if (!token) {
+  if (session?.user) {
+    return NextResponse.json({
+      authenticated: true,
+      user: {
+        id: session.user.id,
+        username: session.user.email?.split("@")[0] ?? session.user.id,
+        displayName: session.user.name,
+        email: session.user.email,
+        avatarUrl: session.user.image ?? undefined,
+      },
+    });
+  }
+
+  const authHeader = request.headers.get("authorization") ?? "";
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  const token = match?.[1];
+  const validated = await validateSessionToken(token);
+
+  if (!validated) {
     return NextResponse.json({ authenticated: false, user: null }, { status: 401 });
   }
 
-  // TODO: wire real token validation (better-auth) when REQUIRE_AUTH is enabled.
   return NextResponse.json({
     authenticated: true,
-    user: { id: "token", username: "token" },
+    user: {
+      id: validated.user.id,
+      username: validated.user.email?.split("@")[0] ?? validated.user.id,
+      displayName: validated.user.name,
+      email: validated.user.email,
+      avatarUrl: validated.user.image ?? undefined,
+    },
   });
 }

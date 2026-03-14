@@ -153,7 +153,7 @@ export const linkRouter = {
       return { success: true };
     }),
 
-  linkToKanbanger: protectedProcedure
+  linkToPlanningTask: protectedProcedure
     .input(
       z.object({
         worktreeId: z.string().uuid(),
@@ -177,7 +177,7 @@ export const linkRouter = {
       const existing = await ctx.db.query.worktreeLinks.findFirst({
         where: and(
           eq(worktreeLinks.worktreeId, input.worktreeId),
-          eq(worktreeLinks.linkType, "kanbanger_task"),
+          eq(worktreeLinks.linkType, "planning_task"),
           eq(worktreeLinks.externalId, input.taskId)
         ),
       });
@@ -191,7 +191,7 @@ export const linkRouter = {
         .values({
           worktreeId: input.worktreeId,
           userId: ctx.session.user.id,
-          linkType: "kanbanger_task",
+          linkType: "planning_task",
           externalId: input.taskId,
           url: input.taskUrl,
           title: input.taskTitle,

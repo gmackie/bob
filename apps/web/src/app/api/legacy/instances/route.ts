@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { AgentType } from "@bob/legacy";
 
 import { getSession } from "~/auth/server";
-import { getServices } from "~/server/services";
+import { getServices } from "@bob/execution/services";
 
 export async function GET() {
   try {

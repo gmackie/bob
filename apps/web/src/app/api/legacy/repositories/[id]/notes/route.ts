@@ -3,7 +3,7 @@ import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getSession } from "~/auth/server";
-import { getServices } from "~/server/services";
+import { getServices } from "@bob/execution/services";
 
 interface RouteParams {
   params: Promise<{ id: string }>;

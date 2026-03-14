@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { startIssueSession } from "~/lib/tasks/planningControl";
+import { startIssueSession } from "@bob/execution/runtime/planningControl";
 
 import {
   parseSignedJsonRequest,

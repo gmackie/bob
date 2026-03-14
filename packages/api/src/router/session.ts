@@ -166,7 +166,6 @@ export const sessionRouter = {
           linkedTask: linkedTaskBySessionId.get(session.id) ?? null,
           issueManaged: Boolean(session.workItemId ?? session.planningTaskId),
           planningTaskId: session.planningTaskId,
-          kanbangerTaskId: session.planningTaskId,
         })),
         nextCursor,
       };
@@ -229,7 +228,6 @@ export const sessionRouter = {
             session.planningTaskId,
         ),
         planningTaskId: session.planningTaskId,
-        kanbangerTaskId: session.planningTaskId,
       };
     }),
 

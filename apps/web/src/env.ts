@@ -19,7 +19,6 @@ export const env = createEnv({
     DATABASE_URL: z.url(),
     GATEWAY_URL: z.string().optional(),
     PLANNING_WEBHOOK_SECRET: z.string().optional(),
-    KANBANGER_WEBHOOK_SECRET: z.string().optional(),
     SENTRY_AUTH_TOKEN: z.string().optional(),
     SENTRY_ORG: z.string().optional(),
     SENTRY_PROJECT: z.string().optional(),

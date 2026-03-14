@@ -18,7 +18,7 @@ import {
 
 import { getSession } from "~/auth/server";
 import { getPlanningRemoteConfig } from "~/lib/planning/remote-config";
-import { getServices } from "~/server/services";
+import { getServices } from "@bob/execution/services";
 
 const execAsync = promisify(exec);
 
@@ -34,7 +34,7 @@ type StartBody = {
   workspaceId?: string;
 };
 
-type KanbangerIssueByIdentifier = {
+type PlanningIssueByIdentifier = {
   id: string;
   identifier: string;
   title: string;
@@ -43,7 +43,7 @@ type KanbangerIssueByIdentifier = {
   projectId: string;
 };
 
-async function kanbangerQuery<T>(path: string, input?: unknown): Promise<T> {
+async function planningQuery<T>(path: string, input?: unknown): Promise<T> {
   const { baseUrl, apiKey } = getPlanningRemoteConfig();
 
   if (!apiKey) {
@@ -198,12 +198,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   try {
-    let task: (KanbangerIssueByIdentifier & { workspaceId: string }) | null =
+    let task: (PlanningIssueByIdentifier & { workspaceId: string }) | null =
       null;
     if (taskIdentifier) {
-      let issue: KanbangerIssueByIdentifier;
+      let issue: PlanningIssueByIdentifier;
       try {
-        issue = await kanbangerQuery<KanbangerIssueByIdentifier>(
+        issue = await planningQuery<PlanningIssueByIdentifier>(
           "issue.getByIdentifier",
           {
             identifier: taskIdentifier,
@@ -325,7 +325,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const existingLegacy = gitService
       .getRepositories(session.user.id)
-      .find((r) => r.path === repoRow.path);
+      .find((repo: { path: string }) => repo.path === repoRow.path);
     const legacyRepo =
       existingLegacy ??
       (await gitService.addRepository(repoRow.path, session.user.id));
@@ -359,7 +359,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       | {
           id: string;
           status: string;
-          kanbangerIssueIdentifier: string;
+          planningIssueIdentifier: string;
         }
       | null = null;
     if (task) {
@@ -378,7 +378,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         .returning({
           id: taskRuns.id,
           status: taskRuns.status,
-          kanbangerIssueIdentifier: taskRuns.planningItemIdentifier,
+          planningIssueIdentifier: taskRuns.planningItemIdentifier,
         });
 
       taskRun = createdTaskRun ?? null;
@@ -413,7 +413,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           .returning({
             id: taskRuns.id,
             status: taskRuns.status,
-            kanbangerIssueIdentifier: taskRuns.planningItemIdentifier,
+            planningIssueIdentifier: taskRuns.planningItemIdentifier,
           });
         taskRun = updatedTaskRun ?? taskRun;
       }
@@ -424,7 +424,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             id: repoRow.id,
             name: repoRow.name,
             path: repoRow.path,
-            kanbangerProjectId: repoRow.planningProjectId,
             planningProjectId: repoRow.planningProjectId,
           },
           taskRun,

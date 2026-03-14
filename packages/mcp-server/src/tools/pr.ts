@@ -50,7 +50,7 @@ export const createPrTool: ToolDefinition = {
     try {
       const session = await ctx.callTrpc<{
         repositoryId: string | null;
-        kanbangerTaskId: string | null;
+        planningTaskId: string | null;
       }>("session.get", { id: ctx.sessionId });
 
       if (!session.repositoryId) {
@@ -70,7 +70,7 @@ export const createPrTool: ToolDefinition = {
         headBranch: head_branch,
         baseBranch: base_branch,
         draft,
-        kanbangerTaskId: session.kanbangerTaskId,
+        planningTaskId: session.planningTaskId,
       });
 
       return jsonResult({

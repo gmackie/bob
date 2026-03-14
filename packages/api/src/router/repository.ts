@@ -42,7 +42,7 @@ async function gatewayRequest(
 function generatePlanningMd(options: {
   title?: string;
   goal?: string;
-  kanbangerTaskId?: string;
+  planningTaskId?: string;
   worktreeId: string;
   tasks?: Array<{ key: string; content: string; status?: string }>;
 }): string {
@@ -50,8 +50,8 @@ function generatePlanningMd(options: {
   
   lines.push("---");
   lines.push(`bob_worktree_id: ${options.worktreeId}`);
-  if (options.kanbangerTaskId) {
-    lines.push(`kanbanger_task_id: ${options.kanbangerTaskId}`);
+  if (options.planningTaskId) {
+    lines.push(`planning_task_id: ${options.planningTaskId}`);
   }
   lines.push(`created_at: ${new Date().toISOString()}`);
   lines.push("---");
@@ -264,7 +264,7 @@ export const repositoryRouter = {
           .object({
             title: z.string().optional(),
             goal: z.string().optional(),
-            kanbangerTaskId: z.string().optional(),
+            planningTaskId: z.string().optional(),
             tasks: z
               .array(
                 z.object({
@@ -312,7 +312,7 @@ export const repositoryRouter = {
         const planningContent = generatePlanningMd({
           title: input.planning.title,
           goal: input.planning.goal,
-          kanbangerTaskId: input.planning.kanbangerTaskId,
+          planningTaskId: input.planning.planningTaskId,
           worktreeId: wt.id,
           tasks: input.planning.tasks,
         });
@@ -336,7 +336,7 @@ export const repositoryRouter = {
           title: input.planning.title,
           goal: input.planning.goal,
           status: "active",
-          planningTaskId: input.planning.kanbangerTaskId,
+          planningTaskId: input.planning.planningTaskId,
           lastSyncedAt: new Date(),
         });
       }
@@ -397,7 +397,7 @@ export const repositoryRouter = {
         title: z.string().optional(),
         goal: z.string().optional(),
         status: z.enum(planStatusEnum).optional(),
-        kanbangerTaskId: z.string().optional().nullable(),
+        planningTaskId: z.string().optional().nullable(),
         tasks: z
           .array(
             z.object({
@@ -433,8 +433,8 @@ export const repositoryRouter = {
         contentToWrite = generatePlanningMd({
           title: input.title ?? plan?.title ?? undefined,
           goal: input.goal ?? plan?.goal ?? undefined,
-          kanbangerTaskId:
-            input.kanbangerTaskId ?? plan?.planningTaskId ?? undefined,
+          planningTaskId:
+            input.planningTaskId ?? plan?.planningTaskId ?? undefined,
           worktreeId: input.worktreeId,
           tasks: input.tasks,
         });
@@ -458,7 +458,7 @@ export const repositoryRouter = {
             title: input.title,
             goal: input.goal,
             status: input.status ?? "active",
-            planningTaskId: input.kanbangerTaskId,
+            planningTaskId: input.planningTaskId,
             lastSyncedAt: new Date(),
           })
           .returning();
@@ -468,8 +468,8 @@ export const repositoryRouter = {
         if (input.title !== undefined) updates.title = input.title;
         if (input.goal !== undefined) updates.goal = input.goal;
         if (input.status !== undefined) updates.status = input.status;
-        if (input.kanbangerTaskId !== undefined) {
-          updates.planningTaskId = input.kanbangerTaskId;
+        if (input.planningTaskId !== undefined) {
+          updates.planningTaskId = input.planningTaskId;
         }
 
         const [updated] = await ctx.db

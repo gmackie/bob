@@ -4,22 +4,15 @@ export interface PlanningControlConfig {
   maxSkewMs: number;
 }
 
-const DEFAULT_KANBANGER_URL = "https://tasks.gmac.io";
+const DEFAULT_PLANNING_URL = "https://tasks.gmac.io";
 const DEFAULT_MAX_SKEW_MS = 300_000;
 
 export function getPlanningControlConfig(
   env: Record<string, string | undefined> = process.env,
 ): PlanningControlConfig {
-  const baseUrl =
-    env.PLANNING_URL ??
-    env.KANBANGER_URL ??
-    DEFAULT_KANBANGER_URL;
-  const sharedSecret =
-    env.PLANNING_CONTROL_SHARED_SECRET?.trim() ??
-    env.KANBANGER_CONTROL_SHARED_SECRET?.trim();
-  const maxSkewMsRaw =
-    env.PLANNING_CONTROL_MAX_SKEW_MS ??
-    env.KANBANGER_CONTROL_MAX_SKEW_MS;
+  const baseUrl = env.PLANNING_URL ?? DEFAULT_PLANNING_URL;
+  const sharedSecret = env.PLANNING_CONTROL_SHARED_SECRET?.trim();
+  const maxSkewMsRaw = env.PLANNING_CONTROL_MAX_SKEW_MS;
 
   try {
     new URL(baseUrl);

@@ -119,7 +119,7 @@ export const planRouter = {
         title: z.string().max(256).optional(),
         goal: z.string().optional(),
         status: z.enum(planStatusEnum).optional(),
-        kanbangerTaskId: z.string().max(100).optional().nullable(),
+        planningTaskId: z.string().max(100).optional().nullable(),
       })
     )
     .mutation(async ({ ctx, input }) => {

@@ -16,7 +16,7 @@ const {
   verifyPlanningControlRequestMock: vi.fn(),
 }));
 
-vi.mock("~/lib/tasks/planningControl", () => ({
+vi.mock("@bob/execution/runtime/planningControl", () => ({
   startIssueSession: startIssueSessionMock,
   resumeIssueSession: resumeIssueSessionMock,
   stopIssueSession: stopIssueSessionMock,

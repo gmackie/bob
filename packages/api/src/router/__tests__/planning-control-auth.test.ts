@@ -7,11 +7,11 @@ import {
 import type { PlanningControlAuthError } from "../../services/integrations/planningControlVerifier";
 import { getPlanningControlConfig } from "../../services/integrations/planningControlConfig";
 
-describe("Kanbanger control request verification", () => {
+describe("Planning control request verification", () => {
   const config = getPlanningControlConfig({
-    KANBANGER_URL: "https://tasks.example.internal",
-    KANBANGER_CONTROL_SHARED_SECRET: "super-secret",
-    KANBANGER_CONTROL_MAX_SKEW_MS: "300000",
+    PLANNING_URL: "https://tasks.example.internal",
+    PLANNING_CONTROL_SHARED_SECRET: "super-secret",
+    PLANNING_CONTROL_MAX_SKEW_MS: "300000",
   });
 
   function getAuthError(fn: () => void): PlanningControlAuthError {
@@ -33,12 +33,12 @@ describe("Kanbanger control request verification", () => {
     });
 
     const headers = new Headers({
-      "X-Kanbanger-Timestamp": timestamp,
+      "X-Planning-Timestamp": timestamp,
       "Idempotency-Key": idempotencyKey,
-      "X-Kanbanger-Signature": buildPlanningControlSignature(
+      "X-Planning-Signature": buildPlanningControlSignature(
         {
           method: "POST",
-          path: "/api/integrations/kanbanger/issues/start",
+          path: "/api/integrations/planning/tasks/start",
           timestamp,
           idempotencyKey,
           body,
@@ -51,7 +51,7 @@ describe("Kanbanger control request verification", () => {
       verifyPlanningControlRequest(
         {
           method: "POST",
-          path: "/api/integrations/kanbanger/issues/start",
+          path: "/api/integrations/planning/tasks/start",
           headers,
           body,
         },
@@ -126,12 +126,12 @@ describe("Kanbanger control request verification", () => {
     });
 
     const headers = new Headers({
-      "X-Kanbanger-Timestamp": timestamp,
+      "X-Planning-Timestamp": timestamp,
       "Idempotency-Key": idempotencyKey,
-      "X-Kanbanger-Signature": buildPlanningControlSignature(
+      "X-Planning-Signature": buildPlanningControlSignature(
         {
           method: "POST",
-          path: "/api/integrations/kanbanger/issues/start",
+          path: "/api/integrations/planning/tasks/start",
           timestamp,
           idempotencyKey,
           body,
@@ -144,7 +144,7 @@ describe("Kanbanger control request verification", () => {
       verifyPlanningControlRequest(
         {
           method: "POST",
-          path: "/api/integrations/kanbanger/issues/start",
+          path: "/api/integrations/planning/tasks/start",
           headers,
           body,
         },
@@ -166,12 +166,12 @@ describe("Kanbanger control request verification", () => {
     });
 
     const headers = new Headers({
-      "X-Kanbanger-Timestamp": timestamp,
+      "X-Planning-Timestamp": timestamp,
       "Idempotency-Key": idempotencyKey,
-      "X-Kanbanger-Signature": buildPlanningControlSignature(
+      "X-Planning-Signature": buildPlanningControlSignature(
         {
           method: "POST",
-          path: "/api/integrations/kanbanger/issues/start",
+          path: "/api/integrations/planning/tasks/start",
           timestamp,
           idempotencyKey,
           body,
@@ -184,7 +184,7 @@ describe("Kanbanger control request verification", () => {
       verifyPlanningControlRequest(
         {
           method: "POST",
-          path: "/api/integrations/kanbanger/issues/start",
+          path: "/api/integrations/planning/tasks/start",
           headers,
           body: JSON.stringify({
             issueId: "550e8400-e29b-41d4-a716-446655440001",
@@ -207,11 +207,11 @@ describe("Kanbanger control request verification", () => {
     });
 
     const headers = new Headers({
-      "X-Kanbanger-Timestamp": timestamp,
-      "X-Kanbanger-Signature": buildPlanningControlSignature(
+      "X-Planning-Timestamp": timestamp,
+      "X-Planning-Signature": buildPlanningControlSignature(
         {
           method: "POST",
-          path: "/api/integrations/kanbanger/issues/start",
+          path: "/api/integrations/planning/tasks/start",
           timestamp,
           idempotencyKey: "idem-123",
           body,
@@ -224,7 +224,7 @@ describe("Kanbanger control request verification", () => {
       verifyPlanningControlRequest(
         {
           method: "POST",
-          path: "/api/integrations/kanbanger/issues/start",
+          path: "/api/integrations/planning/tasks/start",
           headers,
           body,
         },

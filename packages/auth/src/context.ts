@@ -50,9 +50,9 @@ export function resolveWorkspaceSelection(headers: Headers): WorkspaceSelection 
 
 export async function resolveRequestAuthContext(opts: {
   auth: Auth;
-  defaultUser: RequestAuthContext["session"] extends infer T
-    ? Exclude<T, null>
-    : never;
+  defaultUser?:
+    | (RequestAuthContext["session"] extends infer T ? Exclude<T, null> : never)
+    | null;
   headers: Headers;
 }): Promise<RequestAuthContext> {
   const authHeader = opts.headers.get("authorization");

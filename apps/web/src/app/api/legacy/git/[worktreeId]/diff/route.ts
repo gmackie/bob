@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getSession } from "~/auth/server";
 import { getCompleteDiff } from "~/server/git-utils";
-import { getServices } from "~/server/services";
+import { getServices } from "@bob/execution/services";
 
 interface RouteParams {
   params: Promise<{ worktreeId: string }>;

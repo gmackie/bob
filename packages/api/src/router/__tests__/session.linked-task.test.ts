@@ -52,7 +52,6 @@ describe("session router linked task URLs", () => {
   beforeAll(async () => {
     process.env.DATABASE_URL ??=
       "postgres://postgres:postgres@localhost:5432/test";
-    delete process.env.KANBANGER_URL;
     process.env.PLANNING_URL = "https://planning.example.internal";
     ({ appRouter } = await import("../../root"));
   });

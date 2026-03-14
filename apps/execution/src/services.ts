@@ -1,5 +1,3 @@
-import "server-only";
-
 import { existsSync, readdirSync, statSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
@@ -14,9 +12,7 @@ import {
 } from "@bob/legacy/services";
 
 declare global {
-  // Shared across Next route handlers and custom server.
-  // Kept as `any` to avoid TS module identity issues.
-  var __serviceManager: any;
+  var __executionServiceManager: any;
 }
 
 class ServiceManager {
@@ -45,8 +41,8 @@ class ServiceManager {
     for (const entry of entries) {
       const repoPath = join(reposDir, entry);
       try {
-        const st = statSync(repoPath);
-        if (!st.isDirectory()) continue;
+        const stats = statSync(repoPath);
+        if (!stats.isDirectory()) continue;
         if (!existsSync(join(repoPath, ".git"))) continue;
 
         await this._gitService.addRepository(repoPath, DEFAULT_USER_ID);
@@ -65,8 +61,8 @@ class ServiceManager {
 
     this._agentService = new AgentService({
       gitService: this._gitService,
-      agentFactory: agentFactory,
-      getAgentCommand: getAgentCommand,
+      agentFactory,
+      getAgentCommand,
     });
     await this._agentService.initialize();
 
@@ -115,10 +111,10 @@ class ServiceManager {
 }
 
 function getServiceManager(): ServiceManager {
-  if (!globalThis.__serviceManager) {
-    globalThis.__serviceManager = new ServiceManager();
+  if (!globalThis.__executionServiceManager) {
+    globalThis.__executionServiceManager = new ServiceManager();
   }
-  return globalThis.__serviceManager;
+  return globalThis.__executionServiceManager;
 }
 
 export async function getServices() {
@@ -129,6 +125,11 @@ export async function getServices() {
     agentService: manager.agentService,
     terminalService: manager.terminalService,
   };
+}
+
+export async function cleanupServices(): Promise<void> {
+  const manager = getServiceManager();
+  await manager.cleanup();
 }
 
 export { DEFAULT_USER_ID };

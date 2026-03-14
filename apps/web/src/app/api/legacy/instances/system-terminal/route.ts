@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getServices } from "~/server/services";
+import { getServices } from "@bob/execution/services";
 
 interface SystemTerminalBody {
   cwd?: string;

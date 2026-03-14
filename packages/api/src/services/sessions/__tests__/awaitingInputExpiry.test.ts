@@ -60,7 +60,7 @@ describe("awaiting-input expiry cron", () => {
           userId: row.user_id,
           awaitingInputDefault:
             row.awaiting_input_default ?? "proceed with default",
-          kanbangerTaskId: row.kanbanger_task_id,
+          planningTaskId: row.kanbanger_task_id,
         }),
       );
 
@@ -68,8 +68,8 @@ describe("awaiting-input expiry cron", () => {
       expect(sessions[0]!.id).toBe("session-1");
       expect(sessions[0]!.userId).toBe("user-1");
       expect(sessions[0]!.awaitingInputDefault).toBe("proceed with default");
-      expect(sessions[0]!.kanbangerTaskId).toBe("task-1");
-      expect(sessions[1]!.kanbangerTaskId).toBeNull();
+      expect(sessions[0]!.planningTaskId).toBe("task-1");
+      expect(sessions[1]!.planningTaskId).toBeNull();
     });
 
     it("should handle empty result set", () => {
@@ -89,7 +89,7 @@ describe("awaiting-input expiry cron", () => {
         id: "session-123",
         userId: "user-456",
         awaitingInputDefault: "proceed with option A",
-        kanbangerTaskId: "task-789",
+        planningTaskId: "task-789",
       };
 
       const resolution = {
@@ -253,10 +253,10 @@ describe("awaiting-input expiry cron", () => {
     it("should skip notification when no task linked", () => {
       const session = {
         id: "session-123",
-        kanbangerTaskId: null,
+        planningTaskId: null,
       };
 
-      const shouldNotify = session.kanbangerTaskId !== null;
+      const shouldNotify = session.planningTaskId !== null;
 
       expect(shouldNotify).toBe(false);
     });
@@ -264,10 +264,10 @@ describe("awaiting-input expiry cron", () => {
     it("should trigger notification when task linked", () => {
       const session = {
         id: "session-123",
-        kanbangerTaskId: "task-456",
+        planningTaskId: "task-456",
       };
 
-      const shouldNotify = session.kanbangerTaskId !== null;
+      const shouldNotify = session.planningTaskId !== null;
 
       expect(shouldNotify).toBe(true);
     });

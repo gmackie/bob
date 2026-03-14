@@ -3,27 +3,23 @@ const DEFAULT_PLANNING_URL = "https://tasks.gmac.io";
 type PlanningEnv = NodeJS.ProcessEnv;
 
 export function getPlanningBaseUrl(env: PlanningEnv = process.env): string {
-  return env.PLANNING_URL ?? env.KANBANGER_URL ?? DEFAULT_PLANNING_URL;
+  return env.PLANNING_URL ?? DEFAULT_PLANNING_URL;
 }
 
 export function getPlanningAppUrl(
   env: PlanningEnv = process.env,
 ): string | null {
-  return env.PLANNING_URL ?? env.KANBANGER_URL ?? null;
+  return env.PLANNING_URL ?? null;
 }
 
 export function getPlanningApiKey(
   env: PlanningEnv = process.env,
 ): string | null {
-  return env.PLANNING_API_KEY ?? env.KANBANGER_API_KEY ?? null;
+  return env.PLANNING_API_KEY ?? null;
 }
 
 export function getPlanningApiUrl(env: PlanningEnv = process.env): string {
-  return (
-    env.PLANNING_API_URL ??
-    env.KANBANGER_API_URL ??
-    `${getPlanningBaseUrl(env)}/api`
-  );
+  return env.PLANNING_API_URL ?? `${getPlanningBaseUrl(env)}/api`;
 }
 
 export function buildPlanningWorkItemUrl(

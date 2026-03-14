@@ -2,11 +2,9 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 import type { PlanningControlConfig } from "./planningControlConfig";
 
-export const KANBANGER_CONTROL_SIGNATURE_HEADER = "x-kanbanger-signature";
-export const KANBANGER_CONTROL_TIMESTAMP_HEADER = "x-kanbanger-timestamp";
-export const KANBANGER_CONTROL_IDEMPOTENCY_HEADER = "idempotency-key";
 export const PLANNING_CONTROL_SIGNATURE_HEADER = "x-planning-signature";
 export const PLANNING_CONTROL_TIMESTAMP_HEADER = "x-planning-timestamp";
+export const PLANNING_CONTROL_IDEMPOTENCY_HEADER = "idempotency-key";
 
 export interface PlanningControlSignatureInput {
   method: string;
@@ -133,19 +131,19 @@ export function verifyPlanningControlRequest(
 ): VerifiedPlanningControlRequest {
   const timestamp = requireHeader(
     request.headers,
-    [KANBANGER_CONTROL_TIMESTAMP_HEADER, PLANNING_CONTROL_TIMESTAMP_HEADER],
+    PLANNING_CONTROL_TIMESTAMP_HEADER,
     "MISSING_TIMESTAMP",
     "Missing planning control timestamp header",
   );
   const idempotencyKey = requireHeader(
     request.headers,
-    KANBANGER_CONTROL_IDEMPOTENCY_HEADER,
+    PLANNING_CONTROL_IDEMPOTENCY_HEADER,
     "MISSING_IDEMPOTENCY_KEY",
-    "Missing Kanbanger control idempotency key",
+    "Missing planning control idempotency key",
   );
   const signature = requireHeader(
     request.headers,
-    [KANBANGER_CONTROL_SIGNATURE_HEADER, PLANNING_CONTROL_SIGNATURE_HEADER],
+    PLANNING_CONTROL_SIGNATURE_HEADER,
     "MISSING_SIGNATURE",
     "Missing planning control signature",
   );

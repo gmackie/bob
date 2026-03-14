@@ -6,21 +6,16 @@ import {
 } from "../webhook-config";
 
 describe("planning webhook config", () => {
-  it("prefers planning webhook secrets over legacy names", () => {
+  it("reads the planning webhook secret", () => {
     expect(
       getPlanningWebhookSecret({
         PLANNING_WEBHOOK_SECRET: "planning-secret",
-        KANBANGER_WEBHOOK_SECRET: "legacy-secret",
       }),
     ).toBe("planning-secret");
   });
 
-  it("falls back to the legacy webhook secret name", () => {
-    expect(
-      getPlanningWebhookSecret({
-        KANBANGER_WEBHOOK_SECRET: "legacy-secret",
-      }),
-    ).toBe("legacy-secret");
+  it("returns null when the planning webhook secret is absent", () => {
+    expect(getPlanningWebhookSecret({})).toBeNull();
   });
 
   it("recognizes planning webhook headers", () => {

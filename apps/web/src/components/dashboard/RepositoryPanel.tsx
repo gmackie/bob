@@ -1,529 +1,429 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import React from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import type {
-  AgentInfo,
-  AgentType,
-  ClaudeInstance,
-  Repository,
-  Worktree,
-} from "~/lib/legacy/types";
 import { api } from "~/lib/rest/api";
 
+type AgentType =
+  | "claude"
+  | "codex"
+  | "cursor-agent"
+  | "gemini"
+  | "kiro"
+  | "opencode";
+
+type RepositoryRecord = Awaited<ReturnType<typeof api.getRepositories>>[number] & {
+  planningProjectId?: string | null;
+  remoteProvider?: string | null;
+  remoteUrl?: string | null;
+};
+
+type InstanceRecord = Awaited<ReturnType<typeof api.getInstances>>[number];
+
+type RepoOptionsResponse = {
+  repos: Array<{
+    fullName: string;
+    preferred: {
+      provider: "gitea" | "github";
+      instanceUrl: string | null;
+      defaultBranch: string;
+    };
+  }>;
+};
+
 interface RepositoryPanelProps {
-  repositories: Repository[];
-  instances: ClaudeInstance[];
-  selectedWorktreeId: string | null;
-  selectedRepositoryId: string | null;
-  onSelectWorktree: (worktreeId: string) => Promise<void>;
-  onSelectRepository: (repositoryId: string) => void;
-  onCreateWorktreeAndStartInstance: (
-    repositoryId: string,
-    branchName: string,
-    agentType?: AgentType,
-  ) => void;
-  onDeleteWorktree: (worktreeId: string, force: boolean) => Promise<void>;
-  onRefreshMainBranch: (repositoryId: string) => Promise<void>;
-  isCollapsed: boolean;
-  onToggleCollapse: () => void;
-  onRefreshData: () => Promise<void>;
+  projectId: string;
 }
 
-export function RepositoryPanel({
-  repositories,
-  instances,
-  selectedWorktreeId,
-  selectedRepositoryId,
-  onSelectWorktree,
-  onSelectRepository,
-  onCreateWorktreeAndStartInstance,
-  onDeleteWorktree,
-  onRefreshMainBranch,
-  isCollapsed,
-  onToggleCollapse,
-  onRefreshData,
-}: RepositoryPanelProps) {
-  const [showNewWorktreeForm, setShowNewWorktreeForm] = useState<string | null>(
-    null,
+export function RepositoryPanel({ projectId }: RepositoryPanelProps) {
+  const [repositories, setRepositories] = useState<RepositoryRecord[]>([]);
+  const [instances, setInstances] = useState<InstanceRecord[]>([]);
+  const [repoOptions, setRepoOptions] = useState<RepoOptionsResponse["repos"]>(
+    [],
   );
-  const [newBranchName, setNewBranchName] = useState("");
-  const [startingInstances, setStartingInstances] = useState<Set<string>>(
-    new Set(),
-  );
-  const [copiedWorktreeId, setCopiedWorktreeId] = useState<string | null>(null);
-  const [refreshingRepositories, setRefreshingRepositories] = useState<
-    Set<string>
-  >(new Set());
-  const [availableAgents, setAvailableAgents] = useState<AgentInfo[]>([]);
-  const [selectedAgentType, setSelectedAgentType] = useState<
-    AgentType | undefined
-  >(undefined);
-  const [showAddRepoModal, setShowAddRepoModal] = useState(false);
-  const [newRepoPath, setNewRepoPath] = useState("");
-  const [addingRepo, setAddingRepo] = useState(false);
+  const [selectedFullName, setSelectedFullName] = useState("");
+  const [branchName, setBranchName] = useState("");
+  const [agentType, setAgentType] = useState<AgentType>("opencode");
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const [nextRepositories, nextInstances, repoOptionsResponse] =
+        await Promise.all([
+          api.getRepositories() as Promise<RepositoryRecord[]>,
+          api.getInstances(),
+          fetch("/api/planning/repo-options", { cache: "no-store" }).then(
+            async (response) => {
+              if (!response.ok) {
+                throw new Error(`Failed to load repo options (${response.status})`);
+              }
+              return (await response.json()) as RepoOptionsResponse;
+            },
+          ),
+        ]);
+
+      setRepositories(nextRepositories);
+      setInstances(nextInstances);
+      setRepoOptions(repoOptionsResponse.repos);
+      if (!selectedFullName && repoOptionsResponse.repos[0]?.fullName) {
+        setSelectedFullName(repoOptionsResponse.repos[0].fullName);
+      }
+    } catch (refreshError) {
+      setError(
+        refreshError instanceof Error
+          ? refreshError.message
+          : "Failed to load repository controls",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchAgents = async () => {
-      try {
-        const agents = await api.getAgents();
-        setAvailableAgents(agents);
-        const defaultAgent = agents.find(
-          (a) => a.isAvailable && (a.isAuthenticated ?? true),
-        );
-        if (defaultAgent) {
-          setSelectedAgentType(defaultAgent.type);
-        }
-      } catch (error) {
-        console.error("Failed to fetch available agents:", error);
-        setAvailableAgents([]);
-      }
-    };
-    fetchAgents();
+    void refresh();
   }, []);
 
-  const getWorktreeStatus = (worktree: Worktree) => {
-    const worktreeInstances = instances.filter(
-      (i) => i.worktreeId === worktree.id,
+  const mappedRepository = useMemo(
+    () =>
+      repositories.find((repository) => repository.planningProjectId === projectId) ??
+      null,
+    [projectId, repositories],
+  );
+
+  const mappedInstances = useMemo(() => {
+    if (!mappedRepository) return [];
+    return instances.filter(
+      (instance) => instance.repositoryId === mappedRepository.id,
     );
-    if (worktreeInstances.length === 0)
-      return { status: "none", label: "No Instance" };
+  }, [instances, mappedRepository]);
 
-    const instance = worktreeInstances[0];
+  const selectedOption = repoOptions.find(
+    (option) => option.fullName === selectedFullName,
+  );
 
-    switch (instance?.status) {
-      case "running":
-        return { status: "running", label: "Running" };
-      case "starting":
-        return { status: "starting", label: "Starting" };
-      case "error":
-        return { status: "error", label: "Error" };
-      case "stopped":
-      default:
-        return { status: "stopped", label: "Stopped" };
-    }
-  };
+  const handleMapRepository = async () => {
+    if (!selectedOption) return;
 
-  const getWorktreeDotClass = (status: string) => {
-    if (status === "running") return "is-running";
-    if (status === "starting") return "is-warning";
-    if (status === "error") return "is-danger";
-    return "is-muted";
-  };
-
-  const getBranchDisplayName = (branch: string) => {
-    return branch.replace(/^refs\/heads\//, "");
-  };
-
-  const handleWorktreeSelect = async (worktreeId: string) => {
-    setStartingInstances((prev) => new Set(prev).add(worktreeId));
+    setSubmitting(true);
+    setError(null);
 
     try {
-      await onSelectWorktree(worktreeId);
-    } finally {
-      setTimeout(() => {
-        setStartingInstances((prev) => {
-          const newSet = new Set(prev);
-          newSet.delete(worktreeId);
-          return newSet;
-        });
-      }, 2000);
-    }
-  };
-
-  const handleCopyWorktreeLink = async (
-    worktreeId: string,
-    e: React.MouseEvent,
-  ) => {
-    e.stopPropagation();
-    const currentUrl = new URL(window.location.href);
-    currentUrl.searchParams.set("worktree", worktreeId);
-    const linkUrl = currentUrl.toString();
-
-    try {
-      await navigator.clipboard.writeText(linkUrl);
-      setCopiedWorktreeId(worktreeId);
-      setTimeout(() => setCopiedWorktreeId(null), 2000);
-    } catch (err) {
-      console.error("Failed to copy link:", err);
-      prompt("Copy this link:", linkUrl);
-    }
-  };
-
-  const handleRefreshMainBranch = async (
-    repositoryId: string,
-    e: React.MouseEvent,
-  ) => {
-    e.stopPropagation();
-
-    setRefreshingRepositories((prev) => new Set(prev).add(repositoryId));
-
-    try {
-      await onRefreshMainBranch(repositoryId);
-    } catch (error) {
-      console.error("Failed to refresh main branch:", error);
-    } finally {
-      setRefreshingRepositories((prev) => {
-        const newSet = new Set(prev);
-        newSet.delete(repositoryId);
-        return newSet;
+      const response = await fetch(`/api/planning/projects/${projectId}/repo`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          provider: selectedOption.preferred.provider,
+          fullName: selectedOption.fullName,
+          instanceUrl: selectedOption.preferred.instanceUrl,
+        }),
       });
-    }
-  };
 
-  const handleCreateWorktree = (repositoryId: string) => {
-    if (newBranchName.trim()) {
-      onCreateWorktreeAndStartInstance(
-        repositoryId,
-        newBranchName.trim(),
-        selectedAgentType,
-      );
-      setNewBranchName("");
-      setShowNewWorktreeForm(null);
-    }
-  };
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(payload?.error ?? "Failed to map repository");
+      }
 
-  const handleAddRepository = async () => {
-    if (!newRepoPath.trim()) return;
-
-    setAddingRepo(true);
-    try {
-      await api.addRepository(newRepoPath.trim());
-      await onRefreshData();
-      setNewRepoPath("");
-      setShowAddRepoModal(false);
-    } catch (error) {
-      console.error("Failed to add repository:", error);
-      alert(
-        `Failed to add repository: ${error instanceof Error ? error.message : "Unknown error"}`,
+      await refresh();
+    } catch (mapError) {
+      setError(
+        mapError instanceof Error ? mapError.message : "Failed to map repository",
       );
     } finally {
-      setAddingRepo(false);
+      setSubmitting(false);
+    }
+  };
+
+  const handleUnmapRepository = async () => {
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/planning/projects/${projectId}/repo`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(payload?.error ?? "Failed to unmap repository");
+      }
+
+      await refresh();
+    } catch (unmapError) {
+      setError(
+        unmapError instanceof Error
+          ? unmapError.message
+          : "Failed to unmap repository",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRefreshMainBranch = async () => {
+    if (!mappedRepository) return;
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      await api.refreshMainBranch(mappedRepository.id);
+      await refresh();
+    } catch (refreshError) {
+      setError(
+        refreshError instanceof Error
+          ? refreshError.message
+          : "Failed to refresh the main branch",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCreateWorktree = async () => {
+    if (!mappedRepository || !branchName.trim()) return;
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const worktree = await api.createWorktree(
+        mappedRepository.id,
+        branchName.trim(),
+      );
+      await api.startInstance(worktree.id, agentType);
+      setBranchName("");
+      await refresh();
+    } catch (worktreeError) {
+      setError(
+        worktreeError instanceof Error
+          ? worktreeError.message
+          : "Failed to create the worktree",
+      );
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
-    <div className={`left-panel ${isCollapsed ? "collapsed" : ""}`}>
-      <div className="panel-header">
-        <div className="dash-repoPanelHeaderBar">
-          {!isCollapsed && <h3 className="dash-repoPanelHeaderTitle">Repositories</h3>}
-          <button
-            onClick={onToggleCollapse}
-            className="collapse-toggle-btn dash-repoPanelToggle"
-            title={isCollapsed ? "Expand panel" : "Collapse panel"}
-          >
-            {isCollapsed ? "▶" : "◀"}
-          </button>
+    <section className="rounded-[1.75rem] border border-white/10 bg-[#0d1524] p-6 text-white">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <div className="text-xs uppercase tracking-[0.28em] text-white/35">
+            Execution
+          </div>
+          <h2 className="mt-2 text-2xl font-semibold">Repository controls</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">
+            Map a repository to this project, create worktrees, and jump into the
+            execution surfaces without reopening the legacy dashboard.
+          </p>
         </div>
+        <button
+          type="button"
+          className="rounded-full border border-white/15 px-4 py-2 text-sm text-white/80 transition hover:border-white/30 hover:text-white"
+          onClick={() => void refresh()}
+          disabled={loading || submitting}
+        >
+          Refresh
+        </button>
       </div>
 
-        {!isCollapsed && (
-          <>
-            <div className="add-repo-section">
-            <button
-              onClick={() => setShowAddRepoModal(true)}
-              className="add-repo-btn"
-            >
-              <span>+</span>
-              Add Repository
-            </button>
-          </div>
-
-              <div className="panel-content">
-            {repositories.length === 0 ? (
-              <div className="dash-repoPanelEmpty">
-                <div>No repositories added</div>
-                <p>Click “Add Repository” to get started</p>
-              </div>
-            ) : (
-              <div className="dash-repoPanelStack">
-                {repositories.map((repo) => (
-                  <article
-                    key={repo.id}
-                    className={`dash-repoPanelCard ${selectedRepositoryId === repo.id ? "is-selected" : ""}`}
-                  >
-                    <header className="dash-repoPanelHeader">
-                      <button
-                        type="button"
-                        className="dash-repoPanelTitleButton"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSelectRepository(repo.id);
-                        }}
-                        title="View repository dashboard"
-                      >
-                        <h4 className="dash-repoPanelName">
-                          {repo.name}
-                        </h4>
-                        <p className="dash-repoPanelPath">{repo.path}</p>
-                        <div className="dash-repoPanelMetaRow">
-                          <span>
-                            Main: <strong>{repo.mainBranch}</strong>
-                          </span>
-                          <button
-                            type="button"
-                            onClick={(e) => handleRefreshMainBranch(repo.id, e)}
-                            disabled={refreshingRepositories.has(repo.id)}
-                            className="dash-repoPanelRefreshBtn"
-                            title={
-                              refreshingRepositories.has(repo.id)
-                                ? "Refreshing..."
-                                : "Refresh main branch"
-                            }
-                          >
-                            {refreshingRepositories.has(repo.id) ? "↻" : "⟳"}
-                          </button>
-                        </div>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowNewWorktreeForm(repo.id)}
-                        className="dash-repoPanelAddBtn"
-                        title="Create new worktree and start agent instance"
-                      >
-                        +
-                      </button>
-                    </header>
-
-                    {showNewWorktreeForm === repo.id && (
-                      <div className="dash-repoPanelForm">
-                        <div className="dash-repoPanelFormInner">
-                          <input
-                            type="text"
-                            value={newBranchName}
-                            onChange={(e) => setNewBranchName(e.target.value)}
-                            placeholder="Branch name (e.g., feature-xyz)"
-                            className="dash-repoPanelInput dash-repoPanelFormField"
-                            onKeyDown={(e) =>
-                              e.key === "Enter" && handleCreateWorktree(repo.id)
-                            }
-                            autoFocus
-                          />
-                          <div className="dash-repoPanelFormRow">
-                            <select
-                              value={selectedAgentType ?? ""}
-                              onChange={(e) =>
-                                setSelectedAgentType(
-                                  e.target.value as AgentType | undefined,
-                                )
-                              }
-                              className="dash-repoPanelInput dash-repoPanelFormField"
-                            >
-                              <option value="">Select Agent</option>
-                              {availableAgents
-                                .filter((a) => a.isAvailable)
-                                .map((agent) => (
-                                  <option key={agent.type} value={agent.type}>
-                                    {agent.name}
-                                    {agent.isAuthenticated === false
-                                      ? " (needs auth)"
-                                      : ""}
-                                  </option>
-                                ))}
-                            </select>
-                            <button
-                              type="button"
-                              onClick={() => handleCreateWorktree(repo.id)}
-                              disabled={!newBranchName.trim()}
-                              className="dash-repoPanelAction"
-                            >
-                              Create
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setShowNewWorktreeForm(null);
-                                setNewBranchName("");
-                              }}
-                              className="dash-repoPanelAction dash-repoPanelActionSecondary"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="dash-repoWorktreeRail">
-                      {repo.worktrees.length === 0 ? (
-                        <div className="dash-emptyState">No worktrees yet</div>
-                      ) : (
-                        repo.worktrees.map((worktree) => {
-                          const status = getWorktreeStatus(worktree);
-                          const isSelected = selectedWorktreeId === worktree.id;
-                          const isStarting = startingInstances.has(worktree.id);
-
-                          return (
-                            <div
-                              key={worktree.id}
-                              className="dash-repoWorktreeRow"
-                            >
-                              <button
-                                type="button"
-                                className={`dash-liveSessionChip ${
-                                  isSelected ? "is-active" : ""
-                                }`}
-                                onClick={() =>
-                                  handleWorktreeSelect(worktree.id)
-                                }
-                              >
-                                <span
-                                  className={`dash-sessionDot ${getWorktreeDotClass(
-                                    status.status,
-                                  )}`}
-                                />
-                                <span className="dash-liveSessionChipInfo">
-                                  <span>
-                                    {getBranchDisplayName(worktree.branch)}
-                                  </span>
-                                  <span className="dash-terminalSessionSubline">
-                                    {worktree.path}
-                                  </span>
-                                  <span className="dash-terminalSessionSubline">
-                                    {isStarting ? "Starting..." : status.label}
-                                  </span>
-                                </span>
-                                <span className="dash-sessionAction">
-                                  {isStarting ? "Opening..." : "Open"}
-                                </span>
-                              </button>
-                              <div className="dash-repoWorktreeActions">
-                                <button
-                                  type="button"
-                                  onClick={(e) =>
-                                    handleCopyWorktreeLink(worktree.id, e)
-                                  }
-                                  className={`dash-repoWorktreeAction ${
-                                    copiedWorktreeId === worktree.id
-                                      ? "is-copied"
-                                      : ""
-                                  }`}
-                                  title={
-                                    copiedWorktreeId === worktree.id
-                                      ? "Link copied!"
-                                      : "Copy direct link to this worktree"
-                                  }
-                                >
-                                  {copiedWorktreeId === worktree.id
-                                    ? "✓"
-                                    : "🔗"}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (
-                                      confirm(
-                                        `Delete worktree "${getBranchDisplayName(worktree.branch)}"?`,
-                                      )
-                                    ) {
-                                      onDeleteWorktree(worktree.id, false);
-                                    }
-                                  }}
-                                  className="dash-repoWorktreeAction is-danger"
-                                  title="Delete worktree"
-                                >
-                                  ×
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  </article>
-                ))}
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {isCollapsed && repositories.length > 0 && (
-        <div className="collapsed-content">
-          {repositories.every((repo) => repo.worktrees.length === 0) ? (
-            <div className="dash-emptyState">No worktrees yet</div>
-          ) : (
-            repositories.map((repo) =>
-              repo.worktrees.map((worktree) => {
-                const status = getWorktreeStatus(worktree);
-                const isSelected = selectedWorktreeId === worktree.id;
-                const isStarting = startingInstances.has(worktree.id);
-                return (
-                  <button
-                    key={`${repo.id}-${worktree.id}`}
-                    type="button"
-                    className={`dash-collapsedWorktreeItem ${
-                      isSelected ? "is-active" : ""
-                    }`}
-                    onClick={() => handleWorktreeSelect(worktree.id)}
-                    title={`${getBranchDisplayName(worktree.branch)} - ${worktree.path}`}
-                  >
-                    <span
-                      className={`dash-sessionDot ${getWorktreeDotClass(status.status)}`}
-                    />
-                    <div className="dash-collapsedWorktreeText">
-                      <span className="dash-collapsedWorktreeName">
-                        {getBranchDisplayName(worktree.branch)}
-                      </span>
-                      <span className="dash-collapsedWorktreeMeta">
-                        {repo.name}
-                      </span>
-                    </div>
-                    <span className="dash-collapsedWorktreeStatus">
-                      {isStarting ? "Starting..." : status.label}
-                    </span>
-                  </button>
-                );
-              }),
-            )
-          )}
+      {error ? (
+        <div className="mt-4 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+          {error}
         </div>
-      )}
+      ) : null}
 
-      {showAddRepoModal && (
-        <div
-          className="dash-repoModalBackdrop"
-        >
-          <div
-            className="dash-repoModalCard"
-          >
-            <h3 className="dash-repoModalTitle">
-              Add Repository
-            </h3>
-            <input
-              type="text"
-              value={newRepoPath}
-              onChange={(e) => setNewRepoPath(e.target.value)}
-              placeholder="Enter repository path (e.g., /path/to/repo)"
-              className="dash-repoPanelInput dash-repoModalInput"
-              onKeyDown={(e) => e.key === "Enter" && handleAddRepository()}
-              autoFocus
-            />
-            <div
-              className="dash-repoModalFooter"
-            >
-              <button
-                onClick={() => {
-                  setShowAddRepoModal(false);
-                  setNewRepoPath("");
-                }}
-                className="dash-repoPanelAction dash-repoPanelActionSecondary"
-                disabled={addingRepo}
+      {loading ? (
+        <div className="mt-6 rounded-2xl border border-dashed border-white/15 px-4 py-6 text-sm text-white/55">
+          Loading repository controls…
+        </div>
+      ) : mappedRepository ? (
+        <div className="mt-6 space-y-6">
+          <div className="rounded-2xl border border-white/10 bg-black/15 p-5">
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+              <div>
+                <div className="text-sm font-medium text-white">
+                  {mappedRepository.name}
+                </div>
+                <div className="mt-1 text-sm text-white/55">
+                  {mappedRepository.path}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-3 text-xs text-white/45">
+                  <span>Main: {mappedRepository.mainBranch}</span>
+                  <span>Current: {mappedRepository.branch}</span>
+                  <span>
+                    Provider: {mappedRepository.remoteProvider ?? "unconfigured"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <Link
+                  href={`/repositories/${mappedRepository.id}`}
+                  className="rounded-full border border-sky-400/40 px-4 py-2 text-sm text-sky-200 transition hover:border-sky-300 hover:text-white"
+                >
+                  Open repository
+                </Link>
+                <button
+                  type="button"
+                  className="rounded-full border border-white/15 px-4 py-2 text-sm text-white/80 transition hover:border-white/30 hover:text-white"
+                  onClick={() => void handleRefreshMainBranch()}
+                  disabled={submitting}
+                >
+                  Refresh main
+                </button>
+                <button
+                  type="button"
+                  className="rounded-full border border-rose-400/35 px-4 py-2 text-sm text-rose-200 transition hover:border-rose-300 hover:text-white"
+                  onClick={() => void handleUnmapRepository()}
+                  disabled={submitting}
+                >
+                  Unmap
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-black/15 p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="text-sm font-medium text-white">
+                  Create a worktree
+                </div>
+                <div className="mt-1 text-sm text-white/55">
+                  Start an agent instance immediately after creating the branch.
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_auto]">
+              <input
+                value={branchName}
+                onChange={(event) => setBranchName(event.target.value)}
+                placeholder="feature/project-scoped-controls"
+                className="rounded-2xl border border-white/10 bg-[#07101b] px-4 py-3 text-sm text-white outline-none transition focus:border-sky-400/50"
+              />
+              <select
+                value={agentType}
+                onChange={(event) => setAgentType(event.target.value as AgentType)}
+                className="rounded-2xl border border-white/10 bg-[#07101b] px-4 py-3 text-sm text-white outline-none transition focus:border-sky-400/50"
               >
-                Cancel
-              </button>
+                <option value="opencode">OpenCode</option>
+                <option value="codex">Codex</option>
+                <option value="claude">Claude</option>
+                <option value="gemini">Gemini</option>
+                <option value="kiro">Kiro</option>
+                <option value="cursor-agent">Cursor Agent</option>
+              </select>
               <button
-                onClick={handleAddRepository}
-                className="dash-repoPanelAction"
-                disabled={!newRepoPath.trim() || addingRepo}
+                type="button"
+                className="rounded-2xl bg-sky-400 px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-sky-300 disabled:cursor-not-allowed disabled:bg-slate-500"
+                onClick={() => void handleCreateWorktree()}
+                disabled={submitting || branchName.trim().length === 0}
               >
-                {addingRepo ? "Adding..." : "Add"}
+                Create
               </button>
             </div>
           </div>
+
+          <div className="rounded-2xl border border-white/10 bg-black/15 p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div className="text-sm font-medium text-white">Worktrees</div>
+              <div className="text-sm text-white/45">
+                {mappedRepository.worktrees.length} active
+              </div>
+            </div>
+
+            {mappedRepository.worktrees.length === 0 ? (
+              <div className="mt-4 rounded-2xl border border-dashed border-white/15 px-4 py-6 text-sm text-white/55">
+                No worktrees yet for this project repository.
+              </div>
+            ) : (
+              <div className="mt-4 space-y-3">
+                {mappedRepository.worktrees.map((worktree) => {
+                  const instance = mappedInstances.find(
+                    (candidate) => candidate.worktreeId === worktree.id,
+                  );
+
+                  return (
+                    <div
+                      key={worktree.id}
+                      className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#07101b] px-4 py-4 md:flex-row md:items-center md:justify-between"
+                    >
+                      <div>
+                        <div className="text-sm font-medium text-white">
+                          {worktree.branch.replace(/^refs\/heads\//, "")}
+                        </div>
+                        <div className="mt-1 text-sm text-white/55">
+                          {worktree.path}
+                        </div>
+                        <div className="mt-2 text-xs text-white/40">
+                          Instance: {instance?.status ?? "not started"}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-3">
+                        <Link
+                          href={`/repositories/${mappedRepository.id}`}
+                          className="rounded-full border border-white/15 px-4 py-2 text-sm text-white/80 transition hover:border-white/30 hover:text-white"
+                        >
+                          Open
+                        </Link>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="mt-6 rounded-2xl border border-white/10 bg-black/15 p-5">
+          <div className="text-sm font-medium text-white">Map a repository</div>
+          <p className="mt-2 text-sm text-white/60">
+            Choose one of your connected repositories and attach it to this
+            planning project.
+          </p>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+            <select
+              value={selectedFullName}
+              onChange={(event) => setSelectedFullName(event.target.value)}
+              className="rounded-2xl border border-white/10 bg-[#07101b] px-4 py-3 text-sm text-white outline-none transition focus:border-sky-400/50"
+            >
+              {repoOptions.length === 0 ? (
+                <option value="">No connected repositories</option>
+              ) : null}
+              {repoOptions.map((option) => (
+                <option key={option.fullName} value={option.fullName}>
+                  {option.fullName}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="rounded-2xl bg-sky-400 px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-sky-300 disabled:cursor-not-allowed disabled:bg-slate-500"
+              onClick={() => void handleMapRepository()}
+              disabled={submitting || !selectedOption}
+            >
+              Map repository
+            </button>
+          </div>
         </div>
       )}
-    </div>
+    </section>
   );
 }

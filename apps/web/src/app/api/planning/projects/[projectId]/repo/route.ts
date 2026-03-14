@@ -13,16 +13,16 @@ import {
   runGit,
   safeRepoDirName,
 } from "~/server/git/user-repos";
-import { getServices } from "~/server/services";
+import { getServices } from "@bob/execution/services";
 
 function ensureLegacyRepoForPath(input: {
   gitService: Awaited<ReturnType<typeof getServices>>["gitService"];
   repoPath: string;
   userId: string;
 }) {
-  const existing = input.gitService
-    .getRepositories(input.userId)
-    .find((r) => r.path === input.repoPath);
+    const existing = input.gitService
+      .getRepositories(input.userId)
+      .find((repo: { path: string }) => repo.path === input.repoPath);
   if (existing) return existing;
   return input.gitService.addRepository(input.repoPath, input.userId);
 }

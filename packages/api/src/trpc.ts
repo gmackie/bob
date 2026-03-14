@@ -3,10 +3,10 @@ import superjson from "superjson";
 import { z, ZodError } from "zod/v4";
 
 import {
-  type ApiKeyPermission,
   type ApiKeyAuth,
-  validateApiKey,
+  type ApiKeyPermission,
   type Auth,
+  resolveRequestAuthContext,
 } from "@bob/auth";
 import { eq } from "@bob/db";
 import { db } from "@bob/db/client";
@@ -19,28 +19,14 @@ export const createTRPCContext = async (opts: {
   auth: Auth;
 }) => {
   const authApi = opts.auth.api;
-  const authHeader = opts.headers.get("authorization");
-  if (authHeader?.startsWith("Bearer ")) {
-    const apiKeyAuth = await validateApiKey(authHeader.slice(7));
+  let defaultUser:
+    | {
+        session: null;
+        user: typeof user.$inferSelect;
+      }
+    | null = null;
 
-    if (apiKeyAuth) {
-      return {
-        authApi,
-        session: {
-          user: apiKeyAuth.user,
-          session: null,
-        },
-        apiKeyAuth,
-        db,
-      };
-    }
-  }
-
-  const session = await authApi.getSession({
-    headers: opts.headers,
-  });
-
-  if (process.env.REQUIRE_AUTH !== "true" && !session?.user) {
+  if (process.env.REQUIRE_AUTH !== "true") {
     const [userRecord] = await db
       .select()
       .from(user)
@@ -48,19 +34,23 @@ export const createTRPCContext = async (opts: {
       .limit(1);
 
     if (userRecord) {
-      return {
-        authApi,
-        session: { user: userRecord, session: null },
-        apiKeyAuth: null as ApiKeyAuth | null,
-        db,
+      defaultUser = {
+        user: userRecord,
+        session: null,
       };
     }
   }
 
+  const authContext = await resolveRequestAuthContext({
+    auth: opts.auth,
+    defaultUser,
+    headers: opts.headers,
+  });
+
   return {
     authApi,
-    session,
-    apiKeyAuth: null as ApiKeyAuth | null,
+    session: authContext.session,
+    apiKeyAuth: authContext.apiKeyAuth as ApiKeyAuth | null,
     db,
   };
 };

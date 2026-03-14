@@ -1,6 +1,8 @@
+import React from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { RepositoryPanel } from "~/components/dashboard";
 import { WorkItemBoard } from "~/components/work-items/work-item-board";
 import { createPlanningCaller } from "~/lib/planning/server";
 
@@ -61,6 +63,10 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           <span>{counts.active} active</span>
           <span>{project.status.replace(/_/g, " ")}</span>
         </div>
+      </section>
+
+      <section className="mt-10">
+        <RepositoryPanel projectId={project.id} />
       </section>
 
       <section className="mt-10">
