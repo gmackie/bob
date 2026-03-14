@@ -104,6 +104,7 @@ describe("product-facing app router", () => {
 
   it("exposes the unified planning and collaboration subrouters", async () => {
     expect((appRouter as any)._def.record.planning).toBeDefined();
+    expect((appRouter as any)._def.record.kanbanger).toBeUndefined();
 
     queryMocks.workspaceMembersFindMany.mockResolvedValueOnce([
       {

@@ -39,7 +39,6 @@ const appRouterRecord = {
   git: gitRouter,
   gitProviders: gitProvidersRouter,
   instance: instanceRouter,
-  kanbanger: planningRouter,
   planning: planningRouter,
   link: linkRouter,
   plan: planRouter,
