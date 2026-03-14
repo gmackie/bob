@@ -2,6 +2,7 @@ import { Redirect, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Linking,
   ScrollView,
   Text,
   TextInput,
@@ -10,6 +11,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Badge, Button, Card, ListRow, Screen } from "~/components/ui";
+import { buildHeadlessSessionDestination } from "~/features/planning/execution-links";
 import {
   buildTaskWorkspaceViewModel,
   deriveTaskWorkspaceValidationState,
@@ -18,6 +20,7 @@ import {
 } from "~/features/planning/task-workspace";
 import { authClient } from "~/utils/auth";
 import { trpc } from "~/utils/api";
+import { getBaseUrl } from "~/utils/base-url";
 
 export default function TaskWorkspaceScreen() {
   const { data: session, isPending } = authClient.useSession();
@@ -228,6 +231,7 @@ export default function TaskWorkspaceScreen() {
 
   const workItemData = workItemQuery.data;
   const awaitingInputModel = workspaceModel?.awaitingInput ?? null;
+  const baseUrl = getBaseUrl();
 
   return (
     <Screen className="pt-6">
@@ -384,19 +388,32 @@ export default function TaskWorkspaceScreen() {
         </View>
         <Card className="mb-5">
           {runRows.length > 0 ? (
-            runRows.map((run, index) => (
-              <ListRow
-                key={run.id}
-                title={run.label}
-                subtitle={run.branch}
-                right={
-                  <Text className="text-muted text-sm">
-                    {run.hasSession ? "Open run" : "Recorded"}
-                  </Text>
-                }
-                showDivider={index < runRows.length - 1}
-              />
-            ))
+            runRows.map((run, index) => {
+              const sessionId = run.sessionId;
+
+              return (
+                <ListRow
+                  key={run.id}
+                  title={run.label}
+                  subtitle={run.branch}
+                  onPress={
+                    sessionId
+                      ? () => {
+                          void Linking.openURL(
+                            buildHeadlessSessionDestination(sessionId, baseUrl),
+                          );
+                        }
+                      : undefined
+                  }
+                  right={
+                    <Text className="text-muted text-sm">
+                      {run.hasSession ? "Open run" : "Recorded"}
+                    </Text>
+                  }
+                  showDivider={index < runRows.length - 1}
+                />
+              );
+            })
           ) : (
             <Text className="text-muted text-sm">
               No runs have been recorded for this task yet.
@@ -414,6 +431,9 @@ export default function TaskWorkspaceScreen() {
                 key={artifact.id}
                 title={artifact.title ?? artifact.artifactRole}
                 subtitle={artifact.url}
+                onPress={() => {
+                  void Linking.openURL(artifact.url);
+                }}
                 showDivider={index < workItemData.currentArtifacts.length - 1}
               />
             ))

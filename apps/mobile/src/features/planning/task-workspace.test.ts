@@ -138,12 +138,14 @@ describe("task workspace view model", () => {
         label: "awaiting review",
         branch: "bob/mob-42-review",
         hasSession: true,
+        sessionId: "session-1",
       },
       {
         id: "run-2",
         label: "completed",
         branch: "No branch recorded",
         hasSession: false,
+        sessionId: null,
       },
     ]);
   });

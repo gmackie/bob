@@ -177,5 +177,6 @@ export function summarizeTaskRuns(runs: TaskWorkspaceRun[]) {
     label: run.status.replace(/_/g, " "),
     branch: run.branch?.trim() || "No branch recorded",
     hasSession: run.sessionId != null,
+    sessionId: run.sessionId,
   }));
 }
