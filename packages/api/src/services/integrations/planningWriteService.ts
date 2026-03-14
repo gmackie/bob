@@ -8,21 +8,21 @@ import {
   getPlanningBaseUrl,
 } from "./planningRemoteConfig";
 
-export type KanbangerIssueStatus =
+export type PlanningIssueStatus =
   | "todo"
   | "in_progress"
   | "in_review"
   | "done"
   | "blocked";
 
-export type KanbangerMilestoneKind =
+export type PlanningMilestoneKind =
   | "progress"
   | "blocked"
   | "review_ready"
   | "verification_result"
   | "completed";
 
-export type KanbangerArtifactType =
+export type PlanningArtifactType =
   | "pr"
   | "verification"
   | "build"
@@ -31,7 +31,7 @@ export type KanbangerArtifactType =
   | "deliverable"
   | "other";
 
-export type KanbangerArtifactRole =
+export type PlanningArtifactRole =
   | "primary"
   | "review"
   | "verification"
@@ -54,7 +54,7 @@ interface SessionScopedInput {
 }
 
 export interface ReportMilestoneInput extends SessionScopedInput {
-  kind: KanbangerMilestoneKind;
+  kind: PlanningMilestoneKind;
   message: string;
   phase?: string;
   progress?: string;
@@ -75,12 +75,12 @@ export interface RecordPromptResolutionInput extends SessionScopedInput {
 }
 
 export interface SetIssueStatusInput extends SessionScopedInput {
-  status: KanbangerIssueStatus;
+  status: PlanningIssueStatus;
 }
 
 export interface AttachArtifactInput extends SessionScopedInput {
-  artifactType: KanbangerArtifactType;
-  artifactRole?: KanbangerArtifactRole;
+  artifactType: PlanningArtifactType;
+  artifactRole?: PlanningArtifactRole;
   url: string;
   title?: string;
   summary?: string;
@@ -154,7 +154,7 @@ function createIdempotencyKey(parts: Array<string | number | null | undefined>) 
   return createHash("sha256").update(payload).digest("hex");
 }
 
-async function kanbangerMutation<T>(
+async function planningMutation<T>(
   path: string,
   input: unknown,
   idempotencyKey: string,
@@ -163,7 +163,7 @@ async function kanbangerMutation<T>(
 
   if (!planningApiKey) {
     console.warn(
-      `[KanbangerWriteService] PLANNING_API_KEY not set, skipping ${path}`,
+      `[PlanningWriteService] PLANNING_API_KEY not set, skipping ${path}`,
     );
     return null;
   }
@@ -204,7 +204,7 @@ async function createIssueComment(
     return null;
   }
 
-  return kanbangerMutation<{ id?: string }>(
+  return planningMutation<{ id?: string }>(
     "comment.create",
     { issueId, body },
     idempotencyKey,
@@ -219,7 +219,7 @@ async function syncBobRunProjection(
     latestSummary?: string;
     lastPromptCommentId?: string;
     reviewUrl?: string;
-    issueStatus?: Exclude<KanbangerIssueStatus, "blocked">;
+    issueStatus?: Exclude<PlanningIssueStatus, "blocked">;
   },
   idempotencyKey: string,
 ) {
@@ -227,7 +227,7 @@ async function syncBobRunProjection(
     return null;
   }
 
-  return kanbangerMutation(
+  return planningMutation(
     "agent.syncBobRun",
     {
       issueId: context.issueId,
@@ -255,7 +255,7 @@ async function createCanonicalArtifact(
     return null;
   }
 
-  return kanbangerMutation(
+  return planningMutation(
     "issueArtifact.create",
     {
       issueId: context.issueId,
@@ -406,7 +406,7 @@ export async function setIssueStatus(input: SetIssueStatusInput) {
 
   const remoteStatus = input.status;
 
-  await kanbangerMutation(
+  await planningMutation(
     "issue.update",
     {
       id: context.issueId,
@@ -498,7 +498,7 @@ export async function completeTaskRun(input: CompleteTaskRunInput) {
     throw new Error("No active task run for this session");
   }
 
-  await kanbangerMutation(
+  await planningMutation(
     "agent.completeTask",
     {
       taskRunId: context.taskRunId,

@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 describe("planning webhook route", () => {
@@ -23,5 +26,15 @@ describe("planning webhook route", () => {
     await expect(response.json()).resolves.toEqual({
       error: "Missing webhook event header",
     });
+  });
+
+  it("uses planning-named local webhook symbols", () => {
+    const routePath = fileURLToPath(new URL("../route.ts", import.meta.url));
+    const source = readFileSync(routePath, "utf8");
+
+    expect(source).not.toContain("KanbangerTaskPayload");
+    expect(source).not.toContain("KanbangerIssueUpdatedPayload");
+    expect(source).toContain("getLatestTaskRunByPlanningItemId");
+    expect(source).toContain("PlanningTask");
   });
 });
