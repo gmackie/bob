@@ -34,7 +34,7 @@ You are working in a Bob-managed session. Bob provides tools for status reportin
 
 Your session has:
 - A unique \`BOB_SESSION_ID\` (check environment)
-- Optional linked Kanbanger task
+- Optional linked task
 - Optional linked repository/worktree
 
 Use \`get_session\` to understand your context at the start of work.
@@ -67,7 +67,7 @@ request_input(
 Key behaviors:
 - Provide sensible default actions so work can continue if no response
 - Default timeout is 30 minutes
-- The human can respond via the Bob UI or Kanbanger task comments
+- The human can respond via the Bob UI or linked task comments
 - After resolution, you'll transition back to "working" status
 
 ## Being Blocked
@@ -83,7 +83,7 @@ mark_blocked(
 
 This will:
 - Set your status to "blocked"
-- Post a notification to Kanbanger (if task linked)
+- Post a notification to the linked task (if task linked)
 - Wait for human to resolve the issue
 
 ## Pull Requests
@@ -110,7 +110,7 @@ submit_for_review(
 
 ## Task Integration
 
-If working on a Kanbanger task:
+If working on a linked task:
 
 1. Task is auto-linked when session starts from task
 2. Use \`post_task_comment\` to share progress updates
@@ -153,7 +153,7 @@ complete_task(
 - \`refresh_pr\` - Refresh PR from remote
 
 ### Task Tools
-- \`link_task\` - Link a Kanbanger task
+- \`link_task\` - Link a task
 - \`post_task_comment\` - Comment on linked task
 - \`complete_task\` - Mark task complete
 - \`update_task_status\` - Change task status

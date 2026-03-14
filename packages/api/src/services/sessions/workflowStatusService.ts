@@ -470,7 +470,8 @@ export async function findExpiredAwaitingInputSessions(): Promise<
   }>
 > {
   const result = await db.execute(sql`
-    SELECT id, user_id, awaiting_input_default, kanbanger_task_id
+    SELECT id, user_id, awaiting_input_default,
+           kanbanger_task_id AS planning_task_id
     FROM chat_conversations
     WHERE workflow_status = 'awaiting_input'
       AND awaiting_input_expires_at <= NOW()
@@ -482,13 +483,13 @@ export async function findExpiredAwaitingInputSessions(): Promise<
       id: string;
       user_id: string;
       awaiting_input_default: string;
-      kanbanger_task_id: string | null;
+      planning_task_id: string | null;
     }>
   ).map((row) => ({
     id: row.id,
     userId: row.user_id,
     awaitingInputDefault: row.awaiting_input_default ?? "proceed with default",
-    planningTaskId: row.kanbanger_task_id,
+    planningTaskId: row.planning_task_id,
   }));
 }
 

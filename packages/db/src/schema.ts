@@ -1156,7 +1156,7 @@ export const CreateGitCommitSchema = createInsertSchema(gitCommits, {
 // 1.4 Webhook Deliveries (idempotency + audit)
 export const webhookDeliveries = pgTable("webhook_deliveries", (t) => ({
   id: t.uuid().notNull().primaryKey().defaultRandom(),
-  provider: t.varchar({ length: 20 }).notNull(), // 'github' | 'gitlab' | 'gitea' | 'kanbanger'
+  provider: t.varchar({ length: 20 }).notNull(), // 'github' | 'gitlab' | 'gitea' | 'planning'
   deliveryId: t.text(), // X-GitHub-Delivery, X-Gitea-Delivery, etc.
   eventType: t.varchar({ length: 50 }).notNull(), // e.g., 'pull_request', 'push'
   action: t.varchar({ length: 50 }), // e.g., 'opened', 'closed', 'merged'
@@ -1187,7 +1187,7 @@ export const CreateWebhookDeliverySchema = createInsertSchema(
   processedAt: true,
 });
 
-// 1.5 Task Runs (Kanbanger execution tracking)
+// 1.5 Task Runs (planning execution tracking)
 export const taskRuns = pgTable("task_runs", (t) => ({
   id: t.uuid().notNull().primaryKey().defaultRandom(),
   userId: t
