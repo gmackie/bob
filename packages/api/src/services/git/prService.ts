@@ -28,7 +28,7 @@ export interface CreateDraftPrInput {
   headBranch: string;
   baseBranch?: string;
   draft?: boolean;
-  kanbangerTaskId?: string;
+  planningTaskId?: string;
 }
 
 export interface UpdatePrInput {
@@ -66,7 +66,7 @@ export interface PrWithCommits {
   status: string;
   url: string;
   sessionId: string | null;
-  kanbangerTaskId: string | null;
+  planningTaskId: string | null;
   additions: number | null;
   deletions: number | null;
   changedFiles: number | null;
@@ -180,7 +180,7 @@ export async function createDraftPr(
       status: mapPrStatus(remotePr),
       url: remotePr.url,
       sessionId: input.sessionId ?? null,
-      kanbangerTaskId: input.kanbangerTaskId ?? null,
+      planningTaskId: input.planningTaskId ?? null,
       additions: remotePr.additions ?? null,
       deletions: remotePr.deletions ?? null,
       changedFiles: remotePr.changedFiles ?? null,
@@ -609,14 +609,14 @@ export async function listPrsBySession(
   }));
 }
 
-export async function linkPrToKanbangerTask(
+export async function linkPrToPlanningTask(
   userId: string,
   pullRequestId: string,
-  kanbangerTaskId: string,
+  planningTaskId: string,
 ): Promise<void> {
   await db
     .update(pullRequests)
-    .set({ kanbangerTaskId })
+    .set({ planningTaskId })
     .where(
       and(eq(pullRequests.id, pullRequestId), eq(pullRequests.userId, userId)),
     );

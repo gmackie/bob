@@ -466,7 +466,7 @@ export async function findExpiredAwaitingInputSessions(): Promise<
     id: string;
     userId: string;
     awaitingInputDefault: string;
-    kanbangerTaskId: string | null;
+    planningTaskId: string | null;
   }>
 > {
   const result = await db.execute(sql`
@@ -488,7 +488,7 @@ export async function findExpiredAwaitingInputSessions(): Promise<
     id: row.id,
     userId: row.user_id,
     awaitingInputDefault: row.awaiting_input_default ?? "proceed with default",
-    kanbangerTaskId: row.kanbanger_task_id,
+    planningTaskId: row.kanbanger_task_id,
   }));
 }
 

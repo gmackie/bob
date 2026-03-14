@@ -23,6 +23,7 @@
     "@bob/auth": "workspace:*",
     "@bob/config": "workspace:*",
     "@bob/db": "workspace:*",
+    "@bob/execution": "workspace:*",
     "@bob/legacy": "workspace:*",
     "@bob/monitoring": "workspace:*",
     "@bob/ui": "workspace:*",

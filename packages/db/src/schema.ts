@@ -697,7 +697,7 @@ export const taskStatusEnum = [
 export type TaskStatus = (typeof taskStatusEnum)[number];
 
 export const linkTypeEnum = [
-  "kanbanger_task",
+  "planning_task",
   "github_pr",
   "github_issue",
   "control_panel",
@@ -1079,7 +1079,7 @@ export const pullRequests = pgTable("pull_requests", (t) => ({
   sessionId: t
     .uuid()
     .references(() => chatConversations.id, { onDelete: "set null" }),
-  kanbangerTaskId: t.text(),
+  planningTaskId: t.text("kanbanger_task_id"),
   additions: t.integer(),
   deletions: t.integer(),
   changedFiles: t.integer(),
@@ -1103,7 +1103,7 @@ export const CreatePullRequestSchema = createInsertSchema(pullRequests, {
   body: z.string().optional(),
   status: z.enum(prStatusEnum),
   url: z.string().url(),
-  kanbangerTaskId: z.string().optional(),
+  planningTaskId: z.string().optional(),
 }).omit({
   id: true,
   userId: true,

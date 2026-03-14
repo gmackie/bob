@@ -267,7 +267,7 @@ export const gitRouter = {
         headBranch: z.string().min(1),
         baseBranch: z.string().optional(),
         draft: z.boolean().default(true),
-        kanbangerTaskId: z.string().optional(),
+        planningTaskId: z.string().optional(),
         remote: z.string().default("origin"),
         setUpstream: z.boolean().default(true),
       }),
@@ -305,7 +305,7 @@ export const gitRouter = {
           headBranch: input.headBranch,
           baseBranch: input.baseBranch,
           draft: input.draft,
-          kanbangerTaskId: input.kanbangerTaskId,
+          planningTaskId: input.planningTaskId,
         });
       } catch (error) {
         throw new TRPCError({

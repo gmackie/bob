@@ -46,7 +46,7 @@ function createMockPullRequest(overrides = {}) {
     status: "open" as const,
     url: "https://github.com/org/repo/pull/42",
     sessionId: null,
-    kanbangerTaskId: null,
+    planningTaskId: null,
     additions: 100,
     deletions: 20,
     changedFiles: 5,

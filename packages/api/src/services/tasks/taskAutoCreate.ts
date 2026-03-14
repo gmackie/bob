@@ -17,7 +17,7 @@ import {
   getPlanningApiUrl,
 } from "../integrations/planningRemoteConfig";
 
-export interface KanbangerCreateIssueInput {
+export interface PlanningCreateIssueInput {
   workspaceId: string;
   projectId: string;
   title: string;
@@ -26,7 +26,7 @@ export interface KanbangerCreateIssueInput {
   priority?: number;
 }
 
-export interface KanbangerIssue {
+export interface PlanningIssue {
   id: string;
   identifier: string;
   title: string;
@@ -45,7 +45,7 @@ export interface AutoCreateResult {
   reason: string;
 }
 
-async function kanbangerRequest<T>(
+async function planningRequest<T>(
   endpoint: string,
   method: "GET" | "POST" | "PATCH" = "GET",
   body?: Record<string, unknown>,
@@ -73,10 +73,10 @@ async function kanbangerRequest<T>(
   return response.json() as Promise<T>;
 }
 
-async function createKanbangerIssue(
-  input: KanbangerCreateIssueInput,
-): Promise<KanbangerIssue> {
-  return kanbangerRequest<KanbangerIssue>(
+async function createPlanningIssue(
+  input: PlanningCreateIssueInput,
+): Promise<PlanningIssue> {
+  return planningRequest<PlanningIssue>(
     `/workspaces/${input.workspaceId}/issues`,
     "POST",
     {
@@ -89,12 +89,12 @@ async function createKanbangerIssue(
   );
 }
 
-export async function addCommentToKanbangerIssue(
+export async function addCommentToPlanningIssue(
   workspaceId: string,
   issueId: string,
   body: string,
 ): Promise<void> {
-  await kanbangerRequest(
+  await planningRequest(
     `/workspaces/${workspaceId}/issues/${issueId}/comments`,
     "POST",
     { body },
@@ -180,8 +180,8 @@ function extractLabelsFromBranch(branch: string): string[] {
 export interface AutoCreateFromPRInput {
   pullRequestId: string;
   userId: string;
-  kanbangerWorkspaceId: string;
-  kanbangerProjectId: string;
+  planningWorkspaceId: string;
+  planningProjectId: string;
   forceCreate?: boolean;
   isFirstPush?: boolean;
 }
@@ -228,10 +228,10 @@ export async function autoCreateTaskFromPR(
     };
   }
 
-  if (pr.kanbangerTaskId && !input.forceCreate) {
+  if (pr.planningTaskId && !input.forceCreate) {
     return {
       created: false,
-      taskId: pr.kanbangerTaskId,
+      taskId: pr.planningTaskId,
       taskIdentifier: null,
       taskUrl: null,
       contextReadiness: {
@@ -287,9 +287,9 @@ export async function autoCreateTaskFromPR(
   const description = generateTaskDescription(pr, readiness);
 
   try {
-    const issue = await createKanbangerIssue({
-      workspaceId: input.kanbangerWorkspaceId,
-      projectId: input.kanbangerProjectId,
+    const issue = await createPlanningIssue({
+      workspaceId: input.planningWorkspaceId,
+      projectId: input.planningProjectId,
       title: pr.title,
       description,
       labels,
@@ -298,7 +298,7 @@ export async function autoCreateTaskFromPR(
 
     await db
       .update(pullRequests)
-      .set({ kanbangerTaskId: issue.id })
+      .set({ planningTaskId: issue.id })
       .where(eq(pullRequests.id, pr.id));
 
     if (pr.sessionId) {
@@ -325,7 +325,7 @@ export async function autoCreateTaskFromPR(
       taskIdentifier: null,
       taskUrl: null,
       contextReadiness: readiness,
-      reason: `Failed to create Kanbanger task: ${errorMessage}`,
+      reason: `Failed to create planning task: ${errorMessage}`,
     };
   }
 }
@@ -334,8 +334,8 @@ export interface CheckAndCreateInput {
   userId: string;
   branch: string;
   repositoryId: string;
-  kanbangerWorkspaceId: string;
-  kanbangerProjectId: string;
+  planningWorkspaceId: string;
+  planningProjectId: string;
   isFirstPush?: boolean;
 }
 
@@ -358,8 +358,8 @@ export async function checkAndCreateTaskIfReady(
   return autoCreateTaskFromPR({
     pullRequestId: pr.id,
     userId: input.userId,
-    kanbangerWorkspaceId: input.kanbangerWorkspaceId,
-    kanbangerProjectId: input.kanbangerProjectId,
+    planningWorkspaceId: input.planningWorkspaceId,
+    planningProjectId: input.planningProjectId,
     isFirstPush: input.isFirstPush,
   });
 }

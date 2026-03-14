@@ -10,7 +10,7 @@ import {
   webhookDeliveries,
 } from "@bob/db/schema";
 
-export type WebhookProvider = "github" | "gitlab" | "gitea" | "kanbanger";
+export type WebhookProvider = "github" | "gitlab" | "gitea" | "planning";
 
 export interface WebhookDeliveryInput {
   provider: WebhookProvider;
@@ -469,7 +469,7 @@ async function handleGiteaPush(
   }
 }
 
-interface KanbangerCommentPayload {
+interface PlanningCommentPayload {
   event?: "comment.created";
   issueId?: string;
   issue?: {
@@ -498,12 +498,12 @@ interface KanbangerCommentPayload {
   } | null;
 }
 
-interface NormalizedKanbangerCommentPayload {
+interface NormalizedPlanningCommentPayload {
   issueId: string;
   issueIdentifier: string | null;
   issueStatus: string | null;
-  comment: KanbangerCommentPayload["comment"];
-  bobRouting: NonNullable<KanbangerCommentPayload["bobRouting"]> | null;
+  comment: PlanningCommentPayload["comment"];
+  bobRouting: NonNullable<PlanningCommentPayload["bobRouting"]> | null;
 }
 
 const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:3002";
@@ -513,18 +513,18 @@ function truncateStatusMessage(value: string): string {
 }
 
 function buildExternalCommentMessage(
-  payload: NormalizedKanbangerCommentPayload,
+  payload: NormalizedPlanningCommentPayload,
 ): string {
   const author =
     payload.comment.user.name ||
     payload.comment.user.email ||
     payload.comment.user.id;
-  return `Kanbanger comment from ${author}:\n\n${payload.comment.body.trim()}`;
+  return `Planning comment from ${author}:\n\n${payload.comment.body.trim()}`;
 }
 
-function normalizeKanbangerCommentPayload(
-  payload: KanbangerCommentPayload,
-): NormalizedKanbangerCommentPayload | null {
+function normalizePlanningCommentPayload(
+  payload: PlanningCommentPayload,
+): NormalizedPlanningCommentPayload | null {
   const issueId = payload.issue?.id ?? payload.issueId ?? null;
   const body = payload.comment?.body?.trim();
 
@@ -624,28 +624,28 @@ async function sendMessageToGateway(
 
 async function recordLateCommentReply(
   session: Awaited<ReturnType<typeof getLatestIssueSession>>,
-  payload: NormalizedKanbangerCommentPayload,
+  payload: NormalizedPlanningCommentPayload,
 ) {
   if (!session) {
     return;
   }
 
   await addSessionEvent(session.id, session.next_seq, "external_reply", {
-    type: "kanbanger_comment_late",
+    type: "planning_comment_late",
     reason: payload.bobRouting?.reason ?? "mention",
     commentId: payload.comment.id,
     parentId: payload.comment.parentId ?? null,
     issueId: payload.issueId,
     value: payload.comment.body,
-    source: "kanbanger_comment",
+    source: "planning_comment",
   });
   await setNextSeq(session.id, session.next_seq + 1);
 }
 
-export async function handleKanbangerComment(
-  rawPayload: KanbangerCommentPayload,
+export async function handlePlanningComment(
+  rawPayload: PlanningCommentPayload,
 ): Promise<void> {
-  const payload = normalizeKanbangerCommentPayload(rawPayload);
+  const payload = normalizePlanningCommentPayload(rawPayload);
   if (!payload?.bobRouting?.shouldRoute) {
     return;
   }
@@ -695,7 +695,7 @@ export async function handleKanbangerComment(
       resolution: {
         type: "human",
         value: payload.comment.body,
-        source: "kanbanger_comment",
+        source: "planning_comment",
         commentId: payload.comment.id,
         parentId: payload.comment.parentId ?? null,
       },
@@ -740,13 +740,13 @@ export async function handleKanbangerComment(
         type: "workflow_status",
         workflowStatus: "working",
         message: "External feedback received",
-        source: "kanbanger_comment",
+        source: "planning_comment",
         commentId: payload.comment.id,
       });
     } else {
       await addSessionEvent(session.id, session.next_seq, "external_reply", {
-        type: "kanbanger_comment",
-        source: "kanbanger_comment",
+        type: "planning_comment",
+        source: "planning_comment",
         commentId: payload.comment.id,
         parentId: payload.comment.parentId ?? null,
         value: payload.comment.body,
@@ -761,14 +761,14 @@ export async function handleKanbangerComment(
   await recordLateCommentReply(session, payload);
 }
 
-export async function processKanbangerWebhook(
+export async function processPlanningWebhook(
   eventType: string,
   payload: Record<string, unknown>,
   deliveryId: string,
 ): Promise<void> {
   try {
     if (eventType === "comment.created") {
-      await handleKanbangerComment(payload as unknown as KanbangerCommentPayload);
+      await handlePlanningComment(payload as unknown as PlanningCommentPayload);
     }
     await markDeliveryProcessed(deliveryId);
   } catch (error) {

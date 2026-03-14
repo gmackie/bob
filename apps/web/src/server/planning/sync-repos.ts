@@ -17,7 +17,7 @@ import { repositories, user } from "@bob/db/schema";
 import { getPlanningRemoteConfig } from "~/lib/planning/remote-config";
 import { getServices } from "~/server/services";
 
-interface KanbangerProjectListItem {
+interface PlanningProjectListItem {
   project: {
     id: string;
     name: string;
@@ -235,14 +235,14 @@ function pickBestByScore<T>(
   return { best: top.item, bestScore: top.score, ambiguous: false };
 }
 
-async function kanbangerRequest<T>(path: string, input: unknown): Promise<T> {
+async function planningRequest<T>(path: string, input: unknown): Promise<T> {
   const { baseUrl, apiKey } = getPlanningRemoteConfig();
 
   if (!apiKey) {
     throw new Error("PLANNING_API_KEY not configured");
   }
 
-  // tasks.gmac.io (Kanbanger) rejects POST for query procedures; use GET batch format.
+  // tasks.gmac.io (Planning) rejects POST for query procedures; use GET batch format.
   const inputObj = { "0": { json: input ?? {} } };
   const qs = new URLSearchParams({
     batch: "1",
@@ -537,7 +537,7 @@ function pickMatchingLocalRepos(
   };
 }
 
-export type KanbangerSyncReposResult = {
+export type PlanningSyncReposResult = {
   workspaceId: string;
   userId: string;
   projects: number;
@@ -576,7 +576,7 @@ export async function syncPlanningReposForBobUser(input: {
   userId?: string | null;
   dryRun?: boolean;
   includeCandidates?: boolean;
-}): Promise<KanbangerSyncReposResult> {
+}): Promise<PlanningSyncReposResult> {
   if (!getPlanningRemoteConfig().apiKey) {
     const err: ErrorWithStatusCode = new Error(
       "PLANNING_API_KEY not configured",
@@ -598,7 +598,7 @@ export async function syncPlanningReposForBobUser(input: {
     : (() => {
         // workspace.list returns memberships (workspace nested) on tasks.gmac.io.
         const first = (ws: any) => ws?.[0];
-        return kanbangerRequest<any[]>("workspace.list", {}).then((ws) => {
+        return planningRequest<any[]>("workspace.list", {}).then((ws) => {
           const item = first(ws);
           return item?.id ?? item?.workspace?.id;
         });
@@ -607,10 +607,10 @@ export async function syncPlanningReposForBobUser(input: {
   const workspaceIdValue = await resolvedWorkspaceId;
 
   if (!workspaceIdValue) {
-    throw new Error("No Kanbanger workspace found");
+    throw new Error("No Planning workspace found");
   }
 
-  const projects = await kanbangerRequest<KanbangerProjectListItem[]>(
+  const projects = await planningRequest<PlanningProjectListItem[]>(
     "project.list",
     {
       workspaceId: workspaceIdValue,
@@ -665,7 +665,7 @@ export async function syncPlanningReposForBobUser(input: {
 
   const localRepos = await listLocalRepos(reposDir);
 
-  const results: KanbangerSyncReposResult["results"] = [];
+  const results: PlanningSyncReposResult["results"] = [];
 
   const dryRun = input.dryRun === true;
   const includeCandidates = input.includeCandidates === true;

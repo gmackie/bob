@@ -5,7 +5,7 @@ import { z } from "zod/v4";
 import {
   createDraftPr,
   getPrById,
-  linkPrToKanbangerTask,
+  linkPrToPlanningTask,
   listPrsByRepository,
   listPrsBySession,
   mergePr,
@@ -65,7 +65,7 @@ export const pullRequestRouter = {
         headBranch: z.string().min(1),
         baseBranch: z.string().optional(),
         draft: z.boolean().optional(),
-        kanbangerTaskId: z.string().optional(),
+        planningTaskId: z.string().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -79,7 +79,7 @@ export const pullRequestRouter = {
           headBranch: input.headBranch,
           baseBranch: input.baseBranch,
           draft: input.draft,
-          kanbangerTaskId: input.kanbangerTaskId,
+          planningTaskId: input.planningTaskId,
         });
       } catch (error) {
         throw new TRPCError({
@@ -208,18 +208,18 @@ export const pullRequestRouter = {
       }
     }),
 
-  linkToKanbangerTask: protectedProcedure
+  linkToPlanningTask: protectedProcedure
     .input(
       z.object({
         pullRequestId: z.string().uuid(),
-        kanbangerTaskId: z.string().min(1),
+        planningTaskId: z.string().min(1),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      await linkPrToKanbangerTask(
+      await linkPrToPlanningTask(
         ctx.session.user.id,
         input.pullRequestId,
-        input.kanbangerTaskId,
+        input.planningTaskId,
       );
       return { success: true };
     }),

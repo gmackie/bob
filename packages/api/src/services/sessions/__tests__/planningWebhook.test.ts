@@ -69,9 +69,9 @@ vi.mock("@bob/db/schema", () => ({
   webhookDeliveries: {},
 }));
 
-import { handleKanbangerComment } from "../../webhooks/processWebhook";
+import { handlePlanningComment } from "../../webhooks/processWebhook";
 
-describe("Kanbanger webhook routing", () => {
+describe("Planning webhook routing", () => {
   beforeEach(() => {
     executeMock.mockReset();
     insertCalls.length = 0;
@@ -87,7 +87,7 @@ describe("Kanbanger webhook routing", () => {
   });
 
   it("ignores untargeted comments", async () => {
-    await handleKanbangerComment({
+    await handlePlanningComment({
       issue: { id: "issue-1", identifier: "ENG-1", status: "in_progress" },
       comment: {
         id: "comment-1",
@@ -129,7 +129,7 @@ describe("Kanbanger webhook routing", () => {
       })
       .mockResolvedValueOnce({ rows: [{ id: "session-1" }] });
 
-    await handleKanbangerComment({
+    await handlePlanningComment({
       issue: { id: "issue-1", identifier: "ENG-1", status: "blocked" },
       comment: {
         id: "comment-1",
@@ -166,7 +166,7 @@ describe("Kanbanger webhook routing", () => {
         workflowStatus: "working",
         resolution: expect.objectContaining({
           commentId: "comment-1",
-          source: "kanbanger_comment",
+          source: "planning_comment",
         }),
       }),
     });
@@ -194,7 +194,7 @@ describe("Kanbanger webhook routing", () => {
       })
       .mockResolvedValueOnce({ rows: [] });
 
-    await handleKanbangerComment({
+    await handlePlanningComment({
       issue: { id: "issue-1", identifier: "ENG-1", status: "blocked" },
       comment: {
         id: "comment-2",
@@ -223,7 +223,7 @@ describe("Kanbanger webhook routing", () => {
       sessionId: "session-1",
       eventType: "external_reply",
       payload: expect.objectContaining({
-        type: "kanbanger_comment_late",
+        type: "planning_comment_late",
         commentId: "comment-2",
       }),
     });
@@ -251,7 +251,7 @@ describe("Kanbanger webhook routing", () => {
       })
       .mockResolvedValueOnce({ rows: [] });
 
-    await handleKanbangerComment({
+    await handlePlanningComment({
       issue: { id: "issue-2", identifier: "ENG-2", status: "in_review" },
       comment: {
         id: "comment-3",
@@ -281,7 +281,7 @@ describe("Kanbanger webhook routing", () => {
       eventType: "state",
       payload: expect.objectContaining({
         workflowStatus: "working",
-        source: "kanbanger_comment",
+        source: "planning_comment",
         commentId: "comment-3",
       }),
     });

@@ -56,7 +56,7 @@ async function resolveWithTimeout(session: {
   id: string;
   userId: string;
   awaitingInputDefault: string;
-  kanbangerTaskId: string | null;
+  planningTaskId: string | null;
 }): Promise<void> {
   const resolutionJson = JSON.stringify({
     type: "timeout",
@@ -100,15 +100,15 @@ async function resolveWithTimeout(session: {
     },
   });
 
-  if (session.kanbangerTaskId) {
-    await postKanbangerComment(
-      session.kanbangerTaskId,
+  if (session.planningTaskId) {
+    await postPlanningComment(
+      session.planningTaskId,
       `Timeout reached. Proceeding with: **${session.awaitingInputDefault}**`,
     );
   }
 }
 
-async function postKanbangerComment(
+async function postPlanningComment(
   taskId: string,
   body: string,
 ): Promise<void> {
