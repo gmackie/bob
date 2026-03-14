@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { findFirstMock, insertCalls, chatMessagesTable, taskRunsTable } =
@@ -95,5 +98,25 @@ describe("execution task runtime helpers", () => {
       role: "user",
     });
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses planning-named runtime task exports", () => {
+    const source = readFileSync(
+      path.resolve(__dirname, "./taskExecutor.ts"),
+      "utf8",
+    );
+
+    expect(source).not.toContain("KanbangerTask");
+    expect(source).not.toContain("getTaskRunByKanbangerId");
+    expect(source).not.toContain("getLatestTaskRunByKanbangerId");
+    expect(source).not.toContain(
+      "Superseded by Kanbanger issue context update requiring a fresh run",
+    );
+    expect(source).toContain("PlanningTask");
+    expect(source).toContain("getTaskRunByPlanningItemId");
+    expect(source).toContain("getLatestTaskRunByPlanningItemId");
+    expect(source).toContain(
+      "Superseded by planning issue context update requiring a fresh run",
+    );
   });
 });

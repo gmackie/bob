@@ -276,7 +276,7 @@ function SessionHeader({
           {issueManaged && (
             <>
               <span>·</span>
-              <span>Issue-managed session</span>
+              <span>Task-linked session</span>
             </>
           )}
           {gitBranch && (
@@ -300,7 +300,7 @@ function SessionHeader({
           rel="noopener noreferrer"
           className="rounded border px-3 py-1 text-sm"
         >
-          Open in Kanbanger
+          Open linked task
         </a>
       )}
     </div>

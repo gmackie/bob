@@ -12,12 +12,12 @@ import { user } from "@bob/db/schema";
 import {
   executeTask,
   forwardIssueContextUpdate,
-  getLatestTaskRunByKanbangerId as getLatestTaskRunByPlanningItemId,
+  getLatestTaskRunByPlanningItemId,
   supersedeAndRestartTask,
 } from "@bob/execution/runtime/taskExecutor";
 import type {
   IssueContextFieldChange,
-  KanbangerTask as PlanningTask,
+  PlanningTask,
 } from "@bob/execution/runtime/taskExecutor";
 
 import { env } from "~/env";

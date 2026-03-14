@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { taskRunsFindFirstMock, userFindFirstMock } = vi.hoisted(() => ({
@@ -116,5 +119,17 @@ describe("planning control runtime", () => {
         branch: "bob/BUILD-42/task",
       },
     });
+  });
+
+  it("uses planning-named control actor types and stop reasons", () => {
+    const source = readFileSync(
+      path.resolve(__dirname, "./planningControl.ts"),
+      "utf8",
+    );
+
+    expect(source).not.toContain("KanbangerControlActor");
+    expect(source).not.toContain("Stopped from Kanbanger and moved to blocked");
+    expect(source).toContain("PlanningControlActor");
+    expect(source).toContain("Stopped from planning and moved to blocked");
   });
 });

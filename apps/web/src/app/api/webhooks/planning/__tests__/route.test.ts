@@ -34,6 +34,10 @@ describe("planning webhook route", () => {
 
     expect(source).not.toContain("KanbangerTaskPayload");
     expect(source).not.toContain("KanbangerIssueUpdatedPayload");
+    expect(source).not.toContain(
+      "getLatestTaskRunByKanbangerId as getLatestTaskRunByPlanningItemId",
+    );
+    expect(source).not.toContain("KanbangerTask as PlanningTask");
     expect(source).toContain("getLatestTaskRunByPlanningItemId");
     expect(source).toContain("PlanningTask");
   });

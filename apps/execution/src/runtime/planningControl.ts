@@ -12,9 +12,9 @@ import {
   markTaskBlocked,
   resumeBlockedTask,
 } from "./taskExecutor.js";
-import type { KanbangerTask } from "./taskExecutor.js";
+import type { PlanningTask } from "./taskExecutor.js";
 
-export interface KanbangerControlActor {
+export interface PlanningControlActor {
   id: string;
   name?: string;
   email?: string;
@@ -29,8 +29,8 @@ export interface StartIssueSessionInput {
   description?: string;
   labels?: string[];
   priority?: number;
-  actor: KanbangerControlActor;
-  repository?: KanbangerTask["repository"];
+  actor: PlanningControlActor;
+  repository?: PlanningTask["repository"];
 }
 
 export interface ResumeIssueSessionInput {
@@ -38,7 +38,7 @@ export interface ResumeIssueSessionInput {
   projectId: string;
   issueId: string;
   issueIdentifier: string;
-  actor: KanbangerControlActor;
+  actor: PlanningControlActor;
   message?: string;
 }
 
@@ -47,7 +47,7 @@ export interface StopIssueSessionInput {
   projectId: string;
   issueId: string;
   issueIdentifier: string;
-  actor: KanbangerControlActor;
+  actor: PlanningControlActor;
   reason?: string;
 }
 
@@ -86,7 +86,7 @@ const SITE_BASE_URL = "http://localhost:3000";
 const DEFAULT_CONTROL_USER_ID = "default-user";
 
 async function ensureControlUserId(
-  actor: KanbangerControlActor,
+  actor: PlanningControlActor,
 ): Promise<string> {
   if (actor.email) {
     const mappedUser = await db.query.user.findFirst({
@@ -271,7 +271,7 @@ export async function stopIssueSession(
   }
 
   const reason =
-    input.reason?.trim() ?? "Stopped from Kanbanger and moved to blocked";
+    input.reason?.trim() ?? "Stopped from planning and moved to blocked";
 
   await markTaskBlocked(latestTaskRun.id, reason);
 

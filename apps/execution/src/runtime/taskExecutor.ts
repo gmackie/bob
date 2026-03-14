@@ -9,7 +9,7 @@ import {
 
 const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:3002";
 
-export interface KanbangerTask {
+export interface PlanningTask {
   id: string;
   identifier: string;
   title: string;
@@ -86,14 +86,14 @@ function slugify(text: string): string {
     .slice(0, 50);
 }
 
-function generateBranchName(task: KanbangerTask): string {
+function generateBranchName(task: PlanningTask): string {
   const slug = slugify(task.title);
   return `bob/${task.identifier}/${slug}`;
 }
 
 export async function findRepositoryForTask(
   userId: string,
-  task: KanbangerTask,
+  task: PlanningTask,
 ): Promise<{ repositoryId: string; path: string; mainBranch: string } | null> {
   const repos = await db.query.repositories.findMany({
     where: eq(repositories.userId, userId),
@@ -185,7 +185,7 @@ export async function findRepositoryForTask(
 
 export async function executeTask(
   userId: string,
-  task: KanbangerTask,
+  task: PlanningTask,
   options?: {
     contextPreamble?: string;
   },
@@ -362,7 +362,7 @@ export async function executeTask(
 }
 
 function buildInitialPrompt(
-  task: KanbangerTask,
+  task: PlanningTask,
   options?: {
     contextPreamble?: string;
   },
@@ -480,7 +480,7 @@ export async function completeTask(taskRunId: string): Promise<void> {
     .where(eq(taskRuns.id, taskRunId));
 }
 
-export async function getTaskRunByKanbangerId(
+export async function getTaskRunByPlanningItemId(
   planningItemId: string,
 ): Promise<typeof taskRuns.$inferSelect | null> {
   const taskRun = await db.query.taskRuns.findFirst({
@@ -494,7 +494,7 @@ export async function getTaskRunByKanbangerId(
   return taskRun ?? null;
 }
 
-export async function getLatestTaskRunByKanbangerId(
+export async function getLatestTaskRunByPlanningItemId(
   planningItemId: string,
 ): Promise<typeof taskRuns.$inferSelect | null> {
   const taskRun = await db.query.taskRuns.findFirst({
@@ -555,7 +555,7 @@ export async function forwardIssueContextUpdate(
 
 export async function supersedeAndRestartTask(
   taskRunId: string,
-  task: KanbangerTask,
+  task: PlanningTask,
   changes: IssueContextFieldChange[],
 ): Promise<TaskExecutionResult | null> {
   const taskRun = await db.query.taskRuns.findFirst({
@@ -567,7 +567,7 @@ export async function supersedeAndRestartTask(
   }
 
   const reason =
-    "Superseded by Kanbanger issue context update requiring a fresh run";
+    "Superseded by planning issue context update requiring a fresh run";
 
   await db
     .update(taskRuns)
