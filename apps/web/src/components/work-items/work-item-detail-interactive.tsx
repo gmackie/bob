@@ -233,29 +233,27 @@ function ForgeGraphSection({ taskId }: { taskId: string }) {
     ),
   );
 
-  if (!data?.available || !data.data || data.data.length === 0) {
+  if (!data || data.length === 0) {
     return (
       <div className="rounded-3xl border border-white/10 bg-black/20 p-6">
         <h2 className="text-lg font-semibold text-white">Build & Deploy</h2>
         <div className="mt-4 rounded-2xl border border-dashed border-white/10 px-4 py-6 text-center text-sm text-white/35">
-          {data && !data.available
-            ? "Build status unavailable"
-            : "No revisions linked to this task."}
+          No revisions linked to this task.
         </div>
       </div>
     );
   }
 
-  const latest = data.data[0]!;
+  const latest = data[0]!;
 
   return (
     <div className="rounded-3xl border border-white/10 bg-black/20 p-6">
       <h2 className="text-lg font-semibold text-white">Build & Deploy</h2>
       <div className="mt-4">
         <RevisionStatusBar
-          gates={latest.gates}
-          commitSha={latest.commit_sha}
-          branch={latest.branch}
+          gates={latest.gates ?? []}
+          commitSha={latest.revId}
+          branch={latest.branch ?? undefined}
         />
       </div>
     </div>

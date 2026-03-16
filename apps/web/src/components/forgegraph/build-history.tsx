@@ -7,25 +7,16 @@ import { BUILD_COLOR, formatLabel } from "~/lib/design/colors";
 interface Build {
   id: string;
   status: string;
-  duration_ms?: number;
-  artifact_url?: string;
-  created_at: string;
+  durationMs?: number | null;
+  artifactManifestRef?: string | null;
+  createdAt: string | Date;
 }
 
 interface BuildHistoryProps {
   builds: Build[];
-  available: boolean;
 }
 
-export function BuildHistory({ builds, available }: BuildHistoryProps) {
-  if (!available) {
-    return (
-      <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-center text-sm text-white/35">
-        Build status unavailable
-      </div>
-    );
-  }
-
+export function BuildHistory({ builds }: BuildHistoryProps) {
   if (builds.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-center text-sm text-white/35">
@@ -45,25 +36,20 @@ export function BuildHistory({ builds, available }: BuildHistoryProps) {
             <Badge variant={BUILD_COLOR[build.status] ?? "default"}>
               {formatLabel(build.status)}
             </Badge>
-            {build.duration_ms != null && (
+            {build.durationMs != null && (
               <span className="text-xs text-white/40">
-                {(build.duration_ms / 1000).toFixed(1)}s
+                {(build.durationMs / 1000).toFixed(1)}s
               </span>
             )}
           </div>
           <div className="flex items-center gap-3">
-            {build.artifact_url && (
-              <a
-                href={build.artifact_url}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs text-blue-400 hover:text-blue-300"
-              >
-                Artifacts
-              </a>
+            {build.artifactManifestRef && (
+              <span className="text-xs text-blue-400">
+                {build.artifactManifestRef}
+              </span>
             )}
             <span className="text-xs text-white/30">
-              {new Date(build.created_at).toLocaleString()}
+              {new Date(build.createdAt).toLocaleString()}
             </span>
           </div>
         </div>

@@ -8,28 +8,17 @@ interface Deployment {
   id: string;
   environment: string;
   status: string;
-  revision_sha?: string;
-  deployed_at?: string;
-  updated_at: string;
+  deployedAt?: string | Date | null;
+  updatedAt?: string | Date | null;
 }
 
 interface DeploymentStatusProps {
   deployments: Deployment[];
-  available: boolean;
 }
 
 export function DeploymentStatus({
   deployments,
-  available,
 }: DeploymentStatusProps) {
-  if (!available) {
-    return (
-      <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-center text-sm text-white/35">
-        Deployment status unavailable
-      </div>
-    );
-  }
-
   if (deployments.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-center text-sm text-white/35">
@@ -53,14 +42,9 @@ export function DeploymentStatus({
               {formatLabel(deploy.status)}
             </Badge>
           </div>
-          {deploy.revision_sha && (
-            <div className="mt-2 font-mono text-xs text-white/40">
-              {deploy.revision_sha.slice(0, 8)}
-            </div>
-          )}
           <div className="mt-1 text-[10px] text-white/25">
-            {deploy.deployed_at
-              ? new Date(deploy.deployed_at).toLocaleString()
+            {deploy.deployedAt
+              ? new Date(deploy.deployedAt).toLocaleString()
               : formatLabel(deploy.status)}
           </div>
         </div>

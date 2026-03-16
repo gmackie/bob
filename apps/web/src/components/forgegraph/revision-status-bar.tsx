@@ -7,7 +7,9 @@ import { BUILD_COLOR, formatLabel } from "~/lib/design/colors";
 
 interface Gate {
   name: string;
-  status: "pending" | "passed" | "failed" | "running";
+  status: string;
+  startedAt?: string;
+  finishedAt?: string;
 }
 
 interface RevisionStatusBarProps {
