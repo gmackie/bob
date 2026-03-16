@@ -5,6 +5,8 @@ import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { CreateProjectButton } from "~/components/projects/create-project-button";
 import { ProjectCard } from "~/components/projects/project-card";
 import { StartPlanningButton } from "~/components/planning/start-planning-button";
+import { WorkspaceSelector } from "~/components/planning/workspace-selector";
+import { RecentPlans } from "~/components/planning/recent-plans";
 import { CreateWorkItemButton } from "~/components/work-items/create-work-item-button";
 import { summarizeProjects } from "~/components/work-items/planning-utils";
 import { ActiveDispatchBar } from "~/components/planning/active-dispatch-bar";
@@ -13,10 +15,28 @@ import { createPlanningCaller } from "~/lib/planning/server";
 
 export const dynamic = "force-dynamic";
 
-export default async function PlanningPage() {
+export default async function PlanningPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const workspaceParam =
+    typeof params.workspace === "string" ? params.workspace : undefined;
+
   const caller = (await createPlanningCaller()) as any;
   const workspaces = await caller.workspace.list();
-  const currentWorkspace = workspaces[0]?.workspace ?? null;
+
+  const allWorkspaces: Array<{ id: string; name: string; slug: string }> =
+    workspaces.map((m: any) => ({
+      id: m.workspace.id as string,
+      name: m.workspace.name as string,
+      slug: m.workspace.slug as string,
+    }));
+
+  const currentWorkspace = workspaceParam
+    ? allWorkspaces.find((w) => w.id === workspaceParam) ?? allWorkspaces[0] ?? null
+    : allWorkspaces[0] ?? null;
 
   if (!currentWorkspace) {
     return (
@@ -50,8 +70,16 @@ export default async function PlanningPage() {
       <section className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-[#0e1628] via-[#13243a] to-[#0d111c] px-8 py-8">
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
-            <div className="text-xs uppercase tracking-[0.28em] text-white/35">
-              Builder Planning
+            <div className="flex items-center gap-3">
+              <span className="text-xs uppercase tracking-[0.28em] text-white/35">
+                Builder Planning
+              </span>
+              {allWorkspaces.length > 1 && (
+                <WorkspaceSelector
+                  workspaces={allWorkspaces}
+                  currentId={currentWorkspace.id}
+                />
+              )}
             </div>
             <h1 className="mt-3 text-4xl font-semibold text-white">
               {currentWorkspace.name}
@@ -106,6 +134,13 @@ export default async function PlanningPage() {
             ))}
           </div>
         )}
+      </section>
+
+      <section className="mt-8">
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold text-white">Recent Planning Sessions</h2>
+        </div>
+        <RecentPlans />
       </section>
 
       <section className="mt-10">

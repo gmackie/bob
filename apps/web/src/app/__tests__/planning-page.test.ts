@@ -17,6 +17,14 @@ vi.mock("~/components/planning/start-planning-button", () => ({
   StartPlanningButton: () => null,
 }));
 
+vi.mock("~/components/planning/workspace-selector", () => ({
+  WorkspaceSelector: () => null,
+}));
+
+vi.mock("~/components/planning/recent-plans", () => ({
+  RecentPlans: () => null,
+}));
+
 vi.mock("~/components/work-items/board-filter-bar", () => ({
   FilterableBoard: () => "<div>Work board</div>",
 }));
@@ -75,7 +83,11 @@ vi.mock("~/lib/planning/server", () => ({
 describe("planning page", () => {
   it("frames execution as a task-scoped workspace", async () => {
     const module = await import("../(dashboard)/planning/page");
-    const markup = renderToStaticMarkup(await module.default());
+    const markup = renderToStaticMarkup(
+      await module.default({
+        searchParams: Promise.resolve({}),
+      }),
+    );
 
     expect(markup).toContain(
       "scan active work before opening a task&#x27;s execution workspace.",
