@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { WorkItemDetailCard } from "~/components/work-items/work-item-detail-card";
+import { Breadcrumbs } from "~/components/layout/breadcrumbs";
+import { WorkItemDetailInteractive } from "~/components/work-items/work-item-detail-interactive";
 import { createPlanningCaller } from "~/lib/planning/server";
 
 interface WorkItemPageProps {
@@ -23,25 +23,24 @@ export default async function WorkItemPage({ params }: WorkItemPageProps) {
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
-      <div className="flex flex-wrap items-center gap-3 text-sm text-white/45">
-        <Link href="/planning" className="transition hover:text-white">
-          Planning
-        </Link>
-        {detail.workItem.project ? (
-          <>
-            <span>/</span>
-            <Link
-              href={`/projects/${detail.workItem.project.id}`}
-              className="transition hover:text-white"
-            >
-              {detail.workItem.project.key}
-            </Link>
-          </>
-        ) : null}
-      </div>
+      <Breadcrumbs
+        items={[
+          { label: "Planning", href: "/planning" },
+          ...(detail.workItem.project
+            ? [
+                {
+                  label: detail.workItem.project.key,
+                  href: `/projects/${detail.workItem.project.id}`,
+                },
+              ]
+            : []),
+          { label: detail.workItem.identifier },
+        ]}
+        className="mb-4"
+      />
 
       <div className="mt-6">
-        <WorkItemDetailCard
+        <WorkItemDetailInteractive
           workItem={{
             id: detail.workItem.id,
             identifier: detail.workItem.identifier,
@@ -49,6 +48,7 @@ export default async function WorkItemPage({ params }: WorkItemPageProps) {
             description: detail.workItem.description ?? null,
             kind: detail.workItem.kind,
             status: detail.workItem.status,
+            priority: detail.workItem.priority ?? "no_priority",
             project: detail.workItem.project
               ? {
                   id: detail.workItem.project.id,
@@ -62,7 +62,7 @@ export default async function WorkItemPage({ params }: WorkItemPageProps) {
             id: comment.id,
             body: comment.body,
             userId: comment.userId,
-            createdAt: comment.createdAt,
+            createdAt: String(comment.createdAt),
           }))}
           currentArtifacts={detail.currentArtifacts.map((artifact: any) => ({
             id: artifact.id,

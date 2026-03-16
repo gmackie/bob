@@ -1,14 +1,19 @@
 import Link from "next/link";
 import React from "react";
 
+import { Badge } from "@bob/ui/badge";
+
+import { KIND_COLOR, PRIORITY_COLOR } from "~/lib/design/colors";
+
 import {
   type PlanningWorkItem,
   groupWorkItemsByStatus,
 } from "./planning-utils";
 
-interface WorkItemBoardItem extends PlanningWorkItem {
+export interface WorkItemBoardItem extends PlanningWorkItem {
   identifier: string;
   kind: string;
+  priority?: string;
 }
 
 interface WorkItemBoardProps {
@@ -22,6 +27,13 @@ const COLUMN_ORDER = [
   { key: "inReview", title: "In Review" },
   { key: "done", title: "Done" },
 ] as const;
+
+const PRIORITY_BORDER: Record<string, string> = {
+  urgent: "border-l-rose-500",
+  high: "border-l-orange-500",
+  medium: "border-l-amber-500",
+  low: "border-l-blue-500",
+};
 
 export function WorkItemBoard({ items }: WorkItemBoardProps) {
   const grouped = groupWorkItemsByStatus(items);
@@ -48,23 +60,38 @@ export function WorkItemBoard({ items }: WorkItemBoardProps) {
                   No items
                 </div>
               ) : (
-                columnItems.map((item) => (
-                  <Link
-                    key={item.id}
-                    href={`/work-items/${item.id}`}
-                    className="block rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 transition hover:border-white/20 hover:bg-white/[0.06]"
-                  >
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
-                      {item.identifier}
-                    </div>
-                    <div className="mt-2 text-sm font-medium text-white">
-                      {item.title}
-                    </div>
-                    <div className="mt-2 text-xs text-white/45">
-                      {item.kind}
-                    </div>
-                  </Link>
-                ))
+                columnItems.map((item) => {
+                  const boardItem = item as WorkItemBoardItem;
+                  const priorityBorder =
+                    boardItem.priority
+                      ? PRIORITY_BORDER[boardItem.priority]
+                      : undefined;
+
+                  return (
+                    <Link
+                      key={item.id}
+                      href={`/work-items/${item.id}`}
+                      className={`block rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 transition hover:border-white/20 hover:bg-white/[0.06] ${
+                        priorityBorder ? `border-l-2 ${priorityBorder}` : ""
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+                          {boardItem.identifier}
+                        </span>
+                        <Badge
+                          variant={KIND_COLOR[boardItem.kind] ?? "default"}
+                          className="text-[10px] px-1.5 py-0"
+                        >
+                          {boardItem.kind}
+                        </Badge>
+                      </div>
+                      <div className="mt-2 text-sm font-medium text-white">
+                        {item.title}
+                      </div>
+                    </Link>
+                  );
+                })
               )}
             </div>
           </section>

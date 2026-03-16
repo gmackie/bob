@@ -6,6 +6,30 @@ import { projects, workItems } from "@bob/db/schema";
 import { protectedProcedure } from "../trpc";
 
 export const projectRouter = {
+  create: protectedProcedure
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+        name: z.string().min(1).max(128),
+        key: z.string().min(1).max(16),
+        description: z.string().optional(),
+        color: z.string().max(7).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const [project] = await ctx.db
+        .insert(projects)
+        .values({
+          workspaceId: input.workspaceId,
+          name: input.name,
+          key: input.key.toUpperCase(),
+          description: input.description ?? null,
+          color: input.color ?? null,
+        })
+        .returning();
+      return project!;
+    }),
+
   list: protectedProcedure
     .input(
       z.object({

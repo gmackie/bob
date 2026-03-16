@@ -1,7 +1,7 @@
 import type {
   WorkflowState,
   WorkflowStatus,
-} from "~/app/chat/_components/session-header";
+} from "~/app/(dashboard)/chat/_components/session-header";
 
 export const workflowStatuses: WorkflowStatus[] = [
   "started",

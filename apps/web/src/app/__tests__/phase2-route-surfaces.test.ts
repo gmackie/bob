@@ -4,6 +4,10 @@ import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { NextRequest } from "next/server";
 
+vi.mock("~/components/work-items/create-work-item-button", () => ({
+  CreateWorkItemButton: () => null,
+}));
+
 vi.mock("~/lib/planning/server", () => ({
   createPlanningCaller: vi.fn(async () => ({
     project: {

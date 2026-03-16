@@ -1,8 +1,9 @@
 import React from "react";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { RepositoryPanel } from "~/components/dashboard";
+import { CreateWorkItemButton } from "~/components/work-items/create-work-item-button";
 import { WorkItemBoard } from "~/components/work-items/work-item-board";
 import { createPlanningCaller } from "~/lib/planning/server";
 
@@ -30,12 +31,13 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-10">
-      <Link
-        href="/planning"
-        className="text-sm text-white/45 transition hover:text-white"
-      >
-        Back to planning
-      </Link>
+      <Breadcrumbs
+        items={[
+          { label: "Planning", href: "/planning" },
+          { label: project.key },
+        ]}
+        className="mb-4"
+      />
 
       <section className="mt-4 rounded-[2rem] border border-white/10 bg-gradient-to-br from-[#151f33] via-[#111827] to-[#101522] px-8 py-8">
         <div className="flex items-start justify-between gap-4">
@@ -71,7 +73,10 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
 
       <section className="mt-10">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">Project Board</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-semibold text-white">Project Board</h2>
+            <CreateWorkItemButton projectId={project.id} />
+          </div>
           <span className="text-sm text-white/45">{workItems.length} items</span>
         </div>
         <WorkItemBoard
@@ -81,6 +86,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             title: item.title,
             status: item.status,
             kind: item.kind,
+            priority: item.priority,
           }))}
         />
       </section>

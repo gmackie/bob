@@ -3,6 +3,7 @@ import type { TRPCRouterRecord } from "@trpc/server";
 import { authRouter } from "./router/auth";
 import { chatRouter } from "./router/chat";
 import { eventRouter } from "./router/event";
+import { forgegraphRouter } from "./router/forgegraph";
 import { filesystemRouter } from "./router/filesystem";
 import { gitRouter } from "./router/git";
 import { gitProvidersRouter } from "./router/gitProviders";
@@ -36,6 +37,7 @@ const appRouterRecord = {
   comment: commentRouter,
   event: eventRouter,
   filesystem: filesystemRouter,
+  forgegraph: forgegraphRouter,
   git: gitRouter,
   gitProviders: gitProvidersRouter,
   instance: instanceRouter,

@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-import { InputComposer } from "~/app/chat/_components/input-composer";
+import { InputComposer } from "~/app/(dashboard)/chat/_components/input-composer";
 import { SystemStatusPanel } from "~/components/dashboard/SystemStatusPanel";
 
 type WorkflowStatus =

@@ -1,5 +1,15 @@
+import React from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+
+vi.mock("~/components/work-items/workspace-controls", () => ({
+  WorkspaceControls: (props: any) =>
+    React.createElement("div", { "data-testid": "workspace-controls" },
+      props.activeSessionId
+        ? React.createElement("a", { href: "#" }, "Resume live workspace")
+        : React.createElement("a", { href: "#" }, "Start new session"),
+    ),
+}));
 
 vi.mock("~/lib/planning/server", () => ({
   createPlanningCaller: vi.fn(async () => ({

@@ -4,6 +4,9 @@ import Link from "next/link";
 import React from "react";
 import { useEffect, useMemo, useState } from "react";
 
+import { AgentLauncher } from "~/components/projects/agent-launcher";
+import { RepoSelector } from "~/components/projects/repo-selector";
+import { RepoStatusCard } from "~/components/projects/repo-status-card";
 import { api } from "~/lib/rest/api";
 
 type AgentType =
@@ -44,8 +47,6 @@ export function RepositoryPanel({ projectId }: RepositoryPanelProps) {
     [],
   );
   const [selectedFullName, setSelectedFullName] = useState("");
-  const [branchName, setBranchName] = useState("");
-  const [agentType, setAgentType] = useState<AgentType>("opencode");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -110,30 +111,24 @@ export function RepositoryPanel({ projectId }: RepositoryPanelProps) {
 
   const handleMapRepository = async () => {
     if (!selectedOption) return;
-
     setSubmitting(true);
     setError(null);
-
     try {
       const response = await fetch(`/api/planning/projects/${projectId}/repo`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           provider: selectedOption.preferred.provider,
           fullName: selectedOption.fullName,
           instanceUrl: selectedOption.preferred.instanceUrl,
         }),
       });
-
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as
           | { error?: string }
           | null;
         throw new Error(payload?.error ?? "Failed to map repository");
       }
-
       await refresh();
     } catch (mapError) {
       setError(
@@ -147,19 +142,16 @@ export function RepositoryPanel({ projectId }: RepositoryPanelProps) {
   const handleUnmapRepository = async () => {
     setSubmitting(true);
     setError(null);
-
     try {
       const response = await fetch(`/api/planning/projects/${projectId}/repo`, {
         method: "DELETE",
       });
-
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as
           | { error?: string }
           | null;
         throw new Error(payload?.error ?? "Failed to unmap repository");
       }
-
       await refresh();
     } catch (unmapError) {
       setError(
@@ -174,10 +166,8 @@ export function RepositoryPanel({ projectId }: RepositoryPanelProps) {
 
   const handleRefreshMainBranch = async () => {
     if (!mappedRepository) return;
-
     setSubmitting(true);
     setError(null);
-
     try {
       await api.refreshMainBranch(mappedRepository.id);
       await refresh();
@@ -192,19 +182,13 @@ export function RepositoryPanel({ projectId }: RepositoryPanelProps) {
     }
   };
 
-  const handleCreateWorktree = async () => {
-    if (!mappedRepository || !branchName.trim()) return;
-
+  const handleCreateWorktree = async (branchName: string, agentType: AgentType) => {
+    if (!mappedRepository) return;
     setSubmitting(true);
     setError(null);
-
     try {
-      const worktree = await api.createWorktree(
-        mappedRepository.id,
-        branchName.trim(),
-      );
+      const worktree = await api.createWorktree(mappedRepository.id, branchName);
       await api.startInstance(worktree.id, agentType);
-      setBranchName("");
       await refresh();
     } catch (worktreeError) {
       setError(
@@ -252,93 +236,21 @@ export function RepositoryPanel({ projectId }: RepositoryPanelProps) {
         </div>
       ) : mappedRepository ? (
         <div className="mt-6 space-y-6">
-          <div className="rounded-2xl border border-white/10 bg-black/15 p-5">
-            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-              <div>
-                <div className="text-sm font-medium text-white">
-                  {mappedRepository.name}
-                </div>
-                <div className="mt-1 text-sm text-white/55">
-                  {mappedRepository.path}
-                </div>
-                <div className="mt-3 flex flex-wrap gap-3 text-xs text-white/45">
-                  <span>Main: {mappedRepository.mainBranch}</span>
-                  <span>Current: {mappedRepository.branch}</span>
-                  <span>
-                    Provider: {mappedRepository.remoteProvider ?? "unconfigured"}
-                  </span>
-                </div>
-              </div>
+          <RepoStatusCard
+            repository={mappedRepository}
+            onRefreshMain={() => void handleRefreshMainBranch()}
+            onUnmap={() => void handleUnmapRepository()}
+            disabled={submitting}
+          />
 
-              <div className="flex flex-wrap gap-3">
-                <Link
-                  href={`/repositories/${mappedRepository.id}`}
-                  className="rounded-full border border-sky-400/40 px-4 py-2 text-sm text-sky-200 transition hover:border-sky-300 hover:text-white"
-                >
-                  Open repository
-                </Link>
-                <button
-                  type="button"
-                  className="rounded-full border border-white/15 px-4 py-2 text-sm text-white/80 transition hover:border-white/30 hover:text-white"
-                  onClick={() => void handleRefreshMainBranch()}
-                  disabled={submitting}
-                >
-                  Refresh main
-                </button>
-                <button
-                  type="button"
-                  className="rounded-full border border-rose-400/35 px-4 py-2 text-sm text-rose-200 transition hover:border-rose-300 hover:text-white"
-                  onClick={() => void handleUnmapRepository()}
-                  disabled={submitting}
-                >
-                  Unmap
-                </button>
-              </div>
-            </div>
-          </div>
+          <AgentLauncher
+            onLaunch={(branch, agent) =>
+              void handleCreateWorktree(branch, agent as AgentType)
+            }
+            disabled={submitting}
+          />
 
-          <div className="rounded-2xl border border-white/10 bg-black/15 p-5">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <div className="text-sm font-medium text-white">
-                  Create a worktree
-                </div>
-                <div className="mt-1 text-sm text-white/55">
-                  Start an agent instance immediately after creating the branch.
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_auto]">
-              <input
-                value={branchName}
-                onChange={(event) => setBranchName(event.target.value)}
-                placeholder="feature/project-scoped-controls"
-                className="rounded-2xl border border-white/10 bg-[#07101b] px-4 py-3 text-sm text-white outline-none transition focus:border-sky-400/50"
-              />
-              <select
-                value={agentType}
-                onChange={(event) => setAgentType(event.target.value as AgentType)}
-                className="rounded-2xl border border-white/10 bg-[#07101b] px-4 py-3 text-sm text-white outline-none transition focus:border-sky-400/50"
-              >
-                <option value="opencode">OpenCode</option>
-                <option value="codex">Codex</option>
-                <option value="claude">Claude</option>
-                <option value="gemini">Gemini</option>
-                <option value="kiro">Kiro</option>
-                <option value="cursor-agent">Cursor Agent</option>
-              </select>
-              <button
-                type="button"
-                className="rounded-2xl bg-sky-400 px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-sky-300 disabled:cursor-not-allowed disabled:bg-slate-500"
-                onClick={() => void handleCreateWorktree()}
-                disabled={submitting || branchName.trim().length === 0}
-              >
-                Create
-              </button>
-            </div>
-          </div>
-
+          {/* Worktrees list */}
           <div className="rounded-2xl border border-white/10 bg-black/15 p-5">
             <div className="flex items-center justify-between gap-4">
               <div className="text-sm font-medium text-white">Worktrees</div>
@@ -391,37 +303,14 @@ export function RepositoryPanel({ projectId }: RepositoryPanelProps) {
           </div>
         </div>
       ) : (
-        <div className="mt-6 rounded-2xl border border-white/10 bg-black/15 p-5">
-          <div className="text-sm font-medium text-white">Map a repository</div>
-          <p className="mt-2 text-sm text-white/60">
-            Choose one of your connected repositories and attach it to this
-            planning project.
-          </p>
-
-          <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-            <select
-              value={selectedFullName}
-              onChange={(event) => setSelectedFullName(event.target.value)}
-              className="rounded-2xl border border-white/10 bg-[#07101b] px-4 py-3 text-sm text-white outline-none transition focus:border-sky-400/50"
-            >
-              {repoOptions.length === 0 ? (
-                <option value="">No connected repositories</option>
-              ) : null}
-              {repoOptions.map((option) => (
-                <option key={option.fullName} value={option.fullName}>
-                  {option.fullName}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="rounded-2xl bg-sky-400 px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-sky-300 disabled:cursor-not-allowed disabled:bg-slate-500"
-              onClick={() => void handleMapRepository()}
-              disabled={submitting || !selectedOption}
-            >
-              Map repository
-            </button>
-          </div>
+        <div className="mt-6">
+          <RepoSelector
+            options={repoOptions}
+            selectedFullName={selectedFullName}
+            onSelect={setSelectedFullName}
+            onMap={() => void handleMapRepository()}
+            disabled={submitting}
+          />
         </div>
       )}
     </section>

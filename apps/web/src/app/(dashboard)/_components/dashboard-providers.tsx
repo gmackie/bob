@@ -6,6 +6,7 @@ import {
   ErrorProvider,
   ProgressProvider,
 } from "~/contexts";
+import { AppShell } from "~/components/layout/app-shell";
 
 export function DashboardProviders(props: { children: React.ReactNode }) {
   return (
@@ -13,7 +14,7 @@ export function DashboardProviders(props: { children: React.ReactNode }) {
       <ErrorProvider>
         <ProgressProvider>
           <CheatCodeProvider>
-            <div className="dashboard-layout">{props.children}</div>
+            <AppShell>{props.children}</AppShell>
           </CheatCodeProvider>
         </ProgressProvider>
       </ErrorProvider>

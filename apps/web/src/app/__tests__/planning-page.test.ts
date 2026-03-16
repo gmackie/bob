@@ -5,8 +5,16 @@ vi.mock("~/components/projects/project-card", () => ({
   ProjectCard: (props: { name: string }) => `<div>${props.name}</div>`,
 }));
 
-vi.mock("~/components/work-items/work-item-board", () => ({
-  WorkItemBoard: () => "<div>Work board</div>",
+vi.mock("~/components/projects/create-project-button", () => ({
+  CreateProjectButton: () => null,
+}));
+
+vi.mock("~/components/work-items/create-work-item-button", () => ({
+  CreateWorkItemButton: () => null,
+}));
+
+vi.mock("~/components/work-items/board-filter-bar", () => ({
+  FilterableBoard: () => "<div>Work board</div>",
 }));
 
 vi.mock("~/lib/planning/server", () => ({
