@@ -2,6 +2,7 @@ import type { TRPCRouterRecord } from "@trpc/server";
 
 import { authRouter } from "./router/auth";
 import { chatRouter } from "./router/chat";
+import { dispatchRouter } from "./router/dispatch";
 import { eventRouter } from "./router/event";
 import { forgegraphRouter } from "./router/forgegraph";
 import { filesystemRouter } from "./router/filesystem";
@@ -36,6 +37,7 @@ const appRouterRecord = {
   auth: authRouter,
   chat: chatRouter,
   comment: commentRouter,
+  dispatch: dispatchRouter,
   event: eventRouter,
   filesystem: filesystemRouter,
   forgegraph: forgegraphRouter,
