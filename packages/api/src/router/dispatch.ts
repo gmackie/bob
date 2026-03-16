@@ -432,7 +432,7 @@ export const dispatchRouter = {
           if (run.status === "completed") {
             await ctx.db
               .update(dispatchItems)
-              .set({ status: "completed" })
+              .set({ status: "completed", pipelineState: "agent_complete" })
               .where(eq(dispatchItems.id, item.id));
             completedCount++;
 
@@ -611,12 +611,36 @@ export const dispatchRouter = {
           .where(eq(dispatchBatches.id, input.batchId));
       }
 
+      // Advance pipeline for items with active pipeline state
+      const { advancePipeline } = await import(
+        "../services/forgegraph/pipelineOrchestrator"
+      );
+      for (const item of finalItems) {
+        if (
+          item.pipelineState &&
+          !["complete", "build_failed", "deploy_failed"].includes(
+            item.pipelineState,
+          )
+        ) {
+          await advancePipeline(ctx.db, item, {
+            id: batch.id,
+            userId: batch.userId,
+          });
+        }
+      }
+
       // Return updated batch
       const updatedBatch = await ctx.db.query.dispatchBatches.findFirst({
         where: eq(dispatchBatches.id, input.batchId),
       });
 
-      return { batch: updatedBatch!, items: finalItems };
+      // Re-fetch items after pipeline advancement
+      const pipelineItems = await ctx.db.query.dispatchItems.findMany({
+        where: eq(dispatchItems.batchId, input.batchId),
+        orderBy: [dispatchItems.sortOrder],
+      });
+
+      return { batch: updatedBatch!, items: pipelineItems };
     }),
   /** List dispatch batches for the current user, optionally filtered by status. */
   listBatches: protectedProcedure

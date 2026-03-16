@@ -1,11 +1,13 @@
 import { z } from "zod/v4";
 import { and, desc, eq } from "@bob/db";
 import {
+  dispatchItems,
   forgeRevisions,
   forgeBuilds,
   forgeDeployments,
   forgeRunEvents,
 } from "@bob/db/schema";
+import { TRPCError } from "@trpc/server";
 import { protectedProcedure } from "../trpc";
 
 export const forgegraphRouter = {
@@ -248,5 +250,71 @@ export const forgegraphRouter = {
           : undefined,
         orderBy: [desc(forgeBuilds.createdAt)],
       });
+    }),
+
+  approveProdDeploy: protectedProcedure
+    .input(z.object({ dispatchItemId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify item is in awaiting_prod_approval state
+      const item = await ctx.db.query.dispatchItems.findFirst({
+        where: eq(dispatchItems.id, input.dispatchItemId),
+      });
+
+      if (!item) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Dispatch item not found",
+        });
+      }
+
+      if (item.pipelineState !== "awaiting_prod_approval") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Item is in state "${item.pipelineState}", expected "awaiting_prod_approval"`,
+        });
+      }
+
+      // Find the build for this item (keyed by item.id)
+      const build = await ctx.db.query.forgeBuilds.findFirst({
+        where: eq(forgeBuilds.idempotencyKey, item.id),
+      });
+
+      if (!build) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "No build found for this dispatch item",
+        });
+      }
+
+      const revision = await ctx.db.query.forgeRevisions.findFirst({
+        where: eq(forgeRevisions.id, build.revisionId),
+      });
+
+      if (!revision) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "No revision found for this build",
+        });
+      }
+
+      // Create prod deployment
+      const [deployment] = await ctx.db
+        .insert(forgeDeployments)
+        .values({
+          revisionId: revision.id,
+          buildId: build.id,
+          repoId: revision.repoId,
+          environment: "prod",
+          status: "deploying",
+        })
+        .returning();
+
+      // Set state to deploying_prod
+      await ctx.db
+        .update(dispatchItems)
+        .set({ pipelineState: "deploying_prod" })
+        .where(eq(dispatchItems.id, item.id));
+
+      return deployment!;
     }),
 };
