@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "@bob/tailwind-config/theme";
-@import "./chat/chat.css";
+@import "./(dashboard)/chat/chat.css";
 
 @source "../../../../packages/ui/src/*.{ts,tsx}";
 

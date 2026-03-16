@@ -42,7 +42,7 @@ vi.mock("@bob/db/schema", () => ({
 import {
   buildIssueContextUpdateMessage,
   forwardIssueContextUpdate,
-} from "./taskExecutor.js";
+} from "./taskExecutor";
 
 describe("execution task runtime helpers", () => {
   beforeEach(() => {

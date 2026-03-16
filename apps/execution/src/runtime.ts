@@ -2,7 +2,7 @@ import {
   getExecutionServiceConfig,
   type ExecutionChildProcessConfig,
   type ExecutionServiceConfig,
-} from "./config.js";
+} from "./config";
 
 export interface ExecutionLogger {
   error(message: string, error?: unknown): void;

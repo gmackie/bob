@@ -4,7 +4,7 @@ import { homedir } from "os";
 import { basename, join } from "path";
 import { promisify } from "util";
 
-import type { AgentType, Repository, Worktree } from "../types.js";
+import type { AgentType, Repository, Worktree } from "../types";
 
 const execAsync = promisify(exec);
 

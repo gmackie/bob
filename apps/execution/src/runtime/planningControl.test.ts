@@ -56,7 +56,7 @@ vi.mock("./taskExecutor.js", () => ({
   resumeBlockedTask: vi.fn(),
 }));
 
-import { getIssueSessionSnapshot } from "./planningControl.js";
+import { getIssueSessionSnapshot } from "./planningControl";
 
 describe("planning control runtime", () => {
   beforeEach(() => {

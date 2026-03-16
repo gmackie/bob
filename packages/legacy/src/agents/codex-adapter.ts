@@ -1,5 +1,5 @@
-import { BaseAgentAdapter } from './base-adapter.js';
-import { AgentType } from '../types.js';
+import { BaseAgentAdapter } from './base-adapter';
+import { AgentType } from '../types';
 
 export class CodexAdapter extends BaseAgentAdapter {
   readonly type: AgentType = 'codex';

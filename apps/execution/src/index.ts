@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 
-import { type ExecutionChildProcessConfig } from "./config.js";
-import { runExecutionService } from "./runtime.js";
+import { type ExecutionChildProcessConfig } from "./config";
+import { runExecutionService } from "./runtime";
 
 function startChild(config: ExecutionChildProcessConfig): ChildProcess {
   return spawn(config.command, config.args, {

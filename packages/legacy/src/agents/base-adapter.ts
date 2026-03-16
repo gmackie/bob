@@ -2,8 +2,8 @@ import { spawn } from "child_process";
 import type { ChildProcess } from "child_process";
 import { IPty, spawn as spawnPty } from "node-pty";
 
-import { AgentAdapter, AgentType } from "../types.js";
-import { getAgentCommand } from "../utils/agentPaths.js";
+import { AgentAdapter, AgentType } from "../types";
+import { getAgentCommand } from "../utils/agentPaths";
 
 export abstract class BaseAgentAdapter implements AgentAdapter {
   abstract readonly type: AgentType;

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { getExecutionServiceConfig } from "./config.js";
+import { getExecutionServiceConfig } from "./config";
 
 describe("execution config", () => {
   const originalEnv = { ...process.env };

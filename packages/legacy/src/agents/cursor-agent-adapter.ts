@@ -1,5 +1,5 @@
-import { BaseAgentAdapter } from './base-adapter.js';
-import { AgentType } from '../types.js';
+import { BaseAgentAdapter } from './base-adapter';
+import { AgentType } from '../types';
 import { spawn } from 'child_process';
 
 export class CursorAgentAdapter extends BaseAgentAdapter {

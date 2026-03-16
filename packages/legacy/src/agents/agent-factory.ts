@@ -1,10 +1,10 @@
-import { AgentAdapter, AgentType, AgentInfo } from '../types.js';
-import { ClaudeAdapter } from './claude-adapter.js';
-import { CodexAdapter } from './codex-adapter.js';
-import { GeminiAdapter } from './gemini-adapter.js';
-import { KiroAdapter } from './kiro-adapter.js';
-import { OpenCodeAdapter } from './opencode-adapter.js';
-import { CursorAgentAdapter } from './cursor-agent-adapter.js';
+import { AgentAdapter, AgentType, AgentInfo } from '../types';
+import { ClaudeAdapter } from './claude-adapter';
+import { CodexAdapter } from './codex-adapter';
+import { GeminiAdapter } from './gemini-adapter';
+import { KiroAdapter } from './kiro-adapter';
+import { OpenCodeAdapter } from './opencode-adapter';
+import { CursorAgentAdapter } from './cursor-agent-adapter';
 
 export class AgentFactory {
   private adapters: Map<AgentType, AgentAdapter> = new Map();

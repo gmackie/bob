@@ -15,8 +15,8 @@ import {
   executeTask,
   markTaskBlocked,
   resumeBlockedTask,
-} from "./taskExecutor.js";
-import type { PlanningTask } from "./taskExecutor.js";
+} from "./taskExecutor";
+import type { PlanningTask } from "./taskExecutor";
 
 export interface PlanningControlActor {
   id: string;

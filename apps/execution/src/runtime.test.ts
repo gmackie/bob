@@ -6,7 +6,7 @@ import {
   type ExecutionChild,
   createShutdownHandler,
   runExecutionService,
-} from "./runtime.js";
+} from "./runtime";
 
 class FakeChild extends EventEmitter {
   kill = vi.fn();

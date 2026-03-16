@@ -1,3 +1,3 @@
-export * from "./types.js";
-export * from "./agents/index.js";
-export * from "./utils/agentPaths.js";
+export * from "./types";
+export * from "./agents/index";
+export * from "./utils/agentPaths";

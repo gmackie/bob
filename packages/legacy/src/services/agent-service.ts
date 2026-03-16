@@ -6,8 +6,8 @@ import type {
   AgentInstance,
   AgentType,
   Worktree,
-} from "../types.js";
-import type { GitService } from "./git-service.js";
+} from "../types";
+import type { GitService } from "./git-service";
 
 export const DEFAULT_USER_ID = "default-user";
 
