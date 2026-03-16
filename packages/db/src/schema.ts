@@ -1364,6 +1364,7 @@ export const taskRuns = pgTable("task_runs", (t) => ({
   status: t.varchar({ length: 20 }).notNull(), // 'starting' | 'running' | 'blocked' | 'completed' | 'failed'
   blockedReason: t.text(),
   branch: t.text(), // The git branch created for this task run
+  forgegraphRevisionId: t.text(), // VCS revision ID (commit SHA or jj change ID) for ForgeGraph tracking
   createdAt: t.timestamp().defaultNow().notNull(),
   updatedAt: t
     .timestamp({ mode: "date", withTimezone: true })

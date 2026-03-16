@@ -8,6 +8,7 @@ import { PersistenceWriter, SessionEventRecord } from "./persistence/Persistence
 import { SessionCleanup } from "./sessions/SessionCleanup.js";
 import { AgentProcessManager } from "./agents/agent-process-manager.js";
 import { getStdioAdapter } from "./agents/adapters/base-stdio-adapter.js";
+import { detectVcs, getVcsAdapter } from "./vcs/vcs-adapter.js";
 import { and, eq, sql } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
@@ -834,6 +835,7 @@ async function handleGitCheckout(body: Record<string, unknown>, res: ServerRespo
   const path = body.path as string;
   const branch = body.branch as string;
   const create = body.create as boolean ?? false;
+  const baseBranch = (body.baseBranch as string) ?? "main";
 
   if (!path || !branch) {
     sendError(res, 400, "path and branch are required");
@@ -841,12 +843,22 @@ async function handleGitCheckout(body: Record<string, unknown>, res: ServerRespo
   }
 
   try {
+    // Use VCS adapter for branch creation — supports both git and jj repos
+    if (create && detectVcs(path) === "jj") {
+      const vcs = getVcsAdapter(path);
+      const { changeId } = await vcs.createChange({ repoPath: path, baseBranch, name: branch });
+      sendJson(res, 200, { success: true, changeId, vcs: "jj" });
+      return;
+    }
+
+    // Default git path
     const args = ["checkout"];
     if (create) args.push("-b");
     args.push(branch);
 
     runGit(path, args);
-    sendJson(res, 200, { success: true });
+    const changeId = create ? runGitSafe(path, ["rev-parse", "HEAD"]) : undefined;
+    sendJson(res, 200, { success: true, ...(changeId ? { changeId, vcs: "git" } : {}) });
   } catch (error) {
     sendError(res, 500, `Git checkout failed: ${error}`);
   }

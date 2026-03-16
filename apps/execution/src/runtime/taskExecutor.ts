@@ -227,13 +227,20 @@ export async function executeTask(
   const branch = generateBranchName(task);
   const worktreeId: string | null = null;
   const worktreePath = repoInfo.path;
+  let forgegraphRevisionId: string | null = null;
 
   try {
-    await gatewayRequest(userId, "/git/checkout", {
+    const checkoutResult = await gatewayRequest(userId, "/git/checkout", {
       path: repoInfo.path,
       branch,
+      baseBranch: repoInfo.mainBranch,
       create: true,
-    });
+    }) as { success: boolean; changeId?: string; vcs?: string };
+
+    // Capture the VCS revision ID (commit SHA or jj change ID) for ForgeGraph
+    if (checkoutResult?.changeId) {
+      forgegraphRevisionId = checkoutResult.changeId;
+    }
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
@@ -307,6 +314,7 @@ export async function executeTask(
       worktreeId,
       status: "starting",
       branch,
+      forgegraphRevisionId,
     })
     .returning();
   const insertedTaskRun = expectInsertedRow(
@@ -360,6 +368,7 @@ export async function executeTask(
     id: insertedTaskRun.id,
     repositoryId: repoInfo.repositoryId,
     branch,
+    forgegraphRevisionId,
     planningItemId: task.id,
     workItemId: task.id,
   });
@@ -622,6 +631,7 @@ async function reportForgeGraphCreated(
     id: string;
     repositoryId: string | null;
     branch: string | null;
+    forgegraphRevisionId?: string | null;
     planningItemId: string;
     workItemId?: string | null;
   },
@@ -629,7 +639,8 @@ async function reportForgeGraphCreated(
   try {
     if (!taskRun.repositoryId) return;
 
-    const revId = taskRun.branch ?? taskRun.id;
+    // Prefer the VCS-specific revision ID (commit SHA or jj change ID), fall back to branch name
+    const revId = taskRun.forgegraphRevisionId ?? taskRun.branch ?? taskRun.id;
 
     const [revision] = await database
       .insert(forgeRevisions)
