@@ -58,7 +58,7 @@ function expectInsertedRow<T>(row: T | undefined, message: string): T {
   return row;
 }
 
-async function gatewayRequest(
+export async function gatewayRequest(
   userId: string,
   endpoint: string,
   body: Record<string, unknown>,

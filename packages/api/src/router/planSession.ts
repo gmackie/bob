@@ -42,6 +42,28 @@ export const planSessionRouter = {
       return session!;
     }),
 
+  /** Start a planning session on the gateway. */
+  start: protectedProcedure
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        workspaceId: z.string().uuid(),
+        projectId: z.string().uuid(),
+        projectName: z.string(),
+        workingDirectory: z.string(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { startPlanningSession } = await import(
+        "@bob/execution/planning/startPlanningSession"
+      );
+
+      return startPlanningSession({
+        userId: ctx.session.user.id,
+        ...input,
+      });
+    }),
+
   /** Get a planning session with its drafts and dependencies. */
   get: protectedProcedure
     .input(z.object({ sessionId: z.string().uuid() }))

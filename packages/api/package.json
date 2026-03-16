@@ -64,6 +64,7 @@
     "@bob/auth": "workspace:*",
     "@bob/config": "workspace:*",
     "@bob/db": "workspace:*",
+    "@bob/execution": "workspace:*",
     "@bob/validators": "workspace:*",
     "@elevenlabs/client": "^0.13.0",
     "@trpc/server": "catalog:",

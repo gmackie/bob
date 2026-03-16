@@ -6,7 +6,9 @@
     "./services": "./src/services.ts",
     "./runtime": "./src/runtime/index.ts",
     "./runtime/planningControl": "./src/runtime/planningControl.ts",
-    "./runtime/taskExecutor": "./src/runtime/taskExecutor.ts"
+    "./runtime/taskExecutor": "./src/runtime/taskExecutor.ts",
+    "./planning/planningAgentTools": "./src/planning/planningAgentTools.ts",
+    "./planning/startPlanningSession": "./src/planning/startPlanningSession.ts"
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts",

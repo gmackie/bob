@@ -116,6 +116,13 @@ importers:
         version: 5.9.3
 
   apps/execution:
+    dependencies:
+      '@bob/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@bob/legacy':
+        specifier: workspace:*
+        version: link:../../packages/legacy
     devDependencies:
       '@bob/eslint-config':
         specifier: workspace:*
@@ -144,6 +151,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+      vitest:
+        specifier: ^4.0.0
+        version: 4.0.17(@opentelemetry/api@1.9.0)(@types/node@22.19.5)(happy-dom@19.0.2)(jiti@2.6.1)(jsdom@27.4.0(@noble/hashes@2.0.1))(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
 
   apps/gateway:
     dependencies:
@@ -323,6 +333,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+      vitest:
+        specifier: ^4.0.0
+        version: 4.0.17(@opentelemetry/api@1.9.0)(@types/node@25.0.7)(happy-dom@19.0.2)(jiti@2.6.1)(jsdom@27.4.0(@noble/hashes@2.0.1))(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
 
   apps/web:
     dependencies:
@@ -338,6 +351,9 @@ importers:
       '@bob/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@bob/execution':
+        specifier: workspace:*
+        version: link:../execution
       '@bob/legacy':
         specifier: workspace:*
         version: link:../../packages/legacy
@@ -526,6 +542,9 @@ importers:
       '@bob/db':
         specifier: workspace:*
         version: link:../db
+      '@bob/execution':
+        specifier: workspace:*
+        version: link:../../apps/execution
       '@bob/validators':
         specifier: workspace:*
         version: link:../validators
@@ -609,6 +628,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+      vitest:
+        specifier: ^4.0.0
+        version: 4.0.17(@opentelemetry/api@1.9.0)(@types/node@25.0.7)(happy-dom@19.0.2)(jiti@2.6.1)(jsdom@27.4.0(@noble/hashes@2.0.1))(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
 
   packages/bob:
     dependencies:
@@ -716,6 +738,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+      vitest:
+        specifier: ^4.0.0
+        version: 4.0.17(@opentelemetry/api@1.9.0)(@types/node@25.0.7)(happy-dom@19.0.2)(jiti@2.6.1)(jsdom@27.4.0(@noble/hashes@2.0.1))(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
 
   packages/email:
     dependencies:
