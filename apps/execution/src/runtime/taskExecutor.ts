@@ -3,6 +3,8 @@ import { db } from "@bob/db/client";
 import {
   chatConversations,
   chatMessages,
+  forgeRevisions,
+  forgeRunEvents,
   repositories,
   taskRuns,
 } from "@bob/db/schema";
@@ -353,6 +355,15 @@ export async function executeTask(
     };
   }
 
+  // Report to ForgeGraph (fire and forget)
+  void reportForgeGraphCreated(db, {
+    id: insertedTaskRun.id,
+    repositoryId: repoInfo.repositoryId,
+    branch,
+    planningItemId: task.id,
+    workItemId: task.id,
+  });
+
   return {
     taskRunId: insertedTaskRun.id,
     sessionId: insertedSession.id,
@@ -602,4 +613,51 @@ export async function supersedeAndRestartTask(
   }
 
   return result;
+}
+
+/** Fire-and-forget: create a ForgeGraph revision + "created" event for a new task run. */
+async function reportForgeGraphCreated(
+  database: typeof db,
+  taskRun: {
+    id: string;
+    repositoryId: string | null;
+    branch: string | null;
+    planningItemId: string;
+    workItemId?: string | null;
+  },
+): Promise<void> {
+  try {
+    if (!taskRun.repositoryId) return;
+
+    const revId = taskRun.branch ?? taskRun.id;
+
+    const [revision] = await database
+      .insert(forgeRevisions)
+      .values({
+        repoId: taskRun.repositoryId,
+        revId,
+        taskId: taskRun.workItemId ?? null,
+        taskRunId: taskRun.id,
+        branch: taskRun.branch,
+      })
+      .onConflictDoUpdate({
+        target: [forgeRevisions.repoId, forgeRevisions.revId],
+        set: { taskRunId: taskRun.id, branch: taskRun.branch },
+      })
+      .returning();
+
+    if (!revision) return;
+
+    await database.insert(forgeRunEvents).values({
+      runId: taskRun.id,
+      repoId: taskRun.repositoryId,
+      revisionId: revision.id,
+      eventType: "created",
+      taskId: taskRun.workItemId ?? null,
+    });
+
+    console.log(`[forgegraph] Reported 'created' for task run ${taskRun.id}`);
+  } catch (err) {
+    console.error(`[forgegraph] Failed to report 'created' for ${taskRun.id}:`, err);
+  }
 }

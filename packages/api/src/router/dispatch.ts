@@ -439,6 +439,15 @@ export const dispatchRouter = {
             // Update planning API status to "in_review"
             void updatePlanningTaskStatus(item.planningTaskId, "in_review");
 
+            // Report to ForgeGraph
+            if (item.taskRunId) {
+              const { ForgeGraphEventReporter } = await import(
+                "../services/forgegraph/eventReporter"
+              );
+              const reporter = new ForgeGraphEventReporter(ctx.db);
+              void reporter.reportApproved(item.taskRunId);
+            }
+
             // Insert task-completed notification
             await ctx.db.insert(notifications).values({
               userId: batch.userId,
@@ -453,6 +462,15 @@ export const dispatchRouter = {
               .set({ status: "failed" })
               .where(eq(dispatchItems.id, item.id));
             failedCount++;
+
+            // Report to ForgeGraph
+            if (item.taskRunId) {
+              const { ForgeGraphEventReporter } = await import(
+                "../services/forgegraph/eventReporter"
+              );
+              const reporter = new ForgeGraphEventReporter(ctx.db);
+              void reporter.reportFailed(item.taskRunId);
+            }
           }
         }
       }

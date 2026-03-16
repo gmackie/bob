@@ -46,6 +46,10 @@
     "./services/opencode/opencodeClient": {
       "types": "./dist/api/src/services/opencode/opencodeClient.d.ts",
       "default": "./src/services/opencode/opencodeClient.ts"
+    },
+    "./services/forgegraph/eventReporter": {
+      "types": "./dist/api/src/services/forgegraph/eventReporter.d.ts",
+      "default": "./src/services/forgegraph/eventReporter.ts"
     }
   },
   "license": "MIT",
