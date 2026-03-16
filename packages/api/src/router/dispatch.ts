@@ -6,13 +6,48 @@ import { and, desc, eq, inArray } from "@bob/db";
 import {
   dispatchBatches,
   dispatchItems,
+  notifications,
   planDraftDependencies,
   planDrafts,
   taskRuns,
 } from "@bob/db/schema";
 
+import {
+  getPlanningApiKey,
+  getPlanningBaseUrl,
+} from "../services/integrations/planningRemoteConfig";
 import { suggestAgent } from "../services/dispatch/agentHeuristics";
 import { protectedProcedure } from "../trpc";
+
+/**
+ * Fire-and-forget update of a planning task's status via the planning API.
+ * Gracefully degrades if no API key is configured.
+ */
+async function updatePlanningTaskStatus(
+  taskId: string,
+  status: string,
+): Promise<void> {
+  const planningApiKey = getPlanningApiKey();
+  if (!planningApiKey) return;
+
+  const url = `${getPlanningBaseUrl()}/api/trpc/issue.update`;
+  try {
+    await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": planningApiKey,
+      },
+      body: JSON.stringify({
+        "0": { json: { id: taskId, status } },
+      }),
+    });
+  } catch (err) {
+    console.error(
+      `[dispatch] Failed to update planning task ${taskId}: ${err}`,
+    );
+  }
+}
 
 export const dispatchRouter = {
   /**
@@ -400,6 +435,18 @@ export const dispatchRouter = {
               .set({ status: "completed" })
               .where(eq(dispatchItems.id, item.id));
             completedCount++;
+
+            // Update planning API status to "in_review"
+            void updatePlanningTaskStatus(item.planningTaskId, "in_review");
+
+            // Insert task-completed notification
+            await ctx.db.insert(notifications).values({
+              userId: batch.userId,
+              title: `Task ${item.planningTaskIdentifier} completed`,
+              body: `Agent ${item.agentType} finished work on "${item.title}"`,
+              type: "task_completed",
+              url: `/work-items/${item.planningTaskId}`,
+            });
           } else if (run.status === "failed") {
             await ctx.db
               .update(dispatchItems)
@@ -528,6 +575,14 @@ export const dispatchRouter = {
             failedTasks: failedCount,
           })
           .where(eq(dispatchBatches.id, input.batchId));
+
+        // Batch completion notification
+        await ctx.db.insert(notifications).values({
+          userId: batch.userId,
+          title: "Dispatch batch complete",
+          body: `${completedCount}/${batch.totalTasks} tasks finished`,
+          type: "batch_completed",
+        });
       } else {
         await ctx.db
           .update(dispatchBatches)

@@ -101,6 +101,8 @@ export const workItemNotificationType = [
   "work_item_commented",
   "work_item_needs_input",
   "work_item_review_ready",
+  "task_completed",
+  "batch_completed",
 ] as const;
 export type WorkItemNotificationType =
   (typeof workItemNotificationType)[number];
