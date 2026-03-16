@@ -20,7 +20,7 @@ echo "==> Building packages..."
 ssh "$HOST" "bash -c '$NVM && cd $DIR && pnpm --filter @bob/legacy build && SKIP_ENV_VALIDATION=1 pnpm --filter @bob/web build'"
 
 echo "==> Restarting services..."
-ssh "$HOST" "systemctl --user restart bob-web bob-gateway"
+ssh "$HOST" "systemctl --user daemon-reload && systemctl --user restart bob-web bob-gateway"
 
 echo "==> Waiting for services..."
 sleep 5
