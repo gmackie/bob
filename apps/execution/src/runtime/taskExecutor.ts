@@ -411,25 +411,20 @@ export async function markTaskBlocked(
   taskRunId: string,
   reason: string,
 ): Promise<void> {
-  const taskRun = await db.query.taskRuns.findFirst({
-    where: eq(taskRuns.id, taskRunId),
-  });
-
-  if (!taskRun) return;
-
-  await db
+  const [updated] = await db
     .update(taskRuns)
     .set({
       status: "blocked",
       blockedReason: reason,
     })
-    .where(eq(taskRuns.id, taskRunId));
+    .where(and(eq(taskRuns.id, taskRunId), eq(taskRuns.status, "running")))
+    .returning({ sessionId: taskRuns.sessionId });
 
-  if (taskRun.sessionId) {
+  if (updated?.sessionId) {
     await db
       .update(chatConversations)
       .set({ blockedReason: reason })
-      .where(eq(chatConversations.id, taskRun.sessionId));
+      .where(eq(chatConversations.id, updated.sessionId));
   }
 }
 
@@ -437,31 +432,28 @@ export async function resumeBlockedTask(
   taskRunId: string,
   additionalContext?: string,
 ): Promise<void> {
-  const taskRun = await db.query.taskRuns.findFirst({
-    where: eq(taskRuns.id, taskRunId),
-  });
-
-  if (!(taskRun?.status === "blocked" && taskRun.sessionId)) {
-    return;
-  }
-
-  await db
+  const [updated] = await db
     .update(taskRuns)
     .set({
       status: "running",
       blockedReason: null,
     })
-    .where(eq(taskRuns.id, taskRunId));
+    .where(and(eq(taskRuns.id, taskRunId), eq(taskRuns.status, "blocked")))
+    .returning({ sessionId: taskRuns.sessionId, userId: taskRuns.userId });
+
+  if (!updated?.sessionId) {
+    return;
+  }
 
   await db
     .update(chatConversations)
     .set({ blockedReason: null })
-    .where(eq(chatConversations.id, taskRun.sessionId));
+    .where(eq(chatConversations.id, updated.sessionId));
 
   if (additionalContext) {
     try {
-      await gatewayRequest(taskRun.userId, "/session/send", {
-        sessionId: taskRun.sessionId,
+      await gatewayRequest(updated.userId, "/session/send", {
+        sessionId: updated.sessionId,
         message: additionalContext,
       });
     } catch (error) {
@@ -569,6 +561,24 @@ export async function supersedeAndRestartTask(
   const reason =
     "Superseded by planning issue context update requiring a fresh run";
 
+  // Create the new task run FIRST — if this fails, the old task keeps its
+  // current status rather than being orphaned with no replacement.
+  const result = await executeTask(taskRun.userId, task, {
+    contextPreamble: [
+      reason,
+      "",
+      "Updated issue fields:",
+      ...changes.map((change) => {
+        const fromValue = change.from ?? "(empty)";
+        const toValue = change.to ?? "(empty)";
+        return `- ${change.field}: ${fromValue} -> ${toValue}`;
+      }),
+      "",
+      `Previous Bob run branch: ${taskRun.branch ?? "(unknown)"}`,
+    ].join("\n"),
+  });
+
+  // Only mark the old task as failed after the new one is successfully created.
   await db
     .update(taskRuns)
     .set({
@@ -590,18 +600,5 @@ export async function supersedeAndRestartTask(
       .where(eq(chatConversations.id, taskRun.sessionId));
   }
 
-  return executeTask(taskRun.userId, task, {
-    contextPreamble: [
-      reason,
-      "",
-      "Updated issue fields:",
-      ...changes.map((change) => {
-        const fromValue = change.from ?? "(empty)";
-        const toValue = change.to ?? "(empty)";
-        return `- ${change.field}: ${fromValue} -> ${toValue}`;
-      }),
-      "",
-      `Previous Bob run branch: ${taskRun.branch ?? "(unknown)"}`,
-    ].join("\n"),
-  });
+  return result;
 }

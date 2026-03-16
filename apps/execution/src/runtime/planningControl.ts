@@ -5,7 +5,11 @@ import {
   taskRuns,
   user,
 } from "@bob/db/schema";
-import type { TaskRunStatus, WorkflowStatus } from "@bob/db/schema";
+import {
+  taskRunStatusEnum,
+  type TaskRunStatus,
+  type WorkflowStatus,
+} from "@bob/db/schema";
 
 import {
   executeTask,
@@ -186,7 +190,9 @@ function buildIssueSessionSnapshot(
       (taskRun.session?.workflowStatus as WorkflowStatus | null | undefined) ??
       null,
     sessionStatus: taskRun.session?.status ?? null,
-    runStatus: taskRun.status as TaskRunStatus,
+    runStatus: (taskRunStatusEnum as readonly string[]).includes(taskRun.status)
+      ? (taskRun.status as TaskRunStatus)
+      : null,
     latestSummary: taskRun.session?.statusMessage ?? taskRun.blockedReason,
     repository: taskRun.repository
       ? {
