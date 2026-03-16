@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Badge } from "@bob/ui/badge";
@@ -28,6 +29,42 @@ const DISPATCH_STATUS_COLOR: Record<string, BadgeVariant> = {
   completed: "emerald",
   failed: "rose",
 };
+
+const PIPELINE_STATE_COLOR: Record<string, BadgeVariant> = {
+  agent_complete: "slate",
+  building: "blue",
+  gates_passed: "emerald",
+  deploying_dev: "blue",
+  deploying_staging: "blue",
+  deploying_prod: "blue",
+  dev_healthy: "emerald",
+  staging_healthy: "emerald",
+  awaiting_prod_approval: "amber",
+  prod_healthy: "emerald",
+  complete: "emerald",
+  build_failed: "rose",
+  deploy_failed: "rose",
+};
+
+const ACTIVE_PIPELINE_STATES = new Set([
+  "building",
+  "deploying_dev",
+  "deploying_staging",
+  "deploying_prod",
+]);
+
+const PULSING_PIPELINE_STATES = new Set([
+  "deploying_dev",
+  "deploying_staging",
+  "deploying_prod",
+]);
+
+function formatDuration(ms: number): string {
+  if (ms < 60_000) return `${Math.floor(ms / 1000)}s`;
+  if (ms < 3600_000)
+    return `${Math.floor(ms / 60_000)}m ${Math.floor((ms % 60_000) / 1000)}s`;
+  return `${Math.floor(ms / 3600_000)}h ${Math.floor((ms % 3600_000) / 60_000)}m`;
+}
 
 const AGENT_OPTIONS = [
   "claude",
@@ -85,6 +122,38 @@ export function DispatchPlan({ batchId }: DispatchPlanProps) {
     trpc.dispatch.dispatch.mutationOptions({
       onSuccess: (result) => {
         toast(`Dispatched ${result.started} task${result.started === 1 ? "" : "s"}`);
+        void queryClient.invalidateQueries({
+          queryKey: trpc.dispatch.getBatch.queryKey({ batchId }),
+        });
+      },
+      onError: (err) => {
+        toast(err.message, {
+          style: { background: "#1a0000", borderColor: "#f43f5e40" },
+        });
+      },
+    }),
+  );
+
+  const approveProd = useMutation(
+    trpc.forgegraph.approveProdDeploy.mutationOptions({
+      onSuccess: () => {
+        toast("Production deploy approved");
+        void queryClient.invalidateQueries({
+          queryKey: trpc.dispatch.getBatch.queryKey({ batchId }),
+        });
+      },
+      onError: (err) => {
+        toast(err.message, {
+          style: { background: "#1a0000", borderColor: "#f43f5e40" },
+        });
+      },
+    }),
+  );
+
+  const resetPipeline = useMutation(
+    trpc.dispatch.resetPipelineState.mutationOptions({
+      onSuccess: () => {
+        toast("Pipeline reset — will retry on next poll");
         void queryClient.invalidateQueries({
           queryKey: trpc.dispatch.getBatch.queryKey({ batchId }),
         });
@@ -183,6 +252,9 @@ export function DispatchPlan({ batchId }: DispatchPlanProps) {
                 Status
               </th>
               <th className="px-4 py-2.5 text-left font-medium text-white/50">
+                Pipeline
+              </th>
+              <th className="px-4 py-2.5 text-left font-medium text-white/50">
                 Blocked By
               </th>
             </tr>
@@ -250,6 +322,23 @@ export function DispatchPlan({ batchId }: DispatchPlanProps) {
                     </Badge>
                   </td>
 
+                  {/* Pipeline */}
+                  <td className="px-4 py-2.5">
+                    <PipelineCell
+                      pipelineState={item.pipelineState as string | null}
+                      updatedAt={item.updatedAt as string | Date | null}
+                      itemId={item.id}
+                      onApproveProd={() =>
+                        approveProd.mutate({ dispatchItemId: item.id })
+                      }
+                      onRetry={() =>
+                        resetPipeline.mutate({ itemId: item.id })
+                      }
+                      isApproving={approveProd.isPending}
+                      isRetrying={resetPipeline.isPending}
+                    />
+                  </td>
+
                   {/* Blocked By */}
                   <td className="px-4 py-2.5 text-xs text-white/40">
                     {blockerLabels.length > 0
@@ -300,5 +389,96 @@ export function DispatchPlan({ batchId }: DispatchPlanProps) {
         </div>
       )}
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Pipeline cell with badge, time-in-stage counter, and action btns  */
+/* ------------------------------------------------------------------ */
+
+function PipelineCell({
+  pipelineState,
+  updatedAt,
+  itemId,
+  onApproveProd,
+  onRetry,
+  isApproving,
+  isRetrying,
+}: {
+  pipelineState: string | null;
+  updatedAt: string | Date | null;
+  itemId: string;
+  onApproveProd: () => void;
+  onRetry: () => void;
+  isApproving: boolean;
+  isRetrying: boolean;
+}) {
+  if (!pipelineState) return <span className="text-xs text-white/25">{"\u2014"}</span>;
+
+  const variant = PIPELINE_STATE_COLOR[pipelineState] ?? "slate";
+  const isPulsing = PULSING_PIPELINE_STATES.has(pipelineState) || pipelineState === "building";
+  const isActive = ACTIVE_PIPELINE_STATES.has(pipelineState);
+  const isFailed = pipelineState === "build_failed" || pipelineState === "deploy_failed";
+  const isAwaitingApproval = pipelineState === "awaiting_prod_approval";
+
+  return (
+    <div className="flex items-center gap-2">
+      <Badge
+        variant={variant}
+        className={`text-[10px]${isPulsing ? " animate-pulse" : ""}`}
+      >
+        {formatLabel(pipelineState)}
+      </Badge>
+
+      {isActive && updatedAt && (
+        <ElapsedTimer since={updatedAt} />
+      )}
+
+      {isAwaitingApproval && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-6 px-2 text-[10px]"
+          onClick={onApproveProd}
+          disabled={isApproving}
+        >
+          {isApproving ? "Approving..." : "Approve Prod"}
+        </Button>
+      )}
+
+      {isFailed && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-6 px-2 text-[10px]"
+          onClick={onRetry}
+          disabled={isRetrying}
+        >
+          {isRetrying ? "Retrying..." : "Retry"}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Live elapsed-time counter for active pipeline states               */
+/* ------------------------------------------------------------------ */
+
+function ElapsedTimer({ since }: { since: string | Date }) {
+  const [now, setNow] = useState(Date.now);
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const elapsed = now - new Date(since).getTime();
+  if (elapsed < 0) return null;
+
+  return (
+    <span className="text-[10px] tabular-nums text-white/40">
+      {formatDuration(elapsed)}
+    </span>
   );
 }

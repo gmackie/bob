@@ -661,4 +661,23 @@ export const dispatchRouter = {
         limit: input.limit,
       });
     }),
+  /** Reset a dispatch item's pipeline state to agent_complete (re-triggers build). */
+  resetPipelineState: protectedProcedure
+    .input(z.object({ itemId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const [item] = await ctx.db
+        .update(dispatchItems)
+        .set({ pipelineState: "agent_complete" })
+        .where(eq(dispatchItems.id, input.itemId))
+        .returning();
+
+      if (!item) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Dispatch item not found",
+        });
+      }
+
+      return { ok: true };
+    }),
 } satisfies TRPCRouterRecord;

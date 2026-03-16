@@ -7,6 +7,8 @@ import { toast } from "@bob/ui/toast";
 import { Badge } from "@bob/ui/badge";
 
 import { OpenChatPanelButton } from "~/components/chat/open-chat-panel-button";
+import { BuildHistory } from "~/components/forgegraph/build-history";
+import { DeploymentStatus } from "~/components/forgegraph/deployment-status";
 import { RevisionStatusBar } from "~/components/forgegraph/revision-status-bar";
 import { KIND_COLOR, formatLabel } from "~/lib/design/colors";
 import { formatRelativeTime } from "~/lib/format/time";
@@ -233,6 +235,24 @@ function ForgeGraphSection({ taskId }: { taskId: string }) {
     ),
   );
 
+  const latestRevisionId = data?.[0]?.id ?? null;
+
+  const { data: builds } = useQuery({
+    ...trpc.forgegraph.listBuilds.queryOptions(
+      { revisionId: latestRevisionId! },
+    ),
+    enabled: !!latestRevisionId,
+    staleTime: 30_000,
+  });
+
+  const { data: deployments } = useQuery({
+    ...trpc.forgegraph.listDeployments.queryOptions(
+      { revisionId: latestRevisionId! },
+    ),
+    enabled: !!latestRevisionId,
+    staleTime: 30_000,
+  });
+
   if (!data || data.length === 0) {
     return (
       <div className="rounded-3xl border border-white/10 bg-black/20 p-6">
@@ -249,12 +269,28 @@ function ForgeGraphSection({ taskId }: { taskId: string }) {
   return (
     <div className="rounded-3xl border border-white/10 bg-black/20 p-6">
       <h2 className="text-lg font-semibold text-white">Build & Deploy</h2>
-      <div className="mt-4">
+      <div className="mt-4 space-y-5">
         <RevisionStatusBar
           gates={latest.gates ?? []}
           commitSha={latest.revId}
           branch={latest.branch ?? undefined}
         />
+
+        {builds && builds.length > 0 && (
+          <div>
+            <h3 className="mb-2 text-sm font-medium text-white/60">Builds</h3>
+            <BuildHistory builds={builds} />
+          </div>
+        )}
+
+        {deployments && deployments.length > 0 && (
+          <div>
+            <h3 className="mb-2 text-sm font-medium text-white/60">
+              Deployments
+            </h3>
+            <DeploymentStatus deployments={deployments} />
+          </div>
+        )}
       </div>
     </div>
   );
