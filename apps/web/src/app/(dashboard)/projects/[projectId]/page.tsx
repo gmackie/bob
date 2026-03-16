@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { RepositoryPanel } from "~/components/dashboard";
+import { StartPlanningButton } from "~/components/planning/start-planning-button";
 import { CreateWorkItemButton } from "~/components/work-items/create-work-item-button";
 import { WorkItemBoard } from "~/components/work-items/work-item-board";
 import { createPlanningCaller } from "~/lib/planning/server";
@@ -52,10 +53,17 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
               {project.description?.trim() || "No project description yet."}
             </p>
           </div>
-          <div
-            className="h-4 w-4 rounded-full"
-            style={{ backgroundColor: project.color ?? "#6b7280" }}
-          />
+          <div className="flex items-center gap-3">
+            <StartPlanningButton
+              workspaceId={project.workspaceId}
+              projectId={project.id}
+              projectName={project.name}
+            />
+            <div
+              className="h-4 w-4 rounded-full"
+              style={{ backgroundColor: project.color ?? "#6b7280" }}
+            />
+          </div>
         </div>
 
         <div className="mt-6 flex flex-wrap gap-3 text-sm text-white/55">

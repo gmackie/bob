@@ -10,6 +10,8 @@ import { InputComposer } from "~/app/(dashboard)/chat/_components/input-composer
 import { AwaitingInputCard } from "~/app/(dashboard)/chat/_components/awaiting-input-card";
 import { useChatSession } from "~/hooks/use-chat-session";
 
+import { DraftPanel } from "~/components/planning/draft-panel";
+
 import { useChatPanel } from "./chat-panel-provider";
 
 const PANEL_WIDTH = 500;
@@ -32,6 +34,7 @@ export function ChatPanel() {
   if (!isOpen) return null;
 
   const isAwaitingInput = workflowState?.workflowStatus === "awaiting_input";
+  const isPlanningSession = sessionData?.sessionType === "planning";
   const title = sessionData?.title ?? (sessionId ? `Session ${sessionId.slice(0, 8)}` : "Chat");
 
   return (
@@ -103,6 +106,16 @@ export function ChatPanel() {
           </div>
         )}
       </div>
+
+      {/* Draft panel for planning sessions */}
+      {isPlanningSession && sessionId && (
+        <div className="border-t border-white/8 px-3 py-3">
+          <div className="mb-2 text-[10px] font-medium uppercase tracking-widest text-white/30">
+            Draft Tasks
+          </div>
+          <DraftPanel sessionId={sessionId} />
+        </div>
+      )}
 
       {/* Input */}
       <div className="border-t border-white/8">

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { CreateProjectButton } from "~/components/projects/create-project-button";
 import { ProjectCard } from "~/components/projects/project-card";
+import { StartPlanningButton } from "~/components/planning/start-planning-button";
 import { CreateWorkItemButton } from "~/components/work-items/create-work-item-button";
 import { summarizeProjects } from "~/components/work-items/planning-utils";
 import { FilterableBoard } from "~/components/work-items/board-filter-bar";
@@ -60,6 +61,11 @@ export default async function PlanningPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            <StartPlanningButton
+              workspaceId={currentWorkspace.id}
+              projectId={projects[0]?.project?.id ?? ""}
+              projectName={projects[0]?.project?.name}
+            />
             <CreateWorkItemButton
               projects={projects.map((p: any) => ({
                 id: p.project.id,
