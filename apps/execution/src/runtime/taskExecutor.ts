@@ -188,6 +188,7 @@ export async function executeTask(
   task: PlanningTask,
   options?: {
     contextPreamble?: string;
+    agentType?: string;
   },
 ): Promise<TaskExecutionResult> {
   const repoInfo = await findRepositoryForTask(userId, task);
@@ -276,7 +277,7 @@ export async function executeTask(
       repositoryId: repoInfo.repositoryId,
       worktreeId,
       workingDirectory: worktreePath,
-      agentType: "opencode",
+      agentType: options?.agentType ?? "opencode",
       title: `${task.identifier}: ${task.title}`,
       status: "provisioning",
       workItemId: task.id,
@@ -315,7 +316,7 @@ export async function executeTask(
     await gatewayRequest(userId, "/session/start", {
       sessionId: insertedSession.id,
       workingDirectory: worktreePath,
-      agentType: "opencode",
+      agentType: options?.agentType ?? "opencode",
       initialPrompt: prompt,
     });
   } catch (error) {

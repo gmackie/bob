@@ -232,6 +232,79 @@ export const planDraftDependenciesRelations = relations(
   }),
 );
 
+// =============================================================================
+// Dispatch Tables (batch execution of planning tasks)
+// =============================================================================
+
+export const dispatchBatches = pgTable("dispatch_batches", (t) => ({
+  id: t.uuid().notNull().primaryKey().defaultRandom(),
+  userId: t.text().notNull().references(() => user.id, { onDelete: "cascade" }),
+  sessionId: t.uuid().references(() => chatConversations.id, { onDelete: "set null" }),
+  workspaceId: t.text().notNull(),
+  projectId: t.text().notNull(),
+  status: t.varchar({ length: 20 }).notNull().default("pending"),
+  // status: "pending" | "dispatching" | "running" | "completed" | "failed"
+  concurrency: t.integer().notNull().default(2),
+  totalTasks: t.integer().notNull().default(0),
+  completedTasks: t.integer().notNull().default(0),
+  failedTasks: t.integer().notNull().default(0),
+  createdAt: t.timestamp().defaultNow().notNull(),
+  updatedAt: t.timestamp({ mode: "date", withTimezone: true }).$onUpdateFn(() => sql`now()`),
+}));
+
+export const dispatchItems = pgTable(
+  "dispatch_items",
+  (t) => ({
+    id: t.uuid().notNull().primaryKey().defaultRandom(),
+    batchId: t.uuid().notNull().references(() => dispatchBatches.id, { onDelete: "cascade" }),
+    planningTaskId: t.text().notNull(),
+    planningTaskIdentifier: t.text().notNull(),
+    title: t.text().notNull(),
+    description: t.text(),
+    agentType: t.varchar({ length: 50 }).notNull().default("opencode"),
+    status: t.varchar({ length: 20 }).notNull().default("queued"),
+    // status: "queued" | "blocked" | "running" | "completed" | "failed"
+    blockedByItems: t.json().$type<string[]>().default([]),
+    // Array of dispatchItem IDs that must complete before this one starts
+    taskRunId: t.uuid().references(() => taskRuns.id, { onDelete: "set null" }),
+    sortOrder: t.integer().notNull().default(0),
+    createdAt: t.timestamp().defaultNow().notNull(),
+    updatedAt: t.timestamp({ mode: "date", withTimezone: true }).$onUpdateFn(() => sql`now()`),
+  }),
+  (table) => [
+    { name: "dispatch_items_batch_idx", columns: [table.batchId] },
+  ],
+);
+
+export const dispatchBatchesRelations = relations(
+  dispatchBatches,
+  ({ one, many }) => ({
+    user: one(user, {
+      fields: [dispatchBatches.userId],
+      references: [user.id],
+    }),
+    session: one(chatConversations, {
+      fields: [dispatchBatches.sessionId],
+      references: [chatConversations.id],
+    }),
+    items: many(dispatchItems),
+  }),
+);
+
+export const dispatchItemsRelations = relations(
+  dispatchItems,
+  ({ one }) => ({
+    batch: one(dispatchBatches, {
+      fields: [dispatchItems.batchId],
+      references: [dispatchBatches.id],
+    }),
+    taskRun: one(taskRuns, {
+      fields: [dispatchItems.taskRunId],
+      references: [taskRuns.id],
+    }),
+  }),
+);
+
 export const CreateUserPreferencesSchema = createInsertSchema(userPreferences, {
   theme: z.enum(["light", "dark", "system"]).default("system"),
   language: z.string().max(10).default("en"),
