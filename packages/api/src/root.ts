@@ -9,6 +9,7 @@ import { gitRouter } from "./router/git";
 import { gitProvidersRouter } from "./router/gitProviders";
 import { instanceRouter } from "./router/instance";
 import { planningRouter } from "./router/planning";
+import { planSessionRouter } from "./router/planSession";
 import { linkRouter } from "./router/link";
 import { planRouter } from "./router/plan";
 import { postRouter } from "./router/post";
@@ -42,6 +43,7 @@ const appRouterRecord = {
   gitProviders: gitProvidersRouter,
   instance: instanceRouter,
   planning: planningRouter,
+  planSession: planSessionRouter,
   link: linkRouter,
   plan: planRouter,
   post: postRouter,
