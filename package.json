@@ -46,8 +46,13 @@
   },
   "pnpm": {
     "overrides": {
-      "@types/pg": "8.16.0"
-    }
+      "@types/pg": "8.16.0",
+      "node-gyp": "^10.0.0"
+    },
+    "onlyBuiltDependencies": [
+      "node-pty",
+      "@swc/core"
+    ]
   },
   "prettier": "@bob/prettier-config"
 }
