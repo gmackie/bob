@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-HOST="labnuc.tail1e1a32.ts.net"
+HOST="bob.tail1e1a32.ts.net"
 DIR="/home/mackieg/dev/bob"
 NVM="source ~/.nvm/nvm.sh && nvm use 22 >/dev/null 2>&1"
 
