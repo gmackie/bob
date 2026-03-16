@@ -6,6 +6,8 @@ import { join, dirname, basename } from "path";
 import { SessionManager, SessionRecord, SessionManagerCallbacks } from "./sessions/SessionManager.js";
 import { PersistenceWriter, SessionEventRecord } from "./persistence/PersistenceWriter.js";
 import { SessionCleanup } from "./sessions/SessionCleanup.js";
+import { AgentProcessManager } from "./agents/agent-process-manager.js";
+import { getStdioAdapter } from "./agents/adapters/base-stdio-adapter.js";
 import { and, eq, sql } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
@@ -143,6 +145,8 @@ const sessionManager = new SessionManager({
   leaseTimeoutMs: 30_000,
   cleanupIntervalMs: 10_000,
 });
+
+const agentProcessManager = new AgentProcessManager();
 
 const sessionManagerCallbacks: SessionManagerCallbacks = {
   onPersistEvent: (event) => {
@@ -1293,14 +1297,19 @@ function handleSessionsWebSocket(ws: WebSocket): void {
 
           const input = msg as ClientInput;
           const actor = sessionManager.getSession(input.sessionId);
-          
+
           if (!actor) {
             sendError("SESSION_NOT_FOUND", `Session ${input.sessionId} not found`, input.sessionId);
             return;
           }
 
           const seq = actor.handleInput(input.data, input.clientInputId);
-          
+
+          // Route input to stdio process manager if it's managing this session
+          if (agentProcessManager.isManaging(input.sessionId)) {
+            agentProcessManager.sendInput(input.sessionId, input.data);
+          }
+
           send({
             type: "input_ack",
             sessionId: input.sessionId,
@@ -1433,8 +1442,22 @@ async function validateToken(token: string): Promise<string | null> {
   return token;
 }
 
-async function startAgentForSession(actor: ReturnType<typeof sessionManager.getSession>, userId: string): Promise<void> {
+async function startAgentForSession(actor: ReturnType<typeof sessionManager.getSession>, userId: string, initialPrompt?: string): Promise<void> {
   if (!actor) return;
+
+  // Check if we can use stdio mode for this agent type
+  const stdioAdapter = getStdioAdapter(actor.agentType, actor.workingDirectory);
+  if (stdioAdapter && process.env.AGENT_STDIO_MODE !== "false") {
+    console.log(`[Gateway] Using stdio mode for ${actor.agentType} session ${actor.sessionId}`);
+    await agentProcessManager.startSession({
+      sessionId: actor.sessionId,
+      agentType: actor.agentType,
+      workingDirectory: actor.workingDirectory,
+      initialPrompt,
+      actor,
+    });
+    return;
+  }
 
   // Skip PTY session creation for non-PTY agents (e.g., elevenlabs, opencode chat)
   const ptyAgents = ["claude", "codex", "gemini", "kiro", "cursor-agent"];
