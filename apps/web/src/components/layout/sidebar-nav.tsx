@@ -8,8 +8,11 @@ import {
   GearIcon,
   BellIcon,
 } from "@radix-ui/react-icons";
+import { useQuery } from "@tanstack/react-query";
 
 import { cn } from "@bob/ui";
+
+import { useTRPC } from "~/trpc/react";
 
 export interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
@@ -41,12 +44,24 @@ const NAV_ITEMS: NavItem[] = [
   { icon: GearIcon, label: "Settings", href: "/settings" },
 ];
 
+/** Returns the number of active (non-stopped) planning sessions. */
+function useActivePlanningSessionCount(): number | undefined {
+  const trpc = useTRPC();
+  const { data: sessions } = useQuery(
+    trpc.planSession.list.queryOptions({ limit: 10 }, { staleTime: 30_000 }),
+  );
+
+  if (!sessions) return undefined;
+  return sessions.filter((s) => s.status !== "stopped").length;
+}
+
 interface SidebarNavProps {
   collapsed: boolean;
 }
 
 export function SidebarNav({ collapsed }: SidebarNavProps) {
   const pathname = usePathname() ?? "";
+  const planningCount = useActivePlanningSessionCount();
 
   return (
     <nav className="flex flex-1 flex-col gap-1 px-2 py-3">
@@ -54,6 +69,10 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
         const isActive =
           pathname === item.href || pathname.startsWith(item.href + "/");
         const Icon = item.icon;
+
+        // Use dynamic badge for the Planning nav item
+        const badge =
+          item.href === "/planning" ? planningCount : item.badge;
 
         return (
           <Link
@@ -70,9 +89,9 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
           >
             <Icon className="size-[15px] shrink-0" />
             {!collapsed && <span>{item.label}</span>}
-            {!collapsed && item.badge !== undefined && item.badge > 0 && (
+            {!collapsed && badge !== undefined && badge > 0 && (
               <span className="ml-auto rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] text-white/60">
-                {item.badge}
+                {badge}
               </span>
             )}
           </Link>
