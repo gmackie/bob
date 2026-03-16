@@ -13,6 +13,10 @@ vi.mock("~/components/work-items/create-work-item-button", () => ({
   CreateWorkItemButton: () => null,
 }));
 
+vi.mock("~/components/planning/start-planning-button", () => ({
+  StartPlanningButton: () => null,
+}));
+
 vi.mock("~/components/work-items/board-filter-bar", () => ({
   FilterableBoard: () => "<div>Work board</div>",
 }));

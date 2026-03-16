@@ -8,6 +8,10 @@ vi.mock("~/components/work-items/create-work-item-button", () => ({
   CreateWorkItemButton: () => null,
 }));
 
+vi.mock("~/components/planning/start-planning-button", () => ({
+  StartPlanningButton: () => null,
+}));
+
 vi.mock("~/lib/planning/server", () => ({
   createPlanningCaller: vi.fn(async () => ({
     project: {
