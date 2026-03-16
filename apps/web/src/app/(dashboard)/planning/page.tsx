@@ -10,7 +10,7 @@ import { RecentPlans } from "~/components/planning/recent-plans";
 import { CreateWorkItemButton } from "~/components/work-items/create-work-item-button";
 import { summarizeProjects } from "~/components/work-items/planning-utils";
 import { ActiveDispatchBar } from "~/components/planning/active-dispatch-bar";
-import { FilterableBoard } from "~/components/work-items/board-filter-bar";
+import { ViewSwitcher } from "~/components/graph/view-switcher";
 import { createPlanningCaller } from "~/lib/planning/server";
 
 export const dynamic = "force-dynamic";
@@ -149,7 +149,7 @@ export default async function PlanningPage({
           <h2 className="text-lg font-semibold text-white">Work Board</h2>
           <span className="text-sm text-white/45">{workItems.length} visible items</span>
         </div>
-        <FilterableBoard
+        <ViewSwitcher
           items={workItems.map((item: any) => ({
             id: item.id,
             identifier: item.identifier,
@@ -157,6 +157,7 @@ export default async function PlanningPage({
             status: item.status,
             kind: item.kind,
             priority: item.priority,
+            parentId: item.parentId,
           }))}
           projects={projects.map((p: any) => ({
             id: p.project.id,
