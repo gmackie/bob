@@ -158,26 +158,32 @@ export const workItems = pgTable("work_items", (t) => ({
     .$onUpdateFn(() => sql`now()`),
 }));
 
-export const planDrafts = pgTable("plan_drafts", (t) => ({
-  id: t.uuid().notNull().primaryKey().defaultRandom(),
-  sessionId: t
-    .uuid()
-    .notNull()
-    .references(() => chatConversations.id, { onDelete: "cascade" }),
-  workspaceId: t.uuid().notNull(),
-  projectId: t.uuid().notNull(),
-  title: t.varchar({ length: 256 }).notNull(),
-  description: t.text(),
-  kind: workItemKindEnum().notNull().default("task"),
-  priority: t.varchar({ length: 20 }).notNull().default("no_priority"),
-  sortOrder: t.integer().notNull().default(0),
-  status: t.varchar({ length: 20 }).notNull().default("draft"),
-  // status: "draft" | "committed" | "discarded"
-  createdAt: t.timestamp().defaultNow().notNull(),
-  updatedAt: t
-    .timestamp({ mode: "date", withTimezone: true })
-    .$onUpdateFn(() => sql`now()`),
-}));
+export const planDrafts = pgTable(
+  "plan_drafts",
+  (t) => ({
+    id: t.uuid().notNull().primaryKey().defaultRandom(),
+    sessionId: t
+      .uuid()
+      .notNull()
+      .references(() => chatConversations.id, { onDelete: "cascade" }),
+    workspaceId: t.uuid().notNull(),
+    projectId: t.uuid().notNull(),
+    title: t.varchar({ length: 256 }).notNull(),
+    description: t.text(),
+    kind: workItemKindEnum().notNull().default("task"),
+    priority: t.varchar({ length: 20 }).notNull().default("no_priority"),
+    sortOrder: t.integer().notNull().default(0),
+    status: t.varchar({ length: 20 }).notNull().default("draft"),
+    // status: "draft" | "committed" | "discarded"
+    createdAt: t.timestamp().defaultNow().notNull(),
+    updatedAt: t
+      .timestamp({ mode: "date", withTimezone: true })
+      .$onUpdateFn(() => sql`now()`),
+  }),
+  (table) => [
+    { name: "plan_drafts_session_idx", columns: [table.sessionId] },
+  ],
+);
 
 export const planDraftDependencies = pgTable(
   "plan_draft_dependencies",
@@ -191,6 +197,38 @@ export const planDraftDependencies = pgTable(
       .uuid()
       .notNull()
       .references(() => planDrafts.id, { onDelete: "cascade" }),
+  }),
+  (table) => [
+    {
+      name: "plan_draft_deps_unique_idx",
+      columns: [table.draftId, table.dependsOnDraftId],
+      unique: true,
+    },
+  ],
+);
+
+export const planDraftsRelations = relations(planDrafts, ({ one, many }) => ({
+  session: one(chatConversations, {
+    fields: [planDrafts.sessionId],
+    references: [chatConversations.id],
+  }),
+  dependencies: many(planDraftDependencies, { relationName: "draft" }),
+  dependedOnBy: many(planDraftDependencies, { relationName: "dependsOn" }),
+}));
+
+export const planDraftDependenciesRelations = relations(
+  planDraftDependencies,
+  ({ one }) => ({
+    draft: one(planDrafts, {
+      fields: [planDraftDependencies.draftId],
+      references: [planDrafts.id],
+      relationName: "draft",
+    }),
+    dependsOn: one(planDrafts, {
+      fields: [planDraftDependencies.dependsOnDraftId],
+      references: [planDrafts.id],
+      relationName: "dependsOn",
+    }),
   }),
 );
 
@@ -707,6 +745,7 @@ export const chatConversationsRelations = relations(
     messages: many(chatMessages),
     events: many(sessionEvents),
     connections: many(sessionConnections),
+    planDrafts: many(planDrafts),
   }),
 );
 
