@@ -42,17 +42,33 @@ export function DraftPanel({ sessionId, expanded = false }: DraftPanelProps) {
     }),
   );
 
+  const createBatch = useMutation(
+    trpc.dispatch.createBatch.mutationOptions({
+      onSuccess: (result) => {
+        router.push(`/planning/dispatch/${result.batch.id}`);
+      },
+      onError: (err) => {
+        toast(err.message, {
+          style: { background: "#1a0000", borderColor: "#f43f5e40" },
+        });
+      },
+    }),
+  );
+
   const commitPlan = useMutation(
     trpc.planSession.commitPlan.mutationOptions({
       onSuccess: (result) => {
-        const ids = result.tasks.map((t) => t.identifier).join(", ");
+        if (result.committed === 0) {
+          toast("No tasks were committed");
+          return;
+        }
         toast(
-          `Committed ${result.committed} task${result.committed === 1 ? "" : "s"}${ids ? `: ${ids}` : ""}`,
+          `Committed ${result.committed} task${result.committed === 1 ? "" : "s"} — creating dispatch batch...`,
         );
         void queryClient.invalidateQueries({
           queryKey: trpc.planSession.get.queryKey({ sessionId }),
         });
-        router.refresh();
+        createBatch.mutate({ sessionId, tasks: result.tasks });
       },
       onError: (err) => {
         toast(err.message, {
@@ -157,7 +173,7 @@ export function DraftPanel({ sessionId, expanded = false }: DraftPanelProps) {
         <Button
           size="sm"
           onClick={() => commitPlan.mutate({ sessionId })}
-          disabled={commitPlan.isPending || activeDrafts.length === 0}
+          disabled={commitPlan.isPending || createBatch.isPending || activeDrafts.length === 0}
         >
           {commitPlan.isPending ? "Committing..." : "Commit Plan"}
         </Button>
