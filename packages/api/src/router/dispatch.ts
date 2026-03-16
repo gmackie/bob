@@ -2,7 +2,7 @@ import type { TRPCRouterRecord } from "@trpc/server";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod/v4";
 
-import { and, eq, inArray } from "@bob/db";
+import { and, desc, eq, inArray } from "@bob/db";
 import {
   dispatchBatches,
   dispatchItems,
@@ -544,5 +544,24 @@ export const dispatchRouter = {
       });
 
       return { batch: updatedBatch!, items: finalItems };
+    }),
+  /** List dispatch batches for the current user, optionally filtered by status. */
+  listBatches: protectedProcedure
+    .input(
+      z.object({
+        status: z.string().optional(),
+        limit: z.number().int().min(1).max(50).default(5),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const filters = [eq(dispatchBatches.userId, ctx.session.user.id)];
+      if (input.status) {
+        filters.push(eq(dispatchBatches.status, input.status));
+      }
+      return ctx.db.query.dispatchBatches.findMany({
+        where: and(...filters),
+        orderBy: desc(dispatchBatches.createdAt),
+        limit: input.limit,
+      });
     }),
 } satisfies TRPCRouterRecord;

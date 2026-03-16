@@ -7,6 +7,7 @@ import { ProjectCard } from "~/components/projects/project-card";
 import { StartPlanningButton } from "~/components/planning/start-planning-button";
 import { CreateWorkItemButton } from "~/components/work-items/create-work-item-button";
 import { summarizeProjects } from "~/components/work-items/planning-utils";
+import { ActiveDispatchBar } from "~/components/planning/active-dispatch-bar";
 import { FilterableBoard } from "~/components/work-items/board-filter-bar";
 import { createPlanningCaller } from "~/lib/planning/server";
 
@@ -108,6 +109,7 @@ export default async function PlanningPage() {
       </section>
 
       <section className="mt-10">
+        <ActiveDispatchBar />
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-white">Work Board</h2>
           <span className="text-sm text-white/45">{workItems.length} visible items</span>

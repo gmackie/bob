@@ -21,6 +21,10 @@ vi.mock("~/components/work-items/board-filter-bar", () => ({
   FilterableBoard: () => "<div>Work board</div>",
 }));
 
+vi.mock("~/components/planning/active-dispatch-bar", () => ({
+  ActiveDispatchBar: () => null,
+}));
+
 vi.mock("~/lib/planning/server", () => ({
   createPlanningCaller: vi.fn(async () => ({
     workspace: {

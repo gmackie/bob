@@ -1,6 +1,7 @@
 import Link from "next/link";
 import React from "react";
 
+import { cn } from "@bob/ui";
 import { Badge } from "@bob/ui/badge";
 
 import { KIND_COLOR, PRIORITY_COLOR } from "~/lib/design/colors";
@@ -14,7 +15,17 @@ export interface WorkItemBoardItem extends PlanningWorkItem {
   identifier: string;
   kind: string;
   priority?: string;
+  dispatchStatus?: string; // queued | blocked | running | completed | failed
+  dispatchAgent?: string;
 }
+
+const DISPATCH_DOT: Record<string, string> = {
+  queued: "bg-slate-400",
+  blocked: "bg-amber-400",
+  running: "bg-blue-400 animate-pulse",
+  completed: "bg-emerald-400",
+  failed: "bg-rose-400",
+};
 
 interface WorkItemBoardProps {
   items: WorkItemBoardItem[];
@@ -89,6 +100,23 @@ export function WorkItemBoard({ items }: WorkItemBoardProps) {
                       <div className="mt-2 text-sm font-medium text-white">
                         {item.title}
                       </div>
+                      {boardItem.dispatchStatus && (
+                        <div className="mt-2 flex items-center gap-1.5">
+                          <span
+                            className={cn(
+                              "size-2 rounded-full",
+                              DISPATCH_DOT[boardItem.dispatchStatus] ??
+                                "bg-slate-400",
+                            )}
+                            title={`Dispatch: ${boardItem.dispatchStatus}`}
+                          />
+                          {boardItem.dispatchAgent && (
+                            <span className="text-[10px] text-white/40">
+                              {boardItem.dispatchAgent}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </Link>
                   );
                 })
