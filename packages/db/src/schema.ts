@@ -158,6 +158,42 @@ export const workItems = pgTable("work_items", (t) => ({
     .$onUpdateFn(() => sql`now()`),
 }));
 
+export const planDrafts = pgTable("plan_drafts", (t) => ({
+  id: t.uuid().notNull().primaryKey().defaultRandom(),
+  sessionId: t
+    .uuid()
+    .notNull()
+    .references(() => chatConversations.id, { onDelete: "cascade" }),
+  workspaceId: t.uuid().notNull(),
+  projectId: t.uuid().notNull(),
+  title: t.varchar({ length: 256 }).notNull(),
+  description: t.text(),
+  kind: workItemKindEnum().notNull().default("task"),
+  priority: t.varchar({ length: 20 }).notNull().default("no_priority"),
+  sortOrder: t.integer().notNull().default(0),
+  status: t.varchar({ length: 20 }).notNull().default("draft"),
+  // status: "draft" | "committed" | "discarded"
+  createdAt: t.timestamp().defaultNow().notNull(),
+  updatedAt: t
+    .timestamp({ mode: "date", withTimezone: true })
+    .$onUpdateFn(() => sql`now()`),
+}));
+
+export const planDraftDependencies = pgTable(
+  "plan_draft_dependencies",
+  (t) => ({
+    id: t.uuid().notNull().primaryKey().defaultRandom(),
+    draftId: t
+      .uuid()
+      .notNull()
+      .references(() => planDrafts.id, { onDelete: "cascade" }),
+    dependsOnDraftId: t
+      .uuid()
+      .notNull()
+      .references(() => planDrafts.id, { onDelete: "cascade" }),
+  }),
+);
+
 export const CreateUserPreferencesSchema = createInsertSchema(userPreferences, {
   theme: z.enum(["light", "dark", "system"]).default("system"),
   language: z.string().max(10).default("en"),
@@ -585,6 +621,7 @@ export const chatConversations = pgTable(
     title: t.varchar({ length: 256 }),
     workingDirectory: t.text(),
     agentType: t.varchar({ length: 50 }).notNull().default("opencode"),
+    sessionType: t.varchar({ length: 20 }).notNull().default("execution"),
     opencodeSessionId: t.text(),
     status: t.varchar({ length: 20 }).notNull().default("stopped"),
     nextSeq: t.bigint({ mode: "number" }).notNull().default(1),
