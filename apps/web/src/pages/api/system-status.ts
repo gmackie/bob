@@ -45,40 +45,58 @@ const HOST_DEPENDENCIES: Array<{ name: string; command: string }> = [
   { name: "rsync", command: "rsync" },
 ];
 
-function hasCommand(command: string): boolean {
-  const pathValue = (process.env.PATH ?? "").toLowerCase();
-  if (!pathValue) return false;
-
-  return pathValue.includes(command.toLowerCase());
+function hasCommand(command: string): { found: boolean; version?: string } {
+  try {
+    const { execSync } = require("child_process");
+    execSync(`which ${command}`, { encoding: "utf-8", timeout: 3000 });
+    // Try to get version
+    try {
+      const version = execSync(`${command} --version 2>&1 || true`, {
+        encoding: "utf-8",
+        timeout: 5000,
+      }).trim().split("\n")[0];
+      return { found: true, version };
+    } catch {
+      return { found: true };
+    }
+  } catch {
+    return { found: false };
+  }
 }
 
 function buildSystemStatus(): SystemStatusResponse {
   return {
     timestamp: new Date().toISOString(),
     agents: AGENTS.map((agent) => {
-      const isAvailable = hasCommand(agent.command);
+      const check = hasCommand(agent.command);
 
       return {
         type: agent.type,
         name: agent.name,
-        isAvailable,
-        isAuthenticated: isAvailable,
-        authenticationStatus: isAvailable
+        isAvailable: check.found,
+        isAuthenticated: check.found,
+        authenticationStatus: check.found
           ? "Detected in environment"
           : "Not detected in environment",
-        statusMessage: isAvailable ? "Available" : "Command not found",
+        statusMessage: check.found
+          ? `Available${check.version ? ` (${check.version})` : ""}`
+          : "Command not found",
       };
     }),
     hostDependencies: HOST_DEPENDENCIES.map((dependency) => {
-      const isAvailable =
-        dependency.command === "node" ? true : hasCommand(dependency.command);
+      const check =
+        dependency.command === "node"
+          ? { found: true, version: process.version }
+          : hasCommand(dependency.command);
 
       return {
         name: dependency.name,
         command: dependency.command,
-        isAvailable,
-        version: dependency.command === "node" ? process.version : undefined,
-        statusMessage: isAvailable ? "Available" : "Command not found",
+        isAvailable: check.found,
+        version: check.version,
+        statusMessage: check.found
+          ? `Available${check.version ? ` (${check.version})` : ""}`
+          : "Command not found",
       };
     }),
   };

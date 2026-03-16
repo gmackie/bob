@@ -47,7 +47,7 @@ export function SystemOperations() {
   }, []);
 
   return (
-    <main className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-6 py-10">
+    <div className="flex flex-col gap-8">
       <header className="rounded-[2rem] border border-white/10 bg-[linear-gradient(135deg,#0e1728,#09111d)] px-8 py-8 text-white">
         <div className="text-xs uppercase tracking-[0.3em] text-white/40">
           System
@@ -121,6 +121,6 @@ export function SystemOperations() {
           isLeftPanelCollapsed={false}
         />
       </section>
-    </main>
+    </div>
   );
 }
