@@ -16,8 +16,8 @@ ssh "$HOST" "bash -c '$NVM && cd $DIR && pnpm install --frozen-lockfile 2>/dev/n
 echo "==> Pushing schema..."
 ssh "$HOST" "bash -c '$NVM && cd $DIR && pnpm --filter @bob/db push'"
 
-echo "==> Building web app..."
-ssh "$HOST" "bash -c '$NVM && cd $DIR && SKIP_ENV_VALIDATION=1 pnpm --filter @bob/web build'"
+echo "==> Building packages..."
+ssh "$HOST" "bash -c '$NVM && cd $DIR && pnpm --filter @bob/legacy build && SKIP_ENV_VALIDATION=1 pnpm --filter @bob/web build'"
 
 echo "==> Restarting services..."
 ssh "$HOST" "systemctl --user restart bob-web bob-gateway"

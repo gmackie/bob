@@ -16,6 +16,7 @@ const config = {
     "@bob/config",
     "@bob/db",
     "@bob/execution",
+    "@bob/legacy",
     "@bob/monitoring",
     "@bob/ui",
     "@bob/validators",
