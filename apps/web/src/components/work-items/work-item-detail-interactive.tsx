@@ -135,7 +135,7 @@ export function WorkItemDetailInteractive({
             <>
               <Link
                 href={getTaskWorkspaceHref(workItem.id)}
-                className="inline-flex rounded-full bg-[#f59e0b] px-4 py-2 text-sm font-medium text-black transition hover:bg-[#f8b84b]"
+                className="inline-flex rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
               >
                 Open execution workspace
               </Link>

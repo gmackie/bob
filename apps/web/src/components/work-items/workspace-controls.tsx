@@ -79,14 +79,14 @@ export function WorkspaceControls({
             {liveHref ? (
               <Link
                 href={liveHref}
-                className="rounded-full bg-[#f59e0b] px-4 py-2 text-sm font-medium text-black transition hover:bg-[#f8b84b]"
+                className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
               >
                 Resume live workspace
               </Link>
             ) : (
               <Link
                 href={`/chat?session=${activeSessionId}`}
-                className="rounded-full bg-[#f59e0b] px-4 py-2 text-sm font-medium text-black transition hover:bg-[#f8b84b]"
+                className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
               >
                 Open session console
               </Link>
@@ -111,7 +111,7 @@ export function WorkspaceControls({
           <>
             <Link
               href="/chat"
-              className="rounded-full bg-[#f59e0b] px-4 py-2 text-sm font-medium text-black transition hover:bg-[#f8b84b]"
+              className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
             >
               Start new session
             </Link>
