@@ -28,17 +28,17 @@ export function Breadcrumbs({ items, className }: BreadcrumbsProps) {
         return (
           <span key={i} className="flex items-center gap-1.5">
             {i > 0 && (
-              <ChevronRightIcon className="size-3 text-white/25" />
+              <ChevronRightIcon className="size-3 text-muted-foreground/50" />
             )}
             {item.href && !isLast ? (
               <Link
                 href={item.href}
-                className="text-white/50 transition-colors hover:text-white/80"
+                className="text-muted-foreground transition-colors hover:text-foreground"
               >
                 {item.label}
               </Link>
             ) : (
-              <span className={isLast ? "text-white/80" : "text-white/50"}>
+              <span className={isLast ? "text-foreground" : "text-muted-foreground"}>
                 {item.label}
               </span>
             )}

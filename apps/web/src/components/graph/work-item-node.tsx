@@ -55,20 +55,20 @@ function WorkItemNodeComponent({ data }: NodeProps) {
   return (
     <div
       className={cn(
-        "min-w-[200px] max-w-[260px] rounded-xl border border-white/12 bg-[#0f1729] shadow-lg transition-shadow hover:border-white/25 hover:shadow-xl",
+        "min-w-[200px] max-w-[260px] rounded-xl border border-border bg-popover shadow-lg transition-shadow hover:border-muted-foreground/30 hover:shadow-xl",
         borderClass && `border-l-2 ${borderClass}`,
       )}
     >
       <Handle
         type="target"
         position={Position.Top}
-        className="!bg-white/20 !border-white/30 !w-2 !h-2"
+        className="!bg-muted-foreground !border-muted-foreground/60 !w-2 !h-2"
       />
 
       <Link href={`/work-items/${d.id}`} className="block px-3.5 py-3">
         {/* Header: identifier + kind */}
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[10px] font-mono uppercase tracking-wider text-white/40">
+          <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
             {d.identifier}
           </span>
           <Badge
@@ -80,7 +80,7 @@ function WorkItemNodeComponent({ data }: NodeProps) {
         </div>
 
         {/* Title */}
-        <div className="mt-1.5 text-sm font-medium leading-snug text-white/85">
+        <div className="mt-1.5 text-sm font-medium leading-snug text-foreground">
           {d.title.length > 60 ? d.title.slice(0, 57) + "..." : d.title}
         </div>
 
@@ -112,11 +112,11 @@ function WorkItemNodeComponent({ data }: NodeProps) {
                 pipeline.pulse && "animate-pulse",
               )}
             />
-            <span className="text-[10px] text-white/40">
+            <span className="text-[10px] text-muted-foreground">
               {formatLabel(d.pipelineState!)}
             </span>
             {d.dispatchAgent && (
-              <span className="text-[10px] text-white/30">
+              <span className="text-[10px] text-muted-foreground">
                 ({d.dispatchAgent})
               </span>
             )}
@@ -125,7 +125,7 @@ function WorkItemNodeComponent({ data }: NodeProps) {
 
         {/* Child count */}
         {(d.childCount ?? 0) > 0 && (
-          <div className="mt-1.5 text-[10px] text-white/30">
+          <div className="mt-1.5 text-[10px] text-muted-foreground">
             {d.childCount} child item{d.childCount === 1 ? "" : "s"}
           </div>
         )}
@@ -134,7 +134,7 @@ function WorkItemNodeComponent({ data }: NodeProps) {
       <Handle
         type="source"
         position={Position.Bottom}
-        className="!bg-white/20 !border-white/30 !w-2 !h-2"
+        className="!bg-muted-foreground !border-muted-foreground/60 !w-2 !h-2"
       />
     </div>
   );

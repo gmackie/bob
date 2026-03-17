@@ -60,12 +60,12 @@ export function WorkspaceControls({
       {/* Run status */}
       {latestRun && (
         <div className="flex items-center gap-2 text-sm">
-          <span className="text-white/45">Latest run:</span>
+          <span className="text-muted-foreground">Latest run:</span>
           <Badge variant={BUILD_COLOR[runStatus ?? ""] ?? "default"}>
             {formatLabel(runStatus ?? "unknown")}
           </Badge>
           {latestRun.branch && (
-            <span className="font-mono text-xs text-white/40">
+            <span className="font-mono text-xs text-muted-foreground">
               {latestRun.branch}
             </span>
           )}
@@ -121,7 +121,7 @@ export function WorkspaceControls({
             />
           </>
         ) : (
-          <span className="text-sm text-white/45">
+          <span className="text-sm text-muted-foreground">
             Only task work items can open the execution workspace.
           </span>
         )}

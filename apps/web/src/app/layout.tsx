@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 
 import { cn } from "@bob/ui";
 import { ThemeProvider, ThemeToggle } from "@bob/ui/theme";
@@ -29,18 +29,37 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "white" },
-    { media: "(prefers-color-scheme: dark)", color: "black" },
+    { media: "(prefers-color-scheme: light)", color: "#FAFAF8" },
+    { media: "(prefers-color-scheme: dark)", color: "#141310" },
   ],
 };
 
-const geistSans = Geist({
-  subsets: ["latin"],
-  variable: "--font-geist-sans",
+const satoshi = localFont({
+  src: [
+    { path: "../../../public/fonts/satoshi/satoshi-400.woff2", weight: "400", style: "normal" },
+    { path: "../../../public/fonts/satoshi/satoshi-500.woff2", weight: "500", style: "normal" },
+    { path: "../../../public/fonts/satoshi/satoshi-700.woff2", weight: "700", style: "normal" },
+    { path: "../../../public/fonts/satoshi/satoshi-900.woff2", weight: "900", style: "normal" },
+  ],
+  variable: "--font-satoshi",
+  display: "swap",
 });
-const geistMono = Geist_Mono({
-  subsets: ["latin"],
-  variable: "--font-geist-mono",
+
+const dmSans = localFont({
+  src: [
+    { path: "../../../public/fonts/dm-sans/dm-sans-latin-variable.woff2", weight: "100 900", style: "normal" },
+    { path: "../../../public/fonts/dm-sans/dm-sans-latin-italic-variable.woff2", weight: "400", style: "italic" },
+  ],
+  variable: "--font-dm-sans",
+  display: "swap",
+});
+
+const jetBrainsMono = localFont({
+  src: [
+    { path: "../../../public/fonts/jetbrains-mono/jetbrains-mono-latin-variable.woff2", weight: "100 800", style: "normal" },
+  ],
+  variable: "--font-jetbrains-mono",
+  display: "swap",
 });
 
 export default function RootLayout(props: { children: React.ReactNode; params: Promise<any> }) {
@@ -49,8 +68,9 @@ export default function RootLayout(props: { children: React.ReactNode; params: P
       <body
         className={cn(
           "bg-background text-foreground min-h-screen font-sans antialiased",
-          geistSans.variable,
-          geistMono.variable,
+          satoshi.variable,
+          dmSans.variable,
+          jetBrainsMono.variable,
         )}
       >
         <ThemeProvider>

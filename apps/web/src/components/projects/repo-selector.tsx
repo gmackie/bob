@@ -27,9 +27,9 @@ export function RepoSelector({
   const hasSelection = options.some((o) => o.fullName === selectedFullName);
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/15 p-5">
-      <div className="text-sm font-medium text-white">Map a repository</div>
-      <p className="mt-2 text-sm text-white/60">
+    <div className="rounded-2xl border border-border bg-secondary p-5">
+      <div className="text-sm font-medium text-foreground">Map a repository</div>
+      <p className="mt-2 text-sm text-muted-foreground">
         Choose one of your connected repositories and attach it to this
         planning project.
       </p>
@@ -38,7 +38,7 @@ export function RepoSelector({
         <select
           value={selectedFullName}
           onChange={(e) => onSelect(e.target.value)}
-          className="rounded-2xl border border-white/10 bg-[#07101b] px-4 py-3 text-sm text-white outline-none transition focus:border-sky-400/50"
+          className="rounded-2xl border border-border bg-popover px-4 py-3 text-sm text-foreground outline-none transition focus:border-sky-400/50"
         >
           {options.length === 0 ? (
             <option value="">No connected repositories</option>

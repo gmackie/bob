@@ -17,7 +17,7 @@ interface GateDecisionCardProps {
 export function GateDecisionCard({ gates, available }: GateDecisionCardProps) {
   if (!available) {
     return (
-      <div className="rounded-2xl border border-dashed border-white/10 px-4 py-4 text-sm text-white/35">
+      <div className="rounded-2xl border border-dashed border-border px-4 py-4 text-sm text-muted-foreground">
         Gate status unavailable
       </div>
     );
@@ -25,7 +25,7 @@ export function GateDecisionCard({ gates, available }: GateDecisionCardProps) {
 
   if (gates.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-white/10 px-4 py-4 text-sm text-white/35">
+      <div className="rounded-2xl border border-dashed border-border px-4 py-4 text-sm text-muted-foreground">
         No gates configured for this revision.
       </div>
     );
@@ -36,8 +36,8 @@ export function GateDecisionCard({ gates, available }: GateDecisionCardProps) {
   const hasFailed = gates.some((g) => g.status === "failed");
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-4">
-      <div className="text-xs uppercase tracking-[0.18em] text-white/35">
+    <div className="rounded-2xl border border-border bg-card px-4 py-4">
+      <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
         Gate progression
       </div>
 
@@ -47,7 +47,7 @@ export function GateDecisionCard({ gates, available }: GateDecisionCardProps) {
             key={gate.name}
             className="flex items-center justify-between text-sm"
           >
-            <span className="text-white/70">{formatLabel(gate.name)}</span>
+            <span className="text-secondary-foreground">{formatLabel(gate.name)}</span>
             <Badge variant={BUILD_COLOR[gate.status] ?? "default"}>
               {formatLabel(gate.status)}
             </Badge>
@@ -55,7 +55,7 @@ export function GateDecisionCard({ gates, available }: GateDecisionCardProps) {
         ))}
       </div>
 
-      <div className="mt-3 text-xs text-white/45">
+      <div className="mt-3 text-xs text-muted-foreground">
         {allPassed
           ? "All gates passed — ready for production."
           : hasFailed

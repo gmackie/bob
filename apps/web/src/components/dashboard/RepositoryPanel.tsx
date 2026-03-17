@@ -202,21 +202,21 @@ export function RepositoryPanel({ projectId }: RepositoryPanelProps) {
   };
 
   return (
-    <section className="rounded-[1.75rem] border border-white/10 bg-[#0d1524] p-6 text-white">
+    <section className="rounded-[1.75rem] border border-border bg-popover p-6 text-foreground">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <div className="text-xs uppercase tracking-[0.28em] text-white/35">
+          <div className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
             Execution
           </div>
-          <h2 className="mt-2 text-2xl font-semibold">Repository controls</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">
+          <h2 className="mt-2 font-display text-2xl font-semibold">Repository controls</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-secondary-foreground">
             Map a repository to this project, create worktrees, and jump into the
             execution surfaces without reopening the legacy dashboard.
           </p>
         </div>
         <button
           type="button"
-          className="rounded-full border border-white/15 px-4 py-2 text-sm text-white/80 transition hover:border-white/30 hover:text-white"
+          className="rounded-full border border-border px-4 py-2 text-sm text-foreground transition hover:border-muted-foreground/30 hover:text-foreground"
           onClick={() => void refresh()}
           disabled={loading || submitting}
         >
@@ -231,7 +231,7 @@ export function RepositoryPanel({ projectId }: RepositoryPanelProps) {
       ) : null}
 
       {loading ? (
-        <div className="mt-6 rounded-2xl border border-dashed border-white/15 px-4 py-6 text-sm text-white/55">
+        <div className="mt-6 rounded-2xl border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
           Loading repository controls…
         </div>
       ) : mappedRepository ? (
@@ -251,16 +251,16 @@ export function RepositoryPanel({ projectId }: RepositoryPanelProps) {
           />
 
           {/* Worktrees list */}
-          <div className="rounded-2xl border border-white/10 bg-black/15 p-5">
+          <div className="rounded-2xl border border-border bg-secondary p-5">
             <div className="flex items-center justify-between gap-4">
-              <div className="text-sm font-medium text-white">Worktrees</div>
-              <div className="text-sm text-white/45">
+              <div className="text-sm font-medium text-foreground">Worktrees</div>
+              <div className="text-sm text-muted-foreground">
                 {mappedRepository.worktrees.length} active
               </div>
             </div>
 
             {mappedRepository.worktrees.length === 0 ? (
-              <div className="mt-4 rounded-2xl border border-dashed border-white/15 px-4 py-6 text-sm text-white/55">
+              <div className="mt-4 rounded-2xl border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
                 No worktrees yet for this project repository.
               </div>
             ) : (
@@ -273,16 +273,16 @@ export function RepositoryPanel({ projectId }: RepositoryPanelProps) {
                   return (
                     <div
                       key={worktree.id}
-                      className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#07101b] px-4 py-4 md:flex-row md:items-center md:justify-between"
+                      className="flex flex-col gap-3 rounded-2xl border border-border bg-background px-4 py-4 md:flex-row md:items-center md:justify-between"
                     >
                       <div>
-                        <div className="text-sm font-medium text-white">
+                        <div className="text-sm font-medium text-foreground">
                           {worktree.branch.replace(/^refs\/heads\//, "")}
                         </div>
-                        <div className="mt-1 text-sm text-white/55">
+                        <div className="mt-1 text-sm text-muted-foreground">
                           {worktree.path}
                         </div>
-                        <div className="mt-2 text-xs text-white/40">
+                        <div className="mt-2 text-xs text-muted-foreground">
                           Instance: {instance?.status ?? "not started"}
                         </div>
                       </div>
@@ -290,7 +290,7 @@ export function RepositoryPanel({ projectId }: RepositoryPanelProps) {
                       <div className="flex flex-wrap gap-3">
                         <Link
                           href={`/repositories/${mappedRepository.id}`}
-                          className="rounded-full border border-white/15 px-4 py-2 text-sm text-white/80 transition hover:border-white/30 hover:text-white"
+                          className="rounded-full border border-border px-4 py-2 text-sm text-foreground transition hover:border-muted-foreground/30 hover:text-foreground"
                         >
                           Open
                         </Link>

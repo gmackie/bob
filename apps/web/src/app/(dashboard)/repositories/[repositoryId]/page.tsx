@@ -59,7 +59,7 @@ export default async function RepositoryPage({ params }: RepositoryPageProps) {
 
         <div className="mt-8 space-y-8">
           <section>
-            <h2 className="mb-4 text-xl font-semibold">Pull Requests</h2>
+            <h2 className="mb-4 font-display text-xl font-semibold">Pull Requests</h2>
             {pullRequests.length === 0 ? (
               <p className="text-gray-500">
                 No pull requests found. Push a branch and create a PR to get

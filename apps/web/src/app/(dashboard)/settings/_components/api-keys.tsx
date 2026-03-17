@@ -104,7 +104,7 @@ export function ApiKeysSection() {
   if (isLoading) {
     return (
       <section className="rounded-lg border p-6">
-        <h2 className="mb-4 text-xl font-semibold">API Keys</h2>
+        <h2 className="mb-4 font-display text-xl font-semibold">API Keys</h2>
         <div className="animate-pulse space-y-4">
           <div className="bg-muted h-16 rounded" />
           <div className="bg-muted h-16 rounded" />
@@ -116,7 +116,7 @@ export function ApiKeysSection() {
   return (
     <section className="rounded-lg border p-6">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-xl font-semibold">API Keys</h2>
+        <h2 className="font-display text-xl font-semibold">API Keys</h2>
         {!showCreateForm && (
           <Button onClick={() => setShowCreateForm(true)} size="sm">
             Create New Key

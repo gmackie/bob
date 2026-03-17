@@ -65,27 +65,27 @@ export function WorkItemDetailCard({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-3xl border border-white/10 bg-white/[0.05] p-6">
+      <section className="rounded-3xl border border-border bg-accent p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="text-xs uppercase tracking-[0.24em] text-white/45">
+            <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
               {workItem.identifier}
             </div>
-            <h1 className="mt-2 text-3xl font-semibold text-white">
+            <h1 className="mt-2 font-display text-3xl font-semibold text-foreground">
               {workItem.title}
             </h1>
           </div>
           {workItem.project ? (
             <Link
               href={`/projects/${workItem.project.id}`}
-              className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/60 transition hover:border-white/20 hover:text-white"
+              className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground transition hover:border-muted-foreground/30 hover:text-foreground"
             >
               {workItem.project.key} · {workItem.project.name}
             </Link>
           ) : null}
         </div>
 
-        <div className="mt-5 flex flex-wrap gap-3 text-sm text-white/55">
+        <div className="mt-5 flex flex-wrap gap-3 text-sm text-muted-foreground">
           <span>{workItem.kind}</span>
           <span>{workItem.status.replace(/_/g, " ")}</span>
           <span>{childCount} child item{childCount === 1 ? "" : "s"}</span>
@@ -93,8 +93,8 @@ export function WorkItemDetailCard({
         </div>
 
         <div className="mt-5 space-y-2">
-          <div className="text-sm font-medium text-white">{semanticCopy.summary}</div>
-          <div className="text-sm text-white/55">{semanticCopy.hint}</div>
+          <div className="text-sm font-medium text-foreground">{semanticCopy.summary}</div>
+          <div className="text-sm text-muted-foreground">{semanticCopy.hint}</div>
         </div>
 
         <div className="mt-5">
@@ -110,27 +110,27 @@ export function WorkItemDetailCard({
           )}
         </div>
 
-        <p className="mt-6 max-w-3xl whitespace-pre-wrap text-sm leading-7 text-white/72">
+        <p className="mt-6 max-w-3xl whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
           {workItem.description?.trim() || "No description yet."}
         </p>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.4fr_0.8fr]">
-        <div className="rounded-3xl border border-white/10 bg-black/20 p-6">
-          <h2 className="text-lg font-semibold text-white">Discussion</h2>
+        <div className="rounded-3xl border border-border bg-secondary p-6">
+          <h2 className="font-display text-lg font-semibold text-foreground">Discussion</h2>
           <div className="mt-4 space-y-4">
             {comments.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-white/35">
+              <div className="rounded-2xl border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
                 No comments yet.
               </div>
             ) : (
               comments.map((comment) => (
                 <div
                   key={comment.id}
-                  className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-4"
+                  className="rounded-2xl border border-border bg-accent px-4 py-4"
                 >
-                  <div className="text-xs text-white/35">{comment.userId}</div>
-                  <div className="mt-2 whitespace-pre-wrap text-sm text-white/75">
+                  <div className="text-xs text-muted-foreground">{comment.userId}</div>
+                  <div className="mt-2 whitespace-pre-wrap text-sm text-secondary-foreground">
                     {comment.body}
                   </div>
                 </div>
@@ -139,11 +139,11 @@ export function WorkItemDetailCard({
           </div>
         </div>
 
-        <div className="rounded-3xl border border-white/10 bg-black/20 p-6">
-          <h2 className="text-lg font-semibold text-white">Current Artifacts</h2>
+        <div className="rounded-3xl border border-border bg-secondary p-6">
+          <h2 className="font-display text-lg font-semibold text-foreground">Current Artifacts</h2>
           <div className="mt-4 space-y-3">
             {currentArtifacts.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-white/35">
+              <div className="rounded-2xl border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
                 No artifacts attached.
               </div>
             ) : (
@@ -153,12 +153,12 @@ export function WorkItemDetailCard({
                   href={artifact.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="block rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-4 transition hover:border-white/20 hover:bg-white/[0.06]"
+                  className="block rounded-2xl border border-border bg-accent px-4 py-4 transition hover:border-muted-foreground/30 hover:bg-accent"
                 >
-                  <div className="text-xs uppercase tracking-[0.18em] text-white/35">
+                  <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
                     {artifact.artifactRole}
                   </div>
-                  <div className="mt-2 text-sm text-white">
+                  <div className="mt-2 text-sm text-foreground">
                     {artifact.title?.trim() || artifact.url}
                   </div>
                 </a>

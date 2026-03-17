@@ -108,7 +108,7 @@ export function CreateWorkItemDialog({
 
           <div className="mt-4 space-y-4">
             <div>
-              <label className="mb-1.5 block text-sm text-white/60">Title</label>
+              <label className="mb-1.5 block text-sm text-muted-foreground">Title</label>
               <Input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -118,7 +118,7 @@ export function CreateWorkItemDialog({
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm text-white/60">Description</label>
+              <label className="mb-1.5 block text-sm text-muted-foreground">Description</label>
               <Textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
@@ -129,7 +129,7 @@ export function CreateWorkItemDialog({
 
             {!defaultProjectId && projects.length > 0 && (
               <div>
-                <label className="mb-1.5 block text-sm text-white/60">Project</label>
+                <label className="mb-1.5 block text-sm text-muted-foreground">Project</label>
                 <Select value={projectId} onValueChange={setProjectId}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select project" />
@@ -147,7 +147,7 @@ export function CreateWorkItemDialog({
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1.5 block text-sm text-white/60">Status</label>
+                <label className="mb-1.5 block text-sm text-muted-foreground">Status</label>
                 <Select value={status} onValueChange={setStatus}>
                   <SelectTrigger>
                     <SelectValue />
@@ -163,7 +163,7 @@ export function CreateWorkItemDialog({
               </div>
 
               <div>
-                <label className="mb-1.5 block text-sm text-white/60">Priority</label>
+                <label className="mb-1.5 block text-sm text-muted-foreground">Priority</label>
                 <Select value={priority} onValueChange={setPriority}>
                   <SelectTrigger>
                     <SelectValue />

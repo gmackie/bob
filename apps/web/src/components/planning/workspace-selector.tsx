@@ -23,7 +23,7 @@ export function WorkspaceSelector({
 
   if (workspaces.length <= 1) {
     return (
-      <span className="text-sm text-white/50">
+      <span className="text-sm text-muted-foreground">
         {workspaces[0]?.name ?? "Workspace"}
       </span>
     );

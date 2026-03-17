@@ -101,7 +101,7 @@ export function StartPlanningButton({
 
             <div className="mt-4 space-y-4">
               <div>
-                <label className="mb-1.5 block text-sm text-white/60">
+                <label className="mb-1.5 block text-sm text-secondary-foreground">
                   Goal
                 </label>
                 <Textarea
@@ -113,7 +113,7 @@ export function StartPlanningButton({
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm text-white/60">
+                <label className="mb-1.5 block text-sm text-secondary-foreground">
                   Working directory
                 </label>
                 <Input

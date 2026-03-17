@@ -82,23 +82,23 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
     : SIDEBAR_EXPANDED_WIDTH;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#0a0e17]">
+    <div className="flex h-screen overflow-hidden bg-background">
       {/* Sidebar */}
       <aside
-        className="flex shrink-0 flex-col border-r border-white/8 bg-[#0c1120] transition-[width] duration-200"
+        className="flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200"
         style={{ width: sidebarWidth }}
       >
         {/* Logo / brand */}
         <div
           className={cn(
-            "flex h-14 items-center border-b border-white/8 px-4",
+            "flex h-14 items-center border-b border-sidebar-border px-4",
             collapsed && "justify-center px-0",
           )}
         >
           {collapsed ? (
-            <span className="text-lg font-bold text-white">B</span>
+            <span className="font-display text-lg font-bold text-foreground">B</span>
           ) : (
-            <span className="text-sm font-semibold tracking-wide text-white">
+            <span className="font-display text-sm font-semibold tracking-wide text-foreground">
               Bob Builder
             </span>
           )}
@@ -108,12 +108,12 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         <SidebarNav collapsed={collapsed} />
 
         {/* Bottom section */}
-        <div className="border-t border-white/8 px-2 py-2">
+        <div className="border-t border-sidebar-border px-2 py-2">
           {/* Search button */}
           <button
             onClick={openSearch}
             className={cn(
-              "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/50 transition-colors hover:bg-white/5 hover:text-white/80",
+              "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground",
               collapsed && "justify-center px-0",
             )}
             title={collapsed ? "Search (⌘K)" : undefined}
@@ -121,7 +121,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
             <MagnifyingGlassIcon className="size-[15px] shrink-0" />
             {!collapsed && <span>Search</span>}
             {!collapsed && (
-              <kbd className="ml-auto rounded border border-white/10 px-1 py-0.5 text-[10px] text-white/30">
+              <kbd className="ml-auto rounded border border-border px-1 py-0.5 text-[10px] text-muted-foreground">
                 ⌘K
               </kbd>
             )}
@@ -144,7 +144,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
             <button
               onClick={toggle}
               className={cn(
-                "mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/35 transition-colors hover:bg-white/5 hover:text-white/60",
+                "mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground",
                 collapsed && "justify-center px-0",
               )}
               title={collapsed ? "Expand sidebar" : "Collapse sidebar"}

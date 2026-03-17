@@ -81,8 +81,8 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
             className={cn(
               "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
               isActive
-                ? "bg-white/10 text-white"
-                : "text-white/50 hover:bg-white/5 hover:text-white/80",
+                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
               collapsed && "justify-center px-0",
             )}
             title={collapsed ? item.label : undefined}
@@ -90,7 +90,7 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
             <Icon className="size-[15px] shrink-0" />
             {!collapsed && <span>{item.label}</span>}
             {!collapsed && badge !== undefined && badge > 0 && (
-              <span className="ml-auto rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] text-white/60">
+              <span className="ml-auto rounded-full bg-sidebar-accent px-1.5 py-0.5 text-[10px] text-muted-foreground">
                 {badge}
               </span>
             )}
@@ -116,7 +116,7 @@ export function NotificationButton({
     <button
       onClick={onClick}
       className={cn(
-        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-white/50 transition-colors hover:bg-white/5 hover:text-white/80",
+        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         collapsed && "justify-center px-0",
       )}
       title={collapsed ? "Notifications" : undefined}
@@ -129,7 +129,7 @@ export function NotificationButton({
       </span>
       {!collapsed && <span>Notifications</span>}
       {!collapsed && unreadCount > 0 && (
-        <span className="ml-auto rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] text-white/60">
+        <span className="ml-auto rounded-full bg-sidebar-accent px-1.5 py-0.5 text-[10px] text-muted-foreground">
           {unreadCount}
         </span>
       )}

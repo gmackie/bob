@@ -69,35 +69,35 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       <div className="fixed inset-0 z-50 bg-black/60" onClick={onClose} />
 
       {/* Palette */}
-      <div className="fixed left-1/2 top-[20%] z-50 w-full max-w-lg -translate-x-1/2 rounded-2xl border border-white/10 bg-[#0c1120] shadow-2xl">
-        <div className="flex items-center gap-3 border-b border-white/10 px-4 py-3">
-          <MagnifyingGlassIcon className="size-4 text-white/40" />
+      <div className="fixed left-1/2 top-[20%] z-50 w-full max-w-lg -translate-x-1/2 rounded-2xl border border-border bg-popover shadow-2xl">
+        <div className="flex items-center gap-3 border-b border-border px-4 py-3">
+          <MagnifyingGlassIcon className="size-4 text-muted-foreground" />
           <input
             ref={inputRef}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search work items..."
-            className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/35"
+            className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
             onKeyDown={(e) => {
               if (e.key === "Escape") onClose();
             }}
           />
-          <kbd className="rounded border border-white/10 px-1.5 py-0.5 text-[10px] text-white/30">
+          <kbd className="rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
             ESC
           </kbd>
         </div>
 
         <div className="max-h-80 overflow-y-auto p-2">
           {debouncedSearch.length < 2 ? (
-            <div className="px-3 py-6 text-center text-sm text-white/35">
+            <div className="px-3 py-6 text-center text-sm text-muted-foreground">
               Type to search work items...
             </div>
           ) : isFetching ? (
-            <div className="px-3 py-6 text-center text-sm text-white/35">
+            <div className="px-3 py-6 text-center text-sm text-muted-foreground">
               Searching...
             </div>
           ) : results.length === 0 ? (
-            <div className="px-3 py-6 text-center text-sm text-white/35">
+            <div className="px-3 py-6 text-center text-sm text-muted-foreground">
               No results found.
             </div>
           ) : (
@@ -106,7 +106,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                 key={item.id}
                 href={`/work-items/${item.id}`}
                 onClick={handleSelect}
-                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-white/5"
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-accent"
               >
                 <Badge
                   variant={KIND_COLOR[item.kind] ?? "default"}
@@ -114,10 +114,10 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                 >
                   {item.kind}
                 </Badge>
-                <span className="shrink-0 text-[11px] text-white/40">
+                <span className="shrink-0 text-[11px] text-muted-foreground">
                   {item.identifier}
                 </span>
-                <span className="truncate text-white/80">{item.title}</span>
+                <span className="truncate text-foreground">{item.title}</span>
               </Link>
             ))
           )}

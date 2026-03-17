@@ -78,10 +78,10 @@ export function WorkItemDetailInteractive({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-3xl border border-white/10 bg-white/[0.05] p-6">
+      <section className="rounded-3xl border border-border bg-accent p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex-1">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.24em] text-white/45">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.24em] text-muted-foreground">
               {workItem.identifier}
               <Badge variant={KIND_COLOR[workItem.kind] ?? "default"}>
                 {formatLabel(workItem.kind)}
@@ -100,7 +100,7 @@ export function WorkItemDetailInteractive({
           {workItem.project ? (
             <Link
               href={`/projects/${workItem.project.id}`}
-              className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/60 transition hover:border-white/20 hover:text-white"
+              className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground transition hover:border-muted-foreground/30 hover:text-foreground"
             >
               {workItem.project.key} · {workItem.project.name}
             </Link>
@@ -122,10 +122,10 @@ export function WorkItemDetailInteractive({
             }
             disabled={isPending}
           />
-          <span className="text-sm text-white/45">
+          <span className="text-sm text-muted-foreground">
             {childCount} child item{childCount === 1 ? "" : "s"}
           </span>
-          <span className="text-sm text-white/45">
+          <span className="text-sm text-muted-foreground">
             {comments.length} comments
           </span>
         </div>
@@ -161,26 +161,26 @@ export function WorkItemDetailInteractive({
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.4fr_0.8fr]">
-        <div className="rounded-3xl border border-white/10 bg-black/20 p-6">
-          <h2 className="text-lg font-semibold text-white">Discussion</h2>
+        <div className="rounded-3xl border border-border bg-secondary p-6">
+          <h2 className="font-display text-lg font-semibold text-foreground">Discussion</h2>
           <div className="mt-4 space-y-4">
             {comments.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-white/35">
+              <div className="rounded-2xl border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
                 No comments yet.
               </div>
             ) : (
               comments.map((comment) => (
                 <div
                   key={comment.id}
-                  className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-4"
+                  className="rounded-2xl border border-border bg-accent px-4 py-4"
                 >
-                  <div className="flex items-center gap-2 text-xs text-white/35">
-                    <span className="font-medium text-white/50">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="font-medium text-muted-foreground">
                       {formatUserId(comment.userId)}
                     </span>
                     <span>{formatRelativeTime(comment.createdAt)}</span>
                   </div>
-                  <div className="mt-2 whitespace-pre-wrap text-sm text-white/75">
+                  <div className="mt-2 whitespace-pre-wrap text-sm text-secondary-foreground">
                     {comment.body}
                   </div>
                 </div>
@@ -190,11 +190,11 @@ export function WorkItemDetailInteractive({
           </div>
         </div>
 
-        <div className="rounded-3xl border border-white/10 bg-black/20 p-6">
-          <h2 className="text-lg font-semibold text-white">Current Artifacts</h2>
+        <div className="rounded-3xl border border-border bg-secondary p-6">
+          <h2 className="font-display text-lg font-semibold text-foreground">Current Artifacts</h2>
           <div className="mt-4 space-y-3">
             {currentArtifacts.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-white/35">
+              <div className="rounded-2xl border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
                 No artifacts attached.
               </div>
             ) : (
@@ -204,12 +204,12 @@ export function WorkItemDetailInteractive({
                   href={artifact.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="block rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-4 transition hover:border-white/20 hover:bg-white/[0.06]"
+                  className="block rounded-2xl border border-border bg-accent px-4 py-4 transition hover:border-muted-foreground/30 hover:bg-accent"
                 >
-                  <div className="text-xs uppercase tracking-[0.18em] text-white/35">
+                  <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
                     {artifact.artifactRole}
                   </div>
-                  <div className="mt-2 text-sm text-white">
+                  <div className="mt-2 text-sm text-foreground">
                     {artifact.title?.trim() || artifact.url}
                   </div>
                 </a>
@@ -255,9 +255,9 @@ function ForgeGraphSection({ taskId }: { taskId: string }) {
 
   if (!data || data.length === 0) {
     return (
-      <div className="rounded-3xl border border-white/10 bg-black/20 p-6">
-        <h2 className="text-lg font-semibold text-white">Build & Deploy</h2>
-        <div className="mt-4 rounded-2xl border border-dashed border-white/10 px-4 py-6 text-center text-sm text-white/35">
+      <div className="rounded-3xl border border-border bg-secondary p-6">
+        <h2 className="font-display text-lg font-semibold text-foreground">Build & Deploy</h2>
+        <div className="mt-4 rounded-2xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
           No revisions linked to this task.
         </div>
       </div>
@@ -267,8 +267,8 @@ function ForgeGraphSection({ taskId }: { taskId: string }) {
   const latest = data[0]!;
 
   return (
-    <div className="rounded-3xl border border-white/10 bg-black/20 p-6">
-      <h2 className="text-lg font-semibold text-white">Build & Deploy</h2>
+    <div className="rounded-3xl border border-border bg-secondary p-6">
+      <h2 className="font-display text-lg font-semibold text-foreground">Build & Deploy</h2>
       <div className="mt-4 space-y-5">
         <RevisionStatusBar
           gates={latest.gates ?? []}
@@ -278,14 +278,14 @@ function ForgeGraphSection({ taskId }: { taskId: string }) {
 
         {builds && builds.length > 0 && (
           <div>
-            <h3 className="mb-2 text-sm font-medium text-white/60">Builds</h3>
+            <h3 className="mb-2 text-sm font-medium text-muted-foreground">Builds</h3>
             <BuildHistory builds={builds} />
           </div>
         )}
 
         {deployments && deployments.length > 0 && (
           <div>
-            <h3 className="mb-2 text-sm font-medium text-white/60">
+            <h3 className="mb-2 text-sm font-medium text-muted-foreground">
               Deployments
             </h3>
             <DeploymentStatus deployments={deployments} />

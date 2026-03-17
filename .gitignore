@@ -87,3 +87,4 @@ session-ses_*.md
 .claude/skills/
 skills/
 skills-lock.json
+.gstack/

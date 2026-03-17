@@ -25,7 +25,7 @@ export function DescriptionEditor({
       {({ value: v, onClick }) => (
         <div
           onClick={onClick}
-          className="cursor-pointer whitespace-pre-wrap text-sm leading-7 text-white/68 transition-colors hover:text-white/80"
+          className="cursor-pointer whitespace-pre-wrap text-sm leading-7 text-muted-foreground transition-colors hover:text-foreground"
           role="button"
           tabIndex={0}
           onKeyDown={(e) => {
@@ -33,7 +33,7 @@ export function DescriptionEditor({
           }}
         >
           {v || (
-            <span className="text-white/35">Add a description...</span>
+            <span className="text-muted-foreground">Add a description...</span>
           )}
         </div>
       )}

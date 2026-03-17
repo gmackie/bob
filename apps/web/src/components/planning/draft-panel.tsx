@@ -80,7 +80,7 @@ export function DraftPanel({ sessionId, expanded = false }: DraftPanelProps) {
 
   if (isLoading) {
     return (
-      <div className="px-4 py-3 text-sm text-white/35">Loading drafts...</div>
+      <div className="px-4 py-3 text-sm text-muted-foreground">Loading drafts...</div>
     );
   }
 
@@ -90,7 +90,7 @@ export function DraftPanel({ sessionId, expanded = false }: DraftPanelProps) {
 
   if (activeDrafts.length === 0) {
     return (
-      <div className="px-4 py-3 text-center text-sm text-white/35">
+      <div className="px-4 py-3 text-center text-sm text-muted-foreground">
         No draft tasks yet. The planning agent will create them as you discuss.
       </div>
     );
@@ -111,12 +111,12 @@ export function DraftPanel({ sessionId, expanded = false }: DraftPanelProps) {
           return (
             <div
               key={draft.id}
-              className="group rounded-lg border border-white/8 bg-white/[0.02] px-3 py-2.5"
+              className="group rounded-lg border border-border bg-card px-3 py-2.5"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="truncate text-sm font-medium text-white/85">
+                    <span className="truncate text-sm font-medium text-foreground">
                       {draft.title}
                     </span>
                   </div>
@@ -137,7 +137,7 @@ export function DraftPanel({ sessionId, expanded = false }: DraftPanelProps) {
                     )}
                   </div>
                   {draft.description && (
-                    <p className="mt-1.5 text-xs leading-relaxed text-white/45">
+                    <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
                       {expanded
                         ? draft.description
                         : draft.description.length > 120
@@ -154,7 +154,7 @@ export function DraftPanel({ sessionId, expanded = false }: DraftPanelProps) {
                 <button
                   onClick={() => removeDraft.mutate({ id: draft.id })}
                   disabled={removeDraft.isPending}
-                  className="shrink-0 rounded p-1 text-white/20 opacity-0 transition-opacity hover:bg-white/5 hover:text-white/50 group-hover:opacity-100"
+                  className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100"
                   title="Remove draft"
                 >
                   <Cross1Icon className="size-3" />
@@ -166,8 +166,8 @@ export function DraftPanel({ sessionId, expanded = false }: DraftPanelProps) {
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between border-t border-white/8 px-1 pt-2.5">
-        <span className="text-xs text-white/40">
+      <div className="flex items-center justify-between border-t border-border px-1 pt-2.5">
+        <span className="text-xs text-muted-foreground">
           {activeDrafts.length} draft{activeDrafts.length === 1 ? "" : "s"}
         </span>
         <Button

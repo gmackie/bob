@@ -15,19 +15,19 @@ export function EditableTitle({ value, onSave, disabled }: EditableTitleProps) {
       onSave={onSave}
       disabled={disabled}
       placeholder="Untitled"
-      inputClassName="text-2xl font-semibold"
+      inputClassName="font-display text-2xl font-semibold"
     >
       {({ value: v, onClick }) => (
         <h1
           onClick={onClick}
-          className="cursor-pointer text-2xl font-semibold text-white transition-colors hover:text-white/80"
+          className="cursor-pointer font-display text-2xl font-semibold text-foreground transition-colors hover:text-foreground"
           role="button"
           tabIndex={0}
           onKeyDown={(e) => {
             if (e.key === "Enter") onClick();
           }}
         >
-          {v || <span className="text-white/35">Untitled</span>}
+          {v || <span className="text-muted-foreground">Untitled</span>}
         </h1>
       )}
     </InlineEditable>

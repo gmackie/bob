@@ -44,7 +44,7 @@ export function RepositoryHeader({ repository }: RepositoryHeaderProps) {
     <div className="flex items-start justify-between">
       <div>
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold">{repository.name}</h1>
+          <h1 className="font-display text-2xl font-bold">{repository.name}</h1>
           {hasRemote && (
             <span
               className={cn(

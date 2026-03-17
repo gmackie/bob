@@ -113,7 +113,7 @@ export function FilterableBoard({ items, projects }: BoardFilterBarProps) {
               setKindFilter(null);
               setProjectFilter(null);
             }}
-            className="text-xs text-white/40 transition-colors hover:text-white/70"
+            className="text-xs text-muted-foreground transition-colors hover:text-foreground"
           >
             Clear
           </button>

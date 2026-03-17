@@ -52,7 +52,7 @@ export function PreferencesSection() {
   if (isLoading) {
     return (
       <section className="rounded-lg border p-6">
-        <h2 className="mb-4 text-xl font-semibold">Preferences</h2>
+        <h2 className="mb-4 font-display text-xl font-semibold">Preferences</h2>
         <div className="animate-pulse space-y-4">
           <div className="bg-muted h-10 rounded" />
           <div className="bg-muted h-10 rounded" />
@@ -63,7 +63,7 @@ export function PreferencesSection() {
 
   return (
     <section className="rounded-lg border p-6">
-      <h2 className="mb-4 text-xl font-semibold">Preferences</h2>
+      <h2 className="mb-4 font-display text-xl font-semibold">Preferences</h2>
 
       <div className="space-y-6">
         <div>

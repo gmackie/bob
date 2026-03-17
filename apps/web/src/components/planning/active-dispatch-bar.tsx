@@ -39,9 +39,9 @@ export function ActiveDispatchBar() {
     <div className="mb-4 flex items-center justify-between rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-2.5">
       <div className="flex items-center gap-2">
         <span className="size-2 rounded-full bg-blue-400 animate-pulse" />
-        <span className="text-sm text-white/80">
+        <span className="text-sm text-foreground">
           Dispatching:{" "}
-          <span className="text-white">
+          <span className="text-foreground">
             {batch.completedTasks}/{batch.totalTasks}
           </span>{" "}
           complete

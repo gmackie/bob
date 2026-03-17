@@ -57,17 +57,17 @@ export function WorkItemBoard({ items }: WorkItemBoardProps) {
         return (
           <section
             key={column.key}
-            className="rounded-2xl border border-white/10 bg-black/20 p-4"
+            className="rounded-2xl border border-border bg-secondary p-4"
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-white">{column.title}</h3>
-              <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-white/60">
+              <h3 className="text-sm font-semibold text-foreground">{column.title}</h3>
+              <span className="rounded-full bg-accent px-2 py-0.5 text-xs text-muted-foreground">
                 {columnItems.length}
               </span>
             </div>
             <div className="mt-4 space-y-3">
               {columnItems.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-white/10 px-3 py-6 text-center text-xs text-white/35">
+                <div className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
                   No items
                 </div>
               ) : (
@@ -82,12 +82,12 @@ export function WorkItemBoard({ items }: WorkItemBoardProps) {
                     <Link
                       key={item.id}
                       href={`/work-items/${item.id}`}
-                      className={`block rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 transition hover:border-white/20 hover:bg-white/[0.06] ${
+                      className={`block rounded-xl border border-border bg-card px-3 py-3 transition hover:border-muted-foreground/30 hover:shadow-sm ${
                         priorityBorder ? `border-l-2 ${priorityBorder}` : ""
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+                        <span className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                           {boardItem.identifier}
                         </span>
                         <Badge
@@ -97,7 +97,7 @@ export function WorkItemBoard({ items }: WorkItemBoardProps) {
                           {boardItem.kind}
                         </Badge>
                       </div>
-                      <div className="mt-2 text-sm font-medium text-white">
+                      <div className="mt-2 text-sm font-medium text-foreground">
                         {item.title}
                       </div>
                       {boardItem.dispatchStatus && (
@@ -111,7 +111,7 @@ export function WorkItemBoard({ items }: WorkItemBoardProps) {
                             title={`Dispatch: ${boardItem.dispatchStatus}`}
                           />
                           {boardItem.dispatchAgent && (
-                            <span className="text-[10px] text-white/40">
+                            <span className="text-[10px] text-muted-foreground">
                               {boardItem.dispatchAgent}
                             </span>
                           )}

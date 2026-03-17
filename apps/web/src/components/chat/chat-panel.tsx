@@ -39,11 +39,11 @@ export function ChatPanel() {
 
   return (
     <aside
-      className="flex shrink-0 flex-col border-l border-white/8 bg-[#0c1120]"
+      className="flex shrink-0 flex-col border-l border-border bg-popover"
       style={{ width: PANEL_WIDTH }}
     >
       {/* Header */}
-      <div className="flex h-12 items-center justify-between border-b border-white/8 px-4">
+      <div className="flex h-12 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-2 min-w-0">
           <div
             className={cn(
@@ -52,10 +52,10 @@ export function ChatPanel() {
                 ? "bg-emerald-500"
                 : sessionStatus === "error"
                   ? "bg-rose-500"
-                  : "bg-white/20",
+                  : "bg-muted-foreground",
             )}
           />
-          <span className="truncate text-sm font-medium text-white/80">
+          <span className="truncate text-sm font-medium text-foreground">
             {contextLabel ?? title}
           </span>
         </div>
@@ -63,7 +63,7 @@ export function ChatPanel() {
           {sessionId && (
             <Link
               href={`/chat?session=${sessionId}`}
-              className="rounded p-1 text-white/30 transition-colors hover:bg-white/5 hover:text-white/60"
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               title="Open full page"
             >
               <ExternalLinkIcon className="size-3.5" />
@@ -71,7 +71,7 @@ export function ChatPanel() {
           )}
           <button
             onClick={closePanel}
-            className="rounded p-1 text-white/30 transition-colors hover:bg-white/5 hover:text-white/60"
+            className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             title="Close panel"
           >
             <Cross1Icon className="size-3.5" />
@@ -82,7 +82,7 @@ export function ChatPanel() {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto">
         {workflowState?.awaitingInput && (
-          <div className="border-b border-white/8 p-3">
+          <div className="border-b border-border p-3">
             <AwaitingInputCard
               question={workflowState.awaitingInput.question}
               options={workflowState.awaitingInput.options}
@@ -101,7 +101,7 @@ export function ChatPanel() {
             isConnected={isConnected}
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-white/35">
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
             No active session
           </div>
         )}
@@ -109,8 +109,8 @@ export function ChatPanel() {
 
       {/* Draft panel for planning sessions */}
       {isPlanningSession && sessionId && (
-        <div className="border-t border-white/8 px-3 py-3">
-          <div className="mb-2 text-[10px] font-medium uppercase tracking-widest text-white/30">
+        <div className="border-t border-border px-3 py-3">
+          <div className="mb-2 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
             Draft Tasks
           </div>
           <DraftPanel sessionId={sessionId} />
@@ -118,7 +118,7 @@ export function ChatPanel() {
       )}
 
       {/* Input */}
-      <div className="border-t border-white/8">
+      <div className="border-t border-border">
         <InputComposer
           onSend={sendMessage}
           disabled={!canSend || isAwaitingInput}

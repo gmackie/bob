@@ -43,7 +43,7 @@ export function ViewSwitcher({ items, projects }: ViewSwitcherProps) {
     <div>
       {/* View toggle */}
       <div className="mb-4 flex items-center justify-between">
-        <div className="flex rounded-lg border border-white/10 bg-white/[0.03]">
+        <div className="flex rounded-lg border border-border bg-card">
           {VIEW_OPTIONS.map((opt) => (
             <button
               key={opt.key}
@@ -51,8 +51,8 @@ export function ViewSwitcher({ items, projects }: ViewSwitcherProps) {
               className={cn(
                 "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors",
                 view === opt.key
-                  ? "bg-white/10 text-white"
-                  : "text-white/40 hover:text-white/60",
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
                 opt.key === "board" && "rounded-l-lg",
                 opt.key === "timeline" && "rounded-r-lg",
               )}
@@ -70,7 +70,7 @@ export function ViewSwitcher({ items, projects }: ViewSwitcherProps) {
       )}
 
       {view === "graph" && (
-        <div className="rounded-2xl border border-white/10 bg-[#0a0e17]" style={{ height: 600 }}>
+        <div className="rounded-2xl border border-border bg-popover" style={{ height: 600 }}>
           <FlowGraph items={graphItems} />
         </div>
       )}

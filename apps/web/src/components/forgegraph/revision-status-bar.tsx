@@ -25,14 +25,14 @@ export function RevisionStatusBar({
 }: RevisionStatusBarProps) {
   if (gates.length === 0) {
     return (
-      <div className="text-sm text-white/35">No gates configured.</div>
+      <div className="text-sm text-muted-foreground">No gates configured.</div>
     );
   }
 
   return (
     <div>
       {(commitSha || branch) && (
-        <div className="mb-3 flex items-center gap-2 text-xs text-white/40">
+        <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
           {branch && <span className="font-mono">{branch}</span>}
           {commitSha && (
             <span className="font-mono">{commitSha.slice(0, 8)}</span>
@@ -50,7 +50,7 @@ export function RevisionStatusBar({
                     ? "bg-emerald-500/40"
                     : gate.status === "failed"
                       ? "bg-rose-500/40"
-                      : "bg-white/10",
+                      : "bg-accent",
                 )}
               />
             )}

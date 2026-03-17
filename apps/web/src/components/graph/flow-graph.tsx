@@ -153,10 +153,10 @@ export function FlowGraph({
       >
         <Background color="rgba(255,255,255,0.03)" gap={20} />
         <Controls
-          className="!bg-[#0f1729] !border-white/10 !shadow-lg [&>button]:!bg-[#0f1729] [&>button]:!border-white/10 [&>button]:!text-white/50 [&>button:hover]:!bg-white/5"
+          className="!bg-popover !border-border !shadow-lg [&>button]:!bg-popover [&>button]:!border-border [&>button]:!text-muted-foreground [&>button:hover]:!bg-accent"
         />
         <MiniMap
-          className="!bg-[#0a0e17] !border-white/10"
+          className="!bg-background !border-border"
           nodeColor="rgba(255,255,255,0.1)"
           maskColor="rgba(0,0,0,0.6)"
         />

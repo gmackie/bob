@@ -20,13 +20,13 @@ export function AgentLauncher({ onLaunch, disabled }: AgentLauncherProps) {
   const [agentType, setAgentType] = useState<AgentType>("opencode");
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/15 p-5">
+    <div className="rounded-2xl border border-border bg-secondary p-5">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <div className="text-sm font-medium text-white">
+          <div className="text-sm font-medium text-foreground">
             Create a worktree
           </div>
-          <div className="mt-1 text-sm text-white/55">
+          <div className="mt-1 text-sm text-muted-foreground">
             Start an agent instance immediately after creating the branch.
           </div>
         </div>
@@ -37,12 +37,12 @@ export function AgentLauncher({ onLaunch, disabled }: AgentLauncherProps) {
           value={branchName}
           onChange={(e) => setBranchName(e.target.value)}
           placeholder="feature/project-scoped-controls"
-          className="rounded-2xl border border-white/10 bg-[#07101b] px-4 py-3 text-sm text-white outline-none transition focus:border-sky-400/50"
+          className="rounded-2xl border border-border bg-popover px-4 py-3 text-sm text-foreground outline-none transition focus:border-sky-400/50"
         />
         <select
           value={agentType}
           onChange={(e) => setAgentType(e.target.value as AgentType)}
-          className="rounded-2xl border border-white/10 bg-[#07101b] px-4 py-3 text-sm text-white outline-none transition focus:border-sky-400/50"
+          className="rounded-2xl border border-border bg-popover px-4 py-3 text-sm text-foreground outline-none transition focus:border-sky-400/50"
         >
           <option value="opencode">OpenCode</option>
           <option value="codex">Codex</option>

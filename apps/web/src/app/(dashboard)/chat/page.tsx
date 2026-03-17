@@ -115,7 +115,7 @@ function ChatPageSkeleton() {
       <div className="chat-shell">
         <div className="chat-sidebar">
           <div className="chat-sidebarHeader">
-            <div className="h-8 w-20 animate-pulse rounded bg-white/10" />
+            <div className="h-8 w-20 animate-pulse rounded bg-accent" />
           </div>
           <div className="chat-emptyText">Loading sessions…</div>
         </div>

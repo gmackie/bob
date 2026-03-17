@@ -41,14 +41,14 @@ export default async function PlanningPage({
   if (!currentWorkspace) {
     return (
       <main className="mx-auto max-w-6xl px-6 py-12">
-        <div className="rounded-3xl border border-white/10 bg-black/20 px-8 py-12 text-center">
-          <div className="text-xs uppercase tracking-[0.28em] text-white/35">
+        <div className="rounded-3xl border border-border bg-secondary px-8 py-12 text-center">
+          <div className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
             Builder Planning
           </div>
-          <h1 className="mt-4 text-3xl font-semibold text-white">
+          <h1 className="mt-4 font-display text-3xl font-semibold text-foreground">
             No workspace yet
           </h1>
-          <p className="mt-3 text-sm text-white/60">
+          <p className="mt-3 text-sm text-muted-foreground">
             Create your first workspace through the API to unlock projects and work
             items in the merged shell.
           </p>
@@ -67,11 +67,11 @@ export default async function PlanningPage({
     <main className="mx-auto max-w-7xl px-6 py-10">
       <Breadcrumbs items={[{ label: "Planning" }]} className="mb-4" />
 
-      <section className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-[#0e1628] via-[#13243a] to-[#0d111c] px-8 py-8">
+      <section className="rounded-[2rem] border border-border bg-gradient-to-br from-[#0e1628] via-[#13243a] to-[#0d111c] px-8 py-8">
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
             <div className="flex items-center gap-3">
-              <span className="text-xs uppercase tracking-[0.28em] text-white/35">
+              <span className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
                 Builder Planning
               </span>
               {allWorkspaces.length > 1 && (
@@ -81,10 +81,10 @@ export default async function PlanningPage({
                 />
               )}
             </div>
-            <h1 className="mt-3 text-4xl font-semibold text-white">
+            <h1 className="mt-3 font-display text-4xl font-semibold text-foreground">
               {currentWorkspace.name}
             </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/62">
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
               Intake, scope, and execution now live in one shell. Use this view to
               scan active work before opening a task&apos;s execution workspace.
             </p>
@@ -104,7 +104,7 @@ export default async function PlanningPage({
             />
             <Link
               href="/chat"
-              className="rounded-full border border-white/12 px-4 py-2 text-sm text-white/70 transition hover:border-white/20 hover:text-white"
+              className="rounded-full border border-border px-4 py-2 text-sm text-secondary-foreground transition hover:border-muted-foreground/30 hover:text-foreground"
             >
               Open Execution Workspace
             </Link>
@@ -115,15 +115,15 @@ export default async function PlanningPage({
       <section className="mt-8">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <h2 className="text-lg font-semibold text-white">Projects</h2>
+            <h2 className="font-display text-lg font-semibold text-foreground">Projects</h2>
             <CreateProjectButton workspaceId={currentWorkspace.id} />
           </div>
-          <span className="text-sm text-white/45">{projectCards.length} total</span>
+          <span className="text-sm text-muted-foreground">{projectCards.length} total</span>
         </div>
         {projectCards.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-white/10 px-6 py-8 text-center">
-            <div className="text-sm text-white/45">No projects yet.</div>
-            <div className="mt-1 text-xs text-white/30">
+          <div className="rounded-2xl border border-dashed border-border px-6 py-8 text-center">
+            <div className="text-sm text-muted-foreground">No projects yet.</div>
+            <div className="mt-1 text-xs text-muted-foreground">
               Create your first project to start organizing work items.
             </div>
           </div>
@@ -138,7 +138,7 @@ export default async function PlanningPage({
 
       <section className="mt-8">
         <div className="mb-4">
-          <h2 className="text-lg font-semibold text-white">Recent Planning Sessions</h2>
+          <h2 className="font-display text-lg font-semibold text-foreground">Recent Planning Sessions</h2>
         </div>
         <RecentPlans />
       </section>
@@ -146,8 +146,8 @@ export default async function PlanningPage({
       <section className="mt-10">
         <ActiveDispatchBar />
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">Work Board</h2>
-          <span className="text-sm text-white/45">{workItems.length} visible items</span>
+          <h2 className="font-display text-lg font-semibold text-foreground">Work Board</h2>
+          <span className="text-sm text-muted-foreground">{workItems.length} visible items</span>
         </div>
         <ViewSwitcher
           items={workItems.map((item: any) => ({

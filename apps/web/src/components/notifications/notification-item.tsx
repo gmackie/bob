@@ -29,8 +29,8 @@ export function NotificationItem({
   const content = (
     <div
       className={cn(
-        "rounded-lg px-3 py-2.5 transition-colors hover:bg-white/5",
-        !read && "bg-white/[0.03]",
+        "rounded-lg px-3 py-2.5 transition-colors hover:bg-accent",
+        !read && "bg-primary/5",
       )}
     >
       <div className="flex items-start gap-2">
@@ -38,13 +38,13 @@ export function NotificationItem({
           <span className="mt-1.5 size-2 shrink-0 rounded-full bg-blue-500" />
         )}
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium text-white/80">{title}</div>
+          <div className="text-sm font-medium text-foreground">{title}</div>
           {body && (
-            <div className="mt-0.5 truncate text-xs text-white/45">
+            <div className="mt-0.5 truncate text-xs text-muted-foreground">
               {body}
             </div>
           )}
-          <div className="mt-1 text-[10px] text-white/30">
+          <div className="mt-1 text-[10px] text-muted-foreground/70">
             {formatRelativeTime(createdAt)}
           </div>
         </div>
@@ -55,7 +55,7 @@ export function NotificationItem({
               e.stopPropagation();
               onMarkAsRead(id);
             }}
-            className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-white/30 transition-colors hover:bg-white/10 hover:text-white/60"
+            className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
           >
             Read
           </button>

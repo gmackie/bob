@@ -168,7 +168,7 @@ export function DispatchPlan({ batchId }: DispatchPlanProps) {
 
   if (isLoading || !data) {
     return (
-      <div className="px-4 py-3 text-sm text-white/35">
+      <div className="px-4 py-3 text-sm text-muted-foreground">
         Loading dispatch plan...
       </div>
     );
@@ -197,7 +197,7 @@ export function DispatchPlan({ batchId }: DispatchPlanProps) {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-white/90">Dispatch Plan</h1>
+        <h1 className="font-display text-xl font-semibold text-foreground">Dispatch Plan</h1>
         <Badge variant={DISPATCH_STATUS_COLOR[batch.status] ?? "slate"}>
           {formatLabel(batch.status)}
         </Badge>
@@ -215,10 +215,10 @@ export function DispatchPlan({ batchId }: DispatchPlanProps) {
       {isDispatched && (
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-white/60">
+            <span className="text-secondary-foreground">
               {completed}/{total} complete
             </span>
-            <span className="flex items-center gap-3 text-xs text-white/40">
+            <span className="flex items-center gap-3 text-xs text-muted-foreground">
               {running > 0 && (
                 <span className="text-blue-400">{running} running</span>
               )}
@@ -228,7 +228,7 @@ export function DispatchPlan({ batchId }: DispatchPlanProps) {
               )}
             </span>
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-white/5">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-accent">
             <div
               className="h-full rounded-full bg-emerald-500 transition-all duration-500"
               style={{ width: `${progressPct}%` }}
@@ -238,23 +238,23 @@ export function DispatchPlan({ batchId }: DispatchPlanProps) {
       )}
 
       {/* Task table */}
-      <div className="overflow-hidden rounded-lg border border-white/8">
+      <div className="overflow-hidden rounded-lg border border-border">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-white/8 bg-white/[0.02]">
-              <th className="px-4 py-2.5 text-left font-medium text-white/50">
+            <tr className="border-b border-border bg-card">
+              <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">
                 Task
               </th>
-              <th className="px-4 py-2.5 text-left font-medium text-white/50">
+              <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">
                 Agent
               </th>
-              <th className="px-4 py-2.5 text-left font-medium text-white/50">
+              <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">
                 Status
               </th>
-              <th className="px-4 py-2.5 text-left font-medium text-white/50">
+              <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">
                 Pipeline
               </th>
-              <th className="px-4 py-2.5 text-left font-medium text-white/50">
+              <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">
                 Blocked By
               </th>
             </tr>
@@ -269,15 +269,15 @@ export function DispatchPlan({ batchId }: DispatchPlanProps) {
               return (
                 <tr
                   key={item.id}
-                  className="border-b border-white/5 last:border-b-0"
+                  className="border-b border-border/50 last:border-b-0"
                 >
                   {/* Task */}
                   <td className="px-4 py-2.5">
                     <div className="flex flex-col">
-                      <span className="text-xs text-white/40">
+                      <span className="text-xs text-muted-foreground">
                         {item.planningTaskIdentifier}
                       </span>
-                      <span className="text-white/80">{item.title}</span>
+                      <span className="text-foreground">{item.title}</span>
                     </div>
                   </td>
 
@@ -340,7 +340,7 @@ export function DispatchPlan({ batchId }: DispatchPlanProps) {
                   </td>
 
                   {/* Blocked By */}
-                  <td className="px-4 py-2.5 text-xs text-white/40">
+                  <td className="px-4 py-2.5 text-xs text-muted-foreground">
                     {blockerLabels.length > 0
                       ? blockerLabels.join(", ")
                       : "\u2014"}
@@ -354,11 +354,11 @@ export function DispatchPlan({ batchId }: DispatchPlanProps) {
 
       {/* Controls */}
       {!isCompleted && (
-        <div className="flex items-center justify-between border-t border-white/8 pt-4">
+        <div className="flex items-center justify-between border-t border-border pt-4">
           <div className="flex items-center gap-3">
             <label
               htmlFor="concurrency"
-              className="text-sm text-white/50"
+              className="text-sm text-muted-foreground"
             >
               Concurrency
             </label>
@@ -377,7 +377,7 @@ export function DispatchPlan({ batchId }: DispatchPlanProps) {
                   });
                 }
               }}
-              className="h-8 w-16 rounded-md border border-white/10 bg-white/[0.03] px-2 text-center text-sm text-white/80 focus:border-white/20 focus:outline-none"
+              className="h-8 w-16 rounded-md border border-border bg-card px-2 text-center text-sm text-foreground focus:border-muted-foreground/30 focus:outline-none"
             />
           </div>
           <Button
@@ -413,7 +413,7 @@ function PipelineCell({
   isApproving: boolean;
   isRetrying: boolean;
 }) {
-  if (!pipelineState) return <span className="text-xs text-white/25">{"\u2014"}</span>;
+  if (!pipelineState) return <span className="text-xs text-muted-foreground">{"\u2014"}</span>;
 
   const variant = PIPELINE_STATE_COLOR[pipelineState] ?? "slate";
   const isPulsing = PULSING_PIPELINE_STATES.has(pipelineState) || pipelineState === "building";
@@ -477,7 +477,7 @@ function ElapsedTimer({ since }: { since: string | Date }) {
   if (elapsed < 0) return null;
 
   return (
-    <span className="text-[10px] tabular-nums text-white/40">
+    <span className="text-[10px] tabular-nums text-muted-foreground">
       {formatDuration(elapsed)}
     </span>
   );

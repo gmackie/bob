@@ -40,16 +40,16 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
         className="mb-4"
       />
 
-      <section className="mt-4 rounded-[2rem] border border-white/10 bg-gradient-to-br from-[#151f33] via-[#111827] to-[#101522] px-8 py-8">
+      <section className="mt-4 rounded-[2rem] border border-border bg-gradient-to-br from-[#151f33] via-[#111827] to-[#101522] px-8 py-8">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <div className="text-xs uppercase tracking-[0.24em] text-white/35">
+            <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
               {project.key}
             </div>
-            <h1 className="mt-3 text-4xl font-semibold text-white">
+            <h1 className="mt-3 font-display text-4xl font-semibold text-foreground">
               {project.name}
             </h1>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-white/62">
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
               {project.description?.trim() || "No project description yet."}
             </p>
           </div>
@@ -66,7 +66,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           </div>
         </div>
 
-        <div className="mt-6 flex flex-wrap gap-3 text-sm text-white/55">
+        <div className="mt-6 flex flex-wrap gap-3 text-sm text-muted-foreground">
           <span>{counts.issues} issues</span>
           <span>{counts.tasks} tasks</span>
           <span>{counts.epics} epics</span>
@@ -82,10 +82,10 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
       <section className="mt-10">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <h2 className="text-lg font-semibold text-white">Project Board</h2>
+            <h2 className="font-display text-lg font-semibold text-foreground">Project Board</h2>
             <CreateWorkItemButton projectId={project.id} />
           </div>
-          <span className="text-sm text-white/45">{workItems.length} items</span>
+          <span className="text-sm text-muted-foreground">{workItems.length} items</span>
         </div>
         <WorkItemBoard
           items={workItems.map((item: any) => ({

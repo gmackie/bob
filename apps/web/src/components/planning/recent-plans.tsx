@@ -42,7 +42,7 @@ export function RecentPlans() {
         {Array.from({ length: 3 }).map((_, i) => (
           <div
             key={i}
-            className="h-10 rounded-lg bg-white/[0.03]"
+            className="h-10 rounded-lg bg-card"
           />
         ))}
       </div>
@@ -51,9 +51,9 @@ export function RecentPlans() {
 
   if (!sessions || sessions.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-white/10 px-6 py-6 text-center">
-        <div className="text-sm text-white/45">No planning sessions yet.</div>
-        <div className="mt-1 text-xs text-white/30">
+      <div className="rounded-2xl border border-dashed border-border px-6 py-6 text-center">
+        <div className="text-sm text-muted-foreground">No planning sessions yet.</div>
+        <div className="mt-1 text-xs text-muted-foreground">
           Start a planning session to break goals into actionable tasks.
         </div>
       </div>
@@ -66,7 +66,7 @@ export function RecentPlans() {
         <li key={session.id}>
           <button
             type="button"
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-white/[0.05]"
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-accent"
             onClick={() =>
               openPanel({
                 sessionId: session.id,
@@ -74,7 +74,7 @@ export function RecentPlans() {
               })
             }
           >
-            <span className="min-w-0 flex-1 truncate text-sm text-white/80">
+            <span className="min-w-0 flex-1 truncate text-sm text-foreground">
               {session.title ?? "Untitled session"}
             </span>
             <Badge
@@ -83,7 +83,7 @@ export function RecentPlans() {
             >
               {session.status}
             </Badge>
-            <span className="shrink-0 text-xs text-white/35">
+            <span className="shrink-0 text-xs text-muted-foreground">
               {formatRelativeDate(new Date(session.createdAt))}
             </span>
           </button>

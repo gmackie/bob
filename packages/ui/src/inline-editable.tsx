@@ -105,7 +105,7 @@ export function InlineEditable({
                 onKeyDown={handleKeyDown}
                 disabled={saving}
                 className={cn(
-                  "w-full rounded-lg border border-white/20 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none focus:border-white/30",
+                  "w-full rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground outline-none focus:border-ring",
                   saving && "opacity-50",
                   inputClassName,
                 )}
@@ -119,7 +119,7 @@ export function InlineEditable({
                 onKeyDown={handleKeyDown}
                 disabled={saving}
                 className={cn(
-                  "w-full rounded-lg border border-white/20 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none focus:border-white/30",
+                  "w-full rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground outline-none focus:border-ring",
                   saving && "opacity-50",
                   inputClassName,
                 )}
@@ -137,7 +137,7 @@ export function InlineEditable({
         onClick={startEditing}
         disabled={disabled}
         className={cn(
-          "cursor-pointer rounded px-1 py-0.5 text-left transition-colors hover:bg-white/5",
+          "cursor-pointer rounded px-1 py-0.5 text-left transition-colors hover:bg-accent",
           disabled && "cursor-default",
           className,
         )}
@@ -161,7 +161,7 @@ export function InlineEditable({
           disabled={saving}
           placeholder={placeholder}
           className={cn(
-            "w-full rounded-lg border border-white/20 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none focus:border-white/30",
+            "w-full rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground outline-none focus:border-ring",
             saving && "opacity-50",
             inputClassName,
           )}
@@ -176,7 +176,7 @@ export function InlineEditable({
           disabled={saving}
           placeholder={placeholder}
           className={cn(
-            "w-full rounded-lg border border-white/20 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none focus:border-white/30",
+            "w-full rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground outline-none focus:border-ring",
             saving && "opacity-50",
             inputClassName,
           )}

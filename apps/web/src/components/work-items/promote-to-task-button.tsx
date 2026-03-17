@@ -33,7 +33,7 @@ export function PromoteToTaskButton({
         });
       }}
       disabled={isPending || promoteToTask.isPending}
-      className="inline-flex rounded-full border border-white/12 px-4 py-2 text-sm font-medium text-white transition hover:border-white/25 hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-60"
+      className="inline-flex rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground transition hover:border-muted-foreground/30 hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
     >
       {isPending || promoteToTask.isPending ? "Promoting..." : "Promote to task"}
     </button>

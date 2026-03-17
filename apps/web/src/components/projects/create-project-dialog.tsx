@@ -103,7 +103,7 @@ export function CreateProjectDialog({
 
           <div className="mt-4 space-y-4">
             <div>
-              <label className="mb-1.5 block text-sm text-white/60">Name</label>
+              <label className="mb-1.5 block text-sm text-muted-foreground">Name</label>
               <Input
                 value={name}
                 onChange={(e) => handleNameChange(e.target.value)}
@@ -113,7 +113,7 @@ export function CreateProjectDialog({
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm text-white/60">Key</label>
+              <label className="mb-1.5 block text-sm text-muted-foreground">Key</label>
               <Input
                 value={key}
                 onChange={(e) => setKey(e.target.value.toUpperCase())}
@@ -123,7 +123,7 @@ export function CreateProjectDialog({
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm text-white/60">
+              <label className="mb-1.5 block text-sm text-muted-foreground">
                 Description
               </label>
               <Textarea
@@ -135,7 +135,7 @@ export function CreateProjectDialog({
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm text-white/60">Color</label>
+              <label className="mb-1.5 block text-sm text-muted-foreground">Color</label>
               <div className="flex gap-2">
                 {COLORS.map((c) => (
                   <button

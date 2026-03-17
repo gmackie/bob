@@ -48,33 +48,33 @@ export function SystemOperations() {
 
   return (
     <div className="flex flex-col gap-8">
-      <header className="rounded-[2rem] border border-white/10 bg-[linear-gradient(135deg,#0e1728,#09111d)] px-8 py-8 text-white">
-        <div className="text-xs uppercase tracking-[0.3em] text-white/40">
+      <header className="rounded-[2rem] border border-border bg-[linear-gradient(135deg,#0e1728,#09111d)] px-8 py-8 text-foreground">
+        <div className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
           System
         </div>
-        <h1 className="mt-3 text-4xl font-semibold">Operations Console</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-white/65">
+        <h1 className="mt-3 font-display text-4xl font-semibold">Operations Console</h1>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
           Terminal access, agent controls, and host readiness live here without
           pulling planning users back into the old dashboard shell.
         </p>
       </header>
 
-      <section className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#08111d]">
+      <section className="overflow-hidden rounded-[1.75rem] border border-border bg-popover">
         <SystemStatusPanel />
       </section>
 
-      <section className="rounded-[1.75rem] border border-white/10 bg-[#0b1320] p-6 text-white">
+      <section className="rounded-[1.75rem] border border-border bg-popover p-6 text-foreground">
         <div className="mb-4 flex items-center justify-between gap-4">
           <div>
-            <div className="text-xs uppercase tracking-[0.28em] text-white/35">
+            <div className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
               Terminal
             </div>
-            <h2 className="mt-2 text-xl font-semibold">System terminal</h2>
+            <h2 className="mt-2 font-display text-xl font-semibold">System terminal</h2>
           </div>
           {sessionId ? (
             <button
               type="button"
-              className="rounded-full border border-white/15 px-4 py-2 text-sm text-white/80 transition hover:border-white/30 hover:text-white"
+              className="rounded-full border border-border px-4 py-2 text-sm text-foreground transition hover:border-muted-foreground/30 hover:text-foreground"
               onClick={() => {
                 setSessionId(null);
                 setIsLoadingTerminal(false);
@@ -91,7 +91,7 @@ export function SystemOperations() {
             onClose={() => setSessionId(null)}
           />
         ) : (
-          <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 px-5 py-8 text-sm text-white/55">
+          <div className="rounded-2xl border border-dashed border-border bg-secondary px-5 py-8 text-sm text-muted-foreground">
             {isLoadingTerminal ? "Preparing system terminal" : "System terminal closed"}
           </div>
         )}
@@ -101,12 +101,12 @@ export function SystemOperations() {
         ) : null}
       </section>
 
-      <section className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#08111d]">
-        <div className="border-b border-white/10 px-6 py-4">
-          <div className="text-xs uppercase tracking-[0.28em] text-white/35">
+      <section className="overflow-hidden rounded-[1.75rem] border border-border bg-popover">
+        <div className="border-b border-border px-6 py-4">
+          <div className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
             Agents
           </div>
-          <h2 className="mt-2 text-xl font-semibold text-white">
+          <h2 className="mt-2 font-display text-xl font-semibold text-foreground">
             Agent controls
           </h2>
         </div>

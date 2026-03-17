@@ -56,7 +56,7 @@ export function DialogContent({
         {...props}
       >
         {children}
-        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm p-1 text-white/40 transition-colors hover:text-white/80">
+        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm p-1 text-muted-foreground transition-colors hover:text-foreground">
           <Cross1Icon className="size-4" />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>

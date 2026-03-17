@@ -21,7 +21,7 @@ export function DeploymentStatus({
 }: DeploymentStatusProps) {
   if (deployments.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-center text-sm text-white/35">
+      <div className="rounded-2xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
         No deployments yet.
       </div>
     );
@@ -32,17 +32,17 @@ export function DeploymentStatus({
       {deployments.map((deploy) => (
         <div
           key={deploy.id}
-          className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"
+          className="rounded-xl border border-border bg-card px-4 py-3"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs uppercase tracking-wide text-white/40">
+            <span className="text-xs uppercase tracking-wide text-muted-foreground">
               {deploy.environment}
             </span>
             <Badge variant={DEPLOY_COLOR[deploy.status] ?? "default"}>
               {formatLabel(deploy.status)}
             </Badge>
           </div>
-          <div className="mt-1 text-[10px] text-white/25">
+          <div className="mt-1 text-[10px] text-muted-foreground">
             {deploy.deployedAt
               ? new Date(deploy.deployedAt).toLocaleString()
               : formatLabel(deploy.status)}

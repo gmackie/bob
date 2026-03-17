@@ -63,22 +63,22 @@ export function NotificationPanel({ open, onClose }: NotificationPanelProps) {
   return (
     <div
       ref={panelRef}
-      className="absolute bottom-12 left-2 z-50 w-80 rounded-xl border border-white/10 bg-[#0c1120] shadow-2xl"
+      className="absolute bottom-12 left-2 z-50 w-80 rounded-xl border border-border bg-popover shadow-2xl"
     >
-      <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-        <h3 className="text-sm font-semibold text-white">Notifications</h3>
-        <span className="text-xs text-white/40">
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <h3 className="text-sm font-semibold text-foreground">Notifications</h3>
+        <span className="text-xs text-muted-foreground">
           {items.filter((n: any) => !n.read).length} unread
         </span>
       </div>
 
       <div className="max-h-96 overflow-y-auto p-1">
         {isFetching && items.length === 0 ? (
-          <div className="px-3 py-6 text-center text-sm text-white/35">
+          <div className="px-3 py-6 text-center text-sm text-muted-foreground">
             Loading...
           </div>
         ) : items.length === 0 ? (
-          <div className="px-3 py-6 text-center text-sm text-white/35">
+          <div className="px-3 py-6 text-center text-sm text-muted-foreground">
             No notifications yet.
           </div>
         ) : (
