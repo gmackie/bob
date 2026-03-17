@@ -16,6 +16,7 @@ import { getTaskWorkspaceHref } from "~/lib/planning/task-workspace";
 import { useTRPC } from "~/trpc/react";
 
 import { AddCommentForm } from "./add-comment-form";
+import { ArtifactCardGrid } from "./artifact-card";
 import { DescriptionEditor } from "./description-editor";
 import { EditableTitle } from "./editable-title";
 import { PriorityBadge } from "./priority-badge";
@@ -192,29 +193,8 @@ export function WorkItemDetailInteractive({
 
         <div className="rounded-3xl border border-border bg-secondary p-6">
           <h2 className="font-display text-lg font-semibold text-foreground">Current Artifacts</h2>
-          <div className="mt-4 space-y-3">
-            {currentArtifacts.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
-                No artifacts attached.
-              </div>
-            ) : (
-              currentArtifacts.map((artifact) => (
-                <a
-                  key={artifact.id}
-                  href={artifact.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block rounded-2xl border border-border bg-accent px-4 py-4 transition hover:border-muted-foreground/30 hover:bg-accent"
-                >
-                  <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                    {artifact.artifactRole}
-                  </div>
-                  <div className="mt-2 text-sm text-foreground">
-                    {artifact.title?.trim() || artifact.url}
-                  </div>
-                </a>
-              ))
-            )}
+          <div className="mt-4">
+            <ArtifactCardGrid artifacts={currentArtifacts} />
           </div>
         </div>
 
