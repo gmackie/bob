@@ -1,0 +1,3473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bob Builder — Component Sticker Sheet</title>
+<link rel="preconnect" href="https://api.fontshare.com">
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ================================================================
+   DESIGN TOKENS
+   ================================================================ */
+:root {
+  /* Primary — warm amber */
+  --primary: #D4850A;
+  --primary-hover: #B87208;
+  --primary-subtle: #FFF3E0;
+  --primary-muted: #F5DEB3;
+
+  /* Warm gray neutrals */
+  --bg: #FAFAF8;
+  --bg-elevated: #FFFFFF;
+  --bg-subtle: #F5F4F1;
+  --bg-inset: #EEEDEA;
+  --fg: #1C1B18;
+  --fg-secondary: #5C5A53;
+  --fg-muted: #8A877E;
+  --fg-faint: #B5B2AB;
+  --border: #E3E1DC;
+  --border-subtle: #EEEDEA;
+
+  /* Semantic */
+  --success: #2D8A4E;
+  --success-subtle: #E8F5E9;
+  --warning: #D4850A;
+  --warning-subtle: #FFF3E0;
+  --error: #C62828;
+  --error-subtle: #FFEBEE;
+  --info: #1565C0;
+  --info-subtle: #E3F2FD;
+
+  /* Status palette (matches app components) */
+  --status-emerald: #34D399;
+  --status-blue: #60A5FA;
+  --status-amber: #FBBF24;
+  --status-rose: #FB7185;
+  --status-purple: #A78BFA;
+  --status-slate: #94A3B8;
+  --status-orange: #FB923C;
+
+  /* Sizing */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-full: 9999px;
+
+  --shadow-sm: 0 1px 2px rgba(28, 27, 24, 0.06);
+  --shadow-md: 0 2px 8px rgba(28, 27, 24, 0.08);
+  --shadow-lg: 0 4px 16px rgba(28, 27, 24, 0.1);
+
+  --font-display: 'Satoshi', system-ui, sans-serif;
+  --font-body: 'DM Sans', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --transition: 150ms ease-out;
+}
+
+.dark {
+  --primary: #E8A33C;
+  --primary-hover: #F0B45A;
+  --primary-subtle: #2C2418;
+  --primary-muted: #3D3120;
+
+  --bg: #141310;
+  --bg-elevated: #1C1B18;
+  --bg-subtle: #232220;
+  --bg-inset: #0E0D0B;
+  --fg: #EEEDEA;
+  --fg-secondary: #A8A59E;
+  --fg-muted: #6E6B64;
+  --fg-faint: #4A4843;
+  --border: #2E2D2A;
+  --border-subtle: #232220;
+
+  --success: #4CAF50;
+  --success-subtle: #1B2E1D;
+  --warning: #E8A33C;
+  --warning-subtle: #2C2418;
+  --error: #EF5350;
+  --error-subtle: #2E1616;
+  --info: #42A5F5;
+  --info-subtle: #162230;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* ================================================================
+   RESET & BASE
+   ================================================================ */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--fg);
+  line-height: 1.6;
+  transition: background var(--transition), color var(--transition);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ================================================================
+   LAYOUT
+   ================================================================ */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 32px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  transition: background var(--transition), border-color var(--transition);
+}
+
+.page-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: var(--primary);
+  color: white;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 15px;
+  border-radius: var(--radius-sm);
+}
+
+.logo-text {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+
+.page-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--primary-subtle);
+  color: var(--primary);
+}
+
+.page-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.theme-toggle {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 8px 16px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg-secondary);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.theme-toggle:hover {
+  background: var(--bg-inset);
+  color: var(--fg);
+}
+
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 48px 32px;
+}
+
+/* Table of Contents */
+.toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 48px;
+  padding-bottom: 32px;
+  border-bottom: 1px solid var(--border);
+}
+
+.toc a {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg-muted);
+  text-decoration: none;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  transition: all var(--transition);
+}
+.toc a:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: var(--primary-subtle);
+}
+
+/* Sections */
+section {
+  margin-bottom: 80px;
+}
+
+.section-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--primary);
+  margin-bottom: 8px;
+}
+
+.section-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 28px;
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+  line-height: 1.2;
+}
+
+.section-desc {
+  color: var(--fg-secondary);
+  font-size: 15px;
+  max-width: 600px;
+  margin-bottom: 32px;
+}
+
+.subsection {
+  margin-bottom: 40px;
+}
+
+.subsection-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-muted);
+  margin-bottom: 16px;
+}
+
+.divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0 0 80px;
+}
+
+/* Grids */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+
+.flex-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.flex-col { display: flex; flex-direction: column; gap: 12px; }
+
+@media (max-width: 1024px) {
+  .grid-5 { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 768px) {
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .grid-5 { grid-template-columns: repeat(2, 1fr); }
+  .container { padding: 32px 20px; }
+}
+
+/* ================================================================
+   01 — TYPOGRAPHY
+   ================================================================ */
+.type-specimen {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  margin-bottom: 16px;
+  transition: background var(--transition), border-color var(--transition);
+}
+
+.type-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.type-name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--primary);
+}
+
+.type-role {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-muted);
+  padding: 2px 8px;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-full);
+}
+
+.type-scale {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.type-scale-item {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+
+.type-scale-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-muted);
+  min-width: 100px;
+  flex-shrink: 0;
+}
+
+/* ================================================================
+   02 — COLOR SWATCHES
+   ================================================================ */
+.swatch-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.swatch-color {
+  width: 64px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  transition: border-color var(--transition);
+}
+
+.swatch-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fg-muted);
+  text-align: center;
+}
+
+.swatch-hex {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fg-muted);
+  opacity: 0.7;
+}
+
+/* ================================================================
+   03 — BUTTONS
+   ================================================================ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-body);
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition);
+  gap: 8px;
+  white-space: nowrap;
+}
+
+/* Sizes */
+.btn-sm { font-size: 13px; padding: 6px 12px; height: 32px; }
+.btn-md { font-size: 14px; padding: 10px 20px; height: 36px; }
+.btn-lg { font-size: 15px; padding: 12px 24px; height: 40px; }
+.btn-icon { width: 36px; height: 36px; padding: 0; font-size: 16px; }
+.btn-icon-sm { width: 32px; height: 32px; padding: 0; font-size: 14px; }
+
+/* Variants */
+.btn-primary { background: var(--primary); color: white; }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-secondary { background: var(--bg-subtle); color: var(--fg); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--bg-inset); border-color: var(--fg-muted); }
+
+.btn-ghost { background: transparent; color: var(--fg-secondary); }
+.btn-ghost:hover { background: var(--bg-subtle); color: var(--fg); }
+
+.btn-destructive { background: var(--error); color: white; }
+.btn-destructive:hover { opacity: 0.9; }
+
+.btn-outline { background: transparent; color: var(--fg); border: 1px solid var(--border); }
+.btn-outline:hover { background: var(--bg-subtle); }
+
+.btn-link { background: transparent; color: var(--primary); text-decoration: underline; text-underline-offset: 4px; border: none; padding: 0; height: auto; }
+.btn-link:hover { color: var(--primary-hover); }
+
+/* Focus ring */
+.btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--primary-subtle);
+}
+
+/* ================================================================
+   04 — BADGES
+   ================================================================ */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+  transition: all var(--transition);
+}
+
+.badge-default { background: var(--bg-inset); color: var(--fg-secondary); }
+.badge-slate { background: #94a3b820; color: #94A3B8; }
+.badge-blue { background: #60a5fa20; color: #60A5FA; }
+.badge-amber { background: #fbbf2420; color: #D4850A; }
+.badge-purple { background: #a78bfa20; color: #A78BFA; }
+.badge-emerald { background: #34d39920; color: #34D399; }
+.badge-rose { background: #fb718520; color: #FB7185; }
+.badge-orange { background: #fb923c20; color: #FB923C; }
+
+/* ================================================================
+   05 — INPUTS & FORMS
+   ================================================================ */
+.input {
+  font-family: var(--font-body);
+  font-size: 14px;
+  padding: 10px 14px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--fg);
+  width: 100%;
+  transition: border-color var(--transition), box-shadow var(--transition);
+  outline: none;
+}
+.input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-subtle);
+}
+.input::placeholder { color: var(--fg-muted); }
+.input:disabled { opacity: 0.5; cursor: not-allowed; background: var(--bg-subtle); }
+.input-error { border-color: var(--error); }
+.input-error:focus { box-shadow: 0 0 0 3px var(--error-subtle); }
+
+.textarea {
+  font-family: var(--font-body);
+  font-size: 14px;
+  padding: 10px 14px;
+  min-height: 80px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--fg);
+  width: 100%;
+  resize: vertical;
+  transition: border-color var(--transition), box-shadow var(--transition);
+  outline: none;
+  line-height: 1.5;
+}
+.textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-subtle);
+}
+.textarea::placeholder { color: var(--fg-muted); }
+
+.form-label {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--fg);
+  display: block;
+  margin-bottom: 6px;
+}
+
+.form-description {
+  font-size: 13px;
+  color: var(--fg-muted);
+  margin-top: 4px;
+}
+
+.form-error {
+  font-size: 13px;
+  color: var(--error);
+  margin-top: 4px;
+}
+
+.select-trigger {
+  font-family: var(--font-body);
+  font-size: 14px;
+  padding: 10px 14px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--fg);
+  width: 100%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: border-color var(--transition);
+}
+.select-trigger:hover { border-color: var(--fg-muted); }
+
+/* ================================================================
+   06 — CARDS
+   ================================================================ */
+.card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  transition: all var(--transition);
+}
+.card:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--fg-faint);
+}
+
+.card-header { padding: 24px 24px 0; }
+.card-content { padding: 16px 24px; }
+.card-footer {
+  padding: 0 24px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.card-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 16px;
+  margin-bottom: 4px;
+}
+
+.card-desc {
+  font-size: 14px;
+  color: var(--fg-secondary);
+}
+
+.card-meta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+/* ================================================================
+   07 — ALERTS
+   ================================================================ */
+.alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  border: 1px solid transparent;
+}
+
+.alert-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+
+.alert-success { background: var(--success-subtle); border-color: var(--success); }
+.alert-success .alert-dot { background: var(--success); }
+.alert-warning { background: var(--warning-subtle); border-color: var(--warning); }
+.alert-warning .alert-dot { background: var(--warning); }
+.alert-error { background: var(--error-subtle); border-color: var(--error); }
+.alert-error .alert-dot { background: var(--error); }
+.alert-info { background: var(--info-subtle); border-color: var(--info); }
+.alert-info .alert-dot { background: var(--info); }
+
+/* ================================================================
+   08 — TABLES
+   ================================================================ */
+.table-wrap {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: all var(--transition);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+th {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted);
+  text-align: left;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+
+td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background var(--transition);
+}
+
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--bg-subtle); }
+
+.td-mono {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ================================================================
+   09 — DIALOG / MODAL
+   ================================================================ */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease-out;
+}
+.dialog-backdrop.open {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.dialog {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  width: 480px;
+  max-width: 90vw;
+  box-shadow: var(--shadow-lg);
+  transform: scale(0.96);
+  transition: transform 200ms ease-out;
+}
+.dialog-backdrop.open .dialog {
+  transform: scale(1);
+}
+
+.dialog-header {
+  padding: 24px 24px 0;
+}
+
+.dialog-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 18px;
+  margin-bottom: 4px;
+}
+
+.dialog-description {
+  font-size: 14px;
+  color: var(--fg-secondary);
+}
+
+.dialog-body {
+  padding: 20px 24px;
+}
+
+.dialog-footer {
+  padding: 0 24px 24px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dialog-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: none;
+  border: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font-size: 18px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+}
+.dialog-close:hover { background: var(--bg-subtle); color: var(--fg); }
+
+/* Static demo dialog (not actually a modal overlay) */
+.dialog-demo {
+  position: relative;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  width: 100%;
+  max-width: 480px;
+  box-shadow: var(--shadow-lg);
+}
+
+/* ================================================================
+   10 — DROPDOWN MENU
+   ================================================================ */
+.dropdown-demo {
+  position: relative;
+  display: inline-block;
+}
+
+.dropdown-menu {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 4px;
+  min-width: 200px;
+  box-shadow: var(--shadow-lg);
+}
+
+.dropdown-item {
+  font-family: var(--font-body);
+  font-size: 14px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background var(--transition);
+  color: var(--fg);
+}
+.dropdown-item:hover { background: var(--bg-subtle); }
+.dropdown-item-destructive { color: var(--error); }
+.dropdown-item-destructive:hover { background: var(--error-subtle); }
+
+.dropdown-separator {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.dropdown-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  padding: 8px 12px 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dropdown-shortcut {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-muted);
+  margin-left: auto;
+}
+
+/* ================================================================
+   11 — TOOLTIP
+   ================================================================ */
+.tooltip-demo {
+  position: relative;
+  display: inline-block;
+}
+
+.tooltip-bubble {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--fg);
+  color: var(--bg);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: var(--shadow-md);
+}
+
+.tooltip-bubble::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--fg);
+}
+
+/* ================================================================
+   12 — SEPARATOR
+   ================================================================ */
+.separator-h {
+  height: 1px;
+  width: 100%;
+  background: var(--border);
+}
+
+.separator-v {
+  width: 1px;
+  height: 32px;
+  background: var(--border);
+}
+
+/* ================================================================
+   13 — TOAST
+   ================================================================ */
+.toast-demo {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: 380px;
+}
+
+.toast-content { flex: 1; }
+
+.toast-title {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.toast-desc {
+  font-size: 13px;
+  color: var(--fg-secondary);
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px;
+}
+
+/* ================================================================
+   APP COMPONENTS — STATUS SYSTEM
+   ================================================================ */
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.status-dot-sm { width: 6px; height: 6px; }
+
+.dot-emerald { background: var(--status-emerald); }
+.dot-blue { background: var(--status-blue); }
+.dot-amber { background: var(--status-amber); }
+.dot-rose { background: var(--status-rose); }
+.dot-purple { background: var(--status-purple); }
+.dot-slate { background: var(--status-slate); }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.dot-pulse { animation: pulse-dot 1.5s ease-in-out infinite; }
+
+/* ================================================================
+   APP COMPONENTS — SIDEBAR NAV
+   ================================================================ */
+.sidebar-demo {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--fg-secondary);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.sidebar-item:hover {
+  background: var(--bg-inset);
+  color: var(--fg);
+}
+.sidebar-item.active {
+  background: var(--primary-subtle);
+  color: var(--primary);
+}
+
+.sidebar-icon {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.sidebar-badge {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--bg-inset);
+  color: var(--fg-muted);
+}
+
+.sidebar-notification-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--status-blue);
+  margin-left: auto;
+}
+
+/* ================================================================
+   APP COMPONENTS — BREADCRUMBS
+   ================================================================ */
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.breadcrumb-link {
+  color: var(--fg-muted);
+  text-decoration: none;
+  transition: color var(--transition);
+}
+.breadcrumb-link:hover { color: var(--fg); }
+
+.breadcrumb-separator {
+  color: var(--fg-faint);
+  font-size: 12px;
+}
+
+.breadcrumb-current {
+  color: var(--fg-secondary);
+  font-weight: 500;
+}
+
+/* ================================================================
+   APP COMPONENTS — PRIORITY & STATUS
+   ================================================================ */
+.priority-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.priority-bar {
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+}
+
+.priority-urgent { background: var(--status-rose); }
+.priority-high { background: var(--status-orange); }
+.priority-medium { background: var(--status-amber); }
+.priority-low { background: var(--status-blue); }
+.priority-none { background: var(--fg-faint); }
+
+/* ================================================================
+   APP COMPONENTS — KANBAN BOARD
+   ================================================================ */
+.kanban-demo {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  overflow-x: auto;
+}
+
+@media (max-width: 1024px) {
+  .kanban-demo { grid-template-columns: repeat(3, 1fr); }
+}
+
+.kanban-col {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 12px;
+  min-width: 180px;
+}
+
+.kanban-col-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding: 0 4px;
+}
+
+.kanban-col-title {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-secondary);
+}
+
+.kanban-col-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+
+.kanban-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all var(--transition);
+  position: relative;
+}
+.kanban-card:hover {
+  border-color: var(--fg-faint);
+  box-shadow: var(--shadow-sm);
+}
+.kanban-card:last-child { margin-bottom: 0; }
+
+.kanban-card-priority {
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+}
+
+.kanban-card-id {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-muted);
+  margin-bottom: 4px;
+  padding-left: 8px;
+}
+
+.kanban-card-title {
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  padding-left: 8px;
+  line-height: 1.4;
+}
+
+.kanban-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 8px;
+}
+
+.kanban-empty {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+
+/* ================================================================
+   APP COMPONENTS — WORK ITEM GRAPH NODE
+   ================================================================ */
+.graph-node {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  min-width: 200px;
+  max-width: 260px;
+  position: relative;
+  transition: all var(--transition);
+}
+.graph-node:hover {
+  border-color: var(--fg-faint);
+  box-shadow: var(--shadow-md);
+}
+
+.graph-node-status-bar {
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+}
+
+.graph-node-id {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-muted);
+  margin-bottom: 4px;
+  padding-left: 8px;
+}
+
+.graph-node-title {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  padding-left: 8px;
+  line-height: 1.3;
+}
+
+.graph-node-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 8px;
+  flex-wrap: wrap;
+}
+
+.graph-node-pipeline {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-muted);
+  padding-left: 8px;
+  margin-top: 6px;
+}
+
+.graph-handle {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bg-subtle);
+  border: 2px solid var(--border);
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.graph-handle-top { top: -4px; }
+.graph-handle-bottom { bottom: -4px; }
+
+/* ================================================================
+   APP COMPONENTS — PROJECT CARD
+   ================================================================ */
+.project-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 24px;
+  transition: all var(--transition);
+  cursor: pointer;
+}
+.project-card:hover {
+  border-color: var(--fg-faint);
+  box-shadow: var(--shadow-md);
+}
+
+.project-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.project-color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.project-card-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-muted);
+}
+
+.project-card-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+
+.project-card-meta {
+  font-size: 13px;
+  color: var(--fg-secondary);
+}
+
+/* ================================================================
+   APP COMPONENTS — NOTIFICATION ITEM
+   ================================================================ */
+.notification-item {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  transition: background var(--transition);
+  cursor: pointer;
+}
+.notification-item:hover { background: var(--bg-subtle); }
+
+.notification-item.unread { background: var(--primary-subtle); }
+
+.notification-unread-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--status-blue);
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+
+.notification-content { flex: 1; min-width: 0; }
+
+.notification-title {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+
+.notification-body {
+  font-size: 13px;
+  color: var(--fg-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.notification-time {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-muted);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* ================================================================
+   APP COMPONENTS — DISPATCH BAR
+   ================================================================ */
+.dispatch-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: var(--radius-lg);
+  border: 1px solid;
+  font-size: 14px;
+}
+
+.dispatch-active {
+  border-color: var(--status-blue);
+  background: rgba(96, 165, 250, 0.05);
+}
+
+.dispatch-complete {
+  border-color: var(--status-emerald);
+  background: rgba(52, 211, 153, 0.05);
+}
+
+.dispatch-failed {
+  border-color: var(--status-rose);
+  background: rgba(251, 113, 133, 0.05);
+}
+
+/* ================================================================
+   APP COMPONENTS — FORGEGRAPH
+   ================================================================ */
+.gate-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 20px;
+}
+
+.gate-card-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-muted);
+  margin-bottom: 12px;
+}
+
+.gate-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.gate-row:last-of-type { border-bottom: none; }
+
+.gate-name {
+  font-size: 14px;
+  color: var(--fg-secondary);
+}
+
+.gate-footer {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+
+/* Revision status bar */
+.revision-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.revision-connector {
+  height: 2px;
+  width: 16px;
+  border-radius: 1px;
+}
+
+.revision-info {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg-muted);
+  margin-bottom: 8px;
+}
+
+/* Task status indicator */
+.task-status-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ================================================================
+   APP COMPONENTS — TERMINAL
+   ================================================================ */
+.terminal {
+  background: #0E0D0B;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid #2E2D2A;
+}
+
+.terminal-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  background: #1C1B18;
+  border-bottom: 1px solid #2E2D2A;
+}
+
+.terminal-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.terminal-title {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: #6E6B64;
+  margin-left: 8px;
+}
+
+.terminal-body {
+  padding: 16px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.7;
+  color: #EEEDEA;
+}
+
+.t-prompt { color: #E8A33C; }
+.t-comment { color: #6E6B64; }
+.t-string { color: #A5D6A7; }
+.t-flag { color: #90CAF9; }
+.t-success { color: #4CAF50; }
+.t-error { color: #EF5350; }
+.t-cursor { opacity: 0.4; }
+
+/* ================================================================
+   APP COMPONENTS — INLINE EDITABLE
+   ================================================================ */
+.inline-editable {
+  padding: 4px 8px;
+  border-radius: var(--radius-md);
+  cursor: text;
+  transition: background var(--transition);
+  border: 1px solid transparent;
+}
+.inline-editable:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border);
+}
+
+.inline-editable-active {
+  background: var(--bg-elevated);
+  border: 1px solid var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-subtle);
+  cursor: text;
+  padding: 4px 8px;
+  border-radius: var(--radius-md);
+  outline: none;
+}
+
+/* ================================================================
+   APP COMPONENTS — COMMAND PALETTE
+   ================================================================ */
+.command-palette {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 560px;
+  overflow: hidden;
+}
+
+.command-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.command-search-icon {
+  color: var(--fg-muted);
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.command-input {
+  font-family: var(--font-body);
+  font-size: 15px;
+  background: none;
+  border: none;
+  color: var(--fg);
+  width: 100%;
+  outline: none;
+}
+.command-input::placeholder { color: var(--fg-muted); }
+
+.command-group-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-muted);
+  padding: 12px 18px 6px;
+}
+
+.command-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.command-item:hover { background: var(--bg-subtle); }
+.command-item.selected { background: var(--primary-subtle); color: var(--primary); }
+
+.command-item-icon {
+  width: 18px;
+  text-align: center;
+  color: var(--fg-muted);
+}
+
+.command-shortcut {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-muted);
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+
+.command-kbd {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* ================================================================
+   FOOTER
+   ================================================================ */
+.page-footer {
+  text-align: center;
+  padding: 48px 0;
+  color: var(--fg-muted);
+  font-size: 13px;
+  font-family: var(--font-mono);
+  border-top: 1px solid var(--border);
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     HEADER
+     ============================================================ -->
+<header class="page-header">
+  <div class="page-header-left">
+    <span class="logo-mark">B</span>
+    <span class="logo-text">Bob Builder</span>
+    <span class="page-badge">STICKER SHEET</span>
+  </div>
+  <div class="page-header-right">
+    <span style="font-family: var(--font-mono); font-size: 12px; color: var(--fg-muted);">v0.0.4</span>
+    <button class="theme-toggle" onclick="toggleTheme()" id="theme-btn">Switch to Dark</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ============================================================
+       TABLE OF CONTENTS
+       ============================================================ -->
+  <nav class="toc">
+    <a href="#typography">Typography</a>
+    <a href="#color">Color</a>
+    <a href="#buttons">Buttons</a>
+    <a href="#badges">Badges</a>
+    <a href="#inputs">Inputs & Forms</a>
+    <a href="#cards">Cards</a>
+    <a href="#alerts">Alerts</a>
+    <a href="#tables">Tables</a>
+    <a href="#dialog">Dialog</a>
+    <a href="#dropdown">Dropdown</a>
+    <a href="#tooltip">Tooltip</a>
+    <a href="#toast">Toast</a>
+    <a href="#separator">Separator</a>
+    <a href="#sidebar">Sidebar Nav</a>
+    <a href="#breadcrumbs">Breadcrumbs</a>
+    <a href="#command">Command Palette</a>
+    <a href="#status">Status System</a>
+    <a href="#priority">Priority</a>
+    <a href="#kanban">Kanban Board</a>
+    <a href="#graph-nodes">Graph Nodes</a>
+    <a href="#project-cards">Project Cards</a>
+    <a href="#notifications">Notifications</a>
+    <a href="#dispatch">Dispatch Bar</a>
+    <a href="#forgegraph">ForgeGraph</a>
+    <a href="#terminal">Terminal</a>
+    <a href="#inline-edit">Inline Editable</a>
+    <a href="#composite-dashboard" style="background: var(--primary-subtle); color: var(--primary); border-color: var(--primary);">Dashboard (composite)</a>
+    <a href="#composite-detail" style="background: var(--primary-subtle); color: var(--primary); border-color: var(--primary);">Work Item Detail (composite)</a>
+    <a href="#composite-settings" style="background: var(--primary-subtle); color: var(--primary); border-color: var(--primary);">Settings Form (composite)</a>
+    <a href="#composite-shell" style="background: var(--primary-subtle); color: var(--primary); border-color: var(--primary);">App Shell (composite)</a>
+  </nav>
+
+
+  <!-- ============================================================
+       01 — TYPOGRAPHY
+       ============================================================ -->
+  <section id="typography">
+    <div class="section-label">01</div>
+    <div class="section-title">Typography</div>
+    <div class="section-desc">Satoshi for display, DM Sans for body, JetBrains Mono for code. Each font has one job.</div>
+
+    <div class="type-specimen">
+      <div class="type-meta">
+        <span class="type-name">Satoshi</span>
+        <span class="type-role">Display / Headings</span>
+      </div>
+      <div class="type-scale" style="font-family: var(--font-display);">
+        <div class="type-scale-item">
+          <span class="type-scale-label">72 / Black</span>
+          <span style="font-size: 72px; font-weight: 900; letter-spacing: -0.03em; line-height: 1.05;">Workspace</span>
+        </div>
+        <div class="type-scale-item">
+          <span class="type-scale-label">48 / Black</span>
+          <span style="font-size: 48px; font-weight: 900; letter-spacing: -0.03em; line-height: 1.05;">Build with Bob</span>
+        </div>
+        <div class="type-scale-item">
+          <span class="type-scale-label">36 / Bold</span>
+          <span style="font-size: 36px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15;">Active Projects</span>
+        </div>
+        <div class="type-scale-item">
+          <span class="type-scale-label">28 / Bold</span>
+          <span style="font-size: 28px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2;">Pipeline Status</span>
+        </div>
+        <div class="type-scale-item">
+          <span class="type-scale-label">24 / Bold</span>
+          <span style="font-size: 24px; font-weight: 700; letter-spacing: -0.015em; line-height: 1.2;">Task Execution</span>
+        </div>
+        <div class="type-scale-item">
+          <span class="type-scale-label">18 / Semi</span>
+          <span style="font-size: 18px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.3;">Work Item Detail</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="type-specimen">
+      <div class="type-meta">
+        <span class="type-name">DM Sans</span>
+        <span class="type-role">Body / UI</span>
+      </div>
+      <div class="type-scale" style="font-family: var(--font-body);">
+        <div class="type-scale-item">
+          <span class="type-scale-label">16 / Regular</span>
+          <span style="font-size: 16px;">Bob manages your workspaces, projects, and work items. Plan tasks with AI assistance, execute them in isolated environments, and track progress through pipeline visualizations.</span>
+        </div>
+        <div class="type-scale-item">
+          <span class="type-scale-label">14 / Medium</span>
+          <span style="font-size: 14px; font-weight: 500;">3 tasks running &middot; 12 completed &middot; 1 failed</span>
+        </div>
+        <div class="type-scale-item">
+          <span class="type-scale-label">13 / Regular</span>
+          <span style="font-size: 13px; color: var(--fg-secondary);">Last deployed 4 minutes ago to staging. Build duration: 47s.</span>
+        </div>
+        <div class="type-scale-item">
+          <span class="type-scale-label">12 / Semi UC</span>
+          <span style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--fg-muted);">Table Header &middot; Column Label</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="type-specimen">
+      <div class="type-meta">
+        <span class="type-name">JetBrains Mono</span>
+        <span class="type-role">Code / Data / Terminal</span>
+      </div>
+      <div class="type-scale" style="font-family: var(--font-mono);">
+        <div class="type-scale-item">
+          <span class="type-scale-label">14 / Regular</span>
+          <span style="font-size: 14px;">const workspace = await bob.createWorkspace("api-refactor")</span>
+        </div>
+        <div class="type-scale-item">
+          <span class="type-scale-label">13 / Regular</span>
+          <span style="font-size: 13px; font-variant-numeric: tabular-nums;">task-0042 &middot; 2m 13s &middot; exit(0) &middot; 847KB artifacts</span>
+        </div>
+        <div class="type-scale-item">
+          <span class="type-scale-label">12 / Medium</span>
+          <span style="font-size: 12px; font-weight: 500; color: var(--primary);">192.168.1.42:3100</span>
+        </div>
+        <div class="type-scale-item">
+          <span class="type-scale-label">11 / Semi UC</span>
+          <span style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-muted);">Section Label &middot; Mono Badge</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       02 — COLOR
+       ============================================================ -->
+  <section id="color">
+    <div class="section-label">02</div>
+    <div class="section-title">Color</div>
+    <div class="section-desc">Warm amber primary. Warm gray neutrals. Semantic colors for status. Color is rare and meaningful.</div>
+
+    <div class="subsection">
+      <div class="subsection-label">Primary</div>
+      <div class="swatch-row">
+        <div class="swatch"><div class="swatch-color" style="background: #D4850A;"></div><div class="swatch-label">Primary</div><div class="swatch-hex">#D4850A</div></div>
+        <div class="swatch"><div class="swatch-color" style="background: #B87208;"></div><div class="swatch-label">Hover</div><div class="swatch-hex">#B87208</div></div>
+        <div class="swatch"><div class="swatch-color" style="background: #F5DEB3;"></div><div class="swatch-label">Muted</div><div class="swatch-hex">#F5DEB3</div></div>
+        <div class="swatch"><div class="swatch-color" style="background: #FFF3E0;"></div><div class="swatch-label">Subtle</div><div class="swatch-hex">#FFF3E0</div></div>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">Dark Mode Primary</div>
+      <div class="swatch-row">
+        <div class="swatch"><div class="swatch-color" style="background: #E8A33C;"></div><div class="swatch-label">Primary</div><div class="swatch-hex">#E8A33C</div></div>
+        <div class="swatch"><div class="swatch-color" style="background: #F0B45A;"></div><div class="swatch-label">Hover</div><div class="swatch-hex">#F0B45A</div></div>
+        <div class="swatch"><div class="swatch-color" style="background: #3D3120;"></div><div class="swatch-label">Muted</div><div class="swatch-hex">#3D3120</div></div>
+        <div class="swatch"><div class="swatch-color" style="background: #2C2418;"></div><div class="swatch-label">Subtle</div><div class="swatch-hex">#2C2418</div></div>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">Neutrals (Warm Grays)</div>
+      <div class="swatch-row">
+        <div class="swatch"><div class="swatch-color" style="background: #1C1B18;"></div><div class="swatch-label">900</div><div class="swatch-hex">#1C1B18</div></div>
+        <div class="swatch"><div class="swatch-color" style="background: #3D3B36;"></div><div class="swatch-label">800</div><div class="swatch-hex">#3D3B36</div></div>
+        <div class="swatch"><div class="swatch-color" style="background: #5C5A53;"></div><div class="swatch-label">700</div><div class="swatch-hex">#5C5A53</div></div>
+        <div class="swatch"><div class="swatch-color" style="background: #8A877E;"></div><div class="swatch-label">500</div><div class="swatch-hex">#8A877E</div></div>
+        <div class="swatch"><div class="swatch-color" style="background: #B5B2AB;"></div><div class="swatch-label">400</div><div class="swatch-hex">#B5B2AB</div></div>
+        <div class="swatch"><div class="swatch-color" style="background: #E3E1DC;"></div><div class="swatch-label">200</div><div class="swatch-hex">#E3E1DC</div></div>
+        <div class="swatch"><div class="swatch-color" style="background: #EEEDEA;"></div><div class="swatch-label">100</div><div class="swatch-hex">#EEEDEA</div></div>
+        <div class="swatch"><div class="swatch-color" style="background: #F5F4F1;"></div><div class="swatch-label">50</div><div class="swatch-hex">#F5F4F1</div></div>
+        <div class="swatch"><div class="swatch-color" style="background: #FAFAF8;"></div><div class="swatch-label">25</div><div class="swatch-hex">#FAFAF8</div></div>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">Semantic</div>
+      <div class="swatch-row">
+        <div class="swatch"><div class="swatch-color" style="background: #2D8A4E;"></div><div class="swatch-label">Success</div><div class="swatch-hex">#2D8A4E</div></div>
+        <div class="swatch"><div class="swatch-color" style="background: #D4850A;"></div><div class="swatch-label">Warning</div><div class="swatch-hex">#D4850A</div></div>
+        <div class="swatch"><div class="swatch-color" style="background: #C62828;"></div><div class="swatch-label">Error</div><div class="swatch-hex">#C62828</div></div>
+        <div class="swatch"><div class="swatch-color" style="background: #1565C0;"></div><div class="swatch-label">Info</div><div class="swatch-hex">#1565C0</div></div>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">Status Palette</div>
+      <div class="swatch-row">
+        <div class="swatch"><div class="swatch-color" style="background: #34D399;"></div><div class="swatch-label">Emerald</div><div class="swatch-hex">#34D399</div></div>
+        <div class="swatch"><div class="swatch-color" style="background: #60A5FA;"></div><div class="swatch-label">Blue</div><div class="swatch-hex">#60A5FA</div></div>
+        <div class="swatch"><div class="swatch-color" style="background: #FBBF24;"></div><div class="swatch-label">Amber</div><div class="swatch-hex">#FBBF24</div></div>
+        <div class="swatch"><div class="swatch-color" style="background: #FB7185;"></div><div class="swatch-label">Rose</div><div class="swatch-hex">#FB7185</div></div>
+        <div class="swatch"><div class="swatch-color" style="background: #A78BFA;"></div><div class="swatch-label">Purple</div><div class="swatch-hex">#A78BFA</div></div>
+        <div class="swatch"><div class="swatch-color" style="background: #94A3B8;"></div><div class="swatch-label">Slate</div><div class="swatch-hex">#94A3B8</div></div>
+        <div class="swatch"><div class="swatch-color" style="background: #FB923C;"></div><div class="swatch-label">Orange</div><div class="swatch-hex">#FB923C</div></div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       03 — BUTTONS
+       ============================================================ -->
+  <section id="buttons">
+    <div class="section-label">03</div>
+    <div class="section-title">Buttons</div>
+    <div class="section-desc">Six variants, three sizes. Focus rings use the primary subtle color.</div>
+
+    <div class="subsection">
+      <div class="subsection-label">Variants (Medium)</div>
+      <div class="flex-row">
+        <button class="btn btn-primary btn-md">Primary</button>
+        <button class="btn btn-secondary btn-md">Secondary</button>
+        <button class="btn btn-outline btn-md">Outline</button>
+        <button class="btn btn-ghost btn-md">Ghost</button>
+        <button class="btn btn-destructive btn-md">Destructive</button>
+        <button class="btn btn-link btn-md">Link</button>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">Sizes (Primary)</div>
+      <div class="flex-row">
+        <button class="btn btn-primary btn-sm">Small</button>
+        <button class="btn btn-primary btn-md">Medium</button>
+        <button class="btn btn-primary btn-lg">Large</button>
+        <button class="btn btn-primary btn-icon">B</button>
+        <button class="btn btn-secondary btn-icon-sm" style="font-size: 14px;">+</button>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">States</div>
+      <div class="flex-row">
+        <button class="btn btn-primary btn-md">Default</button>
+        <button class="btn btn-primary btn-md" disabled>Disabled</button>
+        <button class="btn btn-secondary btn-md">Default</button>
+        <button class="btn btn-secondary btn-md" disabled>Disabled</button>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">With Context</div>
+      <div class="flex-row">
+        <button class="btn btn-primary btn-md">Deploy to staging</button>
+        <button class="btn btn-secondary btn-md">Cancel</button>
+        <button class="btn btn-ghost btn-md">View logs</button>
+        <button class="btn btn-destructive btn-md">Delete workspace</button>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       04 — BADGES
+       ============================================================ -->
+  <section id="badges">
+    <div class="section-label">04</div>
+    <div class="section-title">Badges</div>
+    <div class="section-desc">Color-coded pills for status, priority, and categorization.</div>
+
+    <div class="subsection">
+      <div class="subsection-label">Variants</div>
+      <div class="flex-row">
+        <span class="badge badge-default">Default</span>
+        <span class="badge badge-slate">Slate</span>
+        <span class="badge badge-blue">Blue</span>
+        <span class="badge badge-amber">Amber</span>
+        <span class="badge badge-purple">Purple</span>
+        <span class="badge badge-emerald">Emerald</span>
+        <span class="badge badge-rose">Rose</span>
+        <span class="badge badge-orange">Orange</span>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">In Context — Work Item Types</div>
+      <div class="flex-row">
+        <span class="badge badge-blue">Feature</span>
+        <span class="badge badge-rose">Bug</span>
+        <span class="badge badge-purple">Task</span>
+        <span class="badge badge-amber">Chore</span>
+        <span class="badge badge-emerald">Epic</span>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">In Context — Status</div>
+      <div class="flex-row">
+        <span class="badge badge-slate">Backlog</span>
+        <span class="badge badge-blue">Todo</span>
+        <span class="badge badge-amber">In Progress</span>
+        <span class="badge badge-purple">In Review</span>
+        <span class="badge badge-emerald">Done</span>
+        <span class="badge badge-rose">Canceled</span>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">In Context — Build Status</div>
+      <div class="flex-row">
+        <span class="badge badge-slate">Queued</span>
+        <span class="badge badge-blue">Running</span>
+        <span class="badge badge-emerald">Passed</span>
+        <span class="badge badge-rose">Failed</span>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       05 — INPUTS & FORMS
+       ============================================================ -->
+  <section id="inputs">
+    <div class="section-label">05</div>
+    <div class="section-title">Inputs & Forms</div>
+    <div class="section-desc">Text inputs, textareas, selects, labels, and field groupings.</div>
+
+    <div class="grid-2">
+      <div class="flex-col">
+        <div class="subsection">
+          <div class="subsection-label">Text Input States</div>
+          <div class="flex-col" style="max-width: 320px;">
+            <div>
+              <label class="form-label">Workspace name</label>
+              <input class="input" type="text" placeholder="e.g., api-refactor">
+              <div class="form-description">A short identifier for this workspace.</div>
+            </div>
+            <div>
+              <label class="form-label">Focused</label>
+              <input class="input" type="text" value="api-refactor-v2" style="border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-subtle);">
+            </div>
+            <div>
+              <label class="form-label">Error</label>
+              <input class="input input-error" type="text" value="invalid name!">
+              <div class="form-error">Workspace name cannot contain special characters.</div>
+            </div>
+            <div>
+              <label class="form-label">Disabled</label>
+              <input class="input" type="text" value="locked-workspace" disabled>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex-col">
+        <div class="subsection">
+          <div class="subsection-label">Textarea</div>
+          <div style="max-width: 320px;">
+            <label class="form-label">Description</label>
+            <textarea class="textarea" placeholder="Describe the work item..."></textarea>
+          </div>
+        </div>
+
+        <div class="subsection">
+          <div class="subsection-label">Select</div>
+          <div style="max-width: 320px;">
+            <label class="form-label">Priority</label>
+            <div class="select-trigger">
+              <span>Medium</span>
+              <span style="color: var(--fg-muted);">&#9662;</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       06 — CARDS
+       ============================================================ -->
+  <section id="cards">
+    <div class="section-label">06</div>
+    <div class="section-title">Cards</div>
+    <div class="section-desc">Container component with header, content, and footer slots.</div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">api-refactor</div>
+          <div class="card-desc">Refactoring the tRPC router layer to support batch operations.</div>
+        </div>
+        <div class="card-content">
+          <div class="card-meta">4 tasks &middot; 2 running &middot; Updated 3m ago</div>
+        </div>
+        <div class="card-footer">
+          <button class="btn btn-primary btn-sm">Open</button>
+          <button class="btn btn-ghost btn-sm">Archive</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">mobile-auth-flow</div>
+          <div class="card-desc">Biometric auth and session persistence for the Expo mobile app.</div>
+        </div>
+        <div class="card-content">
+          <div class="card-meta">7 tasks &middot; 1 pending &middot; Updated 18m ago</div>
+        </div>
+        <div class="card-footer">
+          <button class="btn btn-primary btn-sm">Open</button>
+          <button class="btn btn-ghost btn-sm">Archive</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       07 — ALERTS
+       ============================================================ -->
+  <section id="alerts">
+    <div class="section-label">07</div>
+    <div class="section-title">Alerts</div>
+    <div class="section-desc">Status-colored banners for system feedback.</div>
+
+    <div style="max-width: 560px;" class="flex-col">
+      <div class="alert alert-success"><span class="alert-dot"></span><span>Deploy completed. 3 services updated on staging.</span></div>
+      <div class="alert alert-warning"><span class="alert-dot"></span><span>Build cache expired. Next build may take longer.</span></div>
+      <div class="alert alert-error"><span class="alert-dot"></span><span>Task failed: exit code 1. Check execution logs.</span></div>
+      <div class="alert alert-info"><span class="alert-dot"></span><span>Bob is analyzing your workspace for optimization opportunities.</span></div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       08 — TABLES
+       ============================================================ -->
+  <section id="tables">
+    <div class="section-label">08</div>
+    <div class="section-title">Tables</div>
+    <div class="section-desc">Data tables with mono-spaced numeric columns and status indicators.</div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Task</th>
+            <th>Status</th>
+            <th>Duration</th>
+            <th>Artifacts</th>
+            <th>Exit</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="td-mono">migrate-db-schema</span></td>
+            <td><span class="status-dot dot-blue dot-pulse" style="margin-right: 8px;"></span>Running</td>
+            <td class="td-mono">2m 41s</td>
+            <td class="td-mono">&mdash;</td>
+            <td class="td-mono">&mdash;</td>
+          </tr>
+          <tr>
+            <td><span class="td-mono">build-gateway</span></td>
+            <td><span class="status-dot dot-blue dot-pulse" style="margin-right: 8px;"></span>Running</td>
+            <td class="td-mono">1m 08s</td>
+            <td class="td-mono">&mdash;</td>
+            <td class="td-mono">&mdash;</td>
+          </tr>
+          <tr>
+            <td><span class="td-mono">lint-packages</span></td>
+            <td><span class="status-dot dot-amber" style="margin-right: 8px;"></span>Pending</td>
+            <td class="td-mono">&mdash;</td>
+            <td class="td-mono">&mdash;</td>
+            <td class="td-mono">&mdash;</td>
+          </tr>
+          <tr>
+            <td><span class="td-mono">test-auth-flow</span></td>
+            <td><span class="status-dot dot-emerald" style="margin-right: 8px;"></span>Passed</td>
+            <td class="td-mono">0m 47s</td>
+            <td class="td-mono">3 files &middot; 12KB</td>
+            <td class="td-mono">0</td>
+          </tr>
+          <tr>
+            <td><span class="td-mono">deploy-staging</span></td>
+            <td><span class="status-dot dot-rose" style="margin-right: 8px;"></span>Failed</td>
+            <td class="td-mono">1m 22s</td>
+            <td class="td-mono">1 file &middot; 4KB</td>
+            <td class="td-mono">1</td>
+          </tr>
+          <tr>
+            <td><span class="td-mono">run-e2e-suite</span></td>
+            <td><span class="status-dot dot-slate" style="margin-right: 8px;"></span>Queued</td>
+            <td class="td-mono">&mdash;</td>
+            <td class="td-mono">&mdash;</td>
+            <td class="td-mono">&mdash;</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       09 — DIALOG
+       ============================================================ -->
+  <section id="dialog">
+    <div class="section-label">09</div>
+    <div class="section-title">Dialog</div>
+    <div class="section-desc">Modal overlay for confirmations, forms, and focused interactions.</div>
+
+    <div class="dialog-demo" style="position: relative;">
+      <div class="dialog-header" style="position: relative;">
+        <div class="dialog-title">Create Workspace</div>
+        <div class="dialog-description">Set up a new workspace for your project.</div>
+        <button class="dialog-close">&times;</button>
+      </div>
+      <div class="dialog-body">
+        <div style="margin-bottom: 16px;">
+          <label class="form-label">Name</label>
+          <input class="input" type="text" placeholder="e.g., api-refactor">
+        </div>
+        <div>
+          <label class="form-label">Description</label>
+          <textarea class="textarea" placeholder="What will this workspace be used for?" style="min-height: 60px;"></textarea>
+        </div>
+      </div>
+      <div class="dialog-footer">
+        <button class="btn btn-secondary btn-md">Cancel</button>
+        <button class="btn btn-primary btn-md">Create workspace</button>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       10 — DROPDOWN MENU
+       ============================================================ -->
+  <section id="dropdown">
+    <div class="section-label">10</div>
+    <div class="section-title">Dropdown Menu</div>
+    <div class="section-desc">Context menus and action lists with keyboard shortcuts.</div>
+
+    <div class="grid-2">
+      <div>
+        <div class="subsection-label">Standard</div>
+        <div class="dropdown-menu">
+          <div class="dropdown-item">
+            <span>Open</span>
+            <span class="dropdown-shortcut">Enter</span>
+          </div>
+          <div class="dropdown-item">
+            <span>Edit</span>
+            <span class="dropdown-shortcut">E</span>
+          </div>
+          <div class="dropdown-item">
+            <span>Duplicate</span>
+            <span class="dropdown-shortcut">D</span>
+          </div>
+          <div class="dropdown-separator"></div>
+          <div class="dropdown-item">
+            <span>Archive</span>
+            <span class="dropdown-shortcut">A</span>
+          </div>
+          <div class="dropdown-separator"></div>
+          <div class="dropdown-item dropdown-item-destructive">
+            <span>Delete</span>
+            <span class="dropdown-shortcut">&Del;</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="subsection-label">Grouped</div>
+        <div class="dropdown-menu">
+          <div class="dropdown-label">Navigation</div>
+          <div class="dropdown-item"><span>Dashboard</span></div>
+          <div class="dropdown-item"><span>Projects</span></div>
+          <div class="dropdown-separator"></div>
+          <div class="dropdown-label">Account</div>
+          <div class="dropdown-item"><span>Settings</span></div>
+          <div class="dropdown-item"><span>Sign out</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       11 — TOOLTIP
+       ============================================================ -->
+  <section id="tooltip">
+    <div class="section-label">11</div>
+    <div class="section-title">Tooltip</div>
+    <div class="section-desc">Contextual hover labels. 300ms delay.</div>
+
+    <div class="flex-row" style="gap: 48px; padding-top: 48px;">
+      <div class="tooltip-demo">
+        <div class="tooltip-bubble">Deploy to staging</div>
+        <button class="btn btn-primary btn-icon">&#9650;</button>
+      </div>
+      <div class="tooltip-demo">
+        <div class="tooltip-bubble">View build logs</div>
+        <button class="btn btn-secondary btn-icon-sm" style="font-size: 14px;">&#9776;</button>
+      </div>
+      <div class="tooltip-demo">
+        <div class="tooltip-bubble">Delete workspace</div>
+        <button class="btn btn-ghost btn-icon-sm" style="font-size: 14px; color: var(--error);">&times;</button>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       12 — TOAST
+       ============================================================ -->
+  <section id="toast">
+    <div class="section-label">12</div>
+    <div class="section-title">Toast</div>
+    <div class="section-desc">Temporary notifications via Sonner. Auto-dismiss after 5s.</div>
+
+    <div class="flex-col" style="gap: 16px; max-width: 380px;">
+      <div class="toast-demo">
+        <span class="status-dot dot-emerald" style="margin-top: 4px;"></span>
+        <div class="toast-content">
+          <div class="toast-title">Workspace created</div>
+          <div class="toast-desc">api-refactor is ready to use.</div>
+        </div>
+        <button class="toast-close">&times;</button>
+      </div>
+      <div class="toast-demo">
+        <span class="status-dot dot-rose" style="margin-top: 4px;"></span>
+        <div class="toast-content">
+          <div class="toast-title">Build failed</div>
+          <div class="toast-desc">test-auth-flow exited with code 1.</div>
+        </div>
+        <button class="toast-close">&times;</button>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       13 — SEPARATOR
+       ============================================================ -->
+  <section id="separator">
+    <div class="section-label">13</div>
+    <div class="section-title">Separator</div>
+    <div class="section-desc">Horizontal and vertical dividers for visual grouping.</div>
+
+    <div class="flex-col" style="gap: 24px;">
+      <div>
+        <div class="subsection-label">Horizontal</div>
+        <div style="padding: 16px 0;">
+          <div style="color: var(--fg-secondary); font-size: 14px; margin-bottom: 12px;">Section A content</div>
+          <div class="separator-h"></div>
+          <div style="color: var(--fg-secondary); font-size: 14px; margin-top: 12px;">Section B content</div>
+        </div>
+      </div>
+      <div>
+        <div class="subsection-label">Vertical</div>
+        <div class="flex-row" style="gap: 16px;">
+          <span style="font-size: 14px;">Dashboard</span>
+          <div class="separator-v"></div>
+          <span style="font-size: 14px;">Projects</span>
+          <div class="separator-v"></div>
+          <span style="font-size: 14px;">Settings</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       14 — SIDEBAR NAV
+       ============================================================ -->
+  <section id="sidebar">
+    <div class="section-label">14</div>
+    <div class="section-title">Sidebar Navigation</div>
+    <div class="section-desc">App shell navigation with active states, badges, and notification dots.</div>
+
+    <div class="grid-2">
+      <div>
+        <div class="subsection-label">Expanded</div>
+        <div class="sidebar-demo">
+          <div class="sidebar-item active">
+            <span class="sidebar-icon">&#9776;</span>
+            <span>Dashboard</span>
+          </div>
+          <div class="sidebar-item">
+            <span class="sidebar-icon">&#9993;</span>
+            <span>Chat</span>
+            <span class="sidebar-badge">3</span>
+          </div>
+          <div class="sidebar-item">
+            <span class="sidebar-icon">&#9881;</span>
+            <span>System</span>
+            <span class="sidebar-notification-dot"></span>
+          </div>
+          <div class="sidebar-item">
+            <span class="sidebar-icon">&#9881;</span>
+            <span>Settings</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="subsection-label">Collapsed</div>
+        <div class="sidebar-demo" style="width: 56px; align-items: center;">
+          <div class="sidebar-item active" style="padding: 8px; justify-content: center;">
+            <span class="sidebar-icon">&#9776;</span>
+          </div>
+          <div class="sidebar-item" style="padding: 8px; justify-content: center; position: relative;">
+            <span class="sidebar-icon">&#9993;</span>
+            <span style="position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 50%; background: var(--status-blue);"></span>
+          </div>
+          <div class="sidebar-item" style="padding: 8px; justify-content: center;">
+            <span class="sidebar-icon">&#9881;</span>
+          </div>
+          <div class="sidebar-item" style="padding: 8px; justify-content: center;">
+            <span class="sidebar-icon">&#9881;</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       15 — BREADCRUMBS
+       ============================================================ -->
+  <section id="breadcrumbs">
+    <div class="section-label">15</div>
+    <div class="section-title">Breadcrumbs</div>
+    <div class="section-desc">Path navigation with chevron separators.</div>
+
+    <div class="flex-col" style="gap: 16px;">
+      <div class="breadcrumbs">
+        <a href="#" class="breadcrumb-link">Dashboard</a>
+        <span class="breadcrumb-separator">&#8250;</span>
+        <span class="breadcrumb-current">Projects</span>
+      </div>
+      <div class="breadcrumbs">
+        <a href="#" class="breadcrumb-link">Dashboard</a>
+        <span class="breadcrumb-separator">&#8250;</span>
+        <a href="#" class="breadcrumb-link">Projects</a>
+        <span class="breadcrumb-separator">&#8250;</span>
+        <a href="#" class="breadcrumb-link">api-refactor</a>
+        <span class="breadcrumb-separator">&#8250;</span>
+        <span class="breadcrumb-current">Work Items</span>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       16 — COMMAND PALETTE
+       ============================================================ -->
+  <section id="command">
+    <div class="section-label">16</div>
+    <div class="section-title">Command Palette</div>
+    <div class="section-desc">Quick-access search and actions.</div>
+
+    <div class="command-palette">
+      <div class="command-input-wrap">
+        <span class="command-search-icon">&#128269;</span>
+        <input class="command-input" type="text" placeholder="Search workspaces, tasks, commands...">
+        <span class="command-kbd">Esc</span>
+      </div>
+      <div class="command-group-label">Recent</div>
+      <div class="command-item selected">
+        <span class="command-item-icon">&#9776;</span>
+        <span>api-refactor workspace</span>
+        <span class="command-shortcut"><span class="command-kbd">&#8984;</span><span class="command-kbd">1</span></span>
+      </div>
+      <div class="command-item">
+        <span class="command-item-icon">&#9998;</span>
+        <span>migrate-db-schema task</span>
+      </div>
+      <div class="command-group-label">Commands</div>
+      <div class="command-item">
+        <span class="command-item-icon">+</span>
+        <span>Create workspace</span>
+        <span class="command-shortcut"><span class="command-kbd">&#8984;</span><span class="command-kbd">N</span></span>
+      </div>
+      <div class="command-item">
+        <span class="command-item-icon">&#9654;</span>
+        <span>Run task</span>
+        <span class="command-shortcut"><span class="command-kbd">&#8984;</span><span class="command-kbd">R</span></span>
+      </div>
+      <div class="command-item">
+        <span class="command-item-icon">&#9881;</span>
+        <span>Open settings</span>
+        <span class="command-shortcut"><span class="command-kbd">&#8984;</span><span class="command-kbd">,</span></span>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       17 — STATUS SYSTEM
+       ============================================================ -->
+  <section id="status">
+    <div class="section-label">17</div>
+    <div class="section-title">Status System</div>
+    <div class="section-desc">Colored dots with optional pulse animation for active states. Used across the entire app.</div>
+
+    <div class="grid-2">
+      <div>
+        <div class="subsection-label">Build Status</div>
+        <div class="flex-col" style="gap: 10px;">
+          <div class="flex-row"><span class="status-dot dot-slate"></span><span style="font-size: 14px;">Queued</span></div>
+          <div class="flex-row"><span class="status-dot dot-blue dot-pulse"></span><span style="font-size: 14px;">Running</span></div>
+          <div class="flex-row"><span class="status-dot dot-emerald"></span><span style="font-size: 14px;">Passed</span></div>
+          <div class="flex-row"><span class="status-dot dot-rose"></span><span style="font-size: 14px;">Failed</span></div>
+          <div class="flex-row"><span class="status-dot dot-slate"></span><span style="font-size: 14px;">Canceled</span></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="subsection-label">Deploy Status</div>
+        <div class="flex-col" style="gap: 10px;">
+          <div class="flex-row"><span class="status-dot dot-amber"></span><span style="font-size: 14px;">Pending</span></div>
+          <div class="flex-row"><span class="status-dot dot-blue dot-pulse"></span><span style="font-size: 14px;">Deploying</span></div>
+          <div class="flex-row"><span class="status-dot dot-emerald"></span><span style="font-size: 14px;">Healthy</span></div>
+          <div class="flex-row"><span class="status-dot dot-rose"></span><span style="font-size: 14px;">Unhealthy</span></div>
+          <div class="flex-row"><span class="status-dot dot-slate"></span><span style="font-size: 14px;">Rolled Back</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="subsection" style="margin-top: 24px;">
+      <div class="subsection-label">Task Status Indicator (multi-dot)</div>
+      <div class="flex-row" style="gap: 24px;">
+        <div class="flex-col" style="gap: 4px; align-items: center;">
+          <div class="task-status-row">
+            <span class="status-dot dot-sm dot-emerald"></span>
+            <span class="status-dot dot-sm dot-emerald"></span>
+            <span class="status-dot dot-sm dot-blue dot-pulse"></span>
+            <span class="status-dot dot-sm dot-slate"></span>
+          </div>
+          <span style="font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted);">2/4 gates</span>
+        </div>
+        <div class="flex-col" style="gap: 4px; align-items: center;">
+          <div class="task-status-row">
+            <span class="status-dot dot-sm dot-emerald"></span>
+            <span class="status-dot dot-sm dot-emerald"></span>
+            <span class="status-dot dot-sm dot-emerald"></span>
+          </div>
+          <span style="font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted);">all passed</span>
+        </div>
+        <div class="flex-col" style="gap: 4px; align-items: center;">
+          <div class="task-status-row">
+            <span class="status-dot dot-sm dot-emerald"></span>
+            <span class="status-dot dot-sm dot-rose"></span>
+            <span class="status-dot dot-sm dot-slate"></span>
+          </div>
+          <span style="font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted);">failed</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       18 — PRIORITY
+       ============================================================ -->
+  <section id="priority">
+    <div class="section-label">18</div>
+    <div class="section-title">Priority</div>
+    <div class="section-desc">Left-border color bars and badge variants for priority levels.</div>
+
+    <div class="flex-col" style="gap: 12px; max-width: 280px;">
+      <div class="priority-indicator"><div class="priority-bar priority-urgent"></div><span class="badge badge-rose">Urgent</span><span style="font-size: 13px; color: var(--fg-secondary);">Blocks deployment</span></div>
+      <div class="priority-indicator"><div class="priority-bar priority-high"></div><span class="badge badge-orange">High</span><span style="font-size: 13px; color: var(--fg-secondary);">This sprint</span></div>
+      <div class="priority-indicator"><div class="priority-bar priority-medium"></div><span class="badge badge-amber">Medium</span><span style="font-size: 13px; color: var(--fg-secondary);">Next sprint</span></div>
+      <div class="priority-indicator"><div class="priority-bar priority-low"></div><span class="badge badge-blue">Low</span><span style="font-size: 13px; color: var(--fg-secondary);">Backlog</span></div>
+      <div class="priority-indicator"><div class="priority-bar priority-none"></div><span class="badge badge-default">None</span><span style="font-size: 13px; color: var(--fg-secondary);">Unset</span></div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       19 — KANBAN BOARD
+       ============================================================ -->
+  <section id="kanban">
+    <div class="section-label">19</div>
+    <div class="section-title">Kanban Board</div>
+    <div class="section-desc">5-column board with priority bars, status badges, and dispatch indicators.</div>
+
+    <div class="kanban-demo">
+      <!-- Backlog -->
+      <div class="kanban-col">
+        <div class="kanban-col-header">
+          <span class="kanban-col-title">Backlog</span>
+          <span class="kanban-col-count">2</span>
+        </div>
+        <div class="kanban-card">
+          <div class="kanban-card-priority priority-low"></div>
+          <div class="kanban-card-id">WI-0023</div>
+          <div class="kanban-card-title">Add rate limiting to API gateway</div>
+          <div class="kanban-card-footer">
+            <span class="badge badge-blue" style="font-size: 10px; padding: 1px 6px;">Feature</span>
+          </div>
+        </div>
+        <div class="kanban-card">
+          <div class="kanban-card-priority priority-none"></div>
+          <div class="kanban-card-id">WI-0024</div>
+          <div class="kanban-card-title">Update error page copy</div>
+          <div class="kanban-card-footer">
+            <span class="badge badge-amber" style="font-size: 10px; padding: 1px 6px;">Chore</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ready -->
+      <div class="kanban-col">
+        <div class="kanban-col-header">
+          <span class="kanban-col-title">Ready</span>
+          <span class="kanban-col-count">1</span>
+        </div>
+        <div class="kanban-card">
+          <div class="kanban-card-priority priority-high"></div>
+          <div class="kanban-card-id">WI-0019</div>
+          <div class="kanban-card-title">Fix auth token refresh race condition</div>
+          <div class="kanban-card-footer">
+            <span class="badge badge-rose" style="font-size: 10px; padding: 1px 6px;">Bug</span>
+            <span class="status-dot dot-sm dot-amber" style="margin-left: auto;" title="Blocked"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- In Progress -->
+      <div class="kanban-col">
+        <div class="kanban-col-header">
+          <span class="kanban-col-title">In Progress</span>
+          <span class="kanban-col-count">2</span>
+        </div>
+        <div class="kanban-card">
+          <div class="kanban-card-priority priority-urgent"></div>
+          <div class="kanban-card-id">WI-0016</div>
+          <div class="kanban-card-title">Migrate DB schema for work item priorities</div>
+          <div class="kanban-card-footer">
+            <span class="badge badge-purple" style="font-size: 10px; padding: 1px 6px;">Task</span>
+            <span class="status-dot dot-sm dot-blue dot-pulse" style="margin-left: auto;" title="Running"></span>
+          </div>
+        </div>
+        <div class="kanban-card">
+          <div class="kanban-card-priority priority-medium"></div>
+          <div class="kanban-card-id">WI-0018</div>
+          <div class="kanban-card-title">Build pipeline timeline view</div>
+          <div class="kanban-card-footer">
+            <span class="badge badge-blue" style="font-size: 10px; padding: 1px 6px;">Feature</span>
+            <span class="status-dot dot-sm dot-blue dot-pulse" style="margin-left: auto;" title="Running"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- In Review -->
+      <div class="kanban-col">
+        <div class="kanban-col-header">
+          <span class="kanban-col-title">In Review</span>
+          <span class="kanban-col-count">1</span>
+        </div>
+        <div class="kanban-card">
+          <div class="kanban-card-priority priority-high"></div>
+          <div class="kanban-card-id">WI-0015</div>
+          <div class="kanban-card-title">tRPC batch endpoint support</div>
+          <div class="kanban-card-footer">
+            <span class="badge badge-blue" style="font-size: 10px; padding: 1px 6px;">Feature</span>
+            <span class="status-dot dot-sm dot-emerald" style="margin-left: auto;" title="Completed"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Done -->
+      <div class="kanban-col">
+        <div class="kanban-col-header">
+          <span class="kanban-col-title">Done</span>
+          <span class="kanban-col-count">1</span>
+        </div>
+        <div class="kanban-card">
+          <div class="kanban-card-priority priority-medium"></div>
+          <div class="kanban-card-id">WI-0012</div>
+          <div class="kanban-card-title">Setup project card component</div>
+          <div class="kanban-card-footer">
+            <span class="badge badge-purple" style="font-size: 10px; padding: 1px 6px;">Task</span>
+            <span class="status-dot dot-sm dot-emerald" style="margin-left: auto;" title="Completed"></span>
+          </div>
+        </div>
+        <div class="kanban-empty">Drop items here</div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       20 — GRAPH NODES
+       ============================================================ -->
+  <section id="graph-nodes">
+    <div class="section-label">20</div>
+    <div class="section-title">Graph Nodes</div>
+    <div class="section-desc">Work item nodes for flow graphs with status borders, pipeline state, and connection handles.</div>
+
+    <div class="grid-4">
+      <div class="graph-node">
+        <div class="graph-handle graph-handle-top"></div>
+        <div class="graph-node-status-bar" style="background: var(--status-amber);"></div>
+        <div class="graph-node-id">WI-0016</div>
+        <div class="graph-node-title">Migrate DB schema</div>
+        <div class="graph-node-meta">
+          <span class="badge badge-purple" style="font-size: 10px; padding: 1px 6px;">Task</span>
+          <span class="badge badge-amber" style="font-size: 10px; padding: 1px 6px;">In Progress</span>
+        </div>
+        <div class="graph-node-pipeline">
+          <span class="status-dot dot-sm dot-blue dot-pulse"></span>
+          <span>building</span>
+        </div>
+        <div class="graph-handle graph-handle-bottom"></div>
+      </div>
+
+      <div class="graph-node">
+        <div class="graph-handle graph-handle-top"></div>
+        <div class="graph-node-status-bar" style="background: var(--status-emerald);"></div>
+        <div class="graph-node-id">WI-0015</div>
+        <div class="graph-node-title">tRPC batch endpoints</div>
+        <div class="graph-node-meta">
+          <span class="badge badge-blue" style="font-size: 10px; padding: 1px 6px;">Feature</span>
+          <span class="badge badge-emerald" style="font-size: 10px; padding: 1px 6px;">Done</span>
+        </div>
+        <div class="graph-node-pipeline">
+          <span class="status-dot dot-sm dot-emerald"></span>
+          <span>healthy</span>
+        </div>
+        <div class="graph-handle graph-handle-bottom"></div>
+      </div>
+
+      <div class="graph-node">
+        <div class="graph-handle graph-handle-top"></div>
+        <div class="graph-node-status-bar" style="background: var(--status-purple);"></div>
+        <div class="graph-node-id">WI-0019</div>
+        <div class="graph-node-title">Auth token refresh fix</div>
+        <div class="graph-node-meta">
+          <span class="badge badge-rose" style="font-size: 10px; padding: 1px 6px;">Bug</span>
+          <span class="badge badge-purple" style="font-size: 10px; padding: 1px 6px;">In Review</span>
+        </div>
+        <div class="graph-node-pipeline">
+          <span class="status-dot dot-sm dot-amber"></span>
+          <span>awaiting approval</span>
+        </div>
+        <div class="graph-handle graph-handle-bottom"></div>
+      </div>
+
+      <div class="graph-node">
+        <div class="graph-handle graph-handle-top"></div>
+        <div class="graph-node-status-bar" style="background: rgba(148, 163, 184, 0.5);"></div>
+        <div class="graph-node-id">WI-0023</div>
+        <div class="graph-node-title">API rate limiting</div>
+        <div class="graph-node-meta">
+          <span class="badge badge-blue" style="font-size: 10px; padding: 1px 6px;">Feature</span>
+          <span class="badge badge-slate" style="font-size: 10px; padding: 1px 6px;">Backlog</span>
+        </div>
+        <div class="graph-handle graph-handle-bottom"></div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       21 — PROJECT CARDS
+       ============================================================ -->
+  <section id="project-cards">
+    <div class="section-label">21</div>
+    <div class="section-title">Project Cards</div>
+    <div class="section-desc">Project overview cards with color indicators and metadata.</div>
+
+    <div class="grid-3">
+      <div class="project-card">
+        <div class="project-card-header">
+          <div class="project-color-dot" style="background: var(--primary);"></div>
+          <div class="project-card-label">Project</div>
+        </div>
+        <div class="project-card-name">api-refactor</div>
+        <div class="project-card-meta">12 items &middot; 4 active &middot; 2 running</div>
+      </div>
+
+      <div class="project-card">
+        <div class="project-card-header">
+          <div class="project-color-dot" style="background: var(--status-purple);"></div>
+          <div class="project-card-label">Project</div>
+        </div>
+        <div class="project-card-name">mobile-auth-flow</div>
+        <div class="project-card-meta">7 items &middot; 1 active &middot; 0 running</div>
+      </div>
+
+      <div class="project-card">
+        <div class="project-card-header">
+          <div class="project-color-dot" style="background: var(--status-emerald);"></div>
+          <div class="project-card-label">Project</div>
+        </div>
+        <div class="project-card-name">infra-migration</div>
+        <div class="project-card-meta">23 items &middot; 0 active &middot; Complete</div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       22 — NOTIFICATIONS
+       ============================================================ -->
+  <section id="notifications">
+    <div class="section-label">22</div>
+    <div class="section-title">Notifications</div>
+    <div class="section-desc">Notification items with unread state, truncated body, and timestamps.</div>
+
+    <div style="max-width: 400px; border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; background: var(--bg-elevated);">
+      <div class="notification-item unread">
+        <span class="notification-unread-dot"></span>
+        <div class="notification-content">
+          <div class="notification-title">Build passed: migrate-db-schema</div>
+          <div class="notification-body">All 3 gates passed. Ready for production deploy.</div>
+        </div>
+        <span class="notification-time">2m</span>
+      </div>
+      <div class="notification-item unread">
+        <span class="notification-unread-dot"></span>
+        <div class="notification-content">
+          <div class="notification-title">Task failed: deploy-staging</div>
+          <div class="notification-body">Exit code 1. Container health check timeout after 30s.</div>
+        </div>
+        <span class="notification-time">8m</span>
+      </div>
+      <div class="notification-item">
+        <span style="width: 6px; flex-shrink: 0;"></span>
+        <div class="notification-content">
+          <div class="notification-title">Workspace archived: old-prototype</div>
+          <div class="notification-body">Archived by system after 30 days of inactivity.</div>
+        </div>
+        <span class="notification-time">1h</span>
+      </div>
+      <div class="notification-item">
+        <span style="width: 6px; flex-shrink: 0;"></span>
+        <div class="notification-content">
+          <div class="notification-title">New comment on WI-0015</div>
+          <div class="notification-body">Sean: "Looks good, merging after the next gate."</div>
+        </div>
+        <span class="notification-time">3h</span>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       23 — DISPATCH BAR
+       ============================================================ -->
+  <section id="dispatch">
+    <div class="section-label">23</div>
+    <div class="section-title">Dispatch Bar</div>
+    <div class="section-desc">Persistent status bar for active task dispatches with live progress.</div>
+
+    <div class="flex-col" style="gap: 12px; max-width: 560px;">
+      <div class="dispatch-bar dispatch-active">
+        <span class="status-dot dot-blue dot-pulse"></span>
+        <span>Dispatching: <strong>4</strong>/7 complete</span>
+        <a href="#" style="color: var(--status-blue); margin-left: auto; font-size: 13px; text-decoration: none;">View plan &rarr;</a>
+      </div>
+      <div class="dispatch-bar dispatch-complete">
+        <span class="status-dot dot-emerald"></span>
+        <span>Dispatch complete: <strong>7</strong>/7 tasks</span>
+        <a href="#" style="color: var(--status-emerald); margin-left: auto; font-size: 13px; text-decoration: none;">View results &rarr;</a>
+      </div>
+      <div class="dispatch-bar dispatch-failed">
+        <span class="status-dot dot-rose"></span>
+        <span>Dispatching: <strong>5</strong>/7 complete &middot; <span style="color: var(--status-rose);">2 failed</span></span>
+        <a href="#" style="color: var(--status-rose); margin-left: auto; font-size: 13px; text-decoration: none;">View errors &rarr;</a>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       24 — FORGEGRAPH
+       ============================================================ -->
+  <section id="forgegraph">
+    <div class="section-label">24</div>
+    <div class="section-title">ForgeGraph</div>
+    <div class="section-desc">Gate decision cards, revision status bars, and build pipelines.</div>
+
+    <div class="grid-2">
+      <!-- Gate Decision Card -->
+      <div>
+        <div class="subsection-label">Gate Decision Card</div>
+        <div class="gate-card">
+          <div class="gate-card-title">Deploy Gates</div>
+          <div class="gate-row">
+            <span class="gate-name">Lint</span>
+            <span class="badge badge-emerald" style="font-size: 11px; padding: 1px 8px;">Passed</span>
+          </div>
+          <div class="gate-row">
+            <span class="gate-name">Test</span>
+            <span class="badge badge-emerald" style="font-size: 11px; padding: 1px 8px;">Passed</span>
+          </div>
+          <div class="gate-row">
+            <span class="gate-name">Build</span>
+            <span class="badge badge-blue" style="font-size: 11px; padding: 1px 8px;">Running</span>
+          </div>
+          <div class="gate-row">
+            <span class="gate-name">Deploy</span>
+            <span class="badge badge-slate" style="font-size: 11px; padding: 1px 8px;">Queued</span>
+          </div>
+          <div class="gate-footer">Gates in progress&hellip;</div>
+        </div>
+      </div>
+
+      <!-- Gate states -->
+      <div>
+        <div class="subsection-label">Gate Card States</div>
+        <div class="flex-col" style="gap: 12px;">
+          <div class="gate-card">
+            <div class="gate-card-title">Deploy Gates</div>
+            <div class="gate-row"><span class="gate-name">Lint</span><span class="badge badge-emerald" style="font-size: 11px; padding: 1px 8px;">Passed</span></div>
+            <div class="gate-row"><span class="gate-name">Test</span><span class="badge badge-emerald" style="font-size: 11px; padding: 1px 8px;">Passed</span></div>
+            <div class="gate-row"><span class="gate-name">Build</span><span class="badge badge-emerald" style="font-size: 11px; padding: 1px 8px;">Passed</span></div>
+            <div class="gate-footer" style="color: var(--success);">All gates passed — ready for production.</div>
+          </div>
+          <div class="gate-card" style="border-style: dashed;">
+            <div class="gate-card-title">Deploy Gates</div>
+            <div style="padding: 16px 0; text-align: center; color: var(--fg-muted); font-size: 13px;">No revision pushed yet</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="subsection" style="margin-top: 24px;">
+      <div class="subsection-label">Revision Status Bar</div>
+      <div class="flex-col" style="gap: 16px;">
+        <div>
+          <div class="revision-info">main &middot; a3f2c891</div>
+          <div class="revision-bar">
+            <span class="badge badge-emerald" style="font-size: 10px; padding: 1px 6px;">Lint</span>
+            <div class="revision-connector" style="background: rgba(52, 211, 153, 0.4);"></div>
+            <span class="badge badge-emerald" style="font-size: 10px; padding: 1px 6px;">Test</span>
+            <div class="revision-connector" style="background: rgba(52, 211, 153, 0.4);"></div>
+            <span class="badge badge-blue" style="font-size: 10px; padding: 1px 6px;">Build</span>
+            <div class="revision-connector" style="background: rgba(255,255,255,0.1);"></div>
+            <span class="badge badge-slate" style="font-size: 10px; padding: 1px 6px;">Deploy</span>
+          </div>
+        </div>
+        <div>
+          <div class="revision-info">main &middot; 7f2e0ba3</div>
+          <div class="revision-bar">
+            <span class="badge badge-emerald" style="font-size: 10px; padding: 1px 6px;">Lint</span>
+            <div class="revision-connector" style="background: rgba(52, 211, 153, 0.4);"></div>
+            <span class="badge badge-rose" style="font-size: 10px; padding: 1px 6px;">Test</span>
+            <div class="revision-connector" style="background: rgba(251, 113, 133, 0.4);"></div>
+            <span class="badge badge-slate" style="font-size: 10px; padding: 1px 6px;">Build</span>
+            <div class="revision-connector" style="background: rgba(255,255,255,0.1);"></div>
+            <span class="badge badge-slate" style="font-size: 10px; padding: 1px 6px;">Deploy</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       25 — TERMINAL
+       ============================================================ -->
+  <section id="terminal">
+    <div class="section-label">25</div>
+    <div class="section-title">Terminal</div>
+    <div class="section-desc">Embedded terminal with styled output, always dark regardless of theme.</div>
+
+    <div class="terminal">
+      <div class="terminal-bar">
+        <div class="terminal-dot" style="background: #EF5350;"></div>
+        <div class="terminal-dot" style="background: #E8A33C;"></div>
+        <div class="terminal-dot" style="background: #4CAF50;"></div>
+        <span class="terminal-title">bob &mdash; workspace: api-refactor</span>
+      </div>
+      <div class="terminal-body">
+        <div><span class="t-prompt">bob $</span> task run migrate-db-schema <span class="t-flag">--env</span> staging</div>
+        <div><span class="t-comment"># Preparing execution environment...</span></div>
+        <div><span class="t-comment"># Worktree created at /tmp/bob-wt-a3f2</span></div>
+        <div>Running migration: <span class="t-string">add_work_item_priority_column</span></div>
+        <div>Applied 1 migration in <span class="t-success">2.3s</span></div>
+        <div>&nbsp;</div>
+        <div><span class="t-prompt">bob $</span> task run test-auth-flow <span class="t-flag">--verbose</span></div>
+        <div><span class="t-comment"># Running 14 test cases...</span></div>
+        <div><span class="t-success">PASS</span> auth/login.test.ts (0.8s)</div>
+        <div><span class="t-success">PASS</span> auth/refresh.test.ts (1.2s)</div>
+        <div><span class="t-error">FAIL</span> auth/logout.test.ts (0.3s)</div>
+        <div>&nbsp;</div>
+        <div>  <span class="t-error">Expected: session.destroy() to be called</span></div>
+        <div>  <span class="t-error">Received: 0 calls</span></div>
+        <div>&nbsp;</div>
+        <div>Tests: <span class="t-success">12 passed</span>, <span class="t-error">2 failed</span>, 14 total</div>
+        <div>Time: 2.3s</div>
+        <div><span class="t-prompt">bob $</span> <span class="t-cursor">_</span></div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       26 — INLINE EDITABLE
+       ============================================================ -->
+  <section id="inline-edit">
+    <div class="section-label">26</div>
+    <div class="section-title">Inline Editable</div>
+    <div class="section-desc">Click-to-edit fields with hover, editing, and saving states.</div>
+
+    <div class="flex-col" style="gap: 16px; max-width: 400px;">
+      <div>
+        <div class="subsection-label">Resting</div>
+        <div class="inline-editable" style="font-family: var(--font-display); font-size: 18px; font-weight: 600;">
+          API Refactor Project
+        </div>
+      </div>
+      <div>
+        <div class="subsection-label">Hover (border appears)</div>
+        <div class="inline-editable" style="font-family: var(--font-display); font-size: 18px; font-weight: 600; background: var(--bg-subtle); border-color: var(--border);">
+          API Refactor Project
+        </div>
+      </div>
+      <div>
+        <div class="subsection-label">Editing (focused)</div>
+        <div class="inline-editable-active" style="font-family: var(--font-display); font-size: 18px; font-weight: 600;">
+          API Refactor Project
+        </div>
+        <div class="form-description" style="margin-top: 6px;">Press Enter to save, Esc to cancel</div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- ============================================================
+     COMPOSITE EXAMPLES
+     ============================================================ -->
+<div style="background: var(--primary); padding: 48px 32px; text-align: center; margin-bottom: 0;">
+  <div style="font-family: var(--font-display); font-weight: 900; font-size: 36px; color: white; letter-spacing: -0.02em; margin-bottom: 8px;">Composite Examples</div>
+  <div style="font-family: var(--font-body); font-size: 16px; color: rgba(255,255,255,0.8);">Real UI assembled from the components above</div>
+</div>
+
+<div class="container">
+
+  <!-- ============================================================
+       COMPOSITE — DASHBOARD
+       ============================================================ -->
+  <section id="composite-dashboard">
+    <div class="section-label">Composite</div>
+    <div class="section-title">Dashboard Overview</div>
+    <div class="section-desc">The main landing page — stats, active dispatches, recent projects, and a task table.</div>
+
+    <div style="background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius-xl); overflow: hidden;">
+      <!-- Dashboard Header -->
+      <div style="padding: 24px 32px; border-bottom: 1px solid var(--border); background: var(--bg-elevated); display: flex; align-items: center; justify-content: space-between;">
+        <div>
+          <div style="font-family: var(--font-display); font-weight: 700; font-size: 24px; letter-spacing: -0.015em;">Dashboard</div>
+          <div style="font-size: 14px; color: var(--fg-secondary); margin-top: 2px;">Monday, March 17</div>
+        </div>
+        <div class="flex-row">
+          <button class="btn btn-secondary btn-md">New workspace</button>
+          <button class="btn btn-primary btn-md">Start planning</button>
+        </div>
+      </div>
+
+      <div style="padding: 24px 32px;">
+        <!-- Stats Row -->
+        <div class="grid-4" style="margin-bottom: 24px;">
+          <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px;">
+            <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--fg-muted); margin-bottom: 4px;">Active Tasks</div>
+            <div style="font-family: var(--font-display); font-weight: 700; font-size: 32px; letter-spacing: -0.02em;">12</div>
+            <div style="font-size: 13px; color: var(--fg-muted); margin-top: 4px;">3 running, 9 queued</div>
+          </div>
+          <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px;">
+            <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--fg-muted); margin-bottom: 4px;">Completed Today</div>
+            <div style="font-family: var(--font-display); font-weight: 700; font-size: 32px; letter-spacing: -0.02em; color: var(--success);">28</div>
+            <div style="font-size: 13px; color: var(--fg-muted); margin-top: 4px;">+8 from yesterday</div>
+          </div>
+          <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px;">
+            <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--fg-muted); margin-bottom: 4px;">Failed</div>
+            <div style="font-family: var(--font-display); font-weight: 700; font-size: 32px; letter-spacing: -0.02em; color: var(--error);">2</div>
+            <div style="font-size: 13px; color: var(--fg-muted); margin-top: 4px;">Needs attention</div>
+          </div>
+          <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px;">
+            <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--fg-muted); margin-bottom: 4px;">Avg Duration</div>
+            <div style="font-family: var(--font-display); font-weight: 700; font-size: 32px; letter-spacing: -0.02em;">1m 42s</div>
+            <div style="font-size: 13px; color: var(--fg-muted); margin-top: 4px;">-12% this week</div>
+          </div>
+        </div>
+
+        <!-- Dispatch Bar -->
+        <div class="dispatch-bar dispatch-active" style="margin-bottom: 24px;">
+          <span class="status-dot dot-blue dot-pulse"></span>
+          <span>Dispatching: <strong>4</strong>/7 complete</span>
+          <a href="#" style="color: var(--status-blue); margin-left: auto; font-size: 13px; text-decoration: none;">View plan &rarr;</a>
+        </div>
+
+        <!-- Projects + Tasks side by side -->
+        <div class="grid-2">
+          <!-- Recent Projects -->
+          <div>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+              <span style="font-family: var(--font-display); font-weight: 600; font-size: 16px;">Recent Projects</span>
+              <a href="#" style="font-size: 13px; color: var(--primary); text-decoration: none;">View all &rarr;</a>
+            </div>
+            <div class="flex-col" style="gap: 8px;">
+              <div class="project-card" style="padding: 16px;">
+                <div class="project-card-header" style="margin-bottom: 4px;">
+                  <div class="project-color-dot" style="background: var(--primary);"></div>
+                  <div class="project-card-label">Project</div>
+                </div>
+                <div style="font-family: var(--font-display); font-weight: 600; font-size: 15px; margin-bottom: 4px;">api-refactor</div>
+                <div style="font-size: 13px; color: var(--fg-secondary);">4 active &middot; 2 running</div>
+              </div>
+              <div class="project-card" style="padding: 16px;">
+                <div class="project-card-header" style="margin-bottom: 4px;">
+                  <div class="project-color-dot" style="background: var(--status-purple);"></div>
+                  <div class="project-card-label">Project</div>
+                </div>
+                <div style="font-family: var(--font-display); font-weight: 600; font-size: 15px; margin-bottom: 4px;">mobile-auth-flow</div>
+                <div style="font-size: 13px; color: var(--fg-secondary);">1 active &middot; 0 running</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Tasks -->
+          <div>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+              <span style="font-family: var(--font-display); font-weight: 600; font-size: 16px;">Recent Tasks</span>
+              <a href="#" style="font-size: 13px; color: var(--primary); text-decoration: none;">View all &rarr;</a>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Task</th><th>Status</th><th>Time</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td class="td-mono" style="font-size: 13px;">migrate-db-schema</td>
+                    <td><span class="status-dot dot-blue dot-pulse" style="margin-right: 6px;"></span><span style="font-size: 13px;">Running</span></td>
+                    <td class="td-mono" style="font-size: 12px;">2m 41s</td>
+                  </tr>
+                  <tr>
+                    <td class="td-mono" style="font-size: 13px;">build-gateway</td>
+                    <td><span class="status-dot dot-blue dot-pulse" style="margin-right: 6px;"></span><span style="font-size: 13px;">Running</span></td>
+                    <td class="td-mono" style="font-size: 12px;">1m 08s</td>
+                  </tr>
+                  <tr>
+                    <td class="td-mono" style="font-size: 13px;">test-auth-flow</td>
+                    <td><span class="status-dot dot-rose" style="margin-right: 6px;"></span><span style="font-size: 13px;">Failed</span></td>
+                    <td class="td-mono" style="font-size: 12px;">0m 47s</td>
+                  </tr>
+                  <tr>
+                    <td class="td-mono" style="font-size: 13px;">lint-packages</td>
+                    <td><span class="status-dot dot-emerald" style="margin-right: 6px;"></span><span style="font-size: 13px;">Passed</span></td>
+                    <td class="td-mono" style="font-size: 12px;">0m 12s</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       COMPOSITE — WORK ITEM DETAIL
+       ============================================================ -->
+  <section id="composite-detail">
+    <div class="section-label">Composite</div>
+    <div class="section-title">Work Item Detail</div>
+    <div class="section-desc">Full detail view with editable title, status, priority, description, pipeline status, and activity feed.</div>
+
+    <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-xl); overflow: hidden;">
+      <!-- Breadcrumb bar -->
+      <div style="padding: 12px 24px; border-bottom: 1px solid var(--border); background: var(--bg-subtle);">
+        <div class="breadcrumbs">
+          <a href="#" class="breadcrumb-link">Dashboard</a>
+          <span class="breadcrumb-separator">&#8250;</span>
+          <a href="#" class="breadcrumb-link">api-refactor</a>
+          <span class="breadcrumb-separator">&#8250;</span>
+          <span class="breadcrumb-current">WI-0016</span>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 300px; min-height: 500px;">
+        <!-- Main content -->
+        <div style="padding: 32px; border-right: 1px solid var(--border);">
+          <!-- Editable title -->
+          <div class="inline-editable" style="font-family: var(--font-display); font-weight: 700; font-size: 24px; letter-spacing: -0.015em; margin-bottom: 8px; padding: 4px 8px;">
+            Migrate DB schema for work item priorities
+          </div>
+
+          <!-- Tags row -->
+          <div class="flex-row" style="margin-bottom: 24px; padding-left: 8px;">
+            <span class="badge badge-purple">Task</span>
+            <span class="badge badge-amber">In Progress</span>
+            <span class="badge badge-rose">Urgent</span>
+          </div>
+
+          <!-- Description -->
+          <div style="padding-left: 8px;">
+            <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--fg-muted); margin-bottom: 8px;">Description</div>
+            <div style="font-size: 15px; color: var(--fg-secondary); line-height: 1.7; margin-bottom: 24px;">
+              Add a <code style="font-family: var(--font-mono); font-size: 13px; background: var(--bg-subtle); padding: 2px 6px; border-radius: 4px;">priority</code> column to the work_items table with values: urgent, high, medium, low, none. Migrate existing items to "none" as default. Update the tRPC router to accept priority on create/update. Add database index on (project_id, priority) for efficient board queries.
+            </div>
+
+            <!-- Pipeline status -->
+            <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--fg-muted); margin-bottom: 8px;">Pipeline</div>
+            <div style="background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 24px;">
+              <div class="revision-info">feature/wi-priority &middot; e4a2f103</div>
+              <div class="revision-bar">
+                <span class="badge badge-emerald" style="font-size: 10px; padding: 1px 6px;">Lint</span>
+                <div class="revision-connector" style="background: rgba(52, 211, 153, 0.4);"></div>
+                <span class="badge badge-emerald" style="font-size: 10px; padding: 1px 6px;">Test</span>
+                <div class="revision-connector" style="background: rgba(52, 211, 153, 0.4);"></div>
+                <span class="badge badge-blue" style="font-size: 10px; padding: 1px 6px;">Build</span>
+                <div class="revision-connector" style="background: rgba(255,255,255,0.1);"></div>
+                <span class="badge badge-slate" style="font-size: 10px; padding: 1px 6px;">Deploy</span>
+              </div>
+            </div>
+
+            <!-- Activity -->
+            <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--fg-muted); margin-bottom: 12px;">Activity</div>
+            <div class="flex-col" style="gap: 0; border-left: 2px solid var(--border); padding-left: 16px; margin-left: 4px;">
+              <div style="padding-bottom: 16px; position: relative;">
+                <div style="position: absolute; left: -21px; top: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--status-blue); border: 2px solid var(--bg-elevated);"></div>
+                <div style="font-size: 14px; font-weight: 500;">Build started</div>
+                <div style="font-size: 13px; color: var(--fg-muted);">2 minutes ago</div>
+              </div>
+              <div style="padding-bottom: 16px; position: relative;">
+                <div style="position: absolute; left: -21px; top: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--status-emerald); border: 2px solid var(--bg-elevated);"></div>
+                <div style="font-size: 14px; font-weight: 500;">Tests passed (14/14)</div>
+                <div style="font-size: 13px; color: var(--fg-muted);">5 minutes ago</div>
+              </div>
+              <div style="padding-bottom: 16px; position: relative;">
+                <div style="position: absolute; left: -21px; top: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--primary); border: 2px solid var(--bg-elevated);"></div>
+                <div style="font-size: 14px; font-weight: 500;">Status changed to In Progress</div>
+                <div style="font-size: 13px; color: var(--fg-muted);">12 minutes ago</div>
+              </div>
+              <div style="position: relative;">
+                <div style="position: absolute; left: -21px; top: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--fg-faint); border: 2px solid var(--bg-elevated);"></div>
+                <div style="font-size: 14px; font-weight: 500;">Sean added a comment</div>
+                <div style="font-size: 13px; color: var(--fg-muted);">18 minutes ago</div>
+                <div style="background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px 14px; margin-top: 6px; font-size: 14px; color: var(--fg-secondary);">
+                  "Make sure the index covers the board query pattern — we had perf issues last time without it."
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sidebar metadata -->
+        <div style="padding: 24px; background: var(--bg-subtle);">
+          <div class="flex-col" style="gap: 20px;">
+            <div>
+              <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--fg-muted); margin-bottom: 6px;">Status</div>
+              <div class="select-trigger" style="max-width: none;">
+                <div class="flex-row" style="gap: 6px;"><span class="status-dot dot-amber"></span><span>In Progress</span></div>
+                <span style="color: var(--fg-muted);">&#9662;</span>
+              </div>
+            </div>
+            <div>
+              <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--fg-muted); margin-bottom: 6px;">Priority</div>
+              <div class="select-trigger" style="max-width: none;">
+                <div class="flex-row" style="gap: 6px;"><div class="priority-bar priority-urgent" style="height: 14px;"></div><span>Urgent</span></div>
+                <span style="color: var(--fg-muted);">&#9662;</span>
+              </div>
+            </div>
+            <div>
+              <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--fg-muted); margin-bottom: 6px;">Type</div>
+              <div class="select-trigger" style="max-width: none;">
+                <span>Task</span>
+                <span style="color: var(--fg-muted);">&#9662;</span>
+              </div>
+            </div>
+            <div class="separator-h"></div>
+            <div>
+              <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--fg-muted); margin-bottom: 6px;">Project</div>
+              <div class="flex-row" style="gap: 6px;">
+                <div class="project-color-dot" style="background: var(--primary); width: 8px; height: 8px;"></div>
+                <span style="font-size: 14px;">api-refactor</span>
+              </div>
+            </div>
+            <div>
+              <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--fg-muted); margin-bottom: 6px;">Identifier</div>
+              <span style="font-family: var(--font-mono); font-size: 13px; color: var(--fg-secondary);">WI-0016</span>
+            </div>
+            <div>
+              <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--fg-muted); margin-bottom: 6px;">Created</div>
+              <span style="font-size: 13px; color: var(--fg-secondary);">March 15, 2026</span>
+            </div>
+            <div>
+              <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--fg-muted); margin-bottom: 6px;">Dependencies</div>
+              <div style="font-family: var(--font-mono); font-size: 12px; color: var(--fg-secondary); display: flex; flex-direction: column; gap: 4px;">
+                <div class="flex-row" style="gap: 4px;"><span class="status-dot dot-sm dot-emerald"></span>WI-0012</div>
+                <div class="flex-row" style="gap: 4px;"><span class="status-dot dot-sm dot-amber"></span>WI-0014</div>
+              </div>
+            </div>
+            <div class="separator-h"></div>
+            <div class="flex-row" style="gap: 8px;">
+              <button class="btn btn-secondary btn-sm" style="flex: 1;">Promote to task</button>
+              <button class="btn btn-ghost btn-sm" style="color: var(--error);">Delete</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       COMPOSITE — SETTINGS FORM
+       ============================================================ -->
+  <section id="composite-settings">
+    <div class="section-label">Composite</div>
+    <div class="section-title">Settings Form</div>
+    <div class="section-desc">Multi-section form layout with field groups, labels, descriptions, and action footer.</div>
+
+    <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-xl); overflow: hidden; max-width: 640px;">
+      <!-- Header -->
+      <div style="padding: 24px 32px; border-bottom: 1px solid var(--border);">
+        <div style="font-family: var(--font-display); font-weight: 700; font-size: 20px; margin-bottom: 2px;">Workspace Settings</div>
+        <div style="font-size: 14px; color: var(--fg-secondary);">Configure your workspace preferences and integrations.</div>
+      </div>
+
+      <!-- Form body -->
+      <div style="padding: 32px;">
+        <!-- Section: General -->
+        <div style="margin-bottom: 32px;">
+          <div style="font-family: var(--font-display); font-weight: 600; font-size: 16px; margin-bottom: 16px;">General</div>
+          <div class="flex-col" style="gap: 20px;">
+            <div>
+              <label class="form-label">Workspace name</label>
+              <input class="input" type="text" value="api-refactor" style="max-width: 100%;">
+              <div class="form-description">Used in URLs and terminal prompts.</div>
+            </div>
+            <div>
+              <label class="form-label">Description</label>
+              <textarea class="textarea" style="max-width: 100%; min-height: 60px;">Refactoring the tRPC router layer to support batch operations and improved error handling.</textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="separator-h" style="margin-bottom: 32px;"></div>
+
+        <!-- Section: Execution -->
+        <div style="margin-bottom: 32px;">
+          <div style="font-family: var(--font-display); font-weight: 600; font-size: 16px; margin-bottom: 16px;">Execution</div>
+          <div class="flex-col" style="gap: 20px;">
+            <div>
+              <label class="form-label">Default environment</label>
+              <div class="select-trigger" style="max-width: 100%;">
+                <span>Staging</span>
+                <span style="color: var(--fg-muted);">&#9662;</span>
+              </div>
+              <div class="form-description">Environment used when no --env flag is specified.</div>
+            </div>
+            <div>
+              <label class="form-label">Timeout (seconds)</label>
+              <input class="input" type="number" value="300" style="max-width: 160px;">
+              <div class="form-description">Maximum duration for task execution.</div>
+            </div>
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+              <div style="width: 20px; height: 20px; border: 2px solid var(--primary); border-radius: 4px; background: var(--primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px;">
+                <span style="color: white; font-size: 12px; font-weight: 700;">&#10003;</span>
+              </div>
+              <div>
+                <div style="font-size: 14px; font-weight: 500;">Auto-cleanup worktrees</div>
+                <div style="font-size: 13px; color: var(--fg-muted);">Remove temporary worktrees after task completion.</div>
+              </div>
+            </div>
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+              <div style="width: 20px; height: 20px; border: 2px solid var(--border); border-radius: 4px; background: var(--bg-elevated); flex-shrink: 0; margin-top: 2px;"></div>
+              <div>
+                <div style="font-size: 14px; font-weight: 500;">Collect artifacts</div>
+                <div style="font-size: 13px; color: var(--fg-muted);">Save build outputs and logs for completed tasks.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="separator-h" style="margin-bottom: 32px;"></div>
+
+        <!-- Danger Zone -->
+        <div>
+          <div style="font-family: var(--font-display); font-weight: 600; font-size: 16px; color: var(--error); margin-bottom: 16px;">Danger Zone</div>
+          <div style="background: var(--error-subtle); border: 1px solid var(--error); border-radius: var(--radius-lg); padding: 16px 20px; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <div style="font-size: 14px; font-weight: 500;">Delete workspace</div>
+              <div style="font-size: 13px; color: var(--fg-secondary);">Permanently remove this workspace and all its data.</div>
+            </div>
+            <button class="btn btn-destructive btn-sm">Delete</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div style="padding: 16px 32px; border-top: 1px solid var(--border); background: var(--bg-subtle); display: flex; justify-content: flex-end; gap: 8px;">
+        <button class="btn btn-secondary btn-md">Cancel</button>
+        <button class="btn btn-primary btn-md">Save changes</button>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================================================
+       COMPOSITE — APP SHELL
+       ============================================================ -->
+  <section id="composite-shell">
+    <div class="section-label">Composite</div>
+    <div class="section-title">App Shell</div>
+    <div class="section-desc">Full-width layout with sidebar, header, and content area showing the planning view.</div>
+
+    <div style="background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-xl); overflow: hidden; display: grid; grid-template-columns: 240px 1fr; min-height: 560px;">
+      <!-- Sidebar -->
+      <div style="background: var(--bg-subtle); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 16px 12px;">
+        <!-- Logo -->
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 12px; margin-bottom: 16px;">
+          <span class="logo-mark" style="width: 24px; height: 24px; font-size: 13px;">B</span>
+          <span style="font-family: var(--font-display); font-weight: 900; font-size: 16px;">Bob</span>
+        </div>
+
+        <!-- Workspace selector -->
+        <div style="padding: 8px 12px; margin-bottom: 12px; border: 1px solid var(--border); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: space-between; cursor: pointer; font-size: 13px; font-weight: 500;">
+          <div class="flex-row" style="gap: 6px;">
+            <div class="project-color-dot" style="background: var(--primary); width: 8px; height: 8px;"></div>
+            <span>api-refactor</span>
+          </div>
+          <span style="color: var(--fg-muted); font-size: 10px;">&#9662;</span>
+        </div>
+
+        <!-- Nav items -->
+        <div class="flex-col" style="gap: 2px;">
+          <div class="sidebar-item active">
+            <span class="sidebar-icon">&#9776;</span>
+            <span>Planning</span>
+          </div>
+          <div class="sidebar-item">
+            <span class="sidebar-icon">&#9635;</span>
+            <span>Board</span>
+            <span class="sidebar-badge">7</span>
+          </div>
+          <div class="sidebar-item">
+            <span class="sidebar-icon">&#9993;</span>
+            <span>Chat</span>
+            <span class="sidebar-badge">3</span>
+          </div>
+          <div class="sidebar-item">
+            <span class="sidebar-icon">&#9672;</span>
+            <span>Pipelines</span>
+          </div>
+          <div class="sidebar-item">
+            <span class="sidebar-icon">&#9783;</span>
+            <span>Terminal</span>
+          </div>
+        </div>
+
+        <div style="flex: 1;"></div>
+
+        <!-- Bottom nav -->
+        <div class="flex-col" style="gap: 2px;">
+          <div class="sidebar-item">
+            <span class="sidebar-icon">&#128276;</span>
+            <span>Notifications</span>
+            <span class="sidebar-notification-dot"></span>
+          </div>
+          <div class="sidebar-item">
+            <span class="sidebar-icon">&#9881;</span>
+            <span>Settings</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main content area -->
+      <div style="display: flex; flex-direction: column;">
+        <!-- Top bar -->
+        <div style="padding: 12px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--bg-elevated);">
+          <div class="breadcrumbs">
+            <a href="#" class="breadcrumb-link">api-refactor</a>
+            <span class="breadcrumb-separator">&#8250;</span>
+            <span class="breadcrumb-current">Planning</span>
+          </div>
+          <div class="flex-row" style="gap: 8px;">
+            <button class="btn btn-ghost btn-sm" style="font-family: var(--font-mono); font-size: 12px;">&#8984;K</button>
+            <button class="btn btn-primary btn-sm">Start planning</button>
+          </div>
+        </div>
+
+        <!-- Dispatch bar -->
+        <div style="padding: 12px 24px 0;">
+          <div class="dispatch-bar dispatch-active" style="margin-bottom: 0;">
+            <span class="status-dot dot-blue dot-pulse"></span>
+            <span style="font-size: 13px;">Dispatching: <strong>4</strong>/7 complete</span>
+            <a href="#" style="color: var(--status-blue); margin-left: auto; font-size: 12px; text-decoration: none;">View plan &rarr;</a>
+          </div>
+        </div>
+
+        <!-- Planning content -->
+        <div style="padding: 24px; flex: 1;">
+          <div style="font-family: var(--font-display); font-weight: 700; font-size: 20px; margin-bottom: 4px;">Recent Plans</div>
+          <div style="font-size: 14px; color: var(--fg-secondary); margin-bottom: 20px;">AI-generated execution plans for your project.</div>
+
+          <div class="flex-col" style="gap: 8px;">
+            <!-- Plan cards -->
+            <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 20px; display: flex; align-items: center; gap: 16px; cursor: pointer; transition: all 150ms ease-out;" onmouseover="this.style.borderColor='var(--fg-faint)'" onmouseout="this.style.borderColor='var(--border)'">
+              <div style="flex: 1;">
+                <div style="font-weight: 500; font-size: 15px; margin-bottom: 2px;">Add priority column migration</div>
+                <div style="font-size: 13px; color: var(--fg-secondary);">7 tasks &middot; Estimated 12 minutes</div>
+              </div>
+              <div class="flex-row" style="gap: 6px;">
+                <span class="badge badge-blue" style="font-size: 11px;">4/7</span>
+                <span class="status-dot dot-blue dot-pulse"></span>
+              </div>
+            </div>
+
+            <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 20px; display: flex; align-items: center; gap: 16px; cursor: pointer; transition: all 150ms ease-out;" onmouseover="this.style.borderColor='var(--fg-faint)'" onmouseout="this.style.borderColor='var(--border)'">
+              <div style="flex: 1;">
+                <div style="font-weight: 500; font-size: 15px; margin-bottom: 2px;">Batch endpoint support</div>
+                <div style="font-size: 13px; color: var(--fg-secondary);">5 tasks &middot; Completed in 8 minutes</div>
+              </div>
+              <div class="flex-row" style="gap: 6px;">
+                <span class="badge badge-emerald" style="font-size: 11px;">5/5</span>
+                <span class="status-dot dot-emerald"></span>
+              </div>
+            </div>
+
+            <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 20px; display: flex; align-items: center; gap: 16px; cursor: pointer; transition: all 150ms ease-out;" onmouseover="this.style.borderColor='var(--fg-faint)'" onmouseout="this.style.borderColor='var(--border)'">
+              <div style="flex: 1;">
+                <div style="font-weight: 500; font-size: 15px; margin-bottom: 2px;">Fix auth token refresh</div>
+                <div style="font-size: 13px; color: var(--fg-secondary);">3 tasks &middot; 1 failed</div>
+              </div>
+              <div class="flex-row" style="gap: 6px;">
+                <span class="badge badge-rose" style="font-size: 11px;">2/3</span>
+                <span class="status-dot dot-rose"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- ============================================================
+     FOOTER
+     ============================================================ -->
+<footer class="page-footer">
+  Bob Builder Design System &mdash; Sticker Sheet &mdash; Generated by /design-consultation
+</footer>
+
+<script>
+  let isDark = false;
+  function toggleTheme() {
+    isDark = !isDark;
+    document.body.classList.toggle('dark', isDark);
+    document.getElementById('theme-btn').textContent = isDark ? 'Switch to Light' : 'Switch to Dark';
+  }
+</script>
+
+</body>
+</html>
