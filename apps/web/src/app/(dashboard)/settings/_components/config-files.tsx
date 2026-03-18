@@ -68,6 +68,16 @@ export function ConfigFilesSection() {
     "      \"name\": \"create-gmacko-app-feature-development\",\n" +
     "      \"description\": \"Feature placement guidance for create-gmacko-app repos so agents know where code belongs across apps/nextjs, packages/ui, packages/api, packages/db, helpers, and shared packages\",\n" +
     "      \"path\": \"./skills/create-gmacko-app-feature-development.md\"\n" +
+    "    },\n" +
+    "    {\n" +
+    "      \"name\": \"work-item-shaping\",\n" +
+    "      \"description\": \"Question-driven shaping for turning rough ideas into Bob epics or issues, plus BRDs and requirement sets\",\n" +
+    "      \"path\": \"./skills/work-item-shaping.md\"\n" +
+    "    },\n" +
+    "    {\n" +
+    "      \"name\": \"work-item-breakdown\",\n" +
+    "      \"description\": \"Breaks Bob epics, issues, BRDs, and requirement sets into linked child tasks with dependencies and lifecycle guidance\",\n" +
+    "      \"path\": \"./skills/work-item-breakdown.md\"\n" +
     "    }\n" +
     "  ]\n" +
     "}\n";
@@ -123,6 +133,36 @@ export function ConfigFilesSection() {
     "- keep helpers close to the layer they serve\n" +
     "- move them to a layer-local helper module only after reuse inside that layer appears\n" +
     "- promote to a shared package only when at least two consumers or a stable platform concern justify it\n";
+
+  const WORK_ITEM_SHAPING_SKILL_TEMPLATE =
+    "---\n" +
+    "name: work-item-shaping\n" +
+    "description: Use when a user is past a rough idea and needs to shape it into a Bob epic or issue with clearer scope, a business requirements document, or structured requirements - guides question-driven brainstorming, choosing the right work item kind, and capturing the parent work item cleanly before execution starts\n" +
+    "---\n\n" +
+    "# Work Item Shaping\n\n" +
+    "Core rule: chat one question at a time until the work is clear enough to become an epic or issue with a real BRD or requirement set.\n\n" +
+    "Use an epic for multi-step feature work, an issue for a bug or narrow problem that still needs shaping, and a task only when the work is already directly executable.\n\n" +
+    "Bob storage rules:\n" +
+    "- keep the parent scope on the epic or issue\n" +
+    "- put the concise summary in the parent description\n" +
+    "- attach longer BRDs as documentation artifacts when needed\n" +
+    "- keep requirements on the parent item before creating child tasks\n";
+
+  const WORK_ITEM_BREAKDOWN_SKILL_TEMPLATE =
+    "---\n" +
+    "name: work-item-breakdown\n" +
+    "description: Use when a Bob epic, issue, business requirements document, or requirement set needs to become executable child tasks - turns parent scope into linked tasks, dependencies, and requirement ownership while teaching the Bob lifecycle from shape through ship\n" +
+    "---\n\n" +
+    "# Work Item Breakdown\n\n" +
+    "Core rule: the parent issue or epic owns the scope and requirements; child tasks own execution.\n\n" +
+    "Breakdown rules:\n" +
+    "- read the parent issue or epic and any BRD first\n" +
+    "- normalize the scope into parent requirements\n" +
+    "- create child tasks beneath the parent\n" +
+    "- use linkedTaskId to link each requirement to its primary owning task\n" +
+    "- only promote the parent to a task when it should execute directly\n\n" +
+    "Lifecycle:\n" +
+    "- shape -> plan -> execute -> review -> ship\n";
 
   const STORYBOOK_TASK_TEMPLATE =
     "# Task: [Component Name]\n\n" +
@@ -523,6 +563,14 @@ export function ConfigFilesSection() {
                               path: "skills/create-gmacko-app-feature-development.md",
                               content:
                                 CREATE_GMACKO_APP_FEATURE_DEVELOPMENT_SKILL_TEMPLATE,
+                            },
+                            {
+                              path: "skills/work-item-shaping.md",
+                              content: WORK_ITEM_SHAPING_SKILL_TEMPLATE,
+                            },
+                            {
+                              path: "skills/work-item-breakdown.md",
+                              content: WORK_ITEM_BREAKDOWN_SKILL_TEMPLATE,
                             },
                             {
                               path: "prompts/storybook-task-template.md",

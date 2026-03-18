@@ -11,6 +11,33 @@ export interface PlanningContext {
  * Includes tool descriptions that the agent can invoke via structured output.
  */
 export function buildPlanningPrompt(ctx: PlanningContext): string {
+  const workItemGuidance = `
+## Work Item Shaping Workflow
+
+Use the Bob work-item-shaping pattern whenever the user's request is still a rough idea, fuzzy initiative, or partially defined problem.
+
+- Ask one question at a time until the scope is clear
+- Decide whether the parent should be an epic or issue before drafting execution tasks
+- Choose \`epic\` for grouped feature or initiative work
+- Choose \`issue\` for a bug, operational problem, or narrow fix that still needs shaping
+- Choose \`task\` only when the work is already directly executable
+- Produce a parent work item description with problem, scope, constraints, and success signals
+- When the work is large enough, describe or reference a BRD or business requirements document
+
+## Requirements and Task Breakdown
+
+Use the Bob work-item-breakdown pattern when an epic, issue, BRD, or requirement set is ready to plan.
+
+- Convert BRD scope into concrete parent requirements first
+- Create executable child tasks under the parent issue or epic
+- Keep each task small enough for one agent session
+- Set dependencies only where order is real
+- Link requirements to tasks and note the owning \`linkedTaskId\` in the plan when possible
+- Keep the parent issue or epic as the scope owner; do not collapse the whole plan into one umbrella task
+
+The Bob lifecycle is: shape -> plan -> execute -> review -> ship.
+`;
+
   const reactFrontendGuidance = ctx.reactFrontend
     ? `
 ## Storybook Development Workflow
@@ -87,6 +114,7 @@ Show all current draft tasks for this session.
 - Prefer smaller tasks over larger ones
 - Set dependencies only where truly necessary (avoid over-constraining)
 - Use "epic" kind for grouping-only items, "task" for executable work, "issue" for bugs/problems
+${workItemGuidance}
 ${reactFrontendGuidance}
 
 ## Context
