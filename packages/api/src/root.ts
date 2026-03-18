@@ -4,6 +4,7 @@ import { authRouter } from "./router/auth";
 import { chatRouter } from "./router/chat";
 import { dispatchRouter } from "./router/dispatch";
 import { eventRouter } from "./router/event";
+import { featureBranchRouter } from "./router/featureBranch";
 import { forgegraphRouter } from "./router/forgegraph";
 import { filesystemRouter } from "./router/filesystem";
 import { gitRouter } from "./router/git";
@@ -42,6 +43,7 @@ const appRouterRecord = {
   comment: commentRouter,
   dispatch: dispatchRouter,
   event: eventRouter,
+  featureBranch: featureBranchRouter,
   filesystem: filesystemRouter,
   forgegraph: forgegraphRouter,
   git: gitRouter,
