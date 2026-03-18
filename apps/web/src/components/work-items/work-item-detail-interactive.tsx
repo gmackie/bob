@@ -16,6 +16,7 @@ import { formatRelativeTime } from "~/lib/format/time";
 import { getTaskWorkspaceHref } from "~/lib/planning/task-workspace";
 import { useTRPC } from "~/trpc/react";
 
+import { FeatureBranchView } from "~/components/pull-requests/feature-branch-view";
 import { ActivityTimeline } from "./activity-timeline";
 import { AddCommentForm } from "./add-comment-form";
 import { ArtifactCardGrid } from "./artifact-card";
@@ -170,6 +171,12 @@ export function WorkItemDetailInteractive({
             workItemId={workItem.id}
             workItemKind={workItem.kind}
           />
+        </section>
+      )}
+
+      {workItem.kind === "epic" && (
+        <section className="rounded-3xl border border-border bg-secondary p-6">
+          <FeatureBranchView workItemId={workItem.id} />
         </section>
       )}
 
