@@ -63,6 +63,11 @@ export function ConfigFilesSection() {
     "      \"name\": \"storybook-development\",\n" +
     "      \"description\": \"State-first Storybook workflow for UI generation, state coverage, and prompt-driven iteration\",\n" +
     "      \"path\": \"./skills/storybook-development.md\"\n" +
+    "    },\n" +
+    "    {\n" +
+    "      \"name\": \"create-gmacko-app-feature-development\",\n" +
+    "      \"description\": \"Feature placement guidance for create-gmacko-app repos so agents know where code belongs across apps/nextjs, packages/ui, packages/api, packages/db, helpers, and shared packages\",\n" +
+    "      \"path\": \"./skills/create-gmacko-app-feature-development.md\"\n" +
     "    }\n" +
     "  ]\n" +
     "}\n";
@@ -93,6 +98,31 @@ export function ConfigFilesSection() {
     "- responsive variants\n" +
     "- accessibility variants\n\n" +
     "Use the prompt files in ./prompts for the task template and seed library.\n";
+
+  const CREATE_GMACKO_APP_FEATURE_DEVELOPMENT_SKILL_TEMPLATE =
+    "---\n" +
+    "name: create-gmacko-app-feature-development\n" +
+    "description: Use when implementing a feature in a create-gmacko-app repo and you need to know where code belongs across apps/nextjs, packages/ui, packages/api, packages/db, local helpers, and shared packages - keeps feature work uniform, package-scoped, and ready to promote into shared layers when reuse appears\n" +
+    "---\n\n" +
+    "# Create Gmacko App Feature Development\n\n" +
+    "Core rule: place code in the narrowest correct layer first, then promote it only when reuse is real.\n\n" +
+    "Package map:\n" +
+    "- apps/nextjs: routes, page composition, app-specific providers, app-only hooks\n" +
+    "- packages/ui: reusable UI primitives, shared components, stories\n" +
+    "- packages/api: routers, procedures, domain services, integration orchestration\n" +
+    "- packages/db: schema, migrations, seeds, persistence helpers\n" +
+    "- apps/nextjs + Playwright: repeatable web end-to-end coverage\n" +
+    "- apps/expo/.maestro: mobile end-to-end flows for Expo\n" +
+    "- docs/ai: proposal and implementation artifacts\n\n" +
+    "Validation stack:\n" +
+    "- use Playwright for deterministic web flows in apps/nextjs\n" +
+    "- use gstack /browse for browser QA and visual verification\n" +
+    "- use Maestro from apps/expo/.maestro for mobile end-to-end flows\n" +
+    "- treat /browse as the fast inspection loop and Playwright or Maestro as the durable regression layer\n\n" +
+    "Helper rules:\n" +
+    "- keep helpers close to the layer they serve\n" +
+    "- move them to a layer-local helper module only after reuse inside that layer appears\n" +
+    "- promote to a shared package only when at least two consumers or a stable platform concern justify it\n";
 
   const STORYBOOK_TASK_TEMPLATE =
     "# Task: [Component Name]\n\n" +
@@ -488,6 +518,11 @@ export function ConfigFilesSection() {
                             {
                               path: "skills/storybook-development.md",
                               content: STORYBOOK_DEVELOPMENT_SKILL_TEMPLATE,
+                            },
+                            {
+                              path: "skills/create-gmacko-app-feature-development.md",
+                              content:
+                                CREATE_GMACKO_APP_FEATURE_DEVELOPMENT_SKILL_TEMPLATE,
                             },
                             {
                               path: "prompts/storybook-task-template.md",

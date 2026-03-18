@@ -1,8 +1,9 @@
 import { z } from "zod/v4";
 
-import { desc, eq } from "@bob/db";
-import { projects, workItems } from "@bob/db/schema";
+import { and, desc, eq } from "@bob/db";
+import { projects, repositories, workItems } from "@bob/db/schema";
 
+import { detectProjectCapabilities } from "../services/projects/projectCapabilities";
 import { protectedProcedure } from "../trpc";
 
 export const projectRouter = {
@@ -79,12 +80,35 @@ export const projectRouter = {
         return null;
       }
 
+      const linkedRepository = await ctx.db.query.repositories.findFirst({
+        where: and(
+          eq(repositories.planningProjectId, project.id),
+          eq(repositories.userId, ctx.session.user.id),
+        ),
+      });
+
       const items = await ctx.db.query.workItems.findMany({
         where: eq(workItems.projectId, input.id),
       });
 
+      const capabilities = detectProjectCapabilities({
+        repositoryPath: linkedRepository?.path,
+      });
+
       return {
         project,
+        linkedRepository: linkedRepository
+          ? {
+              id: linkedRepository.id,
+              name: linkedRepository.name,
+              path: linkedRepository.path,
+              remoteProvider: linkedRepository.remoteProvider,
+              remoteOwner: linkedRepository.remoteOwner,
+              remoteName: linkedRepository.remoteName,
+              remoteUrl: linkedRepository.remoteUrl,
+            }
+          : null,
+        capabilities,
         counts: {
           issues: items.filter((item) => item.kind === "issue").length,
           tasks: items.filter((item) => item.kind === "task").length,

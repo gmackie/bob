@@ -1,4 +1,8 @@
-export const SKILL_NAMES = ["bob-workflow", "storybook-development"] as const;
+export const SKILL_NAMES = [
+  "bob-workflow",
+  "storybook-development",
+  "create-gmacko-app-feature-development",
+] as const;
 
 export type SkillName = (typeof SKILL_NAMES)[number];
 
@@ -33,6 +37,7 @@ export function getMcpServerConfig(config: BobAgentConfig) {
 
 export {
   bobWorkflowSkill,
+  createGmackoAppFeatureDevelopmentSkill,
   getOhMyOpenCodeMcpConfig,
   generateOhMyOpenCodeConfig,
   storybookDevelopmentSkill,
