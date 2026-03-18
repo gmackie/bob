@@ -6,9 +6,12 @@
   "exports": {
     ".": "./src/index.ts",
     "./skills/*": "./src/skills/*.md",
+    "./prompts/*": "./src/prompts/*",
+    "./templates/*": "./src/templates/*",
     "./config/*": "./src/config/*",
     "./oh-my-opencode": "./src/oh-my-opencode/index.ts",
     "./oh-my-opencode/bob-workflow-skill": "./src/oh-my-opencode/bob-workflow-skill.ts",
+    "./oh-my-opencode/storybook-development-skill": "./src/oh-my-opencode/storybook-development-skill.ts",
     "./oh-my-opencode/config": "./src/oh-my-opencode/oh-my-opencode-config.json"
   },
   "files": [

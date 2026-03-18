@@ -17,6 +17,11 @@
       "name": "bob-workflow",
       "description": "Workflow and status reporting for Bob-managed sessions",
       "path": "./skills/bob-workflow.md"
+    },
+    {
+      "name": "storybook-development",
+      "description": "State-first Storybook workflow for UI generation, state coverage, and prompt-driven iteration",
+      "path": "./skills/storybook-development.md"
     }
   ]
 }

@@ -13,6 +13,11 @@ const ctx: PlanningContext = {
   sessionId: "sess-001",
 };
 
+const reactCtx: PlanningContext = {
+  ...ctx,
+  reactFrontend: true,
+};
+
 describe("buildPlanningPrompt", () => {
   it("returns a string containing the workspace ID", () => {
     const prompt = buildPlanningPrompt(ctx);
@@ -36,6 +41,20 @@ describe("buildPlanningPrompt", () => {
     expect(prompt).toContain("remove_draft_task");
     expect(prompt).toContain("set_dependency");
     expect(prompt).toContain("list_drafts");
+  });
+
+  it("does not include Storybook workflow guidance when the project has no React frontend", () => {
+    const prompt = buildPlanningPrompt(ctx);
+    expect(prompt).not.toContain("Storybook Development Workflow");
+    expect(prompt).not.toContain("Required States");
+  });
+
+  it("includes Storybook workflow guidance for projects with a React frontend", () => {
+    const prompt = buildPlanningPrompt(reactCtx);
+    expect(prompt).toContain("Storybook Development Workflow");
+    expect(prompt).toContain("Required States");
+    expect(prompt).toContain("Prompt Payload");
+    expect(prompt).toContain("Generate component, stories, and fixtures together");
   });
 });
 

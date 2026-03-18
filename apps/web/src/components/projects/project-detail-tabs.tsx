@@ -42,6 +42,7 @@ interface ProjectDetailTabsProps {
     autoBranch?: boolean;
     autoFeaturePR?: boolean;
     ciTrigger?: boolean;
+    reactFrontend?: boolean;
   };
 }
 

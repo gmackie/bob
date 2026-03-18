@@ -1,4 +1,5 @@
 export { bobWorkflowSkill } from "./bob-workflow-skill.js";
+export { storybookDevelopmentSkill } from "./storybook-development-skill.js";
 export type { BuiltinSkill } from "./bob-workflow-skill.js";
 
 export function getOhMyOpenCodeMcpConfig(env: {
@@ -31,6 +32,13 @@ export function generateOhMyOpenCodeConfig(env: {
         name: "bob-workflow",
         description: "Workflow and status reporting for Bob-managed sessions",
         source: "@bob/agent-toolkit/oh-my-opencode/bob-workflow-skill",
+      },
+      "storybook-development": {
+        name: "storybook-development",
+        description:
+          "State-first Storybook workflow for UI generation, state coverage, and prompt-driven iteration",
+        source:
+          "@bob/agent-toolkit/oh-my-opencode/storybook-development-skill",
       },
     },
   };

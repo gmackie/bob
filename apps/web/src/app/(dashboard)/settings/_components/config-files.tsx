@@ -58,6 +58,11 @@ export function ConfigFilesSection() {
     "      \"name\": \"bob-workflow\",\n" +
     "      \"description\": \"Workflow and status reporting for Bob-managed sessions\",\n" +
     "      \"path\": \"./skills/bob-workflow.md\"\n" +
+    "    },\n" +
+    "    {\n" +
+    "      \"name\": \"storybook-development\",\n" +
+    "      \"description\": \"State-first Storybook workflow for UI generation, state coverage, and prompt-driven iteration\",\n" +
+    "      \"path\": \"./skills/storybook-development.md\"\n" +
     "    }\n" +
     "  ]\n" +
     "}\n";
@@ -71,6 +76,59 @@ export function ConfigFilesSection() {
     "- Use mark_blocked when you cannot proceed\n" +
     "- Use submit_for_review when a PR is ready\n\n" +
     "Required env (for bob MCP server): BOB_API_URL, BOB_API_KEY, BOB_SESSION_ID\n";
+
+  const STORYBOOK_DEVELOPMENT_SKILL_TEMPLATE =
+    "---\n" +
+    "name: storybook-development\n" +
+    "description: Use when building or iterating on React UI in Bob with Storybook and you need exhaustive state coverage, edge-case fixtures, adversarial data, and prompt-driven review loops - turns natural language product intent into structured tasks, stories, mock data, and repeatable UX critique\n" +
+    "---\n\n" +
+    "# Storybook Development\n\n" +
+    "Use Storybook as the primary UI development surface. Treat prompts as specs and stories as the acceptance surface.\n\n" +
+    "Required story categories:\n" +
+    "- happy path\n" +
+    "- loading\n" +
+    "- error variants\n" +
+    "- empty\n" +
+    "- edge cases\n" +
+    "- responsive variants\n" +
+    "- accessibility variants\n\n" +
+    "Use the prompt files in ./prompts for the task template and seed library.\n";
+
+  const STORYBOOK_TASK_TEMPLATE =
+    "# Task: [Component Name]\n\n" +
+    "## Intent\n" +
+    "[What are we building?]\n\n" +
+    "## Context\n" +
+    "[Where it appears and what it does]\n\n" +
+    "## Required States\n" +
+    "- happy path\n" +
+    "- loading\n" +
+    "- empty\n" +
+    "- error\n\n" +
+    "## Edge Cases\n" +
+    "- long text\n" +
+    "- partial data\n" +
+    "- malformed values\n" +
+    "- slow network\n\n" +
+    "## UX Goals\n" +
+    "- clarity\n" +
+    "- feedback\n" +
+    "- responsiveness\n\n" +
+    "## Deliverables\n" +
+    "- component\n" +
+    "- stories\n" +
+    "- fixtures\n";
+
+  const STORYBOOK_PROMPT_LIBRARY_TEMPLATE =
+    "# Storybook Prompt Library\n\n" +
+    "## Component Generator\n" +
+    "Create a React component plus Storybook stories with meaningful states, edge cases, accessibility variants, and realistic mock data.\n\n" +
+    "## State Expander\n" +
+    "Enumerate all UI states including happy path, loading, error variants, empty, partial data, slow network, invalid input, and edge UX cases. Then generate stories for all of them.\n\n" +
+    "## UX Improver\n" +
+    "Improve this component to reduce cognitive load, improve hierarchy, and strengthen system feedback. Update stories accordingly.\n\n" +
+    "## Adversarial Tester\n" +
+    "Generate mock data that will break the UI: long text, null fields, malformed values, multilingual strings, and emoji-heavy copy.\n";
 
   const [selectedRootId, setSelectedRootId] = React.useState<ConfigRootId | "">(
     "",
@@ -416,6 +474,38 @@ export function ConfigFilesSection() {
                         disabled={!selectedRootId || templateMutation.isPending}
                       >
                         Write opencode-config.json + skill
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto justify-start px-2 py-1 text-xs"
+                        onClick={() =>
+                          handleWriteTemplate([
+                            {
+                              path: "skills/bob-workflow.md",
+                              content: BOB_WORKFLOW_SKILL_TEMPLATE,
+                            },
+                            {
+                              path: "skills/storybook-development.md",
+                              content: STORYBOOK_DEVELOPMENT_SKILL_TEMPLATE,
+                            },
+                            {
+                              path: "prompts/storybook-task-template.md",
+                              content: STORYBOOK_TASK_TEMPLATE,
+                            },
+                            {
+                              path: "prompts/storybook-prompt-library.md",
+                              content: STORYBOOK_PROMPT_LIBRARY_TEMPLATE,
+                            },
+                            {
+                              path: "opencode-config.json",
+                              content: OPENCODE_CONFIG_JSON_TEMPLATE,
+                            },
+                          ])
+                        }
+                        disabled={!selectedRootId || templateMutation.isPending}
+                      >
+                        Write Storybook workflow kit
                       </Button>
                     </div>
                   </div>

@@ -8,6 +8,12 @@ import {
 
 let appRouter: typeof import("../../root").appRouter;
 
+const startPlanningSessionMock = vi.fn();
+
+vi.mock("@bob/execution/planning/startPlanningSession", () => ({
+  startPlanningSession: startPlanningSessionMock,
+}));
+
 const dbInsertMock = vi.fn();
 const dbInsertValuesMock = vi.fn();
 const dbInsertReturningMock = vi.fn();
@@ -89,6 +95,9 @@ const makeDbMock = () => ({
     planDraftDependencies: {
       findMany: (...args: unknown[]) => dbQueryFindManyMock("planDraftDependencies", ...args),
     },
+    projects: {
+      findFirst: (...args: unknown[]) => dbQueryFindFirstMock("projects", ...args),
+    },
   },
 });
 
@@ -139,6 +148,7 @@ describe("planSession router", () => {
     dbUpdateReturningMock.mockReset();
     dbQueryFindFirstMock.mockReset();
     dbQueryFindManyMock.mockReset();
+    startPlanningSessionMock.mockReset();
   });
 
   describe("create", () => {
@@ -218,6 +228,37 @@ describe("planSession router", () => {
         }),
       );
       expect(result).toMatchObject({ id: DRAFT_ID, title: "Implement login" });
+    });
+  });
+
+  describe("start", () => {
+    it("passes the project's React frontend capability into execution planning startup", async () => {
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: PROJECT_ID,
+        automationSettings: {
+          reactFrontend: true,
+        },
+      });
+      startPlanningSessionMock.mockResolvedValueOnce({ sessionId: SESSION_ID });
+
+      const caller = createCaller({ id: "user-1" });
+
+      const result = await caller.planSession.start({
+        sessionId: SESSION_ID,
+        workspaceId: WORKSPACE_ID,
+        projectId: PROJECT_ID,
+        projectName: "Acme App",
+        workingDirectory: "/repo",
+      });
+
+      expect(startPlanningSessionMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: "user-1",
+          projectId: PROJECT_ID,
+          reactFrontend: true,
+        }),
+      );
+      expect(result).toEqual({ sessionId: SESSION_ID });
     });
   });
 
