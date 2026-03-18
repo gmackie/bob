@@ -6,6 +6,7 @@ import {
   createDraftPr,
   getPrById,
   linkPrToPlanningTask,
+  listAllPrs,
   listPrsByRepository,
   listPrsBySession,
   mergePr,
@@ -19,6 +20,20 @@ const prStatusSchema = z.enum(["draft", "open", "merged", "closed"]);
 const mergeMethodSchema = z.enum(["merge", "squash", "rebase"]);
 
 export const pullRequestRouter = {
+  list: protectedProcedure
+    .input(
+      z.object({
+        status: prStatusSchema.optional(),
+        limit: z.number().int().min(1).max(100).optional(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      return listAllPrs(ctx.session.user.id, {
+        status: input.status,
+        limit: input.limit,
+      });
+    }),
+
   get: protectedProcedure
     .input(z.object({ pullRequestId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {

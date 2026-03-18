@@ -507,6 +507,28 @@ export async function getPrById(
   };
 }
 
+export async function listAllPrs(
+  userId: string,
+  options?: {
+    status?: "draft" | "open" | "merged" | "closed";
+    limit?: number;
+  },
+): Promise<Array<PrWithCommits>> {
+  const conditions = [eq(pullRequests.userId, userId)];
+
+  if (options?.status) {
+    conditions.push(eq(pullRequests.status, options.status));
+  }
+
+  const prs = await db.query.pullRequests.findMany({
+    where: and(...conditions),
+    orderBy: (pr, { desc }) => [desc(pr.createdAt)],
+    limit: options?.limit ?? 50,
+  });
+
+  return prs.map((pr) => ({ ...pr, commits: [] }));
+}
+
 export async function listPrsByRepository(
   userId: string,
   repositoryId: string,

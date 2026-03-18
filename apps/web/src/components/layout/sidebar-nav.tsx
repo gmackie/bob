@@ -29,6 +29,24 @@ const NAV_ITEMS: NavItem[] = [
       <svg
         className="size-[15px]"
         viewBox="0 0 15 15"
+        fill="currentColor"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <circle cx="4.5" cy="3.5" r="1.5" />
+        <circle cx="4.5" cy="11.5" r="1.5" />
+        <circle cx="10.5" cy="3.5" r="1.5" />
+        <rect x="4" y="5" width="1" height="5" />
+        <path d="M10.5 5v2.5a2 2 0 0 1-2 2H7V8.5h1.5a1 1 0 0 0 1-1V5h1Z" />
+      </svg>
+    ),
+    label: "Pull Requests",
+    href: "/pull-requests",
+  },
+  {
+    icon: () => (
+      <svg
+        className="size-[15px]"
+        viewBox="0 0 15 15"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
       >
