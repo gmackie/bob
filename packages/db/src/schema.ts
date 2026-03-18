@@ -2171,4 +2171,36 @@ export const workItemSnapshotsRelations = relations(
   }),
 );
 
+// ---------------------------------------------------------------------------
+// Session checkpoints (turn-level)
+// ---------------------------------------------------------------------------
+
+export const sessionCheckpoints = pgTable(
+  "session_checkpoints",
+  (t) => ({
+    id: t.uuid().notNull().primaryKey().defaultRandom(),
+    sessionId: t
+      .uuid()
+      .notNull()
+      .references(() => chatConversations.id, { onDelete: "cascade" }),
+    turnNumber: t.integer().notNull(),
+    eventSeq: t.integer().notNull(),
+    label: t.text(),
+    snapshotData: t.jsonb().notNull().default({}),
+    gitRef: t.text(),
+    createdAt: t.timestamp().defaultNow().notNull(),
+  }),
+  (table) => [index("session_checkpoints_session_id_idx").on(table.sessionId)],
+);
+
+export const sessionCheckpointsRelations = relations(
+  sessionCheckpoints,
+  ({ one }) => ({
+    session: one(chatConversations, {
+      fields: [sessionCheckpoints.sessionId],
+      references: [chatConversations.id],
+    }),
+  }),
+);
+
 export * from "./auth-schema";

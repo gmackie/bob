@@ -11,6 +11,7 @@ export interface SkillFinding {
 }
 
 export interface SkillExecutionBlockProps {
+  executionId?: string;
   skillSlug: string;
   skillName?: string;
   category?: string;
@@ -20,6 +21,7 @@ export interface SkillExecutionBlockProps {
   findings?: SkillFinding[];
   durationMs?: number;
   childExecutions?: SkillExecutionBlockProps[];
+  onReplay?: (executionId: string) => void;
 }
 
 const categoryBorderColor: Record<string, string> = {
@@ -129,6 +131,7 @@ function FindingsList({ findings }: { findings: SkillFinding[] }) {
 
 export function SkillExecutionBlock(props: SkillExecutionBlockProps) {
   const {
+    executionId,
     skillSlug,
     skillName,
     category,
@@ -137,6 +140,7 @@ export function SkillExecutionBlock(props: SkillExecutionBlockProps) {
     durationMs,
     output,
     childExecutions,
+    onReplay,
   } = props;
 
   const [expanded, setExpanded] = useState(status !== "completed");
@@ -235,6 +239,23 @@ export function SkillExecutionBlock(props: SkillExecutionBlockProps) {
           {hasFindings && status !== "running" && (
             <div className="pt-1 border-t border-[var(--neutral-100)] dark:border-[var(--neutral-700)] text-xs text-[var(--neutral-500)] dark:text-[var(--neutral-400)]">
               Result: {findingSummary(findingsList)}
+            </div>
+          )}
+
+          {/* Replay button — only on completed/failed executions with an ID */}
+          {executionId && status !== "running" && onReplay && (
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => onReplay(executionId)}
+                className={cn(
+                  "text-xs font-medium px-2 py-1 rounded",
+                  "text-primary hover:bg-primary/10",
+                  "transition-colors duration-150",
+                )}
+              >
+                Replay
+              </button>
             </div>
           )}
         </div>

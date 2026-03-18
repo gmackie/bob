@@ -10,6 +10,7 @@ import {
 
 import { cn } from "@bob/ui";
 
+import { FloatingCapture } from "~/components/capture/floating-capture";
 import { ChatPanel } from "~/components/chat/chat-panel";
 import { ChatPanelProvider } from "~/components/chat/chat-panel-provider";
 import {
@@ -167,6 +168,9 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 
       {/* Chat side panel */}
       <ChatPanel />
+
+      {/* Floating capture widget */}
+      <FloatingCapture />
     </div>
   );
 }

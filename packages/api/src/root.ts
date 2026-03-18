@@ -2,6 +2,7 @@ import type { TRPCRouterRecord } from "@trpc/server";
 
 import { authRouter } from "./router/auth";
 import { captureRouter } from "./router/capture";
+import { checkpointRouter } from "./router/checkpoint";
 import { chatRouter } from "./router/chat";
 import { dispatchRouter } from "./router/dispatch";
 import { eventRouter } from "./router/event";
@@ -44,6 +45,7 @@ const appRouterRecord = {
   auth: authRouter,
   capture: captureRouter,
   chat: chatRouter,
+  checkpoint: checkpointRouter,
   comment: commentRouter,
   dispatch: dispatchRouter,
   event: eventRouter,
