@@ -8,6 +8,7 @@ import { RepositoryPanel } from "~/components/dashboard";
 import { StartPlanningButton } from "~/components/planning/start-planning-button";
 import { CreateWorkItemButton } from "~/components/work-items/create-work-item-button";
 import { ProjectDetailTabs } from "~/components/projects/project-detail-tabs";
+import { ProjectTemplatePanel } from "~/components/projects/project-template-panel";
 import { STATUS_COLOR, formatLabel } from "~/lib/design/colors";
 import { createPlanningCaller } from "~/lib/planning/server";
 
@@ -26,7 +27,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
     notFound();
   }
 
-  const { project, counts } = projectResult;
+  const { project, counts, capabilities, linkedRepository } = projectResult;
   const workItems = await caller.workItems.list({
     workspaceId: project.workspaceId,
     projectId: project.id,
@@ -59,6 +60,11 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
               <span className="rounded-full border border-border bg-accent px-2.5 py-0.5 font-mono text-xs font-medium text-muted-foreground">
                 {project.key}
               </span>
+              {capabilities.template ? (
+                <span className="rounded-full border border-emerald-400/25 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-100">
+                  Gmacko app
+                </span>
+              ) : null}
               <Badge
                 variant={STATUS_COLOR[project.status] ?? "default"}
                 className="text-[10px] px-1.5 py-0"
@@ -91,6 +97,22 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           <span>{counts.active} active</span>
         </div>
       </section>
+
+      {capabilities.template ? (
+        <section className="mt-10">
+          <ProjectTemplatePanel
+            linkedRepository={linkedRepository}
+            capability={capabilities.template}
+            planningAction={
+              <StartPlanningButton
+                workspaceId={project.workspaceId}
+                projectId={project.id}
+                projectName={project.name}
+              />
+            }
+          />
+        </section>
+      ) : null}
 
       {/* Repository panel */}
       <section className="mt-10">

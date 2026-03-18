@@ -22,6 +22,11 @@
       "name": "storybook-development",
       "description": "State-first Storybook workflow for UI generation, state coverage, and prompt-driven iteration",
       "path": "./skills/storybook-development.md"
+    },
+    {
+      "name": "create-gmacko-app-feature-development",
+      "description": "Feature placement guidance for create-gmacko-app repos so agents know where code belongs across apps/nextjs, packages/ui, packages/api, packages/db, helpers, and shared packages",
+      "path": "./skills/create-gmacko-app-feature-development.md"
     }
   ]
 }
