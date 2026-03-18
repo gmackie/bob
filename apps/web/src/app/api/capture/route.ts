@@ -27,10 +27,21 @@ export async function POST(req: NextRequest) {
     const filepath = join(CAPTURE_DIR, filename);
 
     if (targetType === "browser" && url) {
-      // For browser targets, generate a placeholder SVG indicating the URL
-      // In production this would use Playwright for actual screenshots
-      const placeholderSvg = generatePlaceholderCapture(url, 1280, 720);
-      await writeFile(filepath.replace(".png", ".svg"), placeholderSvg);
+      // Attempt real Playwright screenshot, fall back to placeholder SVG
+      let captured = false;
+      try {
+        const { captureUrl } = await import(
+          "@bob/execution-lib/capture/playwright-capture"
+        );
+        await captureUrl(url, { outputPath: filepath });
+        captured = true;
+      } catch (err) {
+        console.warn("Playwright capture unavailable, using placeholder:", err);
+      }
+      if (!captured) {
+        const placeholderSvg = generatePlaceholderCapture(url, 1280, 720);
+        await writeFile(filepath.replace(".png", ".svg"), placeholderSvg);
+      }
     } else if (targetType === "window" && targetId) {
       // macOS window capture
       try {

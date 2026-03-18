@@ -26,6 +26,7 @@
     "@bob/config": "workspace:*",
     "@bob/db": "workspace:*",
     "@bob/execution": "workspace:*",
+    "@bob/execution-lib": "workspace:*",
     "@bob/legacy": "workspace:*",
     "@bob/monitoring": "workspace:*",
     "@bob/ui": "workspace:*",

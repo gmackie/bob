@@ -12,7 +12,9 @@
       "@bob/legacy": ["../../packages/legacy/src/index.ts"],
       "@bob/legacy/*": ["../../packages/legacy/src/*"],
       "@bob/execution": ["../../apps/execution/src/runtime/index.ts"],
-      "@bob/execution/*": ["../../apps/execution/src/*"]
+      "@bob/execution/*": ["../../apps/execution/src/*"],
+      "@bob/execution-lib": ["../../packages/execution/src/index.ts"],
+      "@bob/execution-lib/*": ["../../packages/execution/src/*"]
     },
     "plugins": [{ "name": "next" }]
   },

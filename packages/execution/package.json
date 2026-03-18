@@ -10,6 +10,10 @@
     "./vcs/jj-client": {
       "types": "./dist/vcs/jj-client.d.ts",
       "default": "./src/vcs/jj-client.ts"
+    },
+    "./capture/playwright-capture": {
+      "types": "./dist/capture/playwright-capture.d.ts",
+      "default": "./src/capture/playwright-capture.ts"
     }
   },
   "license": "MIT",
@@ -20,6 +24,9 @@
     "format": "prettier --check . --ignore-path ../../.gitignore",
     "lint": "eslint --flag unstable_native_nodejs_ts_config",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
+  },
+  "optionalDependencies": {
+    "playwright": "^1.52.0"
   },
   "devDependencies": {
     "@bob/eslint-config": "workspace:*",
