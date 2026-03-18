@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@bob/ui";
 import type { SessionEvent } from "~/hooks/use-session-socket";
+import { ImageMessage } from "./image-message";
 
 interface Message {
   id: string;
@@ -247,6 +248,16 @@ function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
   );
 }
 
+const IMAGE_URL_REGEX = /(?:\/uploads\/chat\/[^\s]+|https?:\/\/[^\s]+\.(?:png|jpg|jpeg|gif|webp))/gi;
+
+function extractImageUrls(content: string): string[] {
+  return content.match(IMAGE_URL_REGEX) ?? [];
+}
+
+function stripImageUrls(content: string): string {
+  return content.replace(IMAGE_URL_REGEX, "").trim();
+}
+
 function MessageBubble({ message }: { message: Message }) {
   if (message.role === "system") {
     return <div className="chat-systemMessage">{message.content}</div>;
@@ -254,6 +265,8 @@ function MessageBubble({ message }: { message: Message }) {
 
   const isUser = message.role === "user";
   const roleLabel = isUser ? "You" : "Agent";
+  const imageUrls = extractImageUrls(message.content);
+  const textContent = imageUrls.length > 0 ? stripImageUrls(message.content) : message.content;
 
   return (
     <div className={cn("chat-messageRow", isUser && "is-user")}>
@@ -274,7 +287,15 @@ function MessageBubble({ message }: { message: Message }) {
             {formatTimestamp(message.timestamp)}
           </time>
         </div>
-        <div className="chat-messageText">{message.content}</div>
+        {textContent && <div className="chat-messageText">{textContent}</div>}
+
+        {imageUrls.map((url) => (
+          <ImageMessage
+            key={url}
+            url={url}
+            filename={url.split("/").pop()}
+          />
+        ))}
 
         {message.toolCalls?.map((tc) => (
           <ToolCallDisplay key={tc.id} toolCall={tc} />

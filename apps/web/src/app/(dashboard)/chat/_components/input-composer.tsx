@@ -36,9 +36,17 @@ export function InputComposer({
 }: InputComposerProps) {
   const [value, setValue] = useState("");
   const [isFocusMode, setIsFocusMode] = useState(false);
+  const [uploadPreview, setUploadPreview] = useState<{
+    file: File;
+    previewUrl: string;
+    uploadedUrl?: string;
+    isUploading: boolean;
+    error?: string;
+  } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const isElevenLabs = agentType === "elevenlabs";
-  const canSend = value.trim().length > 0 && !disabled;
+  const canSend = (value.trim().length > 0 || uploadPreview?.uploadedUrl) && !disabled;
   
   const { state: voiceState, startVoice, stopVoice } = useVoiceSession(
     sessionId ?? null,
@@ -59,11 +67,19 @@ export function InputComposer({
 
   const handleSend = useCallback(() => {
     const trimmed = value.trim();
-    if (!trimmed || disabled) return;
+    const imageUrl = uploadPreview?.uploadedUrl;
 
-    onSend(trimmed);
+    if (!trimmed && !imageUrl) return;
+    if (disabled) return;
+
+    const parts: string[] = [];
+    if (trimmed) parts.push(trimmed);
+    if (imageUrl) parts.push(imageUrl);
+
+    onSend(parts.join("\n"));
     setValue("");
-  }, [value, disabled, onSend]);
+    setUploadPreview(null);
+  }, [value, disabled, onSend, uploadPreview]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -101,6 +117,49 @@ export function InputComposer({
     },
     [disabled, isVoiceActive],
   );
+
+  const handleFileSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      // Reset input so same file can be re-selected
+      e.target.value = "";
+
+      if (!file.type.startsWith("image/")) return;
+
+      const previewUrl = URL.createObjectURL(file);
+      setUploadPreview({ file, previewUrl, isUploading: true });
+
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await fetch("/api/upload", { method: "POST", body: formData });
+        if (!res.ok) {
+          const data = await res.json() as { error?: string };
+          throw new Error(data.error ?? "Upload failed");
+        }
+        const data = await res.json() as { url: string };
+        setUploadPreview((prev) =>
+          prev ? { ...prev, uploadedUrl: data.url, isUploading: false } : null,
+        );
+      } catch (err) {
+        setUploadPreview((prev) =>
+          prev
+            ? { ...prev, isUploading: false, error: err instanceof Error ? err.message : "Upload failed" }
+            : null,
+        );
+      }
+    },
+    [],
+  );
+
+  const handleRemovePreview = useCallback(() => {
+    if (uploadPreview) {
+      URL.revokeObjectURL(uploadPreview.previewUrl);
+    }
+    setUploadPreview(null);
+  }, [uploadPreview]);
 
   return (
     <div className={cn("chat-composer", isFocusMode && "is-focus")}>
@@ -160,6 +219,30 @@ export function InputComposer({
         </div>
       )}
 
+      {uploadPreview && (
+        <div className="chat-uploadPreview">
+          <div className="chat-uploadPreviewThumb">
+            <img src={uploadPreview.previewUrl} alt="Upload preview" />
+            {uploadPreview.isUploading && (
+              <div className="chat-uploadPreviewSpinner">
+                <div className="chat-uploadPreviewSpinnerDot" />
+              </div>
+            )}
+          </div>
+          <span className="chat-uploadPreviewName">
+            {uploadPreview.error ?? uploadPreview.file.name}
+          </span>
+          <button
+            type="button"
+            className="chat-uploadPreviewRemove"
+            onClick={handleRemovePreview}
+            aria-label="Remove image"
+          >
+            &times;
+          </button>
+        </div>
+      )}
+
       <div className="chat-composerRow">
         <div className="chat-composerField">
           <textarea
@@ -177,7 +260,28 @@ export function InputComposer({
             className="chat-composerInput"
           />
         </div>
-        
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={(e) => void handleFileSelect(e)}
+          className="sr-only"
+          aria-label="Attach image"
+          tabIndex={-1}
+        />
+        <button
+          type="button"
+          className="chat-attachButton"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={disabled || isVoiceActive || !!uploadPreview}
+          aria-label="Attach image"
+        >
+          <span className="chat-attachButtonIcon" aria-hidden="true">
+            &#128206;
+          </span>
+        </button>
+
         <Button
           type="button"
           onClick={handleSend}

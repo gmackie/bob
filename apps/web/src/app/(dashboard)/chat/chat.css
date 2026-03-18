@@ -1692,6 +1692,144 @@
   color: #dbe8ff;
 }
 
+.chat-imageMessage {
+  margin-top: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+  display: inline-block;
+  max-width: 400px;
+}
+
+.chat-imageMessage a {
+  display: block;
+  line-height: 0;
+}
+
+.chat-imageMessageImg {
+  max-width: 400px;
+  width: 100%;
+  height: auto;
+  aspect-ratio: auto;
+  object-cover: cover;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.chat-imageMessageFilename {
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  color: rgba(232, 238, 248, 0.58);
+}
+
+.chat-imageMessageCaption {
+  padding: 0 10px 6px;
+  font-size: 12px;
+  color: rgba(232, 238, 248, 0.82);
+}
+
+.chat-uploadPreview {
+  margin-bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(12, 17, 26, 0.8);
+  padding: 6px 8px;
+}
+
+.chat-uploadPreviewThumb {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.chat-uploadPreviewThumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.chat-uploadPreviewSpinner {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(6, 10, 18, 0.6);
+}
+
+.chat-uploadPreviewSpinnerDot {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(100, 160, 255, 0.3);
+  border-top-color: rgba(100, 160, 255, 0.9);
+  border-radius: 999px;
+  animation: chatSpin 0.8s linear infinite;
+}
+
+.chat-uploadPreviewName {
+  font-size: 11px;
+  color: rgba(232, 238, 248, 0.82);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 160px;
+}
+
+.chat-uploadPreviewRemove {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(232, 238, 248, 0.8);
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chat-uploadPreviewRemove:hover {
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #fca5a5;
+  background: rgba(248, 113, 113, 0.14);
+}
+
+.chat-attachButton {
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(232, 238, 248, 0.8);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.chat-attachButton:hover {
+  border-color: rgba(100, 160, 255, 0.5);
+  background: rgba(100, 160, 255, 0.12);
+}
+
+.chat-attachButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.chat-attachButtonIcon {
+  font-size: 18px;
+  line-height: 1;
+}
+
 @keyframes pulseDot {
   0%,
   100% {
