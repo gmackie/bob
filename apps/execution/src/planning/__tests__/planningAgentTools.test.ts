@@ -49,6 +49,19 @@ describe("buildPlanningPrompt", () => {
     expect(prompt).not.toContain("Required States");
   });
 
+  it("includes generic Bob work-item shaping and breakdown guidance", () => {
+    const prompt = buildPlanningPrompt(ctx);
+    expect(prompt).toContain("Work Item Shaping Workflow");
+    expect(prompt).toContain("rough idea");
+    expect(prompt).toContain("epic or issue");
+    expect(prompt).toContain("business requirements document");
+    expect(prompt).toContain("one question at a time");
+    expect(prompt).toContain("Requirements and Task Breakdown");
+    expect(prompt).toContain("parent issue or epic");
+    expect(prompt).toContain("linkedTaskId");
+    expect(prompt).toContain("shape -> plan -> execute -> review -> ship");
+  });
+
   it("includes Storybook workflow guidance for projects with a React frontend", () => {
     const prompt = buildPlanningPrompt(reactCtx);
     expect(prompt).toContain("Storybook Development Workflow");

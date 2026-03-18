@@ -27,6 +27,16 @@
       "name": "create-gmacko-app-feature-development",
       "description": "Feature placement guidance for create-gmacko-app repos so agents know where code belongs across apps/nextjs, packages/ui, packages/api, packages/db, helpers, and shared packages",
       "path": "./skills/create-gmacko-app-feature-development.md"
+    },
+    {
+      "name": "work-item-shaping",
+      "description": "Question-driven shaping for turning rough ideas into Bob epics or issues, plus BRDs and requirement sets",
+      "path": "./skills/work-item-shaping.md"
+    },
+    {
+      "name": "work-item-breakdown",
+      "description": "Breaks Bob epics, issues, BRDs, and requirement sets into linked child tasks with dependencies and lifecycle guidance",
+      "path": "./skills/work-item-breakdown.md"
     }
   ]
 }

@@ -2,6 +2,8 @@ export const SKILL_NAMES = [
   "bob-workflow",
   "storybook-development",
   "create-gmacko-app-feature-development",
+  "work-item-shaping",
+  "work-item-breakdown",
 ] as const;
 
 export type SkillName = (typeof SKILL_NAMES)[number];
@@ -41,5 +43,7 @@ export {
   getOhMyOpenCodeMcpConfig,
   generateOhMyOpenCodeConfig,
   storybookDevelopmentSkill,
+  workItemBreakdownSkill,
+  workItemShapingSkill,
 } from "./oh-my-opencode/index.js";
 export type { BuiltinSkill } from "./oh-my-opencode/index.js";
