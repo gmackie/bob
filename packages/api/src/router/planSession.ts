@@ -7,6 +7,7 @@ import {
   chatConversations,
   planDraftDependencies,
   planDrafts,
+  workItems,
 } from "@bob/db/schema";
 
 import {
@@ -20,22 +21,40 @@ export const planSessionRouter = {
   create: protectedProcedure
     .input(
       z.object({
-        workspaceId: z.string().uuid(),
-        projectId: z.string().uuid(),
-        workingDirectory: z.string(),
+        workspaceId: z.string().uuid().optional(),
+        projectId: z.string().uuid().optional(),
+        workingDirectory: z.string().optional(),
         title: z.string().max(256).optional(),
+        workItemId: z.string().uuid().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      // If workItemId is provided, look up workspace/project from the work item
+      let resolvedWorkItemId = input.workItemId ?? null;
+
+      if (input.workItemId && (!input.workspaceId || !input.projectId)) {
+        const wi = await ctx.db.query.workItems.findFirst({
+          where: eq(workItems.id, input.workItemId),
+        });
+        if (!wi) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Work item not found",
+          });
+        }
+        resolvedWorkItemId = wi.id;
+      }
+
       const [session] = await ctx.db
         .insert(chatConversations)
         .values({
           userId: ctx.session.user.id,
-          workingDirectory: input.workingDirectory,
+          workingDirectory: input.workingDirectory ?? "/",
           agentType: "claude",
           sessionType: "planning",
           title: input.title ?? "Planning session",
           status: "provisioning",
+          workItemId: resolvedWorkItemId,
         })
         .returning();
 

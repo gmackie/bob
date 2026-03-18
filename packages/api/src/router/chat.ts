@@ -63,6 +63,8 @@ export const chatRouter = {
         worktreeId: z.string().uuid().optional(),
         workingDirectory: z.string().optional(),
         title: z.string().max(256).optional(),
+        sessionType: z.string().max(20).optional(),
+        workItemId: z.string().uuid().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -74,6 +76,8 @@ export const chatRouter = {
           worktreeId: input.worktreeId ?? null,
           workingDirectory: input.workingDirectory ?? null,
           title: input.title ?? null,
+          ...(input.sessionType ? { sessionType: input.sessionType } : {}),
+          ...(input.workItemId ? { workItemId: input.workItemId } : {}),
         })
         .returning();
 

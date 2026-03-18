@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { toast } from "@bob/ui/toast";
 
+import { useChatPanel } from "~/components/chat/chat-panel-provider";
 import { WorkflowPage, type WorkflowPageProps } from "~/components/workflow/workflow-page";
 import { WorkItemDetailInteractive } from "~/components/work-items/work-item-detail-interactive";
 
@@ -28,6 +29,7 @@ export function WorkflowPageClient({
   childCount,
 }: WorkflowPageClientProps) {
   const router = useRouter();
+  const chatPanel = useChatPanel();
 
   // For tasks, keep the existing detail view
   if (workItem.kind === "task") {
@@ -53,10 +55,7 @@ export function WorkflowPageClient({
       comments={comments}
       artifacts={artifacts}
       onOpenPlanningSession={() => {
-        // Open the chat panel for this work item
-        toast("Opening planning session...");
-        // Navigate to workspace or trigger chat panel
-        router.push(`/work-items/${workItem.id}/workspace`);
+        chatPanel.openPlanningSession(workItem.id, workItem.title);
       }}
       onBreakIntoTasks={() => {
         toast("Breaking into tasks...");
