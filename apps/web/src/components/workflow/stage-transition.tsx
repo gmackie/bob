@@ -1,20 +1,31 @@
 "use client";
 
+import { Badge } from "@bob/ui/badge";
+
 import type { WorkflowStage } from "~/lib/workflow/stage";
 
 const TRANSITION_CONFIG: Record<
   WorkflowStage,
-  { action: string; description: string } | null
+  {
+    action: string;
+    description: string;
+    skills?: string[];
+    contextHint?: string;
+  } | null
 > = {
   idea: {
     action: "Shape this idea with Bob →",
     description:
-      "Open a planning session to define requirements and scope this idea.",
+      "Open a guided shaping session, add notes or docs, and let Bob clarify the parent scope before execution starts.",
+    skills: ["work-item-shaping"],
+    contextHint: "Add docs, screenshots, or repo files before launch",
   },
   shape: {
     action: "Break into tasks →",
     description:
-      "Generate child tasks from the requirements so agents can start working.",
+      "Prepare a task-planning session with requirements, BRD context, and ownership hints before Bob drafts child tasks.",
+    skills: ["work-item-breakdown"],
+    contextHint: "Bring requirements, BRDs, and repo context into the session",
   },
   plan: {
     action: "Dispatch agents →",
@@ -45,15 +56,37 @@ export function StageTransition({
   if (!config) return null;
 
   return (
-    <div className="rounded-2xl border border-primary/20 bg-primary/5 p-6 text-center">
-      <button
-        type="button"
-        onClick={() => onTransition(config.action)}
-        className="bg-primary text-primary-foreground rounded-xl px-6 py-3 text-sm font-medium transition-colors hover:bg-primary/90"
-      >
-        {config.action}
-      </button>
-      <p className="text-muted-foreground mt-3 text-sm">{config.description}</p>
+    <div className="rounded-[1.5rem] border border-primary/20 bg-[linear-gradient(135deg,rgba(59,130,246,0.08),rgba(15,23,42,0.9))] p-5">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="max-w-2xl">
+          <div className="flex flex-wrap gap-2">
+            {(config.skills ?? []).map((skill) => (
+              <Badge
+                key={skill}
+                className="border-primary/20 bg-primary/10 text-primary"
+              >
+                {skill}
+              </Badge>
+            ))}
+            {config.contextHint ? (
+              <Badge className="border-white/10 bg-white/5 text-slate-200">
+                {config.contextHint}
+              </Badge>
+            ) : null}
+          </div>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            {config.description}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onTransition(config.action)}
+          className="rounded-xl bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        >
+          {config.action}
+        </button>
+      </div>
     </div>
   );
 }
