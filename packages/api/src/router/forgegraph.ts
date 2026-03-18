@@ -1,6 +1,7 @@
 import { z } from "zod/v4";
 import { and, desc, eq } from "@bob/db";
 import {
+  activities,
   dispatchItems,
   forgeRevisions,
   forgeBuilds,
@@ -133,6 +134,26 @@ export const forgegraphRouter = {
         })
         .where(eq(forgeBuilds.id, input.buildId))
         .returning();
+
+      // Emit activity event if the build is linked to a work item via its revision
+      if (updated) {
+        const revision = await ctx.db.query.forgeRevisions.findFirst({
+          where: eq(forgeRevisions.id, updated.revisionId),
+        });
+        if (revision?.taskId) {
+          await ctx.db.insert(activities).values({
+            workItemId: revision.taskId,
+            type: "build_status_changed",
+            toValue: input.status,
+            metadata: {
+              buildId: input.buildId,
+              status: input.status,
+              revisionId: revision.id,
+            },
+          });
+        }
+      }
+
       return updated;
     }),
 
@@ -173,6 +194,26 @@ export const forgegraphRouter = {
         .set({ status: input.status })
         .where(eq(forgeDeployments.id, input.deploymentId))
         .returning();
+
+      // Emit activity event if the deployment is linked to a work item via its revision
+      if (updated) {
+        const revision = await ctx.db.query.forgeRevisions.findFirst({
+          where: eq(forgeRevisions.id, updated.revisionId),
+        });
+        if (revision?.taskId) {
+          await ctx.db.insert(activities).values({
+            workItemId: revision.taskId,
+            type: "deploy_status_changed",
+            toValue: input.status,
+            metadata: {
+              deploymentId: input.deploymentId,
+              environment: updated.environment,
+              status: input.status,
+            },
+          });
+        }
+      }
+
       return updated;
     }),
 

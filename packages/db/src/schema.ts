@@ -89,6 +89,8 @@ export const workItemActivityType = [
   "status_changed",
   "artifact_added",
   "notification_created",
+  "build_status_changed",
+  "deploy_status_changed",
 ] as const;
 export type WorkItemActivityType = (typeof workItemActivityType)[number];
 export const workItemActivityTypeEnum = pgEnum(

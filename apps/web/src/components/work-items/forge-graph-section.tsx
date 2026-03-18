@@ -7,34 +7,14 @@ import { BuildHistory } from "~/components/forgegraph/build-history";
 import { DeploymentStatus } from "~/components/forgegraph/deployment-status";
 import { GateDecisionCard } from "~/components/forgegraph/gate-decision-card";
 import { RevisionStatusBar } from "~/components/forgegraph/revision-status-bar";
+import { useLiveBuildStatus } from "~/hooks/use-live-build-status";
 import { useTRPC } from "~/trpc/react";
 
 export function ForgeGraphSection({ taskId }: { taskId: string }) {
   const trpc = useTRPC();
-  const { data } = useQuery(
-    trpc.forgegraph.listRevisions.queryOptions(
-      { taskId, limit: 1 },
-      { staleTime: 30_000 },
-    ),
-  );
 
-  const latestRevisionId = data?.[0]?.id ?? null;
-
-  const { data: builds } = useQuery({
-    ...trpc.forgegraph.listBuilds.queryOptions(
-      { revisionId: latestRevisionId! },
-    ),
-    enabled: !!latestRevisionId,
-    staleTime: 30_000,
-  });
-
-  const { data: deployments } = useQuery({
-    ...trpc.forgegraph.listDeployments.queryOptions(
-      { revisionId: latestRevisionId! },
-    ),
-    enabled: !!latestRevisionId,
-    staleTime: 30_000,
-  });
+  const { latestRevision, builds, deployments, isLoading } =
+    useLiveBuildStatus({ taskId });
 
   const { data: taskRuns } = useQuery({
     ...trpc.taskRun.listByWorkItem.queryOptions({ workItemId: taskId }),
@@ -44,7 +24,7 @@ export function ForgeGraphSection({ taskId }: { taskId: string }) {
   // Find the latest task run with a linked PR
   const linkedPrId = taskRuns?.find((r) => r.pullRequestId)?.pullRequestId ?? null;
 
-  if (!data || data.length === 0) {
+  if (!isLoading && !latestRevision) {
     return (
       <div className="rounded-3xl border border-border bg-secondary p-6">
         <h2 className="font-display text-lg font-semibold text-foreground">Build & Deploy</h2>
@@ -55,19 +35,22 @@ export function ForgeGraphSection({ taskId }: { taskId: string }) {
     );
   }
 
-  const latest = data[0]!;
-  const gates = (latest.gates ?? []) as Array<{ name: string; status: "pending" | "passed" | "failed" | "running" }>;
+  if (!latestRevision) {
+    return null;
+  }
+
+  const gates = (latestRevision.gates ?? []) as Array<{ name: string; status: "pending" | "passed" | "failed" | "running" }>;
 
   return (
     <div className="rounded-3xl border border-border bg-secondary p-6">
       <h2 className="font-display text-lg font-semibold text-foreground">Build & Deploy</h2>
       <div className="mt-4 space-y-5">
-        <GateDecisionCard gates={gates} available={!!latest.gates} />
+        <GateDecisionCard gates={gates} available={!!latestRevision.gates} />
 
         <RevisionStatusBar
           gates={gates}
-          commitSha={latest.revId}
-          branch={latest.branch ?? undefined}
+          commitSha={latestRevision.revId}
+          branch={latestRevision.branch ?? undefined}
         />
 
         {linkedPrId && (
@@ -105,14 +88,14 @@ export function ForgeGraphSection({ taskId }: { taskId: string }) {
           </Link>
         )}
 
-        {builds && builds.length > 0 && (
+        {builds.length > 0 && (
           <div>
             <h3 className="mb-2 text-sm font-medium text-muted-foreground">Builds</h3>
             <BuildHistory builds={builds} />
           </div>
         )}
 
-        {deployments && deployments.length > 0 && (
+        {deployments.length > 0 && (
           <div>
             <h3 className="mb-2 text-sm font-medium text-muted-foreground">
               Deployments
