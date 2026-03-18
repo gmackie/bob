@@ -16,6 +16,7 @@ import { planRouter } from "./router/plan";
 import { postRouter } from "./router/post";
 import { projectRouter } from "./router/project";
 import { pullRequestRouter } from "./router/pullRequest";
+import { requirementRouter } from "./router/requirement";
 import { repositoryRouter } from "./router/repository";
 import { sessionRouter } from "./router/session";
 import { settingsRouter } from "./router/settings";
@@ -53,6 +54,7 @@ const appRouterRecord = {
   post: postRouter,
   project: projectRouter,
   pullRequest: pullRequestRouter,
+  requirement: requirementRouter,
   repository: repositoryRouter,
   session: sessionRouter,
   settings: settingsRouter,

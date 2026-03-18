@@ -603,6 +603,59 @@ export const repositoriesRelations = relations(
   }),
 );
 
+export const requirementCategory = [
+  "data",
+  "api",
+  "ui",
+  "infra",
+  "test",
+  "other",
+] as const;
+export type RequirementCategory = (typeof requirementCategory)[number];
+
+export const requirementStatus = [
+  "pending",
+  "in_progress",
+  "done",
+] as const;
+export type RequirementStatus = (typeof requirementStatus)[number];
+
+export const requirements = pgTable("requirements", (t) => ({
+  id: t.uuid().notNull().primaryKey().defaultRandom(),
+  workItemId: t
+    .uuid()
+    .notNull()
+    .references(() => workItems.id, { onDelete: "cascade" }),
+  category: t
+    .text({ enum: requirementCategory })
+    .notNull()
+    .default("other"),
+  description: t.text().notNull(),
+  status: t
+    .text({ enum: requirementStatus })
+    .notNull()
+    .default("pending"),
+  linkedTaskId: t.uuid(),
+  sortOrder: t.integer().notNull().default(0),
+  createdAt: t.timestamp().defaultNow().notNull(),
+}));
+
+export const requirementsRelations = relations(
+  requirements,
+  ({ one }) => ({
+    workItem: one(workItems, {
+      fields: [requirements.workItemId],
+      references: [workItems.id],
+      relationName: "work_item_requirements",
+    }),
+    linkedTask: one(workItems, {
+      fields: [requirements.linkedTaskId],
+      references: [workItems.id],
+      relationName: "requirement_linked_task",
+    }),
+  }),
+);
+
 export const workItemsRelations = relations(workItems, ({ one, many }) => ({
   ownerUser: one(user, {
     fields: [workItems.ownerUserId],
@@ -627,6 +680,9 @@ export const workItemsRelations = relations(workItems, ({ one, many }) => ({
   }),
   children: many(workItems, {
     relationName: "work_item_parent",
+  }),
+  requirements: many(requirements, {
+    relationName: "work_item_requirements",
   }),
 }));
 
