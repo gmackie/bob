@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { WorkspaceControls } from "~/components/work-items/workspace-controls";
+import { WorkspaceLayout } from "~/components/workspace/workspace-layout";
 import { createPlanningCaller } from "~/lib/planning/server";
 import {
   deriveTaskWorkspaceValidationState,
@@ -60,7 +61,15 @@ export default async function TaskWorkspacePage({
           ? "border-amber-400/30 bg-amber-500/10 text-amber-100"
           : "border-border bg-accent text-muted-foreground";
 
+  const worktreePath = activeSession?.workingDirectory ?? null;
+  const branchName = target.activeRun?.branch?.trim() ?? null;
+
   return (
+    <WorkspaceLayout
+      rootPath={worktreePath}
+      branchName={branchName}
+      activeSessionId={activeSessionId}
+    >
     <main className="mx-auto max-w-6xl px-6 py-10">
       <Breadcrumbs
         items={[
@@ -313,5 +322,6 @@ export default async function TaskWorkspacePage({
         </div>
       </section>
     </main>
+    </WorkspaceLayout>
   );
 }
