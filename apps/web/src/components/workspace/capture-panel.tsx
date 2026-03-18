@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { useTRPC } from "~/trpc/react";
+import { useFileSaveTrigger } from "~/hooks/use-file-save-trigger";
 
 interface CaptureResult {
   url: string;
@@ -13,27 +14,42 @@ interface CaptureResult {
   capturedAt: string;
 }
 
-type AutoInterval = 0 | 5000 | 10000 | 30000;
+type AutoMode = "off" | "file_save" | "5s" | "10s" | "30s";
 
-const AUTO_INTERVAL_OPTIONS: { label: string; value: AutoInterval }[] = [
-  { label: "Off", value: 0 },
-  { label: "5s", value: 5000 },
-  { label: "10s", value: 10000 },
-  { label: "30s", value: 30000 },
+const AUTO_MODE_OPTIONS: { label: string; value: AutoMode }[] = [
+  { label: "Off", value: "off" },
+  { label: "On file save", value: "file_save" },
+  { label: "5s", value: "5s" },
+  { label: "10s", value: "10s" },
+  { label: "30s", value: "30s" },
 ];
+
+const AUTO_MODE_INTERVALS: Record<AutoMode, number> = {
+  off: 0,
+  file_save: 0,
+  "5s": 5000,
+  "10s": 10000,
+  "30s": 30000,
+};
 
 const MAX_HISTORY = 20;
 
-export function CapturePanel() {
+interface CapturePanelProps {
+  sessionId?: string | null;
+}
+
+export function CapturePanel({ sessionId }: CapturePanelProps) {
   const trpc = useTRPC();
 
   // State
   const [selectedTargetId, setSelectedTargetId] = useState("screen");
   const [url, setUrl] = useState("");
-  const [autoInterval, setAutoInterval] = useState<AutoInterval>(0);
+  const [autoMode, setAutoMode] = useState<AutoMode>("off");
   const [captures, setCaptures] = useState<CaptureResult[]>([]);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [fileSaveMessage, setFileSaveMessage] = useState(false);
   const autoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const fileSaveMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const historyStripRef = useRef<HTMLDivElement>(null);
 
   // Queries
@@ -69,21 +85,51 @@ export function CapturePanel() {
     });
   }, [captureMutation, selectedTarget, selectedTargetId, url]);
 
-  // Auto-capture interval
+  // Auto-capture interval (for timed modes)
+  const intervalMs = AUTO_MODE_INTERVALS[autoMode];
   useEffect(() => {
     if (autoTimerRef.current) {
       clearInterval(autoTimerRef.current);
       autoTimerRef.current = null;
     }
-    if (autoInterval > 0) {
-      autoTimerRef.current = setInterval(doCapture, autoInterval);
+    if (intervalMs > 0) {
+      autoTimerRef.current = setInterval(doCapture, intervalMs);
     }
     return () => {
       if (autoTimerRef.current) {
         clearInterval(autoTimerRef.current);
       }
     };
-  }, [autoInterval, doCapture]);
+  }, [intervalMs, doCapture]);
+
+  // File-save triggered capture
+  const onFileSaveTrigger = useCallback(() => {
+    doCapture();
+    setFileSaveMessage(true);
+    if (fileSaveMessageTimerRef.current) {
+      clearTimeout(fileSaveMessageTimerRef.current);
+    }
+    fileSaveMessageTimerRef.current = setTimeout(() => {
+      setFileSaveMessage(false);
+      fileSaveMessageTimerRef.current = null;
+    }, 3000);
+  }, [doCapture]);
+
+  useFileSaveTrigger({
+    sessionId: sessionId ?? null,
+    enabled: autoMode === "file_save" && Boolean(sessionId),
+    onTrigger: onFileSaveTrigger,
+    debounceMs: 500,
+  });
+
+  // Cleanup file-save message timer
+  useEffect(() => {
+    return () => {
+      if (fileSaveMessageTimerRef.current) {
+        clearTimeout(fileSaveMessageTimerRef.current);
+      }
+    };
+  }, []);
 
   // Scroll history strip to the right when new captures arrive
   useEffect(() => {
@@ -108,8 +154,11 @@ export function CapturePanel() {
           {captureMutation.isPending && (
             <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" title="Capturing..." />
           )}
-          {autoInterval > 0 && !captureMutation.isPending && (
+          {autoMode !== "off" && !captureMutation.isPending && (
             <span className="h-2 w-2 rounded-full bg-green-500" title="Auto-capture active" />
+          )}
+          {fileSaveMessage && (
+            <span className="text-xs text-green-500 animate-pulse">Auto-captured on file change</span>
           )}
         </div>
 
@@ -154,12 +203,12 @@ export function CapturePanel() {
         <div className="flex items-center gap-1">
           <span className="text-xs text-muted-foreground">Auto:</span>
           <select
-            value={autoInterval}
-            onChange={(e) => setAutoInterval(Number(e.target.value) as AutoInterval)}
+            value={autoMode}
+            onChange={(e) => setAutoMode(e.target.value as AutoMode)}
             className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary"
           >
-            {AUTO_INTERVAL_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
+            {AUTO_MODE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value} disabled={opt.value === "file_save" && !sessionId}>
                 {opt.label}
               </option>
             ))}

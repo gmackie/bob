@@ -180,7 +180,7 @@ export function WorkspaceLayout({
           {centerTab === "content" && children}
           {centerTab === "capture" && (
             <ErrorBoundary section="Screen Capture">
-              <CapturePanel />
+              <CapturePanel sessionId={activeSessionId} />
             </ErrorBoundary>
           )}
           {centerTab === "revisions" && rootPath && (
