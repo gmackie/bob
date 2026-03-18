@@ -169,4 +169,55 @@ export const filesystemRouter = {
 
       return result.matches;
     }),
+
+  gitStatus: protectedProcedure
+    .input(
+      z.object({
+        path: z.string(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      try {
+        const result = await gatewayRequest(ctx.session.user.id, "/git/status", {
+          path: input.path,
+        }) as {
+          branch: string;
+          ahead: number;
+          behind: number;
+          staged: string[];
+          unstaged: string[];
+          untracked: string[];
+        };
+
+        const files: Array<{ file: string; status: "M" | "A" | "D" | "??" | "R" | "C" }> = [];
+        const seen = new Set<string>();
+
+        // Staged files are added/modified in the index
+        for (const file of result.staged) {
+          seen.add(file);
+          files.push({ file, status: "A" });
+        }
+
+        // Unstaged (modified in working tree) — override staged status if present
+        for (const file of result.unstaged) {
+          if (!seen.has(file)) {
+            seen.add(file);
+            files.push({ file, status: "M" });
+          }
+        }
+
+        // Untracked files
+        for (const file of result.untracked) {
+          if (!seen.has(file)) {
+            seen.add(file);
+            files.push({ file, status: "??" });
+          }
+        }
+
+        return files;
+      } catch {
+        // Not a git repo or other error — return empty array
+        return [] as Array<{ file: string; status: "M" | "A" | "D" | "??" | "R" | "C" }>;
+      }
+    }),
 } satisfies TRPCRouterRecord;

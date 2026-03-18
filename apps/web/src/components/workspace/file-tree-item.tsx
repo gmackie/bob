@@ -25,6 +25,27 @@ function getFileIndicatorColor(name: string): string {
   }
 }
 
+type GitStatusCode = "M" | "A" | "D" | "??" | "R" | "C";
+
+function getGitStatusColor(status: GitStatusCode): string {
+  switch (status) {
+    case "M":
+      return "bg-amber-500";
+    case "A":
+      return "bg-emerald-500";
+    case "D":
+      return "bg-rose-500";
+    case "??":
+      return "bg-slate-400";
+    case "R":
+      return "bg-blue-500";
+    case "C":
+      return "bg-blue-400";
+    default:
+      return "bg-muted-foreground/40";
+  }
+}
+
 export interface FileTreeItemProps {
   name: string;
   path: string;
@@ -33,6 +54,7 @@ export interface FileTreeItemProps {
   isExpanded?: boolean;
   isSelected?: boolean;
   isLoading?: boolean;
+  gitStatus?: GitStatusCode;
   onToggle?: (path: string) => void;
   onSelect?: (path: string) => void;
 }
@@ -45,6 +67,7 @@ export function FileTreeItem({
   isExpanded = false,
   isSelected = false,
   isLoading = false,
+  gitStatus,
   onToggle,
   onSelect,
 }: FileTreeItemProps) {
@@ -97,9 +120,23 @@ export function FileTreeItem({
       {/* Name */}
       <span className="truncate text-foreground">{name}</span>
 
+      {/* Spacer to push indicators to the right */}
+      <span className="flex-1" />
+
+      {/* Git status indicator */}
+      {gitStatus && !isLoading && (
+        <span
+          className={cn(
+            "size-1.5 shrink-0 rounded-full",
+            getGitStatusColor(gitStatus),
+          )}
+          title={gitStatus}
+        />
+      )}
+
       {/* Loading indicator */}
       {isLoading && (
-        <span className="ml-auto h-3 w-3 shrink-0 animate-spin rounded-full border border-muted-foreground/30 border-t-muted-foreground" />
+        <span className="h-3 w-3 shrink-0 animate-spin rounded-full border border-muted-foreground/30 border-t-muted-foreground" />
       )}
     </button>
   );

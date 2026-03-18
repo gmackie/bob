@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { useTRPC } from "~/trpc/react";
@@ -41,13 +41,47 @@ function filterEntries(entries: FileEntry[]): FileEntry[] {
   return entries.filter((e) => !FILTERED_NAMES.has(e.name));
 }
 
+type GitStatusCode = "M" | "A" | "D" | "??" | "R" | "C";
+
 interface FileTreeNodeProps {
   entry: FileEntry;
   depth: number;
   expandedPaths: Set<string>;
   selectedPath: string | null;
+  gitStatusMap: Map<string, GitStatusCode>;
+  rootPath: string;
   onToggle: (path: string) => void;
   onSelect: (path: string) => void;
+}
+
+/** Given a directory path, find the most important git status among all children */
+function getFolderGitStatus(
+  dirPath: string,
+  rootPath: string,
+  gitStatusMap: Map<string, GitStatusCode>,
+): GitStatusCode | undefined {
+  // Priority order: D > M > A > ??
+  const priority: Record<string, number> = { D: 4, M: 3, A: 2, R: 1, "??": 0, C: 0 };
+  let best: GitStatusCode | undefined;
+  let bestPriority = -1;
+
+  // dirPath is absolute, rootPath is absolute — git status files are relative to rootPath
+  const relDir = dirPath.startsWith(rootPath)
+    ? dirPath.slice(rootPath.length).replace(/^\//, "")
+    : "";
+
+  for (const [file, status] of gitStatusMap) {
+    const match = relDir === "" ? true : file.startsWith(relDir + "/");
+    if (match) {
+      const p = priority[status] ?? 0;
+      if (p > bestPriority) {
+        bestPriority = p;
+        best = status;
+      }
+    }
+  }
+
+  return best;
 }
 
 function FileTreeNode({
@@ -55,6 +89,8 @@ function FileTreeNode({
   depth,
   expandedPaths,
   selectedPath,
+  gitStatusMap,
+  rootPath,
   onToggle,
   onSelect,
 }: FileTreeNodeProps) {
@@ -70,6 +106,14 @@ function FileTreeNode({
 
   const sorted = children ? sortEntries(filterEntries(children)) : [];
 
+  // Compute git status for this entry
+  const entryRelPath = entry.path.startsWith(rootPath)
+    ? entry.path.slice(rootPath.length).replace(/^\//, "")
+    : "";
+  const fileGitStatus = entry.isDirectory
+    ? getFolderGitStatus(entry.path, rootPath, gitStatusMap)
+    : gitStatusMap.get(entryRelPath);
+
   return (
     <>
       <FileTreeItem
@@ -80,6 +124,7 @@ function FileTreeNode({
         isExpanded={isExpanded}
         isSelected={selectedPath === entry.path}
         isLoading={entry.isDirectory && isExpanded && isLoading}
+        gitStatus={fileGitStatus}
         onToggle={onToggle}
         onSelect={onSelect}
       />
@@ -100,6 +145,8 @@ function FileTreeNode({
               depth={depth + 1}
               expandedPaths={expandedPaths}
               selectedPath={selectedPath}
+              gitStatusMap={gitStatusMap}
+              rootPath={rootPath}
               onToggle={onToggle}
               onSelect={onSelect}
             />
@@ -149,6 +196,25 @@ export function FileTree({ rootPath, onFileSelect, className }: FileTreeProps) {
       { path: rootPath, showHidden: false },
     ),
   );
+
+  // Fetch git status for the workspace root
+  const { data: gitStatusData } = useQuery(
+    trpc.filesystem.gitStatus.queryOptions(
+      { path: rootPath },
+      { refetchInterval: 10_000 },
+    ),
+  );
+
+  // Build a Map<relativePath, statusCode> for quick lookup
+  const gitStatusMap = useMemo(() => {
+    const map = new Map<string, GitStatusCode>();
+    if (gitStatusData) {
+      for (const entry of gitStatusData) {
+        map.set(entry.file, entry.status);
+      }
+    }
+    return map;
+  }, [gitStatusData]);
 
   const handleToggle = useCallback((path: string) => {
     setExpandedPaths((prev) => {
@@ -202,6 +268,8 @@ export function FileTree({ rootPath, onFileSelect, className }: FileTreeProps) {
               depth={0}
               expandedPaths={expandedPaths}
               selectedPath={selectedPath}
+              gitStatusMap={gitStatusMap}
+              rootPath={rootPath}
               onToggle={handleToggle}
               onSelect={handleSelect}
             />
