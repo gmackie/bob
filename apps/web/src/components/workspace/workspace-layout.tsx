@@ -5,6 +5,9 @@ import type { ReactNode } from "react";
 
 import { FileTree } from "~/components/workspace/file-tree";
 import { TerminalComponent } from "~/components/dashboard/Terminal";
+import { CapturePanel } from "~/components/workspace/capture-panel";
+
+type CenterTab = "content" | "capture";
 
 interface WorkspaceLayoutProps {
   /** Absolute path to the worktree / repository root for the file tree */
@@ -25,6 +28,7 @@ export function WorkspaceLayout({
 }: WorkspaceLayoutProps) {
   const [fileTreeOpen, setFileTreeOpen] = useState(true);
   const [terminalOpen, setTerminalOpen] = useState(false);
+  const [centerTab, setCenterTab] = useState<CenterTab>("content");
 
   const toggleFileTree = useCallback(() => setFileTreeOpen((v) => !v), []);
   const toggleTerminal = useCallback(() => setTerminalOpen((v) => !v), []);
@@ -79,9 +83,35 @@ export function WorkspaceLayout({
 
       {/* Right side — main content + terminal */}
       <div className="flex flex-1 flex-col overflow-hidden">
+        {/* Center panel tabs */}
+        <div className="flex shrink-0 items-center gap-1 border-b border-border bg-card px-4">
+          <button
+            type="button"
+            onClick={() => setCenterTab("content")}
+            className={`px-3 py-1.5 text-xs font-medium transition ${
+              centerTab === "content"
+                ? "border-b-2 border-primary text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Content
+          </button>
+          <button
+            type="button"
+            onClick={() => setCenterTab("capture")}
+            className={`px-3 py-1.5 text-xs font-medium transition ${
+              centerTab === "capture"
+                ? "border-b-2 border-primary text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Capture
+          </button>
+        </div>
+
         {/* Main content area */}
         <div className="flex-1 overflow-y-auto">
-          {children}
+          {centerTab === "content" ? children : <CapturePanel />}
         </div>
 
         {/* Terminal panel (bottom) */}
