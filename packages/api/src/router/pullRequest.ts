@@ -17,6 +17,7 @@ import {
   syncCommits,
   updatePr,
 } from "../services/git/prService";
+import { onPullRequestCreated } from "../services/automation/pipeline-trigger";
 import { protectedProcedure } from "../trpc";
 
 const prStatusSchema = z.enum(["draft", "open", "merged", "closed"]);
@@ -88,7 +89,7 @@ export const pullRequestRouter = {
     )
     .mutation(async ({ ctx, input }) => {
       try {
-        return await createDraftPr({
+        const pr = await createDraftPr({
           userId: ctx.session.user.id,
           repositoryId: input.repositoryId,
           sessionId: input.sessionId,
@@ -99,6 +100,21 @@ export const pullRequestRouter = {
           draft: input.draft,
           planningTaskId: input.planningTaskId,
         });
+
+        // Fire-and-forget: create a forge revision for CI tracking
+        if (pr.repositoryId) {
+          onPullRequestCreated({
+            pullRequestId: pr.id,
+            repositoryId: pr.repositoryId,
+            headBranch: pr.headBranch,
+            headSha: pr.headBranch, // placeholder — real SHA comes from commit sync
+            taskId: input.planningTaskId ?? undefined,
+          }).catch(() => {
+            // Intentionally swallowed — pipeline trigger is best-effort
+          });
+        }
+
+        return pr;
       } catch (error) {
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
