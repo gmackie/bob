@@ -7,11 +7,17 @@ import { STAGES, type WorkflowStage } from "~/lib/workflow/stage";
 interface PipelineIndicatorProps {
   currentStage: WorkflowStage;
   onStageClick?: (stage: WorkflowStage) => void;
+  /** Set of stages that have at least one snapshot available. */
+  snapshotStages?: Set<WorkflowStage>;
+  /** Called when a completed stage dot with snapshots is clicked. */
+  onViewSnapshot?: (stage: WorkflowStage) => void;
 }
 
 export function PipelineIndicator({
   currentStage,
   onStageClick,
+  snapshotStages,
+  onViewSnapshot,
 }: PipelineIndicatorProps) {
   const currentIndex = STAGES.findIndex((s) => s.key === currentStage);
 
@@ -21,17 +27,27 @@ export function PipelineIndicator({
         const isCompleted = idx < currentIndex;
         const isCurrent = idx === currentIndex;
         const isFuture = idx > currentIndex;
+        const hasSnapshot = snapshotStages?.has(stage.key) ?? false;
 
         return (
           <div key={stage.key} className="flex flex-1 items-center">
             {/* Stage dot + label */}
             <button
               type="button"
-              onClick={() => onStageClick?.(stage.key)}
+              onClick={() => {
+                if (isCompleted && hasSnapshot && onViewSnapshot) {
+                  onViewSnapshot(stage.key);
+                } else {
+                  onStageClick?.(stage.key);
+                }
+              }}
               className={cn(
-                "flex flex-col items-center gap-1.5",
-                onStageClick && "cursor-pointer",
-                !onStageClick && "cursor-default",
+                "relative flex flex-col items-center gap-1.5",
+                (onStageClick || (isCompleted && hasSnapshot && onViewSnapshot)) &&
+                  "cursor-pointer",
+                !onStageClick &&
+                  !(isCompleted && hasSnapshot && onViewSnapshot) &&
+                  "cursor-default",
               )}
             >
               {/* Dot */}
@@ -44,7 +60,18 @@ export function PipelineIndicator({
                 )}
               />
 
-              {/* Label — hidden on mobile, shown on sm+ */}
+              {/* Snapshot clock icon on completed dots */}
+              {isCompleted && hasSnapshot && (
+                <svg
+                  className="absolute -right-1.5 -top-1.5 h-3 w-3 text-muted-foreground"
+                  viewBox="0 0 16 16"
+                  fill="currentColor"
+                >
+                  <path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zm0 14A6 6 0 1 1 8 2a6 6 0 0 1 0 12zm.5-9H7v5l4.28 2.54.72-1.21-3.5-2.08V5z" />
+                </svg>
+              )}
+
+              {/* Label -- hidden on mobile, shown on sm+ */}
               <span
                 className={cn(
                   "hidden text-xs font-medium sm:block",

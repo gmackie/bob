@@ -5,6 +5,12 @@ import { useMutation } from "@tanstack/react-query";
 import { toast } from "@bob/ui/toast";
 
 import { useTRPC } from "~/trpc/react";
+import type { WorkflowStage } from "~/lib/workflow/stage";
+import { STAGES } from "~/lib/workflow/stage";
+
+interface StageSkillMapping {
+  [stage: string]: { slug: string; label: string; enabled: boolean }[];
+}
 
 interface AutomationSettingsProps {
   projectId: string;
@@ -13,6 +19,7 @@ interface AutomationSettingsProps {
     autoBranch?: boolean;
     autoFeaturePR?: boolean;
     ciTrigger?: boolean;
+    stageSkills?: StageSkillMapping;
   };
 }
 
@@ -97,6 +104,42 @@ const TOGGLE_CONFIG = [
   },
 ];
 
+/** Default skill mapping per workflow stage. */
+const DEFAULT_STAGE_SKILLS: Record<
+  WorkflowStage,
+  { slug: string; label: string }[]
+> = {
+  idea: [{ slug: "brainstorm", label: "/brainstorm" }],
+  shape: [{ slug: "plan-ceo-review", label: "/plan-ceo-review" }],
+  plan: [{ slug: "plan-eng-review", label: "/plan-eng-review" }],
+  execute: [{ slug: "tdd", label: "/tdd" }],
+  review: [
+    { slug: "review", label: "/review" },
+    { slug: "qa", label: "/qa" },
+  ],
+  deploy: [{ slug: "ship", label: "/ship" }],
+  live: [{ slug: "retro", label: "/retro" }],
+};
+
+function buildInitialStageSkills(
+  saved?: StageSkillMapping,
+): StageSkillMapping {
+  const result: StageSkillMapping = {};
+  for (const stage of STAGES) {
+    const defaults = DEFAULT_STAGE_SKILLS[stage.key] ?? [];
+    const savedStage = saved?.[stage.key];
+    result[stage.key] = defaults.map((d) => {
+      const savedSkill = savedStage?.find((s) => s.slug === d.slug);
+      return {
+        slug: d.slug,
+        label: d.label,
+        enabled: savedSkill ? savedSkill.enabled : true,
+      };
+    });
+  }
+  return result;
+}
+
 export function AutomationSettings({
   projectId,
   initialSettings,
@@ -114,6 +157,10 @@ export function AutomationSettings({
     autoFeaturePR: initialSettings?.autoFeaturePR ?? true,
     ciTrigger: initialSettings?.ciTrigger ?? true,
   });
+
+  const [stageSkills, setStageSkills] = useState<StageSkillMapping>(() =>
+    buildInitialStageSkills(initialSettings?.stageSkills),
+  );
 
   const updateSettings = useMutation(
     trpc.project.updateAutomationSettings.mutationOptions({
@@ -133,6 +180,29 @@ export function AutomationSettings({
     updateSettings.mutate({
       projectId,
       settings: { [key]: value },
+    });
+  }
+
+  function handleSkillToggle(
+    stageKey: string,
+    skillSlug: string,
+    enabled: boolean,
+  ) {
+    setStageSkills((prev) => {
+      const next = { ...prev };
+      next[stageKey] = (prev[stageKey] ?? []).map((s) =>
+        s.slug === skillSlug ? { ...s, enabled } : s,
+      );
+      return next;
+    });
+    // Persist the full stageSkills mapping
+    const updated = { ...stageSkills };
+    updated[stageKey] = (stageSkills[stageKey] ?? []).map((s) =>
+      s.slug === skillSlug ? { ...s, enabled } : s,
+    );
+    updateSettings.mutate({
+      projectId,
+      settings: { stageSkills: updated },
     });
   }
 
@@ -156,6 +226,50 @@ export function AutomationSettings({
             disabled={updateSettings.isPending}
           />
         ))}
+      </div>
+
+      {/* Stage Skills Section */}
+      <h3 className="mt-10 font-display text-lg font-bold text-foreground">
+        Stage Skills
+      </h3>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Configure which skills run at each workflow stage
+      </p>
+
+      <div className="mt-6 space-y-4">
+        {STAGES.map((stage) => {
+          const skills = stageSkills[stage.key] ?? [];
+          if (skills.length === 0) return null;
+          return (
+            <div
+              key={stage.key}
+              className="rounded-xl border border-border bg-card px-5 py-4"
+            >
+              <p className="mb-3 text-sm font-semibold capitalize text-foreground">
+                {stage.label}
+              </p>
+              <div className="space-y-2">
+                {skills.map((skill) => (
+                  <div
+                    key={skill.slug}
+                    className="flex items-center justify-between gap-4"
+                  >
+                    <span className="font-mono text-sm text-muted-foreground">
+                      {skill.label}
+                    </span>
+                    <ToggleSwitch
+                      checked={skill.enabled}
+                      onChange={(val) =>
+                        handleSkillToggle(stage.key, skill.slug, val)
+                      }
+                      disabled={updateSettings.isPending}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

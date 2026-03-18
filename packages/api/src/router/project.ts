@@ -106,6 +106,18 @@ export const projectRouter = {
           autoBranch: z.boolean().optional(),
           autoFeaturePR: z.boolean().optional(),
           ciTrigger: z.boolean().optional(),
+          stageSkills: z
+            .record(
+              z.string(),
+              z.array(
+                z.object({
+                  slug: z.string(),
+                  label: z.string(),
+                  enabled: z.boolean(),
+                }),
+              ),
+            )
+            .optional(),
         }),
       }),
     )

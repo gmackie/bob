@@ -2142,4 +2142,33 @@ export const skillExecutionsRelations = relations(
   }),
 );
 
+// ---------------------------------------------------------------------------
+// Work-item time-travel snapshots
+// ---------------------------------------------------------------------------
+
+export const workItemSnapshots = pgTable(
+  "work_item_snapshots",
+  (t) => ({
+    id: t.uuid().notNull().primaryKey().defaultRandom(),
+    workItemId: t
+      .uuid()
+      .notNull()
+      .references(() => workItems.id, { onDelete: "cascade" }),
+    stage: t.text().notNull(),
+    data: t.jsonb().notNull().default({}),
+    createdAt: t.timestamp().defaultNow().notNull(),
+  }),
+  (table) => [index("work_item_snapshots_work_item_id_idx").on(table.workItemId)],
+);
+
+export const workItemSnapshotsRelations = relations(
+  workItemSnapshots,
+  ({ one }) => ({
+    workItem: one(workItems, {
+      fields: [workItemSnapshots.workItemId],
+      references: [workItems.id],
+    }),
+  }),
+);
+
 export * from "./auth-schema";
