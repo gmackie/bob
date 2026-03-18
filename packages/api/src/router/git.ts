@@ -5,6 +5,8 @@ import { z } from "zod/v4";
 import { and, eq } from "@bob/db";
 import { chatConversations, repositories, sessionEvents } from "@bob/db/schema";
 
+import { JjClient } from "@bob/execution-lib/vcs/jj-client";
+
 import { createDraftPr } from "../services/git/prService";
 import { protectedProcedure } from "../trpc";
 
@@ -350,5 +352,69 @@ export const gitRouter = {
         pushed: true,
         pullRequest: pr,
       };
+    }),
+  // ── JJ (Jujutsu) procedures ───────────────────────────────────────
+
+  jjIsRepo: protectedProcedure
+    .input(z.object({ path: z.string() }))
+    .query(({ input }) => {
+      const jj = new JjClient(input.path);
+      return jj.isJjRepo();
+    }),
+
+  jjLog: protectedProcedure
+    .input(
+      z.object({
+        path: z.string(),
+        limit: z.number().min(1).max(100).default(20),
+      }),
+    )
+    .query(({ input }) => {
+      const jj = new JjClient(input.path);
+      return jj.log(input.limit);
+    }),
+
+  jjNew: protectedProcedure
+    .input(
+      z.object({
+        path: z.string(),
+        description: z.string().optional(),
+      }),
+    )
+    .mutation(({ input }) => {
+      const jj = new JjClient(input.path);
+      return jj.new(input.description);
+    }),
+
+  jjDescribe: protectedProcedure
+    .input(
+      z.object({
+        path: z.string(),
+        description: z.string(),
+        revision: z.string().optional(),
+      }),
+    )
+    .mutation(({ input }) => {
+      const jj = new JjClient(input.path);
+      return jj.describe(input.description, input.revision);
+    }),
+
+  jjSquash: protectedProcedure
+    .input(z.object({ path: z.string() }))
+    .mutation(({ input }) => {
+      const jj = new JjClient(input.path);
+      return jj.squash();
+    }),
+
+  jjDiff: protectedProcedure
+    .input(
+      z.object({
+        path: z.string(),
+        revision: z.string().optional(),
+      }),
+    )
+    .query(({ input }) => {
+      const jj = new JjClient(input.path);
+      return jj.diff(input.revision);
     }),
 } satisfies TRPCRouterRecord;

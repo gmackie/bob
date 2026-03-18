@@ -6,6 +6,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./src/index.ts"
+    },
+    "./vcs/jj-client": {
+      "types": "./dist/vcs/jj-client.d.ts",
+      "default": "./src/vcs/jj-client.ts"
     }
   },
   "license": "MIT",
