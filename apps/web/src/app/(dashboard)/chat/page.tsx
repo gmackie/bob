@@ -102,6 +102,22 @@ function buildChatPath(
 }
 
 export default function ChatPage() {
+  // Redirect to planning if accessed directly without a session context.
+  // Chat is now accessed through the ChatPanel on task detail pages.
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const hasSession = searchParams?.get("session");
+
+  useEffect(() => {
+    if (!hasSession) {
+      router.replace("/planning");
+    }
+  }, [hasSession, router]);
+
+  if (!hasSession) {
+    return <ChatPageSkeleton />;
+  }
+
   return (
     <Suspense fallback={<ChatPageSkeleton />}>
       <ChatPageContent />

@@ -23,7 +23,6 @@ export interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { icon: DashboardIcon, label: "Planning", href: "/planning" },
-  { icon: ChatBubbleIcon, label: "Chat", href: "/chat" },
   {
     icon: () => (
       <svg
