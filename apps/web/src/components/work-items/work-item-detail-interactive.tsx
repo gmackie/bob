@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "@bob/ui/toast";
 import { Badge } from "@bob/ui/badge";
 
+import { ErrorBoundary } from "@bob/ui/error-boundary";
 import { OpenChatPanelButton } from "~/components/chat/open-chat-panel-button";
 import { KIND_COLOR, formatLabel } from "~/lib/design/colors";
 import { formatRelativeTime } from "~/lib/format/time";
@@ -164,16 +165,20 @@ export function WorkItemDetailInteractive({
 
       {(workItem.kind === "epic" || workItem.kind === "issue") && (
         <section className="rounded-3xl border border-border bg-secondary p-6">
-          <RequirementsChecklist
-            workItemId={workItem.id}
-            workItemKind={workItem.kind}
-          />
+          <ErrorBoundary section="Requirements">
+            <RequirementsChecklist
+              workItemId={workItem.id}
+              workItemKind={workItem.kind}
+            />
+          </ErrorBoundary>
         </section>
       )}
 
       {workItem.kind === "epic" && (
         <section className="rounded-3xl border border-border bg-secondary p-6">
-          <FeatureBranchView workItemId={workItem.id} />
+          <ErrorBoundary section="Feature Branches">
+            <FeatureBranchView workItemId={workItem.id} />
+          </ErrorBoundary>
         </section>
       )}
 
@@ -217,12 +222,16 @@ export function WorkItemDetailInteractive({
         <div className="rounded-3xl border border-border bg-secondary p-6">
           <h2 className="font-display text-lg font-semibold text-foreground">Activity</h2>
           <div className="mt-4">
-            <ActivityTimeline workItemId={workItem.id} />
+            <ErrorBoundary section="Activity">
+              <ActivityTimeline workItemId={workItem.id} />
+            </ErrorBoundary>
           </div>
         </div>
 
         {workItem.kind === "task" && (
-          <ForgeGraphSection taskId={workItem.id} />
+          <ErrorBoundary section="Build & Deploy">
+            <ForgeGraphSection taskId={workItem.id} />
+          </ErrorBoundary>
         )}
       </section>
     </div>

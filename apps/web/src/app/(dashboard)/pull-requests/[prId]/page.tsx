@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 
+import { ErrorBoundary } from "@bob/ui/error-boundary";
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { CiPipeline } from "~/components/pull-requests/ci-pipeline";
 import { PrChangedFiles } from "~/components/pull-requests/pr-changed-files";
@@ -109,12 +110,16 @@ export default function PullRequestDetailPage() {
       />
 
       <div className="mt-6 space-y-4">
-        <CiPipeline builds={builds} />
+        <ErrorBoundary section="CI Pipeline">
+          <CiPipeline builds={builds} />
+        </ErrorBoundary>
 
-        <PrReviewSection
-          pullRequestId={pr.id}
-          prStatus={pr.status}
-        />
+        <ErrorBoundary section="Reviews">
+          <PrReviewSection
+            pullRequestId={pr.id}
+            prStatus={pr.status}
+          />
+        </ErrorBoundary>
 
         <PrChangedFiles
           additions={pr.additions}

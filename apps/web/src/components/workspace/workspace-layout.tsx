@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import type { ReactNode } from "react";
 
+import { ErrorBoundary } from "@bob/ui/error-boundary";
 import { FileTree } from "~/components/workspace/file-tree";
 import { TerminalComponent } from "~/components/dashboard/Terminal";
 import { CapturePanel } from "~/components/workspace/capture-panel";
@@ -63,7 +64,9 @@ export function WorkspaceLayout({
             </button>
           </div>
           <div className="flex-1 overflow-y-auto overflow-x-hidden">
-            <FileTree rootPath={rootPath} />
+            <ErrorBoundary section="File Tree">
+              <FileTree rootPath={rootPath} />
+            </ErrorBoundary>
           </div>
         </aside>
       )}
@@ -127,12 +130,18 @@ export function WorkspaceLayout({
         {/* Main content area */}
         <div className="flex-1 overflow-y-auto">
           {centerTab === "content" && children}
-          {centerTab === "capture" && <CapturePanel />}
+          {centerTab === "capture" && (
+            <ErrorBoundary section="Screen Capture">
+              <CapturePanel />
+            </ErrorBoundary>
+          )}
           {centerTab === "revisions" && rootPath && (
-            <div className="space-y-4 p-4">
-              <RevisionGraph worktreePath={rootPath} />
-              <ChangesetActions worktreePath={rootPath} />
-            </div>
+            <ErrorBoundary section="Revisions">
+              <div className="space-y-4 p-4">
+                <RevisionGraph worktreePath={rootPath} />
+                <ChangesetActions worktreePath={rootPath} />
+              </div>
+            </ErrorBoundary>
           )}
         </div>
 
@@ -154,18 +163,20 @@ export function WorkspaceLayout({
           </button>
 
           {terminalOpen && (
-            <div className="h-[250px] bg-[#1a1a1a]">
-              {activeSessionId ? (
-                <TerminalComponent
-                  sessionId={activeSessionId}
-                  onClose={toggleTerminal}
-                />
-              ) : (
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                  No active session — start one to see the terminal
-                </div>
-              )}
-            </div>
+            <ErrorBoundary section="Terminal">
+              <div className="h-[250px] bg-[#1a1a1a]">
+                {activeSessionId ? (
+                  <TerminalComponent
+                    sessionId={activeSessionId}
+                    onClose={toggleTerminal}
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                    No active session — start one to see the terminal
+                  </div>
+                )}
+              </div>
+            </ErrorBoundary>
           )}
         </div>
       </div>

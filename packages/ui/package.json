@@ -18,7 +18,8 @@
     "./select": "./src/select.tsx",
     "./textarea": "./src/textarea.tsx",
     "./tooltip": "./src/tooltip.tsx",
-    "./inline-editable": "./src/inline-editable.tsx"
+    "./inline-editable": "./src/inline-editable.tsx",
+    "./error-boundary": "./src/error-boundary.tsx"
   },
   "license": "MIT",
   "scripts": {
