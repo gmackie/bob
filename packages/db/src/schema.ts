@@ -825,12 +825,41 @@ export const chatConversationsRelations = relations(
   }),
 );
 
-export const chatMessagesRelations = relations(chatMessages, ({ one }) => ({
-  conversation: one(chatConversations, {
-    fields: [chatMessages.conversationId],
-    references: [chatConversations.id],
-  }),
+export const chatAttachments = pgTable("chat_attachments", (t) => ({
+  id: t.uuid().notNull().primaryKey().defaultRandom(),
+  messageId: t
+    .uuid()
+    .references(() => chatMessages.id, { onDelete: "cascade" }),
+  type: t.text({ enum: ["image", "file"] }).notNull().default("image"),
+  url: t.text().notNull(),
+  filename: t.text(),
+  mimeType: t.text(),
+  width: t.integer(),
+  height: t.integer(),
+  sizeBytes: t.integer(),
+  createdAt: t.timestamp().defaultNow().notNull(),
 }));
+
+export const chatMessagesRelations = relations(
+  chatMessages,
+  ({ one, many }) => ({
+    conversation: one(chatConversations, {
+      fields: [chatMessages.conversationId],
+      references: [chatConversations.id],
+    }),
+    attachments: many(chatAttachments),
+  }),
+);
+
+export const chatAttachmentsRelations = relations(
+  chatAttachments,
+  ({ one }) => ({
+    message: one(chatMessages, {
+      fields: [chatAttachments.messageId],
+      references: [chatMessages.id],
+    }),
+  }),
+);
 
 export const planStatusEnum = [
   "draft",
