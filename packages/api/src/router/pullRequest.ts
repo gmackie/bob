@@ -1,5 +1,8 @@
 import type { TRPCRouterRecord } from "@trpc/server";
 import { TRPCError } from "@trpc/server";
+import { desc, eq } from "@bob/db";
+import { db } from "@bob/db/client";
+import { prReviews, user } from "@bob/db/schema";
 import { z } from "zod/v4";
 
 import {
@@ -265,5 +268,47 @@ export const pullRequestRouter = {
               : "Failed to refresh pull request",
         });
       }
+    }),
+  listReviews: protectedProcedure
+    .input(z.object({ pullRequestId: z.string().uuid() }))
+    .query(async ({ input }) => {
+      const reviews = await db
+        .select({
+          id: prReviews.id,
+          pullRequestId: prReviews.pullRequestId,
+          userId: prReviews.userId,
+          status: prReviews.status,
+          body: prReviews.body,
+          createdAt: prReviews.createdAt,
+          userName: user.name,
+          userImage: user.image,
+        })
+        .from(prReviews)
+        .leftJoin(user, eq(prReviews.userId, user.id))
+        .where(eq(prReviews.pullRequestId, input.pullRequestId))
+        .orderBy(desc(prReviews.createdAt));
+
+      return reviews;
+    }),
+
+  addReview: protectedProcedure
+    .input(
+      z.object({
+        pullRequestId: z.string().uuid(),
+        status: z.enum(["approved", "changes_requested", "commented"]),
+        body: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const [review] = await db
+        .insert(prReviews)
+        .values({
+          pullRequestId: input.pullRequestId,
+          userId: ctx.session.user.id,
+          status: input.status,
+          body: input.body ?? null,
+        })
+        .returning();
+      return review;
     }),
 } satisfies TRPCRouterRecord;

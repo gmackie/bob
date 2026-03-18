@@ -7,6 +7,7 @@ import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { CiPipeline } from "~/components/pull-requests/ci-pipeline";
 import { PrChangedFiles } from "~/components/pull-requests/pr-changed-files";
 import { PrHeader } from "~/components/pull-requests/pr-header";
+import { PrReviewSection } from "~/components/pull-requests/pr-review-section";
 import { useTRPC } from "~/trpc/react";
 
 export default function PullRequestDetailPage() {
@@ -109,6 +110,11 @@ export default function PullRequestDetailPage() {
 
       <div className="mt-6 space-y-4">
         <CiPipeline builds={builds} />
+
+        <PrReviewSection
+          pullRequestId={pr.id}
+          prStatus={pr.status}
+        />
 
         <PrChangedFiles
           additions={pr.additions}

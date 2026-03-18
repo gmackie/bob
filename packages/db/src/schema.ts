@@ -1144,6 +1144,17 @@ export type GitProvider = (typeof gitProviderEnum)[number];
 export const prStatusEnum = ["draft", "open", "merged", "closed"] as const;
 export type PRStatus = (typeof prStatusEnum)[number];
 
+export const prReviewStatusEnum = [
+  "approved",
+  "changes_requested",
+  "commented",
+] as const;
+export type PRReviewStatus = (typeof prReviewStatusEnum)[number];
+export const prReviewStatusPgEnum = pgEnum(
+  "pr_review_status",
+  prReviewStatusEnum,
+);
+
 export const webhookStatusEnum = ["pending", "processed", "failed"] as const;
 export type WebhookStatus = (typeof webhookStatusEnum)[number];
 
@@ -1264,6 +1275,19 @@ export const CreatePullRequestSchema = createInsertSchema(pullRequests, {
   mergedAt: true,
   closedAt: true,
 });
+
+// 1.2.1 PR Reviews
+export const prReviews = pgTable("pr_reviews", (t) => ({
+  id: t.uuid().notNull().primaryKey().defaultRandom(),
+  pullRequestId: t
+    .uuid()
+    .notNull()
+    .references(() => pullRequests.id, { onDelete: "cascade" }),
+  userId: t.text().notNull(),
+  status: prReviewStatusPgEnum().notNull(),
+  body: t.text(),
+  createdAt: t.timestamp().defaultNow().notNull(),
+}));
 
 // 1.3 Git Commits
 export const gitCommits = pgTable("git_commits", (t) => ({
@@ -1564,8 +1588,20 @@ export const pullRequestsRelations = relations(
     }),
     commits: many(gitCommits),
     taskRuns: many(taskRuns),
+    reviews: many(prReviews),
   }),
 );
+
+export const prReviewsRelations = relations(prReviews, ({ one }) => ({
+  pullRequest: one(pullRequests, {
+    fields: [prReviews.pullRequestId],
+    references: [pullRequests.id],
+  }),
+  user: one(user, {
+    fields: [prReviews.userId],
+    references: [user.id],
+  }),
+}));
 
 export const gitCommitsRelations = relations(gitCommits, ({ one }) => ({
   repository: one(repositories, {
