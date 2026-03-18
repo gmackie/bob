@@ -6,8 +6,10 @@ import type { ReactNode } from "react";
 import { FileTree } from "~/components/workspace/file-tree";
 import { TerminalComponent } from "~/components/dashboard/Terminal";
 import { CapturePanel } from "~/components/workspace/capture-panel";
+import { RevisionGraph } from "~/components/workspace/revision-graph";
+import { ChangesetActions } from "~/components/workspace/changeset-actions";
 
-type CenterTab = "content" | "capture";
+type CenterTab = "content" | "capture" | "revisions";
 
 interface WorkspaceLayoutProps {
   /** Absolute path to the worktree / repository root for the file tree */
@@ -107,11 +109,31 @@ export function WorkspaceLayout({
           >
             Capture
           </button>
+          {rootPath && (
+            <button
+              type="button"
+              onClick={() => setCenterTab("revisions")}
+              className={`px-3 py-1.5 text-xs font-medium transition ${
+                centerTab === "revisions"
+                  ? "border-b-2 border-primary text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Revisions
+            </button>
+          )}
         </div>
 
         {/* Main content area */}
         <div className="flex-1 overflow-y-auto">
-          {centerTab === "content" ? children : <CapturePanel />}
+          {centerTab === "content" && children}
+          {centerTab === "capture" && <CapturePanel />}
+          {centerTab === "revisions" && rootPath && (
+            <div className="space-y-4 p-4">
+              <RevisionGraph worktreePath={rootPath} />
+              <ChangesetActions worktreePath={rootPath} />
+            </div>
+          )}
         </div>
 
         {/* Terminal panel (bottom) */}
