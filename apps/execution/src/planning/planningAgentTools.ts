@@ -4,6 +4,84 @@ export interface PlanningContext {
   projectName: string;
   sessionId: string;
   reactFrontend?: boolean;
+  launchContext?: PlanningLaunchContext;
+}
+
+export interface PlanningLaunchWorkItem {
+  id: string;
+  identifier: string;
+  title: string;
+  kind: string;
+}
+
+export interface PlanningLaunchRepoSource {
+  id: string;
+  label: string;
+  path: string;
+  detail: string;
+}
+
+export interface PlanningLaunchAttachment {
+  name: string;
+  sizeLabel: string;
+  content?: string;
+}
+
+export interface PlanningLaunchContext {
+  intent: "shape" | "breakdown";
+  notes: string;
+  workItem?: PlanningLaunchWorkItem;
+  selectedRepoSources: PlanningLaunchRepoSource[];
+  attachedFiles: PlanningLaunchAttachment[];
+}
+
+function buildLaunchContextGuidance(launchContext?: PlanningLaunchContext): string {
+  if (!launchContext) {
+    return "";
+  }
+
+  const repoContext =
+    launchContext.selectedRepoSources.length > 0
+      ? `- Selected repo context:\n${launchContext.selectedRepoSources
+          .map(
+            (source) =>
+              `  - ${source.label} (${source.path}): ${source.detail}`,
+          )
+          .join("\n")}`
+      : "- Selected repo context: none provided";
+
+  const attachments =
+    launchContext.attachedFiles.length > 0
+      ? `- Attached file excerpts:\n${launchContext.attachedFiles
+          .map((file) => {
+            const summary = `  - ${file.name} [${file.sizeLabel}]`;
+            if (!file.content?.trim()) {
+              return `${summary}: metadata only`;
+            }
+
+            return `${summary}\n    ${file.content
+              .trim()
+              .split("\n")
+              .join("\n    ")}`;
+          })
+          .join("\n")}`
+      : "- Attached file excerpts: none provided";
+
+  const workItem = launchContext.workItem
+    ? `- Work item: ${launchContext.workItem.identifier} ${launchContext.workItem.title} (${launchContext.workItem.kind})`
+    : "- Work item: not specified";
+
+  return `
+## Launch Context
+
+This planning session was started from the workflow launch modal. Treat the following as the initial session brief and context bundle before asking your first question.
+
+- Intent: ${launchContext.intent}
+- Kickoff brief: ${launchContext.notes}
+${workItem}
+${repoContext}
+${attachments}
+`;
 }
 
 /**
@@ -62,6 +140,8 @@ Required States should cover happy path, loading, empty, error variants, partial
 `
     : "";
 
+  const launchContextGuidance = buildLaunchContextGuidance(ctx.launchContext);
+
   return `# Planning Session
 
 You are a planning agent for the "${ctx.projectName}" project. Your job is to help the user break down their goal into structured, actionable tasks.
@@ -116,6 +196,7 @@ Show all current draft tasks for this session.
 - Use "epic" kind for grouping-only items, "task" for executable work, "issue" for bugs/problems
 ${workItemGuidance}
 ${reactFrontendGuidance}
+${launchContextGuidance}
 
 ## Context
 

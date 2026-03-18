@@ -260,6 +260,85 @@ describe("planSession router", () => {
       );
       expect(result).toEqual({ sessionId: SESSION_ID });
     });
+
+    it("forwards workflow launch context into execution planning startup", async () => {
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: PROJECT_ID,
+        automationSettings: {
+          reactFrontend: false,
+        },
+      });
+      startPlanningSessionMock.mockResolvedValueOnce({ sessionId: SESSION_ID });
+
+      const caller = createCaller({ id: "user-1" });
+
+      await caller.planSession.start({
+        sessionId: SESSION_ID,
+        workspaceId: WORKSPACE_ID,
+        projectId: PROJECT_ID,
+        projectName: "Acme App",
+        workingDirectory: "/repo",
+        launchContext: {
+          intent: "shape",
+          notes:
+            "Shape this into an epic, clarify the API surface, and keep the parent item as the scope owner.",
+          workItem: {
+            id: "8d236647-d217-4273-9115-f6957d77b168",
+            identifier: "EPIC-42",
+            title: "Improve launch workflow",
+            kind: "epic",
+          },
+          selectedRepoSources: [
+            {
+              id: "repo-readme",
+              label: "Project overview",
+              path: "README.md",
+              detail: "Product overview and current setup guidance.",
+            },
+          ],
+          attachedFiles: [
+            {
+              name: "launch-brief.md",
+              sizeLabel: "14 KB",
+              content:
+                "# Launch brief\n\nFocus the work on planning-session kickoff quality.",
+            },
+          ],
+        },
+      });
+
+      expect(startPlanningSessionMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          launchContext: {
+            intent: "shape",
+            notes:
+              "Shape this into an epic, clarify the API surface, and keep the parent item as the scope owner.",
+            workItem: {
+              id: "8d236647-d217-4273-9115-f6957d77b168",
+              identifier: "EPIC-42",
+              title: "Improve launch workflow",
+              kind: "epic",
+            },
+            selectedRepoSources: [
+              {
+                id: "repo-readme",
+                label: "Project overview",
+                path: "README.md",
+                detail: "Product overview and current setup guidance.",
+              },
+            ],
+            attachedFiles: [
+              {
+                name: "launch-brief.md",
+                sizeLabel: "14 KB",
+                content:
+                  "# Launch brief\n\nFocus the work on planning-session kickoff quality.",
+              },
+            ],
+          },
+        }),
+      );
+    });
   });
 
   describe("removeDraft", () => {

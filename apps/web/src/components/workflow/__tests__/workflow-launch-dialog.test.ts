@@ -29,6 +29,7 @@ vi.mock("@bob/ui/dialog", () => ({
 }));
 
 import {
+  buildWorkflowLaunchContext,
   WorkflowLaunchDialogBody,
   getWorkflowLaunchExperience,
 } from "../workflow-launch-dialog";
@@ -150,5 +151,64 @@ describe("WorkflowLaunchDialogBody", () => {
     expect(markup).toContain("Requirements checklist");
     expect(markup).toContain("Existing child tasks");
     expect(markup).toContain("Open planning session");
+  });
+});
+
+describe("buildWorkflowLaunchContext", () => {
+  it("expands selected repository sources into a structured planning kickoff payload", () => {
+    const experience = getWorkflowLaunchExperience({
+      intent: "shape",
+      workItem,
+      requirementCount: 2,
+      childTaskCount: 0,
+    });
+
+    const context = buildWorkflowLaunchContext({
+      experience,
+      notes: "Use the README and planning docs to shape this into a clean epic.",
+      selectedSourceIds: ["parent-work-item", "repo-readme", "repo-plans"],
+      attachedFiles: [
+        {
+          id: "file-1",
+          name: "launch-brief.md",
+          sizeLabel: "12 KB",
+          content: "# Brief\n\nKeep the BRD lightweight and focused on outcomes.",
+        },
+      ],
+      workItem,
+    });
+
+    expect(context).toEqual({
+      intent: "shape",
+      notes: "Use the README and planning docs to shape this into a clean epic.",
+      workItem,
+      selectedRepoSources: [
+        {
+          id: "parent-work-item",
+          label: "Parent work item",
+          path: "EPIC-0040",
+          detail: "Carry the current title and description into the shaping conversation.",
+        },
+        {
+          id: "repo-readme",
+          label: "Project overview",
+          path: "README.md",
+          detail: "Anchor the conversation in product language, setup context, and existing capabilities.",
+        },
+        {
+          id: "repo-plans",
+          label: "Planning docs",
+          path: "docs/ai",
+          detail: "Pull prior proposals, product notes, and implementation plans if this work already exists on paper.",
+        },
+      ],
+      attachedFiles: [
+        {
+          name: "launch-brief.md",
+          sizeLabel: "12 KB",
+          content: "# Brief\n\nKeep the BRD lightweight and focused on outcomes.",
+        },
+      ],
+    });
   });
 });

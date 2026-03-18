@@ -17,6 +17,34 @@ import {
 } from "../services/integrations/planningRemoteConfig";
 import { protectedProcedure } from "../trpc";
 
+const planningLaunchContextSchema = z.object({
+  intent: z.enum(["shape", "breakdown"]),
+  notes: z.string(),
+  workItem: z
+    .object({
+      id: z.string(),
+      identifier: z.string(),
+      title: z.string(),
+      kind: z.string(),
+    })
+    .optional(),
+  selectedRepoSources: z.array(
+    z.object({
+      id: z.string(),
+      label: z.string(),
+      path: z.string(),
+      detail: z.string(),
+    }),
+  ),
+  attachedFiles: z.array(
+    z.object({
+      name: z.string(),
+      sizeLabel: z.string(),
+      content: z.string().optional(),
+    }),
+  ),
+});
+
 export const planSessionRouter = {
   /** Create a new planning session. */
   create: protectedProcedure
@@ -71,6 +99,7 @@ export const planSessionRouter = {
         projectId: z.string().uuid(),
         projectName: z.string(),
         workingDirectory: z.string(),
+        launchContext: planningLaunchContextSchema.optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
