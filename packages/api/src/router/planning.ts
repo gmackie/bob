@@ -6,6 +6,7 @@ import {
   getPlanningApiKey,
   getPlanningBaseUrl,
 } from "../services/integrations/planningRemoteConfig";
+import { onTaskStatusChange } from "../services/automation/task-trigger";
 import { protectedProcedure } from "../trpc";
 
 async function planningQuery<T>(path: string, input?: unknown): Promise<T> {
@@ -299,9 +300,17 @@ export const planningRouter = {
         dueDate: z.string().nullable().optional(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      // Fetch current task to detect status transitions
+      const oldTask = input.status
+        ? await planningQuery<{ id: string; status: string; identifier: string; title: string; projectId?: string }>(
+            "issue.get",
+            { id: input.id },
+          ).catch(() => null)
+        : null;
+
       const { dueDate, ...rest } = input;
-      return planningMutation<{
+      const result = await planningMutation<{
         id: string;
         identifier: string;
         title: string;
@@ -315,6 +324,23 @@ export const planningRouter = {
             ? null
             : undefined,
       });
+
+      // Fire-and-forget: check if status changed and trigger automation
+      if (input.status && oldTask && oldTask.status !== input.status) {
+        onTaskStatusChange({
+          taskId: input.id,
+          projectId: oldTask.projectId ?? null,
+          oldStatus: oldTask.status,
+          newStatus: input.status,
+          userId: ctx.session.user.id,
+          identifier: oldTask.identifier ?? result.identifier,
+          title: oldTask.title ?? result.title,
+        }).catch((err) =>
+          console.error("[automation] task trigger failed:", err),
+        );
+      }
+
+      return result;
     }),
 
   addComment: protectedProcedure
