@@ -487,8 +487,53 @@ export const taskRunRouter = {
     }),
 };
 
+const listRecentActivitiesProcedure = protectedProcedure
+  .input(
+    z.object({
+      limit: z.number().min(1).max(100).default(50),
+    }),
+  )
+  .query(async ({ ctx, input }) => {
+    const recentActivities = await ctx.db.query.activities.findMany({
+      orderBy: desc(activities.createdAt),
+      limit: input.limit,
+      with: {
+        workItem: {
+          columns: {
+            id: true,
+            title: true,
+            projectId: true,
+            sequenceNumber: true,
+          },
+          with: {
+            project: {
+              columns: {
+                id: true,
+                key: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return recentActivities.map((activity) => ({
+      ...activity,
+      workItemTitle: activity.workItem?.title ?? null,
+      workItemIdentifier: activity.workItem
+        ? formatWorkItemIdentifier({
+            projectKey: activity.workItem.project?.key ?? null,
+            sequenceNumber: activity.workItem.sequenceNumber,
+            id: activity.workItem.id,
+          })
+        : null,
+    }));
+  });
+
 export const activityRouter = {
   listByWorkItem: listActivitiesProcedure,
+  listRecent: listRecentActivitiesProcedure,
 };
 
 export const workItemsRouter = {

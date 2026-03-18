@@ -1,8 +1,15 @@
 "use client";
 
+import { ActivityFeed } from "./activity-feed";
 import { AgentStatusBar } from "./agent-status-bar";
+import { AttentionPanel } from "./attention-panel";
+import { ProjectProgress } from "./project-progress";
 
-export function MissionControl() {
+interface MissionControlProps {
+  workspaceId?: string;
+}
+
+export function MissionControl({ workspaceId }: MissionControlProps) {
   return (
     <div className="flex flex-col gap-5">
       {/* Agent status bar — full width */}
@@ -11,34 +18,13 @@ export function MissionControl() {
       {/* 3-column grid */}
       <div className="grid grid-cols-[16rem_1fr_18rem] gap-5">
         {/* Left column — Project progress */}
-        <div className="rounded-2xl border border-border bg-card p-5">
-          <h3 className="font-display text-sm font-semibold text-foreground">
-            Projects
-          </h3>
-          <p className="mt-3 font-body text-sm text-muted-foreground">
-            No projects to display
-          </p>
-        </div>
+        <ProjectProgress workspaceId={workspaceId ?? ""} />
 
         {/* Center column — Activity feed */}
-        <div className="rounded-2xl border border-border bg-card p-5">
-          <h3 className="font-display text-sm font-semibold text-foreground">
-            Recent Activity
-          </h3>
-          <p className="mt-3 font-body text-sm text-muted-foreground">
-            No recent activity
-          </p>
-        </div>
+        <ActivityFeed />
 
         {/* Right column — Attention items */}
-        <div className="rounded-2xl border border-border bg-card p-5">
-          <h3 className="font-display text-sm font-semibold text-foreground">
-            Needs Attention
-          </h3>
-          <p className="mt-3 font-body text-sm text-muted-foreground">
-            Nothing needs attention right now
-          </p>
-        </div>
+        <AttentionPanel />
       </div>
     </div>
   );
