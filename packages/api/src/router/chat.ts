@@ -3,7 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod/v4";
 
 import { desc, eq, and, asc } from "@bob/db";
-import { chatConversations, chatMessages, messageRoleEnum } from "@bob/db/schema";
+import { chatAttachments, chatConversations, chatMessages, messageRoleEnum } from "@bob/db/schema";
 
 import { protectedProcedure } from "../trpc";
 
@@ -210,5 +210,46 @@ export const chatRouter = {
         .limit(input.limit);
 
       return messages;
+    }),
+  attachImage: protectedProcedure
+    .input(
+      z.object({
+        messageId: z.string().uuid(),
+        url: z.string(),
+        filename: z.string().optional(),
+        mimeType: z.string().optional(),
+        width: z.number().int().positive().optional(),
+        height: z.number().int().positive().optional(),
+        sizeBytes: z.number().int().positive().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const [attachment] = await ctx.db
+        .insert(chatAttachments)
+        .values({
+          messageId: input.messageId,
+          type: "image",
+          url: input.url,
+          filename: input.filename ?? null,
+          mimeType: input.mimeType ?? null,
+          width: input.width ?? null,
+          height: input.height ?? null,
+          sizeBytes: input.sizeBytes ?? null,
+        })
+        .returning();
+
+      return attachment;
+    }),
+
+  getAttachments: protectedProcedure
+    .input(z.object({ messageId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const attachments = await ctx.db
+        .select()
+        .from(chatAttachments)
+        .where(eq(chatAttachments.messageId, input.messageId))
+        .orderBy(asc(chatAttachments.createdAt));
+
+      return attachments;
     }),
 } satisfies TRPCRouterRecord;
