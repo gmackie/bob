@@ -390,6 +390,16 @@ export const projects = pgTable("projects", (t) => ({
   description: t.text(),
   color: t.varchar({ length: 7 }),
   status: projectStatusEnum().notNull().default("planned"),
+  automationSettings: t
+    .jsonb()
+    .$type<{
+      autoDispatch?: boolean;
+      autoBranch?: boolean;
+      autoFeaturePR?: boolean;
+      ciTrigger?: boolean;
+    }>()
+    .notNull()
+    .default({}),
   createdAt: t.timestamp().defaultNow().notNull(),
   updatedAt: t
     .timestamp({ mode: "date", withTimezone: true })

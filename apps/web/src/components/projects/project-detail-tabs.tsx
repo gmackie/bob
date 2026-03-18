@@ -15,8 +15,9 @@ import {
 import { WorkItemBoard } from "~/components/work-items/work-item-board";
 import type { WorkItemBoardItem } from "~/components/work-items/work-item-board";
 import { RequirementsChecklist } from "~/components/work-items/requirements-checklist";
+import { AutomationSettings } from "~/components/projects/automation-settings";
 
-type TabKey = "board" | "list" | "requirements";
+type TabKey = "board" | "list" | "requirements" | "settings";
 
 export interface ProjectWorkItem {
   id: string;
@@ -33,6 +34,15 @@ interface ProjectDetailTabsProps {
   /** The top-level epic work item ID for the requirements tab, if any */
   epicWorkItemId?: string;
   epicWorkItemKind?: string;
+  /** Project ID for the settings tab */
+  projectId: string;
+  /** Current automation settings from the project */
+  automationSettings?: {
+    autoDispatch?: boolean;
+    autoBranch?: boolean;
+    autoFeaturePR?: boolean;
+    ciTrigger?: boolean;
+  };
 }
 
 const STATUS_ORDER: Record<string, number> = {
@@ -69,6 +79,8 @@ export function ProjectDetailTabs({
   items,
   epicWorkItemId,
   epicWorkItemKind,
+  projectId,
+  automationSettings,
 }: ProjectDetailTabsProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("board");
 
@@ -76,6 +88,7 @@ export function ProjectDetailTabs({
     { key: "board", label: "Board" },
     { key: "list", label: "List" },
     { key: "requirements", label: "Requirements" },
+    { key: "settings", label: "Settings" },
   ];
 
   return (
@@ -109,6 +122,12 @@ export function ProjectDetailTabs({
           <RequirementsTab
             epicWorkItemId={epicWorkItemId}
             epicWorkItemKind={epicWorkItemKind}
+          />
+        )}
+        {activeTab === "settings" && (
+          <AutomationSettings
+            projectId={projectId}
+            initialSettings={automationSettings}
           />
         )}
       </div>

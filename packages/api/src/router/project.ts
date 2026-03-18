@@ -96,4 +96,40 @@ export const projectRouter = {
         },
       };
     }),
+
+  updateAutomationSettings: protectedProcedure
+    .input(
+      z.object({
+        projectId: z.string().uuid(),
+        settings: z.object({
+          autoDispatch: z.boolean().optional(),
+          autoBranch: z.boolean().optional(),
+          autoFeaturePR: z.boolean().optional(),
+          ciTrigger: z.boolean().optional(),
+        }),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.projects.findFirst({
+        where: eq(projects.id, input.projectId),
+        columns: { automationSettings: true },
+      });
+
+      if (!existing) {
+        throw new Error("Project not found");
+      }
+
+      const merged = {
+        ...(existing.automationSettings ?? {}),
+        ...input.settings,
+      };
+
+      const [updated] = await ctx.db
+        .update(projects)
+        .set({ automationSettings: merged })
+        .where(eq(projects.id, input.projectId))
+        .returning();
+
+      return updated!;
+    }),
 };

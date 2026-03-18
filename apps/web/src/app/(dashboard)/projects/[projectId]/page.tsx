@@ -111,6 +111,8 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           }))}
           epicWorkItemId={topEpic?.id}
           epicWorkItemKind={topEpic?.kind}
+          projectId={project.id}
+          automationSettings={project.automationSettings ?? undefined}
         />
       </section>
     </main>
