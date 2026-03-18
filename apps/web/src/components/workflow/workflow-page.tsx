@@ -19,6 +19,7 @@ import { StageExecute } from "./stage-execute";
 import { StageReview } from "./stage-review";
 import { StageDeploy } from "./stage-deploy";
 import { StageLive } from "./stage-live";
+import { WorkflowMobile } from "./workflow-mobile";
 
 export interface WorkflowPageProps {
   workItem: {
@@ -181,37 +182,61 @@ export function WorkflowPage({
   // --- Stages to render (up to and including current) ---
   const stagesToRender = STAGE_KEYS.slice(0, stageIndex + 1);
 
+  const allProps: WorkflowPageProps = {
+    workItem,
+    requirements,
+    childTasks,
+    dispatch,
+    pullRequests,
+    deployments,
+    comments,
+    artifacts,
+    sessionId,
+    onOpenPlanningSession,
+    onBreakIntoTasks,
+    onDispatchAgents,
+    onMergeAndDeploy,
+  };
+
   return (
-    <div className="space-y-6">
-      {/* Pipeline indicator — sticky */}
-      <div className="sticky top-0 z-10 bg-background rounded-2xl border border-border p-4">
-        <PipelineIndicator
-          currentStage={currentStage}
-          onStageClick={handleStageClick}
-        />
+    <>
+      {/* Mobile layout (< md) — swipeable cards */}
+      <div className="md:hidden">
+        <WorkflowMobile {...allProps} />
       </div>
 
-      {/* Bob thinking indicator — shows when an agent session is active */}
-      <BobThinking workItemId={workItem.id} sessionId={sessionId} />
+      {/* Desktop layout (md+) */}
+      <div className="hidden md:block space-y-6">
+        {/* Pipeline indicator — sticky */}
+        <div className="sticky top-0 z-10 bg-background rounded-2xl border border-border p-4">
+          <PipelineIndicator
+            currentStage={currentStage}
+            onStageClick={handleStageClick}
+          />
+        </div>
 
-      {/* Stage sections */}
-      {stagesToRender.map((stageKey) => {
-        const isCompleted = STAGE_KEYS.indexOf(stageKey) < stageIndex;
-        const isCurrent = stageKey === currentStage;
+        {/* Bob thinking indicator — shows when an agent session is active */}
+        <BobThinking workItemId={workItem.id} sessionId={sessionId} />
 
-        return (
-          <div key={stageKey} id={`stage-${stageKey}`}>
-            {renderStageSection(stageKey, isCompleted, isCurrent)}
-          </div>
-        );
-      })}
+        {/* Stage sections */}
+        {stagesToRender.map((stageKey) => {
+          const isCompleted = STAGE_KEYS.indexOf(stageKey) < stageIndex;
+          const isCurrent = stageKey === currentStage;
 
-      {/* Transition banner after the current stage */}
-      <StageTransition
-        currentStage={currentStage}
-        onTransition={handleTransition}
-      />
-    </div>
+          return (
+            <div key={stageKey} id={`stage-${stageKey}`}>
+              {renderStageSection(stageKey, isCompleted, isCurrent)}
+            </div>
+          );
+        })}
+
+        {/* Transition banner after the current stage */}
+        <StageTransition
+          currentStage={currentStage}
+          onTransition={handleTransition}
+        />
+      </div>
+    </>
   );
 
   function renderStageSection(
