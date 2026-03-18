@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { ErrorBoundary } from "@bob/ui/error-boundary";
@@ -9,6 +9,8 @@ import { TerminalComponent } from "~/components/dashboard/Terminal";
 import { CapturePanel } from "~/components/workspace/capture-panel";
 import { RevisionGraph } from "~/components/workspace/revision-graph";
 import { ChangesetActions } from "~/components/workspace/changeset-actions";
+import { useFileChangeEvents } from "~/hooks/use-file-change-events";
+import { useSessionEvents } from "~/hooks/use-session-events";
 
 type CenterTab = "content" | "capture" | "revisions";
 
@@ -32,6 +34,46 @@ export function WorkspaceLayout({
   const [fileTreeOpen, setFileTreeOpen] = useState(true);
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [centerTab, setCenterTab] = useState<CenterTab>("content");
+
+  // Track "new updates" badges for tabs the user isn't currently viewing
+  const [contentHasUpdates, setContentHasUpdates] = useState(false);
+  const [revisionsHasUpdates, setRevisionsHasUpdates] = useState(false);
+
+  // Keep current tab in a ref so event callbacks don't go stale
+  const centerTabRef = useRef<CenterTab>(centerTab);
+  centerTabRef.current = centerTab;
+
+  // Listen for file_change events — badge the Content tab when not active
+  useFileChangeEvents({
+    sessionId: activeSessionId,
+    enabled: Boolean(activeSessionId),
+    interval: 3_000,
+    onFileChange: useCallback(() => {
+      if (centerTabRef.current !== "content") {
+        setContentHasUpdates(true);
+      }
+    }, []),
+  });
+
+  // Listen for build/deploy events — badge the Revisions tab when not active
+  const { events: buildEvents } = useSessionEvents({
+    sessionId: activeSessionId,
+    enabled: Boolean(activeSessionId),
+    interval: 5_000,
+    eventTypes: ["build_status", "deploy_status"],
+  });
+
+  useEffect(() => {
+    if (buildEvents && buildEvents.length > 0 && centerTabRef.current !== "revisions") {
+      setRevisionsHasUpdates(true);
+    }
+  }, [buildEvents]);
+
+  const handleTabChange = useCallback((tab: CenterTab) => {
+    setCenterTab(tab);
+    if (tab === "content") setContentHasUpdates(false);
+    if (tab === "revisions") setRevisionsHasUpdates(false);
+  }, []);
 
   const toggleFileTree = useCallback(() => setFileTreeOpen((v) => !v), []);
   const toggleTerminal = useCallback(() => setTerminalOpen((v) => !v), []);
@@ -65,7 +107,7 @@ export function WorkspaceLayout({
           </div>
           <div className="flex-1 overflow-y-auto overflow-x-hidden">
             <ErrorBoundary section="File Tree">
-              <FileTree rootPath={rootPath} />
+              <FileTree rootPath={rootPath} sessionId={activeSessionId} />
             </ErrorBoundary>
           </div>
         </aside>
@@ -92,18 +134,21 @@ export function WorkspaceLayout({
         <div className="flex shrink-0 items-center gap-1 border-b border-border bg-card px-4">
           <button
             type="button"
-            onClick={() => setCenterTab("content")}
-            className={`px-3 py-1.5 text-xs font-medium transition ${
+            onClick={() => handleTabChange("content")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition ${
               centerTab === "content"
                 ? "border-b-2 border-primary text-foreground"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
             Content
+            {contentHasUpdates && (
+              <span className="size-1.5 rounded-full bg-primary" aria-label="New updates" />
+            )}
           </button>
           <button
             type="button"
-            onClick={() => setCenterTab("capture")}
+            onClick={() => handleTabChange("capture")}
             className={`px-3 py-1.5 text-xs font-medium transition ${
               centerTab === "capture"
                 ? "border-b-2 border-primary text-foreground"
@@ -115,14 +160,17 @@ export function WorkspaceLayout({
           {rootPath && (
             <button
               type="button"
-              onClick={() => setCenterTab("revisions")}
-              className={`px-3 py-1.5 text-xs font-medium transition ${
+              onClick={() => handleTabChange("revisions")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition ${
                 centerTab === "revisions"
                   ? "border-b-2 border-primary text-foreground"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
               Revisions
+              {revisionsHasUpdates && (
+                <span className="size-1.5 rounded-full bg-primary" aria-label="New updates" />
+              )}
             </button>
           )}
         </div>

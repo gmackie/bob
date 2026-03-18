@@ -2,6 +2,7 @@ import React from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { ActivityTimeline } from "~/components/work-items/activity-timeline";
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { WorkspaceControls } from "~/components/work-items/workspace-controls";
 import { WorkspaceLayout } from "~/components/workspace/workspace-layout";
@@ -286,6 +287,13 @@ export default async function TaskWorkspacePage({
                   </div>
                 ))
               )}
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-border bg-secondary p-6">
+            <h2 className="font-display text-lg font-semibold text-foreground">Activity</h2>
+            <div className="mt-4">
+              <ActivityTimeline workItemId={detail.workItem.id} live={!!activeSessionId} />
             </div>
           </div>
 
