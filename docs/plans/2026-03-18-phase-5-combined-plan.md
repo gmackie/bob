@@ -219,3 +219,80 @@
 - Tasks B.5 + B.6 + B.7 (floating capture + dashboard + stories)
 
 **Total: 2 tracks, 12 tasks**
+
+---
+
+## Expansion: Skills as Universal Protocol
+
+### Task E.1: Skill Composability (Nested Execution Trees)
+
+**Files:**
+- Modify: `packages/db/src/schema.ts` — add `parentExecutionId` to skillExecutions
+- Modify: `apps/web/src/app/(dashboard)/chat/_components/skill-execution-block.tsx`
+
+**Implementation:**
+- Skills can call other skills. Each execution records its parentExecutionId.
+- Chat UI renders nested skill blocks: /ship contains /review which contains /qa.
+- Expandable tree: collapsed shows top-level skill, expand shows children.
+- Depth indicator: left-border indentation per nesting level.
+
+### Task E.2: Human-as-Skill (Decision Gates)
+
+**Files:**
+- Create: `apps/web/src/components/workflow/human-gate.tsx`
+- Modify: `packages/api/src/router/skill.ts` — add `requestHumanInput` procedure
+
+**Implementation:**
+- When an agent hits a decision point, it invokes a "human_review" skill.
+- This pauses execution and presents a structured prompt to the user.
+- The prompt appears both in chat AND as a notification on the work item page.
+- User responds with a choice. Agent resumes with the decision.
+- Schema: add `awaitingInput` fields to skillExecutions (question, options, response, respondedAt).
+
+### Task E.3: Turn-Level Checkpointing
+
+**Files:**
+- Modify: `packages/db/src/schema.ts` — add `sessionCheckpoints` table
+- Create: `packages/api/src/router/checkpoint.ts`
+- Create: `apps/web/src/components/chat/checkpoint-indicator.tsx`
+
+**Implementation:**
+- `sessionCheckpoints` table: id, sessionId, turnNumber, eventSeq, label, snapshotData (jsonb), createdAt
+- Every N turns (configurable) OR on every skill execution, save a checkpoint.
+- snapshotData: conversation state, file system state hash, git ref, work item state.
+- Chat UI: small checkpoint markers between messages. Click to revert.
+- Revert action: restores conversation to that turn, git resets to that ref, updates work item state.
+- "What if" mode: branch from a checkpoint to explore alternatives without losing the original path.
+
+### Task E.4: Skill Replay + Editing
+
+**Files:**
+- Create: `apps/web/src/components/chat/skill-replay.tsx`
+- Modify: `packages/api/src/router/skill.ts` — add `replay` procedure
+
+**Implementation:**
+- Every skill execution is fully recorded (input, output, duration, tool calls within).
+- "Replay" button on any completed skill block opens a replay view.
+- Replay shows: timeline of what happened, each sub-step, duration bars.
+- "Edit & Re-run" button: modify the skill input parameters and re-execute.
+- Use case: "What if /review had been stricter?" Change config, re-run, see different results.
+- Re-run creates a new execution linked to the original (branched_from field).
+
+---
+
+## Updated Implementation Order
+
+**Phase 5A (parallel):**
+- Tasks A.1 + A.2 (planning session + Bob Thinking)
+- Tasks B.1 + B.2 (skill registry + chat blocks)
+
+**Phase 5B (parallel):**
+- Tasks A.3 + A.4 (time travel + mobile swipe)
+- Tasks B.3 + B.4 (skill mapping + agent routing)
+- Tasks E.1 + E.2 (composability + human gates)
+
+**Phase 5C (integration):**
+- Tasks E.3 + E.4 (checkpointing + replay)
+- Tasks A.5, B.5, B.6, B.7 (stories + floating capture + dashboard)
+
+**Total: 3 tracks, 16 tasks**
