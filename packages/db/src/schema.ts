@@ -2040,4 +2040,106 @@ export const forgeRunEventsRelations = relations(
   }),
 );
 
+// ── Skills ──────────────────────────────────────────────────────────────────
+
+export const skillCategory = [
+  "planning",
+  "execution",
+  "review",
+  "deploy",
+  "ops",
+  "other",
+] as const;
+export type SkillCategory = (typeof skillCategory)[number];
+export const skillCategoryEnum = pgEnum("skill_category", skillCategory);
+
+export const skillSource = ["builtin", "gstack", "custom"] as const;
+export type SkillSource = (typeof skillSource)[number];
+export const skillSourceEnum = pgEnum("skill_source", skillSource);
+
+export const skillExecutionStatus = [
+  "running",
+  "completed",
+  "failed",
+  "cancelled",
+] as const;
+export type SkillExecutionStatus = (typeof skillExecutionStatus)[number];
+export const skillExecutionStatusEnum = pgEnum(
+  "skill_execution_status",
+  skillExecutionStatus,
+);
+
+export const skills = pgTable("skills", (t) => ({
+  id: t.uuid().notNull().primaryKey().defaultRandom(),
+  name: t.text().notNull(),
+  slug: t.text().notNull().unique(),
+  description: t.text(),
+  category: skillCategoryEnum().notNull().default("other"),
+  source: skillSourceEnum().notNull().default("builtin"),
+  version: t.text(),
+  configSchema: t.jsonb().notNull().default({}),
+  isActive: t.boolean().notNull().default(true),
+  createdAt: t.timestamp().defaultNow().notNull(),
+}));
+
+export const skillsRelations = relations(skills, ({ many }) => ({
+  executions: many(skillExecutions),
+}));
+
+export const skillExecutions = pgTable(
+  "skill_executions",
+  (t) => ({
+    id: t.uuid().notNull().primaryKey().defaultRandom(),
+    sessionId: t
+      .uuid()
+      .references(() => chatConversations.id, { onDelete: "set null" }),
+    skillId: t
+      .uuid()
+      .references(() => skills.id, { onDelete: "set null" }),
+    skillSlug: t.text().notNull(),
+    workItemId: t
+      .uuid()
+      .references(() => workItems.id, { onDelete: "set null" }),
+    parentExecutionId: t.uuid(),
+    status: skillExecutionStatusEnum().notNull().default("running"),
+    input: t.jsonb().notNull().default({}),
+    output: t.jsonb().notNull().default({}),
+    findings: t.jsonb().notNull().default([]),
+    durationMs: t.integer(),
+    startedAt: t.timestamp().defaultNow().notNull(),
+    completedAt: t.timestamp({ mode: "date", withTimezone: true }),
+    createdAt: t.timestamp().defaultNow().notNull(),
+  }),
+  (table) => [
+    index("skill_executions_skill_slug_idx").on(table.skillSlug),
+    index("skill_executions_session_id_idx").on(table.sessionId),
+    index("skill_executions_work_item_id_idx").on(table.workItemId),
+    index("skill_executions_parent_execution_id_idx").on(
+      table.parentExecutionId,
+    ),
+  ],
+);
+
+export const skillExecutionsRelations = relations(
+  skillExecutions,
+  ({ one }) => ({
+    skill: one(skills, {
+      fields: [skillExecutions.skillId],
+      references: [skills.id],
+    }),
+    session: one(chatConversations, {
+      fields: [skillExecutions.sessionId],
+      references: [chatConversations.id],
+    }),
+    workItem: one(workItems, {
+      fields: [skillExecutions.workItemId],
+      references: [workItems.id],
+    }),
+    parentExecution: one(skillExecutions, {
+      fields: [skillExecutions.parentExecutionId],
+      references: [skillExecutions.id],
+    }),
+  }),
+);
+
 export * from "./auth-schema";

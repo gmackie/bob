@@ -21,6 +21,7 @@ import { pullRequestRouter } from "./router/pullRequest";
 import { requirementRouter } from "./router/requirement";
 import { repositoryRouter } from "./router/repository";
 import { sessionRouter } from "./router/session";
+import { skillRouter } from "./router/skill";
 import { settingsRouter } from "./router/settings";
 import { systemRouter } from "./router/system";
 import { terminalRouter } from "./router/terminal";
@@ -61,6 +62,7 @@ const appRouterRecord = {
   requirement: requirementRouter,
   repository: repositoryRouter,
   session: sessionRouter,
+  skill: skillRouter,
   settings: settingsRouter,
   system: systemRouter,
   taskRun: taskRunRouter,
