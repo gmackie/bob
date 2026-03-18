@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { formatRelativeTime } from "~/lib/format/time";
 import { useTRPC } from "~/trpc/react";
+import { useLiveActivity } from "~/hooks/use-live-activity";
 
 /** Map activity type to a Tailwind color class for the dot. */
 function dotColor(type: string): string {
@@ -80,19 +81,34 @@ const COLLAPSED_LIMIT = 10;
 
 interface ActivityTimelineProps {
   workItemId: string;
+  /** When true, poll for live updates and show a "new events" badge. */
+  live?: boolean;
 }
 
-export function ActivityTimeline({ workItemId }: ActivityTimelineProps) {
+export function ActivityTimeline({ workItemId, live = false }: ActivityTimelineProps) {
   const trpc = useTRPC();
   const [expanded, setExpanded] = useState(false);
 
-  const { data: activities, isLoading } = useQuery({
+  // Static query (default)
+  const staticQuery = useQuery({
     ...trpc.activity.listByWorkItem.queryOptions({
       workItemId,
       limit: 100,
     }),
     staleTime: 30_000,
+    enabled: !live,
   });
+
+  // Live query via hook
+  const liveResult = useLiveActivity({
+    workItemId: live ? workItemId : undefined,
+    limit: 100,
+  });
+
+  const activities = live ? liveResult.workItemActivities : staticQuery.data;
+  const isLoading = live ? liveResult.isLoading : staticQuery.isLoading;
+  const newCount = live ? liveResult.newCount : 0;
+  const markSeen = liveResult.markSeen;
 
   if (isLoading) {
     return (
@@ -115,6 +131,16 @@ export function ActivityTimeline({ workItemId }: ActivityTimelineProps) {
 
   return (
     <div>
+      {live && newCount > 0 && (
+        <button
+          type="button"
+          onClick={markSeen}
+          className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary transition hover:bg-primary/20"
+        >
+          <span className="size-1.5 rounded-full bg-primary" />
+          {newCount} new event{newCount === 1 ? "" : "s"}
+        </button>
+      )}
       <ol className="relative space-y-0">
         {visible.map((activity, index) => {
           const isLast = index === visible.length - 1;

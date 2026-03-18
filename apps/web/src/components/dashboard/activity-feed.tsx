@@ -1,8 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { formatRelativeTime } from "~/lib/format/time";
-import { useTRPC } from "~/trpc/react";
+import { useLiveActivity } from "~/hooks/use-live-activity";
 
 /** Map activity type to a Tailwind dot color. */
 function dotColor(type: string): string {
@@ -76,12 +75,10 @@ function fmt(value: string): string {
   return value.replace(/_/g, " ");
 }
 
-export function ActivityFeed() {
-  const trpc = useTRPC();
-  const { data: activities, isLoading } = useQuery({
-    ...trpc.activity.listRecent.queryOptions({ limit: 50 }),
-    staleTime: 10_000,
-    refetchInterval: 10_000,
+export function ActivityFeed({ workspaceId }: { workspaceId?: string }) {
+  const { workspaceActivities: activities, isLoading } = useLiveActivity({
+    workspaceId: workspaceId ?? "default",
+    limit: 50,
   });
 
   return (
