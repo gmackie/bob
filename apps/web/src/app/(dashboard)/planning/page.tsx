@@ -5,13 +5,17 @@ import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { PlusIcon } from "@radix-ui/react-icons";
 
+import { cn } from "@bob/ui";
 import { Button } from "@bob/ui/button";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
+import { MissionControl } from "~/components/dashboard/mission-control";
 import { CreateProjectDialog } from "~/components/projects/create-project-dialog";
 import { ProjectCard } from "~/components/projects/project-card";
 import { WorkspaceSelector } from "~/components/planning/workspace-selector";
 import { useTRPC } from "~/trpc/react";
+
+type PlanningView = "dashboard" | "projects";
 
 export default function PlanningPage() {
   const trpc = useTRPC();
@@ -63,6 +67,16 @@ export default function PlanningPage() {
 
   const isLoading = wsLoading || projLoading;
 
+  // Check for active agents to determine default view
+  const { data: instances } = useQuery(
+    trpc.instance.list.queryOptions(undefined, { staleTime: 10_000 }),
+  );
+  const hasActiveAgents = (instances ?? []).some(
+    (i: any) => i.status === "running" || i.status === "starting",
+  );
+
+  const [view, setView] = useState<PlanningView>(hasActiveAgents ? "dashboard" : "projects");
+
   // No workspace state
   if (!wsLoading && (!workspaces || workspaces.length === 0)) {
     return (
@@ -100,24 +114,51 @@ export default function PlanningPage() {
     <main className="mx-auto max-w-7xl px-6 py-10">
       <Breadcrumbs items={[{ label: "Projects" }]} className="mb-4" />
 
-      {/* Page header */}
+      {/* View toggle + header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
+          <div className="flex items-center gap-1 mb-2">
+            {(["dashboard", "projects"] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={cn(
+                  "rounded-lg px-4 py-2 text-sm font-medium transition-colors",
+                  view === v
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {v === "dashboard" ? "Dashboard" : "Projects"}
+              </button>
+            ))}
+          </div>
           <h1 className="font-display text-2xl font-bold text-foreground">
-            Projects
+            {view === "dashboard" ? "Mission Control" : "Projects"}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Your workspaces and projects
+            {view === "dashboard"
+              ? "Live overview of your agents and projects"
+              : "Your workspaces and projects"}
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>
-          <PlusIcon className="mr-1.5 h-4 w-4" />
-          Create Project
-        </Button>
+        {view === "projects" && (
+          <Button onClick={() => setCreateOpen(true)}>
+            <PlusIcon className="mr-1.5 h-4 w-4" />
+            Create Project
+          </Button>
+        )}
       </div>
 
-      {/* Workspace selector */}
-      {workspaces && workspaces.length > 1 && (
+      {/* Dashboard view */}
+      {view === "dashboard" && (
+        <section className="mt-8">
+          <MissionControl workspaceId={currentWorkspace?.id} />
+        </section>
+      )}
+
+      {/* Workspace selector (projects view only) */}
+      {view === "projects" && workspaces && workspaces.length > 1 && (
         <div className="mt-6">
           <WorkspaceSelector
             workspaces={workspaces.map((w) => ({
@@ -130,8 +171,8 @@ export default function PlanningPage() {
         </div>
       )}
 
-      {/* Projects grid */}
-      <section className="mt-8">
+      {/* Projects grid (projects view only) */}
+      {view === "projects" && <section className="mt-8">
         <div className="mb-4 flex items-center justify-between">
           <span className="text-sm text-muted-foreground">
             {isLoading ? "" : `${projectCards.length} project${projectCards.length !== 1 ? "s" : ""}`}
@@ -192,7 +233,7 @@ export default function PlanningPage() {
             ))}
           </div>
         )}
-      </section>
+      </section>}
 
       {/* Create project dialog */}
       {currentWorkspace && (
