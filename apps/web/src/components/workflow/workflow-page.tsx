@@ -9,6 +9,7 @@ import {
   type WorkflowStage,
 } from "~/lib/workflow/stage";
 
+import { BobThinking } from "./bob-thinking";
 import { PipelineIndicator } from "./pipeline-indicator";
 import { StageTransition } from "./stage-transition";
 import { StageIdea } from "./stage-idea";
@@ -76,6 +77,8 @@ export interface WorkflowPageProps {
     url: string;
     title: string | null;
   }>;
+  /** Active session ID for this work item (if any) — drives the BobThinking indicator */
+  sessionId?: string | null;
   onOpenPlanningSession: () => void;
   onBreakIntoTasks: () => void;
   onDispatchAgents: () => void;
@@ -94,6 +97,7 @@ export function WorkflowPage({
   deployments,
   comments,
   artifacts,
+  sessionId,
   onOpenPlanningSession,
   onBreakIntoTasks,
   onDispatchAgents,
@@ -186,6 +190,9 @@ export function WorkflowPage({
           onStageClick={handleStageClick}
         />
       </div>
+
+      {/* Bob thinking indicator — shows when an agent session is active */}
+      <BobThinking workItemId={workItem.id} sessionId={sessionId} />
 
       {/* Stage sections */}
       {stagesToRender.map((stageKey) => {
