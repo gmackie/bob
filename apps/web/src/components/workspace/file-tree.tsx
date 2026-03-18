@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
+import { useFileChangeEvents } from "~/hooks/use-file-change-events";
 import { useTRPC } from "~/trpc/react";
 
 import { FileTreeItem } from "./file-tree-item";
@@ -182,9 +183,11 @@ export interface FileTreeProps {
   onFileSelect?: (path: string) => void;
   /** Additional CSS class name */
   className?: string;
+  /** When provided, polls for file_change events and auto-refreshes affected directories */
+  sessionId?: string | null;
 }
 
-export function FileTree({ rootPath, onFileSelect, className }: FileTreeProps) {
+export function FileTree({ rootPath, onFileSelect, className, sessionId }: FileTreeProps) {
   const trpc = useTRPC();
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(
     () => new Set([rootPath]),
@@ -215,6 +218,14 @@ export function FileTree({ rootPath, onFileSelect, className }: FileTreeProps) {
     }
     return map;
   }, [gitStatusData]);
+
+  // Poll for file_change events when a sessionId is active; auto-invalidates
+  // the filesystem.list query for the parent directory of each changed file.
+  useFileChangeEvents({
+    sessionId: sessionId ?? null,
+    enabled: Boolean(sessionId),
+    interval: 3_000,
+  });
 
   const handleToggle = useCallback((path: string) => {
     setExpandedPaths((prev) => {
