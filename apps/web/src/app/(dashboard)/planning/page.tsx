@@ -1,134 +1,192 @@
-import React from "react";
-import Link from "next/link";
+"use client";
+
+import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
+import { PlusIcon } from "@radix-ui/react-icons";
+
+import { Button } from "@bob/ui/button";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
-import { CreateProjectButton } from "~/components/projects/create-project-button";
+import { CreateProjectDialog } from "~/components/projects/create-project-dialog";
 import { ProjectCard } from "~/components/projects/project-card";
-import { StartPlanningButton } from "~/components/planning/start-planning-button";
 import { WorkspaceSelector } from "~/components/planning/workspace-selector";
-import { RecentPlans } from "~/components/planning/recent-plans";
-import { CreateWorkItemButton } from "~/components/work-items/create-work-item-button";
-import { summarizeProjects } from "~/components/work-items/planning-utils";
-import { ActiveDispatchBar } from "~/components/planning/active-dispatch-bar";
-import { ViewSwitcher } from "~/components/graph/view-switcher";
-import { createPlanningCaller } from "~/lib/planning/server";
+import { useTRPC } from "~/trpc/react";
 
-export const dynamic = "force-dynamic";
+export default function PlanningPage() {
+  const trpc = useTRPC();
+  const searchParams = useSearchParams();
+  const [createOpen, setCreateOpen] = useState(false);
 
-export default async function PlanningPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  const params = await searchParams;
-  const workspaceParam =
-    typeof params.workspace === "string" ? params.workspace : undefined;
+  // Fetch workspaces
+  const {
+    data: workspaces,
+    isLoading: wsLoading,
+  } = useQuery(
+    trpc.planning.listWorkspaces.queryOptions(undefined, {
+      staleTime: 60_000,
+    }),
+  );
 
-  const caller = (await createPlanningCaller()) as any;
-  const workspaces = await caller.workspace.list();
+  // Read workspace from URL param (set by WorkspaceSelector), default to first
+  const workspaceParam = searchParams?.get("workspace") ?? null;
 
-  const allWorkspaces: Array<{ id: string; name: string; slug: string }> =
-    workspaces.map((m: any) => ({
-      id: m.workspace.id as string,
-      name: m.workspace.name as string,
-      slug: m.workspace.slug as string,
-    }));
+  const currentWorkspace =
+    (workspaceParam
+      ? workspaces?.find((w) => w.id === workspaceParam)
+      : workspaces?.[0]) ?? null;
 
-  const currentWorkspace = workspaceParam
-    ? allWorkspaces.find((w) => w.id === workspaceParam) ?? allWorkspaces[0] ?? null
-    : allWorkspaces[0] ?? null;
+  // Fetch projects for the current workspace
+  const {
+    data: projects,
+    isLoading: projLoading,
+  } = useQuery(
+    trpc.planning.listProjects.queryOptions(
+      { workspaceId: currentWorkspace?.id ?? "" },
+      {
+        enabled: !!currentWorkspace,
+        staleTime: 15_000,
+      },
+    ),
+  );
 
-  if (!currentWorkspace) {
+  // Map projects to card props
+  const projectCards = (projects ?? []).map((p) => ({
+    id: p.project.id,
+    label: p.project.key,
+    name: p.project.name,
+    color: p.project.color,
+    status: p.project.status,
+    totals: `${p.issueCount} issues`,
+    activeLabel: `${p.completedCount} completed`,
+  }));
+
+  const isLoading = wsLoading || projLoading;
+
+  // No workspace state
+  if (!wsLoading && (!workspaces || workspaces.length === 0)) {
     return (
       <main className="mx-auto max-w-6xl px-6 py-12">
-        <div className="rounded-3xl border border-border bg-secondary px-8 py-12 text-center">
-          <div className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
-            Builder Planning
+        <Breadcrumbs items={[{ label: "Projects" }]} className="mb-4" />
+        <div className="rounded-2xl border border-border bg-secondary px-8 py-12 text-center">
+          <div className="text-4xl">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="mx-auto h-12 w-12 text-muted-foreground"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={1.5}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"
+              />
+            </svg>
           </div>
-          <h1 className="mt-4 font-display text-3xl font-semibold text-foreground">
+          <h1 className="mt-4 font-display text-2xl font-bold text-foreground">
             No workspace yet
           </h1>
           <p className="mt-3 text-sm text-muted-foreground">
-            Create your first workspace through the API to unlock projects and work
-            items in the merged shell.
+            Create your first workspace through the API to unlock projects.
           </p>
         </div>
       </main>
     );
   }
 
-  const [projects, workItems] = await Promise.all([
-    caller.project.list({ workspaceId: currentWorkspace.id }),
-    caller.workItem.list({ workspaceId: currentWorkspace.id, limit: 100 }),
-  ]);
-  const projectCards = summarizeProjects(projects);
-
   return (
     <main className="mx-auto max-w-7xl px-6 py-10">
-      <Breadcrumbs items={[{ label: "Planning" }]} className="mb-4" />
+      <Breadcrumbs items={[{ label: "Projects" }]} className="mb-4" />
 
-      <section className="rounded-[2rem] border border-border bg-gradient-to-br from-[#0e1628] via-[#13243a] to-[#0d111c] px-8 py-8">
-        <div className="flex flex-wrap items-end justify-between gap-6">
-          <div>
-            <div className="flex items-center gap-3">
-              <span className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
-                Builder Planning
-              </span>
-              {allWorkspaces.length > 1 && (
-                <WorkspaceSelector
-                  workspaces={allWorkspaces}
-                  currentId={currentWorkspace.id}
-                />
-              )}
-            </div>
-            <h1 className="mt-3 font-display text-4xl font-semibold text-foreground">
-              {currentWorkspace.name}
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-              Intake, scope, and execution now live in one shell. Use this view to
-              scan active work before opening a task&apos;s execution workspace.
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <StartPlanningButton
-              workspaceId={currentWorkspace.id}
-              projectId={projects[0]?.project?.id ?? ""}
-              projectName={projects[0]?.project?.name}
-            />
-            <CreateWorkItemButton
-              projects={projects.map((p: any) => ({
-                id: p.project.id,
-                name: p.project.name,
-                key: p.project.key,
-              }))}
-            />
-            <Link
-              href="/chat"
-              className="rounded-full border border-border px-4 py-2 text-sm text-secondary-foreground transition hover:border-muted-foreground/30 hover:text-foreground"
-            >
-              Open Execution Workspace
-            </Link>
-          </div>
+      {/* Page header */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-foreground">
+            Projects
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Your workspaces and projects
+          </p>
         </div>
-      </section>
+        <Button onClick={() => setCreateOpen(true)}>
+          <PlusIcon className="mr-1.5 h-4 w-4" />
+          Create Project
+        </Button>
+      </div>
 
+      {/* Workspace selector */}
+      {workspaces && workspaces.length > 1 && (
+        <div className="mt-6">
+          <WorkspaceSelector
+            workspaces={workspaces.map((w) => ({
+              id: w.id,
+              name: w.name,
+              slug: w.slug,
+            }))}
+            currentId={currentWorkspace?.id ?? ""}
+          />
+        </div>
+      )}
+
+      {/* Projects grid */}
       <section className="mt-8">
         <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h2 className="font-display text-lg font-semibold text-foreground">Projects</h2>
-            <CreateProjectButton workspaceId={currentWorkspace.id} />
-          </div>
-          <span className="text-sm text-muted-foreground">{projectCards.length} total</span>
+          <span className="text-sm text-muted-foreground">
+            {isLoading ? "" : `${projectCards.length} project${projectCards.length !== 1 ? "s" : ""}`}
+          </span>
         </div>
-        {projectCards.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-border px-6 py-8 text-center">
-            <div className="text-sm text-muted-foreground">No projects yet.</div>
-            <div className="mt-1 text-xs text-muted-foreground">
-              Create your first project to start organizing work items.
-            </div>
+
+        {isLoading ? (
+          /* Loading skeleton */
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="animate-pulse rounded-2xl border border-border bg-card p-5"
+              >
+                <div className="h-3 w-16 rounded bg-muted" />
+                <div className="mt-3 h-5 w-3/4 rounded bg-muted" />
+                <div className="mt-6 h-4 w-1/2 rounded bg-muted" />
+                <div className="mt-3 h-3 w-2/3 rounded bg-muted" />
+              </div>
+            ))}
+          </div>
+        ) : projectCards.length === 0 ? (
+          /* Empty state */
+          <div className="rounded-2xl border border-dashed border-border px-8 py-12 text-center">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="mx-auto h-10 w-10 text-muted-foreground"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={1.5}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"
+              />
+            </svg>
+            <h2 className="mt-4 font-display text-lg font-semibold text-foreground">
+              No projects yet
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Create your first project to start organizing work.
+            </p>
+            <Button
+              className="mt-5"
+              onClick={() => setCreateOpen(true)}
+            >
+              <PlusIcon className="mr-1.5 h-4 w-4" />
+              Create your first project
+            </Button>
           </div>
         ) : (
-          <div className="grid gap-4 lg:grid-cols-3">
+          /* Projects grid */
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {projectCards.map((project) => (
               <ProjectCard key={project.id} {...project} />
             ))}
@@ -136,35 +194,14 @@ export default async function PlanningPage({
         )}
       </section>
 
-      <section className="mt-8">
-        <div className="mb-4">
-          <h2 className="font-display text-lg font-semibold text-foreground">Recent Planning Sessions</h2>
-        </div>
-        <RecentPlans />
-      </section>
-
-      <section className="mt-10">
-        <ActiveDispatchBar />
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-display text-lg font-semibold text-foreground">Work Board</h2>
-          <span className="text-sm text-muted-foreground">{workItems.length} visible items</span>
-        </div>
-        <ViewSwitcher
-          items={workItems.map((item: any) => ({
-            id: item.id,
-            identifier: item.identifier,
-            title: item.title,
-            status: item.status,
-            kind: item.kind,
-            priority: item.priority,
-            parentId: item.parentId,
-          }))}
-          projects={projects.map((p: any) => ({
-            id: p.project.id,
-            key: p.project.key,
-          }))}
+      {/* Create project dialog */}
+      {currentWorkspace && (
+        <CreateProjectDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          workspaceId={currentWorkspace.id}
         />
-      </section>
+      )}
     </main>
   );
 }
