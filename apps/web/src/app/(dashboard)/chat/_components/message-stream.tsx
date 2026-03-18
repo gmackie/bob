@@ -4,6 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { cn } from "@bob/ui";
 import type { SessionEvent } from "~/hooks/use-session-socket";
 import { ImageMessage } from "./image-message";
+import {
+  SkillExecutionBlock,
+  type SkillExecutionBlockProps,
+} from "./skill-execution-block";
 
 interface Message {
   id: string;
@@ -21,6 +25,20 @@ interface ToolCall {
   result?: string;
   isError?: boolean;
 }
+
+interface SkillStreamItem {
+  kind: "skill";
+  id: string;
+  props: SkillExecutionBlockProps;
+}
+
+interface MessageStreamItem {
+  kind: "message";
+  id: string;
+  message: Message;
+}
+
+type StreamItem = MessageStreamItem | SkillStreamItem;
 
 interface MessageStreamProps {
   sessionId: string;
@@ -73,31 +91,48 @@ function toolCallIndicatorClass({
   return isError ? "chat-toolCallIndicator--error" : "chat-toolCallIndicator--success";
 }
 
-function parseEventsToMessages(events: SessionEvent[]): Message[] {
-  const messages: Message[] = [];
+function parseEventsToStream(events: SessionEvent[]): StreamItem[] {
+  const items: StreamItem[] = [];
   let currentAssistantContent = "";
   let currentToolCalls: ToolCall[] = [];
   let lastAssistantSeq = 0;
 
-  for (const event of events) {
-    if (event.eventType === "input" && event.direction === "client") {
-      if (currentAssistantContent || currentToolCalls.length > 0) {
-        messages.push({
-          id: `assistant-${lastAssistantSeq}`,
+  // Track active skill executions by skillSlug so skill_complete can update them
+  const skillMap = new Map<string, SkillStreamItem>();
+
+  function flushAssistant(timestamp: Date) {
+    if (currentAssistantContent || currentToolCalls.length > 0) {
+      const id = `assistant-${lastAssistantSeq}`;
+      items.push({
+        kind: "message",
+        id,
+        message: {
+          id,
           role: "assistant",
           content: currentAssistantContent,
           toolCalls: currentToolCalls.length > 0 ? [...currentToolCalls] : undefined,
-          timestamp: new Date(event.createdAt),
-        });
-        currentAssistantContent = "";
-        currentToolCalls = [];
-      }
+          timestamp,
+        },
+      });
+      currentAssistantContent = "";
+      currentToolCalls = [];
+    }
+  }
 
-      messages.push({
-        id: `user-${event.seq}`,
-        role: "user",
-        content: toDisplayText(event.payload.data),
-        timestamp: new Date(event.createdAt),
+  for (const event of events) {
+    if (event.eventType === "input" && event.direction === "client") {
+      flushAssistant(new Date(event.createdAt));
+
+      const id = `user-${event.seq}`;
+      items.push({
+        kind: "message",
+        id,
+        message: {
+          id,
+          role: "user",
+          content: toDisplayText(event.payload.data),
+          timestamp: new Date(event.createdAt),
+        },
       });
     }
 
@@ -138,23 +173,33 @@ function parseEventsToMessages(events: SessionEvent[]): Message[] {
       const status = toDisplayText(event.payload.status) || "Update";
       const reason = toDisplayText(event.payload.reason);
       const reasonSuffix = reason ? `: ${reason}` : "";
+      const id = `system-${event.seq}`;
 
-      messages.push({
-        id: `system-${event.seq}`,
-        role: "system",
-        content: `Session ${status}${reasonSuffix}`,
-        timestamp: new Date(event.createdAt),
+      items.push({
+        kind: "message",
+        id,
+        message: {
+          id,
+          role: "system",
+          content: `Session ${status}${reasonSuffix}`,
+          timestamp: new Date(event.createdAt),
+        },
       });
     }
 
     if (event.eventType === "error") {
       const message = toDisplayText(event.payload.message) || "Unknown error";
+      const id = `error-${event.seq}`;
 
-      messages.push({
-        id: `error-${event.seq}`,
-        role: "system",
-        content: `Error: ${message}`,
-        timestamp: new Date(event.createdAt),
+      items.push({
+        kind: "message",
+        id,
+        message: {
+          id,
+          role: "system",
+          content: `Error: ${message}`,
+          timestamp: new Date(event.createdAt),
+        },
       });
     }
 
@@ -163,30 +208,119 @@ function parseEventsToMessages(events: SessionEvent[]): Message[] {
       const transcriptType =
         transcriptTypeRaw === "user" ? "user" : "assistant";
       const transcriptText = toDisplayText(event.payload.text);
+      const id = `transcript-${event.seq}`;
 
-      messages.push({
-        id: `transcript-${event.seq}`,
-        role: transcriptType,
-        content: transcriptText,
-        timestamp: new Date(
-          timestampForTranscript(event.payload.timestamp, event.createdAt),
-        ),
+      items.push({
+        kind: "message",
+        id,
+        message: {
+          id,
+          role: transcriptType,
+          content: transcriptText,
+          timestamp: new Date(
+            timestampForTranscript(event.payload.timestamp, event.createdAt),
+          ),
+        },
       });
+    }
+
+    // Skill execution events
+    if (event.eventType === "skill_start") {
+      // Flush any pending assistant content before the skill block
+      flushAssistant(new Date(event.createdAt));
+
+      const slug = toDisplayText(event.payload.skillSlug) || "unknown";
+      const id = `skill-${slug}-${event.seq}`;
+      const skillItem: SkillStreamItem = {
+        kind: "skill",
+        id,
+        props: {
+          skillSlug: slug,
+          skillName: toDisplayText(event.payload.skillName) || undefined,
+          category: toDisplayText(event.payload.category) || undefined,
+          status: "running",
+          input: event.payload.input as Record<string, unknown> | undefined,
+        },
+      };
+      skillMap.set(slug, skillItem);
+      items.push(skillItem);
+    }
+
+    if (event.eventType === "skill_complete") {
+      const slug = toDisplayText(event.payload.skillSlug) || "unknown";
+      const existing = skillMap.get(slug);
+      if (existing) {
+        // Update the existing skill item in place
+        const rawStatus = toDisplayText(event.payload.status);
+        existing.props.status =
+          rawStatus === "failed"
+            ? "failed"
+            : rawStatus === "cancelled"
+              ? "cancelled"
+              : "completed";
+        existing.props.output = event.payload.output as Record<string, unknown> | undefined;
+        existing.props.durationMs =
+          typeof event.payload.durationMs === "number"
+            ? event.payload.durationMs
+            : undefined;
+        existing.props.findings = Array.isArray(event.payload.findings)
+          ? (event.payload.findings as SkillExecutionBlockProps["findings"])
+          : undefined;
+        existing.props.childExecutions = Array.isArray(event.payload.childExecutions)
+          ? (event.payload.childExecutions as SkillExecutionBlockProps["childExecutions"])
+          : undefined;
+        skillMap.delete(slug);
+      } else {
+        // No matching start — render a standalone completed block
+        const rawStatus = toDisplayText(event.payload.status);
+        const id = `skill-${slug}-${event.seq}`;
+        items.push({
+          kind: "skill",
+          id,
+          props: {
+            skillSlug: slug,
+            skillName: toDisplayText(event.payload.skillName) || undefined,
+            category: toDisplayText(event.payload.category) || undefined,
+            status:
+              rawStatus === "failed"
+                ? "failed"
+                : rawStatus === "cancelled"
+                  ? "cancelled"
+                  : "completed",
+            output: event.payload.output as Record<string, unknown> | undefined,
+            durationMs:
+              typeof event.payload.durationMs === "number"
+                ? event.payload.durationMs
+                : undefined,
+            findings: Array.isArray(event.payload.findings)
+              ? (event.payload.findings as SkillExecutionBlockProps["findings"])
+              : undefined,
+            childExecutions: Array.isArray(event.payload.childExecutions)
+              ? (event.payload.childExecutions as SkillExecutionBlockProps["childExecutions"])
+              : undefined,
+          },
+        });
+      }
     }
   }
 
   if (currentAssistantContent || currentToolCalls.length > 0) {
-    messages.push({
-      id: `assistant-${lastAssistantSeq}`,
-      role: "assistant",
-      content: currentAssistantContent,
-      toolCalls: currentToolCalls.length > 0 ? [...currentToolCalls] : undefined,
-      timestamp: new Date(),
-      isStreaming: true,
+    const id = `assistant-${lastAssistantSeq}`;
+    items.push({
+      kind: "message",
+      id,
+      message: {
+        id,
+        role: "assistant",
+        content: currentAssistantContent,
+        toolCalls: currentToolCalls.length > 0 ? [...currentToolCalls] : undefined,
+        timestamp: new Date(),
+        isStreaming: true,
+      },
     });
   }
 
-  return messages;
+  return items;
 }
 
 function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
@@ -313,13 +447,13 @@ export function MessageStream({
   isConnected,
 }: MessageStreamProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const messages = parseEventsToMessages(events);
+  const streamItems = parseEventsToStream(events);
 
   useEffect(() => {
     if (containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, [messages.length]);
+  }, [streamItems.length]);
 
   return (
     <div
@@ -333,7 +467,7 @@ export function MessageStream({
         </div>
       )}
 
-      {messages.length === 0 ? (
+      {streamItems.length === 0 ? (
         <div className="chat-emptyState">
           <div>
             <div className="chat-emptyStateTitle">Start a conversation</div>
@@ -343,7 +477,13 @@ export function MessageStream({
           </div>
         </div>
       ) : (
-        messages.map((msg) => <MessageBubble key={msg.id} message={msg} />)
+        streamItems.map((item) =>
+          item.kind === "skill" ? (
+            <SkillExecutionBlock key={item.id} {...item.props} />
+          ) : (
+            <MessageBubble key={item.id} message={item.message} />
+          ),
+        )
       )}
     </div>
   );

@@ -20,7 +20,9 @@ export type SessionEventType =
   | "state"
   | "error"
   | "heartbeat"
-  | "transcript";
+  | "transcript"
+  | "skill_start"
+  | "skill_complete";
 
 export interface SessionEvent {
   type: "event";
