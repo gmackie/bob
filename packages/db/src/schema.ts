@@ -1374,6 +1374,41 @@ export const prReviews = pgTable("pr_reviews", (t) => ({
   createdAt: t.timestamp().defaultNow().notNull(),
 }));
 
+// 1.2.2 Feature Branches
+export const featureBranches = pgTable("feature_branches", (t) => ({
+  id: t.uuid().notNull().primaryKey().defaultRandom(),
+  workItemId: t
+    .uuid()
+    .notNull()
+    .references(() => workItems.id, { onDelete: "cascade" }),
+  repositoryId: t
+    .uuid()
+    .notNull()
+    .references(() => repositories.id, { onDelete: "cascade" }),
+  branchName: t.text().notNull(),
+  baseBranch: t.text().notNull().default("main"),
+  status: t.text().notNull().default("active"), // 'active' | 'ready' | 'merged' | 'abandoned'
+  featurePrId: t
+    .uuid()
+    .references(() => pullRequests.id, { onDelete: "set null" }),
+  createdAt: t.timestamp().defaultNow().notNull(),
+}));
+
+// 1.2.3 Feature Branch Task PRs (junction table)
+export const featureBranchTaskPRs = pgTable("feature_branch_task_prs", (t) => ({
+  id: t.uuid().notNull().primaryKey().defaultRandom(),
+  featureBranchId: t
+    .uuid()
+    .notNull()
+    .references(() => featureBranches.id, { onDelete: "cascade" }),
+  pullRequestId: t
+    .uuid()
+    .notNull()
+    .references(() => pullRequests.id, { onDelete: "cascade" }),
+  mergedAt: t.timestamp({ mode: "date", withTimezone: true }),
+  createdAt: t.timestamp().defaultNow().notNull(),
+}));
+
 // 1.3 Git Commits
 export const gitCommits = pgTable("git_commits", (t) => ({
   id: t.uuid().notNull().primaryKey().defaultRandom(),
@@ -1674,6 +1709,7 @@ export const pullRequestsRelations = relations(
     commits: many(gitCommits),
     taskRuns: many(taskRuns),
     reviews: many(prReviews),
+    featureBranchTaskPRs: many(featureBranchTaskPRs),
   }),
 );
 
@@ -1687,6 +1723,39 @@ export const prReviewsRelations = relations(prReviews, ({ one }) => ({
     references: [user.id],
   }),
 }));
+
+export const featureBranchesRelations = relations(
+  featureBranches,
+  ({ one, many }) => ({
+    workItem: one(workItems, {
+      fields: [featureBranches.workItemId],
+      references: [workItems.id],
+    }),
+    repository: one(repositories, {
+      fields: [featureBranches.repositoryId],
+      references: [repositories.id],
+    }),
+    featurePr: one(pullRequests, {
+      fields: [featureBranches.featurePrId],
+      references: [pullRequests.id],
+    }),
+    taskPRs: many(featureBranchTaskPRs),
+  }),
+);
+
+export const featureBranchTaskPRsRelations = relations(
+  featureBranchTaskPRs,
+  ({ one }) => ({
+    featureBranch: one(featureBranches, {
+      fields: [featureBranchTaskPRs.featureBranchId],
+      references: [featureBranches.id],
+    }),
+    pullRequest: one(pullRequests, {
+      fields: [featureBranchTaskPRs.pullRequestId],
+      references: [pullRequests.id],
+    }),
+  }),
+);
 
 export const gitCommitsRelations = relations(gitCommits, ({ one }) => ({
   repository: one(repositories, {

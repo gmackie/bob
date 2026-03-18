@@ -17,7 +17,7 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
-    "storybook": "portless run storybook dev",
+    "storybook": "portless bob-storybook storybook dev --port ${PORT:-6006}",
     "build-storybook": "storybook build"
   },
   "dependencies": {
