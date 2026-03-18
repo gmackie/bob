@@ -19,6 +19,7 @@ interface AutomationSettingsProps {
     autoBranch?: boolean;
     autoFeaturePR?: boolean;
     ciTrigger?: boolean;
+    reactFrontend?: boolean;
     stageSkills?: StageSkillMapping;
   };
 }
@@ -102,6 +103,12 @@ const TOGGLE_CONFIG = [
     label: "CI trigger",
     description: "Run CI pipeline automatically when a PR is created",
   },
+  {
+    key: "reactFrontend" as const,
+    label: "React frontend",
+    description:
+      "This project has a React UI surface, so planning should include Storybook state coverage guidance for frontend work",
+  },
 ];
 
 /** Default skill mapping per workflow stage. */
@@ -151,11 +158,13 @@ export function AutomationSettings({
     autoBranch: boolean;
     autoFeaturePR: boolean;
     ciTrigger: boolean;
+    reactFrontend: boolean;
   }>({
     autoDispatch: initialSettings?.autoDispatch ?? true,
     autoBranch: initialSettings?.autoBranch ?? true,
     autoFeaturePR: initialSettings?.autoFeaturePR ?? true,
     ciTrigger: initialSettings?.ciTrigger ?? true,
+    reactFrontend: initialSettings?.reactFrontend ?? false,
   });
 
   const [stageSkills, setStageSkills] = useState<StageSkillMapping>(() =>
@@ -173,7 +182,12 @@ export function AutomationSettings({
   );
 
   function handleToggle(
-    key: "autoDispatch" | "autoBranch" | "autoFeaturePR" | "ciTrigger",
+    key:
+      | "autoDispatch"
+      | "autoBranch"
+      | "autoFeaturePR"
+      | "ciTrigger"
+      | "reactFrontend",
     value: boolean,
   ) {
     setSettings((prev) => ({ ...prev, [key]: value }));

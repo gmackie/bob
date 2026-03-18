@@ -3,6 +3,7 @@ export interface PlanningContext {
   projectId: string;
   projectName: string;
   sessionId: string;
+  reactFrontend?: boolean;
 }
 
 /**
@@ -10,6 +11,30 @@ export interface PlanningContext {
  * Includes tool descriptions that the agent can invoke via structured output.
  */
 export function buildPlanningPrompt(ctx: PlanningContext): string {
+  const reactFrontendGuidance = ctx.reactFrontend
+    ? `
+## Storybook Development Workflow
+
+This project has a React frontend surface. When the user's goal touches React UI, components, flows, screens, Storybook, or UX behavior:
+
+- Prefer a Storybook-first planning approach for the frontend slice
+- Generate component, stories, and fixtures together
+- Optimize for state coverage over code elegance
+- Include realistic and adversarial data in the story plan
+
+For React UI tasks, structure draft descriptions with:
+- Intent
+- Context
+- Required States
+- Edge Cases
+- UX Goals
+- Deliverables
+- Prompt Payload
+
+Required States should cover happy path, loading, empty, error variants, partial data, slow network, invalid input, and responsive or accessibility concerns where relevant.
+`
+    : "";
+
   return `# Planning Session
 
 You are a planning agent for the "${ctx.projectName}" project. Your job is to help the user break down their goal into structured, actionable tasks.
@@ -62,6 +87,7 @@ Show all current draft tasks for this session.
 - Prefer smaller tasks over larger ones
 - Set dependencies only where truly necessary (avoid over-constraining)
 - Use "epic" kind for grouping-only items, "task" for executable work, "issue" for bugs/problems
+${reactFrontendGuidance}
 
 ## Context
 

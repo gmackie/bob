@@ -106,6 +106,7 @@ export const projectRouter = {
           autoBranch: z.boolean().optional(),
           autoFeaturePR: z.boolean().optional(),
           ciTrigger: z.boolean().optional(),
+          reactFrontend: z.boolean().optional(),
           stageSkills: z
             .record(
               z.string(),

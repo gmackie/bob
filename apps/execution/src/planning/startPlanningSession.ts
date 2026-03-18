@@ -12,6 +12,7 @@ interface StartPlanningInput {
   projectName: string;
   sessionId: string;
   workingDirectory: string;
+  reactFrontend?: boolean;
 }
 
 export async function startPlanningSession(
@@ -22,6 +23,7 @@ export async function startPlanningSession(
     projectId: input.projectId,
     projectName: input.projectName,
     sessionId: input.sessionId,
+    reactFrontend: input.reactFrontend ?? false,
   };
 
   const prompt = buildPlanningPrompt(ctx);

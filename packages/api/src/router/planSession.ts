@@ -7,6 +7,7 @@ import {
   chatConversations,
   planDraftDependencies,
   planDrafts,
+  projects,
   workItems,
 } from "@bob/db/schema";
 
@@ -77,9 +78,18 @@ export const planSessionRouter = {
         "@bob/execution/planning/startPlanningSession"
       );
 
+      const project = await ctx.db.query.projects.findFirst({
+        where: eq(projects.id, input.projectId),
+        columns: { automationSettings: true },
+      });
+      const projectAutomation =
+        (project?.automationSettings as { reactFrontend?: boolean } | undefined) ??
+        undefined;
+
       return startPlanningSession({
         userId: ctx.session.user.id,
         ...input,
+        reactFrontend: Boolean(projectAutomation?.reactFrontend),
       });
     }),
 
