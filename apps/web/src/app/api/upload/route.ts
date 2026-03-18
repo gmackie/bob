@@ -3,9 +3,16 @@ import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { randomUUID } from "crypto";
 
+import { getSession } from "~/auth/server";
+
 const UPLOAD_DIR = join(process.cwd(), "public", "uploads", "chat");
 
 export async function POST(req: NextRequest) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const formData: any = await req.formData();

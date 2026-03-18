@@ -1,5 +1,5 @@
 import { relations, sql } from "drizzle-orm";
-import { pgEnum, pgTable } from "drizzle-orm/pg-core";
+import { index, pgEnum, pgTable } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -638,7 +638,9 @@ export const requirements = pgTable("requirements", (t) => ({
   linkedTaskId: t.uuid(),
   sortOrder: t.integer().notNull().default(0),
   createdAt: t.timestamp().defaultNow().notNull(),
-}));
+}), (table) => [
+  index("requirements_work_item_id_idx").on(table.workItemId),
+]);
 
 export const requirementsRelations = relations(
   requirements,
@@ -894,7 +896,9 @@ export const chatAttachments = pgTable("chat_attachments", (t) => ({
   height: t.integer(),
   sizeBytes: t.integer(),
   createdAt: t.timestamp().defaultNow().notNull(),
-}));
+}), (table) => [
+  index("chat_attachments_message_id_idx").on(table.messageId),
+]);
 
 export const chatMessagesRelations = relations(
   chatMessages,
@@ -1372,7 +1376,9 @@ export const prReviews = pgTable("pr_reviews", (t) => ({
   status: prReviewStatusPgEnum().notNull(),
   body: t.text(),
   createdAt: t.timestamp().defaultNow().notNull(),
-}));
+}), (table) => [
+  index("pr_reviews_pull_request_id_idx").on(table.pullRequestId),
+]);
 
 // 1.2.2 Feature Branches
 export const featureBranches = pgTable("feature_branches", (t) => ({
@@ -1392,7 +1398,10 @@ export const featureBranches = pgTable("feature_branches", (t) => ({
     .uuid()
     .references(() => pullRequests.id, { onDelete: "set null" }),
   createdAt: t.timestamp().defaultNow().notNull(),
-}));
+}), (table) => [
+  index("feature_branches_work_item_id_idx").on(table.workItemId),
+  index("feature_branches_repository_id_idx").on(table.repositoryId),
+]);
 
 // 1.2.3 Feature Branch Task PRs (junction table)
 export const featureBranchTaskPRs = pgTable("feature_branch_task_prs", (t) => ({
@@ -1407,7 +1416,10 @@ export const featureBranchTaskPRs = pgTable("feature_branch_task_prs", (t) => ({
     .references(() => pullRequests.id, { onDelete: "cascade" }),
   mergedAt: t.timestamp({ mode: "date", withTimezone: true }),
   createdAt: t.timestamp().defaultNow().notNull(),
-}));
+}), (table) => [
+  index("feature_branch_task_prs_feature_branch_id_idx").on(table.featureBranchId),
+  index("feature_branch_task_prs_pull_request_id_idx").on(table.pullRequestId),
+]);
 
 // 1.3 Git Commits
 export const gitCommits = pgTable("git_commits", (t) => ({

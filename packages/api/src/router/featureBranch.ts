@@ -1,4 +1,4 @@
-import type { TRPCRouterRecord } from "@trpc/server";
+import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import { and, count, eq } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
@@ -150,14 +150,23 @@ export const featureBranchRouter = {
       }
 
       // Create the PR via the existing service
-      const pr = await createDraftPr({
-        userId: ctx.session.user.id,
-        repositoryId: input.repositoryId,
-        title: input.title,
-        headBranch: branch.branchName,
-        baseBranch: branch.baseBranch,
-        draft: false,
-      });
+      let pr;
+      try {
+        pr = await createDraftPr({
+          userId: ctx.session.user.id,
+          repositoryId: input.repositoryId,
+          title: input.title,
+          headBranch: branch.branchName,
+          baseBranch: branch.baseBranch,
+          draft: false,
+        });
+      } catch (err) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to create pull request for feature branch",
+          cause: err,
+        });
+      }
 
       // Link the PR back to the feature branch
       const [updated] = await db

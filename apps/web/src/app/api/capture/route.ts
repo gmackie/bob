@@ -4,9 +4,16 @@ import { join } from "path";
 import { randomUUID } from "crypto";
 import { execSync } from "child_process";
 
+import { getSession } from "~/auth/server";
+
 const CAPTURE_DIR = join(process.cwd(), "public", "uploads", "captures");
 
 export async function POST(req: NextRequest) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = (await req.json()) as {
       targetType: "browser" | "window" | "screen";

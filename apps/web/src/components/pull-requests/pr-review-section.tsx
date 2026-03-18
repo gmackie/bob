@@ -82,6 +82,9 @@ export function PrReviewSection({
             pullRequestId,
           }),
         });
+        void queryClient.invalidateQueries({
+          queryKey: trpc.pullRequest.list.queryKey(),
+        });
       },
     }),
   );
