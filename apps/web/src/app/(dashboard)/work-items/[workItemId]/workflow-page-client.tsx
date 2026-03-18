@@ -13,6 +13,7 @@ import { WorkItemDetailInteractive } from "~/components/work-items/work-item-det
 
 interface WorkflowPageClientProps {
   workItem: WorkflowPageProps["workItem"];
+  workspaceId: string;
   requirements: WorkflowPageProps["requirements"];
   childTasks: WorkflowPageProps["childTasks"];
   comments: WorkflowPageProps["comments"];
@@ -26,6 +27,7 @@ interface WorkflowPageClientProps {
  */
 export function WorkflowPageClient({
   workItem,
+  workspaceId,
   requirements,
   childTasks,
   comments,
@@ -90,19 +92,24 @@ export function WorkflowPageClient({
         }}
         requirementCount={requirements.count}
         childTaskCount={childTasks.length}
-        onConfirm={(input) => {
-          if (input.selectedSourceIds.length > 0 || input.attachedFiles.length > 0) {
-            toast(
-              "Context bundle capture is in prototype mode for now. Opening the planning session next.",
-            );
+        onConfirm={(launchContext) => {
+          if (!workItem.project?.id) {
+            toast("This workflow needs a project-linked work item to start planning.");
+            return;
           }
 
-          void chatPanel.openPlanningSession(
-            workItem.id,
-            input.intent === "shape"
-              ? `Shape ${workItem.title}`
-              : `Plan ${workItem.title}`,
-          );
+          void chatPanel.openPlanningSession({
+            workItemId: workItem.id,
+            title:
+              launchContext.intent === "shape"
+                ? `Shape ${workItem.title}`
+                : `Plan ${workItem.title}`,
+            workspaceId,
+            projectId: workItem.project.id,
+            projectName: workItem.project.name,
+            workingDirectory: "/",
+            launchContext,
+          });
           setLaunchIntent(null);
         }}
       />

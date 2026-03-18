@@ -97,6 +97,7 @@ export default async function WorkItemPage({ params }: WorkItemPageProps) {
       <div className="mt-6">
         <WorkflowPageClient
           workItem={workItem}
+          workspaceId={detail.workItem.workspaceId}
           requirements={{ count: requirementCount }}
           childTasks={childTasks}
           comments={commentsData}

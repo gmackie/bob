@@ -18,6 +18,43 @@ const reactCtx: PlanningContext = {
   reactFrontend: true,
 };
 
+const launchContext: PlanningContext = {
+  ...reactCtx,
+  launchContext: {
+    intent: "breakdown",
+    notes:
+      "Turn the parent scope into executable child tasks and keep requirement ownership explicit.",
+    workItem: {
+      id: "work-item-1",
+      identifier: "EPIC-42",
+      title: "Improve launch workflow",
+      kind: "epic",
+    },
+    selectedRepoSources: [
+      {
+        id: "repo-readme",
+        label: "Project overview",
+        path: "README.md",
+        detail: "Baseline product overview and setup instructions.",
+      },
+      {
+        id: "repo-plans",
+        label: "Planning docs",
+        path: "docs/ai",
+        detail: "Existing implementation plans and design notes.",
+      },
+    ],
+    attachedFiles: [
+      {
+        name: "launch-brief.md",
+        sizeLabel: "12 KB",
+        content:
+          "# Launch brief\n\nThe workflow modal should pass its selected context into planning startup.",
+      },
+    ],
+  },
+};
+
 describe("buildPlanningPrompt", () => {
   it("returns a string containing the workspace ID", () => {
     const prompt = buildPlanningPrompt(ctx);
@@ -68,6 +105,24 @@ describe("buildPlanningPrompt", () => {
     expect(prompt).toContain("Required States");
     expect(prompt).toContain("Prompt Payload");
     expect(prompt).toContain("Generate component, stories, and fixtures together");
+  });
+
+  it("includes explicit launch context when a workflow modal starts the planning session", () => {
+    const prompt = buildPlanningPrompt(launchContext);
+
+    expect(prompt).toContain("Launch Context");
+    expect(prompt).toContain("Intent: breakdown");
+    expect(prompt).toContain("Kickoff brief");
+    expect(prompt).toContain(
+      "Turn the parent scope into executable child tasks and keep requirement ownership explicit.",
+    );
+    expect(prompt).toContain("Work item: EPIC-42 Improve launch workflow");
+    expect(prompt).toContain("Project overview (README.md)");
+    expect(prompt).toContain("Planning docs (docs/ai)");
+    expect(prompt).toContain("launch-brief.md");
+    expect(prompt).toContain(
+      "The workflow modal should pass its selected context into planning startup.",
+    );
   });
 });
 

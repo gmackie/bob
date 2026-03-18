@@ -37,6 +37,8 @@ export interface WorkflowLaunchAttachment {
   id: string;
   name: string;
   sizeLabel: string;
+  content?: string;
+  file?: File;
 }
 
 export interface WorkflowLaunchExperience {
@@ -59,12 +61,9 @@ interface WorkflowLaunchDialogProps {
   workItem: WorkItemSummary;
   requirementCount: number;
   childTaskCount: number;
-  onConfirm: (input: {
-    intent: WorkflowLaunchIntent;
-    notes: string;
-    selectedSourceIds: string[];
-    attachedFiles: WorkflowLaunchAttachment[];
-  }) => void;
+  onConfirm: (
+    input: ReturnType<typeof buildWorkflowLaunchContext>,
+  ) => void | Promise<void>;
 }
 
 interface WorkflowLaunchDialogBodyProps {
@@ -95,6 +94,77 @@ function formatFileSize(size: number) {
   }
   return `${size} B`;
 }
+
+function isTextLikeFile(file: File) {
+  if (file.type.startsWith("text/")) {
+    return true;
+  }
+
+  return /\.(md|mdx|txt|json|ya?ml|csv|ts|tsx|js|jsx|html|css|scss)$/i.test(
+    file.name,
+  );
+}
+
+async function materializeWorkflowAttachments(
+  attachedFiles: WorkflowLaunchAttachment[],
+): Promise<WorkflowLaunchAttachment[]> {
+  return Promise.all(
+    attachedFiles.map(async (file) => {
+      if (file.content || !file.file || !isTextLikeFile(file.file)) {
+        return {
+          id: file.id,
+          name: file.name,
+          sizeLabel: file.sizeLabel,
+          content: file.content,
+        };
+      }
+
+      const rawContent = await file.file.text();
+      const content =
+        rawContent.length > 8000
+          ? `${rawContent.slice(0, 8000)}\n...[truncated]`
+          : rawContent;
+
+      return {
+        id: file.id,
+        name: file.name,
+        sizeLabel: file.sizeLabel,
+        content,
+      };
+    }),
+  );
+}
+
+export function buildWorkflowLaunchContext(input: {
+  experience: WorkflowLaunchExperience;
+  notes: string;
+  selectedSourceIds: string[];
+  attachedFiles: WorkflowLaunchAttachment[];
+  workItem: WorkItemSummary;
+}) {
+  return {
+    intent: input.experience.intent,
+    notes: input.notes,
+    workItem: input.workItem,
+    selectedRepoSources: input.experience.repoSources
+      .filter((source) => input.selectedSourceIds.includes(source.id))
+      .map(({ id, label, path, detail }) => ({
+        id,
+        label,
+        path,
+        detail,
+      })),
+    attachedFiles: input.attachedFiles.map(({ name, sizeLabel, content }) => ({
+      name,
+      sizeLabel,
+      content,
+    })),
+  };
+}
+
+export type WorkflowPlanningLaunchContext = ReturnType<
+  typeof buildWorkflowLaunchContext
+>;
 
 export function getWorkflowLaunchExperience(input: {
   intent: WorkflowLaunchIntent;
@@ -252,6 +322,7 @@ export function WorkflowLaunchDialog({
   const [attachedFiles, setAttachedFiles] = useState<WorkflowLaunchAttachment[]>(
     [],
   );
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const experience = intent
@@ -294,6 +365,7 @@ export function WorkflowLaunchDialog({
       id: `${file.name}-${file.size}-${index}`,
       name: file.name,
       sizeLabel: formatFileSize(file.size),
+      file,
     }));
 
     setAttachedFiles((current) => {
@@ -334,7 +406,7 @@ export function WorkflowLaunchDialog({
             notes={notes}
             selectedSourceIds={selectedSourceIds}
             attachedFiles={attachedFiles}
-            isSubmitting={false}
+            isSubmitting={isSubmitting}
             onNotesChange={setNotes}
             onToggleSource={(id) => {
               setSelectedSourceIds((current) =>
@@ -350,14 +422,24 @@ export function WorkflowLaunchDialog({
               );
             }}
             onDropFiles={(files) => appendFiles(files)}
-            onSubmit={() => {
-              onConfirm({
-                intent: experience.intent,
-                notes,
-                selectedSourceIds,
-                attachedFiles,
-              });
-              onOpenChange(false);
+            onSubmit={async () => {
+              setIsSubmitting(true);
+              try {
+                const hydratedAttachments =
+                  await materializeWorkflowAttachments(attachedFiles);
+                await onConfirm(
+                  buildWorkflowLaunchContext({
+                    experience,
+                    notes,
+                    selectedSourceIds,
+                    attachedFiles: hydratedAttachments,
+                    workItem,
+                  }),
+                );
+                onOpenChange(false);
+              } finally {
+                setIsSubmitting(false);
+              }
             }}
             onCancel={() => onOpenChange(false)}
           />

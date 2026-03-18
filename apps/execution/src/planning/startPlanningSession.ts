@@ -3,7 +3,11 @@ import { db } from "@bob/db/client";
 import { chatConversations } from "@bob/db/schema";
 
 import { gatewayRequest } from "../runtime/taskExecutor";
-import { buildPlanningPrompt, type PlanningContext } from "./planningAgentTools";
+import {
+  buildPlanningPrompt,
+  type PlanningContext,
+  type PlanningLaunchContext,
+} from "./planningAgentTools";
 
 interface StartPlanningInput {
   userId: string;
@@ -13,6 +17,7 @@ interface StartPlanningInput {
   sessionId: string;
   workingDirectory: string;
   reactFrontend?: boolean;
+  launchContext?: PlanningLaunchContext;
 }
 
 export async function startPlanningSession(
@@ -24,6 +29,7 @@ export async function startPlanningSession(
     projectName: input.projectName,
     sessionId: input.sessionId,
     reactFrontend: input.reactFrontend ?? false,
+    launchContext: input.launchContext,
   };
 
   const prompt = buildPlanningPrompt(ctx);
