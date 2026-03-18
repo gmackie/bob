@@ -22,6 +22,7 @@ import { settingsRouter } from "./router/settings";
 import { systemRouter } from "./router/system";
 import { terminalRouter } from "./router/terminal";
 import {
+  activityRouter,
   artifactRouter,
   commentRouter,
   notificationRouter,
@@ -33,6 +34,7 @@ import { workspaceRouter } from "./router/workspace";
 import { createTRPCRouter } from "./trpc";
 
 const appRouterRecord = {
+  activity: activityRouter,
   artifact: artifactRouter,
   auth: authRouter,
   chat: chatRouter,

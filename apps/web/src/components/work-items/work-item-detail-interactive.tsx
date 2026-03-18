@@ -16,6 +16,7 @@ import { formatRelativeTime } from "~/lib/format/time";
 import { getTaskWorkspaceHref } from "~/lib/planning/task-workspace";
 import { useTRPC } from "~/trpc/react";
 
+import { ActivityTimeline } from "./activity-timeline";
 import { AddCommentForm } from "./add-comment-form";
 import { ArtifactCardGrid } from "./artifact-card";
 import { DescriptionEditor } from "./description-editor";
@@ -196,6 +197,13 @@ export function WorkItemDetailInteractive({
           <h2 className="font-display text-lg font-semibold text-foreground">Current Artifacts</h2>
           <div className="mt-4">
             <ArtifactCardGrid artifacts={currentArtifacts} />
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-border bg-secondary p-6">
+          <h2 className="font-display text-lg font-semibold text-foreground">Activity</h2>
+          <div className="mt-4">
+            <ActivityTimeline workItemId={workItem.id} />
           </div>
         </div>
 

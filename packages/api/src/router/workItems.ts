@@ -294,6 +294,21 @@ const promoteToTaskProcedure = protectedProcedure
     return workItem ?? existing;
   });
 
+const listActivitiesProcedure = protectedProcedure
+  .input(
+    z.object({
+      workItemId: z.string().uuid(),
+      limit: z.number().min(1).max(100).default(50),
+    }),
+  )
+  .query(({ ctx, input }) =>
+    ctx.db.query.activities.findMany({
+      where: eq(activities.workItemId, input.workItemId),
+      orderBy: desc(activities.createdAt),
+      limit: input.limit,
+    }),
+  );
+
 const listCurrentArtifactsProcedure = protectedProcedure
   .input(
     z.object({
@@ -472,6 +487,10 @@ export const taskRunRouter = {
     }),
 };
 
+export const activityRouter = {
+  listByWorkItem: listActivitiesProcedure,
+};
+
 export const workItemsRouter = {
   list: listWorkItemsProcedure,
   get: getWorkItemProcedure,
@@ -479,6 +498,7 @@ export const workItemsRouter = {
   listComments: listCommentsProcedure,
   createComment: createCommentProcedure,
   createArtifact: createArtifactProcedure,
+  listActivities: listActivitiesProcedure,
   listCurrentArtifacts: listCurrentArtifactsProcedure,
   listChildArtifactGroups: listChildArtifactGroupsProcedure,
   listNotifications: listNotificationsProcedure,
