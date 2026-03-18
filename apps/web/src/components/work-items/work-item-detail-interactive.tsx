@@ -23,6 +23,7 @@ import { DescriptionEditor } from "./description-editor";
 import { EditableTitle } from "./editable-title";
 import { PriorityBadge } from "./priority-badge";
 import { PromoteToTaskButton } from "./promote-to-task-button";
+import { RequirementsChecklist } from "./requirements-checklist";
 import { StatusSelect } from "./status-select";
 
 interface WorkItemDetailInteractiveProps {
@@ -162,6 +163,15 @@ export function WorkItemDetailInteractive({
           />
         </div>
       </section>
+
+      {(workItem.kind === "epic" || workItem.kind === "issue") && (
+        <section className="rounded-3xl border border-border bg-secondary p-6">
+          <RequirementsChecklist
+            workItemId={workItem.id}
+            workItemKind={workItem.kind}
+          />
+        </section>
+      )}
 
       <section className="grid gap-6 xl:grid-cols-[1.4fr_0.8fr]">
         <div className="rounded-3xl border border-border bg-secondary p-6">
