@@ -5,6 +5,9 @@ import { useState } from "react";
 
 import { Badge } from "@bob/ui/badge";
 
+import { StageBadge } from "~/components/workflow/stage-badge";
+import type { StageDetectionInput } from "~/lib/workflow/stage";
+
 import {
   KIND_COLOR,
   PRIORITY_COLOR,
@@ -170,6 +173,7 @@ function ListTab({ items }: { items: ProjectWorkItem[] }) {
             <th className="px-4 py-3">Status</th>
             <th className="px-4 py-3">Priority</th>
             <th className="px-4 py-3">Kind</th>
+            <th className="px-4 py-3">Stage</th>
             <th className="px-4 py-3">Updated</th>
           </tr>
         </thead>
@@ -182,7 +186,7 @@ function ListTab({ items }: { items: ProjectWorkItem[] }) {
               <td className="px-4 py-3">
                 <Link
                   href={`/work-items/${item.id}`}
-                  className="font-mono text-xs text-muted-foreground hover:text-foreground"
+                  className="font-mono text-xs text-primary hover:underline"
                 >
                   {item.identifier}
                 </Link>
@@ -190,7 +194,7 @@ function ListTab({ items }: { items: ProjectWorkItem[] }) {
               <td className="px-4 py-3">
                 <Link
                   href={`/work-items/${item.id}`}
-                  className="font-medium text-foreground hover:text-primary"
+                  className="font-medium text-primary hover:underline"
                 >
                   {item.title}
                 </Link>
@@ -218,6 +222,20 @@ function ListTab({ items }: { items: ProjectWorkItem[] }) {
                 >
                   {item.kind}
                 </Badge>
+              </td>
+              <td className="px-4 py-3">
+                <StageBadge
+                  stageInput={{
+                    workItem: { kind: item.kind, status: item.status },
+                    requirementCount: 0,
+                    childTaskCount: 0,
+                    dispatchedTaskCount: 0,
+                    completedTaskCount: 0,
+                    openPRCount: 0,
+                    mergedFeaturePR: false,
+                    healthyDeployment: false,
+                  } satisfies StageDetectionInput}
+                />
               </td>
               <td className="px-4 py-3 text-xs text-muted-foreground">
                 {item.updatedAt
