@@ -91,6 +91,7 @@ export const workItemActivityType = [
   "notification_created",
   "build_status_changed",
   "deploy_status_changed",
+  "planning_session_completed",
 ] as const;
 export type WorkItemActivityType = (typeof workItemActivityType)[number];
 export const workItemActivityTypeEnum = pgEnum(
@@ -120,6 +121,7 @@ export const workItemArtifactType = [
   "test_report",
   "doc",
   "deliverable",
+  "planning_doc",
   "other",
 ] as const;
 export type WorkItemArtifactType = (typeof workItemArtifactType)[number];
@@ -1663,9 +1665,11 @@ export const workItemArtifacts = pgTable("work_item_artifacts", (t) => ({
   producerId: t.text(),
   artifactType: workItemArtifactTypeEnum().notNull(),
   artifactRole: t.text().notNull(),
-  url: t.text().notNull(),
+  url: t.text(),
   title: t.text(),
   summary: t.text(),
+  content: t.text(),
+  sessionId: t.uuid().references(() => chatConversations.id, { onDelete: "set null" }),
   metadata: t.json().$type<Record<string, unknown>>(),
   isCurrent: t.boolean().notNull().default(true),
   createdAt: t.timestamp().defaultNow().notNull(),
@@ -1677,9 +1681,10 @@ export const CreateWorkItemArtifactSchema = createInsertSchema(
     producerType: z.enum(workItemArtifactProducerType),
     artifactType: z.enum(workItemArtifactType),
     artifactRole: z.string().min(1),
-    url: z.string().url(),
+    url: z.string().url().optional(),
     title: z.string().optional(),
     summary: z.string().optional(),
+    content: z.string().optional(),
   },
 ).omit({
   id: true,
