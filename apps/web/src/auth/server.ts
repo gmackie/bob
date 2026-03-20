@@ -46,7 +46,7 @@ const baseUrl = safeOrigin(publicSiteUrl);
 
 export const auth = initAuth({
   baseUrl,
-  productionUrl: safeOrigin(publicSiteUrl),
+  productionUrl: baseUrl,
   secret: env.AUTH_SECRET,
   githubClientId: env.AUTH_GITHUB_ID,
   githubClientSecret: env.AUTH_GITHUB_SECRET,
