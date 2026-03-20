@@ -22,15 +22,21 @@ export default function PlanningPage() {
   const searchParams = useSearchParams();
   const [createOpen, setCreateOpen] = useState(false);
 
-  // Fetch workspaces
+  // Fetch workspaces (local DB, not remote planning API)
   const {
-    data: workspaces,
+    data: workspaceMemberships,
     isLoading: wsLoading,
   } = useQuery(
-    trpc.planning.listWorkspaces.queryOptions(undefined, {
+    trpc.workspace.list.queryOptions(undefined, {
       staleTime: 60_000,
     }),
   );
+
+  // Map memberships to flat workspace objects
+  const workspaces = (workspaceMemberships ?? [])
+    .map((m: any) => m.workspace)
+    .filter(Boolean)
+    .map((w: any) => ({ id: w.id as string, name: w.name as string, slug: w.slug as string }));
 
   // Read workspace from URL param (set by WorkspaceSelector), default to first
   const workspaceParam = searchParams?.get("workspace") ?? null;
@@ -40,12 +46,12 @@ export default function PlanningPage() {
       ? workspaces?.find((w) => w.id === workspaceParam)
       : workspaces?.[0]) ?? null;
 
-  // Fetch projects for the current workspace
+  // Fetch projects for the current workspace (local DB)
   const {
-    data: projects,
+    data: projectsData,
     isLoading: projLoading,
   } = useQuery(
-    trpc.planning.listProjects.queryOptions(
+    trpc.project.list.queryOptions(
       { workspaceId: currentWorkspace?.id ?? "" },
       {
         enabled: !!currentWorkspace,
@@ -55,14 +61,14 @@ export default function PlanningPage() {
   );
 
   // Map projects to card props
-  const projectCards = (projects ?? []).map((p) => ({
+  const projectCards = (projectsData ?? []).map((p: any) => ({
     id: p.project.id,
     label: p.project.key,
     name: p.project.name,
     color: p.project.color,
     status: p.project.status,
-    totals: `${p.issueCount} issues`,
-    activeLabel: `${p.completedCount} completed`,
+    totals: `${p.counts?.issues ?? 0} issues`,
+    activeLabel: `${p.counts?.active ?? 0} active`,
   }));
 
   const isLoading = wsLoading || projLoading;
