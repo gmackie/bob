@@ -12,6 +12,7 @@ import { toast } from "@bob/ui/toast";
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { MissionControl } from "~/components/dashboard/mission-control";
 import { CreateProjectDialog } from "~/components/projects/create-project-dialog";
+import { ImportGitHubDialog } from "~/components/projects/import-github-dialog";
 import { ProjectCard } from "~/components/projects/project-card";
 import { WorkspaceSelector } from "~/components/planning/workspace-selector";
 import { useTRPC } from "~/trpc/react";
@@ -22,6 +23,7 @@ export default function PlanningPage() {
   const trpc = useTRPC();
   const searchParams = useSearchParams();
   const [createOpen, setCreateOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   // Fetch workspaces (local DB, not remote planning API)
   const {
@@ -193,10 +195,15 @@ export default function PlanningPage() {
           </p>
         </div>
         {view === "projects" && (
-          <Button onClick={() => setCreateOpen(true)}>
-            <PlusIcon className="mr-1.5 h-4 w-4" />
-            Create Project
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              Import from GitHub
+            </Button>
+            <Button onClick={() => setCreateOpen(true)}>
+              <PlusIcon className="mr-1.5 h-4 w-4" />
+              Create Project
+            </Button>
+          </div>
         )}
       </div>
 
@@ -290,6 +297,15 @@ export default function PlanningPage() {
         <CreateProjectDialog
           open={createOpen}
           onOpenChange={setCreateOpen}
+          workspaceId={currentWorkspace.id}
+        />
+      )}
+
+      {/* Import from GitHub dialog */}
+      {currentWorkspace && (
+        <ImportGitHubDialog
+          open={importOpen}
+          onOpenChange={setImportOpen}
           workspaceId={currentWorkspace.id}
         />
       )}
