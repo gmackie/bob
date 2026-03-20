@@ -74,7 +74,11 @@ export function useSessionSocket({
   baseReconnectDelayMs = 1000,
 }: UseSessionSocketOptions) {
   const wsRef = useRef<WebSocket | null>(null);
-  const clientIdRef = useRef<string>(crypto.randomUUID());
+  const clientIdRef = useRef<string>(
+    typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2) + Date.now().toString(36),
+  );
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -327,7 +331,10 @@ export function useSessionSocket({
     (sessionId: string, data: string) => {
       if (!enabled) return null;
 
-      const clientInputId = crypto.randomUUID();
+      const clientInputId =
+        typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : Math.random().toString(36).slice(2) + Date.now().toString(36);
       send({
         type: "input",
         sessionId,
