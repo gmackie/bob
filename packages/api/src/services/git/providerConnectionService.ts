@@ -4,7 +4,11 @@ import { account, gitProviderConnections } from "@bob/db/schema";
 
 import type { EncryptedToken } from "../crypto/tokenVault";
 import type { GitProvider, GitProviderClient } from "./providers/types";
-import { decryptToken, encryptToken } from "../crypto/tokenVault";
+import {
+  decryptToken,
+  encryptToken,
+  isEncryptionConfigured,
+} from "../crypto/tokenVault";
 import { createGiteaClient } from "./providers/gitea";
 import { createGitHubClient } from "./providers/github";
 import { createGitLabClient } from "./providers/gitlab";
@@ -25,32 +29,80 @@ export interface ConnectionWithDecryptedToken {
 }
 
 async function ensureGitHubConnectionFromOAuth(userId: string): Promise<void> {
-  const existing = await db.query.gitProviderConnections.findFirst({
-    where: and(
-      eq(gitProviderConnections.userId, userId),
-      eq(gitProviderConnections.provider, "github"),
-      isNull(gitProviderConnections.instanceUrl),
-      isNull(gitProviderConnections.revokedAt),
-    ),
-  });
-  if (existing) return;
+  try {
+    const existing = await db.query.gitProviderConnections.findFirst({
+      where: and(
+        eq(gitProviderConnections.userId, userId),
+        eq(gitProviderConnections.provider, "github"),
+        isNull(gitProviderConnections.instanceUrl),
+        isNull(gitProviderConnections.revokedAt),
+      ),
+    });
+    if (existing) return;
 
-  const oauthAccount = await db.query.account.findFirst({
-    where: and(eq(account.userId, userId), eq(account.providerId, "github")),
-  });
-  if (!oauthAccount?.accessToken) return;
+    const oauthAccount = await db.query.account.findFirst({
+      where: and(eq(account.userId, userId), eq(account.providerId, "github")),
+    });
+    if (!oauthAccount) {
+      console.warn(
+        `[git-provider] No GitHub OAuth account found for user ${userId}. ` +
+          "User may need to sign in with GitHub.",
+      );
+      return;
+    }
+    if (!oauthAccount.accessToken) {
+      console.warn(
+        `[git-provider] GitHub OAuth account found for user ${userId} but ` +
+          "accessToken is missing. BetterAuth may not have stored the token. " +
+          `Account ID: ${oauthAccount.id}, providerId: ${oauthAccount.providerId}`,
+      );
+      return;
+    }
 
-  await createConnection({
-    userId,
-    provider: "github",
-    providerAccountId: oauthAccount.accountId,
-    providerUsername: null,
-    scopes: oauthAccount.scope ?? null,
-    accessToken: oauthAccount.accessToken,
-    refreshToken: oauthAccount.refreshToken ?? null,
-    accessTokenExpiresAt: oauthAccount.accessTokenExpiresAt ?? null,
-    refreshTokenExpiresAt: oauthAccount.refreshTokenExpiresAt ?? null,
-  });
+    if (!isEncryptionConfigured()) {
+      console.error(
+        "[git-provider] GIT_TOKEN_ENCRYPTION_KEY is not set or too short. " +
+          "Cannot encrypt GitHub token to create provider connection.",
+      );
+      return;
+    }
+
+    // Try to fetch the GitHub username for a better UX
+    let providerUsername: string | null = null;
+    try {
+      const ghClient = createGitHubClient(oauthAccount.accessToken);
+      const ghUser = await ghClient.getAuthenticatedUser();
+      providerUsername = ghUser.username;
+    } catch (err) {
+      console.warn(
+        "[git-provider] Could not fetch GitHub username with OAuth token, " +
+          "proceeding without it:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+
+    await createConnection({
+      userId,
+      provider: "github",
+      providerAccountId: oauthAccount.accountId,
+      providerUsername,
+      scopes: oauthAccount.scope ?? null,
+      accessToken: oauthAccount.accessToken,
+      refreshToken: oauthAccount.refreshToken ?? null,
+      accessTokenExpiresAt: oauthAccount.accessTokenExpiresAt ?? null,
+      refreshTokenExpiresAt: oauthAccount.refreshTokenExpiresAt ?? null,
+    });
+
+    console.info(
+      `[git-provider] Created GitHub provider connection for user ${userId}` +
+        (providerUsername ? ` (${providerUsername})` : ""),
+    );
+  } catch (err) {
+    console.error(
+      "[git-provider] Failed to ensure GitHub connection from OAuth:",
+      err instanceof Error ? err.message : err,
+    );
+  }
 }
 
 export async function getConnection(
