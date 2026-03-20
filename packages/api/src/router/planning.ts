@@ -13,10 +13,8 @@ async function planningQuery<T>(path: string, input?: unknown): Promise<T> {
   const planningApiKey = getPlanningApiKey();
 
   if (!planningApiKey) {
-    throw new TRPCError({
-      code: "PRECONDITION_FAILED",
-      message: "PLANNING_API_KEY not configured",
-    });
+    // Return empty result when remote planning API is not configured
+    return [] as unknown as T;
   }
 
   // tasks.gmac.io rejects POST for query procedures; use GET batch format.
@@ -60,10 +58,8 @@ async function planningMutation<T>(path: string, input?: unknown): Promise<T> {
   const planningApiKey = getPlanningApiKey();
 
   if (!planningApiKey) {
-    throw new TRPCError({
-      code: "PRECONDITION_FAILED",
-      message: "PLANNING_API_KEY not configured",
-    });
+    // Return empty result when remote planning API is not configured
+    return {} as unknown as T;
   }
 
   const url = `${getPlanningBaseUrl()}/api/trpc/${path}`;
