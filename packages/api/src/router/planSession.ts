@@ -2,12 +2,13 @@ import type { TRPCRouterRecord } from "@trpc/server";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod/v4";
 
-import { and, desc, eq, inArray } from "@bob/db";
+import { and, desc, eq, inArray, ne } from "@bob/db";
 import {
   chatConversations,
   planDraftDependencies,
   planDrafts,
   projects,
+  workItemArtifacts,
   workItems,
 } from "@bob/db/schema";
 
@@ -55,6 +56,15 @@ export const planSessionRouter = {
         workingDirectory: z.string().optional(),
         title: z.string().max(256).optional(),
         workItemId: z.string().uuid().optional(),
+        planningSessionType: z
+          .enum([
+            "office_hours",
+            "ceo_review",
+            "eng_review",
+            "design_review",
+            "breakdown",
+          ])
+          .optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -84,6 +94,7 @@ export const planSessionRouter = {
           title: input.title ?? "Planning session",
           status: "provisioning",
           workItemId: resolvedWorkItemId,
+          planningSessionType: input.planningSessionType ?? null,
         })
         .returning();
 
@@ -172,6 +183,82 @@ export const planSessionRouter = {
       });
 
       return sessions;
+    }),
+
+  /** List planning sessions for a specific work item. */
+  listByWorkItem: protectedProcedure
+    .input(
+      z.object({
+        workItemId: z.string().uuid(),
+        limit: z.number().min(1).max(50).default(20),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const sessions = await ctx.db.query.chatConversations.findMany({
+        where: and(
+          eq(chatConversations.userId, ctx.session.user.id),
+          eq(chatConversations.sessionType, "planning"),
+          eq(chatConversations.workItemId, input.workItemId),
+        ),
+        orderBy: desc(chatConversations.createdAt),
+        limit: input.limit,
+      });
+
+      return sessions;
+    }),
+
+  /** Get the most recent active (non-stopped) planning session for a work item. */
+  getActiveForWorkItem: protectedProcedure
+    .input(z.object({ workItemId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const session = await ctx.db.query.chatConversations.findFirst({
+        where: and(
+          eq(chatConversations.userId, ctx.session.user.id),
+          eq(chatConversations.sessionType, "planning"),
+          eq(chatConversations.workItemId, input.workItemId),
+          ne(chatConversations.status, "stopped"),
+        ),
+        orderBy: desc(chatConversations.createdAt),
+      });
+
+      return session ?? null;
+    }),
+
+  /** Save a planning artifact for a work item. */
+  saveArtifact: protectedProcedure
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        workItemId: z.string().uuid(),
+        title: z.string().min(1).max(256),
+        content: z.string(),
+        planningSessionType: z
+          .enum([
+            "office_hours",
+            "ceo_review",
+            "eng_review",
+            "design_review",
+            "breakdown",
+          ])
+          .optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const [artifact] = await ctx.db
+        .insert(workItemArtifacts)
+        .values({
+          workItemId: input.workItemId,
+          sessionId: input.sessionId,
+          artifactType: "planning_doc",
+          artifactRole: input.planningSessionType ?? "planning",
+          producerType: "bob",
+          title: input.title,
+          content: input.content,
+          isCurrent: true,
+        })
+        .returning();
+
+      return artifact!;
     }),
 
   // --- Draft CRUD ---
