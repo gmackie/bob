@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PlusIcon } from "@radix-ui/react-icons";
 
 import { cn } from "@bob/ui";
 import { Button } from "@bob/ui/button";
+import { toast } from "@bob/ui/toast";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { MissionControl } from "~/components/dashboard/mission-control";
@@ -83,6 +84,20 @@ export default function PlanningPage() {
 
   const [view, setView] = useState<PlanningView>(hasActiveAgents ? "dashboard" : "projects");
 
+  // Create workspace mutation
+  const queryClient = useQueryClient();
+  const createWorkspace = useMutation(
+    trpc.workspace.create.mutationOptions({
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: trpc.workspace.list.queryKey() });
+        toast("Workspace created!");
+      },
+      onError: (err) => toast(err.message),
+    }),
+  );
+
+  const [wsName, setWsName] = useState("");
+
   // No workspace state
   if (!wsLoading && (!workspaces || workspaces.length === 0)) {
     return (
@@ -109,8 +124,37 @@ export default function PlanningPage() {
             No workspace yet
           </h1>
           <p className="mt-3 text-sm text-muted-foreground">
-            Create your first workspace through the API to unlock projects.
+            Create your first workspace to start planning.
           </p>
+          <div className="mx-auto mt-6 flex max-w-sm items-center gap-2">
+            <input
+              value={wsName}
+              onChange={(e) => setWsName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && wsName.trim()) {
+                  createWorkspace.mutate({
+                    name: wsName.trim(),
+                    slug: wsName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+                  });
+                }
+              }}
+              placeholder="Workspace name"
+              className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+            <Button
+              onClick={() => {
+                if (wsName.trim()) {
+                  createWorkspace.mutate({
+                    name: wsName.trim(),
+                    slug: wsName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+                  });
+                }
+              }}
+              disabled={!wsName.trim() || createWorkspace.isPending}
+            >
+              {createWorkspace.isPending ? "Creating..." : "Create Workspace"}
+            </Button>
+          </div>
         </div>
       </main>
     );
