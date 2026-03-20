@@ -832,6 +832,8 @@ export const chatConversations = pgTable(
     awaitingInputResolution: t
       .json()
       .$type<{ type: "human" | "timeout"; value: string }>(),
+    planningSessionType: t.varchar({ length: 30 }),
+    // values: "office_hours" | "ceo_review" | "eng_review" | "design_review" | "breakdown"
     createdAt: t.timestamp().defaultNow().notNull(),
     updatedAt: t.timestamp({ mode: "date", withTimezone: true }),
   }),
