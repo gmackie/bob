@@ -511,4 +511,103 @@ export const planSessionRouter = {
 
       return { committed: createdTasks.length, tasks: createdTasks };
     }),
+
+  /** Commit drafts as local work items with hierarchy preserved. */
+  commitPlanLocal: protectedProcedure
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        parentWorkItemId: z.string().uuid(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const drafts = await ctx.db.query.planDrafts.findMany({
+        where: and(
+          eq(planDrafts.sessionId, input.sessionId),
+          eq(planDrafts.status, "draft"),
+        ),
+        orderBy: [planDrafts.sortOrder, planDrafts.createdAt],
+      });
+
+      if (drafts.length === 0) {
+        return { committed: 0, workItems: [] };
+      }
+
+      // Get parent work item for workspace/project context
+      const parentWI = await ctx.db.query.workItems.findFirst({
+        where: eq(workItems.id, input.parentWorkItemId),
+      });
+      if (!parentWI) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Parent work item not found",
+        });
+      }
+
+      const created: Array<{
+        draftId: string;
+        workItemId: string;
+        title: string;
+      }> = [];
+      const draftToWorkItem = new Map<string, string>();
+
+      // Create epics first, then tasks
+      const epics = drafts.filter((d) => d.kind === "epic");
+      const tasks = drafts.filter((d) => d.kind !== "epic");
+
+      for (const draft of epics) {
+        const [wi] = await ctx.db
+          .insert(workItems)
+          .values({
+            ownerUserId: ctx.session.user.id,
+            workspaceId: parentWI.workspaceId,
+            projectId: parentWI.projectId,
+            parentId: input.parentWorkItemId,
+            kind: "epic",
+            title: draft.title,
+            description: draft.description,
+            status: "todo",
+          })
+          .returning();
+        draftToWorkItem.set(draft.id, wi!.id);
+        created.push({
+          draftId: draft.id,
+          workItemId: wi!.id,
+          title: draft.title,
+        });
+      }
+
+      for (const draft of tasks) {
+        const [wi] = await ctx.db
+          .insert(workItems)
+          .values({
+            ownerUserId: ctx.session.user.id,
+            workspaceId: parentWI.workspaceId,
+            projectId: parentWI.projectId,
+            parentId: input.parentWorkItemId,
+            kind: "task",
+            title: draft.title,
+            description: draft.description,
+            status: "todo",
+          })
+          .returning();
+        draftToWorkItem.set(draft.id, wi!.id);
+        created.push({
+          draftId: draft.id,
+          workItemId: wi!.id,
+          title: draft.title,
+        });
+      }
+
+      // Mark all drafts as committed
+      if (created.length > 0) {
+        const committedIds = created.map((c) => c.draftId);
+        await ctx.db
+          .update(planDrafts)
+          .set({ status: "committed" })
+          .where(inArray(planDrafts.id, committedIds));
+      }
+
+      return { committed: created.length, workItems: created };
+    }),
 } satisfies TRPCRouterRecord;
