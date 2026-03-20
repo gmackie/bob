@@ -184,13 +184,15 @@ const createArtifactProcedure = protectedProcedure
     z.object({
       workItemId: z.string().uuid(),
       taskRunId: z.string().uuid().optional(),
+      sessionId: z.string().uuid().optional(),
       producerType: z.enum(workItemArtifactProducerType),
       producerId: z.string().optional(),
       artifactType: z.enum(workItemArtifactType),
       artifactRole: z.string().min(1),
-      url: z.string().url(),
+      url: z.string().url().optional(),
       title: z.string().optional(),
       summary: z.string().optional(),
+      content: z.string().optional(),
       metadata: z.record(z.string(), z.unknown()).optional(),
     }),
   )
@@ -235,13 +237,15 @@ const createArtifactProcedure = protectedProcedure
       .values({
         workItemId: input.workItemId,
         taskRunId: input.taskRunId ?? null,
+        sessionId: input.sessionId ?? null,
         producerType: input.producerType,
         producerId: input.producerId ?? null,
         artifactType: input.artifactType,
         artifactRole: input.artifactRole,
-        url: input.url,
+        url: input.url ?? null,
         title: input.title ?? null,
         summary: input.summary ?? null,
+        content: input.content ?? null,
         metadata: input.metadata ?? null,
         isCurrent: true,
       })
