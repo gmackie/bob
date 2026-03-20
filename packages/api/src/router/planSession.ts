@@ -261,6 +261,65 @@ export const planSessionRouter = {
       return artifact!;
     }),
 
+  /** Get prior planning context for a work item (for context chaining). */
+  getPriorContext: protectedProcedure
+    .input(
+      z.object({
+        workItemId: z.string().uuid(),
+        excludeSessionId: z.string().uuid().optional(),
+        maxChars: z.number().int().min(0).default(8000),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const conditions = [
+        eq(workItemArtifacts.workItemId, input.workItemId),
+        eq(workItemArtifacts.artifactType, "planning_doc"),
+        eq(workItemArtifacts.isCurrent, true),
+      ];
+
+      if (input.excludeSessionId) {
+        conditions.push(
+          ne(workItemArtifacts.sessionId, input.excludeSessionId),
+        );
+      }
+
+      const artifacts = await ctx.db.query.workItemArtifacts.findMany({
+        where: and(...conditions),
+        orderBy: desc(workItemArtifacts.createdAt),
+      });
+
+      // Truncate content to fit within the total character budget
+      let remainingChars = input.maxChars;
+      const result: Array<{
+        id: string;
+        title: string | null;
+        sessionId: string | null;
+        content: string | null;
+        createdAt: Date;
+      }> = [];
+
+      for (const artifact of artifacts) {
+        if (remainingChars <= 0) break;
+
+        const content = artifact.content ?? "";
+        const truncatedContent =
+          content.length > remainingChars
+            ? content.slice(0, remainingChars)
+            : content;
+        remainingChars -= truncatedContent.length;
+
+        result.push({
+          id: artifact.id,
+          title: artifact.title,
+          sessionId: artifact.sessionId,
+          content: truncatedContent,
+          createdAt: artifact.createdAt,
+        });
+      }
+
+      return result;
+    }),
+
   // --- Draft CRUD ---
 
   createDraft: protectedProcedure
