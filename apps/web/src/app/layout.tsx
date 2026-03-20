@@ -36,10 +36,10 @@ export const viewport: Viewport = {
 
 const satoshi = localFont({
   src: [
-    { path: "../../../public/fonts/satoshi/satoshi-400.woff2", weight: "400", style: "normal" },
-    { path: "../../../public/fonts/satoshi/satoshi-500.woff2", weight: "500", style: "normal" },
-    { path: "../../../public/fonts/satoshi/satoshi-700.woff2", weight: "700", style: "normal" },
-    { path: "../../../public/fonts/satoshi/satoshi-900.woff2", weight: "900", style: "normal" },
+    { path: "../../public/fonts/satoshi/satoshi-400.woff2", weight: "400", style: "normal" },
+    { path: "../../public/fonts/satoshi/satoshi-500.woff2", weight: "500", style: "normal" },
+    { path: "../../public/fonts/satoshi/satoshi-700.woff2", weight: "700", style: "normal" },
+    { path: "../../public/fonts/satoshi/satoshi-900.woff2", weight: "900", style: "normal" },
   ],
   variable: "--font-satoshi",
   display: "swap",
@@ -47,8 +47,8 @@ const satoshi = localFont({
 
 const dmSans = localFont({
   src: [
-    { path: "../../../public/fonts/dm-sans/dm-sans-latin-variable.woff2", weight: "100 900", style: "normal" },
-    { path: "../../../public/fonts/dm-sans/dm-sans-latin-italic-variable.woff2", weight: "400", style: "italic" },
+    { path: "../../public/fonts/dm-sans/dm-sans-latin-variable.woff2", weight: "100 900", style: "normal" },
+    { path: "../../public/fonts/dm-sans/dm-sans-latin-italic-variable.woff2", weight: "400", style: "italic" },
   ],
   variable: "--font-dm-sans",
   display: "swap",
@@ -56,7 +56,7 @@ const dmSans = localFont({
 
 const jetBrainsMono = localFont({
   src: [
-    { path: "../../../public/fonts/jetbrains-mono/jetbrains-mono-latin-variable.woff2", weight: "100 800", style: "normal" },
+    { path: "../../public/fonts/jetbrains-mono/jetbrains-mono-latin-variable.woff2", weight: "100 800", style: "normal" },
   ],
   variable: "--font-jetbrains-mono",
   display: "swap",
