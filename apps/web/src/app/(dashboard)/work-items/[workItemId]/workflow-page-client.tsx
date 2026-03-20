@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useMutation } from "@tanstack/react-query";
 import { toast } from "@bob/ui/toast";
 
-import { useChatPanel } from "~/components/chat/chat-panel-provider";
+import { useTRPC } from "~/trpc/react";
 import { WorkflowPage, type WorkflowPageProps } from "~/components/workflow/workflow-page";
 import {
   WorkflowLaunchDialog,
@@ -34,7 +36,11 @@ export function WorkflowPageClient({
   artifacts,
   childCount,
 }: WorkflowPageClientProps) {
-  const chatPanel = useChatPanel();
+  const router = useRouter();
+  const trpc = useTRPC();
+  const createSession = useMutation(
+    trpc.planSession.create.mutationOptions(),
+  );
   const [launchIntent, setLaunchIntent] = useState<WorkflowLaunchIntent | null>(
     null,
   );
@@ -98,19 +104,31 @@ export function WorkflowPageClient({
             return;
           }
 
-          void chatPanel.openPlanningSession({
-            workItemId: workItem.id,
-            title:
-              launchContext.intent === "shape"
-                ? `Shape ${workItem.title}`
-                : `Plan ${workItem.title}`,
-            workspaceId,
-            projectId: workItem.project.id,
-            projectName: workItem.project.name,
-            workingDirectory: "/",
-            launchContext,
-          });
-          setLaunchIntent(null);
+          const title =
+            launchContext.intent === "shape"
+              ? `Shape ${workItem.title}`
+              : `Plan ${workItem.title}`;
+          const planningSessionType =
+            launchContext.intent === "shape" ? "office_hours" as const : "breakdown" as const;
+
+          createSession.mutate(
+            {
+              workItemId: workItem.id,
+              workspaceId,
+              projectId: workItem.project.id,
+              title,
+              planningSessionType,
+            },
+            {
+              onSuccess: (session) => {
+                setLaunchIntent(null);
+                router.push(`/work-items/${workItem.id}/plan/${session.id}`);
+              },
+              onError: (err) => {
+                toast(err.message ?? "Failed to create planning session");
+              },
+            },
+          );
         }}
       />
     </>
