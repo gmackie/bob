@@ -1,17 +1,27 @@
-"use client";
-
-import { use } from "react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
+import { createPlanningCaller } from "~/lib/planning/server";
 import { DraftPanel } from "~/components/planning/draft-panel";
 
 interface ReviewPageProps {
   params: Promise<{ sessionId: string }>;
 }
 
-export default function PlanReviewPage({ params }: ReviewPageProps) {
-  const { sessionId } = use(params);
+export const dynamic = "force-dynamic";
+
+export default async function PlanReviewPage({ params }: ReviewPageProps) {
+  const { sessionId } = await params;
+
+  // Fetch session data to check for work-item linkage
+  const caller = (await createPlanningCaller()) as any;
+  const sessionData = await caller.planSession.get({ sessionId }).catch(() => null);
+
+  // Redirect to split-view if session is linked to a work item
+  if (sessionData?.session?.workItemId) {
+    redirect(`/work-items/${sessionData.session.workItemId}/plan/${sessionId}`);
+  }
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
