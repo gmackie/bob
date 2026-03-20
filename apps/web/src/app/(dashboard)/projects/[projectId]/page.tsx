@@ -5,7 +5,7 @@ import { Badge } from "@bob/ui/badge";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { RepositoryPanel } from "~/components/dashboard";
-import { StartPlanningButton } from "~/components/planning/start-planning-button";
+import { NewIdeaButton } from "~/components/planning/new-idea-button";
 import { CreateWorkItemButton } from "~/components/work-items/create-work-item-button";
 import { ProjectDetailTabs } from "~/components/projects/project-detail-tabs";
 import { ProjectTemplatePanel } from "~/components/projects/project-template-panel";
@@ -78,10 +78,9 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           </div>
           <div className="flex items-center gap-3">
             <CreateWorkItemButton projectId={project.id} />
-            <StartPlanningButton
+            <NewIdeaButton
               workspaceId={project.workspaceId}
               projectId={project.id}
-              projectName={project.name}
             />
             <div
               className="h-4 w-4 rounded-full"
@@ -104,10 +103,9 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             linkedRepository={linkedRepository}
             capability={capabilities.template}
             planningAction={
-              <StartPlanningButton
+              <NewIdeaButton
                 workspaceId={project.workspaceId}
                 projectId={project.id}
-                projectName={project.name}
               />
             }
           />
