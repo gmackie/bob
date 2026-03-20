@@ -1,9 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import Link from "next/link";
+import { ExternalLinkIcon } from "@radix-ui/react-icons";
+
+import { cn } from "@bob/ui";
+
+import { MessageStream } from "~/app/(dashboard)/chat/_components/message-stream";
+import { InputComposer } from "~/app/(dashboard)/chat/_components/input-composer";
+import { AwaitingInputCard } from "~/app/(dashboard)/chat/_components/awaiting-input-card";
+import { useChatSession } from "~/hooks/use-chat-session";
+import { useTRPC } from "~/trpc/react";
 
 import { ResizableSplitView } from "~/components/planning/resizable-split-view";
 import { ArtifactPreviewPanel } from "~/components/planning/artifact-preview-panel";
+
+import type { SessionEvent } from "~/hooks/use-session-socket";
 
 interface PlanningSessionClientProps {
   workItem: {
@@ -29,17 +42,189 @@ interface PlanningSessionClientProps {
   isReadOnly: boolean;
 }
 
+/**
+ * Extract artifact content from assistant messages.
+ *
+ * Looks for:
+ * 1. Fenced ```markdown ... ``` blocks (returns inner content)
+ * 2. Large structured content after a top-level "# " heading (>400 chars)
+ *
+ * Returns the *last* detected artifact so the preview always shows the latest.
+ */
+function extractArtifactContent(events: SessionEvent[]): string | null {
+  let lastArtifact: string | null = null;
+
+  for (const event of events) {
+    if (event.direction !== "agent") continue;
+    const content =
+      event.eventType === "message_final"
+        ? toDisplayText(event.payload.content)
+        : event.eventType === "output_chunk"
+          ? toDisplayText(event.payload.data)
+          : null;
+
+    if (!content) continue;
+
+    // Check for fenced markdown blocks
+    const fencedMatch = content.match(/```markdown\n([\s\S]+?)```/);
+    if (fencedMatch?.[1] && fencedMatch[1].length > 100) {
+      lastArtifact = fencedMatch[1].trim();
+      continue;
+    }
+
+    // Check for large structured markdown (starts with # heading, has multiple sections)
+    const headingMatch = content.match(/(^|\n)(# .+\n[\s\S]{400,})/);
+    if (headingMatch?.[2]) {
+      lastArtifact = headingMatch[2].trim();
+    }
+  }
+
+  return lastArtifact;
+}
+
+function toDisplayText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value === null || value === undefined) return "";
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "";
+  }
+}
+
 export function PlanningSessionClient({
   workItem,
   session,
   priorArtifacts,
   isReadOnly,
 }: PlanningSessionClientProps) {
+  const trpc = useTRPC();
   const [artifactContent, setArtifactContent] = useState<string | null>(null);
+  const startedRef = useRef(false);
 
-  // TODO: Wire up to actual chat messages stream
-  // For v1, the chat panel component will need to expose a callback
-  // that fires when new messages arrive, allowing us to parse artifact content.
+  // Start the session on the gateway if it's still provisioning
+  const startSession = useMutation(
+    trpc.planSession.start.mutationOptions(),
+  );
+
+  useEffect(() => {
+    if (
+      session.status === "provisioning" &&
+      !isReadOnly &&
+      !startedRef.current &&
+      workItem.projectId
+    ) {
+      startedRef.current = true;
+      startSession.mutate({
+        sessionId: session.id,
+        workspaceId: workItem.workspaceId,
+        projectId: workItem.projectId,
+        projectName: workItem.projectName ?? "Project",
+        workingDirectory: "/",
+      });
+    }
+  }, [session.status, session.id, isReadOnly, workItem, startSession]);
+
+  // Wire up the chat session (same hook as ChatPanel uses)
+  const {
+    events,
+    sendMessage,
+    stopSession,
+    resolveInput,
+    workflowState,
+    sessionData,
+    sessionStatus,
+    isConnected,
+    canSend,
+  } = useChatSession({ sessionId: session.id, enabled: true });
+
+  // Extract artifact content from events whenever they change
+  useEffect(() => {
+    const extracted = extractArtifactContent(events);
+    if (extracted) {
+      setArtifactContent(extracted);
+    }
+  }, [events]);
+
+  const isAwaitingInput = workflowState?.workflowStatus === "awaiting_input";
+
+  const statusIndicator = (
+    <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground border-b border-border">
+      <div
+        className={cn(
+          "size-2 rounded-full",
+          sessionStatus === "running" || sessionStatus === "idle"
+            ? "bg-emerald-500"
+            : sessionStatus === "error"
+              ? "bg-rose-500"
+              : sessionStatus === "provisioning" || sessionStatus === "starting"
+                ? "bg-amber-500 animate-pulse"
+                : "bg-muted-foreground",
+        )}
+      />
+      <span className="capitalize">{sessionStatus}</span>
+      {!isConnected && sessionStatus !== "stopped" && (
+        <span className="text-muted-foreground/60">(connecting...)</span>
+      )}
+      <Link
+        href={`/chat?session=${session.id}`}
+        className="ml-auto flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+        title="Open in full chat"
+      >
+        <ExternalLinkIcon className="size-3" />
+        <span>Full view</span>
+      </Link>
+    </div>
+  );
+
+  const chatPanel = (
+    <div className="flex h-full flex-col bg-background">
+      {statusIndicator}
+
+      {/* Awaiting input prompt */}
+      {workflowState?.awaitingInput && (
+        <div className="border-b border-border p-3">
+          <AwaitingInputCard
+            question={workflowState.awaitingInput.question}
+            options={workflowState.awaitingInput.options}
+            defaultAction={workflowState.awaitingInput.defaultAction}
+            expiresAt={workflowState.awaitingInput.expiresAt}
+            onResolve={resolveInput}
+            isResolving={false}
+          />
+        </div>
+      )}
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto">
+        <MessageStream
+          sessionId={session.id}
+          events={events}
+          isConnected={isConnected}
+        />
+      </div>
+
+      {/* Input */}
+      {!isReadOnly && (
+        <div className="border-t border-border">
+          <InputComposer
+            onSend={sendMessage}
+            disabled={!canSend || isAwaitingInput}
+            sessionId={session.id}
+            placeholder={
+              !isConnected
+                ? "Connecting..."
+                : sessionStatus === "provisioning" || sessionStatus === "starting"
+                  ? "Session starting..."
+                  : isAwaitingInput
+                    ? "Resolve input prompt above"
+                    : "Type a message..."
+            }
+          />
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="flex-1 overflow-hidden">
@@ -47,16 +232,7 @@ export function PlanningSessionClient({
       <div className="hidden h-full md:block">
         <ResizableSplitView
           storageKey={`planning-split-${workItem.id}`}
-          left={
-            <div className="flex h-full flex-col bg-background p-4">
-              {/* Chat panel placeholder — will be wired to existing ChatPanel */}
-              <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-                Chat panel will be embedded here.
-                <br />
-                Session: {session.id}
-              </div>
-            </div>
-          }
+          left={chatPanel}
           right={
             <ArtifactPreviewPanel
               liveContent={artifactContent}
@@ -70,6 +246,7 @@ export function PlanningSessionClient({
       {/* Mobile: tab view */}
       <div className="flex h-full flex-col md:hidden">
         <MobilePlanningTabs
+          chatPanel={chatPanel}
           artifactContent={artifactContent}
           priorArtifacts={priorArtifacts}
           isReadOnly={isReadOnly}
@@ -81,11 +258,13 @@ export function PlanningSessionClient({
 }
 
 function MobilePlanningTabs({
+  chatPanel,
   artifactContent,
   priorArtifacts,
   isReadOnly,
   sessionId,
 }: {
+  chatPanel: React.ReactNode;
   artifactContent: string | null;
   priorArtifacts: Array<{ id: string; title: string | null; content: string | null; createdAt: string }>;
   isReadOnly: boolean;
@@ -112,9 +291,7 @@ function MobilePlanningTabs({
       </div>
       <div className="flex-1 overflow-hidden">
         {tab === "chat" ? (
-          <div className="flex h-full items-center justify-center text-muted-foreground text-sm p-4">
-            Chat panel (mobile)
-          </div>
+          chatPanel
         ) : (
           <ArtifactPreviewPanel
             liveContent={artifactContent}
