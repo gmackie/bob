@@ -5,6 +5,8 @@ import Link from "next/link";
 
 import { cn } from "@bob/ui";
 
+import { SessionHistory } from "./session-history";
+
 interface ChildTask {
   id: string;
   identifier: string;
@@ -179,6 +181,12 @@ export function StagePlan({
               ))}
             </div>
           )}
+
+          <SessionHistory
+            workItemId={workItemId}
+            sessionTypes={["ceo_review", "eng_review", "design_review", "breakdown"]}
+            className="mt-4"
+          />
         </div>
       )}
     </section>

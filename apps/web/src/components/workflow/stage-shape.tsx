@@ -5,6 +5,7 @@ import { useState } from "react";
 import { cn } from "@bob/ui";
 
 import { RequirementsChecklist } from "~/components/work-items/requirements-checklist";
+import { SessionHistory } from "./session-history";
 
 interface StageShapeProps {
   workItemId: string;
@@ -112,6 +113,12 @@ export function StageShape({
               Requirements are only available for epics and issues.
             </div>
           )}
+
+          <SessionHistory
+            workItemId={workItemId}
+            sessionTypes={["office_hours"]}
+            className="mt-4"
+          />
         </div>
       )}
     </section>
