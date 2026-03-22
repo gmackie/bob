@@ -787,9 +787,10 @@ export const sessionRouter = {
       return { count: input.events.length };
     }),
 
-  getGatewayWebSocketUrl: protectedProcedure.query(async () => {
+  getGatewayWebSocketUrl: protectedProcedure.query(async ({ ctx }) => {
     return {
       url: getGatewaySocketUrl(),
+      userId: ctx.session.user.id,
     };
   }),
 
