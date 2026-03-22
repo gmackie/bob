@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "@bob/db";
+import { and, eq, isNull, sql } from "@bob/db";
 import { db } from "@bob/db/client";
 import { account, gitProviderConnections } from "@bob/db/schema";
 
@@ -252,7 +252,7 @@ export async function revokeConnection(
 ): Promise<boolean> {
   const result = await db
     .update(gitProviderConnections)
-    .set({ revokedAt: new Date() })
+    .set({ revokedAt: sql`now()` })
     .where(
       and(
         eq(gitProviderConnections.id, connectionId),
