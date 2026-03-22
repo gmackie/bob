@@ -3,7 +3,7 @@ import type { StdioAdapter, ParsedEvent } from "./base-stdio-adapter.js";
 export function createClaudeStdioAdapter(workingDirectory: string): StdioAdapter {
   return {
     command: "claude",
-    args: ["--output-format", "stream-json", "-p"],
+    args: ["--output-format", "stream-json", "--verbose", "-p"],
     env: {
       CLAUDE_WORKING_DIR: workingDirectory,
     },
