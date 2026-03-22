@@ -1122,6 +1122,49 @@ const server = createServer(async (req, res) => {
       }
 
       switch (pathname) {
+        case "/session/start": {
+          const sessionId = body.sessionId as string;
+          const agentType = (body.agentType as string) ?? "claude";
+          const workingDirectory = (body.workingDirectory as string) ?? "/";
+          const initialPrompt = body.initialPrompt as string | undefined;
+
+          if (!sessionId || !userId) {
+            sendError(res, 400, "sessionId and userId are required");
+            return;
+          }
+
+          // Update the session status to "running" and claim it
+          await db
+            .update(chatConversations)
+            .set({
+              status: "running",
+              claimedByGatewayId: GATEWAY_ID,
+              leaseExpiresAt: new Date(Date.now() + CONTAINER_TTL_MS),
+              agentType,
+              workingDirectory,
+            })
+            .where(eq(chatConversations.id, sessionId));
+
+          console.log(`[Gateway] Session ${sessionId} started (agent: ${agentType}, user: ${userId})`);
+
+          // If there's an initial prompt, persist it as the first user event
+          if (initialPrompt) {
+            await persistenceWriter.write({
+              sessionId,
+              seq: 1,
+              eventType: "system_prompt",
+              data: { content: initialPrompt },
+              createdAt: new Date(),
+            });
+          }
+
+          sendJson(res, 200, {
+            status: "ok",
+            sessionId,
+            gatewayId: GATEWAY_ID,
+          });
+          return;
+        }
         case "/fs/list":
           await handleFsList(body, res);
           return;
