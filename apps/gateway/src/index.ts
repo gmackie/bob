@@ -1325,9 +1325,10 @@ function handleSessionsWebSocket(ws: WebSocket): void {
           const missedEvents = actor.attachSubscriber(connection.clientId, ws, sub.lastAckSeq);
           connection.subscribedSessions.add(sub.sessionId);
 
-          // If the session is running but no agent process exists, start one
-          if (!agentProcessManager.isManaging(sub.sessionId) && actor.getStatus() !== "stopped") {
-            console.log(`[Gateway] Auto-starting agent for resumed session ${sub.sessionId}`);
+          // If no agent process is managing this session, start one
+          // (actor defaults to "stopped" when loaded from DB, so always try to start)
+          if (!agentProcessManager.isManaging(sub.sessionId)) {
+            console.log(`[Gateway] Auto-starting agent for session ${sub.sessionId} (status: ${actor.getStatus()})`);
             startAgentForSession(actor, connection.userId!).catch((err) => {
               console.error(`[Gateway] Failed to auto-start agent for ${sub.sessionId}:`, err);
             });
