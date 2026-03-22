@@ -3,7 +3,7 @@ import type { StdioAdapter, ParsedEvent } from "./base-stdio-adapter.js";
 export function createClaudeStdioAdapter(workingDirectory: string): StdioAdapter {
   return {
     command: "claude",
-    args: ["--output-format", "stream-json", "--verbose"],
+    args: ["--output-format", "stream-json", "--input-format", "stream-json", "--verbose", "-p"],
     env: {
       CLAUDE_WORKING_DIR: workingDirectory,
     },
@@ -73,7 +73,8 @@ export function createClaudeStdioAdapter(workingDirectory: string): StdioAdapter
     },
 
     formatInput(message: string): string {
-      return message + "\n";
+      // stream-json input format: JSON object per line with type "user_message"
+      return JSON.stringify({ type: "user_message", content: message }) + "\n";
     },
   };
 }
