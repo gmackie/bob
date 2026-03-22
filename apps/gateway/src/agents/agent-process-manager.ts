@@ -69,6 +69,7 @@ export class AgentProcessManager {
     // Capture stderr as output
     child.stderr?.on("data", (chunk: Buffer) => {
       const text = chunk.toString();
+      console.error(`[AgentProcessManager] stderr (${sessionId}): ${text.slice(0, 500)}`);
       actor.handleAgentOutput(text, "stderr");
     });
 
