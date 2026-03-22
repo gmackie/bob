@@ -1253,6 +1253,7 @@ function handleSessionsWebSocket(ws: WebSocket): void {
     heartbeatTimer: null,
   };
   sessionConnections.set(connectionId, connection);
+  console.log(`[Gateway] New session connection ${connectionId}`);
 
   const send = (msg: ServerMessage) => {
     if (ws.readyState === WebSocket.OPEN) {
@@ -1265,8 +1266,11 @@ function handleSessionsWebSocket(ws: WebSocket): void {
   };
 
   ws.on("message", async (data) => {
-    const msg = parseClientMessage(data.toString());
+    const raw = data.toString();
+    console.log(`[Gateway] WS message from ${connectionId}: ${raw.slice(0, 200)}`);
+    const msg = parseClientMessage(raw);
     if (!msg) {
+      console.log(`[Gateway] Failed to parse message from ${connectionId}`);
       sendError("INVALID_MESSAGE", "Failed to parse message");
       return;
     }
@@ -1320,6 +1324,14 @@ function handleSessionsWebSocket(ws: WebSocket): void {
 
           const missedEvents = actor.attachSubscriber(connection.clientId, ws, sub.lastAckSeq);
           connection.subscribedSessions.add(sub.sessionId);
+
+          // If the session is running but no agent process exists, start one
+          if (!agentProcessManager.isManaging(sub.sessionId) && actor.getStatus() !== "stopped") {
+            console.log(`[Gateway] Auto-starting agent for resumed session ${sub.sessionId}`);
+            startAgentForSession(actor, connection.userId!).catch((err) => {
+              console.error(`[Gateway] Failed to auto-start agent for ${sub.sessionId}:`, err);
+            });
+          }
 
           send({
             type: "subscribed",
