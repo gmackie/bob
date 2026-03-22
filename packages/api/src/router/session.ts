@@ -30,7 +30,8 @@ import { buildPlanningWorkItemUrl } from "../services/integrations/planningRemot
 import { protectedProcedure } from "../trpc";
 
 const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:3002";
-const getGatewaySocketUrl = (): string => `${GATEWAY_URL.replace(/^http/, "ws")}/sessions`;
+const GATEWAY_PUBLIC_URL = process.env.GATEWAY_PUBLIC_URL ?? GATEWAY_URL;
+const getGatewaySocketUrl = (): string => `${GATEWAY_PUBLIC_URL.replace(/^http/, "ws")}/sessions`;
 
 // Initialize ElevenLabs session service (singleton)
 let elevenlabsService: ElevenLabsSessionService | null = null;
