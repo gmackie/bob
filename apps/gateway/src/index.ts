@@ -1133,7 +1133,7 @@ const server = createServer(async (req, res) => {
             return;
           }
 
-          // Update the session status to "running" and claim it
+          // Update the session status and claim it
           await db
             .update(chatConversations)
             .set({
@@ -1145,17 +1145,23 @@ const server = createServer(async (req, res) => {
             })
             .where(eq(chatConversations.id, sessionId));
 
-          console.log(`[Gateway] Session ${sessionId} started (agent: ${agentType}, user: ${userId})`);
+          console.log(`[Gateway] Session ${sessionId} started via HTTP (agent: ${agentType}, user: ${userId})`);
 
-          // If there's an initial prompt, persist it as the first user event
-          if (initialPrompt) {
-            await persistenceWriter.write({
-              sessionId,
-              seq: 1,
-              eventType: "system_prompt",
-              data: { content: initialPrompt },
-              createdAt: new Date(),
-            });
+          // Get or load the session actor from DB
+          const actor = await sessionManager.getSession(sessionId);
+
+          if (!actor) {
+            console.error(`[Gateway] Session ${sessionId} not found in DB after update`);
+            sendJson(res, 200, { status: "ok", sessionId, gatewayId: GATEWAY_ID, warning: "session not loaded" });
+            return;
+          }
+
+          // Start the agent subprocess (claude CLI, etc.)
+          try {
+            await startAgentForSession(actor, userId, initialPrompt);
+          } catch (agentError) {
+            console.error(`[Gateway] Failed to start agent for session ${sessionId}:`, agentError);
+            // Don't fail the HTTP response — the session is created, agent can retry
           }
 
           sendJson(res, 200, {
