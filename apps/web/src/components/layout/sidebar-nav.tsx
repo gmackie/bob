@@ -4,15 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   DashboardIcon,
-  ChatBubbleIcon,
   GearIcon,
   BellIcon,
 } from "@radix-ui/react-icons";
-import { useQuery } from "@tanstack/react-query";
-
 import { cn } from "@bob/ui";
-
-import { useTRPC } from "~/trpc/react";
 
 export interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
@@ -61,25 +56,12 @@ const NAV_ITEMS: NavItem[] = [
   { icon: GearIcon, label: "Settings", href: "/settings" },
 ];
 
-/** Returns the number of active (non-stopped) planning sessions. */
-function useActivePlanningSessionCount(): number | undefined {
-  const trpc = useTRPC();
-  const { data: sessions } = useQuery(
-    trpc.planSession.list.queryOptions({ limit: 10 }, { staleTime: 30_000 }),
-  );
-
-  if (!sessions) return undefined;
-  return sessions.filter((s) => s.status !== "stopped").length;
-}
-
 interface SidebarNavProps {
   collapsed: boolean;
 }
 
 export function SidebarNav({ collapsed }: SidebarNavProps) {
   const pathname = usePathname() ?? "";
-  const planningCount = useActivePlanningSessionCount();
-
   return (
     <nav className="flex flex-1 flex-col gap-1 px-2 py-3">
       {NAV_ITEMS.map((item) => {
@@ -87,9 +69,7 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
           pathname === item.href || pathname.startsWith(item.href + "/");
         const Icon = item.icon;
 
-        // Use dynamic badge for the Planning nav item
-        const badge =
-          item.href === "/planning" ? planningCount : item.badge;
+        const badge = item.badge;
 
         return (
           <Link
