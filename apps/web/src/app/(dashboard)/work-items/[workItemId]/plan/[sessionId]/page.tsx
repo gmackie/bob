@@ -58,13 +58,6 @@ export default async function PlanningSessionPage({ params }: PlanningSessionPag
             : "Planning"}
         </span>
 
-        {/* End session link (always visible) */}
-        {!isReadOnly && (
-          <button className="ml-auto text-sm text-muted-foreground hover:text-foreground">
-            End session
-          </button>
-        )}
-
         {isReadOnly && (
           <span className="ml-auto text-xs text-muted-foreground">
             Read-only replay
