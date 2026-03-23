@@ -1310,14 +1310,18 @@ function handleSessionsWebSocket(ws: WebSocket): void {
           }
 
           const sub = msg as ClientSubscribe;
+          console.log(`[Gateway] Subscribe request for session ${sub.sessionId} from user ${connection.userId}`);
           const actor = await sessionManager.getOrLoadSession(sub.sessionId);
-          
+
           if (!actor) {
+            console.log(`[Gateway] Session ${sub.sessionId} NOT FOUND in DB`);
             sendError("SESSION_NOT_FOUND", `Session ${sub.sessionId} not found`, sub.sessionId);
             return;
           }
 
+          console.log(`[Gateway] Session ${sub.sessionId} loaded, actor.userId=${actor.userId}, connection.userId=${connection.userId}`);
           if (actor.userId !== connection.userId) {
+            console.log(`[Gateway] ACCESS_DENIED: actor.userId=${actor.userId} !== connection.userId=${connection.userId}`);
             sendError("ACCESS_DENIED", "Not authorized for this session", sub.sessionId);
             return;
           }
