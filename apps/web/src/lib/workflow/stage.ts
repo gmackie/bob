@@ -39,6 +39,8 @@ export interface StageDetectionInput {
   openPRCount: number;
   mergedFeaturePR: boolean;
   healthyDeployment: boolean;
+  artifactCount?: number; // Planning artifacts (BRDs, design docs)
+  sessionCount?: number; // Completed planning sessions
 }
 
 export interface StageDetectionResult {
@@ -77,7 +79,7 @@ export function detectStage(input: StageDetectionInput): StageDetectionResult {
     stage = "execute";
   } else if (input.childTaskCount > 0) {
     stage = "plan";
-  } else if (input.requirementCount > 0) {
+  } else if (input.requirementCount > 0 || (input.artifactCount ?? 0) > 0) {
     stage = "shape";
   } else {
     stage = "idea";

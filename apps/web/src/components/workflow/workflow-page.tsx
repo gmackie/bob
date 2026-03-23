@@ -124,6 +124,7 @@ export function WorkflowPage({
     openPRCount: pullRequests.filter((pr) => pr.status === "open").length,
     mergedFeaturePR: pullRequests.some((pr) => pr.status === "merged"),
     healthyDeployment: deployments.some((d) => d.status === "healthy"),
+    artifactCount: artifacts.length,
   };
 
   const detection = useMemo(() => detectStage(detectionInput), [
@@ -134,6 +135,7 @@ export function WorkflowPage({
     detectionInput.openPRCount,
     detectionInput.mergedFeaturePR,
     detectionInput.healthyDeployment,
+    detectionInput.artifactCount,
     detectionInput.workItem.kind,
     detectionInput.workItem.status,
   ]);
