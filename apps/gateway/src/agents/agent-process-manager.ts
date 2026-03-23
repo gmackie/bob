@@ -221,8 +221,14 @@ export class AgentProcessManager {
     const event = adapter.parseLine(line);
 
     if (!event) {
-      // Unparseable line — treat as raw output
-      actor.handleAgentOutput(line + "\n");
+      // Null means the adapter intentionally skipped this line (system events, etc.)
+      // Only output truly unparseable lines (not JSON)
+      try {
+        JSON.parse(line); // If it parses as JSON, it was intentionally skipped
+      } catch {
+        // Not JSON — treat as raw text output (e.g., warnings, errors)
+        actor.handleAgentOutput(line + "\n");
+      }
       return;
     }
 
