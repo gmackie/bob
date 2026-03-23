@@ -12,7 +12,8 @@ let ptyModule: typeof import("node-pty") | null = null;
 async function loadPty(): Promise<typeof import("node-pty")> {
   if (ptyModule) return ptyModule;
   try {
-    ptyModule = await import("node-pty");
+    // Use require() for node-pty (native module, works better than ESM import)
+    ptyModule = require("node-pty") as typeof import("node-pty");
     return ptyModule;
   } catch {
     throw new Error("node-pty not available — install with: pnpm add node-pty");
@@ -60,11 +61,20 @@ export async function spawnClaudePty(
   };
 }
 
+let _ptyChecked = false;
+let _ptyAvailable = false;
+
 export function isPtyAvailable(): boolean {
+  if (_ptyChecked) return _ptyAvailable;
+  _ptyChecked = true;
   try {
-    require.resolve("node-pty");
-    return true;
-  } catch {
-    return false;
+    // Dynamic require works in tsx/Node.js even in ESM context
+    const pty = require("node-pty");
+    _ptyAvailable = !!pty?.spawn;
+    console.log(`[ClaudePTY] node-pty availability check: ${_ptyAvailable}`);
+  } catch (e) {
+    console.log(`[ClaudePTY] node-pty not available: ${e}`);
+    _ptyAvailable = false;
   }
+  return _ptyAvailable;
 }
