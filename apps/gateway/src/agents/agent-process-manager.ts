@@ -6,6 +6,7 @@ interface ManagedSession {
   process: ChildProcess;
   adapter: StdioAdapter;
   actor: SessionActor;
+  agentType: string;
 }
 
 interface StartSessionConfig {
@@ -47,7 +48,7 @@ export class AgentProcessManager {
       stdio: ["pipe", "pipe", "pipe"],
     });
 
-    const managed: ManagedSession = { process: child, adapter, actor };
+    const managed: ManagedSession = { process: child, adapter, actor, agentType };
     this.sessions.set(sessionId, managed);
 
     actor.setStatus("starting");
@@ -83,8 +84,9 @@ export class AgentProcessManager {
       console.log(
         `[AgentProcessManager] Process exited for session ${sessionId}: code=${code} signal=${signal}`,
       );
-      // For Claude: the sentinel process (--help) exits immediately — don't tear down the session
-      if (adapter.command === "claude") {
+      // For Claude: the sentinel process exits immediately — don't tear down the session
+      // (Claude uses per-message spawning because piped stdin triggers print mode)
+      if (agentType === "claude") {
         console.log(`[AgentProcessManager] Claude sentinel exited, session stays managed for per-message spawning`);
         return;
       }
@@ -106,11 +108,11 @@ export class AgentProcessManager {
     const managed = this.sessions.get(sessionId);
     if (!managed) return false;
 
-    const { adapter, actor } = managed;
+    const { adapter, actor, agentType } = managed;
 
     // For Claude in non-TTY: spawn a new -p process per message
     // because piped stdin triggers print mode (one-shot)
-    if (adapter.command === "claude") {
+    if (agentType === "claude") {
       console.log(`[AgentProcessManager] Spawning per-message Claude for session ${sessionId}`);
       const child = spawn("claude", ["-p", "--output-format", "stream-json", "--verbose"], {
         cwd: managed.process.spawnargs ? undefined : "/",
