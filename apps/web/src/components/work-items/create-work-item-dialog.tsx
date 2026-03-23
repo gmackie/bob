@@ -32,6 +32,12 @@ interface CreateWorkItemDialogProps {
   projects?: Array<{ id: string; name: string; key: string }>;
 }
 
+const KINDS = [
+  { value: "task", label: "Task", description: "An individual unit of work" },
+  { value: "issue", label: "Issue", description: "A feature request or bug report" },
+  { value: "epic", label: "Epic", description: "A large initiative broken into tasks" },
+] as const;
+
 const STATUSES = [
   { value: "backlog", label: "Backlog" },
   { value: "todo", label: "Ready" },
@@ -55,6 +61,7 @@ export function CreateWorkItemDialog({
   const router = useRouter();
   const trpc = useTRPC();
 
+  const [kind, setKind] = useState<"issue" | "epic" | "task">("task");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [projectId, setProjectId] = useState(defaultProjectId ?? "");
@@ -76,6 +83,7 @@ export function CreateWorkItemDialog({
   );
 
   function resetForm() {
+    setKind("task");
     setTitle("");
     setDescription("");
     setStatus("todo");
@@ -90,6 +98,7 @@ export function CreateWorkItemDialog({
       projectId,
       title: title.trim(),
       description: description.trim() || undefined,
+      kind,
       status: status as "backlog" | "todo" | "in_progress" | "in_review" | "done",
       priority: priority as "no_priority" | "urgent" | "high" | "medium" | "low",
     });
@@ -107,6 +116,27 @@ export function CreateWorkItemDialog({
           </DialogHeader>
 
           <div className="mt-4 space-y-4">
+            <div>
+              <label className="mb-1.5 block text-sm text-muted-foreground">Kind</label>
+              <div className="flex gap-1 rounded-md border border-border bg-muted/30 p-1">
+                {KINDS.map((k) => (
+                  <button
+                    key={k.value}
+                    type="button"
+                    onClick={() => setKind(k.value)}
+                    className={`flex-1 rounded-sm px-3 py-1.5 text-sm font-medium transition-colors ${
+                      kind === k.value
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                    title={k.description}
+                  >
+                    {k.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div>
               <label className="mb-1.5 block text-sm text-muted-foreground">Title</label>
               <Input

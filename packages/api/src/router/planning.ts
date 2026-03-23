@@ -519,6 +519,7 @@ export const planningRouter = {
         projectId: z.string().uuid(),
         title: z.string().min(1),
         description: z.string().optional(),
+        kind: z.enum(["issue", "epic", "task"]).default("task"),
         status: z
           .enum(["backlog", "todo", "in_progress", "in_review", "done"])
           .default("todo"),
@@ -556,7 +557,7 @@ export const planningRouter = {
             workspaceId: project.workspaceId,
             projectId: input.projectId,
             sequenceNumber: nextSeq,
-            kind: "task",
+            kind: input.kind,
             title: input.title,
             description: input.description ?? null,
             status: input.status,
