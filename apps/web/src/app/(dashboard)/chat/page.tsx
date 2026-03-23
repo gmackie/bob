@@ -498,17 +498,10 @@ function ChatPageContent() {
     (message: string) => {
       if (!activeSessionId) return;
 
-      if (isHeadlessMode) {
-        sendHeadlessInputMutation.mutate({
-          sessionId: activeSessionId,
-          message,
-        });
-        return;
-      }
-
+      // Always use WebSocket sendInput (works in both normal and headless mode)
       sendInput(activeSessionId, message);
     },
-    [activeSessionId, isHeadlessMode, sendHeadlessInputMutation, sendInput],
+    [activeSessionId, sendInput],
   );
 
   const handleSendMessage = useCallback(
