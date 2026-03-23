@@ -290,6 +290,16 @@ export default function PlanningPage() {
             ))}
           </div>
         )}
+
+        {/* Getting started hint when few projects */}
+        {!isLoading && projectCards.length > 0 && projectCards.length < 3 && (
+          <div className="mt-8 rounded-2xl border border-dashed border-border px-8 py-6 text-center">
+            <h3 className="font-display text-lg font-semibold text-foreground">Get started with Bob</h3>
+            <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
+              Import your GitHub repositories as projects, then use &ldquo;New Idea&rdquo; to start planning with Claude.
+            </p>
+          </div>
+        )}
       </section>}
 
       {/* Create project dialog */}
