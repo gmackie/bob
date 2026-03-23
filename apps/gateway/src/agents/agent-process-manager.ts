@@ -226,8 +226,15 @@ export class AgentProcessManager {
         console.log(`[AgentProcessManager] Spawning new Claude conversation for session ${sessionId}`);
       }
 
+      // Use the session's working directory (set by executeTask to the repo path)
+      const cwd = actor.workingDirectory && actor.workingDirectory !== "/"
+        ? actor.workingDirectory
+        : process.env.HOME || "/";
+
+      console.log(`[AgentProcessManager] Claude cwd: ${cwd}`);
+
       const child = spawn("claude", args, {
-        cwd: process.env.HOME || "/",
+        cwd,
         env: { ...process.env, ...adapter.env },
         stdio: ["pipe", "pipe", "pipe"],
       });
