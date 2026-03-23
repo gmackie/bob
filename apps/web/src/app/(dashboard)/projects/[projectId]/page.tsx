@@ -53,7 +53,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="font-display text-2xl font-bold text-foreground">
+              <h1 className="font-display text-4xl font-bold tracking-tight leading-[1.15] text-foreground">
                 {project.name}
               </h1>
               <span className="rounded-full border border-border bg-accent px-2.5 py-0.5 font-mono text-xs font-medium text-muted-foreground">

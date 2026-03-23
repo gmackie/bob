@@ -122,7 +122,7 @@ export default function PlanningPage() {
               />
             </svg>
           </div>
-          <h1 className="mt-4 font-display text-2xl font-bold text-foreground">
+          <h1 className="mt-4 font-display text-4xl font-bold tracking-tight leading-[1.15] text-foreground">
             No workspace yet
           </h1>
           <p className="mt-3 text-sm text-muted-foreground">
@@ -185,7 +185,7 @@ export default function PlanningPage() {
               </button>
             ))}
           </div>
-          <h1 className="font-display text-2xl font-bold text-foreground">
+          <h1 className="font-display text-4xl font-bold tracking-tight leading-[1.15] text-foreground">
             {view === "dashboard" ? "Mission Control" : "Projects"}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
