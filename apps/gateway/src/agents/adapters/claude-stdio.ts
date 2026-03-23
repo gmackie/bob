@@ -4,7 +4,7 @@ export function createClaudeStdioAdapter(workingDirectory: string): StdioAdapter
   return {
     // Interactive conversation mode — Claude stays alive and reads stdin continuously
     command: "claude",
-    args: ["--no-session-persistence"],
+    args: [],
     env: {
       CLAUDE_WORKING_DIR: workingDirectory,
     },
