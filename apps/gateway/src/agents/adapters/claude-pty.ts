@@ -5,15 +5,18 @@
  * This replaces the per-message spawning approach when node-pty is available.
  */
 
+import { createRequire } from "module";
 import type { IPty } from "node-pty";
+
+// ESM doesn't have require() — create one for native modules
+const esmRequire = createRequire(import.meta.url);
 
 let ptyModule: typeof import("node-pty") | null = null;
 
 async function loadPty(): Promise<typeof import("node-pty")> {
   if (ptyModule) return ptyModule;
   try {
-    // Use require() for node-pty (native module, works better than ESM import)
-    ptyModule = require("node-pty") as typeof import("node-pty");
+    ptyModule = esmRequire("node-pty") as typeof import("node-pty");
     return ptyModule;
   } catch {
     throw new Error("node-pty not available — install with: pnpm add node-pty");
@@ -68,8 +71,7 @@ export function isPtyAvailable(): boolean {
   if (_ptyChecked) return _ptyAvailable;
   _ptyChecked = true;
   try {
-    // Dynamic require works in tsx/Node.js even in ESM context
-    const pty = require("node-pty");
+    const pty = esmRequire("node-pty");
     _ptyAvailable = !!pty?.spawn;
     console.log(`[ClaudePTY] node-pty availability check: ${_ptyAvailable}`);
   } catch (e) {
