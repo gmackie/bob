@@ -1,5 +1,6 @@
 import "@xterm/xterm/css/xterm.css";
-import "./dashboard.css";
+// dashboard.css removed — 4000+ lines of legacy CSS that overrode DESIGN.md
+// (font-family, background gradients, color scheme all conflicted with tailwind theme)
 
 import { ReactNode } from "react";
 import { redirect } from "next/navigation";
