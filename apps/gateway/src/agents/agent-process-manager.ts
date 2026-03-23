@@ -22,13 +22,32 @@ interface StartSessionConfig {
 
 export class AgentProcessManager {
   private sessions = new Map<string, ManagedSession>();
+  private starting = new Set<string>(); // Prevents concurrent starts for the same session
 
   async startSession(config: StartSessionConfig): Promise<void> {
     const { sessionId, agentType, workingDirectory, initialPrompt, actor } = config;
 
+    // Prevent concurrent starts
+    if (this.starting.has(sessionId)) {
+      console.log(`[AgentProcessManager] Session ${sessionId} already starting, skipping duplicate`);
+      return;
+    }
+    this.starting.add(sessionId);
+
+    try {
+      await this._doStartSession(config);
+    } finally {
+      this.starting.delete(sessionId);
+    }
+  }
+
+  private async _doStartSession(config: StartSessionConfig): Promise<void> {
+    const { sessionId, agentType, workingDirectory, initialPrompt, actor } = config;
+
     if (this.sessions.has(sessionId)) {
-      console.warn(`[AgentProcessManager] Session ${sessionId} already managed, stopping existing`);
-      await this.stopSession(sessionId);
+      // Don't kill an existing working session — just skip
+      console.log(`[AgentProcessManager] Session ${sessionId} already managed, skipping`);
+      return;
     }
 
     const adapter = getStdioAdapter(agentType, workingDirectory);
