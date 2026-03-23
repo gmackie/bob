@@ -109,12 +109,7 @@ export function WorkspaceControls({
           </>
         ) : canExecute ? (
           <>
-            <Link
-              href="/chat"
-              className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
-            >
-              Start new session
-            </Link>
+            <StartAgentButton workItemId={workItemId} />
             <OpenChatPanelButton
               workItemId={workItemId}
               label={workItemIdentifier}
@@ -127,5 +122,33 @@ export function WorkspaceControls({
         )}
       </div>
     </div>
+  );
+}
+
+function StartAgentButton({ workItemId }: { workItemId: string }) {
+  const router = useRouter();
+  const trpc = useTRPC();
+
+  const executeTask = useMutation(
+    trpc.taskRun.execute.mutationOptions({
+      onSuccess: (result) => {
+        toast(`Agent started on branch ${result.branch}`);
+        router.refresh();
+      },
+      onError: (err) => {
+        toast(err.message, {
+          style: { background: "#1a0000", borderColor: "#f43f5e40" },
+        });
+      },
+    }),
+  );
+
+  return (
+    <Button
+      onClick={() => executeTask.mutate({ workItemId })}
+      disabled={executeTask.isPending}
+    >
+      {executeTask.isPending ? "Starting agent..." : "Start agent"}
+    </Button>
   );
 }
