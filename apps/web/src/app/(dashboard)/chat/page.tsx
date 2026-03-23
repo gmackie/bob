@@ -400,10 +400,10 @@ function ChatPageContent() {
     reconnect,
   } = useSessionSocket({
     gatewayUrl: gatewayInfo?.url ?? "",
-    token: isHeadlessMode ? "" : "session-token",
+    token: gatewayInfo?.userId ?? "session-token",
     onEvent: handleEvent,
     onStatusChange: handleStatusChange,
-    enabled: !isHeadlessMode,
+    enabled: true,
   });
 
   const updateUrl = useCallback(
