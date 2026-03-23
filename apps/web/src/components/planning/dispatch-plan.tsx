@@ -274,7 +274,7 @@ export function DispatchPlan({ batchId }: DispatchPlanProps) {
                   {/* Task */}
                   <td className="px-4 py-2.5">
                     <div className="flex flex-col">
-                      <span className="text-xs text-muted-foreground">
+                      <span className="font-mono text-xs text-muted-foreground">
                         {item.planningTaskIdentifier}
                       </span>
                       <span className="text-foreground">{item.title}</span>
@@ -340,7 +340,7 @@ export function DispatchPlan({ batchId }: DispatchPlanProps) {
                   </td>
 
                   {/* Blocked By */}
-                  <td className="px-4 py-2.5 text-xs text-muted-foreground">
+                  <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
                     {blockerLabels.length > 0
                       ? blockerLabels.join(", ")
                       : "\u2014"}

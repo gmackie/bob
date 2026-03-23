@@ -87,7 +87,7 @@ export function WorkItemBoard({ items }: WorkItemBoardProps) {
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                        <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                           {boardItem.identifier}
                         </span>
                         <Badge

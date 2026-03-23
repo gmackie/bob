@@ -114,7 +114,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                 >
                   {item.kind}
                 </Badge>
-                <span className="shrink-0 text-[11px] text-muted-foreground">
+                <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
                   {item.identifier}
                 </span>
                 <span className="truncate text-foreground">{item.title}</span>

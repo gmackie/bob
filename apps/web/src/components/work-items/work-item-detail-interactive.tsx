@@ -85,7 +85,7 @@ export function WorkItemDetailInteractive({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex-1">
             <div className="flex items-center gap-2 text-xs uppercase tracking-[0.24em] text-muted-foreground">
-              {workItem.identifier}
+              <span className="font-mono">{workItem.identifier}</span>
               <Badge variant={KIND_COLOR[workItem.kind] ?? "default"}>
                 {formatLabel(workItem.kind)}
               </Badge>
