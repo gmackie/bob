@@ -36,6 +36,7 @@ import {
   workItemRouter,
   workItemsRouter,
 } from "./router/workItems";
+import { webhookRouter } from "./router/webhook";
 import { workspaceRouter } from "./router/workspace";
 import { createTRPCRouter } from "./trpc";
 
@@ -74,6 +75,7 @@ const appRouterRecord = {
   notification: notificationRouter,
   workItem: workItemRouter,
   workItems: workItemsRouter,
+  webhook: webhookRouter,
   workspace: workspaceRouter,
 } satisfies TRPCRouterRecord;
 
