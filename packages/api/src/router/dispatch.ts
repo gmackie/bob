@@ -456,6 +456,28 @@ export const dispatchRouter = {
               type: "task_completed",
               url: `/work-items/${item.planningTaskId}`,
             });
+
+            // Auto-create PR for the completed task run
+            if (run.repositoryId && run.branch) {
+              const { onSessionComplete } = await import(
+                "../services/automation/branch-automation"
+              );
+              const prResult = await onSessionComplete({
+                sessionId: run.sessionId ?? run.id,
+                workItemId: run.workItemId ?? item.planningTaskId,
+                identifier: item.planningTaskIdentifier,
+                repositoryId: run.repositoryId,
+                branch: run.branch,
+                userId: batch.userId,
+              });
+              if (prResult.prId) {
+                // Link the PR back to the task run
+                await ctx.db
+                  .update(taskRuns)
+                  .set({ pullRequestId: prResult.prId })
+                  .where(eq(taskRuns.id, run.id));
+              }
+            }
           } else if (run.status === "failed") {
             await ctx.db
               .update(dispatchItems)
