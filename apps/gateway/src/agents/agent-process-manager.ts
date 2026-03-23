@@ -83,6 +83,11 @@ export class AgentProcessManager {
       console.log(
         `[AgentProcessManager] Process exited for session ${sessionId}: code=${code} signal=${signal}`,
       );
+      // For Claude: the sentinel process (--help) exits immediately — don't tear down the session
+      if (adapter.command === "claude") {
+        console.log(`[AgentProcessManager] Claude sentinel exited, session stays managed for per-message spawning`);
+        return;
+      }
       actor.handleAgentExit(code, signal);
       this.sessions.delete(sessionId);
     });
@@ -101,7 +106,48 @@ export class AgentProcessManager {
     const managed = this.sessions.get(sessionId);
     if (!managed) return false;
 
-    const { process: child, adapter } = managed;
+    const { adapter, actor } = managed;
+
+    // For Claude in non-TTY: spawn a new -p process per message
+    // because piped stdin triggers print mode (one-shot)
+    if (adapter.command === "claude") {
+      console.log(`[AgentProcessManager] Spawning per-message Claude for session ${sessionId}`);
+      const child = spawn("claude", ["-p", "--output-format", "stream-json", "--verbose"], {
+        cwd: managed.process.spawnargs ? undefined : "/",
+        env: { ...process.env, ...adapter.env },
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+
+      let buffer = "";
+      child.stdout?.on("data", (chunk: Buffer) => {
+        buffer += chunk.toString();
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          this.handleLine(sessionId, line);
+        }
+      });
+
+      child.stderr?.on("data", (chunk: Buffer) => {
+        const text = chunk.toString();
+        // Skip warnings about stdin timing
+        if (text.includes("no stdin data received")) return;
+        console.error(`[AgentProcessManager] per-msg stderr (${sessionId}): ${text.slice(0, 200)}`);
+      });
+
+      child.on("exit", (code) => {
+        console.log(`[AgentProcessManager] Per-message Claude exited: code=${code}`);
+      });
+
+      // Write the message to stdin immediately
+      child.stdin?.write(message);
+      child.stdin?.end();
+      return true;
+    }
+
+    // Default: write to existing process stdin
+    const { process: child } = managed;
     if (!child.stdin?.writable) {
       console.warn(`[AgentProcessManager] stdin not writable for session ${sessionId}`);
       return false;
