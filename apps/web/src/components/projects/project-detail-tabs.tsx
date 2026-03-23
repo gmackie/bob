@@ -19,6 +19,7 @@ import { WorkItemBoard } from "~/components/work-items/work-item-board";
 import type { WorkItemBoardItem } from "~/components/work-items/work-item-board";
 import { RequirementsChecklist } from "~/components/work-items/requirements-checklist";
 import { AutomationSettings } from "~/components/projects/automation-settings";
+import { RepositoryPanel } from "~/components/dashboard";
 
 type TabKey = "board" | "list" | "requirements" | "settings";
 
@@ -129,10 +130,13 @@ export function ProjectDetailTabs({
           />
         )}
         {activeTab === "settings" && (
-          <AutomationSettings
-            projectId={projectId}
-            initialSettings={automationSettings}
-          />
+          <div className="space-y-8">
+            <AutomationSettings
+              projectId={projectId}
+              initialSettings={automationSettings}
+            />
+            <RepositoryPanel projectId={projectId} />
+          </div>
         )}
       </div>
     </div>
