@@ -52,34 +52,29 @@ interface PlanningSessionClientProps {
  * Returns the *last* detected artifact so the preview always shows the latest.
  */
 function extractArtifactContent(events: SessionEvent[]): string | null {
-  let lastArtifact: string | null = null;
+  // Accumulate all agent output as the artifact content
+  // This builds a running document of the planning conversation's outputs
+  const outputParts: string[] = [];
 
   for (const event of events) {
     if (event.direction !== "agent") continue;
-    const content =
-      event.eventType === "message_final"
-        ? toDisplayText(event.payload.content)
-        : event.eventType === "output_chunk"
-          ? toDisplayText(event.payload.data)
-          : null;
 
-    if (!content) continue;
-
-    // Check for fenced markdown blocks
-    const fencedMatch = content.match(/```markdown\n([\s\S]+?)```/);
-    if (fencedMatch?.[1] && fencedMatch[1].length > 100) {
-      lastArtifact = fencedMatch[1].trim();
-      continue;
+    if (event.eventType === "output_chunk") {
+      const text = toDisplayText(event.payload.data);
+      if (text) outputParts.push(text);
     }
 
-    // Check for large structured markdown (starts with # heading, has multiple sections)
-    const headingMatch = content.match(/(^|\n)(# .+\n[\s\S]{400,})/);
-    if (headingMatch?.[2]) {
-      lastArtifact = headingMatch[2].trim();
+    if (event.eventType === "message_final") {
+      const text = toDisplayText(event.payload.content);
+      if (text) {
+        // message_final replaces accumulated chunks for this message
+        outputParts.push(text);
+      }
     }
   }
 
-  return lastArtifact;
+  const combined = outputParts.join("").trim();
+  return combined.length > 0 ? combined : null;
 }
 
 function toDisplayText(value: unknown): string {
