@@ -1,9 +1,11 @@
 import type { TRPCRouterRecord } from "@trpc/server";
-import { and, desc, eq } from "@bob/db";
+import { and, desc, eq, lt } from "@bob/db";
 import { db } from "@bob/db/client";
 import { webhookConfigs, webhookDeliveries } from "@bob/db/schema";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod/v4";
 
+import { emitWebhookEvent } from "../services/webhooks/webhookDeliveryService";
 import { protectedProcedure } from "../trpc";
 
 export const webhookRouter = {
@@ -120,12 +122,13 @@ export const webhookRouter = {
       return row ?? null;
     }),
 
-  // List deliveries for a webhook config
-  listDeliveries: protectedProcedure
+  // List deliveries for a webhook config with cursor pagination
+  deliveries: protectedProcedure
     .input(
       z.object({
-        webhookConfigId: z.string().uuid(),
+        configId: z.string().uuid(),
         limit: z.number().int().min(1).max(100).default(50),
+        cursor: z.string().datetime().optional(),
       }),
     )
     .query(async ({ ctx, input }) => {
@@ -135,19 +138,105 @@ export const webhookRouter = {
         .from(webhookConfigs)
         .where(
           and(
-            eq(webhookConfigs.id, input.webhookConfigId),
+            eq(webhookConfigs.id, input.configId),
             eq(webhookConfigs.userId, ctx.session.user.id),
           ),
         )
         .limit(1);
 
-      if (config.length === 0) return [];
+      if (config.length === 0) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Webhook config not found" });
+      }
 
-      return db
+      const conditions = [eq(webhookDeliveries.webhookConfigId, input.configId)];
+      if (input.cursor) {
+        conditions.push(lt(webhookDeliveries.receivedAt, new Date(input.cursor)));
+      }
+
+      const items = await db
         .select()
         .from(webhookDeliveries)
-        .where(eq(webhookDeliveries.webhookConfigId, input.webhookConfigId))
+        .where(and(...conditions))
         .orderBy(desc(webhookDeliveries.receivedAt))
-        .limit(input.limit);
+        .limit(input.limit + 1);
+
+      const hasMore = items.length > input.limit;
+      if (hasMore) items.pop();
+
+      return {
+        items,
+        nextCursor: hasMore ? items.at(-1)!.receivedAt.toISOString() : null,
+      };
+    }),
+
+  // Re-deliver a failed webhook delivery
+  redeliver: protectedProcedure
+    .input(z.object({ deliveryId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      // Fetch delivery and verify ownership via the config
+      const rows = await db
+        .select({
+          delivery: webhookDeliveries,
+          userId: webhookConfigs.userId,
+        })
+        .from(webhookDeliveries)
+        .innerJoin(webhookConfigs, eq(webhookDeliveries.webhookConfigId, webhookConfigs.id))
+        .where(eq(webhookDeliveries.id, input.deliveryId))
+        .limit(1);
+
+      const row = rows[0];
+      if (!row || row.userId !== ctx.session.user.id) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Delivery not found" });
+      }
+      if (row.delivery.status !== "failed") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Only failed deliveries can be re-delivered" });
+      }
+
+      const [updated] = await db
+        .update(webhookDeliveries)
+        .set({
+          status: "pending",
+          errorMessage: null,
+          retryCount: 0,
+          nextRetryAt: null,
+          processedAt: null,
+        })
+        .where(eq(webhookDeliveries.id, input.deliveryId))
+        .returning();
+
+      return updated!;
+    }),
+
+  // Send a test webhook event to a config
+  testWebhook: protectedProcedure
+    .input(z.object({ configId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const config = await db
+        .select()
+        .from(webhookConfigs)
+        .where(
+          and(
+            eq(webhookConfigs.id, input.configId),
+            eq(webhookConfigs.userId, ctx.session.user.id),
+          ),
+        )
+        .limit(1);
+
+      if (config.length === 0) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Webhook config not found" });
+      }
+
+      const results = await emitWebhookEvent(
+        "webhook.test",
+        ctx.session.user.id,
+        { test: true, configId: input.configId, timestamp: new Date().toISOString() },
+      );
+
+      const result = results[0];
+      return {
+        success: result?.success ?? false,
+        deliveryId: result?.deliveryId ?? null,
+        error: result?.error ?? null,
+      };
     }),
 } satisfies TRPCRouterRecord;
