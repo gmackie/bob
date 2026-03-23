@@ -37,7 +37,9 @@ export class AgentProcessManager {
     }
 
     // For Claude: try PTY mode first (enables multi-turn tool use)
-    if (agentType === "claude" && isPtyAvailable()) {
+    const ptyOk = isPtyAvailable();
+    console.log(`[AgentProcessManager] agentType=${agentType}, isPtyAvailable=${ptyOk}`);
+    if (agentType === "claude" && ptyOk) {
       try {
         await this.startClaudePtySession(sessionId, workingDirectory, adapter, actor, initialPrompt);
         return;
