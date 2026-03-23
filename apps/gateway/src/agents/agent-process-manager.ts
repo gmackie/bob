@@ -55,17 +55,9 @@ export class AgentProcessManager {
       throw new Error(`No stdio adapter available for agent type: ${agentType}`);
     }
 
-    // For Claude: try PTY mode first (enables multi-turn tool use)
-    const ptyOk = isPtyAvailable();
-    console.log(`[AgentProcessManager] agentType=${agentType}, isPtyAvailable=${ptyOk}`);
-    if (agentType === "claude" && ptyOk) {
-      try {
-        await this.startClaudePtySession(sessionId, workingDirectory, adapter, actor, initialPrompt);
-        return;
-      } catch (err) {
-        console.warn(`[AgentProcessManager] PTY spawn failed for ${sessionId}, falling back to stdio:`, err);
-      }
-    }
+    // PTY mode disabled — per-message spawn with --resume is more reliable
+    // PTY has trust dialog issues that require manual acceptance
+    // TODO: Re-enable PTY when Claude CLI supports --skip-trust-dialog
 
     // Fallback: stdio mode (sentinel process for Claude, direct for others)
     const env = {
@@ -219,7 +211,12 @@ export class AgentProcessManager {
     // For Claude in non-TTY: spawn a new -p process per message
     // because piped stdin triggers print mode (one-shot)
     if (agentType === "claude") {
-      const args = ["-p", "--output-format", "stream-json", "--verbose"];
+      const args = [
+        "-p",
+        "--output-format", "stream-json",
+        "--verbose",
+        "--dangerously-skip-permissions",
+      ];
 
       // Use --resume to continue conversation if we have a Claude session ID
       if (managed.claudeSessionId) {
@@ -230,6 +227,7 @@ export class AgentProcessManager {
       }
 
       const child = spawn("claude", args, {
+        cwd: process.env.HOME || "/",
         env: { ...process.env, ...adapter.env },
         stdio: ["pipe", "pipe", "pipe"],
       });
