@@ -1,13 +1,15 @@
 import { spawn, type ChildProcess } from "child_process";
 import type { SessionActor } from "../sessions/SessionActor.js";
 import { getStdioAdapter, type StdioAdapter } from "./adapters/base-stdio-adapter.js";
+import { spawnClaudePty, isPtyAvailable, type ClaudePtySession } from "./adapters/claude-pty.js";
 
 interface ManagedSession {
   process: ChildProcess;
   adapter: StdioAdapter;
   actor: SessionActor;
   agentType: string;
-  claudeSessionId?: string; // Claude CLI session ID for --resume
+  claudeSessionId?: string;
+  ptySession?: ClaudePtySession; // PTY-based session for Claude interactive mode
 }
 
 interface StartSessionConfig {
@@ -34,13 +36,24 @@ export class AgentProcessManager {
       throw new Error(`No stdio adapter available for agent type: ${agentType}`);
     }
 
+    // For Claude: try PTY mode first (enables multi-turn tool use)
+    if (agentType === "claude" && isPtyAvailable()) {
+      try {
+        await this.startClaudePtySession(sessionId, workingDirectory, adapter, actor, initialPrompt);
+        return;
+      } catch (err) {
+        console.warn(`[AgentProcessManager] PTY spawn failed for ${sessionId}, falling back to stdio:`, err);
+      }
+    }
+
+    // Fallback: stdio mode (sentinel process for Claude, direct for others)
     const env = {
       ...process.env,
       ...adapter.env,
     };
 
     console.log(
-      `[AgentProcessManager] Spawning ${adapter.command} ${adapter.args.join(" ")} for session ${sessionId}`,
+      `[AgentProcessManager] Spawning ${adapter.command} ${adapter.args.join(" ")} for session ${sessionId} (stdio mode)`,
     );
 
     const child = spawn(adapter.command, adapter.args, {
@@ -54,21 +67,17 @@ export class AgentProcessManager {
 
     actor.setStatus("starting");
 
-    // Buffer partial lines from stdout
     let stdoutBuffer = "";
     child.stdout?.on("data", (chunk: Buffer) => {
       stdoutBuffer += chunk.toString();
       const lines = stdoutBuffer.split("\n");
-      // Keep the last incomplete line in the buffer
       stdoutBuffer = lines.pop() ?? "";
-
       for (const line of lines) {
         if (!line.trim()) continue;
         this.handleLine(sessionId, line);
       }
     });
 
-    // Capture stderr as output
     child.stderr?.on("data", (chunk: Buffer) => {
       const text = chunk.toString();
       console.error(`[AgentProcessManager] stderr (${sessionId}): ${text.slice(0, 500)}`);
@@ -82,34 +91,101 @@ export class AgentProcessManager {
     });
 
     child.on("exit", (code, signal) => {
-      console.log(
-        `[AgentProcessManager] Process exited for session ${sessionId}: code=${code} signal=${signal}`,
-      );
-      // For Claude: the sentinel process exits immediately — don't tear down the session
-      // (Claude uses per-message spawning because piped stdin triggers print mode)
+      console.log(`[AgentProcessManager] Process exited for session ${sessionId}: code=${code} signal=${signal}`);
       if (agentType === "claude") {
-        console.log(`[AgentProcessManager] Claude sentinel exited, session stays managed for per-message spawning`);
+        console.log(`[AgentProcessManager] Claude sentinel exited, session stays managed`);
         return;
       }
       actor.handleAgentExit(code, signal);
       this.sessions.delete(sessionId);
     });
 
-    // Mark as running once the process is spawned
     actor.setStatus("running");
 
-    // Send the initial prompt if provided
     if (initialPrompt && child.stdin?.writable) {
       const formatted = adapter.formatInput(initialPrompt);
       child.stdin.write(formatted);
     }
   }
 
+  /**
+   * Start Claude in a real PTY for interactive multi-turn sessions.
+   * Claude gets a real terminal so it stays in interactive mode with full tool use.
+   */
+  private async startClaudePtySession(
+    sessionId: string,
+    workingDirectory: string,
+    adapter: StdioAdapter,
+    actor: SessionActor,
+    initialPrompt?: string,
+  ): Promise<void> {
+    console.log(`[AgentProcessManager] Starting Claude PTY session for ${sessionId} in ${workingDirectory}`);
+
+    const ptySession = await spawnClaudePty(workingDirectory, adapter.env as Record<string, string>);
+
+    // Create a dummy child process reference for the ManagedSession interface
+    const dummyChild = spawn("true", [], { stdio: "ignore" });
+
+    const managed: ManagedSession = {
+      process: dummyChild,
+      adapter,
+      actor,
+      agentType: "claude",
+      ptySession,
+    };
+    this.sessions.set(sessionId, managed);
+
+    actor.setStatus("starting");
+
+    // Buffer and parse PTY output line by line
+    let buffer = "";
+    ptySession.onData((data: string) => {
+      buffer += data;
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        // Strip ANSI escape codes for cleaner parsing
+        const clean = trimmed.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "").trim();
+        if (!clean) continue;
+
+        this.handleLine(sessionId, clean);
+      }
+    });
+
+    ptySession.pty.onExit(({ exitCode, signal }) => {
+      console.log(`[AgentProcessManager] Claude PTY exited for ${sessionId}: code=${exitCode} signal=${signal}`);
+      actor.handleAgentExit(exitCode, signal);
+      this.sessions.delete(sessionId);
+    });
+
+    actor.setStatus("running");
+
+    // Send initial prompt if provided (wait a moment for Claude to initialize)
+    if (initialPrompt) {
+      setTimeout(() => {
+        ptySession.write(initialPrompt + "\n");
+      }, 3000); // Wait 3s for Claude to start up
+    }
+
+    console.log(`[AgentProcessManager] Claude PTY session ${sessionId} started (PID=${ptySession.pty.pid})`);
+  }
+
   sendInput(sessionId: string, message: string): boolean {
     const managed = this.sessions.get(sessionId);
     if (!managed) return false;
 
-    const { adapter, actor, agentType } = managed;
+    const { adapter, actor, agentType, ptySession } = managed;
+
+    // If we have a PTY session (Claude interactive mode), write directly to it
+    if (ptySession) {
+      console.log(`[AgentProcessManager] Sending to Claude PTY for session ${sessionId}`);
+      ptySession.write(message + "\n");
+      return true;
+    }
 
     // For Claude in non-TTY: spawn a new -p process per message
     // because piped stdin triggers print mode (one-shot)
@@ -181,6 +257,14 @@ export class AgentProcessManager {
   async stopSession(sessionId: string): Promise<void> {
     const managed = this.sessions.get(sessionId);
     if (!managed) return;
+
+    // Kill PTY session if it exists
+    if (managed.ptySession) {
+      console.log(`[AgentProcessManager] Killing Claude PTY for session ${sessionId}`);
+      managed.ptySession.kill();
+      this.sessions.delete(sessionId);
+      return;
+    }
 
     const { process: child } = managed;
 
