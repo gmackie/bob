@@ -68,7 +68,7 @@ export function WorkItemDetailCard({
       <section className="rounded-3xl border border-border bg-accent p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
+            <div className="font-mono text-xs uppercase tracking-[0.24em] text-muted-foreground">
               {workItem.identifier}
             </div>
             <h1 className="mt-2 font-display text-3xl font-semibold text-foreground">

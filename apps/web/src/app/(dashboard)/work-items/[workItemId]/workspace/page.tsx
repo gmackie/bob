@@ -95,7 +95,7 @@ export default async function TaskWorkspacePage({
       <section className="mt-6 rounded-[2rem] border border-border bg-accent p-8">
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div className="max-w-3xl">
-            <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
+            <div className="font-mono text-xs uppercase tracking-[0.24em] text-muted-foreground">
               {detail.workItem.identifier}
             </div>
             <h1 className="mt-3 font-display text-3xl font-semibold text-foreground">
