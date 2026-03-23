@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { cn } from "@bob/ui";
 
 interface ArtifactPreviewPanelProps {
@@ -97,11 +98,8 @@ export function ArtifactPreviewPanel({
           </div>
         ) : (
           /* Rendered markdown */
-          <div className="prose prose-sm max-w-none dark:prose-invert">
-            {/* Use a simple pre-formatted display for now; replace with proper markdown renderer */}
-            <div className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-foreground">
-              {displayContent}
-            </div>
+          <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:font-display prose-headings:tracking-tight prose-p:text-foreground prose-li:text-foreground">
+            <ReactMarkdown>{displayContent}</ReactMarkdown>
           </div>
         )}
       </div>
