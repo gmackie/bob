@@ -1,3 +1,4 @@
+import { TRPCError } from "@trpc/server";
 import { z } from "zod/v4";
 import { and, desc, eq, isNull, or } from "@bob/db";
 
@@ -488,6 +489,62 @@ export const taskRunRouter = {
         workItemIdentifier:
           run.workItemIdentifierSnapshot ?? run.planningItemIdentifier,
       }));
+    }),
+
+  execute: protectedProcedure
+    .input(
+      z.object({
+        workItemId: z.string().uuid(),
+        agentType: z.string().default("claude"),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const workItem = await ctx.db.query.workItems.findFirst({
+        where: eq(workItems.id, input.workItemId),
+      });
+
+      if (!workItem) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Work item not found",
+        });
+      }
+
+      const project = workItem.projectId
+        ? await ctx.db.query.projects.findFirst({
+            where: eq(projects.id, workItem.projectId),
+          })
+        : null;
+
+      const identifier = formatWorkItemIdentifier({
+        projectKey: project?.key ?? null,
+        sequenceNumber: workItem.sequenceNumber,
+        id: workItem.id,
+      });
+
+      const { executeTask } = await import(
+        "@bob/execution/runtime/taskExecutor"
+      );
+
+      const result = await executeTask(
+        ctx.session.user.id,
+        {
+          id: workItem.id,
+          identifier,
+          title: workItem.title,
+          description: workItem.description,
+          workspaceId: workItem.workspaceId ?? "",
+          projectId: workItem.projectId ?? "",
+          assigneeId: null,
+          labels: [],
+          priority: 0,
+        },
+        {
+          agentType: input.agentType,
+        },
+      );
+
+      return result;
     }),
 };
 
