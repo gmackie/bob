@@ -298,7 +298,24 @@ export class AgentProcessManager {
   }
 
   isManaging(sessionId: string): boolean {
-    return this.sessions.has(sessionId);
+    const managed = this.sessions.get(sessionId);
+    if (!managed) return false;
+
+    // Check if the PTY/process is actually alive
+    if (managed.ptySession) {
+      // PTY session — check if process is still running
+      try {
+        process.kill(managed.ptySession.pty.pid, 0); // Signal 0 = check if alive
+        return true;
+      } catch {
+        // Process is dead — clean up
+        console.log(`[AgentProcessManager] PTY for ${sessionId} is dead, cleaning up`);
+        this.sessions.delete(sessionId);
+        return false;
+      }
+    }
+
+    return true; // stdio-managed sessions are always considered alive (sentinel pattern)
   }
 
   getStatus(sessionId: string): "running" | "not_found" {
