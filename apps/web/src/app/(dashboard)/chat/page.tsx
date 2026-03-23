@@ -419,13 +419,13 @@ function ChatPageContent() {
   );
 
   useEffect(() => {
-    if (isHeadlessMode || !activeSessionId || connectionState.status !== "connected") {
+    if (!activeSessionId || connectionState.status !== "connected") {
       return;
     }
 
     subscribe(activeSessionId, latestSeqRef.current);
     return () => unsubscribe(activeSessionId);
-  }, [activeSessionId, connectionState.status, isHeadlessMode, subscribe, unsubscribe]);
+  }, [activeSessionId, connectionState.status, subscribe, unsubscribe]);
 
   useEffect(() => {
     if (
