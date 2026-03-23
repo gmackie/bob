@@ -2,10 +2,10 @@ import type { StdioAdapter, ParsedEvent } from "./base-stdio-adapter.js";
 
 export function createClaudeStdioAdapter(workingDirectory: string): StdioAdapter {
   return {
-    // Initial process spawns without args — stays alive as a sentinel
+    // Sentinel process — just keeps the session "managed" in the process manager
     // Actual messages spawn per-message Claude -p processes (see agent-process-manager.ts)
-    command: "claude",
-    args: ["--help"],  // Quick no-op that exits immediately — the sentinel
+    command: "true",  // /usr/bin/true — exits immediately with code 0, no output
+    args: [],
     env: {
       CLAUDE_WORKING_DIR: workingDirectory,
     },
