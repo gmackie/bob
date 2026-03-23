@@ -166,11 +166,17 @@ export class AgentProcessManager {
 
     actor.setStatus("running");
 
-    // Send initial prompt if provided (wait a moment for Claude to initialize)
+    // Auto-accept workspace trust dialog (sends "1" + Enter after brief delay)
+    setTimeout(() => {
+      ptySession.write("1\n");
+      console.log(`[AgentProcessManager] Sent trust dialog acceptance for ${sessionId}`);
+    }, 2000);
+
+    // Send initial prompt after Claude finishes loading
     if (initialPrompt) {
       setTimeout(() => {
         ptySession.write(initialPrompt + "\n");
-      }, 3000); // Wait 3s for Claude to start up
+      }, 8000); // Wait for trust dialog + hook loading
     }
 
     console.log(`[AgentProcessManager] Claude PTY session ${sessionId} started (PID=${ptySession.pty.pid})`);
