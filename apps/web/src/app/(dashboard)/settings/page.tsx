@@ -1,4 +1,5 @@
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
+import { CollapsibleSection } from "./_components/collapsible-section";
 import { ApiKeysSection } from "./_components/api-keys";
 import { ConfigFilesSection } from "./_components/config-files";
 import { GitProvidersSection } from "./_components/git-providers";
@@ -22,11 +23,21 @@ export default function SettingsPage() {
       </header>
 
       <div className="space-y-8">
-        <PreferencesSection />
-        <GitProvidersSection />
-        <ConfigFilesSection />
-        <ApiKeysSection />
-        <WebhooksSection />
+        <CollapsibleSection title="Preferences" defaultOpen>
+          <PreferencesSection />
+        </CollapsibleSection>
+        <CollapsibleSection title="Git Providers" defaultOpen>
+          <GitProvidersSection />
+        </CollapsibleSection>
+        <CollapsibleSection title="Config Files (MCP / Skills / Agents)" defaultOpen={false}>
+          <ConfigFilesSection />
+        </CollapsibleSection>
+        <CollapsibleSection title="API Keys" defaultOpen={false}>
+          <ApiKeysSection />
+        </CollapsibleSection>
+        <CollapsibleSection title="Webhooks" defaultOpen={false}>
+          <WebhooksSection />
+        </CollapsibleSection>
       </div>
     </div>
   );
