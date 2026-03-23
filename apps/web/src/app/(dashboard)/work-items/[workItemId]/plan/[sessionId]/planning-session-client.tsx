@@ -3,9 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ExternalLinkIcon } from "@radix-ui/react-icons";
 
 import { cn } from "@bob/ui";
+import { toast } from "@bob/ui/toast";
 
 import { MessageStream } from "~/app/(dashboard)/chat/_components/message-stream";
 import { InputComposer } from "~/app/(dashboard)/chat/_components/input-composer";
@@ -94,12 +96,18 @@ export function PlanningSessionClient({
   isReadOnly,
 }: PlanningSessionClientProps) {
   const trpc = useTRPC();
+  const router = useRouter();
   const [artifactContent, setArtifactContent] = useState<string | null>(null);
   const startedRef = useRef(false);
 
   // Start the session on the gateway if it's still provisioning
   const startSession = useMutation(
     trpc.planSession.start.mutationOptions(),
+  );
+
+  // Save artifact content to work item
+  const saveArtifact = useMutation(
+    trpc.planSession.saveArtifact.mutationOptions(),
   );
 
   useEffect(() => {
@@ -141,6 +149,32 @@ export function PlanningSessionClient({
     }
   }, [events]);
 
+  const handleEndSession = () => {
+    // Save artifact if there's content
+    if (artifactContent && artifactContent.length > 0) {
+      saveArtifact.mutate({
+        sessionId: session.id,
+        workItemId: workItem.id,
+        title: `${session.planningSessionType ?? "Planning"} — ${workItem.title}`,
+        content: artifactContent,
+        planningSessionType: session.planningSessionType ?? undefined,
+      }, {
+        onSuccess: () => {
+          toast.success("Artifact saved to work item");
+        },
+        onError: () => {
+          toast.error("Failed to save artifact");
+        },
+      });
+    }
+
+    // Stop the session
+    stopSession(session.id);
+
+    // Navigate back to work item
+    router.push(`/work-items/${workItem.id}`);
+  };
+
   const isAwaitingInput = workflowState?.workflowStatus === "awaiting_input";
 
   const statusIndicator = (
@@ -169,6 +203,14 @@ export function PlanningSessionClient({
         <ExternalLinkIcon className="size-3" />
         <span>Full view</span>
       </Link>
+      {!isReadOnly && (
+        <button
+          onClick={handleEndSession}
+          className="ml-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          End session
+        </button>
+      )}
     </div>
   );
 
