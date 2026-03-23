@@ -4,7 +4,6 @@ import { notFound } from "next/navigation";
 import { Badge } from "@bob/ui/badge";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
-import { RepositoryPanel } from "~/components/dashboard";
 import { NewIdeaButton } from "~/components/planning/new-idea-button";
 import { CreateWorkItemButton } from "~/components/work-items/create-work-item-button";
 import { ProjectDetailTabs } from "~/components/projects/project-detail-tabs";
@@ -111,11 +110,6 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           />
         </section>
       ) : null}
-
-      {/* Repository panel */}
-      <section className="mt-10">
-        <RepositoryPanel projectId={project.id} />
-      </section>
 
       {/* Tabbed work items section */}
       <section className="mt-10">

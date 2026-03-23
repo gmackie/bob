@@ -50,6 +50,7 @@ export function RepositoryPanel({ projectId }: RepositoryPanelProps) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectorExpanded, setSelectorExpanded] = useState(false);
 
   const refresh = async () => {
     setLoading(true);
@@ -304,13 +305,23 @@ export function RepositoryPanel({ projectId }: RepositoryPanelProps) {
         </div>
       ) : (
         <div className="mt-6">
-          <RepoSelector
-            options={repoOptions}
-            selectedFullName={selectedFullName}
-            onSelect={setSelectedFullName}
-            onMap={() => void handleMapRepository()}
-            disabled={submitting}
-          />
+          {selectorExpanded ? (
+            <RepoSelector
+              options={repoOptions}
+              selectedFullName={selectedFullName}
+              onSelect={setSelectedFullName}
+              onMap={() => void handleMapRepository()}
+              disabled={submitting}
+            />
+          ) : (
+            <button
+              type="button"
+              className="rounded-2xl border border-border bg-secondary px-5 py-3 text-sm font-medium text-foreground transition hover:border-muted-foreground/30 hover:text-foreground"
+              onClick={() => setSelectorExpanded(true)}
+            >
+              Map repository
+            </button>
+          )}
         </div>
       )}
     </section>
