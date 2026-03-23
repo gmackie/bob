@@ -3,6 +3,7 @@ import { ApiKeysSection } from "./_components/api-keys";
 import { ConfigFilesSection } from "./_components/config-files";
 import { GitProvidersSection } from "./_components/git-providers";
 import { PreferencesSection } from "./_components/preferences";
+import { WebhooksSection } from "./_components/webhooks";
 
 export default function SettingsPage() {
   return (
@@ -25,6 +26,7 @@ export default function SettingsPage() {
         <GitProvidersSection />
         <ConfigFilesSection />
         <ApiKeysSection />
+        <WebhooksSection />
       </div>
     </div>
   );
