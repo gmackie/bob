@@ -166,10 +166,12 @@ export class AgentProcessManager {
 
     actor.setStatus("running");
 
-    // Auto-accept workspace trust dialog (sends "1" + Enter after brief delay)
+    // Auto-accept workspace trust dialog
+    // The dialog shows option "1. Yes, I trust this folder" pre-selected with ❯
+    // Just press Enter to confirm the default selection
     setTimeout(() => {
-      ptySession.write("1\n");
-      console.log(`[AgentProcessManager] Sent trust dialog acceptance for ${sessionId}`);
+      ptySession.write("\r");
+      console.log(`[AgentProcessManager] Sent trust dialog acceptance (Enter) for ${sessionId}`);
     }, 2000);
 
     // Send initial prompt after Claude finishes loading
