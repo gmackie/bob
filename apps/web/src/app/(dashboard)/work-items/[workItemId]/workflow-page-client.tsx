@@ -75,8 +75,27 @@ export function WorkflowPageClient({
         onBreakIntoTasks={() => {
           setLaunchIntent("breakdown");
         }}
-        onDispatchAgents={() => {
-          toast("Dispatching agents...");
+        onDispatchAgents={async () => {
+          toast("Starting agents on child tasks...");
+
+          let started = 0;
+          for (const child of childTasks) {
+            if (child.status === "todo" || child.status === "backlog" || child.status === "draft") {
+              try {
+                await fetch("/api/trpc/taskRun.execute", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ "0": { json: { workItemId: child.id } } }),
+                });
+                started++;
+              } catch (err: any) {
+                console.error(`Failed to start agent on ${child.identifier}:`, err);
+              }
+            }
+          }
+
+          toast(`${started} agents dispatched! Check each task's workspace for progress.`);
+          router.refresh();
         }}
         onMergeAndDeploy={() => {
           toast("Initiating merge & deploy...");
