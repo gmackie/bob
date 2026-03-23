@@ -1985,7 +1985,7 @@ export const forgeRevisions = pgTable(
     status: t.varchar({ length: 20 }).notNull().default("open"),
     gates: t.json().$type<Array<{ name: string; status: string; startedAt?: string; finishedAt?: string }>>().default([]),
     createdAt: t.timestamp().defaultNow().notNull(),
-    updatedAt: t.timestamp({ mode: "date", withTimezone: true }).$onUpdateFn(() => sql`now()`),
+    updatedAt: t.timestamp({ withTimezone: true }).$onUpdateFn(() => sql`now()`),
   }),
   (table) => [
     { name: "forge_revisions_repo_idx", columns: [table.repoId] },
