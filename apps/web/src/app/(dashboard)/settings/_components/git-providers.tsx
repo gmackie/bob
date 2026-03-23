@@ -70,8 +70,6 @@ export function GitProvidersSection() {
 
   return (
     <section className="rounded-lg border p-6">
-      <h2 className="mb-4 font-display text-xl font-semibold">Git Providers</h2>
-
       <div className="mb-6 grid gap-4">
         <div>
           <Label className="mb-2 block">Provider</Label>

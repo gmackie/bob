@@ -378,10 +378,6 @@ export function ConfigFilesSection() {
 
   return (
     <section className="rounded-lg border p-6">
-      <h2 className="mb-4 font-display text-xl font-semibold">
-        Config Files (MCP / Skills / Agents)
-      </h2>
-
       <div className="flex flex-col gap-6">
         <div className="flex flex-wrap gap-2">
           {roots?.map((root) => (
