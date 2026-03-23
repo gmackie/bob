@@ -6,6 +6,7 @@ import {
   forgeDeployments,
   notifications,
 } from "@bob/db/schema";
+import { emitWebhookEvent } from "../webhooks/webhookDeliveryService";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Database = any;
@@ -39,17 +40,33 @@ interface PipelineBatch {
   userId: string;
 }
 
+/** Map pipeline state to the webhook event name emitted on entry. */
+const STATE_WEBHOOK_EVENTS: Record<string, string> = {
+  building: "pipeline.build_started",
+  gates_passed: "pipeline.build_passed",
+  build_failed: "pipeline.build_failed",
+  deploying_dev: "pipeline.deploy_started",
+  dev_healthy: "pipeline.deploy_healthy",
+  deploying_staging: "pipeline.deploy_started",
+  staging_healthy: "pipeline.deploy_healthy",
+  awaiting_prod_approval: "pipeline.awaiting_approval",
+  deploying_prod: "pipeline.deploy_started",
+  prod_healthy: "pipeline.deploy_healthy",
+  deploy_failed: "pipeline.deploy_failed",
+  complete: "pipeline.complete",
+};
+
 export async function advancePipeline(
   db: Database,
   item: PipelineItem,
   batch: PipelineBatch,
 ): Promise<void> {
-  const state = item.pipelineState;
+  const stateBefore = item.pipelineState;
 
   // Terminal states — nothing to do
-  if (state && TERMINAL_STATES.includes(state)) return;
+  if (stateBefore && TERMINAL_STATES.includes(stateBefore)) return;
 
-  switch (state) {
+  switch (stateBefore) {
     case "agent_complete":
       await handleAgentComplete(db, item);
       break;
@@ -83,6 +100,27 @@ export async function advancePipeline(
     default:
       // Unknown or null state — do nothing
       break;
+  }
+
+  // Emit webhook if the pipeline state changed
+  const updated = await db.query.dispatchItems.findFirst({
+    where: eq(dispatchItems.id, item.id),
+    columns: { pipelineState: true },
+  });
+  const stateAfter = updated?.pipelineState ?? null;
+
+  if (stateAfter && stateAfter !== stateBefore) {
+    const webhookEvent = STATE_WEBHOOK_EVENTS[stateAfter];
+    if (webhookEvent) {
+      // Fire-and-forget — delivery failures must not block the pipeline
+      emitWebhookEvent(webhookEvent, batch.userId, {
+        dispatchItemId: item.id,
+        taskIdentifier: item.planningTaskIdentifier,
+        title: item.title,
+        previousState: stateBefore,
+        state: stateAfter,
+      }).catch(() => {});
+    }
   }
 }
 
