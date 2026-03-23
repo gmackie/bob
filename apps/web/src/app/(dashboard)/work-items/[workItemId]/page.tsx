@@ -20,7 +20,7 @@ export default async function WorkItemPage({ params }: WorkItemPageProps) {
     notFound();
   }
 
-  const [comments, requirementData, childItems] = await Promise.all([
+  const [comments, requirementData, childItems, featureBranchData, forgeRevisions] = await Promise.all([
     caller.comment.listByWorkItem({ workItemId }),
     caller.requirement.list({ workItemId }).catch(() => ({})),
     caller.workItem
@@ -30,6 +30,10 @@ export default async function WorkItemPage({ params }: WorkItemPageProps) {
         limit: 100,
       })
       .catch(() => []),
+    // Fetch feature branches (which link to PRs) for this work item
+    caller.featureBranch.list({ workItemId }).catch(() => []),
+    // Fetch forge revisions (which link to deployments) for this work item
+    caller.forgegraph.listRevisions({ taskId: workItemId }).catch(() => []),
   ]);
 
   // Compute requirement count from grouped data
@@ -43,6 +47,75 @@ export default async function WorkItemPage({ params }: WorkItemPageProps) {
     title: child.title,
     status: child.status,
     priority: child.priority ?? "no_priority",
+  }));
+
+  // Resolve PRs from feature branches — fetch details for each feature PR
+  const featureBranches = featureBranchData as any[];
+  const prIds = featureBranches
+    .map((fb: any) => fb.featurePrId)
+    .filter(Boolean) as string[];
+
+  const pullRequestsData = await Promise.all(
+    prIds.map((id: string) =>
+      caller.pullRequest.get({ pullRequestId: id }).catch(() => null),
+    ),
+  );
+
+  const pullRequests = pullRequestsData
+    .filter(Boolean)
+    .map((pr: any) => ({
+      id: pr.id,
+      number: pr.number ?? 0,
+      title: pr.title,
+      status: pr.status as string,
+      ciPassing: pr.ciPassing ?? false,
+      reviewStatus: pr.reviewStatus ?? "pending",
+    }));
+
+  // Also fetch task-level PRs from child work items' feature branches
+  const childTaskIds = (childItems as any[]).map((c: any) => c.id);
+  const childFeatureBranches = await Promise.all(
+    childTaskIds.map((id: string) =>
+      caller.featureBranch.list({ workItemId: id }).catch(() => []),
+    ),
+  );
+  const childPrIds = childFeatureBranches
+    .flat()
+    .map((fb: any) => fb.featurePrId)
+    .filter(Boolean) as string[];
+
+  const childPRsData = await Promise.all(
+    childPrIds.map((id: string) =>
+      caller.pullRequest.get({ pullRequestId: id }).catch(() => null),
+    ),
+  );
+
+  const allPullRequests = [
+    ...pullRequests,
+    ...childPRsData.filter(Boolean).map((pr: any) => ({
+      id: pr.id,
+      number: pr.number ?? 0,
+      title: pr.title,
+      status: pr.status as string,
+      ciPassing: pr.ciPassing ?? false,
+      reviewStatus: pr.reviewStatus ?? "pending",
+    })),
+  ];
+
+  // Resolve deployments from forge revisions
+  const revisions = forgeRevisions as any[];
+  const revisionIds = revisions.map((r: any) => r.id);
+  const deploymentsData = await Promise.all(
+    revisionIds.map((id: string) =>
+      caller.forgegraph.listDeployments({ revisionId: id }).catch(() => []),
+    ),
+  );
+
+  const allDeployments = deploymentsData.flat().map((d: any) => ({
+    id: d.id,
+    environment: d.environment as string,
+    status: d.status as string,
+    deployedAt: d.createdAt ? String(d.createdAt) : undefined,
   }));
 
   const workItem = {
@@ -103,6 +176,8 @@ export default async function WorkItemPage({ params }: WorkItemPageProps) {
           comments={commentsData}
           artifacts={artifactsData}
           childCount={detail.childCount}
+          pullRequests={allPullRequests}
+          deployments={allDeployments}
         />
       </div>
     </main>

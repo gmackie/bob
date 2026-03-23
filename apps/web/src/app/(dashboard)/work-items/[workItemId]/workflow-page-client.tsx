@@ -21,6 +21,8 @@ interface WorkflowPageClientProps {
   comments: WorkflowPageProps["comments"];
   artifacts: WorkflowPageProps["artifacts"];
   childCount: number;
+  pullRequests: WorkflowPageProps["pullRequests"];
+  deployments: WorkflowPageProps["deployments"];
 }
 
 /**
@@ -35,6 +37,8 @@ export function WorkflowPageClient({
   comments,
   artifacts,
   childCount,
+  pullRequests,
+  deployments,
 }: WorkflowPageClientProps) {
   const router = useRouter();
   const trpc = useTRPC();
@@ -65,8 +69,8 @@ export function WorkflowPageClient({
         requirements={requirements}
         childTasks={childTasks}
         dispatch={null}
-        pullRequests={[]}
-        deployments={[]}
+        pullRequests={pullRequests}
+        deployments={deployments}
         comments={comments}
         artifacts={artifacts}
         onOpenPlanningSession={() => {
