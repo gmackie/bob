@@ -36,7 +36,7 @@ export async function spawnClaudePty(
 ): Promise<ClaudePtySession> {
   const nodePty = await loadPty();
 
-  const pty = nodePty.spawn("claude", ["--output-format", "stream-json", "--verbose"], {
+  const pty = nodePty.spawn("claude", ["--output-format", "stream-json", "--verbose", "--permission-mode", "bypassPermissions"], {
     name: "xterm-256color",
     cols: 200,
     rows: 50,
