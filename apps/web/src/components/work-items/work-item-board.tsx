@@ -67,9 +67,7 @@ export function WorkItemBoard({ items }: WorkItemBoardProps) {
             </div>
             <div className="mt-4 space-y-3">
               {columnItems.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
-                  No items
-                </div>
+                <div className="min-h-[2rem]" />
               ) : (
                 columnItems.map((item) => {
                   const boardItem = item as WorkItemBoardItem;
