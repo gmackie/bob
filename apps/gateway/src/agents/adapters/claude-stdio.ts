@@ -54,12 +54,8 @@ export function createClaudeStdioAdapter(workingDirectory: string): StdioAdapter
           return null;
         }
 
-        // Result — session complete for this message
+        // Result — message complete (text already emitted via "assistant" event)
         if (type === "result") {
-          const resultText = msg.result as string | undefined;
-          if (resultText && resultText.length > 0) {
-            return { type: "output", data: { text: resultText } };
-          }
           return { type: "status", data: { status: "completed" } };
         }
 

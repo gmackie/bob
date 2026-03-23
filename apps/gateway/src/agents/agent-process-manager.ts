@@ -7,6 +7,7 @@ interface ManagedSession {
   adapter: StdioAdapter;
   actor: SessionActor;
   agentType: string;
+  claudeSessionId?: string; // Claude CLI session ID for --resume
 }
 
 interface StartSessionConfig {
@@ -113,9 +114,17 @@ export class AgentProcessManager {
     // For Claude in non-TTY: spawn a new -p process per message
     // because piped stdin triggers print mode (one-shot)
     if (agentType === "claude") {
-      console.log(`[AgentProcessManager] Spawning per-message Claude for session ${sessionId}`);
-      const child = spawn("claude", ["-p", "--output-format", "stream-json", "--verbose"], {
-        cwd: managed.process.spawnargs ? undefined : "/",
+      const args = ["-p", "--output-format", "stream-json", "--verbose"];
+
+      // Use --resume to continue conversation if we have a Claude session ID
+      if (managed.claudeSessionId) {
+        args.push("--resume", managed.claudeSessionId);
+        console.log(`[AgentProcessManager] Spawning Claude --resume ${managed.claudeSessionId} for session ${sessionId}`);
+      } else {
+        console.log(`[AgentProcessManager] Spawning new Claude conversation for session ${sessionId}`);
+      }
+
+      const child = spawn("claude", args, {
         env: { ...process.env, ...adapter.env },
         stdio: ["pipe", "pipe", "pipe"],
       });
@@ -127,13 +136,22 @@ export class AgentProcessManager {
         buffer = lines.pop() ?? "";
         for (const line of lines) {
           if (!line.trim()) continue;
+
+          // Capture Claude session ID from init event for conversation continuity
+          try {
+            const parsed = JSON.parse(line);
+            if (parsed.type === "system" && parsed.subtype === "init" && parsed.session_id) {
+              managed.claudeSessionId = parsed.session_id;
+              console.log(`[AgentProcessManager] Captured Claude session ID: ${parsed.session_id}`);
+            }
+          } catch { /* not JSON */ }
+
           this.handleLine(sessionId, line);
         }
       });
 
       child.stderr?.on("data", (chunk: Buffer) => {
         const text = chunk.toString();
-        // Skip warnings about stdin timing
         if (text.includes("no stdin data received")) return;
         console.error(`[AgentProcessManager] per-msg stderr (${sessionId}): ${text.slice(0, 200)}`);
       });
