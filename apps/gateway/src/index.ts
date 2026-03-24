@@ -1754,7 +1754,15 @@ server.listen(PORT, () => {
   persistenceWriter.start();
   sessionManager.start();
   sessionCleanup.start();
-  
+
+  // Start ForgeGraph runners (build + deploy pipeline execution)
+  import("./forgegraph/build-runner.js").then(({ startBuildRunner }) => startBuildRunner()).catch((err) => {
+    console.warn("[Gateway] ForgeGraph build runner failed to start:", err);
+  });
+  import("./forgegraph/deploy-runner.js").then(({ startDeployRunner }) => startDeployRunner()).catch((err) => {
+    console.warn("[Gateway] ForgeGraph deploy runner failed to start:", err);
+  });
+
   console.log(`[Gateway] Running on port ${PORT} (ID: ${GATEWAY_ID})`);
   console.log(`[Gateway] Sessions WS: ws://localhost:${PORT}/sessions`);
   console.log(`[Gateway] Events WS: ws://localhost:${PORT}/events?userId=<id>`);
