@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { and, desc, eq } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
@@ -7,6 +8,7 @@ import {
   forgeRunEvents,
   repositories,
   taskRuns,
+  worktrees,
 } from "@bob/db/schema";
 
 const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:3002";
@@ -225,55 +227,91 @@ export async function executeTask(
   }
 
   const branch = generateBranchName(task);
-  const worktreeId: string | null = null;
-  const worktreePath = repoInfo.path;
+  let worktreeId: string | null = null;
+  let worktreePath = repoInfo.path;
   let forgegraphRevisionId: string | null = null;
 
+  // Create an isolated worktree for this task so agents can run in parallel
+  const worktreeDirName = `${task.identifier.toLowerCase()}-${Date.now()}`;
+  const targetWorktreePath = join(repoInfo.path, "..", ".bob-worktrees", worktreeDirName);
+
   try {
-    const checkoutResult = await gatewayRequest(userId, "/git/checkout", {
-      path: repoInfo.path,
+    const worktreeResult = await gatewayRequest(userId, "/git/worktree", {
+      repoPath: repoInfo.path,
+      worktreePath: targetWorktreePath,
       branch,
       baseBranch: repoInfo.mainBranch,
-      create: true,
-    }) as { success: boolean; changeId?: string; vcs?: string };
+      action: "create",
+    }) as { success: boolean; worktreePath: string; changeId?: string; vcs?: string };
 
-    // Capture the VCS revision ID (commit SHA or jj change ID) for ForgeGraph
-    if (checkoutResult?.changeId) {
-      forgegraphRevisionId = checkoutResult.changeId;
+    worktreePath = worktreeResult.worktreePath;
+
+    if (worktreeResult?.changeId) {
+      forgegraphRevisionId = worktreeResult.changeId;
+    }
+
+    // Record the worktree in the database
+    const [worktreeRecord] = await db
+      .insert(worktrees)
+      .values({
+        userId,
+        repositoryId: repoInfo.repositoryId,
+        path: worktreePath,
+        branch,
+      })
+      .returning();
+    if (worktreeRecord) {
+      worktreeId = worktreeRecord.id;
     }
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
 
-    if (!errorMessage.includes("already exists")) {
-      const [taskRun] = await db
-        .insert(taskRuns)
-        .values({
-          userId,
-          workItemId: task.id,
-          workItemIdentifierSnapshot: task.identifier,
-          planningWorkspaceId: task.workspaceId,
-          planningItemId: task.id,
-          planningItemIdentifier: task.identifier,
-          repositoryId: repoInfo.repositoryId,
-          status: "failed",
-          blockedReason: `Failed to create branch: ${errorMessage}`,
-          branch,
-        })
-        .returning();
-      const insertedTaskRun = expectInsertedRow(
-        taskRun,
-        "Failed to create failed task run",
-      );
-
-      return {
-        taskRunId: insertedTaskRun.id,
-        sessionId: "",
-        worktreeId: null,
+    // Fall back to checkout in main repo if worktree creation fails
+    console.warn(`[taskExecutor] Worktree creation failed, falling back to checkout: ${errorMessage}`);
+    try {
+      const checkoutResult = await gatewayRequest(userId, "/git/checkout", {
+        path: repoInfo.path,
         branch,
-        status: "failed",
-        blockedReason: `Failed to create branch: ${errorMessage}`,
-      };
+        baseBranch: repoInfo.mainBranch,
+        create: true,
+      }) as { success: boolean; changeId?: string; vcs?: string };
+
+      if (checkoutResult?.changeId) {
+        forgegraphRevisionId = checkoutResult.changeId;
+      }
+    } catch (checkoutError) {
+      const checkoutMsg = checkoutError instanceof Error ? checkoutError.message : "Unknown error";
+      if (!checkoutMsg.includes("already exists")) {
+        const [taskRun] = await db
+          .insert(taskRuns)
+          .values({
+            userId,
+            workItemId: task.id,
+            workItemIdentifierSnapshot: task.identifier,
+            planningWorkspaceId: task.workspaceId,
+            planningItemId: task.id,
+            planningItemIdentifier: task.identifier,
+            repositoryId: repoInfo.repositoryId,
+            status: "failed",
+            blockedReason: `Failed to create branch: ${checkoutMsg}`,
+            branch,
+          })
+          .returning();
+        const insertedTaskRun = expectInsertedRow(
+          taskRun,
+          "Failed to create failed task run",
+        );
+
+        return {
+          taskRunId: insertedTaskRun.id,
+          sessionId: "",
+          worktreeId: null,
+          branch,
+          status: "failed",
+          blockedReason: `Failed to create branch: ${checkoutMsg}`,
+        };
+      }
     }
   }
 

@@ -476,6 +476,19 @@ export const dispatchRouter = {
                   .update(taskRuns)
                   .set({ pullRequestId: prResult.prId })
                   .where(eq(taskRuns.id, run.id));
+
+                // Create forge revision with real commit SHA (not branch name placeholder)
+                const { onPullRequestCreated } = await import(
+                  "../services/automation/pipeline-trigger"
+                );
+                void onPullRequestCreated({
+                  pullRequestId: prResult.prId,
+                  repositoryId: run.repositoryId!,
+                  headBranch: run.branch!,
+                  headSha: prResult.headSha ?? run.branch!,
+                  taskId: run.workItemId ?? item.planningTaskId,
+                  taskRunId: run.id,
+                }).catch(() => { /* best-effort */ });
               }
             }
           } else if (run.status === "failed") {
