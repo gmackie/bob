@@ -115,9 +115,17 @@ export class AgentProcessManager {
 
     actor.setStatus("running");
 
-    if (initialPrompt && child.stdin?.writable) {
-      const formatted = adapter.formatInput(initialPrompt);
-      child.stdin.write(formatted);
+    if (initialPrompt) {
+      if (agentType === "claude") {
+        // Claude uses per-message spawning — send via sendInput, not sentinel stdin
+        setTimeout(() => {
+          this.sendInput(sessionId, initialPrompt);
+        }, 500);
+      } else if (child.stdin?.writable) {
+        child.stdin.on("error", () => {}); // Prevent EPIPE crash
+        const formatted = adapter.formatInput(initialPrompt);
+        child.stdin.write(formatted);
+      }
     }
   }
 
