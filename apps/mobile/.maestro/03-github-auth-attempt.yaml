@@ -1,0 +1,10 @@
+appId: com.gmacko.bob.dev
+---
+# Test: Tapping GitHub login button triggers auth flow
+- launchApp
+- assertVisible: "Continue with GitHub"
+- tapOn: "Continue with GitHub"
+# Should show an error toast since expo-web-browser isn't linked yet
+# or redirect to a web view
+- waitForAnimationToEnd
+- takeScreenshot: screenshots/03-github-auth
