@@ -1,4 +1,8 @@
 import { join } from "node:path";
+import {
+  createDecipheriv,
+  createHmac,
+} from "node:crypto";
 import { and, desc, eq } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
@@ -6,10 +10,28 @@ import {
   chatMessages,
   forgeRevisions,
   forgeRunEvents,
+  gitProviderConnections,
   repositories,
   taskRuns,
   worktrees,
 } from "@bob/db/schema";
+
+/** Decrypt a git provider access token (matches tokenVault.ts logic) */
+function decryptProviderToken(
+  encrypted: { ciphertext: string; iv: string; tag: string },
+  connectionId: string,
+): string | null {
+  const key = process.env.GIT_TOKEN_ENCRYPTION_KEY;
+  if (!key || key.length < 32) return null;
+  const masterKey = Buffer.from(key.slice(0, 32), "utf8");
+  const rowKey = createHmac("sha256", masterKey).update(connectionId).digest().subarray(0, 32);
+  const iv = Buffer.from(encrypted.iv, "base64");
+  const tag = Buffer.from(encrypted.tag, "base64");
+  const ciphertext = Buffer.from(encrypted.ciphertext, "base64");
+  const decipher = createDecipheriv("aes-256-gcm", rowKey, iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
+}
 
 const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:3002";
 
@@ -250,6 +272,34 @@ export async function executeTask(
       forgegraphRevisionId = worktreeResult.changeId;
     }
 
+    // Configure authenticated remote URL for push capability
+    try {
+      const repo = await db.query.repositories.findFirst({
+        where: eq(repositories.id, repoInfo.repositoryId),
+      });
+      if (repo?.gitProviderConnectionId && repo.remoteOwner && repo.remoteName) {
+        const conn = await db.query.gitProviderConnections.findFirst({
+          where: eq(gitProviderConnections.id, repo.gitProviderConnectionId),
+        });
+        if (conn?.accessTokenCiphertext && conn.accessTokenIv && conn.accessTokenTag) {
+          const token = decryptProviderToken(
+            { ciphertext: conn.accessTokenCiphertext, iv: conn.accessTokenIv, tag: conn.accessTokenTag },
+            conn.id,
+          );
+          if (token) {
+            const authUrl = `https://x-access-token:${token}@github.com/${repo.remoteOwner}/${repo.remoteName}.git`;
+            await gatewayRequest(userId, "/git/status", { path: worktreePath }); // ensure it exists
+            // Set the remote URL with embedded credentials for push
+            const { execSync } = await import("node:child_process");
+            execSync(`git remote set-url origin "${authUrl}"`, { cwd: worktreePath, stdio: "ignore" });
+            console.log(`[taskExecutor] Configured authenticated remote for ${branch}`);
+          }
+        }
+      }
+    } catch (authErr) {
+      console.warn(`[taskExecutor] Failed to configure auth remote:`, authErr);
+    }
+
     // Record the worktree in the database
     const [worktreeRecord] = await db
       .insert(worktrees)
@@ -458,6 +508,12 @@ function buildInitialPrompt(
   lines.push("3. Implement the changes");
   lines.push("4. Write or update tests as needed");
   lines.push("5. Ensure the code compiles and tests pass");
+  lines.push("6. Commit your changes with a descriptive message");
+  lines.push("7. Push your branch to remote: `git push -u origin HEAD`");
+  lines.push("");
+  lines.push(
+    "IMPORTANT: You MUST commit and push your changes before finishing. The branch has been pre-configured with authentication.",
+  );
   lines.push("");
   lines.push(
     "If you encounter any blockers or need clarification, let me know and I will mark the task as blocked.",
