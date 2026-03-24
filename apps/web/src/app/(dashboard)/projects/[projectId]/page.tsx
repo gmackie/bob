@@ -53,7 +53,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="font-display text-4xl font-bold tracking-tight leading-[1.15] text-foreground">
+              <h1 className="font-display text-4xl font-bold tracking-tight leading-[1.15] text-white">
                 {project.name}
               </h1>
               <span className="rounded-full border border-border bg-accent px-2.5 py-0.5 font-mono text-xs font-medium text-muted-foreground">
@@ -71,7 +71,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
                 {formatLabel(project.status)}
               </Badge>
             </div>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-white/60">
               {project.description?.trim() || "No project description yet."}
             </p>
           </div>
