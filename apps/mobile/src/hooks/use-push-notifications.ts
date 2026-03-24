@@ -9,28 +9,41 @@
 import { useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 import { router } from "expo-router";
-import * as Notifications from "expo-notifications";
-import * as Device from "expo-device";
 import Constants from "expo-constants";
 
-import { trpc } from "~/utils/api";
 import { getBaseUrl } from "~/utils/base-url";
 
-// Configure how notifications appear when the app is in foreground
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// Lazy-load expo-notifications to avoid crash if native module isn't available
+let Notifications: typeof import("expo-notifications") | null = null;
+let Device: typeof import("expo-device") | null = null;
+
+try {
+  Notifications = require("expo-notifications");
+  Device = require("expo-device");
+
+  // Configure how notifications appear when the app is in foreground
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+} catch {
+  console.log("[push] expo-notifications not available (native module not linked)");
+}
 
 /**
  * Register for push notifications and return the Expo push token.
  */
 async function registerForPushNotifications(): Promise<string | null> {
+  if (!Notifications || !Device) {
+    console.log("[push] Native modules not available, skipping registration");
+    return null;
+  }
+
   if (!Device.isDevice) {
     console.log("[push] Must use physical device for push notifications");
     return null;
@@ -51,7 +64,7 @@ async function registerForPushNotifications(): Promise<string | null> {
   }
 
   // Get Expo push token
-  const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+  const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? (Constants as any).easConfig?.projectId;
   if (!projectId) {
     console.log("[push] No EAS project ID found");
     return null;
@@ -122,6 +135,8 @@ export function usePushNotifications() {
   const responseListener = useRef<Notifications.EventSubscription | null>(null);
 
   useEffect(() => {
+    if (!Notifications) return;
+
     // Register for push notifications
     registerForPushNotifications().then((token) => {
       if (token) {
