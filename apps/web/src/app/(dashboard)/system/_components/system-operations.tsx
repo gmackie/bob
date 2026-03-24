@@ -48,12 +48,12 @@ export function SystemOperations() {
 
   return (
     <div className="flex flex-col gap-8">
-      <header className="rounded-[2rem] border border-border bg-[linear-gradient(135deg,#0e1728,#09111d)] px-8 py-8 text-foreground">
-        <div className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
+      <header className="rounded-[2rem] border border-border bg-[linear-gradient(135deg,#0e1728,#09111d)] px-8 py-8">
+        <div className="text-xs uppercase tracking-[0.3em] text-white/50">
           System
         </div>
-        <h1 className="mt-3 font-display text-4xl font-semibold">Operations Console</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
+        <h1 className="mt-3 font-display text-4xl font-semibold text-white">Operations Console</h1>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-white/60">
           Terminal access, agent controls, and host readiness live here without
           pulling planning users back into the old dashboard shell.
         </p>
