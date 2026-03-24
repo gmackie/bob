@@ -1,5 +1,5 @@
 import { Redirect, router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -11,8 +11,39 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Badge, Button, Card, ListRow, Screen } from "~/components/ui";
 import { getWorkItemDetailPresentation } from "~/features/planning/work-item-detail";
+import { getTaskWorkspaceHref } from "~/features/planning/navigation";
 import { authClient } from "~/utils/auth";
 import { trpc } from "~/utils/api";
+import { getBaseUrl } from "~/utils/base-url";
+
+const PIPELINE_STAGES = [
+  { key: "idea", label: "Idea" },
+  { key: "shape", label: "Shape" },
+  { key: "plan", label: "Plan" },
+  { key: "execute", label: "Execute" },
+  { key: "review", label: "Review" },
+  { key: "deploy", label: "Deploy" },
+  { key: "live", label: "Live" },
+] as const;
+
+function detectMobileStage(input: {
+  childCount: number;
+  artifactCount: number;
+  childStatuses: string[];
+}): { stage: string; stageIndex: number } {
+  const dispatched = input.childStatuses.filter(
+    (s) => s === "in_progress" || s === "done" || s === "in_review",
+  ).length;
+  const completed = input.childStatuses.filter((s) => s === "done").length;
+
+  if (completed === input.childCount && input.childCount > 0 && dispatched === input.childCount) {
+    return { stage: "review", stageIndex: 4 };
+  }
+  if (dispatched > 0) return { stage: "execute", stageIndex: 3 };
+  if (input.childCount > 0) return { stage: "plan", stageIndex: 2 };
+  if (input.artifactCount > 0) return { stage: "shape", stageIndex: 1 };
+  return { stage: "idea", stageIndex: 0 };
+}
 
 export default function WorkItemDetailScreen() {
   const { data: session, isPending } = authClient.useSession();
@@ -56,6 +87,26 @@ export default function WorkItemDetailScreen() {
       },
     }),
   );
+
+  const [dispatching, setDispatching] = useState(false);
+
+  // Fetch child work items for epic/issue pipeline view
+  const childItemsQuery = useQuery(
+    trpc.workItem.list.queryOptions(
+      { workspaceId: workItemQuery.data?.workItem?.workspaceId ?? "", parentId: workItemId, limit: 50 },
+      { enabled: Boolean(session && workItemId && workItemQuery.data?.workItem?.kind !== "task") },
+    ),
+  );
+
+  const pipelineDetection = useMemo(() => {
+    if (!workItemQuery.data || workItemQuery.data.workItem.kind === "task") return null;
+    const children = childItemsQuery.data ?? [];
+    return detectMobileStage({
+      childCount: children.length,
+      artifactCount: workItemQuery.data.currentArtifacts.length,
+      childStatuses: children.map((c: any) => c.status),
+    });
+  }, [workItemQuery.data, childItemsQuery.data]);
 
   if (isPending) {
     return (
@@ -114,6 +165,38 @@ export default function WorkItemDetailScreen() {
           </View>
         </View>
 
+        {/* Pipeline stepper for epics/issues */}
+        {pipelineDetection ? (
+          <Card variant="elevated" className="mb-5">
+            <View className="flex-row justify-between">
+              {PIPELINE_STAGES.map((stage, idx) => {
+                const isCompleted = idx < pipelineDetection.stageIndex;
+                const isCurrent = idx === pipelineDetection.stageIndex;
+                return (
+                  <View key={stage.key} className="items-center flex-1">
+                    <View
+                      className={`h-3 w-3 rounded-full ${
+                        isCompleted
+                          ? "bg-primary"
+                          : isCurrent
+                            ? "bg-primary/60"
+                            : "bg-border"
+                      }`}
+                    />
+                    <Text
+                      className={`mt-1 text-[10px] ${
+                        isCompleted || isCurrent ? "text-primary font-semibold" : "text-muted"
+                      }`}
+                    >
+                      {stage.label}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          </Card>
+        ) : null}
+
         {workItem.description ? (
           <Card className="mb-5">
             <Text className="text-foreground text-base font-semibold">
@@ -123,6 +206,80 @@ export default function WorkItemDetailScreen() {
               {workItem.description}
             </Text>
           </Card>
+        ) : null}
+
+        {/* Child tasks (for epics/issues) */}
+        {childItemsQuery.data && childItemsQuery.data.length > 0 ? (
+          <View className="mb-5">
+            <View className="mb-3 flex-row items-center justify-between">
+              <Text className="text-foreground text-lg font-semibold">
+                Tasks ({childItemsQuery.data.filter((c: any) => c.status === "done").length}/{childItemsQuery.data.length})
+              </Text>
+              {pipelineDetection?.stage === "plan" ? (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={dispatching}
+                  onPress={async () => {
+                    setDispatching(true);
+                    const tasks = (childItemsQuery.data ?? []).filter(
+                      (c: any) => c.status === "todo" || c.status === "draft",
+                    );
+                    const baseUrl = getBaseUrl();
+                    for (const task of tasks) {
+                      try {
+                        await fetch(`${baseUrl}/api/trpc/taskRun.execute`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ "0": { json: { workItemId: (task as any).id, agentType: "claude" } } }),
+                        });
+                      } catch {}
+                    }
+                    setDispatching(false);
+                    await queryClient.invalidateQueries({
+                      queryKey: trpc.workItem.list.queryKey({
+                        workspaceId: workItem.workspaceId ?? "",
+                        parentId: workItemId,
+                        limit: 50,
+                      }),
+                    });
+                  }}
+                >
+                  {dispatching ? "Dispatching..." : "Dispatch agents"}
+                </Button>
+              ) : null}
+            </View>
+            <Card>
+              {childItemsQuery.data.map((child: any, index: number) => (
+                <ListRow
+                  key={child.id}
+                  title={`${child.identifier ?? ""} ${child.title}`}
+                  subtitle={child.status.replace(/_/g, " ")}
+                  right={
+                    <Badge
+                      variant={
+                        child.status === "done"
+                          ? "success"
+                          : child.status === "in_progress"
+                            ? "accent"
+                            : "default"
+                      }
+                    >
+                      {child.status === "done" ? "Done" : child.status === "in_progress" ? "Running" : "Todo"}
+                    </Badge>
+                  }
+                  onPress={() =>
+                    router.push(
+                      (child.kind === "task"
+                        ? getTaskWorkspaceHref(child.id)
+                        : `/work-items/${child.id}`) as never,
+                    )
+                  }
+                  showDivider={index < childItemsQuery.data.length - 1}
+                />
+              ))}
+            </Card>
+          </View>
         ) : null}
 
         <Card variant="elevated" className="mb-5">
