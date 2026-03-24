@@ -1,0 +1,6 @@
+appId: com.gmacko.bob.dev
+---
+# Test: App launches and shows onboarding
+- launchApp
+- assertVisible: "Continue with GitHub"
+- takeScreenshot: screenshots/01-onboarding
