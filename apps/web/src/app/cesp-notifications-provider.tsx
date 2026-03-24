@@ -329,9 +329,10 @@ export function CESPNotificationsProvider({
   children: ReactNode;
 }) {
   const trpc = useTRPC();
-  const { data: preferences } = useQuery(
-    trpc.settings.getPreferences.queryOptions(undefined),
-  );
+  const { data: preferences } = useQuery({
+    ...trpc.settings.getPreferences.queryOptions(undefined),
+    retry: false, // Don't retry if unauthorized — prevents console error spam
+  });
 
   const enabled = preferences?.pushNotifications ?? false;
   const seenIdsRef = useRef(new Map<string, number>());
