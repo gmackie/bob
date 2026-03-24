@@ -462,6 +462,26 @@ export const notificationRouter = {
   list: listNotificationsProcedure,
   create: createNotificationProcedure,
   markAsRead: markNotificationAsReadProcedure,
+
+  registerPushToken: protectedProcedure
+    .input(
+      z.object({
+        token: z.string().min(1),
+        platform: z.enum(["ios", "android", "web"]),
+        deviceName: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { registerPushToken } = await import(
+        "../services/push/pushService"
+      );
+      return registerPushToken({
+        userId: ctx.session.user.id,
+        expoPushToken: input.token,
+        deviceType: input.platform,
+        deviceName: input.deviceName,
+      });
+    }),
 };
 
 export const taskRunRouter = {
