@@ -49,8 +49,9 @@ function detectBuildSteps(workDir: string): BuildStep[] {
 
     // Detect available scripts from package.json
     try {
+      const { readFileSync } = await import("node:fs");
       const pkg = JSON.parse(
-        execSync(`cat ${workDir}/package.json`, { encoding: "utf8" }),
+        readFileSync(`${workDir}/package.json`, { encoding: "utf8" }),
       );
       const scripts = pkg.scripts ?? {};
 
