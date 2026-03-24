@@ -1,4 +1,4 @@
-import type { ConfigContext, ExpoConfig } from "expo/config";
+/** @type {import('expo/config').ConfigContext} */
 
 const APP_ENV = process.env.APP_ENV ?? "development";
 const API_URL = process.env.API_URL ?? "http://localhost:3000";
@@ -7,7 +7,7 @@ const SENTRY_DSN = process.env.SENTRY_DSN;
 const POSTHOG_KEY = process.env.POSTHOG_KEY;
 const POSTHOG_HOST = process.env.POSTHOG_HOST ?? "https://us.i.posthog.com";
 
-const getAppName = (): string => {
+const getAppName = () => {
   switch (APP_ENV) {
     case "production":
       return "Bob";
@@ -18,7 +18,7 @@ const getAppName = (): string => {
   }
 };
 
-const getBundleId = (): string => {
+const getBundleId = () => {
   const base = "com.gmacko.bob";
   switch (APP_ENV) {
     case "production":
@@ -32,7 +32,6 @@ const getBundleId = (): string => {
 
 const getSentryConfig = () => {
   if (!SENTRY_DSN) return null;
-
   return [
     "@sentry/react-native/expo",
     {
@@ -42,15 +41,11 @@ const getSentryConfig = () => {
   ];
 };
 
-export default ({ config }: ConfigContext): ExpoConfig => {
+/** @param {{ config: import('expo/config').ExpoConfig }} ctx */
+module.exports = ({ config }) => {
   const sentryPlugin = getSentryConfig();
-  const plugins: ExpoConfig["plugins"] = [
-    [
-      "expo-dev-client",
-      {
-        launchMode: "most-recent",
-      },
-    ],
+  const plugins = [
+    ["expo-dev-client", { launchMode: "most-recent" }],
     "expo-router",
     "expo-secure-store",
     "expo-web-browser",
@@ -68,7 +63,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   ];
 
   if (sentryPlugin) {
-    plugins.push(sentryPlugin as [string, Record<string, unknown>]);
+    plugins.push(sentryPlugin);
   }
 
   return {
