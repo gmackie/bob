@@ -84,9 +84,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       fallbackToCacheTimeout: 0,
       url: "https://u.expo.dev/e1dd0ab0-4dc1-40f8-b066-7cb91fde1759",
     },
-    runtimeVersion: {
-      policy: "appVersion",
-    },
+    runtimeVersion: "1.0.0",
     newArchEnabled: true,
     assetBundlePatterns: ["**/*"],
     ios: {
