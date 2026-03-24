@@ -45,9 +45,16 @@ export function WorkflowPageClient({
   const createSession = useMutation(
     trpc.planSession.create.mutationOptions(),
   );
+  const executeTask = useMutation(
+    trpc.taskRun.execute.mutationOptions(),
+  );
+  const mergePR = useMutation(
+    trpc.pullRequest.merge.mutationOptions(),
+  );
   const [launchIntent, setLaunchIntent] = useState<WorkflowLaunchIntent | null>(
     null,
   );
+  const [dispatching, setDispatching] = useState(false);
 
   // For tasks, keep the existing detail view
   if (workItem.kind === "task") {
@@ -80,29 +87,63 @@ export function WorkflowPageClient({
           setLaunchIntent("breakdown");
         }}
         onDispatchAgents={async () => {
+          if (dispatching) return;
+          setDispatching(true);
           toast("Starting agents on child tasks...");
 
           let started = 0;
-          for (const child of childTasks) {
-            if (child.status === "todo" || child.status === "backlog" || child.status === "draft") {
-              try {
-                await fetch("/api/trpc/taskRun.execute", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ "0": { json: { workItemId: child.id } } }),
-                });
-                started++;
-              } catch (err: any) {
-                console.error(`Failed to start agent on ${child.identifier}:`, err);
-              }
+          const dispatchable = childTasks.filter(
+            (c) => c.status === "todo" || c.status === "backlog" || c.status === "draft",
+          );
+
+          for (const child of dispatchable) {
+            try {
+              await executeTask.mutateAsync({
+                workItemId: child.id,
+                agentType: "claude",
+              });
+              started++;
+              toast(`Agent started on ${child.identifier} (${started}/${dispatchable.length})`);
+            } catch (err: any) {
+              console.error(`Failed to start agent on ${child.identifier}:`, err);
+              toast(`Failed to start agent on ${child.identifier}: ${err.message ?? "Unknown error"}`);
             }
           }
 
           toast(`${started} agents dispatched! Check each task's workspace for progress.`);
+          setDispatching(false);
           router.refresh();
         }}
-        onMergeAndDeploy={() => {
-          toast("Initiating merge & deploy...");
+        onMergeAndDeploy={async () => {
+          // Find any open PRs from the pullRequests prop and merge them
+          const openPRs = pullRequests.filter(
+            (pr) => pr.status === "open" || pr.status === "draft",
+          );
+
+          if (openPRs.length === 0) {
+            toast("No open pull requests to merge.");
+            return;
+          }
+
+          toast(`Merging ${openPRs.length} pull request(s)...`);
+
+          let merged = 0;
+          for (const pr of openPRs) {
+            try {
+              await mergePR.mutateAsync({
+                pullRequestId: pr.id,
+                mergeMethod: "squash",
+              });
+              merged++;
+              toast(`Merged PR #${pr.number}`);
+            } catch (err: any) {
+              console.error(`Failed to merge PR #${pr.number}:`, err);
+              toast(`Failed to merge PR #${pr.number}: ${err.message ?? "Unknown error"}`);
+            }
+          }
+
+          toast(`${merged} PR(s) merged! Deployment pipeline starting...`);
+          router.refresh();
         }}
       />
       <WorkflowLaunchDialog
