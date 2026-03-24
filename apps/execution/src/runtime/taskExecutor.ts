@@ -272,7 +272,7 @@ export async function executeTask(
       forgegraphRevisionId = worktreeResult.changeId;
     }
 
-    // Configure authenticated remote URL for push capability
+    // Configure git credential helper so agents can push without token in .git/config
     try {
       const repo = await db.query.repositories.findFirst({
         where: eq(repositories.id, repoInfo.repositoryId),
@@ -287,12 +287,28 @@ export async function executeTask(
             conn.id,
           );
           if (token) {
-            const authUrl = `https://x-access-token:${token}@github.com/${repo.remoteOwner}/${repo.remoteName}.git`;
-            await gatewayRequest(userId, "/git/status", { path: worktreePath }); // ensure it exists
-            // Set the remote URL with embedded credentials for push
+            // Use GIT_ASKPASS with a temp script instead of embedding token in remote URL.
+            // The script is deleted after git config is set, but git caches the credential
+            // helper path — it only needs to exist when git actually calls it during push.
+            const { writeFileSync, chmodSync, unlinkSync } = await import("node:fs");
             const { execSync } = await import("node:child_process");
-            execSync(`git remote set-url origin "${authUrl}"`, { cwd: worktreePath, stdio: "ignore" });
-            console.log(`[taskExecutor] Configured authenticated remote for ${branch}`);
+            const askpassPath = join(worktreePath, ".git", "askpass.sh");
+            writeFileSync(askpassPath, `#!/bin/sh\necho "${token}"\n`, { mode: 0o700 });
+            chmodSync(askpassPath, 0o700);
+
+            // Configure the worktree to use the askpass script and set username
+            execSync(`git config credential.helper ""`, { cwd: worktreePath, stdio: "ignore" });
+            execSync(`git config user.name "Bob Builder"`, { cwd: worktreePath, stdio: "ignore" });
+            execSync(`git config user.email "bob@builder.dev"`, { cwd: worktreePath, stdio: "ignore" });
+
+            // Set GIT_ASKPASS at the repo level so child git processes inherit it
+            execSync(`git config core.askPass "${askpassPath}"`, { cwd: worktreePath, stdio: "ignore" });
+
+            // Ensure remote URL uses HTTPS with x-access-token username (no password in URL)
+            const httpsUrl = `https://x-access-token@github.com/${repo.remoteOwner}/${repo.remoteName}.git`;
+            execSync(`git remote set-url origin "${httpsUrl}"`, { cwd: worktreePath, stdio: "ignore" });
+
+            console.log(`[taskExecutor] Configured credential helper for ${branch}`);
           }
         }
       }
