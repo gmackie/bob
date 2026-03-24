@@ -1182,7 +1182,7 @@ const server = createServer(async (req, res) => {
           console.log(`[Gateway] Session ${sessionId} started via HTTP (agent: ${agentType}, user: ${userId})`);
 
           // Get or load the session actor from DB
-          const actor = await sessionManager.getSession(sessionId);
+          const actor = await sessionManager.getOrLoadSession(sessionId);
 
           if (!actor) {
             console.error(`[Gateway] Session ${sessionId} not found in DB after update`);
