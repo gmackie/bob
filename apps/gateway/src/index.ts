@@ -864,6 +864,40 @@ async function handleGitCheckout(body: Record<string, unknown>, res: ServerRespo
   }
 }
 
+async function handleGitWorktree(body: Record<string, unknown>, res: ServerResponse): Promise<void> {
+  const repoPath = body.repoPath as string;
+  const worktreePath = body.worktreePath as string;
+  const branch = body.branch as string;
+  const baseBranch = (body.baseBranch as string) ?? "main";
+  const action = (body.action as string) ?? "create";
+
+  if (!repoPath) {
+    sendError(res, 400, "repoPath is required");
+    return;
+  }
+
+  try {
+    const { GitAdapter } = await import("./vcs/git-adapter.js");
+    const adapter = new GitAdapter();
+
+    if (action === "remove") {
+      await adapter.removeWorktree({ repoPath, worktreePath: worktreePath ?? "", branch });
+      sendJson(res, 200, { success: true, action: "removed" });
+      return;
+    }
+
+    if (!worktreePath || !branch) {
+      sendError(res, 400, "worktreePath and branch are required for create");
+      return;
+    }
+
+    const result = await adapter.createWorktree({ repoPath, worktreePath, branch, baseBranch });
+    sendJson(res, 200, { success: true, worktreePath: result.worktreePath, changeId: result.changeId, vcs: "git" });
+  } catch (error) {
+    sendError(res, 500, `Git worktree operation failed: ${error}`);
+  }
+}
+
 async function handleGitReset(body: Record<string, unknown>, res: ServerResponse): Promise<void> {
   const path = body.path as string;
   const files = (body.files as string[]) ?? [];
@@ -1221,6 +1255,9 @@ const server = createServer(async (req, res) => {
           return;
         case "/git/checkout":
           await handleGitCheckout(body, res);
+          return;
+        case "/git/worktree":
+          await handleGitWorktree(body, res);
           return;
         case "/git/reset":
           await handleGitReset(body, res);

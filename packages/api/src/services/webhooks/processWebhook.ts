@@ -1,10 +1,15 @@
 import { and, eq, isNull, sql } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
+  activities,
   chatConversations,
   chatMessages,
+  forgeBuilds,
+  forgeDeployments,
+  forgeRevisions,
   gitCommits,
   pullRequests,
+  repositories,
   sessionEvents,
   taskRuns,
   webhookDeliveries,
@@ -130,6 +135,12 @@ export async function processGitHubWebhook(
         break;
       case "push":
         await handleGitHubPush(payload as unknown as GitHubPushPayload);
+        break;
+      case "check_run":
+        await handleGitHubCheckRun(payload);
+        break;
+      case "workflow_run":
+        await handleGitHubWorkflowRun(payload);
         break;
       default:
         break;
@@ -778,4 +789,201 @@ export async function processPlanningWebhook(
     );
     throw error;
   }
+}
+
+// ──────────────────────────────────────────────────────────────
+// GitHub Actions CI/CD Integration
+// ──────────────────────────────────────────────────────────────
+
+/**
+ * Handle GitHub check_run events (individual CI checks like lint, test, build).
+ * Maps check conclusions to ForgeGraph build status updates.
+ */
+async function handleGitHubCheckRun(payload: Record<string, unknown>): Promise<void> {
+  const action = payload.action as string;
+  if (action !== "completed") return; // Only care about completed checks
+
+  const checkRun = payload.check_run as Record<string, unknown> | undefined;
+  if (!checkRun) return;
+
+  const headSha = checkRun.head_sha as string;
+  const conclusion = checkRun.conclusion as string; // success, failure, neutral, cancelled, etc.
+  const checkName = checkRun.name as string;
+
+  if (!headSha) return;
+
+  // Find the forge revision matching this commit SHA
+  const revision = await db.query.forgeRevisions.findFirst({
+    where: eq(forgeRevisions.revId, headSha),
+  });
+
+  if (!revision) {
+    console.log(`[webhook:check_run] No forge revision found for SHA ${headSha}`);
+    return;
+  }
+
+  // Map check conclusion to build status
+  const buildStatus = conclusion === "success" ? "success"
+    : conclusion === "failure" ? "failed"
+    : conclusion === "cancelled" ? "cancelled"
+    : "pending";
+
+  // Find or create a build record
+  const idempotencyKey = `check-${headSha}-${checkName}`;
+  const [build] = await db
+    .insert(forgeBuilds)
+    .values({
+      revisionId: revision.id,
+      repoId: revision.repoId,
+      idempotencyKey,
+      status: buildStatus,
+      ciProvider: "github-actions",
+      externalJobId: String(checkRun.id ?? ""),
+    })
+    .onConflictDoUpdate({
+      target: [forgeBuilds.idempotencyKey],
+      set: {
+        status: buildStatus,
+        externalJobId: String(checkRun.id ?? ""),
+      },
+    })
+    .returning();
+
+  // Update gate status on the revision
+  if (revision.gates && Array.isArray(revision.gates)) {
+    const normalizedName = checkName.toLowerCase();
+    const updatedGates = (revision.gates as Array<{ name: string; status: string }>).map(
+      (gate) => {
+        if (normalizedName.includes(gate.name)) {
+          return { ...gate, status: buildStatus };
+        }
+        return gate;
+      },
+    );
+
+    // If all gates passed, update revision status
+    const allPassed = updatedGates.every((g) => g.status === "success");
+    const anyFailed = updatedGates.some((g) => g.status === "failed");
+
+    await db
+      .update(forgeRevisions)
+      .set({
+        gates: updatedGates,
+        status: allPassed ? "gates_passed" : anyFailed ? "failed" : "pending",
+      })
+      .where(eq(forgeRevisions.id, revision.id));
+  }
+
+  // Log activity on the linked work item
+  if (revision.taskId) {
+    await db.insert(activities).values({
+      workItemId: revision.taskId,
+      type: "build_status_changed",
+      toValue: buildStatus,
+      metadata: {
+        checkName,
+        conclusion,
+        headSha,
+        buildId: build?.id,
+        revisionId: revision.id,
+      },
+    });
+  }
+
+  console.log(`[webhook:check_run] Updated build for ${headSha}: ${checkName} → ${buildStatus}`);
+}
+
+/**
+ * Handle GitHub workflow_run events (entire CI workflow completion).
+ * When all checks pass, can trigger deployment creation.
+ */
+async function handleGitHubWorkflowRun(payload: Record<string, unknown>): Promise<void> {
+  const action = payload.action as string;
+  if (action !== "completed") return;
+
+  const workflowRun = payload.workflow_run as Record<string, unknown> | undefined;
+  if (!workflowRun) return;
+
+  const headSha = workflowRun.head_sha as string;
+  const conclusion = workflowRun.conclusion as string;
+  const workflowName = workflowRun.name as string;
+
+  if (!headSha) return;
+
+  // Find the forge revision
+  const revision = await db.query.forgeRevisions.findFirst({
+    where: eq(forgeRevisions.revId, headSha),
+  });
+
+  if (!revision) {
+    console.log(`[webhook:workflow_run] No forge revision for SHA ${headSha}`);
+    return;
+  }
+
+  // Create a build record for the overall workflow
+  const idempotencyKey = `workflow-${headSha}-${workflowName}`;
+  const buildStatus = conclusion === "success" ? "success" : "failed";
+
+  const [build] = await db
+    .insert(forgeBuilds)
+    .values({
+      revisionId: revision.id,
+      repoId: revision.repoId,
+      idempotencyKey,
+      status: buildStatus,
+      ciProvider: "github-actions",
+      externalJobId: String(workflowRun.id ?? ""),
+    })
+    .onConflictDoUpdate({
+      target: [forgeBuilds.idempotencyKey],
+      set: {
+        status: buildStatus,
+        externalJobId: String(workflowRun.id ?? ""),
+      },
+    })
+    .returning();
+
+  // If workflow succeeded and revision has all gates passed, auto-create staging deployment
+  if (conclusion === "success" && build) {
+    const existingDeployment = await db.query.forgeDeployments.findFirst({
+      where: and(
+        eq(forgeDeployments.revisionId, revision.id),
+        eq(forgeDeployments.environment, "staging"),
+      ),
+    });
+
+    if (!existingDeployment) {
+      await db.insert(forgeDeployments).values({
+        revisionId: revision.id,
+        buildId: build.id,
+        repoId: revision.repoId,
+        environment: "staging",
+        status: "deploying",
+      });
+      console.log(`[webhook:workflow_run] Auto-created staging deployment for ${headSha}`);
+    }
+
+    // Update revision status
+    await db
+      .update(forgeRevisions)
+      .set({ status: "gates_passed" })
+      .where(eq(forgeRevisions.id, revision.id));
+  }
+
+  // Log activity
+  if (revision.taskId) {
+    await db.insert(activities).values({
+      workItemId: revision.taskId,
+      type: "build_status_changed",
+      toValue: buildStatus,
+      metadata: {
+        workflowName,
+        conclusion,
+        headSha,
+        buildId: build?.id,
+      },
+    });
+  }
+
+  console.log(`[webhook:workflow_run] ${workflowName} for ${headSha}: ${conclusion}`);
 }
