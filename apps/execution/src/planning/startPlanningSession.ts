@@ -8,6 +8,7 @@ import {
   type PlanningContext,
   type PlanningLaunchContext,
 } from "./planningAgentTools";
+import { buildSmolAgentPlanningProfile } from "./smolAgentPlanningProfile";
 
 interface StartPlanningInput {
   userId: string;
@@ -34,12 +35,31 @@ export async function startPlanningSession(
 
   const prompt = buildPlanningPrompt(ctx);
 
-  // Start the session on the gateway
+  const profile = buildSmolAgentPlanningProfile({
+    sessionId: input.sessionId,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    projectName: input.projectName,
+    workingDirectory: input.workingDirectory,
+  });
+
+  console.log(
+    `[planning] Starting planning session ${input.sessionId} with ${profile.agentType} for project "${input.projectName}"`,
+  );
+
+  // Start the session on the gateway with smol-agent
   await gatewayRequest(input.userId, "/session/start", {
     sessionId: input.sessionId,
     workingDirectory: input.workingDirectory,
-    agentType: "claude",
+    agentType: profile.agentType,
     initialPrompt: prompt,
+    env: {
+      ...profile.env,
+      BOB_API_URL: process.env.BOB_API_URL ?? "http://localhost:3000",
+      ...(process.env.BOB_API_KEY
+        ? { BOB_API_KEY: process.env.BOB_API_KEY }
+        : {}),
+    },
   });
 
   // Update session status

@@ -10,6 +10,7 @@ import { toast } from "@bob/ui/toast";
 
 import { KIND_COLOR, PRIORITY_COLOR, formatLabel } from "~/lib/design/colors";
 import { useTRPC } from "~/trpc/react";
+import { DependencyGraph } from "./dependency-graph";
 
 interface DraftPanelProps {
   sessionId: string;
@@ -98,6 +99,9 @@ export function DraftPanel({ sessionId, expanded = false }: DraftPanelProps) {
 
   return (
     <div className={expanded ? "space-y-4" : "space-y-2"}>
+      {/* DAG visualization — shown when dependencies exist, hidden on mobile */}
+      <DependencyGraph drafts={activeDrafts} dependencies={dependencies} />
+
       {/* Draft cards */}
       <div className={expanded ? "space-y-3" : "space-y-1.5"}>
         {activeDrafts.map((draft) => {
