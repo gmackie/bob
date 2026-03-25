@@ -53,6 +53,9 @@ const makeDbMock = () => ({
     forgeDeployments: {
       findFirst: (...args: unknown[]) => dbQueryFindFirstMock("forgeDeployments", ...args),
     },
+    workItemArtifacts: {
+      findFirst: (...args: unknown[]) => dbQueryFindFirstMock("workItemArtifacts", ...args),
+    },
   },
 });
 
@@ -94,29 +97,14 @@ describe("advancePipeline", () => {
   });
 
   describe("agent_complete state", () => {
-    it("creates a build and transitions to 'building'", async () => {
+    it("transitions to 'awaiting_review'", async () => {
       const item = makeItem({ pipelineState: "agent_complete" });
-
-      // forgeRevisions.findFirst → returns revision
-      dbQueryFindFirstMock.mockResolvedValueOnce({
-        id: REVISION_ID,
-        repoId: REPO_ID,
-        taskRunId: TASK_RUN_ID,
-      });
 
       await advancePipeline(db as any, item, makeBatch());
 
-      // Should insert a build
-      expect(dbInsertValuesMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          revisionId: REVISION_ID,
-          repoId: REPO_ID,
-          idempotencyKey: ITEM_ID,
-        }),
-      );
-
-      // Should transition to "building"
-      expect(dbUpdateSetMock).toHaveBeenCalledWith({ pipelineState: "building" });
+      // Should transition to "awaiting_review" (no build yet)
+      expect(dbUpdateSetMock).toHaveBeenCalledWith({ pipelineState: "awaiting_review" });
+      expect(dbInsertMock).not.toHaveBeenCalled();
     });
 
     it("no-ops when taskRunId is null", async () => {
@@ -126,6 +114,56 @@ describe("advancePipeline", () => {
 
       expect(dbInsertMock).not.toHaveBeenCalled();
       expect(dbUpdateMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("awaiting_review state", () => {
+    it("transitions to 'building' when a code_review artifact with approve exists", async () => {
+      const item = makeItem({ pipelineState: "awaiting_review" });
+
+      // workItemArtifacts.findFirst → returns approved review
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: "artifact-1",
+        artifactType: "code_review",
+        isCurrent: true,
+        content: JSON.stringify({ decision: "approve" }),
+      });
+
+      // forgeRevisions.findFirst → returns revision (for triggerBuild)
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: REVISION_ID,
+        repoId: REPO_ID,
+        taskRunId: TASK_RUN_ID,
+      });
+
+      await advancePipeline(db as any, item, makeBatch());
+
+      expect(dbUpdateSetMock).toHaveBeenCalledWith({ pipelineState: "building" });
+    });
+
+    it("stays in awaiting_review when no review artifact exists", async () => {
+      const item = makeItem({ pipelineState: "awaiting_review" });
+      dbQueryFindFirstMock.mockResolvedValueOnce(null);
+
+      await advancePipeline(db as any, item, makeBatch());
+
+      expect(dbUpdateSetMock).not.toHaveBeenCalled();
+    });
+
+    it("stays in awaiting_review when review requests changes", async () => {
+      const item = makeItem({ pipelineState: "awaiting_review" });
+
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: "artifact-2",
+        artifactType: "code_review",
+        isCurrent: true,
+        content: JSON.stringify({ decision: "request_changes" }),
+      });
+
+      await advancePipeline(db as any, item, makeBatch());
+
+      // Should NOT transition — stays in awaiting_review
+      expect(dbUpdateSetMock).not.toHaveBeenCalled();
     });
   });
 
@@ -220,7 +258,7 @@ describe("advancePipeline", () => {
   });
 
   describe("terminal states", () => {
-    it.each(["complete", "build_failed", "deploy_failed"])(
+    it.each(["complete", "build_failed", "deploy_failed", "review_failed"])(
       "no-ops for terminal state '%s'",
       async (state) => {
         const item = makeItem({ pipelineState: state });

@@ -4,7 +4,10 @@ import {
   activities,
   featureBranches,
   featureBranchTaskPRs,
+  repositories,
 } from "@bob/db/schema";
+
+import { createDraftPr } from "../git/prService";
 
 /**
  * Called when a task PR is merged into a feature branch.
@@ -64,5 +67,44 @@ export async function checkFeatureReadiness(params: {
     });
   }
 
-  return { ready: true, featurePrCreated: false };
+  // Auto-create feature PR now that all task PRs are merged
+  try {
+    // Look up the repository to get the userId for PR creation
+    const [repo] = await db
+      .select()
+      .from(repositories)
+      .where(eq(repositories.id, branch.repositoryId));
+
+    if (!repo) {
+      console.error(
+        `[feature-assembly] Repository ${branch.repositoryId} not found — cannot auto-create feature PR`,
+      );
+      return { ready: true, featurePrCreated: false };
+    }
+
+    const pr = await createDraftPr({
+      repositoryId: branch.repositoryId,
+      headBranch: branch.branchName,
+      baseBranch: branch.baseBranch,
+      title: `Feature: ${branch.branchName}`,
+      body: `Auto-created feature PR for work item. All ${taskPRs.length} task PRs merged.`,
+      userId: repo.userId,
+    });
+
+    if (pr) {
+      await db
+        .update(featureBranches)
+        .set({ featurePrId: pr.id })
+        .where(eq(featureBranches.id, params.featureBranchId));
+    }
+
+    console.log(
+      `[feature-assembly] Auto-created feature PR for branch ${branch.branchName}`,
+    );
+    return { ready: true, featurePrCreated: true };
+  } catch (err) {
+    console.error(`[feature-assembly] Failed to auto-create feature PR:`, err);
+    // Don't block readiness — notify human to create manually
+    return { ready: true, featurePrCreated: false };
+  }
 }

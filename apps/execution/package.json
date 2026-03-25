@@ -8,7 +8,8 @@
     "./runtime/planningControl": "./src/runtime/planningControl.ts",
     "./runtime/taskExecutor": "./src/runtime/taskExecutor.ts",
     "./planning/planningAgentTools": "./src/planning/planningAgentTools.ts",
-    "./planning/startPlanningSession": "./src/planning/startPlanningSession.ts"
+    "./planning/startPlanningSession": "./src/planning/startPlanningSession.ts",
+    "./planning/smolAgentReviewProfile": "./src/planning/smolAgentReviewProfile.ts"
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts",

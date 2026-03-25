@@ -92,6 +92,9 @@ export const workItemActivityType = [
   "build_status_changed",
   "deploy_status_changed",
   "planning_session_completed",
+  "review_requested",
+  "review_approved",
+  "review_changes_requested",
 ] as const;
 export type WorkItemActivityType = (typeof workItemActivityType)[number];
 export const workItemActivityTypeEnum = pgEnum(
@@ -122,6 +125,7 @@ export const workItemArtifactType = [
   "doc",
   "deliverable",
   "planning_doc",
+  "code_review",
   "other",
 ] as const;
 export type WorkItemArtifactType = (typeof workItemArtifactType)[number];
