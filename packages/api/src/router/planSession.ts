@@ -9,6 +9,7 @@ import {
   planDrafts,
   projects,
   workItemArtifacts,
+  workItemDependencies,
   workItems,
 } from "@bob/db/schema";
 
@@ -352,6 +353,10 @@ export const planSessionRouter = {
         })
         .returning();
 
+      console.log(
+        `[planning] Draft created: "${input.title}" (${input.kind}) in session ${input.sessionId}`,
+      );
+
       return draft!;
     }),
 
@@ -401,6 +406,10 @@ export const planSessionRouter = {
           dependsOnDraftId: input.dependsOnDraftId,
         })
         .returning();
+
+      console.log(
+        `[planning] Dependency set: ${input.draftId} depends on ${input.dependsOnDraftId}`,
+      );
 
       return dep!;
     }),
@@ -512,7 +521,7 @@ export const planSessionRouter = {
       return { committed: createdTasks.length, tasks: createdTasks };
     }),
 
-  /** Commit drafts as local work items with hierarchy preserved. */
+  /** Commit drafts as local work items with dependencies preserved. */
   commitPlanLocal: protectedProcedure
     .input(
       z.object({
@@ -530,7 +539,7 @@ export const planSessionRouter = {
       });
 
       if (drafts.length === 0) {
-        return { committed: 0, workItems: [] };
+        return { committed: 0, workItems: [], dependencies: 0 };
       }
 
       // Get parent work item for workspace/project context
@@ -544,70 +553,137 @@ export const planSessionRouter = {
         });
       }
 
-      const created: Array<{
-        draftId: string;
-        workItemId: string;
-        title: string;
-      }> = [];
-      const draftToWorkItem = new Map<string, string>();
+      // Fetch draft dependencies
+      const draftIds = drafts.map((d) => d.id);
+      const draftDeps =
+        draftIds.length > 0
+          ? await ctx.db.query.planDraftDependencies.findMany({
+              where: inArray(planDraftDependencies.draftId, draftIds),
+            })
+          : [];
 
-      // Create epics first, then tasks
-      const epics = drafts.filter((d) => d.kind === "epic");
-      const tasks = drafts.filter((d) => d.kind !== "epic");
-
-      for (const draft of epics) {
-        const [wi] = await ctx.db
-          .insert(workItems)
-          .values({
-            ownerUserId: ctx.session.user.id,
-            workspaceId: parentWI.workspaceId,
-            projectId: parentWI.projectId,
-            parentId: input.parentWorkItemId,
-            kind: "epic",
-            title: draft.title,
-            description: draft.description,
-            status: "todo",
-          })
-          .returning();
-        draftToWorkItem.set(draft.id, wi!.id);
-        created.push({
-          draftId: draft.id,
-          workItemId: wi!.id,
-          title: draft.title,
-        });
+      // Cycle detection via topological sort
+      if (draftDeps.length > 0) {
+        const inDegree = new Map<string, number>();
+        const adjList = new Map<string, string[]>();
+        for (const id of draftIds) {
+          inDegree.set(id, 0);
+          adjList.set(id, []);
+        }
+        for (const dep of draftDeps) {
+          // dep.draftId depends on dep.dependsOnDraftId
+          // Edge: dependsOnDraftId → draftId (must complete before)
+          adjList.get(dep.dependsOnDraftId)?.push(dep.draftId);
+          inDegree.set(dep.draftId, (inDegree.get(dep.draftId) ?? 0) + 1);
+        }
+        const queue = draftIds.filter((id) => (inDegree.get(id) ?? 0) === 0);
+        let visited = 0;
+        while (queue.length > 0) {
+          const node = queue.shift()!;
+          visited++;
+          for (const neighbor of adjList.get(node) ?? []) {
+            const deg = (inDegree.get(neighbor) ?? 1) - 1;
+            inDegree.set(neighbor, deg);
+            if (deg === 0) queue.push(neighbor);
+          }
+        }
+        if (visited < draftIds.length) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "Cyclic dependencies detected in plan drafts. Remove circular dependencies before committing.",
+          });
+        }
       }
 
-      for (const draft of tasks) {
-        const [wi] = await ctx.db
-          .insert(workItems)
-          .values({
-            ownerUserId: ctx.session.user.id,
-            workspaceId: parentWI.workspaceId,
-            projectId: parentWI.projectId,
-            parentId: input.parentWorkItemId,
-            kind: "task",
-            title: draft.title,
-            description: draft.description,
-            status: "todo",
-          })
-          .returning();
-        draftToWorkItem.set(draft.id, wi!.id);
-        created.push({
-          draftId: draft.id,
-          workItemId: wi!.id,
-          title: draft.title,
-        });
-      }
+      console.log(
+        `[planning] Committing plan: ${drafts.length} drafts, ${draftDeps.length} dependencies in session ${input.sessionId}`,
+      );
 
-      // Mark all drafts as committed
-      if (created.length > 0) {
+      // All DB writes in a single transaction
+      const result = await ctx.db.transaction(async (tx) => {
+        // Batch insert all work items (epics first for ordering, but all under same parent)
+        const sorted = [
+          ...drafts.filter((d) => d.kind === "epic"),
+          ...drafts.filter((d) => d.kind !== "epic"),
+        ];
+
+        const workItemValues = sorted.map((draft) => ({
+          ownerUserId: ctx.session.user.id,
+          workspaceId: parentWI.workspaceId,
+          projectId: parentWI.projectId,
+          parentId: input.parentWorkItemId,
+          kind: draft.kind as "epic" | "task" | "issue",
+          title: draft.title,
+          description: draft.description,
+          status: "todo" as const,
+        }));
+
+        const createdRows = await tx
+          .insert(workItems)
+          .values(workItemValues)
+          .returning({ id: workItems.id, title: workItems.title });
+
+        // Build draftId → workItemId map
+        const draftToWorkItem = new Map<string, string>();
+        const created: Array<{
+          draftId: string;
+          workItemId: string;
+          title: string;
+        }> = [];
+
+        for (let i = 0; i < sorted.length; i++) {
+          const draft = sorted[i]!;
+          const row = createdRows[i]!;
+          draftToWorkItem.set(draft.id, row.id);
+          created.push({
+            draftId: draft.id,
+            workItemId: row.id,
+            title: row.title,
+          });
+        }
+
+        // Persist dependencies as work_item_dependencies
+        let depCount = 0;
+        if (draftDeps.length > 0) {
+          const depValues = draftDeps
+            .map((dep) => {
+              const workItemId = draftToWorkItem.get(dep.draftId);
+              const dependsOnWorkItemId = draftToWorkItem.get(
+                dep.dependsOnDraftId,
+              );
+              if (!workItemId || !dependsOnWorkItemId) return null;
+              return { workItemId, dependsOnWorkItemId };
+            })
+            .filter(
+              (v): v is { workItemId: string; dependsOnWorkItemId: string } =>
+                v !== null,
+            );
+
+          if (depValues.length > 0) {
+            await tx.insert(workItemDependencies).values(depValues);
+            depCount = depValues.length;
+          }
+        }
+
+        // Mark drafts as committed
         const committedIds = created.map((c) => c.draftId);
-        await ctx.db
+        await tx
           .update(planDrafts)
           .set({ status: "committed" })
           .where(inArray(planDrafts.id, committedIds));
-      }
 
-      return { committed: created.length, workItems: created };
+        return { created, depCount };
+      });
+
+      console.log(
+        `[planning] Plan committed: ${result.created.length} work items, ${result.depCount} dependencies`,
+      );
+
+      return {
+        committed: result.created.length,
+        workItems: result.created,
+        dependencies: result.depCount,
+      };
     }),
 } satisfies TRPCRouterRecord;
