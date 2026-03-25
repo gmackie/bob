@@ -1,5 +1,5 @@
 import { relations, sql } from "drizzle-orm";
-import { index, pgEnum, pgTable } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, index, pgEnum, pgTable } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -1638,6 +1638,9 @@ export const taskRuns = pgTable("task_runs", (t) => ({
   blockedReason: t.text(),
   branch: t.text(), // The git branch created for this task run
   forgegraphRevisionId: t.text(), // VCS revision ID (commit SHA or jj change ID) for ForgeGraph tracking
+  parentTaskRunId: t.uuid().references((): AnyPgColumn => taskRuns.id, { onDelete: "set null" }),
+  runPhase: t.varchar({ length: 20 }).notNull().default("execute"),
+  // runPhase values: "shape" | "plan" | "execute" | "review" | "ship"
   createdAt: t.timestamp().defaultNow().notNull(),
   updatedAt: t
     .timestamp({ mode: "date", withTimezone: true })
@@ -1904,7 +1907,7 @@ export const gitCommitsRelations = relations(gitCommits, ({ one }) => ({
   }),
 }));
 
-export const taskRunsRelations = relations(taskRuns, ({ one }) => ({
+export const taskRunsRelations = relations(taskRuns, ({ one, many }) => ({
   user: one(user, {
     fields: [taskRuns.userId],
     references: [user.id],
@@ -1929,7 +1932,62 @@ export const taskRunsRelations = relations(taskRuns, ({ one }) => ({
     fields: [taskRuns.pullRequestId],
     references: [pullRequests.id],
   }),
+  parentRun: one(taskRuns, {
+    fields: [taskRuns.parentTaskRunId],
+    references: [taskRuns.id],
+    relationName: "task_run_parent",
+  }),
+  childRuns: many(taskRuns, {
+    relationName: "task_run_parent",
+  }),
 }));
+
+// =============================================================================
+// Run Lifecycle Events (cross-phase event logging)
+// =============================================================================
+
+export const runLifecycleEvents = pgTable(
+  "run_lifecycle_events",
+  (t) => ({
+    id: t.uuid().notNull().primaryKey().defaultRandom(),
+    taskRunId: t
+      .uuid()
+      .notNull()
+      .references(() => taskRuns.id, { onDelete: "cascade" }),
+    workItemId: t
+      .uuid()
+      .references(() => workItems.id, { onDelete: "set null" }),
+    sessionId: t
+      .uuid()
+      .references(() => chatConversations.id, { onDelete: "set null" }),
+    eventType: t.varchar({ length: 40 }).notNull(),
+    phase: t.varchar({ length: 20 }).notNull(),
+    metadata: t.json().$type<Record<string, unknown>>().default({}),
+    createdAt: t.timestamp().defaultNow().notNull(),
+  }),
+  (table) => [
+    { name: "run_lifecycle_events_run_idx", columns: [table.taskRunId] },
+    { name: "run_lifecycle_events_type_idx", columns: [table.eventType] },
+  ],
+);
+
+export const runLifecycleEventsRelations = relations(
+  runLifecycleEvents,
+  ({ one }) => ({
+    taskRun: one(taskRuns, {
+      fields: [runLifecycleEvents.taskRunId],
+      references: [taskRuns.id],
+    }),
+    workItem: one(workItems, {
+      fields: [runLifecycleEvents.workItemId],
+      references: [workItems.id],
+    }),
+    session: one(chatConversations, {
+      fields: [runLifecycleEvents.sessionId],
+      references: [chatConversations.id],
+    }),
+  }),
+);
 
 export const commentsRelations = relations(comments, ({ one }) => ({
   workItem: one(workItems, {

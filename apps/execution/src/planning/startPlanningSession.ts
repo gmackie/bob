@@ -9,6 +9,7 @@ import {
   type PlanningLaunchContext,
 } from "./planningAgentTools";
 import { buildSmolAgentPlanningProfile } from "./smolAgentPlanningProfile";
+import { buildSmolAgentShapeProfile } from "./smolAgentShapeProfile";
 
 interface StartPlanningInput {
   userId: string;
@@ -35,16 +36,28 @@ export async function startPlanningSession(
 
   const prompt = buildPlanningPrompt(ctx);
 
-  const profile = buildSmolAgentPlanningProfile({
-    sessionId: input.sessionId,
-    workspaceId: input.workspaceId,
-    projectId: input.projectId,
-    projectName: input.projectName,
-    workingDirectory: input.workingDirectory,
-  });
+  const isShapeIntent = input.launchContext?.intent === "shape";
+
+  const profile = isShapeIntent
+    ? buildSmolAgentShapeProfile({
+        sessionId: input.sessionId,
+        workspaceId: input.workspaceId,
+        projectId: input.projectId,
+        projectName: input.projectName,
+        workingDirectory: input.workingDirectory,
+        workItemId: input.launchContext?.workItem?.id ?? "",
+        workItemTitle: input.launchContext?.workItem?.title ?? input.projectName,
+      })
+    : buildSmolAgentPlanningProfile({
+        sessionId: input.sessionId,
+        workspaceId: input.workspaceId,
+        projectId: input.projectId,
+        projectName: input.projectName,
+        workingDirectory: input.workingDirectory,
+      });
 
   console.log(
-    `[planning] Starting planning session ${input.sessionId} with ${profile.agentType} for project "${input.projectName}"`,
+    `[planning] Starting ${isShapeIntent ? "shape" : "planning"} session ${input.sessionId} with ${profile.agentType} for project "${input.projectName}"`,
   );
 
   // Start the session on the gateway with smol-agent

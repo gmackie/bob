@@ -8,6 +8,7 @@ import {
   planDraftDependencies,
   planDrafts,
   projects,
+  runLifecycleEvents,
   workItemArtifacts,
   workItemDependencies,
   workItems,
@@ -64,6 +65,7 @@ export const planSessionRouter = {
             "eng_review",
             "design_review",
             "breakdown",
+            "shape",
           ])
           .optional(),
       }),
@@ -240,6 +242,7 @@ export const planSessionRouter = {
             "eng_review",
             "design_review",
             "breakdown",
+            "shape",
           ])
           .optional(),
       }),
@@ -679,6 +682,24 @@ export const planSessionRouter = {
       console.log(
         `[planning] Plan committed: ${result.created.length} work items, ${result.depCount} dependencies`,
       );
+
+      // Fire-and-forget lifecycle event
+      void ctx.db
+        .insert(runLifecycleEvents)
+        .values({
+          taskRunId: `plan-commit-${input.sessionId}`,
+          workItemId: input.parentWorkItemId,
+          sessionId: input.sessionId,
+          eventType: "plan_approved",
+          phase: "plan",
+          metadata: {
+            committed: result.created.length,
+            dependencies: result.depCount,
+          },
+        })
+        .catch((err: unknown) =>
+          console.error("[planning] Failed to log lifecycle event:", err),
+        );
 
       return {
         committed: result.created.length,
