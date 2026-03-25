@@ -6,6 +6,26 @@ const rl = createInterface({ input: process.stdin });
 rl.on("line", (line) => {
   try {
     const msg = JSON.parse(line);
+    if (msg.method === "initialize") {
+      console.log(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: 1 } }));
+    }
+    if (msg.method === "session/new") {
+      console.log(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: { sessionId: "mock-acp-session" } }));
+    }
+    if (msg.method === "session/prompt") {
+      const text = msg.params?.prompt?.[0]?.text ?? "";
+      console.log(JSON.stringify({
+        jsonrpc: "2.0",
+        method: "session/update",
+        params: {
+          sessionId: msg.params?.sessionId ?? "mock-acp-session",
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            content: { type: "text", text: `ACP Echo: ${text}` },
+          },
+        },
+      }));
+    }
     if (msg.method === "session.start") {
       // Acknowledge session start
       console.log(JSON.stringify({ jsonrpc: "2.0", method: "events.output", params: { type: "text", content: "Mock agent started" } }));

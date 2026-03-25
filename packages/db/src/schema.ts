@@ -239,6 +239,49 @@ export const planDraftDependenciesRelations = relations(
 );
 
 // =============================================================================
+// Work Item Dependencies (persisted from planDraftDependencies on commit)
+// =============================================================================
+
+export const workItemDependencies = pgTable(
+  "work_item_dependencies",
+  (t) => ({
+    id: t.uuid().notNull().primaryKey().defaultRandom(),
+    workItemId: t
+      .uuid()
+      .notNull()
+      .references(() => workItems.id, { onDelete: "cascade" }),
+    dependsOnWorkItemId: t
+      .uuid()
+      .notNull()
+      .references(() => workItems.id, { onDelete: "cascade" }),
+    createdAt: t.timestamp().defaultNow().notNull(),
+  }),
+  (table) => [
+    {
+      name: "work_item_deps_unique_idx",
+      columns: [table.workItemId, table.dependsOnWorkItemId],
+      unique: true,
+    },
+  ],
+);
+
+export const workItemDependenciesRelations = relations(
+  workItemDependencies,
+  ({ one }) => ({
+    workItem: one(workItems, {
+      fields: [workItemDependencies.workItemId],
+      references: [workItems.id],
+      relationName: "work_item_dependencies",
+    }),
+    dependsOn: one(workItems, {
+      fields: [workItemDependencies.dependsOnWorkItemId],
+      references: [workItems.id],
+      relationName: "work_item_depended_on_by",
+    }),
+  }),
+);
+
+// =============================================================================
 // Dispatch Tables (batch execution of planning tasks)
 // =============================================================================
 
@@ -429,6 +472,7 @@ export const agentTypeEnum = [
   "codex",
   "gemini",
   "opencode",
+  "smol-agent",
   "cursor-agent",
   "elevenlabs",
 ] as const;
@@ -700,6 +744,12 @@ export const workItemsRelations = relations(workItems, ({ one, many }) => ({
   }),
   requirements: many(requirements, {
     relationName: "work_item_requirements",
+  }),
+  dependencies: many(workItemDependencies, {
+    relationName: "work_item_dependencies",
+  }),
+  dependedOnBy: many(workItemDependencies, {
+    relationName: "work_item_depended_on_by",
   }),
 }));
 

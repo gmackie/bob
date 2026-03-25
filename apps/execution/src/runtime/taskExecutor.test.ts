@@ -119,4 +119,16 @@ describe("execution task runtime helpers", () => {
       "Superseded by planning issue context update requiring a fresh run",
     );
   });
+
+  it("wires smol-agent launch profiles into executeTask", () => {
+    const source = readFileSync(
+      path.resolve(__dirname, "./taskExecutor.ts"),
+      "utf8",
+    );
+
+    expect(source).toContain("buildSmolAgentTaskExecutionProfile");
+    expect(source).toContain('selectedAgent === "smol-agent"');
+    expect(source).toContain("buildSmolAgentLaunchEnv");
+    expect(source).toContain("env: launchEnv");
+  });
 });

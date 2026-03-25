@@ -1,6 +1,7 @@
 import { createClaudeStdioAdapter } from "./claude-stdio.js";
 import { createCodexStdioAdapter } from "./codex-stdio.js";
 import { createOpencodeStdioAdapter } from "./opencode-stdio.js";
+import { createSmolAgentAcpAdapter } from "./smol-agent-acp.js";
 
 export interface ParsedEvent {
   type: "output" | "tool_call" | "tool_result" | "status" | "error";
@@ -26,6 +27,8 @@ export function getStdioAdapter(
       return createCodexStdioAdapter(workingDirectory);
     case "opencode":
       return createOpencodeStdioAdapter(workingDirectory);
+    case "smol-agent":
+      return createSmolAgentAcpAdapter(workingDirectory);
     default:
       return null;
   }

@@ -1161,6 +1161,19 @@ const server = createServer(async (req, res) => {
           const agentType = (body.agentType as string) ?? "claude";
           const workingDirectory = (body.workingDirectory as string) ?? "/";
           const initialPrompt = body.initialPrompt as string | undefined;
+          const rawEnv =
+            body.env && typeof body.env === "object"
+              ? (body.env as Record<string, unknown>)
+              : null;
+          const launchEnv = rawEnv
+            ? Object.fromEntries(
+                Object.entries(rawEnv).filter(
+                  (entry): entry is [string, string] =>
+                    typeof entry[0] === "string" &&
+                    typeof entry[1] === "string",
+                ),
+              )
+            : undefined;
 
           if (!sessionId || !userId) {
             sendError(res, 400, "sessionId and userId are required");
@@ -1192,7 +1205,7 @@ const server = createServer(async (req, res) => {
 
           // Start the agent subprocess (claude CLI, etc.)
           try {
-            await startAgentForSession(actor, userId, initialPrompt);
+            await startAgentForSession(actor, userId, initialPrompt, launchEnv);
           } catch (agentError) {
             console.error(`[Gateway] Failed to start agent for session ${sessionId}:`, agentError);
             // Don't fail the HTTP response — the session is created, agent can retry
@@ -1557,7 +1570,12 @@ async function validateToken(token: string): Promise<string | null> {
   return token;
 }
 
-async function startAgentForSession(actor: ReturnType<typeof sessionManager.getSession>, userId: string, initialPrompt?: string): Promise<void> {
+async function startAgentForSession(
+  actor: ReturnType<typeof sessionManager.getSession>,
+  userId: string,
+  initialPrompt?: string,
+  launchEnv?: Record<string, string>,
+): Promise<void> {
   if (!actor) return;
 
   // Check if we can use stdio mode for this agent type
@@ -1569,6 +1587,7 @@ async function startAgentForSession(actor: ReturnType<typeof sessionManager.getS
       agentType: actor.agentType,
       workingDirectory: actor.workingDirectory,
       initialPrompt,
+      env: launchEnv,
       actor,
     });
     return;

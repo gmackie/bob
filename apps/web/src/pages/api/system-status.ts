@@ -6,7 +6,8 @@ type AgentType =
   | "codex"
   | "gemini"
   | "kiro"
-  | "opencode";
+  | "opencode"
+  | "smol-agent";
 
 type SystemStatusResponse = {
   timestamp: string;
@@ -34,6 +35,7 @@ const AGENTS: Array<{ type: AgentType; name: string; command: string }> = [
   { type: "gemini", name: "Gemini", command: "gemini" },
   { type: "kiro", name: "Kiro", command: "kiro" },
   { type: "opencode", name: "OpenCode", command: "opencode" },
+  { type: "smol-agent", name: "Smol Agent", command: "smol-agent" },
 ];
 
 const HOST_DEPENDENCIES: Array<{ name: string; command: string }> = [
