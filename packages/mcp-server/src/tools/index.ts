@@ -15,6 +15,7 @@ export { createToolResult, jsonResult, errorResult } from "./types.js";
 export function createToolRegistry(): ToolRegistry {
   const registry: ToolRegistry = new Map();
 
+  // Phase 1 smol-agent task execution depends on workflow, task, and PR tools.
   const allTools: ToolDefinition[] = [
     ...statusTools,
     ...contextTools,

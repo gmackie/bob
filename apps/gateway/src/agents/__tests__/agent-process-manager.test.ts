@@ -3,6 +3,7 @@ import { join } from "path";
 import { fileURLToPath } from "url";
 import { AgentProcessManager } from "../agent-process-manager.js";
 import type { StdioAdapter, ParsedEvent } from "../adapters/base-stdio-adapter.js";
+import { createSmolAgentAcpAdapter } from "../adapters/smol-agent-acp.js";
 
 // Mock getStdioAdapter to return our test adapter
 vi.mock("../adapters/base-stdio-adapter.js", async (importOriginal) => {
@@ -12,6 +13,9 @@ vi.mock("../adapters/base-stdio-adapter.js", async (importOriginal) => {
     getStdioAdapter: (agentType: string, _workingDirectory: string): StdioAdapter | null => {
       if (agentType === "mock") {
         return createMockAdapter();
+      }
+      if (agentType === "smol-agent") {
+        return createMockSmolAdapter();
       }
       return null;
     },
@@ -61,6 +65,16 @@ function createMockAdapter(): StdioAdapter {
       }
       return JSON.stringify({ jsonrpc: "2.0", method: "chat.send", params: { message } }) + "\n";
     },
+  };
+}
+
+function createMockSmolAdapter(): StdioAdapter {
+  const adapter = createSmolAgentAcpAdapter("/tmp");
+  return {
+    ...adapter,
+    command: "node",
+    args: [join(__dirname, "mock-agent.mjs")],
+    env: {},
   };
 }
 
@@ -185,5 +199,27 @@ describe("AgentProcessManager", () => {
     expect(manager.getStatus("test-status")).toBe("running");
 
     await manager.stopSession("test-status");
+  });
+
+  it("starts a smol-agent session and sends the first ACP prompt after bootstrap", async () => {
+    await manager.startSession({
+      sessionId: "test-smol",
+      agentType: "smol-agent",
+      workingDirectory: "/tmp",
+      initialPrompt: "Implement the task",
+      actor: actor as any,
+    });
+
+    expect(manager.isManaging("test-smol")).toBe(true);
+
+    await new Promise((r) => setTimeout(r, 500));
+
+    const outputCalls = actor.handleAgentOutput.mock.calls;
+    const acpEcho = outputCalls.find((c: unknown[]) =>
+      (c[0] as string).includes("ACP Echo: Implement the task"),
+    );
+    expect(acpEcho).toBeDefined();
+
+    await manager.stopSession("test-smol");
   });
 });

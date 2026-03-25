@@ -17,6 +17,7 @@ interface StartSessionConfig {
   agentType: string;
   workingDirectory: string;
   initialPrompt?: string;
+  env?: Record<string, string>;
   actor: SessionActor;
 }
 
@@ -63,6 +64,7 @@ export class AgentProcessManager {
     const env = {
       ...process.env,
       ...adapter.env,
+      ...config.env,
     };
 
     console.log(
@@ -179,7 +181,7 @@ export class AgentProcessManager {
 
     ptySession.pty.onExit(({ exitCode, signal }) => {
       console.log(`[AgentProcessManager] Claude PTY exited for ${sessionId}: code=${exitCode} signal=${signal}`);
-      actor.handleAgentExit(exitCode, signal);
+      actor.handleAgentExit(exitCode ?? null, signal != null ? String(signal) : null);
       this.sessions.delete(sessionId);
     });
 
@@ -399,6 +401,16 @@ export class AgentProcessManager {
       case "status":
         // Status events are informational — log them
         console.log(`[AgentProcessManager] Status for session ${sessionId}:`, event.data);
+        if (
+          typeof event.data.followUpInput === "string" &&
+          event.data.followUpInput.length > 0 &&
+          managed.process.stdin?.writable
+        ) {
+          const followUp = event.data.followUpInput.endsWith("\n")
+            ? event.data.followUpInput
+            : `${event.data.followUpInput}\n`;
+          managed.process.stdin.write(followUp);
+        }
         break;
 
       case "error":

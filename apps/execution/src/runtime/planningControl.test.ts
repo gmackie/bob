@@ -39,6 +39,7 @@ vi.mock("@bob/db", () => ({
 
 vi.mock("@bob/db/schema", () => ({
   chatConversations: { id: { name: "id" } },
+  taskRunStatusEnum: ["starting", "running", "blocked", "failed", "completed"],
   taskRuns: {
     workItemId: { name: "work_item_id" },
     planningItemId: { name: "planning_item_id" },

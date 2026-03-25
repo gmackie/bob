@@ -15,6 +15,7 @@ import {
   taskRuns,
   worktrees,
 } from "@bob/db/schema";
+import { buildSmolAgentTaskExecutionProfile } from "./smolAgentProfile";
 
 /** Decrypt a git provider access token (matches tokenVault.ts logic) */
 function decryptProviderToken(
@@ -74,6 +75,18 @@ export interface IssueContextFieldChange {
     | "epicId";
   from: string | null;
   to: string | null;
+}
+
+function buildSmolAgentLaunchEnv(
+  profileEnv: Record<string, string>,
+): Record<string, string> {
+  return {
+    ...profileEnv,
+    BOB_API_URL: process.env.BOB_API_URL ?? "http://localhost:3000",
+    ...(process.env.BOB_API_KEY
+      ? { BOB_API_KEY: process.env.BOB_API_KEY }
+      : {}),
+  };
 }
 
 function expectInsertedRow<T>(row: T | undefined, message: string): T {
@@ -381,7 +394,7 @@ export async function executeTask(
     }
   }
 
-  const prompt = buildInitialPrompt(task, options);
+  const selectedAgent = options?.agentType ?? "opencode";
 
   const [session] = await db
     .insert(chatConversations)
@@ -390,7 +403,7 @@ export async function executeTask(
       repositoryId: repoInfo.repositoryId,
       worktreeId,
       workingDirectory: worktreePath,
-      agentType: options?.agentType ?? "opencode",
+      agentType: selectedAgent,
       title: `${task.identifier}: ${task.title}`,
       status: "provisioning",
       workItemId: task.id,
@@ -426,12 +439,32 @@ export async function executeTask(
     "Failed to create starting task run",
   );
 
+  const smolAgentProfile =
+    selectedAgent === "smol-agent"
+      ? buildSmolAgentTaskExecutionProfile({
+          sessionId: insertedSession.id,
+          taskRunId: insertedTaskRun.id,
+          workItemId: task.id,
+          workItemIdentifier: task.identifier,
+          title: task.title,
+          description: task.description,
+          branch,
+          workingDirectory: worktreePath,
+        })
+      : null;
+  const prompt =
+    smolAgentProfile?.initialPrompt ?? buildInitialPrompt(task, options);
+  const launchEnv = smolAgentProfile
+    ? buildSmolAgentLaunchEnv(smolAgentProfile.env)
+    : undefined;
+
   try {
     await gatewayRequest(userId, "/session/start", {
       sessionId: insertedSession.id,
       workingDirectory: worktreePath,
-      agentType: options?.agentType ?? "opencode",
+      agentType: selectedAgent,
       initialPrompt: prompt,
+      env: launchEnv,
     });
   } catch (error) {
     const errorMessage =
