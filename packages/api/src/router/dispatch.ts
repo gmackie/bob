@@ -4,12 +4,16 @@ import { z } from "zod/v4";
 
 import { and, desc, eq, inArray } from "@bob/db";
 import {
+  chatConversations,
   dispatchBatches,
   dispatchItems,
   notifications,
   planDraftDependencies,
   planDrafts,
+  pullRequests,
   taskRuns,
+  workItemArtifacts,
+  workItems,
 } from "@bob/db/schema";
 
 import {
@@ -47,6 +51,135 @@ async function updatePlanningTaskStatus(
       `[dispatch] Failed to update planning task ${taskId}: ${err}`,
     );
   }
+}
+
+/**
+ * Fire-and-forget: trigger a code-reviewer smol-agent session for a completed
+ * dispatch item that has an associated pull request.
+ */
+async function triggerCodeReview(
+  database: typeof import("@bob/db/client").db,
+  item: {
+    planningTaskId: string;
+    planningTaskIdentifier: string;
+    title: string;
+    description: string | null;
+    taskRunId: string | null;
+  },
+  userId: string,
+): Promise<void> {
+  if (!item.taskRunId) return;
+
+  // Look up the task run to get the PR ID
+  const taskRun = await database.query.taskRuns.findFirst({
+    where: eq(taskRuns.id, item.taskRunId),
+  });
+  if (!taskRun?.pullRequestId) return;
+
+  // Look up PR details for the diff URL
+  const pr = await database.query.pullRequests.findFirst({
+    where: eq(pullRequests.id, taskRun.pullRequestId),
+  });
+  if (!pr) return;
+
+  // Build a diff URL from the PR info
+  const prDiffUrl = pr.url.endsWith(".diff") ? pr.url : `${pr.url}.diff`;
+
+  // Look up the work item for requirements (description serves as requirements)
+  const workItem = await database.query.workItems.findFirst({
+    where: eq(workItems.id, item.planningTaskId),
+  });
+
+  // Build the requirements list from the work item description
+  const requirements: string[] = [];
+  if (workItem?.description) {
+    // Split description into lines, use non-empty lines as requirements
+    const lines = workItem.description.split("\n").filter((l) => l.trim());
+    requirements.push(...lines);
+  }
+
+  // Look up the session to get the working directory
+  const session = taskRun.sessionId
+    ? await database.query.chatConversations.findFirst({
+        where: eq(chatConversations.id, taskRun.sessionId),
+      })
+    : null;
+
+  const workingDirectory = session?.workingDirectory ?? "/tmp";
+
+  // Build the review profile
+  const { buildSmolAgentReviewProfile } = await import(
+    "@bob/execution/planning/smolAgentReviewProfile"
+  );
+
+  // Create a review session record
+  const [reviewSession] = await database
+    .insert(chatConversations)
+    .values({
+      userId,
+      repositoryId: taskRun.repositoryId,
+      worktreeId: taskRun.worktreeId,
+      workingDirectory,
+      agentType: "smol-agent",
+      title: `Review: ${item.planningTaskIdentifier} - ${item.title}`,
+      status: "provisioning",
+      workItemId: workItem?.id ?? null,
+      workItemIdentifierSnapshot: item.planningTaskIdentifier,
+      gitBranch: taskRun.branch,
+      sessionType: "review",
+    })
+    .returning();
+
+  if (!reviewSession) return;
+
+  // Create a review task run
+  const [reviewTaskRun] = await database
+    .insert(taskRuns)
+    .values({
+      userId,
+      workItemId: workItem?.id ?? null,
+      workItemIdentifierSnapshot: item.planningTaskIdentifier,
+      planningWorkspaceId: taskRun.planningWorkspaceId,
+      planningItemId: item.planningTaskId,
+      planningItemIdentifier: item.planningTaskIdentifier,
+      sessionId: reviewSession.id,
+      repositoryId: taskRun.repositoryId,
+      worktreeId: taskRun.worktreeId,
+      status: "starting",
+      branch: taskRun.branch,
+      runPhase: "review",
+      parentTaskRunId: taskRun.id,
+    })
+    .returning();
+
+  if (!reviewTaskRun) return;
+
+  const profile = buildSmolAgentReviewProfile({
+    sessionId: reviewSession.id,
+    workItemId: item.planningTaskId,
+    pullRequestId: taskRun.pullRequestId,
+    workItemTitle: item.title,
+    prDiffUrl,
+    requirements,
+    taskDescription: item.description ?? item.title,
+    workingDirectory,
+  });
+
+  const { gatewayRequest } = await import(
+    "@bob/execution/runtime/taskExecutor"
+  );
+
+  await gatewayRequest(userId, "/session/start", {
+    sessionId: reviewSession.id,
+    workingDirectory,
+    agentType: "smol-agent",
+    initialPrompt: profile.initialPrompt,
+    env: {
+      ...profile.env,
+      BOB_API_URL: process.env.BOB_API_URL ?? "http://localhost:3000",
+      ...(process.env.BOB_API_KEY ? { BOB_API_KEY: process.env.BOB_API_KEY } : {}),
+    },
+  });
 }
 
 export const dispatchRouter = {
@@ -438,6 +571,11 @@ export const dispatchRouter = {
 
             // Update planning API status to "in_review"
             void updatePlanningTaskStatus(item.planningTaskId, "in_review");
+
+            // Auto-trigger code reviewer if PR exists on the task run
+            void triggerCodeReview(ctx.db, item, batch.userId).catch((err) =>
+              console.error(`[dispatch] Failed to trigger code review:`, err),
+            );
 
             // Report to ForgeGraph
             if (item.taskRunId) {

@@ -5,6 +5,8 @@ import {
   forgeBuilds,
   forgeDeployments,
   notifications,
+  taskRuns,
+  workItemArtifacts,
 } from "@bob/db/schema";
 import { emitWebhookEvent } from "../webhooks/webhookDeliveryService";
 
@@ -16,14 +18,14 @@ type Database = any;
  * Called by checkProgress on each polling cycle.
  *
  * States:
- *   null → agent_complete → building → gates_passed → deploying_dev → dev_healthy →
- *   deploying_staging → staging_healthy → awaiting_prod_approval →
- *   deploying_prod → prod_healthy → complete
+ *   null → agent_complete → awaiting_review → building → gates_passed →
+ *   deploying_dev → dev_healthy → deploying_staging → staging_healthy →
+ *   awaiting_prod_approval → deploying_prod → prod_healthy → complete
  *
- *   Any state → build_failed / deploy_failed (terminal failure states)
+ *   Any state → build_failed / deploy_failed / review_failed (terminal failure states)
  */
 
-const TERMINAL_STATES = ["complete", "build_failed", "deploy_failed"];
+const TERMINAL_STATES = ["complete", "build_failed", "deploy_failed", "review_failed"];
 
 interface PipelineItem {
   id: string;
@@ -69,6 +71,9 @@ export async function advancePipeline(
   switch (stateBefore) {
     case "agent_complete":
       await handleAgentComplete(db, item);
+      break;
+    case "awaiting_review":
+      await handleAwaitingReview(db, item, batch);
       break;
     case "building":
       await handleBuilding(db, item, batch);
@@ -134,25 +139,113 @@ async function handleAgentComplete(
 ): Promise<void> {
   if (!item.taskRunId) return;
 
-  // Look up the forge revision for this task run
+  // Transition to awaiting_review — the review gate will approve before building
+  await setPipelineState(db, item.id, "awaiting_review");
+}
+
+async function handleAwaitingReview(
+  db: Database,
+  item: PipelineItem,
+  batch: PipelineBatch,
+): Promise<void> {
+  // Check for a current code_review artifact for this task's work item
+  const review = await db.query.workItemArtifacts.findFirst({
+    where: and(
+      eq(workItemArtifacts.artifactType, "code_review"),
+      eq(workItemArtifacts.isCurrent, true),
+      eq(workItemArtifacts.workItemId, item.planningTaskId),
+    ),
+  });
+
+  if (!review?.content) return; // No review yet — wait
+
+  try {
+    const parsed = JSON.parse(review.content as string) as { decision: string };
+
+    if (parsed.decision === "approve") {
+      // Review passed — trigger build
+      await triggerBuild(db, item);
+      await setPipelineState(db, item.id, "building");
+    } else if (parsed.decision === "request_changes") {
+      // Resume execution agent with review feedback, then mark this
+      // review artifact as stale so the next review cycle creates a new one.
+      console.log(
+        `[pipeline] Review requested changes for ${item.planningTaskIdentifier}`,
+      );
+
+      const reviewContent = parsed as {
+        decision: string;
+        summary?: string;
+        comments?: Array<{ file: string; line: number; comment: string }>;
+      };
+
+      const feedbackLines = [
+        "Code review requested changes:",
+        reviewContent.summary ?? "",
+        "",
+      ];
+
+      if (reviewContent.comments && reviewContent.comments.length > 0) {
+        feedbackLines.push("Specific comments:");
+        for (const c of reviewContent.comments) {
+          feedbackLines.push(`- ${c.file}:${c.line} — ${c.comment}`);
+        }
+      }
+
+      const feedbackMessage = feedbackLines.join("\n");
+
+      // Find the execution task run (not the review task run) for this item
+      if (item.taskRunId) {
+        const { resumeBlockedTask } = await import(
+          "@bob/execution/runtime/taskExecutor"
+        );
+        void resumeBlockedTask(item.taskRunId, feedbackMessage).catch((err) =>
+          console.error(
+            `[pipeline] Failed to resume task with review feedback:`,
+            err,
+          ),
+        );
+      }
+
+      // Mark the review artifact as stale so the next review creates a fresh one
+      await db
+        .update(workItemArtifacts)
+        .set({ isCurrent: false })
+        .where(eq(workItemArtifacts.id, review.id));
+    }
+  } catch {
+    // Malformed review artifact
+    console.error(
+      `[pipeline] Failed to parse review artifact for ${item.planningTaskIdentifier}`,
+    );
+  }
+}
+
+/**
+ * Trigger a build for a dispatch item. Extracted from handleAgentComplete
+ * so it can be reused by handleAwaitingReview after review approval.
+ */
+async function triggerBuild(
+  db: Database,
+  item: PipelineItem,
+): Promise<void> {
+  if (!item.taskRunId) return;
+
   const revision = await db.query.forgeRevisions.findFirst({
     where: eq(forgeRevisions.taskRunId, item.taskRunId),
   });
   if (!revision) return;
 
-  // Trigger a build — idempotent via idempotencyKey
   await db
     .insert(forgeBuilds)
     .values({
       revisionId: revision.id,
       repoId: revision.repoId,
-      idempotencyKey: item.id, // one build per dispatch item
+      idempotencyKey: item.id,
     })
     .onConflictDoNothing({
       target: [forgeBuilds.idempotencyKey],
     });
-
-  await setPipelineState(db, item.id, "building");
 }
 
 async function handleBuilding(

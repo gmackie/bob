@@ -8,11 +8,13 @@ import {
   forgeDeployments,
   forgeRevisions,
   gitCommits,
+  prReviews,
   pullRequests,
   repositories,
   sessionEvents,
   taskRuns,
   webhookDeliveries,
+  workItemArtifacts,
 } from "@bob/db/schema";
 
 export type WebhookProvider = "github" | "gitlab" | "gitea" | "planning";
@@ -136,6 +138,9 @@ export async function processGitHubWebhook(
       case "push":
         await handleGitHubPush(payload as unknown as GitHubPushPayload);
         break;
+      case "pull_request_review":
+        await handleGitHubPullRequestReview(payload);
+        break;
       case "check_run":
         await handleGitHubCheckRun(payload);
         break;
@@ -195,6 +200,32 @@ async function handleGitHubPullRequest(
         closedAt: pr.closed_at ? new Date(pr.closed_at) : null,
       })
       .where(eq(pullRequests.id, existing.id));
+
+    // When new commits are pushed (synchronize), invalidate stale code_review
+    // artifacts so the review gate doesn't use an outdated review.
+    if (payload.action === "synchronize") {
+      // Find task runs linked to this PR to get the work item ID
+      const linkedTaskRun = await db.query.taskRuns.findFirst({
+        where: eq(taskRuns.pullRequestId, existing.id),
+      });
+
+      if (linkedTaskRun?.workItemId) {
+        await db
+          .update(workItemArtifacts)
+          .set({ isCurrent: false })
+          .where(
+            and(
+              eq(workItemArtifacts.workItemId, linkedTaskRun.workItemId),
+              eq(workItemArtifacts.artifactType, "code_review"),
+              eq(workItemArtifacts.isCurrent, true),
+            ),
+          );
+
+        console.log(
+          `[webhook:pull_request] Invalidated stale code_review artifacts for PR #${pr.number}`,
+        );
+      }
+    }
   }
 }
 
@@ -789,6 +820,71 @@ export async function processPlanningWebhook(
     );
     throw error;
   }
+}
+
+// ──────────────────────────────────────────────────────────────
+// GitHub Pull Request Review Sync
+// ──────────────────────────────────────────────────────────────
+
+async function handleGitHubPullRequestReview(
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const review = payload.review as {
+    state: string;
+    body?: string;
+    user?: { login: string; id: number };
+  } | undefined;
+  const pullRequest = payload.pull_request as {
+    number: number;
+  } | undefined;
+  const repository = payload.repository as {
+    owner: { login: string };
+    name: string;
+  } | undefined;
+
+  if (!review || !pullRequest || !repository) return;
+
+  // Only sync approved and changes_requested — ignore "commented"
+  if (review.state !== "approved" && review.state !== "changes_requested") {
+    return;
+  }
+
+  const owner = repository.owner.login;
+  const repo = repository.name;
+  const prNumber = pullRequest.number;
+
+  // Find the matching PR in Bob's database
+  const existingPr = await db.query.pullRequests.findFirst({
+    where: and(
+      eq(pullRequests.provider, "github"),
+      isNull(pullRequests.instanceUrl),
+      eq(pullRequests.remoteOwner, owner),
+      eq(pullRequests.remoteName, repo),
+      eq(pullRequests.number, prNumber),
+    ),
+  });
+
+  if (!existingPr) {
+    console.log(
+      `[webhook:pull_request_review] No matching PR found for ${owner}/${repo}#${prNumber}`,
+    );
+    return;
+  }
+
+  // Upsert the review record
+  const reviewerUserId = review.user?.login ?? "unknown";
+  const status = review.state as "approved" | "changes_requested";
+
+  await db.insert(prReviews).values({
+    pullRequestId: existingPr.id,
+    userId: reviewerUserId,
+    status,
+    body: review.body ?? null,
+  });
+
+  console.log(
+    `[webhook:pull_request_review] Synced external review ${status} for PR #${prNumber} (${owner}/${repo})`,
+  );
 }
 
 // ──────────────────────────────────────────────────────────────
