@@ -5,6 +5,7 @@ let nextId = 1;
 export function createCodexStdioAdapter(workingDirectory: string): StdioAdapter {
   let initialized = false;
   let threadStarted = false;
+  let threadId: string | null = null;
 
   return {
     command: "codex",
@@ -97,10 +98,15 @@ export function createCodexStdioAdapter(workingDirectory: string): StdioAdapter 
 
         // Track initialization and thread start responses
         if (msg.result !== undefined) {
+          const result = msg.result as Record<string, unknown> | null;
           if (!initialized) {
             initialized = true;
           } else if (!threadStarted) {
             threadStarted = true;
+            // Capture threadId from thread/start response
+            if (result && typeof result.threadId === "string") {
+              threadId = result.threadId;
+            }
           }
           return { type: "status", data: { result: msg.result } };
         }
@@ -152,6 +158,7 @@ export function createCodexStdioAdapter(workingDirectory: string): StdioAdapter 
           id: nextId++,
           method: "turn/start",
           params: {
+            ...(threadId ? { threadId } : {}),
             prompt: [{ type: "text", text: message }],
           },
         }),
