@@ -61,6 +61,22 @@ function formatEventType(eventType: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function isDelegationEvent(eventType: string): boolean {
+  return eventType === "delegation_started" || eventType === "delegation_completed";
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function getEventLabel(event: LifecycleEvent): string {
+  if (isDelegationEvent(event.eventType) && event.metadata?.toolName) {
+    return String(event.metadata.toolName);
+  }
+  return formatEventType(event.eventType);
+}
+
 interface LifecycleEvent {
   id: string;
   taskRunId: string;
@@ -138,10 +154,20 @@ export function LifecycleTimeline({ workItemId }: LifecycleTimelineProps) {
             Object.keys(event.metadata).length > 0;
           const isMetadataExpanded = expandedMetadata.has(event.id);
 
+          const isDelegation = isDelegationEvent(event.eventType);
+          const isError = isDelegation && event.metadata?.isError === true;
+          const durationMs =
+            event.eventType === "delegation_completed" && event.metadata?.durationMs != null
+              ? Number(event.metadata.durationMs)
+              : null;
+
           return (
-            <li key={event.id} className="relative flex gap-3 pb-4">
+            <li
+              key={event.id}
+              className={`relative flex gap-3 pb-4 ${isDelegation ? "ml-4 border-l-2 border-[#B5B2AB] pl-3 dark:border-[#6E6B64]" : ""}`}
+            >
               {/* Vertical connector line */}
-              {!isLast && (
+              {!isLast && !isDelegation && (
                 <span
                   className="absolute left-[5px] top-3 bottom-0 w-px bg-[#E3E1DC] dark:bg-[#2E2D2A]"
                   aria-hidden="true"
@@ -149,22 +175,40 @@ export function LifecycleTimeline({ workItemId }: LifecycleTimelineProps) {
               )}
 
               {/* Timeline dot */}
-              <span
-                className="relative mt-1.5 size-[10px] shrink-0 rounded-full border-2 border-white bg-[#B5B2AB] dark:border-[#1C1B18] dark:bg-[#6E6B64]"
-                aria-hidden="true"
-              />
+              {!isDelegation && (
+                <span
+                  className="relative mt-1.5 size-[10px] shrink-0 rounded-full border-2 border-white bg-[#B5B2AB] dark:border-[#1C1B18] dark:bg-[#6E6B64]"
+                  aria-hidden="true"
+                />
+              )}
 
               {/* Event content */}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <PhaseBadge phase={event.phase} />
-                  <span className="font-[family-name:var(--font-dm-sans)] text-sm text-[#1C1B18] dark:text-[#EEEDEA]">
-                    {formatEventType(event.eventType)}
+                  <span
+                    className={`font-[family-name:var(--font-dm-sans)] text-sm ${
+                      isError
+                        ? "text-red-600 dark:text-red-400"
+                        : "text-[#1C1B18] dark:text-[#EEEDEA]"
+                    }`}
+                  >
+                    {getEventLabel(event)}
                   </span>
+                  {durationMs != null && (
+                    <span className={`font-[family-name:var(--font-jetbrains-mono)] text-xs ${isError ? "text-red-500 dark:text-red-400" : "text-[#8A877E] dark:text-[#6E6B64]"}`}>
+                      {formatDuration(durationMs)}
+                    </span>
+                  )}
                 </div>
 
-                <p className="mt-0.5 font-[family-name:var(--font-dm-sans)] text-[13px] text-[#8A877E] dark:text-[#6E6B64]">
+                <p className={`mt-0.5 font-[family-name:var(--font-dm-sans)] text-[13px] ${isError ? "text-red-500 dark:text-red-400" : "text-[#8A877E] dark:text-[#6E6B64]"}`}>
                   {formatRelativeTime(event.createdAt)}
+                  {isDelegation && !event.metadata?.toolName && (
+                    <span className="ml-1 italic">
+                      ({formatEventType(event.eventType)})
+                    </span>
+                  )}
                 </p>
 
                 {hasMetadata && (

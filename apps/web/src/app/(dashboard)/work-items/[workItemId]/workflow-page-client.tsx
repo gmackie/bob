@@ -12,6 +12,7 @@ import {
   type WorkflowLaunchIntent,
 } from "~/components/workflow/workflow-launch-dialog";
 import { WorkItemDetailInteractive } from "~/components/work-items/work-item-detail-interactive";
+import { LifecycleTimelineSection } from "~/components/work-items/lifecycle-timeline-section";
 
 interface WorkflowPageClientProps {
   workItem: WorkflowPageProps["workItem"];
@@ -146,6 +147,7 @@ export function WorkflowPageClient({
           router.refresh();
         }}
       />
+      <LifecycleTimelineSection workItemId={workItem.id} />
       <WorkflowLaunchDialog
         open={launchIntent !== null}
         onOpenChange={(open) => {

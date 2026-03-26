@@ -20,6 +20,7 @@ import { ArtifactCardGrid } from "./artifact-card";
 import { DescriptionEditor } from "./description-editor";
 import { EditableTitle } from "./editable-title";
 import { ForgeGraphSection } from "./forge-graph-section";
+import { LifecycleTimelineSection } from "./lifecycle-timeline-section";
 import { PriorityBadge } from "./priority-badge";
 import { PromoteToTaskButton } from "./promote-to-task-button";
 import { RequirementsChecklist } from "./requirements-checklist";
@@ -234,6 +235,10 @@ export function WorkItemDetailInteractive({
           </ErrorBoundary>
         )}
       </section>
+
+      <ErrorBoundary section="Lifecycle Events">
+        <LifecycleTimelineSection workItemId={workItem.id} />
+      </ErrorBoundary>
     </div>
   );
 }
