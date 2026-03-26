@@ -1203,12 +1203,28 @@ const server = createServer(async (req, res) => {
             return;
           }
 
-          // Start the agent subprocess (claude CLI, etc.)
+          // Start the agent subprocess — fall back to claude if preferred agent fails
           try {
             await startAgentForSession(actor, userId, initialPrompt, launchEnv);
           } catch (agentError) {
-            console.error(`[Gateway] Failed to start agent for session ${sessionId}:`, agentError);
-            // Don't fail the HTTP response — the session is created, agent can retry
+            if (agentType !== "claude") {
+              console.warn(
+                `[Gateway] ${agentType} failed for session ${sessionId}, falling back to claude:`,
+                agentError instanceof Error ? agentError.message : agentError,
+              );
+              // Update session to use claude
+              await db
+                .update(chatConversations)
+                .set({ agentType: "claude" })
+                .where(eq(chatConversations.id, sessionId));
+              try {
+                await startAgentForSession(actor, userId, initialPrompt, undefined, "claude");
+              } catch (fallbackError) {
+                console.error(`[Gateway] Claude fallback also failed for ${sessionId}:`, fallbackError);
+              }
+            } else {
+              console.error(`[Gateway] Failed to start agent for session ${sessionId}:`, agentError);
+            }
           }
 
           sendJson(res, 200, {
@@ -1575,16 +1591,19 @@ async function startAgentForSession(
   userId: string,
   initialPrompt?: string,
   launchEnv?: Record<string, string>,
+  agentTypeOverride?: string,
 ): Promise<void> {
   if (!actor) return;
 
+  const effectiveAgentType = agentTypeOverride ?? actor.agentType;
+
   // Check if we can use stdio mode for this agent type
-  const stdioAdapter = getStdioAdapter(actor.agentType, actor.workingDirectory);
+  const stdioAdapter = getStdioAdapter(effectiveAgentType, actor.workingDirectory);
   if (stdioAdapter && process.env.AGENT_STDIO_MODE !== "false") {
-    console.log(`[Gateway] Using stdio mode for ${actor.agentType} session ${actor.sessionId}`);
+    console.log(`[Gateway] Using stdio mode for ${effectiveAgentType} session ${actor.sessionId}`);
     await agentProcessManager.startSession({
       sessionId: actor.sessionId,
-      agentType: actor.agentType,
+      agentType: effectiveAgentType,
       workingDirectory: actor.workingDirectory,
       initialPrompt,
       env: launchEnv,
@@ -1595,8 +1614,8 @@ async function startAgentForSession(
 
   // Skip PTY session creation for non-PTY agents (e.g., elevenlabs, opencode chat)
   const ptyAgents = ["claude", "codex", "gemini", "kiro", "cursor-agent"];
-  if (!ptyAgents.includes(actor.agentType)) {
-    console.log(`[Gateway] Agent ${actor.agentType} is not PTY-based, skipping container setup`);
+  if (!ptyAgents.includes(effectiveAgentType)) {
+    console.log(`[Gateway] Agent ${effectiveAgentType} is not PTY-based, skipping container setup`);
     actor.setStatus("running");
     return;
   }
