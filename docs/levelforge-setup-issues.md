@@ -226,3 +226,36 @@ Fix: Update the gateway to use Claude Code's JSON-RPC protocol:
 
 See Claude Code's protocol spec for the full method list.
 The valid methods are listed in the error response.
+
+---
+
+## Update: 2026-03-25 10:56 PM — CASCADE WORKS! Protocol issue remaining.
+
+### Major Progress
+1. Claude hits usage limit → cascade to Codex: **WORKING**
+2. Codex thread created: **WORKING** (gpt-5.3-codex-spark, cwd /home/mackieg/levelforge)
+3. Thread ID: 019d28aa-d0e5-73f0-82fc-3389182d3771
+
+### Issue 7: Missing threadId on turn/start calls
+The gateway creates a thread successfully via `thread/start` (gets back threadId).
+But subsequent `turn/start` calls don't include the threadId, causing:
+```json
+{"error":{"code":-32600,"message":"Invalid request: missing field `threadId`"},"id":4}
+```
+
+Fix: After receiving the `thread/start` response, store `result.thread.id` and
+include it as `threadId` in all subsequent `turn/start` calls:
+```json
+{"method": "turn/start", "params": {"threadId": "019d28aa-...", "message": "..."}, "id": 4}
+```
+
+### Issue 8: Shell snapshot validation error (non-fatal)
+```
+Shell snapshot validation failed: line 461: syntax error near unexpected token `(`
+```
+This is a Codex CLI issue with the shell snapshot on labnuc, likely a zsh/bash
+incompatibility. Non-fatal but should be investigated.
+
+### Summary: Almost There
+The full pipeline works: spawn → cascade → connect → thread create.
+One field (`threadId`) missing from turn/start calls. One-line fix in the gateway.
