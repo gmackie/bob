@@ -1203,28 +1203,46 @@ const server = createServer(async (req, res) => {
             return;
           }
 
-          // Start the agent subprocess — fall back to claude if preferred agent fails
-          try {
-            await startAgentForSession(actor, userId, initialPrompt, launchEnv);
-          } catch (agentError) {
-            if (agentType !== "claude") {
-              console.warn(
-                `[Gateway] ${agentType} failed for session ${sessionId}, falling back to claude:`,
-                agentError instanceof Error ? agentError.message : agentError,
-              );
-              // Update session to use claude
-              await db
-                .update(chatConversations)
-                .set({ agentType: "claude" })
-                .where(eq(chatConversations.id, sessionId));
-              try {
-                await startAgentForSession(actor, userId, initialPrompt, undefined, "claude");
-              } catch (fallbackError) {
-                console.error(`[Gateway] Claude fallback also failed for ${sessionId}:`, fallbackError);
+          // Start the agent subprocess — cascade through fallback agents on failure
+          const fallbackChain = [agentType, "claude", "codex", "gemini"].filter(
+            (a, i, arr) => arr.indexOf(a) === i, // dedupe (if agentType is already claude/codex/gemini)
+          );
+
+          let started = false;
+          for (const tryAgent of fallbackChain) {
+            try {
+              if (tryAgent !== agentType) {
+                console.warn(
+                  `[Gateway] ${fallbackChain[fallbackChain.indexOf(tryAgent) - 1]} failed for session ${sessionId}, trying ${tryAgent}`,
+                );
+                await db
+                  .update(chatConversations)
+                  .set({ agentType: tryAgent })
+                  .where(eq(chatConversations.id, sessionId));
               }
-            } else {
-              console.error(`[Gateway] Failed to start agent for session ${sessionId}:`, agentError);
+              await startAgentForSession(
+                actor,
+                userId,
+                initialPrompt,
+                tryAgent === agentType ? launchEnv : undefined,
+                tryAgent === agentType ? undefined : tryAgent,
+              );
+              started = true;
+              break;
+            } catch (err) {
+              console.warn(
+                `[Gateway] Agent ${tryAgent} failed for session ${sessionId}:`,
+                err instanceof Error ? err.message : err,
+              );
             }
+          }
+
+          if (!started) {
+            console.error(`[Gateway] All agents failed for session ${sessionId}. Fallback chain: ${fallbackChain.join(" → ")}`);
+            await db
+              .update(chatConversations)
+              .set({ status: "error", lastError: { code: "ALL_AGENTS_FAILED", message: `No agent available. Tried: ${fallbackChain.join(", ")}`, timestamp: new Date().toISOString() } })
+              .where(eq(chatConversations.id, sessionId));
           }
 
           sendJson(res, 200, {
