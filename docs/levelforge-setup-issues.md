@@ -86,3 +86,28 @@ Deploy: `https://level.gmac.io` (live)
 
 Sprint 1 tasks (14 items) are documented in:
 `docs/plans/2026-03-25-master-implementation-roadmap.md`
+
+---
+
+## Update: 2026-03-25 7:35 PM
+
+Re-tested after user reported issues resolved. Same behavior:
+- Shaping session still shows "provisioning (connecting...)" → "Disconnected - reconnecting..."
+- System Status: Claude = Installed, Auth = "-" (NOT AUTHENTICATED)
+- "Add repositories" message still shows — repo not registered
+
+### Root Cause
+Two issues remain:
+1. **Claude agent not authenticated** — Auth column shows "-". Need to run `claude login` or set API key on the Bob host.
+2. **No repositories registered** — The "Add Repository" action needs to be used but isn't visible as a button. May need to clone the repo and add it via CLI/API.
+
+### To Fix
+On the Bob host machine:
+```bash
+# 1. Authenticate Claude
+claude login  # or set ANTHROPIC_API_KEY
+
+# 2. Clone and register LevelForge repo
+git clone https://git.gmac.io/gmackie/levelforge.git /home/bob/repos/levelforge
+# Then register via Bob's API or admin interface
+```
