@@ -142,3 +142,33 @@ Fix Claude auth and repo registration on the Bob host, then retry.
 In the meantime, LevelForge Sprint 1 can be executed manually using
 Claude Code subagent-driven development (which has been working well
 throughout this session).
+
+---
+
+## Update: 2026-03-25 8:10 PM — Gateway Cascade Fix Deployed, Still Not Connecting
+
+Bob team confirmed:
+- Claude auth is working (loggedIn: true)
+- LevelForge repo registered at /home/mackieg/levelforge
+- Duplicate project deleted
+- Gateway cascade fallback (smol-agent → claude → codex → gemini) deployed
+- Stale smol-agent issue was the original blocker
+
+Current state: Session opens, shows "provisioning (connecting...)" but never
+transitions to "connected." After 90+ seconds, stays at "Disconnected - reconnecting..."
+
+### Likely Remaining Issue
+The gateway may be spawning the Claude agent process but the PTY/WebSocket
+stream between the agent and the browser isn't establishing. Check:
+- `journalctl -u bob-gateway` on labnuc for spawn/connection errors
+- Whether the Claude process actually starts: `ps aux | grep claude`
+- WebSocket connection in browser DevTools (Network tab, WS filter)
+
+### LevelForge Setup Is Complete
+- Project: LF (3bd98932)
+- Epic: LF-1 (Sprint 1: Foundation Wiring)
+- Repo: /home/mackieg/levelforge (registered)
+- Auth: Claude authenticated
+- CI: .gitea/workflows/ci.yml deployed
+
+Only the PTY session connection is broken. Everything else is ready.
