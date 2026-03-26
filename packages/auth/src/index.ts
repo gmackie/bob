@@ -54,8 +54,11 @@ export function initAuth<
           "expo://",
           "bob://",
           "http://localhost:3000",
+          "https://bob-web.localhost",
           options.baseUrl,
           options.productionUrl,
+          // Allow extra trusted origins via env var (comma-separated)
+          ...(process.env.TRUSTED_ORIGINS?.split(",").map((o) => o.trim()) ?? []),
         ].filter(Boolean),
       ),
     ),
