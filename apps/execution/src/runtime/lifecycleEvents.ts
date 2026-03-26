@@ -9,7 +9,11 @@ export type LifecycleEventType =
   | "plan_approved"
   | "plan_rejected"
   | "brd_generated"
-  | "tasks_dispatched";
+  | "tasks_dispatched"
+  | "delegation_started"
+  | "delegation_completed"
+  | "review_requested"
+  | "review_completed";
 
 export interface LifecycleEventInput {
   taskRunId: string;
