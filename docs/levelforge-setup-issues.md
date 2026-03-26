@@ -1,0 +1,88 @@
+# LevelForge Setup Issues in Bob
+
+**Date:** 2026-03-25
+**Reporter:** Claude Code (automated setup attempt)
+**Project:** LevelForge (key: LF, project ID: 3bd98932-9fc8-4a4f-bdb4-092afdf63f84)
+
+---
+
+## What Was Done
+
+1. Created LevelForge project in Bob (key: LF)
+2. Created Sprint 1 epic (LF-1: Foundation Wiring)
+3. Attempted "Shape this idea with Bob" planning session
+4. Session shows "provisioning (connecting...)" then "Disconnected - reconnecting..."
+
+## Issues Found
+
+### Issue 1: Shaping Session Fails to Connect
+
+**Symptom:** Clicking "Open shaping session" on LF-1 shows "provisioning (connecting...)" followed by "Disconnected - reconnecting..." indefinitely. The agent never starts.
+
+**Likely cause:** The LevelForge repository is not cloned on the Bob execution host. The agent needs a local copy of the repo to work against. Bob's System page says "Add repositories with the Add Repository action to get started" but the Add Repository action is not visible.
+
+**Fix needed:**
+1. Clone `https://git.gmac.io/gmackie/levelforge.git` on the Bob host machine
+2. Register the local path in Bob's repository/worktree system
+3. Verify Claude agent is authenticated (System page shows "Installed" but auth status unclear)
+
+### Issue 2: Duplicate LevelForge Projects
+
+**Symptom:** Two identical "LevelForge" projects appear in the project list (both with key "LF"). This happened because the first "Create" click appeared to fail (project didn't show in sidebar) so we created it again.
+
+**Fix needed:** Delete the duplicate project via Bob's admin/API.
+
+### Issue 3: "Add Repository" Not Visible
+
+**Symptom:** The System page mentions "Add repositories with the Add Repository action" but there's no visible button for this. The text appears in a message area that says "Select a worktree — Pick one from the left panel to continue."
+
+**Likely cause:** The repository management UI may not be fully wired yet, or it requires a different navigation path.
+
+**What's needed:** A way to register `git.gmac.io/gmackie/levelforge` as a managed repository in Bob's system so that agent sessions can work against it.
+
+### Issue 4: Claude Agent Auth Unclear
+
+**Symptom:** System Status page shows Claude as "Installed" but the Auth column shows "-" (dash). Other agents (Cursor, Codex, Kiro, OpenCode, Smol) show "Missing".
+
+**Fix needed:** Verify Claude Code is properly authenticated on the Bob host. The agent needs a valid API key or Anthropic session to function.
+
+## Configuration Needed
+
+For Bob to orchestrate LevelForge development:
+
+```
+1. Bob host: Clone levelforge repo
+   git clone https://git.gmac.io/gmackie/levelforge.git /path/to/levelforge
+
+2. Bob: Register repo path
+   (needs Admin/System UI or API call)
+
+3. Bob host: Verify Claude auth
+   claude --version  # should show authenticated
+
+4. Bob host: Set environment variables for agents
+   GEMINI_API_KEY=<key>
+   DATABASE_URL=postgresql://levelforge:levelforge@localhost:5432/levelforge_test
+
+5. Bob: Delete duplicate LF project
+```
+
+## What's Ready (No Issues)
+
+- Gitea integration is connected (Settings > Git Providers > Gitea shows "Disconnect")
+- API keys exist (2 keys visible in Settings > API Keys)
+- Git, Node.js, pnpm all OK on the host
+- CI workflow pushed to LevelForge repo (.gitea/workflows/ci.yml)
+- Master implementation roadmap committed (76 tasks, 8 sprints)
+- Bob orchestration plan committed
+
+## LevelForge Context for Bob Team
+
+Repo: `git.gmac.io/gmackie/levelforge`
+Branch: `main`
+Tests: `pnpm test` (126 passing in generator, 25 in validators, 20 in catalog, 14 in benchmarks)
+Build: `nix build .#levelforge --option sandbox false`
+Deploy: `https://level.gmac.io` (live)
+
+Sprint 1 tasks (14 items) are documented in:
+`docs/plans/2026-03-25-master-implementation-roadmap.md`
