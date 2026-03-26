@@ -382,13 +382,27 @@ export class AgentProcessManager {
         actor.handleAgentOutput((event.data.text as string) ?? "");
         break;
 
-      case "tool_call":
+      case "tool_call": {
+        const toolName = event.data.name as string;
         actor.handleToolCall(
           event.data.toolCallId as string,
-          event.data.name as string,
+          toolName,
           (event.data.arguments as string) ?? "{}",
         );
+
+        // Detect delegation/sub-agent tool calls for hybrid multi-agent visibility
+        const isDelegation = /^(delegate|agent|spawn_agent|sub_?agent)/i.test(toolName);
+        if (isDelegation) {
+          console.log(
+            `[AgentProcessManager] Delegation detected in session ${sessionId}: ${toolName}`,
+          );
+          actor.handleAgentOutput(
+            `[delegation] Sub-agent started: ${toolName}\n`,
+            "system",
+          );
+        }
         break;
+      }
 
       case "tool_result":
         actor.handleToolResult(
