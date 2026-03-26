@@ -111,3 +111,34 @@ claude login  # or set ANTHROPIC_API_KEY
 git clone https://git.gmac.io/gmackie/levelforge.git /home/bob/repos/levelforge
 # Then register via Bob's API or admin interface
 ```
+
+---
+
+## Update: 2026-03-25 7:52 PM — Still Blocked
+
+Third attempt after user reported "should be working now." Same result:
+- Session: "provisioning (connecting...)" → "Disconnected - reconnecting..."
+- System Status unchanged: Claude Auth = "-", no repos registered
+
+### Definitive Blockers (must be fixed on Bob host)
+
+1. **Claude Auth = "-"**: The Claude Code CLI is installed but not authenticated.
+   On the Bob host, run: `claude login` or ensure `ANTHROPIC_API_KEY` is set.
+
+2. **No repositories in worktree panel**: The left panel on System page says
+   "Select a worktree — Pick one from the left panel to continue. Add
+   repositories with the Add Repository action to get started."
+   No repos are visible. The LevelForge repo needs to be cloned and registered.
+
+### What We Tried
+- Created project LF in Bob
+- Created epic LF-1 (Sprint 1: Foundation Wiring)
+- Attempted shaping session 3 times
+- Attached parent work item + README + planning docs context
+- Each time: session opens but agent never connects
+
+### Recommendation
+Fix Claude auth and repo registration on the Bob host, then retry.
+In the meantime, LevelForge Sprint 1 can be executed manually using
+Claude Code subagent-driven development (which has been working well
+throughout this session).
