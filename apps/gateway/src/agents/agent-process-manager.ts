@@ -436,9 +436,43 @@ export class AgentProcessManager {
     }
 
     switch (event.type) {
-      case "output":
-        actor.handleAgentOutput((event.data.text as string) ?? "");
+      case "output": {
+        const outputText = (event.data.text as string) ?? "";
+        actor.handleAgentOutput(outputText);
+
+        // Detect usage limit / rate limit messages and cascade to next agent
+        const isUsageLimit =
+          /out of (extra )?usage/i.test(outputText) ||
+          /rate.?limit/i.test(outputText) ||
+          /usage.*resets/i.test(outputText);
+
+        if (isUsageLimit && managed.agentType !== "codex") {
+          const nextAgent = managed.agentType === "claude" ? "codex" : "gemini";
+          console.warn(
+            `[AgentProcessManager] ${managed.agentType} hit usage limit for session ${sessionId}, falling back to ${nextAgent}`,
+          );
+          // Stop the current session and start with fallback agent
+          void this.stopSession(sessionId).then(() => {
+            void this.startSession({
+              sessionId,
+              agentType: nextAgent,
+              workingDirectory: managed.actor.workingDirectory ?? "/",
+              initialPrompt: undefined, // no re-send of prompt — session continues
+              actor: managed.actor,
+            }).then(() => {
+              void db
+                .update(chatConversations)
+                .set({ agentType: nextAgent })
+                .where(eq(chatConversations.id, sessionId))
+                .catch(() => {});
+              console.log(`[AgentProcessManager] Usage limit fallback to ${nextAgent} succeeded`);
+            }).catch((err) => {
+              console.error(`[AgentProcessManager] Usage limit fallback to ${nextAgent} failed:`, err);
+            });
+          });
+        }
         break;
+      }
 
       case "tool_call": {
         const toolName = event.data.name as string;
