@@ -25,36 +25,67 @@ export function createCodexStdioAdapter(workingDirectory: string): StdioAdapter 
           return { type: "output", data: { text: trimmed } };
         }
 
-        // JSON-RPC notification (no id)
+        // JSON-RPC notification (no id) — Codex app-server protocol
         if (msg.method && !("id" in msg)) {
           const params = (msg.params as Record<string, unknown>) ?? {};
-          switch (msg.method) {
-            case "events/output":
-              return { type: "output", data: { text: (params.text as string) ?? "" } };
-            case "events/toolCall":
+          const method = msg.method as string;
+
+          // Item deltas — streaming agent message text
+          if (method === "item/agentMessage/delta") {
+            const delta = (params.delta as Record<string, unknown>) ?? {};
+            return { type: "output", data: { text: (delta.text as string) ?? "" } };
+          }
+
+          // Turn lifecycle
+          if (method === "turn/started") {
+            return { type: "status", data: { status: "turn_started" } };
+          }
+          if (method === "turn/completed") {
+            return { type: "status", data: { status: "completed" } };
+          }
+
+          // Item lifecycle — tool calls
+          if (method === "item/started") {
+            const item = (params.item as Record<string, unknown>) ?? {};
+            if (item.type === "tool_call") {
               return {
                 type: "tool_call",
                 data: {
-                  toolCallId: params.id as string,
-                  name: params.name as string,
-                  arguments: JSON.stringify(params.arguments ?? {}),
+                  toolCallId: (item.id as string) ?? "",
+                  name: (item.name as string) ?? "tool",
+                  arguments: JSON.stringify(item.arguments ?? {}),
                 },
               };
-            case "events/toolResult":
+            }
+            return null; // Skip other item/started events
+          }
+
+          if (method === "item/completed") {
+            const item = (params.item as Record<string, unknown>) ?? {};
+            if (item.type === "tool_call") {
               return {
                 type: "tool_result",
                 data: {
-                  toolCallId: params.id as string,
-                  result: JSON.stringify(params.result ?? ""),
-                  isError: (params.isError as boolean) ?? false,
+                  toolCallId: (item.id as string) ?? "",
+                  result: JSON.stringify(item.output ?? ""),
+                  isError: item.status === "failed",
                 },
               };
-            case "events/status":
-              return { type: "status", data: { status: params.status as string } };
+            }
+            return null;
+          }
+
+          // Token usage — skip (informational)
+          if (method.startsWith("thread/tokenUsage")) return null;
+
+          // Legacy format fallback
+          switch (method) {
+            case "events/output":
+              return { type: "output", data: { text: (params.text as string) ?? "" } };
             case "events/error":
               return { type: "error", data: { message: (params.message as string) ?? "Unknown error" } };
             default:
-              return { type: "output", data: { text: trimmed } };
+              return null; // Skip unrecognized notifications instead of showing raw JSON
           }
         }
 
@@ -107,6 +138,7 @@ export function createCodexStdioAdapter(workingDirectory: string): StdioAdapter 
             id: nextId++,
             method: "thread/start",
             params: {
+              threadId: `bob-thread-${Date.now()}`,
               cwd: workingDirectory,
             },
           }),
