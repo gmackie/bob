@@ -170,18 +170,20 @@ export function createCodexStdioAdapter(workingDirectory: string): StdioAdapter 
         );
       }
 
-      // Send the message as a turn
-      lines.push(
-        JSON.stringify({
-          jsonrpc: "2.0",
-          id: nextId++,
-          method: "turn/start",
-          params: {
-            ...(threadId ? { threadId } : {}),
-            prompt: [{ type: "text", text: message }],
-          },
-        }),
-      );
+      // Send the message as a turn (skip if empty — handshake only)
+      if (message) {
+        lines.push(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: nextId++,
+            method: "turn/start",
+            params: {
+              ...(threadId ? { threadId } : {}),
+              prompt: [{ type: "text", text: message }],
+            },
+          }),
+        );
+      }
 
       return lines.join("\n") + "\n";
     },
