@@ -202,6 +202,14 @@ export class AgentProcessManager {
         const formatted = adapter.formatInput(initialPrompt);
         child.stdin.write(formatted);
       }
+    } else if (agentType !== "claude" && child.stdin?.writable) {
+      // No initial prompt (e.g., fallback from usage limit) — send handshake only
+      // so the agent is ready when the user types
+      child.stdin.on("error", () => {});
+      const handshake = adapter.formatInput(""); // triggers initialize + thread/start
+      if (handshake.trim()) {
+        child.stdin.write(handshake);
+      }
     }
   }
 
