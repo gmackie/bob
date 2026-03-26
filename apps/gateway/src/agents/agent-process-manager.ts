@@ -118,6 +118,47 @@ export class AgentProcessManager {
 
     child.on("error", (error) => {
       console.error(`[AgentProcessManager] Process error for session ${sessionId}:`, error);
+
+      // Cascade fallback: if agent spawn failed (ENOENT), try next agent
+      const isSpawnError = (error as NodeJS.ErrnoException).code === "ENOENT";
+      if (isSpawnError && agentType !== "claude") {
+        const fallbackChain = ["claude", "codex", "gemini"].filter((a) => a !== agentType);
+        console.warn(
+          `[AgentProcessManager] ${agentType} not found, trying fallback chain: ${fallbackChain.join(" → ")}`,
+        );
+        this.sessions.delete(sessionId);
+
+        // Try each fallback agent
+        void (async () => {
+          for (const fallbackAgent of fallbackChain) {
+            try {
+              const fallbackAdapter = getStdioAdapter(fallbackAgent, workingDirectory);
+              if (!fallbackAdapter) continue;
+
+              console.log(`[AgentProcessManager] Trying fallback agent: ${fallbackAgent}`);
+              await this.startSession({
+                ...config,
+                agentType: fallbackAgent,
+              });
+              console.log(`[AgentProcessManager] Fallback to ${fallbackAgent} succeeded for session ${sessionId}`);
+
+              // Update DB to reflect the actual agent used
+              void db
+                .update(chatConversations)
+                .set({ agentType: fallbackAgent })
+                .where(eq(chatConversations.id, sessionId))
+                .catch(() => {});
+              return;
+            } catch (fallbackErr) {
+              console.warn(`[AgentProcessManager] Fallback ${fallbackAgent} also failed:`, fallbackErr);
+            }
+          }
+          console.error(`[AgentProcessManager] All fallback agents failed for session ${sessionId}`);
+          actor.setStatus("error", "No agent available");
+        })();
+        return;
+      }
+
       actor.setStatus("error", String(error));
       this.sessions.delete(sessionId);
     });
