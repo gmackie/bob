@@ -172,6 +172,10 @@ export function ImportGitHubDialog({
     trpc.project.create.mutationOptions({}),
   );
 
+  const addRepo = useMutation(
+    trpc.repository.addFromProvider.mutationOptions({}),
+  );
+
   async function handleImport() {
     const entries = Array.from(selected.entries());
     if (entries.length === 0) return;
@@ -186,7 +190,7 @@ export function ImportGitHubDialog({
       const [fullName, { name, key }] = entries[i]!;
       const repo = repos.find((r) => r.fullName === fullName);
       try {
-        await createProject.mutateAsync({
+        const project = await createProject.mutateAsync({
           workspaceId,
           name: name.trim() || repoShortName(fullName),
           key: (key.trim() || deriveKey(name)).toUpperCase(),
@@ -195,6 +199,22 @@ export function ImportGitHubDialog({
             : `Imported from ${fullName}`,
           color: COLORS[i % COLORS.length],
         });
+
+        // Also register the repository so agent sessions can use it
+        if (repo) {
+          void addRepo.mutateAsync({
+            fullName,
+            cloneUrl: repo.preferred.sshUrl || repo.preferred.htmlUrl + ".git",
+            htmlUrl: repo.preferred.htmlUrl,
+            defaultBranch: repo.preferred.defaultBranch || "main",
+            provider: repo.preferred.provider,
+            instanceUrl: repo.preferred.instanceUrl,
+            projectId: project?.id,
+          }).catch((err) => {
+            console.warn(`Failed to register repo ${fullName}:`, err);
+          });
+        }
+
         successCount++;
       } catch (err) {
         errorCount++;

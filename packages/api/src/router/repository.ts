@@ -206,6 +206,76 @@ export const repositoryRouter = {
       return repo;
     }),
 
+  /** Register a repository from a connected git provider (GitHub/Gitea).
+   *  Clones the repo on the host if not already present, then registers it. */
+  addFromProvider: protectedProcedure
+    .input(
+      z.object({
+        fullName: z.string(), // e.g., "gmackie/levelforge"
+        cloneUrl: z.string(), // e.g., "https://git.gmac.io/gmackie/levelforge.git"
+        htmlUrl: z.string(),
+        defaultBranch: z.string().default("main"),
+        provider: z.string().optional(), // "github" | "gitea"
+        instanceUrl: z.string().optional(),
+        projectId: z.string().uuid().optional(), // link to planning project
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const [owner, name] = input.fullName.split("/");
+      const repoName = name ?? input.fullName;
+      const localPath = `/home/${process.env.USER ?? "mackieg"}/repos/${repoName}`;
+
+      // Check if already registered
+      const existing = await ctx.db.query.repositories.findFirst({
+        where: and(
+          eq(repositories.userId, ctx.session.user.id),
+          eq(repositories.remoteOwner, owner ?? ""),
+          eq(repositories.remoteName, repoName),
+        ),
+      });
+
+      if (existing) {
+        return existing;
+      }
+
+      // Clone via gateway (fire-and-forget — gateway handles the git clone)
+      try {
+        await gatewayRequest(ctx.session.user.id, "/git/clone", {
+          cloneUrl: input.cloneUrl,
+          targetPath: localPath,
+          branch: input.defaultBranch,
+        });
+      } catch (err) {
+        console.warn(
+          `[repository] Clone failed for ${input.fullName}, registering with path anyway:`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+
+      const [repo] = await ctx.db
+        .insert(repositories)
+        .values({
+          userId: ctx.session.user.id,
+          name: repoName,
+          path: localPath,
+          branch: input.defaultBranch,
+          mainBranch: input.defaultBranch,
+          remoteUrl: input.cloneUrl,
+          remoteOwner: owner ?? "",
+          remoteName: repoName,
+          remoteProvider: input.provider ?? null,
+          remoteInstanceUrl: input.instanceUrl ?? null,
+          planningProjectId: input.projectId ?? null,
+        })
+        .returning();
+
+      console.log(
+        `[repository] Registered ${input.fullName} at ${localPath}`,
+      );
+
+      return repo;
+    }),
+
   delete: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
