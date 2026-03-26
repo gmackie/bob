@@ -3,6 +3,9 @@ import type { StdioAdapter, ParsedEvent } from "./base-stdio-adapter.js";
 let nextId = 1;
 
 export function createCodexStdioAdapter(workingDirectory: string): StdioAdapter {
+  let initialized = false;
+  let threadStarted = false;
+
   return {
     command: "codex",
     args: ["app-server"],
@@ -19,7 +22,6 @@ export function createCodexStdioAdapter(workingDirectory: string): StdioAdapter 
 
         // JSON-RPC response or notification
         if (msg.jsonrpc !== "2.0") {
-          // Not JSON-RPC, treat as raw output
           return { type: "output", data: { text: trimmed } };
         }
 
@@ -62,7 +64,13 @@ export function createCodexStdioAdapter(workingDirectory: string): StdioAdapter 
           return { type: "error", data: { message: (err.message as string) ?? "RPC error", code: err.code } };
         }
 
+        // Track initialization and thread start responses
         if (msg.result !== undefined) {
+          if (!initialized) {
+            initialized = true;
+          } else if (!threadStarted) {
+            threadStarted = true;
+          }
           return { type: "status", data: { result: msg.result } };
         }
 
@@ -73,13 +81,51 @@ export function createCodexStdioAdapter(workingDirectory: string): StdioAdapter 
     },
 
     formatInput(message: string): string {
-      const request = {
-        jsonrpc: "2.0",
-        id: nextId++,
-        method: "chat/send",
-        params: { message },
-      };
-      return JSON.stringify(request) + "\n";
+      const lines: string[] = [];
+
+      // Codex app-server uses JSON-RPC with thread/turn protocol
+      if (!initialized) {
+        initialized = true;
+        lines.push(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: nextId++,
+            method: "initialize",
+            params: {
+              clientInfo: { name: "bob-gateway", version: "0.1.0" },
+              protocolVersion: "1.0",
+            },
+          }),
+        );
+      }
+
+      if (!threadStarted) {
+        threadStarted = true;
+        lines.push(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: nextId++,
+            method: "thread/start",
+            params: {
+              cwd: workingDirectory,
+            },
+          }),
+        );
+      }
+
+      // Send the message as a turn
+      lines.push(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: nextId++,
+          method: "turn/start",
+          params: {
+            prompt: [{ type: "text", text: message }],
+          },
+        }),
+      );
+
+      return lines.join("\n") + "\n";
     },
   };
 }
