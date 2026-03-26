@@ -196,3 +196,33 @@ Only the PTY session connection is broken. Everything else is ready.
 - Agent starts ✅ (cascade fallback to Claude works)
 - Chat UI functional ✅ (messages display, input ready)
 - Claude hit usage limit — normal, resets Mar 26 10pm PT
+
+---
+
+## Update: 2026-03-25 9:50 PM — Agent Connected! Two protocol issues found.
+
+### Good News
+The agent session connects and spawns successfully. The gateway cascade,
+working directory resolution, and fallback fixes are all working.
+
+### Issue 5: Claude API Usage Limit (not cascading to Codex)
+The Claude session hits "You're out of extra usage" but doesn't fall back
+to Codex. The cascade only triggers on spawn failure, not mid-session API
+limits. Enhancement: detect usage limit errors and restart with next agent.
+
+### Issue 6: JSON-RPC Protocol Mismatch (Critical)
+Bob's gateway sends `chat/send` to Claude Code but Claude expects `turn/start`.
+
+Error from agent:
+```json
+{"error":{"code":-32600,"message":"Invalid request: unknown variant `chat/send`, expected one of `initialize`, `thread/start`, `thread/resume`, `turn/start`, `turn/steer`, `turn/interrupt`, ..."}}
+```
+
+Fix: Update the gateway to use Claude Code's JSON-RPC protocol:
+- `thread/start` to create a conversation
+- `turn/start` to send a message (not `chat/send`)
+- `turn/steer` to guide the response
+- `turn/interrupt` to cancel
+
+See Claude Code's protocol spec for the full method list.
+The valid methods are listed in the error response.
