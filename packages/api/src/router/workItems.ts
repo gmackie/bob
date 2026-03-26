@@ -7,6 +7,7 @@ import {
   comments,
   notifications,
   projects,
+  runLifecycleEvents,
   taskRuns,
   workItemArtifactProducerType,
   workItemArtifacts,
@@ -565,6 +566,31 @@ export const taskRunRouter = {
       );
 
       return result;
+    }),
+
+  listLifecycleEvents: protectedProcedure
+    .input(
+      z.object({
+        workItemId: z.string().uuid(),
+        limit: z.number().min(1).max(100).default(50),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const events = await ctx.db
+        .select({
+          id: runLifecycleEvents.id,
+          taskRunId: runLifecycleEvents.taskRunId,
+          eventType: runLifecycleEvents.eventType,
+          phase: runLifecycleEvents.phase,
+          metadata: runLifecycleEvents.metadata,
+          createdAt: runLifecycleEvents.createdAt,
+        })
+        .from(runLifecycleEvents)
+        .where(eq(runLifecycleEvents.workItemId, input.workItemId))
+        .orderBy(desc(runLifecycleEvents.createdAt))
+        .limit(input.limit);
+
+      return events;
     }),
 };
 
