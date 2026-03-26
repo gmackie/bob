@@ -122,11 +122,21 @@ export class AgentProcessManager {
       // Cascade fallback: if agent spawn failed (ENOENT), try next agent
       const isSpawnError = (error as NodeJS.ErrnoException).code === "ENOENT";
       if (isSpawnError && agentType !== "claude") {
+        const agentDisplayName: Record<string, string> = {
+          "smol-agent": "Smol Agent",
+          claude: "Claude",
+          codex: "Codex",
+          gemini: "Gemini",
+        };
         const fallbackChain = ["claude", "codex", "gemini"].filter((a) => a !== agentType);
         console.warn(
           `[AgentProcessManager] ${agentType} not found, trying fallback chain: ${fallbackChain.join(" → ")}`,
         );
         this.sessions.delete(sessionId);
+
+        actor.handleAgentOutput(
+          `${agentDisplayName[agentType] ?? agentType} is not available on this host. Finding an alternative...\n`,
+        );
 
         // Try each fallback agent
         void (async () => {
@@ -142,7 +152,10 @@ export class AgentProcessManager {
               });
               console.log(`[AgentProcessManager] Fallback to ${fallbackAgent} succeeded for session ${sessionId}`);
 
-              // Update DB to reflect the actual agent used
+              actor.handleAgentOutput(
+                `Connected to **${agentDisplayName[fallbackAgent] ?? fallbackAgent}**. You can continue.\n\n`,
+              );
+
               void db
                 .update(chatConversations)
                 .set({ agentType: fallbackAgent })
@@ -154,6 +167,9 @@ export class AgentProcessManager {
             }
           }
           console.error(`[AgentProcessManager] All fallback agents failed for session ${sessionId}`);
+          actor.handleAgentOutput(
+            `No AI agents are available on this host. Please check the System page for agent installation status.\n`,
+          );
           actor.setStatus("error", "No agent available");
         })();
         return;
@@ -447,17 +463,29 @@ export class AgentProcessManager {
           /usage.*resets/i.test(outputText);
 
         if (isUsageLimit && managed.agentType !== "codex") {
-          const nextAgent = managed.agentType === "claude" ? "codex" : "gemini";
+          const currentAgent = managed.agentType;
+          const nextAgent = currentAgent === "claude" ? "codex" : "gemini";
+          const agentDisplayName: Record<string, string> = {
+            claude: "Claude",
+            codex: "Codex",
+            gemini: "Gemini",
+          };
           console.warn(
-            `[AgentProcessManager] ${managed.agentType} hit usage limit for session ${sessionId}, falling back to ${nextAgent}`,
+            `[AgentProcessManager] ${currentAgent} hit usage limit for session ${sessionId}, falling back to ${nextAgent}`,
           );
+
+          // Show a clear system message to the user
+          actor.handleAgentOutput(
+            `\n\n---\n**${agentDisplayName[currentAgent] ?? currentAgent}** reached its usage limit. Switching to **${agentDisplayName[nextAgent] ?? nextAgent}**...\n\n`,
+          );
+
           // Stop the current session and start with fallback agent
           void this.stopSession(sessionId).then(() => {
             void this.startSession({
               sessionId,
               agentType: nextAgent,
               workingDirectory: managed.actor.workingDirectory ?? "/",
-              initialPrompt: undefined, // no re-send of prompt — session continues
+              initialPrompt: undefined,
               actor: managed.actor,
             }).then(() => {
               void db
@@ -465,8 +493,14 @@ export class AgentProcessManager {
                 .set({ agentType: nextAgent })
                 .where(eq(chatConversations.id, sessionId))
                 .catch(() => {});
+              actor.handleAgentOutput(
+                `Switched to **${agentDisplayName[nextAgent] ?? nextAgent}**. You can continue your conversation.\n\n`,
+              );
               console.log(`[AgentProcessManager] Usage limit fallback to ${nextAgent} succeeded`);
             }).catch((err) => {
+              actor.handleAgentOutput(
+                `Failed to switch to ${agentDisplayName[nextAgent] ?? nextAgent}. Please try again later.\n`,
+              );
               console.error(`[AgentProcessManager] Usage limit fallback to ${nextAgent} failed:`, err);
             });
           });
