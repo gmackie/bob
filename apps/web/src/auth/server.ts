@@ -32,17 +32,14 @@ function safeOrigin(input: string): string {
 }
 
 const publicSiteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL ??
   process.env.FRONTEND_URL ??
-  // Vercel (not used in hosted VPS mode, but keep as fallback)
-  (env.VERCEL_ENV === "production"
-    ? `https://${env.VERCEL_PROJECT_PRODUCTION_URL}`
-    : env.VERCEL_ENV === "preview"
-      ? `https://${env.VERCEL_URL}`
-      : undefined) ??
+  process.env.NEXT_PUBLIC_SITE_URL ??
   "http://localhost:3000";
 
 const baseUrl = safeOrigin(publicSiteUrl);
+
+// Debug: log the resolved auth base URL on startup
+console.log(`[auth] Base URL resolved to: ${baseUrl} (FRONTEND_URL=${process.env.FRONTEND_URL}, NEXT_PUBLIC_SITE_URL=${process.env.NEXT_PUBLIC_SITE_URL})`);
 
 export const auth = initAuth({
   baseUrl,
