@@ -259,3 +259,23 @@ incompatibility. Non-fatal but should be investigated.
 ### Summary: Almost There
 The full pipeline works: spawn → cascade → connect → thread create.
 One field (`threadId`) missing from turn/start calls. One-line fix in the gateway.
+
+---
+
+## Update: 2026-03-25 11:10 PM — threadId still missing
+
+The gateway still sends `turn/start` without `threadId`. Same error:
+```json
+{"error":{"code":-32600,"message":"Invalid request: missing field `threadId`"},"id":3}
+```
+
+The thread IS created successfully (id:2 returns a thread object).
+But the next RPC call (id:3) doesn't include the threadId.
+
+Codex CLI requires this exact format for turn/start:
+```json
+{"method": "turn/start", "params": {"threadId": "019d28c0-8b94-7880-be1a-81f453b5394e", "content": [{"type": "text", "text": "user message here"}]}, "id": 4}
+```
+
+The gateway needs to store `response.result.thread.id` after the
+thread/start call succeeds, then include it in all subsequent turn/start calls.
