@@ -8,6 +8,7 @@ import {
   planDraftDependencies,
   planDrafts,
   projects,
+  repositories,
   runLifecycleEvents,
   workItemArtifacts,
   workItemDependencies,
@@ -87,11 +88,24 @@ export const planSessionRouter = {
         resolvedWorkItemId = wi.id;
       }
 
+      // Resolve working directory from mapped repository if not explicitly provided
+      let workingDirectory = input.workingDirectory ?? "/";
+      if (workingDirectory === "/" && input.projectId) {
+        const repo = await ctx.db.query.repositories.findFirst({
+          where: eq(repositories.planningProjectId, input.projectId),
+          columns: { path: true },
+        });
+        if (repo?.path) {
+          workingDirectory = repo.path;
+          console.log(`[planSession] Resolved working directory from repo: ${repo.path}`);
+        }
+      }
+
       const [session] = await ctx.db
         .insert(chatConversations)
         .values({
           userId: ctx.session.user.id,
-          workingDirectory: input.workingDirectory ?? "/",
+          workingDirectory,
           agentType: "claude",
           sessionType: "planning",
           title: input.title ?? "Planning session",
