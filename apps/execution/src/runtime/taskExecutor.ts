@@ -12,6 +12,7 @@ import {
   forgeRunEvents,
   gitProviderConnections,
   repositories,
+  runLifecycleEvents,
   taskRuns,
   worktrees,
 } from "@bob/db/schema";
@@ -499,6 +500,22 @@ export async function executeTask(
       blockedReason: `Failed to start session: ${errorMessage}`,
     };
   }
+
+  // Fire-and-forget: write run_started lifecycle event
+  void db.insert(runLifecycleEvents).values({
+    taskRunId: insertedTaskRun.id,
+    workItemId: task.id,
+    sessionId: insertedSession.id,
+    eventType: "run_started",
+    phase: "execute",
+    metadata: {
+      agentType: selectedAgent,
+      branch,
+      taskIdentifier: task.identifier,
+    },
+  }).catch((err: unknown) =>
+    console.warn("[taskExecutor] Failed to write run_started lifecycle event:", err),
+  );
 
   // Report to ForgeGraph (fire and forget)
   void reportForgeGraphCreated(db, {

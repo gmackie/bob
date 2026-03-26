@@ -1,6 +1,6 @@
 import { eq } from "@bob/db";
 import { db } from "@bob/db/client";
-import { chatConversations } from "@bob/db/schema";
+import { chatConversations, runLifecycleEvents, taskRuns } from "@bob/db/schema";
 
 import { gatewayRequest } from "../runtime/taskExecutor";
 import {
@@ -80,6 +80,30 @@ export async function startPlanningSession(
     .update(chatConversations)
     .set({ status: "running" })
     .where(eq(chatConversations.id, input.sessionId));
+
+  // Fire-and-forget: write run_started lifecycle event
+  const phase = isShapeIntent ? "shape" : "plan";
+  void (async () => {
+    try {
+      // Look up the taskRun associated with this session (if any)
+      const taskRun = await db.query.taskRuns.findFirst({
+        where: eq(taskRuns.sessionId, input.sessionId),
+        columns: { id: true, workItemId: true },
+      });
+      if (taskRun) {
+        await db.insert(runLifecycleEvents).values({
+          taskRunId: taskRun.id,
+          workItemId: taskRun.workItemId ?? undefined,
+          sessionId: input.sessionId,
+          eventType: "run_started",
+          phase,
+          metadata: { agentType: profile.agentType, projectName: input.projectName },
+        });
+      }
+    } catch (err) {
+      console.warn("[planning] Failed to write run_started lifecycle event:", err);
+    }
+  })();
 
   return { sessionId: input.sessionId };
 }

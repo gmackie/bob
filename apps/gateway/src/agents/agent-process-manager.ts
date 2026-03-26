@@ -2,6 +2,21 @@ import { spawn, type ChildProcess } from "child_process";
 import type { SessionActor } from "../sessions/SessionActor.js";
 import { getStdioAdapter, type StdioAdapter } from "./adapters/base-stdio-adapter.js";
 import { spawnClaudePty, isPtyAvailable, type ClaudePtySession } from "./adapters/claude-pty.js";
+import { db } from "@bob/db/client";
+import { eq } from "@bob/db";
+import { runLifecycleEvents, taskRuns, chatConversations } from "@bob/db/schema";
+
+/** Regex patterns that suggest an agent result produced a real artifact. */
+const ARTIFACT_PATTERNS = [
+  /\/home\/|\/tmp\/|\/Volumes\//, // absolute file paths
+  /file:\/\//,                    // file URLs
+  /#\d+/,                         // PR numbers
+  /[0-9a-f]{7,40}/,               // commit SHAs
+];
+
+function looksLikeArtifact(result: string): boolean {
+  return ARTIFACT_PATTERNS.some((p) => p.test(result));
+}
 
 interface ManagedSession {
   process: ChildProcess;
@@ -10,6 +25,8 @@ interface ManagedSession {
   agentType: string;
   claudeSessionId?: string;
   ptySession?: ClaudePtySession; // PTY-based session for Claude interactive mode
+  /** Tracks active delegation tool calls so we can pair start/end events. */
+  activeDelegations?: Map<string, { toolName: string; startedAt: number }>;
 }
 
 interface StartSessionConfig {
@@ -400,17 +417,58 @@ export class AgentProcessManager {
             `[delegation] Sub-agent started: ${toolName}\n`,
             "system",
           );
+
+          // Track this delegation for pairing with its result
+          if (!managed.activeDelegations) {
+            managed.activeDelegations = new Map();
+          }
+          const toolCallId = event.data.toolCallId as string;
+          managed.activeDelegations.set(toolCallId, {
+            toolName,
+            startedAt: Date.now(),
+          });
+
+          // Fire-and-forget: write delegation_started lifecycle event
+          void this.writeDelegationEvent(sessionId, "delegation_started", {
+            toolName,
+            arguments: event.data.arguments,
+          });
         }
         break;
       }
 
-      case "tool_result":
-        actor.handleToolResult(
-          event.data.toolCallId as string,
-          (event.data.result as string) ?? "",
-          (event.data.isError as boolean) ?? false,
-        );
+      case "tool_result": {
+        const resultToolCallId = event.data.toolCallId as string;
+        const resultText = (event.data.result as string) ?? "";
+        const isError = (event.data.isError as boolean) ?? false;
+
+        actor.handleToolResult(resultToolCallId, resultText, isError);
+
+        // Check if this completes a tracked delegation
+        const delegation = managed.activeDelegations?.get(resultToolCallId);
+        if (delegation) {
+          managed.activeDelegations!.delete(resultToolCallId);
+          const durationMs = Date.now() - delegation.startedAt;
+
+          console.log(
+            `[AgentProcessManager] Delegation completed in session ${sessionId}: ${delegation.toolName} (${durationMs}ms)`,
+          );
+
+          // Fire-and-forget: write delegation_completed lifecycle event
+          void this.writeDelegationEvent(sessionId, "delegation_completed", {
+            toolName: delegation.toolName,
+            durationMs,
+            isError,
+            resultPreview: resultText.slice(0, 500),
+          });
+
+          // Task 3: Sub-run promotion if result looks like it produced artifacts
+          if (!isError && looksLikeArtifact(resultText)) {
+            void this.promoteToChildRun(sessionId, delegation.toolName, resultText);
+          }
+        }
         break;
+      }
 
       case "status":
         // Status events are informational — log them
@@ -430,6 +488,90 @@ export class AgentProcessManager {
       case "error":
         actor.handleAgentOutput(`Error: ${event.data.message ?? "Unknown error"}\n`, "stderr");
         break;
+    }
+  }
+
+  /**
+   * Look up the taskRunId for a gateway session and write a lifecycle event.
+   * Fire-and-forget — errors are logged at warn level.
+   */
+  private async writeDelegationEvent(
+    sessionId: string,
+    eventType: string,
+    metadata: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      const taskRun = await db.query.taskRuns.findFirst({
+        where: eq(taskRuns.sessionId, sessionId),
+        columns: { id: true, runPhase: true, workItemId: true },
+      });
+      if (!taskRun) {
+        console.warn(`[AgentProcessManager] No taskRun found for session ${sessionId}, skipping lifecycle event`);
+        return;
+      }
+      await db.insert(runLifecycleEvents).values({
+        taskRunId: taskRun.id,
+        workItemId: taskRun.workItemId ?? undefined,
+        sessionId,
+        eventType,
+        phase: taskRun.runPhase ?? "execute",
+        metadata,
+      });
+    } catch (err) {
+      console.warn("[AgentProcessManager] Failed to write delegation event:", err);
+    }
+  }
+
+  /**
+   * When a delegation result contains artifact patterns, create a child taskRun.
+   * Fire-and-forget — errors are logged at warn level.
+   */
+  private async promoteToChildRun(
+    sessionId: string,
+    toolName: string,
+    resultText: string,
+  ): Promise<void> {
+    try {
+      const parentRun = await db.query.taskRuns.findFirst({
+        where: eq(taskRuns.sessionId, sessionId),
+        columns: {
+          id: true,
+          userId: true,
+          planningWorkspaceId: true,
+          planningItemId: true,
+          planningItemIdentifier: true,
+          workItemId: true,
+          workItemIdentifierSnapshot: true,
+          repositoryId: true,
+          runPhase: true,
+        },
+      });
+      if (!parentRun) return;
+
+      const [childRun] = await db
+        .insert(taskRuns)
+        .values({
+          userId: parentRun.userId,
+          planningWorkspaceId: parentRun.planningWorkspaceId,
+          planningItemId: parentRun.planningItemId,
+          planningItemIdentifier: parentRun.planningItemIdentifier,
+          workItemId: parentRun.workItemId,
+          workItemIdentifierSnapshot: parentRun.workItemIdentifierSnapshot,
+          repositoryId: parentRun.repositoryId,
+          parentTaskRunId: parentRun.id,
+          runPhase: parentRun.runPhase ?? "execute",
+          status: "completed",
+          completedAt: new Date(),
+        })
+        .returning({ id: taskRuns.id });
+
+      if (childRun) {
+        console.log(
+          `[AgentProcessManager] Promoted delegation "${toolName}" to child run ${childRun.id} (parent=${parentRun.id})`,
+        );
+      }
+    } catch (err) {
+      console.warn("[AgentProcessManager] Failed to promote delegation to child run:", err);
     }
   }
 
