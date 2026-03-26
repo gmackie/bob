@@ -103,9 +103,14 @@ export function createCodexStdioAdapter(workingDirectory: string): StdioAdapter 
             initialized = true;
           } else if (!threadStarted) {
             threadStarted = true;
-            // Capture threadId from thread/start response
-            if (result && typeof result.threadId === "string") {
-              threadId = result.threadId;
+            // Capture threadId from thread/start response (result.thread.id)
+            if (result) {
+              const thread = result.thread as Record<string, unknown> | undefined;
+              if (thread && typeof thread.id === "string") {
+                threadId = thread.id;
+              } else if (typeof result.threadId === "string") {
+                threadId = result.threadId;
+              }
             }
           }
           return { type: "status", data: { result: msg.result } };
