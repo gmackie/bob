@@ -172,3 +172,27 @@ stream between the agent and the browser isn't establishing. Check:
 - CI: .gitea/workflows/ci.yml deployed
 
 Only the PTY session connection is broken. Everything else is ready.
+
+---
+
+## Update: 2026-03-25 9:31 PM — ALL ISSUES RESOLVED
+
+### Root Causes Found and Fixed
+
+1. **Tailscale serve misconfiguration** — Port 8443 was routing to localhost:3003 instead of localhost:3002 (the actual gateway port). This caused the WebSocket to never connect, producing the "Disconnected - reconnecting..." loop.
+   - **Fix:** `tailscale serve --https 8443 http://localhost:3002`
+
+2. **smol-agent not installed on labnuc** — The gateway tried to spawn smol-agent which doesn't exist on the host.
+   - **Fix:** Added cascade agent fallback in AgentProcessManager: smol-agent → claude → codex → gemini. Falls back automatically on ENOENT.
+
+3. **Auth INVALID_ORIGIN error** — `NEXT_PUBLIC_SITE_URL` had stale `:9443` port baked into the Next.js build from old Caddy setup.
+   - **Fix:** Changed auth config to prioritize `FRONTEND_URL` (server-side env var) over `NEXT_PUBLIC_SITE_URL` (build-time var).
+
+4. **Working directory defaulting to "/"** — Planning sessions didn't resolve the repo path from the project's mapped repository.
+   - **Fix:** `planSession.create` now looks up the repository path from `repositories.planningProjectId`.
+
+### Current State: WORKING
+- Session connects ✅ (green "Running" dot, WebSocket connected)
+- Agent starts ✅ (cascade fallback to Claude works)
+- Chat UI functional ✅ (messages display, input ready)
+- Claude hit usage limit — normal, resets Mar 26 10pm PT
