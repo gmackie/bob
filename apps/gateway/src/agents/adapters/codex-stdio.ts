@@ -99,20 +99,34 @@ export function createCodexStdioAdapter(workingDirectory: string): StdioAdapter 
         // Track initialization and thread start responses
         if (msg.result !== undefined) {
           const result = msg.result as Record<string, unknown> | null;
+          console.log(
+            `[codex-adapter] Response id:${msg.id} initialized=${initialized} threadStarted=${threadStarted} result=${JSON.stringify(result).slice(0, 200)}`,
+          );
+
           if (!initialized) {
             initialized = true;
           } else if (!threadStarted) {
             threadStarted = true;
-            // Capture threadId from thread/start response (result.thread.id)
+            // Capture threadId from thread/start response
+            // Try result.thread.id, result.threadId, or result.id
             if (result) {
               const thread = result.thread as Record<string, unknown> | undefined;
               if (thread && typeof thread.id === "string") {
                 threadId = thread.id;
+                console.log(`[codex-adapter] Captured threadId from result.thread.id: ${threadId}`);
               } else if (typeof result.threadId === "string") {
                 threadId = result.threadId;
+                console.log(`[codex-adapter] Captured threadId from result.threadId: ${threadId}`);
+              } else if (typeof result.id === "string") {
+                threadId = result.id;
+                console.log(`[codex-adapter] Captured threadId from result.id: ${threadId}`);
+              } else {
+                console.warn(`[codex-adapter] Could not find threadId in response: ${JSON.stringify(result).slice(0, 300)}`);
               }
             }
           }
+
+          console.log(`[codex-adapter] Current threadId: ${threadId}`);
           return { type: "status", data: { result: msg.result } };
         }
 
