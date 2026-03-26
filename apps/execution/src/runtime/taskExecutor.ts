@@ -467,10 +467,31 @@ export async function executeTask(
       initialPrompt: prompt,
       env: launchEnv,
     });
-  } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-
+  } catch (firstError) {
+    // Fallback: if preferred agent fails, try claude
+    if (selectedAgent !== "claude") {
+      console.warn(
+        `[taskExecutor] ${selectedAgent} failed, falling back to claude:`,
+        firstError instanceof Error ? firstError.message : firstError,
+      );
+      try {
+        await gatewayRequest(userId, "/session/start", {
+          sessionId: insertedSession.id,
+          workingDirectory: worktreePath,
+          agentType: "claude",
+          initialPrompt: buildInitialPrompt(task, options),
+        });
+        // Fallback succeeded — continue normally
+      } catch (fallbackError) {
+        // Both failed — treat as original error
+        const errorMessage =
+          fallbackError instanceof Error ? fallbackError.message : "Unknown error";
+        await db.update(taskRuns).set({ status: "failed", blockedReason: `Failed to start session: ${errorMessage}` }).where(eq(taskRuns.id, insertedTaskRun.id));
+        await db.update(chatConversations).set({ status: "error", lastError: { code: "TASK_START_FAILED", message: errorMessage, timestamp: new Date().toISOString() } }).where(eq(chatConversations.id, insertedSession.id));
+        return { taskRunId: insertedTaskRun.id, sessionId: insertedSession.id, worktreeId, branch, status: "failed", blockedReason: `Failed to start session: ${errorMessage}` };
+      }
+    } else {
+      const errorMessage = firstError instanceof Error ? firstError.message : "Unknown error";
     await db
       .update(taskRuns)
       .set({
@@ -499,6 +520,7 @@ export async function executeTask(
       status: "failed",
       blockedReason: `Failed to start session: ${errorMessage}`,
     };
+    }
   }
 
   // Fire-and-forget: write run_started lifecycle event

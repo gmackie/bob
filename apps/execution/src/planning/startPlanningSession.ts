@@ -56,24 +56,44 @@ export async function startPlanningSession(
         workingDirectory: input.workingDirectory,
       });
 
+  let agentType: string = profile.agentType;
+
   console.log(
-    `[planning] Starting ${isShapeIntent ? "shape" : "planning"} session ${input.sessionId} with ${profile.agentType} for project "${input.projectName}"`,
+    `[planning] Starting ${isShapeIntent ? "shape" : "planning"} session ${input.sessionId} with ${agentType} for project "${input.projectName}"`,
   );
 
-  // Start the session on the gateway with smol-agent
-  await gatewayRequest(input.userId, "/session/start", {
-    sessionId: input.sessionId,
-    workingDirectory: input.workingDirectory,
-    agentType: profile.agentType,
-    initialPrompt: prompt,
-    env: {
-      ...profile.env,
-      BOB_API_URL: process.env.BOB_API_URL ?? "http://localhost:3000",
-      ...(process.env.BOB_API_KEY
-        ? { BOB_API_KEY: process.env.BOB_API_KEY }
-        : {}),
-    },
-  });
+  // Start the session on the gateway — try preferred agent, fall back to claude
+  try {
+    await gatewayRequest(input.userId, "/session/start", {
+      sessionId: input.sessionId,
+      workingDirectory: input.workingDirectory,
+      agentType,
+      initialPrompt: prompt,
+      env: {
+        ...profile.env,
+        BOB_API_URL: process.env.BOB_API_URL ?? "http://localhost:3000",
+        ...(process.env.BOB_API_KEY
+          ? { BOB_API_KEY: process.env.BOB_API_KEY }
+          : {}),
+      },
+    });
+  } catch (err) {
+    if (agentType !== "claude") {
+      console.warn(
+        `[planning] ${agentType} failed, falling back to claude:`,
+        err instanceof Error ? err.message : err,
+      );
+      agentType = "claude";
+      await gatewayRequest(input.userId, "/session/start", {
+        sessionId: input.sessionId,
+        workingDirectory: input.workingDirectory,
+        agentType: "claude",
+        initialPrompt: prompt,
+      });
+    } else {
+      throw err;
+    }
+  }
 
   // Update session status
   await db
