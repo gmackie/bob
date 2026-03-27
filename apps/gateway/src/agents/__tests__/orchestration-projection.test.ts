@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { buildOrchestrationProjection } from "../orchestration-projection.js";
 import type { T3DomainEvent } from "../t3code-event-map.js";
+import { buildOrchestrationProjection } from "../orchestration-projection.js";
 
 function makeTaskRun(input: {
   id: string;
@@ -28,14 +28,20 @@ function makeRunEvent(
     type,
     threadId: "thread-root",
     runId,
-    ...(extra as never),
+    ...extra,
   } as T3DomainEvent;
 }
 
 describe("orchestration projection", () => {
   it("creates a root run from planning or execution start", () => {
     const projection = buildOrchestrationProjection({
-      taskRuns: [makeTaskRun({ id: "run-root", sessionId: "session-root", runPhase: "plan" })],
+      taskRuns: [
+        makeTaskRun({
+          id: "run-root",
+          sessionId: "session-root",
+          runPhase: "plan",
+        }),
+      ],
       events: [makeRunEvent("run.started", "run-root", { status: "running" })],
     });
 
@@ -55,7 +61,11 @@ describe("orchestration projection", () => {
   it("links a delegated child run to the parent and tracks the spawned agent", () => {
     const projection = buildOrchestrationProjection({
       taskRuns: [
-        makeTaskRun({ id: "run-root", sessionId: "session-root", runPhase: "execute" }),
+        makeTaskRun({
+          id: "run-root",
+          sessionId: "session-root",
+          runPhase: "execute",
+        }),
         makeTaskRun({
           id: "run-child",
           sessionId: "session-child",
@@ -76,8 +86,13 @@ describe("orchestration projection", () => {
       ],
     });
 
-    expect(projection.runsById["run-root"].childRunIds).toContain("run-child");
-    expect(projection.runsById["run-child"]).toMatchObject({
+    const rootRun = projection.runsById["run-root"];
+    const childRun = projection.runsById["run-child"];
+    if (!rootRun || !childRun) {
+      throw new Error("Expected root and child runs to exist");
+    }
+    expect(rootRun.childRunIds).toContain("run-child");
+    expect(childRun).toMatchObject({
       parentRunId: "run-root",
       sessionId: "session-child",
       status: "running",
@@ -146,7 +161,7 @@ describe("orchestration projection", () => {
     });
     expect(projection.runsById["run-root"]).toMatchObject({
       status: "blocked",
-      blocker: "awaiting dependency",
+      blocker: "Which branch should this target?",
       taskIds: ["task-1"],
     });
   });
@@ -179,7 +194,13 @@ describe("orchestration projection", () => {
       runId: "run-root",
       kind: "plan",
       title: "Integration plan",
-      linkedTo: [{ kind: "artifact-to-run", sourceId: "artifact-1", targetId: "run-root" }],
+      linkedTo: [
+        {
+          kind: "artifact-to-run",
+          sourceId: "artifact-1",
+          targetId: "run-root",
+        },
+      ],
     });
     expect(projection.links).toEqual([
       {
@@ -194,7 +215,11 @@ describe("orchestration projection", () => {
   it("keeps child task runs as child runs in the hierarchy", () => {
     const projection = buildOrchestrationProjection({
       taskRuns: [
-        makeTaskRun({ id: "run-root", sessionId: "session-root", runPhase: "plan" }),
+        makeTaskRun({
+          id: "run-root",
+          sessionId: "session-root",
+          runPhase: "plan",
+        }),
         makeTaskRun({
           id: "run-child",
           sessionId: "session-child",
@@ -238,6 +263,218 @@ describe("orchestration projection", () => {
       runId: "run-child",
       agentId: "agent-child",
       title: "Follow up on child work",
+    });
+  });
+
+  it("tracks child task runs on the parent task hierarchy", () => {
+    const projection = buildOrchestrationProjection({
+      taskRuns: [
+        makeTaskRun({
+          id: "run-root",
+          sessionId: "session-root",
+          runPhase: "plan",
+        }),
+        makeTaskRun({
+          id: "run-child",
+          sessionId: "session-child",
+          parentTaskRunId: "run-root",
+          runPhase: "execute",
+        }),
+      ],
+      events: [
+        makeRunEvent("run.started", "run-root", { status: "running" }),
+        makeRunEvent("run.started", "run-child", { status: "running" }),
+        {
+          type: "agent.spawned",
+          threadId: "thread-root",
+          runId: "run-root",
+          agentId: "agent-root",
+          label: "planner",
+        },
+        {
+          type: "agent.task.assigned",
+          threadId: "thread-root",
+          runId: "run-root",
+          agentId: "agent-root",
+          taskId: "task-root",
+          title: "Coordinate the delegation",
+        },
+      ],
+    });
+
+    const rootRun = projection.runsById["run-root"];
+    if (!rootRun) {
+      throw new Error("Expected root run to exist");
+    }
+    expect(rootRun.childRunIds).toEqual(["run-child"]);
+    expect(projection.tasksById["task-root"]).toMatchObject({
+      runId: "run-root",
+      agentId: "agent-root",
+      childTaskRunIds: ["run-child"],
+    });
+  });
+
+  it("keeps runs blocked until the last pending request resolves and inherited agents retain the pending state", () => {
+    const projection = buildOrchestrationProjection({
+      taskRuns: [makeTaskRun({ id: "run-root", sessionId: "session-root" })],
+      events: [
+        makeRunEvent("run.started", "run-root", { status: "running" }),
+        {
+          type: "agent.spawned",
+          threadId: "thread-root",
+          runId: "run-root",
+          agentId: "agent-1",
+          label: "builder",
+        },
+        {
+          type: "user_input.requested",
+          threadId: "thread-root",
+          runId: "run-root",
+          requestId: "input-1",
+          question: "Which branch should this target?",
+        },
+        {
+          type: "request.opened",
+          threadId: "thread-root",
+          runId: "run-root",
+          requestId: "request-1",
+          detail: "Need approval to continue",
+        },
+        {
+          type: "agent.spawned",
+          threadId: "thread-root",
+          runId: "run-root",
+          agentId: "agent-2",
+          label: "reviewer",
+        },
+        {
+          type: "request.resolved",
+          threadId: "thread-root",
+          runId: "run-root",
+          requestId: "request-1",
+          decision: "approved",
+        },
+      ],
+    });
+
+    expect(projection.runsById["run-root"]).toMatchObject({
+      status: "blocked",
+      blocker: "Which branch should this target?",
+    });
+    expect(projection.agentsById["agent-2"]).toMatchObject({
+      pendingRequestIds: ["input-1"],
+    });
+
+    const afterUserInputResolution = buildOrchestrationProjection({
+      taskRuns: [makeTaskRun({ id: "run-root", sessionId: "session-root" })],
+      events: [
+        makeRunEvent("run.started", "run-root", { status: "running" }),
+        {
+          type: "agent.spawned",
+          threadId: "thread-root",
+          runId: "run-root",
+          agentId: "agent-1",
+          label: "builder",
+        },
+        {
+          type: "user_input.requested",
+          threadId: "thread-root",
+          runId: "run-root",
+          requestId: "input-1",
+          question: "Which branch should this target?",
+        },
+        {
+          type: "request.opened",
+          threadId: "thread-root",
+          runId: "run-root",
+          requestId: "request-1",
+          detail: "Need approval to continue",
+        },
+        {
+          type: "agent.spawned",
+          threadId: "thread-root",
+          runId: "run-root",
+          agentId: "agent-2",
+          label: "reviewer",
+        },
+        {
+          type: "request.resolved",
+          threadId: "thread-root",
+          runId: "run-root",
+          requestId: "request-1",
+          decision: "approved",
+        },
+        {
+          type: "user_input.resolved",
+          threadId: "thread-root",
+          runId: "run-root",
+          requestId: "input-1",
+          answers: ["main"],
+        },
+      ],
+    });
+
+    expect(afterUserInputResolution.runsById["run-root"]).toMatchObject({
+      status: "running",
+      blocker: null,
+    });
+    expect(afterUserInputResolution.agentsById["agent-1"]).toMatchObject({
+      pendingRequestIds: [],
+    });
+    expect(afterUserInputResolution.agentsById["agent-2"]).toMatchObject({
+      pendingRequestIds: [],
+    });
+  });
+
+  it("removes stale ownership from the previous agent when a task is reassigned", () => {
+    const projection = buildOrchestrationProjection({
+      taskRuns: [makeTaskRun({ id: "run-root", sessionId: "session-root" })],
+      events: [
+        makeRunEvent("run.started", "run-root", { status: "running" }),
+        {
+          type: "agent.spawned",
+          threadId: "thread-root",
+          runId: "run-root",
+          agentId: "agent-old",
+          label: "builder",
+        },
+        {
+          type: "agent.spawned",
+          threadId: "thread-root",
+          runId: "run-root",
+          agentId: "agent-new",
+          label: "reviewer",
+        },
+        {
+          type: "agent.task.assigned",
+          threadId: "thread-root",
+          runId: "run-root",
+          agentId: "agent-old",
+          taskId: "task-1",
+          title: "Implement the reducer",
+        },
+        {
+          type: "agent.task.reassigned",
+          threadId: "thread-root",
+          runId: "run-root",
+          agentId: "agent-new",
+          taskId: "task-1",
+          previousAgentId: "agent-old",
+        },
+      ],
+    });
+
+    expect(projection.tasksById["task-1"]).toMatchObject({
+      runId: "run-root",
+      agentId: "agent-new",
+    });
+    expect(projection.agentsById["agent-old"]).toMatchObject({
+      currentTaskId: null,
+      taskIds: [],
+    });
+    expect(projection.agentsById["agent-new"]).toMatchObject({
+      currentTaskId: "task-1",
+      taskIds: ["task-1"],
     });
   });
 });
