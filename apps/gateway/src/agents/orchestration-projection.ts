@@ -537,11 +537,9 @@ function recomputeRunStatus(
     return;
   }
 
-  if (
-    run.status === "blocked" ||
-    run.status === "completed" ||
-    run.status === "failed"
-  ) {
+  // If no agents are blocked, failed, or completed, ensure run is "running".
+  // This handles the case where agentStatuses is empty (no agents yet).
+  if (run.status !== "running") {
     run.status = "running";
   }
 }

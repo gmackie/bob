@@ -1,17 +1,17 @@
-import { and, desc, eq } from "@bob/db";
+import { and, desc, eq, sql } from "@bob/db";
+import type { Db } from "@bob/db/client";
 import {
   dispatchItems,
   forgeRevisions,
   forgeBuilds,
   forgeDeployments,
   notifications,
+  runLifecycleEvents,
   taskRuns,
+  workItems,
   workItemArtifacts,
 } from "@bob/db/schema";
 import { emitWebhookEvent } from "../webhooks/webhookDeliveryService";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Database = any;
 
 /**
  * Pipeline state machine for a dispatch item.
@@ -59,7 +59,7 @@ const STATE_WEBHOOK_EVENTS: Record<string, string> = {
 };
 
 export async function advancePipeline(
-  db: Database,
+  db: Db,
   item: PipelineItem,
   batch: PipelineBatch,
 ): Promise<void> {
@@ -134,7 +134,7 @@ export async function advancePipeline(
 // ---------------------------------------------------------------------------
 
 async function handleAgentComplete(
-  db: Database,
+  db: Db,
   item: PipelineItem,
 ): Promise<void> {
   if (!item.taskRunId) return;
@@ -144,7 +144,7 @@ async function handleAgentComplete(
 }
 
 async function handleAwaitingReview(
-  db: Database,
+  db: Db,
   item: PipelineItem,
   batch: PipelineBatch,
 ): Promise<void> {
@@ -226,7 +226,7 @@ async function handleAwaitingReview(
  * so it can be reused by handleAwaitingReview after review approval.
  */
 async function triggerBuild(
-  db: Database,
+  db: Db,
   item: PipelineItem,
 ): Promise<void> {
   if (!item.taskRunId) return;
@@ -249,7 +249,7 @@ async function triggerBuild(
 }
 
 async function handleBuilding(
-  db: Database,
+  db: Db,
   item: PipelineItem,
   batch: PipelineBatch,
 ): Promise<void> {
@@ -275,7 +275,7 @@ async function handleBuilding(
 }
 
 async function handleGatesPassed(
-  db: Database,
+  db: Db,
   item: PipelineItem,
 ): Promise<void> {
   const { revisionId, buildId } = await getRevisionAndBuild(db, item);
@@ -299,7 +299,7 @@ async function handleGatesPassed(
 }
 
 async function handleDeploying(
-  db: Database,
+  db: Db,
   item: PipelineItem,
   batch: PipelineBatch,
   environment: string,
@@ -337,7 +337,7 @@ async function handleDeploying(
 }
 
 async function handleDevHealthy(
-  db: Database,
+  db: Db,
   item: PipelineItem,
 ): Promise<void> {
   const { revisionId, buildId } = await getRevisionAndBuild(db, item);
@@ -361,7 +361,7 @@ async function handleDevHealthy(
 }
 
 async function handleStagingHealthy(
-  db: Database,
+  db: Db,
   item: PipelineItem,
   batch: PipelineBatch,
 ): Promise<void> {
@@ -377,7 +377,7 @@ async function handleStagingHealthy(
 }
 
 async function handleProdHealthy(
-  db: Database,
+  db: Db,
   item: PipelineItem,
   batch: PipelineBatch,
 ): Promise<void> {
@@ -397,7 +397,7 @@ async function handleProdHealthy(
 // ---------------------------------------------------------------------------
 
 async function setPipelineState(
-  db: Database,
+  db: Db,
   itemId: string,
   state: string,
 ): Promise<void> {
@@ -412,7 +412,7 @@ async function setPipelineState(
  * The build is keyed by item.id as the idempotencyKey.
  */
 async function getRevisionAndBuild(
-  db: Database,
+  db: Db,
   item: PipelineItem,
 ): Promise<{ revisionId: string | null; buildId: string | null }> {
   const build = await db.query.forgeBuilds.findFirst({
@@ -420,4 +420,132 @@ async function getRevisionAndBuild(
   });
   if (!build) return { revisionId: null, buildId: null };
   return { revisionId: build.revisionId, buildId: build.id };
+}
+
+// ---------------------------------------------------------------------------
+// Delivery feedback — backward transitions + work item state
+// ---------------------------------------------------------------------------
+
+/**
+ * Delivery evidence types that can trigger work item state changes.
+ */
+export type DeliveryEvidenceType =
+  | "ci_failed"
+  | "ci_passed"
+  | "review_rejected"
+  | "review_approved"
+  | "deploy_failed"
+  | "deploy_succeeded";
+
+/**
+ * Reopen a pipeline item by moving it from a terminal or advanced state
+ * back to agent_complete. This is called when delivery evidence contradicts
+ * the current pipeline state (e.g., CI fails after the item was marked complete).
+ *
+ * Returns true if the item was reopened, false if it was already in a non-terminal state.
+ */
+export async function reopenPipeline(
+  db: Db,
+  itemId: string,
+  reason: DeliveryEvidenceType,
+): Promise<boolean> {
+  // Only reopen items that have advanced past agent_complete
+  const item = await db.query.dispatchItems.findFirst({
+    where: eq(dispatchItems.id, itemId),
+  });
+  if (!item) return false;
+
+  const state = item.pipelineState;
+  if (!state || state === "agent_complete") return false;
+
+  const previousState = state;
+  await setPipelineState(db, itemId, "agent_complete");
+
+  console.log(
+    `[pipeline] Reopened ${itemId}: ${previousState} → agent_complete (reason: ${reason})`,
+  );
+
+  return true;
+}
+
+/**
+ * Handle delivery evidence by updating the work item state and logging
+ * an audit event. Called from processWebhook when CI/review/deploy
+ * evidence changes.
+ *
+ * This is the core of the delivery feedback loop: delivery evidence
+ * flows back to work item state.
+ */
+export async function handleDeliveryEvidence(
+  db: Db,
+  opts: {
+    dispatchItemId: string;
+    workItemId: string;
+    taskRunId: string;
+    evidenceType: DeliveryEvidenceType;
+    metadata?: Record<string, unknown>;
+  },
+): Promise<void> {
+  const { dispatchItemId, workItemId, taskRunId, evidenceType, metadata } = opts;
+
+  // Determine work item state transition based on evidence type
+  let newWorkItemStatus: string | null = null;
+  let shouldReopenPipeline = false;
+
+  switch (evidenceType) {
+    case "ci_failed":
+      newWorkItemStatus = "in_progress";
+      shouldReopenPipeline = true;
+      break;
+    case "review_rejected":
+      newWorkItemStatus = "in_progress";
+      shouldReopenPipeline = true;
+      break;
+    case "deploy_failed":
+      newWorkItemStatus = "in_progress";
+      shouldReopenPipeline = true;
+      break;
+    case "ci_passed":
+      // CI passing doesn't change work item status — pipeline handles advancement
+      break;
+    case "review_approved":
+      // Review approval doesn't change work item status directly
+      break;
+    case "deploy_succeeded":
+      newWorkItemStatus = "done";
+      break;
+  }
+
+  // Update work item status if needed
+  if (newWorkItemStatus) {
+    const [updated] = await db
+      .update(workItems)
+      .set({ status: newWorkItemStatus })
+      .where(eq(workItems.id, workItemId))
+      .returning({ id: workItems.id, status: workItems.status });
+
+    if (updated) {
+      console.log(
+        `[delivery-feedback] Work item ${workItemId} → ${newWorkItemStatus} (evidence: ${evidenceType})`,
+      );
+    }
+  }
+
+  // Reopen pipeline if evidence contradicts current state
+  if (shouldReopenPipeline) {
+    await reopenPipeline(db, dispatchItemId, evidenceType);
+  }
+
+  // Log audit event
+  await db.insert(runLifecycleEvents).values({
+    taskRunId,
+    workItemId,
+    eventType: evidenceType,
+    phase: "execute",
+    metadata: {
+      dispatchItemId,
+      evidenceType,
+      ...(metadata ?? {}),
+    },
+  });
 }

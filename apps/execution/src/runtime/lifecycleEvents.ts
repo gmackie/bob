@@ -13,7 +13,14 @@ export type LifecycleEventType =
   | "delegation_started"
   | "delegation_completed"
   | "review_requested"
-  | "review_completed";
+  | "review_completed"
+  // Delivery feedback events — triggered by webhook evidence
+  | "ci_failed"
+  | "ci_passed"
+  | "review_rejected"
+  | "review_approved"
+  | "deploy_failed"
+  | "deploy_succeeded";
 
 export interface LifecycleEventInput {
   taskRunId: string;

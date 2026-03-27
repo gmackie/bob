@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { advancePipeline } from "../pipelineOrchestrator";
+import {
+  advancePipeline,
+  handleDeliveryEvidence,
+  reopenPipeline,
+} from "../pipelineOrchestrator";
 
 // Mocks for DB operations
 const dbInsertMock = vi.fn();
@@ -44,6 +48,9 @@ const makeDbMock = () => ({
     };
   },
   query: {
+    dispatchItems: {
+      findFirst: (...args: unknown[]) => dbQueryFindFirstMock("dispatchItems", ...args),
+    },
     forgeRevisions: {
       findFirst: (...args: unknown[]) => dbQueryFindFirstMock("forgeRevisions", ...args),
     },
@@ -281,5 +288,209 @@ describe("advancePipeline", () => {
       expect(dbInsertMock).not.toHaveBeenCalled();
       expect(dbUpdateMock).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("reopenPipeline", () => {
+  let db: ReturnType<typeof makeDbMock>;
+
+  beforeEach(() => {
+    db = makeDbMock();
+    dbInsertMock.mockReset();
+    dbUpdateMock.mockReset();
+    dbUpdateSetMock.mockReset();
+    dbUpdateWhereMock.mockReset();
+    dbQueryFindFirstMock.mockReset();
+  });
+
+  it("reopens a terminal state item back to agent_complete", async () => {
+    dbQueryFindFirstMock.mockResolvedValueOnce({
+      id: ITEM_ID,
+      pipelineState: "build_failed",
+    });
+
+    const reopened = await reopenPipeline(db as any, ITEM_ID, "ci_failed");
+
+    expect(reopened).toBe(true);
+    expect(dbUpdateSetMock).toHaveBeenCalledWith({ pipelineState: "agent_complete" });
+  });
+
+  it("reopens an advanced state item back to agent_complete", async () => {
+    dbQueryFindFirstMock.mockResolvedValueOnce({
+      id: ITEM_ID,
+      pipelineState: "building",
+    });
+
+    const reopened = await reopenPipeline(db as any, ITEM_ID, "ci_failed");
+
+    expect(reopened).toBe(true);
+    expect(dbUpdateSetMock).toHaveBeenCalledWith({ pipelineState: "agent_complete" });
+  });
+
+  it("returns false for items already at agent_complete", async () => {
+    dbQueryFindFirstMock.mockResolvedValueOnce({
+      id: ITEM_ID,
+      pipelineState: "agent_complete",
+    });
+
+    const reopened = await reopenPipeline(db as any, ITEM_ID, "ci_failed");
+
+    expect(reopened).toBe(false);
+    expect(dbUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("returns false for items with null state", async () => {
+    dbQueryFindFirstMock.mockResolvedValueOnce({
+      id: ITEM_ID,
+      pipelineState: null,
+    });
+
+    const reopened = await reopenPipeline(db as any, ITEM_ID, "ci_failed");
+
+    expect(reopened).toBe(false);
+    expect(dbUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("returns false when item not found", async () => {
+    dbQueryFindFirstMock.mockResolvedValueOnce(null);
+
+    const reopened = await reopenPipeline(db as any, "nonexistent", "ci_failed");
+
+    expect(reopened).toBe(false);
+  });
+});
+
+describe("handleDeliveryEvidence", () => {
+  let db: ReturnType<typeof makeDbMock>;
+  const dbUpdateReturningMock = vi.fn();
+
+  beforeEach(() => {
+    db = makeDbMock();
+    // Extend the mock to support .returning() on update
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (db as any).update = (table: unknown) => {
+      dbUpdateMock(table);
+      return {
+        set: (values: unknown) => {
+          dbUpdateSetMock(values);
+          return {
+            where: (condition: unknown) => {
+              dbUpdateWhereMock(condition);
+              return {
+                returning: () => dbUpdateReturningMock(),
+              };
+            },
+          };
+        },
+      };
+    };
+    dbInsertMock.mockReset();
+    dbInsertValuesMock.mockReset();
+    dbUpdateMock.mockReset();
+    dbUpdateSetMock.mockReset();
+    dbUpdateWhereMock.mockReset();
+    dbUpdateReturningMock.mockReset();
+    dbQueryFindFirstMock.mockReset();
+  });
+
+  it("reopens work item and pipeline on ci_failed", async () => {
+    // reopenPipeline: findFirst returns an advanced-state item
+    dbQueryFindFirstMock.mockResolvedValueOnce({
+      id: ITEM_ID,
+      pipelineState: "building",
+    });
+    // update work item .returning()
+    dbUpdateReturningMock.mockResolvedValueOnce([{ id: "task-1", status: "in_progress" }]);
+
+    await handleDeliveryEvidence(db as any, {
+      dispatchItemId: ITEM_ID,
+      workItemId: "task-1",
+      taskRunId: TASK_RUN_ID,
+      evidenceType: "ci_failed",
+    });
+
+    // Should update work item status to in_progress
+    expect(dbUpdateSetMock).toHaveBeenCalledWith({ status: "in_progress" });
+    // Should reopen pipeline (sets pipelineState to agent_complete)
+    expect(dbUpdateSetMock).toHaveBeenCalledWith({ pipelineState: "agent_complete" });
+    // Should log audit event
+    expect(dbInsertValuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskRunId: TASK_RUN_ID,
+        workItemId: "task-1",
+        eventType: "ci_failed",
+        phase: "execute",
+      }),
+    );
+  });
+
+  it("sets work item to done on deploy_succeeded", async () => {
+    // update work item .returning()
+    dbUpdateReturningMock.mockResolvedValueOnce([{ id: "task-1", status: "done" }]);
+
+    await handleDeliveryEvidence(db as any, {
+      dispatchItemId: ITEM_ID,
+      workItemId: "task-1",
+      taskRunId: TASK_RUN_ID,
+      evidenceType: "deploy_succeeded",
+    });
+
+    expect(dbUpdateSetMock).toHaveBeenCalledWith({ status: "done" });
+    // Should NOT reopen pipeline
+    expect(dbUpdateSetMock).not.toHaveBeenCalledWith({ pipelineState: "agent_complete" });
+  });
+
+  it("reopens work item and pipeline on review_rejected", async () => {
+    dbQueryFindFirstMock.mockResolvedValueOnce({
+      id: ITEM_ID,
+      pipelineState: "awaiting_review",
+    });
+    dbUpdateReturningMock.mockResolvedValueOnce([{ id: "task-1", status: "in_progress" }]);
+
+    await handleDeliveryEvidence(db as any, {
+      dispatchItemId: ITEM_ID,
+      workItemId: "task-1",
+      taskRunId: TASK_RUN_ID,
+      evidenceType: "review_rejected",
+    });
+
+    expect(dbUpdateSetMock).toHaveBeenCalledWith({ status: "in_progress" });
+    expect(dbUpdateSetMock).toHaveBeenCalledWith({ pipelineState: "agent_complete" });
+  });
+
+  it("reopens work item and pipeline on deploy_failed", async () => {
+    dbQueryFindFirstMock.mockResolvedValueOnce({
+      id: ITEM_ID,
+      pipelineState: "deploying_dev",
+    });
+    dbUpdateReturningMock.mockResolvedValueOnce([{ id: "task-1", status: "in_progress" }]);
+
+    await handleDeliveryEvidence(db as any, {
+      dispatchItemId: ITEM_ID,
+      workItemId: "task-1",
+      taskRunId: TASK_RUN_ID,
+      evidenceType: "deploy_failed",
+    });
+
+    expect(dbUpdateSetMock).toHaveBeenCalledWith({ status: "in_progress" });
+    expect(dbUpdateSetMock).toHaveBeenCalledWith({ pipelineState: "agent_complete" });
+  });
+
+  it("does not change work item status on ci_passed", async () => {
+    await handleDeliveryEvidence(db as any, {
+      dispatchItemId: ITEM_ID,
+      workItemId: "task-1",
+      taskRunId: TASK_RUN_ID,
+      evidenceType: "ci_passed",
+    });
+
+    // Should NOT update work item status
+    expect(dbUpdateSetMock).not.toHaveBeenCalledWith(expect.objectContaining({ status: expect.any(String) }));
+    // Should still log audit event
+    expect(dbInsertValuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "ci_passed",
+      }),
+    );
   });
 });
