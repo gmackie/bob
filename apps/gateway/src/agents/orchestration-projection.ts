@@ -325,6 +325,17 @@ function attachChildRun(
 ): void {
   const parent = ensureRun(snapshot, parentRunId);
   const child = ensureRun(snapshot, childRunId);
+  const previousParentRunId = child.parentRunId;
+
+  if (previousParentRunId && previousParentRunId !== parentRunId) {
+    const previousParent = snapshot.runsById[previousParentRunId];
+    if (previousParent) {
+      previousParent.childRunIds = previousParent.childRunIds.filter(
+        (existingChildRunId) => existingChildRunId !== childRunId,
+      );
+      syncRunChildTaskHierarchy(snapshot, previousParentRunId);
+    }
+  }
 
   child.parentRunId = parentRunId;
   if (!parent.childRunIds.includes(childRunId)) {
@@ -498,7 +509,39 @@ function recomputeRunStatus(
   }
 
   run.blocker = null;
-  if (run.status === "blocked") {
+  const agentStatuses = run.agentIds
+    .map((agentId) => snapshot.agentsById[agentId]?.status)
+    .filter((status): status is ProjectionAgentStatus => Boolean(status));
+
+  if (
+    agentStatuses.length > 0 &&
+    agentStatuses.every((status) => status === "failed")
+  ) {
+    run.status = "failed";
+    return;
+  }
+
+  if (
+    agentStatuses.length > 0 &&
+    agentStatuses.some((status) => status === "failed")
+  ) {
+    run.status = "failed";
+    return;
+  }
+
+  if (
+    agentStatuses.length > 0 &&
+    agentStatuses.every((status) => status === "completed")
+  ) {
+    run.status = "completed";
+    return;
+  }
+
+  if (
+    run.status === "blocked" ||
+    run.status === "completed" ||
+    run.status === "failed"
+  ) {
     run.status = "running";
   }
 }
@@ -588,6 +631,16 @@ function syncRunChildTaskHierarchy(
     return;
   }
 
+  for (const taskId of run.taskIds) {
+    const task = snapshot.tasksById[taskId];
+    if (task?.runId !== runId) {
+      continue;
+    }
+    task.childTaskRunIds = task.childTaskRunIds.filter(
+      (childTaskRunId) => !run.childRunIds.includes(childTaskRunId),
+    );
+  }
+
   for (const childRunId of run.childRunIds) {
     linkChildRunToParentTask(snapshot, runId, childRunId);
   }
@@ -655,12 +708,14 @@ function applyEvent(
     case "agent.completed": {
       const agent = ensureAgent(snapshot, event.agentId, event.runId);
       agent.status = "completed";
+      recomputeRunStatus(snapshot, event.runId);
       return;
     }
 
     case "agent.failed": {
       const agent = ensureAgent(snapshot, event.agentId, event.runId);
       agent.status = "failed";
+      recomputeRunStatus(snapshot, event.runId);
       return;
     }
 
@@ -692,7 +747,13 @@ function applyEvent(
     case "agent.task.progressed": {
       const task = ensureTask(snapshot, event.taskId, event.runId);
       task.status = "running";
+      task.blocker = null;
       task.summary = event.detail ?? task.summary;
+      const agentId = task.agentId ?? event.agentId;
+      if (agentId) {
+        recomputeAgentStatus(snapshot, agentId);
+      }
+      recomputeRunStatus(snapshot, event.runId);
       return;
     }
 
@@ -755,6 +816,7 @@ function applyEvent(
       }
       syncRunChildTaskHierarchy(snapshot, event.runId);
       recomputeAgentStatus(snapshot, event.agentId);
+      recomputeRunStatus(snapshot, event.runId);
       return;
     }
 
