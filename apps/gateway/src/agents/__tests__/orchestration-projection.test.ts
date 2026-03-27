@@ -477,4 +477,140 @@ describe("orchestration projection", () => {
       taskIds: ["task-1"],
     });
   });
+
+  it("marks the run completed when the only agent completes", () => {
+    const projection = buildOrchestrationProjection({
+      taskRuns: [makeTaskRun({ id: "run-root", sessionId: "session-root" })],
+      events: [
+        makeRunEvent("run.started", "run-root", { status: "running" }),
+        {
+          type: "agent.spawned",
+          threadId: "thread-root",
+          runId: "run-root",
+          agentId: "agent-1",
+          label: "builder",
+        },
+        {
+          type: "agent.completed",
+          threadId: "thread-root",
+          runId: "run-root",
+          agentId: "agent-1",
+        },
+      ],
+    });
+
+    expect(projection.agentsById["agent-1"]).toMatchObject({
+      status: "completed",
+    });
+    expect(projection.runsById["run-root"]).toMatchObject({
+      status: "completed",
+      blocker: null,
+    });
+  });
+
+  it("restores the agent and run to running when blocked work progresses again", () => {
+    const projection = buildOrchestrationProjection({
+      taskRuns: [makeTaskRun({ id: "run-root", sessionId: "session-root" })],
+      events: [
+        makeRunEvent("run.started", "run-root", { status: "running" }),
+        {
+          type: "agent.spawned",
+          threadId: "thread-root",
+          runId: "run-root",
+          agentId: "agent-1",
+          label: "builder",
+        },
+        {
+          type: "agent.task.assigned",
+          threadId: "thread-root",
+          runId: "run-root",
+          agentId: "agent-1",
+          taskId: "task-1",
+          title: "Implement the reducer",
+        },
+        {
+          type: "agent.task.blocked",
+          threadId: "thread-root",
+          runId: "run-root",
+          agentId: "agent-1",
+          taskId: "task-1",
+          blocker: "awaiting dependency",
+        },
+        {
+          type: "agent.task.progressed",
+          threadId: "thread-root",
+          runId: "run-root",
+          agentId: "agent-1",
+          taskId: "task-1",
+          detail: "dependency resolved",
+        },
+      ],
+    });
+
+    expect(projection.tasksById["task-1"]).toMatchObject({
+      status: "running",
+      blocker: null,
+      summary: "dependency resolved",
+    });
+    expect(projection.agentsById["agent-1"]).toMatchObject({
+      status: "running",
+      currentTaskId: "task-1",
+    });
+    expect(projection.runsById["run-root"]).toMatchObject({
+      status: "running",
+      blocker: null,
+    });
+  });
+
+  it("reattaches child runs to the latest parent task instead of keeping stale links", () => {
+    const projection = buildOrchestrationProjection({
+      taskRuns: [
+        makeTaskRun({
+          id: "run-root",
+          sessionId: "session-root",
+          runPhase: "plan",
+        }),
+        makeTaskRun({
+          id: "run-child",
+          sessionId: "session-child",
+          parentTaskRunId: "run-root",
+          runPhase: "execute",
+        }),
+      ],
+      events: [
+        makeRunEvent("run.started", "run-root", { status: "running" }),
+        makeRunEvent("run.started", "run-child", { status: "running" }),
+        {
+          type: "agent.spawned",
+          threadId: "thread-root",
+          runId: "run-root",
+          agentId: "agent-root",
+          label: "planner",
+        },
+        {
+          type: "agent.task.assigned",
+          threadId: "thread-root",
+          runId: "run-root",
+          agentId: "agent-root",
+          taskId: "task-1",
+          title: "Draft the delegation",
+        },
+        {
+          type: "agent.task.assigned",
+          threadId: "thread-root",
+          runId: "run-root",
+          agentId: "agent-root",
+          taskId: "task-2",
+          title: "Follow up on the delegation",
+        },
+      ],
+    });
+
+    expect(projection.tasksById["task-1"]).toMatchObject({
+      childTaskRunIds: [],
+    });
+    expect(projection.tasksById["task-2"]).toMatchObject({
+      childTaskRunIds: ["run-child"],
+    });
+  });
 });
