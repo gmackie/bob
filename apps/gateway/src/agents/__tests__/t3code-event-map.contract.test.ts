@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { bobEventToT3 } from "../t3code-event-map.js";
+import { bobEventToT3, t3EventToBob } from "../t3code-event-map.js";
 import type { ServerEvent } from "../../ws/protocol.js";
+import type { T3DomainEvent } from "../t3code-event-map.js";
 
 const THREAD_ID = "thread-compat";
 
@@ -15,6 +16,10 @@ function makeStateEvent(payload: Record<string, unknown>): ServerEvent {
     payload,
     createdAt: "2026-03-27T00:00:00.000Z",
   };
+}
+
+function makeT3Event(event: T3DomainEvent): T3DomainEvent {
+  return event;
 }
 
 describe("bobEventToT3 canonical v1 contract", () => {
@@ -483,5 +488,223 @@ describe("bobEventToT3 canonical v1 contract", () => {
   ])("maps %s", (_label, payload, expected) => {
     const event = makeStateEvent(payload);
     expect(bobEventToT3(event, THREAD_ID)).toMatchObject(expected);
+  });
+
+  it.each([
+    [
+      "run.started missing runId",
+      {
+        orchestrationType: "run_started",
+        status: "running",
+      },
+    ],
+    [
+      "thread.message.started blank identifiers",
+      {
+        orchestrationType: "thread_message_started",
+        runId: " ",
+        messageId: "",
+        role: "assistant",
+      },
+    ],
+    [
+      "agent.task.assigned missing taskId",
+      {
+        orchestrationType: "agent_task_assigned",
+        runId: "run-1",
+        agentId: "agent-1",
+      },
+    ],
+    [
+      "link.created blank targetId",
+      {
+        orchestrationType: "link_created",
+        runId: "run-1",
+        linkKind: "thread-to-run",
+        sourceId: "thread-1",
+        targetId: "   ",
+      },
+    ],
+  ] as const)("returns null for malformed %s payloads", (_label, payload) => {
+    expect(bobEventToT3(makeStateEvent(payload), THREAD_ID)).toBeNull();
+  });
+});
+
+describe("t3EventToBob canonical v1 contract", () => {
+  it.each<
+    [
+      string,
+      T3DomainEvent,
+      Record<string, unknown>,
+    ]
+  >([
+    [
+      "thread.message.started",
+      makeT3Event({
+        type: "thread.message.started",
+        threadId: THREAD_ID,
+        runId: "run-1",
+        messageId: "message-1",
+        role: "assistant",
+      }),
+      {
+        eventType: "state",
+        direction: "system",
+        payload: {
+          orchestrationType: "thread_message_started",
+          runId: "run-1",
+          messageId: "message-1",
+          role: "assistant",
+        },
+      },
+    ],
+    [
+      "run.started",
+      makeT3Event({
+        type: "run.started",
+        threadId: THREAD_ID,
+        runId: "run-1",
+        status: "running",
+      }),
+      {
+        eventType: "state",
+        direction: "system",
+        payload: {
+          orchestrationType: "run_started",
+          runId: "run-1",
+          status: "running",
+        },
+      },
+    ],
+    [
+      "agent.spawned",
+      makeT3Event({
+        type: "agent.spawned",
+        threadId: THREAD_ID,
+        runId: "run-1",
+        agentId: "agent-1",
+        label: "researcher",
+      }),
+      {
+        eventType: "state",
+        direction: "system",
+        payload: {
+          orchestrationType: "agent_spawned",
+          runId: "run-1",
+          agentId: "agent-1",
+          label: "researcher",
+        },
+      },
+    ],
+    [
+      "agent.task.assigned",
+      makeT3Event({
+        type: "agent.task.assigned",
+        threadId: THREAD_ID,
+        runId: "run-1",
+        agentId: "agent-1",
+        taskId: "task-1",
+        title: "Inspect orchestration flow",
+      }),
+      {
+        eventType: "state",
+        direction: "system",
+        payload: {
+          orchestrationType: "agent_task_assigned",
+          runId: "run-1",
+          agentId: "agent-1",
+          taskId: "task-1",
+          title: "Inspect orchestration flow",
+        },
+      },
+    ],
+    [
+      "request.opened",
+      makeT3Event({
+        type: "request.opened",
+        threadId: THREAD_ID,
+        runId: "run-1",
+        requestId: "request-1",
+        requestKind: "command",
+        detail: "Need approval for command execution",
+      }),
+      {
+        eventType: "state",
+        direction: "system",
+        payload: {
+          orchestrationType: "request_opened",
+          runId: "run-1",
+          requestId: "request-1",
+          requestKind: "command",
+          detail: "Need approval for command execution",
+        },
+      },
+    ],
+    [
+      "user_input.requested",
+      makeT3Event({
+        type: "user_input.requested",
+        threadId: THREAD_ID,
+        runId: "run-1",
+        requestId: "input-1",
+        question: "Which branch should be used?",
+      }),
+      {
+        eventType: "state",
+        direction: "system",
+        payload: {
+          orchestrationType: "user_input_requested",
+          runId: "run-1",
+          requestId: "input-1",
+          question: "Which branch should be used?",
+        },
+      },
+    ],
+    [
+      "artifact.produced",
+      makeT3Event({
+        type: "artifact.produced",
+        threadId: THREAD_ID,
+        runId: "run-1",
+        artifactId: "artifact-1",
+        artifactKind: "plan",
+        title: "Integration plan",
+      }),
+      {
+        eventType: "state",
+        direction: "system",
+        payload: {
+          orchestrationType: "artifact_produced",
+          runId: "run-1",
+          artifactId: "artifact-1",
+          artifactKind: "plan",
+          title: "Integration plan",
+        },
+      },
+    ],
+    [
+      "link.created",
+      makeT3Event({
+        type: "link.created",
+        threadId: THREAD_ID,
+        runId: "run-1",
+        linkKind: "thread-to-run",
+        sourceId: "thread-1",
+        targetId: "run-1",
+      }),
+      {
+        eventType: "state",
+        direction: "system",
+        payload: {
+          orchestrationType: "link_created",
+          runId: "run-1",
+          linkKind: "thread-to-run",
+          sourceId: "thread-1",
+          targetId: "run-1",
+        },
+      },
+    ],
+  ])("maps %s", (_label, event, expected) => {
+    expect(t3EventToBob(event)).toMatchObject(expected);
   });
 });

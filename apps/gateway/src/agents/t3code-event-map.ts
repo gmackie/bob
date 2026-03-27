@@ -315,6 +315,15 @@ function readArray(payload: Record<string, unknown>, key: string): unknown[] | u
   return Array.isArray(value) ? value : undefined;
 }
 
+function readRequiredId(payload: Record<string, unknown>, key: string): string | null {
+  const value = readString(payload, key);
+  if (value === undefined) {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 /**
  * Convert a Bob ServerEvent to a T3 Code domain event.
  * Returns null if the event has no T3 equivalent.
@@ -349,227 +358,413 @@ export function bobEventToT3(event: ServerEvent, threadId: string): T3DomainEven
     case "state":
       switch (readString(payload, "orchestrationType")) {
         case "thread_message_started":
-          return {
-            type: "thread.message.started",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            messageId: readString(payload, "messageId") ?? "",
-            role: readString(payload, "role"),
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            const messageId = readRequiredId(payload, "messageId");
+            if (!runId || !messageId) {
+              return null;
+            }
+            return {
+              type: "thread.message.started",
+              threadId,
+              runId,
+              messageId,
+              role: readString(payload, "role"),
+            };
+          }
         case "thread_message_delta":
-          return {
-            type: "thread.message.delta",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            messageId: readString(payload, "messageId") ?? "",
-            content: readString(payload, "content") ?? "",
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            const messageId = readRequiredId(payload, "messageId");
+            if (!runId || !messageId) {
+              return null;
+            }
+            return {
+              type: "thread.message.delta",
+              threadId,
+              runId,
+              messageId,
+              content: readString(payload, "content") ?? "",
+            };
+          }
         case "thread_message_completed":
-          return {
-            type: "thread.message.completed",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            messageId: readString(payload, "messageId") ?? "",
-            content: readString(payload, "content"),
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            const messageId = readRequiredId(payload, "messageId");
+            if (!runId || !messageId) {
+              return null;
+            }
+            return {
+              type: "thread.message.completed",
+              threadId,
+              runId,
+              messageId,
+              content: readString(payload, "content"),
+            };
+          }
         case "thread_message_failed":
-          return {
-            type: "thread.message.failed",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            messageId: readString(payload, "messageId") ?? "",
-            errorMessage: readString(payload, "errorMessage") ?? "",
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            const messageId = readRequiredId(payload, "messageId");
+            if (!runId || !messageId) {
+              return null;
+            }
+            return {
+              type: "thread.message.failed",
+              threadId,
+              runId,
+              messageId,
+              errorMessage: readString(payload, "errorMessage") ?? "",
+            };
+          }
         case "run_started":
-          return {
-            type: "run.started",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            status: mapRunStatus(readString(payload, "status")),
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            if (!runId) {
+              return null;
+            }
+            return {
+              type: "run.started",
+              threadId,
+              runId,
+              status: mapRunStatus(readString(payload, "status")),
+            };
+          }
         case "run_updated":
-          return {
-            type: "run.updated",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            status: mapRunStatus(readString(payload, "status")),
-            detail: readString(payload, "detail"),
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            if (!runId) {
+              return null;
+            }
+            return {
+              type: "run.updated",
+              threadId,
+              runId,
+              status: mapRunStatus(readString(payload, "status")),
+              detail: readString(payload, "detail"),
+            };
+          }
         case "run_completed":
-          return {
-            type: "run.completed",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            status: mapRunStatus(readString(payload, "status")),
-            summary: readString(payload, "summary"),
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            if (!runId) {
+              return null;
+            }
+            return {
+              type: "run.completed",
+              threadId,
+              runId,
+              status: mapRunStatus(readString(payload, "status")),
+              summary: readString(payload, "summary"),
+            };
+          }
         case "run_failed":
-          return {
-            type: "run.failed",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            status: mapRunStatus(readString(payload, "status")),
-            errorMessage: readString(payload, "errorMessage") ?? "",
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            if (!runId) {
+              return null;
+            }
+            return {
+              type: "run.failed",
+              threadId,
+              runId,
+              status: mapRunStatus(readString(payload, "status")),
+              errorMessage: readString(payload, "errorMessage") ?? "",
+            };
+          }
         case "agent_spawned":
-          return {
-            type: "agent.spawned",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            agentId: readString(payload, "agentId") ?? "",
-            label: readString(payload, "label"),
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            const agentId = readRequiredId(payload, "agentId");
+            if (!runId || !agentId) {
+              return null;
+            }
+            return {
+              type: "agent.spawned",
+              threadId,
+              runId,
+              agentId,
+              label: readString(payload, "label"),
+            };
+          }
         case "agent_updated":
-          return {
-            type: "agent.updated",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            agentId: readString(payload, "agentId") ?? "",
-            status: mapAgentStatus(readString(payload, "status")),
-            detail: readString(payload, "detail"),
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            const agentId = readRequiredId(payload, "agentId");
+            if (!runId || !agentId) {
+              return null;
+            }
+            return {
+              type: "agent.updated",
+              threadId,
+              runId,
+              agentId,
+              status: mapAgentStatus(readString(payload, "status")),
+              detail: readString(payload, "detail"),
+            };
+          }
         case "agent_completed":
-          return {
-            type: "agent.completed",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            agentId: readString(payload, "agentId") ?? "",
-            status: mapAgentStatus(readString(payload, "status")),
-            summary: readString(payload, "summary"),
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            const agentId = readRequiredId(payload, "agentId");
+            if (!runId || !agentId) {
+              return null;
+            }
+            return {
+              type: "agent.completed",
+              threadId,
+              runId,
+              agentId,
+              status: mapAgentStatus(readString(payload, "status")),
+              summary: readString(payload, "summary"),
+            };
+          }
         case "agent_failed":
-          return {
-            type: "agent.failed",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            agentId: readString(payload, "agentId") ?? "",
-            status: mapAgentStatus(readString(payload, "status")),
-            errorMessage: readString(payload, "errorMessage") ?? "",
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            const agentId = readRequiredId(payload, "agentId");
+            if (!runId || !agentId) {
+              return null;
+            }
+            return {
+              type: "agent.failed",
+              threadId,
+              runId,
+              agentId,
+              status: mapAgentStatus(readString(payload, "status")),
+              errorMessage: readString(payload, "errorMessage") ?? "",
+            };
+          }
         case "agent_task_assigned":
-          return {
-            type: "agent.task.assigned",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            agentId: readString(payload, "agentId") ?? "",
-            taskId: readString(payload, "taskId") ?? "",
-            title: readString(payload, "title"),
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            const agentId = readRequiredId(payload, "agentId");
+            const taskId = readRequiredId(payload, "taskId");
+            if (!runId || !agentId || !taskId) {
+              return null;
+            }
+            return {
+              type: "agent.task.assigned",
+              threadId,
+              runId,
+              agentId,
+              taskId,
+              title: readString(payload, "title"),
+            };
+          }
         case "agent_task_progressed":
-          return {
-            type: "agent.task.progressed",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            agentId: readString(payload, "agentId") ?? "",
-            taskId: readString(payload, "taskId") ?? "",
-            detail: readString(payload, "detail"),
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            const agentId = readRequiredId(payload, "agentId");
+            const taskId = readRequiredId(payload, "taskId");
+            if (!runId || !agentId || !taskId) {
+              return null;
+            }
+            return {
+              type: "agent.task.progressed",
+              threadId,
+              runId,
+              agentId,
+              taskId,
+              detail: readString(payload, "detail"),
+            };
+          }
         case "agent_task_blocked":
-          return {
-            type: "agent.task.blocked",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            agentId: readString(payload, "agentId") ?? "",
-            taskId: readString(payload, "taskId") ?? "",
-            blocker: readString(payload, "blocker"),
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            const agentId = readRequiredId(payload, "agentId");
+            const taskId = readRequiredId(payload, "taskId");
+            if (!runId || !agentId || !taskId) {
+              return null;
+            }
+            return {
+              type: "agent.task.blocked",
+              threadId,
+              runId,
+              agentId,
+              taskId,
+              blocker: readString(payload, "blocker"),
+            };
+          }
         case "agent_task_completed":
-          return {
-            type: "agent.task.completed",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            agentId: readString(payload, "agentId") ?? "",
-            taskId: readString(payload, "taskId") ?? "",
-            summary: readString(payload, "summary"),
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            const agentId = readRequiredId(payload, "agentId");
+            const taskId = readRequiredId(payload, "taskId");
+            if (!runId || !agentId || !taskId) {
+              return null;
+            }
+            return {
+              type: "agent.task.completed",
+              threadId,
+              runId,
+              agentId,
+              taskId,
+              summary: readString(payload, "summary"),
+            };
+          }
         case "agent_task_failed":
-          return {
-            type: "agent.task.failed",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            agentId: readString(payload, "agentId") ?? "",
-            taskId: readString(payload, "taskId") ?? "",
-            errorMessage: readString(payload, "errorMessage") ?? "",
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            const agentId = readRequiredId(payload, "agentId");
+            const taskId = readRequiredId(payload, "taskId");
+            if (!runId || !agentId || !taskId) {
+              return null;
+            }
+            return {
+              type: "agent.task.failed",
+              threadId,
+              runId,
+              agentId,
+              taskId,
+              errorMessage: readString(payload, "errorMessage") ?? "",
+            };
+          }
         case "agent_task_reassigned":
-          return {
-            type: "agent.task.reassigned",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            agentId: readString(payload, "agentId") ?? "",
-            taskId: readString(payload, "taskId") ?? "",
-            previousAgentId: readString(payload, "previousAgentId"),
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            const agentId = readRequiredId(payload, "agentId");
+            const taskId = readRequiredId(payload, "taskId");
+            if (!runId || !agentId || !taskId) {
+              return null;
+            }
+            return {
+              type: "agent.task.reassigned",
+              threadId,
+              runId,
+              agentId,
+              taskId,
+              previousAgentId: readString(payload, "previousAgentId"),
+            };
+          }
         case "request_opened":
-          return {
-            type: "request.opened",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            requestId: readString(payload, "requestId") ?? "",
-            requestKind: readString(payload, "requestKind"),
-            detail: readString(payload, "detail"),
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            const requestId = readRequiredId(payload, "requestId");
+            if (!runId || !requestId) {
+              return null;
+            }
+            return {
+              type: "request.opened",
+              threadId,
+              runId,
+              requestId,
+              requestKind: readString(payload, "requestKind"),
+              detail: readString(payload, "detail"),
+            };
+          }
         case "request_resolved":
-          return {
-            type: "request.resolved",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            requestId: readString(payload, "requestId") ?? "",
-            requestKind: readString(payload, "requestKind"),
-            decision: readString(payload, "decision"),
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            const requestId = readRequiredId(payload, "requestId");
+            if (!runId || !requestId) {
+              return null;
+            }
+            return {
+              type: "request.resolved",
+              threadId,
+              runId,
+              requestId,
+              requestKind: readString(payload, "requestKind"),
+              decision: readString(payload, "decision"),
+            };
+          }
         case "user_input_requested":
-          return {
-            type: "user_input.requested",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            requestId: readString(payload, "requestId") ?? "",
-            question: readString(payload, "question"),
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            const requestId = readRequiredId(payload, "requestId");
+            if (!runId || !requestId) {
+              return null;
+            }
+            return {
+              type: "user_input.requested",
+              threadId,
+              runId,
+              requestId,
+              question: readString(payload, "question"),
+            };
+          }
         case "user_input_resolved":
-          return {
-            type: "user_input.resolved",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            requestId: readString(payload, "requestId") ?? "",
-            answers: readArray(payload, "answers"),
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            const requestId = readRequiredId(payload, "requestId");
+            if (!runId || !requestId) {
+              return null;
+            }
+            return {
+              type: "user_input.resolved",
+              threadId,
+              runId,
+              requestId,
+              answers: readArray(payload, "answers"),
+            };
+          }
         case "artifact_produced":
-          return {
-            type: "artifact.produced",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            artifactId: readString(payload, "artifactId") ?? "",
-            artifactKind: readString(payload, "artifactKind"),
-            title: readString(payload, "title"),
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            const artifactId = readRequiredId(payload, "artifactId");
+            if (!runId || !artifactId) {
+              return null;
+            }
+            return {
+              type: "artifact.produced",
+              threadId,
+              runId,
+              artifactId,
+              artifactKind: readString(payload, "artifactKind"),
+              title: readString(payload, "title"),
+            };
+          }
         case "artifact_updated":
-          return {
-            type: "artifact.updated",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            artifactId: readString(payload, "artifactId") ?? "",
-            artifactKind: readString(payload, "artifactKind"),
-            title: readString(payload, "title"),
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            const artifactId = readRequiredId(payload, "artifactId");
+            if (!runId || !artifactId) {
+              return null;
+            }
+            return {
+              type: "artifact.updated",
+              threadId,
+              runId,
+              artifactId,
+              artifactKind: readString(payload, "artifactKind"),
+              title: readString(payload, "title"),
+            };
+          }
         case "artifact_promoted":
-          return {
-            type: "artifact.promoted",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            artifactId: readString(payload, "artifactId") ?? "",
-            artifactKind: readString(payload, "artifactKind"),
-            title: readString(payload, "title"),
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            const artifactId = readRequiredId(payload, "artifactId");
+            if (!runId || !artifactId) {
+              return null;
+            }
+            return {
+              type: "artifact.promoted",
+              threadId,
+              runId,
+              artifactId,
+              artifactKind: readString(payload, "artifactKind"),
+              title: readString(payload, "title"),
+            };
+          }
         case "link_created":
-          return {
-            type: "link.created",
-            threadId,
-            runId: readString(payload, "runId") ?? "",
-            linkKind: readString(payload, "linkKind") ?? "",
-            sourceId: readString(payload, "sourceId") ?? "",
-            targetId: readString(payload, "targetId") ?? "",
-          };
+          {
+            const runId = readRequiredId(payload, "runId");
+            const linkKind = readRequiredId(payload, "linkKind");
+            const sourceId = readRequiredId(payload, "sourceId");
+            const targetId = readRequiredId(payload, "targetId");
+            if (!runId || !linkKind || !sourceId || !targetId) {
+              return null;
+            }
+            return {
+              type: "link.created",
+              threadId,
+              runId,
+              linkKind,
+              sourceId,
+              targetId,
+            };
+          }
         default:
           break;
       }
