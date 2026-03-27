@@ -7,7 +7,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { eq } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
@@ -49,7 +49,6 @@ function detectBuildSteps(workDir: string): BuildStep[] {
 
     // Detect available scripts from package.json
     try {
-      const { readFileSync } = await import("node:fs");
       const pkg = JSON.parse(
         readFileSync(`${workDir}/package.json`, { encoding: "utf8" }),
       );

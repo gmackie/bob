@@ -9,10 +9,11 @@ import { SessionCleanup } from "./sessions/SessionCleanup.js";
 import { AgentProcessManager } from "./agents/agent-process-manager.js";
 import { getStdioAdapter } from "./agents/adapters/base-stdio-adapter.js";
 import { detectVcs, getVcsAdapter } from "./vcs/vcs-adapter.js";
-import { and, eq, sql } from "@bob/db";
+import { and, eq, isNotNull, sql } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
   chatConversations,
+  dispatchItems,
   sessionEvents,
 } from "@bob/db/schema";
 import {
@@ -1072,6 +1073,36 @@ setInterval(() => {
     }
   }
 }, 60 * 1000);
+
+// Pipeline driver: advance active dispatch items every 30 seconds.
+// This ensures webhook-driven state changes propagate through the pipeline
+// even when no UI client is polling checkProgress.
+const PIPELINE_TERMINAL_STATES = ["complete", "build_failed", "deploy_failed", "review_failed"];
+setInterval(async () => {
+  try {
+    const allPipelineItems = await db.query.dispatchItems.findMany({
+      where: isNotNull(dispatchItems.pipelineState),
+      with: { batch: true },
+      limit: 100,
+    });
+    const activeItems = allPipelineItems.filter(
+      (i) => i.pipelineState && !PIPELINE_TERMINAL_STATES.includes(i.pipelineState),
+    );
+
+    if (activeItems.length > 0) {
+      const { advancePipeline } = await import(
+        "@bob/api/services/forgegraph/pipelineOrchestrator"
+      );
+      for (const item of activeItems) {
+        await advancePipeline(db, item, item.batch).catch((err: unknown) =>
+          console.error(`[pipeline-driver] Failed to advance ${item.id}:`, err),
+        );
+      }
+    }
+  } catch (err) {
+    console.error("[pipeline-driver] Error in pipeline driver:", err);
+  }
+}, 30 * 1000);
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", `http://localhost:${PORT}`);

@@ -4,6 +4,7 @@ import {
   activities,
   chatConversations,
   chatMessages,
+  dispatchItems,
   forgeBuilds,
   forgeDeployments,
   forgeRevisions,
@@ -17,7 +18,48 @@ import {
   workItemArtifacts,
 } from "@bob/db/schema";
 
+import { z } from "zod/v4";
+
 export type WebhookProvider = "github" | "gitlab" | "gitea" | "planning";
+
+// Zod schemas for webhook payloads that touch the delivery pipeline.
+// These validate at the boundary before any DB writes happen.
+
+const GitHubCheckRunPayload = z.object({
+  action: z.string(),
+  check_run: z.object({
+    id: z.number().optional(),
+    head_sha: z.string(),
+    conclusion: z.string().nullable(),
+    name: z.string(),
+  }),
+});
+
+const GitHubWorkflowRunPayload = z.object({
+  action: z.string(),
+  workflow_run: z.object({
+    id: z.number().optional(),
+    head_sha: z.string(),
+    conclusion: z.string().nullable(),
+    name: z.string(),
+  }),
+});
+
+const GitHubPullRequestReviewPayload = z.object({
+  review: z.object({
+    state: z.string(),
+    body: z.string().nullable().optional(),
+    user: z.object({ login: z.string(), id: z.number() }).optional(),
+  }),
+  pull_request: z.object({
+    number: z.number(),
+    head: z.object({ sha: z.string() }).optional(),
+  }),
+  repository: z.object({
+    owner: z.object({ login: z.string() }),
+    name: z.string(),
+  }),
+});
 
 export interface WebhookDeliveryInput {
   provider: WebhookProvider;
@@ -829,20 +871,12 @@ export async function processPlanningWebhook(
 async function handleGitHubPullRequestReview(
   payload: Record<string, unknown>,
 ): Promise<void> {
-  const review = payload.review as {
-    state: string;
-    body?: string;
-    user?: { login: string; id: number };
-  } | undefined;
-  const pullRequest = payload.pull_request as {
-    number: number;
-  } | undefined;
-  const repository = payload.repository as {
-    owner: { login: string };
-    name: string;
-  } | undefined;
-
-  if (!review || !pullRequest || !repository) return;
+  const parsed = GitHubPullRequestReviewPayload.safeParse(payload);
+  if (!parsed.success) {
+    console.error("[webhook:pull_request_review] Invalid payload:", parsed.error.message);
+    return;
+  }
+  const { review, pull_request: pullRequest, repository } = parsed.data;
 
   // Only sync approved and changes_requested — ignore "commented"
   if (review.state !== "approved" && review.state !== "changes_requested") {
@@ -885,6 +919,33 @@ async function handleGitHubPullRequestReview(
   console.log(
     `[webhook:pull_request_review] Synced external review ${status} for PR #${prNumber} (${owner}/${repo})`,
   );
+
+  // Delivery feedback: feed review evidence back to work item state
+  const headSha = pullRequest.head?.sha;
+  if (headSha) {
+    const revision = await db.query.forgeRevisions.findFirst({
+      where: eq(forgeRevisions.revId, headSha),
+    });
+
+    if (revision?.taskId && revision?.taskRunId) {
+      const item = await db.query.dispatchItems.findFirst({
+        where: eq(dispatchItems.taskRunId, revision.taskRunId),
+      });
+
+      if (item) {
+        const { handleDeliveryEvidence } = await import(
+          "../forgegraph/pipelineOrchestrator"
+        );
+        await handleDeliveryEvidence(db, {
+          dispatchItemId: item.id,
+          workItemId: revision.taskId,
+          taskRunId: revision.taskRunId,
+          evidenceType: status === "approved" ? "review_approved" : "review_rejected",
+          metadata: { prNumber, reviewer: reviewerUserId, headSha },
+        });
+      }
+    }
+  }
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -896,15 +957,17 @@ async function handleGitHubPullRequestReview(
  * Maps check conclusions to ForgeGraph build status updates.
  */
 async function handleGitHubCheckRun(payload: Record<string, unknown>): Promise<void> {
-  const action = payload.action as string;
+  const parsed = GitHubCheckRunPayload.safeParse(payload);
+  if (!parsed.success) {
+    console.error("[webhook:check_run] Invalid payload:", parsed.error.message);
+    return;
+  }
+  const { action, check_run: checkRun } = parsed.data;
   if (action !== "completed") return; // Only care about completed checks
 
-  const checkRun = payload.check_run as Record<string, unknown> | undefined;
-  if (!checkRun) return;
-
-  const headSha = checkRun.head_sha as string;
-  const conclusion = checkRun.conclusion as string; // success, failure, neutral, cancelled, etc.
-  const checkName = checkRun.name as string;
+  const headSha = checkRun.head_sha;
+  const conclusion = checkRun.conclusion ?? "neutral";
+  const checkName = checkRun.name;
 
   if (!headSha) return;
 
@@ -918,11 +981,11 @@ async function handleGitHubCheckRun(payload: Record<string, unknown>): Promise<v
     return;
   }
 
-  // Map check conclusion to build status
-  const buildStatus = conclusion === "success" ? "success"
+  // Map GitHub check conclusion to normalized build status (matches forgeBuildStatusEnum)
+  const buildStatus = conclusion === "success" ? "passed"
     : conclusion === "failure" ? "failed"
-    : conclusion === "cancelled" ? "cancelled"
-    : "pending";
+    : conclusion === "cancelled" ? "canceled"
+    : "queued";
 
   // Find or create a build record
   const idempotencyKey = `check-${headSha}-${checkName}`;
@@ -950,7 +1013,7 @@ async function handleGitHubCheckRun(payload: Record<string, unknown>): Promise<v
     const normalizedName = checkName.toLowerCase();
     const updatedGates = (revision.gates as Array<{ name: string; status: string }>).map(
       (gate) => {
-        if (normalizedName.includes(gate.name)) {
+        if (normalizedName === gate.name.toLowerCase()) {
           return { ...gate, status: buildStatus };
         }
         return gate;
@@ -958,7 +1021,7 @@ async function handleGitHubCheckRun(payload: Record<string, unknown>): Promise<v
     );
 
     // If all gates passed, update revision status
-    const allPassed = updatedGates.every((g) => g.status === "success");
+    const allPassed = updatedGates.every((g) => g.status === "passed");
     const anyFailed = updatedGates.some((g) => g.status === "failed");
 
     await db
@@ -987,6 +1050,26 @@ async function handleGitHubCheckRun(payload: Record<string, unknown>): Promise<v
   }
 
   console.log(`[webhook:check_run] Updated build for ${headSha}: ${checkName} → ${buildStatus}`);
+
+  // Delivery feedback: feed CI evidence back to work item state
+  if (revision.taskId && revision.taskRunId && (buildStatus === "failed" || buildStatus === "passed")) {
+    const dispatchItem = await db.query.dispatchItems.findFirst({
+      where: eq(dispatchItems.taskRunId, revision.taskRunId),
+    });
+
+    if (dispatchItem) {
+      const { handleDeliveryEvidence } = await import(
+        "../forgegraph/pipelineOrchestrator"
+      );
+      await handleDeliveryEvidence(db, {
+        dispatchItemId: dispatchItem.id,
+        workItemId: revision.taskId,
+        taskRunId: revision.taskRunId,
+        evidenceType: buildStatus === "failed" ? "ci_failed" : "ci_passed",
+        metadata: { checkName, conclusion, headSha, buildId: build?.id },
+      });
+    }
+  }
 }
 
 /**
@@ -994,15 +1077,17 @@ async function handleGitHubCheckRun(payload: Record<string, unknown>): Promise<v
  * When all checks pass, can trigger deployment creation.
  */
 async function handleGitHubWorkflowRun(payload: Record<string, unknown>): Promise<void> {
-  const action = payload.action as string;
+  const parsed = GitHubWorkflowRunPayload.safeParse(payload);
+  if (!parsed.success) {
+    console.error("[webhook:workflow_run] Invalid payload:", parsed.error.message);
+    return;
+  }
+  const { action, workflow_run: workflowRun } = parsed.data;
   if (action !== "completed") return;
 
-  const workflowRun = payload.workflow_run as Record<string, unknown> | undefined;
-  if (!workflowRun) return;
-
-  const headSha = workflowRun.head_sha as string;
-  const conclusion = workflowRun.conclusion as string;
-  const workflowName = workflowRun.name as string;
+  const headSha = workflowRun.head_sha;
+  const conclusion = workflowRun.conclusion ?? "neutral";
+  const workflowName = workflowRun.name;
 
   if (!headSha) return;
 
@@ -1018,7 +1103,8 @@ async function handleGitHubWorkflowRun(payload: Record<string, unknown>): Promis
 
   // Create a build record for the overall workflow
   const idempotencyKey = `workflow-${headSha}-${workflowName}`;
-  const buildStatus = conclusion === "success" ? "success" : "failed";
+  // Normalize to forgeBuildStatusEnum values
+  const buildStatus = conclusion === "success" ? "passed" : "failed";
 
   const [build] = await db
     .insert(forgeBuilds)

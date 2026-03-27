@@ -532,7 +532,7 @@ export class AgentProcessManager {
           );
           actor.handleAgentOutput(
             `[delegation] Sub-agent started: ${toolName}\n`,
-            "system",
+            "stdout",
           );
 
           // Track this delegation for pairing with its result

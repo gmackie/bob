@@ -2,7 +2,7 @@ import type { TRPCRouterRecord } from "@trpc/server";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod/v4";
 
-import { and, desc, eq, inArray } from "@bob/db";
+import { and, desc, eq, inArray, sql } from "@bob/db";
 import {
   chatConversations,
   dispatchBatches,
@@ -536,8 +536,8 @@ export const dispatchRouter = {
         orderBy: [dispatchItems.sortOrder],
       });
 
-      let completedCount = batch.completedTasks;
-      let failedCount = batch.failedTasks;
+      let newCompleted = 0;
+      let newFailed = 0;
 
       // Check running items for completion
       const runningItems = items.filter(
@@ -567,7 +567,7 @@ export const dispatchRouter = {
               .update(dispatchItems)
               .set({ status: "completed", pipelineState: "agent_complete" })
               .where(eq(dispatchItems.id, item.id));
-            completedCount++;
+            newCompleted++;
 
             // Update planning API status to "in_review"
             void updatePlanningTaskStatus(item.planningTaskId, "in_review");
@@ -634,7 +634,7 @@ export const dispatchRouter = {
               .update(dispatchItems)
               .set({ status: "failed" })
               .where(eq(dispatchItems.id, item.id));
-            failedCount++;
+            newFailed++;
 
             // Report to ForgeGraph
             if (item.taskRunId) {
@@ -648,14 +648,20 @@ export const dispatchRouter = {
         }
       }
 
-      // Update batch counters
-      await ctx.db
-        .update(dispatchBatches)
-        .set({
-          completedTasks: completedCount,
-          failedTasks: failedCount,
-        })
-        .where(eq(dispatchBatches.id, input.batchId));
+      // Update batch counters atomically to avoid race conditions
+      if (newCompleted > 0 || newFailed > 0) {
+        await ctx.db
+          .update(dispatchBatches)
+          .set({
+            ...(newCompleted > 0 && {
+              completedTasks: sql`${dispatchBatches.completedTasks} + ${newCompleted}`,
+            }),
+            ...(newFailed > 0 && {
+              failedTasks: sql`${dispatchBatches.failedTasks} + ${newFailed}`,
+            }),
+          })
+          .where(eq(dispatchBatches.id, input.batchId));
+      }
 
       // Build set of completed item IDs for dependency checking
       // Re-fetch to get updated statuses
@@ -741,7 +747,7 @@ export const dispatchRouter = {
                 .update(dispatchItems)
                 .set({ status: "failed" })
                 .where(eq(dispatchItems.id, item.id));
-              failedCount++;
+              newFailed++;
             }
           }
         }
@@ -760,28 +766,21 @@ export const dispatchRouter = {
       if (allDone) {
         await ctx.db
           .update(dispatchBatches)
-          .set({
-            status: "completed",
-            completedTasks: completedCount,
-            failedTasks: failedCount,
-          })
+          .set({ status: "completed" })
           .where(eq(dispatchBatches.id, input.batchId));
+
+        // Re-read to get accurate counts for notification
+        const finalBatch = await ctx.db.query.dispatchBatches.findFirst({
+          where: eq(dispatchBatches.id, input.batchId),
+        });
 
         // Batch completion notification
         await ctx.db.insert(notifications).values({
           userId: batch.userId,
           title: "Dispatch batch complete",
-          body: `${completedCount}/${batch.totalTasks} tasks finished`,
+          body: `${finalBatch?.completedTasks ?? 0}/${batch.totalTasks} tasks finished`,
           type: "batch_completed",
         });
-      } else {
-        await ctx.db
-          .update(dispatchBatches)
-          .set({
-            completedTasks: completedCount,
-            failedTasks: failedCount,
-          })
-          .where(eq(dispatchBatches.id, input.batchId));
       }
 
       // Advance pipeline for items with active pipeline state
@@ -838,11 +837,11 @@ export const dispatchRouter = {
   resetPipelineState: protectedProcedure
     .input(z.object({ itemId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      const [item] = await ctx.db
-        .update(dispatchItems)
-        .set({ pipelineState: "agent_complete" })
-        .where(eq(dispatchItems.id, input.itemId))
-        .returning();
+      // Verify the item exists and the user owns the batch
+      const item = await ctx.db.query.dispatchItems.findFirst({
+        where: eq(dispatchItems.id, input.itemId),
+        with: { batch: true },
+      });
 
       if (!item) {
         throw new TRPCError({
@@ -850,6 +849,18 @@ export const dispatchRouter = {
           message: "Dispatch item not found",
         });
       }
+
+      if (item.batch.userId !== ctx.session.user.id) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You do not own this dispatch batch",
+        });
+      }
+
+      await ctx.db
+        .update(dispatchItems)
+        .set({ pipelineState: "agent_complete" })
+        .where(eq(dispatchItems.id, input.itemId));
 
       return { ok: true };
     }),

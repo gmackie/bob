@@ -68,9 +68,10 @@ async function checkHealth(
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT);
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const response = await fetch(url, {
         method: "GET",
-        signal: controller.signal,
+        signal: controller.signal as any,
         redirect: "follow",
       });
       clearTimeout(timeout);

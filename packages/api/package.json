@@ -19,6 +19,10 @@
       "types": "./dist/api/src/services/webhooks/processWebhook.d.ts",
       "default": "./src/services/webhooks/processWebhook.ts"
     },
+    "./services/forgegraph/pipelineOrchestrator": {
+      "types": "./dist/api/src/services/forgegraph/pipelineOrchestrator.d.ts",
+      "default": "./src/services/forgegraph/pipelineOrchestrator.ts"
+    },
     "./services/git/providerConnectionService": {
       "types": "./dist/api/src/services/git/providerConnectionService.d.ts",
       "default": "./src/services/git/providerConnectionService.ts"
