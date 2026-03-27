@@ -1,10 +1,30 @@
 import type { T3DomainEvent } from "./t3code-event-map.js";
 
-export type ProjectionRunPhase = "shape" | "plan" | "execute" | "review" | "ship";
+export type ProjectionRunPhase =
+  | "shape"
+  | "plan"
+  | "execute"
+  | "review"
+  | "ship";
 
-export type ProjectionRunStatus = "starting" | "running" | "blocked" | "completed" | "failed";
-export type ProjectionAgentStatus = "starting" | "running" | "blocked" | "completed" | "failed";
-export type ProjectionTaskStatus = "starting" | "running" | "blocked" | "completed" | "failed";
+export type ProjectionRunStatus =
+  | "starting"
+  | "running"
+  | "blocked"
+  | "completed"
+  | "failed";
+export type ProjectionAgentStatus =
+  | "starting"
+  | "running"
+  | "blocked"
+  | "completed"
+  | "failed";
+export type ProjectionTaskStatus =
+  | "starting"
+  | "running"
+  | "blocked"
+  | "completed"
+  | "failed";
 export type ProjectionRequestStatus = "open" | "resolved";
 
 export interface TaskRunSeed {
@@ -17,8 +37,8 @@ export interface TaskRunSeed {
 }
 
 export interface OrchestrationProjectionInput {
-  readonly taskRuns?: ReadonlyArray<TaskRunSeed>;
-  readonly events?: ReadonlyArray<T3DomainEvent>;
+  readonly taskRuns?: readonly TaskRunSeed[];
+  readonly events?: readonly T3DomainEvent[];
 }
 
 export interface OrchestrationProjectionSnapshot {
@@ -101,7 +121,9 @@ function createEmptySnapshot(): OrchestrationProjectionSnapshot {
   };
 }
 
-function normalizeRunPhase(value: string | undefined): ProjectionRunPhase | null {
+function normalizeRunPhase(
+  value: string | undefined,
+): ProjectionRunPhase | null {
   switch (value) {
     case "shape":
     case "plan":
@@ -129,7 +151,9 @@ function normalizeRunStatus(value: string | undefined): ProjectionRunStatus {
   }
 }
 
-function normalizeAgentStatus(value: string | undefined): ProjectionAgentStatus {
+function normalizeAgentStatus(
+  value: string | undefined,
+): ProjectionAgentStatus {
   switch (value) {
     case "starting":
     case "running":
@@ -142,20 +166,10 @@ function normalizeAgentStatus(value: string | undefined): ProjectionAgentStatus 
   }
 }
 
-function normalizeTaskStatus(value: string | undefined): ProjectionTaskStatus {
-  switch (value) {
-    case "starting":
-    case "running":
-    case "blocked":
-    case "completed":
-    case "failed":
-      return value;
-    default:
-      return "starting";
-  }
-}
-
-function ensureRun(snapshot: OrchestrationProjectionSnapshot, runId: string): OrchestrationRun {
+function ensureRun(
+  snapshot: OrchestrationProjectionSnapshot,
+  runId: string,
+): OrchestrationRun {
   const existing = snapshot.runsById[runId];
   if (existing) {
     return existing;
@@ -186,7 +200,21 @@ function ensureAgent(
 ): OrchestrationAgent {
   const existing = snapshot.agentsById[agentId];
   if (existing) {
-    existing.runId = runId;
+    if (existing.runId !== runId) {
+      const previousRun = snapshot.runsById[existing.runId];
+      if (previousRun) {
+        previousRun.agentIds = previousRun.agentIds.filter(
+          (existingAgentId) => existingAgentId !== agentId,
+        );
+      }
+      existing.runId = runId;
+    }
+
+    const run = ensureRun(snapshot, runId);
+    if (!run.agentIds.includes(agentId)) {
+      run.agentIds.push(agentId);
+    }
+    inheritOpenRequestsForAgent(snapshot, existing);
     return existing;
   }
 
@@ -206,6 +234,7 @@ function ensureAgent(
   if (!run.agentIds.includes(agentId)) {
     run.agentIds.push(agentId);
   }
+  inheritOpenRequestsForAgent(snapshot, agent);
   return agent;
 }
 
@@ -305,11 +334,13 @@ function attachChildRun(
   if (rootIndex !== -1) {
     snapshot.rootRunIds.splice(rootIndex, 1);
   }
+
+  linkChildRunToParentTask(snapshot, parentRunId, childRunId);
 }
 
 function seedTaskRuns(
   snapshot: OrchestrationProjectionSnapshot,
-  taskRuns: ReadonlyArray<TaskRunSeed>,
+  taskRuns: readonly TaskRunSeed[],
 ): void {
   for (const taskRun of taskRuns) {
     const run = ensureRun(snapshot, taskRun.id);
@@ -324,7 +355,10 @@ function seedTaskRuns(
   }
 }
 
-function addLink(snapshot: OrchestrationProjectionSnapshot, link: OrchestrationLink): void {
+function addLink(
+  snapshot: OrchestrationProjectionSnapshot,
+  link: OrchestrationLink,
+): void {
   snapshot.links.push(link);
 
   const artifact = snapshot.artifactsById[link.sourceId];
@@ -354,6 +388,211 @@ function markRunAgentsPendingRequest(
   }
 }
 
+function getOpenRequestIdsForRun(
+  snapshot: OrchestrationProjectionSnapshot,
+  runId: string,
+): string[] {
+  return Object.values(snapshot.requestsById)
+    .filter((request) => request.runId === runId && request.status === "open")
+    .map((request) => request.id);
+}
+
+function getBlockedTaskIdsForRun(
+  snapshot: OrchestrationProjectionSnapshot,
+  runId: string,
+): string[] {
+  return Object.values(snapshot.tasksById)
+    .filter((task) => task.runId === runId && task.status === "blocked")
+    .map((task) => task.id);
+}
+
+function recomputeAgentStatus(
+  snapshot: OrchestrationProjectionSnapshot,
+  agentId: string,
+): void {
+  const agent = snapshot.agentsById[agentId];
+  if (!agent) {
+    return;
+  }
+
+  agent.pendingRequestIds = agent.pendingRequestIds.filter((requestId) => {
+    const request = snapshot.requestsById[requestId];
+    return request?.status === "open";
+  });
+
+  if (agent.pendingRequestIds.length > 0) {
+    agent.status = "blocked";
+    return;
+  }
+
+  const currentTaskId = agent.currentTaskId;
+  if (!currentTaskId) {
+    if (agent.status !== "completed" && agent.status !== "failed") {
+      agent.status = "running";
+    }
+    return;
+  }
+
+  const currentTask = snapshot.tasksById[currentTaskId];
+  if (!currentTask) {
+    if (agent.status !== "completed" && agent.status !== "failed") {
+      agent.status = "running";
+    }
+    return;
+  }
+
+  switch (currentTask.status) {
+    case "blocked":
+      agent.status = "blocked";
+      return;
+    case "completed":
+      agent.status = "completed";
+      return;
+    case "failed":
+      agent.status = "failed";
+      return;
+    default:
+      agent.status = "running";
+      return;
+  }
+}
+
+function recomputeRunStatus(
+  snapshot: OrchestrationProjectionSnapshot,
+  runId: string,
+): void {
+  const run = snapshot.runsById[runId];
+  if (!run || run.status === "completed" || run.status === "failed") {
+    return;
+  }
+
+  const openRequestIds = getOpenRequestIdsForRun(snapshot, runId);
+  const blockedTaskIds = getBlockedTaskIdsForRun(snapshot, runId);
+
+  if (openRequestIds.length > 0) {
+    const requestId = openRequestIds[0];
+    if (!requestId) {
+      return;
+    }
+    const request = snapshot.requestsById[requestId];
+    if (!request) {
+      return;
+    }
+    run.status = "blocked";
+    run.blocker = request.question ?? run.blocker;
+    return;
+  }
+
+  if (blockedTaskIds.length > 0) {
+    const taskId = blockedTaskIds[0];
+    if (!taskId) {
+      return;
+    }
+    const task = snapshot.tasksById[taskId];
+    if (!task) {
+      return;
+    }
+    run.status = "blocked";
+    run.blocker = task.blocker ?? run.blocker;
+    return;
+  }
+
+  run.blocker = null;
+  if (run.status === "blocked") {
+    run.status = "running";
+  }
+}
+
+function inheritOpenRequestsForAgent(
+  snapshot: OrchestrationProjectionSnapshot,
+  agent: OrchestrationAgent,
+): void {
+  const openRequestIds = getOpenRequestIdsForRun(snapshot, agent.runId);
+  for (const requestId of openRequestIds) {
+    if (!agent.pendingRequestIds.includes(requestId)) {
+      agent.pendingRequestIds.push(requestId);
+    }
+  }
+  recomputeAgentStatus(snapshot, agent.id);
+}
+
+function clearAgentTaskOwnership(
+  snapshot: OrchestrationProjectionSnapshot,
+  agentId: string,
+  taskId: string,
+): void {
+  const agent = snapshot.agentsById[agentId];
+  if (!agent) {
+    return;
+  }
+
+  agent.taskIds = agent.taskIds.filter((ownedTaskId) => ownedTaskId !== taskId);
+  if (agent.currentTaskId === taskId) {
+    agent.currentTaskId = null;
+  }
+  recomputeAgentStatus(snapshot, agentId);
+}
+
+function linkChildRunToParentTask(
+  snapshot: OrchestrationProjectionSnapshot,
+  runId: string,
+  childRunId: string,
+): void {
+  const run = snapshot.runsById[runId];
+  if (!run) {
+    return;
+  }
+
+  for (const agentId of run.agentIds) {
+    const agent = snapshot.agentsById[agentId];
+    const currentTaskId = agent?.currentTaskId;
+    if (typeof currentTaskId !== "string") {
+      continue;
+    }
+
+    const task = snapshot.tasksById[currentTaskId];
+    if (task?.runId !== runId) {
+      continue;
+    }
+
+    if (!task.childTaskRunIds.includes(childRunId)) {
+      task.childTaskRunIds.push(childRunId);
+    }
+    return;
+  }
+
+  for (let index = run.taskIds.length - 1; index >= 0; index -= 1) {
+    const taskId = run.taskIds[index];
+    if (typeof taskId !== "string") {
+      continue;
+    }
+
+    const task = snapshot.tasksById[taskId];
+    if (task?.runId !== runId) {
+      continue;
+    }
+
+    if (!task.childTaskRunIds.includes(childRunId)) {
+      task.childTaskRunIds.push(childRunId);
+    }
+    return;
+  }
+}
+
+function syncRunChildTaskHierarchy(
+  snapshot: OrchestrationProjectionSnapshot,
+  runId: string,
+): void {
+  const run = snapshot.runsById[runId];
+  if (!run) {
+    return;
+  }
+
+  for (const childRunId of run.childRunIds) {
+    linkChildRunToParentTask(snapshot, runId, childRunId);
+  }
+}
+
 function clearRunAgentsPendingRequest(
   snapshot: OrchestrationProjectionSnapshot,
   runId: string,
@@ -369,11 +608,19 @@ function clearRunAgentsPendingRequest(
     if (!agent) {
       continue;
     }
-    agent.pendingRequestIds = agent.pendingRequestIds.filter((pendingId) => pendingId !== requestId);
+    agent.pendingRequestIds = agent.pendingRequestIds.filter(
+      (pendingId) => pendingId !== requestId,
+    );
+    recomputeAgentStatus(snapshot, agentId);
   }
+
+  recomputeRunStatus(snapshot, runId);
 }
 
-function applyEvent(snapshot: OrchestrationProjectionSnapshot, event: T3DomainEvent): void {
+function applyEvent(
+  snapshot: OrchestrationProjectionSnapshot,
+  event: T3DomainEvent,
+): void {
   switch (event.type) {
     case "run.started":
     case "run.updated":
@@ -394,13 +641,14 @@ function applyEvent(snapshot: OrchestrationProjectionSnapshot, event: T3DomainEv
     case "agent.spawned": {
       const agent = ensureAgent(snapshot, event.agentId, event.runId);
       agent.label = event.label ?? agent.label;
-      agent.status = "running";
+      recomputeAgentStatus(snapshot, agent.id);
       return;
     }
 
     case "agent.updated": {
       const agent = ensureAgent(snapshot, event.agentId, event.runId);
       agent.status = normalizeAgentStatus(event.status);
+      recomputeAgentStatus(snapshot, agent.id);
       return;
     }
 
@@ -435,6 +683,9 @@ function applyEvent(snapshot: OrchestrationProjectionSnapshot, event: T3DomainEv
       if (!run.agentIds.includes(event.agentId)) {
         run.agentIds.push(event.agentId);
       }
+      syncRunChildTaskHierarchy(snapshot, event.runId);
+      recomputeAgentStatus(snapshot, event.agentId);
+      recomputeRunStatus(snapshot, event.runId);
       return;
     }
 
@@ -459,6 +710,9 @@ function applyEvent(snapshot: OrchestrationProjectionSnapshot, event: T3DomainEv
       agent.currentTaskId = event.taskId;
       run.status = "blocked";
       run.blocker = event.blocker ?? run.blocker;
+      syncRunChildTaskHierarchy(snapshot, event.runId);
+      recomputeAgentStatus(snapshot, event.agentId);
+      recomputeRunStatus(snapshot, event.runId);
       return;
     }
 
@@ -466,26 +720,41 @@ function applyEvent(snapshot: OrchestrationProjectionSnapshot, event: T3DomainEv
       const task = ensureTask(snapshot, event.taskId, event.runId);
       task.status = "completed";
       task.summary = event.summary ?? task.summary;
+      const agentId = task.agentId ?? event.agentId;
+      if (agentId) {
+        recomputeAgentStatus(snapshot, agentId);
+      }
+      recomputeRunStatus(snapshot, event.runId);
       return;
     }
 
     case "agent.task.failed": {
       const task = ensureTask(snapshot, event.taskId, event.runId);
       task.status = "failed";
-      task.summary = event.errorMessage ?? task.summary;
+      task.summary = event.errorMessage;
       const run = ensureRun(snapshot, event.runId);
       run.status = "failed";
+      const agentId = task.agentId ?? event.agentId;
+      if (agentId) {
+        recomputeAgentStatus(snapshot, agentId);
+      }
       return;
     }
 
     case "agent.task.reassigned": {
       const task = ensureTask(snapshot, event.taskId, event.runId);
+      const previousAgentId = event.previousAgentId ?? task.agentId;
+      if (previousAgentId && previousAgentId !== event.agentId) {
+        clearAgentTaskOwnership(snapshot, previousAgentId, event.taskId);
+      }
       task.agentId = event.agentId;
       const agent = ensureAgent(snapshot, event.agentId, event.runId);
       agent.currentTaskId = event.taskId;
       if (!agent.taskIds.includes(event.taskId)) {
         agent.taskIds.push(event.taskId);
       }
+      syncRunChildTaskHierarchy(snapshot, event.runId);
+      recomputeAgentStatus(snapshot, event.agentId);
       return;
     }
 
@@ -495,10 +764,9 @@ function applyEvent(snapshot: OrchestrationProjectionSnapshot, event: T3DomainEv
       request.question = event.detail ?? request.question;
       request.status = "open";
       run.status = "blocked";
-      if (!run.blocker) {
-        run.blocker = event.detail ?? run.blocker;
-      }
+      run.blocker ??= event.detail ?? null;
       markRunAgentsPendingRequest(snapshot, event.runId, event.requestId);
+      recomputeRunStatus(snapshot, event.runId);
       return;
     }
 
@@ -506,6 +774,7 @@ function applyEvent(snapshot: OrchestrationProjectionSnapshot, event: T3DomainEv
       const request = ensureRequest(snapshot, event.requestId, event.runId);
       request.status = "resolved";
       clearRunAgentsPendingRequest(snapshot, event.runId, event.requestId);
+      recomputeRunStatus(snapshot, event.runId);
       return;
     }
 
@@ -515,10 +784,9 @@ function applyEvent(snapshot: OrchestrationProjectionSnapshot, event: T3DomainEv
       request.question = event.question ?? request.question;
       request.status = "open";
       run.status = "blocked";
-      if (!run.blocker) {
-        run.blocker = event.question ?? run.blocker;
-      }
+      run.blocker ??= event.question ?? null;
       markRunAgentsPendingRequest(snapshot, event.runId, event.requestId);
+      recomputeRunStatus(snapshot, event.runId);
       return;
     }
 
@@ -526,6 +794,7 @@ function applyEvent(snapshot: OrchestrationProjectionSnapshot, event: T3DomainEv
       const request = ensureRequest(snapshot, event.requestId, event.runId);
       request.status = "resolved";
       clearRunAgentsPendingRequest(snapshot, event.runId, event.requestId);
+      recomputeRunStatus(snapshot, event.runId);
       return;
     }
 
