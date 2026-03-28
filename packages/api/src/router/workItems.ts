@@ -16,7 +16,73 @@ import {
   workItemNotificationType,
 } from "@bob/db/schema";
 
+import { isForgeGraphEnabled, requireForgeGraphClient } from "../services/forgegraph/config";
+import { resolveForgeGraphId, cacheMapping } from "../services/forgegraph/idResolver";
+import type { FgWorkItem, FgArtifact, FgActivity } from "../services/forgegraph/forgeGraphClient";
+import { toBobStatus } from "../services/forgegraph/statusMap";
 import { protectedProcedure } from "../trpc";
+
+/** Map a ForgeGraph work item to Bob's local shape. */
+function mapFgWorkItemToLocal(
+  fg: FgWorkItem,
+  project?: { id: string; key: string; name: string } | null,
+) {
+  const meta = fg.metadata as { projectKey?: string; sequenceNumber?: number } | null;
+  const identifier =
+    meta?.projectKey && meta?.sequenceNumber
+      ? `${meta.projectKey}-${meta.sequenceNumber}`
+      : fg.externalId?.slice(0, 8).toUpperCase() ?? fg.id.slice(0, 8).toUpperCase();
+
+  return {
+    id: fg.externalId ?? fg.id,
+    identifier,
+    title: fg.title,
+    description: fg.description ?? null,
+    kind: fg.kind,
+    status: (fg.metadata as any)?.bobStatus ?? toBobStatus(fg.status),
+    priority: (fg.metadata as any)?.priority ?? "no_priority",
+    sequenceNumber: meta?.sequenceNumber ?? 0,
+    projectId: fg.repositoryId ?? null,
+    project: project ?? null,
+    createdAt: new Date(fg.createdAt),
+    updatedAt: new Date(fg.updatedAt),
+  };
+}
+
+/** Map a ForgeGraph artifact to Bob's local artifact shape. */
+function mapFgArtifactToLocal(fg: FgArtifact) {
+  return {
+    id: fg.id,
+    workItemId: fg.workItemId,
+    taskRunId: null,
+    sessionId: null,
+    producerType: fg.producerType,
+    producerId: fg.producerId ?? null,
+    artifactType: fg.artifactType,
+    artifactRole: fg.artifactRole,
+    title: fg.title ?? null,
+    summary: fg.summary ?? null,
+    content: fg.content ?? null,
+    url: fg.url ?? null,
+    isCurrent: fg.isCurrent,
+    metadata: fg.metadata ?? null,
+    createdAt: new Date(fg.createdAt),
+  };
+}
+
+/** Map a ForgeGraph activity to Bob's local activity shape. */
+function mapFgActivityToLocal(fg: FgActivity) {
+  return {
+    id: fg.id,
+    workItemId: fg.workItemId,
+    userId: fg.actorId,
+    type: fg.type,
+    fromValue: null,
+    toValue: null,
+    metadata: fg.metadata ?? null,
+    createdAt: new Date(fg.createdAt),
+  };
+}
 
 function formatWorkItemIdentifier(input: {
   projectKey: string | null;
@@ -43,6 +109,47 @@ const listWorkItemsProcedure = protectedProcedure
     }),
   )
   .query(async ({ ctx, input }) => {
+    // ── ForgeGraph read path ──────────────────────────────────────────
+    if (isForgeGraphEnabled()) {
+      const fg = requireForgeGraphClient();
+
+      // Build FG filters
+      const fgFilters: Record<string, string | number> = {};
+      if (input.projectId) fgFilters.repositoryId = input.projectId;
+      if (input.parentId) fgFilters.parentId = input.parentId;
+      if (input.kind) fgFilters.kind = input.kind;
+      if (input.status) fgFilters.status = input.status;
+      fgFilters.limit = input.limit;
+
+      const fgItems = await fg.listWorkItems(fgFilters);
+
+      // Load projects locally for enrichment
+      const projectRows = await ctx.db.query.projects.findMany({
+        where: eq(projects.workspaceId, input.workspaceId),
+      });
+      const projectById = new Map(projectRows.map((p) => [p.id, p]));
+
+      return fgItems.map((fgItem) => {
+        // Cache the mapping for future lookups
+        if (fgItem.externalId) cacheMapping(fgItem.externalId, fgItem.id);
+
+        const project = fgItem.repositoryId
+          ? projectById.get(fgItem.repositoryId) ?? null
+          : null;
+        const mapped = mapFgWorkItemToLocal(fgItem, project ? { id: project.id, key: project.key, name: project.name } : null);
+
+        return {
+          ...mapped,
+          // Spread extra fields the UI might expect from the local DB shape
+          ownerUserId: null,
+          workspaceId: input.workspaceId,
+          parentId: fgItem.parentId ?? null,
+          project,
+        };
+      });
+    }
+
+    // ── Local DB path ─────────────────────────────────────────────────
     const items = await ctx.db.query.workItems.findMany({
       where: and(
         eq(workItems.workspaceId, input.workspaceId),
@@ -86,16 +193,122 @@ const listWorkItemsProcedure = protectedProcedure
     });
   });
 
+/** Parse a short identifier like "BOB-27" into { projectKey, sequenceNumber }. */
+function parseIdentifier(id: string): { projectKey: string; sequenceNumber: number } | null {
+  const match = id.match(/^([A-Za-z][A-Za-z0-9]*)-(\d+)$/);
+  if (!match) return null;
+  return { projectKey: match[1]!.toUpperCase(), sequenceNumber: parseInt(match[2]!, 10) };
+}
+
 const getWorkItemProcedure = protectedProcedure
   .input(
     z.object({
-      id: z.string().uuid(),
+      id: z.string(),
     }),
   )
   .query(async ({ ctx, input }) => {
-    const workItem = await ctx.db.query.workItems.findFirst({
-      where: eq(workItems.id, input.id),
-    });
+    // ── ForgeGraph read path ──────────────────────────────────────────
+    if (isForgeGraphEnabled()) {
+      const fg = requireForgeGraphClient();
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.id);
+
+      let fgItem: FgWorkItem | null = null;
+      let project: { id: string; key: string; name: string } | null = null;
+
+      if (isUuid) {
+        // Resolve Bob UUID → FG ID, then fetch detail
+        const fgId = await resolveForgeGraphId(fg, input.id);
+        if (fgId) {
+          try {
+            fgItem = await fg.getWorkItem(fgId);
+          } catch {
+            fgItem = null;
+          }
+        }
+      } else {
+        // Parse short identifier like "BOB-27"
+        const parsed = parseIdentifier(input.id);
+        if (parsed) {
+          const localProject = await ctx.db.query.projects.findFirst({
+            where: eq(projects.key, parsed.projectKey),
+          });
+          if (localProject) {
+            project = { id: localProject.id, key: localProject.key, name: localProject.name };
+            // Search FG by repositoryId + metadata
+            const candidates = await fg.listWorkItems({ repositoryId: localProject.id });
+            fgItem = candidates.find((c) => {
+              const meta = c.metadata as { projectKey?: string; sequenceNumber?: number } | null;
+              return meta?.projectKey === parsed.projectKey && meta?.sequenceNumber === parsed.sequenceNumber;
+            }) ?? null;
+          }
+        }
+      }
+
+      if (!fgItem) {
+        return null;
+      }
+
+      // Cache the mapping
+      if (fgItem.externalId) cacheMapping(fgItem.externalId, fgItem.id);
+
+      // Resolve project if not already resolved
+      if (!project && fgItem.repositoryId) {
+        const localProject = await ctx.db.query.projects.findFirst({
+          where: eq(projects.id, fgItem.repositoryId),
+        });
+        if (localProject) {
+          project = { id: localProject.id, key: localProject.key, name: localProject.name };
+        }
+      }
+
+      const mapped = mapFgWorkItemToLocal(fgItem, project);
+
+      // Detail endpoint returns children and artifacts inline
+      const currentArtifacts = (fgItem.artifacts ?? [])
+        .filter((a) => a.isCurrent)
+        .map(mapFgArtifactToLocal);
+
+      const childCount = fgItem.children?.length ?? 0;
+
+      return {
+        workItem: {
+          ...mapped,
+          ownerUserId: null,
+          workspaceId: null,
+          parentId: fgItem.parentId ?? null,
+          project,
+        },
+        currentArtifacts,
+        childCount,
+      };
+    }
+
+    // ── Local DB path ─────────────────────────────────────────────────
+    // Try UUID lookup first
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.id);
+
+    let workItem;
+    if (isUuid) {
+      workItem = await ctx.db.query.workItems.findFirst({
+        where: eq(workItems.id, input.id),
+      });
+    } else {
+      // Try short identifier lookup (e.g. "BOB-27")
+      const parsed = parseIdentifier(input.id);
+      if (parsed) {
+        const project = await ctx.db.query.projects.findFirst({
+          where: eq(projects.key, parsed.projectKey),
+        });
+        if (project) {
+          workItem = await ctx.db.query.workItems.findFirst({
+            where: and(
+              eq(workItems.projectId, project.id),
+              eq(workItems.sequenceNumber, parsed.sequenceNumber),
+            ),
+          });
+        }
+      }
+    }
 
     if (!workItem) {
       return null;
@@ -275,6 +488,16 @@ const promoteToTaskProcedure = protectedProcedure
       return existing;
     }
 
+    // ── ForgeGraph write path ──────────────────────────────────────
+    if (isForgeGraphEnabled()) {
+      const fg = requireForgeGraphClient();
+      const fgId = await resolveForgeGraphId(fg, input.id);
+      if (fgId) {
+        await fg.updateWorkItem(fgId, { kind: "task" });
+      }
+    }
+
+    // Always update local DB (ForgeGraph is supplementary)
     const [workItem] = await ctx.db
       .update(workItems)
       .set({
@@ -307,13 +530,24 @@ const listActivitiesProcedure = protectedProcedure
       limit: z.number().min(1).max(100).default(50),
     }),
   )
-  .query(({ ctx, input }) =>
-    ctx.db.query.activities.findMany({
+  .query(async ({ ctx, input }) => {
+    // ── ForgeGraph read path ──────────────────────────────────────────
+    if (isForgeGraphEnabled()) {
+      const fg = requireForgeGraphClient();
+      const fgId = await resolveForgeGraphId(fg, input.workItemId);
+      if (fgId) {
+        const fgActivities = await fg.listActivities(fgId, input.limit);
+        return fgActivities.map(mapFgActivityToLocal);
+      }
+    }
+
+    // ── Local DB path ─────────────────────────────────────────────────
+    return ctx.db.query.activities.findMany({
       where: eq(activities.workItemId, input.workItemId),
       orderBy: desc(activities.createdAt),
       limit: input.limit,
-    }),
-  );
+    });
+  });
 
 const listCurrentArtifactsProcedure = protectedProcedure
   .input(
@@ -321,15 +555,26 @@ const listCurrentArtifactsProcedure = protectedProcedure
       workItemId: z.string().uuid(),
     }),
   )
-  .query(({ ctx, input }) =>
-    ctx.db.query.workItemArtifacts.findMany({
+  .query(async ({ ctx, input }) => {
+    // ── ForgeGraph read path ──────────────────────────────────────────
+    if (isForgeGraphEnabled()) {
+      const fg = requireForgeGraphClient();
+      const fgId = await resolveForgeGraphId(fg, input.workItemId);
+      if (fgId) {
+        const fgArtifacts = await fg.listArtifacts(fgId);
+        return fgArtifacts.filter((a) => a.isCurrent).map(mapFgArtifactToLocal);
+      }
+    }
+
+    // ── Local DB path ─────────────────────────────────────────────────
+    return ctx.db.query.workItemArtifacts.findMany({
       where: and(
         eq(workItemArtifacts.workItemId, input.workItemId),
         eq(workItemArtifacts.isCurrent, true),
       ),
       orderBy: desc(workItemArtifacts.createdAt),
-    }),
-  );
+    });
+  });
 
 const listChildArtifactGroupsProcedure = protectedProcedure
   .input(
@@ -338,6 +583,42 @@ const listChildArtifactGroupsProcedure = protectedProcedure
     }),
   )
   .query(async ({ ctx, input }) => {
+    // ── ForgeGraph read path ──────────────────────────────────────────
+    if (isForgeGraphEnabled()) {
+      const fg = requireForgeGraphClient();
+      const fgId = await resolveForgeGraphId(fg, input.parentWorkItemId);
+      if (fgId) {
+        // Detail endpoint includes children inline
+        const parentDetail = await fg.getWorkItem(fgId);
+        const fgChildren = parentDetail.children ?? [];
+
+        const groups = await Promise.all(
+          fgChildren.map(async (child) => {
+            // Cache mapping for each child
+            if (child.externalId) cacheMapping(child.externalId, child.id);
+
+            // If child has artifacts inline, use them; otherwise fetch
+            let childArtifacts = child.artifacts;
+            if (!childArtifacts) {
+              childArtifacts = await fg.listArtifacts(child.id);
+            }
+
+            const currentArtifacts = childArtifacts
+              .filter((a) => a.isCurrent)
+              .map(mapFgArtifactToLocal);
+
+            return {
+              workItem: mapFgWorkItemToLocal(child),
+              artifacts: currentArtifacts,
+            };
+          }),
+        );
+
+        return groups.filter((group) => group.artifacts.length > 0);
+      }
+    }
+
+    // ── Local DB path ─────────────────────────────────────────────────
     const children = await ctx.db.query.workItems.findMany({
       where: eq(workItems.parentId, input.parentWorkItemId),
       orderBy: desc(workItems.updatedAt),

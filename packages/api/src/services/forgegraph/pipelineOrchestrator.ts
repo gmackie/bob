@@ -518,6 +518,32 @@ export async function handleDeliveryEvidence(
 
   // Update work item status if needed
   if (newWorkItemStatus) {
+    // ── ForgeGraph write path ──────────────────────────────────────
+    const { isForgeGraphEnabled, requireForgeGraphClient } = await import("./config");
+    if (isForgeGraphEnabled()) {
+      const fg = requireForgeGraphClient();
+      const { resolveForgeGraphId } = await import("./idResolver");
+      const fgId = await resolveForgeGraphId(fg, workItemId);
+      if (fgId) {
+        const { toFgStatus } = await import("./statusMap");
+        await fg.updateWorkItem(fgId, {
+          status: toFgStatus(newWorkItemStatus),
+          actorId: "bob",
+        });
+        await fg.recordActivity(fgId, {
+          actorId: "bob",
+          type: "delivery_evidence",
+          metadata: {
+            evidenceType,
+            dispatchItemId,
+            newStatus: newWorkItemStatus,
+            ...(metadata ?? {}),
+          },
+        });
+      }
+    }
+
+    // Always update local DB as well
     const [updated] = await db
       .update(workItems)
       .set({ status: newWorkItemStatus })

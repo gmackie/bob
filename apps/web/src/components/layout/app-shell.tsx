@@ -56,7 +56,21 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
     return localStorage.getItem(STORAGE_KEY) === "true";
   });
 
-  const collapsed = fullBleed || userCollapsed;
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.innerWidth < 768;
+  });
+
+  // Auto-collapse on mobile viewports
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const handler = (e: MediaQueryListEvent | MediaQueryList) => setIsMobile(e.matches);
+    handler(mq);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
+  const collapsed = fullBleed || userCollapsed || isMobile;
 
   const toggle = useCallback(() => {
     setUserCollapsed((prev) => {

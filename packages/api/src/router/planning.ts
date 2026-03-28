@@ -9,6 +9,10 @@ import {
   getPlanningApiKey,
   getPlanningBaseUrl,
 } from "../services/integrations/planningRemoteConfig";
+import { isForgeGraphEnabled, requireForgeGraphClient } from "../services/forgegraph/config";
+import { resolveForgeGraphId, cacheMapping } from "../services/forgegraph/idResolver";
+import type { FgWorkItem } from "../services/forgegraph/forgeGraphClient";
+import { toFgStatus, toBobStatus } from "../services/forgegraph/statusMap";
 import { onTaskStatusChange } from "../services/automation/task-trigger";
 import { protectedProcedure } from "../trpc";
 
@@ -23,6 +27,35 @@ function formatWorkItemIdentifier(input: {
 
   const suffix = input.id.slice(0, 8).toUpperCase();
   return input.projectKey ? `${input.projectKey}-${suffix}` : `TASK-${suffix}`;
+}
+
+/** Map a ForgeGraph work item to the planning task list shape. */
+function mapFgToTaskShape(
+  fg: FgWorkItem,
+  project?: { id: string; name: string; key: string } | null,
+) {
+  const meta = fg.metadata as { projectKey?: string; sequenceNumber?: number; priority?: string } | null;
+  const identifier =
+    meta?.projectKey && meta?.sequenceNumber
+      ? `${meta.projectKey}-${meta.sequenceNumber}`
+      : fg.externalId?.slice(0, 8).toUpperCase() ?? fg.id.slice(0, 8).toUpperCase();
+
+  return {
+    id: fg.externalId ?? fg.id,
+    identifier,
+    title: fg.title,
+    description: fg.description ?? undefined,
+    status: (fg.metadata as any)?.bobStatus ?? toBobStatus(fg.status),
+    priority: (meta?.priority ?? "no_priority") as string,
+    kind: fg.kind,
+    project: project ? { id: project.id, name: project.name, key: project.key } : undefined,
+    assignee: undefined as { id: string; name: string } | undefined,
+    labels: [] as Array<{ id: string; name: string; color: string }>,
+    dueDate: undefined as string | undefined,
+    createdAt: fg.createdAt,
+    updatedAt: fg.updatedAt,
+    completedAt: undefined as string | undefined,
+  };
 }
 
 async function planningQuery<T>(path: string, input?: unknown): Promise<T> {
@@ -271,6 +304,41 @@ export const planningRouter = {
       }),
     )
     .query(async ({ ctx, input }) => {
+      // ── ForgeGraph read path ──────────────────────────────────────
+      if (isForgeGraphEnabled()) {
+        const fg = requireForgeGraphClient();
+
+        const fgFilters: Record<string, string | number> = {};
+        if (input.projectId) fgFilters.repositoryId = input.projectId;
+        if (input.status) fgFilters.status = input.status;
+        fgFilters.limit = input.limit;
+
+        let fgItems = await fg.listWorkItems(fgFilters);
+
+        // Client-side search filter (FG may not support full-text)
+        if (input.search) {
+          const q = input.search.toLowerCase();
+          fgItems = fgItems.filter((item) => item.title.toLowerCase().includes(q));
+        }
+
+        // Load projects locally for enrichment
+        const projectRows = await ctx.db.query.projects.findMany({
+          where: eq(projects.workspaceId, input.workspaceId),
+        });
+        const projectById = new Map(projectRows.map((p) => [p.id, p]));
+
+        return fgItems.map((fgItem) => {
+          if (fgItem.externalId) cacheMapping(fgItem.externalId, fgItem.id);
+          const project = fgItem.repositoryId
+            ? projectById.get(fgItem.repositoryId) ?? null
+            : null;
+          return mapFgToTaskShape(
+            fgItem,
+            project ? { id: project.id, name: project.name, key: project.key } : null,
+          );
+        });
+      }
+
       const planningApiKey = getPlanningApiKey();
       if (!planningApiKey) {
         const {
@@ -383,6 +451,27 @@ export const planningRouter = {
   getTask: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
+      // ── ForgeGraph read path ──────────────────────────────────────
+      if (isForgeGraphEnabled()) {
+        const fg = requireForgeGraphClient();
+        const fgId = await resolveForgeGraphId(fg, input.id);
+        if (fgId) {
+          const fgItem = await fg.getWorkItem(fgId);
+          const project = fgItem.repositoryId
+            ? await ctx.db.query.projects.findFirst({
+                where: eq(projects.id, fgItem.repositoryId),
+              })
+            : null;
+
+          return mapFgToTaskShape(
+            fgItem,
+            project ? { id: project.id, name: project.name, key: project.key } : null,
+          );
+        }
+        // Not found in FG — fall through to local
+        throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
+      }
+
       const planningApiKey = getPlanningApiKey();
       if (!planningApiKey) {
         const item = await ctx.db.query.workItems.findFirst({
@@ -450,6 +539,51 @@ export const planningRouter = {
       }),
     )
     .query(async ({ ctx, input }) => {
+      // ── ForgeGraph read path ──────────────────────────────────────
+      if (isForgeGraphEnabled()) {
+        const fg = requireForgeGraphClient();
+        const match = input.identifier.match(/^([A-Za-z][A-Za-z0-9]*)-(\d+)$/);
+        if (!match) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
+        }
+
+        const [, projectKey, seqStr] = match;
+        const seqNum = parseInt(seqStr!, 10);
+        const pkUpper = projectKey!.toUpperCase();
+
+        const project = await ctx.db.query.projects.findFirst({
+          where: eq(projects.key, pkUpper),
+        });
+
+        if (!project) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
+        }
+
+        // Search FG by repositoryId, then match metadata
+        const candidates = await fg.listWorkItems({ repositoryId: project.id });
+        const fgItem = candidates.find((c) => {
+          const meta = c.metadata as { projectKey?: string; sequenceNumber?: number } | null;
+          return meta?.projectKey === pkUpper && meta?.sequenceNumber === seqNum;
+        });
+
+        if (!fgItem) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
+        }
+
+        if (fgItem.externalId) cacheMapping(fgItem.externalId, fgItem.id);
+
+        return {
+          id: fgItem.externalId ?? fgItem.id,
+          identifier: `${pkUpper}-${seqNum}`,
+          title: fgItem.title,
+          description: fgItem.description ?? undefined,
+          status: fgItem.status,
+          priority: (fgItem.metadata as any)?.priority ?? ("no_priority" as string),
+          projectId: project.id,
+          dueDate: undefined as string | undefined,
+        };
+      }
+
       const planningApiKey = getPlanningApiKey();
       if (!planningApiKey) {
         // Parse identifier like "PROJ-123"
@@ -530,6 +664,71 @@ export const planningRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      // ── ForgeGraph write path ──────────────────────────────────────
+      if (isForgeGraphEnabled()) {
+        const fg = requireForgeGraphClient();
+
+        const project = await ctx.db.query.projects.findFirst({
+          where: eq(projects.id, input.projectId),
+        });
+        if (!project) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Project not found",
+          });
+        }
+
+        // Generate sequence number locally from existing project work items
+        const maxSeqResult = await ctx.db
+          .select({ maxSeq: sql<number>`coalesce(max(${workItems.sequenceNumber}), 0)` })
+          .from(workItems)
+          .where(eq(workItems.projectId, input.projectId));
+        const nextSeq = (maxSeqResult[0]?.maxSeq ?? 0) + 1;
+
+        const externalId = crypto.randomUUID();
+        const fgItem = await fg.createWorkItem({
+          kind: input.kind,
+          title: input.title,
+          description: input.description,
+          status: toFgStatus(input.status),
+          repositoryId: project.id,
+          externalId,
+          metadata: {
+            projectKey: project.key,
+            sequenceNumber: nextSeq,
+            bobStatus: input.status,
+          },
+        });
+
+        // Cache the mapping so future lookups don't hit the API
+        cacheMapping(externalId, fgItem.id);
+
+        // Also insert locally so sequence numbers stay consistent
+        const [created] = await ctx.db
+          .insert(workItems)
+          .values({
+            id: externalId,
+            ownerUserId: ctx.session.user.id,
+            workspaceId: project.workspaceId,
+            projectId: input.projectId,
+            sequenceNumber: nextSeq,
+            kind: input.kind,
+            title: input.title,
+            description: input.description ?? null,
+            status: input.status,
+          })
+          .returning();
+
+        return {
+          id: created!.id,
+          identifier: `${project.key}-${nextSeq}`,
+          title: created!.title,
+          status: created!.status,
+          priority: "no_priority" as string,
+        };
+      }
+
+      // ── Legacy local DB path ───────────────────────────────────────
       const planningApiKey = getPlanningApiKey();
       if (!planningApiKey) {
         const project = await ctx.db.query.projects.findFirst({
@@ -598,6 +797,86 @@ export const planningRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      // ── ForgeGraph write path ──────────────────────────────────────
+      if (isForgeGraphEnabled()) {
+        const fg = requireForgeGraphClient();
+
+        // Fetch current task for status transition detection
+        const oldItem = await ctx.db.query.workItems.findFirst({
+          where: eq(workItems.id, input.id),
+        });
+
+        if (!oldItem) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Task not found",
+          });
+        }
+
+        // Resolve ForgeGraph ID (import inline to avoid circular deps at module level)
+        const { requireForgeGraphId } = await import("../services/forgegraph/idResolver");
+        const fgId = await requireForgeGraphId(fg, input.id);
+
+        // Build update payload for ForgeGraph
+        const fgUpdate: Record<string, unknown> = {};
+        if (input.title !== undefined) fgUpdate.title = input.title;
+        if (input.description !== undefined) fgUpdate.description = input.description;
+        if (input.status !== undefined) {
+          fgUpdate.status = toFgStatus(input.status);
+          fgUpdate.metadata = { bobStatus: input.status };
+        }
+
+        await fg.updateWorkItem(fgId, fgUpdate as any);
+
+        // Also update local DB to keep it in sync
+        const localUpdate: Record<string, unknown> = {};
+        if (input.title !== undefined) localUpdate.title = input.title;
+        if (input.description !== undefined) localUpdate.description = input.description;
+        if (input.status !== undefined) localUpdate.status = input.status;
+
+        const [updated] = await ctx.db
+          .update(workItems)
+          .set(localUpdate)
+          .where(eq(workItems.id, input.id))
+          .returning();
+
+        const project = oldItem.projectId
+          ? await ctx.db.query.projects.findFirst({
+              where: eq(projects.id, oldItem.projectId),
+            })
+          : null;
+
+        const identifier = formatWorkItemIdentifier({
+          projectKey: project?.key ?? null,
+          sequenceNumber: oldItem.sequenceNumber,
+          id: oldItem.id,
+        });
+
+        // Fire-and-forget: check if status changed and trigger automation
+        if (input.status && oldItem.status !== input.status) {
+          onTaskStatusChange({
+            taskId: input.id,
+            projectId: oldItem.projectId ?? null,
+            oldStatus: oldItem.status,
+            newStatus: input.status,
+            userId: ctx.session.user.id,
+            identifier,
+            title: oldItem.title,
+          }).catch((err) =>
+            console.error("[automation] task trigger failed:", err),
+          );
+        }
+
+        return {
+          id: updated!.id,
+          identifier,
+          title: updated!.title,
+          status: updated!.status,
+          priority: "no_priority" as string,
+        };
+      }
+
+      // ── Legacy local DB path ───────────────────────────────────────
       const planningApiKey = getPlanningApiKey();
       if (!planningApiKey) {
         // Fetch current task for status transition detection
@@ -791,6 +1070,60 @@ export const planningRouter = {
       }),
     )
     .query(async ({ ctx, input }) => {
+      // ── ForgeGraph read path ──────────────────────────────────────
+      // FG does not support full-text search; fetch all items for the
+      // workspace projects and filter client-side.
+      if (isForgeGraphEnabled()) {
+        const fg = requireForgeGraphClient();
+
+        // Load all projects in workspace to get repositoryIds
+        const projectRows = await ctx.db.query.projects.findMany({
+          where: eq(projects.workspaceId, input.workspaceId),
+        });
+        const projectById = new Map(projectRows.map((p) => [p.id, p]));
+
+        // Fetch work items from each project
+        const allFgItems: FgWorkItem[] = [];
+        for (const proj of projectRows) {
+          const items = await fg.listWorkItems({ repositoryId: proj.id, limit: 100 });
+          allFgItems.push(...items);
+        }
+        // Also fetch items without a project
+        const unprojectItems = await fg.listWorkItems({ limit: 100 });
+        for (const item of unprojectItems) {
+          if (!allFgItems.some((existing) => existing.id === item.id)) {
+            allFgItems.push(item);
+          }
+        }
+
+        const q = input.query.toLowerCase();
+        const matched = allFgItems
+          .filter((item) => item.title.toLowerCase().includes(q))
+          .slice(0, input.limit);
+
+        return matched.map((fgItem) => {
+          if (fgItem.externalId) cacheMapping(fgItem.externalId, fgItem.id);
+          const project = fgItem.repositoryId
+            ? projectById.get(fgItem.repositoryId) ?? null
+            : null;
+          const meta = fgItem.metadata as { projectKey?: string; sequenceNumber?: number } | null;
+          const identifier =
+            meta?.projectKey && meta?.sequenceNumber
+              ? `${meta.projectKey}-${meta.sequenceNumber}`
+              : fgItem.externalId?.slice(0, 8).toUpperCase() ?? fgItem.id.slice(0, 8).toUpperCase();
+
+          return {
+            id: fgItem.externalId ?? fgItem.id,
+            identifier,
+            title: fgItem.title,
+            status: fgItem.status,
+            priority: (fgItem.metadata as any)?.priority ?? ("no_priority" as string),
+            project: project ? { id: project.id, name: project.name } : undefined,
+            assignee: undefined as { id: string; name: string } | undefined,
+          };
+        });
+      }
+
       const planningApiKey = getPlanningApiKey();
       if (!planningApiKey) {
         const searchPattern = `%${input.query}%`;
