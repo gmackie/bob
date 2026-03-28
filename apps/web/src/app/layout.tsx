@@ -60,6 +60,7 @@ const jetBrainsMono = localFont({
   ],
   variable: "--font-jetbrains-mono",
   display: "swap",
+  preload: false,
 });
 
 export default function RootLayout(props: { children: React.ReactNode; params: Promise<any> }) {

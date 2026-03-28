@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@bob/ui/button";
 import { Label } from "@bob/ui/label";
+import { useTheme } from "@bob/ui/theme";
 
 import { useTRPC } from "~/trpc/react";
 
@@ -27,7 +28,12 @@ export function PreferencesSection() {
     }),
   );
 
+  const { setTheme: applyTheme } = useTheme();
+
   const handleThemeChange = (theme: "light" | "dark" | "system") => {
+    // Apply theme immediately via ThemeProvider
+    applyTheme(theme === "system" ? "auto" : theme);
+    // Persist to database
     startTransition(() => {
       updatePreferences.mutate({ theme });
     });

@@ -2,7 +2,7 @@ import type { TRPCRouterRecord } from "@trpc/server";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod/v4";
 
-import { and, desc, eq, inArray, ne } from "@bob/db";
+import { and, desc, eq, inArray, ne, sql } from "@bob/db";
 import {
   chatConversations,
   planDraftDependencies,
@@ -19,6 +19,8 @@ import {
   getPlanningApiKey,
   getPlanningBaseUrl,
 } from "../services/integrations/planningRemoteConfig";
+import { isForgeGraphEnabled, requireForgeGraphClient } from "../services/forgegraph/config";
+import { cacheMapping } from "../services/forgegraph/idResolver";
 import { protectedProcedure } from "../trpc";
 
 const planningLaunchContextSchema = z.object({
@@ -617,6 +619,156 @@ export const planSessionRouter = {
         `[planning] Committing plan: ${drafts.length} drafts, ${draftDeps.length} dependencies in session ${input.sessionId}`,
       );
 
+      // ── ForgeGraph write path ──────────────────────────────────────
+      if (isForgeGraphEnabled()) {
+        const fg = requireForgeGraphClient();
+
+        // Get project for key + sequence numbers
+        const project = parentWI.projectId
+          ? await ctx.db.query.projects.findFirst({
+              where: eq(projects.id, parentWI.projectId),
+            })
+          : null;
+
+        // Get current max sequence number for the project
+        let currentMaxSeq = 0;
+        if (parentWI.projectId) {
+          const maxSeqResult = await ctx.db
+            .select({ maxSeq: sql`coalesce(max(${workItems.sequenceNumber}), 0)` })
+            .from(workItems)
+            .where(eq(workItems.projectId, parentWI.projectId));
+          currentMaxSeq = Number(maxSeqResult[0]?.maxSeq ?? 0);
+        }
+
+        const sorted = [
+          ...drafts.filter((d) => d.kind === "epic"),
+          ...drafts.filter((d) => d.kind !== "epic"),
+        ];
+
+        const draftToFgId = new Map<string, string>();
+        const draftToLocalId = new Map<string, string>();
+        const created: Array<{
+          draftId: string;
+          workItemId: string;
+          title: string;
+        }> = [];
+
+        // Create each work item in ForgeGraph + local DB
+        for (const draft of sorted) {
+          currentMaxSeq++;
+          const externalId = crypto.randomUUID();
+
+          const { toFgStatus } = await import("../services/forgegraph/statusMap");
+          const fgItem = await fg.createWorkItem({
+            kind: draft.kind as "epic" | "task" | "issue",
+            title: draft.title,
+            description: draft.description ?? undefined,
+            status: toFgStatus("todo"),
+            repositoryId: parentWI.projectId ?? undefined,
+            externalId,
+            metadata: {
+              projectKey: project?.key ?? null,
+              sequenceNumber: currentMaxSeq,
+              parentWorkItemId: input.parentWorkItemId,
+              bobStatus: "todo",
+            },
+          });
+
+          cacheMapping(externalId, fgItem.id);
+          draftToFgId.set(draft.id, fgItem.id);
+          draftToLocalId.set(draft.id, externalId);
+
+          // Insert local row for sequence number consistency
+          await ctx.db.insert(workItems).values({
+            id: externalId,
+            ownerUserId: ctx.session.user.id,
+            workspaceId: parentWI.workspaceId,
+            projectId: parentWI.projectId,
+            parentId: input.parentWorkItemId,
+            sequenceNumber: currentMaxSeq,
+            kind: draft.kind as "epic" | "task" | "issue",
+            title: draft.title,
+            description: draft.description,
+            status: "todo",
+          });
+
+          created.push({
+            draftId: draft.id,
+            workItemId: externalId,
+            title: draft.title,
+          });
+        }
+
+        // Create dependencies in ForgeGraph
+        let depCount = 0;
+        for (const dep of draftDeps) {
+          const fgWorkItemId = draftToFgId.get(dep.draftId);
+          const fgDependsOnId = draftToFgId.get(dep.dependsOnDraftId);
+          if (fgWorkItemId && fgDependsOnId) {
+            await fg.addDependency(fgWorkItemId, fgDependsOnId);
+            depCount++;
+          }
+        }
+
+        // Also persist dependencies locally
+        if (draftDeps.length > 0) {
+          const depValues = draftDeps
+            .map((dep) => {
+              const workItemId = draftToLocalId.get(dep.draftId);
+              const dependsOnWorkItemId = draftToLocalId.get(dep.dependsOnDraftId);
+              if (!workItemId || !dependsOnWorkItemId) return null;
+              return { workItemId, dependsOnWorkItemId };
+            })
+            .filter(
+              (v): v is { workItemId: string; dependsOnWorkItemId: string } =>
+                v !== null,
+            );
+
+          if (depValues.length > 0) {
+            await ctx.db.insert(workItemDependencies).values(depValues);
+          }
+        }
+
+        // Mark drafts as committed
+        const committedIds = created.map((c) => c.draftId);
+        if (committedIds.length > 0) {
+          await ctx.db
+            .update(planDrafts)
+            .set({ status: "committed" })
+            .where(inArray(planDrafts.id, committedIds));
+        }
+
+        console.log(
+          `[planning] Plan committed (ForgeGraph): ${created.length} work items, ${depCount} dependencies`,
+        );
+
+        // Fire-and-forget lifecycle event
+        void ctx.db
+          .insert(runLifecycleEvents)
+          .values({
+            taskRunId: `plan-commit-${input.sessionId}`,
+            workItemId: input.parentWorkItemId,
+            sessionId: input.sessionId,
+            eventType: "plan_approved",
+            phase: "plan",
+            metadata: {
+              committed: created.length,
+              dependencies: depCount,
+              forgeGraph: true,
+            },
+          })
+          .catch((err: unknown) =>
+            console.error("[planning] Failed to log lifecycle event:", err),
+          );
+
+        return {
+          committed: created.length,
+          workItems: created,
+          dependencies: depCount,
+        };
+      }
+
+      // ── Legacy local DB path ───────────────────────────────────────
       // All DB writes in a single transaction
       const result = await ctx.db.transaction(async (tx) => {
         // Batch insert all work items (epics first for ordering, but all under same parent)

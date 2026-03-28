@@ -50,6 +50,13 @@ export function getWsBase(): string {
     return explicit.endsWith("/ws") ? explicit : `${explicit}/ws`;
   }
 
+  // Use the gateway public URL if available (common in split web+gateway deploys).
+  const gatewayUrl = process.env.NEXT_PUBLIC_GATEWAY_URL;
+  if (gatewayUrl) {
+    const wsGateway = gatewayUrl.replace(/^http/, "ws");
+    return wsGateway.endsWith("/ws") ? wsGateway : `${wsGateway}/ws`;
+  }
+
   const apiBase = getApiBase();
   if (apiBase) {
     const wsBase = apiBase.replace(/^http/, "ws");
