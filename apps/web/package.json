@@ -47,7 +47,7 @@
     "@xyflow/react": "^12.10.1",
     "better-auth": "catalog:",
     "dagre": "^0.8.5",
-    "next": "^16.0.9",
+    "next": "16.2.1",
     "react": "catalog:react19",
     "react-dom": "catalog:react19",
     "react-markdown": "^10.1.0",
