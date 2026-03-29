@@ -235,11 +235,15 @@ const getWorkItemProcedure = protectedProcedure
           if (localProject) {
             project = { id: localProject.id, key: localProject.key, name: localProject.name };
             // Search FG by repositoryId + metadata
-            const candidates = await fg.listWorkItems({ repositoryId: localProject.id });
-            fgItem = candidates.find((c) => {
-              const meta = c.metadata as { projectKey?: string; sequenceNumber?: number } | null;
-              return meta?.projectKey === parsed.projectKey && meta?.sequenceNumber === parsed.sequenceNumber;
-            }) ?? null;
+            try {
+              const candidates = await fg.listWorkItems({ repositoryId: localProject.id });
+              fgItem = candidates.find((c) => {
+                const meta = c.metadata as { projectKey?: string; sequenceNumber?: number } | null;
+                return meta?.projectKey === parsed.projectKey && meta?.sequenceNumber === parsed.sequenceNumber;
+              }) ?? null;
+            } catch {
+              fgItem = null;
+            }
           }
         }
       }
