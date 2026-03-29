@@ -1489,6 +1489,65 @@ export const CreateGitProviderConnectionSchema = createInsertSchema(
   revokedAt: true,
 });
 
+// ── Browser Cookie Jar ─────────────────────────────────────────────
+
+export const cookieSourceEnum = ["extension", "cli"] as const;
+export const sameSiteEnum = ["Strict", "Lax", "None"] as const;
+
+export const browserCookies = pgTable(
+  "browser_cookies",
+  (t) => ({
+    id: t.uuid().notNull().primaryKey().defaultRandom(),
+    userId: t
+      .text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    domain: t.text().notNull(),
+    name: t.text().notNull(),
+    valueCiphertext: t.text().notNull(),
+    valueIv: t.text().notNull(),
+    valueTag: t.text().notNull(),
+    path: t.text().notNull().default("/"),
+    expires: t.timestamp({ mode: "date", withTimezone: true }),
+    secure: t.boolean().notNull().default(false),
+    httpOnly: t.boolean().notNull().default(false),
+    sameSite: t.varchar({ length: 10 }).notNull().default("Lax"),
+    source: t.varchar({ length: 20 }).notNull(),
+    createdAt: t.timestamp().defaultNow().notNull(),
+    updatedAt: t
+      .timestamp({ mode: "date", withTimezone: true })
+      .$onUpdateFn(() => sql`now()`),
+  }),
+  (table) => [
+    uniqueIndex("browser_cookies_user_domain_name_path_idx").on(
+      table.userId,
+      table.domain,
+      table.name,
+      table.path,
+    ),
+    index("browser_cookies_user_domain_idx").on(table.userId, table.domain),
+  ],
+);
+
+export const sessionCookieScopes = pgTable(
+  "session_cookie_scopes",
+  (t) => ({
+    id: t.uuid().notNull().primaryKey().defaultRandom(),
+    sessionId: t
+      .uuid()
+      .notNull()
+      .references(() => chatConversations.id, { onDelete: "cascade" }),
+    domain: t.text().notNull(),
+    createdAt: t.timestamp().defaultNow().notNull(),
+  }),
+  (table) => [
+    uniqueIndex("session_cookie_scopes_session_domain_idx").on(
+      table.sessionId,
+      table.domain,
+    ),
+  ],
+);
+
 // 1.2 Pull Requests
 export const pullRequests = pgTable("pull_requests", (t) => ({
   id: t.uuid().notNull().primaryKey().defaultRandom(),
@@ -2541,5 +2600,24 @@ export const runArtifactsRelations = relations(runArtifacts, ({ one }) => ({
     references: [agentRuns.id],
   }),
 }));
+
+// ── Browser Cookie Jar Relations ───────────────────────────────────
+
+export const browserCookiesRelations = relations(browserCookies, ({ one }) => ({
+  user: one(user, {
+    fields: [browserCookies.userId],
+    references: [user.id],
+  }),
+}));
+
+export const sessionCookieScopesRelations = relations(
+  sessionCookieScopes,
+  ({ one }) => ({
+    session: one(chatConversations, {
+      fields: [sessionCookieScopes.sessionId],
+      references: [chatConversations.id],
+    }),
+  }),
+);
 
 export * from "./auth-schema";
