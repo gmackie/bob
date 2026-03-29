@@ -14,7 +14,13 @@ export const dynamic = "force-dynamic";
 export default async function WorkItemPage({ params }: WorkItemPageProps) {
   const { workItemId } = await params;
   const caller = (await createPlanningCaller()) as any;
-  const detail = await caller.workItem.get({ id: workItemId });
+  let detail;
+  try {
+    detail = await caller.workItem.get({ id: workItemId });
+  } catch (error) {
+    console.error(`Failed to fetch work item ${workItemId}:`, error);
+    notFound();
+  }
 
   if (!detail) {
     notFound();
