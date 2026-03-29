@@ -22,7 +22,7 @@ export function RecentRuns({ workspaceId }: RecentRunsProps) {
   const trpc = useTRPC();
 
   const { data: runs, isLoading } = useQuery(
-    trpc.publicApi.listRuns.queryOptions(
+    trpc.agentRun.list.queryOptions(
       { workspaceId, limit: 5 },
       { enabled: !!workspaceId, refetchInterval: 10_000 },
     ),

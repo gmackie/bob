@@ -47,7 +47,7 @@ export default function RunsPage() {
   const activeWorkspaceId = workspaceId || workspaces?.[0]?.id || "";
 
   const { data: runs, isLoading } = useQuery(
-    trpc.publicApi.listRuns.queryOptions(
+    trpc.agentRun.list.queryOptions(
       { workspaceId: activeWorkspaceId, limit: 50 },
       { enabled: !!activeWorkspaceId, refetchInterval: 10_000 },
     ),
