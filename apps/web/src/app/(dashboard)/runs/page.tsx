@@ -76,11 +76,78 @@ export default function RunsPage() {
           ))}
         </div>
       ) : !runs?.length ? (
-        <Card className="p-8 text-center">
-          <h3 className="font-display text-lg font-semibold">No runs yet</h3>
+        <Card className="p-8">
+          <h3 className="font-display text-lg font-semibold">
+            Welcome to blder.bot
+          </h3>
           <p className="text-muted-foreground mt-2 text-sm">
-            Run <code className="font-mono text-xs">bob run &lt;work-item-id&gt;</code> to launch an agent and see results here.
+            See what your agents did, understand the changes, and ship with
+            confidence.
           </p>
+          <div className="mt-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <span className="bg-primary/10 text-primary flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold">
+                1
+              </span>
+              <div>
+                <p className="text-sm font-medium">Install bob</p>
+                <code className="bg-muted mt-1 block rounded px-3 py-2 font-mono text-xs">
+                  brew install blder/tap/bob
+                </code>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <span className="bg-primary/10 text-primary flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold">
+                2
+              </span>
+              <div>
+                <p className="text-sm font-medium">Generate an API key</p>
+                <p className="text-muted-foreground text-xs">
+                  Go to{" "}
+                  <Link
+                    href="/settings"
+                    className="text-primary hover:underline"
+                  >
+                    Settings &rarr; API Keys
+                  </Link>{" "}
+                  and create a key for the CLI.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <span className="bg-primary/10 text-primary flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold">
+                3
+              </span>
+              <div>
+                <p className="text-sm font-medium">Authenticate</p>
+                <code className="bg-muted mt-1 block rounded px-3 py-2 font-mono text-xs">
+                  bob login --api-key YOUR_KEY
+                </code>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <span className="bg-primary/10 text-primary flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold">
+                4
+              </span>
+              <div>
+                <p className="text-sm font-medium">Initialize a workspace</p>
+                <code className="bg-muted mt-1 block rounded px-3 py-2 font-mono text-xs">
+                  cd your-project && bob init
+                </code>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <span className="bg-primary/10 text-primary flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold">
+                5
+              </span>
+              <div>
+                <p className="text-sm font-medium">Run your first agent</p>
+                <code className="bg-muted mt-1 block rounded px-3 py-2 font-mono text-xs">
+                  bob run &lt;work-item-id&gt; --agent claude-code
+                </code>
+              </div>
+            </div>
+          </div>
         </Card>
       ) : (
         <div className="flex flex-col gap-2">
