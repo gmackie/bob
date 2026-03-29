@@ -2,13 +2,18 @@ import type { TRPCRouterRecord } from "@trpc/server";
 import { z } from "zod/v4";
 
 import { and, count, eq, sql } from "@bob/db";
-import { browserCookies, sessionCookieScopes } from "@bob/db/schema";
+import { browserCookies, chatConversations, sessionCookieScopes } from "@bob/db/schema";
 
 import {
   encryptCookieValue,
   decryptCookieValue,
 } from "../services/crypto/cookieVault";
 import { apiKeyWriteProcedure, protectedProcedure } from "../trpc";
+
+/** Normalize cookie domains: strip leading dot, lowercase */
+function normalizeDomain(domain: string): string {
+  return domain.replace(/^\./, "").toLowerCase();
+}
 
 const cookieInputSchema = z.object({
   name: z.string(),
@@ -38,6 +43,7 @@ export const cookiesRouter = {
       for (const cookie of input.cookies) {
         const tempId = crypto.randomUUID();
         const encrypted = encryptCookieValue(cookie.value, tempId);
+        const normalizedDomain = normalizeDomain(cookie.domain);
         const expiresDate =
           cookie.expires && cookie.expires > 0
             ? new Date(cookie.expires * 1000)
@@ -48,7 +54,7 @@ export const cookiesRouter = {
           .values({
             id: tempId,
             userId,
-            domain: cookie.domain,
+            domain: normalizedDomain,
             name: cookie.name,
             valueCiphertext: encrypted.ciphertext,
             valueIv: encrypted.iv,
@@ -81,7 +87,7 @@ export const cookiesRouter = {
           });
 
         imported++;
-        domains.add(cookie.domain);
+        domains.add(normalizedDomain);
       }
 
       return { imported, domains: [...domains] };
@@ -129,18 +135,20 @@ export const cookiesRouter = {
       }),
     )
     .query(async ({ ctx, input }) => {
+      const domain = normalizeDomain(input.domain);
+
       // Check domain is in scope for this session
       const scope = await ctx.db.query.sessionCookieScopes.findFirst({
         where: and(
           eq(sessionCookieScopes.sessionId, input.sessionId),
-          eq(sessionCookieScopes.domain, input.domain),
+          eq(sessionCookieScopes.domain, domain),
         ),
       });
 
       if (!scope) {
         return {
           cookies: [],
-          error: `Domain "${input.domain}" not in scope for this session`,
+          error: `Domain "${domain}" not in scope for this session`,
         };
       }
 
@@ -148,7 +156,7 @@ export const cookiesRouter = {
       const cookies = await ctx.db.query.browserCookies.findMany({
         where: and(
           eq(browserCookies.userId, ctx.session.user.id),
-          eq(browserCookies.domain, input.domain),
+          eq(browserCookies.domain, domain),
         ),
       });
 
@@ -185,9 +193,22 @@ export const cookiesRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      // Verify the user owns this session
+      const session = await ctx.db.query.chatConversations.findFirst({
+        where: and(
+          eq(chatConversations.id, input.sessionId),
+          eq(chatConversations.userId, ctx.session.user.id),
+        ),
+        columns: { id: true },
+      });
+
+      if (!session) {
+        throw new Error("Session not found or not owned by this user");
+      }
+
       const values = input.domains.map((domain) => ({
         sessionId: input.sessionId,
-        domain,
+        domain: normalizeDomain(domain),
       }));
 
       await ctx.db

@@ -1226,7 +1226,10 @@ const server = createServer(async (req, res) => {
           console.log(`[Gateway] Session ${sessionId} started via HTTP (agent: ${agentType}, user: ${userId})`);
 
           // Insert cookie domain scopes before starting agent
-          const cookieDomains = body.cookieDomains as string[] | undefined;
+          const rawCookieDomains = body.cookieDomains;
+          const cookieDomains = Array.isArray(rawCookieDomains)
+            ? rawCookieDomains.filter((d): d is string => typeof d === "string" && d.length > 0)
+            : undefined;
           if (cookieDomains && cookieDomains.length > 0) {
             const bobApiUrl = process.env.BOB_API_URL ?? "http://localhost:3000";
             const bobApiKey = process.env.BOB_API_KEY;
