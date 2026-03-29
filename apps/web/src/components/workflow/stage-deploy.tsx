@@ -128,6 +128,12 @@ export function StageDeploy({
       {/* Content */}
       {!isCollapsed && (
         <div className="mt-4 space-y-3">
+          <a
+            href={`/work-items/${workItemId}/review`}
+            className="flex items-center justify-center gap-2 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
+          >
+            View Deploy Status →
+          </a>
           {sortedDeployments.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
               No deployments yet.

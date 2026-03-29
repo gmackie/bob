@@ -9,6 +9,9 @@ import { GateRow, type Gate } from "./gate-row";
 import { BuildDetailCard, type BuildData } from "./build-detail-card";
 import { TestReportViewer, type TestReportData } from "./test-report-viewer";
 import { ArtifactPanel, type ArtifactItem } from "./artifact-panel";
+import { EnvironmentLanes } from "./environment-lanes";
+import { ApprovalGateCard } from "./approval-gate-card";
+import { ErrorDetailCard } from "./error-detail-card";
 import { formatLabel } from "~/lib/design/colors";
 
 // ---------- prop types ----------
@@ -215,7 +218,54 @@ export function ReviewPage(props: ReviewPageProps) {
             return <TestReportViewer key={`test-${item.id}`} report={report} />;
           })}
 
-          {/* Phase 2 components will be added here */}
+          {/* Phase 2: Error cards for failed states */}
+          {visibleItems.map((item) => {
+            if (item.pipelineState === "build_failed") {
+              return (
+                <ErrorDetailCard
+                  key={`err-${item.id}`}
+                  type="build_failed"
+                  title="Build Failed"
+                  message={`Task "${item.title}" failed during build.`}
+                />
+              );
+            }
+            if (item.pipelineState === "deploy_failed") {
+              return (
+                <ErrorDetailCard
+                  key={`err-${item.id}`}
+                  type="deploy_failed"
+                  title="Deploy Failed"
+                  message={`Task "${item.title}" failed during deployment.`}
+                />
+              );
+            }
+            return null;
+          })}
+
+          {/* Phase 2: Approval gate */}
+          {primaryItem?.pipelineState === "awaiting_prod_approval" && (
+            <ApprovalGateCard
+              commitSha={Object.values(props.revisions)[0]?.revId ?? "unknown"}
+              evidence={[
+                { label: "Tests pass", passed: true },
+                { label: "Code review approved", passed: Object.values(props.codeReviews).some(r => r.decision === "approve") },
+                { label: "Staging healthy", passed: props.deployments.some(d => d.environment === "staging" && d.status === "healthy") },
+              ]}
+              onApprove={() => {/* TODO: wire trpc.forgegraph.approveProdDeploy */}}
+              isApproving={false}
+            />
+          )}
+
+          {/* Phase 2: Environment lanes */}
+          {props.deployments.length > 0 && (
+            <EnvironmentLanes
+              deployments={props.deployments.map(d => ({
+                ...d,
+                commitSha: Object.values(props.revisions)[0]?.revId,
+              }))}
+            />
+          )}
         </div>
 
         {/* Sidebar */}
