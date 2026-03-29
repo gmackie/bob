@@ -136,6 +136,14 @@ export function StageReview({
       {/* Content */}
       {!isCollapsed && (
         <div className="mt-4 space-y-3">
+          {/* Open Review Dashboard link */}
+          <a
+            href={`/work-items/${workItemId}/review`}
+            className="mb-4 flex items-center justify-center gap-2 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
+          >
+            Open Review Dashboard →
+          </a>
+
           {pullRequests.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
               No pull requests yet.
