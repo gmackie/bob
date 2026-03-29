@@ -441,6 +441,12 @@ export const workspaces = pgTable("workspaces", (t) => ({
   updatedAt: t
     .timestamp({ mode: "date", withTimezone: true })
     .$onUpdateFn(() => sql`now()`),
+  tenantId: t.uuid("tenant_id").references(() => tenants.id, {
+    onDelete: "cascade",
+  }),
+  machineId: t.text("machine_id"),
+  lastHeartbeat: t.timestamp("last_heartbeat"),
+  agentConfigs: t.json("agent_configs").$type<Record<string, unknown>>(),
 }));
 
 export const CreateWorkspaceSchema = createInsertSchema(workspaces, {
@@ -805,6 +811,10 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   ownerUser: one(user, {
     fields: [workspaces.ownerUserId],
     references: [user.id],
+  }),
+  tenant: one(tenants, {
+    fields: [workspaces.tenantId],
+    references: [tenants.id],
   }),
   members: many(workspaceMembers),
   projects: many(projects),
