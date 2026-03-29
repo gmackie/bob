@@ -8,6 +8,7 @@ import {
   agentRuns,
   apiKeys,
   runArtifacts,
+  tenants,
   workspaces,
   tenantMembers,
 } from "@bob/db/schema";
@@ -17,6 +18,32 @@ import {
   apiKeyReadProcedure,
   apiKeyWriteProcedure,
 } from "../trpc";
+
+// Auto-create tenant for new users on first authenticated request
+async function ensureTenant(db: any, userId: string) {
+  let membership = await db.query.tenantMembers.findFirst({
+    where: eq(tenantMembers.userId, userId),
+    with: { tenant: true },
+  });
+
+  if (membership) return membership;
+
+  // Auto-create tenant for new user
+  const slug = userId.replace(/[^a-z0-9-]/g, "-").slice(0, 64);
+  const [tenant] = await db
+    .insert(tenants)
+    .values({ name: slug, slug, plan: "free" })
+    .returning();
+
+  await db
+    .insert(tenantMembers)
+    .values({ tenantId: tenant.id, userId, role: "owner" });
+
+  return db.query.tenantMembers.findFirst({
+    where: eq(tenantMembers.userId, userId),
+    with: { tenant: true },
+  });
+}
 
 export const publicApiRouter = {
   // POST /workspaces — register a workspace
@@ -33,15 +60,12 @@ export const publicApiRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      // Find user's tenant
-      const membership = await ctx.db.query.tenantMembers.findFirst({
-        where: eq(tenantMembers.userId, ctx.session.user.id),
-        with: { tenant: true },
-      });
+      // Find or auto-create user's tenant
+      const membership = await ensureTenant(ctx.db, ctx.session.user.id);
       if (!membership) {
         throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "No tenant found for user",
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to create tenant",
         });
       }
 
