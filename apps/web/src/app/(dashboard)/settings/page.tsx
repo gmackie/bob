@@ -1,6 +1,7 @@
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { CollapsibleSection } from "./_components/collapsible-section";
 import { ApiKeysSection } from "./_components/api-keys";
+import { CookieJar } from "./_components/cookie-jar";
 import { ConfigFilesSection } from "./_components/config-files";
 import { GitProvidersSection } from "./_components/git-providers";
 import { PreferencesSection } from "./_components/preferences";
@@ -34,6 +35,9 @@ export default function SettingsPage() {
         </CollapsibleSection>
         <CollapsibleSection title="API Keys" defaultOpen={false}>
           <ApiKeysSection />
+        </CollapsibleSection>
+        <CollapsibleSection title="Cookie Jar" defaultOpen={false}>
+          <CookieJar />
         </CollapsibleSection>
         <CollapsibleSection title="Webhooks" defaultOpen={false}>
           <WebhooksSection />
