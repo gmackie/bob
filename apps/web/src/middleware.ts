@@ -7,7 +7,7 @@ export function middleware(request: NextRequest) {
   }
 
   const target = request.nextUrl.clone();
-  target.pathname = "/planning";
+  target.pathname = "/runs";
 
   return NextResponse.redirect(target, 301);
 }
