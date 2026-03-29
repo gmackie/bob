@@ -89,7 +89,7 @@ const createApiKeyCaller = () =>
   appRouter.createCaller({
     session: fakeSession,
     authApi: { getSession: vi.fn() } as any,
-    apiKeyAuth: { permissions: ["admin"] },
+    apiKeyAuth: { keyId: "test-key", permissions: ["admin"] as const, user: fakeSession.user, userId: fakeSession.user.id },
     db: makeDbMock() as any,
   });
 

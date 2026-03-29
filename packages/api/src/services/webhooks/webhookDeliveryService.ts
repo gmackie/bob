@@ -131,7 +131,7 @@ async function deliverToConfig(
           "X-Webhook-Event": eventType,
         },
         body,
-        signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS),
+        signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS) as any,
       });
 
       lastStatusCode = response.status;
