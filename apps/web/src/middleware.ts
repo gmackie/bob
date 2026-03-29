@@ -9,7 +9,7 @@ export function middleware(request: NextRequest) {
   const target = request.nextUrl.clone();
   target.pathname = "/runs";
 
-  return NextResponse.redirect(target, 301);
+  return NextResponse.redirect(target, 302);
 }
 
 export const config = {

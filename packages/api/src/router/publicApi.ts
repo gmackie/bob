@@ -19,7 +19,8 @@ import {
   apiKeyWriteProcedure,
 } from "../trpc";
 
-// Auto-create tenant for new users on first authenticated request
+// Auto-create tenant for new users on first authenticated request.
+// Handles concurrent requests by catching unique constraint violations.
 async function ensureTenant(db: any, userId: string) {
   let membership = await db.query.tenantMembers.findFirst({
     where: eq(tenantMembers.userId, userId),
@@ -30,14 +31,22 @@ async function ensureTenant(db: any, userId: string) {
 
   // Auto-create tenant for new user
   const slug = userId.replace(/[^a-z0-9-]/g, "-").slice(0, 64);
-  const [tenant] = await db
-    .insert(tenants)
-    .values({ name: slug, slug, plan: "free" })
-    .returning();
+  try {
+    const [tenant] = await db
+      .insert(tenants)
+      .values({ name: slug, slug, plan: "free" })
+      .onConflictDoNothing()
+      .returning();
 
-  await db
-    .insert(tenantMembers)
-    .values({ tenantId: tenant.id, userId, role: "owner" });
+    if (tenant) {
+      await db
+        .insert(tenantMembers)
+        .values({ tenantId: tenant.id, userId, role: "owner" })
+        .onConflictDoNothing();
+    }
+  } catch {
+    // Concurrent request already created the tenant, re-query
+  }
 
   return db.query.tenantMembers.findFirst({
     where: eq(tenantMembers.userId, userId),
