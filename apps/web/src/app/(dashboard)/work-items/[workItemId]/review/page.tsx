@@ -23,11 +23,13 @@ export default async function ReviewPageRoute({ params }: ReviewPageRouteProps) 
 
   // Find dispatch batch for this work item.
   // listBatches returns the current user's batches ordered by most recent.
-  // We match by projectId since batches are scoped to a project.
-  const batches = await caller.dispatch.listBatches({ limit: 10 }).catch(() => []);
-  const batch = (batches as any[]).find(
+  // Match by projectId, preferring batches whose items reference this work item's children.
+  const batches = await caller.dispatch.listBatches({ limit: 20 }).catch(() => []);
+  const projectBatches = (batches as any[]).filter(
     (b: any) => b.projectId === detail.workItem.project?.id,
   );
+  // Use the most recent batch for this project (listBatches is ordered by createdAt desc)
+  const batch = projectBatches[0] ?? null;
   if (!batch) {
     return (
       <main className="mx-auto max-w-6xl px-6 py-10">
@@ -67,7 +69,12 @@ export default async function ReviewPageRoute({ params }: ReviewPageRouteProps) 
             id: fullRev.id,
             revId: fullRev.revId,
             branch: fullRev.branch,
-            gates: [] as Gate[], // Gates are derived from run events, not a separate field
+            gates: ((fullRev.gates ?? []) as any[]).map((g: any) => ({
+              name: g.name ?? "unknown",
+              status: g.status ?? "pending",
+              startedAt: g.startedAt,
+              finishedAt: g.finishedAt,
+            })) as Gate[],
             builds: ((fullRev.builds ?? []) as any[]).map((b: any) => ({
               id: b.id,
               status: b.status,
@@ -84,34 +91,51 @@ export default async function ReviewPageRoute({ params }: ReviewPageRouteProps) 
   );
 
   // Artifacts come from the workItem.get response (detail.currentArtifacts)
-  const allArtifacts: ArtifactItem[] = ((detail.currentArtifacts ?? []) as any[]).map(
-    (a: any) => ({
-      id: a.id,
-      artifactType: a.artifactType ?? a.artifactRole ?? "other",
-      artifactRole: a.artifactRole ?? "",
-      title: a.title ?? null,
-      url: a.url ?? null,
-      producerType: a.producerType ?? "system",
-      createdAt: a.createdAt ?? new Date().toISOString(),
-    }),
-  );
+  // Keep the raw artifacts with content for code review parsing
+  const rawArtifacts = (detail.currentArtifacts ?? []) as any[];
 
-  // Parse code review artifacts
+  const allArtifacts: ArtifactItem[] = rawArtifacts.map((a: any) => ({
+    id: a.id,
+    artifactType: a.artifactType ?? a.artifactRole ?? "other",
+    artifactRole: a.artifactRole ?? "",
+    title: a.title ?? null,
+    url: a.url ?? null,
+    producerType: a.producerType ?? "system",
+    createdAt: a.createdAt ?? new Date().toISOString(),
+  }));
+
+  // Parse code review artifacts from their content JSON
   for (const item of items as any[]) {
-    const reviewArtifact = allArtifacts.find(
-      (a) => a.artifactType === "code_review",
+    const reviewArtifact = rawArtifacts.find(
+      (a: any) =>
+        (a.artifactType === "code_review" || a.artifactRole === "code_review") &&
+        a.isCurrent,
     );
-    if (reviewArtifact) {
+    if (reviewArtifact?.content) {
       try {
-        // Code review content would be parsed from artifact — placeholder for now
+        const parsed = JSON.parse(reviewArtifact.content);
         codeReviews[item.id] = {
-          decision: "approve",
-          summary: "Review passed.",
-          comments: [],
-          reviewerName: "bob-reviewer",
+          decision: parsed.decision ?? "approve",
+          summary: parsed.summary ?? "",
+          comments: Array.isArray(parsed.comments)
+            ? parsed.comments.map((c: any) => ({
+                file: c.file ?? "",
+                line: c.line,
+                severity: c.severity ?? "suggestion",
+                body: c.body ?? "",
+                diffContext: c.diffContext,
+                resolution: c.resolution ?? null,
+              }))
+            : [],
+          reviewerName: parsed.reviewerName ?? "bob-reviewer",
+          reviewedAt: reviewArtifact.createdAt
+            ? String(reviewArtifact.createdAt)
+            : undefined,
+          iteration: parsed.iteration,
+          isAgentFixing: parsed.isAgentFixing ?? false,
         };
       } catch {
-        // Skip unparseable reviews
+        // Content isn't valid JSON, skip
       }
     }
   }
