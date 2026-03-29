@@ -71,6 +71,10 @@ export const publicApiRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      // workItemId accepts any string — ForgeGraph work items may use UUIDs,
+      // short identifiers (e.g. "BOB-27"), or ForgeGraph-native IDs.
+      // We store as-is and resolve at display time.
+
       // Verify workspace belongs to user's tenant
       const workspace = await ctx.db.query.workspaces.findFirst({
         where: eq(workspaces.id, input.workspaceId),
@@ -168,6 +172,23 @@ export const publicApiRouter = {
     .query(async ({ ctx, input }) => {
       return ctx.db.query.agentRuns.findMany({
         where: eq(agentRuns.workspaceId, input.workspaceId),
+        with: { artifacts: true },
+        orderBy: [desc(agentRuns.createdAt)],
+        limit: input.limit,
+      });
+    }),
+
+  // GET /work-items/:id/runs — list runs for a work item
+  listRunsByWorkItem: apiKeyReadProcedure
+    .input(
+      z.object({
+        workItemId: z.string().min(1),
+        limit: z.number().min(1).max(100).default(20),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      return ctx.db.query.agentRuns.findMany({
+        where: eq(agentRuns.workItemId, input.workItemId),
         with: { artifacts: true },
         orderBy: [desc(agentRuns.createdAt)],
         limit: input.limit,
