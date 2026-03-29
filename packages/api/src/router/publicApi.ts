@@ -1,9 +1,12 @@
+import { randomBytes, createHash } from "node:crypto";
+
 import { z } from "zod/v4";
 import { TRPCError } from "@trpc/server";
 
 import { desc, eq } from "@bob/db";
 import {
   agentRuns,
+  apiKeys,
   runArtifacts,
   workspaces,
   tenantMembers,
@@ -176,5 +179,39 @@ export const publicApiRouter = {
         .set({ lastHeartbeat: new Date() })
         .where(eq(workspaces.id, input.workspaceId));
       return { ok: true };
+    }),
+
+  // POST /api-keys — generate a new API key
+  generateApiKey: protectedProcedure
+    .input(
+      z.object({
+        name: z.string().min(1).max(100).default("bob-cli"),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const rawKey = `bob_${randomBytes(32).toString("hex")}`;
+      const keyHash = createHash("sha256").update(rawKey).digest("hex");
+      const keyPrefix = rawKey.slice(0, 12);
+
+      const [apiKey] = await ctx.db
+        .insert(apiKeys)
+        .values({
+          userId: ctx.session.user.id,
+          name: input.name,
+          keyHash,
+          keyPrefix,
+          permissions: ["read", "write"],
+        })
+        .returning();
+
+      if (!apiKey) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to create API key",
+        });
+      }
+
+      // Return the raw key ONCE — it can never be retrieved again
+      return { id: apiKey.id, key: rawKey, prefix: keyPrefix };
     }),
 };
