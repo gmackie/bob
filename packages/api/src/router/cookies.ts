@@ -68,6 +68,7 @@ export const cookiesRouter = {
               browserCookies.path,
             ],
             set: {
+              id: tempId,
               valueCiphertext: encrypted.ciphertext,
               valueIv: encrypted.iv,
               valueTag: encrypted.tag,

@@ -107,15 +107,21 @@ function renderDomainList(domains, filter) {
     ? domains.filter((d) => d.domain.includes(filter))
     : domains;
 
-  list.innerHTML = filtered
-    .map(
-      (d) =>
-        `<label class="domain-item">
-          <input type="checkbox" value="${d.domain}">
-          ${d.domain} <span style="color:#737373">(${d.count})</span>
-        </label>`,
-    )
-    .join("");
+  list.innerHTML = "";
+  for (const d of filtered) {
+    const label = document.createElement("label");
+    label.className = "domain-item";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = d.domain;
+    label.appendChild(checkbox);
+    label.appendChild(document.createTextNode(` ${d.domain} `));
+    const span = document.createElement("span");
+    span.style.color = "#737373";
+    span.textContent = `(${d.count})`;
+    label.appendChild(span);
+    list.appendChild(label);
+  }
 }
 
 // Init

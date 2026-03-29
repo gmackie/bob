@@ -1225,24 +1225,26 @@ const server = createServer(async (req, res) => {
 
           console.log(`[Gateway] Session ${sessionId} started via HTTP (agent: ${agentType}, user: ${userId})`);
 
-          // Fire-and-forget: insert cookie domain scopes for this session
+          // Insert cookie domain scopes before starting agent
           const cookieDomains = body.cookieDomains as string[] | undefined;
           if (cookieDomains && cookieDomains.length > 0) {
             const bobApiUrl = process.env.BOB_API_URL ?? "http://localhost:3000";
             const bobApiKey = process.env.BOB_API_KEY;
             if (bobApiKey) {
-              void fetch(`${bobApiUrl}/api/trpc/cookies.setSessionScopes`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${bobApiKey}`,
-                },
-                body: JSON.stringify({
-                  json: { sessionId, domains: cookieDomains },
-                }),
-              }).catch((err) =>
-                console.warn(`[Gateway] Failed to set cookie scopes for session ${sessionId}:`, err),
-              );
+              try {
+                await fetch(`${bobApiUrl}/api/trpc/cookies.setSessionScopes`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${bobApiKey}`,
+                  },
+                  body: JSON.stringify({
+                    json: { sessionId, domains: cookieDomains },
+                  }),
+                });
+              } catch (err) {
+                console.warn(`[Gateway] Failed to set cookie scopes for session ${sessionId}:`, err);
+              }
             }
           }
 

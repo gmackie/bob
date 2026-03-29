@@ -531,6 +531,9 @@ export class AgentProcessManager {
             cookieArgs,
           ).then((result) => {
             actor.handleToolResult(cookieToolCallId, result, false);
+          }).catch((err) => {
+            const message = err instanceof Error ? err.message : String(err);
+            actor.handleToolResult(cookieToolCallId, JSON.stringify({ error: `Cookie fetch failed: ${message}` }), false);
           });
           break;
         }

@@ -111,7 +111,7 @@ export function readCookiesForDomain(
          FROM cookies
          WHERE host_key LIKE ?`,
       )
-      .all(`%${domain}%`) as Array<{
+      .all(`%${domain.replace(/%/g, "\\%").replace(/_/g, "\\_")}%`) as Array<{
         name: string;
         encrypted_value: Buffer;
         host_key: string;

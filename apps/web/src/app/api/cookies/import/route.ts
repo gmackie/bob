@@ -5,6 +5,8 @@ import { db } from "@bob/db/client";
 import { browserCookies } from "@bob/db/schema";
 import { encryptCookieValue } from "@bob/api/services/crypto/cookieVault";
 
+const MAX_COOKIES = 500;
+
 const cookieSchema = {
   validate(body: unknown): body is {
     cookies: Array<{
@@ -21,7 +23,14 @@ const cookieSchema = {
   } {
     if (!body || typeof body !== "object") return false;
     const b = body as Record<string, unknown>;
-    return Array.isArray(b.cookies) && b.cookies.length > 0;
+    if (!Array.isArray(b.cookies) || b.cookies.length === 0 || b.cookies.length > MAX_COOKIES) return false;
+    return b.cookies.every(
+      (c: unknown) =>
+        c && typeof c === "object" &&
+        typeof (c as Record<string, unknown>).name === "string" &&
+        typeof (c as Record<string, unknown>).value === "string" &&
+        typeof (c as Record<string, unknown>).domain === "string",
+    );
   },
 };
 
@@ -98,6 +107,7 @@ export async function POST(req: NextRequest) {
           browserCookies.path,
         ],
         set: {
+          id: tempId,
           valueCiphertext: encrypted.ciphertext,
           valueIv: encrypted.iv,
           valueTag: encrypted.tag,
