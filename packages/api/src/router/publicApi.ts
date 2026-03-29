@@ -12,11 +12,15 @@ import {
   tenantMembers,
 } from "@bob/db/schema";
 
-import { protectedProcedure } from "../trpc";
+import {
+  protectedProcedure,
+  apiKeyReadProcedure,
+  apiKeyWriteProcedure,
+} from "../trpc";
 
 export const publicApiRouter = {
   // POST /workspaces — register a workspace
-  registerWorkspace: protectedProcedure
+  registerWorkspace: apiKeyWriteProcedure
     .input(
       z.object({
         name: z.string().min(1).max(128),
@@ -57,7 +61,7 @@ export const publicApiRouter = {
     }),
 
   // POST /runs — create an agent run
-  createRun: protectedProcedure
+  createRun: apiKeyWriteProcedure
     .input(
       z.object({
         workItemId: z.string().min(1),
@@ -91,7 +95,7 @@ export const publicApiRouter = {
     }),
 
   // PATCH /runs/:id — update run status
-  updateRun: protectedProcedure
+  updateRun: apiKeyWriteProcedure
     .input(
       z.object({
         runId: z.string().uuid(),
@@ -118,7 +122,7 @@ export const publicApiRouter = {
     }),
 
   // POST /runs/:id/artifacts — upload artifact metadata
-  createArtifact: protectedProcedure
+  createArtifact: apiKeyWriteProcedure
     .input(
       z.object({
         runId: z.string().uuid(),
@@ -142,7 +146,7 @@ export const publicApiRouter = {
     }),
 
   // GET /runs/:id — get run with artifacts
-  getRun: protectedProcedure
+  getRun: apiKeyReadProcedure
     .input(z.object({ runId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       const run = await ctx.db.query.agentRuns.findFirst({
@@ -154,7 +158,7 @@ export const publicApiRouter = {
     }),
 
   // GET /runs — list runs for a workspace
-  listRuns: protectedProcedure
+  listRuns: apiKeyReadProcedure
     .input(
       z.object({
         workspaceId: z.string().uuid(),
@@ -171,7 +175,7 @@ export const publicApiRouter = {
     }),
 
   // POST /workspaces/:id/heartbeat
-  heartbeat: protectedProcedure
+  heartbeat: apiKeyWriteProcedure
     .input(z.object({ workspaceId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       await ctx.db
