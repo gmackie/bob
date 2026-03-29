@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { RouterOutputs } from "@bob/api";
 
 import { trpc } from "~/utils/api";
+import { colors } from "~/lib/colors";
 
 type PostByIdOutput = RouterOutputs["post"]["byId"];
 
@@ -40,10 +41,10 @@ export default function Post() {
     <SafeAreaView className="bg-background">
       <Stack.Screen options={{ title: post.title }} />
       <View className="h-full w-full p-4">
-        <Text className="text-primary py-2 text-3xl font-bold">
+        <Text className="py-2 text-3xl font-bold" style={{ color: colors.primary }}>
           {post.title}
         </Text>
-        <Text className="text-foreground py-4">{post.content}</Text>
+        <Text className="py-4" style={{ color: colors.foreground }}>{post.content}</Text>
       </View>
     </SafeAreaView>
   );

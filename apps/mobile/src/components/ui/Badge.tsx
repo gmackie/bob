@@ -1,10 +1,20 @@
 import { Text, View } from "react-native";
 
+import { colors } from "~/lib/colors";
+
 interface BadgeProps {
   children: React.ReactNode;
   variant?: "default" | "success" | "warning" | "danger" | "accent";
   className?: string;
 }
+
+const textColors = {
+  default: colors.muted,
+  success: colors.success,
+  warning: colors.warning,
+  danger: colors.danger,
+  accent: colors.accent,
+} as const;
 
 export function Badge({
   children,
@@ -19,19 +29,11 @@ export function Badge({
     accent: "border-accent/30 bg-accent/10",
   };
 
-  const textClasses = {
-    default: "text-muted",
-    success: "text-success",
-    warning: "text-warning",
-    danger: "text-danger",
-    accent: "text-accent",
-  };
-
   return (
     <View
       className={`rounded-full border px-2.5 py-1 ${variantClasses[variant]} ${className}`}
     >
-      <Text className={`text-xs font-medium ${textClasses[variant]}`}>
+      <Text className="text-xs font-medium" style={{ color: textColors[variant] }}>
         {children}
       </Text>
     </View>

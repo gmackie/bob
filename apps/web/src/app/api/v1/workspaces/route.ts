@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { createPublicApiCaller } from "../_lib/caller";
-import { errorResponse } from "../_lib/error";
+import { createPublicApiCaller, errorResponse } from "~/lib/rest/api-helpers";
 
 export const runtime = "nodejs";
 

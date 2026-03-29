@@ -157,7 +157,7 @@ export function PlanningSessionClient({
         workItemId: workItem.id,
         title: `${session.planningSessionType ?? "Planning"} — ${workItem.title}`,
         content: artifactContent,
-        planningSessionType: session.planningSessionType ?? undefined,
+        planningSessionType: (session.planningSessionType as "shape" | "breakdown" | "office_hours" | "ceo_review" | "eng_review" | "design_review" | undefined) ?? undefined,
       }, {
         onSuccess: () => {
           toast.success("Artifact saved to work item");
@@ -169,7 +169,7 @@ export function PlanningSessionClient({
     }
 
     // Stop the session
-    stopSession(session.id);
+    stopSession();
 
     // Navigate back to work item
     router.push(`/work-items/${workItem.id}`);

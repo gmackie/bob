@@ -16,8 +16,8 @@ interface UseLiveActivityOptions {
   interval?: number;
 }
 
-function countNewSince<T extends { createdAt: Date | string }>(
-  items: T[],
+function countNewSince(
+  items: readonly { createdAt: Date | string }[],
   since: Date,
 ): number {
   return items.filter((a) => {

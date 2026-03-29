@@ -2257,11 +2257,11 @@ PODS:
 
 DEPENDENCIES:
   - "EASClient (from `../../../node_modules/.pnpm/expo-eas-client@1.0.8/node_modules/expo-eas-client/ios`)"
-  - "EXApplication (from `../../../node_modules/.pnpm/expo-application@7.0.8_expo@54.0.31/node_modules/expo-application/ios`)"
+  - EXApplication (from `../../../node_modules/expo-application/ios`)
   - "EXConstants (from `../../../node_modules/.pnpm/expo-constants@18.0.13_expo@54.0.31_react-native@0.81.5_@babel+core@7.28.6_@types+react@19.1.17_react@19.1.4_/node_modules/expo-constants/ios`)"
   - "EXJSONUtils (from `../../../node_modules/.pnpm/expo-json-utils@0.15.0/node_modules/expo-json-utils/ios`)"
   - "EXManifests (from `../../../node_modules/.pnpm/expo-manifests@1.0.10_expo@54.0.31/node_modules/expo-manifests/ios`)"
-  - "EXNotifications (from `../../../node_modules/.pnpm/expo-notifications@0.32.16_expo@54.0.31_react-native@0.81.5_@babel+core@7.28.6_@types+r_70a7edf03865d2bebc7ff3b345a4aa32/node_modules/expo-notifications/ios`)"
+  - EXNotifications (from `../../../node_modules/expo-notifications/ios`)
   - "Expo (from `../../../node_modules/.pnpm/expo@54.0.31_@babel+core@7.28.6_@expo+metro-runtime@6.1.2_expo-router@6.0.21_react-nati_7423e709b972f9c96714348bb753668b/node_modules/expo`)"
   - "expo-dev-client (from `../../../node_modules/.pnpm/expo-dev-client@6.0.20_expo@54.0.31/node_modules/expo-dev-client/ios`)"
   - "expo-dev-launcher (from `../../../node_modules/.pnpm/expo-dev-launcher@6.0.20_expo@54.0.31/node_modules/expo-dev-launcher`)"
@@ -2270,7 +2270,7 @@ DEPENDENCIES:
   - "ExpoAsset (from `../../../node_modules/.pnpm/expo-asset@12.0.12_expo@54.0.31_react-native@0.81.5_@babel+core@7.28.6_@types+react@19.1.17_react@19.1.4__react@19.1.4/node_modules/expo-asset/ios`)"
   - "ExpoClipboard (from `../../../node_modules/.pnpm/expo-clipboard@8.0.8_expo@54.0.31_react-native@0.81.5_@babel+core@7.28.6_@types+react@19.1.17_react@19.1.4__react@19.1.4/node_modules/expo-clipboard/ios`)"
   - "ExpoCrypto (from `../../../node_modules/.pnpm/expo-crypto@15.0.8_expo@54.0.31/node_modules/expo-crypto/ios`)"
-  - "ExpoDevice (from `../../../node_modules/.pnpm/expo-device@8.0.10_expo@54.0.31/node_modules/expo-device/ios`)"
+  - ExpoDevice (from `../../../node_modules/expo-device/ios`)
   - "ExpoFileSystem (from `../../../node_modules/.pnpm/expo-file-system@19.0.21_expo@54.0.31_react-native@0.81.5_@babel+core@7.28.6_@types+react@19.1.17_react@19.1.4_/node_modules/expo-file-system/ios`)"
   - "ExpoFont (from `../../../node_modules/.pnpm/expo-font@14.0.10_expo@54.0.31_react-native@0.81.5_@babel+core@7.28.6_@types+react@19.1.17_react@19.1.4__react@19.1.4/node_modules/expo-font/ios`)"
   - "ExpoHead (from `../../../node_modules/.pnpm/expo-router@6.0.21_@expo+metro-runtime@6.1.2_@types+react-dom@19.1.11_@types+react@19.1_82f516687a3405804f846a9c5d215908/node_modules/expo-router/ios`)"
@@ -2370,7 +2370,7 @@ EXTERNAL SOURCES:
   EASClient:
     :path: "../../../node_modules/.pnpm/expo-eas-client@1.0.8/node_modules/expo-eas-client/ios"
   EXApplication:
-    :path: "../../../node_modules/.pnpm/expo-application@7.0.8_expo@54.0.31/node_modules/expo-application/ios"
+    :path: "../../../node_modules/expo-application/ios"
   EXConstants:
     :path: "../../../node_modules/.pnpm/expo-constants@18.0.13_expo@54.0.31_react-native@0.81.5_@babel+core@7.28.6_@types+react@19.1.17_react@19.1.4_/node_modules/expo-constants/ios"
   EXJSONUtils:
@@ -2378,7 +2378,7 @@ EXTERNAL SOURCES:
   EXManifests:
     :path: "../../../node_modules/.pnpm/expo-manifests@1.0.10_expo@54.0.31/node_modules/expo-manifests/ios"
   EXNotifications:
-    :path: "../../../node_modules/.pnpm/expo-notifications@0.32.16_expo@54.0.31_react-native@0.81.5_@babel+core@7.28.6_@types+r_70a7edf03865d2bebc7ff3b345a4aa32/node_modules/expo-notifications/ios"
+    :path: "../../../node_modules/expo-notifications/ios"
   Expo:
     :path: "../../../node_modules/.pnpm/expo@54.0.31_@babel+core@7.28.6_@expo+metro-runtime@6.1.2_expo-router@6.0.21_react-nati_7423e709b972f9c96714348bb753668b/node_modules/expo"
   expo-dev-client:
@@ -2396,7 +2396,7 @@ EXTERNAL SOURCES:
   ExpoCrypto:
     :path: "../../../node_modules/.pnpm/expo-crypto@15.0.8_expo@54.0.31/node_modules/expo-crypto/ios"
   ExpoDevice:
-    :path: "../../../node_modules/.pnpm/expo-device@8.0.10_expo@54.0.31/node_modules/expo-device/ios"
+    :path: "../../../node_modules/expo-device/ios"
   ExpoFileSystem:
     :path: "../../../node_modules/.pnpm/expo-file-system@19.0.21_expo@54.0.31_react-native@0.81.5_@babel+core@7.28.6_@types+react@19.1.17_react@19.1.4_/node_modules/expo-file-system/ios"
   ExpoFont:

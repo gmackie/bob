@@ -30,7 +30,8 @@ pnpm build
 
 ## Product Model
 
-- `workspaces`, `projects`, and typed `work_items` drive planning
-- `tasks` are the executable work items
-- Bob sessions, task runs, worktrees, and artifacts power execution
+- `workspaces` and `projects` provide Bob's execution and planning context
+- canonical `work_items` live in ForgeGraph and are consumed by Bob for planning and execution
+- `tasks` are the executable work items Bob works on
+- Bob sessions, task runs, worktrees, transcripts, and artifacts power planning and execution
 - web and mobile both use the same product-facing tRPC router

@@ -23,6 +23,7 @@ import {
 } from "~/features/planning/notifications";
 import { authClient } from "~/utils/auth";
 import { trpc } from "~/utils/api";
+import { colors } from "~/lib/colors";
 
 function formatWorkItemSubtitle(input: {
   kind: string;
@@ -146,7 +147,7 @@ export default function PlanningScreen() {
     return (
       <Screen className="items-center justify-center">
         <ActivityIndicator />
-        <Text className="text-muted mt-3">Loading workspaces…</Text>
+        <Text className="mt-3" style={{ color: colors.muted }}>Loading workspaces…</Text>
       </Screen>
     );
   }
@@ -155,10 +156,10 @@ export default function PlanningScreen() {
     return (
       <Screen className="justify-center">
         <Card className="items-center">
-          <Text className="text-foreground text-xl font-semibold">
+          <Text className="text-xl font-semibold" style={{ color: colors.foreground }}>
             No workspace yet
           </Text>
-          <Text className="text-muted mt-2 text-center text-sm">
+          <Text className="mt-2 text-center text-sm" style={{ color: colors.muted }}>
             Create your first workspace on web, then mobile will pick it up here.
           </Text>
         </Card>
@@ -171,10 +172,10 @@ export default function PlanningScreen() {
       <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
         <View className="mb-6 flex-row items-start justify-between">
           <View className="flex-1 pr-4">
-            <Text className="text-muted text-sm uppercase tracking-[0.18em]">
+            <Text className="text-sm uppercase tracking-[0.18em]" style={{ color: colors.muted }}>
               Workspace
             </Text>
-            <Text className="text-foreground mt-1 text-3xl font-semibold tracking-tight">
+            <Text className="mt-1 text-3xl font-semibold tracking-tight" style={{ color: colors.foreground }}>
               {primaryWorkspace.name}
             </Text>
           </View>
@@ -189,36 +190,36 @@ export default function PlanningScreen() {
         </View>
 
         <Card variant="elevated" className="mb-5">
-          <Text className="text-foreground text-lg font-semibold">
+          <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>
             Execution snapshot
           </Text>
           <View className="mt-4 flex-row gap-3">
             <View className="flex-1">
-              <Text className="text-muted2 text-xs uppercase tracking-[0.16em]">
+              <Text className="text-xs uppercase tracking-[0.16em]" style={{ color: colors.muted2 }}>
                 In progress
               </Text>
-              <Text className="text-foreground mt-1 text-2xl font-semibold">
+              <Text className="mt-1 text-2xl font-semibold" style={{ color: colors.foreground }}>
                 {sections.executionSummary.inProgress}
               </Text>
             </View>
             <View className="flex-1">
-              <Text className="text-muted2 text-xs uppercase tracking-[0.16em]">
+              <Text className="text-xs uppercase tracking-[0.16em]" style={{ color: colors.muted2 }}>
                 In review
               </Text>
-              <Text className="text-foreground mt-1 text-2xl font-semibold">
+              <Text className="mt-1 text-2xl font-semibold" style={{ color: colors.foreground }}>
                 {sections.executionSummary.inReview}
               </Text>
             </View>
             <View className="flex-1">
-              <Text className="text-muted2 text-xs uppercase tracking-[0.16em]">
+              <Text className="text-xs uppercase tracking-[0.16em]" style={{ color: colors.muted2 }}>
                 Blocked
               </Text>
-              <Text className="text-foreground mt-1 text-2xl font-semibold">
+              <Text className="mt-1 text-2xl font-semibold" style={{ color: colors.foreground }}>
                 {sections.executionSummary.blocked}
               </Text>
             </View>
           </View>
-          <Text className="text-muted mt-4 text-sm">
+          <Text className="mt-4 text-sm" style={{ color: colors.muted }}>
             {sections.heroWorkspace?.projectCount ?? 0} projects,{" "}
             {sections.heroWorkspace?.activeTaskCount ?? 0} active task runs
           </Text>
@@ -226,7 +227,7 @@ export default function PlanningScreen() {
 
         <View className="mb-5">
           <View className="mb-3 flex-row items-center justify-between">
-            <Text className="text-foreground text-lg font-semibold">Projects</Text>
+            <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>Projects</Text>
             {sections.featuredProjects[0] ? (
               <Button
                 variant="ghost"
@@ -246,20 +247,20 @@ export default function PlanningScreen() {
                   key={project.id}
                   title={`${project.key} · ${project.name}`}
                   subtitle={`${project.taskCount} tasks · ${project.issueCount} issues · ${project.activeCount} active`}
-                  right={<Text className="text-muted text-sm">Open</Text>}
+                  right={<Text className="text-sm" style={{ color: colors.muted }}>Open</Text>}
                   onPress={() => router.push(getProjectHref(project.id) as never)}
                   showDivider={index < sections.featuredProjects.length - 1}
                 />
               ))
             ) : (
-              <Text className="text-muted text-sm">No projects yet.</Text>
+              <Text className="text-sm" style={{ color: colors.muted }}>No projects yet.</Text>
             )}
           </Card>
         </View>
 
         <View className="mb-5">
           <View className="mb-3 flex-row items-center justify-between">
-            <Text className="text-foreground text-lg font-semibold">
+            <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>
               Recent work items
             </Text>
           </View>
@@ -276,9 +277,9 @@ export default function PlanningScreen() {
                   })}
                   right={
                     item.kind === "task" ? (
-                      <Text className="text-muted text-sm">Workspace</Text>
+                      <Text className="text-sm" style={{ color: colors.muted }}>Workspace</Text>
                     ) : (
-                      <Text className="text-muted text-sm">Details</Text>
+                      <Text className="text-sm" style={{ color: colors.muted }}>Details</Text>
                     )
                   }
                   onPress={() =>
@@ -292,14 +293,14 @@ export default function PlanningScreen() {
                 />
               ))
             ) : (
-              <Text className="text-muted text-sm">No work items yet.</Text>
+              <Text className="text-sm" style={{ color: colors.muted }}>No work items yet.</Text>
             )}
           </Card>
         </View>
 
         <View className="mb-8">
           <View className="mb-3 flex-row items-center justify-between">
-            <Text className="text-foreground text-lg font-semibold">Inbox</Text>
+            <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>Inbox</Text>
             <Button
               variant="ghost"
               size="sm"
@@ -332,7 +333,7 @@ export default function PlanningScreen() {
                 />
               ))
             ) : (
-              <Text className="text-muted text-sm">
+              <Text className="text-sm" style={{ color: colors.muted }}>
                 No unread notifications. Execution milestones will land here.
               </Text>
             )}

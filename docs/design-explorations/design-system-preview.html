@@ -1,0 +1,2387 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bob Builder — Design System + Multi-Form-Factor Explorations</title>
+<link rel="preconnect" href="https://api.fontshare.com">
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Colors — Light */
+    --bg-page: #FAFAF8;
+    --bg-elevated: #FFFFFF;
+    --bg-subtle: #F5F4F1;
+    --bg-inset: #EEEDEA;
+    --border: #E3E1DC;
+    --border-subtle: #EEEDEA;
+    --text-primary: #1C1B18;
+    --text-secondary: #5C5A53;
+    --text-muted: #8A877E;
+    --accent: #D4850A;
+    --accent-hover: #B87208;
+    --accent-muted: #F5DEB3;
+    --accent-subtle: #FFF3E0;
+    --success: #2D8A4E;
+    --success-subtle: #E8F5E9;
+    --warning: #D4850A;
+    --warning-subtle: #FFF3E0;
+    --error: #C62828;
+    --error-subtle: #FFEBEE;
+    --info: #1565C0;
+    --info-subtle: #E3F2FD;
+    --neutral-800: #3D3B36;
+    --neutral-700: #5C5A53;
+    --neutral-500: #8A877E;
+    --neutral-400: #B5B2AB;
+    --neutral-200: #E3E1DC;
+    --neutral-100: #EEEDEA;
+  }
+
+  [data-theme="dark"] {
+    --bg-page: #141310;
+    --bg-elevated: #1C1B18;
+    --bg-subtle: #232220;
+    --bg-inset: #0E0D0B;
+    --border: #2E2D2A;
+    --border-subtle: #232220;
+    --text-primary: #EEEDEA;
+    --text-secondary: #A8A59E;
+    --text-muted: #6E6B64;
+    --accent: #E8A33C;
+    --accent-hover: #F0B45A;
+    --accent-muted: #3D3120;
+    --accent-subtle: #2C2418;
+    --success: #4CAF50;
+    --success-subtle: #1B2E1D;
+    --warning: #E8A33C;
+    --warning-subtle: #2C2418;
+    --error: #EF5350;
+    --error-subtle: #2E1616;
+    --info: #42A5F5;
+    --info-subtle: #162230;
+    --neutral-800: #3D3B36;
+    --neutral-700: #5C5A53;
+    --neutral-500: #6E6B64;
+    --neutral-400: #4A4843;
+    --neutral-200: #2E2D2A;
+    --neutral-100: #232220;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg-page);
+    color: var(--text-primary);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* ===== GLOBAL NAV ===== */
+  .top-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 32px;
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(12px);
+  }
+  .top-bar-title {
+    font-family: 'Satoshi', sans-serif;
+    font-weight: 900;
+    font-size: 20px;
+    letter-spacing: -0.02em;
+    color: var(--accent);
+  }
+  .theme-toggle {
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 150ms ease-out;
+  }
+  .theme-toggle:hover {
+    background: var(--accent-subtle);
+    color: var(--accent);
+    border-color: var(--accent-muted);
+  }
+
+  /* ===== SECTIONS ===== */
+  .section {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 64px 32px;
+  }
+  .section + .section {
+    border-top: 1px solid var(--border);
+  }
+  .section-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  .section-title {
+    font-family: 'Satoshi', sans-serif;
+    font-size: 36px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+  }
+  .section-desc {
+    font-size: 16px;
+    color: var(--text-secondary);
+    max-width: 640px;
+    margin-bottom: 48px;
+  }
+
+  /* ===== HERO ===== */
+  .hero {
+    padding: 96px 32px 64px;
+    max-width: 1400px;
+    margin: 0 auto;
+    text-align: center;
+  }
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--accent-subtle);
+    border: 1px solid var(--accent-muted);
+    border-radius: 9999px;
+    padding: 4px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--accent);
+    margin-bottom: 24px;
+  }
+  .hero h1 {
+    font-family: 'Satoshi', sans-serif;
+    font-size: 72px;
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+    color: var(--text-primary);
+    margin-bottom: 16px;
+  }
+  .hero h1 span {
+    color: var(--accent);
+  }
+  .hero p {
+    font-size: 20px;
+    color: var(--text-secondary);
+    max-width: 540px;
+    margin: 0 auto;
+    line-height: 1.5;
+  }
+
+  /* ===== FONT SPECIMENS ===== */
+  .font-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 48px;
+  }
+  .font-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    transition: border-color 200ms;
+  }
+  .font-card:hover {
+    border-color: var(--accent-muted);
+  }
+  .font-card-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 16px;
+  }
+  .font-specimen-satoshi {
+    font-family: 'Satoshi', sans-serif;
+  }
+  .font-specimen-dm {
+    font-family: 'DM Sans', sans-serif;
+  }
+  .font-specimen-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ===== COLOR PALETTE ===== */
+  .palette-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .swatch {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    min-width: 80px;
+  }
+  .swatch-color {
+    width: 64px;
+    height: 64px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    transition: transform 150ms ease-out;
+  }
+  .swatch-color:hover {
+    transform: scale(1.08);
+  }
+  .swatch-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-align: center;
+  }
+  .swatch-hex {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  /* ===== NEUTRAL STRIP ===== */
+  .neutral-strip {
+    display: flex;
+    border-radius: 12px;
+    overflow: hidden;
+    height: 48px;
+    border: 1px solid var(--border);
+    margin-bottom: 32px;
+  }
+  .neutral-strip div {
+    flex: 1;
+    position: relative;
+  }
+  .neutral-strip div:hover::after {
+    content: attr(data-label);
+    position: absolute;
+    bottom: -22px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  /* ===== UI COMPONENTS ===== */
+  .component-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 48px;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 150ms ease-out;
+    border: none;
+    text-decoration: none;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #FFF;
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-secondary {
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+  }
+  .btn-secondary:hover {
+    background: var(--accent-subtle);
+    border-color: var(--accent-muted);
+    color: var(--accent);
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-secondary);
+  }
+  .btn-ghost:hover { color: var(--accent); background: var(--accent-subtle); }
+  .btn-danger {
+    background: var(--error-subtle);
+    color: var(--error);
+    border: 1px solid transparent;
+  }
+  .btn-danger:hover { border-color: var(--error); }
+
+  .input-field {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 150ms;
+  }
+  .input-field:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-subtle);
+  }
+  .input-field::placeholder { color: var(--text-muted); }
+
+  .alert {
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .alert-success { background: var(--success-subtle); color: var(--success); }
+  .alert-warning { background: var(--warning-subtle); color: var(--warning); }
+  .alert-error { background: var(--error-subtle); color: var(--error); }
+  .alert-info { background: var(--info-subtle); color: var(--info); }
+
+  /* ===== FORM FACTOR EXPLORATIONS ===== */
+  .ff-container {
+    display: flex;
+    gap: 32px;
+    align-items: flex-start;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 48px;
+  }
+
+  .device-frame {
+    background: var(--bg-inset);
+    border: 2px solid var(--border);
+    border-radius: 20px;
+    overflow: hidden;
+    flex-shrink: 0;
+    position: relative;
+  }
+  .device-frame::before {
+    content: attr(data-device);
+    position: absolute;
+    top: -28px;
+    left: 0;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .device-phone { width: 375px; min-height: 667px; margin-top: 36px; }
+  .device-tablet { width: 768px; min-height: 500px; margin-top: 36px; }
+  .device-desktop { width: 100%; max-width: 1100px; min-height: 500px; margin-top: 36px; }
+
+  .device-inner {
+    background: var(--bg-page);
+    height: 100%;
+    overflow: hidden;
+  }
+
+  /* ===== PHONE MOCKUP: MISSION CONTROL ===== */
+  .phone-header {
+    padding: 16px 20px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .phone-greeting {
+    font-family: 'Satoshi', sans-serif;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .phone-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 9999px;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #FFF;
+    font-weight: 700;
+    font-size: 14px;
+  }
+
+  .phone-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding: 0 20px 16px;
+  }
+  .stat-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .stat-card::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+  }
+  .stat-card.accent::after { background: var(--accent); }
+  .stat-card.success::after { background: var(--success); }
+  .stat-card.info::after { background: var(--info); }
+  .stat-card.error::after { background: var(--error); }
+  .stat-number {
+    font-family: 'Satoshi', sans-serif;
+    font-size: 28px;
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    margin-bottom: 2px;
+  }
+  .stat-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .phone-section-label {
+    padding: 0 20px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  .phone-task-list {
+    padding: 0 20px;
+  }
+  .phone-task {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .phone-task:last-child { border-bottom: none; }
+  .task-priority {
+    width: 4px;
+    height: 32px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .task-priority.p0 { background: var(--error); }
+  .task-priority.p1 { background: var(--accent); }
+  .task-priority.p2 { background: var(--info); }
+  .task-content { flex: 1; min-width: 0; }
+  .task-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .task-meta {
+    font-size: 12px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 2px;
+  }
+  .task-id {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg-subtle);
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+
+  /* ===== PHONE BOTTOM NAV ===== */
+  .phone-nav {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-around;
+    padding: 10px 0 24px;
+    background: var(--bg-elevated);
+    border-top: 1px solid var(--border);
+  }
+  .phone-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+  .phone-nav-item.active { color: var(--accent); }
+  .phone-nav-icon {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+  }
+
+  /* ===== PHONE VOICE FAB ===== */
+  .voice-fab {
+    position: absolute;
+    bottom: 82px;
+    right: 20px;
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 24px rgba(212, 133, 10, 0.35);
+    color: #FFF;
+    font-size: 22px;
+    cursor: pointer;
+    transition: transform 150ms ease-out, box-shadow 150ms;
+  }
+  .voice-fab:hover {
+    transform: scale(1.06);
+    box-shadow: 0 6px 32px rgba(212, 133, 10, 0.5);
+  }
+
+  /* ===== TABLET MOCKUP: SPLIT VIEW ===== */
+  .tablet-layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    height: 100%;
+  }
+  .tablet-sidebar {
+    background: var(--bg-elevated);
+    border-right: 1px solid var(--border);
+    padding: 20px 0;
+    overflow-y: auto;
+  }
+  .tablet-sidebar-header {
+    padding: 0 20px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .tablet-sidebar-title {
+    font-family: 'Satoshi', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .sidebar-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-muted);
+    background: var(--bg-subtle);
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+  .sidebar-group-label {
+    padding: 16px 20px 6px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .sidebar-item {
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: background 100ms;
+    border-left: 3px solid transparent;
+  }
+  .sidebar-item:hover { background: var(--bg-subtle); }
+  .sidebar-item.active {
+    background: var(--accent-subtle);
+    border-left-color: var(--accent);
+  }
+  .sidebar-item-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 9999px;
+    flex-shrink: 0;
+  }
+  .sidebar-item-text {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sidebar-item-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+
+  .tablet-content {
+    padding: 24px;
+    overflow-y: auto;
+  }
+  .tablet-content-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 24px;
+  }
+  .tablet-content-title {
+    font-family: 'Satoshi', sans-serif;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 4px;
+  }
+  .tablet-content-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  /* ===== TABLET: PLANNING CARDS ===== */
+  .plan-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .plan-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    transition: border-color 200ms;
+  }
+  .plan-card:hover { border-color: var(--accent-muted); }
+  .plan-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .plan-card-stage {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+  .stage-plan { background: var(--info-subtle); color: var(--info); }
+  .stage-execute { background: var(--accent-subtle); color: var(--accent); }
+  .stage-review { background: var(--success-subtle); color: var(--success); }
+  .stage-blocked { background: var(--error-subtle); color: var(--error); }
+  .plan-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+  }
+  .plan-card-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+  }
+
+  /* Progress bar */
+  .progress-bar-container {
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .progress-bar {
+    flex: 1;
+    height: 4px;
+    background: var(--bg-subtle);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 300ms ease-out;
+  }
+  .progress-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    min-width: 32px;
+    text-align: right;
+  }
+
+  /* ===== DESKTOP MOCKUP: DASHBOARD ===== */
+  .desktop-layout {
+    display: grid;
+    grid-template-columns: 60px 240px 1fr 320px;
+    height: 100%;
+  }
+  .desktop-rail {
+    background: var(--bg-elevated);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 0;
+    gap: 4px;
+  }
+  .rail-icon {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    font-size: 18px;
+    cursor: pointer;
+    transition: background 100ms;
+    color: var(--text-muted);
+  }
+  .rail-icon:hover { background: var(--bg-subtle); color: var(--text-primary); }
+  .rail-icon.active { background: var(--accent-subtle); color: var(--accent); }
+  .rail-logo {
+    width: 32px;
+    height: 32px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #FFF;
+    font-family: 'Satoshi', sans-serif;
+    font-weight: 900;
+    font-size: 16px;
+    margin-bottom: 16px;
+  }
+  .rail-spacer { flex: 1; }
+
+  .desktop-sidebar {
+    background: var(--bg-elevated);
+    border-right: 1px solid var(--border);
+    padding: 20px 16px;
+    overflow-y: auto;
+  }
+  .desktop-sidebar-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 20px;
+    font-size: 13px;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .desktop-sidebar-search kbd {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    padding: 1px 5px;
+    border-radius: 4px;
+    margin-left: auto;
+    color: var(--text-muted);
+  }
+
+  .desktop-main {
+    padding: 24px;
+    overflow-y: auto;
+    background: var(--bg-page);
+  }
+
+  .desktop-panel {
+    background: var(--bg-elevated);
+    border-left: 1px solid var(--border);
+    padding: 20px;
+    overflow-y: auto;
+  }
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .panel-title {
+    font-family: 'Satoshi', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  /* ===== DESKTOP: DATA TABLE ===== */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+  }
+  .data-table th {
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+  }
+  .data-table td {
+    padding: 10px 12px;
+    font-size: 14px;
+    border-bottom: 1px solid var(--border-subtle);
+    vertical-align: middle;
+  }
+  .data-table tr:hover td { background: var(--bg-subtle); }
+
+  /* ===== DESKTOP: ACTIVITY FEED ===== */
+  .activity-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .activity-dot-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding-top: 4px;
+  }
+  .activity-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 9999px;
+    flex-shrink: 0;
+  }
+  .activity-line {
+    width: 1px;
+    flex: 1;
+    background: var(--border);
+    min-height: 16px;
+  }
+  .activity-content { flex: 1; }
+  .activity-text {
+    font-size: 13px;
+    color: var(--text-primary);
+    line-height: 1.4;
+  }
+  .activity-text strong { font-weight: 600; }
+  .activity-time {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* ===== DESKTOP: METRIC SPARKLINE CARDS ===== */
+  .metric-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .metric-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .metric-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .metric-card-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+  .metric-card-change {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+  .metric-card-change.up { background: var(--success-subtle); color: var(--success); }
+  .metric-card-change.down { background: var(--error-subtle); color: var(--error); }
+  .metric-card-value {
+    font-family: 'Satoshi', sans-serif;
+    font-size: 32px;
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .sparkline {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 32px;
+  }
+  .sparkline-bar {
+    flex: 1;
+    border-radius: 2px;
+    min-height: 3px;
+    transition: opacity 100ms;
+  }
+  .sparkline-bar:hover { opacity: 0.7; }
+
+  /* ===== EXPLORATION SECTION ===== */
+  .exploration-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 48px;
+  }
+  .exploration-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    transition: border-color 200ms, transform 200ms;
+  }
+  .exploration-card:hover {
+    border-color: var(--accent-muted);
+    transform: translateY(-2px);
+  }
+  .exploration-preview {
+    padding: 24px;
+    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .exploration-info {
+    padding: 16px 24px 24px;
+    border-top: 1px solid var(--border);
+  }
+  .exploration-tag {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+  .exploration-title {
+    font-family: 'Satoshi', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin-bottom: 4px;
+  }
+  .exploration-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+  }
+
+  /* ===== EXPLORATION 1: RADIAL GAUGE ===== */
+  .radial-cluster {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+  }
+  .radial-gauge {
+    position: relative;
+    width: 80px;
+    height: 80px;
+  }
+  .radial-gauge svg {
+    transform: rotate(-90deg);
+    width: 80px;
+    height: 80px;
+  }
+  .radial-gauge circle {
+    fill: none;
+    stroke-width: 6;
+    stroke-linecap: round;
+  }
+  .radial-bg { stroke: var(--bg-subtle); }
+  .radial-gauge .value {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Satoshi', sans-serif;
+    font-size: 18px;
+    font-weight: 900;
+    letter-spacing: -0.03em;
+  }
+  .radial-gauge .label-text {
+    position: absolute;
+    bottom: -18px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  /* ===== EXPLORATION 2: TIMELINE ===== */
+  .timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding-left: 16px;
+  }
+  .timeline-event {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    position: relative;
+    padding-bottom: 20px;
+  }
+  .timeline-event::before {
+    content: '';
+    position: absolute;
+    left: -12px;
+    top: 8px;
+    bottom: -8px;
+    width: 2px;
+    background: var(--border);
+  }
+  .timeline-event:last-child::before { display: none; }
+  .timeline-node {
+    position: relative;
+    left: -20px;
+    width: 16px;
+    height: 16px;
+    border-radius: 9999px;
+    border: 2px solid;
+    background: var(--bg-page);
+    flex-shrink: 0;
+    z-index: 1;
+  }
+  .timeline-node.completed { background: var(--success); border-color: var(--success); }
+  .timeline-node.active { border-color: var(--accent); animation: pulse 2s infinite; }
+  .timeline-node.pending { border-color: var(--border); }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(232, 163, 60, 0.4); }
+    50% { box-shadow: 0 0 0 6px rgba(232, 163, 60, 0); }
+  }
+  .timeline-content {
+    padding-top: 0;
+  }
+  .timeline-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .timeline-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* ===== EXPLORATION 3: COMMAND PALETTE ===== */
+  .cmd-palette {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.15);
+    overflow: hidden;
+    max-width: 100%;
+  }
+  .cmd-input-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .cmd-icon {
+    color: var(--text-muted);
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .cmd-input-text {
+    font-size: 15px;
+    color: var(--text-primary);
+    flex: 1;
+  }
+  .cmd-results {
+    padding: 8px 0;
+  }
+  .cmd-result {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: background 80ms;
+  }
+  .cmd-result:hover, .cmd-result.selected { background: var(--accent-subtle); }
+  .cmd-result-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .cmd-result-text {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .cmd-result-shortcut {
+    display: flex;
+    gap: 4px;
+  }
+  .cmd-result-shortcut kbd {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: var(--text-muted);
+  }
+
+  /* ===== EXPLORATION 4: KANBAN MINI ===== */
+  .kanban-mini {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+  }
+  .kanban-col {
+    min-width: 140px;
+    flex: 1;
+  }
+  .kanban-col-header {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 0 0 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .kanban-col-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    background: var(--bg-subtle);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  .kanban-item {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 6px;
+    cursor: grab;
+    transition: border-color 150ms, box-shadow 150ms;
+  }
+  .kanban-item:hover {
+    border-color: var(--accent-muted);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+  .kanban-item-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+  .kanban-item-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* ===== EXPLORATION 5: DENSE DATA VIS ===== */
+  .heatmap-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 3px;
+  }
+  .heat-cell {
+    aspect-ratio: 1;
+    border-radius: 3px;
+    transition: transform 100ms;
+    min-width: 12px;
+  }
+  .heat-cell:hover { transform: scale(1.3); }
+
+  /* ===== EXPLORATION 6: CONTEXTUAL CONTROLS ===== */
+  .controls-demo {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .control-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .control-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    min-width: 80px;
+  }
+  .toggle-track {
+    width: 44px;
+    height: 24px;
+    border-radius: 12px;
+    background: var(--neutral-400);
+    position: relative;
+    cursor: pointer;
+    transition: background 150ms;
+  }
+  .toggle-track.on { background: var(--accent); }
+  .toggle-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 10px;
+    background: #FFF;
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    transition: transform 150ms;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .toggle-track.on .toggle-thumb { transform: translateX(20px); }
+  .slider-track {
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--bg-subtle);
+    position: relative;
+  }
+  .slider-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: var(--accent);
+  }
+  .slider-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 8px;
+    background: var(--accent);
+    border: 2px solid var(--bg-elevated);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    position: absolute;
+    top: -5px;
+    cursor: grab;
+  }
+  .segmented {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .segmented-btn {
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-right: 1px solid var(--border);
+    transition: all 100ms;
+  }
+  .segmented-btn:last-child { border-right: none; }
+  .segmented-btn:hover { background: var(--bg-subtle); }
+  .segmented-btn.active {
+    background: var(--accent);
+    color: #FFF;
+  }
+
+  /* ===== RESPONSIVE ===== */
+  @media (max-width: 1200px) {
+    .exploration-grid { grid-template-columns: 1fr; }
+    .ff-container { flex-direction: column; align-items: center; }
+  }
+  @media (max-width: 768px) {
+    .hero h1 { font-size: 48px; }
+    .font-grid { grid-template-columns: 1fr; }
+    .section { padding: 48px 20px; }
+    .metric-row { grid-template-columns: 1fr; }
+    .device-desktop { display: none; }
+    .device-tablet { width: 100%; max-width: 768px; }
+    .device-phone { width: 100%; max-width: 375px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div class="top-bar-title">Bob Builder — Design System</div>
+  <button class="theme-toggle" onclick="toggleTheme()">
+    <span id="theme-icon">☀️</span> Light Mode
+  </button>
+</div>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-badge">◆ Design System v2 — Multi-Form-Factor</div>
+  <h1>Build <span>Beautifully</span></h1>
+  <p>Typography, color, and layout explorations for Bob across desktop, tablet, and mobile.</p>
+</div>
+
+<!-- FONT SPECIMENS -->
+<div class="section">
+  <div class="section-label">Typography</div>
+  <div class="section-title">Font System</div>
+  <div class="section-desc">Satoshi for display and headings. DM Sans for body and UI. JetBrains Mono for code, data, and identifiers.</div>
+
+  <div class="font-grid">
+    <div class="font-card">
+      <div class="font-card-label">Display — Satoshi</div>
+      <div class="font-specimen-satoshi" style="font-size:48px; font-weight:900; letter-spacing:-0.03em; line-height:1.05; margin-bottom:12px;">Mission Control</div>
+      <div class="font-specimen-satoshi" style="font-size:36px; font-weight:700; letter-spacing:-0.02em; line-height:1.15; margin-bottom:8px;">Planning Session</div>
+      <div class="font-specimen-satoshi" style="font-size:28px; font-weight:700; letter-spacing:-0.02em; line-height:1.2; margin-bottom:8px;">Work Item Details</div>
+      <div class="font-specimen-satoshi" style="font-size:24px; font-weight:700; letter-spacing:-0.015em; line-height:1.2; margin-bottom:8px;">Task Execution</div>
+      <div class="font-specimen-satoshi" style="font-size:18px; font-weight:600; letter-spacing:-0.01em; line-height:1.3;">Agent Session Active</div>
+    </div>
+
+    <div class="font-card">
+      <div class="font-card-label">Body — DM Sans</div>
+      <div class="font-specimen-dm" style="font-size:16px; font-weight:400; line-height:1.6; margin-bottom:16px; color:var(--text-primary);">Bob orchestrates the full lifecycle of development work — from initial idea capture through planning sessions, task decomposition, automated execution, code review, and deployment. Every stage surfaces the information you need, nothing you don't.</div>
+      <div class="font-specimen-dm" style="font-size:14px; font-weight:500; line-height:1.5; margin-bottom:12px; color:var(--text-secondary);">UI labels at 14px/500 weight feel confident without shouting. Good for navigation, form labels, and card metadata.</div>
+      <div class="font-specimen-dm" style="font-size:13px; font-weight:400; line-height:1.5; color:var(--text-muted);">Caption text at 13px for timestamps, secondary metadata, and helper text.</div>
+      <div style="margin-top:12px;">
+        <span class="font-specimen-dm" style="font-size:12px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; color:var(--accent);">Label · Uppercase · 12px · 600 weight</span>
+      </div>
+    </div>
+
+    <div class="font-card">
+      <div class="font-card-label">Data — DM Sans (tabular-nums)</div>
+      <div class="font-specimen-dm" style="font-size:32px; font-weight:900; font-family:'Satoshi',sans-serif; letter-spacing:-0.03em; line-height:1; margin-bottom:8px;">1,247</div>
+      <div class="font-specimen-dm" style="font-variant-numeric:tabular-nums; font-size:14px; margin-bottom:4px;">Tasks completed: <strong>847</strong> / 1,247</div>
+      <div class="font-specimen-dm" style="font-variant-numeric:tabular-nums; font-size:14px; margin-bottom:4px;">Execution time: <strong>3h 42m 18s</strong></div>
+      <div class="font-specimen-dm" style="font-variant-numeric:tabular-nums; font-size:14px;">Success rate: <strong>94.2%</strong></div>
+    </div>
+
+    <div class="font-card">
+      <div class="font-card-label">Code — JetBrains Mono</div>
+      <div class="font-specimen-mono" style="font-size:14px; line-height:1.6; padding:16px; background:var(--bg-inset); border-radius:8px; border:1px solid var(--border);">
+        <div style="color:var(--text-muted);">// Stage detection — pure function</div>
+        <div><span style="color:var(--info);">const</span> stage = <span style="color:var(--accent);">detectStage</span>(workItem);</div>
+        <div><span style="color:var(--info);">if</span> (stage === <span style="color:var(--success);">'execute'</span>) {</div>
+        <div>&nbsp;&nbsp;<span style="color:var(--accent);">spawnAgent</span>(workItem.id);</div>
+        <div>}</div>
+      </div>
+      <div style="margin-top:12px;">
+        <span class="font-specimen-mono" style="font-size:11px; color:var(--text-muted); background:var(--bg-subtle); padding:2px 6px; border-radius:4px;">BOB-1247</span>
+        <span class="font-specimen-mono" style="font-size:11px; color:var(--text-muted); margin-left:8px;">a3f7c2d</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- COLOR PALETTE -->
+<div class="section">
+  <div class="section-label">Color</div>
+  <div class="section-title">Warm Amber System</div>
+  <div class="section-desc">Restrained palette — one accent + warm neutrals. Color is rare and meaningful. Every competitor uses cold blue-gray; Bob's warmth is its signature.</div>
+
+  <div style="margin-bottom:32px;">
+    <div style="font-size:12px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; color:var(--text-muted); margin-bottom:12px;">Primary Accent</div>
+    <div class="palette-row">
+      <div class="swatch">
+        <div class="swatch-color" style="background:#D4850A;"></div>
+        <div class="swatch-label">Primary</div>
+        <div class="swatch-hex">#D4850A</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#B87208;"></div>
+        <div class="swatch-label">Hover</div>
+        <div class="swatch-hex">#B87208</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#E8A33C;"></div>
+        <div class="swatch-label">Dark Primary</div>
+        <div class="swatch-hex">#E8A33C</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#F5DEB3;"></div>
+        <div class="swatch-label">Muted</div>
+        <div class="swatch-hex">#F5DEB3</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#FFF3E0;"></div>
+        <div class="swatch-label">Subtle</div>
+        <div class="swatch-hex">#FFF3E0</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#3D3120;"></div>
+        <div class="swatch-label">Dark Muted</div>
+        <div class="swatch-hex">#3D3120</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-bottom:32px;">
+    <div style="font-size:12px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; color:var(--text-muted); margin-bottom:12px;">Warm Neutrals</div>
+    <div class="neutral-strip">
+      <div style="background:#1C1B18;" data-label="900 #1C1B18"></div>
+      <div style="background:#3D3B36;" data-label="800 #3D3B36"></div>
+      <div style="background:#5C5A53;" data-label="700 #5C5A53"></div>
+      <div style="background:#8A877E;" data-label="500 #8A877E"></div>
+      <div style="background:#B5B2AB;" data-label="400 #B5B2AB"></div>
+      <div style="background:#E3E1DC;" data-label="200 #E3E1DC"></div>
+      <div style="background:#EEEDEA;" data-label="100 #EEEDEA"></div>
+      <div style="background:#F5F4F1;" data-label="50 #F5F4F1"></div>
+      <div style="background:#FAFAF8;" data-label="25 #FAFAF8"></div>
+    </div>
+  </div>
+
+  <div style="margin-bottom:32px;">
+    <div style="font-size:12px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; color:var(--text-muted); margin-bottom:12px;">Semantic Colors</div>
+    <div class="palette-row">
+      <div class="swatch">
+        <div class="swatch-color" style="background:#2D8A4E;"></div>
+        <div class="swatch-label">Success</div>
+        <div class="swatch-hex">#2D8A4E</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#D4850A;"></div>
+        <div class="swatch-label">Warning</div>
+        <div class="swatch-hex">#D4850A</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#C62828;"></div>
+        <div class="swatch-label">Error</div>
+        <div class="swatch-hex">#C62828</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#1565C0;"></div>
+        <div class="swatch-label">Info</div>
+        <div class="swatch-hex">#1565C0</div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div style="font-size:12px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; color:var(--text-muted); margin-bottom:12px;">UI Components</div>
+    <div class="component-grid">
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <button class="btn btn-primary">Start Execution</button>
+        <button class="btn btn-secondary">View Details</button>
+        <button class="btn btn-ghost">Cancel</button>
+        <button class="btn btn-danger">Delete Work Item</button>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <input class="input-field" placeholder="Search work items..." value="">
+        <input class="input-field" placeholder="Task title" value="Implement auth flow">
+        <div style="display:flex; gap:8px;">
+          <input class="input-field" placeholder="Priority" value="P1" style="width:80px; text-align:center;">
+          <input class="input-field" placeholder="Assignee" value="bob-agent">
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div class="alert alert-success">✓ Build succeeded — 47 tests pass</div>
+        <div class="alert alert-warning">⚠ Agent waiting for review</div>
+        <div class="alert alert-error">✕ Execution failed: timeout</div>
+        <div class="alert alert-info">ℹ 3 work items need attention</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FORM FACTOR EXPLORATIONS -->
+<div class="section">
+  <div class="section-label">Form Factors</div>
+  <div class="section-title">Phone · Tablet · Desktop</div>
+  <div class="section-desc">The same design system adapts to three contexts. Phone is glanceable + voice-first. Tablet is split-view for planning. Desktop is data-dense with multiple panels.</div>
+
+  <!-- PHONE -->
+  <div class="ff-container">
+    <div class="device-frame device-phone" data-device="iPhone 15 · 375×667">
+      <div class="device-inner" style="position:relative;">
+        <div class="phone-header">
+          <div>
+            <div style="font-size:13px; color:var(--text-muted);">Good morning</div>
+            <div class="phone-greeting">Mission Control</div>
+          </div>
+          <div class="phone-avatar">MG</div>
+        </div>
+
+        <div class="phone-stats">
+          <div class="stat-card accent">
+            <div class="stat-number" style="color:var(--accent);">7</div>
+            <div class="stat-label">In Progress</div>
+          </div>
+          <div class="stat-card success">
+            <div class="stat-number" style="color:var(--success);">23</div>
+            <div class="stat-label">Completed</div>
+          </div>
+          <div class="stat-card error">
+            <div class="stat-number" style="color:var(--error);">2</div>
+            <div class="stat-label">Blocked</div>
+          </div>
+          <div class="stat-card info">
+            <div class="stat-number" style="color:var(--info);">4</div>
+            <div class="stat-label">Review</div>
+          </div>
+        </div>
+
+        <div class="phone-section-label">Needs Attention</div>
+        <div class="phone-task-list">
+          <div class="phone-task">
+            <div class="task-priority p0"></div>
+            <div class="task-content">
+              <div class="task-title">Auth middleware rewrite</div>
+              <div class="task-meta">
+                <span class="task-id">BOB-412</span>
+                <span>·</span>
+                <span>Blocked 2h</span>
+              </div>
+            </div>
+          </div>
+          <div class="phone-task">
+            <div class="task-priority p1"></div>
+            <div class="task-content">
+              <div class="task-title">Mobile planning view</div>
+              <div class="task-meta">
+                <span class="task-id">BOB-389</span>
+                <span>·</span>
+                <span>Review ready</span>
+              </div>
+            </div>
+          </div>
+          <div class="phone-task">
+            <div class="task-priority p1"></div>
+            <div class="task-content">
+              <div class="task-title">Deployment pipeline fix</div>
+              <div class="task-meta">
+                <span class="task-id">BOB-401</span>
+                <span>·</span>
+                <span>Executing</span>
+              </div>
+            </div>
+          </div>
+          <div class="phone-task">
+            <div class="task-priority p2"></div>
+            <div class="task-content">
+              <div class="task-title">Add workspace settings</div>
+              <div class="task-meta">
+                <span class="task-id">BOB-395</span>
+                <span>·</span>
+                <span>Planning</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="voice-fab" title="Voice command">🎙</div>
+
+        <div class="phone-nav">
+          <div class="phone-nav-item active">
+            <div class="phone-nav-icon">◆</div>
+            <span>Home</span>
+          </div>
+          <div class="phone-nav-item">
+            <div class="phone-nav-icon">▦</div>
+            <span>Plan</span>
+          </div>
+          <div class="phone-nav-item">
+            <div class="phone-nav-icon">▶</div>
+            <span>Execute</span>
+          </div>
+          <div class="phone-nav-item">
+            <div class="phone-nav-icon">🔔</div>
+            <span>Inbox</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TABLET -->
+    <div class="device-frame device-tablet" data-device="iPad · 768×1024">
+      <div class="device-inner">
+        <div class="tablet-layout">
+          <div class="tablet-sidebar">
+            <div class="tablet-sidebar-header">
+              <div class="tablet-sidebar-title">Work Items</div>
+              <div class="sidebar-count">36</div>
+            </div>
+
+            <div class="sidebar-group-label">Executing</div>
+            <div class="sidebar-item active">
+              <div class="sidebar-item-dot" style="background:var(--accent);"></div>
+              <div class="sidebar-item-text">Auth middleware rewrite</div>
+              <div class="sidebar-item-badge" style="background:var(--accent-subtle); color:var(--accent);">P0</div>
+            </div>
+            <div class="sidebar-item">
+              <div class="sidebar-item-dot" style="background:var(--accent);"></div>
+              <div class="sidebar-item-text">Deployment pipeline</div>
+              <div class="sidebar-item-badge" style="background:var(--info-subtle); color:var(--info);">P1</div>
+            </div>
+
+            <div class="sidebar-group-label">Planning</div>
+            <div class="sidebar-item">
+              <div class="sidebar-item-dot" style="background:var(--info);"></div>
+              <div class="sidebar-item-text">Mobile planning view</div>
+              <div class="sidebar-item-badge" style="background:var(--info-subtle); color:var(--info);">P1</div>
+            </div>
+            <div class="sidebar-item">
+              <div class="sidebar-item-dot" style="background:var(--info);"></div>
+              <div class="sidebar-item-text">Workspace settings</div>
+              <div class="sidebar-item-badge" style="background:var(--success-subtle); color:var(--success);">P2</div>
+            </div>
+
+            <div class="sidebar-group-label">Review</div>
+            <div class="sidebar-item">
+              <div class="sidebar-item-dot" style="background:var(--success);"></div>
+              <div class="sidebar-item-text">API rate limiting</div>
+            </div>
+            <div class="sidebar-item">
+              <div class="sidebar-item-dot" style="background:var(--success);"></div>
+              <div class="sidebar-item-text">Error handling audit</div>
+            </div>
+          </div>
+
+          <div class="tablet-content">
+            <div class="tablet-content-header">
+              <div>
+                <div class="tablet-content-title">Auth Middleware Rewrite</div>
+                <div class="tablet-content-meta">
+                  <span class="task-id">BOB-412</span>
+                  <span class="plan-card-stage stage-execute">Executing</span>
+                  <span>Started 45m ago</span>
+                </div>
+              </div>
+              <button class="btn btn-secondary" style="font-size:13px; padding:6px 12px;">⋯</button>
+            </div>
+
+            <div class="plan-cards">
+              <div class="plan-card">
+                <div class="plan-card-header">
+                  <span class="plan-card-stage stage-review">Complete</span>
+                  <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-muted);">1/4</span>
+                </div>
+                <div class="plan-card-title">Extract session store interface</div>
+                <div class="plan-card-desc">Define TokenStore abstraction for pluggable backends</div>
+                <div class="progress-bar-container">
+                  <div class="progress-bar"><div class="progress-fill" style="width:100%; background:var(--success);"></div></div>
+                  <div class="progress-label">100%</div>
+                </div>
+              </div>
+              <div class="plan-card">
+                <div class="plan-card-header">
+                  <span class="plan-card-stage stage-execute">Active</span>
+                  <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-muted);">2/4</span>
+                </div>
+                <div class="plan-card-title">Implement Redis token store</div>
+                <div class="plan-card-desc">Move session tokens from cookies to Redis with TTL</div>
+                <div class="progress-bar-container">
+                  <div class="progress-bar"><div class="progress-fill" style="width:68%; background:var(--accent);"></div></div>
+                  <div class="progress-label">68%</div>
+                </div>
+              </div>
+              <div class="plan-card">
+                <div class="plan-card-header">
+                  <span class="plan-card-stage stage-plan">Pending</span>
+                  <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-muted);">3/4</span>
+                </div>
+                <div class="plan-card-title">Migrate existing sessions</div>
+                <div class="plan-card-desc">Zero-downtime migration script for active sessions</div>
+              </div>
+              <div class="plan-card">
+                <div class="plan-card-header">
+                  <span class="plan-card-stage stage-plan">Pending</span>
+                  <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-muted);">4/4</span>
+                </div>
+                <div class="plan-card-title">Remove old auth middleware</div>
+                <div class="plan-card-desc">Clean up deprecated cookie-based session handling</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DESKTOP -->
+  <div class="ff-container">
+    <div class="device-frame device-desktop" data-device="Desktop · 1440×900">
+      <div class="device-inner">
+        <div class="desktop-layout">
+          <!-- Icon Rail -->
+          <div class="desktop-rail">
+            <div class="rail-logo">B</div>
+            <div class="rail-icon active" title="Dashboard">◆</div>
+            <div class="rail-icon" title="Planning">▦</div>
+            <div class="rail-icon" title="Execution">▶</div>
+            <div class="rail-icon" title="Repositories">⟨⟩</div>
+            <div class="rail-icon" title="Settings">⚙</div>
+            <div class="rail-spacer"></div>
+            <div class="rail-icon" title="Notifications" style="position:relative;">
+              🔔
+              <div style="position:absolute;top:4px;right:6px;width:8px;height:8px;border-radius:4px;background:var(--error);border:2px solid var(--bg-elevated);"></div>
+            </div>
+          </div>
+
+          <!-- Sidebar -->
+          <div class="desktop-sidebar">
+            <div class="desktop-sidebar-search">
+              <span>🔍</span>
+              <span>Search...</span>
+              <kbd>⌘K</kbd>
+            </div>
+
+            <div class="sidebar-group-label">Projects</div>
+            <div class="sidebar-item active">
+              <div class="sidebar-item-dot" style="background:var(--accent);"></div>
+              <div class="sidebar-item-text">Bob Builder</div>
+            </div>
+            <div class="sidebar-item">
+              <div class="sidebar-item-dot" style="background:var(--info);"></div>
+              <div class="sidebar-item-text">PlayTrek</div>
+            </div>
+            <div class="sidebar-item">
+              <div class="sidebar-item-dot" style="background:var(--success);"></div>
+              <div class="sidebar-item-text">ForgeGraph</div>
+            </div>
+
+            <div class="sidebar-group-label">Quick Actions</div>
+            <div class="sidebar-item">
+              <div style="font-size:14px; margin-right:2px;">+</div>
+              <div class="sidebar-item-text">New Work Item</div>
+            </div>
+            <div class="sidebar-item">
+              <div style="font-size:14px; margin-right:2px;">▶</div>
+              <div class="sidebar-item-text">Start Bob Session</div>
+            </div>
+          </div>
+
+          <!-- Main Content -->
+          <div class="desktop-main">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:24px;">
+              <div>
+                <div style="font-family:'Satoshi',sans-serif; font-size:24px; font-weight:700; letter-spacing:-0.02em;">Dashboard</div>
+                <div style="font-size:13px; color:var(--text-muted);">Bob Builder · 36 work items</div>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <button class="btn btn-secondary" style="font-size:13px; padding:6px 12px;">⟳ Sync</button>
+                <button class="btn btn-primary" style="font-size:13px; padding:6px 12px;">+ New Item</button>
+              </div>
+            </div>
+
+            <div class="metric-row">
+              <div class="metric-card">
+                <div class="metric-card-header">
+                  <div class="metric-card-label">Tasks Completed</div>
+                  <div class="metric-card-change up">+12%</div>
+                </div>
+                <div class="metric-card-value">847</div>
+                <div class="sparkline">
+                  <div class="sparkline-bar" style="height:40%; background:var(--accent-muted);"></div>
+                  <div class="sparkline-bar" style="height:55%; background:var(--accent-muted);"></div>
+                  <div class="sparkline-bar" style="height:35%; background:var(--accent-muted);"></div>
+                  <div class="sparkline-bar" style="height:70%; background:var(--accent-muted);"></div>
+                  <div class="sparkline-bar" style="height:60%; background:var(--accent-muted);"></div>
+                  <div class="sparkline-bar" style="height:80%; background:var(--accent-muted);"></div>
+                  <div class="sparkline-bar" style="height:95%; background:var(--accent);"></div>
+                </div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-card-header">
+                  <div class="metric-card-label">Success Rate</div>
+                  <div class="metric-card-change up">+3.1%</div>
+                </div>
+                <div class="metric-card-value">94.2%</div>
+                <div class="sparkline">
+                  <div class="sparkline-bar" style="height:85%; background:var(--success); opacity:0.3;"></div>
+                  <div class="sparkline-bar" style="height:88%; background:var(--success); opacity:0.35;"></div>
+                  <div class="sparkline-bar" style="height:82%; background:var(--success); opacity:0.4;"></div>
+                  <div class="sparkline-bar" style="height:91%; background:var(--success); opacity:0.5;"></div>
+                  <div class="sparkline-bar" style="height:90%; background:var(--success); opacity:0.6;"></div>
+                  <div class="sparkline-bar" style="height:93%; background:var(--success); opacity:0.8;"></div>
+                  <div class="sparkline-bar" style="height:94%; background:var(--success);"></div>
+                </div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-card-header">
+                  <div class="metric-card-label">Avg Execution</div>
+                  <div class="metric-card-change down">+8min</div>
+                </div>
+                <div class="metric-card-value">42m</div>
+                <div class="sparkline">
+                  <div class="sparkline-bar" style="height:50%; background:var(--info); opacity:0.3;"></div>
+                  <div class="sparkline-bar" style="height:45%; background:var(--info); opacity:0.35;"></div>
+                  <div class="sparkline-bar" style="height:55%; background:var(--info); opacity:0.4;"></div>
+                  <div class="sparkline-bar" style="height:40%; background:var(--info); opacity:0.5;"></div>
+                  <div class="sparkline-bar" style="height:60%; background:var(--info); opacity:0.6;"></div>
+                  <div class="sparkline-bar" style="height:65%; background:var(--info); opacity:0.8;"></div>
+                  <div class="sparkline-bar" style="height:70%; background:var(--info);"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Data Table -->
+            <div style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:12px; overflow:hidden;">
+              <div style="padding:14px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
+                <div style="font-family:'Satoshi',sans-serif; font-size:16px; font-weight:700;">Recent Work Items</div>
+                <div class="segmented">
+                  <div class="segmented-btn active">All</div>
+                  <div class="segmented-btn">Active</div>
+                  <div class="segmented-btn">Blocked</div>
+                </div>
+              </div>
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Title</th>
+                    <th>Stage</th>
+                    <th>Priority</th>
+                    <th>Updated</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="task-id">BOB-412</span></td>
+                    <td style="font-weight:500;">Auth middleware rewrite</td>
+                    <td><span class="plan-card-stage stage-execute">Execute</span></td>
+                    <td style="color:var(--error); font-weight:600;">P0</td>
+                    <td style="color:var(--text-muted); font-size:13px;">2m ago</td>
+                  </tr>
+                  <tr>
+                    <td><span class="task-id">BOB-389</span></td>
+                    <td style="font-weight:500;">Mobile planning view</td>
+                    <td><span class="plan-card-stage stage-review">Review</span></td>
+                    <td style="color:var(--accent); font-weight:600;">P1</td>
+                    <td style="color:var(--text-muted); font-size:13px;">14m ago</td>
+                  </tr>
+                  <tr>
+                    <td><span class="task-id">BOB-401</span></td>
+                    <td style="font-weight:500;">Deployment pipeline fix</td>
+                    <td><span class="plan-card-stage stage-execute">Execute</span></td>
+                    <td style="color:var(--accent); font-weight:600;">P1</td>
+                    <td style="color:var(--text-muted); font-size:13px;">28m ago</td>
+                  </tr>
+                  <tr>
+                    <td><span class="task-id">BOB-395</span></td>
+                    <td style="font-weight:500;">Workspace settings page</td>
+                    <td><span class="plan-card-stage stage-plan">Plan</span></td>
+                    <td style="color:var(--info); font-weight:600;">P2</td>
+                    <td style="color:var(--text-muted); font-size:13px;">1h ago</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Right Panel -->
+          <div class="desktop-panel">
+            <div class="panel-header">
+              <div class="panel-title">Activity</div>
+              <div style="font-size:12px; color:var(--text-muted); cursor:pointer;">View all →</div>
+            </div>
+
+            <div class="activity-item">
+              <div class="activity-dot-wrap">
+                <div class="activity-dot" style="background:var(--success);"></div>
+                <div class="activity-line"></div>
+              </div>
+              <div class="activity-content">
+                <div class="activity-text"><strong>bob-agent</strong> completed task <span class="task-id">BOB-410</span></div>
+                <div class="activity-time">2 minutes ago</div>
+              </div>
+            </div>
+            <div class="activity-item">
+              <div class="activity-dot-wrap">
+                <div class="activity-dot" style="background:var(--accent);"></div>
+                <div class="activity-line"></div>
+              </div>
+              <div class="activity-content">
+                <div class="activity-text"><strong>bob-agent</strong> started execution on <span class="task-id">BOB-412</span></div>
+                <div class="activity-time">45 minutes ago</div>
+              </div>
+            </div>
+            <div class="activity-item">
+              <div class="activity-dot-wrap">
+                <div class="activity-dot" style="background:var(--info);"></div>
+                <div class="activity-line"></div>
+              </div>
+              <div class="activity-content">
+                <div class="activity-text"><strong>You</strong> created planning session for <span class="task-id">BOB-395</span></div>
+                <div class="activity-time">1 hour ago</div>
+              </div>
+            </div>
+            <div class="activity-item">
+              <div class="activity-dot-wrap">
+                <div class="activity-dot" style="background:var(--error);"></div>
+              </div>
+              <div class="activity-content">
+                <div class="activity-text"><strong>CI</strong> failed on <span style="font-family:'JetBrains Mono',monospace; font-size:11px;">main</span> — test timeout</div>
+                <div class="activity-time">2 hours ago</div>
+              </div>
+            </div>
+
+            <div style="margin-top:24px;">
+              <div class="panel-header">
+                <div class="panel-title">Agent Status</div>
+              </div>
+              <div style="background:var(--accent-subtle); border:1px solid var(--accent-muted); border-radius:12px; padding:14px;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                  <div style="width:8px; height:8px; border-radius:4px; background:var(--accent); animation:pulse 2s infinite;"></div>
+                  <span style="font-size:13px; font-weight:600; color:var(--accent);">Bob is working</span>
+                </div>
+                <div style="font-size:13px; color:var(--text-secondary); margin-bottom:4px;">Auth middleware rewrite</div>
+                <div style="font-size:12px; color:var(--text-muted);">Step 2/4 · Redis token store · 68%</div>
+                <div class="progress-bar-container" style="margin-top:8px;">
+                  <div class="progress-bar"><div class="progress-fill" style="width:68%; background:var(--accent);"></div></div>
+                  <div class="progress-label">68%</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DESIGN EXPLORATIONS -->
+<div class="section">
+  <div class="section-label">Explorations</div>
+  <div class="section-title">Visually Striking Patterns</div>
+  <div class="section-desc">Ideas for displaying information and managing controls across form factors. Each exploration is a conversation starter — pick what resonates.</div>
+
+  <div class="exploration-grid">
+    <!-- Exploration 1: Radial Gauges -->
+    <div class="exploration-card">
+      <div class="exploration-preview">
+        <div class="radial-cluster">
+          <div class="radial-gauge">
+            <svg viewBox="0 0 80 80">
+              <circle class="radial-bg" cx="40" cy="40" r="34" stroke-dasharray="213.6" stroke-dashoffset="0"/>
+              <circle cx="40" cy="40" r="34" stroke="var(--success)" stroke-dasharray="213.6" stroke-dashoffset="12.8" style="transition:stroke-dashoffset 1s;"/>
+            </svg>
+            <div class="value" style="color:var(--success);">94%</div>
+            <div class="label-text">Pass Rate</div>
+          </div>
+          <div class="radial-gauge">
+            <svg viewBox="0 0 80 80">
+              <circle class="radial-bg" cx="40" cy="40" r="34" stroke-dasharray="213.6" stroke-dashoffset="0"/>
+              <circle cx="40" cy="40" r="34" stroke="var(--accent)" stroke-dasharray="213.6" stroke-dashoffset="68.4" style="transition:stroke-dashoffset 1s;"/>
+            </svg>
+            <div class="value" style="color:var(--accent);">68%</div>
+            <div class="label-text">Progress</div>
+          </div>
+          <div class="radial-gauge">
+            <svg viewBox="0 0 80 80">
+              <circle class="radial-bg" cx="40" cy="40" r="34" stroke-dasharray="213.6" stroke-dashoffset="0"/>
+              <circle cx="40" cy="40" r="34" stroke="var(--info)" stroke-dasharray="213.6" stroke-dashoffset="128.2" style="transition:stroke-dashoffset 1s;"/>
+            </svg>
+            <div class="value" style="color:var(--info);">40%</div>
+            <div class="label-text">Coverage</div>
+          </div>
+        </div>
+      </div>
+      <div class="exploration-info">
+        <div class="exploration-tag">Mobile + Tablet</div>
+        <div class="exploration-title">Radial Gauge Cluster</div>
+        <div class="exploration-desc">Compact metric display for phone home screen and tablet dashboards. Glanceable at any size. The arc fill gives immediate visual feedback without reading numbers.</div>
+      </div>
+    </div>
+
+    <!-- Exploration 2: Lifecycle Timeline -->
+    <div class="exploration-card">
+      <div class="exploration-preview" style="padding-left:40px;">
+        <div class="timeline">
+          <div class="timeline-event">
+            <div class="timeline-node completed"></div>
+            <div class="timeline-content">
+              <div class="timeline-title">Idea Captured</div>
+              <div class="timeline-desc">Mar 24 · From voice memo</div>
+            </div>
+          </div>
+          <div class="timeline-event">
+            <div class="timeline-node completed"></div>
+            <div class="timeline-content">
+              <div class="timeline-title">Shape Complete</div>
+              <div class="timeline-desc">Mar 24 · 3 constraints defined</div>
+            </div>
+          </div>
+          <div class="timeline-event">
+            <div class="timeline-node completed"></div>
+            <div class="timeline-content">
+              <div class="timeline-title">Plan Approved</div>
+              <div class="timeline-desc">Mar 25 · 4 tasks, 2h estimate</div>
+            </div>
+          </div>
+          <div class="timeline-event">
+            <div class="timeline-node active"></div>
+            <div class="timeline-content">
+              <div class="timeline-title" style="color:var(--accent);">Executing — Step 2/4</div>
+              <div class="timeline-desc">Now · Redis token store</div>
+            </div>
+          </div>
+          <div class="timeline-event">
+            <div class="timeline-node pending"></div>
+            <div class="timeline-content">
+              <div class="timeline-title" style="color:var(--text-muted);">Review</div>
+              <div class="timeline-desc" style="color:var(--text-muted);">Pending</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="exploration-info">
+        <div class="exploration-tag">All Form Factors</div>
+        <div class="exploration-title">Lifecycle Timeline</div>
+        <div class="exploration-desc">Bob's 7-stage workflow as a vertical timeline. The pulsing active node draws the eye. Works vertically on phone, horizontally on tablet/desktop. Each node is tappable for details.</div>
+      </div>
+    </div>
+
+    <!-- Exploration 3: Command Palette -->
+    <div class="exploration-card">
+      <div class="exploration-preview" style="display:flex; align-items:center; justify-content:center;">
+        <div class="cmd-palette" style="width:100%; max-width:380px;">
+          <div class="cmd-input-row">
+            <div class="cmd-icon">⌘</div>
+            <div class="cmd-input-text">Execute auth middleware...</div>
+          </div>
+          <div class="cmd-results">
+            <div class="cmd-result selected">
+              <div class="cmd-result-icon" style="background:var(--accent-subtle); color:var(--accent);">▶</div>
+              <div class="cmd-result-text">Start Execution</div>
+              <div class="cmd-result-shortcut"><kbd>⌘</kbd><kbd>E</kbd></div>
+            </div>
+            <div class="cmd-result">
+              <div class="cmd-result-icon" style="background:var(--info-subtle); color:var(--info);">▦</div>
+              <div class="cmd-result-text">Open Planning Session</div>
+              <div class="cmd-result-shortcut"><kbd>⌘</kbd><kbd>P</kbd></div>
+            </div>
+            <div class="cmd-result">
+              <div class="cmd-result-icon" style="background:var(--success-subtle); color:var(--success);">✓</div>
+              <div class="cmd-result-text">Mark as Review Ready</div>
+              <div class="cmd-result-shortcut"><kbd>⌘</kbd><kbd>R</kbd></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="exploration-info">
+        <div class="exploration-tag">Desktop + Tablet</div>
+        <div class="exploration-title">Command Palette</div>
+        <div class="exploration-desc">Power-user control surface. Every action is searchable and keyboard-accessible. On tablet, this slides up from the bottom as a sheet. The voice FAB on mobile is the equivalent.</div>
+      </div>
+    </div>
+
+    <!-- Exploration 4: Activity Heatmap -->
+    <div class="exploration-card">
+      <div class="exploration-preview" style="display:flex; flex-direction:column; align-items:center; gap:16px;">
+        <div style="font-family:'Satoshi',sans-serif; font-size:18px; font-weight:700; letter-spacing:-0.01em;">Execution Activity</div>
+        <div class="heatmap-grid" id="heatmap" style="width:100%; max-width:300px;"></div>
+        <div style="display:flex; align-items:center; gap:8px; font-size:11px; color:var(--text-muted);">
+          <span>Less</span>
+          <div style="width:12px; height:12px; border-radius:3px; background:var(--bg-subtle);"></div>
+          <div style="width:12px; height:12px; border-radius:3px; background:var(--accent); opacity:0.25;"></div>
+          <div style="width:12px; height:12px; border-radius:3px; background:var(--accent); opacity:0.5;"></div>
+          <div style="width:12px; height:12px; border-radius:3px; background:var(--accent); opacity:0.75;"></div>
+          <div style="width:12px; height:12px; border-radius:3px; background:var(--accent);"></div>
+          <span>More</span>
+        </div>
+      </div>
+      <div class="exploration-info">
+        <div class="exploration-tag">Desktop</div>
+        <div class="exploration-title">Execution Heatmap</div>
+        <div class="exploration-desc">GitHub-style contribution graph but for Bob's execution activity. Shows when the agent is most active. Dense data in a compact, scannable format. Warm amber reinforces the brand.</div>
+      </div>
+    </div>
+
+    <!-- Exploration 5: Contextual Controls -->
+    <div class="exploration-card">
+      <div class="exploration-preview">
+        <div class="controls-demo">
+          <div class="control-row">
+            <div class="control-label">Auto-execute</div>
+            <div class="toggle-track on" onclick="this.classList.toggle('on')">
+              <div class="toggle-thumb"></div>
+            </div>
+          </div>
+          <div class="control-row">
+            <div class="control-label">Confidence</div>
+            <div class="slider-track">
+              <div class="slider-fill" style="width:75%;"></div>
+              <div class="slider-thumb" style="left:calc(75% - 8px);"></div>
+            </div>
+            <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--text-muted); min-width:30px;">75%</span>
+          </div>
+          <div class="control-row">
+            <div class="control-label">Review</div>
+            <div class="segmented">
+              <div class="segmented-btn active">Auto</div>
+              <div class="segmented-btn">Manual</div>
+              <div class="segmented-btn">Skip</div>
+            </div>
+          </div>
+          <div class="control-row">
+            <div class="control-label">Priority</div>
+            <div style="display:flex; gap:6px;">
+              <div style="padding:4px 10px; border-radius:6px; font-size:13px; font-weight:600; background:var(--error-subtle); color:var(--error); cursor:pointer;">P0</div>
+              <div style="padding:4px 10px; border-radius:6px; font-size:13px; font-weight:600; background:var(--accent-subtle); color:var(--accent); cursor:pointer; border:2px solid var(--accent);">P1</div>
+              <div style="padding:4px 10px; border-radius:6px; font-size:13px; font-weight:600; background:var(--bg-subtle); color:var(--text-muted); cursor:pointer;">P2</div>
+              <div style="padding:4px 10px; border-radius:6px; font-size:13px; font-weight:600; background:var(--bg-subtle); color:var(--text-muted); cursor:pointer;">P3</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="exploration-info">
+        <div class="exploration-tag">All Form Factors</div>
+        <div class="exploration-title">Contextual Controls</div>
+        <div class="exploration-desc">Inline controls that feel native to each platform. Toggles, sliders, segmented controls, and chip selectors scale naturally from phone to desktop without layout changes.</div>
+      </div>
+    </div>
+
+    <!-- Exploration 6: Kanban Mini -->
+    <div class="exploration-card">
+      <div class="exploration-preview">
+        <div class="kanban-mini">
+          <div class="kanban-col">
+            <div class="kanban-col-header">
+              <div style="width:8px; height:8px; border-radius:4px; background:var(--info);"></div>
+              Plan <span class="kanban-col-count">3</span>
+            </div>
+            <div class="kanban-item">
+              <div class="kanban-item-title">Settings page</div>
+              <div class="kanban-item-meta"><span class="task-id" style="font-size:10px; padding:0 4px;">BOB-395</span> P2</div>
+            </div>
+            <div class="kanban-item">
+              <div class="kanban-item-title">Email templates</div>
+              <div class="kanban-item-meta"><span class="task-id" style="font-size:10px; padding:0 4px;">BOB-418</span> P3</div>
+            </div>
+          </div>
+          <div class="kanban-col">
+            <div class="kanban-col-header">
+              <div style="width:8px; height:8px; border-radius:4px; background:var(--accent);"></div>
+              Execute <span class="kanban-col-count">2</span>
+            </div>
+            <div class="kanban-item" style="border-left:3px solid var(--accent);">
+              <div class="kanban-item-title">Auth rewrite</div>
+              <div class="kanban-item-meta"><span class="task-id" style="font-size:10px; padding:0 4px;">BOB-412</span> P0</div>
+            </div>
+            <div class="kanban-item">
+              <div class="kanban-item-title">Pipeline fix</div>
+              <div class="kanban-item-meta"><span class="task-id" style="font-size:10px; padding:0 4px;">BOB-401</span> P1</div>
+            </div>
+          </div>
+          <div class="kanban-col">
+            <div class="kanban-col-header">
+              <div style="width:8px; height:8px; border-radius:4px; background:var(--success);"></div>
+              Review <span class="kanban-col-count">2</span>
+            </div>
+            <div class="kanban-item">
+              <div class="kanban-item-title">Mobile view</div>
+              <div class="kanban-item-meta"><span class="task-id" style="font-size:10px; padding:0 4px;">BOB-389</span> P1</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="exploration-info">
+        <div class="exploration-tag">Tablet + Desktop</div>
+        <div class="exploration-title">Mini Kanban</div>
+        <div class="exploration-desc">Compact board view that fits inside a panel or sidebar. Stage columns map to Bob's workflow stages. Colored left borders mark active items. Scrolls horizontally on tablet.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SPACING SCALE VISUAL -->
+<div class="section">
+  <div class="section-label">Spacing</div>
+  <div class="section-title">4px Base Unit</div>
+  <div class="section-desc">Comfortable density — dashboard data needs room to breathe without wasting screen real estate.</div>
+
+  <div style="display:flex; align-items:flex-end; gap:16px; margin-bottom:32px;">
+    <div style="text-align:center;">
+      <div style="width:2px; height:2px; background:var(--accent); margin:0 auto 8px;"></div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text-muted);">2xs</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text-muted);">2px</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="width:4px; height:4px; background:var(--accent); margin:0 auto 8px;"></div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text-muted);">xs</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text-muted);">4px</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="width:8px; height:8px; background:var(--accent); margin:0 auto 8px;"></div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text-muted);">sm</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text-muted);">8px</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="width:16px; height:16px; background:var(--accent); margin:0 auto 8px;"></div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text-muted);">md</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text-muted);">16px</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="width:24px; height:24px; background:var(--accent); margin:0 auto 8px;"></div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text-muted);">lg</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text-muted);">24px</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="width:32px; height:32px; background:var(--accent); margin:0 auto 8px;"></div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text-muted);">xl</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text-muted);">32px</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="width:48px; height:48px; background:var(--accent); margin:0 auto 8px;"></div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text-muted);">2xl</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text-muted);">48px</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="width:64px; height:64px; background:var(--accent); margin:0 auto 8px;"></div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text-muted);">3xl</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text-muted);">64px</div>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px;">
+    <div style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:4px; padding:8px 12px; text-align:center;">
+      <div style="font-size:11px; color:var(--text-muted);">sm: 4px</div>
+      <div style="font-size:13px; font-weight:600;">Badge</div>
+    </div>
+    <div style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:8px; padding:8px 12px; text-align:center;">
+      <div style="font-size:11px; color:var(--text-muted);">md: 8px</div>
+      <div style="font-size:13px; font-weight:600;">Button</div>
+    </div>
+    <div style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:12px; padding:8px 12px; text-align:center;">
+      <div style="font-size:11px; color:var(--text-muted);">lg: 12px</div>
+      <div style="font-size:13px; font-weight:600;">Card</div>
+    </div>
+    <div style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:9999px; padding:8px 16px; text-align:center;">
+      <div style="font-size:11px; color:var(--text-muted);">full</div>
+      <div style="font-size:13px; font-weight:600;">Pill</div>
+    </div>
+  </div>
+</div>
+
+<!-- MOTION -->
+<div class="section">
+  <div class="section-label">Motion</div>
+  <div class="section-title">Minimal-Functional</div>
+  <div class="section-desc">Only transitions that aid comprehension. This is a work tool.</div>
+
+  <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:16px;">
+    <div style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:12px; padding:20px; text-align:center;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:24px; font-weight:600; color:var(--accent); margin-bottom:8px;">50ms</div>
+      <div style="font-size:12px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em;">Micro</div>
+      <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">Hover states</div>
+    </div>
+    <div style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:12px; padding:20px; text-align:center;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:24px; font-weight:600; color:var(--accent); margin-bottom:8px;">150ms</div>
+      <div style="font-size:12px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em;">Short</div>
+      <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">Buttons, toggles</div>
+    </div>
+    <div style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:12px; padding:20px; text-align:center;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:24px; font-weight:600; color:var(--accent); margin-bottom:8px;">250ms</div>
+      <div style="font-size:12px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em;">Medium</div>
+      <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">Panels, drawers</div>
+    </div>
+    <div style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:12px; padding:20px; text-align:center;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:24px; font-weight:600; color:var(--accent); margin-bottom:8px;">400ms</div>
+      <div style="font-size:12px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em;">Long</div>
+      <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">Page transitions</div>
+    </div>
+  </div>
+</div>
+
+<div style="text-align:center; padding:48px 32px; color:var(--text-muted); font-size:13px;">
+  Bob Builder Design System · Generated by /design-consultation · <span id="gen-date"></span>
+</div>
+
+<script>
+// Theme toggle
+function toggleTheme() {
+  const html = document.documentElement;
+  const btn = document.querySelector('.theme-toggle');
+  const icon = document.getElementById('theme-icon');
+  if (html.dataset.theme === 'dark') {
+    html.dataset.theme = 'light';
+    icon.textContent = '🌙';
+    btn.innerHTML = icon.outerHTML + ' Dark Mode';
+  } else {
+    html.dataset.theme = 'dark';
+    icon.textContent = '☀️';
+    btn.innerHTML = icon.outerHTML + ' Light Mode';
+  }
+}
+
+// Generate heatmap
+const heatmap = document.getElementById('heatmap');
+const levels = [0, 0.15, 0.3, 0.55, 0.8, 1];
+for (let i = 0; i < 35; i++) {
+  const cell = document.createElement('div');
+  cell.className = 'heat-cell';
+  const level = levels[Math.floor(Math.random() * levels.length)];
+  if (level === 0) {
+    cell.style.background = 'var(--bg-subtle)';
+  } else {
+    cell.style.background = 'var(--accent)';
+    cell.style.opacity = level;
+  }
+  heatmap.appendChild(cell);
+}
+
+// Date
+document.getElementById('gen-date').textContent = new Date().toLocaleDateString('en-US', {
+  year: 'numeric', month: 'long', day: 'numeric'
+});
+</script>
+</body>
+</html>

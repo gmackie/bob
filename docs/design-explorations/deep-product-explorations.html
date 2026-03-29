@@ -1,0 +1,1533 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bob Builder — Deep Product Explorations</title>
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-page: #FAFAF8; --bg-elevated: #FFFFFF; --bg-subtle: #F5F4F1;
+    --bg-inset: #EEEDEA; --border: #E3E1DC; --border-subtle: #EEEDEA;
+    --text-primary: #1C1B18; --text-secondary: #5C5A53; --text-muted: #8A877E;
+    --accent: #D4850A; --accent-hover: #B87208; --accent-muted: #F5DEB3; --accent-subtle: #FFF3E0;
+    --success: #2D8A4E; --success-subtle: #E8F5E9;
+    --warning: #D4850A; --warning-subtle: #FFF3E0;
+    --error: #C62828; --error-subtle: #FFEBEE;
+    --info: #1565C0; --info-subtle: #E3F2FD;
+  }
+  [data-theme="dark"] {
+    --bg-page: #141310; --bg-elevated: #1C1B18; --bg-subtle: #232220;
+    --bg-inset: #0E0D0B; --border: #2E2D2A; --border-subtle: #232220;
+    --text-primary: #EEEDEA; --text-secondary: #A8A59E; --text-muted: #6E6B64;
+    --accent: #E8A33C; --accent-hover: #F0B45A; --accent-muted: #3D3120; --accent-subtle: #2C2418;
+    --success: #4CAF50; --success-subtle: #1B2E1D;
+    --warning: #E8A33C; --warning-subtle: #2C2418;
+    --error: #EF5350; --error-subtle: #2E1616;
+    --info: #42A5F5; --info-subtle: #162230;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'DM Sans',sans-serif; background:var(--bg-page); color:var(--text-primary); line-height:1.6; -webkit-font-smoothing:antialiased; }
+
+  /* NAV */
+  .top-bar { position:sticky; top:0; z-index:100; display:flex; align-items:center; justify-content:space-between; padding:12px 32px; background:var(--bg-elevated); border-bottom:1px solid var(--border); }
+  .top-bar-title { font-family:'Satoshi',sans-serif; font-weight:900; font-size:20px; letter-spacing:-0.02em; color:var(--accent); }
+  .top-bar-nav { display:flex; gap:4px; }
+  .nav-pill { padding:6px 14px; border-radius:8px; font-size:13px; font-weight:500; color:var(--text-muted); cursor:pointer; transition:all 150ms; border:none; background:none; }
+  .nav-pill:hover { color:var(--text-primary); background:var(--bg-subtle); }
+  .nav-pill.active { color:var(--accent); background:var(--accent-subtle); }
+  .theme-toggle { background:var(--bg-subtle); border:1px solid var(--border); border-radius:8px; padding:6px 14px; font-family:'DM Sans',sans-serif; font-size:13px; font-weight:500; color:var(--text-secondary); cursor:pointer; }
+  .theme-toggle:hover { background:var(--accent-subtle); color:var(--accent); border-color:var(--accent-muted); }
+
+  /* SECTIONS */
+  .exploration { display:none; max-width:1400px; margin:0 auto; padding:48px 32px; }
+  .exploration.active { display:block; }
+  .ex-header { margin-bottom:48px; }
+  .ex-label { font-size:12px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; color:var(--accent); margin-bottom:8px; }
+  .ex-title { font-family:'Satoshi',sans-serif; font-size:36px; font-weight:700; letter-spacing:-0.02em; line-height:1.15; margin-bottom:8px; }
+  .ex-desc { font-size:16px; color:var(--text-secondary); max-width:720px; }
+
+  /* SHARED MOCKUP FRAME */
+  .mockup { background:var(--bg-inset); border:2px solid var(--border); border-radius:16px; overflow:hidden; margin-bottom:48px; }
+  .mockup-bar { display:flex; align-items:center; gap:8px; padding:10px 16px; background:var(--bg-elevated); border-bottom:1px solid var(--border); }
+  .mockup-dot { width:10px; height:10px; border-radius:5px; }
+  .mockup-url { flex:1; text-align:center; font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-muted); }
+  .mockup-inner { background:var(--bg-page); }
+
+  /* PHONE FRAME */
+  .phone-frame { width:390px; border:2px solid var(--border); border-radius:24px; overflow:hidden; margin:0 auto; position:relative; }
+  .phone-notch { width:120px; height:28px; background:var(--bg-page); border-radius:0 0 16px 16px; margin:0 auto; position:relative; z-index:2; }
+  .phone-inner { background:var(--bg-page); min-height:700px; position:relative; }
+  .phone-home-bar { position:absolute; bottom:8px; left:50%; transform:translateX(-50%); width:134px; height:5px; border-radius:3px; background:var(--text-muted); opacity:0.3; }
+
+  /* TABLET FRAME */
+  .tablet-frame { width:100%; max-width:1024px; border:2px solid var(--border); border-radius:16px; overflow:hidden; margin:0 auto; }
+
+  /* ===== PLANNING SESSION ===== */
+  .plan-split { display:grid; grid-template-columns:1fr 380px; min-height:600px; }
+  .plan-chat { display:flex; flex-direction:column; border-right:1px solid var(--border); }
+  .plan-chat-header { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; background:var(--bg-elevated); border-bottom:1px solid var(--border); }
+  .plan-chat-title { font-family:'Satoshi',sans-serif; font-size:16px; font-weight:700; }
+  .plan-chat-badge { font-size:11px; font-weight:600; padding:3px 8px; border-radius:4px; }
+  .plan-chat-messages { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:16px; }
+  .plan-chat-input { padding:16px 20px; border-top:1px solid var(--border); background:var(--bg-elevated); }
+
+  /* Messages */
+  .msg { display:flex; gap:10px; }
+  .msg-avatar { width:28px; height:28px; border-radius:8px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; }
+  .msg-avatar.user { background:var(--bg-subtle); color:var(--text-secondary); }
+  .msg-avatar.bob { background:var(--accent-subtle); color:var(--accent); }
+  .msg-body { flex:1; min-width:0; }
+  .msg-name { font-size:12px; font-weight:600; margin-bottom:2px; }
+  .msg-name.bob-name { color:var(--accent); }
+  .msg-text { font-size:14px; color:var(--text-primary); line-height:1.5; }
+  .msg-text code { font-family:'JetBrains Mono',monospace; font-size:12px; background:var(--bg-subtle); padding:1px 5px; border-radius:4px; }
+  .msg-time { font-size:11px; color:var(--text-muted); margin-top:4px; }
+
+  /* Tool call blocks */
+  .tool-block { background:var(--bg-subtle); border:1px solid var(--border); border-radius:8px; margin-top:8px; overflow:hidden; }
+  .tool-header { display:flex; align-items:center; gap:8px; padding:8px 12px; font-size:12px; font-weight:600; color:var(--text-secondary); cursor:pointer; }
+  .tool-icon { font-size:14px; }
+  .tool-name { font-family:'JetBrains Mono',monospace; font-size:11px; }
+  .tool-status { margin-left:auto; font-size:11px; padding:1px 6px; border-radius:3px; }
+  .tool-status.ok { background:var(--success-subtle); color:var(--success); }
+  .tool-status.err { background:var(--error-subtle); color:var(--error); }
+  .tool-status.running { background:var(--accent-subtle); color:var(--accent); }
+  .tool-detail { padding:0 12px 10px; font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-muted); line-height:1.5; }
+
+  /* Awaiting input */
+  .awaiting-card { background:var(--accent-subtle); border:1px solid var(--accent-muted); border-radius:12px; padding:16px; margin-top:8px; }
+  .awaiting-title { font-size:13px; font-weight:600; color:var(--accent); margin-bottom:8px; display:flex; align-items:center; gap:6px; }
+  .awaiting-q { font-size:14px; color:var(--text-primary); margin-bottom:12px; line-height:1.5; }
+  .awaiting-options { display:flex; flex-direction:column; gap:6px; }
+  .awaiting-opt { padding:10px 14px; border-radius:8px; border:1px solid var(--border); background:var(--bg-elevated); font-size:13px; font-weight:500; cursor:pointer; display:flex; align-items:center; gap:8px; transition:all 150ms; }
+  .awaiting-opt:hover { border-color:var(--accent); background:var(--accent-subtle); }
+  .awaiting-opt.selected { border-color:var(--accent); background:var(--accent-subtle); color:var(--accent); }
+  .awaiting-key { width:22px; height:22px; border-radius:6px; background:var(--bg-subtle); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:600; color:var(--text-muted); flex-shrink:0; }
+
+  /* Draft panel */
+  .draft-panel { display:flex; flex-direction:column; background:var(--bg-elevated); }
+  .draft-header { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1px solid var(--border); }
+  .draft-title { font-family:'Satoshi',sans-serif; font-size:16px; font-weight:700; }
+  .draft-count { font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--text-muted); background:var(--bg-subtle); padding:2px 8px; border-radius:4px; }
+  .draft-list { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:8px; }
+  .draft-card { background:var(--bg-page); border:1px solid var(--border); border-radius:10px; padding:12px 14px; cursor:grab; transition:border-color 200ms, box-shadow 200ms; position:relative; }
+  .draft-card:hover { border-color:var(--accent-muted); box-shadow:0 2px 8px rgba(0,0,0,0.06); }
+  .draft-card-top { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .draft-grip { color:var(--text-muted); font-size:12px; cursor:grab; }
+  .draft-kind { font-size:10px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; padding:2px 6px; border-radius:3px; }
+  .draft-kind.task { background:var(--accent-subtle); color:var(--accent); }
+  .draft-kind.issue { background:var(--info-subtle); color:var(--info); }
+  .draft-priority { font-size:10px; font-weight:700; padding:2px 5px; border-radius:3px; }
+  .draft-priority.p0 { background:var(--error-subtle); color:var(--error); }
+  .draft-priority.p1 { background:var(--accent-subtle); color:var(--accent); }
+  .draft-priority.p2 { background:var(--info-subtle); color:var(--info); }
+  .draft-card-title { font-size:13px; font-weight:600; color:var(--text-primary); }
+  .draft-card-desc { font-size:12px; color:var(--text-muted); margin-top:2px; line-height:1.4; }
+  .draft-deps { display:flex; align-items:center; gap:4px; margin-top:8px; font-size:11px; color:var(--text-muted); }
+  .draft-dep-tag { font-family:'JetBrains Mono',monospace; font-size:10px; background:var(--bg-subtle); padding:1px 5px; border-radius:3px; }
+  .draft-actions { padding:12px 20px; border-top:1px solid var(--border); display:flex; gap:8px; }
+
+  /* ===== INPUT BAR ===== */
+  .input-bar { display:flex; gap:8px; }
+  .input-bar input { flex:1; padding:10px 14px; border-radius:8px; border:1px solid var(--border); background:var(--bg-page); color:var(--text-primary); font-family:'DM Sans',sans-serif; font-size:14px; outline:none; }
+  .input-bar input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-subtle); }
+  .input-bar input::placeholder { color:var(--text-muted); }
+  .input-bar input:disabled { opacity:0.5; cursor:not-allowed; }
+  .send-btn { padding:10px 16px; border-radius:8px; border:none; background:var(--accent); color:#FFF; font-family:'DM Sans',sans-serif; font-size:14px; font-weight:600; cursor:pointer; }
+  .send-btn:hover { background:var(--accent-hover); }
+  .send-btn:disabled { opacity:0.4; cursor:not-allowed; }
+
+  /* ===== ERROR / RETRY BANNERS ===== */
+  .banner { display:flex; align-items:center; gap:10px; padding:10px 16px; border-radius:8px; font-size:13px; font-weight:500; }
+  .banner-error { background:var(--error-subtle); color:var(--error); border:1px solid rgba(198,40,40,0.2); }
+  .banner-warning { background:var(--warning-subtle); color:var(--warning); border:1px solid rgba(212,133,10,0.2); }
+  .banner-info { background:var(--info-subtle); color:var(--info); border:1px solid rgba(21,101,192,0.2); }
+  .banner-retry { margin-left:auto; padding:4px 10px; border-radius:6px; border:1px solid currentColor; background:transparent; color:inherit; font-size:12px; font-weight:600; cursor:pointer; font-family:'DM Sans',sans-serif; }
+  .banner-retry:hover { background:rgba(255,255,255,0.1); }
+
+  /* ===== WORKFLOW PIPELINE ===== */
+  .pipeline { display:flex; align-items:center; gap:0; padding:16px 24px; background:var(--bg-elevated); border-bottom:1px solid var(--border); overflow-x:auto; }
+  .pipe-stage { display:flex; align-items:center; gap:6px; padding:6px 14px; border-radius:8px; font-size:13px; font-weight:500; color:var(--text-muted); white-space:nowrap; cursor:pointer; transition:all 150ms; }
+  .pipe-stage:hover { color:var(--text-primary); background:var(--bg-subtle); }
+  .pipe-stage.completed { color:var(--success); }
+  .pipe-stage.current { color:var(--accent); background:var(--accent-subtle); font-weight:600; }
+  .pipe-stage.future { color:var(--text-muted); opacity:0.5; }
+  .pipe-connector { width:24px; height:2px; background:var(--border); flex-shrink:0; }
+  .pipe-connector.done { background:var(--success); }
+  .pipe-dot { width:16px; height:16px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:10px; flex-shrink:0; }
+  .pipe-dot.done { background:var(--success); color:#FFF; }
+  .pipe-dot.active { background:var(--accent); color:#FFF; }
+  .pipe-dot.pending { background:var(--bg-subtle); border:2px solid var(--border); }
+
+  /* ===== DISPATCH TABLE ===== */
+  .dispatch-table { width:100%; border-collapse:collapse; }
+  .dispatch-table th { text-align:left; padding:10px 14px; font-size:11px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; color:var(--text-muted); border-bottom:1px solid var(--border); background:var(--bg-elevated); }
+  .dispatch-table td { padding:12px 14px; font-size:14px; border-bottom:1px solid var(--border-subtle); vertical-align:middle; }
+  .dispatch-table tr:hover td { background:var(--bg-subtle); }
+  .dispatch-status { display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:600; padding:3px 8px; border-radius:4px; }
+  .dispatch-status.queued { background:var(--bg-subtle); color:var(--text-muted); }
+  .dispatch-status.blocked { background:var(--warning-subtle); color:var(--warning); }
+  .dispatch-status.running { background:var(--accent-subtle); color:var(--accent); }
+  .dispatch-status.completed { background:var(--success-subtle); color:var(--success); }
+  .dispatch-status.failed { background:var(--error-subtle); color:var(--error); }
+  .dispatch-agent { padding:4px 8px; border-radius:6px; border:1px solid var(--border); background:var(--bg-elevated); font-size:12px; font-weight:500; color:var(--text-secondary); }
+  .dispatch-dep { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-muted); }
+  .pipeline-cell { display:flex; align-items:center; gap:6px; }
+  .pipeline-dot { width:6px; height:6px; border-radius:3px; flex-shrink:0; }
+  .pipeline-label { font-size:12px; color:var(--text-secondary); }
+  .pipeline-timer { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-muted); }
+  .mini-btn { padding:3px 8px; border-radius:4px; border:1px solid var(--border); background:var(--bg-elevated); font-size:11px; font-weight:600; cursor:pointer; font-family:'DM Sans',sans-serif; }
+  .mini-btn:hover { border-color:var(--accent); color:var(--accent); }
+  .mini-btn.danger { color:var(--error); border-color:var(--error-subtle); }
+  .mini-btn.danger:hover { background:var(--error-subtle); }
+  .mini-btn.approve { color:var(--success); border-color:var(--success); }
+  .mini-btn.approve:hover { background:var(--success-subtle); }
+
+  /* Progress bar inline */
+  .progress-inline { display:flex; align-items:center; gap:10px; }
+  .progress-track { flex:1; height:6px; background:var(--bg-subtle); border-radius:3px; overflow:hidden; }
+  .progress-fill { height:100%; border-radius:3px; transition:width 400ms ease-out; }
+  .progress-text { font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--text-muted); min-width:42px; text-align:right; }
+
+  /* ===== GIT DIFF ===== */
+  .diff-viewer { background:var(--bg-elevated); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  .diff-file-header { display:flex; align-items:center; gap:10px; padding:10px 16px; background:var(--bg-subtle); border-bottom:1px solid var(--border); }
+  .diff-file-name { font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:500; color:var(--text-primary); }
+  .diff-file-stat { margin-left:auto; font-family:'JetBrains Mono',monospace; font-size:12px; }
+  .diff-add { color:var(--success); }
+  .diff-del { color:var(--error); }
+  .diff-lines { font-family:'JetBrains Mono',monospace; font-size:12px; line-height:1.7; }
+  .diff-line { display:flex; padding:0 16px; }
+  .diff-line:hover { background:var(--bg-subtle); }
+  .diff-line.added { background:var(--success-subtle); }
+  .diff-line.removed { background:var(--error-subtle); }
+  .diff-line.hunk { background:var(--info-subtle); color:var(--info); font-style:italic; padding:4px 16px; }
+  .diff-gutter { width:48px; text-align:right; padding-right:12px; color:var(--text-muted); user-select:none; flex-shrink:0; opacity:0.6; }
+  .diff-sign { width:16px; text-align:center; flex-shrink:0; font-weight:700; }
+  .diff-sign.plus { color:var(--success); }
+  .diff-sign.minus { color:var(--error); }
+  .diff-code { flex:1; white-space:pre; overflow-x:auto; }
+
+  /* ===== FILE BROWSER ===== */
+  .file-browser { background:var(--bg-elevated); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  .fb-header { display:flex; align-items:center; gap:8px; padding:10px 16px; border-bottom:1px solid var(--border); }
+  .fb-breadcrumb { font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--text-muted); }
+  .fb-breadcrumb span { color:var(--text-secondary); cursor:pointer; }
+  .fb-breadcrumb span:hover { color:var(--accent); }
+  .fb-list { }
+  .fb-item { display:flex; align-items:center; gap:10px; padding:8px 16px; border-bottom:1px solid var(--border-subtle); cursor:pointer; transition:background 80ms; }
+  .fb-item:hover { background:var(--bg-subtle); }
+  .fb-item:last-child { border-bottom:none; }
+  .fb-icon { width:20px; text-align:center; font-size:14px; flex-shrink:0; }
+  .fb-name { font-family:'JetBrains Mono',monospace; font-size:13px; flex:1; }
+  .fb-name.dir { font-weight:600; color:var(--text-primary); }
+  .fb-name.file { color:var(--text-secondary); }
+  .fb-change { font-size:11px; padding:1px 6px; border-radius:3px; font-weight:600; }
+  .fb-change.modified { background:var(--accent-subtle); color:var(--accent); }
+  .fb-change.added { background:var(--success-subtle); color:var(--success); }
+  .fb-change.deleted { background:var(--error-subtle); color:var(--error); }
+
+  /* ===== PR REVIEW ===== */
+  .pr-card { background:var(--bg-elevated); border:1px solid var(--border); border-radius:12px; padding:20px; margin-bottom:16px; transition:border-color 200ms; }
+  .pr-card:hover { border-color:var(--accent-muted); }
+  .pr-card-header { display:flex; align-items:flex-start; gap:12px; margin-bottom:12px; }
+  .pr-status-icon { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+  .pr-status-icon.open { background:var(--success-subtle); color:var(--success); }
+  .pr-status-icon.merged { background:var(--info-subtle); color:var(--info); }
+  .pr-title { font-family:'Satoshi',sans-serif; font-size:16px; font-weight:700; letter-spacing:-0.01em; }
+  .pr-meta { display:flex; align-items:center; gap:10px; font-size:13px; color:var(--text-muted); margin-top:4px; flex-wrap:wrap; }
+  .pr-checks { display:flex; gap:6px; margin-top:12px; flex-wrap:wrap; }
+  .pr-check { display:flex; align-items:center; gap:4px; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; background:var(--bg-subtle); border:1px solid var(--border); }
+  .pr-check.pass { color:var(--success); }
+  .pr-check.fail { color:var(--error); }
+  .pr-check.pending { color:var(--accent); }
+  .pr-review-status { display:flex; align-items:center; gap:6px; margin-top:12px; padding:10px 14px; border-radius:8px; font-size:13px; font-weight:500; }
+
+  /* ===== FORGEGRAPH DEPLOY ===== */
+  .deploy-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:24px; }
+  .deploy-card { background:var(--bg-elevated); border:1px solid var(--border); border-radius:12px; padding:16px; position:relative; overflow:hidden; }
+  .deploy-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+  .deploy-card.healthy::before { background:var(--success); }
+  .deploy-card.deploying::before { background:var(--accent); }
+  .deploy-card.unhealthy::before { background:var(--error); }
+  .deploy-env { font-size:11px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px; }
+  .deploy-status { display:flex; align-items:center; gap:6px; font-size:14px; font-weight:600; margin-bottom:4px; }
+  .deploy-dot { width:8px; height:8px; border-radius:4px; }
+  .deploy-dot.green { background:var(--success); }
+  .deploy-dot.amber { background:var(--accent); animation:pulse 2s infinite; }
+  .deploy-dot.red { background:var(--error); }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(232,163,60,0.4);} 50%{box-shadow:0 0 0 6px rgba(232,163,60,0);} }
+  .deploy-meta { font-size:12px; color:var(--text-muted); }
+  .deploy-hash { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-muted); background:var(--bg-subtle); padding:1px 5px; border-radius:3px; }
+
+  /* Deploy timeline */
+  .deploy-timeline { display:flex; flex-direction:column; gap:0; }
+  .deploy-event { display:flex; align-items:flex-start; gap:12px; padding:10px 0; position:relative; }
+  .deploy-event::before { content:''; position:absolute; left:11px; top:28px; bottom:-6px; width:2px; background:var(--border); }
+  .deploy-event:last-child::before { display:none; }
+  .deploy-event-dot { width:24px; height:24px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:11px; flex-shrink:0; z-index:1; }
+  .deploy-event-dot.success { background:var(--success-subtle); color:var(--success); }
+  .deploy-event-dot.active { background:var(--accent-subtle); color:var(--accent); }
+  .deploy-event-dot.pending { background:var(--bg-subtle); color:var(--text-muted); border:1px solid var(--border); }
+  .deploy-event-dot.error { background:var(--error-subtle); color:var(--error); }
+  .deploy-event-content { flex:1; }
+  .deploy-event-title { font-size:13px; font-weight:600; color:var(--text-primary); }
+  .deploy-event-detail { font-size:12px; color:var(--text-muted); margin-top:1px; }
+
+  /* ===== REQUIREMENTS ===== */
+  .req-group { margin-bottom:20px; }
+  .req-group-header { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .req-group-label { font-size:11px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; color:var(--text-muted); }
+  .req-progress { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-muted); }
+  .req-item { display:flex; align-items:flex-start; gap:8px; padding:6px 0; }
+  .req-check { width:18px; height:18px; border-radius:4px; border:2px solid var(--border); display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; margin-top:1px; transition:all 150ms; }
+  .req-check:hover { border-color:var(--accent); }
+  .req-check.done { background:var(--success); border-color:var(--success); color:#FFF; font-size:11px; }
+  .req-text { font-size:13px; color:var(--text-primary); line-height:1.4; }
+  .req-text.done-text { color:var(--text-muted); text-decoration:line-through; }
+
+  /* ===== GENERIC HELPERS ===== */
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 20px; border-radius:8px; font-family:'DM Sans',sans-serif; font-size:14px; font-weight:600; cursor:pointer; transition:all 150ms; border:none; }
+  .btn-primary { background:var(--accent); color:#FFF; }
+  .btn-primary:hover { background:var(--accent-hover); }
+  .btn-secondary { background:var(--bg-subtle); border:1px solid var(--border); color:var(--text-primary); }
+  .btn-secondary:hover { background:var(--accent-subtle); border-color:var(--accent-muted); color:var(--accent); }
+  .btn-sm { padding:6px 12px; font-size:13px; }
+  .id-tag { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-muted); background:var(--bg-subtle); padding:1px 6px; border-radius:4px; }
+  .stage-badge { font-size:11px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; padding:2px 8px; border-radius:4px; }
+  .stage-idea { background:var(--bg-subtle); color:var(--text-muted); }
+  .stage-shape { background:var(--info-subtle); color:var(--info); }
+  .stage-plan { background:var(--info-subtle); color:var(--info); }
+  .stage-execute { background:var(--accent-subtle); color:var(--accent); }
+  .stage-review { background:var(--success-subtle); color:var(--success); }
+  .stage-deploy { background:var(--accent-subtle); color:var(--accent); }
+  .stage-live { background:var(--success-subtle); color:var(--success); }
+
+  /* Layouts */
+  .two-col { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+  .three-col { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+
+  /* Phone-specific helpers */
+  .ph-header { padding:16px 20px; display:flex; align-items:center; justify-content:space-between; }
+  .ph-title { font-family:'Satoshi',sans-serif; font-size:20px; font-weight:700; letter-spacing:-0.02em; }
+  .ph-back { font-size:18px; color:var(--accent); cursor:pointer; padding:4px; }
+  .ph-section { padding:0 20px 16px; }
+  .ph-label { font-size:11px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px; }
+
+  /* Tab bar for phone */
+  .phone-tabs { display:flex; border-bottom:1px solid var(--border); margin:0 20px; }
+  .phone-tab { flex:1; padding:10px 0; text-align:center; font-size:13px; font-weight:500; color:var(--text-muted); cursor:pointer; border-bottom:2px solid transparent; transition:all 150ms; }
+  .phone-tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+
+  @media (max-width: 900px) {
+    .plan-split { grid-template-columns:1fr; }
+    .two-col, .three-col, .deploy-grid { grid-template-columns:1fr; }
+    .phone-frame { width:100%; max-width:390px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- TOP NAV -->
+<div class="top-bar">
+  <div class="top-bar-title">Bob Builder — Deep Explorations</div>
+  <div class="top-bar-nav">
+    <button class="nav-pill active" onclick="showSection('planning')">Planning Session</button>
+    <button class="nav-pill" onclick="showSection('chat')">Agent Chat</button>
+    <button class="nav-pill" onclick="showSection('dispatch')">Dispatch</button>
+    <button class="nav-pill" onclick="showSection('review')">Review & Diff</button>
+    <button class="nav-pill" onclick="showSection('deploy')">Deploy</button>
+    <button class="nav-pill" onclick="showSection('mobile')">Mobile</button>
+  </div>
+  <button class="theme-toggle" onclick="toggleTheme()">☀️ Light</button>
+</div>
+
+<!-- ===== 1. PLANNING SESSION SPLIT VIEW ===== -->
+<div class="exploration active" id="planning">
+  <div class="ex-header">
+    <div class="ex-label">Planning Session</div>
+    <div class="ex-title">Idea → Shape → Plan with Bob</div>
+    <div class="ex-desc">Split-view planning session where you chat with Bob on the left while draft tasks accumulate on the right. Bob breaks down your feature into executable tasks with dependencies.</div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-bar">
+      <div class="mockup-dot" style="background:#EF5350;"></div>
+      <div class="mockup-dot" style="background:#FFC107;"></div>
+      <div class="mockup-dot" style="background:#4CAF50;"></div>
+      <div class="mockup-url">bob.tail1e1a32.ts.net/work-items/BOB-412/plan/sess_a7f2c</div>
+    </div>
+    <div class="mockup-inner">
+      <!-- Pipeline -->
+      <div class="pipeline">
+        <div class="pipe-stage completed"><div class="pipe-dot done">✓</div> Idea</div>
+        <div class="pipe-connector done"></div>
+        <div class="pipe-stage completed"><div class="pipe-dot done">✓</div> Shape</div>
+        <div class="pipe-connector done"></div>
+        <div class="pipe-stage current"><div class="pipe-dot active">●</div> Plan</div>
+        <div class="pipe-connector"></div>
+        <div class="pipe-stage future"><div class="pipe-dot pending"></div> Execute</div>
+        <div class="pipe-connector"></div>
+        <div class="pipe-stage future"><div class="pipe-dot pending"></div> Review</div>
+        <div class="pipe-connector"></div>
+        <div class="pipe-stage future"><div class="pipe-dot pending"></div> Deploy</div>
+        <div class="pipe-connector"></div>
+        <div class="pipe-stage future"><div class="pipe-dot pending"></div> Live</div>
+      </div>
+
+      <div class="plan-split">
+        <!-- CHAT SIDE -->
+        <div class="plan-chat">
+          <div class="plan-chat-header">
+            <div>
+              <div class="plan-chat-title">Planning: Auth Middleware Rewrite</div>
+              <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Breakdown session · <span class="id-tag">BOB-412</span></div>
+            </div>
+            <div class="plan-chat-badge" style="background:var(--accent-subtle); color:var(--accent);">● Working</div>
+          </div>
+
+          <div class="plan-chat-messages">
+            <!-- User message -->
+            <div class="msg">
+              <div class="msg-avatar user">MG</div>
+              <div class="msg-body">
+                <div class="msg-name">You</div>
+                <div class="msg-text">We need to rewrite the auth middleware. Legal flagged session token storage — cookies don't meet the new compliance requirements. Need to move to Redis-backed sessions with proper TTL and rotation.</div>
+                <div class="msg-time">10:42 AM</div>
+              </div>
+            </div>
+
+            <!-- Bob response -->
+            <div class="msg">
+              <div class="msg-avatar bob">B</div>
+              <div class="msg-body">
+                <div class="msg-name bob-name">Bob</div>
+                <div class="msg-text">I've read through the existing auth middleware in <code>packages/auth/src/middleware.ts</code> and the session handling in <code>packages/auth/src/session.ts</code>. Here's what I see:<br><br>The current implementation stores JWTs in HTTP-only cookies with a 7-day expiry. The compliance concern is valid — session tokens shouldn't be stored client-side for this use case.<br><br>I'll break this into 4 tasks with a dependency chain. Let me think through the right order...</div>
+
+                <!-- Tool call -->
+                <div class="tool-block">
+                  <div class="tool-header">
+                    <span class="tool-icon">📂</span>
+                    <span class="tool-name">Read</span>
+                    <span style="font-size:11px; color:var(--text-muted);">packages/auth/src/middleware.ts</span>
+                    <span class="tool-status ok">✓ 247 lines</span>
+                  </div>
+                </div>
+                <div class="tool-block">
+                  <div class="tool-header">
+                    <span class="tool-icon">📂</span>
+                    <span class="tool-name">Read</span>
+                    <span style="font-size:11px; color:var(--text-muted);">packages/auth/src/session.ts</span>
+                    <span class="tool-status ok">✓ 183 lines</span>
+                  </div>
+                </div>
+                <div class="tool-block">
+                  <div class="tool-header">
+                    <span class="tool-icon">🔍</span>
+                    <span class="tool-name">Grep</span>
+                    <span style="font-size:11px; color:var(--text-muted);">session.*cookie across packages/auth/</span>
+                    <span class="tool-status ok">✓ 12 matches</span>
+                  </div>
+                </div>
+
+                <div class="msg-time">10:43 AM</div>
+              </div>
+            </div>
+
+            <!-- Bob creates tasks -->
+            <div class="msg">
+              <div class="msg-avatar bob">B</div>
+              <div class="msg-body">
+                <div class="msg-name bob-name">Bob</div>
+                <div class="msg-text">I've created 4 draft tasks. The dependency chain is:<br><br><strong>1 → 2 → 3 → 4</strong> (sequential — each builds on the previous)<br><br>Task 1 defines the interface, 2 implements the Redis store, 3 handles the migration, and 4 cleans up the old code. I marked 1 and 2 as P0 since they're the compliance-critical path.</div>
+
+                <!-- Awaiting input -->
+                <div class="awaiting-card">
+                  <div class="awaiting-title">
+                    <span style="font-size:14px;">⏸</span> Bob needs your input
+                  </div>
+                  <div class="awaiting-q">Should the migration (Task 3) run as a zero-downtime background job, or is a maintenance window acceptable? This affects the complexity significantly.</div>
+                  <div class="awaiting-options">
+                    <div class="awaiting-opt selected">
+                      <div class="awaiting-key">A</div>
+                      <span>Zero-downtime — background migration with dual-read during transition</span>
+                    </div>
+                    <div class="awaiting-opt">
+                      <div class="awaiting-key">B</div>
+                      <span>Maintenance window — simpler but requires 5-10min downtime</span>
+                    </div>
+                    <div class="awaiting-opt">
+                      <div class="awaiting-key">C</div>
+                      <span>Let me think about it — continue with the other tasks for now</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="msg-time">10:44 AM</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="plan-chat-input">
+            <div class="input-bar">
+              <input placeholder="Reply to Bob or refine the plan..." disabled>
+              <button class="send-btn" disabled>↑</button>
+            </div>
+            <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">⏸ Resolve the input prompt above to continue</div>
+          </div>
+        </div>
+
+        <!-- DRAFT PANEL -->
+        <div class="draft-panel">
+          <div class="draft-header">
+            <div class="draft-title">Draft Tasks</div>
+            <div class="draft-count">4 tasks</div>
+          </div>
+
+          <div class="draft-list">
+            <div class="draft-card">
+              <div class="draft-card-top">
+                <span class="draft-grip">⠿</span>
+                <span class="draft-kind task">Task</span>
+                <span class="draft-priority p0">P0</span>
+              </div>
+              <div class="draft-card-title">Extract session store interface</div>
+              <div class="draft-card-desc">Define TokenStore abstraction with get/set/delete/rotate methods for pluggable backends</div>
+            </div>
+
+            <div class="draft-card">
+              <div class="draft-card-top">
+                <span class="draft-grip">⠿</span>
+                <span class="draft-kind task">Task</span>
+                <span class="draft-priority p0">P0</span>
+              </div>
+              <div class="draft-card-title">Implement Redis token store</div>
+              <div class="draft-card-desc">Redis-backed TokenStore with TTL, rotation, and connection pooling</div>
+              <div class="draft-deps">
+                <span style="font-size:11px;">blocked by</span>
+                <span class="draft-dep-tag">Task 1</span>
+              </div>
+            </div>
+
+            <div class="draft-card">
+              <div class="draft-card-top">
+                <span class="draft-grip">⠿</span>
+                <span class="draft-kind task">Task</span>
+                <span class="draft-priority p1">P1</span>
+              </div>
+              <div class="draft-card-title">Migrate existing sessions</div>
+              <div class="draft-card-desc">Zero-downtime migration script for active sessions (dual-read during transition)</div>
+              <div class="draft-deps">
+                <span style="font-size:11px;">blocked by</span>
+                <span class="draft-dep-tag">Task 2</span>
+              </div>
+            </div>
+
+            <div class="draft-card">
+              <div class="draft-card-top">
+                <span class="draft-grip">⠿</span>
+                <span class="draft-kind task">Task</span>
+                <span class="draft-priority p2">P2</span>
+              </div>
+              <div class="draft-card-title">Remove old auth middleware</div>
+              <div class="draft-card-desc">Clean up deprecated cookie-based session handling and unused imports</div>
+              <div class="draft-deps">
+                <span style="font-size:11px;">blocked by</span>
+                <span class="draft-dep-tag">Task 3</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dependency graph mini -->
+          <div style="padding:12px 20px; border-top:1px solid var(--border);">
+            <div style="font-size:11px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px;">Dependency Chain</div>
+            <div style="display:flex; align-items:center; gap:8px; justify-content:center;">
+              <div style="padding:4px 8px; border-radius:6px; background:var(--accent-subtle); border:1px solid var(--accent-muted); font-size:11px; font-weight:600; color:var(--accent);">T1</div>
+              <div style="color:var(--text-muted);">→</div>
+              <div style="padding:4px 8px; border-radius:6px; background:var(--accent-subtle); border:1px solid var(--accent-muted); font-size:11px; font-weight:600; color:var(--accent);">T2</div>
+              <div style="color:var(--text-muted);">→</div>
+              <div style="padding:4px 8px; border-radius:6px; background:var(--info-subtle); border:1px solid var(--border); font-size:11px; font-weight:600; color:var(--info);">T3</div>
+              <div style="color:var(--text-muted);">→</div>
+              <div style="padding:4px 8px; border-radius:6px; background:var(--bg-subtle); border:1px solid var(--border); font-size:11px; font-weight:600; color:var(--text-muted);">T4</div>
+            </div>
+          </div>
+
+          <div class="draft-actions">
+            <button class="btn btn-secondary btn-sm" style="flex:1;">Edit Tasks</button>
+            <button class="btn btn-primary btn-sm" style="flex:1;">Commit Plan →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- REQUIREMENTS CHECKLIST -->
+  <div class="ex-header" style="margin-top:0;">
+    <div class="ex-label">Shape Stage</div>
+    <div class="ex-title" style="font-size:28px;">Requirements Checklist</div>
+    <div class="ex-desc">During Shape, Bob generates categorized requirements that track what the feature needs. Checking items off feeds context back into planning.</div>
+  </div>
+
+  <div style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:12px; padding:20px; max-width:640px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+      <div style="font-family:'Satoshi',sans-serif; font-size:16px; font-weight:700;">Requirements</div>
+      <div class="progress-inline" style="width:180px;">
+        <div class="progress-track"><div class="progress-fill" style="width:57%; background:var(--success);"></div></div>
+        <div class="progress-text">4/7</div>
+      </div>
+    </div>
+
+    <div class="req-group">
+      <div class="req-group-header">
+        <div class="req-group-label">Data Layer</div>
+        <div class="req-progress">2/2</div>
+      </div>
+      <div class="req-item"><div class="req-check done">✓</div><div class="req-text done-text">Redis connection pool with health checks</div></div>
+      <div class="req-item"><div class="req-check done">✓</div><div class="req-text done-text">Session schema: token, userId, expiresAt, metadata</div></div>
+    </div>
+    <div class="req-group">
+      <div class="req-group-header">
+        <div class="req-group-label">API Layer</div>
+        <div class="req-progress">1/2</div>
+      </div>
+      <div class="req-item"><div class="req-check done">✓</div><div class="req-text done-text">TokenStore interface with get/set/delete/rotate</div></div>
+      <div class="req-item"><div class="req-check"></div><div class="req-text">Migration endpoint with progress reporting</div></div>
+    </div>
+    <div class="req-group">
+      <div class="req-group-header">
+        <div class="req-group-label">Infrastructure</div>
+        <div class="req-progress">1/2</div>
+      </div>
+      <div class="req-item"><div class="req-check done">✓</div><div class="req-text done-text">Redis instance provisioned on labnuc</div></div>
+      <div class="req-item"><div class="req-check"></div><div class="req-text">Session TTL monitoring and alerts</div></div>
+    </div>
+    <div class="req-group">
+      <div class="req-group-header">
+        <div class="req-group-label">Test</div>
+        <div class="req-progress">0/1</div>
+      </div>
+      <div class="req-item"><div class="req-check"></div><div class="req-text">Integration tests with real Redis (not mocks)</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 2. AGENT CHAT — FAILURE MODES ===== -->
+<div class="exploration" id="chat">
+  <div class="ex-header">
+    <div class="ex-label">Agent Chat</div>
+    <div class="ex-title">Execution, Errors & Recovery</div>
+    <div class="ex-desc">What Bob looks like during task execution — tool calls streaming, errors surfacing, connection drops recovering, and the human gate pattern where Bob pauses for your decision.</div>
+  </div>
+
+  <!-- Connection Error State -->
+  <div style="max-width:720px; margin-bottom:32px;">
+    <div style="font-size:14px; font-weight:600; color:var(--text-secondary); margin-bottom:8px;">Connection Lost → Reconnecting</div>
+    <div class="banner banner-error">
+      <span>⚡</span>
+      <span>Connection lost to gateway. Reconnecting... (attempt 3)</span>
+      <button class="banner-retry">Retry Now</button>
+    </div>
+  </div>
+
+  <!-- Agent Error State -->
+  <div style="max-width:720px; margin-bottom:32px;">
+    <div style="font-size:14px; font-weight:600; color:var(--text-secondary); margin-bottom:8px;">Agent Crash → Recovery Options</div>
+    <div class="banner banner-error" style="flex-direction:column; align-items:flex-start; gap:8px;">
+      <div style="display:flex; align-items:center; gap:8px; width:100%;">
+        <span>💥</span>
+        <span>Agent process exited unexpectedly (exit code 1)</span>
+      </div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--error); background:rgba(0,0,0,0.15); padding:8px 10px; border-radius:6px; width:100%; overflow-x:auto;">
+        Error: ECONNREFUSED 127.0.0.1:6379 — Redis connection failed<br>
+        at RedisTokenStore.connect (packages/auth/src/stores/redis.ts:47)
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="mini-btn">↻ Restart Agent</button>
+        <button class="mini-btn">📋 Copy Logs</button>
+        <button class="mini-btn danger">✕ Stop Session</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rate Limit / Quota Warning -->
+  <div style="max-width:720px; margin-bottom:48px;">
+    <div style="font-size:14px; font-weight:600; color:var(--text-secondary); margin-bottom:8px;">Rate Limit Warning</div>
+    <div class="banner banner-warning">
+      <span>⏳</span>
+      <span>API rate limit approaching (82/100 requests/min). Bob will auto-throttle.</span>
+    </div>
+  </div>
+
+  <!-- Full chat mockup with tool calls -->
+  <div class="mockup" style="max-width:800px;">
+    <div class="mockup-bar">
+      <div class="mockup-dot" style="background:#EF5350;"></div>
+      <div class="mockup-dot" style="background:#FFC107;"></div>
+      <div class="mockup-dot" style="background:#4CAF50;"></div>
+      <div class="mockup-url">Execution: BOB-412/2 · Implement Redis token store</div>
+    </div>
+    <div class="mockup-inner" style="max-height:none;">
+      <!-- Session header -->
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 20px; background:var(--bg-elevated); border-bottom:1px solid var(--border);">
+        <div>
+          <div style="font-family:'Satoshi',sans-serif; font-size:15px; font-weight:700;">Implement Redis token store</div>
+          <div style="display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-muted); margin-top:2px;">
+            <span class="id-tag">BOB-412/2</span>
+            <span class="stage-badge stage-execute">Executing</span>
+            <span>claude</span>
+            <span>·</span>
+            <span style="font-family:'JetBrains Mono',monospace;">feature/auth-redis</span>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <div style="width:8px; height:8px; border-radius:4px; background:var(--accent); animation:pulse 2s infinite;"></div>
+          <span style="font-size:12px; font-weight:600; color:var(--accent);">Working</span>
+        </div>
+      </div>
+
+      <div style="padding:20px; display:flex; flex-direction:column; gap:16px;">
+        <!-- Bob working message -->
+        <div class="msg">
+          <div class="msg-avatar bob">B</div>
+          <div class="msg-body">
+            <div class="msg-name bob-name">Bob</div>
+            <div class="msg-text">Starting implementation of the Redis token store. I'll create the module, write tests first, then implement.</div>
+
+            <div class="tool-block">
+              <div class="tool-header">
+                <span class="tool-icon">✏️</span>
+                <span class="tool-name">Write</span>
+                <span style="font-size:11px; color:var(--text-muted);">packages/auth/src/stores/redis.ts</span>
+                <span class="tool-status ok">✓ created</span>
+              </div>
+            </div>
+            <div class="tool-block">
+              <div class="tool-header">
+                <span class="tool-icon">✏️</span>
+                <span class="tool-name">Write</span>
+                <span style="font-size:11px; color:var(--text-muted);">packages/auth/src/stores/__tests__/redis.test.ts</span>
+                <span class="tool-status ok">✓ created</span>
+              </div>
+            </div>
+            <div class="tool-block">
+              <div class="tool-header">
+                <span class="tool-icon">🖥</span>
+                <span class="tool-name">Bash</span>
+                <span style="font-size:11px; color:var(--text-muted);">pnpm -F @bob/auth test redis</span>
+                <span class="tool-status err">✕ 2 failed</span>
+              </div>
+              <div class="tool-detail">
+                FAIL packages/auth/src/stores/__tests__/redis.test.ts<br>
+                ✕ should rotate token and invalidate old (42ms)<br>
+                ✕ should handle expired sessions (18ms)<br>
+                ✓ should store and retrieve session (12ms)<br>
+                ✓ should delete session (8ms)<br>
+                ✓ should respect TTL (15ms)
+              </div>
+            </div>
+
+            <div class="msg-time">10:51 AM</div>
+          </div>
+        </div>
+
+        <!-- Bob self-correcting -->
+        <div class="msg">
+          <div class="msg-avatar bob">B</div>
+          <div class="msg-body">
+            <div class="msg-name bob-name">Bob</div>
+            <div class="msg-text">Two tests failing — the rotation logic needs to atomically invalidate the old token before setting the new one. Let me fix with a Redis MULTI transaction.</div>
+
+            <div class="tool-block">
+              <div class="tool-header">
+                <span class="tool-icon">✏️</span>
+                <span class="tool-name">Edit</span>
+                <span style="font-size:11px; color:var(--text-muted);">packages/auth/src/stores/redis.ts:47-62</span>
+                <span class="tool-status ok">✓ edited</span>
+              </div>
+            </div>
+            <div class="tool-block">
+              <div class="tool-header">
+                <span class="tool-icon">🖥</span>
+                <span class="tool-name">Bash</span>
+                <span style="font-size:11px; color:var(--text-muted);">pnpm -F @bob/auth test redis</span>
+                <span class="tool-status ok">✓ 5 passed</span>
+              </div>
+              <div class="tool-detail">
+                PASS packages/auth/src/stores/__tests__/redis.test.ts<br>
+                ✓ should store and retrieve session (11ms)<br>
+                ✓ should delete session (7ms)<br>
+                ✓ should respect TTL (14ms)<br>
+                ✓ should rotate token and invalidate old (23ms)<br>
+                ✓ should handle expired sessions (9ms)
+              </div>
+            </div>
+
+            <div class="msg-time">10:52 AM</div>
+          </div>
+        </div>
+
+        <!-- Human review gate -->
+        <div class="msg">
+          <div class="msg-avatar bob">B</div>
+          <div class="msg-body">
+            <div class="msg-name bob-name">Bob</div>
+            <div class="msg-text">All tests passing. Before I commit and push, I want you to review the connection pool settings. The defaults may need tuning for your load.</div>
+
+            <div class="awaiting-card">
+              <div class="awaiting-title">
+                <span style="font-size:14px;">🔍</span> Review gate — Bob is paused
+              </div>
+              <div class="awaiting-q">Connection pool config: <code>maxConnections: 10</code>, <code>minIdle: 2</code>, <code>acquireTimeout: 5000ms</code>. These are conservative defaults. Your gateway handles ~50 concurrent sessions — want me to tune higher?</div>
+              <div class="awaiting-options">
+                <div class="awaiting-opt">
+                  <div class="awaiting-key">A</div>
+                  <span>Defaults are fine — commit and push</span>
+                </div>
+                <div class="awaiting-opt">
+                  <div class="awaiting-key">B</div>
+                  <span>Tune for 50 concurrent: maxConnections: 25, minIdle: 5</span>
+                </div>
+                <div class="awaiting-opt">
+                  <div class="awaiting-key">C</div>
+                  <span>Make these configurable via env vars</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 3. DISPATCH ===== -->
+<div class="exploration" id="dispatch">
+  <div class="ex-header">
+    <div class="ex-label">Dispatch & Execute</div>
+    <div class="ex-title">Concurrent Task Execution</div>
+    <div class="ex-desc">After committing a plan, dispatch multiple agents in parallel. Track progress, handle failures, and manage the pipeline from build through deployment.</div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-bar">
+      <div class="mockup-dot" style="background:#EF5350;"></div>
+      <div class="mockup-dot" style="background:#FFC107;"></div>
+      <div class="mockup-dot" style="background:#4CAF50;"></div>
+      <div class="mockup-url">bob.tail1e1a32.ts.net/planning/dispatch/batch_9f3a</div>
+    </div>
+    <div class="mockup-inner">
+      <!-- Header -->
+      <div style="padding:20px 24px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); background:var(--bg-elevated);">
+        <div>
+          <div style="font-family:'Satoshi',sans-serif; font-size:20px; font-weight:700; letter-spacing:-0.02em;">Dispatch: Auth Middleware Rewrite</div>
+          <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
+            <span class="id-tag">BOB-412</span>
+            <span class="dispatch-status running"><span style="width:6px;height:6px;border-radius:3px;background:var(--accent);animation:pulse 2s infinite;"></span> Running</span>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:16px;">
+          <div style="text-align:right;">
+            <div style="font-size:12px; color:var(--text-muted);">Concurrency</div>
+            <div style="font-family:'Satoshi',sans-serif; font-size:18px; font-weight:700;">2</div>
+          </div>
+          <button class="btn btn-secondary btn-sm">⚙ Settings</button>
+        </div>
+      </div>
+
+      <!-- Progress -->
+      <div style="padding:16px 24px; background:var(--bg-elevated); border-bottom:1px solid var(--border);">
+        <div class="progress-inline">
+          <div class="progress-track" style="height:8px;">
+            <div class="progress-fill" style="width:37.5%; background:linear-gradient(90deg, var(--success) 66%, var(--accent) 100%);"></div>
+          </div>
+          <div class="progress-text" style="font-size:14px;">1/4 done · 1 running · 1 failed</div>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div style="overflow-x:auto;">
+        <table class="dispatch-table">
+          <thead>
+            <tr>
+              <th style="width:36px;">#</th>
+              <th>Task</th>
+              <th style="width:100px;">Agent</th>
+              <th style="width:100px;">Status</th>
+              <th style="width:200px;">Pipeline</th>
+              <th style="width:120px;">Blocked By</th>
+              <th style="width:80px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--text-muted);">1</td>
+              <td>
+                <div style="font-weight:600; font-size:14px;">Extract session store interface</div>
+                <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Define TokenStore abstraction</div>
+              </td>
+              <td><span class="dispatch-agent">claude</span></td>
+              <td><span class="dispatch-status completed">✓ Done</span></td>
+              <td>
+                <div class="pipeline-cell">
+                  <div class="pipeline-dot" style="background:var(--success);"></div>
+                  <span class="pipeline-label">Tests passing</span>
+                  <span class="pipeline-timer">4m 12s</span>
+                </div>
+              </td>
+              <td><span style="color:var(--text-muted); font-size:12px;">—</span></td>
+              <td><button class="mini-btn" style="font-size:10px;">View</button></td>
+            </tr>
+            <tr style="background:var(--accent-subtle);">
+              <td style="font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--text-muted);">2</td>
+              <td>
+                <div style="font-weight:600; font-size:14px;">Implement Redis token store</div>
+                <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Redis-backed TokenStore with TTL</div>
+              </td>
+              <td><span class="dispatch-agent">claude</span></td>
+              <td><span class="dispatch-status running">● Running</span></td>
+              <td>
+                <div class="pipeline-cell">
+                  <div class="pipeline-dot" style="background:var(--accent); animation:pulse 2s infinite;"></div>
+                  <span class="pipeline-label">Executing</span>
+                  <span class="pipeline-timer">2m 38s</span>
+                </div>
+              </td>
+              <td><span class="dispatch-dep">✓ Task 1</span></td>
+              <td><button class="mini-btn" style="font-size:10px;">Watch</button></td>
+            </tr>
+            <tr style="background:var(--error-subtle);">
+              <td style="font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--text-muted);">3</td>
+              <td>
+                <div style="font-weight:600; font-size:14px;">Migrate existing sessions</div>
+                <div style="font-size:12px; color:var(--error); margin-top:2px;">Error: ECONNREFUSED — Redis not reachable from staging</div>
+              </td>
+              <td><span class="dispatch-agent">claude</span></td>
+              <td><span class="dispatch-status failed">✕ Failed</span></td>
+              <td>
+                <div class="pipeline-cell">
+                  <div class="pipeline-dot" style="background:var(--error);"></div>
+                  <span class="pipeline-label" style="color:var(--error);">Build failed</span>
+                  <span class="pipeline-timer">1m 04s</span>
+                </div>
+              </td>
+              <td><span class="dispatch-dep">✓ Task 2</span></td>
+              <td><button class="mini-btn danger" style="font-size:10px;">Retry</button></td>
+            </tr>
+            <tr style="opacity:0.5;">
+              <td style="font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--text-muted);">4</td>
+              <td>
+                <div style="font-weight:600; font-size:14px;">Remove old auth middleware</div>
+                <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Clean up deprecated code</div>
+              </td>
+              <td><span class="dispatch-agent">claude</span></td>
+              <td><span class="dispatch-status blocked">⏸ Blocked</span></td>
+              <td>
+                <div class="pipeline-cell">
+                  <span class="pipeline-label">Waiting</span>
+                </div>
+              </td>
+              <td><span class="dispatch-dep" style="color:var(--error);">✕ Task 3</span></td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 4. REVIEW & DIFF ===== -->
+<div class="exploration" id="review">
+  <div class="ex-header">
+    <div class="ex-label">Review Stage</div>
+    <div class="ex-title">Code Review, Diffs & PRs</div>
+    <div class="ex-desc">After execution completes, review the changes. File browser shows what changed, diff viewer shows the details, and PR cards show CI status and review state.</div>
+  </div>
+
+  <div class="two-col">
+    <!-- File Browser -->
+    <div>
+      <div style="font-size:14px; font-weight:600; color:var(--text-secondary); margin-bottom:12px;">File Browser — Changed Files</div>
+      <div class="file-browser">
+        <div class="fb-header">
+          <div class="fb-breadcrumb"><span>bob</span> / <span>packages</span> / <span>auth</span> / src</div>
+          <div style="margin-left:auto; font-size:12px; color:var(--text-muted);">8 files changed</div>
+        </div>
+        <div class="fb-list">
+          <div class="fb-item">
+            <div class="fb-icon">📁</div>
+            <div class="fb-name dir">stores/</div>
+            <div class="fb-change added">+2 new</div>
+          </div>
+          <div class="fb-item" style="padding-left:36px;">
+            <div class="fb-icon" style="font-size:12px;">📄</div>
+            <div class="fb-name file">redis.ts</div>
+            <div class="fb-change added">+new</div>
+          </div>
+          <div class="fb-item" style="padding-left:36px;">
+            <div class="fb-icon" style="font-size:12px;">📄</div>
+            <div class="fb-name file">interface.ts</div>
+            <div class="fb-change added">+new</div>
+          </div>
+          <div class="fb-item">
+            <div class="fb-icon" style="font-size:12px;">📄</div>
+            <div class="fb-name file">middleware.ts</div>
+            <div class="fb-change modified">modified</div>
+          </div>
+          <div class="fb-item">
+            <div class="fb-icon" style="font-size:12px;">📄</div>
+            <div class="fb-name file">session.ts</div>
+            <div class="fb-change modified">modified</div>
+          </div>
+          <div class="fb-item">
+            <div class="fb-icon">📁</div>
+            <div class="fb-name dir">__tests__/</div>
+            <div class="fb-change added">+1 new</div>
+          </div>
+          <div class="fb-item" style="padding-left:36px;">
+            <div class="fb-icon" style="font-size:12px;">📄</div>
+            <div class="fb-name file">redis.test.ts</div>
+            <div class="fb-change added">+new</div>
+          </div>
+          <div class="fb-item">
+            <div class="fb-icon" style="font-size:12px;">📄</div>
+            <div class="fb-name file">index.ts</div>
+            <div class="fb-change modified">modified</div>
+          </div>
+          <div class="fb-item">
+            <div class="fb-icon" style="font-size:12px;">📄</div>
+            <div class="fb-name file">package.json</div>
+            <div class="fb-change modified">modified</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Git Diff Viewer -->
+    <div>
+      <div style="font-size:14px; font-weight:600; color:var(--text-secondary); margin-bottom:12px;">Diff Viewer</div>
+      <div class="diff-viewer">
+        <div class="diff-file-header">
+          <span style="font-size:14px;">📄</span>
+          <span class="diff-file-name">packages/auth/src/stores/redis.ts</span>
+          <div class="diff-file-stat">
+            <span class="diff-add">+87</span> <span class="diff-del">-0</span>
+          </div>
+        </div>
+        <div class="diff-lines">
+          <div class="diff-line hunk">@@ +1,24 @@</div>
+          <div class="diff-line added"><div class="diff-gutter">1</div><div class="diff-sign plus">+</div><div class="diff-code">import { Redis } from 'ioredis';</div></div>
+          <div class="diff-line added"><div class="diff-gutter">2</div><div class="diff-sign plus">+</div><div class="diff-code">import type { TokenStore, Session } from './interface';</div></div>
+          <div class="diff-line added"><div class="diff-gutter">3</div><div class="diff-sign plus">+</div><div class="diff-code"></div></div>
+          <div class="diff-line added"><div class="diff-gutter">4</div><div class="diff-sign plus">+</div><div class="diff-code">export class RedisTokenStore implements TokenStore {</div></div>
+          <div class="diff-line added"><div class="diff-gutter">5</div><div class="diff-sign plus">+</div><div class="diff-code">  private redis: Redis;</div></div>
+          <div class="diff-line added"><div class="diff-gutter">6</div><div class="diff-sign plus">+</div><div class="diff-code">  private prefix = 'session:';</div></div>
+          <div class="diff-line added"><div class="diff-gutter">7</div><div class="diff-sign plus">+</div><div class="diff-code"></div></div>
+          <div class="diff-line added"><div class="diff-gutter">8</div><div class="diff-sign plus">+</div><div class="diff-code">  constructor(config: RedisConfig) {</div></div>
+          <div class="diff-line added"><div class="diff-gutter">9</div><div class="diff-sign plus">+</div><div class="diff-code">    this.redis = new Redis({</div></div>
+          <div class="diff-line added"><div class="diff-gutter">10</div><div class="diff-sign plus">+</div><div class="diff-code">      maxRetriesPerRequest: 3,</div></div>
+          <div class="diff-line added"><div class="diff-gutter">11</div><div class="diff-sign plus">+</div><div class="diff-code">      ...config,</div></div>
+          <div class="diff-line added"><div class="diff-gutter">12</div><div class="diff-sign plus">+</div><div class="diff-code">    });</div></div>
+          <div class="diff-line added"><div class="diff-gutter">13</div><div class="diff-sign plus">+</div><div class="diff-code">  }</div></div>
+        </div>
+      </div>
+
+      <div class="diff-viewer" style="margin-top:16px;">
+        <div class="diff-file-header">
+          <span style="font-size:14px;">📄</span>
+          <span class="diff-file-name">packages/auth/src/middleware.ts</span>
+          <div class="diff-file-stat">
+            <span class="diff-add">+12</span> <span class="diff-del">-28</span>
+          </div>
+        </div>
+        <div class="diff-lines">
+          <div class="diff-line hunk">@@ -14,18 +14,8 @@</div>
+          <div class="diff-line removed"><div class="diff-gutter">14</div><div class="diff-sign minus">-</div><div class="diff-code">const sessionToken = cookies().get('session');</div></div>
+          <div class="diff-line removed"><div class="diff-gutter">15</div><div class="diff-sign minus">-</div><div class="diff-code">if (!sessionToken) return null;</div></div>
+          <div class="diff-line removed"><div class="diff-gutter">16</div><div class="diff-sign minus">-</div><div class="diff-code">const decoded = jwt.verify(sessionToken.value);</div></div>
+          <div class="diff-line added"><div class="diff-gutter">14</div><div class="diff-sign plus">+</div><div class="diff-code">const session = await tokenStore.get(sessionId);</div></div>
+          <div class="diff-line added"><div class="diff-gutter">15</div><div class="diff-sign plus">+</div><div class="diff-code">if (!session) return null;</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PR Cards -->
+  <div style="margin-top:48px;">
+    <div class="ex-label">Pull Requests</div>
+    <div class="ex-title" style="font-size:28px; margin-bottom:24px;">PR Status & CI Checks</div>
+
+    <div class="pr-card">
+      <div class="pr-card-header">
+        <div class="pr-status-icon open">⊙</div>
+        <div style="flex:1;">
+          <div class="pr-title">feat: implement Redis-backed session storage</div>
+          <div class="pr-meta">
+            <span class="id-tag">#147</span>
+            <span>feature/auth-redis → main</span>
+            <span>·</span>
+            <span>opened 12 min ago by bob-agent</span>
+          </div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-secondary btn-sm">Review</button>
+          <button class="btn btn-primary btn-sm">Merge →</button>
+        </div>
+      </div>
+      <div class="pr-checks">
+        <div class="pr-check pass">✓ Build</div>
+        <div class="pr-check pass">✓ Tests (47/47)</div>
+        <div class="pr-check pass">✓ Lint</div>
+        <div class="pr-check pass">✓ Type Check</div>
+        <div class="pr-check pending">● Security Scan</div>
+      </div>
+      <div class="pr-review-status" style="background:var(--success-subtle); color:var(--success);">
+        <span>✓</span> Approved by bob-agent · All CI checks passing (4/5, 1 pending)
+      </div>
+    </div>
+
+    <div class="pr-card">
+      <div class="pr-card-header">
+        <div class="pr-status-icon" style="background:var(--error-subtle); color:var(--error);">⊙</div>
+        <div style="flex:1;">
+          <div class="pr-title">feat: session migration script</div>
+          <div class="pr-meta">
+            <span class="id-tag">#148</span>
+            <span>feature/auth-migrate → main</span>
+            <span>·</span>
+            <span>opened 3 min ago by bob-agent</span>
+          </div>
+        </div>
+      </div>
+      <div class="pr-checks">
+        <div class="pr-check fail">✕ Build</div>
+        <div class="pr-check fail">✕ Tests (41/47)</div>
+        <div class="pr-check pass">✓ Lint</div>
+      </div>
+      <div class="pr-review-status" style="background:var(--error-subtle); color:var(--error);">
+        <span>✕</span> CI failing — 6 test failures in migration script. Bob will auto-fix and force-push.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 5. DEPLOY ===== -->
+<div class="exploration" id="deploy">
+  <div class="ex-header">
+    <div class="ex-label">Deploy & Monitor</div>
+    <div class="ex-title">ForgeGraph Deployment Pipeline</div>
+    <div class="ex-desc">After PRs merge, track deployment through ForgeGraph — build, push to Harbor, rollout on Kubernetes, health checks, and promotion from staging to production.</div>
+  </div>
+
+  <!-- Environment cards -->
+  <div class="deploy-grid">
+    <div class="deploy-card healthy">
+      <div class="deploy-env">Development</div>
+      <div class="deploy-status">
+        <div class="deploy-dot green"></div>
+        <span style="color:var(--success);">Healthy</span>
+      </div>
+      <div class="deploy-meta">Deployed 28m ago</div>
+      <div style="margin-top:8px;">
+        <span class="deploy-hash">a3f7c2d</span>
+        <span style="font-size:11px; color:var(--text-muted); margin-left:4px;">feat: redis token store</span>
+      </div>
+    </div>
+    <div class="deploy-card deploying">
+      <div class="deploy-env">Staging</div>
+      <div class="deploy-status">
+        <div class="deploy-dot amber"></div>
+        <span style="color:var(--accent);">Deploying</span>
+      </div>
+      <div class="deploy-meta">Rolling out... (2/3 pods ready)</div>
+      <div style="margin-top:8px;">
+        <span class="deploy-hash">a3f7c2d</span>
+        <span style="font-size:11px; color:var(--text-muted); margin-left:4px;">feat: redis token store</span>
+      </div>
+      <div class="progress-inline" style="margin-top:8px;">
+        <div class="progress-track"><div class="progress-fill" style="width:66%; background:var(--accent);"></div></div>
+        <div class="progress-text">2/3</div>
+      </div>
+    </div>
+    <div class="deploy-card" style="border-color:var(--border);">
+      <div class="deploy-env">Production</div>
+      <div class="deploy-status">
+        <div class="deploy-dot green"></div>
+        <span style="color:var(--success);">Healthy</span>
+      </div>
+      <div class="deploy-meta">Deployed 2 days ago</div>
+      <div style="margin-top:8px;">
+        <span class="deploy-hash">9b2e4f1</span>
+        <span style="font-size:11px; color:var(--text-muted); margin-left:4px;">previous release</span>
+      </div>
+      <div style="margin-top:8px;">
+        <button class="mini-btn approve" style="font-size:11px;">↑ Promote staging</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Deployment timeline -->
+  <div style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:12px; padding:24px; max-width:640px;">
+    <div style="font-family:'Satoshi',sans-serif; font-size:16px; font-weight:700; margin-bottom:16px;">Deployment Pipeline</div>
+
+    <div class="deploy-timeline">
+      <div class="deploy-event">
+        <div class="deploy-event-dot success">✓</div>
+        <div class="deploy-event-content">
+          <div class="deploy-event-title">PR #147 merged</div>
+          <div class="deploy-event-detail">feature/auth-redis → main · 12:14 PM</div>
+        </div>
+      </div>
+      <div class="deploy-event">
+        <div class="deploy-event-dot success">✓</div>
+        <div class="deploy-event-content">
+          <div class="deploy-event-title">CI Build passed</div>
+          <div class="deploy-event-detail">47 tests, 0 failures · 2m 18s · <span class="deploy-hash">a3f7c2d</span></div>
+        </div>
+      </div>
+      <div class="deploy-event">
+        <div class="deploy-event-dot success">✓</div>
+        <div class="deploy-event-content">
+          <div class="deploy-event-title">Image pushed to Harbor</div>
+          <div class="deploy-event-detail">harbor.gmac.io/bob/web:a3f7c2d · 142MB</div>
+        </div>
+      </div>
+      <div class="deploy-event">
+        <div class="deploy-event-dot success">✓</div>
+        <div class="deploy-event-content">
+          <div class="deploy-event-title">Dev deployment healthy</div>
+          <div class="deploy-event-detail">3/3 pods ready · health check OK · 12:18 PM</div>
+        </div>
+      </div>
+      <div class="deploy-event">
+        <div class="deploy-event-dot active" style="animation:pulse 2s infinite;">●</div>
+        <div class="deploy-event-content">
+          <div class="deploy-event-title" style="color:var(--accent);">Staging rollout in progress</div>
+          <div class="deploy-event-detail">2/3 pods ready · rolling update · started 12:20 PM</div>
+        </div>
+      </div>
+      <div class="deploy-event">
+        <div class="deploy-event-dot pending">○</div>
+        <div class="deploy-event-content">
+          <div class="deploy-event-title" style="color:var(--text-muted);">Staging health check</div>
+          <div class="deploy-event-detail" style="color:var(--text-muted);">Pending rollout completion</div>
+        </div>
+      </div>
+      <div class="deploy-event">
+        <div class="deploy-event-dot pending">○</div>
+        <div class="deploy-event-content">
+          <div class="deploy-event-title" style="color:var(--text-muted);">Production promotion</div>
+          <div class="deploy-event-detail" style="color:var(--text-muted);">Manual approval required</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rollback state -->
+  <div style="margin-top:32px; max-width:640px;">
+    <div style="font-size:14px; font-weight:600; color:var(--text-secondary); margin-bottom:12px;">Unhealthy Deploy → Rollback</div>
+    <div class="banner banner-error" style="flex-direction:column; align-items:flex-start; gap:10px;">
+      <div style="display:flex; align-items:center; gap:8px; width:100%;">
+        <span>🚨</span>
+        <span style="font-weight:600;">Staging health check failed</span>
+      </div>
+      <div style="font-size:13px; width:100%;">
+        Pod <code style="font-family:'JetBrains Mono',monospace; font-size:11px;">bob-web-7f9c4-xk2d</code> CrashLoopBackOff: Redis connection refused.
+        Service degraded — 1/3 pods healthy.
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="mini-btn danger" style="font-weight:600;">↩ Rollback to 9b2e4f1</button>
+        <button class="mini-btn">📋 Pod Logs</button>
+        <button class="mini-btn">🔍 Investigate</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 6. MOBILE ===== -->
+<div class="exploration" id="mobile">
+  <div class="ex-header">
+    <div class="ex-label">Mobile Explorations</div>
+    <div class="ex-title">Phone-Sized Product Surfaces</div>
+    <div class="ex-desc">The same planning, execution, review, and deploy workflows adapted for phone. Focused on glanceability, voice interaction, and one-handed operation.</div>
+  </div>
+
+  <div style="display:flex; gap:32px; flex-wrap:wrap; justify-content:center;">
+    <!-- Phone: Work Item Detail -->
+    <div class="phone-frame">
+      <div class="phone-notch"></div>
+      <div class="phone-inner">
+        <div class="ph-header">
+          <span class="ph-back">‹</span>
+          <span class="ph-title">BOB-412</span>
+          <span style="font-size:18px; cursor:pointer;">⋯</span>
+        </div>
+
+        <div class="ph-section">
+          <div style="font-family:'Satoshi',sans-serif; font-size:22px; font-weight:700; letter-spacing:-0.02em; margin-bottom:4px;">Auth Middleware Rewrite</div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <span class="stage-badge stage-execute">Execute</span>
+            <span class="dispatch-status running" style="font-size:11px;">● 1/4 done</span>
+          </div>
+        </div>
+
+        <div class="phone-tabs">
+          <div class="phone-tab active">Progress</div>
+          <div class="phone-tab">Chat</div>
+          <div class="phone-tab">Files</div>
+          <div class="phone-tab">PRs</div>
+        </div>
+
+        <div class="ph-section" style="padding-top:16px;">
+          <!-- Mini pipeline -->
+          <div style="display:flex; align-items:center; gap:4px; margin-bottom:16px; overflow-x:auto;">
+            <div style="padding:4px 10px; border-radius:6px; background:var(--success-subtle); color:var(--success); font-size:11px; font-weight:600;">✓ Idea</div>
+            <div style="color:var(--border);">—</div>
+            <div style="padding:4px 10px; border-radius:6px; background:var(--success-subtle); color:var(--success); font-size:11px; font-weight:600;">✓ Shape</div>
+            <div style="color:var(--border);">—</div>
+            <div style="padding:4px 10px; border-radius:6px; background:var(--success-subtle); color:var(--success); font-size:11px; font-weight:600;">✓ Plan</div>
+            <div style="color:var(--border);">—</div>
+            <div style="padding:4px 10px; border-radius:6px; background:var(--accent-subtle); color:var(--accent); font-size:11px; font-weight:600;">● Execute</div>
+            <div style="color:var(--border);">—</div>
+            <div style="padding:4px 10px; border-radius:6px; background:var(--bg-subtle); color:var(--text-muted); font-size:11px;">Review</div>
+          </div>
+
+          <!-- Task cards -->
+          <div class="ph-label">Tasks</div>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <div style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:10px; padding:12px;">
+              <div style="display:flex; align-items:center; justify-content:space-between;">
+                <div style="font-size:13px; font-weight:600;">Extract session interface</div>
+                <span class="dispatch-status completed" style="font-size:10px;">✓</span>
+              </div>
+              <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">claude · 4m 12s</div>
+            </div>
+
+            <div style="background:var(--accent-subtle); border:1px solid var(--accent-muted); border-radius:10px; padding:12px;">
+              <div style="display:flex; align-items:center; justify-content:space-between;">
+                <div style="font-size:13px; font-weight:600; color:var(--accent);">Implement Redis store</div>
+                <span class="dispatch-status running" style="font-size:10px;">● Running</span>
+              </div>
+              <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">claude · 2m 38s</div>
+              <div class="progress-inline" style="margin-top:6px;">
+                <div class="progress-track" style="height:4px;"><div class="progress-fill" style="width:68%; background:var(--accent);"></div></div>
+                <div class="progress-text" style="font-size:10px;">68%</div>
+              </div>
+            </div>
+
+            <div style="background:var(--error-subtle); border:1px solid rgba(198,40,40,0.2); border-radius:10px; padding:12px;">
+              <div style="display:flex; align-items:center; justify-content:space-between;">
+                <div style="font-size:13px; font-weight:600; color:var(--error);">Migrate sessions</div>
+                <span class="dispatch-status failed" style="font-size:10px;">✕ Failed</span>
+              </div>
+              <div style="font-size:11px; color:var(--error); margin-top:2px;">ECONNREFUSED — Redis</div>
+              <div style="margin-top:6px;">
+                <button class="mini-btn danger" style="font-size:10px; padding:4px 10px;">↻ Retry</button>
+              </div>
+            </div>
+
+            <div style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:10px; padding:12px; opacity:0.5;">
+              <div style="display:flex; align-items:center; justify-content:space-between;">
+                <div style="font-size:13px; font-weight:600;">Remove old middleware</div>
+                <span class="dispatch-status blocked" style="font-size:10px;">⏸ Blocked</span>
+              </div>
+              <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">waiting on Task 3</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Voice FAB -->
+        <div style="position:absolute; bottom:96px; right:20px; width:56px; height:56px; border-radius:16px; background:var(--accent); display:flex; align-items:center; justify-content:center; box-shadow:0 4px 24px rgba(212,133,10,0.35); color:#FFF; font-size:22px; cursor:pointer;">🎙</div>
+
+        <div class="phone-home-bar"></div>
+      </div>
+    </div>
+
+    <!-- Phone: Agent Chat -->
+    <div class="phone-frame">
+      <div class="phone-notch"></div>
+      <div class="phone-inner" style="display:flex; flex-direction:column;">
+        <div class="ph-header" style="border-bottom:1px solid var(--border);">
+          <span class="ph-back">‹</span>
+          <div style="text-align:center; flex:1;">
+            <div style="font-size:14px; font-weight:600;">Redis Token Store</div>
+            <div style="display:flex; align-items:center; justify-content:center; gap:4px; font-size:11px; color:var(--accent);">
+              <span style="width:6px; height:6px; border-radius:3px; background:var(--accent); animation:pulse 2s infinite;"></span>
+              Working
+            </div>
+          </div>
+          <span style="font-size:14px; cursor:pointer;">⋯</span>
+        </div>
+
+        <div style="flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:14px;">
+          <div class="msg">
+            <div class="msg-avatar bob" style="width:24px; height:24px; font-size:10px;">B</div>
+            <div class="msg-body">
+              <div class="msg-text" style="font-size:13px;">All tests passing. Review the pool config before I commit.</div>
+              <div class="tool-block" style="margin-top:6px;">
+                <div class="tool-header" style="padding:6px 10px;">
+                  <span class="tool-icon" style="font-size:12px;">🖥</span>
+                  <span class="tool-name" style="font-size:10px;">test</span>
+                  <span class="tool-status ok" style="font-size:10px;">✓ 5 pass</span>
+                </div>
+              </div>
+              <div class="awaiting-card" style="margin-top:8px; padding:12px;">
+                <div class="awaiting-title" style="font-size:12px;">
+                  <span>🔍</span> Needs your input
+                </div>
+                <div class="awaiting-q" style="font-size:13px;">Pool: <code>max:10, minIdle:2</code>. Tune higher for 50 concurrent?</div>
+                <div class="awaiting-options" style="gap:4px;">
+                  <div class="awaiting-opt" style="padding:8px 10px; font-size:12px;">
+                    <div class="awaiting-key" style="width:18px; height:18px; font-size:10px;">A</div>
+                    Defaults fine — commit
+                  </div>
+                  <div class="awaiting-opt" style="padding:8px 10px; font-size:12px;">
+                    <div class="awaiting-key" style="width:18px; height:18px; font-size:10px;">B</div>
+                    Tune higher
+                  </div>
+                  <div class="awaiting-opt" style="padding:8px 10px; font-size:12px;">
+                    <div class="awaiting-key" style="width:18px; height:18px; font-size:10px;">C</div>
+                    Use env vars
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding:12px 16px; border-top:1px solid var(--border); background:var(--bg-elevated);">
+          <div style="font-size:11px; color:var(--text-muted); text-align:center; padding:4px;">⏸ Resolve the prompt above to continue</div>
+        </div>
+
+        <div class="phone-home-bar"></div>
+      </div>
+    </div>
+
+    <!-- Phone: Deploy Status -->
+    <div class="phone-frame">
+      <div class="phone-notch"></div>
+      <div class="phone-inner">
+        <div class="ph-header">
+          <span class="ph-back">‹</span>
+          <span class="ph-title">Deploy</span>
+          <span style="font-size:14px; color:var(--accent);">↻</span>
+        </div>
+
+        <div class="ph-section">
+          <div class="ph-label">Environments</div>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <div style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:10px; padding:12px;">
+              <div style="display:flex; align-items:center; justify-content:space-between;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <div class="deploy-dot green"></div>
+                  <span style="font-size:14px; font-weight:600;">Dev</span>
+                </div>
+                <span class="deploy-hash">a3f7c2d</span>
+              </div>
+              <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Healthy · 28m ago</div>
+            </div>
+
+            <div style="background:var(--accent-subtle); border:1px solid var(--accent-muted); border-radius:10px; padding:12px;">
+              <div style="display:flex; align-items:center; justify-content:space-between;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <div class="deploy-dot amber"></div>
+                  <span style="font-size:14px; font-weight:600; color:var(--accent);">Staging</span>
+                </div>
+                <span class="deploy-hash">a3f7c2d</span>
+              </div>
+              <div style="font-size:12px; color:var(--accent); margin-top:2px;">Deploying · 2/3 pods</div>
+              <div class="progress-inline" style="margin-top:6px;">
+                <div class="progress-track" style="height:4px;"><div class="progress-fill" style="width:66%; background:var(--accent);"></div></div>
+              </div>
+            </div>
+
+            <div style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:10px; padding:12px;">
+              <div style="display:flex; align-items:center; justify-content:space-between;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <div class="deploy-dot green"></div>
+                  <span style="font-size:14px; font-weight:600;">Production</span>
+                </div>
+                <span class="deploy-hash">9b2e4f1</span>
+              </div>
+              <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Healthy · 2 days ago</div>
+              <div style="margin-top:8px;">
+                <button class="mini-btn approve" style="width:100%; text-align:center; padding:8px;">↑ Promote Staging</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ph-section" style="padding-top:8px;">
+          <div class="ph-label">Pipeline</div>
+          <div style="display:flex; flex-direction:column; gap:0;">
+            <div style="display:flex; align-items:center; gap:10px; padding:8px 0;">
+              <div style="width:20px; height:20px; border-radius:10px; background:var(--success-subtle); color:var(--success); display:flex; align-items:center; justify-content:center; font-size:10px; flex-shrink:0;">✓</div>
+              <div style="flex:1;">
+                <div style="font-size:13px; font-weight:500;">PR merged</div>
+                <div style="font-size:11px; color:var(--text-muted);">12:14 PM</div>
+              </div>
+            </div>
+            <div style="width:2px; height:8px; background:var(--border); margin-left:9px;"></div>
+            <div style="display:flex; align-items:center; gap:10px; padding:8px 0;">
+              <div style="width:20px; height:20px; border-radius:10px; background:var(--success-subtle); color:var(--success); display:flex; align-items:center; justify-content:center; font-size:10px; flex-shrink:0;">✓</div>
+              <div style="flex:1;">
+                <div style="font-size:13px; font-weight:500;">CI passed</div>
+                <div style="font-size:11px; color:var(--text-muted);">47 tests · 2m 18s</div>
+              </div>
+            </div>
+            <div style="width:2px; height:8px; background:var(--border); margin-left:9px;"></div>
+            <div style="display:flex; align-items:center; gap:10px; padding:8px 0;">
+              <div style="width:20px; height:20px; border-radius:10px; background:var(--success-subtle); color:var(--success); display:flex; align-items:center; justify-content:center; font-size:10px; flex-shrink:0;">✓</div>
+              <div style="flex:1;">
+                <div style="font-size:13px; font-weight:500;">Harbor push</div>
+                <div style="font-size:11px; color:var(--text-muted);">142MB</div>
+              </div>
+            </div>
+            <div style="width:2px; height:8px; background:var(--border); margin-left:9px;"></div>
+            <div style="display:flex; align-items:center; gap:10px; padding:8px 0;">
+              <div style="width:20px; height:20px; border-radius:10px; background:var(--accent-subtle); color:var(--accent); display:flex; align-items:center; justify-content:center; font-size:10px; flex-shrink:0; animation:pulse 2s infinite;">●</div>
+              <div style="flex:1;">
+                <div style="font-size:13px; font-weight:500; color:var(--accent);">Staging rollout</div>
+                <div style="font-size:11px; color:var(--text-muted);">2/3 pods ready</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="phone-home-bar"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="text-align:center; padding:48px 32px; color:var(--text-muted); font-size:13px;">
+  Bob Builder Deep Explorations · Generated by /design-consultation · <span id="gen-date"></span>
+</div>
+
+<script>
+function showSection(id) {
+  document.querySelectorAll('.exploration').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-pill').forEach(el => el.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function toggleTheme() {
+  const html = document.documentElement;
+  const btn = document.querySelector('.theme-toggle');
+  if (html.dataset.theme === 'dark') {
+    html.dataset.theme = 'light';
+    btn.innerHTML = '🌙 Dark';
+  } else {
+    html.dataset.theme = 'dark';
+    btn.innerHTML = '☀️ Light';
+  }
+}
+
+document.getElementById('gen-date').textContent = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+</script>
+</body>
+</html>

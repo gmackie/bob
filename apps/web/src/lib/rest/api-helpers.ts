@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { TRPCError } from "@trpc/server";
+import { appRouter, createTRPCContext } from "@bob/api";
+import { auth } from "~/auth/server";
 
 const STATUS_MAP: Record<string, number> = {
   UNAUTHORIZED: 401,
@@ -19,4 +21,12 @@ export function errorResponse(error: unknown) {
   const message =
     error instanceof Error ? error.message : "Internal server error";
   return NextResponse.json({ error: message }, { status: 500 });
+}
+
+export async function createPublicApiCaller(request: Request) {
+  const ctx = await createTRPCContext({
+    headers: request.headers,
+    auth,
+  });
+  return appRouter.createCaller(ctx);
 }

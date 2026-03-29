@@ -1,0 +1,11 @@
+appId: com.gmacko.bob.dev
+---
+- launchApp
+- assertVisible: "Continue with GitHub"
+- assertVisible:
+    text: "Welcome to Bob"
+    optional: true
+- assertVisible:
+    text: "Workspaces"
+    optional: true
+- takeScreenshot: /tmp/debug-text
