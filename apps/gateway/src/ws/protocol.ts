@@ -97,6 +97,7 @@ export interface ClientCreateSession {
   workingDirectory: string;
   agentType: string;
   title?: string;
+  cookieDomains?: string[];
 }
 
 export interface ServerSessionCreated {
