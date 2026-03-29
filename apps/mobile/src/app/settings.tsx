@@ -12,6 +12,7 @@ import * as Clipboard from "expo-clipboard";
 import { Stack } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { colors } from "~/lib/colors";
 import { trpc } from "~/utils/api";
 
 const PERMISSIONS = ["read", "write", "delete", "admin"] as const;
@@ -52,21 +53,21 @@ function PreferencesSection() {
   if (isLoading) {
     return (
       <View className="border-border bg-card rounded-lg border p-4">
-        <Text className="text-foreground text-lg font-semibold">
+        <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>
           Preferences
         </Text>
-        <Text className="text-muted-foreground mt-2">Loading...</Text>
+        <Text className="mt-2" style={{ color: colors.muted }}>Loading...</Text>
       </View>
     );
   }
 
   return (
     <View className="border-border bg-card rounded-lg border p-4">
-      <Text className="text-foreground mb-4 text-lg font-semibold">
+      <Text className="mb-4 text-lg font-semibold" style={{ color: colors.foreground }}>
         Preferences
       </Text>
 
-      <Text className="text-foreground mb-2 text-sm font-medium">Theme</Text>
+      <Text className="mb-2 text-sm font-medium" style={{ color: colors.foreground }}>Theme</Text>
       <View className="mb-4 flex-row gap-2">
         {(["light", "dark", "system"] as const).map((theme) => (
           <Pressable
@@ -79,11 +80,12 @@ function PreferencesSection() {
             }`}
           >
             <Text
-              className={
-                preferences?.theme === theme
-                  ? "text-primary-foreground"
-                  : "text-foreground"
-              }
+              style={{
+                color:
+                  preferences?.theme === theme
+                    ? colors.primaryForeground
+                    : colors.foreground,
+              }}
             >
               {theme.charAt(0).toUpperCase() + theme.slice(1)}
             </Text>
@@ -91,7 +93,7 @@ function PreferencesSection() {
         ))}
       </View>
 
-      <Text className="text-foreground mb-2 text-sm font-medium">
+      <Text className="mb-2 text-sm font-medium" style={{ color: colors.foreground }}>
         Notifications
       </Text>
       <View className="gap-2">
@@ -106,7 +108,7 @@ function PreferencesSection() {
                 : "border-border bg-background"
             }`}
           />
-          <Text className="text-foreground">Email notifications</Text>
+          <Text style={{ color: colors.foreground }}>Email notifications</Text>
         </Pressable>
         <Pressable
           onPress={() => toggleNotification("push")}
@@ -119,7 +121,7 @@ function PreferencesSection() {
                 : "border-border bg-background"
             }`}
           />
-          <Text className="text-foreground">Push notifications</Text>
+          <Text style={{ color: colors.foreground }}>Push notifications</Text>
         </Pressable>
       </View>
     </View>
@@ -207,13 +209,13 @@ function ApiKeysSection() {
   return (
     <View className="border-border bg-card mt-4 rounded-lg border p-4">
       <View className="mb-4 flex-row items-center justify-between">
-        <Text className="text-foreground text-lg font-semibold">API Keys</Text>
+        <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>API Keys</Text>
         {!showCreateForm && (
           <Pressable
             onPress={() => setShowCreateForm(true)}
             className="bg-primary rounded-md px-3 py-1"
           >
-            <Text className="text-primary-foreground">New Key</Text>
+            <Text style={{ color: colors.primaryForeground }}>New Key</Text>
           </Pressable>
         )}
       </View>
@@ -230,7 +232,7 @@ function ApiKeysSection() {
             onPress={() => void copyToClipboard(newKey)}
             className="rounded bg-white p-2 dark:bg-gray-900"
           >
-            <Text className="text-foreground font-mono text-xs">{newKey}</Text>
+            <Text className="font-mono text-xs" style={{ color: colors.foreground }}>{newKey}</Text>
           </Pressable>
           <Pressable onPress={() => setNewKey(null)} className="mt-2">
             <Text className="text-sm text-green-700 dark:text-green-300">
@@ -242,7 +244,7 @@ function ApiKeysSection() {
 
       {showCreateForm && (
         <View className="border-border mb-4 rounded-lg border p-3">
-          <Text className="text-foreground mb-2 font-medium">
+          <Text className="mb-2 font-medium" style={{ color: colors.foreground }}>
             Create New API Key
           </Text>
 
@@ -250,11 +252,12 @@ function ApiKeysSection() {
             value={newKeyName}
             onChangeText={setNewKeyName}
             placeholder="Key name"
-            className="border-border bg-background text-foreground mb-3 rounded-md border px-3 py-2"
+            className="border-border bg-background mb-3 rounded-md border px-3 py-2"
+            style={{ color: colors.foreground }}
             placeholderTextColor="#888"
           />
 
-          <Text className="text-foreground mb-2 text-sm">Permissions</Text>
+          <Text className="mb-2 text-sm" style={{ color: colors.foreground }}>Permissions</Text>
           <View className="mb-3 flex-row flex-wrap gap-2">
             {PERMISSIONS.map((permission) => (
               <Pressable
@@ -269,7 +272,7 @@ function ApiKeysSection() {
                       : "border-border bg-background"
                   }`}
                 />
-                <Text className="text-foreground capitalize">{permission}</Text>
+                <Text className="capitalize" style={{ color: colors.foreground }}>{permission}</Text>
               </Pressable>
             ))}
           </View>
@@ -284,7 +287,7 @@ function ApiKeysSection() {
               }
               className="bg-primary rounded-md px-4 py-2"
             >
-              <Text className="text-primary-foreground">Create</Text>
+              <Text style={{ color: colors.primaryForeground }}>Create</Text>
             </Pressable>
             <Pressable
               onPress={() => {
@@ -294,16 +297,16 @@ function ApiKeysSection() {
               }}
               className="border-border rounded-md border px-4 py-2"
             >
-              <Text className="text-foreground">Cancel</Text>
+              <Text style={{ color: colors.foreground }}>Cancel</Text>
             </Pressable>
           </View>
         </View>
       )}
 
       {isLoading ? (
-        <Text className="text-muted-foreground">Loading...</Text>
+        <Text style={{ color: colors.muted }}>Loading...</Text>
       ) : apiKeys?.length === 0 ? (
-        <Text className="text-muted-foreground">No API keys created yet.</Text>
+        <Text style={{ color: colors.muted }}>No API keys created yet.</Text>
       ) : (
         <View className="gap-2">
           {apiKeys?.map((key) => (
@@ -312,13 +315,13 @@ function ApiKeysSection() {
               className="border-border flex-row items-center justify-between rounded-lg border p-3"
             >
               <View className="flex-1">
-                <Text className="text-foreground font-medium">{key.name}</Text>
-                <Text className="text-muted-foreground text-xs">
+                <Text className="font-medium" style={{ color: colors.foreground }}>{key.name}</Text>
+                <Text className="text-xs" style={{ color: colors.muted }}>
                   {key.keyPrefix}... |{" "}
                   {(key.permissions as string[]).join(", ")}
                 </Text>
                 {key.lastUsedAt && (
-                  <Text className="text-muted-foreground text-xs">
+                  <Text className="text-xs" style={{ color: colors.muted }}>
                     Last used: {new Date(key.lastUsedAt).toLocaleDateString()}
                   </Text>
                 )}
@@ -328,7 +331,7 @@ function ApiKeysSection() {
                 disabled={isRevoking}
                 className="bg-destructive rounded-md px-3 py-1"
               >
-                <Text className="text-destructive-foreground">Revoke</Text>
+                <Text style={{ color: colors.danger }}>Revoke</Text>
               </Pressable>
             </View>
           ))}
@@ -343,7 +346,7 @@ export default function SettingsScreen() {
     <SafeAreaView className="bg-background flex-1">
       <Stack.Screen options={{ title: "Settings" }} />
       <ScrollView className="flex-1 p-4">
-        <Text className="text-foreground mb-4 text-2xl font-bold">
+        <Text className="mb-4 text-2xl font-bold" style={{ color: colors.foreground }}>
           Settings
         </Text>
         <PreferencesSection />

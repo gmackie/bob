@@ -1,5 +1,7 @@
 import { Pressable, Text, View } from "react-native";
 
+import { colors } from "~/lib/colors";
+
 interface ListRowProps {
   title: string;
   subtitle?: string;
@@ -20,8 +22,8 @@ export function ListRow({
       className={`flex-row items-center justify-between py-3 ${showDivider ? "border-border/60 border-b" : ""}`}
     >
       <View className="flex-1 space-y-0.5">
-        <Text className="text-foreground text-base font-semibold">{title}</Text>
-        {subtitle && <Text className="text-muted text-sm">{subtitle}</Text>}
+        <Text className="text-base font-semibold" style={{ color: colors.foreground }}>{title}</Text>
+        {subtitle && <Text className="text-sm" style={{ color: colors.muted }}>{subtitle}</Text>}
       </View>
       {right && <View className="ml-3">{right}</View>}
     </View>

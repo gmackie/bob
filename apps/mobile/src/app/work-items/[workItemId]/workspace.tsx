@@ -22,6 +22,7 @@ import {
 import { authClient } from "~/utils/auth";
 import { trpc } from "~/utils/api";
 import { getBaseUrl } from "~/utils/base-url";
+import { colors } from "~/lib/colors";
 
 export default function TaskWorkspaceScreen() {
   const { data: session, isPending } = authClient.useSession();
@@ -222,7 +223,7 @@ export default function TaskWorkspaceScreen() {
     return (
       <Screen className="justify-center">
         <Card className="items-center">
-          <Text className="text-foreground text-lg font-semibold">
+          <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>
             Task not found
           </Text>
         </Card>
@@ -238,16 +239,16 @@ export default function TaskWorkspaceScreen() {
     <Screen className="pt-6">
       <ScrollView showsVerticalScrollIndicator={false}>
         <View className="mb-5">
-          <Text className="text-muted text-sm uppercase tracking-[0.18em]">
+          <Text className="text-sm uppercase tracking-[0.18em]" style={{ color: colors.muted }}>
             {workItemData.workItem.identifier}
           </Text>
-          <Text className="text-foreground mt-1 text-3xl font-semibold tracking-tight">
+          <Text className="mt-1 text-3xl font-semibold tracking-tight" style={{ color: colors.foreground }}>
             {workItemData.workItem.title}
           </Text>
         </View>
 
         <Card variant="elevated" className="mb-5">
-          <Text className="text-foreground text-lg font-semibold">
+          <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>
             {workspaceModel?.title ?? DEFAULT_EXECUTION_WORKSPACE_TITLE}
           </Text>
           <View className="mt-4 flex-row flex-wrap gap-2">
@@ -262,14 +263,14 @@ export default function TaskWorkspaceScreen() {
             </Badge>
           </View>
           {workspaceModel?.statusMessage ? (
-            <Text className="text-muted mt-4 text-sm">
+            <Text className="mt-4 text-sm" style={{ color: colors.muted }}>
               {workspaceModel.statusMessage}
             </Text>
           ) : null}
         </Card>
 
         <Card className="mb-5">
-          <Text className="text-foreground text-base font-semibold">
+          <Text className="text-base font-semibold" style={{ color: colors.foreground }}>
             Validation state
           </Text>
           <View className="mt-4 flex-row flex-wrap gap-2">
@@ -288,23 +289,23 @@ export default function TaskWorkspaceScreen() {
             </Badge>
             <Badge>{workspaceModel?.artifactCount ?? 0} artifacts</Badge>
           </View>
-          <Text className="text-muted mt-3 text-sm leading-6">
+          <Text className="mt-3 text-sm leading-6" style={{ color: colors.muted }}>
             {validationState.detail}
           </Text>
         </Card>
 
         {awaitingInputModel ? (
           <Card className="mb-5">
-            <Text className="text-foreground text-base font-semibold">
+            <Text className="text-base font-semibold" style={{ color: colors.foreground }}>
               Awaiting input
             </Text>
-            <Text className="text-muted mt-3 text-sm leading-6">
+            <Text className="mt-3 text-sm leading-6" style={{ color: colors.muted }}>
               {awaitingInputModel.question}
             </Text>
-            <Text className="text-muted2 mt-3 text-xs uppercase tracking-[0.16em]">
+            <Text className="mt-3 text-xs uppercase tracking-[0.16em]" style={{ color: colors.muted2 }}>
               Default: {awaitingInputModel.defaultAction}
             </Text>
-            <Text className="text-muted2 mt-1 text-xs uppercase tracking-[0.16em]">
+            <Text className="mt-1 text-xs uppercase tracking-[0.16em]" style={{ color: colors.muted2 }}>
               Expires: {new Date(awaitingInputModel.expiresAt).toLocaleString()}
             </Text>
             <Button
@@ -330,7 +331,7 @@ export default function TaskWorkspaceScreen() {
         ) : null}
 
         <View className="mb-3 flex-row items-center justify-between">
-          <Text className="text-foreground text-lg font-semibold">Conversation</Text>
+          <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>Conversation</Text>
         </View>
         <Card className="mb-5">
           {eventRows.length > 0 ? (
@@ -342,7 +343,7 @@ export default function TaskWorkspaceScreen() {
               />
             ))
           ) : (
-            <Text className="text-muted text-sm">
+            <Text className="text-sm" style={{ color: colors.muted }}>
               {linkedSession
                 ? "No visible messages yet."
                 : "No linked execution session yet for this task."}
@@ -351,7 +352,7 @@ export default function TaskWorkspaceScreen() {
         </Card>
 
         <Card className="mb-5">
-          <Text className="text-foreground text-base font-semibold">
+          <Text className="text-base font-semibold" style={{ color: colors.foreground }}>
             Send message
           </Text>
           <TextInput
@@ -365,7 +366,8 @@ export default function TaskWorkspaceScreen() {
                 : "Execution chat will unlock when this task has a linked session"
             }
             placeholderTextColor="#7B8794"
-            className="text-foreground border-border mt-3 min-h-24 rounded-2xl border px-4 py-3"
+            className="border-border mt-3 min-h-24 rounded-2xl border px-4 py-3"
+            style={{ color: colors.foreground }}
           />
           <Button
             className="mt-4"
@@ -385,7 +387,7 @@ export default function TaskWorkspaceScreen() {
         </Card>
 
         <View className="mb-3 flex-row items-center justify-between">
-          <Text className="text-foreground text-lg font-semibold">Run history</Text>
+          <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>Run history</Text>
         </View>
         <Card className="mb-5">
           {runRows.length > 0 ? (
@@ -407,7 +409,7 @@ export default function TaskWorkspaceScreen() {
                       : undefined
                   }
                   right={
-                    <Text className="text-muted text-sm">
+                    <Text className="text-sm" style={{ color: colors.muted }}>
                       {run.hasSession ? "Open run" : "Recorded"}
                     </Text>
                   }
@@ -416,14 +418,14 @@ export default function TaskWorkspaceScreen() {
               );
             })
           ) : (
-            <Text className="text-muted text-sm">
+            <Text className="text-sm" style={{ color: colors.muted }}>
               No runs have been recorded for this task yet.
             </Text>
           )}
         </Card>
 
         <View className="mb-3 flex-row items-center justify-between">
-          <Text className="text-foreground text-lg font-semibold">Artifacts</Text>
+          <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>Artifacts</Text>
         </View>
         <Card className="mb-8">
           {workItemData.currentArtifacts.length > 0 ? (
@@ -439,7 +441,7 @@ export default function TaskWorkspaceScreen() {
               />
             ))
           ) : (
-            <Text className="text-muted text-sm">
+            <Text className="text-sm" style={{ color: colors.muted }}>
               Verification and deliverable links will appear here.
             </Text>
           )}

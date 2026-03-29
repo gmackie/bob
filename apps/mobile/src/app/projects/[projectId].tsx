@@ -14,6 +14,7 @@ import {
 } from "~/features/planning/project-detail";
 import { authClient } from "~/utils/auth";
 import { trpc } from "~/utils/api";
+import { colors } from "~/lib/colors";
 
 export default function ProjectDetailScreen() {
   const { data: session, isPending } = authClient.useSession();
@@ -62,7 +63,7 @@ export default function ProjectDetailScreen() {
     return (
       <Screen className="justify-center">
         <Card className="items-center">
-          <Text className="text-foreground text-lg font-semibold">
+          <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>
             Project not found
           </Text>
         </Card>
@@ -86,14 +87,14 @@ export default function ProjectDetailScreen() {
       <ScrollView showsVerticalScrollIndicator={false}>
         <View className="mb-5 flex-row items-start justify-between">
           <View className="flex-1 pr-4">
-            <Text className="text-muted text-sm uppercase tracking-[0.18em]">
+            <Text className="text-sm uppercase tracking-[0.18em]" style={{ color: colors.muted }}>
               Project
             </Text>
-            <Text className="text-foreground mt-1 text-3xl font-semibold tracking-tight">
+            <Text className="mt-1 text-3xl font-semibold tracking-tight" style={{ color: colors.foreground }}>
               {project.name}
             </Text>
             {project.description ? (
-              <Text className="text-muted mt-3 text-sm leading-6">
+              <Text className="mt-3 text-sm leading-6" style={{ color: colors.muted }}>
                 {project.description}
               </Text>
             ) : null}
@@ -102,39 +103,39 @@ export default function ProjectDetailScreen() {
         </View>
 
         <Card variant="elevated" className="mb-5">
-          <Text className="text-foreground text-lg font-semibold">
+          <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>
             Scope
           </Text>
           <View className="mt-4 flex-row gap-3">
             <View className="flex-1">
-              <Text className="text-muted2 text-xs uppercase tracking-[0.16em]">
+              <Text className="text-xs uppercase tracking-[0.16em]" style={{ color: colors.muted2 }}>
                 Issues
               </Text>
-              <Text className="text-foreground mt-1 text-2xl font-semibold">
+              <Text className="mt-1 text-2xl font-semibold" style={{ color: colors.foreground }}>
                 {counts.issues}
               </Text>
             </View>
             <View className="flex-1">
-              <Text className="text-muted2 text-xs uppercase tracking-[0.16em]">
+              <Text className="text-xs uppercase tracking-[0.16em]" style={{ color: colors.muted2 }}>
                 Tasks
               </Text>
-              <Text className="text-foreground mt-1 text-2xl font-semibold">
+              <Text className="mt-1 text-2xl font-semibold" style={{ color: colors.foreground }}>
                 {counts.tasks}
               </Text>
             </View>
             <View className="flex-1">
-              <Text className="text-muted2 text-xs uppercase tracking-[0.16em]">
+              <Text className="text-xs uppercase tracking-[0.16em]" style={{ color: colors.muted2 }}>
                 Epics
               </Text>
-              <Text className="text-foreground mt-1 text-2xl font-semibold">
+              <Text className="mt-1 text-2xl font-semibold" style={{ color: colors.foreground }}>
                 {counts.epics}
               </Text>
             </View>
             <View className="flex-1">
-              <Text className="text-muted2 text-xs uppercase tracking-[0.16em]">
+              <Text className="text-xs uppercase tracking-[0.16em]" style={{ color: colors.muted2 }}>
                 Active
               </Text>
-              <Text className="text-foreground mt-1 text-2xl font-semibold">
+              <Text className="mt-1 text-2xl font-semibold" style={{ color: colors.foreground }}>
                 {counts.active}
               </Text>
             </View>
@@ -142,31 +143,31 @@ export default function ProjectDetailScreen() {
         </Card>
 
         <Card className="mb-5">
-          <Text className="text-foreground text-lg font-semibold">
+          <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>
             Execution state
           </Text>
           <View className="mt-4 flex-row gap-3">
             <View className="flex-1">
-              <Text className="text-muted2 text-xs uppercase tracking-[0.16em]">
+              <Text className="text-xs uppercase tracking-[0.16em]" style={{ color: colors.muted2 }}>
                 In progress
               </Text>
-              <Text className="text-foreground mt-1 text-2xl font-semibold">
+              <Text className="mt-1 text-2xl font-semibold" style={{ color: colors.foreground }}>
                 {executionSummary.inProgress}
               </Text>
             </View>
             <View className="flex-1">
-              <Text className="text-muted2 text-xs uppercase tracking-[0.16em]">
+              <Text className="text-xs uppercase tracking-[0.16em]" style={{ color: colors.muted2 }}>
                 In review
               </Text>
-              <Text className="text-foreground mt-1 text-2xl font-semibold">
+              <Text className="mt-1 text-2xl font-semibold" style={{ color: colors.foreground }}>
                 {executionSummary.inReview}
               </Text>
             </View>
             <View className="flex-1">
-              <Text className="text-muted2 text-xs uppercase tracking-[0.16em]">
+              <Text className="text-xs uppercase tracking-[0.16em]" style={{ color: colors.muted2 }}>
                 Blocked
               </Text>
-              <Text className="text-foreground mt-1 text-2xl font-semibold">
+              <Text className="mt-1 text-2xl font-semibold" style={{ color: colors.foreground }}>
                 {executionSummary.blocked}
               </Text>
             </View>
@@ -174,7 +175,7 @@ export default function ProjectDetailScreen() {
         </Card>
 
         <View className="mb-3 flex-row items-center justify-between">
-          <Text className="text-foreground text-lg font-semibold">Work items</Text>
+          <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>Work items</Text>
           <Button variant="ghost" size="sm" onPress={() => router.back()}>
             Back
           </Button>
@@ -193,14 +194,14 @@ export default function ProjectDetailScreen() {
                   key={item.id}
                   title={`${item.identifier} · ${item.title}`}
                   subtitle={`${item.kind} · ${item.status.replace(/_/g, " ")}`}
-                  right={<Text className="text-muted text-sm">{action.label}</Text>}
+                  right={<Text className="text-sm" style={{ color: colors.muted }}>{action.label}</Text>}
                   onPress={() => router.push(action.href as never)}
                   showDivider={index < workItemsQuery.data.length - 1}
                 />
               );
             })
           ) : (
-            <Text className="text-muted text-sm">No work items in this project.</Text>
+            <Text className="text-sm" style={{ color: colors.muted }}>No work items in this project.</Text>
           )}
         </Card>
       </ScrollView>

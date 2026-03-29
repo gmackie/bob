@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bob Builder — Execution Review Explorations</title>
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-page:#FAFAF8;--bg-elevated:#FFFFFF;--bg-subtle:#F5F4F1;--bg-inset:#EEEDEA;
+    --border:#E3E1DC;--border-subtle:#EEEDEA;
+    --text-primary:#1C1B18;--text-secondary:#5C5A53;--text-muted:#8A877E;
+    --accent:#D4850A;--accent-hover:#B87208;--accent-muted:#F5DEB3;--accent-subtle:#FFF3E0;
+    --success:#2D8A4E;--success-subtle:#E8F5E9;
+    --warning:#D4850A;--warning-subtle:#FFF3E0;
+    --error:#C62828;--error-subtle:#FFEBEE;
+    --info:#1565C0;--info-subtle:#E3F2FD;
+    --purple:#7C3AED;--purple-subtle:#EDE9FE;
+  }
+  [data-theme="dark"] {
+    --bg-page:#141310;--bg-elevated:#1C1B18;--bg-subtle:#232220;--bg-inset:#0E0D0B;
+    --border:#2E2D2A;--border-subtle:#232220;
+    --text-primary:#EEEDEA;--text-secondary:#A8A59E;--text-muted:#6E6B64;
+    --accent:#E8A33C;--accent-hover:#F0B45A;--accent-muted:#3D3120;--accent-subtle:#2C2418;
+    --success:#4CAF50;--success-subtle:#1B2E1D;
+    --warning:#E8A33C;--warning-subtle:#2C2418;
+    --error:#EF5350;--error-subtle:#2E1616;
+    --info:#42A5F5;--info-subtle:#162230;
+    --purple:#A78BFA;--purple-subtle:#1E1636;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg-page);color:var(--text-primary);line-height:1.6;-webkit-font-smoothing:antialiased;}
+
+  /* NAV */
+  .top-bar{position:sticky;top:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:12px 32px;background:var(--bg-elevated);border-bottom:1px solid var(--border);}
+  .top-bar-title{font-family:'Satoshi',sans-serif;font-weight:900;font-size:20px;letter-spacing:-0.02em;color:var(--accent);}
+  .top-bar-nav{display:flex;gap:4px;}
+  .nav-pill{padding:6px 14px;border-radius:8px;font-size:13px;font-weight:500;color:var(--text-muted);cursor:pointer;border:none;background:none;font-family:'DM Sans',sans-serif;}
+  .nav-pill:hover{color:var(--text-primary);background:var(--bg-subtle);}
+  .nav-pill.active{color:var(--accent);background:var(--accent-subtle);}
+  .theme-toggle{background:var(--bg-subtle);border:1px solid var(--border);border-radius:8px;padding:6px 14px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;color:var(--text-secondary);cursor:pointer;}
+  .theme-toggle:hover{background:var(--accent-subtle);color:var(--accent);border-color:var(--accent-muted);}
+
+  /* SECTIONS */
+  .section{display:none;max-width:1400px;margin:0 auto;padding:48px 32px;}
+  .section.active{display:block;}
+  .ex-label{font-size:12px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:var(--accent);margin-bottom:8px;}
+  .ex-title{font-family:'Satoshi',sans-serif;font-size:36px;font-weight:700;letter-spacing:-0.02em;line-height:1.15;margin-bottom:8px;}
+  .ex-desc{font-size:16px;color:var(--text-secondary);max-width:720px;margin-bottom:48px;}
+  .sub-title{font-family:'Satoshi',sans-serif;font-size:24px;font-weight:700;letter-spacing:-0.02em;margin-bottom:8px;margin-top:48px;}
+  .sub-desc{font-size:14px;color:var(--text-secondary);max-width:640px;margin-bottom:24px;}
+
+  /* MOCKUP */
+  .mockup{background:var(--bg-inset);border:2px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:48px;}
+  .mockup-bar{display:flex;align-items:center;gap:8px;padding:10px 16px;background:var(--bg-elevated);border-bottom:1px solid var(--border);}
+  .mockup-dot{width:10px;height:10px;border-radius:5px;}
+  .mockup-url{flex:1;text-align:center;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-muted);}
+  .mockup-inner{background:var(--bg-page);}
+
+  /* SHARED */
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 20px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;transition:all 150ms;border:none;}
+  .btn-primary{background:var(--accent);color:#FFF;}.btn-primary:hover{background:var(--accent-hover);}
+  .btn-secondary{background:var(--bg-subtle);border:1px solid var(--border);color:var(--text-primary);}.btn-secondary:hover{background:var(--accent-subtle);border-color:var(--accent-muted);color:var(--accent);}
+  .btn-success{background:var(--success);color:#FFF;}.btn-success:hover{opacity:0.9;}
+  .btn-danger{background:var(--error-subtle);color:var(--error);border:1px solid transparent;}.btn-danger:hover{border-color:var(--error);}
+  .btn-sm{padding:6px 12px;font-size:13px;}
+  .btn-xs{padding:4px 10px;font-size:12px;}
+  .id-tag{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-muted);background:var(--bg-subtle);padding:1px 6px;border-radius:4px;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(232,163,60,0.4);}50%{box-shadow:0 0 0 6px rgba(232,163,60,0);}}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* ===== PIPELINE RAIL ===== */
+  .pipeline-rail{display:flex;align-items:center;gap:0;padding:20px 24px;background:var(--bg-elevated);border-bottom:1px solid var(--border);overflow-x:auto;}
+  .pipe-node{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:90px;position:relative;}
+  .pipe-dot{width:28px;height:28px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;transition:all 300ms;}
+  .pipe-dot.done{background:var(--success);color:#FFF;}
+  .pipe-dot.active{background:var(--accent);color:#FFF;animation:pulse 2s infinite;}
+  .pipe-dot.failed{background:var(--error);color:#FFF;}
+  .pipe-dot.pending{background:var(--bg-subtle);border:2px solid var(--border);color:var(--text-muted);}
+  .pipe-dot.approval{background:var(--purple);color:#FFF;}
+  .pipe-label{font-size:10px;font-weight:600;letter-spacing:0.02em;color:var(--text-muted);text-align:center;white-space:nowrap;}
+  .pipe-label.done-label{color:var(--success);}
+  .pipe-label.active-label{color:var(--accent);font-weight:700;}
+  .pipe-label.failed-label{color:var(--error);}
+  .pipe-connector{width:32px;height:2px;flex-shrink:0;margin-bottom:18px;}
+  .pipe-connector.done{background:var(--success);}
+  .pipe-connector.active{background:linear-gradient(90deg,var(--success),var(--accent));}
+  .pipe-connector.pending{background:var(--border);}
+  .pipe-connector.failed{background:var(--error);}
+  .pipe-time{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-muted);margin-top:-2px;}
+
+  /* ===== CODE REVIEW CARD ===== */
+  .review-card{background:var(--bg-elevated);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:24px;}
+  .review-card-header{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border);}
+  .review-card-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+  .review-card-title{font-family:'Satoshi',sans-serif;font-size:16px;font-weight:700;letter-spacing:-0.01em;}
+  .review-card-meta{font-size:12px;color:var(--text-muted);margin-top:2px;}
+  .review-card-body{padding:20px;}
+  .review-card-footer{padding:12px 20px;border-top:1px solid var(--border);background:var(--bg-subtle);display:flex;align-items:center;justify-content:space-between;}
+
+  /* ===== TEST RESULTS ===== */
+  .test-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;}
+  .test-stat{background:var(--bg-elevated);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center;}
+  .test-stat-value{font-family:'Satoshi',sans-serif;font-size:28px;font-weight:900;letter-spacing:-0.03em;line-height:1;}
+  .test-stat-label{font-size:11px;font-weight:500;color:var(--text-muted);margin-top:4px;}
+
+  .test-suite{background:var(--bg-elevated);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden;}
+  .test-suite-header{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;transition:background 100ms;}
+  .test-suite-header:hover{background:var(--bg-subtle);}
+  .test-suite-icon{font-size:14px;flex-shrink:0;}
+  .test-suite-name{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .test-suite-stats{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-muted);display:flex;gap:8px;}
+  .test-suite-stats .pass{color:var(--success);}
+  .test-suite-stats .fail{color:var(--error);}
+  .test-suite-stats .skip{color:var(--text-muted);}
+  .test-suite-details{padding:0 14px 10px;border-top:1px solid var(--border-subtle);}
+  .test-case{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;}
+  .test-case-icon{font-size:12px;flex-shrink:0;width:16px;text-align:center;}
+  .test-case-name{flex:1;color:var(--text-secondary);}
+  .test-case-time{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-muted);}
+
+  /* ===== GATE ROW ===== */
+  .gate-row{display:flex;align-items:center;gap:0;margin-bottom:24px;padding:16px 20px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:12px;}
+  .gate{display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;position:relative;}
+  .gate-dot{width:32px;height:32px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;}
+  .gate-dot.passed{background:var(--success-subtle);color:var(--success);border:2px solid var(--success);}
+  .gate-dot.failed{background:var(--error-subtle);color:var(--error);border:2px solid var(--error);}
+  .gate-dot.running{background:var(--info-subtle);color:var(--info);border:2px solid var(--info);}
+  .gate-dot.pending-g{background:var(--bg-subtle);color:var(--text-muted);border:2px solid var(--border);}
+  .gate-name{font-size:11px;font-weight:600;color:var(--text-secondary);}
+  .gate-time{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-muted);}
+  .gate-connector{width:48px;height:2px;flex-shrink:0;margin-bottom:22px;}
+  .gate-connector.g-done{background:var(--success);}
+  .gate-connector.g-active{background:linear-gradient(90deg,var(--success),var(--info));}
+  .gate-connector.g-pending{background:var(--border);}
+
+  /* ===== BUILD DETAIL ===== */
+  .build-card{background:var(--bg-elevated);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:16px;display:flex;align-items:flex-start;gap:14px;}
+  .build-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+  .build-content{flex:1;min-width:0;}
+  .build-title{font-size:14px;font-weight:600;margin-bottom:2px;}
+  .build-meta{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-muted);flex-wrap:wrap;}
+  .build-meta-sep{color:var(--border);}
+  .build-artifacts{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;}
+  .artifact-chip{display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-subtle);font-size:11px;font-weight:500;color:var(--text-secondary);cursor:pointer;transition:all 150ms;}
+  .artifact-chip:hover{border-color:var(--accent-muted);color:var(--accent);background:var(--accent-subtle);}
+  .artifact-chip-icon{font-size:12px;}
+
+  /* ===== DEPLOY ENVIRONMENT LANE ===== */
+  .env-lanes{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;margin-bottom:24px;border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+  .env-lane{padding:20px;background:var(--bg-elevated);position:relative;}
+  .env-lane+.env-lane{border-left:1px solid var(--border);}
+  .env-lane::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
+  .env-lane.healthy::before{background:var(--success);}
+  .env-lane.deploying::before{background:var(--accent);}
+  .env-lane.pending-env::before{background:var(--border);}
+  .env-lane.failed-env::before{background:var(--error);}
+  .env-lane.approval::before{background:var(--purple);}
+  .env-name{font-size:11px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;}
+  .env-status{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:600;margin-bottom:4px;}
+  .env-dot{width:8px;height:8px;border-radius:4px;flex-shrink:0;}
+  .env-dot.green{background:var(--success);}
+  .env-dot.amber{background:var(--accent);animation:pulse 2s infinite;}
+  .env-dot.red{background:var(--error);}
+  .env-dot.purple{background:var(--purple);}
+  .env-dot.gray{background:var(--text-muted);opacity:0.4;}
+  .env-detail{font-size:12px;color:var(--text-muted);margin-bottom:8px;}
+  .env-hash{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-muted);background:var(--bg-subtle);padding:1px 5px;border-radius:3px;}
+  .env-progress{margin-top:8px;}
+  .progress-track{height:4px;background:var(--bg-subtle);border-radius:2px;overflow:hidden;}
+  .progress-fill{height:100%;border-radius:2px;transition:width 400ms ease-out;}
+
+  /* ===== CODE REVIEW DIFF ===== */
+  .cr-comment{background:var(--bg-elevated);border:1px solid var(--border);border-radius:10px;margin-bottom:12px;overflow:hidden;}
+  .cr-comment-header{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg-subtle);border-bottom:1px solid var(--border);font-size:12px;}
+  .cr-comment-avatar{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;}
+  .cr-comment-file{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-secondary);}
+  .cr-comment-line{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent);}
+  .cr-comment-body{padding:12px 14px;font-size:13px;color:var(--text-primary);line-height:1.5;}
+  .cr-severity{font-size:10px;font-weight:600;padding:2px 6px;border-radius:3px;margin-left:auto;}
+  .cr-severity.critical{background:var(--error-subtle);color:var(--error);}
+  .cr-severity.suggestion{background:var(--info-subtle);color:var(--info);}
+  .cr-severity.nit{background:var(--bg-subtle);color:var(--text-muted);}
+
+  /* ===== DIFF LINES (inline in review) ===== */
+  .diff-ctx{font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.7;padding:8px 14px;background:var(--bg-inset);border-bottom:1px solid var(--border-subtle);}
+  .diff-ctx .added{background:var(--success-subtle);display:block;padding:0 6px;margin:0 -6px;}
+  .diff-ctx .removed{background:var(--error-subtle);display:block;padding:0 6px;margin:0 -6px;}
+  .diff-ctx .hunk{color:var(--info);font-style:italic;}
+
+  /* ===== ARTIFACT PANEL ===== */
+  .artifact-panel{background:var(--bg-elevated);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+  .artifact-panel-header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);}
+  .artifact-panel-title{font-family:'Satoshi',sans-serif;font-size:16px;font-weight:700;}
+  .artifact-list{padding:8px;}
+  .artifact-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;cursor:pointer;transition:background 100ms;}
+  .artifact-item:hover{background:var(--bg-subtle);}
+  .artifact-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+  .artifact-info{flex:1;min-width:0;}
+  .artifact-name{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .artifact-meta{font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:6px;}
+  .artifact-badge{font-size:10px;font-weight:600;padding:2px 6px;border-radius:3px;}
+
+  /* ===== PHONE ===== */
+  .phone-frame{width:390px;border:2px solid var(--border);border-radius:24px;overflow:hidden;position:relative;}
+  .phone-notch{width:120px;height:28px;background:var(--bg-page);border-radius:0 0 16px 16px;margin:0 auto;}
+  .phone-inner{background:var(--bg-page);min-height:750px;position:relative;}
+  .phone-home-bar{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:134px;height:5px;border-radius:3px;background:var(--text-muted);opacity:0.3;}
+  .ph-header{padding:16px 20px;display:flex;align-items:center;justify-content:space-between;}
+  .ph-title{font-family:'Satoshi',sans-serif;font-size:20px;font-weight:700;letter-spacing:-0.02em;}
+  .ph-back{font-size:18px;color:var(--accent);cursor:pointer;}
+  .ph-section{padding:0 20px 16px;}
+  .ph-label{font-size:11px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;}
+  .phone-tabs{display:flex;border-bottom:1px solid var(--border);margin:0 20px;}
+  .phone-tab{flex:1;padding:10px 0;text-align:center;font-size:12px;font-weight:500;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;}
+  .phone-tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600;}
+
+  @media(max-width:900px){.test-summary{grid-template-columns:1fr 1fr;}.env-lanes{grid-template-columns:1fr;}.env-lane+.env-lane{border-left:none;border-top:1px solid var(--border);}}
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div class="top-bar-title">Execution Review</div>
+  <div class="top-bar-nav">
+    <button class="nav-pill active" onclick="showSection('pipeline')">Full Pipeline</button>
+    <button class="nav-pill" onclick="showSection('codereview')">Code Review Gate</button>
+    <button class="nav-pill" onclick="showSection('ci')">CI & Test Artifacts</button>
+    <button class="nav-pill" onclick="showSection('deploy')">Deploy Progression</button>
+    <button class="nav-pill" onclick="showSection('failures')">Failure & Recovery</button>
+    <button class="nav-pill" onclick="showSection('mobile')">Mobile</button>
+  </div>
+  <button class="theme-toggle" onclick="toggleTheme()">☀️ Light</button>
+</div>
+
+<!-- ===== 1. FULL PIPELINE VIEW ===== -->
+<div class="section active" id="pipeline">
+  <div class="ex-label">Execution Review</div>
+  <div class="ex-title">The Full Pipeline</div>
+  <div class="ex-desc">One dispatch item's journey from agent completion through code review, CI gates, and environment promotions to production. Every state in the machine, visualized.</div>
+
+  <div class="mockup">
+    <div class="mockup-bar">
+      <div class="mockup-dot" style="background:#EF5350;"></div>
+      <div class="mockup-dot" style="background:#FFC107;"></div>
+      <div class="mockup-dot" style="background:#4CAF50;"></div>
+      <div class="mockup-url">bob.tail1e1a32.ts.net/planning/dispatch/batch_9f3a · Task 2: Redis token store</div>
+    </div>
+    <div class="mockup-inner">
+      <!-- Pipeline rail — full state machine -->
+      <div class="pipeline-rail">
+        <div class="pipe-node">
+          <div class="pipe-dot done">✓</div>
+          <div class="pipe-label done-label">Agent</div>
+          <div class="pipe-time">4m 12s</div>
+        </div>
+        <div class="pipe-connector done"></div>
+        <div class="pipe-node">
+          <div class="pipe-dot done">✓</div>
+          <div class="pipe-label done-label">Review</div>
+          <div class="pipe-time">approved</div>
+        </div>
+        <div class="pipe-connector done"></div>
+        <div class="pipe-node">
+          <div class="pipe-dot done">✓</div>
+          <div class="pipe-label done-label">Build</div>
+          <div class="pipe-time">2m 18s</div>
+        </div>
+        <div class="pipe-connector done"></div>
+        <div class="pipe-node">
+          <div class="pipe-dot done">✓</div>
+          <div class="pipe-label done-label">Gates</div>
+          <div class="pipe-time">all pass</div>
+        </div>
+        <div class="pipe-connector done"></div>
+        <div class="pipe-node">
+          <div class="pipe-dot done">✓</div>
+          <div class="pipe-label done-label">Dev</div>
+          <div class="pipe-time">healthy</div>
+        </div>
+        <div class="pipe-connector done"></div>
+        <div class="pipe-node">
+          <div class="pipe-dot done">✓</div>
+          <div class="pipe-label done-label">Staging</div>
+          <div class="pipe-time">healthy</div>
+        </div>
+        <div class="pipe-connector active"></div>
+        <div class="pipe-node">
+          <div class="pipe-dot approval">⏸</div>
+          <div class="pipe-label" style="color:var(--purple);font-weight:700;">Approve</div>
+          <div class="pipe-time">waiting</div>
+        </div>
+        <div class="pipe-connector pending"></div>
+        <div class="pipe-node">
+          <div class="pipe-dot pending"></div>
+          <div class="pipe-label">Prod</div>
+        </div>
+        <div class="pipe-connector pending"></div>
+        <div class="pipe-node">
+          <div class="pipe-dot pending"></div>
+          <div class="pipe-label">Complete</div>
+        </div>
+      </div>
+
+      <!-- Approval gate card -->
+      <div style="padding:24px;">
+        <div style="background:var(--purple-subtle);border:1px solid var(--purple);border-radius:12px;padding:20px;display:flex;align-items:flex-start;gap:16px;">
+          <div style="width:40px;height:40px;border-radius:10px;background:var(--purple);color:#FFF;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">⏸</div>
+          <div style="flex:1;">
+            <div style="font-family:'Satoshi',sans-serif;font-size:18px;font-weight:700;margin-bottom:4px;">Production Approval Required</div>
+            <div style="font-size:14px;color:var(--text-secondary);margin-bottom:12px;line-height:1.5;">
+              Task 2 (<span class="id-tag">BOB-412/2</span>) passed all gates and is healthy on staging.
+              Commit <span class="mono" style="font-size:12px;color:var(--text-muted);">a3f7c2d</span> · image <span class="mono" style="font-size:12px;color:var(--text-muted);">harbor.gmac.io/bob/web:a3f7c2d</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+              <div style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--success);font-weight:600;">
+                <span>✓</span> 47 tests pass
+              </div>
+              <div style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--success);font-weight:600;">
+                <span>✓</span> Code review approved
+              </div>
+              <div style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--success);font-weight:600;">
+                <span>✓</span> Staging healthy 8m
+              </div>
+              <div style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--success);font-weight:600;">
+                <span>✓</span> Security scan clean
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-success btn-sm">✓ Approve Production Deploy</button>
+              <button class="btn btn-secondary btn-sm">View Full Report</button>
+              <button class="btn btn-danger btn-sm">✕ Reject</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Environment lanes -->
+        <div style="margin-top:24px;">
+          <div class="env-lanes">
+            <div class="env-lane healthy">
+              <div class="env-name">Development</div>
+              <div class="env-status"><div class="env-dot green"></div><span style="color:var(--success);">Healthy</span></div>
+              <div class="env-detail">3/3 pods · deployed 12m ago</div>
+              <div><span class="env-hash">a3f7c2d</span></div>
+            </div>
+            <div class="env-lane healthy">
+              <div class="env-name">Staging</div>
+              <div class="env-status"><div class="env-dot green"></div><span style="color:var(--success);">Healthy</span></div>
+              <div class="env-detail">3/3 pods · deployed 8m ago</div>
+              <div><span class="env-hash">a3f7c2d</span></div>
+            </div>
+            <div class="env-lane approval">
+              <div class="env-name">Production</div>
+              <div class="env-status"><div class="env-dot purple"></div><span style="color:var(--purple);">Awaiting Approval</span></div>
+              <div class="env-detail">Current: <span class="env-hash">9b2e4f1</span> (2 days ago)</div>
+              <div style="font-size:12px;color:var(--purple);margin-top:4px;">↑ Pending: <span class="env-hash">a3f7c2d</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 2. CODE REVIEW GATE ===== -->
+<div class="section" id="codereview">
+  <div class="ex-label">Code Review Gate</div>
+  <div class="ex-title">Bob Reviews Bob's Work</div>
+  <div class="ex-desc">After agent completes, a code review session inspects the diff. The review produces an artifact with approve/request_changes decision. On rejection, the agent resumes with feedback.</div>
+
+  <!-- Approved review -->
+  <div class="sub-title" style="margin-top:0;">Approved Review</div>
+  <div class="sub-desc">Review passed — 3 comments (1 suggestion applied, 2 nits acknowledged). Build proceeds.</div>
+
+  <div class="review-card">
+    <div class="review-card-header">
+      <div class="review-card-icon" style="background:var(--success-subtle);color:var(--success);">✓</div>
+      <div style="flex:1;">
+        <div class="review-card-title">Code Review: Implement Redis token store</div>
+        <div class="review-card-meta">
+          <span class="id-tag">BOB-412/2</span> · reviewed by <strong>bob-reviewer</strong> · 2m ago ·
+          <span style="color:var(--success);font-weight:600;">APPROVED</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;background:var(--success-subtle);color:var(--success);font-size:13px;font-weight:600;">✓ Approved</div>
+    </div>
+
+    <div class="review-card-body">
+      <div style="font-size:14px;color:var(--text-secondary);margin-bottom:16px;line-height:1.5;padding:12px 16px;background:var(--bg-subtle);border-radius:8px;">
+        Clean implementation. Token rotation using MULTI/EXEC is the right approach. Connection pool defaults are conservative but reasonable for the current scale. Two minor suggestions below.
+      </div>
+
+      <!-- Comment 1 — suggestion applied -->
+      <div class="cr-comment">
+        <div class="cr-comment-header">
+          <div class="cr-comment-avatar" style="background:var(--accent-subtle);color:var(--accent);">B</div>
+          <span style="font-weight:600;color:var(--text-primary);">bob-reviewer</span>
+          <div class="cr-comment-file">stores/redis.ts</div>
+          <div class="cr-comment-line">L47-52</div>
+          <div class="cr-severity suggestion">suggestion</div>
+        </div>
+        <div class="diff-ctx">
+          <div class="removed">-  const multi = this.redis.multi();</div>
+          <div class="removed">-  multi.del(this.key(oldToken));</div>
+          <div class="removed">-  multi.set(this.key(newToken), JSON.stringify(session));</div>
+          <div class="added">+  const pipeline = this.redis.pipeline();</div>
+          <div class="added">+  pipeline.del(this.key(oldToken));</div>
+          <div class="added">+  pipeline.setex(this.key(newToken), this.ttl, JSON.stringify(session));</div>
+        </div>
+        <div class="cr-comment-body">
+          Use <code style="font-family:'JetBrains Mono',monospace;font-size:12px;background:var(--bg-subtle);padding:1px 5px;border-radius:4px;">pipeline</code> instead of <code style="font-family:'JetBrains Mono',monospace;font-size:12px;background:var(--bg-subtle);padding:1px 5px;border-radius:4px;">multi</code> here — you don't need atomic guarantees for rotation since the new token is already valid. Pipeline is faster and won't block other commands.
+          <div style="margin-top:8px;display:flex;align-items:center;gap:6px;">
+            <span style="font-size:11px;font-weight:600;color:var(--success);background:var(--success-subtle);padding:2px 6px;border-radius:3px;">✓ Applied</span>
+            <span style="font-size:11px;color:var(--text-muted);">Agent applied in commit <span class="mono" style="font-size:10px;">e4b2f1a</span></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Comment 2 — nit -->
+      <div class="cr-comment">
+        <div class="cr-comment-header">
+          <div class="cr-comment-avatar" style="background:var(--accent-subtle);color:var(--accent);">B</div>
+          <span style="font-weight:600;color:var(--text-primary);">bob-reviewer</span>
+          <div class="cr-comment-file">stores/redis.ts</div>
+          <div class="cr-comment-line">L12</div>
+          <div class="cr-severity nit">nit</div>
+        </div>
+        <div class="cr-comment-body">
+          Consider extracting <code style="font-family:'JetBrains Mono',monospace;font-size:12px;background:var(--bg-subtle);padding:1px 5px;border-radius:4px;">session:</code> prefix to a config constant — makes it easier to namespace if you add more Redis use cases later.
+          <div style="margin-top:8px;">
+            <span style="font-size:11px;font-weight:600;color:var(--text-muted);background:var(--bg-subtle);padding:2px 6px;border-radius:3px;">Acknowledged</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="review-card-footer">
+      <div style="font-size:12px;color:var(--text-muted);">3 comments · 1 applied · 2 acknowledged</div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-secondary btn-xs">View Full Diff</button>
+        <button class="btn btn-secondary btn-xs">Open Session</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rejected review -->
+  <div class="sub-title">Changes Requested</div>
+  <div class="sub-desc">Review found a critical issue. Agent resumes execution with the feedback, fixes the code, and the review re-runs. Previous review marked stale.</div>
+
+  <div class="review-card" style="border-color:var(--error);">
+    <div class="review-card-header" style="background:var(--error-subtle);">
+      <div class="review-card-icon" style="background:var(--error-subtle);color:var(--error);">✕</div>
+      <div style="flex:1;">
+        <div class="review-card-title">Code Review: Migrate existing sessions</div>
+        <div class="review-card-meta">
+          <span class="id-tag">BOB-412/3</span> · reviewed by <strong>bob-reviewer</strong> · 5m ago ·
+          <span style="color:var(--error);font-weight:600;">CHANGES REQUESTED</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;background:var(--error-subtle);color:var(--error);font-size:13px;font-weight:600;">✕ Changes Requested</div>
+    </div>
+
+    <div class="review-card-body">
+      <div style="font-size:14px;color:var(--text-secondary);margin-bottom:16px;line-height:1.5;padding:12px 16px;background:var(--error-subtle);border-radius:8px;border:1px solid rgba(198,40,40,0.15);">
+        <strong style="color:var(--error);">Critical:</strong> The migration script doesn't handle the case where a session was created after the migration started. Any sessions created during the dual-read window will be orphaned in the old store.
+      </div>
+
+      <div class="cr-comment">
+        <div class="cr-comment-header">
+          <div class="cr-comment-avatar" style="background:var(--accent-subtle);color:var(--accent);">B</div>
+          <span style="font-weight:600;color:var(--text-primary);">bob-reviewer</span>
+          <div class="cr-comment-file">stores/migrate.ts</div>
+          <div class="cr-comment-line">L34-41</div>
+          <div class="cr-severity critical">critical</div>
+        </div>
+        <div class="diff-ctx">
+          <div>const oldSessions = await cookieStore.listAll();</div>
+          <div>for (const session of oldSessions) {</div>
+          <div>  await redisStore.set(session.token, session);</div>
+          <div>}</div>
+        </div>
+        <div class="cr-comment-body">
+          This iterates a point-in-time snapshot. Any new sessions created between <code style="font-family:'JetBrains Mono',monospace;font-size:12px;background:var(--bg-subtle);padding:1px 5px;border-radius:4px;">listAll()</code> and the migration completing will only exist in the cookie store. You need a change-data-capture approach — tail the cookie store for new writes during migration and replay them into Redis.
+        </div>
+      </div>
+    </div>
+
+    <div class="review-card-footer" style="background:var(--error-subtle);">
+      <div style="font-size:12px;color:var(--error);font-weight:500;">↻ Agent resumed with feedback — re-review will run automatically</div>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <div style="width:14px;height:14px;border:2px solid var(--accent);border-top-color:transparent;border-radius:7px;animation:spin 1s linear infinite;"></div>
+        <span style="font-size:12px;color:var(--accent);font-weight:500;">Agent fixing...</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 3. CI & TEST ARTIFACTS ===== -->
+<div class="section" id="ci">
+  <div class="ex-label">CI & Testing</div>
+  <div class="ex-title">Gates, Builds & Test Reports</div>
+  <div class="ex-desc">ForgeGraph tracks revision gates (lint, test, build), build artifacts with image digests, and detailed test results. Every artifact is attached to the work item.</div>
+
+  <!-- Gates inline -->
+  <div class="sub-title" style="margin-top:0;">Revision Gates</div>
+  <div class="sub-desc">Three gates run on every revision. All must pass before deployment begins.</div>
+
+  <div class="gate-row">
+    <div class="gate">
+      <div class="gate-dot passed">✓</div>
+      <div class="gate-name">Lint</div>
+      <div class="gate-time">8s</div>
+    </div>
+    <div class="gate-connector g-done"></div>
+    <div class="gate">
+      <div class="gate-dot passed">✓</div>
+      <div class="gate-name">Test</div>
+      <div class="gate-time">2m 04s</div>
+    </div>
+    <div class="gate-connector g-done"></div>
+    <div class="gate">
+      <div class="gate-dot passed">✓</div>
+      <div class="gate-name">Build</div>
+      <div class="gate-time">1m 42s</div>
+    </div>
+  </div>
+
+  <!-- Build card -->
+  <div class="sub-title">Build Detail</div>
+
+  <div class="build-card">
+    <div class="build-icon" style="background:var(--success-subtle);color:var(--success);">🏗</div>
+    <div class="build-content">
+      <div class="build-title">Build #412-2 — Passed</div>
+      <div class="build-meta">
+        <span class="mono" style="font-size:12px;">a3f7c2d</span>
+        <span class="build-meta-sep">·</span>
+        <span>Gitea Actions</span>
+        <span class="build-meta-sep">·</span>
+        <span>Duration: 2m 18s</span>
+        <span class="build-meta-sep">·</span>
+        <span>3m ago</span>
+      </div>
+      <div class="build-meta" style="margin-top:4px;">
+        <span>Image: <span class="mono" style="font-size:11px;">harbor.gmac.io/bob/web:a3f7c2d</span></span>
+        <span class="build-meta-sep">·</span>
+        <span>142 MB</span>
+        <span class="build-meta-sep">·</span>
+        <span class="mono" style="font-size:11px;">sha256:7f3c9a...</span>
+      </div>
+      <div class="build-artifacts">
+        <div class="artifact-chip"><span class="artifact-chip-icon">📋</span> Test Report</div>
+        <div class="artifact-chip"><span class="artifact-chip-icon">📦</span> OCI Image</div>
+        <div class="artifact-chip"><span class="artifact-chip-icon">📄</span> Build Log</div>
+        <div class="artifact-chip"><span class="artifact-chip-icon">🔒</span> Security Scan</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Test results -->
+  <div class="sub-title">Test Report</div>
+  <div class="sub-desc">Detailed test results from the CI run. Suites expandable to show individual test cases with durations.</div>
+
+  <div class="test-summary">
+    <div class="test-stat">
+      <div class="test-stat-value" style="color:var(--success);">47</div>
+      <div class="test-stat-label">Passed</div>
+    </div>
+    <div class="test-stat">
+      <div class="test-stat-value" style="color:var(--error);">0</div>
+      <div class="test-stat-label">Failed</div>
+    </div>
+    <div class="test-stat">
+      <div class="test-stat-value" style="color:var(--text-muted);">2</div>
+      <div class="test-stat-label">Skipped</div>
+    </div>
+    <div class="test-stat">
+      <div class="test-stat-value">2:04</div>
+      <div class="test-stat-label">Duration</div>
+    </div>
+  </div>
+
+  <!-- Test suites -->
+  <div class="test-suite">
+    <div class="test-suite-header" onclick="this.parentElement.classList.toggle('expanded')">
+      <div class="test-suite-icon" style="color:var(--success);">✓</div>
+      <div class="test-suite-name">packages/auth/src/stores/__tests__/redis.test.ts</div>
+      <div class="test-suite-stats">
+        <span class="pass">5 pass</span>
+        <span>67ms</span>
+      </div>
+    </div>
+    <div class="test-suite-details">
+      <div class="test-case"><div class="test-case-icon" style="color:var(--success);">✓</div><div class="test-case-name">should store and retrieve session</div><div class="test-case-time">11ms</div></div>
+      <div class="test-case"><div class="test-case-icon" style="color:var(--success);">✓</div><div class="test-case-name">should delete session</div><div class="test-case-time">7ms</div></div>
+      <div class="test-case"><div class="test-case-icon" style="color:var(--success);">✓</div><div class="test-case-name">should respect TTL</div><div class="test-case-time">14ms</div></div>
+      <div class="test-case"><div class="test-case-icon" style="color:var(--success);">✓</div><div class="test-case-name">should rotate token and invalidate old</div><div class="test-case-time">23ms</div></div>
+      <div class="test-case"><div class="test-case-icon" style="color:var(--success);">✓</div><div class="test-case-name">should handle expired sessions</div><div class="test-case-time">12ms</div></div>
+    </div>
+  </div>
+
+  <div class="test-suite">
+    <div class="test-suite-header" onclick="this.parentElement.classList.toggle('expanded')">
+      <div class="test-suite-icon" style="color:var(--success);">✓</div>
+      <div class="test-suite-name">packages/auth/src/__tests__/middleware.test.ts</div>
+      <div class="test-suite-stats">
+        <span class="pass">12 pass</span>
+        <span>340ms</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="test-suite">
+    <div class="test-suite-header" onclick="this.parentElement.classList.toggle('expanded')">
+      <div class="test-suite-icon" style="color:var(--success);">✓</div>
+      <div class="test-suite-name">packages/auth/src/__tests__/session.test.ts</div>
+      <div class="test-suite-stats">
+        <span class="pass">8 pass</span>
+        <span class="skip">2 skip</span>
+        <span>190ms</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="test-suite">
+    <div class="test-suite-header">
+      <div class="test-suite-icon" style="color:var(--success);">✓</div>
+      <div class="test-suite-name">apps/web/src/__tests__/auth-flow.test.ts</div>
+      <div class="test-suite-stats">
+        <span class="pass">22 pass</span>
+        <span>1.2s</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Artifact panel -->
+  <div class="sub-title">Attached Artifacts</div>
+  <div class="sub-desc">Every CI run and review produces artifacts attached to the work item. Artifacts are typed, timestamped, and linked to the producer (bob, forgegraph, human).</div>
+
+  <div class="artifact-panel" style="max-width:480px;">
+    <div class="artifact-panel-header">
+      <div class="artifact-panel-title">Artifacts — BOB-412</div>
+      <div style="font-size:12px;color:var(--text-muted);">7 items</div>
+    </div>
+    <div class="artifact-list">
+      <div class="artifact-item">
+        <div class="artifact-icon" style="background:var(--success-subtle);">✅</div>
+        <div class="artifact-info">
+          <div class="artifact-name">Test Report — 47 pass, 0 fail</div>
+          <div class="artifact-meta">
+            <span class="artifact-badge" style="background:var(--success-subtle);color:var(--success);">test_report</span>
+            <span>forgegraph · 3m ago</span>
+          </div>
+        </div>
+      </div>
+      <div class="artifact-item">
+        <div class="artifact-icon" style="background:var(--info-subtle);">🏗</div>
+        <div class="artifact-info">
+          <div class="artifact-name">Build #412-2 — harbor.gmac.io/bob/web:a3f7c2d</div>
+          <div class="artifact-meta">
+            <span class="artifact-badge" style="background:var(--info-subtle);color:var(--info);">build</span>
+            <span>forgegraph · 3m ago</span>
+          </div>
+        </div>
+      </div>
+      <div class="artifact-item">
+        <div class="artifact-icon" style="background:var(--success-subtle);">📋</div>
+        <div class="artifact-info">
+          <div class="artifact-name">Code Review — Approved (3 comments)</div>
+          <div class="artifact-meta">
+            <span class="artifact-badge" style="background:var(--success-subtle);color:var(--success);">code_review</span>
+            <span>bob · 5m ago</span>
+          </div>
+        </div>
+      </div>
+      <div class="artifact-item">
+        <div class="artifact-icon" style="background:var(--purple-subtle);">📋</div>
+        <div class="artifact-info">
+          <div class="artifact-name">PR #147 — feat: Redis session storage</div>
+          <div class="artifact-meta">
+            <span class="artifact-badge" style="background:var(--purple-subtle);color:var(--purple);">pr</span>
+            <span>bob · 8m ago</span>
+          </div>
+        </div>
+      </div>
+      <div class="artifact-item">
+        <div class="artifact-icon" style="background:var(--accent-subtle);">🔒</div>
+        <div class="artifact-info">
+          <div class="artifact-name">Security Scan — No vulnerabilities</div>
+          <div class="artifact-meta">
+            <span class="artifact-badge" style="background:var(--accent-subtle);color:var(--accent);">verification</span>
+            <span>forgegraph · 3m ago</span>
+          </div>
+        </div>
+      </div>
+      <div class="artifact-item">
+        <div class="artifact-icon" style="background:var(--success-subtle);">🚀</div>
+        <div class="artifact-info">
+          <div class="artifact-name">Dev deployment — healthy</div>
+          <div class="artifact-meta">
+            <span class="artifact-badge" style="background:var(--success-subtle);color:var(--success);">deliverable</span>
+            <span>forgegraph · 6m ago</span>
+          </div>
+        </div>
+      </div>
+      <div class="artifact-item">
+        <div class="artifact-icon" style="background:var(--success-subtle);">🚀</div>
+        <div class="artifact-info">
+          <div class="artifact-name">Staging deployment — healthy</div>
+          <div class="artifact-meta">
+            <span class="artifact-badge" style="background:var(--success-subtle);color:var(--success);">deliverable</span>
+            <span>forgegraph · 2m ago</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 4. DEPLOY PROGRESSION ===== -->
+<div class="section" id="deploy">
+  <div class="ex-label">Deploy Progression</div>
+  <div class="ex-title">Dev → Staging → Production</div>
+  <div class="ex-desc">Sequential environment promotion with health checks at each gate. Production requires manual approval. Each environment shows pod status, commit hash, and deploy time.</div>
+
+  <!-- Happy path: all healthy, prod approved -->
+  <div class="sub-title" style="margin-top:0;">Happy Path — All Environments Healthy</div>
+
+  <div class="env-lanes">
+    <div class="env-lane healthy">
+      <div class="env-name">Development</div>
+      <div class="env-status"><div class="env-dot green"></div><span style="color:var(--success);">Healthy</span></div>
+      <div class="env-detail">3/3 pods · deployed 18m ago</div>
+      <div><span class="env-hash">a3f7c2d</span> <span style="font-size:11px;color:var(--text-muted);">redis token store</span></div>
+    </div>
+    <div class="env-lane healthy">
+      <div class="env-name">Staging</div>
+      <div class="env-status"><div class="env-dot green"></div><span style="color:var(--success);">Healthy</span></div>
+      <div class="env-detail">3/3 pods · deployed 14m ago</div>
+      <div><span class="env-hash">a3f7c2d</span></div>
+    </div>
+    <div class="env-lane healthy">
+      <div class="env-name">Production</div>
+      <div class="env-status"><div class="env-dot green"></div><span style="color:var(--success);">Healthy</span></div>
+      <div class="env-detail">3/3 pods · deployed 4m ago</div>
+      <div><span class="env-hash">a3f7c2d</span> <span style="font-size:11px;color:var(--success);font-weight:600;">✓ just promoted</span></div>
+    </div>
+  </div>
+
+  <!-- Mid-deploy: staging rolling out -->
+  <div class="sub-title">Mid-Deploy — Staging Rolling Out</div>
+
+  <div class="env-lanes">
+    <div class="env-lane healthy">
+      <div class="env-name">Development</div>
+      <div class="env-status"><div class="env-dot green"></div><span style="color:var(--success);">Healthy</span></div>
+      <div class="env-detail">3/3 pods</div>
+      <div><span class="env-hash">a3f7c2d</span></div>
+    </div>
+    <div class="env-lane deploying">
+      <div class="env-name">Staging</div>
+      <div class="env-status"><div class="env-dot amber"></div><span style="color:var(--accent);">Deploying</span></div>
+      <div class="env-detail">Rolling update — 2/3 pods ready</div>
+      <div><span class="env-hash">a3f7c2d</span></div>
+      <div class="env-progress">
+        <div class="progress-track"><div class="progress-fill" style="width:66%;background:var(--accent);"></div></div>
+      </div>
+    </div>
+    <div class="env-lane pending-env">
+      <div class="env-name">Production</div>
+      <div class="env-status"><div class="env-dot gray"></div><span style="color:var(--text-muted);">Waiting</span></div>
+      <div class="env-detail">Current: <span class="env-hash">9b2e4f1</span></div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Blocked on staging health check</div>
+    </div>
+  </div>
+
+  <!-- Failed staging -->
+  <div class="sub-title">Failed Deploy — Staging Unhealthy</div>
+
+  <div class="env-lanes">
+    <div class="env-lane healthy">
+      <div class="env-name">Development</div>
+      <div class="env-status"><div class="env-dot green"></div><span style="color:var(--success);">Healthy</span></div>
+      <div class="env-detail">3/3 pods</div>
+      <div><span class="env-hash">a3f7c2d</span></div>
+    </div>
+    <div class="env-lane failed-env">
+      <div class="env-name">Staging</div>
+      <div class="env-status"><div class="env-dot red"></div><span style="color:var(--error);">Unhealthy</span></div>
+      <div class="env-detail" style="color:var(--error);">CrashLoopBackOff — 1/3 pods ready</div>
+      <div style="display:flex;gap:6px;margin-top:8px;">
+        <button class="btn btn-danger btn-xs">↩ Rollback</button>
+        <button class="btn btn-secondary btn-xs">Pod Logs</button>
+      </div>
+    </div>
+    <div class="env-lane pending-env">
+      <div class="env-name">Production</div>
+      <div class="env-status"><div class="env-dot gray"></div><span style="color:var(--text-muted);">Blocked</span></div>
+      <div class="env-detail">Current: <span class="env-hash">9b2e4f1</span></div>
+      <div style="font-size:11px;color:var(--error);margin-top:4px;">⚠ Staging must be healthy first</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 5. FAILURE & RECOVERY ===== -->
+<div class="section" id="failures">
+  <div class="ex-label">Failure Modes</div>
+  <div class="ex-title">Every Way It Can Break</div>
+  <div class="ex-desc">The pipeline has three terminal failure states: build_failed, deploy_failed, and review_failed. Each has a clear recovery path — retry, rollback, or resume with feedback.</div>
+
+  <!-- Pipeline variants showing different failure states -->
+  <div class="sub-title" style="margin-top:0;">Build Failed</div>
+  <div class="sub-desc">Lint/test/build gates failed. Agent can retry the build, or you can resume the agent to fix the issue.</div>
+
+  <div class="pipeline-rail" style="border:1px solid var(--border);border-radius:12px;margin-bottom:24px;">
+    <div class="pipe-node"><div class="pipe-dot done">✓</div><div class="pipe-label done-label">Agent</div></div>
+    <div class="pipe-connector done"></div>
+    <div class="pipe-node"><div class="pipe-dot done">✓</div><div class="pipe-label done-label">Review</div></div>
+    <div class="pipe-connector failed"></div>
+    <div class="pipe-node"><div class="pipe-dot failed">✕</div><div class="pipe-label failed-label">Build</div><div class="pipe-time" style="color:var(--error);">failed</div></div>
+    <div class="pipe-connector pending"></div>
+    <div class="pipe-node"><div class="pipe-dot pending"></div><div class="pipe-label">Gates</div></div>
+    <div class="pipe-connector pending"></div>
+    <div class="pipe-node"><div class="pipe-dot pending"></div><div class="pipe-label">Dev</div></div>
+    <div class="pipe-connector pending"></div>
+    <div class="pipe-node"><div class="pipe-dot pending"></div><div class="pipe-label">Staging</div></div>
+    <div class="pipe-connector pending"></div>
+    <div class="pipe-node"><div class="pipe-dot pending"></div><div class="pipe-label">Approve</div></div>
+    <div class="pipe-connector pending"></div>
+    <div class="pipe-node"><div class="pipe-dot pending"></div><div class="pipe-label">Prod</div></div>
+  </div>
+
+  <div style="background:var(--error-subtle);border:1px solid rgba(198,40,40,0.2);border-radius:12px;padding:16px 20px;display:flex;align-items:flex-start;gap:14px;margin-bottom:48px;max-width:720px;">
+    <div style="font-size:20px;flex-shrink:0;">🔴</div>
+    <div style="flex:1;">
+      <div style="font-weight:600;color:var(--error);margin-bottom:4px;">Build Failed — Test suite error</div>
+      <div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px;">
+        <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:rgba(0,0,0,0.08);padding:2px 6px;border-radius:4px;">FAIL packages/auth/src/__tests__/middleware.test.ts</code><br>
+        <span style="font-size:12px;color:var(--text-muted);margin-top:4px;display:block;">6 failures — session.validate() returns undefined when Redis is unreachable</span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-secondary btn-xs">↻ Retry Build</button>
+        <button class="btn btn-secondary btn-xs">Resume Agent (fix & retry)</button>
+        <button class="btn btn-secondary btn-xs">View Build Log</button>
+        <button class="btn btn-secondary btn-xs">View Test Report</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="sub-title">Review Rejected (Changes Requested)</div>
+  <div class="sub-desc">Code review found issues. Agent is automatically resumed with review feedback, fixes the code, and a new review runs.</div>
+
+  <div class="pipeline-rail" style="border:1px solid var(--border);border-radius:12px;margin-bottom:24px;">
+    <div class="pipe-node"><div class="pipe-dot done">✓</div><div class="pipe-label done-label">Agent</div></div>
+    <div class="pipe-connector failed"></div>
+    <div class="pipe-node"><div class="pipe-dot failed">✕</div><div class="pipe-label failed-label">Review</div><div class="pipe-time" style="color:var(--error);">rejected</div></div>
+    <div class="pipe-connector active"></div>
+    <div class="pipe-node"><div class="pipe-dot active">↻</div><div class="pipe-label active-label">Fixing</div><div class="pipe-time">resumed</div></div>
+    <div class="pipe-connector pending"></div>
+    <div class="pipe-node"><div class="pipe-dot pending"></div><div class="pipe-label">Re-review</div></div>
+    <div class="pipe-connector pending"></div>
+    <div class="pipe-node"><div class="pipe-dot pending"></div><div class="pipe-label">Build</div></div>
+    <div class="pipe-connector pending"></div>
+    <div class="pipe-node"><div class="pipe-dot pending"></div><div class="pipe-label">...</div></div>
+  </div>
+
+  <div style="background:var(--accent-subtle);border:1px solid var(--accent-muted);border-radius:12px;padding:16px 20px;display:flex;align-items:flex-start;gap:14px;margin-bottom:48px;max-width:720px;">
+    <div style="font-size:20px;flex-shrink:0;">🔄</div>
+    <div style="flex:1;">
+      <div style="font-weight:600;color:var(--accent);margin-bottom:4px;">Agent Resumed with Review Feedback</div>
+      <div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px;line-height:1.5;">
+        Code review found 1 critical issue in <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--bg-subtle);padding:1px 5px;border-radius:4px;">stores/migrate.ts:34</code>.
+        Previous review artifact marked <span style="font-style:italic;">stale</span>. Agent is applying the fix — re-review will trigger automatically.
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div style="width:14px;height:14px;border:2px solid var(--accent);border-top-color:transparent;border-radius:7px;animation:spin 1s linear infinite;"></div>
+        <span style="font-size:12px;color:var(--accent);font-weight:500;">Working on fix — iteration 2</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="sub-title">Deploy Failed — Rollback</div>
+  <div class="sub-desc">Staging deployment failed health checks. One-click rollback to the previous known-good revision.</div>
+
+  <div class="pipeline-rail" style="border:1px solid var(--border);border-radius:12px;margin-bottom:24px;">
+    <div class="pipe-node"><div class="pipe-dot done">✓</div><div class="pipe-label done-label">Agent</div></div>
+    <div class="pipe-connector done"></div>
+    <div class="pipe-node"><div class="pipe-dot done">✓</div><div class="pipe-label done-label">Review</div></div>
+    <div class="pipe-connector done"></div>
+    <div class="pipe-node"><div class="pipe-dot done">✓</div><div class="pipe-label done-label">Build</div></div>
+    <div class="pipe-connector done"></div>
+    <div class="pipe-node"><div class="pipe-dot done">✓</div><div class="pipe-label done-label">Dev</div></div>
+    <div class="pipe-connector failed"></div>
+    <div class="pipe-node"><div class="pipe-dot failed">✕</div><div class="pipe-label failed-label">Staging</div><div class="pipe-time" style="color:var(--error);">unhealthy</div></div>
+    <div class="pipe-connector pending"></div>
+    <div class="pipe-node"><div class="pipe-dot pending"></div><div class="pipe-label">Approve</div></div>
+    <div class="pipe-connector pending"></div>
+    <div class="pipe-node"><div class="pipe-dot pending"></div><div class="pipe-label">Prod</div></div>
+  </div>
+
+  <div style="background:var(--error-subtle);border:1px solid rgba(198,40,40,0.2);border-radius:12px;padding:16px 20px;display:flex;align-items:flex-start;gap:14px;max-width:720px;">
+    <div style="font-size:20px;flex-shrink:0;">🚨</div>
+    <div style="flex:1;">
+      <div style="font-weight:600;color:var(--error);margin-bottom:4px;">Staging Deploy Failed — Health Check Timeout</div>
+      <div style="font-size:13px;color:var(--text-secondary);margin-bottom:4px;">
+        Pod <code style="font-family:'JetBrains Mono',monospace;font-size:11px;">bob-web-7f9c4-xk2d</code> CrashLoopBackOff after 3 restarts.
+      </div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--error);background:rgba(0,0,0,0.08);padding:8px 10px;border-radius:6px;margin-bottom:10px;overflow-x:auto;">
+        Error: ECONNREFUSED 10.0.0.14:6379<br>
+        &nbsp;&nbsp;at RedisTokenStore.connect (packages/auth/src/stores/redis.ts:22)<br>
+        &nbsp;&nbsp;at SessionMiddleware.init (packages/auth/src/middleware.ts:14)
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-danger btn-xs" style="font-weight:700;">↩ Rollback to 9b2e4f1</button>
+        <button class="btn btn-secondary btn-xs">📋 Pod Logs</button>
+        <button class="btn btn-secondary btn-xs">🔍 Investigate</button>
+        <button class="btn btn-secondary btn-xs">↻ Retry Deploy</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 6. MOBILE ===== -->
+<div class="section" id="mobile">
+  <div class="ex-label">Mobile</div>
+  <div class="ex-title">Review on the Go</div>
+  <div class="ex-desc">Approve production deploys, review test results, and monitor pipeline status from your phone. The approval gate is the critical mobile use case — one tap to ship.</div>
+
+  <div style="display:flex;gap:32px;flex-wrap:wrap;justify-content:center;">
+    <!-- Phone: Production Approval -->
+    <div class="phone-frame">
+      <div class="phone-notch"></div>
+      <div class="phone-inner">
+        <div class="ph-header" style="border-bottom:1px solid var(--border);">
+          <span class="ph-back">‹</span>
+          <span style="font-size:14px;font-weight:600;">BOB-412/2 Pipeline</span>
+          <span style="font-size:14px;">⋯</span>
+        </div>
+
+        <!-- Mini pipeline -->
+        <div style="display:flex;align-items:center;gap:2px;padding:12px 20px;overflow-x:auto;">
+          <div style="width:22px;height:22px;border-radius:11px;background:var(--success);color:#FFF;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;">✓</div>
+          <div style="width:12px;height:2px;background:var(--success);flex-shrink:0;"></div>
+          <div style="width:22px;height:22px;border-radius:11px;background:var(--success);color:#FFF;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;">✓</div>
+          <div style="width:12px;height:2px;background:var(--success);flex-shrink:0;"></div>
+          <div style="width:22px;height:22px;border-radius:11px;background:var(--success);color:#FFF;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;">✓</div>
+          <div style="width:12px;height:2px;background:var(--success);flex-shrink:0;"></div>
+          <div style="width:22px;height:22px;border-radius:11px;background:var(--success);color:#FFF;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;">✓</div>
+          <div style="width:12px;height:2px;background:var(--success);flex-shrink:0;"></div>
+          <div style="width:22px;height:22px;border-radius:11px;background:var(--success);color:#FFF;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;">✓</div>
+          <div style="width:12px;height:2px;background:var(--success);flex-shrink:0;"></div>
+          <div style="width:22px;height:22px;border-radius:11px;background:var(--success);color:#FFF;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;">✓</div>
+          <div style="width:12px;height:2px;background:linear-gradient(90deg,var(--success),var(--purple));flex-shrink:0;"></div>
+          <div style="width:22px;height:22px;border-radius:11px;background:var(--purple);color:#FFF;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;">⏸</div>
+          <div style="width:12px;height:2px;background:var(--border);flex-shrink:0;"></div>
+          <div style="width:22px;height:22px;border-radius:11px;background:var(--bg-subtle);border:2px solid var(--border);flex-shrink:0;"></div>
+        </div>
+
+        <!-- Approval card -->
+        <div class="ph-section">
+          <div style="background:var(--purple-subtle);border:1px solid var(--purple);border-radius:12px;padding:16px;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+              <span style="font-size:16px;">⏸</span>
+              <span style="font-family:'Satoshi',sans-serif;font-size:16px;font-weight:700;color:var(--purple);">Approve for Production?</span>
+            </div>
+            <div style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;line-height:1.5;">
+              Redis token store is healthy on staging for 8 min. All gates passed.
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;">
+              <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--success);font-weight:500;">✓ 47 tests pass</div>
+              <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--success);font-weight:500;">✓ Code review approved</div>
+              <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--success);font-weight:500;">✓ Staging healthy 8m</div>
+              <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--success);font-weight:500;">✓ Security scan clean</div>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-success btn-sm" style="flex:1;">✓ Approve</button>
+              <button class="btn btn-danger btn-sm" style="flex:1;">✕ Reject</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Environment summary -->
+        <div class="ph-section">
+          <div class="ph-label">Environments</div>
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;">
+              <div style="display:flex;align-items:center;gap:6px;"><div class="env-dot green"></div><span style="font-size:13px;font-weight:600;">Dev</span></div>
+              <span class="env-hash">a3f7c2d</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;">
+              <div style="display:flex;align-items:center;gap:6px;"><div class="env-dot green"></div><span style="font-size:13px;font-weight:600;">Staging</span></div>
+              <span class="env-hash">a3f7c2d</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--purple-subtle);border:1px solid var(--purple);border-radius:8px;">
+              <div style="display:flex;align-items:center;gap:6px;"><div class="env-dot purple"></div><span style="font-size:13px;font-weight:600;color:var(--purple);">Prod</span></div>
+              <span style="font-size:11px;color:var(--purple);font-weight:500;">awaiting</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick artifacts -->
+        <div class="ph-section">
+          <div class="ph-label">Artifacts</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:4px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-elevated);font-size:11px;font-weight:500;">✅ Tests</div>
+            <div style="display:flex;align-items:center;gap:4px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-elevated);font-size:11px;font-weight:500;">🏗 Build</div>
+            <div style="display:flex;align-items:center;gap:4px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-elevated);font-size:11px;font-weight:500;">📋 Review</div>
+            <div style="display:flex;align-items:center;gap:4px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-elevated);font-size:11px;font-weight:500;">📋 PR #147</div>
+            <div style="display:flex;align-items:center;gap:4px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-elevated);font-size:11px;font-weight:500;">🔒 Security</div>
+          </div>
+        </div>
+
+        <div class="phone-home-bar"></div>
+      </div>
+    </div>
+
+    <!-- Phone: Test Results -->
+    <div class="phone-frame">
+      <div class="phone-notch"></div>
+      <div class="phone-inner">
+        <div class="ph-header" style="border-bottom:1px solid var(--border);">
+          <span class="ph-back">‹</span>
+          <span style="font-size:14px;font-weight:600;">Test Report</span>
+          <span style="font-size:14px;">⋯</span>
+        </div>
+
+        <!-- Summary cards -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:16px 20px;">
+          <div style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center;">
+            <div style="font-family:'Satoshi',sans-serif;font-size:24px;font-weight:900;color:var(--success);">47</div>
+            <div style="font-size:11px;color:var(--text-muted);">Passed</div>
+          </div>
+          <div style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center;">
+            <div style="font-family:'Satoshi',sans-serif;font-size:24px;font-weight:900;color:var(--error);">0</div>
+            <div style="font-size:11px;color:var(--text-muted);">Failed</div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:0 20px 12px;">
+          <span style="font-size:12px;color:var(--text-muted);">Duration: <strong style="color:var(--text-primary);">2m 04s</strong></span>
+          <span style="font-size:12px;color:var(--text-muted);">Coverage: <strong style="color:var(--text-primary);">87%</strong></span>
+        </div>
+
+        <!-- Test suites on mobile -->
+        <div class="ph-section">
+          <div class="ph-label">Suites</div>
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <div style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:10px 12px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                <span style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:4px;"><span style="color:var(--success);">✓</span> redis.test.ts</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--success);">5 pass</span>
+              </div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-muted);">67ms · stores/__tests__/</div>
+            </div>
+            <div style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:10px 12px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                <span style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:4px;"><span style="color:var(--success);">✓</span> middleware.test.ts</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--success);">12 pass</span>
+              </div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-muted);">340ms · __tests__/</div>
+            </div>
+            <div style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:10px 12px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                <span style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:4px;"><span style="color:var(--success);">✓</span> session.test.ts</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:10px;display:flex;gap:4px;"><span style="color:var(--success);">8 pass</span> <span style="color:var(--text-muted);">2 skip</span></span>
+              </div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-muted);">190ms · __tests__/</div>
+            </div>
+            <div style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:10px 12px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                <span style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:4px;"><span style="color:var(--success);">✓</span> auth-flow.test.ts</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--success);">22 pass</span>
+              </div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-muted);">1.2s · apps/web/__tests__/</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Build info -->
+        <div class="ph-section">
+          <div class="ph-label">Build</div>
+          <div style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:12px;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+              <span style="color:var(--success);font-size:14px;">✓</span>
+              <span style="font-size:13px;font-weight:600;">Build #412-2 — Passed</span>
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-muted);display:flex;flex-direction:column;gap:2px;">
+              <div>Gitea Actions · 2m 18s</div>
+              <div>Image: harbor.gmac.io/bob/web:a3f7c2d</div>
+              <div>Size: 142 MB</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="phone-home-bar"></div>
+      </div>
+    </div>
+
+    <!-- Phone: Build Failed -->
+    <div class="phone-frame">
+      <div class="phone-notch"></div>
+      <div class="phone-inner">
+        <div class="ph-header" style="border-bottom:1px solid var(--border);">
+          <span class="ph-back">‹</span>
+          <span style="font-size:14px;font-weight:600;">BOB-412/3 Pipeline</span>
+          <span style="font-size:14px;">⋯</span>
+        </div>
+
+        <!-- Failed mini pipeline -->
+        <div style="display:flex;align-items:center;gap:2px;padding:12px 20px;overflow-x:auto;">
+          <div style="width:22px;height:22px;border-radius:11px;background:var(--success);color:#FFF;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;">✓</div>
+          <div style="width:12px;height:2px;background:var(--success);flex-shrink:0;"></div>
+          <div style="width:22px;height:22px;border-radius:11px;background:var(--success);color:#FFF;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;">✓</div>
+          <div style="width:12px;height:2px;background:var(--error);flex-shrink:0;"></div>
+          <div style="width:22px;height:22px;border-radius:11px;background:var(--error);color:#FFF;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;">✕</div>
+          <div style="width:12px;height:2px;background:var(--border);flex-shrink:0;"></div>
+          <div style="width:22px;height:22px;border-radius:11px;background:var(--bg-subtle);border:2px solid var(--border);flex-shrink:0;"></div>
+          <div style="width:12px;height:2px;background:var(--border);flex-shrink:0;"></div>
+          <div style="width:22px;height:22px;border-radius:11px;background:var(--bg-subtle);border:2px solid var(--border);flex-shrink:0;"></div>
+        </div>
+
+        <!-- Error card -->
+        <div class="ph-section">
+          <div style="background:var(--error-subtle);border:1px solid rgba(198,40,40,0.2);border-radius:12px;padding:14px;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+              <span style="font-size:16px;">🔴</span>
+              <span style="font-size:14px;font-weight:600;color:var(--error);">Build Failed</span>
+            </div>
+            <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">
+              6 test failures in middleware.test.ts — session.validate() undefined when Redis unreachable
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--error);background:rgba(0,0,0,0.08);padding:6px 8px;border-radius:6px;margin-bottom:10px;overflow-x:auto;white-space:pre;">FAIL middleware.test.ts
+✕ validate with redis down (42ms)
+✕ fallback on connection error</div>
+            <div style="display:flex;gap:6px;">
+              <button class="btn btn-secondary btn-xs" style="flex:1;">↻ Retry</button>
+              <button class="btn btn-secondary btn-xs" style="flex:1;">Resume Agent</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Failed test details -->
+        <div class="ph-section">
+          <div class="ph-label">Failed Tests</div>
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <div style="background:var(--error-subtle);border:1px solid rgba(198,40,40,0.15);border-radius:8px;padding:10px 12px;">
+              <div style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:600;color:var(--error);margin-bottom:4px;">✕ validate with redis down</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-muted);">middleware.test.ts:47 · 42ms</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--error);margin-top:4px;">Expected: AuthError<br>Received: undefined</div>
+            </div>
+            <div style="background:var(--error-subtle);border:1px solid rgba(198,40,40,0.15);border-radius:8px;padding:10px 12px;">
+              <div style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:600;color:var(--error);margin-bottom:4px;">✕ fallback on connection error</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-muted);">middleware.test.ts:63 · 18ms</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--error);margin-top:4px;">ECONNREFUSED 127.0.0.1:6379</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="phone-home-bar"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="text-align:center;padding:48px 32px;color:var(--text-muted);font-size:13px;">
+  Bob Builder — Execution Review Explorations · <span id="gen-date"></span>
+</div>
+
+<script>
+function showSection(id){
+  document.querySelectorAll('.section').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.nav-pill').forEach(el=>el.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function toggleTheme(){
+  const html=document.documentElement;const btn=document.querySelector('.theme-toggle');
+  if(html.dataset.theme==='dark'){html.dataset.theme='light';btn.innerHTML='🌙 Dark';}
+  else{html.dataset.theme='dark';btn.innerHTML='☀️ Light';}
+}
+document.getElementById('gen-date').textContent=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+
+// Make test suites expandable
+document.querySelectorAll('.test-suite').forEach(suite=>{
+  const details=suite.querySelector('.test-suite-details');
+  if(details){
+    details.style.display='block';
+    suite.querySelector('.test-suite-header').addEventListener('click',()=>{
+      details.style.display=details.style.display==='none'?'block':'none';
+    });
+  }
+});
+</script>
+</body>
+</html>
