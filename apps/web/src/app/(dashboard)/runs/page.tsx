@@ -100,9 +100,13 @@ export default function RunsPage() {
                 {/* Main info */}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-medium text-neutral-500">
+                    <Link
+                      href={`/work-items/${run.workItemId}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="font-mono text-xs font-medium text-neutral-500 hover:text-primary hover:underline"
+                    >
                       {run.workItemId}
-                    </span>
+                    </Link>
                     <span className="text-muted-foreground text-xs">via</span>
                     <span className="text-sm font-medium">{run.agentType}</span>
                   </div>
