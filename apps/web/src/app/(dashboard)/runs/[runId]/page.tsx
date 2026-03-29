@@ -103,7 +103,12 @@ export default function RunDetailPage({
               )}
             />
             <h1 className="font-display text-2xl font-bold tracking-tight">
-              {run.workItemId}
+              <Link
+                href={`/work-items/${run.workItemId}`}
+                className="hover:text-primary"
+              >
+                {run.workItemId}
+              </Link>
             </h1>
             <Badge
               className={cn(
