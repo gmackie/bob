@@ -18,6 +18,7 @@ import { linkRouter } from "./router/link";
 import { planRouter } from "./router/plan";
 import { postRouter } from "./router/post";
 import { projectRouter } from "./router/project";
+import { publicApiRouter } from "./router/publicApi";
 import { pullRequestRouter } from "./router/pullRequest";
 import { requirementRouter } from "./router/requirement";
 import { repositoryRouter } from "./router/repository";
@@ -62,6 +63,7 @@ const appRouterRecord = {
   plan: planRouter,
   post: postRouter,
   project: projectRouter,
+  publicApi: publicApiRouter,
   pullRequest: pullRequestRouter,
   requirement: requirementRouter,
   repository: repositoryRouter,
