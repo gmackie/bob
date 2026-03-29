@@ -82,6 +82,7 @@ const fakeSession = {
     email: "test@example.com",
     emailVerified: true,
     name: "Test User",
+    image: null,
   },
 };
 
