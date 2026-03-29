@@ -102,6 +102,66 @@ export const tenantMembers = pgTable(
   ],
 );
 
+// --- Agent Runs ---
+
+export const agentRunStatusEnum = pgEnum("agent_run_status", [
+  "queued",
+  "running",
+  "completed",
+  "failed",
+]);
+
+export const agentRuns = pgTable(
+  "agent_runs",
+  (t) => ({
+    id: t.uuid().notNull().primaryKey().defaultRandom(),
+    workItemId: t.text("work_item_id").notNull(),
+    workspaceId: t
+      .uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    tenantId: t
+      .uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    agentType: t.varchar("agent_type", { length: 64 }).notNull(),
+    agentConfig: t.json("agent_config").$type<Record<string, unknown>>(),
+    status: agentRunStatusEnum("status").notNull().default("queued"),
+    startedAt: t.timestamp("started_at"),
+    completedAt: t.timestamp("completed_at"),
+    summary: t.json("summary").$type<Record<string, unknown>>(),
+    createdAt: t.timestamp().defaultNow().notNull(),
+  }),
+  (table) => [
+    index("agent_runs_workspace_idx").on(table.workspaceId),
+    index("agent_runs_tenant_idx").on(table.tenantId),
+    index("agent_runs_work_item_idx").on(table.workItemId),
+  ],
+);
+
+export const runArtifactTypeEnum = pgEnum("run_artifact_type", [
+  "diff",
+  "log",
+  "test-report",
+  "file-snapshot",
+]);
+
+export const runArtifacts = pgTable(
+  "run_artifacts",
+  (t) => ({
+    id: t.uuid().notNull().primaryKey().defaultRandom(),
+    runId: t
+      .uuid("run_id")
+      .notNull()
+      .references(() => agentRuns.id, { onDelete: "cascade" }),
+    type: runArtifactTypeEnum("type").notNull(),
+    storageKey: t.text("storage_key").notNull(),
+    metadata: t.json("metadata").$type<Record<string, unknown>>(),
+    createdAt: t.timestamp().defaultNow().notNull(),
+  }),
+  (table) => [index("run_artifacts_run_idx").on(table.runId)],
+);
+
 export const workItemKind = ["issue", "epic", "task"] as const;
 export type WorkItemKind = (typeof workItemKind)[number];
 export const workItemKindEnum = pgEnum("work_item_kind", workItemKind);
@@ -2460,6 +2520,25 @@ export const tenantMembersRelations = relations(tenantMembers, ({ one }) => ({
   tenant: one(tenants, {
     fields: [tenantMembers.tenantId],
     references: [tenants.id],
+  }),
+}));
+
+export const agentRunsRelations = relations(agentRuns, ({ one, many }) => ({
+  workspace: one(workspaces, {
+    fields: [agentRuns.workspaceId],
+    references: [workspaces.id],
+  }),
+  tenant: one(tenants, {
+    fields: [agentRuns.tenantId],
+    references: [tenants.id],
+  }),
+  artifacts: many(runArtifacts),
+}));
+
+export const runArtifactsRelations = relations(runArtifacts, ({ one }) => ({
+  run: one(agentRuns, {
+    fields: [runArtifacts.runId],
+    references: [agentRuns.id],
   }),
 }));
 
