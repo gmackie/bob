@@ -12,6 +12,7 @@ import {
   type WorkflowLaunchIntent,
 } from "~/components/workflow/workflow-launch-dialog";
 import { WorkItemDetailInteractive } from "~/components/work-items/work-item-detail-interactive";
+import { AgentRunsPanel } from "~/components/work-items/agent-runs-panel";
 import { LifecycleTimelineSection } from "~/components/work-items/lifecycle-timeline-section";
 
 interface WorkflowPageClientProps {
@@ -60,12 +61,15 @@ export function WorkflowPageClient({
   // For tasks, keep the existing detail view
   if (workItem.kind === "task") {
     return (
-      <WorkItemDetailInteractive
-        workItem={workItem}
-        childCount={childCount}
-        comments={comments}
-        currentArtifacts={artifacts}
-      />
+      <>
+        <WorkItemDetailInteractive
+          workItem={workItem}
+          childCount={childCount}
+          comments={comments}
+          currentArtifacts={artifacts}
+        />
+        <AgentRunsPanel workItemId={workItem.id} workspaceId={workspaceId} />
+      </>
     );
   }
 
@@ -148,6 +152,7 @@ export function WorkflowPageClient({
         }}
       />
       <LifecycleTimelineSection workItemId={workItem.id} />
+      <AgentRunsPanel workItemId={workItem.id} workspaceId={workspaceId} />
       <WorkflowLaunchDialog
         open={launchIntent !== null}
         onOpenChange={(open) => {
