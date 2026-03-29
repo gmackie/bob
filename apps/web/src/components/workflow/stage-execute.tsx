@@ -205,6 +205,16 @@ export function StageExecute({
               })}
             </div>
           )}
+
+          {/* View Execution Review link */}
+          {dispatchStatus.completed > 0 && (
+            <a
+              href={`/work-items/${workItemId}/review`}
+              className="mt-4 flex items-center justify-center gap-2 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
+            >
+              View Execution Review →
+            </a>
+          )}
         </div>
       )}
     </section>
