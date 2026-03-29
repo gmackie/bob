@@ -1,5 +1,5 @@
 import { relations, sql } from "drizzle-orm";
-import { type AnyPgColumn, index, pgEnum, pgTable } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, index, pgEnum, pgTable, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -57,6 +57,50 @@ export const apiKeys = pgTable("api_keys", (t) => ({
   createdAt: t.timestamp().defaultNow().notNull(),
   revokedAt: t.timestamp({ mode: "date", withTimezone: true }),
 }));
+
+// --- Tenants ---
+
+export const tenantPlanEnum = pgEnum("tenant_plan", [
+  "free",
+  "premium",
+  "pro",
+]);
+
+export const tenantMemberRoleEnum = pgEnum("tenant_member_role", [
+  "owner",
+  "admin",
+  "member",
+]);
+
+export const tenants = pgTable("tenants", (t) => ({
+  id: t.uuid().notNull().primaryKey().defaultRandom(),
+  name: t.varchar({ length: 128 }).notNull(),
+  slug: t.varchar({ length: 64 }).notNull().unique(),
+  plan: tenantPlanEnum("plan").notNull().default("free"),
+  forgeGraphProjectId: t.text("forge_graph_project_id"),
+  createdAt: t.timestamp().defaultNow().notNull(),
+  updatedAt: t.timestamp().defaultNow().notNull(),
+}));
+
+export const tenantMembers = pgTable(
+  "tenant_members",
+  (t) => ({
+    id: t.uuid().notNull().primaryKey().defaultRandom(),
+    tenantId: t
+      .uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    userId: t.text("user_id").notNull(),
+    role: tenantMemberRoleEnum("role").notNull().default("member"),
+    joinedAt: t.timestamp().defaultNow().notNull(),
+  }),
+  (table) => [
+    uniqueIndex("tenant_members_tenant_user_idx").on(
+      table.tenantId,
+      table.userId,
+    ),
+  ],
+);
 
 export const workItemKind = ["issue", "epic", "task"] as const;
 export type WorkItemKind = (typeof workItemKind)[number];
@@ -2397,5 +2441,16 @@ export const sessionCheckpointsRelations = relations(
     }),
   }),
 );
+
+export const tenantsRelations = relations(tenants, ({ many }) => ({
+  members: many(tenantMembers),
+}));
+
+export const tenantMembersRelations = relations(tenantMembers, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [tenantMembers.tenantId],
+    references: [tenants.id],
+  }),
+}));
 
 export * from "./auth-schema";
