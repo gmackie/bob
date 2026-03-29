@@ -31,7 +31,7 @@ export function AgentRunsPanel({
   const trpc = useTRPC();
 
   const { data: runs } = useQuery(
-    trpc.publicApi.listRunsByWorkItem.queryOptions(
+    trpc.agentRun.listByWorkItem.queryOptions(
       { workItemId, limit: 20 },
       { enabled: !!workItemId, refetchInterval: 10_000 },
     ),

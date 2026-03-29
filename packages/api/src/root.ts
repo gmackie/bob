@@ -1,5 +1,6 @@
 import type { TRPCRouterRecord } from "@trpc/server";
 
+import { agentRunRouter } from "./router/agentRun";
 import { authRouter } from "./router/auth";
 import { captureRouter } from "./router/capture";
 import { cookiesRouter } from "./router/cookies";
@@ -44,6 +45,7 @@ import { createTRPCRouter } from "./trpc";
 
 const appRouterRecord = {
   activity: activityRouter,
+  agentRun: agentRunRouter,
   artifact: artifactRouter,
   auth: authRouter,
   capture: captureRouter,
