@@ -26,6 +26,20 @@ const NAV_ITEMS: NavItem[] = [
         fill="currentColor"
         xmlns="http://www.w3.org/2000/svg"
       >
+        <path d="M4.5 2C3.67 2 3 2.67 3 3.5v8c0 .83.67 1.5 1.5 1.5h6c.83 0 1.5-.67 1.5-1.5v-8c0-.83-.67-1.5-1.5-1.5h-6ZM5 5h5v1H5V5Zm0 2.5h5v1H5v-1Zm0 2.5h3v1H5V10Z" />
+      </svg>
+    ),
+    label: "Runs",
+    href: "/runs",
+  },
+  {
+    icon: () => (
+      <svg
+        className="size-[15px]"
+        viewBox="0 0 15 15"
+        fill="currentColor"
+        xmlns="http://www.w3.org/2000/svg"
+      >
         <circle cx="4.5" cy="3.5" r="1.5" />
         <circle cx="4.5" cy="11.5" r="1.5" />
         <circle cx="10.5" cy="3.5" r="1.5" />
