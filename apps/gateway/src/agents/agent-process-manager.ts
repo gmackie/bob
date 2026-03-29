@@ -5,6 +5,7 @@ import { spawnClaudePty, isPtyAvailable, type ClaudePtySession } from "./adapter
 import { db } from "@bob/db/client";
 import { eq } from "@bob/db";
 import { runLifecycleEvents, taskRuns, chatConversations } from "@bob/db/schema";
+import { isCookieToolCall, handleCookieToolCall } from "../sessions/cookieToolHandler.js";
 
 /** Regex patterns that suggest an agent result produced a real artifact. */
 const ARTIFACT_PATTERNS = [
@@ -518,6 +519,22 @@ export class AgentProcessManager {
 
       case "tool_call": {
         const toolName = event.data.name as string;
+
+        // Intercept cookie tool calls — fetch from Bob API and return result
+        if (isCookieToolCall(toolName)) {
+          const cookieToolCallId = event.data.toolCallId as string;
+          const cookieArgs = (event.data.arguments as string) ?? "{}";
+          actor.handleToolCall(cookieToolCallId, toolName, cookieArgs);
+          void handleCookieToolCall(
+            actor.sessionId,
+            toolName,
+            cookieArgs,
+          ).then((result) => {
+            actor.handleToolResult(cookieToolCallId, result, false);
+          });
+          break;
+        }
+
         actor.handleToolCall(
           event.data.toolCallId as string,
           toolName,
