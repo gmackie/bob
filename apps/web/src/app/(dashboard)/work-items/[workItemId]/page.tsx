@@ -26,20 +26,23 @@ export default async function WorkItemPage({ params }: WorkItemPageProps) {
     notFound();
   }
 
+  // Use the resolved UUID for all downstream queries (workItemId from URL may be a short identifier like "BOB-9")
+  const resolvedId = detail.workItem.id;
+
   const [comments, requirementData, childItems, featureBranchData, forgeRevisions] = await Promise.all([
-    caller.comment.listByWorkItem({ workItemId }),
-    caller.requirement.list({ workItemId }).catch(() => ({})),
+    caller.comment.listByWorkItem({ workItemId: resolvedId }),
+    caller.requirement.list({ workItemId: resolvedId }).catch(() => ({})),
     caller.workItem
       .list({
         workspaceId: detail.workItem.workspaceId,
-        parentId: workItemId,
+        parentId: resolvedId,
         limit: 100,
       })
       .catch(() => []),
     // Fetch feature branches (which link to PRs) for this work item
-    caller.featureBranch.list({ workItemId }).catch(() => []),
+    caller.featureBranch.list({ workItemId: resolvedId }).catch(() => []),
     // Fetch forge revisions (which link to deployments) for this work item
-    caller.forgegraph.listRevisions({ taskId: workItemId }).catch(() => []),
+    caller.forgegraph.listRevisions({ taskId: resolvedId }).catch(() => []),
   ]);
 
   // Compute requirement count from grouped data
