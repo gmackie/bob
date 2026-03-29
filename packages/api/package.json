@@ -54,6 +54,10 @@
     "./services/forgegraph/eventReporter": {
       "types": "./dist/api/src/services/forgegraph/eventReporter.d.ts",
       "default": "./src/services/forgegraph/eventReporter.ts"
+    },
+    "./services/crypto/cookieVault": {
+      "types": "./dist/api/src/services/crypto/cookieVault.d.ts",
+      "default": "./src/services/crypto/cookieVault.ts"
     }
   },
   "license": "MIT",
