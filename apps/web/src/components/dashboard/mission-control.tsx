@@ -4,6 +4,7 @@ import { ActivityFeed } from "./activity-feed";
 import { AgentStatusBar } from "./agent-status-bar";
 import { AttentionPanel } from "./attention-panel";
 import { ProjectProgress } from "./project-progress";
+import { RecentRuns } from "./recent-runs";
 import { SkillUsage } from "./skill-usage";
 
 interface MissionControlProps {
@@ -24,8 +25,9 @@ export function MissionControl({ workspaceId }: MissionControlProps) {
         {/* Center column — Activity feed */}
         <ActivityFeed />
 
-        {/* Right column — Attention items + Skill usage */}
+        {/* Right column — Recent runs + Attention + Skill usage */}
         <div className="flex flex-col gap-5">
+          <RecentRuns workspaceId={workspaceId ?? ""} />
           <AttentionPanel />
           <SkillUsage />
         </div>
