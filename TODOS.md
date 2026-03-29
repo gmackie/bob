@@ -51,6 +51,10 @@
 
 ## Deferred (P2)
 
+### QA Bugs (found by /qa 2026-03-29)
+- [ ] BOB-100 shows 3 duplicate entries in board view — data issue, needs DB/ForgeGraph cleanup
+- [ ] `runs/[runId]` detail page has pre-existing TypeScript errors (type `{}` not assignable)
+
 ### UI Polish
 - [ ] Full diff rendering in PR detail page — needs diff parser library (e.g., diff2html)
 - [ ] Mobile-responsive workspace layout — 3-panel doesn't collapse on small screens
@@ -77,3 +81,6 @@
 - [x] Design system (DESIGN.md + theme tokens) — **Completed:** 2026-03-17
 - [x] Storybook (75 stories across 22 groups) — **Completed:** 2026-03-17
 - [x] UI refresh (50+ components migrated to theme tokens) — **Completed:** 2026-03-17
+- [x] QA: Work item detail 500 error (ForgeGraph error handling + UUID resolution) — Fixed by /qa on main, 2026-03-29
+- [x] QA: Runs page "API key required" (session auth agentRun router) — Fixed by /qa on main, 2026-03-29
+- [x] QA: Theme toggle hidden behind capture FAB (z-index fix) — Fixed by /qa on main, 2026-03-29
