@@ -77,6 +77,7 @@ export async function POST(req: NextRequest) {
   for (const cookie of body.cookies) {
     const tempId = crypto.randomUUID();
     const encrypted = encryptCookieValue(cookie.value, tempId);
+    const normalizedDomain = cookie.domain.replace(/^\./, "").toLowerCase();
     const expiresDate =
       cookie.expires && cookie.expires > 0
         ? new Date(cookie.expires * 1000)
@@ -87,7 +88,7 @@ export async function POST(req: NextRequest) {
       .values({
         id: tempId,
         userId: auth.userId,
-        domain: cookie.domain,
+        domain: normalizedDomain,
         name: cookie.name,
         valueCiphertext: encrypted.ciphertext,
         valueIv: encrypted.iv,
@@ -120,7 +121,7 @@ export async function POST(req: NextRequest) {
       });
 
     imported++;
-    domains.add(cookie.domain);
+    domains.add(normalizedDomain);
   }
 
   return NextResponse.json({ imported, domains: [...domains] });

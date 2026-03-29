@@ -69,10 +69,15 @@ function decryptValue(encryptedValue: Buffer, key: Buffer): string {
 
   const decrypted = Buffer.concat([decipher.update(data), decipher.final()]);
 
-  // Remove PKCS7 padding
+  // Remove PKCS7 padding — verify all padding bytes match
   const padLen = decrypted[decrypted.length - 1]!;
   if (padLen > 0 && padLen <= 16) {
-    return decrypted.subarray(0, decrypted.length - padLen).toString("utf8");
+    const paddingValid = decrypted
+      .subarray(decrypted.length - padLen)
+      .every((b) => b === padLen);
+    if (paddingValid) {
+      return decrypted.subarray(0, decrypted.length - padLen).toString("utf8");
+    }
   }
   return decrypted.toString("utf8");
 }
