@@ -3,7 +3,7 @@ import { randomBytes, createHash } from "node:crypto";
 import { z } from "zod/v4";
 import { TRPCError } from "@trpc/server";
 
-import { desc, eq } from "@bob/db";
+import { and, desc, eq, inArray } from "@bob/db";
 import {
   agentRuns,
   apiKeys,
@@ -52,6 +52,28 @@ async function ensureTenant(db: any, userId: string) {
     where: eq(tenantMembers.userId, userId),
     with: { tenant: true },
   });
+}
+
+async function listAuthorizedTenantIds(db: any, userId: string) {
+  const memberships = await db.query.tenantMembers.findMany({
+    where: eq(tenantMembers.userId, userId),
+    columns: { tenantId: true },
+  });
+
+  return memberships.map((membership: { tenantId: string }) => membership.tenantId);
+}
+
+async function assertTenantAccess(db: any, userId: string, tenantId: string | null | undefined) {
+  if (!tenantId) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+
+  const tenantIds = await listAuthorizedTenantIds(db, userId);
+  if (!tenantIds.includes(tenantId)) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+
+  return tenantIds;
 }
 
 export const publicApiRouter = {
@@ -108,13 +130,13 @@ export const publicApiRouter = {
       // short identifiers (e.g. "BOB-27"), or ForgeGraph-native IDs.
       // We store as-is and resolve at display time.
 
-      // Verify workspace belongs to user's tenant
       const workspace = await ctx.db.query.workspaces.findFirst({
         where: eq(workspaces.id, input.workspaceId),
       });
       if (!workspace?.tenantId) {
         throw new TRPCError({ code: "NOT_FOUND" });
       }
+      await assertTenantAccess(ctx.db, ctx.session.user.id, workspace.tenantId);
 
       const [run] = await ctx.db
         .insert(agentRuns)
@@ -141,6 +163,15 @@ export const publicApiRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      const existingRun = await ctx.db.query.agentRuns.findFirst({
+        where: eq(agentRuns.id, input.runId),
+        columns: { tenantId: true },
+      });
+      if (!existingRun?.tenantId) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+      await assertTenantAccess(ctx.db, ctx.session.user.id, existingRun.tenantId);
+
       const now = new Date();
       const updates: Record<string, unknown> = { status: input.status };
 
@@ -169,6 +200,15 @@ export const publicApiRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      const run = await ctx.db.query.agentRuns.findFirst({
+        where: eq(agentRuns.id, input.runId),
+        columns: { tenantId: true },
+      });
+      if (!run?.tenantId) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+      await assertTenantAccess(ctx.db, ctx.session.user.id, run.tenantId);
+
       const [artifact] = await ctx.db
         .insert(runArtifacts)
         .values({
@@ -191,6 +231,7 @@ export const publicApiRouter = {
         with: { artifacts: true },
       });
       if (!run) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertTenantAccess(ctx.db, ctx.session.user.id, run.tenantId);
       return run;
     }),
 
@@ -203,8 +244,19 @@ export const publicApiRouter = {
       }),
     )
     .query(async ({ ctx, input }) => {
+      const workspace = await ctx.db.query.workspaces.findFirst({
+        where: eq(workspaces.id, input.workspaceId),
+      });
+      if (!workspace?.tenantId) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+      await assertTenantAccess(ctx.db, ctx.session.user.id, workspace.tenantId);
+
       return ctx.db.query.agentRuns.findMany({
-        where: eq(agentRuns.workspaceId, input.workspaceId),
+        where: and(
+          eq(agentRuns.workspaceId, input.workspaceId),
+          eq(agentRuns.tenantId, workspace.tenantId),
+        ),
         with: { artifacts: true },
         orderBy: [desc(agentRuns.createdAt)],
         limit: input.limit,
@@ -220,8 +272,16 @@ export const publicApiRouter = {
       }),
     )
     .query(async ({ ctx, input }) => {
+      const tenantIds = await listAuthorizedTenantIds(ctx.db, ctx.session.user.id);
+      if (tenantIds.length === 0) {
+        return [];
+      }
+
       return ctx.db.query.agentRuns.findMany({
-        where: eq(agentRuns.workItemId, input.workItemId),
+        where: and(
+          eq(agentRuns.workItemId, input.workItemId),
+          inArray(agentRuns.tenantId, tenantIds),
+        ),
         with: { artifacts: true },
         orderBy: [desc(agentRuns.createdAt)],
         limit: input.limit,
@@ -232,10 +292,23 @@ export const publicApiRouter = {
   heartbeat: apiKeyWriteProcedure
     .input(z.object({ workspaceId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      const workspace = await ctx.db.query.workspaces.findFirst({
+        where: eq(workspaces.id, input.workspaceId),
+      });
+      if (!workspace?.tenantId) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+      await assertTenantAccess(ctx.db, ctx.session.user.id, workspace.tenantId);
+
       await ctx.db
         .update(workspaces)
         .set({ lastHeartbeat: new Date() })
-        .where(eq(workspaces.id, input.workspaceId));
+        .where(
+          and(
+            eq(workspaces.id, input.workspaceId),
+            eq(workspaces.tenantId, workspace.tenantId),
+          ),
+        );
       return { ok: true };
     }),
 
