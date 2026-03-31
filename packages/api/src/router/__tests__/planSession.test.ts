@@ -98,6 +98,12 @@ const makeDbMock = () => ({
     projects: {
       findFirst: (...args: unknown[]) => dbQueryFindFirstMock("projects", ...args),
     },
+    workItems: {
+      findFirst: (...args: unknown[]) => dbQueryFindFirstMock("workItems", ...args),
+    },
+    workspaceMembers: {
+      findFirst: (...args: unknown[]) => dbQueryFindFirstMock("workspaceMembers", ...args),
+    },
   },
 });
 
@@ -185,6 +191,36 @@ describe("planSession router", () => {
       expect(result).toMatchObject({
         id: SESSION_ID,
         sessionType: "planning",
+      });
+    });
+
+    it("rejects creation when the caller is not a member of the work item's workspace", async () => {
+      dbQueryFindFirstMock
+        .mockResolvedValueOnce({
+          id: "b8a0d12f-2d49-4f8c-94e8-7c4d1d9f6b10",
+          workspaceId: WORKSPACE_ID,
+          projectId: PROJECT_ID,
+        })
+        .mockResolvedValueOnce(null);
+
+      dbInsertReturningMock.mockResolvedValueOnce([
+        {
+          id: SESSION_ID,
+          userId: "user-1",
+          sessionType: "planning",
+          workItemId: "b8a0d12f-2d49-4f8c-94e8-7c4d1d9f6b10",
+        } as any,
+      ]);
+
+      const caller = createCaller({ id: "user-1" });
+
+      await expect(
+        caller.planSession.create({
+          workItemId: "b8a0d12f-2d49-4f8c-94e8-7c4d1d9f6b10",
+          title: "Planning session",
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
       });
     });
   });
@@ -567,6 +603,74 @@ describe("planSession router", () => {
       });
 
       expect(result).toEqual({ committed: 0, tasks: [] });
+    });
+  });
+
+  describe("saveArtifact", () => {
+    it("rejects saving an artifact when the caller is not a member of the work item's workspace", async () => {
+      dbQueryFindFirstMock
+        .mockResolvedValueOnce({
+          id: "b8a0d12f-2d49-4f8c-94e8-7c4d1d9f6b10",
+          workspaceId: WORKSPACE_ID,
+        })
+        .mockResolvedValueOnce(null);
+
+      dbInsertReturningMock.mockResolvedValueOnce([
+        {
+          id: "artifact-1",
+          workItemId: "b8a0d12f-2d49-4f8c-94e8-7c4d1d9f6b10",
+          sessionId: SESSION_ID,
+          artifactType: "planning_doc",
+          artifactRole: "shape",
+          title: "Plan",
+          content: "content",
+        },
+      ]);
+
+      const caller = createCaller({ id: "user-1" });
+
+      await expect(
+        caller.planSession.saveArtifact({
+          sessionId: SESSION_ID,
+          workItemId: "b8a0d12f-2d49-4f8c-94e8-7c4d1d9f6b10",
+          title: "Plan",
+          content: "content",
+          planningSessionType: "shape",
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+    });
+  });
+
+  describe("getPriorContext", () => {
+    it("rejects reading prior context when the caller is not a member of the work item's workspace", async () => {
+      dbQueryFindFirstMock
+        .mockResolvedValueOnce({
+          id: "b8a0d12f-2d49-4f8c-94e8-7c4d1d9f6b10",
+          workspaceId: WORKSPACE_ID,
+        })
+        .mockResolvedValueOnce(null);
+
+      dbQueryFindManyMock.mockResolvedValueOnce([
+        {
+          id: "artifact-1",
+          title: "Prior plan",
+          sessionId: SESSION_ID,
+          content: "secret planning context",
+          createdAt: new Date("2026-03-10T00:00:00.000Z"),
+        },
+      ]);
+
+      const caller = createCaller({ id: "user-1" });
+
+      await expect(
+        caller.planSession.getPriorContext({
+          workItemId: "b8a0d12f-2d49-4f8c-94e8-7c4d1d9f6b10",
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
     });
   });
 });
