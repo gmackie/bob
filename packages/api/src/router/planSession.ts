@@ -13,6 +13,7 @@ import {
   workItemArtifacts,
   workItemDependencies,
   workItems,
+  workspaceMembers,
 } from "@bob/db/schema";
 
 import {
@@ -22,6 +23,33 @@ import {
 import { isForgeGraphEnabled, requireForgeGraphClient } from "../services/forgegraph/config";
 import { cacheMapping } from "../services/forgegraph/idResolver";
 import { protectedProcedure } from "../trpc";
+
+async function assertWorkspaceAccess(db: any, userId: string, workspaceId: string) {
+  const membership = await db.query.workspaceMembers.findFirst({
+    where: and(
+      eq(workspaceMembers.workspaceId, workspaceId),
+      eq(workspaceMembers.userId, userId),
+    ),
+    columns: { id: true },
+  });
+
+  if (!membership) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+}
+
+async function loadAccessibleWorkItem(db: any, userId: string, workItemId: string) {
+  const workItem = await db.query.workItems.findFirst({
+    where: eq(workItems.id, workItemId),
+  });
+
+  if (!workItem?.workspaceId) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+
+  await assertWorkspaceAccess(db, userId, workItem.workspaceId);
+  return workItem;
+}
 
 const planningLaunchContextSchema = z.object({
   intent: z.enum(["shape", "breakdown"]),
@@ -77,16 +105,12 @@ export const planSessionRouter = {
       // If workItemId is provided, look up workspace/project from the work item
       let resolvedWorkItemId = input.workItemId ?? null;
 
-      if (input.workItemId && (!input.workspaceId || !input.projectId)) {
-        const wi = await ctx.db.query.workItems.findFirst({
-          where: eq(workItems.id, input.workItemId),
-        });
-        if (!wi) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Work item not found",
-          });
-        }
+      if (input.workItemId) {
+        const wi = await loadAccessibleWorkItem(
+          ctx.db,
+          ctx.session.user.id,
+          input.workItemId,
+        );
         resolvedWorkItemId = wi.id;
       }
 
@@ -264,6 +288,8 @@ export const planSessionRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
+
       const [artifact] = await ctx.db
         .insert(workItemArtifacts)
         .values({
@@ -291,6 +317,8 @@ export const planSessionRouter = {
       }),
     )
     .query(async ({ ctx, input }) => {
+      await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
+
       const conditions = [
         eq(workItemArtifacts.workItemId, input.workItemId),
         eq(workItemArtifacts.artifactType, "planning_doc"),
