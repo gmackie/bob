@@ -90,6 +90,7 @@ const makeDbMock = () => ({
       findMany: (...args: unknown[]) => dbQueryFindManyMock("chatConversations", ...args),
     },
     planDrafts: {
+      findFirst: (...args: unknown[]) => dbQueryFindFirstMock("planDrafts", ...args),
       findMany: (...args: unknown[]) => dbQueryFindManyMock("planDrafts", ...args),
     },
     planDraftDependencies: {
@@ -227,6 +228,12 @@ describe("planSession router", () => {
 
   describe("createDraft", () => {
     it("inserts a planDrafts row with the provided fields", async () => {
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: SESSION_ID,
+        userId: "user-1",
+        sessionType: "planning",
+      });
+
       const draftRow = {
         id: DRAFT_ID,
         sessionId: SESSION_ID,
@@ -264,6 +271,35 @@ describe("planSession router", () => {
         }),
       );
       expect(result).toMatchObject({ id: DRAFT_ID, title: "Implement login" });
+    });
+
+    it("rejects draft creation when the planning session is not owned by the caller", async () => {
+      dbQueryFindFirstMock.mockResolvedValueOnce(null);
+      dbInsertReturningMock.mockResolvedValueOnce([
+        {
+          id: DRAFT_ID,
+          sessionId: SESSION_ID,
+          workspaceId: WORKSPACE_ID,
+          projectId: PROJECT_ID,
+          title: "Implement login",
+        },
+      ]);
+
+      const caller = createCaller({ id: "user-1" });
+
+      await expect(
+        caller.planSession.createDraft({
+          sessionId: SESSION_ID,
+          workspaceId: WORKSPACE_ID,
+          projectId: PROJECT_ID,
+          title: "Implement login",
+          description: "Add login page",
+          kind: "task",
+          priority: "high",
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
     });
   });
 
@@ -462,6 +498,16 @@ describe("planSession router", () => {
 
   describe("updateDraft", () => {
     it("changes draft fields", async () => {
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: DRAFT_ID,
+        sessionId: SESSION_ID,
+      });
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: SESSION_ID,
+        userId: "user-1",
+        sessionType: "planning",
+      });
+
       const updatedDraft = {
         id: DRAFT_ID,
         title: "Updated title",
@@ -486,6 +532,33 @@ describe("planSession router", () => {
         }),
       );
       expect(result).toMatchObject({ id: DRAFT_ID, title: "Updated title" });
+    });
+
+    it("rejects draft updates when the draft's session is not owned by the caller", async () => {
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: DRAFT_ID,
+        sessionId: SESSION_ID,
+      });
+      dbQueryFindFirstMock.mockResolvedValueOnce(null);
+      dbUpdateReturningMock.mockResolvedValueOnce([
+        {
+          id: DRAFT_ID,
+          title: "Updated title",
+          priority: "medium",
+        },
+      ]);
+
+      const caller = createCaller({ id: "user-1" });
+
+      await expect(
+        caller.planSession.updateDraft({
+          id: DRAFT_ID,
+          title: "Updated title",
+          priority: "medium",
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
     });
   });
 

@@ -51,6 +51,35 @@ async function loadAccessibleWorkItem(db: any, userId: string, workItemId: strin
   return workItem;
 }
 
+async function loadOwnedPlanningSession(db: any, userId: string, sessionId: string) {
+  const session = await db.query.chatConversations.findFirst({
+    where: and(
+      eq(chatConversations.id, sessionId),
+      eq(chatConversations.userId, userId),
+      eq(chatConversations.sessionType, "planning"),
+    ),
+  });
+
+  if (!session) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+
+  return session;
+}
+
+async function loadOwnedDraft(db: any, userId: string, draftId: string) {
+  const draft = await db.query.planDrafts.findFirst({
+    where: eq(planDrafts.id, draftId),
+  });
+
+  if (!draft) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+
+  await loadOwnedPlanningSession(db, userId, draft.sessionId);
+  return draft;
+}
+
 const planningLaunchContextSchema = z.object({
   intent: z.enum(["shape", "breakdown"]),
   notes: z.string(),
@@ -386,6 +415,8 @@ export const planSessionRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await loadOwnedPlanningSession(ctx.db, ctx.session.user.id, input.sessionId);
+
       const [draft] = await ctx.db
         .insert(planDrafts)
         .values({
@@ -422,6 +453,8 @@ export const planSessionRouter = {
     )
     .mutation(async ({ ctx, input }) => {
       const { id, ...updates } = input;
+      await loadOwnedDraft(ctx.db, ctx.session.user.id, id);
+
       const [draft] = await ctx.db
         .update(planDrafts)
         .set(updates)
