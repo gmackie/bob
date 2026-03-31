@@ -4,6 +4,7 @@ let appRouter: typeof import("../../root").appRouter;
 
 const queryMocks = {
   workspaceMembersFindMany: vi.fn(),
+  workspaceMembersFindFirst: vi.fn(),
   projectsFindMany: vi.fn(),
   projectsFindFirst: vi.fn(),
   workItemsFindMany: vi.fn(),
@@ -15,6 +16,7 @@ const makeDbMock = () => ({
   query: {
     workspaceMembers: {
       findMany: queryMocks.workspaceMembersFindMany,
+      findFirst: queryMocks.workspaceMembersFindFirst,
     },
     projects: {
       findMany: queryMocks.projectsFindMany,
@@ -105,6 +107,9 @@ describe("planning routers", () => {
   });
 
   it("lists projects with derived work item counts", async () => {
+    queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce({
+      id: "membership-1",
+    });
     queryMocks.projectsFindMany.mockResolvedValueOnce([
       {
         id: projectId,
@@ -141,6 +146,9 @@ describe("planning routers", () => {
   });
 
   it("lists work items with derived identifiers", async () => {
+    queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce({
+      id: "membership-1",
+    });
     queryMocks.workItemsFindMany.mockResolvedValueOnce([
       {
         id: taskId,
@@ -179,7 +187,23 @@ describe("planning routers", () => {
     ]);
   });
 
+  it("rejects work item listing when the caller is not a member of the workspace", async () => {
+    queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
+    queryMocks.workItemsFindMany.mockResolvedValueOnce([]);
+
+    const caller = createCaller() as any;
+
+    await expect(
+      caller.workItems.list({ workspaceId, limit: 20 }),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+  });
+
   it("gets a work item with current artifacts and child count", async () => {
+    queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce({
+      id: "membership-1",
+    });
     queryMocks.workItemsFindFirst.mockResolvedValueOnce({
       id: taskId,
       workspaceId,
@@ -224,6 +248,26 @@ describe("planning routers", () => {
         }),
       ],
       childCount: 2,
+    });
+  });
+
+  it("rejects work item detail when the caller is not a member of the workspace", async () => {
+    queryMocks.workItemsFindFirst.mockResolvedValueOnce({
+      id: taskId,
+      workspaceId,
+      projectId,
+      sequenceNumber: 12,
+      kind: "task",
+      title: "Port planning shell",
+      status: "in_progress",
+      parentId: null,
+    });
+    queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
+
+    const caller = createCaller() as any;
+
+    await expect(caller.workItems.get({ id: taskId })).rejects.toMatchObject({
+      code: "NOT_FOUND",
     });
   });
 });
