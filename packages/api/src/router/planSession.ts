@@ -186,6 +186,8 @@ export const planSessionRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await loadOwnedPlanningSession(ctx.db, ctx.session.user.id, input.sessionId);
+
       const { startPlanningSession } = await import(
         "@bob/execution/planning/startPlanningSession"
       );
@@ -481,6 +483,9 @@ export const planSessionRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await loadOwnedDraft(ctx.db, ctx.session.user.id, input.draftId);
+      await loadOwnedDraft(ctx.db, ctx.session.user.id, input.dependsOnDraftId);
+
       const [dep] = await ctx.db
         .insert(planDraftDependencies)
         .values({
@@ -504,6 +509,9 @@ export const planSessionRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await loadOwnedDraft(ctx.db, ctx.session.user.id, input.draftId);
+      await loadOwnedDraft(ctx.db, ctx.session.user.id, input.dependsOnDraftId);
+
       await ctx.db
         .delete(planDraftDependencies)
         .where(
