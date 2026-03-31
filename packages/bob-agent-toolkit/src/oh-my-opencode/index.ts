@@ -9,6 +9,9 @@ export function getOhMyOpenCodeMcpConfig(env: {
   apiUrl: string;
   apiKey: string;
   sessionId?: string;
+  secretBrokerUrl?: string;
+  secretBrokerToken?: string;
+  sessionSecretManifest?: string;
 }) {
   return {
     bob: {
@@ -18,6 +21,15 @@ export function getOhMyOpenCodeMcpConfig(env: {
         BOB_API_URL: env.apiUrl,
         BOB_API_KEY: env.apiKey,
         ...(env.sessionId ? { BOB_SESSION_ID: env.sessionId } : {}),
+        ...(env.secretBrokerUrl
+          ? { BOB_SECRET_BROKER_URL: env.secretBrokerUrl }
+          : {}),
+        ...(env.secretBrokerToken
+          ? { BOB_SECRET_BROKER_TOKEN: env.secretBrokerToken }
+          : {}),
+        ...(env.sessionSecretManifest
+          ? { BOB_SESSION_SECRET_MANIFEST: env.sessionSecretManifest }
+          : {}),
       },
     },
   };
@@ -27,6 +39,9 @@ export function generateOhMyOpenCodeConfig(env: {
   apiUrl: string;
   apiKey: string;
   sessionId?: string;
+  secretBrokerUrl?: string;
+  secretBrokerToken?: string;
+  sessionSecretManifest?: string;
 }) {
   return {
     mcpServers: getOhMyOpenCodeMcpConfig(env),

@@ -12,5 +12,7 @@ describe("Bob tool registry for smol-agent task execution", () => {
     expect(tools).toContain("create_pr");
     expect(tools).toContain("submit_for_review");
     expect(tools).toContain("complete_task");
+    expect(tools).toContain("list_session_secrets");
+    expect(tools).toContain("exec_session_secret");
   });
 });

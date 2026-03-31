@@ -37,4 +37,17 @@ describe("SessionHeader", () => {
     expect(html).toContain("Task-linked session");
     expect(html).not.toContain("Issue-managed session");
   });
+
+  it("renders the injected secrets action without coupling header data dependencies", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(SessionHeader, {
+        title: "MOB-42 execution",
+        status: "running",
+        agentType: "bob",
+        secretsAction: React.createElement("button", {}, "Secrets"),
+      }),
+    );
+
+    expect(html).toContain("Secrets");
+  });
 });

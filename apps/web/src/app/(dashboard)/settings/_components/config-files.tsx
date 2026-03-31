@@ -11,6 +11,15 @@ import {
 import { Button } from "@bob/ui/button";
 import { Input } from "@bob/ui/input";
 
+import {
+  BOB_WORKFLOW_SKILL_TEMPLATE,
+  CREATE_GMACKO_APP_FEATURE_DEVELOPMENT_SKILL_TEMPLATE,
+  OPENCODE_CONFIG_JSON_TEMPLATE,
+  OPENCODE_JSON_TEMPLATE,
+  STORYBOOK_DEVELOPMENT_SKILL_TEMPLATE,
+  WORK_ITEM_BREAKDOWN_SKILL_TEMPLATE,
+  WORK_ITEM_SHAPING_SKILL_TEMPLATE,
+} from "./config-file-templates";
 import { useTRPC } from "~/trpc/react";
 
 type ConfigRootId =
@@ -29,140 +38,6 @@ function initialContentForNewFile(fileName: string): string {
 export function ConfigFilesSection() {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
-
-  const OPENCODE_JSON_TEMPLATE =
-    "{\n" +
-    "  \"$schema\": \"https://opencode.ai/config.json\",\n" +
-    "  \"model\": \"anthropic/claude-opus-4-5\",\n" +
-    "  \"small_model\": \"anthropic/claude-haiku-4-5\",\n" +
-    "  \"autoupdate\": false\n" +
-    "}\n";
-
-  const OPENCODE_CONFIG_JSON_TEMPLATE =
-    "{\n" +
-    "  \"$schema\": \"https://opencode.ai/schemas/config.json\",\n" +
-    "  \"mcpServers\": {\n" +
-    "    \"bob\": {\n" +
-    "      \"type\": \"stdio\",\n" +
-    "      \"command\": \"npx\",\n" +
-    "      \"args\": [\"@bob/mcp-server\"],\n" +
-    "      \"env\": {\n" +
-    "        \"BOB_API_URL\": \"\\${env:BOB_API_URL}\",\n" +
-    "        \"BOB_API_KEY\": \"\\${env:BOB_API_KEY}\",\n" +
-    "        \"BOB_SESSION_ID\": \"\\${env:BOB_SESSION_ID}\"\n" +
-    "      }\n" +
-    "    }\n" +
-    "  },\n" +
-    "  \"skills\": [\n" +
-    "    {\n" +
-    "      \"name\": \"bob-workflow\",\n" +
-    "      \"description\": \"Workflow and status reporting for Bob-managed sessions\",\n" +
-    "      \"path\": \"./skills/bob-workflow.md\"\n" +
-    "    },\n" +
-    "    {\n" +
-    "      \"name\": \"storybook-development\",\n" +
-    "      \"description\": \"State-first Storybook workflow for UI generation, state coverage, and prompt-driven iteration\",\n" +
-    "      \"path\": \"./skills/storybook-development.md\"\n" +
-    "    },\n" +
-    "    {\n" +
-    "      \"name\": \"create-gmacko-app-feature-development\",\n" +
-    "      \"description\": \"Feature placement guidance for create-gmacko-app repos so agents know where code belongs across apps/nextjs, packages/ui, packages/api, packages/db, helpers, and shared packages\",\n" +
-    "      \"path\": \"./skills/create-gmacko-app-feature-development.md\"\n" +
-    "    },\n" +
-    "    {\n" +
-    "      \"name\": \"work-item-shaping\",\n" +
-    "      \"description\": \"Question-driven shaping for turning rough ideas into Bob epics or issues, plus BRDs and requirement sets\",\n" +
-    "      \"path\": \"./skills/work-item-shaping.md\"\n" +
-    "    },\n" +
-    "    {\n" +
-    "      \"name\": \"work-item-breakdown\",\n" +
-    "      \"description\": \"Breaks Bob epics, issues, BRDs, and requirement sets into linked child tasks with dependencies and lifecycle guidance\",\n" +
-    "      \"path\": \"./skills/work-item-breakdown.md\"\n" +
-    "    }\n" +
-    "  ]\n" +
-    "}\n";
-
-  const BOB_WORKFLOW_SKILL_TEMPLATE =
-    "# Bob Workflow Skill\n\n" +
-    "This is a starter skill file for Bob + OpenCode.\n\n" +
-    "Typical flow:\n" +
-    "- Call update_status regularly while working\n" +
-    "- Use request_input when you need a decision (with a sensible default_action)\n" +
-    "- Use mark_blocked when you cannot proceed\n" +
-    "- Use submit_for_review when a PR is ready\n\n" +
-    "Required env (for bob MCP server): BOB_API_URL, BOB_API_KEY, BOB_SESSION_ID\n";
-
-  const STORYBOOK_DEVELOPMENT_SKILL_TEMPLATE =
-    "---\n" +
-    "name: storybook-development\n" +
-    "description: Use when building or iterating on React UI in Bob with Storybook and you need exhaustive state coverage, edge-case fixtures, adversarial data, and prompt-driven review loops - turns natural language product intent into structured tasks, stories, mock data, and repeatable UX critique\n" +
-    "---\n\n" +
-    "# Storybook Development\n\n" +
-    "Use Storybook as the primary UI development surface. Treat prompts as specs and stories as the acceptance surface.\n\n" +
-    "Required story categories:\n" +
-    "- happy path\n" +
-    "- loading\n" +
-    "- error variants\n" +
-    "- empty\n" +
-    "- edge cases\n" +
-    "- responsive variants\n" +
-    "- accessibility variants\n\n" +
-    "Use the prompt files in ./prompts for the task template and seed library.\n";
-
-  const CREATE_GMACKO_APP_FEATURE_DEVELOPMENT_SKILL_TEMPLATE =
-    "---\n" +
-    "name: create-gmacko-app-feature-development\n" +
-    "description: Use when implementing a feature in a create-gmacko-app repo and you need to know where code belongs across apps/nextjs, packages/ui, packages/api, packages/db, local helpers, and shared packages - keeps feature work uniform, package-scoped, and ready to promote into shared layers when reuse appears\n" +
-    "---\n\n" +
-    "# Create Gmacko App Feature Development\n\n" +
-    "Core rule: place code in the narrowest correct layer first, then promote it only when reuse is real.\n\n" +
-    "Package map:\n" +
-    "- apps/nextjs: routes, page composition, app-specific providers, app-only hooks\n" +
-    "- packages/ui: reusable UI primitives, shared components, stories\n" +
-    "- packages/api: routers, procedures, domain services, integration orchestration\n" +
-    "- packages/db: schema, migrations, seeds, persistence helpers\n" +
-    "- apps/nextjs + Playwright: repeatable web end-to-end coverage\n" +
-    "- apps/expo/.maestro: mobile end-to-end flows for Expo\n" +
-    "- docs/ai: proposal and implementation artifacts\n\n" +
-    "Validation stack:\n" +
-    "- use Playwright for deterministic web flows in apps/nextjs\n" +
-    "- use gstack /browse for browser QA and visual verification\n" +
-    "- use Maestro from apps/expo/.maestro for mobile end-to-end flows\n" +
-    "- treat /browse as the fast inspection loop and Playwright or Maestro as the durable regression layer\n\n" +
-    "Helper rules:\n" +
-    "- keep helpers close to the layer they serve\n" +
-    "- move them to a layer-local helper module only after reuse inside that layer appears\n" +
-    "- promote to a shared package only when at least two consumers or a stable platform concern justify it\n";
-
-  const WORK_ITEM_SHAPING_SKILL_TEMPLATE =
-    "---\n" +
-    "name: work-item-shaping\n" +
-    "description: Use when a user is past a rough idea and needs to shape it into a Bob epic or issue with clearer scope, a business requirements document, or structured requirements - guides question-driven brainstorming, choosing the right work item kind, and capturing the parent work item cleanly before execution starts\n" +
-    "---\n\n" +
-    "# Work Item Shaping\n\n" +
-    "Core rule: chat one question at a time until the work is clear enough to become an epic or issue with a real BRD or requirement set.\n\n" +
-    "Use an epic for multi-step feature work, an issue for a bug or narrow problem that still needs shaping, and a task only when the work is already directly executable.\n\n" +
-    "Bob storage rules:\n" +
-    "- keep the parent scope on the epic or issue\n" +
-    "- put the concise summary in the parent description\n" +
-    "- attach longer BRDs as documentation artifacts when needed\n" +
-    "- keep requirements on the parent item before creating child tasks\n";
-
-  const WORK_ITEM_BREAKDOWN_SKILL_TEMPLATE =
-    "---\n" +
-    "name: work-item-breakdown\n" +
-    "description: Use when a Bob epic, issue, business requirements document, or requirement set needs to become executable child tasks - turns parent scope into linked tasks, dependencies, and requirement ownership while teaching the Bob lifecycle from shape through ship\n" +
-    "---\n\n" +
-    "# Work Item Breakdown\n\n" +
-    "Core rule: the parent issue or epic owns the scope and requirements; child tasks own execution.\n\n" +
-    "Breakdown rules:\n" +
-    "- read the parent issue or epic and any BRD first\n" +
-    "- normalize the scope into parent requirements\n" +
-    "- create child tasks beneath the parent\n" +
-    "- use linkedTaskId to link each requirement to its primary owning task\n" +
-    "- only promote the parent to a task when it should execute directly\n\n" +
-    "Lifecycle:\n" +
-    "- shape -> plan -> execute -> review -> ship\n";
 
   const STORYBOOK_TASK_TEMPLATE =
     "# Task: [Component Name]\n\n" +
