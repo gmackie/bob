@@ -10,7 +10,15 @@ const queryMocks = {
   workItemsFindMany: vi.fn(),
   workItemsFindFirst: vi.fn(),
   workItemArtifactsFindMany: vi.fn(),
+  commentsFindMany: vi.fn(),
 };
+
+const selectMock = vi.fn();
+const insertValuesMock = vi.fn();
+const insertReturningMock = vi.fn();
+const updateSetMock = vi.fn();
+const updateWhereMock = vi.fn();
+const updateReturningMock = vi.fn();
 
 const makeDbMock = () => ({
   query: {
@@ -29,11 +37,22 @@ const makeDbMock = () => ({
     workItemArtifacts: {
       findMany: queryMocks.workItemArtifactsFindMany,
     },
+    comments: {
+      findMany: queryMocks.commentsFindMany,
+    },
   },
+  select: selectMock,
   insert: vi.fn(() => ({
-    values: vi.fn(() => ({
-      returning: vi.fn(),
-    })),
+    values: insertValuesMock.mockReturnValue({
+      returning: insertReturningMock,
+    }),
+  })),
+  update: vi.fn(() => ({
+    set: updateSetMock.mockReturnValue({
+      where: updateWhereMock.mockReturnValue({
+        returning: updateReturningMock,
+      }),
+    }),
   })),
 });
 
@@ -77,6 +96,14 @@ describe("planning routers", () => {
 
   beforeEach(() => {
     Object.values(queryMocks).forEach((mock) => mock.mockReset());
+    [
+      selectMock,
+      insertValuesMock,
+      insertReturningMock,
+      updateSetMock,
+      updateWhereMock,
+      updateReturningMock,
+    ].forEach((mock) => mock.mockReset());
   });
 
   it("lists workspaces for the current member", async () => {
@@ -268,6 +295,223 @@ describe("planning routers", () => {
 
     await expect(caller.workItems.get({ id: taskId })).rejects.toMatchObject({
       code: "NOT_FOUND",
+    });
+  });
+
+  describe("planning router auth", () => {
+    it("lists planning workspaces from caller memberships", async () => {
+      queryMocks.workspaceMembersFindMany.mockResolvedValueOnce([
+        {
+          workspace: {
+            id: workspaceId,
+            name: "Builder",
+            slug: "builder",
+          },
+        },
+      ]);
+
+      const caller = createCaller() as any;
+      const result = await caller.planning.listWorkspaces();
+
+      expect(result).toEqual([
+        {
+          id: workspaceId,
+          name: "Builder",
+          slug: "builder",
+        },
+      ]);
+    });
+
+    it("rejects planning project listing when the caller is not a member of the workspace", async () => {
+      queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
+
+      const caller = createCaller() as any;
+
+      await expect(
+        caller.planning.listProjects({ workspaceId }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+    });
+
+    it("rejects planning project detail when the caller is not a member of the project workspace", async () => {
+      queryMocks.projectsFindFirst.mockResolvedValueOnce({
+        id: projectId,
+        workspaceId,
+        name: "Merge",
+        key: "MERGE",
+        status: "in_progress",
+        color: "#2255cc",
+      });
+      queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
+
+      const caller = createCaller() as any;
+
+      await expect(
+        caller.planning.getProject({ id: projectId }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+    });
+
+    it("rejects planning task lookup by identifier when the caller is not a member of the project workspace", async () => {
+      queryMocks.projectsFindFirst.mockResolvedValueOnce({
+        id: projectId,
+        workspaceId,
+        key: "MERGE",
+      });
+      queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
+
+      const caller = createCaller() as any;
+
+      await expect(
+        caller.planning.getTaskByIdentifier({ identifier: "MERGE-12" }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+    });
+
+    it("rejects planning task creation when the caller is not a member of the project workspace", async () => {
+      queryMocks.projectsFindFirst.mockResolvedValueOnce({
+        id: projectId,
+        workspaceId,
+        key: "MERGE",
+      });
+      queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
+
+      const caller = createCaller() as any;
+
+      await expect(
+        caller.planning.createTask({
+          projectId,
+          title: "Ship planning hardening",
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+    });
+
+    it("rejects planning task updates when the caller is not a member of the task workspace", async () => {
+      queryMocks.workItemsFindFirst.mockResolvedValueOnce({
+        id: taskId,
+        workspaceId,
+        projectId,
+        sequenceNumber: 12,
+        title: "Ship planning hardening",
+        status: "todo",
+      });
+      queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
+
+      const caller = createCaller() as any;
+
+      await expect(
+        caller.planning.updateTask({
+          id: taskId,
+          status: "done",
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+    });
+
+    it("rejects planning comment creation when the caller is not a member of the task workspace", async () => {
+      queryMocks.workItemsFindFirst.mockResolvedValueOnce({
+        id: taskId,
+        workspaceId,
+      });
+      queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
+
+      const caller = createCaller() as any;
+
+      await expect(
+        caller.planning.addComment({
+          issueId: taskId,
+          body: "Private note",
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+    });
+
+    it("rejects planning comment listing when the caller is not a member of the task workspace", async () => {
+      queryMocks.workItemsFindFirst.mockResolvedValueOnce({
+        id: taskId,
+        workspaceId,
+      });
+      queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
+
+      const caller = createCaller() as any;
+
+      await expect(
+        caller.planning.listComments({
+          issueId: taskId,
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+    });
+
+    it("rejects planning task search when the caller is not a member of the workspace", async () => {
+      queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
+
+      const caller = createCaller() as any;
+
+      await expect(
+        caller.planning.searchTasks({
+          workspaceId,
+          query: "planning",
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+    });
+
+    it("rejects planning label listing when the caller is not a member of the workspace", async () => {
+      queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
+
+      const caller = createCaller() as any;
+
+      await expect(
+        caller.planning.listLabels({
+          workspaceId,
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+    });
+
+    it("rejects agent task claims when the caller is not a member of the task workspace", async () => {
+      queryMocks.workItemsFindFirst.mockResolvedValueOnce({
+        id: taskId,
+        workspaceId,
+      });
+      queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
+
+      const caller = createCaller() as any;
+
+      await expect(
+        caller.planning.agentClaimTask({
+          agentId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          issueId: taskId,
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+    });
+
+    it("rejects agent session starts when the caller is not a member of the workspace", async () => {
+      queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
+
+      const caller = createCaller() as any;
+
+      await expect(
+        caller.planning.agentStartSession({
+          agentId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          workspaceId,
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
     });
   });
 });

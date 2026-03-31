@@ -11,7 +11,10 @@ const updateReturningMock = vi.fn();
 const findManyMocks = {
   workItems: vi.fn(),
   workItemArtifacts: vi.fn(),
+  comments: vi.fn(),
+  activities: vi.fn(),
   notifications: vi.fn(),
+  taskRuns: vi.fn(),
 };
 
 const findFirstMocks = {
@@ -31,8 +34,17 @@ const makeDbMock = () => ({
     workItemArtifacts: {
       findMany: findManyMocks.workItemArtifacts,
     },
+    comments: {
+      findMany: findManyMocks.comments,
+    },
+    activities: {
+      findMany: findManyMocks.activities,
+    },
     notifications: {
       findMany: findManyMocks.notifications,
+    },
+    taskRuns: {
+      findMany: findManyMocks.taskRuns,
     },
   },
   insert: vi.fn(() => ({
@@ -97,7 +109,10 @@ describe("workItems router", () => {
     findFirstMocks.workItems.mockReset();
     findFirstMocks.workspaceMembers.mockReset();
     findManyMocks.workItemArtifacts.mockReset();
+    findManyMocks.comments.mockReset();
+    findManyMocks.activities.mockReset();
     findManyMocks.notifications.mockReset();
+    findManyMocks.taskRuns.mockReset();
   });
 
   it("creates comments against work items and records activity", async () => {
@@ -255,6 +270,13 @@ describe("workItems router", () => {
   });
 
   it("rolls up the latest child artifacts by child work item", async () => {
+    findFirstMocks.workItems.mockResolvedValueOnce({
+      id: parentWorkItemId,
+      workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    });
+    findFirstMocks.workspaceMembers.mockResolvedValueOnce({
+      id: "membership-1",
+    });
     findManyMocks.workItems.mockResolvedValueOnce([
       {
         id: "child-1",
@@ -304,6 +326,79 @@ describe("workItems router", () => {
     ]);
   });
 
+  it("rejects comment listing when the caller is not a member of the work item's workspace", async () => {
+    findFirstMocks.workItems.mockResolvedValueOnce({
+      id: workItemId,
+      workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    });
+    findFirstMocks.workspaceMembers.mockResolvedValueOnce(null);
+
+    const caller = createCaller() as any;
+
+    await expect(
+      caller.workItems.listComments({
+        workItemId,
+      }),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+  });
+
+  it("rejects activity listing when the caller is not a member of the work item's workspace", async () => {
+    findFirstMocks.workItems.mockResolvedValueOnce({
+      id: workItemId,
+      workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    });
+    findFirstMocks.workspaceMembers.mockResolvedValueOnce(null);
+
+    const caller = createCaller() as any;
+
+    await expect(
+      caller.workItems.listActivities({
+        workItemId,
+        limit: 20,
+      }),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+  });
+
+  it("rejects current artifact listing when the caller is not a member of the work item's workspace", async () => {
+    findFirstMocks.workItems.mockResolvedValueOnce({
+      id: workItemId,
+      workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    });
+    findFirstMocks.workspaceMembers.mockResolvedValueOnce(null);
+
+    const caller = createCaller() as any;
+
+    await expect(
+      caller.workItems.listCurrentArtifacts({
+        workItemId,
+      }),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+  });
+
+  it("rejects child artifact grouping when the caller is not a member of the parent work item's workspace", async () => {
+    findFirstMocks.workItems.mockResolvedValueOnce({
+      id: parentWorkItemId,
+      workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    });
+    findFirstMocks.workspaceMembers.mockResolvedValueOnce(null);
+
+    const caller = createCaller() as any;
+
+    await expect(
+      caller.workItems.listChildArtifactGroups({
+        parentWorkItemId,
+      }),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+  });
+
   it("lists notifications linked to work items for the current user", async () => {
     findManyMocks.notifications.mockResolvedValueOnce([
       {
@@ -331,6 +426,42 @@ describe("workItems router", () => {
           type: "work_item_needs_input",
         }),
       ],
+    });
+  });
+
+  it("rejects task run listing when the caller is not a member of the work item's workspace", async () => {
+    findFirstMocks.workItems.mockResolvedValueOnce({
+      id: workItemId,
+      workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    });
+    findFirstMocks.workspaceMembers.mockResolvedValueOnce(null);
+
+    const caller = createCaller() as any;
+
+    await expect(
+      caller.taskRun.listByWorkItem({
+        workItemId,
+      }),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+  });
+
+  it("rejects task execution when the caller is not a member of the work item's workspace", async () => {
+    findFirstMocks.workItems.mockResolvedValueOnce({
+      id: workItemId,
+      workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    });
+    findFirstMocks.workspaceMembers.mockResolvedValueOnce(null);
+
+    const caller = createCaller() as any;
+
+    await expect(
+      caller.taskRun.execute({
+        workItemId,
+      }),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
     });
   });
 
