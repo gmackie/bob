@@ -8,6 +8,8 @@ import {
   worktrees,
   agentInstances,
   worktreePlans,
+  projects,
+  workspaceMembers,
   CreateRepositorySchema,
   agentTypeEnum,
   planStatusEnum,
@@ -37,6 +39,29 @@ async function gatewayRequest(
   }
 
   return response.json();
+}
+
+async function assertProjectAccess(db: any, userId: string, projectId: string) {
+  const project = await db.query.projects.findFirst({
+    where: eq(projects.id, projectId),
+    columns: { id: true, workspaceId: true },
+  });
+
+  if (!project) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
+  }
+
+  const membership = await db.query.workspaceMembers.findFirst({
+    where: and(
+      eq(workspaceMembers.workspaceId, project.workspaceId),
+      eq(workspaceMembers.userId, userId),
+    ),
+    columns: { id: true },
+  });
+
+  if (!membership) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
 }
 
 function generatePlanningMd(options: {
@@ -221,6 +246,10 @@ export const repositoryRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      if (input.projectId) {
+        await assertProjectAccess(ctx.db, ctx.session.user.id, input.projectId);
+      }
+
       const [owner, name] = input.fullName.split("/");
       const repoName = name ?? input.fullName;
       const localPath = `/home/${process.env.USER ?? "mackieg"}/repos/${repoName}`;
