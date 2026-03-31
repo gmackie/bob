@@ -13,11 +13,6 @@ const API_URL = process.env.BOB_API_URL ?? "http://localhost:3000";
 const API_KEY = process.env.BOB_API_KEY;
 const SESSION_ID = process.env.BOB_SESSION_ID ?? null;
 
-if (!API_KEY) {
-  console.error("Error: BOB_API_KEY environment variable is required");
-  process.exit(1);
-}
-
 interface TrpcResponse<T> {
   result?: {
     data: T;
@@ -29,6 +24,10 @@ interface TrpcResponse<T> {
 }
 
 async function callTrpc<T>(path: string, input?: unknown): Promise<T> {
+  if (!API_KEY) {
+    throw new Error("BOB_API_KEY environment variable is required for this tool");
+  }
+
   const url = new URL(`/api/trpc/${path}`, API_URL);
 
   const response = await fetch(url.toString(), {

@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@bob/api": "workspace:*",
+    "@bob/agent-toolkit": "workspace:*",
     "@bob/auth": "workspace:*",
     "@bob/config": "workspace:*",
     "@bob/db": "workspace:*",

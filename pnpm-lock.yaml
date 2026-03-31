@@ -165,6 +165,9 @@ importers:
 
   apps/gateway:
     dependencies:
+      '@bob/agent-toolkit':
+        specifier: workspace:*
+        version: link:../../packages/bob-agent-toolkit
       '@bob/api':
         specifier: workspace:*
         version: link:../../packages/api
@@ -362,6 +365,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@bob/agent-toolkit':
+        specifier: workspace:*
+        version: link:../../packages/bob-agent-toolkit
       '@bob/api':
         specifier: workspace:*
         version: link:../../packages/api

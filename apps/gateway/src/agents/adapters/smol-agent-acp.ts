@@ -15,11 +15,41 @@ function buildRequest(method: string, params: Record<string, unknown>) {
 
 export function createSmolAgentAcpAdapter(
   workingDirectory: string,
+  runtimeEnv: Record<string, string> = {},
 ): StdioAdapter {
   let initialized = false;
   let sessionRequested = false;
   let sessionId: string | null = null;
   let pendingPrompt: string | null = null;
+
+  const mcpServers =
+    runtimeEnv.BOB_SECRET_BROKER_URL && runtimeEnv.BOB_SECRET_BROKER_TOKEN
+      ? {
+          bob: {
+            command: "npx",
+            args: ["@bob/mcp-server"],
+            env: {
+              ...(runtimeEnv.BOB_API_URL
+                ? { BOB_API_URL: runtimeEnv.BOB_API_URL }
+                : {}),
+              ...(runtimeEnv.BOB_API_KEY
+                ? { BOB_API_KEY: runtimeEnv.BOB_API_KEY }
+                : {}),
+              ...(runtimeEnv.BOB_SESSION_ID
+                ? { BOB_SESSION_ID: runtimeEnv.BOB_SESSION_ID }
+                : {}),
+              BOB_SECRET_BROKER_URL: runtimeEnv.BOB_SECRET_BROKER_URL,
+              BOB_SECRET_BROKER_TOKEN: runtimeEnv.BOB_SECRET_BROKER_TOKEN,
+              ...(runtimeEnv.BOB_SESSION_SECRET_MANIFEST
+                ? {
+                    BOB_SESSION_SECRET_MANIFEST:
+                      runtimeEnv.BOB_SESSION_SECRET_MANIFEST,
+                  }
+                : {}),
+            },
+          },
+        }
+      : {};
 
   function buildPromptRequest(text: string) {
     return buildRequest("session/prompt", {
@@ -148,7 +178,7 @@ export function createSmolAgentAcpAdapter(
         lines.push(
           buildRequest("session/new", {
             cwd: workingDirectory,
-            mcpServers: [],
+            mcpServers,
           }),
         );
       }

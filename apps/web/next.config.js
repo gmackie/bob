@@ -11,6 +11,7 @@ const config = {
   output: process.env.DOCKER_BUILD ? "standalone" : undefined,
 
   transpilePackages: [
+    "@bob/agent-toolkit",
     "@bob/api",
     "@bob/auth",
     "@bob/config",

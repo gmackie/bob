@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { SKILL_NAMES } from "../index.js";
-import { generateOhMyOpenCodeConfig } from "../oh-my-opencode/index.js";
+import { SKILL_NAMES, getMcpServerConfig } from "../index.js";
+import {
+  bobWorkflowSkill,
+  generateOhMyOpenCodeConfig,
+  getOhMyOpenCodeMcpConfig,
+} from "../oh-my-opencode/index.js";
 import {
   createGmackoAppFeatureDevelopmentSkill,
   workItemBreakdownSkill,
@@ -28,6 +32,71 @@ test("includes the storybook development skill in generated Oh My OpenCode confi
     config.skills["storybook-development"].source,
     "@bob/agent-toolkit/oh-my-opencode/storybook-development-skill",
   );
+});
+
+test("advertises session secret tools through the Bob workflow skill", () => {
+  assert.ok(
+    bobWorkflowSkill.allowedTools?.includes("list_session_secrets"),
+    "Expected Bob workflow skill to allow listing session secrets",
+  );
+  assert.ok(
+    bobWorkflowSkill.allowedTools?.includes("exec_session_secret"),
+    "Expected Bob workflow skill to allow executing session secret templates",
+  );
+  assert.match(
+    bobWorkflowSkill.template,
+    /list_session_secrets/,
+    "Expected Bob workflow skill instructions to mention secret discovery",
+  );
+  assert.match(
+    bobWorkflowSkill.template,
+    /exec_session_secret/,
+    "Expected Bob workflow skill instructions to mention secret execution",
+  );
+});
+
+test("includes session secret broker env in Bob workflow MCP config", () => {
+  const bobEnv = bobWorkflowSkill.mcpConfig?.mcpServers.bob?.env;
+  assert.ok(bobEnv, "Expected Bob workflow skill to define MCP env");
+  assert.deepEqual(bobEnv, {
+    BOB_API_URL: "${env:BOB_API_URL}",
+    BOB_API_KEY: "${env:BOB_API_KEY}",
+    BOB_SESSION_ID: "${env:BOB_SESSION_ID}",
+    BOB_SECRET_BROKER_URL: "${env:BOB_SECRET_BROKER_URL}",
+    BOB_SECRET_BROKER_TOKEN: "${env:BOB_SECRET_BROKER_TOKEN}",
+    BOB_SESSION_SECRET_MANIFEST: "${env:BOB_SESSION_SECRET_MANIFEST}",
+  });
+});
+
+test("includes session secret broker env in generated MCP config helpers", () => {
+  const input = {
+    apiUrl: "https://bob.example.com",
+    apiKey: "test-key",
+    sessionId: "session-123",
+    secretBrokerUrl: "http://127.0.0.1:4321/session-secret",
+    secretBrokerToken: "secret-broker-token",
+    sessionSecretManifest: '[{"handle":"npm-token","label":"npm-token"}]',
+  };
+
+  assert.deepEqual(getOhMyOpenCodeMcpConfig(input).bob.env, {
+    BOB_API_URL: "https://bob.example.com",
+    BOB_API_KEY: "test-key",
+    BOB_SESSION_ID: "session-123",
+    BOB_SECRET_BROKER_URL: "http://127.0.0.1:4321/session-secret",
+    BOB_SECRET_BROKER_TOKEN: "secret-broker-token",
+    BOB_SESSION_SECRET_MANIFEST:
+      '[{"handle":"npm-token","label":"npm-token"}]',
+  });
+
+  assert.deepEqual(getMcpServerConfig(input).env, {
+    BOB_API_URL: "https://bob.example.com",
+    BOB_API_KEY: "test-key",
+    BOB_SESSION_ID: "session-123",
+    BOB_SECRET_BROKER_URL: "http://127.0.0.1:4321/session-secret",
+    BOB_SECRET_BROKER_TOKEN: "secret-broker-token",
+    BOB_SESSION_SECRET_MANIFEST:
+      '[{"handle":"npm-token","label":"npm-token"}]',
+  });
 });
 
 test("exports the create-gmacko-app feature development skill in the public registry", () => {

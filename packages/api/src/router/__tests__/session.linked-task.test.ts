@@ -5,6 +5,7 @@ let appRouter: typeof import("../../root").appRouter;
 const queryMocks = {
   chatConversationsFindFirst: vi.fn(),
   taskRunsFindFirst: vi.fn(),
+  workItemsFindFirst: vi.fn(),
 };
 
 const makeDbMock = () => ({
@@ -14,6 +15,9 @@ const makeDbMock = () => ({
     },
     taskRuns: {
       findFirst: queryMocks.taskRunsFindFirst,
+    },
+    workItems: {
+      findFirst: queryMocks.workItemsFindFirst,
     },
   },
 });
@@ -59,6 +63,7 @@ describe("session router linked task URLs", () => {
   beforeEach(() => {
     queryMocks.chatConversationsFindFirst.mockReset();
     queryMocks.taskRunsFindFirst.mockReset();
+    queryMocks.workItemsFindFirst.mockReset();
   });
 
   it("builds linked task URLs from planning host aliases and work-item routes", async () => {
@@ -93,5 +98,38 @@ describe("session router linked task URLs", () => {
     });
     expect(result.workItemId).toBe(workItemId);
     expect(result.workItemIdentifier).toBe("PLAN-123");
+  });
+
+  it("resolves projectId from the latest task run work item when the session snapshot lacks it", async () => {
+    queryMocks.chatConversationsFindFirst.mockResolvedValueOnce({
+      id: sessionId,
+      userId: "user-1",
+      workingDirectory: "/repo/demo",
+      status: "running",
+      workItemId: null,
+      workItemIdentifierSnapshot: null,
+      planningTaskId: null,
+      repository: null,
+      worktree: null,
+      workItem: null,
+    });
+    queryMocks.taskRunsFindFirst.mockResolvedValueOnce({
+      id: "run-2",
+      sessionId,
+      userId: "user-1",
+      workItemId,
+      workItemIdentifierSnapshot: "PLAN-123",
+      planningItemId: workItemId,
+      planningItemIdentifier: "PLAN-123",
+    });
+    queryMocks.workItemsFindFirst.mockResolvedValueOnce({
+      id: workItemId,
+      projectId: "33333333-3333-4333-8333-333333333333",
+    });
+
+    const caller = createCaller() as any;
+    const result = await caller.session.get({ id: sessionId });
+
+    expect(result.projectId).toBe("33333333-3333-4333-8333-333333333333");
   });
 });

@@ -19,6 +19,7 @@ export interface StdioAdapter {
 export function getStdioAdapter(
   agentType: string,
   workingDirectory: string,
+  runtimeEnv: Record<string, string> = {},
 ): StdioAdapter | null {
   switch (agentType) {
     case "claude":
@@ -28,7 +29,7 @@ export function getStdioAdapter(
     case "opencode":
       return createOpencodeStdioAdapter(workingDirectory);
     case "smol-agent":
-      return createSmolAgentAcpAdapter(workingDirectory);
+      return createSmolAgentAcpAdapter(workingDirectory, runtimeEnv);
     default:
       return null;
   }

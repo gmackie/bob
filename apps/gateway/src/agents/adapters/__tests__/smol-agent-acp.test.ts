@@ -21,6 +21,19 @@ describe("smol-agent ACP adapter", () => {
     expect(payload).not.toContain("\"method\":\"session/prompt\"");
   });
 
+  it("registers Bob MCP when session secret broker env is available", () => {
+    const adapter = createSmolAgentAcpAdapter("/tmp/project", {
+      BOB_SECRET_BROKER_URL: "http://127.0.0.1:3002/session/secrets/execute",
+      BOB_SECRET_BROKER_TOKEN: "broker-token",
+      BOB_SESSION_SECRET_MANIFEST: "[]",
+    });
+    const payload = adapter.formatInput("Implement the task");
+
+    expect(payload).toContain("\"mcpServers\"");
+    expect(payload).toContain("\"@bob/mcp-server\"");
+    expect(payload).toContain("\"BOB_SECRET_BROKER_TOKEN\":\"broker-token\"");
+  });
+
   it("emits a follow-up prompt once the ACP session id arrives", () => {
     const adapter = createSmolAgentAcpAdapter("/tmp/project");
     adapter.formatInput("Implement the task");

@@ -93,6 +93,22 @@ function createMockActor() {
   };
 }
 
+async function waitForCondition(
+  condition: () => boolean,
+  description: string,
+  timeoutMs = 2_000,
+) {
+  const startedAt = Date.now();
+
+  while (!condition()) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error(`Timed out waiting for ${description}`);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+
 describe("AgentProcessManager", () => {
   let manager: AgentProcessManager;
   let actor: ReturnType<typeof createMockActor>;
@@ -121,8 +137,13 @@ describe("AgentProcessManager", () => {
     expect(actor.setStatus).toHaveBeenCalledWith("starting");
     expect(actor.setStatus).toHaveBeenCalledWith("running");
 
-    // Wait for mock agent to process the session.start and emit events
-    await new Promise((r) => setTimeout(r, 500));
+    await waitForCondition(
+      () =>
+        actor.handleAgentOutput.mock.calls.length > 0 &&
+        actor.handleToolCall.mock.calls.length > 0 &&
+        actor.handleToolResult.mock.calls.length > 0,
+      "mock agent startup events",
+    );
 
     // The mock agent sends 4 lines for session.start:
     // 1. events.output "Mock agent started" → handleAgentOutput
@@ -148,8 +169,13 @@ describe("AgentProcessManager", () => {
     const sent = manager.sendInput("test-2", "hello world");
     expect(sent).toBe(true);
 
-    // Wait for the mock agent to respond
-    await new Promise((r) => setTimeout(r, 500));
+    await waitForCondition(
+      () =>
+        actor.handleAgentOutput.mock.calls.some((call: unknown[]) =>
+          (call[0] as string).includes("Echo: hello world"),
+        ),
+      "mock agent echo response",
+    );
 
     // The mock agent echoes back via events.output
     const outputCalls = actor.handleAgentOutput.mock.calls;
@@ -212,7 +238,13 @@ describe("AgentProcessManager", () => {
 
     expect(manager.isManaging("test-smol")).toBe(true);
 
-    await new Promise((r) => setTimeout(r, 500));
+    await waitForCondition(
+      () =>
+        actor.handleAgentOutput.mock.calls.some((call: unknown[]) =>
+          (call[0] as string).includes("ACP Echo: Implement the task"),
+        ),
+      "smol-agent ACP echo response",
+    );
 
     const outputCalls = actor.handleAgentOutput.mock.calls;
     const acpEcho = outputCalls.find((c: unknown[]) =>

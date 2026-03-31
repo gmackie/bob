@@ -52,6 +52,7 @@ interface SessionHeaderProps {
   linkedTask?: LinkedTask | null;
   workflowState?: WorkflowState | null;
   voiceStatus?: "disconnected" | "connecting" | "connected" | "error";
+  secretsAction?: React.ReactNode;
   onStop?: () => void;
   onRestart?: () => void;
   onRename?: () => void;
@@ -313,6 +314,7 @@ export function SessionHeader({
   linkedTask,
   workflowState,
   voiceStatus,
+  secretsAction,
   onStop,
   onRestart,
   onRename,
@@ -376,6 +378,8 @@ export function SessionHeader({
       </div>
 
       <div className="chat-sessionHeaderActions">
+        {secretsAction}
+
         {linkedTask?.url && (
           <Button
             asChild
