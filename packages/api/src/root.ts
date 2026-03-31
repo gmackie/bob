@@ -24,6 +24,7 @@ import { publicApiRouter } from "./router/publicApi";
 import { pullRequestRouter } from "./router/pullRequest";
 import { requirementRouter } from "./router/requirement";
 import { repositoryRouter } from "./router/repository";
+import { secretsRouter } from "./router/secrets";
 import { sessionRouter } from "./router/session";
 import { skillRouter } from "./router/skill";
 import { snapshotRouter } from "./router/snapshot";
@@ -71,6 +72,7 @@ const appRouterRecord = {
   pullRequest: pullRequestRouter,
   requirement: requirementRouter,
   repository: repositoryRouter,
+  secrets: secretsRouter,
   session: sessionRouter,
   skill: skillRouter,
   snapshot: snapshotRouter,

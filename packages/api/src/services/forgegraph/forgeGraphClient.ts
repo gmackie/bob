@@ -71,6 +71,16 @@ export interface FgReadinessVerdict {
   nextAction?: string;
 }
 
+export interface FgDeploySecretRef {
+  ref: string;
+}
+
+export interface FgDeploySecretBinding {
+  key: string;
+  ref: string;
+  updatedAt: string;
+}
+
 // ── Input types ───────────────────────────────────────────────────────
 
 export interface CreateWorkItemInput {
@@ -238,6 +248,27 @@ export class ForgeGraphClient {
 
   async getBulkReadiness(workItemIds: string[]): Promise<FgReadinessVerdict[]> {
     return this.post<FgReadinessVerdict[]>("/api/fg/work-items/readiness", { workItemIds });
+  }
+
+  async upsertDeploySecret(input: {
+    projectId: string;
+    environment: "dev" | "staging" | "prod" | "preview";
+    key: string;
+    value: string;
+  }): Promise<FgDeploySecretRef> {
+    return this.post<FgDeploySecretRef>("/api/fg/deploy-secrets", input);
+  }
+
+  async listDeploySecrets(input: {
+    projectId: string;
+    environment?: "dev" | "staging" | "prod" | "preview";
+  }): Promise<FgDeploySecretBinding[]> {
+    const params = new URLSearchParams();
+    params.set("projectId", input.projectId);
+    if (input.environment) params.set("environment", input.environment);
+    return this.get<FgDeploySecretBinding[]>(
+      `/api/fg/deploy-secrets?${params.toString()}`,
+    );
   }
 
   // ── HTTP helpers ──────────────────────────────────────────────────

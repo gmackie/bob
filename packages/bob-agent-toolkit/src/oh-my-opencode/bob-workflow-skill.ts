@@ -22,6 +22,11 @@ export interface BuiltinSkill {
   };
 }
 
+const bobSessionSecretToolNames = [
+  "list_session_secrets",
+  "exec_session_secret",
+] as const;
+
 export const bobWorkflowSkill: BuiltinSkill = {
   name: "bob-workflow",
   description:
@@ -123,6 +128,23 @@ complete_task(
 )
 \`\`\`
 
+## Session Secrets
+
+Some Bob sessions expose session-scoped secrets through Bob tools. These tools reveal metadata and execute approved secret-backed actions, but they do not expose plaintext secret values.
+
+1. Use \`list_session_secrets\` to see available secret handles and allowed templates
+2. Use \`exec_session_secret\` to run an approved template such as an authenticated API call or registry login
+3. Do not print, echo, or otherwise try to inspect secret material directly
+
+Example:
+\`\`\`
+exec_session_secret(
+  handle="github-token",
+  template="gh-api",
+  args={ path: "/user" }
+)
+\`\`\`
+
 ## Best Practices
 
 1. **Report early, report often** - Regular status updates help humans track progress
@@ -130,6 +152,7 @@ complete_task(
 3. **Provide good defaults** - Always have a sensible default_action
 4. **Be specific in blockers** - Clear descriptions help humans resolve issues faster
 5. **Link work to tasks** - Use task tools to maintain traceability
+6. **Use secret tools instead of shell env hacks** - Prefer \`list_session_secrets\` and \`exec_session_secret\` when a Bob session provides secret-backed actions
 
 ## Available Tools
 
@@ -157,6 +180,10 @@ complete_task(
 - \`post_task_comment\` - Comment on linked task
 - \`complete_task\` - Mark task complete
 - \`update_task_status\` - Change task status
+
+### Secret Tools
+- \`list_session_secrets\` - List secret handles and allowed templates without revealing plaintext
+- \`exec_session_secret\` - Execute an approved secret-backed template without revealing plaintext
 `,
   mcpConfig: {
     mcpServers: {
@@ -167,6 +194,9 @@ complete_task(
           BOB_API_URL: "${env:BOB_API_URL}",
           BOB_API_KEY: "${env:BOB_API_KEY}",
           BOB_SESSION_ID: "${env:BOB_SESSION_ID}",
+          BOB_SECRET_BROKER_URL: "${env:BOB_SECRET_BROKER_URL}",
+          BOB_SECRET_BROKER_TOKEN: "${env:BOB_SECRET_BROKER_TOKEN}",
+          BOB_SESSION_SECRET_MANIFEST: "${env:BOB_SESSION_SECRET_MANIFEST}",
         },
       },
     },
@@ -189,5 +219,6 @@ complete_task(
     "post_task_comment",
     "complete_task",
     "update_task_status",
+    ...bobSessionSecretToolNames,
   ],
 };

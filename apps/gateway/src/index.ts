@@ -8,6 +8,11 @@ import { PersistenceWriter, SessionEventRecord } from "./persistence/Persistence
 import { SessionCleanup } from "./sessions/SessionCleanup.js";
 import { AgentProcessManager } from "./agents/agent-process-manager.js";
 import { getStdioAdapter } from "./agents/adapters/base-stdio-adapter.js";
+import { prepareSessionAgentRuntime } from "./agents/sessionAgentRuntime.js";
+import {
+  buildSessionSecretLaunchEnv,
+  executeSessionSecretBrokerRequest,
+} from "./secrets/sessionSecretGateway.js";
 import { detectVcs, getVcsAdapter } from "./vcs/vcs-adapter.js";
 import { and, eq, isNotNull, sql } from "@bob/db";
 import { db } from "@bob/db/client";
@@ -1187,6 +1192,27 @@ const server = createServer(async (req, res) => {
       }
 
       switch (pathname) {
+        case "/session/secrets/execute": {
+          const result = await executeSessionSecretBrokerRequest({
+            token: body.token as string,
+            handle: body.handle as string,
+            templateId: body.templateId as string,
+            args:
+              body.args && typeof body.args === "object"
+                ? Object.fromEntries(
+                    Object.entries(body.args as Record<string, unknown>).filter(
+                      (entry): entry is [string, string] =>
+                        typeof entry[0] === "string" &&
+                        typeof entry[1] === "string",
+                    ),
+                  )
+                : {},
+          });
+
+          sendJson(res, 200, result);
+          return;
+        }
+
         case "/session/start": {
           const sessionId = body.sessionId as string;
           const agentType = (body.agentType as string) ?? "claude";
@@ -1209,6 +1235,20 @@ const server = createServer(async (req, res) => {
           if (!sessionId || !userId) {
             sendError(res, 400, "sessionId and userId are required");
             return;
+          }
+
+          let sessionSecretEnv: Record<string, string> | undefined;
+          try {
+            sessionSecretEnv = await buildSessionSecretLaunchEnv({
+              sessionId,
+              gatewayPort: PORT,
+              baseEnv: launchEnv,
+            });
+          } catch (error) {
+            console.warn(
+              `[Gateway] Failed to prepare session secret tooling for ${sessionId}:`,
+              error,
+            );
           }
 
           // Update the session status and claim it
@@ -1281,7 +1321,9 @@ const server = createServer(async (req, res) => {
                 actor,
                 userId,
                 initialPrompt,
-                tryAgent === agentType ? launchEnv : undefined,
+                tryAgent === agentType
+                  ? { ...launchEnv, ...sessionSecretEnv }
+                  : sessionSecretEnv,
                 tryAgent === agentType ? undefined : tryAgent,
               );
               started = true;
@@ -1671,9 +1713,22 @@ async function startAgentForSession(
   if (!actor) return;
 
   const effectiveAgentType = agentTypeOverride ?? actor.agentType;
+  const stagedRuntime = await prepareSessionAgentRuntime({
+    agentType: effectiveAgentType,
+    sessionId: actor.sessionId,
+    runtimeEnv: launchEnv,
+  });
+  const effectiveLaunchEnv = {
+    ...(launchEnv ?? {}),
+    ...stagedRuntime.env,
+  };
 
   // Check if we can use stdio mode for this agent type
-  const stdioAdapter = getStdioAdapter(effectiveAgentType, actor.workingDirectory);
+  const stdioAdapter = getStdioAdapter(
+    effectiveAgentType,
+    actor.workingDirectory,
+    effectiveLaunchEnv,
+  );
   if (stdioAdapter && process.env.AGENT_STDIO_MODE !== "false") {
     console.log(`[Gateway] Using stdio mode for ${effectiveAgentType} session ${actor.sessionId}`);
     await agentProcessManager.startSession({
@@ -1681,7 +1736,7 @@ async function startAgentForSession(
       agentType: effectiveAgentType,
       workingDirectory: actor.workingDirectory,
       initialPrompt,
-      env: launchEnv,
+      env: effectiveLaunchEnv,
       actor,
     });
     return;

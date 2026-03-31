@@ -8,6 +8,7 @@ import {
   sessionConnections,
   sessionEvents,
   taskRuns,
+  workItems,
 } from "@bob/db/schema";
 
 import type { WorkflowStatus } from "../services/sessions/workflowStatusService";
@@ -183,6 +184,12 @@ export const sessionRouter = {
         with: {
           repository: true,
           worktree: true,
+          workItem: {
+            columns: {
+              id: true,
+              projectId: true,
+            },
+          },
         },
       });
 
@@ -201,17 +208,32 @@ export const sessionRouter = {
         orderBy: desc(taskRuns.createdAt),
       });
 
+      const resolvedWorkItemId =
+        session.workItemId ??
+        latestTaskRun?.workItemId ??
+        session.planningTaskId;
+
+      let projectId = session.workItem?.projectId ?? null;
+      if (!projectId && latestTaskRun?.workItemId) {
+        const workItem = await ctx.db.query.workItems.findFirst({
+          where: eq(workItems.id, latestTaskRun.workItemId),
+          columns: {
+            id: true,
+            projectId: true,
+          },
+        });
+        projectId = workItem?.projectId ?? null;
+      }
+
       return {
         ...session,
-        workItemId:
-          session.workItemId ??
-          latestTaskRun?.workItemId ??
-          session.planningTaskId,
+        workItemId: resolvedWorkItemId,
         workItemIdentifier:
           session.workItemIdentifierSnapshot ??
           latestTaskRun?.workItemIdentifierSnapshot ??
           latestTaskRun?.planningItemIdentifier ??
           null,
+        projectId,
         linkedTask: latestTaskRun
           ? {
               id: latestTaskRun.workItemId ?? latestTaskRun.planningItemId,

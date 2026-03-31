@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "child_process";
 import type { SessionActor } from "../sessions/SessionActor.js";
 import { getStdioAdapter, type StdioAdapter } from "./adapters/base-stdio-adapter.js";
 import { spawnClaudePty, isPtyAvailable, type ClaudePtySession } from "./adapters/claude-pty.js";
+import { buildClaudeMessageLaunch } from "./sessionAgentRuntime.js";
 import { db } from "@bob/db/client";
 import { eq } from "@bob/db";
 import { runLifecycleEvents, taskRuns, chatConversations } from "@bob/db/schema";
@@ -24,6 +25,7 @@ interface ManagedSession {
   adapter: StdioAdapter;
   actor: SessionActor;
   agentType: string;
+  launchEnv?: Record<string, string>;
   claudeSessionId?: string;
   ptySession?: ClaudePtySession; // PTY-based session for Claude interactive mode
   /** Tracks active delegation tool calls so we can pair start/end events. */
@@ -69,7 +71,7 @@ export class AgentProcessManager {
       return;
     }
 
-    const adapter = getStdioAdapter(agentType, workingDirectory);
+    const adapter = getStdioAdapter(agentType, workingDirectory, config.env ?? {});
     if (!adapter) {
       throw new Error(`No stdio adapter available for agent type: ${agentType}`);
     }
@@ -95,7 +97,13 @@ export class AgentProcessManager {
       stdio: ["pipe", "pipe", "pipe"],
     });
 
-    const managed: ManagedSession = { process: child, adapter, actor, agentType };
+    const managed: ManagedSession = {
+      process: child,
+      adapter,
+      actor,
+      agentType,
+      launchEnv: config.env ?? {},
+    };
     this.sessions.set(sessionId, managed);
 
     actor.setStatus("starting");
@@ -143,7 +151,11 @@ export class AgentProcessManager {
         void (async () => {
           for (const fallbackAgent of fallbackChain) {
             try {
-              const fallbackAdapter = getStdioAdapter(fallbackAgent, workingDirectory);
+              const fallbackAdapter = getStdioAdapter(
+                fallbackAgent,
+                workingDirectory,
+                config.env ?? {},
+              );
               if (!fallbackAdapter) continue;
 
               console.log(`[AgentProcessManager] Trying fallback agent: ${fallbackAgent}`);
@@ -304,31 +316,27 @@ export class AgentProcessManager {
     // For Claude in non-TTY: spawn a new -p process per message
     // because piped stdin triggers print mode (one-shot)
     if (agentType === "claude") {
-      const args = [
-        "-p",
-        "--output-format", "stream-json",
-        "--verbose",
-        "--dangerously-skip-permissions",
-      ];
+      const launch = buildClaudeMessageLaunch({
+        workingDirectory:
+          actor.workingDirectory && actor.workingDirectory !== "/"
+            ? actor.workingDirectory
+            : undefined,
+        adapterEnv: adapter.env,
+        launchEnv: managed.launchEnv,
+        claudeSessionId: managed.claudeSessionId,
+      });
 
-      // Use --resume to continue conversation if we have a Claude session ID
       if (managed.claudeSessionId) {
-        args.push("--resume", managed.claudeSessionId);
         console.log(`[AgentProcessManager] Spawning Claude --resume ${managed.claudeSessionId} for session ${sessionId}`);
       } else {
         console.log(`[AgentProcessManager] Spawning new Claude conversation for session ${sessionId}`);
       }
 
-      // Use the session's working directory (set by executeTask to the repo path)
-      const cwd = actor.workingDirectory && actor.workingDirectory !== "/"
-        ? actor.workingDirectory
-        : process.env.HOME || "/";
+      console.log(`[AgentProcessManager] Claude cwd: ${launch.cwd}`);
 
-      console.log(`[AgentProcessManager] Claude cwd: ${cwd}`);
-
-      const child = spawn("claude", args, {
-        cwd,
-        env: { ...process.env, ...adapter.env },
+      const child = spawn("claude", launch.args, {
+        cwd: launch.cwd,
+        env: launch.env,
         stdio: ["pipe", "pipe", "pipe"],
       });
 

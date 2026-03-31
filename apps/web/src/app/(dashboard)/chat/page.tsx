@@ -18,6 +18,7 @@ import {
   SessionHeader,
 } from "./_components/session-header";
 import { SessionList } from "./_components/session-list";
+import { SessionSecretsDialog } from "./_components/session-secrets-dialog";
 import { WorkspacePanel } from "./_components/workspace-panel";
 
 import "./chat.css";
@@ -634,6 +635,12 @@ function ChatPageContent() {
                     : undefined
                 }
                 workflowState={workflowState}
+                secretsAction={
+                  <SessionSecretsDialog
+                    sessionId={sessionId}
+                    projectId={activeSessionData.projectId ?? null}
+                  />
+                }
                 onStop={handleStopSession}
               />
 
