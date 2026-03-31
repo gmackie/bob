@@ -16,6 +16,7 @@ const findManyMocks = {
 
 const findFirstMocks = {
   workItems: vi.fn(),
+  workspaceMembers: vi.fn(),
 };
 
 const makeDbMock = () => ({
@@ -23,6 +24,9 @@ const makeDbMock = () => ({
     workItems: {
       findMany: findManyMocks.workItems,
       findFirst: findFirstMocks.workItems,
+    },
+    workspaceMembers: {
+      findFirst: findFirstMocks.workspaceMembers,
     },
     workItemArtifacts: {
       findMany: findManyMocks.workItemArtifacts,
@@ -91,11 +95,19 @@ describe("workItems router", () => {
     updateReturningMock.mockReset();
     findManyMocks.workItems.mockReset();
     findFirstMocks.workItems.mockReset();
+    findFirstMocks.workspaceMembers.mockReset();
     findManyMocks.workItemArtifacts.mockReset();
     findManyMocks.notifications.mockReset();
   });
 
   it("creates comments against work items and records activity", async () => {
+    findFirstMocks.workItems.mockResolvedValueOnce({
+      id: workItemId,
+      workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    });
+    findFirstMocks.workspaceMembers.mockResolvedValueOnce({
+      id: "membership-1",
+    });
     insertReturningMock
       .mockResolvedValueOnce([
         {
@@ -128,7 +140,41 @@ describe("workItems router", () => {
     });
   });
 
+  it("rejects comment creation when the caller is not a member of the work item's workspace", async () => {
+    findFirstMocks.workItems.mockResolvedValueOnce({
+      id: workItemId,
+      workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    });
+    findFirstMocks.workspaceMembers.mockResolvedValueOnce(null);
+    insertReturningMock.mockResolvedValueOnce([
+      {
+        id: "comment-1",
+        workItemId,
+        userId: "user-1",
+        body: "Need to split this task",
+      },
+    ]);
+
+    const caller = createCaller() as any;
+
+    await expect(
+      caller.workItems.createComment({
+        workItemId,
+        body: "Need to split this task",
+      }),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+  });
+
   it("replaces the current artifact for a role and keeps history", async () => {
+    findFirstMocks.workItems.mockResolvedValueOnce({
+      id: workItemId,
+      workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    });
+    findFirstMocks.workspaceMembers.mockResolvedValueOnce({
+      id: "membership-1",
+    });
     findManyMocks.workItemArtifacts.mockResolvedValueOnce([
       {
         id: "artifact-old",
@@ -172,6 +218,39 @@ describe("workItems router", () => {
       id: "artifact-new",
       artifactRole: "review",
       isCurrent: true,
+    });
+  });
+
+  it("rejects artifact creation when the caller is not a member of the work item's workspace", async () => {
+    findFirstMocks.workItems.mockResolvedValueOnce({
+      id: workItemId,
+      workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    });
+    findFirstMocks.workspaceMembers.mockResolvedValueOnce(null);
+    findManyMocks.workItemArtifacts.mockResolvedValueOnce([]);
+    insertReturningMock.mockResolvedValueOnce([
+      {
+        id: "artifact-new",
+        workItemId,
+        artifactRole: "review",
+        isCurrent: true,
+      },
+    ]);
+
+    const caller = createCaller() as any;
+
+    await expect(
+      caller.workItems.createArtifact({
+        workItemId,
+        taskRunId,
+        producerType: "bob",
+        artifactType: "pr",
+        artifactRole: "review",
+        url: "https://example.com/pr/123",
+        title: "Review PR",
+      }),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
     });
   });
 
@@ -258,6 +337,7 @@ describe("workItems router", () => {
   it("promotes an issue into a task while preserving its parent linkage", async () => {
     findFirstMocks.workItems.mockResolvedValueOnce({
       id: workItemId,
+      workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       parentId: parentWorkItemId,
       projectId: "44444444-4444-4444-8444-444444444444",
       sequenceNumber: 17,
@@ -265,9 +345,13 @@ describe("workItems router", () => {
       title: "Investigate flaky deploy preview",
       status: "draft",
     });
+    findFirstMocks.workspaceMembers.mockResolvedValueOnce({
+      id: "membership-1",
+    });
     updateReturningMock.mockResolvedValueOnce([
       {
         id: workItemId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         parentId: parentWorkItemId,
         projectId: "44444444-4444-4444-8444-444444444444",
         sequenceNumber: 17,
@@ -305,6 +389,36 @@ describe("workItems router", () => {
       id: workItemId,
       parentId: parentWorkItemId,
       kind: "task",
+    });
+  });
+
+  it("rejects promoteToTask when the caller is not a member of the work item's workspace", async () => {
+    findFirstMocks.workItems.mockResolvedValueOnce({
+      id: workItemId,
+      workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      parentId: parentWorkItemId,
+      projectId: "44444444-4444-4444-8444-444444444444",
+      sequenceNumber: 17,
+      kind: "issue",
+      title: "Investigate flaky deploy preview",
+      status: "draft",
+    });
+    findFirstMocks.workspaceMembers.mockResolvedValueOnce(null);
+    updateReturningMock.mockResolvedValueOnce([
+      {
+        id: workItemId,
+        kind: "task",
+      },
+    ]);
+
+    const caller = createCaller() as any;
+
+    await expect(
+      caller.workItems.promoteToTask({
+        id: workItemId,
+      }),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
     });
   });
 });
