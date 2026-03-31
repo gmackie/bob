@@ -1,12 +1,26 @@
 import type { TRPCRouterRecord } from "@trpc/server";
 import { and, desc, eq, lt } from "@bob/db";
 import { db } from "@bob/db/client";
-import { webhookConfigs, webhookDeliveries } from "@bob/db/schema";
+import { webhookConfigs, webhookDeliveries, workspaceMembers } from "@bob/db/schema";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod/v4";
 
 import { emitWebhookEvent } from "../services/webhooks/webhookDeliveryService";
 import { protectedProcedure } from "../trpc";
+
+async function assertWorkspaceAccess(userId: string, workspaceId: string) {
+  const membership = await db.query.workspaceMembers.findFirst({
+    where: and(
+      eq(workspaceMembers.workspaceId, workspaceId),
+      eq(workspaceMembers.userId, userId),
+    ),
+    columns: { id: true },
+  });
+
+  if (!membership) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+}
 
 export const webhookRouter = {
   // List webhook configs for the current user
@@ -66,6 +80,10 @@ export const webhookRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      if (input.workspaceId) {
+        await assertWorkspaceAccess(ctx.session.user.id, input.workspaceId);
+      }
+
       const [row] = await db
         .insert(webhookConfigs)
         .values({
