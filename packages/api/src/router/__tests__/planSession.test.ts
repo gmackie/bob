@@ -415,6 +415,16 @@ describe("planSession router", () => {
 
   describe("removeDraft", () => {
     it("deletes the planDrafts row by id", async () => {
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: DRAFT_ID,
+        sessionId: SESSION_ID,
+      });
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: SESSION_ID,
+        userId: "user-1",
+        sessionType: "planning",
+      });
+
       const caller = createCaller({ id: "user-1" });
 
       const result = await caller.planSession.removeDraft({
@@ -423,6 +433,24 @@ describe("planSession router", () => {
 
       expect(dbDeleteMock).toHaveBeenCalledWith(planDrafts);
       expect(result).toEqual({ ok: true });
+    });
+
+    it("rejects draft deletion when the draft's session is not owned by the caller", async () => {
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: DRAFT_ID,
+        sessionId: SESSION_ID,
+      });
+      dbQueryFindFirstMock.mockResolvedValueOnce(null);
+
+      const caller = createCaller({ id: "user-1" });
+
+      await expect(
+        caller.planSession.removeDraft({
+          id: DRAFT_ID,
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
     });
   });
 
@@ -609,6 +637,11 @@ describe("planSession router", () => {
 
   describe("commitPlan", () => {
     it("marks drafts as committed via planning API", async () => {
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: SESSION_ID,
+        userId: "user-1",
+        sessionType: "planning",
+      });
       const drafts = [
         {
           id: DRAFT_ID,
@@ -667,6 +700,11 @@ describe("planSession router", () => {
     });
 
     it("returns { committed: 0 } when no drafts exist", async () => {
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: SESSION_ID,
+        userId: "user-1",
+        sessionType: "planning",
+      });
       dbQueryFindManyMock.mockResolvedValueOnce([]);
 
       const caller = createCaller({ id: "user-1" });
@@ -676,6 +714,21 @@ describe("planSession router", () => {
       });
 
       expect(result).toEqual({ committed: 0, tasks: [] });
+    });
+
+    it("rejects commit when the planning session is not owned by the caller", async () => {
+      dbQueryFindFirstMock.mockResolvedValueOnce(null);
+      dbQueryFindManyMock.mockResolvedValueOnce([]);
+
+      const caller = createCaller({ id: "user-1" });
+
+      await expect(
+        caller.planSession.commitPlan({
+          sessionId: SESSION_ID,
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
     });
   });
 

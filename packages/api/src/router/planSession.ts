@@ -467,6 +467,8 @@ export const planSessionRouter = {
   removeDraft: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      await loadOwnedDraft(ctx.db, ctx.session.user.id, input.id);
+
       await ctx.db.delete(planDrafts).where(eq(planDrafts.id, input.id));
       return { ok: true };
     }),
@@ -520,6 +522,8 @@ export const planSessionRouter = {
   commitPlan: protectedProcedure
     .input(z.object({ sessionId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      await loadOwnedPlanningSession(ctx.db, ctx.session.user.id, input.sessionId);
+
       const drafts = await ctx.db.query.planDrafts.findMany({
         where: and(
           eq(planDrafts.sessionId, input.sessionId),
