@@ -3,11 +3,104 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod/v4";
 
 import { desc, eq, and, asc } from "@bob/db";
-import { chatAttachments, chatConversations, chatMessages, messageRoleEnum } from "@bob/db/schema";
+import {
+  chatAttachments,
+  chatConversations,
+  chatMessages,
+  messageRoleEnum,
+  repositories,
+  workItems,
+  workspaceMembers,
+  worktrees,
+} from "@bob/db/schema";
 
 import { protectedProcedure } from "../trpc";
 
 const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:3002";
+
+async function loadAccessibleWorkItem(db: any, userId: string, workItemId: string) {
+  const workItem = await db.query.workItems.findFirst({
+    where: eq(workItems.id, workItemId),
+    columns: { id: true, workspaceId: true },
+  });
+
+  if (!workItem?.workspaceId) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Work item not found" });
+  }
+
+  const membership = await db.query.workspaceMembers.findFirst({
+    where: and(
+      eq(workspaceMembers.workspaceId, workItem.workspaceId),
+      eq(workspaceMembers.userId, userId),
+    ),
+    columns: { id: true },
+  });
+
+  if (!membership) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+
+  return workItem;
+}
+
+async function loadOwnedRepository(db: any, userId: string, repositoryId: string) {
+  const repository = await db.query.repositories.findFirst({
+    where: and(
+      eq(repositories.id, repositoryId),
+      eq(repositories.userId, userId),
+    ),
+    columns: { id: true },
+  });
+
+  if (!repository) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Repository not found" });
+  }
+
+  return repository;
+}
+
+async function loadOwnedWorktree(db: any, userId: string, worktreeId: string) {
+  const worktree = await db.query.worktrees.findFirst({
+    where: and(eq(worktrees.id, worktreeId), eq(worktrees.userId, userId)),
+    columns: { id: true },
+  });
+
+  if (!worktree) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Worktree not found" });
+  }
+
+  return worktree;
+}
+
+async function loadOwnedConversation(db: any, userId: string, conversationId: string) {
+  const conversation = await db.query.chatConversations.findFirst({
+    where: and(
+      eq(chatConversations.id, conversationId),
+      eq(chatConversations.userId, userId),
+    ),
+  });
+
+  if (!conversation) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Conversation not found" });
+  }
+
+  return conversation;
+}
+
+async function loadOwnedMessage(db: any, userId: string, messageId: string) {
+  const message = await db.query.chatMessages.findFirst({
+    where: eq(chatMessages.id, messageId),
+    with: {
+      conversation: true,
+    },
+  });
+
+  if (!message || message.conversation?.userId !== userId) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Message not found" });
+  }
+
+  return message;
+}
 
 export const chatRouter = {
   listConversations: protectedProcedure
@@ -68,6 +161,16 @@ export const chatRouter = {
       })
     )
     .mutation(async ({ ctx, input }) => {
+      if (input.repositoryId) {
+        await loadOwnedRepository(ctx.db, ctx.session.user.id, input.repositoryId);
+      }
+      if (input.worktreeId) {
+        await loadOwnedWorktree(ctx.db, ctx.session.user.id, input.worktreeId);
+      }
+      if (input.workItemId) {
+        await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
+      }
+
       const [conversation] = await ctx.db
         .insert(chatConversations)
         .values({
@@ -106,16 +209,11 @@ export const chatRouter = {
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const conversation = await ctx.db.query.chatConversations.findFirst({
-        where: and(
-          eq(chatConversations.id, input.conversationId),
-          eq(chatConversations.userId, ctx.session.user.id)
-        ),
-      });
-
-      if (!conversation) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Conversation not found" });
-      }
+      const conversation = await loadOwnedConversation(
+        ctx.db,
+        ctx.session.user.id,
+        input.conversationId,
+      );
 
       const [userMessage] = await ctx.db
         .insert(chatMessages)
@@ -195,16 +293,7 @@ export const chatRouter = {
       })
     )
     .query(async ({ ctx, input }) => {
-      const conversation = await ctx.db.query.chatConversations.findFirst({
-        where: and(
-          eq(chatConversations.id, input.conversationId),
-          eq(chatConversations.userId, ctx.session.user.id)
-        ),
-      });
-
-      if (!conversation) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Conversation not found" });
-      }
+      await loadOwnedConversation(ctx.db, ctx.session.user.id, input.conversationId);
 
       const messages = await ctx.db
         .select()
@@ -228,6 +317,8 @@ export const chatRouter = {
       })
     )
     .mutation(async ({ ctx, input }) => {
+      await loadOwnedMessage(ctx.db, ctx.session.user.id, input.messageId);
+
       const [attachment] = await ctx.db
         .insert(chatAttachments)
         .values({
@@ -248,6 +339,8 @@ export const chatRouter = {
   getAttachments: protectedProcedure
     .input(z.object({ messageId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
+      await loadOwnedMessage(ctx.db, ctx.session.user.id, input.messageId);
+
       const attachments = await ctx.db
         .select()
         .from(chatAttachments)
