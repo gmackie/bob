@@ -1,10 +1,25 @@
 import { z } from "zod/v4";
+import { TRPCError } from "@trpc/server";
 
 import { and, desc, eq } from "@bob/db";
-import { projects, repositories, workItems } from "@bob/db/schema";
+import { projects, repositories, workItems, workspaceMembers } from "@bob/db/schema";
 
 import { detectProjectCapabilities } from "../services/projects/projectCapabilities";
 import { protectedProcedure } from "../trpc";
+
+async function assertWorkspaceAccess(db: any, userId: string, workspaceId: string) {
+  const membership = await db.query.workspaceMembers.findFirst({
+    where: and(
+      eq(workspaceMembers.workspaceId, workspaceId),
+      eq(workspaceMembers.userId, userId),
+    ),
+    columns: { id: true },
+  });
+
+  if (!membership) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+}
 
 export const projectRouter = {
   create: protectedProcedure
@@ -18,6 +33,8 @@ export const projectRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await assertWorkspaceAccess(ctx.db, ctx.session.user.id, input.workspaceId);
+
       const [project] = await ctx.db
         .insert(projects)
         .values({
@@ -38,6 +55,8 @@ export const projectRouter = {
       }),
     )
     .query(async ({ ctx, input }) => {
+      await assertWorkspaceAccess(ctx.db, ctx.session.user.id, input.workspaceId);
+
       const projectRows = await ctx.db.query.projects.findMany({
         where: eq(projects.workspaceId, input.workspaceId),
         orderBy: desc(projects.updatedAt),
@@ -79,6 +98,8 @@ export const projectRouter = {
       if (!project) {
         return null;
       }
+
+      await assertWorkspaceAccess(ctx.db, ctx.session.user.id, project.workspaceId);
 
       const linkedRepository = await ctx.db.query.repositories.findFirst({
         where: and(
@@ -149,12 +170,14 @@ export const projectRouter = {
     .mutation(async ({ ctx, input }) => {
       const existing = await ctx.db.query.projects.findFirst({
         where: eq(projects.id, input.projectId),
-        columns: { automationSettings: true },
+        columns: { workspaceId: true, automationSettings: true },
       });
 
       if (!existing) {
         throw new Error("Project not found");
       }
+
+      await assertWorkspaceAccess(ctx.db, ctx.session.user.id, existing.workspaceId);
 
       const merged = {
         ...(existing.automationSettings ?? {}),
