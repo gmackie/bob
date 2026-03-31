@@ -7,11 +7,33 @@ let appRouter: typeof import("../../root").appRouter;
 
 const queryMocks = {
   projectsFindFirst: vi.fn(),
+  projectsFindMany: vi.fn(),
   workItemsFindMany: vi.fn(),
   repositoriesFindFirst: vi.fn(),
+  workspaceMembersFindFirst: vi.fn(),
+  workspaceMembersFindMany: vi.fn(),
 };
 
 const tempDirs: string[] = [];
+
+const insertReturningMock = vi.fn();
+const insertValuesMock = vi.fn(() => ({
+  returning: insertReturningMock,
+}));
+const insertMock = vi.fn(() => ({
+  values: insertValuesMock,
+}));
+
+const updateReturningMock = vi.fn();
+const updateWhereMock = vi.fn(() => ({
+  returning: updateReturningMock,
+}));
+const updateSetMock = vi.fn(() => ({
+  where: updateWhereMock,
+}));
+const updateMock = vi.fn(() => ({
+  set: updateSetMock,
+}));
 
 function createTempRepo(paths: Array<{ path: string; content?: string }>): string {
   const root = mkdtempSync(path.join(os.tmpdir(), "bob-project-router-"));
@@ -34,6 +56,7 @@ const makeDbMock = () => ({
   query: {
     projects: {
       findFirst: queryMocks.projectsFindFirst,
+      findMany: queryMocks.projectsFindMany,
     },
     workItems: {
       findMany: queryMocks.workItemsFindMany,
@@ -41,7 +64,13 @@ const makeDbMock = () => ({
     repositories: {
       findFirst: queryMocks.repositoriesFindFirst,
     },
+    workspaceMembers: {
+      findFirst: queryMocks.workspaceMembersFindFirst,
+      findMany: queryMocks.workspaceMembersFindMany,
+    },
   },
+  insert: insertMock,
+  update: updateMock,
 });
 
 const createCaller = () =>
@@ -82,6 +111,13 @@ describe("project router", () => {
 
   beforeEach(() => {
     Object.values(queryMocks).forEach((mock) => mock.mockReset());
+    insertReturningMock.mockReset();
+    insertValuesMock.mockClear();
+    insertMock.mockClear();
+    updateReturningMock.mockReset();
+    updateWhereMock.mockClear();
+    updateSetMock.mockClear();
+    updateMock.mockClear();
   });
 
   afterEach(() => {
@@ -126,6 +162,9 @@ describe("project router", () => {
         reactFrontend: true,
       },
     });
+    queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce({
+      id: "membership-1",
+    });
     queryMocks.repositoriesFindFirst.mockResolvedValueOnce({
       id: "repo-1",
       name: "acme-app",
@@ -158,6 +197,97 @@ describe("project router", () => {
       hasPlaywright: true,
       hasMaestro: true,
       frontendApps: ["apps/nextjs"],
+    });
+  });
+
+  it("rejects get when the caller is not a member of the project's workspace", async () => {
+    queryMocks.projectsFindFirst.mockResolvedValueOnce({
+      id: projectId,
+      workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      name: "Acme App",
+      key: "ACME",
+      status: "in_progress",
+      description: "A detected app",
+      color: "#334155",
+      automationSettings: {},
+    });
+    queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
+
+    const caller = createCaller();
+
+    await expect(caller.project.get({ id: projectId })).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+  });
+
+  it("rejects create when the caller is not a member of the workspace", async () => {
+    insertReturningMock.mockResolvedValueOnce([
+      {
+        id: projectId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        name: "Acme App",
+        key: "ACME",
+      },
+    ]);
+    queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
+
+    const caller = createCaller();
+
+    await expect(
+      caller.project.create({
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        name: "Acme App",
+        key: "acme",
+      }),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+  });
+
+  it("rejects list when the caller is not a member of the workspace", async () => {
+    queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
+    queryMocks.projectsFindMany.mockResolvedValueOnce([]);
+    queryMocks.workItemsFindMany.mockResolvedValueOnce([]);
+
+    const caller = createCaller();
+
+    await expect(
+      caller.project.list({
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      }),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+  });
+
+  it("rejects automation updates when the caller is not a member of the project's workspace", async () => {
+    queryMocks.projectsFindFirst.mockResolvedValueOnce({
+      id: projectId,
+      workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      automationSettings: {},
+    });
+    queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
+    updateReturningMock.mockResolvedValueOnce([
+      {
+        id: projectId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        automationSettings: {
+          autoDispatch: true,
+        },
+      },
+    ]);
+
+    const caller = createCaller();
+
+    await expect(
+      caller.project.updateAutomationSettings({
+        projectId,
+        settings: {
+          autoDispatch: true,
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
     });
   });
 });
