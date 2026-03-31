@@ -13,6 +13,7 @@ import {
   workItemArtifacts,
   workItemDependencies,
   workItems,
+  workspaceMembers,
 } from "@bob/db/schema";
 
 import {
@@ -22,6 +23,62 @@ import {
 import { isForgeGraphEnabled, requireForgeGraphClient } from "../services/forgegraph/config";
 import { cacheMapping } from "../services/forgegraph/idResolver";
 import { protectedProcedure } from "../trpc";
+
+async function assertWorkspaceAccess(db: any, userId: string, workspaceId: string) {
+  const membership = await db.query.workspaceMembers.findFirst({
+    where: and(
+      eq(workspaceMembers.workspaceId, workspaceId),
+      eq(workspaceMembers.userId, userId),
+    ),
+    columns: { id: true },
+  });
+
+  if (!membership) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+}
+
+async function loadAccessibleWorkItem(db: any, userId: string, workItemId: string) {
+  const workItem = await db.query.workItems.findFirst({
+    where: eq(workItems.id, workItemId),
+  });
+
+  if (!workItem?.workspaceId) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+
+  await assertWorkspaceAccess(db, userId, workItem.workspaceId);
+  return workItem;
+}
+
+async function loadOwnedPlanningSession(db: any, userId: string, sessionId: string) {
+  const session = await db.query.chatConversations.findFirst({
+    where: and(
+      eq(chatConversations.id, sessionId),
+      eq(chatConversations.userId, userId),
+      eq(chatConversations.sessionType, "planning"),
+    ),
+  });
+
+  if (!session) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+
+  return session;
+}
+
+async function loadOwnedDraft(db: any, userId: string, draftId: string) {
+  const draft = await db.query.planDrafts.findFirst({
+    where: eq(planDrafts.id, draftId),
+  });
+
+  if (!draft) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+
+  await loadOwnedPlanningSession(db, userId, draft.sessionId);
+  return draft;
+}
 
 const planningLaunchContextSchema = z.object({
   intent: z.enum(["shape", "breakdown"]),
@@ -77,16 +134,12 @@ export const planSessionRouter = {
       // If workItemId is provided, look up workspace/project from the work item
       let resolvedWorkItemId = input.workItemId ?? null;
 
-      if (input.workItemId && (!input.workspaceId || !input.projectId)) {
-        const wi = await ctx.db.query.workItems.findFirst({
-          where: eq(workItems.id, input.workItemId),
-        });
-        if (!wi) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Work item not found",
-          });
-        }
+      if (input.workItemId) {
+        const wi = await loadAccessibleWorkItem(
+          ctx.db,
+          ctx.session.user.id,
+          input.workItemId,
+        );
         resolvedWorkItemId = wi.id;
       }
 
@@ -133,6 +186,8 @@ export const planSessionRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await loadOwnedPlanningSession(ctx.db, ctx.session.user.id, input.sessionId);
+
       const { startPlanningSession } = await import(
         "@bob/execution/planning/startPlanningSession"
       );
@@ -264,6 +319,8 @@ export const planSessionRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
+
       const [artifact] = await ctx.db
         .insert(workItemArtifacts)
         .values({
@@ -291,6 +348,8 @@ export const planSessionRouter = {
       }),
     )
     .query(async ({ ctx, input }) => {
+      await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
+
       const conditions = [
         eq(workItemArtifacts.workItemId, input.workItemId),
         eq(workItemArtifacts.artifactType, "planning_doc"),
@@ -358,6 +417,8 @@ export const planSessionRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await loadOwnedPlanningSession(ctx.db, ctx.session.user.id, input.sessionId);
+
       const [draft] = await ctx.db
         .insert(planDrafts)
         .values({
@@ -394,6 +455,8 @@ export const planSessionRouter = {
     )
     .mutation(async ({ ctx, input }) => {
       const { id, ...updates } = input;
+      await loadOwnedDraft(ctx.db, ctx.session.user.id, id);
+
       const [draft] = await ctx.db
         .update(planDrafts)
         .set(updates)
@@ -406,6 +469,8 @@ export const planSessionRouter = {
   removeDraft: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      await loadOwnedDraft(ctx.db, ctx.session.user.id, input.id);
+
       await ctx.db.delete(planDrafts).where(eq(planDrafts.id, input.id));
       return { ok: true };
     }),
@@ -418,6 +483,9 @@ export const planSessionRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await loadOwnedDraft(ctx.db, ctx.session.user.id, input.draftId);
+      await loadOwnedDraft(ctx.db, ctx.session.user.id, input.dependsOnDraftId);
+
       const [dep] = await ctx.db
         .insert(planDraftDependencies)
         .values({
@@ -441,6 +509,9 @@ export const planSessionRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await loadOwnedDraft(ctx.db, ctx.session.user.id, input.draftId);
+      await loadOwnedDraft(ctx.db, ctx.session.user.id, input.dependsOnDraftId);
+
       await ctx.db
         .delete(planDraftDependencies)
         .where(
@@ -459,6 +530,8 @@ export const planSessionRouter = {
   commitPlan: protectedProcedure
     .input(z.object({ sessionId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      await loadOwnedPlanningSession(ctx.db, ctx.session.user.id, input.sessionId);
+
       const drafts = await ctx.db.query.planDrafts.findMany({
         where: and(
           eq(planDrafts.sessionId, input.sessionId),

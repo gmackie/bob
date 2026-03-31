@@ -14,6 +14,7 @@ import {
   workItemArtifactType,
   workItems,
   workItemNotificationType,
+  workspaceMembers,
 } from "@bob/db/schema";
 
 import { isForgeGraphEnabled, requireForgeGraphClient } from "../services/forgegraph/config";
@@ -21,6 +22,41 @@ import { resolveForgeGraphId, cacheMapping } from "../services/forgegraph/idReso
 import type { FgWorkItem, FgArtifact, FgActivity } from "../services/forgegraph/forgeGraphClient";
 import { toBobStatus } from "../services/forgegraph/statusMap";
 import { protectedProcedure } from "../trpc";
+
+async function assertWorkspaceAccess(db: any, userId: string, workspaceId: string) {
+  const membership = await db.query.workspaceMembers.findFirst({
+    where: and(
+      eq(workspaceMembers.workspaceId, workspaceId),
+      eq(workspaceMembers.userId, userId),
+    ),
+    columns: { id: true },
+  });
+
+  if (!membership) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+}
+
+async function assertWorkItemAccess(db: any, userId: string, workItem: { workspaceId: string | null | undefined }) {
+  if (!workItem.workspaceId) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+
+  await assertWorkspaceAccess(db, userId, workItem.workspaceId);
+}
+
+async function loadAccessibleWorkItem(db: any, userId: string, workItemId: string) {
+  const workItem = await db.query.workItems.findFirst({
+    where: eq(workItems.id, workItemId),
+  });
+
+  if (!workItem) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+
+  await assertWorkItemAccess(db, userId, workItem);
+  return workItem;
+}
 
 /** Map a ForgeGraph work item to Bob's local shape. */
 function mapFgWorkItemToLocal(
@@ -109,6 +145,8 @@ const listWorkItemsProcedure = protectedProcedure
     }),
   )
   .query(async ({ ctx, input }) => {
+    await assertWorkspaceAccess(ctx.db, ctx.session.user.id, input.workspaceId);
+
     // ── ForgeGraph read path ──────────────────────────────────────────
     if (isForgeGraphEnabled()) {
       const fg = requireForgeGraphClient();
@@ -318,6 +356,8 @@ const getWorkItemProcedure = protectedProcedure
       return null;
     }
 
+    await assertWorkItemAccess(ctx.db, ctx.session.user.id, workItem);
+
     const [project, currentArtifacts, children] = await Promise.all([
       workItem.projectId
         ? ctx.db.query.projects.findFirst({
@@ -357,12 +397,14 @@ const listCommentsProcedure = protectedProcedure
       workItemId: z.string().uuid(),
     }),
   )
-  .query(({ ctx, input }) =>
-    ctx.db.query.comments.findMany({
+  .query(async ({ ctx, input }) => {
+    await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
+
+    return ctx.db.query.comments.findMany({
       where: eq(comments.workItemId, input.workItemId),
       orderBy: desc(comments.createdAt),
-    }),
-  );
+    });
+  });
 
 const createCommentProcedure = protectedProcedure
   .input(
@@ -374,6 +416,8 @@ const createCommentProcedure = protectedProcedure
     }),
   )
   .mutation(async ({ ctx, input }) => {
+    await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
+
     const [comment] = await ctx.db
       .insert(comments)
       .values({
@@ -416,6 +460,8 @@ const createArtifactProcedure = protectedProcedure
     }),
   )
   .mutation(async ({ ctx, input }) => {
+    await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
+
     const existingArtifacts = await ctx.db.query.workItemArtifacts.findMany({
       where: eq(workItemArtifacts.workItemId, input.workItemId),
     });
@@ -480,9 +526,11 @@ const promoteToTaskProcedure = protectedProcedure
     }),
   )
   .mutation(async ({ ctx, input }) => {
-    const existing = await ctx.db.query.workItems.findFirst({
-      where: eq(workItems.id, input.id),
-    });
+    const existing = await loadAccessibleWorkItem(
+      ctx.db,
+      ctx.session.user.id,
+      input.id,
+    );
 
     if (!existing) {
       return null;
@@ -535,6 +583,8 @@ const listActivitiesProcedure = protectedProcedure
     }),
   )
   .query(async ({ ctx, input }) => {
+    await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
+
     // ── ForgeGraph read path ──────────────────────────────────────────
     if (isForgeGraphEnabled()) {
       const fg = requireForgeGraphClient();
@@ -560,6 +610,8 @@ const listCurrentArtifactsProcedure = protectedProcedure
     }),
   )
   .query(async ({ ctx, input }) => {
+    await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
+
     // ── ForgeGraph read path ──────────────────────────────────────────
     if (isForgeGraphEnabled()) {
       const fg = requireForgeGraphClient();
@@ -587,6 +639,12 @@ const listChildArtifactGroupsProcedure = protectedProcedure
     }),
   )
   .query(async ({ ctx, input }) => {
+    await loadAccessibleWorkItem(
+      ctx.db,
+      ctx.session.user.id,
+      input.parentWorkItemId,
+    );
+
     // ── ForgeGraph read path ──────────────────────────────────────────
     if (isForgeGraphEnabled()) {
       const fg = requireForgeGraphClient();
@@ -778,6 +836,8 @@ export const taskRunRouter = {
       }),
     )
     .query(async ({ ctx, input }) => {
+      await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
+
       const runs = await ctx.db.query.taskRuns.findMany({
         where: and(
           eq(taskRuns.userId, ctx.session.user.id),
@@ -805,16 +865,11 @@ export const taskRunRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const workItem = await ctx.db.query.workItems.findFirst({
-        where: eq(workItems.id, input.workItemId),
-      });
-
-      if (!workItem) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Work item not found",
-        });
-      }
+      const workItem = await loadAccessibleWorkItem(
+        ctx.db,
+        ctx.session.user.id,
+        input.workItemId,
+      );
 
       const project = workItem.projectId
         ? await ctx.db.query.projects.findFirst({
@@ -861,6 +916,8 @@ export const taskRunRouter = {
       }),
     )
     .query(async ({ ctx, input }) => {
+      await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
+
       const events = await ctx.db
         .select({
           id: runLifecycleEvents.id,

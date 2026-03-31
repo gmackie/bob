@@ -3,7 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod/v4";
 
 import { and, desc, eq, sql } from "@bob/db";
-import { comments, projects, workItems, workspaces } from "@bob/db/schema";
+import { comments, projects, workItems, workspaceMembers } from "@bob/db/schema";
 
 import {
   getPlanningApiKey,
@@ -27,6 +27,52 @@ function formatWorkItemIdentifier(input: {
 
   const suffix = input.id.slice(0, 8).toUpperCase();
   return input.projectKey ? `${input.projectKey}-${suffix}` : `TASK-${suffix}`;
+}
+
+async function assertWorkspaceAccess(db: any, userId: string, workspaceId: string) {
+  const membership = await db.query.workspaceMembers.findFirst({
+    where: and(
+      eq(workspaceMembers.workspaceId, workspaceId),
+      eq(workspaceMembers.userId, userId),
+    ),
+    columns: { id: true },
+  });
+
+  if (!membership) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+}
+
+async function loadAccessibleProject(db: any, userId: string, projectId: string) {
+  const project = await db.query.projects.findFirst({
+    where: eq(projects.id, projectId),
+  });
+
+  if (!project) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Project not found",
+    });
+  }
+
+  await assertWorkspaceAccess(db, userId, project.workspaceId);
+  return project;
+}
+
+async function loadAccessibleWorkItem(db: any, userId: string, workItemId: string) {
+  const item = await db.query.workItems.findFirst({
+    where: eq(workItems.id, workItemId),
+  });
+
+  if (!item || !item.workspaceId) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Task not found",
+    });
+  }
+
+  await assertWorkspaceAccess(db, userId, item.workspaceId);
+  return item;
 }
 
 /** Map a ForgeGraph work item to the planning task list shape. */
@@ -165,13 +211,17 @@ export const planningRouter = {
   listWorkspaces: protectedProcedure.query(async ({ ctx }) => {
     const planningApiKey = getPlanningApiKey();
     if (!planningApiKey) {
-      const rows = await ctx.db.query.workspaces.findMany({
-        orderBy: desc(workspaces.createdAt),
+      const rows = await ctx.db.query.workspaceMembers.findMany({
+        where: eq(workspaceMembers.userId, ctx.session.user.id),
+        with: {
+          workspace: true,
+        },
+        orderBy: desc(workspaceMembers.joinedAt),
       });
-      return rows.map((w) => ({
-        id: w.id,
-        name: w.name,
-        slug: w.slug,
+      return rows.map((membership) => ({
+        id: membership.workspace.id,
+        name: membership.workspace.name,
+        slug: membership.workspace.slug,
       }));
     }
 
@@ -189,6 +239,8 @@ export const planningRouter = {
   listProjects: protectedProcedure
     .input(z.object({ workspaceId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
+      await assertWorkspaceAccess(ctx.db, ctx.session.user.id, input.workspaceId);
+
       const planningApiKey = getPlanningApiKey();
       if (!planningApiKey) {
         const projectRows = await ctx.db.query.projects.findMany({
@@ -238,19 +290,10 @@ export const planningRouter = {
   getProject: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
+      const project = await loadAccessibleProject(ctx.db, ctx.session.user.id, input.id);
+
       const planningApiKey = getPlanningApiKey();
       if (!planningApiKey) {
-        const project = await ctx.db.query.projects.findFirst({
-          where: eq(projects.id, input.id),
-        });
-
-        if (!project) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Project not found",
-          });
-        }
-
         const items = await ctx.db.query.workItems.findMany({
           where: eq(workItems.projectId, input.id),
         });
@@ -304,6 +347,18 @@ export const planningRouter = {
       }),
     )
     .query(async ({ ctx, input }) => {
+      await assertWorkspaceAccess(ctx.db, ctx.session.user.id, input.workspaceId);
+      if (input.projectId) {
+        const project = await loadAccessibleProject(
+          ctx.db,
+          ctx.session.user.id,
+          input.projectId,
+        );
+        if (project.workspaceId !== input.workspaceId) {
+          throw new TRPCError({ code: "NOT_FOUND" });
+        }
+      }
+
       // ── ForgeGraph read path ──────────────────────────────────────
       if (isForgeGraphEnabled()) {
         const fg = requireForgeGraphClient();
@@ -451,6 +506,12 @@ export const planningRouter = {
   getTask: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
+      const accessibleItem = await loadAccessibleWorkItem(
+        ctx.db,
+        ctx.session.user.id,
+        input.id,
+      );
+
       // ── ForgeGraph read path ──────────────────────────────────────
       if (isForgeGraphEnabled()) {
         const fg = requireForgeGraphClient();
@@ -474,33 +535,22 @@ export const planningRouter = {
 
       const planningApiKey = getPlanningApiKey();
       if (!planningApiKey) {
-        const item = await ctx.db.query.workItems.findFirst({
-          where: eq(workItems.id, input.id),
-        });
-
-        if (!item) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Task not found",
-          });
-        }
-
-        const project = item.projectId
+        const project = accessibleItem.projectId
           ? await ctx.db.query.projects.findFirst({
-              where: eq(projects.id, item.projectId),
+              where: eq(projects.id, accessibleItem.projectId),
             })
           : null;
 
         return {
-          id: item.id,
+          id: accessibleItem.id,
           identifier: formatWorkItemIdentifier({
             projectKey: project?.key ?? null,
-            sequenceNumber: item.sequenceNumber,
-            id: item.id,
+            sequenceNumber: accessibleItem.sequenceNumber,
+            id: accessibleItem.id,
           }),
-          title: item.title,
-          description: item.description ?? undefined,
-          status: item.status,
+          title: accessibleItem.title,
+          description: accessibleItem.description ?? undefined,
+          status: accessibleItem.status,
           priority: "no_priority" as string,
           project: project
             ? { id: project.id, name: project.name, key: project.key }
@@ -508,8 +558,10 @@ export const planningRouter = {
           assignee: undefined,
           labels: [] as Array<{ id: string; name: string; color: string }>,
           dueDate: undefined,
-          createdAt: item.createdAt.toISOString(),
-          updatedAt: item.updatedAt?.toISOString() ?? item.createdAt.toISOString(),
+          createdAt: accessibleItem.createdAt.toISOString(),
+          updatedAt:
+            accessibleItem.updatedAt?.toISOString() ??
+            accessibleItem.createdAt.toISOString(),
           completedAt: undefined,
         };
       }
@@ -558,6 +610,12 @@ export const planningRouter = {
         if (!project) {
           throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
         }
+
+        if (input.workspaceId && project.workspaceId !== input.workspaceId) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
+        }
+
+        await assertWorkspaceAccess(ctx.db, ctx.session.user.id, project.workspaceId);
 
         // Search FG by repositoryId, then match metadata
         const candidates = await fg.listWorkItems({ repositoryId: project.id });
@@ -608,6 +666,15 @@ export const planningRouter = {
             message: "Task not found",
           });
         }
+
+        if (input.workspaceId && project.workspaceId !== input.workspaceId) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Task not found",
+          });
+        }
+
+        await assertWorkspaceAccess(ctx.db, ctx.session.user.id, project.workspaceId);
 
         const item = await ctx.db.query.workItems.findFirst({
           where: and(
@@ -664,19 +731,15 @@ export const planningRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      const project = await loadAccessibleProject(
+        ctx.db,
+        ctx.session.user.id,
+        input.projectId,
+      );
+
       // ── ForgeGraph write path ──────────────────────────────────────
       if (isForgeGraphEnabled()) {
         const fg = requireForgeGraphClient();
-
-        const project = await ctx.db.query.projects.findFirst({
-          where: eq(projects.id, input.projectId),
-        });
-        if (!project) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Project not found",
-          });
-        }
 
         // Generate sequence number locally from existing project work items
         const maxSeqResult = await ctx.db
@@ -731,17 +794,6 @@ export const planningRouter = {
       // ── Legacy local DB path ───────────────────────────────────────
       const planningApiKey = getPlanningApiKey();
       if (!planningApiKey) {
-        const project = await ctx.db.query.projects.findFirst({
-          where: eq(projects.id, input.projectId),
-        });
-
-        if (!project) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Project not found",
-          });
-        }
-
         // Auto-generate sequence number: max+1 for project
         const maxSeqResult = await ctx.db
           .select({ maxSeq: sql<number>`coalesce(max(${workItems.sequenceNumber}), 0)` })
@@ -797,21 +849,11 @@ export const planningRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      const oldItem = await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.id);
+
       // ── ForgeGraph write path ──────────────────────────────────────
       if (isForgeGraphEnabled()) {
         const fg = requireForgeGraphClient();
-
-        // Fetch current task for status transition detection
-        const oldItem = await ctx.db.query.workItems.findFirst({
-          where: eq(workItems.id, input.id),
-        });
-
-        if (!oldItem) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Task not found",
-          });
-        }
 
         // Resolve ForgeGraph ID (import inline to avoid circular deps at module level)
         const { requireForgeGraphId } = await import("../services/forgegraph/idResolver");
@@ -879,18 +921,6 @@ export const planningRouter = {
       // ── Legacy local DB path ───────────────────────────────────────
       const planningApiKey = getPlanningApiKey();
       if (!planningApiKey) {
-        // Fetch current task for status transition detection
-        const oldItem = await ctx.db.query.workItems.findFirst({
-          where: eq(workItems.id, input.id),
-        });
-
-        if (!oldItem) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Task not found",
-          });
-        }
-
         const updateValues: Record<string, unknown> = {};
         if (input.title !== undefined) updateValues.title = input.title;
         if (input.description !== undefined)
@@ -989,6 +1019,8 @@ export const planningRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.issueId);
+
       const planningApiKey = getPlanningApiKey();
       if (!planningApiKey) {
         const [comment] = await ctx.db
@@ -1024,6 +1056,8 @@ export const planningRouter = {
       }),
     )
     .query(async ({ ctx, input }) => {
+      await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.issueId);
+
       const planningApiKey = getPlanningApiKey();
       if (!planningApiKey) {
         const rows = await ctx.db.query.comments.findMany({
@@ -1070,6 +1104,8 @@ export const planningRouter = {
       }),
     )
     .query(async ({ ctx, input }) => {
+      await assertWorkspaceAccess(ctx.db, ctx.session.user.id, input.workspaceId);
+
       // ── ForgeGraph read path ──────────────────────────────────────
       // FG does not support full-text search; fetch all items for the
       // workspace projects and filter client-side.
@@ -1198,7 +1234,9 @@ export const planningRouter = {
 
   listLabels: protectedProcedure
     .input(z.object({ workspaceId: z.string().uuid() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      await assertWorkspaceAccess(ctx.db, ctx.session.user.id, input.workspaceId);
+
       const planningApiKey = getPlanningApiKey();
       if (!planningApiKey) {
         return [];
@@ -1221,7 +1259,9 @@ export const planningRouter = {
         status: z.enum(["upcoming", "active", "completed"]).optional(),
       }),
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      await assertWorkspaceAccess(ctx.db, ctx.session.user.id, input.workspaceId);
+
       const planningApiKey = getPlanningApiKey();
       if (!planningApiKey) {
         return [];
@@ -1270,7 +1310,9 @@ export const planningRouter = {
         sessionId: z.string().uuid().optional(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.issueId);
+
       const planningApiKey = getPlanningApiKey();
       if (!planningApiKey) {
         return {
@@ -1386,7 +1428,9 @@ export const planningRouter = {
         limit: z.number().min(1).max(50).default(10),
       }),
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      await assertWorkspaceAccess(ctx.db, ctx.session.user.id, input.workspaceId);
+
       const planningApiKey = getPlanningApiKey();
       if (!planningApiKey) {
         return [];
@@ -1413,7 +1457,9 @@ export const planningRouter = {
         clientInfo: z.string().optional(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await assertWorkspaceAccess(ctx.db, ctx.session.user.id, input.workspaceId);
+
       const planningApiKey = getPlanningApiKey();
       if (!planningApiKey) {
         return {

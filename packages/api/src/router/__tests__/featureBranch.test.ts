@@ -10,6 +10,9 @@ const insertReturningMock = vi.fn();
 const updateSetMock = vi.fn();
 const updateWhereMock = vi.fn();
 const updateReturningMock = vi.fn();
+const workItemsFindFirstMock = vi.fn();
+const workspaceMembersFindFirstMock = vi.fn();
+const featureBranchesFindFirstMock = vi.fn();
 
 const mockDb = {
   select: vi.fn(() => ({
@@ -39,6 +42,17 @@ const mockDb = {
       }),
     }),
   })),
+  query: {
+    workItems: {
+      findFirst: workItemsFindFirstMock,
+    },
+    workspaceMembers: {
+      findFirst: workspaceMembersFindFirstMock,
+    },
+    featureBranches: {
+      findFirst: featureBranchesFindFirstMock,
+    },
+  },
 };
 
 vi.mock("@bob/db/client", () => ({ db: mockDb }));
@@ -93,11 +107,32 @@ describe("featureBranch router", () => {
   });
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    [
+      selectFromMock,
+      selectWhereMock,
+      selectGroupByMock,
+      selectLeftJoinMock,
+      insertValuesMock,
+      insertReturningMock,
+      updateSetMock,
+      updateWhereMock,
+      updateReturningMock,
+      workItemsFindFirstMock,
+      workspaceMembersFindFirstMock,
+      featureBranchesFindFirstMock,
+      createDraftPrMock,
+    ].forEach((mock) => mock?.mockReset());
   });
 
   describe("create", () => {
     it("inserts a feature branch and returns it", async () => {
+      workItemsFindFirstMock.mockResolvedValueOnce({
+        id: workItemId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+      workspaceMembersFindFirstMock.mockResolvedValueOnce({
+        id: "membership-1",
+      });
       const created = {
         id: featureBranchId,
         workItemId,
@@ -132,6 +167,13 @@ describe("featureBranch router", () => {
     });
 
     it("uses custom baseBranch when provided", async () => {
+      workItemsFindFirstMock.mockResolvedValueOnce({
+        id: workItemId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+      workspaceMembersFindFirstMock.mockResolvedValueOnce({
+        id: "membership-1",
+      });
       insertReturningMock.mockResolvedValueOnce([
         {
           id: featureBranchId,
@@ -169,6 +211,23 @@ describe("featureBranch router", () => {
 
   describe("get", () => {
     it("returns feature branch with task PRs", async () => {
+      featureBranchesFindFirstMock.mockResolvedValueOnce({
+        id: featureBranchId,
+        workItemId,
+        repositoryId,
+        branchName: "feat/new-feature",
+        baseBranch: "main",
+        status: "active",
+        featurePrId: null,
+        createdAt: new Date(),
+      });
+      workItemsFindFirstMock.mockResolvedValueOnce({
+        id: workItemId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+      workspaceMembersFindFirstMock.mockResolvedValueOnce({
+        id: "membership-1",
+      });
       // First select for the branch itself
       selectWhereMock.mockResolvedValueOnce([
         {
@@ -206,17 +265,46 @@ describe("featureBranch router", () => {
     });
 
     it("returns null when branch not found", async () => {
-      selectWhereMock.mockResolvedValueOnce([]);
+      featureBranchesFindFirstMock.mockResolvedValueOnce(null);
 
       const caller = createCaller() as any;
-      const result = await caller.featureBranch.get({ id: featureBranchId });
+      await expect(
+        caller.featureBranch.get({ id: featureBranchId }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+    });
 
-      expect(result).toBeNull();
+    it("rejects feature branch lookup when the caller is not a member of the branch work item's workspace", async () => {
+      featureBranchesFindFirstMock.mockResolvedValueOnce({
+        id: featureBranchId,
+        workItemId,
+      });
+      workItemsFindFirstMock.mockResolvedValueOnce({
+        id: workItemId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+      workspaceMembersFindFirstMock.mockResolvedValueOnce(null);
+
+      const caller = createCaller() as any;
+
+      await expect(
+        caller.featureBranch.get({ id: featureBranchId }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
     });
   });
 
   describe("list", () => {
     it("returns branches with PR counts", async () => {
+      workItemsFindFirstMock.mockResolvedValueOnce({
+        id: workItemId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+      workspaceMembersFindFirstMock.mockResolvedValueOnce({
+        id: "membership-1",
+      });
       selectGroupByMock.mockResolvedValueOnce([
         {
           id: featureBranchId,
@@ -240,10 +328,37 @@ describe("featureBranch router", () => {
         taskPRCount: 3,
       });
     });
+
+    it("rejects feature branch listing when the caller is not a member of the work item's workspace", async () => {
+      workItemsFindFirstMock.mockResolvedValueOnce({
+        id: workItemId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+      workspaceMembersFindFirstMock.mockResolvedValueOnce(null);
+
+      const caller = createCaller() as any;
+
+      await expect(
+        caller.featureBranch.list({ workItemId }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+    });
   });
 
   describe("addTaskPR", () => {
     it("creates junction record", async () => {
+      featureBranchesFindFirstMock.mockResolvedValueOnce({
+        id: featureBranchId,
+        workItemId,
+      });
+      workItemsFindFirstMock.mockResolvedValueOnce({
+        id: workItemId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+      workspaceMembersFindFirstMock.mockResolvedValueOnce({
+        id: "membership-1",
+      });
       const created = {
         id: "task-pr-1",
         featureBranchId,
@@ -272,6 +387,17 @@ describe("featureBranch router", () => {
 
   describe("markTaskPRMerged", () => {
     it("sets mergedAt timestamp", async () => {
+      featureBranchesFindFirstMock.mockResolvedValueOnce({
+        id: featureBranchId,
+        workItemId,
+      });
+      workItemsFindFirstMock.mockResolvedValueOnce({
+        id: workItemId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+      workspaceMembersFindFirstMock.mockResolvedValueOnce({
+        id: "membership-1",
+      });
       const mergedAt = new Date();
       updateReturningMock.mockResolvedValueOnce([
         {
@@ -298,6 +424,17 @@ describe("featureBranch router", () => {
 
   describe("updateStatus", () => {
     it("changes status of a feature branch", async () => {
+      featureBranchesFindFirstMock.mockResolvedValueOnce({
+        id: featureBranchId,
+        workItemId,
+      });
+      workItemsFindFirstMock.mockResolvedValueOnce({
+        id: workItemId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+      workspaceMembersFindFirstMock.mockResolvedValueOnce({
+        id: "membership-1",
+      });
       updateReturningMock.mockResolvedValueOnce([
         {
           id: featureBranchId,
@@ -334,6 +471,17 @@ describe("featureBranch router", () => {
 
   describe("createFeaturePR", () => {
     it("wraps errors from prService in TRPCError", async () => {
+      featureBranchesFindFirstMock.mockResolvedValueOnce({
+        id: featureBranchId,
+        workItemId,
+      });
+      workItemsFindFirstMock.mockResolvedValueOnce({
+        id: workItemId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+      workspaceMembersFindFirstMock.mockResolvedValueOnce({
+        id: "membership-1",
+      });
       // The branch lookup
       selectWhereMock.mockResolvedValueOnce([
         {
@@ -361,7 +509,7 @@ describe("featureBranch router", () => {
     });
 
     it("throws when feature branch not found", async () => {
-      selectWhereMock.mockResolvedValueOnce([]);
+      featureBranchesFindFirstMock.mockResolvedValueOnce(null);
 
       const caller = createCaller() as any;
       await expect(
@@ -370,7 +518,9 @@ describe("featureBranch router", () => {
           title: "Feature: New feature",
           repositoryId,
         }),
-      ).rejects.toThrow("Feature branch not found");
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
     });
   });
 });

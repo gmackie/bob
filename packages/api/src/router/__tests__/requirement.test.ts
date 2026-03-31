@@ -10,6 +10,9 @@ const updateSetMock = vi.fn();
 const updateWhereMock = vi.fn();
 const updateReturningMock = vi.fn();
 const deleteWhereMock = vi.fn();
+const workItemsFindFirstMock = vi.fn();
+const workspaceMembersFindFirstMock = vi.fn();
+const requirementsFindFirstMock = vi.fn();
 
 const mockDb = {
   select: vi.fn(() => ({
@@ -34,6 +37,17 @@ const mockDb = {
   delete: vi.fn(() => ({
     where: deleteWhereMock,
   })),
+  query: {
+    workItems: {
+      findFirst: workItemsFindFirstMock,
+    },
+    requirements: {
+      findFirst: requirementsFindFirstMock,
+    },
+    workspaceMembers: {
+      findFirst: workspaceMembersFindFirstMock,
+    },
+  },
 };
 
 vi.mock("@bob/db/client", () => ({ db: mockDb }));
@@ -64,7 +78,7 @@ const createCaller = () =>
     },
     authApi: { getSession: vi.fn() } as any,
     apiKeyAuth: null as any,
-    db: {} as any,
+    db: mockDb as any,
   });
 
 describe("requirement router", () => {
@@ -84,6 +98,13 @@ describe("requirement router", () => {
 
   describe("list", () => {
     it("returns grouped requirements with completion counts", async () => {
+      workItemsFindFirstMock.mockResolvedValueOnce({
+        id: workItemId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+      workspaceMembersFindFirstMock.mockResolvedValueOnce({
+        id: "membership-1",
+      });
       selectOrderByMock.mockResolvedValueOnce([
         {
           id: "r1",
@@ -126,16 +147,45 @@ describe("requirement router", () => {
 
     it("returns empty object when no requirements exist", async () => {
       selectOrderByMock.mockResolvedValueOnce([]);
+      workItemsFindFirstMock.mockResolvedValueOnce({
+        id: workItemId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+      workspaceMembersFindFirstMock.mockResolvedValueOnce({
+        id: "membership-1",
+      });
 
       const caller = createCaller() as any;
       const result = await caller.requirement.list({ workItemId });
 
       expect(result).toEqual({});
     });
+
+    it("rejects list when the caller is not a member of the work item's workspace", async () => {
+      workItemsFindFirstMock.mockResolvedValueOnce({
+        id: workItemId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+      workspaceMembersFindFirstMock.mockResolvedValueOnce(null);
+      selectOrderByMock.mockResolvedValueOnce([]);
+
+      const caller = createCaller() as any;
+
+      await expect(caller.requirement.list({ workItemId })).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+    });
   });
 
   describe("create", () => {
     it("inserts a requirement and returns it", async () => {
+      workItemsFindFirstMock.mockResolvedValueOnce({
+        id: workItemId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+      workspaceMembersFindFirstMock.mockResolvedValueOnce({
+        id: "membership-1",
+      });
       const created = {
         id: requirementId,
         workItemId,
@@ -185,10 +235,51 @@ describe("requirement router", () => {
         }),
       ).rejects.toThrow();
     });
+
+    it("rejects create when the caller is not a member of the work item's workspace", async () => {
+      workItemsFindFirstMock.mockResolvedValueOnce({
+        id: workItemId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+      workspaceMembersFindFirstMock.mockResolvedValueOnce(null);
+      insertReturningMock.mockResolvedValueOnce([
+        {
+          id: requirementId,
+          workItemId,
+          category: "api",
+          description: "Create REST endpoints",
+          status: "pending",
+          sortOrder: 0,
+        },
+      ]);
+
+      const caller = createCaller() as any;
+
+      await expect(
+        caller.requirement.create({
+          workItemId,
+          category: "api",
+          description: "Create REST endpoints",
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+    });
   });
 
   describe("update", () => {
     it("changes status of a requirement", async () => {
+      requirementsFindFirstMock.mockResolvedValueOnce({
+        id: requirementId,
+        workItemId,
+      });
+      workItemsFindFirstMock.mockResolvedValueOnce({
+        id: workItemId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+      workspaceMembersFindFirstMock.mockResolvedValueOnce({
+        id: "membership-1",
+      });
       const updated = {
         id: requirementId,
         workItemId,
@@ -218,10 +309,51 @@ describe("requirement router", () => {
         }),
       ).rejects.toThrow();
     });
+
+    it("rejects update when the caller is not a member of the requirement's workspace", async () => {
+      requirementsFindFirstMock.mockResolvedValueOnce({
+        id: requirementId,
+        workItemId,
+      });
+      workItemsFindFirstMock.mockResolvedValueOnce({
+        id: workItemId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+      workspaceMembersFindFirstMock.mockResolvedValueOnce(null);
+      updateReturningMock.mockResolvedValueOnce([
+        {
+          id: requirementId,
+          workItemId,
+          status: "done",
+        },
+      ]);
+
+      const caller = createCaller() as any;
+
+      await expect(
+        caller.requirement.update({
+          id: requirementId,
+          status: "done",
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+    });
   });
 
   describe("delete", () => {
     it("removes a requirement and returns success", async () => {
+      requirementsFindFirstMock.mockResolvedValueOnce({
+        id: requirementId,
+        workItemId,
+      });
+      workItemsFindFirstMock.mockResolvedValueOnce({
+        id: workItemId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+      workspaceMembersFindFirstMock.mockResolvedValueOnce({
+        id: "membership-1",
+      });
       deleteWhereMock.mockResolvedValueOnce(undefined);
 
       const caller = createCaller() as any;
@@ -237,10 +369,42 @@ describe("requirement router", () => {
         caller.requirement.delete({ id: "not-a-uuid" }),
       ).rejects.toThrow();
     });
+
+    it("rejects delete when the caller is not a member of the requirement's workspace", async () => {
+      requirementsFindFirstMock.mockResolvedValueOnce({
+        id: requirementId,
+        workItemId,
+      });
+      workItemsFindFirstMock.mockResolvedValueOnce({
+        id: workItemId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+      workspaceMembersFindFirstMock.mockResolvedValueOnce(null);
+      deleteWhereMock.mockResolvedValueOnce(undefined);
+
+      const caller = createCaller() as any;
+
+      await expect(
+        caller.requirement.delete({ id: requirementId }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+    });
   });
 
   describe("linkToTask", () => {
     it("sets linkedTaskId on a requirement", async () => {
+      requirementsFindFirstMock.mockResolvedValueOnce({
+        id: requirementId,
+        workItemId,
+      });
+      workItemsFindFirstMock.mockResolvedValueOnce({
+        id: workItemId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+      workspaceMembersFindFirstMock.mockResolvedValueOnce({
+        id: "membership-1",
+      });
       const updated = {
         id: requirementId,
         workItemId,
@@ -250,6 +414,7 @@ describe("requirement router", () => {
         linkedTaskId: taskId,
         sortOrder: 0,
       };
+      updateReturningMock.mockReset();
       updateReturningMock.mockResolvedValueOnce([updated]);
 
       const caller = createCaller() as any;
@@ -262,6 +427,36 @@ describe("requirement router", () => {
       expect(result).toMatchObject({
         id: requirementId,
         linkedTaskId: taskId,
+      });
+    });
+
+    it("rejects linkToTask when the caller is not a member of the requirement's workspace", async () => {
+      requirementsFindFirstMock.mockResolvedValueOnce({
+        id: requirementId,
+        workItemId,
+      });
+      workItemsFindFirstMock.mockResolvedValueOnce({
+        id: workItemId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+      workspaceMembersFindFirstMock.mockResolvedValueOnce(null);
+      updateReturningMock.mockResolvedValueOnce([
+        {
+          id: requirementId,
+          workItemId,
+          linkedTaskId: taskId,
+        },
+      ]);
+
+      const caller = createCaller() as any;
+
+      await expect(
+        caller.requirement.linkToTask({
+          id: requirementId,
+          taskId,
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
       });
     });
   });

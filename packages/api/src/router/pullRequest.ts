@@ -23,6 +23,18 @@ import { protectedProcedure } from "../trpc";
 const prStatusSchema = z.enum(["draft", "open", "merged", "closed"]);
 const mergeMethodSchema = z.enum(["merge", "squash", "rebase"]);
 
+async function assertPullRequestAccess(userId: string, pullRequestId: string) {
+  const pr = await getPrById(userId, pullRequestId);
+  if (!pr) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Pull request not found",
+    });
+  }
+
+  return pr;
+}
+
 export const pullRequestRouter = {
   list: protectedProcedure
     .input(
@@ -287,7 +299,9 @@ export const pullRequestRouter = {
     }),
   listReviews: protectedProcedure
     .input(z.object({ pullRequestId: z.string().uuid() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      await assertPullRequestAccess(ctx.session.user.id, input.pullRequestId);
+
       const reviews = await db
         .select({
           id: prReviews.id,
@@ -316,6 +330,8 @@ export const pullRequestRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await assertPullRequestAccess(ctx.session.user.id, input.pullRequestId);
+
       const [review] = await db
         .insert(prReviews)
         .values({

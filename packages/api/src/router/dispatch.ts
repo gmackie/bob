@@ -23,6 +23,56 @@ import {
 import { suggestAgent } from "../services/dispatch/agentHeuristics";
 import { protectedProcedure } from "../trpc";
 
+async function loadOwnedSession(db: any, userId: string, sessionId: string) {
+  const session = await db.query.chatConversations.findFirst({
+    where: and(
+      eq(chatConversations.id, sessionId),
+      eq(chatConversations.userId, userId),
+    ),
+    columns: { id: true },
+  });
+
+  if (!session) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+  }
+
+  return session;
+}
+
+async function loadOwnedBatch(db: any, userId: string, batchId: string) {
+  const batch = await db.query.dispatchBatches.findFirst({
+    where: and(
+      eq(dispatchBatches.id, batchId),
+      eq(dispatchBatches.userId, userId),
+    ),
+  });
+
+  if (!batch) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Batch not found",
+    });
+  }
+
+  return batch;
+}
+
+async function loadOwnedDispatchItem(db: any, userId: string, itemId: string) {
+  const item = await db.query.dispatchItems.findFirst({
+    where: eq(dispatchItems.id, itemId),
+    with: { batch: true },
+  });
+
+  if (!item || item.batch.userId !== userId) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Dispatch item not found",
+    });
+  }
+
+  return item;
+}
+
 /**
  * Fire-and-forget update of a planning task's status via the planning API.
  * Gracefully degrades if no API key is configured.
@@ -202,6 +252,8 @@ export const dispatchRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await loadOwnedSession(ctx.db, ctx.session.user.id, input.sessionId);
+
       // Fetch committed drafts for this session
       const drafts = await ctx.db.query.planDrafts.findMany({
         where: and(
@@ -351,16 +403,7 @@ export const dispatchRouter = {
   getBatch: protectedProcedure
     .input(z.object({ batchId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      const batch = await ctx.db.query.dispatchBatches.findFirst({
-        where: eq(dispatchBatches.id, input.batchId),
-      });
-
-      if (!batch) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Batch not found",
-        });
-      }
+      const batch = await loadOwnedBatch(ctx.db, ctx.session.user.id, input.batchId);
 
       const items = await ctx.db.query.dispatchItems.findMany({
         where: eq(dispatchItems.batchId, input.batchId),
@@ -379,6 +422,8 @@ export const dispatchRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await loadOwnedDispatchItem(ctx.db, ctx.session.user.id, input.itemId);
+
       const [item] = await ctx.db
         .update(dispatchItems)
         .set({ agentType: input.agentType })
@@ -404,6 +449,8 @@ export const dispatchRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await loadOwnedBatch(ctx.db, ctx.session.user.id, input.batchId);
+
       const [batch] = await ctx.db
         .update(dispatchBatches)
         .set({ concurrency: input.concurrency })
@@ -424,16 +471,7 @@ export const dispatchRouter = {
   dispatch: protectedProcedure
     .input(z.object({ batchId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      const batch = await ctx.db.query.dispatchBatches.findFirst({
-        where: eq(dispatchBatches.id, input.batchId),
-      });
-
-      if (!batch) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Batch not found",
-        });
-      }
+      const batch = await loadOwnedBatch(ctx.db, ctx.session.user.id, input.batchId);
 
       // Set batch to dispatching
       await ctx.db
@@ -520,16 +558,7 @@ export const dispatchRouter = {
   checkProgress: protectedProcedure
     .input(z.object({ batchId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      const batch = await ctx.db.query.dispatchBatches.findFirst({
-        where: eq(dispatchBatches.id, input.batchId),
-      });
-
-      if (!batch) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Batch not found",
-        });
-      }
+      const batch = await loadOwnedBatch(ctx.db, ctx.session.user.id, input.batchId);
 
       const items = await ctx.db.query.dispatchItems.findMany({
         where: eq(dispatchItems.batchId, input.batchId),

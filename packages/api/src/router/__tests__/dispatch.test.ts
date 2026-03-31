@@ -67,6 +67,7 @@ const makeDbMock = () => ({
       findMany: (...args: unknown[]) => dbQueryFindManyMock("dispatchBatches", ...args),
     },
     dispatchItems: {
+      findFirst: (...args: unknown[]) => dbQueryFindFirstMock("dispatchItems", ...args),
       findMany: (...args: unknown[]) => dbQueryFindManyMock("dispatchItems", ...args),
     },
     planDrafts: {
@@ -78,6 +79,9 @@ const makeDbMock = () => ({
     taskRuns: {
       findFirst: (...args: unknown[]) => dbQueryFindFirstMock("taskRuns", ...args),
       findMany: (...args: unknown[]) => dbQueryFindManyMock("taskRuns", ...args),
+    },
+    chatConversations: {
+      findFirst: (...args: unknown[]) => dbQueryFindFirstMock("chatConversations", ...args),
     },
     forgeRevisions: {
       findFirst: (...args: unknown[]) => dbQueryFindFirstMock("forgeRevisions", ...args),
@@ -153,6 +157,9 @@ describe("dispatch router", () => {
         },
       ];
 
+      // chatConversations.findFirst (owned session)
+      dbQueryFindFirstMock.mockResolvedValueOnce({ id: SESSION_ID, userId: "user-1" });
+
       // planDrafts.findMany (committed drafts)
       dbQueryFindManyMock
         .mockResolvedValueOnce(drafts)
@@ -219,6 +226,21 @@ describe("dispatch router", () => {
         status: "queued",
       });
     });
+
+    it("rejects batch creation when the session is not owned by the caller", async () => {
+      dbQueryFindFirstMock.mockResolvedValueOnce(null);
+
+      const caller = createCaller({ id: "user-1" });
+
+      await expect(
+        caller.dispatch.createBatch({
+          sessionId: SESSION_ID,
+          tasks: [],
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+    });
   });
 
   describe("getBatch", () => {
@@ -263,10 +285,26 @@ describe("dispatch router", () => {
         caller.dispatch.getBatch({ batchId: BATCH_ID }),
       ).rejects.toThrow("Batch not found");
     });
+
+    it("rejects batch lookup when the batch is owned by another user", async () => {
+      dbQueryFindFirstMock.mockResolvedValueOnce(null);
+
+      const caller = createCaller({ id: "user-1" });
+
+      await expect(
+        caller.dispatch.getBatch({ batchId: BATCH_ID }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+    });
   });
 
   describe("updateItemAgent", () => {
     it("changes agent type", async () => {
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: ITEM_ID,
+        batch: { userId: "user-1" },
+      });
       const updatedItem = {
         id: ITEM_ID,
         agentType: "opencode",
@@ -288,7 +326,7 @@ describe("dispatch router", () => {
     });
 
     it("throws NOT_FOUND when item does not exist", async () => {
-      dbUpdateReturningMock.mockResolvedValueOnce([]);
+      dbQueryFindFirstMock.mockResolvedValueOnce(null);
 
       const caller = createCaller({ id: "user-1" });
 
@@ -299,10 +337,32 @@ describe("dispatch router", () => {
         }),
       ).rejects.toThrow("Dispatch item not found");
     });
+
+    it("rejects agent updates when the item belongs to another user's batch", async () => {
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: ITEM_ID,
+        batch: { userId: "user-2" },
+      });
+
+      const caller = createCaller({ id: "user-1" });
+
+      await expect(
+        caller.dispatch.updateItemAgent({
+          itemId: ITEM_ID,
+          agentType: "opencode",
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+    });
   });
 
   describe("updateConcurrency", () => {
     it("changes concurrency limit", async () => {
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: BATCH_ID,
+        userId: "user-1",
+      });
       const updatedBatch = {
         id: BATCH_ID,
         concurrency: 5,
@@ -323,7 +383,7 @@ describe("dispatch router", () => {
     });
 
     it("throws NOT_FOUND when batch does not exist", async () => {
-      dbUpdateReturningMock.mockResolvedValueOnce([]);
+      dbQueryFindFirstMock.mockResolvedValueOnce(null);
 
       const caller = createCaller({ id: "user-1" });
 
@@ -333,6 +393,21 @@ describe("dispatch router", () => {
           concurrency: 5,
         }),
       ).rejects.toThrow("Batch not found");
+    });
+
+    it("rejects concurrency updates when the batch is owned by another user", async () => {
+      dbQueryFindFirstMock.mockResolvedValueOnce(null);
+
+      const caller = createCaller({ id: "user-1" });
+
+      await expect(
+        caller.dispatch.updateConcurrency({
+          batchId: BATCH_ID,
+          concurrency: 5,
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
     });
   });
 

@@ -1,7 +1,7 @@
 import type { TRPCRouterRecord } from "@trpc/server";
+import { TRPCError } from "@trpc/server";
 import { and, asc, eq } from "@bob/db";
-import { db } from "@bob/db/client";
-import { requirements } from "@bob/db/schema";
+import { requirements, workItems, workspaceMembers } from "@bob/db/schema";
 import { z } from "zod/v4";
 
 import { protectedProcedure } from "../trpc";
@@ -16,11 +16,53 @@ const categorySchema = z.enum([
 ]);
 const statusSchema = z.enum(["pending", "in_progress", "done"]);
 
+async function assertWorkItemAccess(db: any, userId: string, workItemId: string) {
+  const workItem = await db.query.workItems.findFirst({
+    where: eq(workItems.id, workItemId),
+    columns: { workspaceId: true },
+  });
+
+  if (!workItem) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+
+  const membership = await db.query.workspaceMembers.findFirst({
+    where: and(
+      eq(workspaceMembers.workspaceId, workItem.workspaceId),
+      eq(workspaceMembers.userId, userId),
+    ),
+    columns: { id: true },
+  });
+
+  if (!membership) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+}
+
+async function assertRequirementAccess(
+  db: any,
+  userId: string,
+  requirementId: string,
+) {
+  const requirement = await db.query.requirements.findFirst({
+    where: eq(requirements.id, requirementId),
+    columns: { workItemId: true },
+  });
+
+  if (!requirement) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+
+  await assertWorkItemAccess(db, userId, requirement.workItemId);
+}
+
 export const requirementRouter = {
   list: protectedProcedure
     .input(z.object({ workItemId: z.string().uuid() }))
-    .query(async ({ input }) => {
-      const rows = await db
+    .query(async ({ ctx, input }) => {
+      await assertWorkItemAccess(ctx.db, ctx.session.user.id, input.workItemId);
+
+      const rows = await ctx.db
         .select()
         .from(requirements)
         .where(eq(requirements.workItemId, input.workItemId))
@@ -55,8 +97,10 @@ export const requirementRouter = {
         sortOrder: z.number().int().optional(),
       }),
     )
-    .mutation(async ({ input }) => {
-      const [requirement] = await db
+    .mutation(async ({ ctx, input }) => {
+      await assertWorkItemAccess(ctx.db, ctx.session.user.id, input.workItemId);
+
+      const [requirement] = await ctx.db
         .insert(requirements)
         .values({
           workItemId: input.workItemId,
@@ -78,8 +122,10 @@ export const requirementRouter = {
         sortOrder: z.number().int().optional(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const { id, ...updates } = input;
+      await assertRequirementAccess(ctx.db, ctx.session.user.id, id);
+
       // Filter out undefined values
       const setValues: Record<string, unknown> = {};
       if (updates.description !== undefined)
@@ -89,7 +135,7 @@ export const requirementRouter = {
       if (updates.sortOrder !== undefined)
         setValues.sortOrder = updates.sortOrder;
 
-      const [updated] = await db
+      const [updated] = await ctx.db
         .update(requirements)
         .set(setValues)
         .where(eq(requirements.id, id))
@@ -99,8 +145,10 @@ export const requirementRouter = {
 
   delete: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
-    .mutation(async ({ input }) => {
-      await db.delete(requirements).where(eq(requirements.id, input.id));
+    .mutation(async ({ ctx, input }) => {
+      await assertRequirementAccess(ctx.db, ctx.session.user.id, input.id);
+
+      await ctx.db.delete(requirements).where(eq(requirements.id, input.id));
       return { success: true };
     }),
 
@@ -111,8 +159,10 @@ export const requirementRouter = {
         taskId: z.string().uuid(),
       }),
     )
-    .mutation(async ({ input }) => {
-      const [updated] = await db
+    .mutation(async ({ ctx, input }) => {
+      await assertRequirementAccess(ctx.db, ctx.session.user.id, input.id);
+
+      const [updated] = await ctx.db
         .update(requirements)
         .set({ linkedTaskId: input.taskId })
         .where(eq(requirements.id, input.id))

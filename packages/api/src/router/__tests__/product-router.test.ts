@@ -4,6 +4,7 @@ let appRouter: typeof import("../../root").appRouter;
 
 const queryMocks = {
   workspaceMembersFindMany: vi.fn(),
+  workspaceMembersFindFirst: vi.fn(),
   projectsFindMany: vi.fn(),
   projectsFindFirst: vi.fn(),
   workItemsFindMany: vi.fn(),
@@ -21,6 +22,7 @@ const makeDbMock = () => ({
   query: {
     workspaceMembers: {
       findMany: queryMocks.workspaceMembersFindMany,
+      findFirst: queryMocks.workspaceMembersFindFirst,
     },
     projects: {
       findMany: queryMocks.projectsFindMany,
@@ -117,6 +119,9 @@ describe("product-facing app router", () => {
         },
       },
     ]);
+    queryMocks.workspaceMembersFindFirst.mockResolvedValue({
+      id: "membership-1",
+    });
     queryMocks.projectsFindMany.mockResolvedValue([
       {
         id: projectId,
@@ -158,7 +163,7 @@ describe("product-facing app router", () => {
       name: "Merge",
       key: "MERGE",
     });
-    queryMocks.workItemsFindFirst.mockResolvedValueOnce({
+    queryMocks.workItemsFindFirst.mockResolvedValue({
       id: taskId,
       workspaceId,
       projectId,

@@ -5,6 +5,8 @@ import {
   featureBranches,
   featureBranchTaskPRs,
   pullRequests,
+  workItems,
+  workspaceMembers,
 } from "@bob/db/schema";
 import { z } from "zod/v4";
 
@@ -13,6 +15,47 @@ import { checkFeatureReadiness } from "../services/automation/feature-assembly";
 import { protectedProcedure } from "../trpc";
 
 const statusSchema = z.enum(["active", "ready", "merged", "abandoned"]);
+
+async function assertWorkspaceAccess(userId: string, workspaceId: string) {
+  const membership = await db.query.workspaceMembers.findFirst({
+    where: and(
+      eq(workspaceMembers.workspaceId, workspaceId),
+      eq(workspaceMembers.userId, userId),
+    ),
+    columns: { id: true },
+  });
+
+  if (!membership) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+}
+
+async function loadAccessibleWorkItem(userId: string, workItemId: string) {
+  const workItem = await db.query.workItems.findFirst({
+    where: eq(workItems.id, workItemId),
+    columns: { id: true, workspaceId: true },
+  });
+
+  if (!workItem?.workspaceId) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+
+  await assertWorkspaceAccess(userId, workItem.workspaceId);
+  return workItem;
+}
+
+async function loadAccessibleFeatureBranch(userId: string, featureBranchId: string) {
+  const branch = await db.query.featureBranches.findFirst({
+    where: eq(featureBranches.id, featureBranchId),
+  });
+
+  if (!branch) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+
+  await loadAccessibleWorkItem(userId, branch.workItemId);
+  return branch;
+}
 
 export const featureBranchRouter = {
   create: protectedProcedure
@@ -24,7 +67,9 @@ export const featureBranchRouter = {
         baseBranch: z.string().min(1).optional(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await loadAccessibleWorkItem(ctx.session.user.id, input.workItemId);
+
       const [branch] = await db
         .insert(featureBranches)
         .values({
@@ -39,13 +84,8 @@ export const featureBranchRouter = {
 
   get: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
-    .query(async ({ input }) => {
-      const [branch] = await db
-        .select()
-        .from(featureBranches)
-        .where(eq(featureBranches.id, input.id));
-
-      if (!branch) return null;
+    .query(async ({ ctx, input }) => {
+      const branch = await loadAccessibleFeatureBranch(ctx.session.user.id, input.id);
 
       const taskPRs = await db
         .select({
@@ -68,7 +108,9 @@ export const featureBranchRouter = {
 
   list: protectedProcedure
     .input(z.object({ workItemId: z.string().uuid() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      await loadAccessibleWorkItem(ctx.session.user.id, input.workItemId);
+
       const branches = await db
         .select({
           id: featureBranches.id,
@@ -99,7 +141,9 @@ export const featureBranchRouter = {
         pullRequestId: z.string().uuid(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await loadAccessibleFeatureBranch(ctx.session.user.id, input.featureBranchId);
+
       const [record] = await db
         .insert(featureBranchTaskPRs)
         .values({
@@ -118,6 +162,8 @@ export const featureBranchRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await loadAccessibleFeatureBranch(ctx.session.user.id, input.featureBranchId);
+
       const [updated] = await db
         .update(featureBranchTaskPRs)
         .set({ mergedAt: new Date() })
@@ -149,6 +195,8 @@ export const featureBranchRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await loadAccessibleFeatureBranch(ctx.session.user.id, input.featureBranchId);
+
       // Get the feature branch to find branchName and baseBranch
       const [branch] = await db
         .select()
@@ -195,7 +243,9 @@ export const featureBranchRouter = {
         status: statusSchema,
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await loadAccessibleFeatureBranch(ctx.session.user.id, input.id);
+
       const [updated] = await db
         .update(featureBranches)
         .set({ status: input.status })
