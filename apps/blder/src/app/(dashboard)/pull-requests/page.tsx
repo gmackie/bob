@@ -39,7 +39,7 @@ export default function PullRequestsPage() {
             Pull Requests
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Track pull requests created by Bob and synced from your repositories.
+            Track pull requests created by blder.bot and synced from your repositories.
           </p>
         </div>
       </div>
