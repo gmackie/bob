@@ -39,11 +39,11 @@ export function LoginForm() {
   return (
     <div className="relative w-full overflow-hidden rounded-[26px] border border-border bg-secondary p-7 shadow-[0_18px_60px_rgba(0,0,0,.55)] backdrop-blur-md">
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-200/70 to-transparent" />
-      <h1 className="font-display text-3xl font-semibold tracking-tight text-foreground">
+      <h2 className="font-display text-3xl font-semibold tracking-tight text-foreground">
         Sign in
-      </h1>
-      <p className="mt-2 text-sm leading-relaxed text-slate-200/85">
-        Sign in with GitHub to access Bob.
+      </h2>
+      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+        Sign in with GitHub to access blder.bot.
       </p>
 
       <div className="mt-6">
