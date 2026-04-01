@@ -1,24 +1,36 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { cn } from "@bob/ui";
 
 interface CollapsibleSectionProps {
   title: string;
+  sectionId?: string;
   defaultOpen?: boolean;
+  forceOpen?: boolean;
   children: ReactNode;
 }
 
 export function CollapsibleSection({
   title,
+  sectionId,
   defaultOpen = true,
+  forceOpen,
   children,
 }: CollapsibleSectionProps) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const [isOpen, setIsOpen] = useState(defaultOpen || !!forceOpen);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (forceOpen && ref.current) {
+      setIsOpen(true);
+      ref.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [forceOpen]);
 
   return (
-    <div className="border-b border-border pb-6">
+    <div ref={ref} id={sectionId} className="border-b border-border pb-6">
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="flex w-full items-center justify-between text-left"

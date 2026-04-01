@@ -1,3 +1,7 @@
+"use client";
+
+import { useSearchParams } from "next/navigation";
+
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { CollapsibleSection } from "./_components/collapsible-section";
 import { ApiKeysSection } from "./_components/api-keys";
@@ -8,6 +12,9 @@ import { PreferencesSection } from "./_components/preferences";
 import { WebhooksSection } from "./_components/webhooks";
 
 export default function SettingsPage() {
+  const searchParams = useSearchParams();
+  const openSection = searchParams?.get("section") ?? "";
+
   return (
     <div className="mx-auto max-w-4xl px-6 py-10">
       <Breadcrumbs items={[{ label: "Settings" }]} className="mb-4" />
@@ -24,22 +31,22 @@ export default function SettingsPage() {
       </header>
 
       <div className="space-y-8">
-        <CollapsibleSection title="Preferences" defaultOpen>
+        <CollapsibleSection title="Preferences" sectionId="preferences" defaultOpen>
           <PreferencesSection />
         </CollapsibleSection>
-        <CollapsibleSection title="Git Providers" defaultOpen>
+        <CollapsibleSection title="Git Providers" sectionId="git-providers" defaultOpen>
           <GitProvidersSection />
         </CollapsibleSection>
-        <CollapsibleSection title="Config Files (MCP / Skills / Agents)" defaultOpen={false}>
+        <CollapsibleSection title="Config Files (MCP / Skills / Agents)" sectionId="config-files" defaultOpen={false}>
           <ConfigFilesSection />
         </CollapsibleSection>
-        <CollapsibleSection title="API Keys" defaultOpen={false}>
+        <CollapsibleSection title="API Keys" sectionId="api-keys" defaultOpen={false} forceOpen={openSection === "api-keys"}>
           <ApiKeysSection />
         </CollapsibleSection>
-        <CollapsibleSection title="Cookie Jar" defaultOpen={false}>
+        <CollapsibleSection title="Cookie Jar" sectionId="cookie-jar" defaultOpen={false} forceOpen={openSection === "cookie-jar"}>
           <CookieJar />
         </CollapsibleSection>
-        <CollapsibleSection title="Webhooks" defaultOpen={false}>
+        <CollapsibleSection title="Webhooks" sectionId="webhooks" defaultOpen={false} forceOpen={openSection === "webhooks"}>
           <WebhooksSection />
         </CollapsibleSection>
       </div>

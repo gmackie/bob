@@ -193,7 +193,7 @@ export default function RunsPage() {
           <div className="mt-6 space-y-4">
             {[
               { step: 1, title: "Install bob", code: "brew install blder/tap/bob" },
-              { step: 2, title: "Generate an API key", link: { href: "/settings", text: "Settings → API Keys" } },
+              { step: 2, title: "Generate an API key", link: { href: "/settings?section=api-keys", text: "Settings → API Keys" } },
               { step: 3, title: "Authenticate", code: "bob login --api-key YOUR_KEY" },
               { step: 4, title: "Initialize a workspace", code: "cd your-project && bob init" },
               { step: 5, title: "Run your first agent", code: "bob run <work-item-id> --agent claude-code" },
