@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { ChevronLeftIcon, ChevronRightIcon } from "@radix-ui/react-icons";
 
 import { SidebarNav, NotificationButton } from "~/components/layout/sidebar-nav";
+import { ChatPanelProvider } from "~/components/chat/chat-panel-provider";
+import { ChatPanel } from "~/components/chat/chat-panel";
 
 const SIDEBAR_EXPANDED_WIDTH = 240;
 const SIDEBAR_COLLAPSED_WIDTH = 56;
@@ -36,6 +38,7 @@ export default function BilderShell({ children }: { children: React.ReactNode })
     : SIDEBAR_EXPANDED_WIDTH;
 
   return (
+    <ChatPanelProvider>
     <div className="relative flex min-h-screen">
       <aside
         className="bg-background fixed inset-y-0 left-0 z-30 flex flex-col border-r border-border transition-all duration-200"
@@ -88,6 +91,8 @@ export default function BilderShell({ children }: { children: React.ReactNode })
         {children}
       </main>
 
+      <ChatPanel />
+
       {showNotif && (
         <div className="fixed inset-y-0 right-0 z-40 w-80 border-l border-border bg-background p-4">
           <button onClick={() => setShowNotif(false)} className="text-sm text-muted-foreground">Close</button>
@@ -95,5 +100,6 @@ export default function BilderShell({ children }: { children: React.ReactNode })
         </div>
       )}
     </div>
+    </ChatPanelProvider>
   );
 }

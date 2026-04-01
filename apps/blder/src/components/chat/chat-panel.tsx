@@ -39,7 +39,7 @@ export function ChatPanel() {
 
   return (
     <aside
-      className="flex shrink-0 flex-col border-l border-border bg-popover"
+      className="fixed inset-y-0 right-0 z-40 flex flex-col border-l border-border bg-popover shadow-lg"
       style={{ width: PANEL_WIDTH }}
     >
       {/* Header */}
