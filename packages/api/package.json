@@ -7,6 +7,10 @@
       "types": "./dist/api/src/index.d.ts",
       "default": "./src/index.ts"
     },
+    "./contracts/work-items-rest": {
+      "types": "./dist/api/src/contracts/work-items-rest.d.ts",
+      "default": "./src/contracts/work-items-rest.ts"
+    },
     "./openapi": {
       "types": "./dist/api/src/openapi.d.ts",
       "default": "./src/openapi.ts"

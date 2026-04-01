@@ -44,6 +44,14 @@ const ARTIFACT_LABELS: Record<string, string> = {
   "file-snapshot": "File Snapshot",
 };
 
+function getSummaryNumber(
+  summary: Record<string, unknown> | null | undefined,
+  key: string,
+): number | null {
+  const value = summary?.[key];
+  return typeof value === "number" ? value : null;
+}
+
 export default function RunDetailPage({
   params,
 }: {
@@ -53,7 +61,7 @@ export default function RunDetailPage({
   const trpc = useTRPC();
 
   const { data: run, isLoading } = useQuery(
-    trpc.publicApi.getRun.queryOptions(
+    trpc.agentRun.get.queryOptions(
       { runId },
       { refetchInterval: (query) => query.state.data?.status === "running" ? 3000 : false },
     ),
@@ -77,9 +85,9 @@ export default function RunDetailPage({
   }
 
   const StatusIcon = STATUS_ICONS[run.status] ?? ClockIcon;
-  const duration = run.summary?.duration_ms;
-  const filesChanged = run.summary?.files_changed ?? 0;
-  const exitCode = run.summary?.exit_code;
+  const duration = getSummaryNumber(run.summary, "duration_ms");
+  const filesChanged = getSummaryNumber(run.summary, "files_changed") ?? 0;
+  const exitCode = getSummaryNumber(run.summary, "exit_code");
 
   return (
     <div className="flex flex-col gap-6 p-6">

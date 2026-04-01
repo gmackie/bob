@@ -34,6 +34,8 @@
     "dev:mobile:local": "./scripts/dev-mobile.sh",
     "dev:gateway": "pnpm -F @bob/gateway dev",
     "dev:web:gateway": "turbo watch dev -F @bob/web... -F @bob/gateway"
+    ,
+    "generate:work-item-rest": "pnpm exec tsx scripts/generate-work-item-rest-routes.ts"
   },
   "devDependencies": {
     "@bob/prettier-config": "workspace:*",

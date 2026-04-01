@@ -1,6 +1,9 @@
-import type { OpenAPIV3 } from "openapi-types";
+import { z } from "zod/v4";
+import type { OpenAPIV3_1 } from "openapi-types";
 
 import { integrations } from "@bob/config";
+
+import { workItemsRestOperations } from "./contracts/work-items-rest";
 
 export interface OpenApiConfig {
   title: string;
@@ -10,11 +13,15 @@ export interface OpenApiConfig {
 }
 
 const defaultConfig: OpenApiConfig = {
-  title: "Gmacko API",
+  title: "Bob API",
   version: "1.0.0",
-  description: "API documentation for your application",
-  baseUrl: "http://localhost:3000/api",
+  description: "Generated OpenAPI contract for Bob REST adapters",
+  baseUrl: "http://localhost:3000",
 };
+
+function toOpenApiSchema(schema: z.ZodTypeAny): OpenAPIV3_1.SchemaObject {
+  return z.toJSONSchema(schema) as OpenAPIV3_1.SchemaObject;
+}
 
 export function isOpenApiEnabled(): boolean {
   return integrations.openapi;
@@ -22,11 +29,52 @@ export function isOpenApiEnabled(): boolean {
 
 export function generateApiDocument(
   config: Partial<OpenApiConfig> = {},
-): OpenAPIV3.Document {
+): OpenAPIV3_1.Document {
   const mergedConfig = { ...defaultConfig, ...config };
 
-  const document: OpenAPIV3.Document = {
-    openapi: "3.0.3",
+  const paths = Object.fromEntries(
+    workItemsRestOperations.map((operation) => [
+      operation.restPath,
+      {
+        post: {
+          tags: ["workItems"],
+          summary: operation.summary,
+          operationId: operation.procedurePath,
+          security: operation.auth === "session" ? [{ cookieAuth: [] }] : [],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: toOpenApiSchema(operation.inputSchema),
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Successful response",
+              content: {
+                "application/json": {
+                  schema: toOpenApiSchema(operation.outputSchema),
+                },
+              },
+            },
+            "400": {
+              description: "Invalid request payload",
+            },
+            "401": {
+              description: "Unauthorized",
+            },
+            "404": {
+              description: "Resource not found",
+            },
+          },
+        },
+      },
+    ]),
+  ) as Record<string, unknown>;
+
+  return {
+    openapi: "3.1.0",
     info: {
       title: mergedConfig.title,
       version: mergedConfig.version,
@@ -38,195 +86,29 @@ export function generateApiDocument(
         description: "API Server",
       },
     ],
-    paths: {
-      "/trpc/auth.getSession": {
-        get: {
-          tags: ["auth"],
-          summary: "Get current session",
-          description: "Returns the current user session if authenticated",
-          responses: {
-            "200": {
-              description: "Session data",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: {
-                      user: {
-                        type: "object",
-                        properties: {
-                          id: { type: "string" },
-                          email: { type: "string" },
-                          name: { type: "string" },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      "/trpc/post.all": {
-        get: {
-          tags: ["post"],
-          summary: "Get all posts",
-          description: "Returns all posts",
-          responses: {
-            "200": {
-              description: "List of posts",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        id: { type: "string" },
-                        title: { type: "string" },
-                        content: { type: "string" },
-                        createdAt: { type: "string", format: "date-time" },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      "/trpc/post.byId": {
-        get: {
-          tags: ["post"],
-          summary: "Get post by ID",
-          description: "Returns a single post by its ID",
-          parameters: [
-            {
-              name: "id",
-              in: "query",
-              required: true,
-              schema: { type: "string" },
-            },
-          ],
-          responses: {
-            "200": {
-              description: "Post data",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: {
-                      id: { type: "string" },
-                      title: { type: "string" },
-                      content: { type: "string" },
-                      createdAt: { type: "string", format: "date-time" },
-                    },
-                  },
-                },
-              },
-            },
-            "404": {
-              description: "Post not found",
-            },
-          },
-        },
-      },
-      "/trpc/post.create": {
-        post: {
-          tags: ["post"],
-          summary: "Create a new post",
-          description: "Creates a new post (requires authentication)",
-          security: [{ bearerAuth: [] }],
-          requestBody: {
-            required: true,
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  required: ["title", "content"],
-                  properties: {
-                    title: { type: "string", minLength: 1 },
-                    content: { type: "string", minLength: 1 },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            "200": {
-              description: "Created post",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: {
-                      id: { type: "string" },
-                      title: { type: "string" },
-                      content: { type: "string" },
-                      createdAt: { type: "string", format: "date-time" },
-                    },
-                  },
-                },
-              },
-            },
-            "401": {
-              description: "Unauthorized",
-            },
-          },
-        },
-      },
-      "/trpc/post.delete": {
-        post: {
-          tags: ["post"],
-          summary: "Delete a post",
-          description: "Deletes a post by ID (requires authentication)",
-          security: [{ bearerAuth: [] }],
-          requestBody: {
-            required: true,
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  required: ["id"],
-                  properties: {
-                    id: { type: "string" },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            "200": {
-              description: "Post deleted",
-            },
-            "401": {
-              description: "Unauthorized",
-            },
-          },
-        },
-      },
-    },
+    paths: paths as OpenAPIV3_1.PathsObject,
     components: {
       securitySchemes: {
-        bearerAuth: {
-          type: "http",
-          scheme: "bearer",
+        cookieAuth: {
+          type: "apiKey",
+          in: "cookie",
+          name: "better-auth.session_token",
         },
       },
     },
     tags: [
-      { name: "auth", description: "Authentication endpoints" },
-      { name: "post", description: "Post management endpoints" },
+      {
+        name: "workItems",
+        description: "RPC-style REST adapters for work item procedures",
+      },
     ],
-  };
-
-  return document;
+  } as OpenAPIV3_1.Document;
 }
 
 export function getOpenApiSpec(config?: Partial<OpenApiConfig>): string {
   if (!integrations.openapi) {
     return JSON.stringify({ error: "OpenAPI not enabled" });
   }
+
   return JSON.stringify(generateApiDocument(config), null, 2);
 }
