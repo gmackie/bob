@@ -1,0 +1,1 @@
+../../../../../apps/web/src/components/chat/chat-panel.tsx

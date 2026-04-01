@@ -1,0 +1,1 @@
+../../../../../apps/web/src/components/chat/open-chat-panel-button.tsx
