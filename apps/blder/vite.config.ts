@@ -20,6 +20,7 @@ export default defineConfig({
       : []),
   ],
   resolve: {
+    preserveSymlinks: true,
     alias: {
       "~": path.resolve(__dirname, "src"),
       "@bob/db/client": path.resolve(__dirname, "src/lib/db-client-lazy.ts"),

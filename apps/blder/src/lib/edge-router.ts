@@ -3,7 +3,7 @@
  *
  * Excludes routers that depend on Node.js-only APIs:
  * - capture (child_process, fs)
- * - settings (node:fs, node:os, node:path for local config files)
+ * - settings (full version uses node:fs — settingsEdge used instead)
  * - git (imports @bob/execution-lib)
  * - terminal (pty, WebSocket server)
  * - system (execSync for host dependency checks)
@@ -45,6 +45,8 @@ import {
   workItemRouter,
   workItemsRouter,
 } from "@bob/api/router/workItems";
+import { secretsRouter } from "@bob/api/router/secrets";
+import { settingsEdgeRouter } from "@bob/api/router/settingsEdge";
 import { webhookRouter } from "@bob/api/router/webhook";
 import { workspaceRouter } from "@bob/api/router/workspace";
 import { createTRPCRouter } from "@bob/api/trpc";
@@ -75,7 +77,9 @@ const edgeRouterRecord = {
   pullRequest: pullRequestRouter,
   requirement: requirementRouter,
   repository: repositoryRouter,
+  secrets: secretsRouter,
   session: sessionRouter,
+  settings: settingsEdgeRouter,
   skill: skillRouter,
   snapshot: snapshotRouter,
   taskRun: taskRunRouter,
