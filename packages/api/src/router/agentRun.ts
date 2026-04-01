@@ -33,6 +33,26 @@ async function loadAccessibleWorkItem(db: any, userId: string, workItemId: strin
 }
 
 export const agentRunRouter = {
+  get: protectedProcedure
+    .input(
+      z.object({
+        runId: z.string().uuid(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const run = await ctx.db.query.agentRuns.findFirst({
+        where: eq(agentRuns.id, input.runId),
+        with: { artifacts: true },
+      });
+
+      if (!run?.workspaceId) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      await assertWorkspaceAccess(ctx.db, ctx.session.user.id, run.workspaceId);
+      return run;
+    }),
+
   list: protectedProcedure
     .input(
       z.object({

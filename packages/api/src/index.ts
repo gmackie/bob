@@ -19,5 +19,9 @@ type RouterInputs = inferRouterInputs<AppRouter>;
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 
 export { type AppRouter, appRouter } from "./root";
+export {
+  workItemsRestOperationByPath,
+  workItemsRestOperations,
+} from "./contracts/work-items-rest";
 export { createTRPCContext } from "./trpc";
 export type { RouterInputs, RouterOutputs };

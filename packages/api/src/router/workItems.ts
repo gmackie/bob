@@ -9,14 +9,25 @@ import {
   projects,
   runLifecycleEvents,
   taskRuns,
-  workItemArtifactProducerType,
   workItemArtifacts,
-  workItemArtifactType,
   workItems,
-  workItemNotificationType,
   workspaceMembers,
 } from "@bob/db/schema";
 
+import {
+  createArtifactInputSchema,
+  createCommentInputSchema,
+  createNotificationInputSchema,
+  getWorkItemInputSchema,
+  listActivitiesInputSchema,
+  listChildArtifactGroupsInputSchema,
+  listCommentsInputSchema,
+  listCurrentArtifactsInputSchema,
+  listNotificationsInputSchema,
+  listWorkItemsInputSchema,
+  markNotificationAsReadInputSchema,
+  promoteToTaskInputSchema,
+} from "../contracts/work-items-rest";
 import { isForgeGraphEnabled, requireForgeGraphClient } from "../services/forgegraph/config";
 import { resolveForgeGraphId, cacheMapping } from "../services/forgegraph/idResolver";
 import type { FgWorkItem, FgArtifact, FgActivity } from "../services/forgegraph/forgeGraphClient";
@@ -134,16 +145,7 @@ function formatWorkItemIdentifier(input: {
 }
 
 const listWorkItemsProcedure = protectedProcedure
-  .input(
-    z.object({
-      workspaceId: z.string().uuid(),
-      projectId: z.string().uuid().optional(),
-      parentId: z.string().uuid().nullable().optional(),
-      kind: z.enum(["issue", "epic", "task"]).optional(),
-      status: z.string().optional(),
-      limit: z.number().min(1).max(100).default(50),
-    }),
-  )
+  .input(listWorkItemsInputSchema)
   .query(async ({ ctx, input }) => {
     await assertWorkspaceAccess(ctx.db, ctx.session.user.id, input.workspaceId);
 
@@ -239,11 +241,7 @@ function parseIdentifier(id: string): { projectKey: string; sequenceNumber: numb
 }
 
 const getWorkItemProcedure = protectedProcedure
-  .input(
-    z.object({
-      id: z.string(),
-    }),
-  )
+  .input(getWorkItemInputSchema)
   .query(async ({ ctx, input }) => {
     // ── ForgeGraph read path ──────────────────────────────────────────
     if (isForgeGraphEnabled()) {
@@ -392,11 +390,7 @@ const getWorkItemProcedure = protectedProcedure
   });
 
 const listCommentsProcedure = protectedProcedure
-  .input(
-    z.object({
-      workItemId: z.string().uuid(),
-    }),
-  )
+  .input(listCommentsInputSchema)
   .query(async ({ ctx, input }) => {
     await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
 
@@ -407,14 +401,7 @@ const listCommentsProcedure = protectedProcedure
   });
 
 const createCommentProcedure = protectedProcedure
-  .input(
-    z.object({
-      workItemId: z.string().uuid(),
-      body: z.string().min(1).max(10000),
-      bodyHtml: z.string().optional(),
-      parentId: z.string().uuid().optional(),
-    }),
-  )
+  .input(createCommentInputSchema)
   .mutation(async ({ ctx, input }) => {
     await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
 
@@ -443,22 +430,7 @@ const createCommentProcedure = protectedProcedure
   });
 
 const createArtifactProcedure = protectedProcedure
-  .input(
-    z.object({
-      workItemId: z.string().uuid(),
-      taskRunId: z.string().uuid().optional(),
-      sessionId: z.string().uuid().optional(),
-      producerType: z.enum(workItemArtifactProducerType),
-      producerId: z.string().optional(),
-      artifactType: z.enum(workItemArtifactType),
-      artifactRole: z.string().min(1),
-      url: z.string().url().optional(),
-      title: z.string().optional(),
-      summary: z.string().optional(),
-      content: z.string().optional(),
-      metadata: z.record(z.string(), z.unknown()).optional(),
-    }),
-  )
+  .input(createArtifactInputSchema)
   .mutation(async ({ ctx, input }) => {
     await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
 
@@ -520,11 +492,7 @@ const createArtifactProcedure = protectedProcedure
   });
 
 const promoteToTaskProcedure = protectedProcedure
-  .input(
-    z.object({
-      id: z.string().uuid(),
-    }),
-  )
+  .input(promoteToTaskInputSchema)
   .mutation(async ({ ctx, input }) => {
     const existing = await loadAccessibleWorkItem(
       ctx.db,
@@ -576,12 +544,7 @@ const promoteToTaskProcedure = protectedProcedure
   });
 
 const listActivitiesProcedure = protectedProcedure
-  .input(
-    z.object({
-      workItemId: z.string().uuid(),
-      limit: z.number().min(1).max(100).default(50),
-    }),
-  )
+  .input(listActivitiesInputSchema)
   .query(async ({ ctx, input }) => {
     await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
 
@@ -604,11 +567,7 @@ const listActivitiesProcedure = protectedProcedure
   });
 
 const listCurrentArtifactsProcedure = protectedProcedure
-  .input(
-    z.object({
-      workItemId: z.string().uuid(),
-    }),
-  )
+  .input(listCurrentArtifactsInputSchema)
   .query(async ({ ctx, input }) => {
     await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
 
@@ -633,11 +592,7 @@ const listCurrentArtifactsProcedure = protectedProcedure
   });
 
 const listChildArtifactGroupsProcedure = protectedProcedure
-  .input(
-    z.object({
-      parentWorkItemId: z.string().uuid(),
-    }),
-  )
+  .input(listChildArtifactGroupsInputSchema)
   .query(async ({ ctx, input }) => {
     await loadAccessibleWorkItem(
       ctx.db,
@@ -707,12 +662,7 @@ const listChildArtifactGroupsProcedure = protectedProcedure
   });
 
 const listNotificationsProcedure = protectedProcedure
-  .input(
-    z.object({
-      unreadOnly: z.boolean().default(false),
-      limit: z.number().min(1).max(100).default(50),
-    }),
-  )
+  .input(listNotificationsInputSchema)
   .query(async ({ ctx, input }) => {
     const filters = [
       eq(notifications.userId, ctx.session.user.id),
@@ -733,17 +683,7 @@ const listNotificationsProcedure = protectedProcedure
   });
 
 const createNotificationProcedure = protectedProcedure
-  .input(
-    z.object({
-      userId: z.string(),
-      workItemId: z.string().uuid().optional(),
-      actorId: z.string().optional(),
-      type: z.enum(workItemNotificationType),
-      title: z.string().min(1).max(256),
-      body: z.string().optional(),
-      url: z.string().url().optional(),
-    }),
-  )
+  .input(createNotificationInputSchema)
   .mutation(async ({ ctx, input }) => {
     const [notification] = await ctx.db
       .insert(notifications)
@@ -762,11 +702,7 @@ const createNotificationProcedure = protectedProcedure
   });
 
 const markNotificationAsReadProcedure = protectedProcedure
-  .input(
-    z.object({
-      id: z.string().uuid(),
-    }),
-  )
+  .input(markNotificationAsReadInputSchema)
   .mutation(async ({ ctx, input }) => {
     const [notification] = await ctx.db
       .update(notifications)

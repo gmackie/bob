@@ -11,6 +11,7 @@ import {
   tenants,
   workspaces,
   tenantMembers,
+  workspaceMembers,
 } from "@bob/db/schema";
 
 import {
@@ -109,6 +110,22 @@ export const publicApiRouter = {
           tenantId: membership.tenantId,
           machineId: input.machineId,
           lastHeartbeat: new Date(),
+        })
+        .returning();
+
+      if (!workspace) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to create workspace",
+        });
+      }
+
+      await ctx.db
+        .insert(workspaceMembers)
+        .values({
+          workspaceId: workspace.id,
+          userId: ctx.session.user.id,
+          role: "owner",
         })
         .returning();
 

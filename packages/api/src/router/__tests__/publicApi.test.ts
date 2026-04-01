@@ -6,7 +6,7 @@ type MockDb = ReturnType<typeof createMockDb>;
 
 const createMockDb = () => {
   const insertReturning = vi.fn();
-  const insertValues = vi.fn(() => ({
+  const insertValues = vi.fn((values: Record<string, unknown>) => ({
     returning: insertReturning,
   }));
   const insert = vi.fn(() => ({
@@ -27,6 +27,7 @@ const createMockDb = () => {
   return {
     query: {
       tenantMembers: {
+        findFirst: vi.fn(),
         findMany: vi.fn(),
       },
       workspaces: {
@@ -181,6 +182,40 @@ describe("publicApi router tenant isolation", () => {
       }),
     ).rejects.toMatchObject({
       code: "NOT_FOUND",
+    });
+  });
+
+  it("registerWorkspace adds the caller as an owner workspace member", async () => {
+    const db = createMockDb();
+    db.query.tenantMembers.findFirst
+      .mockResolvedValueOnce({
+        tenantId: "tenant-1",
+        tenant: { id: "tenant-1" },
+      });
+    db.__mock.insertReturning
+      .mockResolvedValueOnce([
+        {
+          id: "55555555-5555-4555-8555-555555555555",
+          tenantId: "tenant-1",
+          name: "Bob CLI",
+          slug: "bob-cli",
+        },
+      ])
+      .mockResolvedValueOnce([{ id: "member-1" }]);
+
+    const caller = createCaller(db) as any;
+
+    await caller.publicApi.registerWorkspace({
+      name: "Bob CLI",
+      slug: "bob-cli",
+      machineId: "labnuc",
+    });
+
+    expect(db.insert).toHaveBeenCalledTimes(2);
+    expect(db.__mock.insertValues.mock.calls[1]?.[0]).toMatchObject({
+      workspaceId: "55555555-5555-4555-8555-555555555555",
+      userId: "user-1",
+      role: "owner",
     });
   });
 });
