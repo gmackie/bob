@@ -98,7 +98,7 @@ function ForgeGraphConnection() {
           <div>
             <p className="text-sm font-medium">ForgeGraph</p>
             <p className="text-xs text-muted-foreground">
-              forgegraf.com — deployment pipeline integration
+              forgegraph.com — deployment pipeline integration
             </p>
           </div>
         </div>
