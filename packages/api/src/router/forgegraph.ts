@@ -7,9 +7,11 @@ import {
   forgeBuilds,
   forgeDeployments,
   forgeRunEvents,
+  projects,
 } from "@bob/db/schema";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure } from "../trpc";
+import { getForgeGraphClient } from "../services/forgegraph/config";
 
 export const forgegraphRouter = {
   listRevisions: protectedProcedure
@@ -357,5 +359,74 @@ export const forgegraphRouter = {
         .where(eq(dispatchItems.id, item.id));
 
       return deployment!;
+    }),
+
+  // ── ForgeGraph App Management ──────────────────────────────────────
+
+  listApps: protectedProcedure.query(async () => {
+    const fg = getForgeGraphClient();
+    if (!fg) {
+      return [];
+    }
+    try {
+      return await fg.listApps();
+    } catch {
+      return [];
+    }
+  }),
+
+  listUnlinkedApps: protectedProcedure
+    .input(z.object({ workspaceId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const fg = getForgeGraphClient();
+      if (!fg) return [];
+
+      const [allApps, linkedProjects] = await Promise.all([
+        fg.listApps().catch(() => []),
+        ctx.db.query.projects.findMany({
+          where: eq(projects.workspaceId, input.workspaceId),
+          columns: { forgeGraphAppId: true },
+        }),
+      ]);
+
+      const linkedIds = new Set(
+        linkedProjects.map((p) => p.forgeGraphAppId).filter(Boolean),
+      );
+
+      return allApps.filter((app) => !linkedIds.has(app.id));
+    }),
+
+  importApp: protectedProcedure
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+        appId: z.string(),
+        key: z.string().min(1).max(16).toUpperCase(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const fg = getForgeGraphClient();
+      if (!fg) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "ForgeGraph not configured",
+        });
+      }
+
+      const app = await fg.getApp(input.appId);
+
+      const [project] = await ctx.db
+        .insert(projects)
+        .values({
+          workspaceId: input.workspaceId,
+          forgeGraphAppId: app.id,
+          name: app.name,
+          key: input.key,
+          description: app.description,
+          repoUrl: app.flakeRef ?? null,
+        })
+        .returning();
+
+      return project;
     }),
 };

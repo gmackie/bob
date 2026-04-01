@@ -544,6 +544,9 @@ export const projects = pgTable("projects", (t) => ({
     .notNull()
     .references(() => workspaces.id, { onDelete: "cascade" }),
   leadUserId: t.text().references(() => user.id, { onDelete: "set null" }),
+  forgeGraphAppId: t.text().unique(), // 1:1 with ForgeGraph app
+  repoUrl: t.text(), // synced from ForgeGraph
+  defaultBranch: t.text(), // synced from ForgeGraph
   name: t.varchar({ length: 128 }).notNull(),
   key: t.varchar({ length: 16 }).notNull(),
   description: t.text(),
