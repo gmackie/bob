@@ -28,7 +28,7 @@ export function OpenChatPanelButton({
       onClick={() => openPanel({ sessionId, workItemId, label })}
     >
       <ChatBubbleIcon />
-      {children ?? "Chat with Bob"}
+      {children ?? "Chat"}
     </Button>
   );
 }
