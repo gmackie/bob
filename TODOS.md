@@ -55,6 +55,20 @@
 - [ ] BOB-100 shows 3 duplicate entries in board view — data issue, needs DB/ForgeGraph cleanup
 - [ ] `runs/[runId]` detail page has pre-existing TypeScript errors (type `{}` not assignable)
 
+### QA Fixes Applied (by /qa 2026-04-01, blder.bot)
+- [x] ISSUE-001: Light mode text contrast on login page
+- [x] ISSUE-002: Brand mismatch "Bob Command Dashboard" → "blder.bot"
+- [x] ISSUE-003: Styled 404 page with navigation
+- [x] ISSUE-004: Heading hierarchy (h1 → h2 for "Sign in")
+- [x] ISSUE-005: Added SVG favicon
+- [x] ISSUE-007: Added skip-to-content link
+- [x] ISSUE-008: "forgegraf.com" typo → "forgegraph.com"
+- [x] ISSUE-009: Settings deep link auto-opens + scrolls to section
+- [x] ISSUE-010: Config Files empty state message
+- [x] ISSUE-011: Sidebar collapse button aria-label
+- [x] ISSUE-012: "Bob" → "blder.bot" in PR descriptions
+- [ ] GitHub OAuth app display name still says "bob" — needs manual change in GitHub Developer Settings
+
 ### UI Polish
 - [ ] Full diff rendering in PR detail page — needs diff parser library (e.g., diff2html)
 - [ ] Mobile-responsive workspace layout — 3-panel doesn't collapse on small screens
