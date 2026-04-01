@@ -7,6 +7,19 @@
 
 import type { ForgeGraphConfig } from "./config";
 
+// ── App types ────────────────────────────────────────────────────────
+
+export interface FgApp {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  flakeRef: string | null;
+  healthCheckUrl: string | null;
+  deploymentPlatform: string | null;
+  createdAt: string;
+}
+
 // ── Request/Response types ────────────────────────────────────────────
 
 export interface FgWorkItem {
@@ -142,6 +155,17 @@ export class ForgeGraphClient {
 
   constructor(config: ForgeGraphConfig) {
     this.config = config;
+  }
+
+  // ── Apps ──────────────────────────────────────────────────────────
+
+  async listApps(): Promise<FgApp[]> {
+    const result = await this.get<{ apps: FgApp[] }>("/api/fg/apps");
+    return result.apps;
+  }
+
+  async getApp(id: string): Promise<FgApp> {
+    return this.get<FgApp>(`/api/fg/apps/${id}`);
   }
 
   // ── Work Items ────────────────────────────────────────────────────
