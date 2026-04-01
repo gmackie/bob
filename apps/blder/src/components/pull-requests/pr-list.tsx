@@ -42,7 +42,7 @@ export function PrList({ statusFilter }: PrListProps) {
           No pull requests found
         </div>
         <div className="mt-1 text-xs text-muted-foreground">
-          Pull requests created through Bob or synced via webhooks will appear
+          Pull requests created through blder.bot or synced via webhooks will appear
           here.
         </div>
       </div>
