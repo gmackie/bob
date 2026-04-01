@@ -11,6 +11,14 @@
       "types": "./dist/api/src/contracts/work-items-rest.d.ts",
       "default": "./src/contracts/work-items-rest.ts"
     },
+    "./trpc": {
+      "types": "./dist/api/src/trpc.d.ts",
+      "default": "./src/trpc.ts"
+    },
+    "./router/*": {
+      "types": "./dist/api/src/router/*.d.ts",
+      "default": "./src/router/*.ts"
+    },
     "./openapi": {
       "types": "./dist/api/src/openapi.d.ts",
       "default": "./src/openapi.ts"
