@@ -65,6 +65,7 @@ export default function BilderShell({ children }: { children: React.ReactNode })
 
           <button
             onClick={toggle}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent"
           >
             {collapsed ? (
@@ -80,6 +81,7 @@ export default function BilderShell({ children }: { children: React.ReactNode })
       </aside>
 
       <main
+        id="main-content"
         className="min-h-screen flex-1 transition-all duration-200"
         style={{ marginLeft: sidebarWidth }}
       >
