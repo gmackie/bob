@@ -25,3 +25,38 @@ export function promoteToTask(input: PromoteToTaskInput) {
     kind: "task" as const,
   };
 }
+
+export {
+  createWorkItemsClient,
+  workItemsRestPaths,
+  WorkItemsClientError,
+} from "./client";
+export type {
+  CreateArtifactInput,
+  CreateArtifactResult,
+  CreateCommentInput,
+  CreateCommentResult,
+  CreateNotificationInput,
+  CreateNotificationResult,
+  GetWorkItemInput,
+  GetWorkItemResult,
+  ListActivitiesInput,
+  ListActivitiesResult,
+  ListChildArtifactGroupsInput,
+  ListChildArtifactGroupsResult,
+  ListCommentsInput,
+  ListCommentsResult,
+  ListCurrentArtifactsInput,
+  ListCurrentArtifactsResult,
+  ListNotificationsInput,
+  ListNotificationsResult,
+  ListWorkItemsInput,
+  ListWorkItemsResult,
+  MarkNotificationAsReadInput,
+  MarkNotificationAsReadResult,
+  PromoteToTaskInput as PromoteToTaskRestInput,
+  PromoteToTaskResult,
+  WorkItemsClient,
+  WorkItemsClientOptions,
+  WorkItemsRestPath,
+} from "./client";
