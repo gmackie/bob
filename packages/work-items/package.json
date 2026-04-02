@@ -1,11 +1,15 @@
 {
   "name": "@bob/work-items",
-  "private": true,
+  "private": false,
   "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./src/index.ts"
+    },
+    "./schema": {
+      "types": "./dist/schema.d.ts",
+      "default": "./src/schema.ts"
     }
   },
   "license": "MIT",
@@ -19,7 +23,7 @@
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
   },
   "dependencies": {
-    "@bob/api": "workspace:*"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@bob/eslint-config": "workspace:*",

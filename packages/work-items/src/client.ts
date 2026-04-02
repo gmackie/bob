@@ -1,13 +1,38 @@
-import type { RouterInputs, RouterOutputs } from "@bob/api";
-
-type WorkItemsInputs = RouterInputs["workItems"];
-type WorkItemsOutputs = RouterOutputs["workItems"];
+import type {
+  CreateArtifactInput,
+  CreateArtifactResult,
+  CreateCommentInput,
+  CreateCommentResult,
+  CreateNotificationInput,
+  CreateNotificationResult,
+  GetWorkItemInput,
+  GetWorkItemResult,
+  ListActivitiesInput,
+  ListActivitiesResult,
+  ListChildArtifactGroupsInput,
+  ListChildArtifactGroupsResult,
+  ListCommentsInput,
+  ListCommentsResult,
+  ListCurrentArtifactsInput,
+  ListCurrentArtifactsResult,
+  ListNotificationsInput,
+  ListNotificationsResult,
+  ListWorkItemsInput,
+  ListWorkItemsResult,
+  MarkNotificationAsReadInput,
+  MarkNotificationAsReadResult,
+  PromoteToTaskInput,
+  PromoteToTaskResult,
+  UpdateWorkItemInput,
+  UpdateWorkItemResult,
+} from "./schema";
 
 type MaybePromise<T> = T | Promise<T>;
 
 const workItemsRestPaths = {
   list: "/api/v1/work-items/list",
   get: "/api/v1/work-items/get",
+  update: "/api/v1/work-items/update",
   promoteToTask: "/api/v1/work-items/promote-to-task",
   listComments: "/api/v1/work-items/list-comments",
   createComment: "/api/v1/work-items/create-comment",
@@ -18,42 +43,76 @@ const workItemsRestPaths = {
   listNotifications: "/api/v1/work-items/list-notifications",
   createNotification: "/api/v1/work-items/create-notification",
   markNotificationAsRead: "/api/v1/work-items/mark-notification-as-read",
-} as const satisfies Record<keyof WorkItemsInputs, `/api/v1/work-items/${string}`>;
+} as const satisfies Record<
+  keyof WorkItemsOperationInputMap,
+  `/api/v1/work-items/${string}`
+>;
 
 type WorkItemsOperationName = keyof typeof workItemsRestPaths;
 
 export type WorkItemsRestPath =
   (typeof workItemsRestPaths)[WorkItemsOperationName];
 
-export type ListWorkItemsInput = WorkItemsInputs["list"];
-export type ListWorkItemsResult = WorkItemsOutputs["list"];
-export type GetWorkItemInput = WorkItemsInputs["get"];
-export type GetWorkItemResult = WorkItemsOutputs["get"];
-export type PromoteToTaskInput = WorkItemsInputs["promoteToTask"];
-export type PromoteToTaskResult = WorkItemsOutputs["promoteToTask"];
-export type ListCommentsInput = WorkItemsInputs["listComments"];
-export type ListCommentsResult = WorkItemsOutputs["listComments"];
-export type CreateCommentInput = WorkItemsInputs["createComment"];
-export type CreateCommentResult = WorkItemsOutputs["createComment"];
-export type CreateArtifactInput = WorkItemsInputs["createArtifact"];
-export type CreateArtifactResult = WorkItemsOutputs["createArtifact"];
-export type ListActivitiesInput = WorkItemsInputs["listActivities"];
-export type ListActivitiesResult = WorkItemsOutputs["listActivities"];
-export type ListCurrentArtifactsInput = WorkItemsInputs["listCurrentArtifacts"];
-export type ListCurrentArtifactsResult =
-  WorkItemsOutputs["listCurrentArtifacts"];
-export type ListChildArtifactGroupsInput =
-  WorkItemsInputs["listChildArtifactGroups"];
-export type ListChildArtifactGroupsResult =
-  WorkItemsOutputs["listChildArtifactGroups"];
-export type ListNotificationsInput = WorkItemsInputs["listNotifications"];
-export type ListNotificationsResult = WorkItemsOutputs["listNotifications"];
-export type CreateNotificationInput = WorkItemsInputs["createNotification"];
-export type CreateNotificationResult = WorkItemsOutputs["createNotification"];
-export type MarkNotificationAsReadInput =
-  WorkItemsInputs["markNotificationAsRead"];
-export type MarkNotificationAsReadResult =
-  WorkItemsOutputs["markNotificationAsRead"];
+export type {
+  CreateArtifactInput,
+  CreateArtifactResult,
+  CreateCommentInput,
+  CreateCommentResult,
+  CreateNotificationInput,
+  CreateNotificationResult,
+  GetWorkItemInput,
+  GetWorkItemResult,
+  ListActivitiesInput,
+  ListActivitiesResult,
+  ListChildArtifactGroupsInput,
+  ListChildArtifactGroupsResult,
+  ListCommentsInput,
+  ListCommentsResult,
+  ListCurrentArtifactsInput,
+  ListCurrentArtifactsResult,
+  ListNotificationsInput,
+  ListNotificationsResult,
+  ListWorkItemsInput,
+  ListWorkItemsResult,
+  MarkNotificationAsReadInput,
+  MarkNotificationAsReadResult,
+  PromoteToTaskInput,
+  PromoteToTaskResult,
+  UpdateWorkItemInput,
+  UpdateWorkItemResult,
+} from "./schema";
+
+type WorkItemsOperationInputMap = {
+  list: ListWorkItemsInput;
+  get: GetWorkItemInput;
+  update: UpdateWorkItemInput;
+  promoteToTask: PromoteToTaskInput;
+  listComments: ListCommentsInput;
+  createComment: CreateCommentInput;
+  createArtifact: CreateArtifactInput;
+  listActivities: ListActivitiesInput;
+  listCurrentArtifacts: ListCurrentArtifactsInput;
+  listChildArtifactGroups: ListChildArtifactGroupsInput;
+  listNotifications: ListNotificationsInput;
+  createNotification: CreateNotificationInput;
+  markNotificationAsRead: MarkNotificationAsReadInput;
+};
+
+type WorkItemsOperationOutputMap = {
+  list: ListWorkItemsResult;
+  get: GetWorkItemResult;
+  update: UpdateWorkItemResult;
+  promoteToTask: PromoteToTaskResult;
+  listComments: ListCommentsResult;
+  createComment: CreateCommentResult;
+  createArtifact: CreateArtifactResult;
+  listActivities: ListActivitiesResult;
+  listCurrentArtifacts: ListCurrentArtifactsResult;
+  listChildArtifactGroups: ListChildArtifactGroupsResult;
+  listNotifications: ListNotificationsResult;
+  createNotification: CreateNotificationResult;
+  markNotificationAsRead: MarkNotificationAsReadResult;
+};
 
 export interface WorkItemsClientOptions {
   baseUrl: string;
@@ -86,6 +145,7 @@ export class WorkItemsClientError<TBody = unknown> extends Error {
 export interface WorkItemsClient {
   list(input: ListWorkItemsInput): Promise<ListWorkItemsResult>;
   get(input: GetWorkItemInput): Promise<GetWorkItemResult>;
+  update(input: UpdateWorkItemInput): Promise<UpdateWorkItemResult>;
   promoteToTask(input: PromoteToTaskInput): Promise<PromoteToTaskResult>;
   listComments(input: ListCommentsInput): Promise<ListCommentsResult>;
   createComment(input: CreateCommentInput): Promise<CreateCommentResult>;
@@ -176,8 +236,8 @@ function createMethodCaller<TOperation extends WorkItemsOperationName>(
   const path = workItemsRestPaths[operation];
 
   return async function callMethod(
-    input: WorkItemsInputs[TOperation],
-  ): Promise<WorkItemsOutputs[TOperation]> {
+    input: WorkItemsOperationInputMap[TOperation],
+  ): Promise<WorkItemsOperationOutputMap[TOperation]> {
     const headers = await resolveHeaders(options.getHeaders);
 
     if (!headers.has("accept")) {
@@ -206,7 +266,7 @@ function createMethodCaller<TOperation extends WorkItemsOperationName>(
       });
     }
 
-    return body as WorkItemsOutputs[TOperation];
+    return body as WorkItemsOperationOutputMap[TOperation];
   };
 }
 
@@ -216,6 +276,7 @@ export function createWorkItemsClient(
   return {
     list: createMethodCaller(options, "list"),
     get: createMethodCaller(options, "get"),
+    update: createMethodCaller(options, "update"),
     promoteToTask: createMethodCaller(options, "promoteToTask"),
     listComments: createMethodCaller(options, "listComments"),
     createComment: createMethodCaller(options, "createComment"),
