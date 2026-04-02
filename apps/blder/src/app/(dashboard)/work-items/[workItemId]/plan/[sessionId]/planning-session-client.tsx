@@ -102,7 +102,12 @@ export function PlanningSessionClient({
 
   // Start the session on the gateway if it's still provisioning
   const startSession = useMutation(
-    trpc.planSession.start.mutationOptions(),
+    trpc.planSession.start.mutationOptions({
+      onError: () => {
+        // Allow retry on failure
+        startedRef.current = false;
+      },
+    }),
   );
 
   // Save artifact content to work item
@@ -110,13 +115,16 @@ export function PlanningSessionClient({
     trpc.planSession.saveArtifact.mutationOptions(),
   );
 
+  // Also check the live session status — if it's stuck at provisioning, retry
+  const shouldStart =
+    !isReadOnly &&
+    !startedRef.current &&
+    workItem.projectId &&
+    (session.status === "provisioning" ||
+      (sessionStatus === "stopped" && session.status !== "stopped"));
+
   useEffect(() => {
-    if (
-      session.status === "provisioning" &&
-      !isReadOnly &&
-      !startedRef.current &&
-      workItem.projectId
-    ) {
+    if (shouldStart) {
       startedRef.current = true;
       startSession.mutate({
         sessionId: session.id,
@@ -126,7 +134,7 @@ export function PlanningSessionClient({
         workingDirectory: "/",
       });
     }
-  }, [session.status, session.id, isReadOnly, workItem, startSession]);
+  }, [shouldStart, session.id, workItem, startSession]);
 
   // Wire up the chat session (same hook as ChatPanel uses)
   const {
@@ -194,6 +202,24 @@ export function PlanningSessionClient({
       <span className="capitalize">{sessionStatus}</span>
       {!isConnected && sessionStatus !== "stopped" && (
         <span className="text-muted-foreground/60">(connecting...)</span>
+      )}
+      {(sessionStatus === "provisioning" || sessionStatus === "error" || sessionStatus === "stopped") && !isReadOnly && (
+        <button
+          onClick={() => {
+            startedRef.current = false;
+            startSession.mutate({
+              sessionId: session.id,
+              workspaceId: workItem.workspaceId,
+              projectId: workItem.projectId!,
+              projectName: workItem.projectName ?? "Project",
+              workingDirectory: "/",
+            });
+          }}
+          disabled={startSession.isPending}
+          className="rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
+        >
+          {startSession.isPending ? "Starting..." : "Retry"}
+        </button>
       )}
       <Link
         href={`/chat?session=${session.id}`}
