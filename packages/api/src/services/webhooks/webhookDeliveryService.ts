@@ -141,7 +141,7 @@ async function deliverToConfig(
           .update(webhookDeliveries)
           .set({
             status: "processed",
-            processedAt: new Date(),
+            processedAt: new Date().toISOString(),
             retryCount: attempt,
           })
           .where(eq(webhookDeliveries.id, deliveryId));

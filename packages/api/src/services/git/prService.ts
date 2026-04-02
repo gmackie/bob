@@ -70,16 +70,16 @@ export interface PrWithCommits {
   additions: number | null;
   deletions: number | null;
   changedFiles: number | null;
-  createdAt: Date;
-  updatedAt: Date | null;
-  mergedAt: Date | null;
-  closedAt: Date | null;
+  createdAt: string;
+  updatedAt: string | null;
+  mergedAt: string | null;
+  closedAt: string | null;
   commits: Array<{
     sha: string;
     message: string;
     authorName: string | null;
     authorEmail: string | null;
-    committedAt: Date;
+    committedAt: string;
     isBobCommit: boolean;
   }>;
 }
@@ -263,7 +263,7 @@ export async function updatePr(input: UpdatePrInput): Promise<PrWithCommits> {
       additions: remotePr.additions ?? prRecord.additions,
       deletions: remotePr.deletions ?? prRecord.deletions,
       changedFiles: remotePr.changedFiles ?? prRecord.changedFiles,
-      closedAt: remotePr.closedAt,
+      closedAt: remotePr.closedAt?.toISOString() ?? null,
     })
     .where(eq(pullRequests.id, input.pullRequestId))
     .returning();
@@ -288,7 +288,7 @@ export async function updatePr(input: UpdatePrInput): Promise<PrWithCommits> {
 
 export async function mergePr(
   input: MergePrInput,
-): Promise<{ success: boolean; mergedAt: Date }> {
+): Promise<{ success: boolean; mergedAt: string }> {
   const prRecord = await db.query.pullRequests.findFirst({
     where: and(
       eq(pullRequests.id, input.pullRequestId),
@@ -333,7 +333,7 @@ export async function mergePr(
     input.mergeMethod ?? "squash",
   );
 
-  const mergedAt = new Date();
+  const mergedAt = new Date().toISOString();
 
   await db
     .update(pullRequests)
@@ -362,7 +362,7 @@ async function syncPrCommits(
     message: string;
     authorName: string | null;
     authorEmail: string | null;
-    committedAt: Date;
+    committedAt: string;
     isBobCommit: boolean;
   }>
 > {
@@ -377,7 +377,7 @@ async function syncPrCommits(
     message: string;
     authorName: string | null;
     authorEmail: string | null;
-    committedAt: Date;
+    committedAt: string;
     isBobCommit: boolean;
   }> = [];
 
@@ -397,7 +397,7 @@ async function syncPrCommits(
         message: commit.message,
         authorName: commit.authorName,
         authorEmail: commit.authorEmail,
-        committedAt: commit.committedAt,
+        committedAt: commit.committedAt.toISOString(),
         sessionId: sessionId ?? null,
         isBobCommit,
       })
@@ -408,7 +408,7 @@ async function syncPrCommits(
       message: commit.message,
       authorName: commit.authorName,
       authorEmail: commit.authorEmail ?? null,
-      committedAt: commit.committedAt,
+      committedAt: commit.committedAt.toISOString(),
       isBobCommit,
     });
   }
@@ -423,7 +423,7 @@ export async function syncCommits(input: SyncCommitsInput): Promise<{
     message: string;
     authorName: string | null;
     authorEmail: string | null;
-    committedAt: Date;
+    committedAt: string;
     isBobCommit: boolean;
   }>;
 }> {
@@ -692,8 +692,8 @@ export async function refreshPrFromRemote(
       additions: remotePr.additions ?? prRecord.additions,
       deletions: remotePr.deletions ?? prRecord.deletions,
       changedFiles: remotePr.changedFiles ?? prRecord.changedFiles,
-      mergedAt: remotePr.mergedAt,
-      closedAt: remotePr.closedAt,
+      mergedAt: remotePr.mergedAt?.toISOString() ?? null,
+      closedAt: remotePr.closedAt?.toISOString() ?? null,
     })
     .where(eq(pullRequests.id, pullRequestId))
     .returning();
@@ -757,8 +757,8 @@ export async function upsertPrFromWebhook(params: {
   additions?: number;
   deletions?: number;
   changedFiles?: number;
-  mergedAt?: Date | null;
-  closedAt?: Date | null;
+  mergedAt?: string | null;
+  closedAt?: string | null;
 }): Promise<string> {
   const repo = await db.query.repositories.findFirst({
     where: and(

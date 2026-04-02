@@ -670,7 +670,7 @@ export async function completeTask(taskRunId: string): Promise<void> {
     .update(taskRuns)
     .set({
       status: "completed",
-      completedAt: new Date(),
+      completedAt: new Date().toISOString(),
     })
     .where(eq(taskRuns.id, taskRunId));
 }
@@ -787,7 +787,7 @@ export async function supersedeAndRestartTask(
     .set({
       status: "failed",
       blockedReason: reason,
-      completedAt: new Date(),
+      completedAt: new Date().toISOString(),
     })
     .where(eq(taskRuns.id, taskRunId));
 
@@ -798,7 +798,7 @@ export async function supersedeAndRestartTask(
         status: "stopped",
         blockedReason: reason,
         statusMessage: reason,
-        updatedAt: new Date(),
+        updatedAt: new Date().toISOString(),
       })
       .where(eq(chatConversations.id, taskRun.sessionId));
   }

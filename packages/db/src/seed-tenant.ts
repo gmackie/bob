@@ -26,7 +26,7 @@ async function seedTenant() {
     // Backfill workspaces that have no tenantId
     const updated = await db
       .update(workspaces)
-      .set({ tenantId: existing.id, updatedAt: new Date() })
+      .set({ tenantId: existing.id, updatedAt: new Date().toISOString() })
       .where(isNull(workspaces.tenantId));
     console.log(`Backfilled ${updated.rowCount} workspaces`);
 
@@ -53,7 +53,7 @@ async function seedTenant() {
   // Backfill all existing workspaces to tenant #1
   const updated = await db
     .update(workspaces)
-    .set({ tenantId: tenant.id, updatedAt: new Date() })
+    .set({ tenantId: tenant.id, updatedAt: new Date().toISOString() })
     .where(isNull(workspaces.tenantId));
   console.log(`Backfilled ${updated.rowCount} workspaces`);
 

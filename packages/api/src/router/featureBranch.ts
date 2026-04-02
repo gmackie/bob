@@ -166,7 +166,7 @@ export const featureBranchRouter = {
 
       const [updated] = await db
         .update(featureBranchTaskPRs)
-        .set({ mergedAt: new Date() })
+        .set({ mergedAt: new Date().toISOString() })
         .where(
           and(
             eq(featureBranchTaskPRs.featureBranchId, input.featureBranchId),

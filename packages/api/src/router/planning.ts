@@ -421,8 +421,8 @@ export const planningRouter = {
             assignee: undefined,
             labels: [] as Array<{ id: string; name: string; color: string }>,
             dueDate: undefined,
-            createdAt: item.createdAt.toISOString(),
-            updatedAt: item.updatedAt?.toISOString() ?? item.createdAt.toISOString(),
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt ?? item.createdAt,
           };
         });
       }
@@ -809,7 +809,7 @@ export const planningRouter = {
         return {
           id: comment!.id,
           body: comment!.body,
-          createdAt: comment!.createdAt.toISOString(),
+          createdAt: comment!.createdAt,
         };
       }
 
@@ -841,7 +841,7 @@ export const planningRouter = {
           id: c.id,
           body: c.body,
           user: undefined as { id: string; name: string } | undefined,
-          createdAt: c.createdAt.toISOString(),
+          createdAt: c.createdAt,
           replies: [] as Array<{
             id: string;
             body: string;

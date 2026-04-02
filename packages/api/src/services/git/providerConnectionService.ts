@@ -23,9 +23,9 @@ export interface ConnectionWithDecryptedToken {
   scopes: string | null;
   accessToken: string;
   refreshToken: string | null;
-  accessTokenExpiresAt: Date | null;
-  refreshTokenExpiresAt: Date | null;
-  createdAt: Date;
+  accessTokenExpiresAt: string | null;
+  refreshTokenExpiresAt: string | null;
+  createdAt: string;
 }
 
 async function ensureGitHubConnectionFromOAuth(userId: string): Promise<void> {
@@ -180,7 +180,7 @@ export async function listConnections(userId: string): Promise<
     instanceUrl: string | null;
     providerAccountId: string;
     providerUsername: string | null;
-    createdAt: Date;
+    createdAt: string;
   }>
 > {
   await ensureGitHubConnectionFromOAuth(userId);
@@ -238,8 +238,8 @@ export async function createConnection(params: {
       refreshTokenCiphertext: encryptedRefreshToken?.ciphertext ?? null,
       refreshTokenIv: encryptedRefreshToken?.iv ?? null,
       refreshTokenTag: encryptedRefreshToken?.tag ?? null,
-      accessTokenExpiresAt: params.accessTokenExpiresAt ?? null,
-      refreshTokenExpiresAt: params.refreshTokenExpiresAt ?? null,
+      accessTokenExpiresAt: params.accessTokenExpiresAt?.toISOString() ?? null,
+      refreshTokenExpiresAt: params.refreshTokenExpiresAt?.toISOString() ?? null,
     })
     .returning({ id: gitProviderConnections.id });
 
@@ -286,7 +286,7 @@ export async function updateConnectionToken(
       refreshTokenCiphertext: encryptedRefreshToken?.ciphertext,
       refreshTokenIv: encryptedRefreshToken?.iv,
       refreshTokenTag: encryptedRefreshToken?.tag,
-      accessTokenExpiresAt: accessTokenExpiresAt ?? null,
+      accessTokenExpiresAt: accessTokenExpiresAt?.toISOString() ?? null,
     })
     .where(eq(gitProviderConnections.id, connectionId));
 }
@@ -334,7 +334,7 @@ export async function ensureValidAccessToken(
   }
 
   const fiveMinutesFromNow = new Date(Date.now() + 5 * 60 * 1000);
-  if (connection.accessTokenExpiresAt > fiveMinutesFromNow) {
+  if (new Date(connection.accessTokenExpiresAt) > fiveMinutesFromNow) {
     return connection.accessToken;
   }
 

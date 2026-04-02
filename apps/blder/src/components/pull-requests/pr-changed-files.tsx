@@ -9,12 +9,12 @@ export interface PrChangedFilesProps {
     sha: string;
     message: string;
     authorName: string | null;
-    committedAt: Date;
+    committedAt: string;
     isBobCommit: boolean;
   }>;
 }
 
-function timeAgo(date: Date): string {
+function timeAgo(date: string | Date): string {
   const now = new Date();
   const diffMs = now.getTime() - new Date(date).getTime();
   const diffMins = Math.floor(diffMs / 60_000);

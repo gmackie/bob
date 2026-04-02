@@ -374,7 +374,7 @@ export const planSessionRouter = {
         title: string | null;
         sessionId: string | null;
         content: string | null;
-        createdAt: Date;
+        createdAt: string;
       }> = [];
 
       for (const artifact of artifacts) {

@@ -524,7 +524,7 @@ const markNotificationAsReadProcedure = protectedProcedure
       .update(notifications)
       .set({
         read: true,
-        readAt: new Date(),
+        readAt: new Date().toISOString(),
       })
       .where(
         and(

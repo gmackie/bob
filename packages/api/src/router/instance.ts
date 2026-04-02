@@ -174,7 +174,7 @@ export const instanceRouter = {
           status: input.status,
           pid: input.pid ?? null,
           errorMessage: input.errorMessage ?? null,
-          lastActivity: new Date(),
+          lastActivity: new Date().toISOString(),
         })
         .where(
           and(

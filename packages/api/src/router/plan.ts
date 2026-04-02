@@ -175,7 +175,7 @@ export const planRouter = {
 
       await ctx.db
         .update(worktreePlans)
-        .set({ lastSyncedAt: new Date() })
+        .set({ lastSyncedAt: new Date().toISOString() })
         .where(eq(worktreePlans.id, input.id));
 
       return { success: true };
@@ -227,7 +227,7 @@ export const planRouter = {
 
       const updateData: Record<string, unknown> = { ...updates };
       if (updates.status === "completed") {
-        updateData.completedAt = new Date();
+        updateData.completedAt = new Date().toISOString();
       }
 
       const [updated] = await ctx.db

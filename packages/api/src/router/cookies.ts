@@ -46,7 +46,7 @@ export const cookiesRouter = {
         const normalizedDomain = normalizeDomain(cookie.domain);
         const expiresDate =
           cookie.expires && cookie.expires > 0
-            ? new Date(cookie.expires * 1000)
+            ? new Date(cookie.expires * 1000).toISOString()
             : null;
 
         await ctx.db
@@ -162,7 +162,7 @@ export const cookiesRouter = {
 
       const now = new Date();
       const decrypted = cookies
-        .filter((c) => !c.expires || c.expires > now)
+        .filter((c) => !c.expires || new Date(c.expires) > now)
         .map((c) => ({
           name: c.name,
           value: decryptCookieValue(
@@ -175,7 +175,7 @@ export const cookiesRouter = {
           ),
           domain: c.domain,
           path: c.path,
-          expires: c.expires ? Math.floor(c.expires.getTime() / 1000) : -1,
+          expires: c.expires ? Math.floor(new Date(c.expires).getTime() / 1000) : -1,
           secure: c.secure,
           httpOnly: c.httpOnly,
           sameSite: c.sameSite as "Strict" | "Lax" | "None",
