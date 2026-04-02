@@ -16,7 +16,7 @@ import {
 
 import { protectedProcedure } from "../trpc";
 
-const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:3002";
+function getGatewayUrl() { return process.env.GATEWAY_URL ?? "http://localhost:3002"; }
 
 async function loadAccessibleWorkItem(db: any, userId: string, workItemId: string) {
   const workItem = await db.query.workItems.findFirst({
@@ -225,7 +225,7 @@ export const chatRouter = {
         .returning();
 
       try {
-        const response = await fetch(`${GATEWAY_URL}/chat`, {
+        const response = await fetch(`${getGatewayUrl()}/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

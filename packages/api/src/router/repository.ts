@@ -17,14 +17,14 @@ import {
 
 import { protectedProcedure } from "../trpc";
 
-const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:3002";
+function getGatewayUrl() { return process.env.GATEWAY_URL ?? "http://localhost:3002"; }
 
 async function gatewayRequest(
   userId: string,
   endpoint: string,
   body: Record<string, unknown>
 ): Promise<unknown> {
-  const response = await fetch(`${GATEWAY_URL}${endpoint}`, {
+  const response = await fetch(`${getGatewayUrl()}${endpoint}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ userId, ...body }),

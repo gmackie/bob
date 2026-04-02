@@ -41,7 +41,7 @@ const systemStatusSchema = z.object({
 
 export type SystemStatus = z.infer<typeof systemStatusSchema>;
 
-const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:3002";
+function getGatewayUrl() { return process.env.GATEWAY_URL ?? "http://localhost:3002"; }
 
 export const systemRouter = {
   health: publicProcedure.query(() => {
@@ -55,7 +55,7 @@ export const systemRouter = {
     const userId = ctx.session.user.id;
 
     try {
-      const response = await fetch(`${GATEWAY_URL}/container/ensure`, {
+      const response = await fetch(`${getGatewayUrl()}/container/ensure`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId }),
