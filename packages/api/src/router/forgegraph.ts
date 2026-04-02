@@ -413,7 +413,16 @@ export const forgegraphRouter = {
         });
       }
 
-      const app = await fg.getApp(input.appId);
+      // ForgeGraph's /apps/:id endpoint uses slug, not id.
+      // Look up from the full list instead to match by id.
+      const allApps = await fg.listApps();
+      const app = allApps.find((a) => a.id === input.appId);
+      if (!app) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "ForgeGraph app not found",
+        });
+      }
 
       const [project] = await ctx.db
         .insert(projects)
