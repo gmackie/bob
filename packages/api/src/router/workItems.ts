@@ -27,7 +27,8 @@ import {
   listWorkItemsInputSchema,
   markNotificationAsReadInputSchema,
   promoteToTaskInputSchema,
-} from "../contracts/work-items-rest";
+  updateWorkItemInputSchema,
+} from "@bob/work-items/schema";
 import { isForgeGraphEnabled, requireForgeGraphClient } from "../services/forgegraph/config";
 import { resolveForgeGraphId, cacheMapping } from "../services/forgegraph/idResolver";
 import type { FgWorkItem, FgArtifact, FgActivity } from "../services/forgegraph/forgeGraphClient";
@@ -415,6 +416,75 @@ const buildPromoteToTaskProcedure = (procedure: any) =>
     return workItem ?? existing;
   });
 
+const buildUpdateWorkItemProcedure = (procedure: any) =>
+  procedure.input(updateWorkItemInputSchema).mutation(async ({ ctx, input }: any) => {
+    const existing = await loadAccessibleWorkItem(
+      ctx.db,
+      ctx.session.user.id,
+      input.id,
+    );
+
+    const updates = Object.fromEntries(
+      Object.entries({
+        title: input.title,
+        description: input.description,
+        status: input.status,
+      }).filter(([, value]) => value !== undefined),
+    );
+
+    if (Object.keys(updates).length === 0) {
+      return existing;
+    }
+
+    const [workItem] = await ctx.db
+      .update(workItems)
+      .set(updates)
+      .where(eq(workItems.id, input.id))
+      .returning();
+
+    const nextWorkItem = workItem ?? existing;
+
+    const changedFields: Array<{
+      field: "title" | "description" | "status";
+      previousValue: string | null;
+      nextValue: string | null;
+    }> = [
+      {
+        field: "title",
+        previousValue: existing.title ?? null,
+        nextValue: input.title ?? null,
+      },
+      {
+        field: "description",
+        previousValue: existing.description ?? null,
+        nextValue: input.description ?? null,
+      },
+      {
+        field: "status",
+        previousValue: existing.status ?? null,
+        nextValue: input.status ?? null,
+      },
+    ].filter(
+      (change) =>
+        change.nextValue !== null && change.previousValue !== change.nextValue,
+    );
+
+    if (changedFields.length > 0) {
+      await ctx.db.insert(activities).values(
+        changedFields.map((change) => ({
+          workItemId: input.id,
+          userId: ctx.session.user.id,
+          type: "status_changed",
+          fromValue: change.previousValue,
+          toValue: change.nextValue,
+          metadata: { field: change.field },
+        })),
+      );
+    }
+
+    return nextWorkItem;
+  });
+
 const buildListActivitiesProcedure = (procedure: any) =>
   procedure.input(listActivitiesInputSchema).query(async ({ ctx, input }: any) => {
     await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
@@ -544,6 +614,7 @@ const buildMarkNotificationAsReadProcedure = (procedure: any) =>
 
 const listWorkItemsProcedure = buildListWorkItemsProcedure(protectedProcedure);
 const getWorkItemProcedure = buildGetWorkItemProcedure(protectedProcedure);
+const updateWorkItemProcedure = buildUpdateWorkItemProcedure(protectedProcedure);
 const listCommentsProcedure = buildListCommentsProcedure(protectedProcedure);
 const createCommentProcedure = buildCreateCommentProcedure(protectedProcedure);
 const createArtifactProcedure = buildCreateArtifactProcedure(protectedProcedure);
@@ -564,6 +635,8 @@ const publicListWorkItemsProcedure =
   buildListWorkItemsProcedure(apiKeyReadProcedure);
 const publicGetWorkItemProcedure =
   buildGetWorkItemProcedure(apiKeyReadProcedure);
+const publicUpdateWorkItemProcedure =
+  buildUpdateWorkItemProcedure(apiKeyWriteProcedure);
 const publicListCommentsProcedure =
   buildListCommentsProcedure(apiKeyReadProcedure);
 const publicCreateCommentProcedure =
@@ -788,6 +861,7 @@ export const activityRouter = {
 export const workItemsRouter = {
   list: listWorkItemsProcedure,
   get: getWorkItemProcedure,
+  update: updateWorkItemProcedure,
   promoteToTask: promoteToTaskProcedure,
   listComments: listCommentsProcedure,
   createComment: createCommentProcedure,
@@ -803,6 +877,7 @@ export const workItemsRouter = {
 export const publicWorkItemsRouter = {
   list: publicListWorkItemsProcedure,
   get: publicGetWorkItemProcedure,
+  update: publicUpdateWorkItemProcedure,
   promoteToTask: publicPromoteToTaskProcedure,
   listComments: publicListCommentsProcedure,
   createComment: publicCreateCommentProcedure,

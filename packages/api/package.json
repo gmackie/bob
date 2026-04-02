@@ -90,6 +90,7 @@
     "@bob/db": "workspace:*",
     "@bob/execution": "workspace:*",
     "@bob/execution-lib": "workspace:*",
+    "@bob/work-items": "workspace:*",
     "@bob/validators": "workspace:*",
     "@elevenlabs/client": "^0.13.0",
     "@trpc/server": "catalog:",
