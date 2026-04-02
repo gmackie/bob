@@ -307,7 +307,10 @@ export const publicApiRouter = {
 
   // POST /workspaces/:id/heartbeat
   heartbeat: apiKeyWriteProcedure
-    .input(z.object({ workspaceId: z.string().uuid() }))
+    .input(z.object({
+      workspaceId: z.string().uuid(),
+      agentTypes: z.array(z.string()).optional(),
+    }))
     .mutation(async ({ ctx, input }) => {
       const workspace = await ctx.db.query.workspaces.findFirst({
         where: eq(workspaces.id, input.workspaceId),
@@ -317,9 +320,21 @@ export const publicApiRouter = {
       }
       await assertTenantAccess(ctx.db, ctx.session.user.id, workspace.tenantId);
 
+      const updates: Record<string, unknown> = {
+        lastHeartbeat: new Date().toISOString(),
+      };
+
+      if (input.agentTypes && input.agentTypes.length > 0) {
+        const agentConfigs: Record<string, unknown> = {};
+        for (const agent of input.agentTypes) {
+          agentConfigs[agent] = { available: true };
+        }
+        updates.agentConfigs = agentConfigs;
+      }
+
       await ctx.db
         .update(workspaces)
-        .set({ lastHeartbeat: new Date().toISOString() })
+        .set(updates)
         .where(
           and(
             eq(workspaces.id, input.workspaceId),
