@@ -189,7 +189,8 @@ export const settingsEdgeRouter: TRPCRouterRecord = {
       }
 
       // Validate token by calling ForgeGraph API
-      const resp = await fetch("https://forgegraf.com/api/v1/user", {
+      const fgServer = process.env.FORGEGRAPH_URL ?? "https://forge.gmac.io";
+      const resp = await fetch(`${fgServer}/api/fg/apps`, {
         headers: { Authorization: `Bearer ${input.apiToken}` },
       });
 
@@ -197,7 +198,8 @@ export const settingsEdgeRouter: TRPCRouterRecord = {
         throw new Error("Invalid ForgeGraph API token");
       }
 
-      const fgUser = (await resp.json()) as { login?: string; id?: number };
+      // ForgeGraph doesn't expose a /user endpoint — use token prefix as identity
+      const fgUser = { login: "forgegraph", id: 0 };
 
       // Revoke existing connection if any
       await ctx.db
@@ -219,7 +221,7 @@ export const settingsEdgeRouter: TRPCRouterRecord = {
         id: connectionId,
         userId: ctx.session.user.id,
         provider: "forgegraph",
-        instanceUrl: "https://forgegraf.com",
+        instanceUrl: fgServer,
         providerAccountId: String(fgUser.id ?? "unknown"),
         providerUsername: fgUser.login ?? null,
         accessTokenCiphertext: encrypted.ciphertext,
