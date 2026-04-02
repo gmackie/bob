@@ -35,7 +35,9 @@ function decryptProviderToken(
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
 }
 
-const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:3002";
+function getGatewayUrl() {
+  return process.env.GATEWAY_URL ?? "http://localhost:3002";
+}
 
 export interface PlanningTask {
   id: string;
@@ -103,7 +105,7 @@ export async function gatewayRequest(
   endpoint: string,
   body: Record<string, unknown>,
 ): Promise<unknown> {
-  const response = await fetch(`${GATEWAY_URL}${endpoint}`, {
+  const response = await fetch(`${getGatewayUrl()}${endpoint}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ userId, ...body }),

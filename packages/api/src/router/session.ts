@@ -30,9 +30,9 @@ import { createOpenCodeClient } from "../services/opencode/opencodeClient";
 import { buildPlanningWorkItemUrl } from "../services/integrations/planningRemoteConfig";
 import { protectedProcedure } from "../trpc";
 
-const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:3002";
-const GATEWAY_PUBLIC_URL = process.env.GATEWAY_PUBLIC_URL ?? GATEWAY_URL;
-const getGatewaySocketUrl = (): string => `${GATEWAY_PUBLIC_URL.replace(/^http/, "ws")}/sessions`;
+function getGatewayUrl() { return process.env.GATEWAY_URL ?? "http://localhost:3002"; }
+function getGatewayPublicUrl() { return process.env.GATEWAY_PUBLIC_URL ?? getGatewayUrl(); }
+const getGatewaySocketUrl = (): string => `${getGatewayPublicUrl().replace(/^http/, "ws")}/sessions`;
 
 // Initialize ElevenLabs session service (singleton)
 let elevenlabsService: ElevenLabsSessionService | null = null;
