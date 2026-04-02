@@ -132,13 +132,16 @@ function StartAgentButton({ workItemId }: { workItemId: string }) {
   const executeTask = useMutation(
     trpc.taskRun.execute.mutationOptions({
       onSuccess: (result: any) => {
-        toast(`Agent started on branch ${result.branch}`);
-        // Navigate to the session if one was created
-        if (result.sessionId) {
+        if (result.status === "blocked") {
+          toast(result.blockedReason ?? "Agent blocked");
+        } else if (result.sessionId) {
+          toast(`Agent started on branch ${result.branch ?? "unknown"}`);
           router.push(`/work-items/${workItemId}/plan/${result.sessionId}`);
+          return;
         } else {
-          router.refresh();
+          toast(`Agent started on branch ${result.branch ?? "unknown"}`);
         }
+        router.refresh();
       },
       onError: (err) => {
         toast(err.message, {
