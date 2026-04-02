@@ -3,7 +3,7 @@ import { randomBytes, createHash } from "node:crypto";
 import { z } from "zod/v4";
 import { TRPCError } from "@trpc/server";
 
-import { and, desc, eq, inArray, sql } from "@bob/db";
+import { and, desc, eq, inArray } from "@bob/db";
 import {
   agentRuns,
   apiKeys,
@@ -109,7 +109,7 @@ export const publicApiRouter = {
           ownerUserId: ctx.session.user.id,
           tenantId: membership.tenantId,
           machineId: input.machineId,
-          lastHeartbeat: new Date(),
+          lastHeartbeat: new Date().toISOString(),
         })
         .returning();
 
@@ -317,9 +317,15 @@ export const publicApiRouter = {
       }
       await assertTenantAccess(ctx.db, ctx.session.user.id, workspace.tenantId);
 
-      await ctx.db.execute(
-        sql`UPDATE workspaces SET last_heartbeat = now() WHERE id = ${input.workspaceId} AND tenant_id = ${workspace.tenantId}`,
-      );
+      await ctx.db
+        .update(workspaces)
+        .set({ lastHeartbeat: new Date().toISOString() })
+        .where(
+          and(
+            eq(workspaces.id, input.workspaceId),
+            eq(workspaces.tenantId, workspace.tenantId),
+          ),
+        );
       return { ok: true };
     }),
 

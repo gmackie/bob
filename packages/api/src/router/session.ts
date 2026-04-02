@@ -518,7 +518,7 @@ export const sessionRouter = {
         .update(chatConversations)
         .set({
           status: "running",
-          lastActivityAt: new Date(),
+          lastActivityAt: new Date().toISOString(),
           nextSeq: sql`${chatConversations.nextSeq} + 2`,
         })
         .where(eq(chatConversations.id, input.sessionId))
@@ -584,7 +584,7 @@ export const sessionRouter = {
               message: errorMessage,
               timestamp: new Date().toISOString(),
             },
-            lastActivityAt: new Date(),
+            lastActivityAt: new Date().toISOString(),
           })
           .where(eq(chatConversations.id, input.sessionId));
 
@@ -615,7 +615,7 @@ export const sessionRouter = {
         .set({
           status: input.status,
           lastError: input.lastError,
-          lastActivityAt: new Date(),
+          lastActivityAt: new Date().toISOString(),
         })
         .where(
           and(
@@ -661,7 +661,7 @@ export const sessionRouter = {
       const canClaim =
         !session.claimedByGatewayId ||
         session.claimedByGatewayId === input.gatewayId ||
-        (session.leaseExpiresAt && session.leaseExpiresAt < new Date());
+        (session.leaseExpiresAt && new Date(session.leaseExpiresAt) < new Date());
 
       if (!canClaim) {
         throw new TRPCError({
@@ -674,7 +674,7 @@ export const sessionRouter = {
         .update(chatConversations)
         .set({
           claimedByGatewayId: input.gatewayId,
-          leaseExpiresAt: new Date(Date.now() + input.leaseMs),
+          leaseExpiresAt: new Date(Date.now() + input.leaseMs).toISOString(),
         })
         .where(eq(chatConversations.id, input.sessionId))
         .returning();
@@ -749,7 +749,7 @@ export const sessionRouter = {
         .update(chatConversations)
         .set({
           nextSeq: sql`GREATEST(${chatConversations.nextSeq}, ${input.seq + 1})`,
-          lastActivityAt: new Date(),
+          lastActivityAt: new Date().toISOString(),
         })
         .where(eq(chatConversations.id, input.sessionId));
 
@@ -802,7 +802,7 @@ export const sessionRouter = {
         .update(chatConversations)
         .set({
           nextSeq: sql`GREATEST(${chatConversations.nextSeq}, ${maxSeq + 1})`,
-          lastActivityAt: new Date(),
+          lastActivityAt: new Date().toISOString(),
         })
         .where(eq(chatConversations.id, input.sessionId));
 
@@ -1117,7 +1117,7 @@ export const sessionRouter = {
           .update(chatConversations)
           .set({
             nextSeq: sql`GREATEST(${chatConversations.nextSeq}, ${nextSeq + 1})`,
-            lastActivityAt: new Date(),
+            lastActivityAt: new Date().toISOString(),
           })
           .where(eq(chatConversations.id, input.sessionId));
       });

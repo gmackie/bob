@@ -15,8 +15,8 @@ export interface PrListItemProps {
   remoteName: string;
   additions: number | null;
   deletions: number | null;
-  createdAt: Date;
-  mergedAt: Date | null;
+  createdAt: string;
+  mergedAt: string | null;
 }
 
 function statusDotColor(status: string): string {
@@ -48,7 +48,7 @@ function statusLabel(status: string): string {
   }
 }
 
-function timeAgo(date: Date): string {
+function timeAgo(date: string | Date): string {
   const now = new Date();
   const diffMs = now.getTime() - new Date(date).getTime();
   const diffMins = Math.floor(diffMs / 60_000);

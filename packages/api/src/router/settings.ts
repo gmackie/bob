@@ -197,7 +197,7 @@ export const settingsRouter = {
     .mutation(async ({ ctx, input }) => {
       const [revoked] = await ctx.db
         .update(apiKeys)
-        .set({ revokedAt: new Date() })
+        .set({ revokedAt: new Date().toISOString() })
         .where(
           and(
             eq(apiKeys.id, input.id),

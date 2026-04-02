@@ -9,9 +9,9 @@ export const Post = pgTable("post", (t) => ({
   id: t.uuid().notNull().primaryKey().defaultRandom(),
   title: t.varchar({ length: 256 }).notNull(),
   content: t.text().notNull(),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t
-    .timestamp({ mode: "date", withTimezone: true })
+    .timestamp({ mode: "string", withTimezone: true })
     .$onUpdateFn(() => sql`now()`),
 }));
 
@@ -36,9 +36,9 @@ export const userPreferences = pgTable("user_preferences", (t) => ({
   timezone: t.varchar({ length: 50 }).notNull().default("UTC"),
   emailNotifications: t.boolean().notNull().default(true),
   pushNotifications: t.boolean().notNull().default(true),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t
-    .timestamp({ mode: "date", withTimezone: true })
+    .timestamp({ mode: "string", withTimezone: true })
     .$onUpdateFn(() => sql`now()`),
 }));
 
@@ -52,10 +52,10 @@ export const apiKeys = pgTable("api_keys", (t) => ({
   keyHash: t.text().notNull(),
   keyPrefix: t.varchar({ length: 12 }).notNull(),
   permissions: t.json().$type<string[]>().notNull().default(["read"]),
-  lastUsedAt: t.timestamp({ mode: "date", withTimezone: true }),
-  expiresAt: t.timestamp({ mode: "date", withTimezone: true }),
-  createdAt: t.timestamp().defaultNow().notNull(),
-  revokedAt: t.timestamp({ mode: "date", withTimezone: true }),
+  lastUsedAt: t.timestamp({ mode: "string", withTimezone: true }),
+  expiresAt: t.timestamp({ mode: "string", withTimezone: true }),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
+  revokedAt: t.timestamp({ mode: "string", withTimezone: true }),
 }));
 
 // --- Tenants ---
@@ -78,8 +78,8 @@ export const tenants = pgTable("tenants", (t) => ({
   slug: t.varchar({ length: 64 }).notNull().unique(),
   plan: tenantPlanEnum("plan").notNull().default("free"),
   forgeGraphProjectId: t.text("forge_graph_project_id"),
-  createdAt: t.timestamp().defaultNow().notNull(),
-  updatedAt: t.timestamp().defaultNow().notNull(),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
+  updatedAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
 }));
 
 export const tenantMembers = pgTable(
@@ -92,7 +92,7 @@ export const tenantMembers = pgTable(
       .references(() => tenants.id, { onDelete: "cascade" }),
     userId: t.text("user_id").notNull(),
     role: tenantMemberRoleEnum("role").notNull().default("member"),
-    joinedAt: t.timestamp().defaultNow().notNull(),
+    joinedAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   }),
   (table) => [
     uniqueIndex("tenant_members_tenant_user_idx").on(
@@ -130,7 +130,7 @@ export const agentRuns = pgTable(
     startedAt: t.timestamp("started_at"),
     completedAt: t.timestamp("completed_at"),
     summary: t.json("summary").$type<Record<string, unknown>>(),
-    createdAt: t.timestamp().defaultNow().notNull(),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   }),
   (table) => [
     index("agent_runs_workspace_idx").on(table.workspaceId),
@@ -157,7 +157,7 @@ export const runArtifacts = pgTable(
     type: runArtifactTypeEnum("type").notNull(),
     storageKey: t.text("storage_key").notNull(),
     metadata: t.json("metadata").$type<Record<string, unknown>>(),
-    createdAt: t.timestamp().defaultNow().notNull(),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   }),
   (table) => [index("run_artifacts_run_idx").on(table.runId)],
 );
@@ -266,9 +266,9 @@ export const workItems = pgTable("work_items", (t) => ({
   title: t.varchar({ length: 256 }).notNull(),
   description: t.text(),
   status: t.varchar({ length: 40 }).notNull().default("draft"),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t
-    .timestamp({ mode: "date", withTimezone: true })
+    .timestamp({ mode: "string", withTimezone: true })
     .$onUpdateFn(() => sql`now()`),
 }));
 
@@ -289,9 +289,9 @@ export const planDrafts = pgTable(
     sortOrder: t.integer().notNull().default(0),
     status: t.varchar({ length: 20 }).notNull().default("draft"),
     // status: "draft" | "committed" | "discarded"
-    createdAt: t.timestamp().defaultNow().notNull(),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
     updatedAt: t
-      .timestamp({ mode: "date", withTimezone: true })
+      .timestamp({ mode: "string", withTimezone: true })
       .$onUpdateFn(() => sql`now()`),
   }),
   (table) => [
@@ -362,7 +362,7 @@ export const workItemDependencies = pgTable(
       .uuid()
       .notNull()
       .references(() => workItems.id, { onDelete: "cascade" }),
-    createdAt: t.timestamp().defaultNow().notNull(),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   }),
   (table) => [
     {
@@ -405,8 +405,8 @@ export const dispatchBatches = pgTable("dispatch_batches", (t) => ({
   totalTasks: t.integer().notNull().default(0),
   completedTasks: t.integer().notNull().default(0),
   failedTasks: t.integer().notNull().default(0),
-  createdAt: t.timestamp().defaultNow().notNull(),
-  updatedAt: t.timestamp({ mode: "date", withTimezone: true }).$onUpdateFn(() => sql`now()`),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
+  updatedAt: t.timestamp({ mode: "string", withTimezone: true }).$onUpdateFn(() => sql`now()`),
 }));
 
 export const dispatchItems = pgTable(
@@ -426,8 +426,8 @@ export const dispatchItems = pgTable(
     taskRunId: t.uuid().references(() => taskRuns.id, { onDelete: "set null" }),
     sortOrder: t.integer().notNull().default(0),
     pipelineState: t.varchar({ length: 30 }),
-    createdAt: t.timestamp().defaultNow().notNull(),
-    updatedAt: t.timestamp({ mode: "date", withTimezone: true }).$onUpdateFn(() => sql`now()`),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
+    updatedAt: t.timestamp({ mode: "string", withTimezone: true }).$onUpdateFn(() => sql`now()`),
   }),
   (table) => [
     { name: "dispatch_items_batch_idx", columns: [table.batchId] },
@@ -497,15 +497,15 @@ export const workspaces = pgTable("workspaces", (t) => ({
   name: t.varchar({ length: 128 }).notNull(),
   slug: t.varchar({ length: 64 }).notNull().unique(),
   description: t.text(),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t
-    .timestamp({ mode: "date", withTimezone: true })
+    .timestamp({ mode: "string", withTimezone: true })
     .$onUpdateFn(() => sql`now()`),
   tenantId: t.uuid("tenant_id").references(() => tenants.id, {
     onDelete: "cascade",
   }),
   machineId: t.text("machine_id"),
-  lastHeartbeat: t.timestamp("last_heartbeat"),
+  lastHeartbeat: t.timestamp("last_heartbeat", { mode: "string" }),
   agentConfigs: t.json("agent_configs").$type<Record<string, unknown>>(),
 }));
 
@@ -534,7 +534,7 @@ export const workspaceMembers = pgTable("workspace_members", (t) => ({
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
   role: workspaceMemberRoleEnum().notNull().default("member"),
-  joinedAt: t.timestamp().defaultNow().notNull(),
+  joinedAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
 }));
 
 export const projects = pgTable("projects", (t) => ({
@@ -563,9 +563,9 @@ export const projects = pgTable("projects", (t) => ({
     }>()
     .notNull()
     .default({}),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t
-    .timestamp({ mode: "date", withTimezone: true })
+    .timestamp({ mode: "string", withTimezone: true })
     .$onUpdateFn(() => sql`now()`),
 }));
 
@@ -620,9 +620,9 @@ export const repositories = pgTable("repositories", (t) => ({
   remoteName: t.text(),
   remoteInstanceUrl: t.text(),
   gitProviderConnectionId: t.uuid(),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t
-    .timestamp({ mode: "date", withTimezone: true })
+    .timestamp({ mode: "string", withTimezone: true })
     .$onUpdateFn(() => sql`now()`),
 }));
 
@@ -652,9 +652,9 @@ export const worktrees = pgTable("worktrees", (t) => ({
   branch: t.varchar({ length: 256 }).notNull(),
   preferredAgent: t.varchar({ length: 50 }).notNull().default("claude"),
   isMainWorktree: t.boolean().notNull().default(false),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t
-    .timestamp({ mode: "date", withTimezone: true })
+    .timestamp({ mode: "string", withTimezone: true })
     .$onUpdateFn(() => sql`now()`),
 }));
 
@@ -689,10 +689,10 @@ export const agentInstances = pgTable("agent_instances", (t) => ({
   pid: t.integer(),
   port: t.integer(),
   errorMessage: t.text(),
-  lastActivity: t.timestamp({ mode: "date", withTimezone: true }),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  lastActivity: t.timestamp({ mode: "string", withTimezone: true }),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t
-    .timestamp({ mode: "date", withTimezone: true })
+    .timestamp({ mode: "string", withTimezone: true })
     .$onUpdateFn(() => sql`now()`),
 }));
 
@@ -725,9 +725,9 @@ export const tokenUsageSessions = pgTable("token_usage_sessions", (t) => ({
   cacheReadTokens: t.integer().notNull().default(0),
   cacheCreationTokens: t.integer().notNull().default(0),
   totalCostUsd: t.numeric({ precision: 10, scale: 6 }).notNull().default("0"),
-  sessionStart: t.timestamp().notNull(),
-  sessionEnd: t.timestamp(),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  sessionStart: t.timestamp({ mode: "string" }).notNull(),
+  sessionEnd: t.timestamp({ mode: "string" }),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
 }));
 
 export const instanceUsageSummary = pgTable("instance_usage_summary", (t) => ({
@@ -751,8 +751,8 @@ export const instanceUsageSummary = pgTable("instance_usage_summary", (t) => ({
   totalCacheCreationTokens: t.bigint({ mode: "number" }).notNull().default(0),
   totalCostUsd: t.numeric({ precision: 12, scale: 6 }).notNull().default("0"),
   sessionCount: t.integer().notNull().default(0),
-  firstUsage: t.timestamp().notNull(),
-  lastUsage: t.timestamp().notNull(),
+  firstUsage: t.timestamp({ mode: "string" }).notNull(),
+  lastUsage: t.timestamp({ mode: "string" }).notNull(),
 }));
 
 export const dailyUsageStats = pgTable("daily_usage_stats", (t) => ({
@@ -813,7 +813,7 @@ export const requirements = pgTable("requirements", (t) => ({
     .default("pending"),
   linkedTaskId: t.uuid(),
   sortOrder: t.integer().notNull().default(0),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
 }), (table) => [
   index("requirements_work_item_id_idx").on(table.workItemId),
 ]);
@@ -983,12 +983,12 @@ export const chatConversations = pgTable(
     opencodeSessionId: t.text(),
     status: t.varchar({ length: 20 }).notNull().default("stopped"),
     nextSeq: t.bigint({ mode: "number" }).notNull().default(1),
-    lastActivityAt: t.timestamp({ mode: "date", withTimezone: true }),
+    lastActivityAt: t.timestamp({ mode: "string", withTimezone: true }),
     lastError: t
       .json()
       .$type<{ code: string; message: string; timestamp: string }>(),
     claimedByGatewayId: t.text(),
-    leaseExpiresAt: t.timestamp({ mode: "date", withTimezone: true }),
+    leaseExpiresAt: t.timestamp({ mode: "string", withTimezone: true }),
     gitBranch: t.text(),
     pullRequestId: t.uuid(),
     planningTaskId: t.text("kanbanger_task_id"),
@@ -1000,15 +1000,15 @@ export const chatConversations = pgTable(
     awaitingInputQuestion: t.text(),
     awaitingInputOptions: t.json().$type<string[]>(),
     awaitingInputDefault: t.text(),
-    awaitingInputExpiresAt: t.timestamp({ mode: "date", withTimezone: true }),
-    awaitingInputResolvedAt: t.timestamp({ mode: "date", withTimezone: true }),
+    awaitingInputExpiresAt: t.timestamp({ mode: "string", withTimezone: true }),
+    awaitingInputResolvedAt: t.timestamp({ mode: "string", withTimezone: true }),
     awaitingInputResolution: t
       .json()
       .$type<{ type: "human" | "timeout"; value: string }>(),
     planningSessionType: t.varchar({ length: 30 }),
     // values: "office_hours" | "ceo_review" | "eng_review" | "design_review" | "breakdown"
-    createdAt: t.timestamp().defaultNow().notNull(),
-    updatedAt: t.timestamp({ mode: "date", withTimezone: true }),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
+    updatedAt: t.timestamp({ mode: "string", withTimezone: true }),
   }),
   (table) => [
     {
@@ -1038,7 +1038,7 @@ export const chatMessages = pgTable("chat_messages", (t) => ({
     .json()
     .$type<Array<{ id: string; name: string; arguments: string }>>(),
   toolCallId: t.varchar({ length: 100 }),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
 }));
 
 export const chatConversationsRelations = relations(
@@ -1083,7 +1083,7 @@ export const chatAttachments = pgTable("chat_attachments", (t) => ({
   width: t.integer(),
   height: t.integer(),
   sizeBytes: t.integer(),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
 }), (table) => [
   index("chat_attachments_message_id_idx").on(table.messageId),
 ]);
@@ -1173,10 +1173,10 @@ export const worktreePlans = pgTable("worktree_plans", (t) => ({
   goal: t.text(),
   status: t.varchar({ length: 20 }).notNull().default("draft"),
   planningTaskId: t.varchar("kanbanger_task_id", { length: 100 }),
-  lastSyncedAt: t.timestamp({ mode: "date", withTimezone: true }),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  lastSyncedAt: t.timestamp({ mode: "string", withTimezone: true }),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t
-    .timestamp({ mode: "date", withTimezone: true })
+    .timestamp({ mode: "string", withTimezone: true })
     .$onUpdateFn(() => sql`now()`),
 }));
 
@@ -1209,9 +1209,9 @@ export const worktreeLinks = pgTable("worktree_links", (t) => ({
   url: t.text(),
   title: t.varchar({ length: 256 }),
   metadata: t.json().$type<Record<string, unknown>>(),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t
-    .timestamp({ mode: "date", withTimezone: true })
+    .timestamp({ mode: "string", withTimezone: true })
     .$onUpdateFn(() => sql`now()`),
 }));
 
@@ -1239,10 +1239,10 @@ export const planTaskItems = pgTable("plan_task_items", (t) => ({
   priority: t.varchar({ length: 10 }).notNull().default("medium"),
   parentTaskKey: t.varchar({ length: 20 }),
   sortOrder: t.integer().notNull().default(0),
-  completedAt: t.timestamp({ mode: "date", withTimezone: true }),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  completedAt: t.timestamp({ mode: "string", withTimezone: true }),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t
-    .timestamp({ mode: "date", withTimezone: true })
+    .timestamp({ mode: "string", withTimezone: true })
     .$onUpdateFn(() => sql`now()`),
 }));
 
@@ -1272,7 +1272,7 @@ export const eventLog = pgTable("event_log", (t) => ({
     .references(() => repositories.id, { onDelete: "set null" }),
   eventType: t.varchar({ length: 50 }).notNull(),
   payload: t.json().$type<Record<string, unknown>>().notNull().default({}),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
 }));
 
 export const sessionEventDirectionEnum = ["client", "agent", "system"] as const;
@@ -1302,7 +1302,7 @@ export const sessionEvents = pgTable(
     direction: t.varchar({ length: 20 }).notNull(),
     eventType: t.varchar({ length: 30 }).notNull(),
     payload: t.json().$type<Record<string, unknown>>().notNull().default({}),
-    createdAt: t.timestamp().defaultNow().notNull(),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   }),
   (table) => [
     {
@@ -1334,9 +1334,9 @@ export const sessionConnections = pgTable("session_connections", (t) => ({
     .references(() => user.id, { onDelete: "cascade" }),
   clientId: t.text().notNull(),
   deviceType: t.varchar({ length: 20 }).notNull().default("web"),
-  connectedAt: t.timestamp().defaultNow().notNull(),
-  disconnectedAt: t.timestamp({ mode: "date", withTimezone: true }),
-  lastSeenAt: t.timestamp({ mode: "date", withTimezone: true }),
+  connectedAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
+  disconnectedAt: t.timestamp({ mode: "string", withTimezone: true }),
+  lastSeenAt: t.timestamp({ mode: "string", withTimezone: true }),
   lastAckSeq: t.bigint({ mode: "number" }).notNull().default(0),
   ip: t.text(),
   userAgent: t.text(),
@@ -1465,12 +1465,12 @@ export const gitProviderConnections = pgTable(
     refreshTokenCiphertext: t.text(),
     refreshTokenIv: t.text(),
     refreshTokenTag: t.text(),
-    accessTokenExpiresAt: t.timestamp({ mode: "date", withTimezone: true }),
-    refreshTokenExpiresAt: t.timestamp({ mode: "date", withTimezone: true }),
-    revokedAt: t.timestamp({ mode: "date", withTimezone: true }),
-    createdAt: t.timestamp().defaultNow().notNull(),
+    accessTokenExpiresAt: t.timestamp({ mode: "string", withTimezone: true }),
+    refreshTokenExpiresAt: t.timestamp({ mode: "string", withTimezone: true }),
+    revokedAt: t.timestamp({ mode: "string", withTimezone: true }),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
     updatedAt: t
-      .timestamp({ mode: "date", withTimezone: true })
+      .timestamp({ mode: "string", withTimezone: true })
       .$onUpdateFn(() => sql`now()`),
   }),
 );
@@ -1511,14 +1511,14 @@ export const browserCookies = pgTable(
     valueIv: t.text().notNull(),
     valueTag: t.text().notNull(),
     path: t.text().notNull().default("/"),
-    expires: t.timestamp({ mode: "date", withTimezone: true }),
+    expires: t.timestamp({ mode: "string", withTimezone: true }),
     secure: t.boolean().notNull().default(false),
     httpOnly: t.boolean().notNull().default(false),
     sameSite: t.varchar({ length: 10 }).notNull().default("Lax"),
     source: t.varchar({ length: 20 }).notNull(),
-    createdAt: t.timestamp().defaultNow().notNull(),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
     updatedAt: t
-      .timestamp({ mode: "date", withTimezone: true })
+      .timestamp({ mode: "string", withTimezone: true })
       .$onUpdateFn(() => sql`now()`),
   }),
   (table) => [
@@ -1541,7 +1541,7 @@ export const sessionCookieScopes = pgTable(
       .notNull()
       .references(() => chatConversations.id, { onDelete: "cascade" }),
     domain: t.text().notNull(),
-    createdAt: t.timestamp().defaultNow().notNull(),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   }),
   (table) => [
     uniqueIndex("session_cookie_scopes_session_domain_idx").on(
@@ -1594,11 +1594,11 @@ export const sessionSecrets = pgTable(
       .notNull()
       .default({}),
     externalRef: t.text(),
-    expiresAt: t.timestamp({ mode: "date", withTimezone: true }),
-    lastUsedAt: t.timestamp({ mode: "date", withTimezone: true }),
-    createdAt: t.timestamp().defaultNow().notNull(),
+    expiresAt: t.timestamp({ mode: "string", withTimezone: true }),
+    lastUsedAt: t.timestamp({ mode: "string", withTimezone: true }),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
     updatedAt: t
-      .timestamp({ mode: "date", withTimezone: true })
+      .timestamp({ mode: "string", withTimezone: true })
       .$onUpdateFn(() => sql`now()`),
   }),
   (table) => [
@@ -1628,7 +1628,7 @@ export const sessionSecretUsages = pgTable(
     commandPreview: t.text(),
     exitCode: t.integer(),
     durationMs: t.integer(),
-    createdAt: t.timestamp().defaultNow().notNull(),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   }),
   (table) => [
     index("session_secret_usages_secret_idx").on(table.secretId),
@@ -1650,9 +1650,9 @@ export const projectDeploySecretBindings = pgTable(
     externalRef: t.text().notNull(),
     transport: t.varchar({ length: 32 }).notNull().default("template"),
     templateId: t.varchar({ length: 64 }),
-    createdAt: t.timestamp().defaultNow().notNull(),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
     updatedAt: t
-      .timestamp({ mode: "date", withTimezone: true })
+      .timestamp({ mode: "string", withTimezone: true })
       .$onUpdateFn(() => sql`now()`),
   }),
   (table) => [
@@ -1695,12 +1695,12 @@ export const pullRequests = pgTable("pull_requests", (t) => ({
   additions: t.integer(),
   deletions: t.integer(),
   changedFiles: t.integer(),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t
-    .timestamp({ mode: "date", withTimezone: true })
+    .timestamp({ mode: "string", withTimezone: true })
     .$onUpdateFn(() => sql`now()`),
-  mergedAt: t.timestamp({ mode: "date", withTimezone: true }),
-  closedAt: t.timestamp({ mode: "date", withTimezone: true }),
+  mergedAt: t.timestamp({ mode: "string", withTimezone: true }),
+  closedAt: t.timestamp({ mode: "string", withTimezone: true }),
 }));
 
 export const CreatePullRequestSchema = createInsertSchema(pullRequests, {
@@ -1735,7 +1735,7 @@ export const prReviews = pgTable("pr_reviews", (t) => ({
   userId: t.text().notNull(),
   status: prReviewStatusPgEnum().notNull(),
   body: t.text(),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
 }), (table) => [
   index("pr_reviews_pull_request_id_idx").on(table.pullRequestId),
 ]);
@@ -1757,7 +1757,7 @@ export const featureBranches = pgTable("feature_branches", (t) => ({
   featurePrId: t
     .uuid()
     .references(() => pullRequests.id, { onDelete: "set null" }),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
 }), (table) => [
   index("feature_branches_work_item_id_idx").on(table.workItemId),
   index("feature_branches_repository_id_idx").on(table.repositoryId),
@@ -1774,8 +1774,8 @@ export const featureBranchTaskPRs = pgTable("feature_branch_task_prs", (t) => ({
     .uuid()
     .notNull()
     .references(() => pullRequests.id, { onDelete: "cascade" }),
-  mergedAt: t.timestamp({ mode: "date", withTimezone: true }),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  mergedAt: t.timestamp({ mode: "string", withTimezone: true }),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
 }), (table) => [
   index("feature_branch_task_prs_feature_branch_id_idx").on(table.featureBranchId),
   index("feature_branch_task_prs_pull_request_id_idx").on(table.pullRequestId),
@@ -1798,12 +1798,12 @@ export const gitCommits = pgTable("git_commits", (t) => ({
   message: t.text().notNull(),
   authorName: t.text(),
   authorEmail: t.text(),
-  committedAt: t.timestamp({ mode: "date", withTimezone: true }).notNull(),
+  committedAt: t.timestamp({ mode: "string", withTimezone: true }).notNull(),
   sessionId: t
     .uuid()
     .references(() => chatConversations.id, { onDelete: "set null" }),
   isBobCommit: t.boolean().notNull().default(false),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
 }));
 
 export const CreateGitCommitSchema = createInsertSchema(gitCommits, {
@@ -1838,9 +1838,9 @@ export const webhookConfigs = pgTable(
     events: t.json().$type<string[]>().notNull().default([]),
     active: t.boolean().notNull().default(true),
     description: t.text(),
-    createdAt: t.timestamp().defaultNow().notNull(),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
     updatedAt: t
-      .timestamp({ mode: "date", withTimezone: true })
+      .timestamp({ mode: "string", withTimezone: true })
       .$onUpdateFn(() => sql`now()`),
   }),
   (table) => [
@@ -1880,9 +1880,9 @@ export const webhookDeliveries = pgTable(
     status: t.varchar({ length: 20 }).notNull().default("pending"), // 'pending' | 'processed' | 'failed'
     errorMessage: t.text(),
     retryCount: t.integer().notNull().default(0),
-    nextRetryAt: t.timestamp({ mode: "date", withTimezone: true }),
-    processedAt: t.timestamp({ mode: "date", withTimezone: true }),
-    receivedAt: t.timestamp().defaultNow().notNull(),
+    nextRetryAt: t.timestamp({ mode: "string", withTimezone: true }),
+    processedAt: t.timestamp({ mode: "string", withTimezone: true }),
+    receivedAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   }),
   (table) => [
     index("webhook_deliveries_config_id_idx").on(table.webhookConfigId),
@@ -1934,11 +1934,11 @@ export const taskRuns = pgTable("task_runs", (t) => ({
   parentTaskRunId: t.uuid().references((): AnyPgColumn => taskRuns.id, { onDelete: "set null" }),
   runPhase: t.varchar({ length: 20 }).notNull().default("execute"),
   // runPhase values: "shape" | "plan" | "execute" | "review" | "ship"
-  createdAt: t.timestamp().defaultNow().notNull(),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t
-    .timestamp({ mode: "date", withTimezone: true })
+    .timestamp({ mode: "string", withTimezone: true })
     .$onUpdateFn(() => sql`now()`),
-  completedAt: t.timestamp({ mode: "date", withTimezone: true }),
+  completedAt: t.timestamp({ mode: "string", withTimezone: true }),
 }));
 
 export const CreateTaskRunSchema = createInsertSchema(taskRuns, {
@@ -1971,9 +1971,9 @@ export const comments = pgTable("comments", (t) => ({
   body: t.text().notNull(),
   bodyHtml: t.text(),
   edited: t.boolean().notNull().default(false),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t
-    .timestamp({ mode: "date", withTimezone: true })
+    .timestamp({ mode: "string", withTimezone: true })
     .$onUpdateFn(() => sql`now()`),
 }));
 
@@ -1997,7 +1997,7 @@ export const activities = pgTable("activities", (t) => ({
   fromValue: t.text(),
   toValue: t.text(),
   metadata: t.json().$type<Record<string, unknown>>(),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
 }));
 
 export const workItemArtifacts = pgTable("work_item_artifacts", (t) => ({
@@ -2018,7 +2018,7 @@ export const workItemArtifacts = pgTable("work_item_artifacts", (t) => ({
   sessionId: t.uuid().references(() => chatConversations.id, { onDelete: "set null" }),
   metadata: t.json().$type<Record<string, unknown>>(),
   isCurrent: t.boolean().notNull().default(true),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
 }));
 
 export const CreateWorkItemArtifactSchema = createInsertSchema(
@@ -2052,9 +2052,9 @@ export const notifications = pgTable("notifications", (t) => ({
   body: t.text(),
   url: t.text(),
   read: t.boolean().notNull().default(false),
-  readAt: t.timestamp({ mode: "date", withTimezone: true }),
-  archivedAt: t.timestamp({ mode: "date", withTimezone: true }),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  readAt: t.timestamp({ mode: "string", withTimezone: true }),
+  archivedAt: t.timestamp({ mode: "string", withTimezone: true }),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
 }));
 
 export const CreateNotificationSchema = createInsertSchema(notifications, {
@@ -2081,8 +2081,8 @@ export const devicePushTokens = pgTable("device_push_tokens", (t) => ({
   expoPushToken: t.text().notNull(),
   deviceName: t.text(),
   enabled: t.boolean().notNull().default(true),
-  lastSeenAt: t.timestamp({ mode: "date", withTimezone: true }),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  lastSeenAt: t.timestamp({ mode: "string", withTimezone: true }),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
 }));
 
 export const CreateDevicePushTokenSchema = createInsertSchema(
@@ -2256,7 +2256,7 @@ export const runLifecycleEvents = pgTable(
     eventType: t.varchar({ length: 40 }).notNull(),
     phase: t.varchar({ length: 20 }).notNull(),
     metadata: t.json().$type<Record<string, unknown>>().default({}),
-    createdAt: t.timestamp().defaultNow().notNull(),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   }),
   (table) => [
     { name: "run_lifecycle_events_run_idx", columns: [table.taskRunId] },
@@ -2385,7 +2385,7 @@ export const forgeRevisions = pgTable(
     branch: t.text(),
     status: t.varchar({ length: 20 }).notNull().default("open"),
     gates: t.json().$type<Array<{ name: string; status: string; startedAt?: string; finishedAt?: string }>>().default([]),
-    createdAt: t.timestamp().defaultNow().notNull(),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
     updatedAt: t.timestamp({ withTimezone: true }).$onUpdateFn(() => sql`now()`),
   }),
   (table) => [
@@ -2410,10 +2410,10 @@ export const forgeBuilds = pgTable(
     imageDigest: t.text(),
     artifactManifestRef: t.text(),
     durationMs: t.integer(),
-    startedAt: t.timestamp({ mode: "date", withTimezone: true }),
-    finishedAt: t.timestamp({ mode: "date", withTimezone: true }),
-    createdAt: t.timestamp().defaultNow().notNull(),
-    updatedAt: t.timestamp({ mode: "date", withTimezone: true }).$onUpdateFn(() => sql`now()`),
+    startedAt: t.timestamp({ mode: "string", withTimezone: true }),
+    finishedAt: t.timestamp({ mode: "string", withTimezone: true }),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
+    updatedAt: t.timestamp({ mode: "string", withTimezone: true }).$onUpdateFn(() => sql`now()`),
   }),
   (table) => [
     { name: "forge_builds_revision_idx", columns: [table.revisionId] },
@@ -2434,9 +2434,9 @@ export const forgeDeployments = pgTable(
     environment: t.varchar({ length: 20 }).notNull(),
     status: t.varchar({ length: 30 }).notNull().default("pending_approval"),
     rollbackTargetId: t.uuid(), // self-ref to another forgeDeployments.id
-    deployedAt: t.timestamp({ mode: "date", withTimezone: true }),
-    createdAt: t.timestamp().defaultNow().notNull(),
-    updatedAt: t.timestamp({ mode: "date", withTimezone: true }).$onUpdateFn(() => sql`now()`),
+    deployedAt: t.timestamp({ mode: "string", withTimezone: true }),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
+    updatedAt: t.timestamp({ mode: "string", withTimezone: true }).$onUpdateFn(() => sql`now()`),
   }),
   (table) => [
     { name: "forge_deployments_revision_idx", columns: [table.revisionId] },
@@ -2458,7 +2458,7 @@ export const forgeRunEvents = pgTable(
     eventType: t.varchar({ length: 30 }).notNull(),
     testStatus: t.text(),
     artifactRefs: t.json().$type<Array<{ type: string; url?: string; description?: string }>>().default([]),
-    createdAt: t.timestamp().defaultNow().notNull(),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   }),
   (table) => [
     { name: "forge_run_events_run_idx", columns: [table.runId] },
@@ -2563,7 +2563,7 @@ export const skills = pgTable("skills", (t) => ({
   version: t.text(),
   configSchema: t.jsonb().notNull().default({}),
   isActive: t.boolean().notNull().default(true),
-  createdAt: t.timestamp().defaultNow().notNull(),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
 }));
 
 export const skillsRelations = relations(skills, ({ many }) => ({
@@ -2590,9 +2590,9 @@ export const skillExecutions = pgTable(
     output: t.jsonb().notNull().default({}),
     findings: t.jsonb().notNull().default([]),
     durationMs: t.integer(),
-    startedAt: t.timestamp().defaultNow().notNull(),
-    completedAt: t.timestamp({ mode: "date", withTimezone: true }),
-    createdAt: t.timestamp().defaultNow().notNull(),
+    startedAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
+    completedAt: t.timestamp({ mode: "string", withTimezone: true }),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   }),
   (table) => [
     index("skill_executions_skill_slug_idx").on(table.skillSlug),
@@ -2640,7 +2640,7 @@ export const workItemSnapshots = pgTable(
       .references(() => workItems.id, { onDelete: "cascade" }),
     stage: t.text().notNull(),
     data: t.jsonb().notNull().default({}),
-    createdAt: t.timestamp().defaultNow().notNull(),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   }),
   (table) => [index("work_item_snapshots_work_item_id_idx").on(table.workItemId)],
 );
@@ -2672,7 +2672,7 @@ export const sessionCheckpoints = pgTable(
     label: t.text(),
     snapshotData: t.jsonb().notNull().default({}),
     gitRef: t.text(),
-    createdAt: t.timestamp().defaultNow().notNull(),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   }),
   (table) => [index("session_checkpoints_session_id_idx").on(table.sessionId)],
 );

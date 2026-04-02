@@ -321,7 +321,7 @@ export async function registerPushToken(
       .update(devicePushTokens)
       .set({
         enabled: true,
-        lastSeenAt: new Date(),
+        lastSeenAt: new Date().toISOString(),
         deviceName: input.deviceName ?? existing.deviceName,
       })
       .where(eq(devicePushTokens.id, existing.id));
@@ -337,7 +337,7 @@ export async function registerPushToken(
       deviceType: input.deviceType,
       deviceName: input.deviceName,
       enabled: true,
-      lastSeenAt: new Date(),
+      lastSeenAt: new Date().toISOString(),
     })
     .returning();
 
@@ -385,8 +385,8 @@ export async function listUserTokens(userId: string): Promise<
     deviceType: string;
     deviceName: string | null;
     enabled: boolean;
-    lastSeenAt: Date | null;
-    createdAt: Date;
+    lastSeenAt: string | null;
+    createdAt: string;
   }>
 > {
   const tokens = await db.query.devicePushTokens.findMany({
@@ -409,6 +409,6 @@ export async function updateTokenLastSeen(
 ): Promise<void> {
   await db
     .update(devicePushTokens)
-    .set({ lastSeenAt: new Date() })
+    .set({ lastSeenAt: new Date().toISOString() })
     .where(eq(devicePushTokens.expoPushToken, expoPushToken));
 }

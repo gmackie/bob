@@ -36,7 +36,7 @@ export async function validateApiKey(
   });
 
   if (!keyRecord) return null;
-  if (keyRecord.expiresAt && keyRecord.expiresAt < new Date()) return null;
+  if (keyRecord.expiresAt && new Date(keyRecord.expiresAt) < new Date()) return null;
 
   const userRecord = await db.query.user.findFirst({
     where: (table, { eq }) => eq(table.id, keyRecord.userId),

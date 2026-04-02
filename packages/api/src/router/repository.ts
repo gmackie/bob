@@ -436,7 +436,7 @@ export const repositoryRouter = {
           goal: input.planning.goal,
           status: "active",
           planningTaskId: input.planning.planningTaskId,
-          lastSyncedAt: new Date(),
+          lastSyncedAt: new Date().toISOString(),
         });
       }
 
@@ -558,12 +558,12 @@ export const repositoryRouter = {
             goal: input.goal,
             status: input.status ?? "active",
             planningTaskId: input.planningTaskId,
-            lastSyncedAt: new Date(),
+            lastSyncedAt: new Date().toISOString(),
           })
           .returning();
         plan = newPlan;
       } else {
-        const updates: Record<string, unknown> = { lastSyncedAt: new Date() };
+        const updates: Record<string, unknown> = { lastSyncedAt: new Date().toISOString() };
         if (input.title !== undefined) updates.title = input.title;
         if (input.goal !== undefined) updates.goal = input.goal;
         if (input.status !== undefined) updates.status = input.status;

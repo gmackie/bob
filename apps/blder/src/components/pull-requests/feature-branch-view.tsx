@@ -406,7 +406,7 @@ function FeatureBranchDetail({
 interface TaskPRCardProps {
   taskPR: {
     id: string;
-    mergedAt: Date | null;
+    mergedAt: string | null;
     pullRequest: {
       id: string;
       number: number;

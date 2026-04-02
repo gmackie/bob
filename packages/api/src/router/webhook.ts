@@ -168,7 +168,7 @@ export const webhookRouter = {
 
       const conditions = [eq(webhookDeliveries.webhookConfigId, input.configId)];
       if (input.cursor) {
-        conditions.push(lt(webhookDeliveries.receivedAt, new Date(input.cursor)));
+        conditions.push(lt(webhookDeliveries.receivedAt, input.cursor));
       }
 
       const items = await db
@@ -183,7 +183,7 @@ export const webhookRouter = {
 
       return {
         items,
-        nextCursor: hasMore ? items.at(-1)!.receivedAt.toISOString() : null,
+        nextCursor: hasMore ? items.at(-1)!.receivedAt : null,
       };
     }),
 

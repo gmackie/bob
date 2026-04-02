@@ -202,17 +202,33 @@ export const settingsEdgeRouter: TRPCRouterRecord = {
       const fgUser = { login: "forgegraph", id: 0 };
 
       // Revoke existing connection if any
-      await ctx.db.execute(
-        sql`UPDATE git_provider_connections SET revoked_at = now() WHERE user_id = ${ctx.session.user.id} AND provider = 'forgegraph' AND revoked_at IS NULL`,
-      );
+      await ctx.db
+        .update(gitProviderConnections)
+        .set({ revokedAt: new Date().toISOString() })
+        .where(
+          and(
+            eq(gitProviderConnections.userId, ctx.session.user.id),
+            eq(gitProviderConnections.provider, "forgegraph"),
+            isNull(gitProviderConnections.revokedAt),
+          ),
+        );
 
       // Create new connection with encrypted token
       const connectionId = crypto.randomUUID();
       const encrypted = encryptToken(input.apiToken, connectionId);
 
-      await ctx.db.execute(
-        sql`INSERT INTO git_provider_connections (id, user_id, provider, instance_url, provider_account_id, provider_username, access_token_ciphertext, access_token_iv, access_token_tag, scopes, created_at) VALUES (${connectionId}, ${ctx.session.user.id}, 'forgegraph', ${fgServer}, ${String(fgUser.id ?? "unknown")}, ${fgUser.login ?? null}, ${encrypted.ciphertext}, ${encrypted.iv}, ${encrypted.tag}, 'api', now())`,
-      );
+      await ctx.db.insert(gitProviderConnections).values({
+        id: connectionId,
+        userId: ctx.session.user.id,
+        provider: "forgegraph",
+        instanceUrl: fgServer,
+        providerAccountId: String(fgUser.id ?? "unknown"),
+        providerUsername: fgUser.login ?? null,
+        accessTokenCiphertext: encrypted.ciphertext,
+        accessTokenIv: encrypted.iv,
+        accessTokenTag: encrypted.tag,
+        scopes: "api",
+      });
 
       return {
         id: connectionId,
