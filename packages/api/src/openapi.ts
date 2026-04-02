@@ -40,7 +40,10 @@ export function generateApiDocument(
           tags: ["workItems"],
           summary: operation.summary,
           operationId: operation.procedurePath,
-          security: operation.auth === "session" ? [{ cookieAuth: [] }] : [],
+          security:
+            operation.auth === "session"
+              ? [{ cookieAuth: [] }]
+              : [{ bearerAuth: [] }],
           requestBody: {
             required: true,
             content: {
@@ -89,6 +92,10 @@ export function generateApiDocument(
     paths: paths as OpenAPIV3_1.PathsObject,
     components: {
       securitySchemes: {
+        bearerAuth: {
+          type: "http",
+          scheme: "bearer",
+        },
         cookieAuth: {
           type: "apiKey",
           in: "cookie",

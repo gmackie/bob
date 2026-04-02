@@ -35,6 +35,20 @@ const NAV_ITEMS: NavItem[] = [
     label: "Pull Requests",
     href: "/pull-requests",
   },
+  {
+    icon: () => (
+      <svg className="size-[15px]" viewBox="0 0 15 15" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <rect x="2" y="4" width="11" height="8" rx="1" stroke="currentColor" strokeWidth="1" fill="none" />
+        <circle cx="5" cy="8" r="1" />
+        <circle cx="7.5" cy="8" r="1" />
+        <circle cx="10" cy="8" r="1" />
+        <path d="M5 4V2.5" stroke="currentColor" strokeWidth="1" />
+        <path d="M10 4V2.5" stroke="currentColor" strokeWidth="1" />
+      </svg>
+    ),
+    label: "Nodes",
+    href: "/nodes",
+  },
   { icon: GearIcon, label: "Settings", href: "/settings" },
 ];
 
