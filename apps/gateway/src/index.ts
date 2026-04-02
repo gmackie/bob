@@ -138,7 +138,7 @@ const persistenceWriter = new PersistenceWriter({
       .update(chatConversations)
       .set({
         nextSeq: sql`GREATEST(${chatConversations.nextSeq}, ${lastEvent.seq + 1})`,
-        lastActivityAt: new Date(),
+        lastActivityAt: new Date().toISOString(),
       })
       .where(eq(chatConversations.id, lastEvent.sessionId));
   },
@@ -165,7 +165,7 @@ const sessionManagerCallbacks: SessionManagerCallbacks = {
       .update(chatConversations)
       .set({
         status,
-        lastActivityAt: new Date(),
+        lastActivityAt: new Date().toISOString(),
       })
       .where(eq(chatConversations.id, sessionId));
   },
@@ -1257,7 +1257,7 @@ const server = createServer(async (req, res) => {
             .set({
               status: "running",
               claimedByGatewayId: GATEWAY_ID,
-              leaseExpiresAt: new Date(Date.now() + CONTAINER_TTL_MS),
+              leaseExpiresAt: new Date(Date.now() + CONTAINER_TTL_MS).toISOString(),
               agentType,
               workingDirectory,
             })
