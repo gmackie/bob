@@ -120,7 +120,7 @@ export default async function TaskWorkspacePage({
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
               {target.canExecute
                 ? workflowState?.statusMessage ??
-                  "Use this execution workspace to review context, validation evidence, and the latest handoff before resuming work with Bob."
+                  "Use this execution workspace to review context, validation evidence, and the latest handoff before resuming work with blder.bot."
                 : "Only task work items can open the execution workspace."}
             </p>
             {activeSession ? (
