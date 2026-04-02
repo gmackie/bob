@@ -21,7 +21,7 @@ export function createWorkItemRouteHandler(
     try {
       const caller = (await createPublicApiCaller(request)) as any;
       const body = await request.json();
-      const result = await caller.workItems[operation.procedureName](body);
+      const result = await caller.publicWorkItems[operation.procedureName](body);
       return NextResponse.json(result);
     } catch (error) {
       return errorResponse(error);

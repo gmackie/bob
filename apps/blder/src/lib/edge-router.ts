@@ -44,6 +44,7 @@ import {
   taskRunRouter,
   workItemRouter,
   workItemsRouter,
+  publicWorkItemsRouter,
 } from "@bob/api/router/workItems";
 import { secretsRouter } from "@bob/api/router/secrets";
 import { settingsEdgeRouter } from "@bob/api/router/settingsEdge";
@@ -74,6 +75,7 @@ const edgeRouterRecord = {
   post: postRouter,
   project: projectRouter,
   publicApi: publicApiRouter,
+  publicWorkItems: publicWorkItemsRouter,
   pullRequest: pullRequestRouter,
   requirement: requirementRouter,
   repository: repositoryRouter,

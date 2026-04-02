@@ -32,7 +32,11 @@ import { isForgeGraphEnabled, requireForgeGraphClient } from "../services/forgeg
 import { resolveForgeGraphId, cacheMapping } from "../services/forgegraph/idResolver";
 import type { FgWorkItem, FgArtifact, FgActivity } from "../services/forgegraph/forgeGraphClient";
 import { toBobStatus } from "../services/forgegraph/statusMap";
-import { protectedProcedure } from "../trpc";
+import {
+  apiKeyReadProcedure,
+  apiKeyWriteProcedure,
+  protectedProcedure,
+} from "../trpc";
 
 async function assertWorkspaceAccess(db: any, userId: string, workspaceId: string) {
   const membership = await db.query.workspaceMembers.findFirst({
@@ -144,9 +148,8 @@ function formatWorkItemIdentifier(input: {
   return input.projectKey ? `${input.projectKey}-${suffix}` : `TASK-${suffix}`;
 }
 
-const listWorkItemsProcedure = protectedProcedure
-  .input(listWorkItemsInputSchema)
-  .query(async ({ ctx, input }) => {
+const buildListWorkItemsProcedure = (procedure: any) =>
+  procedure.input(listWorkItemsInputSchema).query(async ({ ctx, input }: any) => {
     await assertWorkspaceAccess(ctx.db, ctx.session.user.id, input.workspaceId);
 
     // ── Local DB path ─────────────────────────────────────────────────
@@ -167,18 +170,20 @@ const listWorkItemsProcedure = protectedProcedure
     });
 
     const projectIds = Array.from(
-      new Set(items.map((item) => item.projectId).filter(Boolean)),
+      new Set(items.map((item: any) => item.projectId).filter(Boolean)),
     ) as string[];
-    const projectRows =
+    const projectRows: any[] =
       projectIds.length > 0
         ? await ctx.db.query.projects.findMany({
             where: eq(projects.workspaceId, input.workspaceId),
           })
         : [];
 
-    const projectById = new Map(projectRows.map((project) => [project.id, project]));
+    const projectById = new Map<string, any>(
+      projectRows.map((project: any) => [project.id, project]),
+    );
 
-    return items.map((item) => {
+    return items.map((item: any) => {
       const project = item.projectId ? projectById.get(item.projectId) ?? null : null;
 
       return {
@@ -200,9 +205,8 @@ function parseIdentifier(id: string): { projectKey: string; sequenceNumber: numb
   return { projectKey: match[1]!.toUpperCase(), sequenceNumber: parseInt(match[2]!, 10) };
 }
 
-const getWorkItemProcedure = protectedProcedure
-  .input(getWorkItemInputSchema)
-  .query(async ({ ctx, input }) => {
+const buildGetWorkItemProcedure = (procedure: any) =>
+  procedure.input(getWorkItemInputSchema).query(async ({ ctx, input }: any) => {
     // ── Local DB path ─────────────────────────────────────────────────
     // Try UUID lookup first
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.id);
@@ -269,9 +273,8 @@ const getWorkItemProcedure = protectedProcedure
     };
   });
 
-const listCommentsProcedure = protectedProcedure
-  .input(listCommentsInputSchema)
-  .query(async ({ ctx, input }) => {
+const buildListCommentsProcedure = (procedure: any) =>
+  procedure.input(listCommentsInputSchema).query(async ({ ctx, input }: any) => {
     await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
 
     return ctx.db.query.comments.findMany({
@@ -280,9 +283,8 @@ const listCommentsProcedure = protectedProcedure
     });
   });
 
-const createCommentProcedure = protectedProcedure
-  .input(createCommentInputSchema)
-  .mutation(async ({ ctx, input }) => {
+const buildCreateCommentProcedure = (procedure: any) =>
+  procedure.input(createCommentInputSchema).mutation(async ({ ctx, input }: any) => {
     await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
 
     const [comment] = await ctx.db
@@ -309,12 +311,11 @@ const createCommentProcedure = protectedProcedure
     return comment;
   });
 
-const createArtifactProcedure = protectedProcedure
-  .input(createArtifactInputSchema)
-  .mutation(async ({ ctx, input }) => {
+const buildCreateArtifactProcedure = (procedure: any) =>
+  procedure.input(createArtifactInputSchema).mutation(async ({ ctx, input }: any) => {
     await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
 
-    const existingArtifacts = await ctx.db.query.workItemArtifacts.findMany({
+    const existingArtifacts: any[] = await ctx.db.query.workItemArtifacts.findMany({
       where: eq(workItemArtifacts.workItemId, input.workItemId),
     });
 
@@ -322,7 +323,7 @@ const createArtifactProcedure = protectedProcedure
       input.producerId == null
         ? null
         : existingArtifacts.find(
-            (artifact) =>
+            (artifact: any) =>
               artifact.producerType === input.producerType &&
               artifact.producerId === input.producerId,
           );
@@ -332,7 +333,8 @@ const createArtifactProcedure = protectedProcedure
     }
 
     const currentArtifactsForRole = existingArtifacts.filter(
-      (artifact) => artifact.artifactRole === input.artifactRole && artifact.isCurrent,
+      (artifact: any) =>
+        artifact.artifactRole === input.artifactRole && artifact.isCurrent,
     );
 
     if (currentArtifactsForRole.length > 0) {
@@ -371,9 +373,8 @@ const createArtifactProcedure = protectedProcedure
     return artifact;
   });
 
-const promoteToTaskProcedure = protectedProcedure
-  .input(promoteToTaskInputSchema)
-  .mutation(async ({ ctx, input }) => {
+const buildPromoteToTaskProcedure = (procedure: any) =>
+  procedure.input(promoteToTaskInputSchema).mutation(async ({ ctx, input }: any) => {
     const existing = await loadAccessibleWorkItem(
       ctx.db,
       ctx.session.user.id,
@@ -414,9 +415,8 @@ const promoteToTaskProcedure = protectedProcedure
     return workItem ?? existing;
   });
 
-const listActivitiesProcedure = protectedProcedure
-  .input(listActivitiesInputSchema)
-  .query(async ({ ctx, input }) => {
+const buildListActivitiesProcedure = (procedure: any) =>
+  procedure.input(listActivitiesInputSchema).query(async ({ ctx, input }: any) => {
     await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
 
     // ── Local DB path ─────────────────────────────────────────────────
@@ -427,13 +427,14 @@ const listActivitiesProcedure = protectedProcedure
     });
   });
 
-const listCurrentArtifactsProcedure = protectedProcedure
-  .input(listCurrentArtifactsInputSchema)
-  .query(async ({ ctx, input }) => {
+const buildListCurrentArtifactsProcedure = (procedure: any) =>
+  procedure
+    .input(listCurrentArtifactsInputSchema)
+    .query(async ({ ctx, input }: any) => {
     await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
 
     // ── Local DB path ─────────────────────────────────────────────────
-    return ctx.db.query.workItemArtifacts.findMany({
+      return ctx.db.query.workItemArtifacts.findMany({
       where: and(
         eq(workItemArtifacts.workItemId, input.workItemId),
         eq(workItemArtifacts.isCurrent, true),
@@ -442,9 +443,10 @@ const listCurrentArtifactsProcedure = protectedProcedure
     });
   });
 
-const listChildArtifactGroupsProcedure = protectedProcedure
-  .input(listChildArtifactGroupsInputSchema)
-  .query(async ({ ctx, input }) => {
+const buildListChildArtifactGroupsProcedure = (procedure: any) =>
+  procedure
+    .input(listChildArtifactGroupsInputSchema)
+    .query(async ({ ctx, input }: any) => {
     await loadAccessibleWorkItem(
       ctx.db,
       ctx.session.user.id,
@@ -452,13 +454,13 @@ const listChildArtifactGroupsProcedure = protectedProcedure
     );
 
     // ── Local DB path ─────────────────────────────────────────────────
-    const children = await ctx.db.query.workItems.findMany({
+    const children: any[] = await ctx.db.query.workItems.findMany({
       where: eq(workItems.parentId, input.parentWorkItemId),
       orderBy: desc(workItems.updatedAt),
     });
 
     const groups = await Promise.all(
-      children.map(async (child) => {
+      children.map(async (child: any) => {
         const artifacts = await ctx.db.query.workItemArtifacts.findMany({
           where: and(
             eq(workItemArtifacts.workItemId, child.id),
@@ -474,12 +476,13 @@ const listChildArtifactGroupsProcedure = protectedProcedure
       }),
     );
 
-    return groups.filter((group) => group.artifacts.length > 0);
-  });
+      return groups.filter((group: any) => group.artifacts.length > 0);
+    });
 
-const listNotificationsProcedure = protectedProcedure
-  .input(listNotificationsInputSchema)
-  .query(async ({ ctx, input }) => {
+const buildListNotificationsProcedure = (procedure: any) =>
+  procedure
+    .input(listNotificationsInputSchema)
+    .query(async ({ ctx, input }: any) => {
     const filters = [
       eq(notifications.userId, ctx.session.user.id),
       isNull(notifications.archivedAt),
@@ -495,12 +498,13 @@ const listNotificationsProcedure = protectedProcedure
       limit: input.limit,
     });
 
-    return { items };
-  });
+      return { items };
+    });
 
-const createNotificationProcedure = protectedProcedure
-  .input(createNotificationInputSchema)
-  .mutation(async ({ ctx, input }) => {
+const buildCreateNotificationProcedure = (procedure: any) =>
+  procedure
+    .input(createNotificationInputSchema)
+    .mutation(async ({ ctx, input }: any) => {
     const [notification] = await ctx.db
       .insert(notifications)
       .values({
@@ -514,12 +518,13 @@ const createNotificationProcedure = protectedProcedure
       })
       .returning();
 
-    return notification;
-  });
+      return notification;
+    });
 
-const markNotificationAsReadProcedure = protectedProcedure
-  .input(markNotificationAsReadInputSchema)
-  .mutation(async ({ ctx, input }) => {
+const buildMarkNotificationAsReadProcedure = (procedure: any) =>
+  procedure
+    .input(markNotificationAsReadInputSchema)
+    .mutation(async ({ ctx, input }: any) => {
     const [notification] = await ctx.db
       .update(notifications)
       .set({
@@ -534,8 +539,51 @@ const markNotificationAsReadProcedure = protectedProcedure
       )
       .returning();
 
-    return notification;
-  });
+      return notification;
+    });
+
+const listWorkItemsProcedure = buildListWorkItemsProcedure(protectedProcedure);
+const getWorkItemProcedure = buildGetWorkItemProcedure(protectedProcedure);
+const listCommentsProcedure = buildListCommentsProcedure(protectedProcedure);
+const createCommentProcedure = buildCreateCommentProcedure(protectedProcedure);
+const createArtifactProcedure = buildCreateArtifactProcedure(protectedProcedure);
+const promoteToTaskProcedure = buildPromoteToTaskProcedure(protectedProcedure);
+const listActivitiesProcedure = buildListActivitiesProcedure(protectedProcedure);
+const listCurrentArtifactsProcedure =
+  buildListCurrentArtifactsProcedure(protectedProcedure);
+const listChildArtifactGroupsProcedure =
+  buildListChildArtifactGroupsProcedure(protectedProcedure);
+const listNotificationsProcedure =
+  buildListNotificationsProcedure(protectedProcedure);
+const createNotificationProcedure =
+  buildCreateNotificationProcedure(protectedProcedure);
+const markNotificationAsReadProcedure =
+  buildMarkNotificationAsReadProcedure(protectedProcedure);
+
+const publicListWorkItemsProcedure =
+  buildListWorkItemsProcedure(apiKeyReadProcedure);
+const publicGetWorkItemProcedure =
+  buildGetWorkItemProcedure(apiKeyReadProcedure);
+const publicListCommentsProcedure =
+  buildListCommentsProcedure(apiKeyReadProcedure);
+const publicCreateCommentProcedure =
+  buildCreateCommentProcedure(apiKeyWriteProcedure);
+const publicCreateArtifactProcedure =
+  buildCreateArtifactProcedure(apiKeyWriteProcedure);
+const publicPromoteToTaskProcedure =
+  buildPromoteToTaskProcedure(apiKeyWriteProcedure);
+const publicListActivitiesProcedure =
+  buildListActivitiesProcedure(apiKeyReadProcedure);
+const publicListCurrentArtifactsProcedure =
+  buildListCurrentArtifactsProcedure(apiKeyReadProcedure);
+const publicListChildArtifactGroupsProcedure =
+  buildListChildArtifactGroupsProcedure(apiKeyReadProcedure);
+const publicListNotificationsProcedure =
+  buildListNotificationsProcedure(apiKeyReadProcedure);
+const publicCreateNotificationProcedure =
+  buildCreateNotificationProcedure(apiKeyWriteProcedure);
+const publicMarkNotificationAsReadProcedure =
+  buildMarkNotificationAsReadProcedure(apiKeyWriteProcedure);
 
 export const workItemRouter = {
   list: listWorkItemsProcedure,
@@ -750,4 +798,19 @@ export const workItemsRouter = {
   listNotifications: listNotificationsProcedure,
   createNotification: createNotificationProcedure,
   markNotificationAsRead: markNotificationAsReadProcedure,
+};
+
+export const publicWorkItemsRouter = {
+  list: publicListWorkItemsProcedure,
+  get: publicGetWorkItemProcedure,
+  promoteToTask: publicPromoteToTaskProcedure,
+  listComments: publicListCommentsProcedure,
+  createComment: publicCreateCommentProcedure,
+  createArtifact: publicCreateArtifactProcedure,
+  listActivities: publicListActivitiesProcedure,
+  listCurrentArtifacts: publicListCurrentArtifactsProcedure,
+  listChildArtifactGroups: publicListChildArtifactGroupsProcedure,
+  listNotifications: publicListNotificationsProcedure,
+  createNotification: publicCreateNotificationProcedure,
+  markNotificationAsRead: publicMarkNotificationAsReadProcedure,
 };

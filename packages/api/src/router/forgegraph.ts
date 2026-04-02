@@ -8,6 +8,7 @@ import {
   forgeDeployments,
   forgeRunEvents,
   projects,
+  repositories,
 } from "@bob/db/schema";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure } from "../trpc";
@@ -424,6 +425,25 @@ export const forgegraphRouter = {
         });
       }
 
+      // Extract git URL from flakeRef (format: git+https://host/owner/repo.git?ref=main&rev=...)
+      let remoteUrl: string | null = null;
+      let remoteOwner: string | null = null;
+      let remoteName: string | null = null;
+      let mainBranch = "main";
+      if (app.flakeRef) {
+        const gitMatch = app.flakeRef.match(/git\+?(https?:\/\/[^?#]+)/);
+        if (gitMatch) {
+          remoteUrl = gitMatch[1]!;
+          const pathParts = new URL(remoteUrl).pathname.replace(/\.git$/, "").split("/").filter(Boolean);
+          if (pathParts.length >= 2) {
+            remoteOwner = pathParts[0]!;
+            remoteName = pathParts[1]!;
+          }
+        }
+        const refMatch = app.flakeRef.match(/[?&]ref=([^&#]+)/);
+        if (refMatch) mainBranch = refMatch[1]!;
+      }
+
       const [project] = await ctx.db
         .insert(projects)
         .values({
@@ -432,9 +452,25 @@ export const forgegraphRouter = {
           name: app.name,
           key: input.key,
           description: app.description,
-          repoUrl: app.flakeRef ?? null,
+          repoUrl: remoteUrl ?? app.flakeRef ?? null,
         })
         .returning();
+
+      // Create a repository record so executeTask can find it
+      if (remoteUrl && project) {
+        await ctx.db.insert(repositories).values({
+          userId: ctx.session.user.id,
+          planningProjectId: project.id,
+          name: remoteName ?? app.name,
+          path: `/repos/${app.slug}`,
+          branch: mainBranch,
+          mainBranch,
+          remoteUrl,
+          remoteProvider: "gitea",
+          remoteOwner,
+          remoteName,
+        }).onConflictDoNothing();
+      }
 
       return project;
     }),

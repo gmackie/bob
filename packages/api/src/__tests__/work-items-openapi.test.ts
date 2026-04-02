@@ -14,7 +14,7 @@ describe("work item OpenAPI document", () => {
 
     expect(listOperation).toBeDefined();
     expect(listOperation?.tags).toContain("workItems");
-    expect(listOperation?.security).toEqual([{ cookieAuth: [] }]);
+    expect(listOperation?.security).toEqual([{ bearerAuth: [] }]);
 
     expect(createCommentOperation).toBeDefined();
     expect(createCommentOperation?.tags).toContain("workItems");
