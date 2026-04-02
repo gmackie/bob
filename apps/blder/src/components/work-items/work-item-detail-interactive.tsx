@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "@bob/ui/toast";
@@ -153,6 +153,8 @@ export function WorkItemDetailInteractive({
           )}
         </div>
 
+        <PlanningSessionsList workItemId={workItem.id} />
+
         <div className="mt-6 max-w-3xl">
           <DescriptionEditor
             value={workItem.description?.trim() ?? ""}
@@ -239,6 +241,62 @@ export function WorkItemDetailInteractive({
       <ErrorBoundary section="Lifecycle Events">
         <LifecycleTimelineSection workItemId={workItem.id} />
       </ErrorBoundary>
+    </div>
+  );
+}
+
+function PlanningSessionsList({ workItemId }: { workItemId: string }) {
+  const trpc = useTRPC();
+  const { data: sessions } = useQuery(
+    trpc.planSession.listByWorkItem.queryOptions(
+      { workItemId },
+      { staleTime: 10_000 },
+    ),
+  );
+
+  if (!sessions || sessions.length === 0) return null;
+
+  const SESSION_TYPE_LABELS: Record<string, string> = {
+    office_hours: "Office Hours",
+    ceo_review: "CEO Review",
+    eng_review: "Eng Review",
+    design_review: "Design Review",
+    breakdown: "Breakdown",
+    shape: "Shape",
+  };
+
+  return (
+    <div className="mt-5">
+      <div className="mb-2 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+        Planning Sessions
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {sessions.map((s: any) => (
+          <Link
+            key={s.id}
+            href={`/work-items/${workItemId}/plan/${s.id}`}
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs transition-colors hover:border-primary/30 hover:bg-accent"
+          >
+            <span
+              className={`size-1.5 rounded-full ${
+                s.status === "running" || s.status === "idle"
+                  ? "bg-emerald-500"
+                  : s.status === "provisioning" || s.status === "starting"
+                    ? "bg-amber-500"
+                    : s.status === "error"
+                      ? "bg-rose-500"
+                      : "bg-muted-foreground"
+              }`}
+            />
+            <span className="font-medium text-foreground">
+              {SESSION_TYPE_LABELS[s.planningSessionType] ?? s.title ?? "Session"}
+            </span>
+            <span className="text-muted-foreground">
+              {s.status}
+            </span>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }
