@@ -7,7 +7,7 @@ import { createHash, randomBytes } from "crypto";
 import type { TRPCRouterRecord } from "@trpc/server";
 import { z } from "zod/v4";
 
-import { and, eq, isNull } from "@bob/db";
+import { and, eq, isNull, sql } from "@bob/db";
 import {
   apiKeys,
   gitProviderConnections,
@@ -146,7 +146,7 @@ export const settingsEdgeRouter: TRPCRouterRecord = {
     .mutation(async ({ ctx, input }) => {
       const [revoked] = await ctx.db
         .update(apiKeys)
-        .set({ revokedAt: new Date() })
+        .set({ revokedAt: sql`now()` })
         .where(
           and(
             eq(apiKeys.id, input.id),
@@ -204,7 +204,7 @@ export const settingsEdgeRouter: TRPCRouterRecord = {
       // Revoke existing connection if any
       await ctx.db
         .update(gitProviderConnections)
-        .set({ revokedAt: new Date() })
+        .set({ revokedAt: sql`now()` })
         .where(
           and(
             eq(gitProviderConnections.userId, ctx.session.user.id),
@@ -239,7 +239,7 @@ export const settingsEdgeRouter: TRPCRouterRecord = {
   disconnectForgeGraph: protectedProcedure.mutation(async ({ ctx }) => {
     await ctx.db
       .update(gitProviderConnections)
-      .set({ revokedAt: new Date() })
+      .set({ revokedAt: sql`now()` })
       .where(
         and(
           eq(gitProviderConnections.userId, ctx.session.user.id),
