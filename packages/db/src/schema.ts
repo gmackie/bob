@@ -507,6 +507,9 @@ export const workspaces = pgTable("workspaces", (t) => ({
   machineId: t.text("machine_id"),
   lastHeartbeat: t.timestamp("last_heartbeat", { mode: "string" }),
   agentConfigs: t.json("agent_configs").$type<Record<string, unknown>>(),
+  forgeAvailable: t.boolean("forge_available").default(false),
+  forgeApiKey: t.text("forge_api_key"),
+  devDir: t.text("dev_dir"),
 }));
 
 export const CreateWorkspaceSchema = createInsertSchema(workspaces, {
@@ -620,10 +623,28 @@ export const repositories = pgTable("repositories", (t) => ({
   remoteName: t.text(),
   remoteInstanceUrl: t.text(),
   gitProviderConnectionId: t.uuid(),
+  workspaceId: t.uuid("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
+  buildSystem: t.varchar("build_system", { length: 32 }),
+  dirty: t.boolean().default(false),
+  stale: t.boolean().default(false),
+  discoveryStatus: t.varchar("discovery_status", { length: 16 }).default("discovered"),
   createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t
     .timestamp({ mode: "string", withTimezone: true })
     .$onUpdateFn(() => sql`now()`),
+}));
+
+export const discoveredDirs = pgTable("discovered_dirs", (t) => ({
+  id: t.uuid().notNull().primaryKey().defaultRandom(),
+  workspaceId: t
+    .uuid("workspace_id")
+    .notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  path: t.text().notNull(),
+  name: t.varchar({ length: 256 }).notNull(),
+  dismissed: t.boolean().default(false),
+  lastSeen: t.timestamp("last_seen", { mode: "string" }).defaultNow(),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
 }));
 
 export const CreateRepositorySchema = createInsertSchema(repositories, {
