@@ -7,8 +7,12 @@ export async function POST(
 ) {
   try {
     const { workspaceId } = await params;
+    const body = await request.json().catch(() => ({}));
     const caller = await createPublicApiCaller(request);
-    const result = await caller.publicApi.heartbeat({ workspaceId });
+    const result = await caller.publicApi.heartbeat({
+      workspaceId,
+      agentTypes: Array.isArray(body.agentTypes) ? body.agentTypes : undefined,
+    });
     return NextResponse.json(result);
   } catch (error) {
     return errorResponse(error);
