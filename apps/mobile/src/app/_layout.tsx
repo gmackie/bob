@@ -12,6 +12,7 @@ import { WorkItemPane } from "~/components/tablet/WorkItemPane";
 import { PlanningPane } from "~/components/tablet/PlanningPane";
 import { InspectorPanel } from "~/components/tablet/InspectorPanel";
 import { useGateway } from "~/hooks/use-gateway";
+import { useTabletShortcuts } from "~/hooks/use-keyboard-shortcuts";
 import { extractFileReferences } from "~/lib/file-references";
 
 import "../styles.css";
@@ -114,6 +115,12 @@ function TabletLayout() {
   const handleSelectFile = useCallback((path: string) => {
     setSelectedFilePath((prev) => (prev === path ? null : path));
   }, []);
+
+  useTabletShortcuts({
+    onFocusSidebar: () => { /* TODO: focus sidebar search when added */ },
+    onFocusMain: () => { /* TODO: focus main pane input */ },
+    onToggleInspector: () => setInspectorVisible((v) => !v),
+  });
 
   if (!SplitView) {
     return <PhoneLayout />;

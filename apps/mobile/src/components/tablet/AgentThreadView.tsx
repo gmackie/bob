@@ -3,6 +3,7 @@ import { Text, View, ScrollView, Pressable, TextInput, KeyboardAvoidingView, Pla
 
 import type { ServerEvent } from "@bob/ws";
 import { colors } from "~/lib/colors";
+import { hapticMedium, hapticSuccess } from "~/lib/haptics";
 
 function formatEventType(eventType: string): string {
   switch (eventType) {
@@ -106,7 +107,9 @@ function ActionButton({
 }) {
   return (
     <Pressable
-      onPress={onPress}
+      onPress={() => { hapticMedium(); onPress(); }}
+      accessibilityRole="button"
+      accessibilityLabel={label}
       className="mr-2 rounded-md px-4 py-2 active:opacity-70"
       style={{
         backgroundColor: color + "20",
@@ -260,6 +263,8 @@ export function AgentThreadView({
           }}
           placeholder="Send input to agent..."
           placeholderTextColor={colors.muted2}
+          accessibilityLabel="Agent input"
+          accessibilityHint="Type a message to send to the agent"
           value={inputText}
           onChangeText={setInputText}
           onSubmitEditing={() => {
@@ -273,10 +278,13 @@ export function AgentThreadView({
         <Pressable
           onPress={() => {
             if (inputText.trim()) {
+              hapticSuccess();
               onSendInput(sessionId, inputText.trim());
               setInputText("");
             }
           }}
+          accessibilityRole="button"
+          accessibilityLabel="Send message"
           className="rounded-md px-4 py-2 active:opacity-70"
           style={{
             backgroundColor: colors.primary,

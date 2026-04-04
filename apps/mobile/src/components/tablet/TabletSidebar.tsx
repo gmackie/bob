@@ -7,6 +7,7 @@ import type { ConnectionState } from "@bob/ws";
 import { authClient } from "~/utils/auth";
 import { trpc } from "~/utils/api";
 import { colors } from "~/lib/colors";
+import { hapticLight, hapticSelection } from "~/lib/haptics";
 
 // ---------------------------------------------------------------------------
 // Shared
@@ -23,7 +24,7 @@ function TabBar({ tab, onTabChange }: { tab: SidebarTab; onTabChange: (t: Sideba
       {(["agents", "items"] as const).map((t) => (
         <Pressable
           key={t}
-          onPress={() => onTabChange(t)}
+          onPress={() => { hapticSelection(); onTabChange(t); }}
           className="flex-1 items-center py-2.5 active:opacity-70"
           style={{
             borderBottomWidth: 2,
@@ -85,7 +86,10 @@ function SessionRow({
 }) {
   return (
     <Pressable
-      onPress={onPress}
+      onPress={() => { hapticLight(); onPress(); }}
+      accessibilityRole="button"
+      accessibilityLabel={`${session.title ?? session.agentType}, ${session.status}`}
+      accessibilityState={{ selected: isSelected }}
       className="flex-row items-center px-4 py-3 active:opacity-70"
       style={{
         minHeight: 44,
@@ -156,7 +160,10 @@ function AgentsTab({
         {FILTERS.map((f) => (
           <Pressable
             key={f.key}
-            onPress={() => setFilter(f.key)}
+            onPress={() => { hapticSelection(); setFilter(f.key); }}
+            accessibilityRole="button"
+            accessibilityLabel={`Filter: ${f.label}`}
+            accessibilityState={{ selected: filter === f.key }}
             className="mr-1.5 rounded-full px-3 py-1 active:opacity-70"
             style={{
               backgroundColor: filter === f.key ? colors.primary + "30" : colors.secondary,
@@ -233,7 +240,10 @@ function WorkItemRow({
 }) {
   return (
     <Pressable
-      onPress={onPress}
+      onPress={() => { hapticLight(); onPress(); }}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.identifier} ${item.title}, ${item.status}`}
+      accessibilityState={{ selected: isSelected }}
       className="flex-row items-center px-4 py-3 active:opacity-70"
       style={{
         minHeight: 44,

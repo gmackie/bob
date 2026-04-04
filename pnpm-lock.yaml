@@ -398,6 +398,9 @@ importers:
       expo-device:
         specifier: ~55.0.12
         version: 55.0.12(expo@55.0.11)
+      expo-haptics:
+        specifier: ~55.0.11
+        version: 55.0.11(expo@55.0.11)
       expo-linking:
         specifier: ~55.0.11
         version: 55.0.11(expo@55.0.11)(react-native@0.84.1(@babel/core@7.28.6)(@react-native/metro-config@0.84.1(@babel/core@7.28.6))(@types/react@19.1.17)(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
@@ -8012,6 +8015,11 @@ packages:
       expo: '*'
       react: '*'
       react-native: '*'
+
+  expo-haptics@55.0.11:
+    resolution: {integrity: sha512-cvayByobLtoS5Yt2JFqcBPH+1mnLHkz+Rr+H1EOCZDdTVo5T6aaAHMOZrbRBZBhxrUevAPxfz0bfyhVZj3XHzA==}
+    peerDependencies:
+      expo: '*'
 
   expo-image@55.0.8:
     resolution: {integrity: sha512-fNdvdYVcGn3g1x6o5AXHKzk4xX8U6rg2W9vFdE1pQO80kWCNReh003ypqSrGy4dD+zA8FtZjrNF3oMDGnPpIGQ==}
@@ -17622,7 +17630,9 @@ snapshots:
       metro-runtime: 0.83.5
     transitivePeerDependencies:
       - '@babel/core'
+      - bufferutil
       - supports-color
+      - utf-8-validate
 
   '@react-native/normalize-colors@0.81.5': {}
 
@@ -21433,6 +21443,10 @@ snapshots:
       react: 19.2.4
       react-native: 0.84.1(@babel/core@7.28.6)(@react-native/metro-config@0.84.1(@babel/core@7.28.6))(@types/react@19.2.14)(react@19.2.4)
     optional: true
+
+  expo-haptics@55.0.11(expo@55.0.11):
+    dependencies:
+      expo: 55.0.11(@babel/core@7.28.6)(@expo/dom-webview@55.0.5)(@expo/metro-runtime@55.0.9)(expo-router@55.0.10)(react-dom@19.2.4(react@19.2.4))(react-native@0.84.1(@babel/core@7.28.6)(@react-native/metro-config@0.84.1(@babel/core@7.28.6))(@types/react@19.1.17)(react@19.2.4))(react-server-dom-webpack@19.2.4(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(webpack@5.104.1(@swc/core@1.15.8)))(react@19.2.4)(typescript@5.9.3)
 
   expo-image@55.0.8(expo@54.0.31)(react-native@0.81.5(@babel/core@7.28.6)(@react-native/metro-config@0.84.1(@babel/core@7.28.6))(@types/react@19.1.17)(react@19.2.3))(react@19.2.3):
     dependencies:
