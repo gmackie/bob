@@ -1,4 +1,5 @@
-import { Platform } from "react-native";
+import { useState, useCallback } from "react";
+import { Platform, View } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -8,13 +9,11 @@ import { Providers } from "../providers";
 import { TabletSidebar } from "~/components/tablet/TabletSidebar";
 import { AgentThreadView } from "~/components/tablet/AgentThreadView";
 import { WorkItemPane } from "~/components/tablet/WorkItemPane";
+import { PlanningPane } from "~/components/tablet/PlanningPane";
+import { InspectorPanel } from "~/components/tablet/InspectorPanel";
 import { useGateway } from "~/hooks/use-gateway";
 
 import "../styles.css";
-
-// Push notifications disabled until next EAS build includes expo-notifications native module.
-// Re-enable by importing usePushNotifications and calling it in AppContent.
-// import { usePushNotifications } from "~/hooks/use-push-notifications";
 
 /**
  * Conditionally import SplitView — only available on iOS and only
@@ -45,9 +44,28 @@ function PhoneLayout() {
 
 function MainPane({
   gateway,
+  onShowArtifact,
+  onOpenInspector,
 }: {
   gateway: ReturnType<typeof useGateway>;
+  onShowArtifact: (content: string) => void;
+  onOpenInspector: () => void;
 }) {
+  if (gateway.activePlanningSessionId && gateway.selectedSessionId) {
+    return (
+      <PlanningPane
+        sessionId={gateway.activePlanningSessionId}
+        sessionStatus="running"
+        sessionType={null}
+        workItemTitle=""
+        events={gateway.selectedSessionEvents}
+        onSendInput={gateway.sendInput}
+        onStopSession={gateway.stopSession}
+        onShowArtifact={onShowArtifact}
+      />
+    );
+  }
+
   if (gateway.selectedSessionId) {
     return (
       <AgentThreadView
@@ -60,7 +78,13 @@ function MainPane({
   }
 
   if (gateway.selectedWorkItemId) {
-    return <WorkItemPane workItemId={gateway.selectedWorkItemId} />;
+    return (
+      <WorkItemPane
+        workItemId={gateway.selectedWorkItemId}
+        onOpenSession={gateway.openPlanningSession}
+        onOpenInspector={onOpenInspector}
+      />
+    );
   }
 
   return <Stack screenOptions={stackScreenOptions} />;
@@ -68,6 +92,17 @@ function MainPane({
 
 function TabletLayout() {
   const gateway = useGateway();
+  const [inspectorVisible, setInspectorVisible] = useState(false);
+  const [inspectorArtifact, setInspectorArtifact] = useState<string | null>(null);
+
+  const handleShowArtifact = useCallback((content: string) => {
+    setInspectorArtifact(content);
+    setInspectorVisible(true);
+  }, []);
+
+  const handleOpenInspector = useCallback(() => {
+    setInspectorVisible(true);
+  }, []);
 
   if (!SplitView) {
     return <PhoneLayout />;
@@ -87,7 +122,18 @@ function TabletLayout() {
         />
       </SplitView.Column>
       <SplitView.Column>
-        <MainPane gateway={gateway} />
+        <View className="flex-1">
+          <MainPane
+            gateway={gateway}
+            onShowArtifact={handleShowArtifact}
+            onOpenInspector={handleOpenInspector}
+          />
+          <InspectorPanel
+            visible={inspectorVisible}
+            onClose={() => setInspectorVisible(false)}
+            artifactContent={inspectorArtifact}
+          />
+        </View>
       </SplitView.Column>
     </SplitView>
   );

@@ -17,9 +17,10 @@ const STATUS_COLORS: Record<string, string> = {
 interface WorkItemPaneProps {
   workItemId: string;
   onOpenInspector?: () => void;
+  onOpenSession?: (sessionId: string) => void;
 }
 
-export function WorkItemPane({ workItemId, onOpenInspector }: WorkItemPaneProps) {
+export function WorkItemPane({ workItemId, onOpenInspector, onOpenSession }: WorkItemPaneProps) {
   // @ts-expect-error — tRPC type inference depth exceeded (pre-existing)
   const workItemQuery = useQuery(trpc.workItem.get.queryOptions(
     { id: workItemId },
@@ -137,18 +138,24 @@ export function WorkItemPane({ workItemId, onOpenInspector }: WorkItemPaneProps)
               Planning Sessions
             </Text>
             {item.sessions.map((session) => (
-              <View
+              <Pressable
                 key={session.id}
-                className="mb-2 rounded-lg px-3 py-2"
-                style={{ backgroundColor: colors.card }}
+                onPress={() => onOpenSession?.(session.id)}
+                className="mb-2 flex-row items-center justify-between rounded-lg px-3 py-3 active:opacity-70"
+                style={{ backgroundColor: colors.card, minHeight: 44 }}
               >
-                <Text className="text-sm font-medium" style={{ color: colors.foreground }}>
-                  {session.planningSessionType ?? "Session"}
+                <View>
+                  <Text className="text-sm font-medium" style={{ color: colors.foreground }}>
+                    {session.planningSessionType ?? "Session"}
+                  </Text>
+                  <Text className="text-xs" style={{ color: colors.muted }}>
+                    {session.status}
+                  </Text>
+                </View>
+                <Text className="text-xs font-medium" style={{ color: colors.primary }}>
+                  {session.status === "running" || session.status === "idle" ? "Resume" : "View"}
                 </Text>
-                <Text className="text-xs" style={{ color: colors.muted }}>
-                  {session.status}
-                </Text>
-              </View>
+              </Pressable>
             ))}
           </View>
         )}

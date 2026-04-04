@@ -37,8 +37,10 @@ export interface UseGatewayResult {
   selectedSessionId: string | null;
   selectedSessionEvents: ServerEvent[];
   selectedWorkItemId: string | null;
+  activePlanningSessionId: string | null;
   selectSession: (sessionId: string | null) => void;
   selectWorkItem: (workItemId: string | null) => void;
+  openPlanningSession: (sessionId: string) => void;
   sendInput: (sessionId: string, data: string) => void;
   stopSession: (sessionId: string) => void;
   refresh: () => void;
@@ -53,6 +55,7 @@ export function useGateway(): UseGatewayResult {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [selectedSessionEvents, setSelectedSessionEvents] = useState<ServerEvent[]>([]);
   const [selectedWorkItemId, setSelectedWorkItemId] = useState<string | null>(null);
+  const [activePlanningSessionId, setActivePlanningSessionId] = useState<string | null>(null);
 
   // Track which session is selected in a ref so callbacks don't go stale
   const selectedRef = useRef<string | null>(null);
@@ -62,7 +65,7 @@ export function useGateway(): UseGatewayResult {
     selectedRef.current = sessionId;
     setSelectedSessionId(sessionId);
     setSelectedSessionEvents([]);
-    // Clear work item selection when switching to an agent
+    setActivePlanningSessionId(null);
     if (sessionId) setSelectedWorkItemId(null);
 
     const client = clientRef.current;
@@ -74,7 +77,7 @@ export function useGateway(): UseGatewayResult {
 
   const selectWorkItem = useCallback((workItemId: string | null) => {
     setSelectedWorkItemId(workItemId);
-    // Clear session selection when switching to a work item
+    setActivePlanningSessionId(null);
     if (workItemId) {
       const prev = selectedRef.current;
       if (prev) clientRef.current?.unsubscribe(prev);
@@ -82,6 +85,21 @@ export function useGateway(): UseGatewayResult {
       setSelectedSessionId(null);
       setSelectedSessionEvents([]);
     }
+  }, []);
+
+  const openPlanningSession = useCallback((sessionId: string) => {
+    // Subscribe to this planning session's event stream
+    const prev = selectedRef.current;
+    selectedRef.current = sessionId;
+    setSelectedSessionId(sessionId);
+    setSelectedSessionEvents([]);
+    setActivePlanningSessionId(sessionId);
+
+    const client = clientRef.current;
+    if (!client) return;
+
+    if (prev) client.unsubscribe(prev);
+    client.subscribe(sessionId);
   }, []);
 
   const sendInput = useCallback((sessionId: string, data: string) => {
@@ -183,7 +201,9 @@ export function useGateway(): UseGatewayResult {
     selectedSessionEvents,
     selectSession,
     selectedWorkItemId,
+    activePlanningSessionId,
     selectWorkItem,
+    openPlanningSession,
     sendInput,
     stopSession,
     refresh,
