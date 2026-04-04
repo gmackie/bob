@@ -235,9 +235,11 @@ export const projectRouter = {
         where: eq(workspaces.id, input.workspaceId),
       });
 
-      // Classify repos
+      // Classify repos: linked (has a matching project) vs gitOnly (no project)
+      // forgeReady is transient (one heartbeat cycle) — repos matched to a forge
+      // app get auto-linked to a project immediately, so we return an empty array
+      // for backward compatibility with the UI.
       const linked: typeof allRepos = [];
-      const forgeReady: typeof allRepos = [];
       const gitOnly: typeof allRepos = [];
 
       for (const repo of allRepos) {
@@ -253,10 +255,8 @@ export const projectRouter = {
 
         if (project) {
           linked.push(repo);
-        } else if (repo.discoveryStatus === "discovered") {
-          gitOnly.push(repo);
         } else {
-          forgeReady.push(repo);
+          gitOnly.push(repo);
         }
       }
 
@@ -266,7 +266,7 @@ export const projectRouter = {
           ...r,
           project: allProjects.find((p) => p.id === r.planningProjectId),
         })),
-        forgeReady,
+        forgeReady: [] as typeof allRepos,
         gitOnly,
         nonGit: nonGitDirs,
       };
@@ -275,6 +275,12 @@ export const projectRouter = {
   dismissDir: protectedProcedure
     .input(z.object({ dirId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      const dir = await ctx.db.query.discoveredDirs.findFirst({
+        where: eq(discoveredDirs.id, input.dirId),
+      });
+      if (!dir) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertWorkspaceAccess(ctx.db, ctx.session.user.id, dir.workspaceId);
+
       await ctx.db
         .update(discoveredDirs)
         .set({ dismissed: true })

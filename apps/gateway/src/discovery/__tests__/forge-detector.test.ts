@@ -3,11 +3,11 @@ import { ForgeDetector } from "../forge-detector.js";
 
 // Mock child_process
 vi.mock("child_process", () => ({
-  execSync: vi.fn(),
+  execFileSync: vi.fn(),
 }));
 
-import { execSync } from "child_process";
-const mockExecSync = vi.mocked(execSync);
+import { execFileSync } from "child_process";
+const mockExecSync = vi.mocked(execFileSync);
 
 describe("ForgeDetector", () => {
   beforeEach(() => {

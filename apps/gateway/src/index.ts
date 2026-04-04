@@ -1,6 +1,6 @@
 import { createServer, IncomingMessage, ServerResponse } from "http";
 import { WebSocketServer, WebSocket } from "ws";
-import { spawn, execSync } from "child_process";
+import { spawn, execSync, execFileSync } from "child_process";
 import { promises as fs } from "fs";
 import { join, dirname, basename } from "path";
 import { SessionManager, SessionRecord, SessionManagerCallbacks } from "./sessions/SessionManager.js";
@@ -1186,6 +1186,12 @@ const server = createServer(async (req, res) => {
 
   // POST /forge/register — trigger forge app create for a repo path
   if (req.method === "POST" && pathname === "/forge/register") {
+    const authHeader = req.headers["authorization"];
+    const apiKey = process.env.BOB_API_KEY;
+    if (!apiKey || !authHeader || authHeader !== `Bearer ${apiKey}`) {
+      sendJson(res, 401, { error: "Unauthorized" });
+      return;
+    }
     try {
       const body = await parseJsonBody(req);
       const path = body.path as string;
@@ -1208,8 +1214,9 @@ const server = createServer(async (req, res) => {
       }
 
       const forgeCli = process.env.FORGE_CLI_PATH ?? `${process.env.HOME}/.forgegraph/bin/fg`;
-      const result = execSync(
-        `${forgeCli} app create --path "${path}" --json`,
+      const result = execFileSync(
+        forgeCli,
+        ["app", "create", "--path", path, "--json"],
         { stdio: "pipe", encoding: "utf8", timeout: 30000 }
       );
 

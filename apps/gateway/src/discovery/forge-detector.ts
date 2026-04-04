@@ -1,4 +1,4 @@
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 
 export interface ForgeApp {
   id: string;
@@ -19,7 +19,7 @@ export class ForgeDetector {
 
   private detectCli(): boolean {
     try {
-      execSync(`which ${FORGE_CLI}`, { stdio: "pipe" });
+      execFileSync("which", [FORGE_CLI], { stdio: "pipe" });
       return true;
     } catch {
       return false;
@@ -33,7 +33,7 @@ export class ForgeDetector {
   isAuthenticated(): boolean {
     if (!this.available) return false;
     try {
-      execSync(`${FORGE_CLI} auth status`, { stdio: "pipe" });
+      execFileSync(FORGE_CLI, ["auth", "status"], { stdio: "pipe" });
       return true;
     } catch {
       return false;
@@ -43,7 +43,7 @@ export class ForgeDetector {
   listApps(): ForgeApp[] {
     if (!this.available) return [];
     try {
-      const output = execSync(`${FORGE_CLI} app list --json`, {
+      const output = execFileSync(FORGE_CLI, ["app", "list", "--json"], {
         stdio: "pipe",
         encoding: "utf8",
       });
