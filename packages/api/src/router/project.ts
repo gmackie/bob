@@ -2,7 +2,14 @@ import { z } from "zod/v4";
 import { TRPCError } from "@trpc/server";
 
 import { and, desc, eq } from "@bob/db";
-import { projects, repositories, workItems, workspaceMembers } from "@bob/db/schema";
+import {
+  discoveredDirs,
+  projects,
+  repositories,
+  workItems,
+  workspaceMembers,
+  workspaces,
+} from "@bob/db/schema";
 
 import { detectProjectCapabilities } from "../services/projects/projectCapabilities";
 import { protectedProcedure } from "../trpc";
@@ -191,5 +198,87 @@ export const projectRouter = {
         .returning();
 
       return updated!;
+    }),
+
+  discovery: protectedProcedure
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      await assertWorkspaceAccess(ctx.db, ctx.session.user.id, input.workspaceId);
+
+      // Get all non-stale repos for this workspace
+      const allRepos = await ctx.db.query.repositories.findMany({
+        where: and(
+          eq(repositories.workspaceId, input.workspaceId),
+          eq(repositories.stale, false),
+        ),
+      });
+
+      // Get all projects for this workspace
+      const allProjects = await ctx.db.query.projects.findMany({
+        where: eq(projects.workspaceId, input.workspaceId),
+      });
+
+      // Get non-dismissed, non-git directories
+      const nonGitDirs = await ctx.db.query.discoveredDirs.findMany({
+        where: and(
+          eq(discoveredDirs.workspaceId, input.workspaceId),
+          eq(discoveredDirs.dismissed, false),
+        ),
+      });
+
+      // Get workspace for forge status
+      const workspace = await ctx.db.query.workspaces.findFirst({
+        where: eq(workspaces.id, input.workspaceId),
+      });
+
+      // Classify repos
+      const linked: typeof allRepos = [];
+      const forgeReady: typeof allRepos = [];
+      const gitOnly: typeof allRepos = [];
+
+      for (const repo of allRepos) {
+        const project = allProjects.find(
+          (p) =>
+            p.id === repo.planningProjectId ||
+            (p.forgeGraphAppId &&
+              p.repoUrl &&
+              repo.remoteUrl &&
+              p.repoUrl.replace(/\.git$/, "") ===
+                repo.remoteUrl.replace(/\.git$/, "")),
+        );
+
+        if (project) {
+          linked.push(repo);
+        } else if (repo.discoveryStatus === "discovered") {
+          gitOnly.push(repo);
+        } else {
+          forgeReady.push(repo);
+        }
+      }
+
+      return {
+        forgeAvailable: workspace?.forgeAvailable ?? false,
+        linked: linked.map((r) => ({
+          ...r,
+          project: allProjects.find((p) => p.id === r.planningProjectId),
+        })),
+        forgeReady,
+        gitOnly,
+        nonGit: nonGitDirs,
+      };
+    }),
+
+  dismissDir: protectedProcedure
+    .input(z.object({ dirId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db
+        .update(discoveredDirs)
+        .set({ dismissed: true })
+        .where(eq(discoveredDirs.id, input.dirId));
+      return { ok: true };
     }),
 };
