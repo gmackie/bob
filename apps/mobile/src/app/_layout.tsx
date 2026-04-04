@@ -57,6 +57,7 @@ function TabletLayout() {
           connectionState={gateway.connectionState}
           selectedSessionId={gateway.selectedSessionId}
           onSelectSession={gateway.selectSession}
+          onRefresh={gateway.refresh}
         />
       </SplitView.Column>
       <SplitView.Column>

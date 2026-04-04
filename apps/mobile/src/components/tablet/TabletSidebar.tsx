@@ -1,8 +1,27 @@
-import { Text, View, Pressable, ScrollView } from "react-native";
+import { useState } from "react";
+import { Text, View, Pressable, ScrollView, RefreshControl } from "react-native";
 
 import type { GatewaySession } from "~/hooks/use-gateway";
 import type { ConnectionState } from "@bob/ws";
 import { colors } from "~/lib/colors";
+
+type StatusFilter = "all" | "running" | "completed" | "failed";
+
+const FILTERS: { key: StatusFilter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "running", label: "Running" },
+  { key: "completed", label: "Done" },
+  { key: "failed", label: "Failed" },
+];
+
+function matchesFilter(status: string, filter: StatusFilter): boolean {
+  switch (filter) {
+    case "all": return true;
+    case "running": return status === "running" || status === "starting" || status === "provisioning";
+    case "completed": return status === "stopped" || status === "idle";
+    case "failed": return status === "error";
+  }
+}
 
 const STATUS_COLORS: Record<string, string> = {
   running: colors.success,
@@ -62,6 +81,7 @@ interface TabletSidebarProps {
   connectionState: ConnectionState;
   selectedSessionId: string | null;
   onSelectSession: (sessionId: string) => void;
+  onRefresh?: () => void;
 }
 
 export function TabletSidebar({
@@ -69,13 +89,25 @@ export function TabletSidebar({
   connectionState,
   selectedSessionId,
   onSelectSession,
+  onRefresh,
 }: TabletSidebarProps) {
-  const activeSessions = sessions.filter(
+  const [filter, setFilter] = useState<StatusFilter>("all");
+  const [refreshing, setRefreshing] = useState(false);
+
+  const filtered = filter === "all" ? sessions : sessions.filter((s) => matchesFilter(s.status, filter));
+  const activeSessions = filtered.filter(
     (s) => s.status === "running" || s.status === "starting" || s.status === "provisioning",
   );
-  const inactiveSessions = sessions.filter(
+  const inactiveSessions = filtered.filter(
     (s) => s.status !== "running" && s.status !== "starting" && s.status !== "provisioning",
   );
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    onRefresh?.();
+    // Give the snapshot time to arrive
+    setTimeout(() => setRefreshing(false), 1000);
+  };
 
   return (
     <View className="flex-1" style={{ backgroundColor: colors.background }}>
@@ -113,8 +145,45 @@ export function TabletSidebar({
         </View>
       </View>
 
+      {/* Filter chips */}
+      <View
+        className="flex-row px-3 py-2"
+        style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}
+      >
+        {FILTERS.map((f) => (
+          <Pressable
+            key={f.key}
+            onPress={() => setFilter(f.key)}
+            className="mr-1.5 rounded-full px-3 py-1 active:opacity-70"
+            style={{
+              backgroundColor: filter === f.key ? colors.primary + "30" : colors.secondary,
+              minHeight: 32,
+              justifyContent: "center",
+            }}
+          >
+            <Text
+              className="text-xs font-medium"
+              style={{
+                color: filter === f.key ? colors.primary : colors.muted,
+              }}
+            >
+              {f.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
       {/* Session list */}
-      <ScrollView className="flex-1">
+      <ScrollView
+        className="flex-1"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.muted}
+          />
+        }
+      >
         {sessions.length === 0 ? (
           <View className="items-center justify-center px-4 py-12">
             <Text className="text-sm" style={{ color: colors.muted }}>

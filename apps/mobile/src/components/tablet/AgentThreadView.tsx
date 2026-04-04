@@ -1,5 +1,5 @@
-import { useRef, useEffect } from "react";
-import { Text, View, ScrollView, Pressable } from "react-native";
+import { useRef, useEffect, useMemo, useState } from "react";
+import { Text, View, ScrollView, Pressable, TextInput, KeyboardAvoidingView, Platform } from "react-native";
 
 import type { ServerEvent } from "@bob/ws";
 import { colors } from "~/lib/colors";
@@ -95,6 +95,55 @@ function EventRow({ event }: { event: ServerEvent }) {
   );
 }
 
+function ActionButton({
+  label,
+  color,
+  onPress,
+}: {
+  label: string;
+  color: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      className="mr-2 rounded-md px-4 py-2 active:opacity-70"
+      style={{
+        backgroundColor: color + "20",
+        minHeight: 44,
+        justifyContent: "center",
+      }}
+    >
+      <Text className="text-sm font-medium" style={{ color }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+/**
+ * Detect if the agent is waiting for tool approval.
+ * A tool_call without a subsequent tool_result means it's pending.
+ */
+function usePendingToolCall(events: ServerEvent[]): ServerEvent | null {
+  return useMemo(() => {
+    const toolCalls = new Map<string, ServerEvent>();
+
+    for (const event of events) {
+      if (event.eventType === "tool_call" && event.payload.toolCallId) {
+        toolCalls.set(event.payload.toolCallId as string, event);
+      }
+      if (event.eventType === "tool_result" && event.payload.toolCallId) {
+        toolCalls.delete(event.payload.toolCallId as string);
+      }
+    }
+
+    // Return the most recent pending tool call
+    const pending = Array.from(toolCalls.values());
+    return pending.length > 0 ? pending[pending.length - 1]! : null;
+  }, [events]);
+}
+
 interface AgentThreadViewProps {
   sessionId: string | null;
   events: ServerEvent[];
@@ -105,12 +154,14 @@ interface AgentThreadViewProps {
 export function AgentThreadView({
   sessionId,
   events,
+  onSendInput,
   onStopSession,
 }: AgentThreadViewProps) {
   const scrollRef = useRef<ScrollView>(null);
+  const [inputText, setInputText] = useState("");
+  const pendingToolCall = usePendingToolCall(events);
 
   useEffect(() => {
-    // Auto-scroll to bottom when new events arrive
     scrollRef.current?.scrollToEnd({ animated: true });
   }, [events.length]);
 
@@ -131,8 +182,12 @@ export function AgentThreadView({
   }
 
   return (
-    <View className="flex-1" style={{ backgroundColor: colors.background }}>
-      {/* Action bar */}
+    <KeyboardAvoidingView
+      className="flex-1"
+      style={{ backgroundColor: colors.background }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      {/* Header */}
       <View
         className="flex-row items-center justify-between px-4 py-2"
         style={{
@@ -143,21 +198,7 @@ export function AgentThreadView({
         <Text className="text-sm font-medium" style={{ color: colors.foreground }}>
           {sessionId.slice(0, 8)}...
         </Text>
-        <View className="flex-row">
-          <Pressable
-            onPress={() => onStopSession(sessionId)}
-            className="rounded-md px-3 py-1.5 active:opacity-70"
-            style={{
-              backgroundColor: colors.danger + "20",
-              minHeight: 44,
-              justifyContent: "center",
-            }}
-          >
-            <Text className="text-xs font-medium" style={{ color: colors.danger }}>
-              Stop
-            </Text>
-          </Pressable>
-        </View>
+        <ActionButton label="Stop" color={colors.danger} onPress={() => onStopSession(sessionId)} />
       </View>
 
       {/* Event stream */}
@@ -172,6 +213,82 @@ export function AgentThreadView({
           events.map((event, i) => <EventRow key={`${event.seq}-${i}`} event={event} />)
         )}
       </ScrollView>
-    </View>
+
+      {/* Approval bar — shown when a tool call is pending */}
+      {pendingToolCall && (
+        <View
+          className="px-4 py-3"
+          style={{
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+            backgroundColor: colors.card,
+          }}
+        >
+          <Text className="mb-2 text-xs" style={{ color: colors.muted }}>
+            Awaiting approval: {pendingToolCall.payload.name as string}
+          </Text>
+          <View className="flex-row">
+            <ActionButton
+              label="Approve"
+              color={colors.success}
+              onPress={() => onSendInput(sessionId, "y")}
+            />
+            <ActionButton
+              label="Reject"
+              color={colors.danger}
+              onPress={() => onSendInput(sessionId, "n")}
+            />
+          </View>
+        </View>
+      )}
+
+      {/* Input bar */}
+      <View
+        className="flex-row items-center px-4 py-2"
+        style={{
+          borderTopWidth: 1,
+          borderTopColor: colors.border,
+          backgroundColor: colors.card,
+        }}
+      >
+        <TextInput
+          className="mr-2 flex-1 rounded-md px-3 py-2 text-sm"
+          style={{
+            backgroundColor: colors.secondary,
+            color: colors.foreground,
+            minHeight: 44,
+          }}
+          placeholder="Send input to agent..."
+          placeholderTextColor={colors.muted2}
+          value={inputText}
+          onChangeText={setInputText}
+          onSubmitEditing={() => {
+            if (inputText.trim()) {
+              onSendInput(sessionId, inputText.trim());
+              setInputText("");
+            }
+          }}
+          returnKeyType="send"
+        />
+        <Pressable
+          onPress={() => {
+            if (inputText.trim()) {
+              onSendInput(sessionId, inputText.trim());
+              setInputText("");
+            }
+          }}
+          className="rounded-md px-4 py-2 active:opacity-70"
+          style={{
+            backgroundColor: colors.primary,
+            minHeight: 44,
+            justifyContent: "center",
+          }}
+        >
+          <Text className="text-sm font-medium" style={{ color: colors.primaryForeground }}>
+            Send
+          </Text>
+        </Pressable>
+      </View>
+    </KeyboardAvoidingView>
   );
 }

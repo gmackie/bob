@@ -39,6 +39,7 @@ export interface UseGatewayResult {
   selectSession: (sessionId: string | null) => void;
   sendInput: (sessionId: string, data: string) => void;
   stopSession: (sessionId: string) => void;
+  refresh: () => void;
 }
 
 export function useGateway(): UseGatewayResult {
@@ -74,6 +75,15 @@ export function useGateway(): UseGatewayResult {
 
   const stopSession = useCallback((sessionId: string) => {
     clientRef.current?.stopSession(sessionId);
+  }, []);
+
+  const refresh = useCallback(() => {
+    // Re-subscribe to workspace to get a fresh snapshot
+    const client = clientRef.current;
+    if (client) {
+      client.unsubscribeWorkspace();
+      client.subscribeWorkspace();
+    }
   }, []);
 
   useEffect(() => {
@@ -159,5 +169,6 @@ export function useGateway(): UseGatewayResult {
     selectSession,
     sendInput,
     stopSession,
+    refresh,
   };
 }
