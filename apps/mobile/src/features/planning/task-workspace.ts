@@ -28,7 +28,7 @@ interface TaskWorkspaceArtifact {
   artifactType: string;
   title: string | null;
   summary?: string | null;
-  url: string;
+  url: string | null;
   metadata?: Record<string, unknown> | null;
 }
 

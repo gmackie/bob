@@ -37,6 +37,8 @@ import {
   ClientAck,
   ClientCreateSession,
   ClientStopSession,
+  ClientSubscribeWorkspace,
+  ClientUnsubscribeWorkspace,
 } from "./ws/protocol.js";
 
 const PORT = parseInt(process.env.GATEWAY_PORT ?? "3002", 10);
@@ -106,6 +108,8 @@ interface SessionConnection {
   authenticated: boolean;
   subscribedSessions: Set<string>;
   heartbeatTimer: ReturnType<typeof setInterval> | null;
+  workspaceSubscribed: boolean;
+  workspaceStatusFilter?: SessionStatus[];
 }
 
 const userContainers = new Map<string, UserContainer>();
@@ -168,6 +172,30 @@ const sessionManagerCallbacks: SessionManagerCallbacks = {
         lastActivityAt: new Date().toISOString(),
       })
       .where(eq(chatConversations.id, sessionId));
+
+    // Notify workspace subscribers for this session's owner
+    const actor = sessionManager.getSession(sessionId);
+    if (actor) {
+      const sessionUserId = actor.userId;
+      for (const [, conn] of sessionConnections) {
+        if (
+          conn.workspaceSubscribed &&
+          conn.userId === sessionUserId &&
+          conn.ws.readyState === WebSocket.OPEN
+        ) {
+          // Apply status filter if set
+          if (conn.workspaceStatusFilter && conn.workspaceStatusFilter.length > 0) {
+            if (!conn.workspaceStatusFilter.includes(status)) continue;
+          }
+          conn.ws.send(encodeServerMessage({
+            type: "session_status_changed",
+            sessionId,
+            status,
+            agentType: actor.agentType,
+          }));
+        }
+      }
+    }
   },
   loadSession: async (sessionId): Promise<SessionRecord | null> => {
     const row = await db.query.chatConversations.findFirst({
@@ -1478,6 +1506,8 @@ function handleSessionsWebSocket(ws: WebSocket): void {
     authenticated: false,
     subscribedSessions: new Set(),
     heartbeatTimer: null,
+    workspaceSubscribed: false,
+    workspaceStatusFilter: undefined,
   };
   sessionConnections.set(connectionId, connection);
   console.log(`[Gateway] New session connection ${connectionId}`);
@@ -1694,7 +1724,7 @@ function handleSessionsWebSocket(ws: WebSocket): void {
 
           const stop = msg as ClientStopSession;
           const actor = sessionManager.getSession(stop.sessionId);
-          
+
           if (!actor) {
             sendError("SESSION_NOT_FOUND", `Session ${stop.sessionId} not found`, stop.sessionId);
             return;
@@ -1712,6 +1742,47 @@ function handleSessionsWebSocket(ws: WebSocket): void {
             type: "session_stopped",
             sessionId: stop.sessionId,
           });
+          break;
+        }
+
+        case "subscribe_workspace": {
+          if (!connection.authenticated || !connection.userId) {
+            sendError("NOT_AUTHENTICATED", "Must send hello first");
+            return;
+          }
+
+          const wsMsg = msg as ClientSubscribeWorkspace;
+          connection.workspaceSubscribed = true;
+          connection.workspaceStatusFilter = wsMsg.statusFilter;
+
+          // Query all sessions for this user from DB
+          const rows = await db.query.chatConversations.findMany({
+            where: eq(chatConversations.userId, connection.userId),
+          });
+
+          let sessions = rows.map((row) => ({
+            sessionId: row.id,
+            status: row.status as SessionStatus,
+            agentType: row.agentType,
+            title: row.title ?? undefined,
+            lastActivityAt: row.lastActivityAt ?? new Date().toISOString(),
+          }));
+
+          // Apply status filter if provided
+          if (wsMsg.statusFilter && wsMsg.statusFilter.length > 0) {
+            sessions = sessions.filter((s) => wsMsg.statusFilter!.includes(s.status));
+          }
+
+          send({
+            type: "workspace_snapshot",
+            sessions,
+          });
+          break;
+        }
+
+        case "unsubscribe_workspace": {
+          connection.workspaceSubscribed = false;
+          connection.workspaceStatusFilter = undefined;
           break;
         }
       }

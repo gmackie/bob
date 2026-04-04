@@ -444,27 +444,27 @@ const buildUpdateWorkItemProcedure = (procedure: any) =>
 
     const nextWorkItem = workItem ?? existing;
 
-    const changedFields: Array<{
-      field: "title" | "description" | "status";
-      previousValue: string | null;
-      nextValue: string | null;
-    }> = [
+    const changedFields = ([
       {
-        field: "title",
+        field: "title" as const,
         previousValue: existing.title ?? null,
         nextValue: input.title ?? null,
       },
       {
-        field: "description",
+        field: "description" as const,
         previousValue: existing.description ?? null,
         nextValue: input.description ?? null,
       },
       {
-        field: "status",
+        field: "status" as const,
         previousValue: existing.status ?? null,
         nextValue: input.status ?? null,
       },
-    ].filter(
+    ] satisfies Array<{
+      field: "title" | "description" | "status";
+      previousValue: string | null;
+      nextValue: string | null;
+    }>).filter(
       (change) =>
         change.nextValue !== null && change.previousValue !== change.nextValue,
     );

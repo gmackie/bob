@@ -58,7 +58,7 @@ export function initAuth<
           options.baseUrl,
           options.productionUrl,
           // Allow extra trusted origins via env var (comma-separated)
-          ...(process.env.TRUSTED_ORIGINS?.split(",").map((o) => o.trim()) ?? []),
+          ...(process.env.TRUSTED_ORIGINS?.split(",").map((o: string) => o.trim()) ?? []),
         ].filter(Boolean),
       ),
     ),

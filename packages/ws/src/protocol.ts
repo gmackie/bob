@@ -1,7 +1,22 @@
+// Shared WebSocket protocol types for client and server.
+// This is the single source of truth — both gateway and clients import from here.
+
 export type SessionStatus = "provisioning" | "starting" | "running" | "idle" | "stopping" | "stopped" | "error";
 export type DeviceType = "web" | "ios" | "android" | "desktop" | "other";
 export type EventDirection = "client" | "agent" | "system";
-export type SessionEventType = "output_chunk" | "message_final" | "input" | "tool_call" | "tool_result" | "state" | "error" | "heartbeat";
+export type SessionEventType =
+  | "output_chunk"
+  | "message_final"
+  | "input"
+  | "tool_call"
+  | "tool_result"
+  | "state"
+  | "error"
+  | "heartbeat";
+
+// ---------------------------------------------------------------------------
+// Client → Server messages
+// ---------------------------------------------------------------------------
 
 export interface ClientHello {
   type: "hello";
@@ -11,17 +26,69 @@ export interface ClientHello {
   lastGlobalSeenAt?: string;
 }
 
+export interface ClientSubscribe {
+  type: "subscribe";
+  sessionId: string;
+  lastAckSeq: number;
+}
+
+export interface ClientUnsubscribe {
+  type: "unsubscribe";
+  sessionId: string;
+}
+
+export interface ClientInput {
+  type: "input";
+  sessionId: string;
+  clientInputId: string;
+  data: string;
+}
+
+export interface ClientAck {
+  type: "ack";
+  sessionId: string;
+  seq: number;
+}
+
+export interface ClientPing {
+  type: "ping";
+  ts: string;
+}
+
+export interface ClientCreateSession {
+  type: "create_session";
+  sessionId?: string;
+  worktreeId?: string;
+  repositoryId?: string;
+  workingDirectory: string;
+  agentType: string;
+  title?: string;
+  cookieDomains?: string[];
+}
+
+export interface ClientStopSession {
+  type: "stop_session";
+  sessionId: string;
+}
+
+export interface ClientSubscribeWorkspace {
+  type: "subscribe_workspace";
+  statusFilter?: SessionStatus[];
+}
+
+export interface ClientUnsubscribeWorkspace {
+  type: "unsubscribe_workspace";
+}
+
+// ---------------------------------------------------------------------------
+// Server → Client messages
+// ---------------------------------------------------------------------------
+
 export interface ServerHelloOk {
   type: "hello_ok";
   gatewayTime: string;
   heartbeatIntervalMs: number;
   userId: string;
-}
-
-export interface ClientSubscribe {
-  type: "subscribe";
-  sessionId: string;
-  lastAckSeq: number;
 }
 
 export interface ServerSubscribed {
@@ -31,21 +98,9 @@ export interface ServerSubscribed {
   latestSeq: number;
 }
 
-export interface ClientUnsubscribe {
-  type: "unsubscribe";
-  sessionId: string;
-}
-
 export interface ServerUnsubscribed {
   type: "unsubscribed";
   sessionId: string;
-}
-
-export interface ClientInput {
-  type: "input";
-  sessionId: string;
-  clientInputId: string;
-  data: string;
 }
 
 export interface ServerInputAck {
@@ -65,17 +120,6 @@ export interface ServerEvent {
   createdAt: string;
 }
 
-export interface ClientAck {
-  type: "ack";
-  sessionId: string;
-  seq: number;
-}
-
-export interface ClientPing {
-  type: "ping";
-  ts: string;
-}
-
 export interface ServerPong {
   type: "pong";
   ts: string;
@@ -89,26 +133,10 @@ export interface ServerError {
   retryable: boolean;
 }
 
-export interface ClientCreateSession {
-  type: "create_session";
-  sessionId?: string;
-  worktreeId?: string;
-  repositoryId?: string;
-  workingDirectory: string;
-  agentType: string;
-  title?: string;
-  cookieDomains?: string[];
-}
-
 export interface ServerSessionCreated {
   type: "session_created";
   sessionId: string;
   status: SessionStatus;
-}
-
-export interface ClientStopSession {
-  type: "stop_session";
-  sessionId: string;
 }
 
 export interface ServerSessionStopped {
@@ -116,34 +144,30 @@ export interface ServerSessionStopped {
   sessionId: string;
 }
 
-export interface ClientSubscribeWorkspace {
-  type: "subscribe_workspace";
-  /** Optional filter — only sessions matching these statuses */
-  statusFilter?: SessionStatus[];
-}
-
-export interface ClientUnsubscribeWorkspace {
-  type: "unsubscribe_workspace";
+export interface WorkspaceSessionInfo {
+  sessionId: string;
+  status: SessionStatus;
+  title?: string;
+  agentType: string;
+  updatedAt: string;
 }
 
 export interface ServerWorkspaceSnapshot {
   type: "workspace_snapshot";
-  sessions: Array<{
-    sessionId: string;
-    status: SessionStatus;
-    agentType: string;
-    title?: string;
-    lastActivityAt: string;
-  }>;
+  sessions: WorkspaceSessionInfo[];
 }
 
 export interface ServerSessionStatusChanged {
   type: "session_status_changed";
   sessionId: string;
   status: SessionStatus;
-  agentType: string;
   title?: string;
+  agentType: string;
 }
+
+// ---------------------------------------------------------------------------
+// Union types
+// ---------------------------------------------------------------------------
 
 export type ClientMessage =
   | ClientHello
@@ -170,21 +194,9 @@ export type ServerMessage =
   | ServerWorkspaceSnapshot
   | ServerSessionStatusChanged;
 
-export function parseClientMessage(data: string): ClientMessage | null {
-  try {
-    const msg = JSON.parse(data) as ClientMessage;
-    if (!msg || typeof msg !== "object" || !msg.type) {
-      return null;
-    }
-    return msg;
-  } catch {
-    return null;
-  }
-}
-
-export function encodeServerMessage(msg: ServerMessage): string {
-  return JSON.stringify(msg);
-}
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 export interface SessionEventPayload {
   outputChunk: { data: string; stream: "stdout" | "stderr" };
@@ -197,30 +209,18 @@ export interface SessionEventPayload {
   heartbeat: { ts: string };
 }
 
-export function createEvent(
-  sessionId: string,
-  seq: number,
-  eventType: SessionEventType,
-  direction: EventDirection,
-  payload: Record<string, unknown>
-): ServerEvent {
-  return {
-    type: "event",
-    sessionId,
-    seq,
-    eventType,
-    direction,
-    payload,
-    createdAt: new Date().toISOString(),
-  };
+export function parseServerMessage(data: string): ServerMessage | null {
+  try {
+    const msg = JSON.parse(data) as ServerMessage;
+    if (!msg || typeof msg !== "object" || !msg.type) {
+      return null;
+    }
+    return msg;
+  } catch {
+    return null;
+  }
 }
 
-export function createError(code: string, message: string, sessionId?: string, retryable = false): ServerError {
-  return {
-    type: "error",
-    code,
-    message,
-    sessionId,
-    retryable,
-  };
+export function encodeClientMessage(msg: ClientMessage): string {
+  return JSON.stringify(msg);
 }

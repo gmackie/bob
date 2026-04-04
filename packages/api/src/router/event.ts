@@ -32,10 +32,10 @@ export const eventRouter = {
         conditions.push(eq(eventLog.eventType, input.eventType));
       }
       if (input.since) {
-        conditions.push(gte(eventLog.createdAt, input.since));
+        conditions.push(gte(eventLog.createdAt, input.since.toISOString()));
       }
       if (input.until) {
-        conditions.push(lte(eventLog.createdAt, input.until));
+        conditions.push(lte(eventLog.createdAt, input.until.toISOString()));
       }
 
       const events = await ctx.db.query.eventLog.findMany({
@@ -107,7 +107,7 @@ export const eventRouter = {
       ];
 
       if (input.since) {
-        conditions.push(gte(eventLog.createdAt, input.since));
+        conditions.push(gte(eventLog.createdAt, input.since.toISOString()));
       }
 
       const events = await ctx.db.query.eventLog.findMany({
@@ -137,7 +137,7 @@ export const eventRouter = {
         conditions.push(eq(eventLog.repositoryId, input.repositoryId));
       }
       if (input.since) {
-        conditions.push(gte(eventLog.createdAt, input.since));
+        conditions.push(gte(eventLog.createdAt, input.since.toISOString()));
       }
 
       const events = await ctx.db.query.eventLog.findMany({

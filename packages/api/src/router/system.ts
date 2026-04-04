@@ -69,7 +69,7 @@ export const systemRouter = {
       return { 
         status: "ready", 
         port: data.port,
-        gatewayUrl: GATEWAY_URL,
+        gatewayUrl: getGatewayUrl(),
       };
     } catch (error) {
       console.error("Failed to ensure container:", error);

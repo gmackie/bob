@@ -107,7 +107,7 @@ export async function recordWebhookDelivery(
 export async function markDeliveryProcessed(deliveryId: string): Promise<void> {
   await db
     .update(webhookDeliveries)
-    .set({ status: "processed", processedAt: new Date() })
+    .set({ status: "processed", processedAt: new Date().toISOString() })
     .where(eq(webhookDeliveries.id, deliveryId));
 }
 
@@ -238,8 +238,8 @@ async function handleGitHubPullRequest(
         additions: pr.additions,
         deletions: pr.deletions,
         changedFiles: pr.changed_files,
-        mergedAt: pr.merged_at ? new Date(pr.merged_at) : null,
-        closedAt: pr.closed_at ? new Date(pr.closed_at) : null,
+        mergedAt: pr.merged_at ? new Date(pr.merged_at).toISOString() : null,
+        closedAt: pr.closed_at ? new Date(pr.closed_at).toISOString() : null,
       })
       .where(eq(pullRequests.id, existing.id));
 
@@ -296,7 +296,7 @@ async function handleGitHubPush(payload: GitHubPushPayload): Promise<void> {
         message: commit.message,
         authorName: commit.author.name,
         authorEmail: commit.author.email,
-        committedAt: new Date(commit.timestamp),
+        committedAt: new Date(commit.timestamp).toISOString(),
         isBobCommit: false,
       });
     }
@@ -377,7 +377,7 @@ async function handleGitLabMergeRequest(
         title: attrs.title,
         body: attrs.description,
         status,
-        mergedAt: attrs.merged_at ? new Date(attrs.merged_at) : null,
+        mergedAt: attrs.merged_at ? new Date(attrs.merged_at).toISOString() : null,
       })
       .where(eq(pullRequests.id, existing.id));
   }
@@ -422,7 +422,7 @@ async function handleGitLabPush(
         message: commit.message,
         authorName: commit.author.name,
         authorEmail: commit.author.email,
-        committedAt: new Date(commit.timestamp),
+        committedAt: new Date(commit.timestamp).toISOString(),
         isBobCommit: false,
       });
     }
@@ -502,8 +502,8 @@ async function handleGiteaPullRequest(
         title: pr.title,
         body: pr.body,
         status,
-        mergedAt: pr.merged_at ? new Date(pr.merged_at) : null,
-        closedAt: pr.closed_at ? new Date(pr.closed_at) : null,
+        mergedAt: pr.merged_at ? new Date(pr.merged_at).toISOString() : null,
+        closedAt: pr.closed_at ? new Date(pr.closed_at).toISOString() : null,
       })
       .where(eq(pullRequests.id, existing.id));
   }
@@ -546,7 +546,7 @@ async function handleGiteaPush(
         message: commit.message,
         authorName: commit.author.name,
         authorEmail: commit.author.email,
-        committedAt: new Date(commit.timestamp),
+        committedAt: new Date(commit.timestamp).toISOString(),
         isBobCommit: false,
       });
     }

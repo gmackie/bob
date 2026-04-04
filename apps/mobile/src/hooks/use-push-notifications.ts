@@ -10,19 +10,21 @@ import { useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 import { router } from "expo-router";
 import Constants from "expo-constants";
+import type * as ExpoNotifications from "expo-notifications";
+import type * as ExpoDevice from "expo-device";
 
 import { getBaseUrl } from "~/utils/base-url";
 
 // Lazy-load expo-notifications to avoid crash if native module isn't available
-let Notifications: typeof import("expo-notifications") | null = null;
-let Device: typeof import("expo-device") | null = null;
+let Notifications: typeof ExpoNotifications | null = null;
+let Device: typeof ExpoDevice | null = null;
 
 try {
   Notifications = require("expo-notifications");
   Device = require("expo-device");
 
   // Configure how notifications appear when the app is in foreground
-  Notifications.setNotificationHandler({
+  Notifications!.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
       shouldPlaySound: true,
@@ -44,7 +46,7 @@ async function registerForPushNotifications(): Promise<string | null> {
     return null;
   }
 
-  if (!Device.isDevice) {
+  if (!Device!.isDevice) {
     console.log("[push] Must use physical device for push notifications");
     return null;
   }
@@ -95,7 +97,7 @@ async function registerTokenWithServer(token: string): Promise<void> {
           json: {
             token,
             platform: Platform.OS as "ios" | "android" | "web",
-            deviceName: Device.deviceName ?? "Unknown",
+            deviceName: Device!.deviceName ?? "Unknown",
           },
         },
       }),
@@ -110,7 +112,7 @@ async function registerTokenWithServer(token: string): Promise<void> {
  * Handle notification tap — navigate to the relevant screen.
  */
 function handleNotificationResponse(
-  response: Notifications.NotificationResponse,
+  response: ExpoNotifications.NotificationResponse,
 ): void {
   const data = response.notification.request.content.data as {
     workItemId?: string;
@@ -131,8 +133,8 @@ function handleNotificationResponse(
  */
 export function usePushNotifications() {
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
-  const notificationListener = useRef<Notifications.EventSubscription | null>(null);
-  const responseListener = useRef<Notifications.EventSubscription | null>(null);
+  const notificationListener = useRef<ExpoNotifications.EventSubscription | null>(null);
+  const responseListener = useRef<ExpoNotifications.EventSubscription | null>(null);
 
   useEffect(() => {
     if (!Notifications) return;

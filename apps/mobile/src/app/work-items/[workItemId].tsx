@@ -325,7 +325,7 @@ export default function WorkItemDetailScreen() {
               <ListRow
                 key={artifact.id}
                 title={artifact.title ?? artifact.artifactRole}
-                subtitle={artifact.url}
+                subtitle={artifact.url ?? undefined}
                 showDivider={index < currentArtifacts.length - 1}
               />
             ))

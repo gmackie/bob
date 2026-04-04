@@ -433,10 +433,10 @@ export default function TaskWorkspaceScreen() {
               <ListRow
                 key={artifact.id}
                 title={artifact.title ?? artifact.artifactRole}
-                subtitle={artifact.url}
-                onPress={() => {
-                  void Linking.openURL(artifact.url);
-                }}
+                subtitle={artifact.url ?? undefined}
+                onPress={artifact.url ? () => {
+                  void Linking.openURL(artifact.url!);
+                } : undefined}
                 showDivider={index < workItemData.currentArtifacts.length - 1}
               />
             ))

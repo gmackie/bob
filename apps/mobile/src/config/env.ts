@@ -42,8 +42,7 @@ function getApiUrl(): string {
         parsed.hostname === "localhost" ||
         parsed.hostname === "127.0.0.1"
       ) {
-        parsed.hostname = resolvedHost;
-        return parsed.toString().replace(/\/$/, "");
+        return `${parsed.protocol}//${resolvedHost}${parsed.port ? `:${parsed.port}` : ""}${parsed.pathname}`.replace(/\/$/, "");
       }
     } catch {
       return envApiUrl;

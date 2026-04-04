@@ -165,7 +165,7 @@ export const settingsRouter = {
       const keyPrefix = getKeyPrefix(key);
 
       const expiresAt = input.expiresInDays
-        ? new Date(Date.now() + input.expiresInDays * 24 * 60 * 60 * 1000)
+        ? new Date(Date.now() + input.expiresInDays * 24 * 60 * 60 * 1000).toISOString()
         : null;
 
       const [created] = await ctx.db
