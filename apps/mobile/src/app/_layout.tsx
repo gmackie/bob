@@ -7,6 +7,7 @@ import { queryClient } from "~/utils/api";
 import { Providers } from "../providers";
 import { TabletSidebar } from "~/components/tablet/TabletSidebar";
 import { AgentThreadView } from "~/components/tablet/AgentThreadView";
+import { WorkItemPane } from "~/components/tablet/WorkItemPane";
 import { useGateway } from "~/hooks/use-gateway";
 
 import "../styles.css";
@@ -42,6 +43,29 @@ function PhoneLayout() {
   return <Stack screenOptions={stackScreenOptions} />;
 }
 
+function MainPane({
+  gateway,
+}: {
+  gateway: ReturnType<typeof useGateway>;
+}) {
+  if (gateway.selectedSessionId) {
+    return (
+      <AgentThreadView
+        sessionId={gateway.selectedSessionId}
+        events={gateway.selectedSessionEvents}
+        onSendInput={gateway.sendInput}
+        onStopSession={gateway.stopSession}
+      />
+    );
+  }
+
+  if (gateway.selectedWorkItemId) {
+    return <WorkItemPane workItemId={gateway.selectedWorkItemId} />;
+  }
+
+  return <Stack screenOptions={stackScreenOptions} />;
+}
+
 function TabletLayout() {
   const gateway = useGateway();
 
@@ -56,21 +80,14 @@ function TabletLayout() {
           sessions={gateway.sessions}
           connectionState={gateway.connectionState}
           selectedSessionId={gateway.selectedSessionId}
+          selectedWorkItemId={gateway.selectedWorkItemId}
           onSelectSession={gateway.selectSession}
+          onSelectWorkItem={gateway.selectWorkItem}
           onRefresh={gateway.refresh}
         />
       </SplitView.Column>
       <SplitView.Column>
-        {gateway.selectedSessionId ? (
-          <AgentThreadView
-            sessionId={gateway.selectedSessionId}
-            events={gateway.selectedSessionEvents}
-            onSendInput={gateway.sendInput}
-            onStopSession={gateway.stopSession}
-          />
-        ) : (
-          <Stack screenOptions={stackScreenOptions} />
-        )}
+        <MainPane gateway={gateway} />
       </SplitView.Column>
     </SplitView>
   );

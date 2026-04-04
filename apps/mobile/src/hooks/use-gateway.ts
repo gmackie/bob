@@ -36,7 +36,9 @@ export interface UseGatewayResult {
   sessions: GatewaySession[];
   selectedSessionId: string | null;
   selectedSessionEvents: ServerEvent[];
+  selectedWorkItemId: string | null;
   selectSession: (sessionId: string | null) => void;
+  selectWorkItem: (workItemId: string | null) => void;
   sendInput: (sessionId: string, data: string) => void;
   stopSession: (sessionId: string) => void;
   refresh: () => void;
@@ -50,6 +52,7 @@ export function useGateway(): UseGatewayResult {
   const [sessions, setSessions] = useState<GatewaySession[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [selectedSessionEvents, setSelectedSessionEvents] = useState<ServerEvent[]>([]);
+  const [selectedWorkItemId, setSelectedWorkItemId] = useState<string | null>(null);
 
   // Track which session is selected in a ref so callbacks don't go stale
   const selectedRef = useRef<string | null>(null);
@@ -59,14 +62,26 @@ export function useGateway(): UseGatewayResult {
     selectedRef.current = sessionId;
     setSelectedSessionId(sessionId);
     setSelectedSessionEvents([]);
+    // Clear work item selection when switching to an agent
+    if (sessionId) setSelectedWorkItemId(null);
 
     const client = clientRef.current;
     if (!client) return;
 
-    // Unsubscribe from previous session's event stream
     if (prev) client.unsubscribe(prev);
-    // Subscribe to new session's event stream
     if (sessionId) client.subscribe(sessionId);
+  }, []);
+
+  const selectWorkItem = useCallback((workItemId: string | null) => {
+    setSelectedWorkItemId(workItemId);
+    // Clear session selection when switching to a work item
+    if (workItemId) {
+      const prev = selectedRef.current;
+      if (prev) clientRef.current?.unsubscribe(prev);
+      selectedRef.current = null;
+      setSelectedSessionId(null);
+      setSelectedSessionEvents([]);
+    }
   }, []);
 
   const sendInput = useCallback((sessionId: string, data: string) => {
@@ -167,6 +182,8 @@ export function useGateway(): UseGatewayResult {
     selectedSessionId,
     selectedSessionEvents,
     selectSession,
+    selectedWorkItemId,
+    selectWorkItem,
     sendInput,
     stopSession,
     refresh,
