@@ -12,6 +12,8 @@ export async function POST(
     const result = await caller.publicApi.heartbeat({
       workspaceId,
       agentTypes: Array.isArray(body.agentTypes) ? body.agentTypes : undefined,
+      forgeAvailable: typeof body.forgeAvailable === "boolean" ? body.forgeAvailable : undefined,
+      repos: Array.isArray(body.repos) ? body.repos : undefined,
     });
     return NextResponse.json(result);
   } catch (error) {

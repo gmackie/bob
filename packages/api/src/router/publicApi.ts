@@ -7,6 +7,9 @@ import { and, desc, eq, inArray } from "@bob/db";
 import {
   agentRuns,
   apiKeys,
+  discoveredDirs,
+  projects,
+  repositories,
   runArtifacts,
   tenants,
   workspaces,
@@ -75,6 +78,138 @@ async function assertTenantAccess(db: any, userId: string, tenantId: string | nu
   }
 
   return tenantIds;
+}
+
+async function processDiscoveredRepos(
+  db: any,
+  userId: string,
+  workspaceId: string,
+  tenantId: string,
+  repos: Array<{
+    name: string;
+    path: string;
+    isGit: boolean;
+    remoteUrl?: string;
+    branch?: string;
+    dirty?: boolean;
+    buildSystem?: string;
+    forgeAppId?: string;
+  }>,
+) {
+  const gitRepos = repos.filter((r) => r.isGit);
+  const nonGitDirs = repos.filter((r) => !r.isGit);
+
+  // Mark all existing repos for this workspace as stale, then un-stale the ones we see
+  await db
+    .update(repositories)
+    .set({ stale: true })
+    .where(eq(repositories.workspaceId, workspaceId));
+
+  for (const repo of gitRepos) {
+    // Upsert repository record
+    const existing = await db.query.repositories.findFirst({
+      where: and(
+        eq(repositories.workspaceId, workspaceId),
+        eq(repositories.path, repo.path),
+      ),
+    });
+
+    if (existing) {
+      await db
+        .update(repositories)
+        .set({
+          remoteUrl: repo.remoteUrl ?? existing.remoteUrl,
+          branch: repo.branch ?? existing.branch,
+          dirty: repo.dirty ?? false,
+          buildSystem: repo.buildSystem ?? existing.buildSystem,
+          stale: false,
+        })
+        .where(eq(repositories.id, existing.id));
+    } else {
+      await db.insert(repositories).values({
+        userId,
+        workspaceId,
+        name: repo.name,
+        path: repo.path,
+        branch: repo.branch ?? "main",
+        mainBranch: repo.branch ?? "main",
+        remoteUrl: repo.remoteUrl,
+        buildSystem: repo.buildSystem,
+        dirty: repo.dirty ?? false,
+        stale: false,
+        discoveryStatus: "discovered",
+      });
+    }
+
+    // Auto-create project for ForgeGraph-linked repos
+    if (repo.forgeAppId) {
+      const existingProject = await db.query.projects.findFirst({
+        where: and(
+          eq(projects.workspaceId, workspaceId),
+          eq(projects.forgeGraphAppId, repo.forgeAppId),
+        ),
+      });
+
+      if (!existingProject) {
+        // Generate a key from the repo name (uppercase, alphanumeric, max 16)
+        const key = repo.name
+          .toUpperCase()
+          .replace(/[^A-Z0-9]/g, "")
+          .slice(0, 16) || "PROJ";
+
+        // Check for key conflicts
+        const keyConflict = await db.query.projects.findFirst({
+          where: and(
+            eq(projects.workspaceId, workspaceId),
+            eq(projects.key, key),
+          ),
+        });
+
+        if (!keyConflict) {
+          const [newProject] = await db
+            .insert(projects)
+            .values({
+              workspaceId,
+              forgeGraphAppId: repo.forgeAppId,
+              name: repo.name,
+              key,
+              repoUrl: repo.remoteUrl,
+              status: "active",
+            })
+            .returning();
+
+          // Link the repository to the project
+          if (newProject) {
+            await db
+              .update(repositories)
+              .set({ planningProjectId: newProject.id })
+              .where(
+                and(
+                  eq(repositories.workspaceId, workspaceId),
+                  eq(repositories.path, repo.path),
+                ),
+              );
+          }
+        }
+      }
+    }
+  }
+
+  // Upsert non-git directories
+  for (const dir of nonGitDirs) {
+    await db
+      .insert(discoveredDirs)
+      .values({
+        workspaceId,
+        path: dir.path,
+        name: dir.name,
+        lastSeen: new Date().toISOString(),
+      })
+      .onConflictDoUpdate({
+        target: [discoveredDirs.workspaceId, discoveredDirs.path],
+        set: { lastSeen: new Date().toISOString() },
+      });
+  }
 }
 
 export const publicApiRouter = {
@@ -310,6 +445,17 @@ export const publicApiRouter = {
     .input(z.object({
       workspaceId: z.string().uuid(),
       agentTypes: z.array(z.string()).optional(),
+      forgeAvailable: z.boolean().optional(),
+      repos: z.array(z.object({
+        name: z.string(),
+        path: z.string(),
+        isGit: z.boolean(),
+        remoteUrl: z.string().optional(),
+        branch: z.string().optional(),
+        dirty: z.boolean().optional(),
+        buildSystem: z.string().optional(),
+        forgeAppId: z.string().optional(),
+      })).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const workspace = await ctx.db.query.workspaces.findFirst({
@@ -332,6 +478,10 @@ export const publicApiRouter = {
         updates.agentConfigs = agentConfigs;
       }
 
+      if (input.forgeAvailable !== undefined) {
+        updates.forgeAvailable = input.forgeAvailable;
+      }
+
       await ctx.db
         .update(workspaces)
         .set(updates)
@@ -341,6 +491,12 @@ export const publicApiRouter = {
             eq(workspaces.tenantId, workspace.tenantId),
           ),
         );
+
+      // Process discovered repos
+      if (input.repos && input.repos.length > 0) {
+        await processDiscoveredRepos(ctx.db, ctx.session.user.id, input.workspaceId, workspace.tenantId, input.repos);
+      }
+
       return { ok: true };
     }),
 
