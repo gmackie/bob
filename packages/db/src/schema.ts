@@ -58,6 +58,19 @@ export const apiKeys = pgTable("api_keys", (t) => ({
   revokedAt: t.timestamp({ mode: "string", withTimezone: true }),
 }));
 
+export const deviceCodes = pgTable("device_codes", (t) => ({
+  id: t.uuid().notNull().primaryKey().defaultRandom(),
+  deviceCode: t.uuid("device_code").notNull().unique().defaultRandom(),
+  userCode: t.varchar("user_code", { length: 16 }).notNull().unique(),
+  apiKey: t.text("api_key"),
+  userId: t
+    .text("user_id")
+    .references(() => user.id, { onDelete: "cascade" }),
+  status: t.varchar({ length: 16 }).notNull().default("pending"),
+  expiresAt: t.timestamp("expires_at", { mode: "string" }).notNull(),
+  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
+}));
+
 // --- Tenants ---
 
 export const tenantPlanEnum = pgEnum("tenant_plan", [
