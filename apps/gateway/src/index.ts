@@ -1228,6 +1228,13 @@ const server = createServer(async (req, res) => {
         return;
       }
 
+      // Validate path doesn't traverse outside expected directories
+      const resolvedPath = join(path);
+      if (resolvedPath.includes("..")) {
+        sendError(res, 400, "invalid path");
+        return;
+      }
+
       const { ForgeDetector } = await import("./discovery/forge-detector.js");
       const detector = new ForgeDetector();
 
@@ -1250,7 +1257,8 @@ const server = createServer(async (req, res) => {
       const app = JSON.parse(result);
       sendJson(res, 200, { ok: true, app });
     } catch (err) {
-      sendError(res, 500, `Failed to register: ${err}`);
+      console.error("[Gateway] forge register failed:", err);
+      sendError(res, 500, "Failed to register app");
     }
     return;
   }

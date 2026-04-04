@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { RepoScanner, DiscoveredRepo } from "../repo-scanner.js";
 
 vi.mock("child_process", () => ({
-  execSync: vi.fn(),
+  execFileSync: vi.fn(),
 }));
 
 vi.mock("fs", () => ({
@@ -11,10 +11,10 @@ vi.mock("fs", () => ({
   statSync: vi.fn(),
 }));
 
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import { existsSync, readdirSync, statSync } from "fs";
 
-const mockExecSync = vi.mocked(execSync);
+const mockExecFileSync = vi.mocked(execFileSync);
 const mockExistsSync = vi.mocked(existsSync);
 const mockReaddirSync = vi.mocked(readdirSync);
 const mockStatSync = vi.mocked(statSync);
@@ -40,15 +40,15 @@ describe("RepoScanner", () => {
       return false;
     });
 
-    // git commands — returns strings because encoding: "utf8" is set
-    mockExecSync.mockImplementation((cmd: any) => {
-      if (typeof cmd !== "string") return "";
-      if (cmd.includes("status --porcelain")) return "";
-      if (cmd.includes("branch --show-current")) return "main\n";
-      if (cmd.includes("remote get-url") && cmd.includes("/dev/bob")) {
+    // git commands via execFileSync(cmd, args, options)
+    mockExecFileSync.mockImplementation((_cmd: any, args: any) => {
+      const argStr = Array.isArray(args) ? args.join(" ") : "";
+      if (argStr.includes("status --porcelain")) return "";
+      if (argStr.includes("branch --show-current")) return "main\n";
+      if (argStr.includes("remote") && argStr.includes("get-url") && argStr.includes("/dev/bob")) {
         return "https://gitea.forge.gmac.io/mackieg/bob.git\n";
       }
-      if (cmd.includes("remote get-url") && cmd.includes("/dev/my-site")) {
+      if (argStr.includes("remote") && argStr.includes("get-url") && argStr.includes("/dev/my-site")) {
         return "https://gitea.forge.gmac.io/mackieg/my-site.git\n";
       }
       return "";

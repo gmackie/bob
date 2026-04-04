@@ -1,4 +1,4 @@
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import { existsSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 
@@ -25,7 +25,7 @@ function detectBuildSystem(dirPath: string): string | undefined {
 
 function gitExec(repoPath: string, args: string): string | undefined {
   try {
-    return execSync(`git -C "${repoPath}" ${args}`, {
+    return execFileSync("git", ["-C", repoPath, ...args.split(" ")], {
       stdio: "pipe",
       encoding: "utf8",
       timeout: 5000,
