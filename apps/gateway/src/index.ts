@@ -14,7 +14,6 @@ import {
   executeSessionSecretBrokerRequest,
 } from "./secrets/sessionSecretGateway.js";
 import { detectVcs, getVcsAdapter } from "./vcs/vcs-adapter.js";
-import { DiscoveryLoop } from "./discovery/discovery-loop.js";
 import { and, eq, isNotNull, sql } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
@@ -46,8 +45,6 @@ const CONTAINER_TTL_MS = 48 * 60 * 60 * 1000;
 const CONTAINER_IMAGE = process.env.AGENT_IMAGE ?? "bob-agent:latest";
 const CONTAINER_PORT = 3100;
 const HEARTBEAT_INTERVAL_MS = 30_000;
-const DEV_DIR = process.env.DEV_DIR;
-const BOB_WORKSPACE_ID = process.env.BOB_WORKSPACE_ID;
 
 interface UserContainer {
   userId: string;
@@ -1977,27 +1974,6 @@ server.listen(PORT, () => {
   import("./forgegraph/deploy-runner.js").then(({ startDeployRunner }) => startDeployRunner()).catch((err) => {
     console.warn("[Gateway] ForgeGraph deploy runner failed to start:", err);
   });
-
-  // Start repo autodiscovery loop
-  if (DEV_DIR && BOB_WORKSPACE_ID && process.env.BOB_API_KEY) {
-    const discoveryLoop = new DiscoveryLoop({
-      devDir: DEV_DIR,
-      apiUrl: process.env.BOB_API_URL ?? "http://localhost:3000",
-      apiKey: process.env.BOB_API_KEY,
-      workspaceId: BOB_WORKSPACE_ID,
-      agentTypes: (process.env.AGENT_TYPES ?? "claude").split(","),
-    });
-    discoveryLoop.start().then((state) => {
-      console.log(`[Gateway] Discovery: ${state.repos.length} repos found, forge: ${state.forgeAvailable}`);
-      for (const notice of state.notices) {
-        console.warn(`[Gateway] Notice: ${notice.message}`);
-      }
-    }).catch((err) => {
-      console.warn("[Gateway] Discovery loop failed to start:", err);
-    });
-  } else if (DEV_DIR) {
-    console.warn("[Gateway] DEV_DIR set but missing BOB_WORKSPACE_ID or BOB_API_KEY — discovery disabled");
-  }
 
   console.log(`[Gateway] Running on port ${PORT} (ID: ${GATEWAY_ID})`);
   console.log(`[Gateway] Sessions WS: ws://localhost:${PORT}/sessions`);
