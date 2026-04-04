@@ -1184,6 +1184,43 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // POST /forge/register — trigger forge app create for a repo path
+  if (req.method === "POST" && pathname === "/forge/register") {
+    try {
+      const body = await parseJsonBody(req);
+      const path = body.path as string;
+
+      if (!path) {
+        sendError(res, 400, "path is required");
+        return;
+      }
+
+      const { ForgeDetector } = await import("./discovery/forge-detector.js");
+      const detector = new ForgeDetector();
+
+      if (!detector.isAvailable()) {
+        sendJson(res, 503, { error: "ForgeGraph CLI not available" });
+        return;
+      }
+      if (!detector.isAuthenticated()) {
+        sendJson(res, 401, { error: "ForgeGraph CLI not authenticated" });
+        return;
+      }
+
+      const forgeCli = process.env.FORGE_CLI_PATH ?? `${process.env.HOME}/.forgegraph/bin/fg`;
+      const result = execSync(
+        `${forgeCli} app create --path "${path}" --json`,
+        { stdio: "pipe", encoding: "utf8", timeout: 30000 }
+      );
+
+      const app = JSON.parse(result);
+      sendJson(res, 200, { ok: true, app });
+    } catch (err) {
+      sendError(res, 500, `Failed to register: ${err}`);
+    }
+    return;
+  }
+
   if (req.method === "POST") {
     try {
       const body = await parseJsonBody(req);
