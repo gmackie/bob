@@ -28,7 +28,7 @@ export interface GatewaySession {
   status: SessionStatus;
   agentType: string;
   title?: string;
-  updatedAt: string;
+  lastActivityAt: string;
 }
 
 export interface UseGatewayResult {
@@ -140,26 +140,34 @@ export function useGateway(): UseGatewayResult {
             status: s.status,
             agentType: s.agentType,
             title: s.title,
-            updatedAt: s.updatedAt,
+            lastActivityAt: s.lastActivityAt,
           })),
         );
       },
       onSessionStatusChanged: (info: ServerSessionStatusChanged) => {
         setSessions((prev) => {
           const idx = prev.findIndex((s) => s.sessionId === info.sessionId);
-          const updated: GatewaySession = {
+          if (idx >= 0) {
+            // Merge — preserve existing title if the update doesn't include one
+            const existing = prev[idx]!;
+            const next = [...prev];
+            next[idx] = {
+              ...existing,
+              status: info.status,
+              agentType: info.agentType,
+              title: info.title ?? existing.title,
+              lastActivityAt: new Date().toISOString(),
+            };
+            return next;
+          }
+          // New session not yet in snapshot — add it
+          return [{
             sessionId: info.sessionId,
             status: info.status,
             agentType: info.agentType,
             title: info.title,
-            updatedAt: new Date().toISOString(),
-          };
-          if (idx >= 0) {
-            const next = [...prev];
-            next[idx] = updated;
-            return next;
-          }
-          return [updated, ...prev];
+            lastActivityAt: new Date().toISOString(),
+          }, ...prev];
         });
       },
       onEvent: (_sessionId: string, event: ServerEvent) => {

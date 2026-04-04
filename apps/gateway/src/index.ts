@@ -192,6 +192,8 @@ const sessionManagerCallbacks: SessionManagerCallbacks = {
             sessionId,
             status,
             agentType: actor.agentType,
+            // title not available on actor — only in DB. Client retains the
+            // title from the initial workspace_snapshot.
           }));
         }
       }

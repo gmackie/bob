@@ -139,6 +139,13 @@ function usePendingToolCall(events: ServerEvent[]): ServerEvent | null {
       if (event.eventType === "tool_result" && event.payload.toolCallId) {
         toolCalls.delete(event.payload.toolCallId as string);
       }
+      // Session ended — no pending tool calls
+      if (event.eventType === "state") {
+        const status = event.payload.status as string;
+        if (status === "stopped" || status === "error") {
+          toolCalls.clear();
+        }
+      }
     }
 
     // Return the most recent pending tool call

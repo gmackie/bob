@@ -149,7 +149,7 @@ export interface WorkspaceSessionInfo {
   status: SessionStatus;
   title?: string;
   agentType: string;
-  updatedAt: string;
+  lastActivityAt: string;
 }
 
 export interface ServerWorkspaceSnapshot {

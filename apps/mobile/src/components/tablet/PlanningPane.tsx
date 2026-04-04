@@ -193,8 +193,8 @@ export function PlanningPane({
   const messages = useMemo(() => eventsToChatMessages(events), [events]);
   const artifactContent = useMemo(() => extractArtifactContent(events), [events]);
 
-  const isActive = sessionStatus === "running" || sessionStatus === "idle" || sessionStatus === "starting";
   const isStarting = sessionStatus === "provisioning" || sessionStatus === "starting";
+  const isActive = sessionStatus === "running" || sessionStatus === "idle" || isStarting;
 
   useEffect(() => {
     scrollRef.current?.scrollToEnd({ animated: true });
@@ -227,9 +227,9 @@ export function PlanningPane({
               style={{
                 width: 6, height: 6, borderRadius: 3, marginRight: 6,
                 backgroundColor:
-                  isActive ? colors.success
+                  isStarting ? colors.warning
+                  : isActive ? colors.success
                   : sessionStatus === "error" ? colors.danger
-                  : isStarting ? colors.warning
                   : colors.muted2,
               }}
             />

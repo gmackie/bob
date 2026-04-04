@@ -109,12 +109,11 @@ export function extractFileReferences(events: ServerEvent[]): FileReference[] {
 }
 
 /** Detect file path patterns in text content */
-const FILE_PATH_REGEX = /(?:^|\s)((?:\/[\w.-]+)+\.\w+(?::\d+)?)/g;
-
 export function findFilePathsInText(text: string): string[] {
+  const regex = /(?:^|\s)((?:\/[\w.-]+)+\.\w+(?::\d+)?)/g;
   const matches: string[] = [];
   let match;
-  while ((match = FILE_PATH_REGEX.exec(text)) !== null) {
+  while ((match = regex.exec(text)) !== null) {
     matches.push(match[1]!.trim());
   }
   return matches;
