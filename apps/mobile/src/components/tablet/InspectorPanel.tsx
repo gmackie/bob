@@ -1,14 +1,20 @@
 import { useState } from "react";
-import { Text, View, ScrollView, Pressable, Animated, Dimensions, useWindowDimensions } from "react-native";
+import { Text, View, ScrollView, Pressable, useWindowDimensions } from "react-native";
 
+import type { FileReference } from "~/lib/file-references";
+import { CodeViewer } from "./CodeViewer";
+import { DiffViewer } from "./DiffViewer";
 import { colors } from "~/lib/colors";
 
-type InspectorTab = "artifact" | "details";
+type InspectorTab = "files" | "artifact" | "details";
 
-interface InspectorPanelProps {
+export interface InspectorPanelProps {
   visible: boolean;
   onClose: () => void;
   artifactContent: string | null;
+  fileReferences: FileReference[];
+  selectedFilePath: string | null;
+  onSelectFile: (path: string) => void;
   workItemDetails?: {
     identifier: string;
     title: string;
@@ -18,31 +24,95 @@ interface InspectorPanelProps {
   } | null;
 }
 
-function TabButton({
-  label,
-  isActive,
-  onPress,
-}: {
-  label: string;
-  isActive: boolean;
-  onPress: () => void;
-}) {
+function TabButton({ label, isActive, onPress }: { label: string; isActive: boolean; onPress: () => void }) {
   return (
     <Pressable
       onPress={onPress}
       className="flex-1 items-center py-2 active:opacity-70"
-      style={{
-        borderBottomWidth: 2,
-        borderBottomColor: isActive ? colors.accent : "transparent",
-      }}
+      style={{ borderBottomWidth: 2, borderBottomColor: isActive ? colors.accent : "transparent" }}
     >
-      <Text
-        className="text-xs font-medium"
-        style={{ color: isActive ? colors.foreground : colors.muted }}
-      >
+      <Text className="text-xs font-medium" style={{ color: isActive ? colors.foreground : colors.muted }}>
         {label}
       </Text>
     </Pressable>
+  );
+}
+
+const ACTION_COLORS: Record<string, string> = {
+  read: colors.muted,
+  write: colors.success,
+  edit: colors.warning,
+  glob: colors.accent,
+  grep: colors.accent,
+  bash: colors.muted2,
+  unknown: colors.muted2,
+};
+
+function FilesView({
+  files,
+  selectedPath,
+  onSelectFile,
+}: {
+  files: FileReference[];
+  selectedPath: string | null;
+  onSelectFile: (path: string) => void;
+}) {
+  const selected = selectedPath ? files.find((f) => f.path === selectedPath) : null;
+
+  // If a file is selected and has content, show the viewer
+  if (selected?.content) {
+    const isDiff = selected.content.includes("@@") && (selected.content.includes("+++ ") || selected.content.startsWith("diff "));
+    if (isDiff) {
+      return <DiffViewer diff={selected.content} filePath={selected.shortPath} />;
+    }
+    return <CodeViewer content={selected.content} filePath={selected.shortPath} />;
+  }
+
+  // File list
+  if (files.length === 0) {
+    return (
+      <View className="flex-1 items-center justify-center px-4">
+        <Text className="text-sm" style={{ color: colors.muted }}>No files referenced</Text>
+        <Text className="mt-1 text-center text-xs" style={{ color: colors.muted2 }}>
+          File references from agent tool calls will appear here
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView className="flex-1">
+      {files.map((file) => (
+        <Pressable
+          key={`${file.path}-${file.seq}`}
+          onPress={() => onSelectFile(file.path)}
+          className="flex-row items-center px-3 py-2.5 active:opacity-70"
+          style={{
+            minHeight: 44,
+            backgroundColor: file.path === selectedPath ? colors.cardElevated : "transparent",
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
+          }}
+        >
+          <View
+            className="mr-2 rounded px-1.5 py-0.5"
+            style={{ backgroundColor: (ACTION_COLORS[file.action] ?? colors.muted) + "20" }}
+          >
+            <Text className="text-[10px] font-bold uppercase" style={{ color: ACTION_COLORS[file.action] ?? colors.muted }}>
+              {file.action}
+            </Text>
+          </View>
+          <Text className="flex-1 text-xs font-mono" style={{ color: colors.foreground }} numberOfLines={1}>
+            {file.shortPath}
+          </Text>
+          {file.content && (
+            <Text className="text-[10px]" style={{ color: colors.muted2 }}>
+              {file.content.split("\n").length}L
+            </Text>
+          )}
+        </Pressable>
+      ))}
+    </ScrollView>
   );
 }
 
@@ -50,77 +120,41 @@ function ArtifactView({ content }: { content: string | null }) {
   if (!content) {
     return (
       <View className="flex-1 items-center justify-center px-4">
-        <Text className="text-sm" style={{ color: colors.muted }}>
-          No artifact content yet
-        </Text>
-        <Text className="mt-1 text-center text-xs" style={{ color: colors.muted2 }}>
-          Artifact content will appear as the agent produces output
-        </Text>
+        <Text className="text-sm" style={{ color: colors.muted }}>No artifact content yet</Text>
       </View>
     );
   }
-
   return (
     <ScrollView className="flex-1 px-4 py-3">
-      <Text className="text-sm leading-5 font-mono" style={{ color: colors.foreground }}>
-        {content}
-      </Text>
+      <Text className="text-sm leading-5 font-mono" style={{ color: colors.foreground }}>{content}</Text>
     </ScrollView>
   );
 }
 
-function DetailsView({
-  details,
-}: {
-  details: InspectorPanelProps["workItemDetails"];
-}) {
+function DetailsView({ details }: { details: InspectorPanelProps["workItemDetails"] }) {
   if (!details) {
     return (
       <View className="flex-1 items-center justify-center px-4">
-        <Text className="text-sm" style={{ color: colors.muted }}>
-          No work item selected
-        </Text>
+        <Text className="text-sm" style={{ color: colors.muted }}>No work item selected</Text>
       </View>
     );
   }
-
   return (
     <ScrollView className="flex-1 px-4 py-3">
-      <View className="mb-4">
-        <Text className="mb-1 text-xs font-semibold uppercase tracking-wider" style={{ color: colors.muted }}>
-          Identifier
-        </Text>
-        <Text className="text-sm" style={{ color: colors.foreground }}>
-          {details.identifier}
-        </Text>
-      </View>
-
-      <View className="mb-4">
-        <Text className="mb-1 text-xs font-semibold uppercase tracking-wider" style={{ color: colors.muted }}>
-          Type
-        </Text>
-        <Text className="text-sm" style={{ color: colors.foreground }}>
-          {details.kind}
-        </Text>
-      </View>
-
-      <View className="mb-4">
-        <Text className="mb-1 text-xs font-semibold uppercase tracking-wider" style={{ color: colors.muted }}>
-          Status
-        </Text>
-        <Text className="text-sm" style={{ color: colors.foreground }}>
-          {details.status.replace(/_/g, " ")}
-        </Text>
-      </View>
-
+      {[
+        { label: "Identifier", value: details.identifier },
+        { label: "Type", value: details.kind },
+        { label: "Status", value: details.status.replace(/_/g, " ") },
+      ].map(({ label, value }) => (
+        <View key={label} className="mb-4">
+          <Text className="mb-1 text-xs font-semibold uppercase tracking-wider" style={{ color: colors.muted }}>{label}</Text>
+          <Text className="text-sm" style={{ color: colors.foreground }}>{value}</Text>
+        </View>
+      ))}
       {details.description && (
         <View className="mb-4">
-          <Text className="mb-1 text-xs font-semibold uppercase tracking-wider" style={{ color: colors.muted }}>
-            Description
-          </Text>
-          <Text className="text-sm leading-5" style={{ color: colors.foreground }}>
-            {details.description}
-          </Text>
+          <Text className="mb-1 text-xs font-semibold uppercase tracking-wider" style={{ color: colors.muted }}>Description</Text>
+          <Text className="text-sm leading-5" style={{ color: colors.foreground }}>{details.description}</Text>
         </View>
       )}
     </ScrollView>
@@ -131,12 +165,13 @@ export function InspectorPanel({
   visible,
   onClose,
   artifactContent,
+  fileReferences,
+  selectedFilePath,
+  onSelectFile,
   workItemDetails,
 }: InspectorPanelProps) {
-  const [tab, setTab] = useState<InspectorTab>("artifact");
+  const [tab, setTab] = useState<InspectorTab>("files");
   const { width: screenWidth } = useWindowDimensions();
-
-  // Inspector takes ~40% of the main pane width
   const inspectorWidth = Math.min(screenWidth * 0.4, 400);
 
   if (!visible) return null;
@@ -149,7 +184,6 @@ export function InspectorPanel({
         backgroundColor: colors.background,
         borderLeftWidth: 1,
         borderLeftColor: colors.border,
-        // Elevation for slide-over effect
         shadowColor: "#000",
         shadowOffset: { width: -2, height: 0 },
         shadowOpacity: 0.3,
@@ -158,30 +192,24 @@ export function InspectorPanel({
       }}
     >
       {/* Header */}
-      <View
-        className="flex-row items-center justify-between px-3 py-2"
-        style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}
-      >
-        <Text className="text-sm font-semibold" style={{ color: colors.foreground }}>
-          Inspector
-        </Text>
-        <Pressable
-          onPress={onClose}
-          className="rounded-md px-2 py-1 active:opacity-70"
-          style={{ minHeight: 44, justifyContent: "center" }}
-        >
+      <View className="flex-row items-center justify-between px-3 py-2" style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}>
+        <Text className="text-sm font-semibold" style={{ color: colors.foreground }}>Inspector</Text>
+        <Pressable onPress={onClose} className="rounded-md px-2 py-1 active:opacity-70" style={{ minHeight: 44, justifyContent: "center" }}>
           <Text className="text-xs" style={{ color: colors.muted }}>Close</Text>
         </Pressable>
       </View>
 
       {/* Tabs */}
       <View className="flex-row" style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}>
+        <TabButton label="Files" isActive={tab === "files"} onPress={() => setTab("files")} />
         <TabButton label="Artifact" isActive={tab === "artifact"} onPress={() => setTab("artifact")} />
         <TabButton label="Details" isActive={tab === "details"} onPress={() => setTab("details")} />
       </View>
 
       {/* Content */}
-      {tab === "artifact" ? (
+      {tab === "files" ? (
+        <FilesView files={fileReferences} selectedPath={selectedFilePath} onSelectFile={onSelectFile} />
+      ) : tab === "artifact" ? (
         <ArtifactView content={artifactContent} />
       ) : (
         <DetailsView details={workItemDetails} />

@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Platform, View } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -12,6 +12,7 @@ import { WorkItemPane } from "~/components/tablet/WorkItemPane";
 import { PlanningPane } from "~/components/tablet/PlanningPane";
 import { InspectorPanel } from "~/components/tablet/InspectorPanel";
 import { useGateway } from "~/hooks/use-gateway";
+import { extractFileReferences } from "~/lib/file-references";
 
 import "../styles.css";
 
@@ -94,6 +95,12 @@ function TabletLayout() {
   const gateway = useGateway();
   const [inspectorVisible, setInspectorVisible] = useState(false);
   const [inspectorArtifact, setInspectorArtifact] = useState<string | null>(null);
+  const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
+
+  const fileReferences = useMemo(
+    () => extractFileReferences(gateway.selectedSessionEvents),
+    [gateway.selectedSessionEvents],
+  );
 
   const handleShowArtifact = useCallback((content: string) => {
     setInspectorArtifact(content);
@@ -102,6 +109,10 @@ function TabletLayout() {
 
   const handleOpenInspector = useCallback(() => {
     setInspectorVisible(true);
+  }, []);
+
+  const handleSelectFile = useCallback((path: string) => {
+    setSelectedFilePath((prev) => (prev === path ? null : path));
   }, []);
 
   if (!SplitView) {
@@ -132,6 +143,9 @@ function TabletLayout() {
             visible={inspectorVisible}
             onClose={() => setInspectorVisible(false)}
             artifactContent={inspectorArtifact}
+            fileReferences={fileReferences}
+            selectedFilePath={selectedFilePath}
+            onSelectFile={handleSelectFile}
           />
         </View>
       </SplitView.Column>
