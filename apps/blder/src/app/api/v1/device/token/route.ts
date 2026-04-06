@@ -29,7 +29,7 @@ export async function GET(request: Request) {
     if (record.status !== "expired") {
       await db
         .update(deviceCodes)
-        .set({ status: "expired" })
+        .set({ status: "expired", apiKey: null })
         .where(eq(deviceCodes.id, record.id));
     }
     return NextResponse.json({ status: "expired" });
@@ -37,7 +37,16 @@ export async function GET(request: Request) {
 
   // Check if approved with API key
   if (record.status === "approved" && record.apiKey) {
-    return NextResponse.json({ status: "complete", apiKey: record.apiKey });
+    const key = record.apiKey;
+
+    // One-time retrieval: clear the raw key from DB immediately.
+    // The CLI gets it once, then it's gone from the database.
+    await db
+      .update(deviceCodes)
+      .set({ apiKey: null })
+      .where(eq(deviceCodes.id, record.id));
+
+    return NextResponse.json({ status: "complete", apiKey: key });
   }
 
   // Still pending

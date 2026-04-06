@@ -22,28 +22,41 @@ export async function POST(request: Request) {
       );
     }
 
-    // Find pending device code
-    const [record] = await db
-      .select()
-      .from(deviceCodes)
+    // Atomic check-and-set: only approve if still pending.
+    // This prevents the TOCTOU race where two concurrent approvals
+    // could both succeed and create duplicate API keys.
+    const [updated] = await db
+      .update(deviceCodes)
+      .set({
+        status: "approved",
+        userId: session.user.id,
+      })
       .where(
-        and(eq(deviceCodes.userCode, userCode), eq(deviceCodes.status, "pending")),
+        and(
+          eq(deviceCodes.userCode, userCode),
+          eq(deviceCodes.status, "pending"),
+        ),
       )
-      .limit(1);
+      .returning();
 
-    if (!record) {
+    if (!updated) {
       return NextResponse.json(
-        { error: "Invalid or already used code" },
+        { error: "Invalid, expired, or already used code" },
         { status: 404 },
       );
     }
 
     // Check expiration
-    if (new Date(record.expiresAt) < new Date()) {
+    if (new Date(updated.expiresAt) < new Date()) {
+      // Already set to approved, revert to expired
+      await db
+        .update(deviceCodes)
+        .set({ status: "expired" })
+        .where(eq(deviceCodes.id, updated.id));
       return NextResponse.json({ error: "Code expired" }, { status: 410 });
     }
 
-    // Generate API key (same logic as publicApi.ts generateApiKey)
+    // Generate API key
     const rawKey = `bob_${randomBytes(32).toString("hex")}`;
     const keyHash = createHash("sha256").update(rawKey).digest("hex");
     const keyPrefix = rawKey.slice(0, 12);
@@ -60,21 +73,22 @@ export async function POST(request: Request) {
       .returning();
 
     if (!apiKey) {
+      // Revert device code status since we couldn't create the key
+      await db
+        .update(deviceCodes)
+        .set({ status: "pending" })
+        .where(eq(deviceCodes.id, updated.id));
       return NextResponse.json(
         { error: "Failed to create API key" },
         { status: 500 },
       );
     }
 
-    // Update device code record
+    // Store raw key temporarily for CLI retrieval
     await db
       .update(deviceCodes)
-      .set({
-        status: "approved",
-        userId: session.user.id,
-        apiKey: rawKey,
-      })
-      .where(eq(deviceCodes.id, record.id));
+      .set({ apiKey: rawKey })
+      .where(eq(deviceCodes.id, updated.id));
 
     return NextResponse.json({ ok: true });
   } catch (error) {
