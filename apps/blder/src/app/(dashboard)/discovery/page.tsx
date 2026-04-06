@@ -80,7 +80,7 @@ export default function DiscoveryPage() {
   async function handleForgeRegister(path: string) {
     setRegisteringPaths((prev) => new Set(prev).add(path));
     try {
-      const res = await fetch(`${GATEWAY_URL}/forge/register`, {
+      const res = await fetch("/api/v1/forge/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path }),
