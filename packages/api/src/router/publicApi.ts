@@ -99,11 +99,15 @@ async function processDiscoveredRepos(
   const gitRepos = repos.filter((r) => r.isGit);
   const nonGitDirs = repos.filter((r) => !r.isGit);
 
-  // Mark all existing repos for this workspace as stale, then un-stale the ones we see
-  await db
-    .update(repositories)
-    .set({ stale: true })
-    .where(eq(repositories.workspaceId, workspaceId));
+  // Mark all existing repos for this workspace as stale, then un-stale the ones we see.
+  // Only do this if we have repos to process — an empty array (scanner failure) should
+  // not mark everything as stale.
+  if (gitRepos.length > 0) {
+    await db
+      .update(repositories)
+      .set({ stale: true })
+      .where(eq(repositories.workspaceId, workspaceId));
+  }
 
   for (const repo of gitRepos) {
     // Upsert repository record
@@ -152,44 +156,47 @@ async function processDiscoveredRepos(
 
       if (!existingProject) {
         // Generate a key from the repo name (uppercase, alphanumeric, max 16)
-        const key = repo.name
+        const baseKey = repo.name
           .toUpperCase()
           .replace(/[^A-Z0-9]/g, "")
-          .slice(0, 16) || "PROJ";
+          .slice(0, 14) || "PROJ";
 
-        // Check for key conflicts
-        const keyConflict = await db.query.projects.findFirst({
-          where: and(
-            eq(projects.workspaceId, workspaceId),
-            eq(projects.key, key),
-          ),
-        });
+        // Find a unique key, appending a numeric suffix on collision
+        let key = baseKey;
+        for (let suffix = 2; suffix <= 99; suffix++) {
+          const conflict = await db.query.projects.findFirst({
+            where: and(
+              eq(projects.workspaceId, workspaceId),
+              eq(projects.key, key),
+            ),
+          });
+          if (!conflict) break;
+          key = `${baseKey}${suffix}`;
+        }
 
-        if (!keyConflict) {
-          const [newProject] = await db
-            .insert(projects)
-            .values({
-              workspaceId,
-              forgeGraphAppId: repo.forgeAppId,
-              name: repo.name,
-              key,
-              repoUrl: repo.remoteUrl,
-              status: "active",
-            })
-            .returning();
+        const [newProject] = await db
+          .insert(projects)
+          .values({
+            workspaceId,
+            forgeGraphAppId: repo.forgeAppId,
+            name: repo.name,
+            key,
+            repoUrl: repo.remoteUrl,
+            status: "active",
+          })
+          .returning();
 
-          // Link the repository to the project
-          if (newProject) {
-            await db
-              .update(repositories)
-              .set({ planningProjectId: newProject.id })
-              .where(
-                and(
-                  eq(repositories.workspaceId, workspaceId),
-                  eq(repositories.path, repo.path),
-                ),
-              );
-          }
+        // Link the repository to the project
+        if (newProject) {
+          await db
+            .update(repositories)
+            .set({ planningProjectId: newProject.id })
+            .where(
+              and(
+                eq(repositories.workspaceId, workspaceId),
+                eq(repositories.path, repo.path),
+              ),
+            );
         }
       }
     }
