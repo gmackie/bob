@@ -15,12 +15,16 @@ import {
 import { authClient } from "~/utils/auth";
 import { getBaseUrl } from "~/utils/base-url";
 
+// Re-export for convenience
+const useSession = authClient.useSession;
+
 function getGatewayWsUrl(): string {
   const apiUrl = getBaseUrl();
-  // API runs on :3000, gateway on :3002. Replace port and protocol.
   const parsed = new URL(apiUrl);
   const protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${parsed.hostname}:3002/sessions`;
+  // Use GATEWAY_PORT env var if set, default to 3002
+  const port = process.env.EXPO_PUBLIC_GATEWAY_PORT ?? "3002";
+  return `${protocol}//${parsed.hostname}:${port}/sessions`;
 }
 
 export interface GatewaySession {
@@ -49,6 +53,7 @@ export interface UseGatewayResult {
 export function useGateway(): UseGatewayResult {
   const clientRef = useRef<BobWsClient | null>(null);
   const clientIdRef = useRef(uuid());
+  const { data: session } = useSession();
 
   const [connectionState, setConnectionState] = useState<ConnectionState>("disconnected");
   const [sessions, setSessions] = useState<GatewaySession[]>([]);
@@ -200,7 +205,9 @@ export function useGateway(): UseGatewayResult {
       clientRef.current = null;
       client.disconnect();
     };
-  }, []);
+    // Reconnect when user session changes (login/logout)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id]);
 
   return {
     connectionState,

@@ -14,7 +14,7 @@ import {
   executeSessionSecretBrokerRequest,
 } from "./secrets/sessionSecretGateway.js";
 import { detectVcs, getVcsAdapter } from "./vcs/vcs-adapter.js";
-import { and, eq, isNotNull, sql } from "@bob/db";
+import { and, desc, eq, isNotNull, sql } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
   chatConversations,
@@ -1765,9 +1765,11 @@ function handleSessionsWebSocket(ws: WebSocket): void {
           connection.workspaceSubscribed = true;
           connection.workspaceStatusFilter = wsMsg.statusFilter;
 
-          // Query all sessions for this user from DB
+          // Query recent sessions for this user from DB (bounded)
           const rows = await db.query.chatConversations.findMany({
             where: eq(chatConversations.userId, connection.userId),
+            orderBy: desc(chatConversations.lastActivityAt),
+            limit: 200,
           });
 
           let sessions = rows.map((row) => ({
