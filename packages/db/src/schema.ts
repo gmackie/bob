@@ -193,6 +193,7 @@ export const workspaceMemberRoleEnum = pgEnum(
 
 export const projectStatus = [
   "planned",
+  "active",
   "in_progress",
   "paused",
   "completed",

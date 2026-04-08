@@ -148,10 +148,7 @@ async function processDiscoveredRepos(
     // Auto-create project for ForgeGraph-linked repos
     if (repo.forgeAppId) {
       const existingProject = await db.query.projects.findFirst({
-        where: and(
-          eq(projects.workspaceId, workspaceId),
-          eq(projects.forgeGraphAppId, repo.forgeAppId),
-        ),
+        where: eq(projects.forgeGraphAppId, repo.forgeAppId),
       });
 
       if (!existingProject) {

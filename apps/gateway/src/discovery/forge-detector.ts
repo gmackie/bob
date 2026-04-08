@@ -33,7 +33,7 @@ export class ForgeDetector {
   isAuthenticated(): boolean {
     if (!this.available) return false;
     try {
-      execFileSync(FORGE_CLI, ["auth", "status"], { stdio: "pipe" });
+      execFileSync(FORGE_CLI, ["whoami"], { stdio: "pipe" });
       return true;
     } catch {
       return false;
