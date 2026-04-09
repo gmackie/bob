@@ -23,6 +23,8 @@ export interface BobAgentConfig {
   apiUrl: string;
   apiKey: string;
   sessionId?: string;
+  workspaceId?: string;
+  projectId?: string;
   secretBrokerUrl?: string;
   secretBrokerToken?: string;
   sessionSecretManifest?: string;
@@ -36,6 +38,8 @@ export function getMcpServerConfig(config: BobAgentConfig) {
       BOB_API_URL: config.apiUrl,
       BOB_API_KEY: config.apiKey,
       ...(config.sessionId ? { BOB_SESSION_ID: config.sessionId } : {}),
+      ...(config.workspaceId ? { BOB_WORKSPACE_ID: config.workspaceId } : {}),
+      ...(config.projectId ? { BOB_PROJECT_ID: config.projectId } : {}),
       ...(config.secretBrokerUrl
         ? { BOB_SECRET_BROKER_URL: config.secretBrokerUrl }
         : {}),

@@ -9,6 +9,7 @@ import { prTools } from "./pr.js";
 import { secretTools } from "./secrets.js";
 import { statusTools } from "./status.js";
 import { taskTools } from "./task.js";
+import { workItemTools } from "./work-items.js";
 
 export type { ToolDefinition, ToolRegistry, ToolContext, ToolResult };
 export { createToolResult, jsonResult, errorResult } from "./types.js";
@@ -21,6 +22,7 @@ export function createToolRegistry(): ToolRegistry {
     ...statusTools,
     ...contextTools,
     ...taskTools,
+    ...workItemTools,
     ...prTools,
     ...secretTools,
   ];

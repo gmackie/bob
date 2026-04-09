@@ -194,6 +194,8 @@ exec_session_secret(
           BOB_API_URL: "${env:BOB_API_URL}",
           BOB_API_KEY: "${env:BOB_API_KEY}",
           BOB_SESSION_ID: "${env:BOB_SESSION_ID}",
+          BOB_WORKSPACE_ID: "${env:BOB_WORKSPACE_ID}",
+          BOB_PROJECT_ID: "${env:BOB_PROJECT_ID}",
           BOB_SECRET_BROKER_URL: "${env:BOB_SECRET_BROKER_URL}",
           BOB_SECRET_BROKER_TOKEN: "${env:BOB_SECRET_BROKER_TOKEN}",
           BOB_SESSION_SECRET_MANIFEST: "${env:BOB_SESSION_SECRET_MANIFEST}",

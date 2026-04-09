@@ -9,6 +9,8 @@ export function getOhMyOpenCodeMcpConfig(env: {
   apiUrl: string;
   apiKey: string;
   sessionId?: string;
+  workspaceId?: string;
+  projectId?: string;
   secretBrokerUrl?: string;
   secretBrokerToken?: string;
   sessionSecretManifest?: string;
@@ -21,6 +23,8 @@ export function getOhMyOpenCodeMcpConfig(env: {
         BOB_API_URL: env.apiUrl,
         BOB_API_KEY: env.apiKey,
         ...(env.sessionId ? { BOB_SESSION_ID: env.sessionId } : {}),
+        ...(env.workspaceId ? { BOB_WORKSPACE_ID: env.workspaceId } : {}),
+        ...(env.projectId ? { BOB_PROJECT_ID: env.projectId } : {}),
         ...(env.secretBrokerUrl
           ? { BOB_SECRET_BROKER_URL: env.secretBrokerUrl }
           : {}),
@@ -39,6 +43,8 @@ export function generateOhMyOpenCodeConfig(env: {
   apiUrl: string;
   apiKey: string;
   sessionId?: string;
+  workspaceId?: string;
+  projectId?: string;
   secretBrokerUrl?: string;
   secretBrokerToken?: string;
   sessionSecretManifest?: string;
