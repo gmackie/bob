@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 
 import { cn } from "@bob/ui";
@@ -40,13 +41,7 @@ export default function NodesPage() {
   const repos = (repoData ?? []) as Array<{
     id: string;
     name: string;
-    path: string;
-    branch: string;
-    mainBranch: string;
-    remoteUrl: string | null;
-    remoteOwner: string | null;
-    remoteName: string | null;
-    planningProjectId: string | null;
+    workspaceId: string | null;
   }>;
 
   const onlineCount = workspaces.filter((w: any) => isNodeOnline(w.lastHeartbeat)).length;
@@ -69,161 +64,76 @@ export default function NodesPage() {
             "size-2 rounded-full",
             onlineCount > 0 ? "bg-emerald-500" : "bg-neutral-400",
           )} />
-          {onlineCount} online · {workspaces.length} total
+          {onlineCount} online &middot; {workspaces.length} total
         </div>
       </div>
 
-      {/* Nodes Grid */}
-      <div className="mt-8 grid gap-4 sm:grid-cols-2">
-        {workspaces.length === 0 ? (
-          <Card className="col-span-full p-8 text-center">
-            <p className="text-sm font-medium text-foreground">No nodes registered</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Run <code className="font-mono">bob init</code> on a machine to register it as a node.
-            </p>
-          </Card>
-        ) : (
-          workspaces.map((ws: any) => {
-            const online = isNodeOnline(ws.lastHeartbeat);
-            const nodeRepos = repos.filter(
-              (r) => r.planningProjectId && workspaces.some((w: any) => w.id === ws.id),
-            );
+      {workspaces.length === 0 ? (
+        <Card className="mt-8 p-8 text-center">
+          <p className="text-sm font-medium text-foreground">No nodes registered</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Run <code className="font-mono">bob init</code> on a machine to register it as a node.
+          </p>
+        </Card>
+      ) : (
+        <div className="mt-8 overflow-hidden rounded-lg border border-border">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-accent/30 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Node</th>
+                <th className="px-4 py-3">Workspace</th>
+                <th className="px-4 py-3 text-right">Agents</th>
+                <th className="px-4 py-3 text-right">Repos</th>
+                <th className="px-4 py-3 text-right">Last Seen</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {workspaces.map((ws: any) => {
+                const online = isNodeOnline(ws.lastHeartbeat);
+                const machineId = ws.machineId || ws.slug;
+                const agentCount = ws.agentConfigs
+                  ? Object.keys(ws.agentConfigs).length
+                  : 0;
+                const repoCount = repos.filter(
+                  (r) => r.workspaceId === ws.id,
+                ).length;
 
-            return (
-              <Card key={ws.id} className="p-5">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className={cn(
-                      "size-2.5 rounded-full",
-                      online ? "bg-emerald-500" : "bg-neutral-400",
-                    )} />
-                    <div>
-                      <h3 className="font-display text-sm font-semibold text-foreground">
-                        {ws.machineId || ws.name || ws.slug}
-                      </h3>
-                      <p className="text-xs text-muted-foreground">
-                        {online ? "Online" : "Offline"} · {formatRelative(ws.lastHeartbeat)}
-                      </p>
-                    </div>
-                  </div>
-                  <span className={cn(
-                    "rounded-full px-2 py-0.5 text-[10px] font-medium",
-                    online
-                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                      : "bg-neutral-500/10 text-neutral-500",
-                  )}>
-                    {online ? "online" : "offline"}
-                  </span>
-                </div>
-
-                {/* Node details */}
-                <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
-                  <div className="rounded-lg border border-border bg-background p-3">
-                    <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
-                      Workspace
-                    </div>
-                    <div className="mt-1 font-mono text-foreground">
-                      {ws.name ?? ws.slug}
-                    </div>
-                    <div className="mt-0.5 font-mono text-muted-foreground text-[10px]">
-                      {ws.id.slice(0, 8)}...
-                    </div>
-                  </div>
-                  <div className="rounded-lg border border-border bg-background p-3">
-                    <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
-                      Agents
-                    </div>
-                    <div className="mt-1 text-foreground">
-                      {ws.agentConfigs
-                        ? Object.keys(ws.agentConfigs).join(", ") || "none"
-                        : "not configured"}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Repos on this node */}
-                {nodeRepos.length > 0 && (
-                  <div className="mt-3">
-                    <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-1.5">
-                      Repositories
-                    </div>
-                    <div className="space-y-1">
-                      {nodeRepos.map((repo) => (
-                        <div
-                          key={repo.id}
-                          className="flex items-center justify-between rounded-md bg-accent/50 px-2.5 py-1.5 text-xs"
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="font-medium text-foreground truncate">
-                              {repo.remoteOwner && repo.remoteName
-                                ? `${repo.remoteOwner}/${repo.remoteName}`
-                                : repo.name}
-                            </span>
-                          </div>
-                          <span className="shrink-0 font-mono text-muted-foreground">
-                            {repo.branch}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </Card>
-            );
-          })
-        )}
-      </div>
-
-      {/* Repositories Section */}
-      <div className="mt-10">
-        <h2 className="font-display text-xl font-semibold text-foreground">
-          Repositories
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          All registered repositories across nodes.
-        </p>
-
-        <div className="mt-4 space-y-2">
-          {repos.length === 0 ? (
-            <Card className="p-6 text-center">
-              <p className="text-sm text-muted-foreground">
-                No repositories registered. Import a ForgeGraph project or run{" "}
-                <code className="font-mono">bob init</code> in a git repo.
-              </p>
-            </Card>
-          ) : (
-            repos.map((repo) => (
-              <Card key={repo.id} className="flex items-center justify-between p-4">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-foreground">
-                      {repo.remoteOwner && repo.remoteName
-                        ? `${repo.remoteOwner}/${repo.remoteName}`
-                        : repo.name}
-                    </span>
-                    {repo.remoteUrl && (
-                      <a
-                        href={repo.remoteUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs text-primary hover:underline"
+                return (
+                  <tr key={ws.id} className="group transition-colors hover:bg-accent/20">
+                    <td className="px-4 py-3">
+                      <span className={cn(
+                        "inline-block size-2.5 rounded-full",
+                        online ? "bg-emerald-500" : "bg-neutral-400",
+                      )} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/nodes/${encodeURIComponent(machineId)}`}
+                        className="font-display font-semibold text-foreground transition-colors hover:text-primary"
                       >
-                        ↗
-                      </a>
-                    )}
-                  </div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">
-                    {repo.path} · branch: {repo.branch}
-                  </div>
-                </div>
-                <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-[10px] font-mono text-muted-foreground">
-                  {repo.mainBranch}
-                </span>
-              </Card>
-            ))
-          )}
+                        {machineId}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {ws.name ?? ws.slug}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-muted-foreground">
+                      {agentCount}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-muted-foreground">
+                      {repoCount}
+                    </td>
+                    <td className="px-4 py-3 text-right text-muted-foreground">
+                      {formatRelative(ws.lastHeartbeat)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-      </div>
+      )}
     </main>
   );
 }
