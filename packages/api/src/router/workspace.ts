@@ -54,4 +54,29 @@ export const workspaceRouter = {
 
       return workspace;
     }),
+
+  delete: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify ownership
+      const membership = await ctx.db.query.workspaceMembers.findFirst({
+        where: eq(workspaceMembers.workspaceId, input.id),
+        with: { workspace: true },
+      });
+
+      if (
+        !membership ||
+        membership.userId !== ctx.session.user.id ||
+        membership.role !== "owner"
+      ) {
+        throw new Error("Not authorized to delete this workspace");
+      }
+
+      await ctx.db
+        .delete(workspaceMembers)
+        .where(eq(workspaceMembers.workspaceId, input.id));
+      await ctx.db.delete(workspaces).where(eq(workspaces.id, input.id));
+
+      return { deleted: true };
+    }),
 };
