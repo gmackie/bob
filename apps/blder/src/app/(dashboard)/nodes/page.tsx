@@ -116,7 +116,7 @@ export default function NodesPage() {
                       </Link>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
-                      {ws.name ?? ws.slug}
+                      {ws.slug}
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-muted-foreground">
                       {agentCount}
