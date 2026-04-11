@@ -1,7 +1,7 @@
 import type { WebSocket } from "ws";
-import { eq, and, gt, asc } from "@bob/db";
+import { eq, and, gt, asc, sql } from "@bob/db";
 import { db } from "@bob/db/client";
-import { chatConversations, sessionEvents } from "@bob/db/schema";
+import { chatConversations, repositories, sessionEvents } from "@bob/db/schema";
 
 import {
   parseClientMessage,
@@ -331,23 +331,39 @@ export class Relay {
   // ── Browser input → daemon ─────────────────────────────────────────
 
   private async handleInput(conn: Connection, input: ClientInput): Promise<void> {
-    const session = await db.query.chatConversations.findFirst({
-      where: eq(chatConversations.id, input.sessionId),
-    });
+    // Load session + its workspace via repository join.
+    // (worktrees doesn't carry workspaceId directly — the workspace lives on
+    // the repository row, and chatConversations has repositoryId, so we join
+    // chatConversations → repositories to get the session's workspace.)
+    const rows = await db
+      .select({
+        sessionUserId: chatConversations.userId,
+        workspaceId: repositories.workspaceId,
+      })
+      .from(chatConversations)
+      .leftJoin(repositories, eq(repositories.id, chatConversations.repositoryId))
+      .where(eq(chatConversations.id, input.sessionId))
+      .limit(1);
 
-    if (!session || session.userId !== conn.userId) {
+    const row = rows[0];
+    if (!row || row.sessionUserId !== conn.userId) {
       this.send(conn, createError("SESSION_NOT_FOUND", "Session not found", input.sessionId));
       return;
     }
 
-    // Find the daemon for this session's workspace.
-    // Sessions don't directly store workspaceId — we look up via the daemon map
-    // by matching the session's user to any active daemon.
-    // For v1, if the user has multiple workspaces, the nudge router already
-    // picked one; we route inputs to whichever daemon is live for that user.
-    const daemon = this.findDaemonForUser(conn.userId!);
+    // Look up the daemon for this session's workspace.
+    // TODO(phase-2): sessions without a repository currently fall back to findDaemonForUser.
+    //   Planning sessions often don't have a repository attached yet. When we add an explicit
+    //   workspaceId column on chat_conversations this can be tightened.
+    const daemon = row.workspaceId
+      ? this.daemonByWorkspace.get(row.workspaceId) ?? null
+      : this.findDaemonForUser(conn.userId!);
+
     if (!daemon) {
-      this.send(conn, createError("DAEMON_OFFLINE", "No daemon online for this session", input.sessionId, true));
+      this.send(
+        conn,
+        createError("DAEMON_OFFLINE", "No daemon online for this session", input.sessionId, true),
+      );
       return;
     }
 
@@ -396,12 +412,20 @@ export class Relay {
   // ── Daemon session_event → persist + fan out ───────────────────────
 
   private async handleSessionEvent(conn: Connection, event: ClientSessionEvent): Promise<void> {
-    // Verify the session belongs to this daemon's user.
-    const session = await db.query.chatConversations.findFirst({
-      where: eq(chatConversations.id, event.sessionId),
-    });
+    // Atomic increment with RETURNING — fuses the auth check into the WHERE clause
+    // and avoids the read-then-write race that caused duplicate seq values under burst.
+    const updated = await db
+      .update(chatConversations)
+      .set({ nextSeq: sql`${chatConversations.nextSeq} + 1` })
+      .where(
+        and(
+          eq(chatConversations.id, event.sessionId),
+          eq(chatConversations.userId, conn.userId!),
+        ),
+      )
+      .returning({ newNextSeq: chatConversations.nextSeq });
 
-    if (!session || session.userId !== conn.userId) {
+    if (updated.length === 0) {
       this.send(
         conn,
         createError("ACCESS_DENIED", "Cannot emit events for this session", event.sessionId),
@@ -409,15 +433,8 @@ export class Relay {
       return;
     }
 
-    // Assign sequence number (we read nextSeq from DB row, increment, write back).
-    // For v1 this is eventually consistent — the daemon may send bursts faster than
-    // the round-trip updates nextSeq, so we use a simple counter in memory and trust
-    // the persistEvent callback to enforce the unique (sessionId, seq) constraint.
-    const seq = session.nextSeq;
-    await db
-      .update(chatConversations)
-      .set({ nextSeq: seq + 1 })
-      .where(eq(chatConversations.id, event.sessionId));
+    // The returned value is AFTER increment, so the seq we use is (new - 1)
+    const seq = updated[0]!.newNextSeq - 1;
 
     const record: SessionEventRecord = {
       sessionId: event.sessionId,

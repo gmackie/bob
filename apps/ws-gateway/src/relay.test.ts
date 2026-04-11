@@ -3,15 +3,41 @@ import { EventEmitter } from "node:events";
 import type { ClientMessage, ServerMessage } from "./protocol.js";
 
 // Mock db
-vi.mock("@bob/db/client", () => ({
-  db: {
-    query: {
-      chatConversations: { findFirst: vi.fn() },
-      sessionEvents: { findMany: vi.fn() },
+vi.mock("@bob/db/client", () => {
+  // Default update chain: supports .set().where() → Promise and
+  // .set().where().returning() → Promise<rows>. Tests override per-case.
+  const makeUpdateChain = () => ({
+    set: vi.fn(() => {
+      const whereResult: any = Promise.resolve();
+      whereResult.returning = vi.fn(() =>
+        Promise.resolve([{ newNextSeq: 2 }]),
+      );
+      return {
+        where: vi.fn(() => whereResult),
+      };
+    }),
+  });
+  // Default select chain: .from().leftJoin().where().limit() → Promise<rows>
+  const makeSelectChain = () => ({
+    from: vi.fn(() => ({
+      leftJoin: vi.fn(() => ({
+        where: vi.fn(() => ({
+          limit: vi.fn(() => Promise.resolve([])),
+        })),
+      })),
+    })),
+  });
+  return {
+    db: {
+      query: {
+        chatConversations: { findFirst: vi.fn() },
+        sessionEvents: { findMany: vi.fn() },
+      },
+      update: vi.fn(() => makeUpdateChain()),
+      select: vi.fn(() => makeSelectChain()),
     },
-    update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve()) })) })),
-  },
-}));
+  };
+});
 
 import { db } from "@bob/db/client";
 import { Relay } from "./relay.js";
@@ -306,6 +332,123 @@ describe("Relay", () => {
           agentType: "claude",
         }),
       ).not.toThrow();
+    });
+  });
+
+  describe("daemon superseding", () => {
+    it("closes the old daemon when a new one connects for the same workspace", async () => {
+      const daemon1 = new FakeWs();
+      relay.handleConnection(daemon1 as any);
+      daemon1.receive({
+        type: "hello",
+        clientId: "d1",
+        deviceType: "daemon",
+        token: "good-daemon",
+        workspaceId: "ws-1",
+      });
+      await new Promise((r) => setImmediate(r));
+
+      const daemon2 = new FakeWs();
+      relay.handleConnection(daemon2 as any);
+      daemon2.receive({
+        type: "hello",
+        clientId: "d2",
+        deviceType: "daemon",
+        token: "good-daemon",
+        workspaceId: "ws-1",
+      });
+      await new Promise((r) => setImmediate(r));
+
+      // Old daemon should have received a SUPERSEDED error and been closed
+      const errors = daemon1.sentOfType("error");
+      expect(errors.some((e: any) => e.code === "SUPERSEDED")).toBe(true);
+      expect(daemon1.readyState).toBe(3); // closed
+    });
+  });
+
+  describe("unauth gate", () => {
+    it("rejects subscribe before hello with NOT_AUTHENTICATED", async () => {
+      const ws = new FakeWs();
+      relay.handleConnection(ws as any);
+
+      ws.receive({ type: "subscribe", sessionId: "s", lastAckSeq: 0 });
+      await new Promise((r) => setImmediate(r));
+
+      const errors = ws.sentOfType("error");
+      expect(errors.some((e: any) => e.code === "NOT_AUTHENTICATED")).toBe(true);
+    });
+
+    it("rejects input before hello with NOT_AUTHENTICATED", async () => {
+      const ws = new FakeWs();
+      relay.handleConnection(ws as any);
+
+      ws.receive({ type: "input", sessionId: "s", clientInputId: "i", data: "x" });
+      await new Promise((r) => setImmediate(r));
+
+      const errors = ws.sentOfType("error");
+      expect(errors.some((e: any) => e.code === "NOT_AUTHENTICATED")).toBe(true);
+    });
+  });
+
+  describe("cross-kind device restriction", () => {
+    it("rejects browser sending session_event", async () => {
+      const ws = new FakeWs();
+      relay.handleConnection(ws as any);
+      ws.receive({ type: "hello", clientId: "c1", deviceType: "web", token: "good-browser" });
+      await new Promise((r) => setImmediate(r));
+
+      ws.receive({
+        type: "session_event",
+        sessionId: "s",
+        eventType: "output_chunk",
+        direction: "agent",
+        payload: { data: "x" },
+      });
+      await new Promise((r) => setImmediate(r));
+
+      const errors = ws.sentOfType("error");
+      expect(errors.some((e: any) => e.code === "INVALID_FOR_DEVICE")).toBe(true);
+    });
+
+    it("rejects daemon sending subscribe", async () => {
+      const ws = new FakeWs();
+      relay.handleConnection(ws as any);
+      ws.receive({
+        type: "hello",
+        clientId: "d1",
+        deviceType: "daemon",
+        token: "good-daemon",
+        workspaceId: "ws-1",
+      });
+      await new Promise((r) => setImmediate(r));
+
+      ws.receive({ type: "subscribe", sessionId: "s", lastAckSeq: 0 });
+      await new Promise((r) => setImmediate(r));
+
+      const errors = ws.sentOfType("error");
+      expect(errors.some((e: any) => e.code === "INVALID_FOR_DEVICE")).toBe(true);
+    });
+  });
+
+  describe("cleanup on close", () => {
+    it("removes daemon from map when connection closes", async () => {
+      const daemon = new FakeWs();
+      relay.handleConnection(daemon as any);
+      daemon.receive({
+        type: "hello",
+        clientId: "d1",
+        deviceType: "daemon",
+        token: "good-daemon",
+        workspaceId: "ws-1",
+      });
+      await new Promise((r) => setImmediate(r));
+
+      expect(relay.getStats().daemonCount).toBe(1);
+
+      daemon.close();
+      await new Promise((r) => setImmediate(r));
+
+      expect(relay.getStats().daemonCount).toBe(0);
     });
   });
 });
