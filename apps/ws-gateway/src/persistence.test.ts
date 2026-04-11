@@ -107,7 +107,7 @@ describe("PersistenceWriter", () => {
     await new Promise((r) => setTimeout(r, 50));
 
     expect(errors.length).toBe(1);
-    expect(errors[0].error.message).toBe("db down");
+    expect(errors[0]?.error.message).toBe("db down");
     await writer.stop();
   });
 });
