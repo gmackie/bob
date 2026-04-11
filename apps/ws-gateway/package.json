@@ -1,0 +1,27 @@
+{
+  "name": "@bob/ws-gateway",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@bob/db": "workspace:*",
+    "ws": "catalog:"
+  },
+  "devDependencies": {
+    "@bob/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/ws": "catalog:",
+    "tsup": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "^4.0.0"
+  }
+}
