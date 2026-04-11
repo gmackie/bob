@@ -13,6 +13,9 @@
   },
   "dependencies": {
     "@bob/db": "workspace:*",
+    "@neondatabase/serverless": "^0.10.4",
+    "drizzle-orm": "^0.44.7",
+    "pg": "^8.17.1",
     "ws": "catalog:"
   },
   "devDependencies": {
