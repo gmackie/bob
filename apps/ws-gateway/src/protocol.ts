@@ -91,6 +91,16 @@ export interface ClientSessionStatus {
   status: SessionStatus;
 }
 
+/** Browser subscribes to all sessions for their user (tablet mission control) */
+export interface ClientSubscribeWorkspace {
+  type: "subscribe_workspace";
+  statusFilter?: SessionStatus[];
+}
+
+export interface ClientUnsubscribeWorkspace {
+  type: "unsubscribe_workspace";
+}
+
 export type ClientMessage =
   | ClientHello
   | ClientSubscribe
@@ -100,7 +110,9 @@ export type ClientMessage =
   | ClientPing
   | ClientSessionClaimed
   | ClientSessionEvent
-  | ClientSessionStatus;
+  | ClientSessionStatus
+  | ClientSubscribeWorkspace
+  | ClientUnsubscribeWorkspace;
 
 // ============================================================================
 // Gateway → Client messages
@@ -178,6 +190,20 @@ export interface ServerReplayTruncated {
   oldestAvailableSeq: number;
 }
 
+export interface WorkspaceSessionInfo {
+  sessionId: string;
+  status: SessionStatus;
+  agentType: string;
+  title?: string;
+  lastActivityAt: string;
+}
+
+/** All sessions for the user (response to subscribe_workspace) */
+export interface ServerWorkspaceSnapshot {
+  type: "workspace_snapshot";
+  sessions: WorkspaceSessionInfo[];
+}
+
 export type ServerMessage =
   | ServerHelloOk
   | ServerSubscribed
@@ -188,7 +214,8 @@ export type ServerMessage =
   | ServerError
   | ServerSessionAvailable
   | ServerSessionStatusChanged
-  | ServerReplayTruncated;
+  | ServerReplayTruncated
+  | ServerWorkspaceSnapshot;
 
 // ============================================================================
 // Codec

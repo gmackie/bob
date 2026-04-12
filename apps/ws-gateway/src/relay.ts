@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { eq, and, gt, asc, sql } from "@bob/db";
+import { eq, and, gt, asc, desc, sql } from "@bob/db";
 import { db } from "@bob/db/client";
 import { chatConversations, repositories, sessionEvents } from "@bob/db/schema";
 
@@ -15,6 +15,7 @@ import {
   type ClientSessionEvent,
   type ClientSessionStatus,
   type ClientSessionClaimed,
+  type ClientSubscribeWorkspace,
   type ServerMessage,
   type SessionStatus,
 } from "./protocol.js";
@@ -31,6 +32,8 @@ interface Connection {
   clientId: string;
   subscribedSessions: Set<string>;
   heartbeatTimer: NodeJS.Timeout | null;
+  workspaceSubscribed: boolean;
+  workspaceStatusFilter?: SessionStatus[];
 }
 
 interface NudgeInput {
@@ -71,6 +74,7 @@ export class Relay {
       clientId: "",
       subscribedSessions: new Set(),
       heartbeatTimer: null,
+      workspaceSubscribed: false,
     };
     this.connections.set(id, conn);
 
@@ -184,6 +188,17 @@ export class Relay {
           return;
         }
         await this.handleSessionStatus(conn, msg);
+        return;
+      case "subscribe_workspace":
+        if (conn.kind !== "browser") {
+          this.send(conn, createError("INVALID_FOR_DEVICE", "subscribe_workspace is for browsers"));
+          return;
+        }
+        await this.handleSubscribeWorkspace(conn, msg as ClientSubscribeWorkspace);
+        return;
+      case "unsubscribe_workspace":
+        conn.workspaceSubscribed = false;
+        conn.workspaceStatusFilter = undefined;
         return;
     }
   }
@@ -487,6 +502,49 @@ export class Relay {
         });
       }
     }
+
+    // Notify workspace subscribers for this user
+    if (conn.userId) {
+      const userConns = this.clientsByUser.get(conn.userId);
+      if (userConns) {
+        for (const c of userConns) {
+          if (!c.workspaceSubscribed) continue;
+          if (c.workspaceStatusFilter?.length && !c.workspaceStatusFilter.includes(msg.status)) continue;
+          this.send(c, {
+            type: "session_status_changed",
+            sessionId: msg.sessionId,
+            status: msg.status,
+          });
+        }
+      }
+    }
+  }
+
+  // ── Workspace subscription ────────────────────────────────────────
+
+  private async handleSubscribeWorkspace(conn: Connection, msg: ClientSubscribeWorkspace): Promise<void> {
+    conn.workspaceSubscribed = true;
+    conn.workspaceStatusFilter = msg.statusFilter;
+
+    const rows = await db.query.chatConversations.findMany({
+      where: eq(chatConversations.userId, conn.userId!),
+      orderBy: [desc(chatConversations.lastActivityAt)],
+      limit: 200,
+    });
+
+    let sessions = rows.map((row) => ({
+      sessionId: row.id,
+      status: row.status as SessionStatus,
+      agentType: row.agentType,
+      title: row.title ?? undefined,
+      lastActivityAt: row.lastActivityAt ?? new Date().toISOString(),
+    }));
+
+    if (msg.statusFilter?.length) {
+      sessions = sessions.filter((s) => msg.statusFilter!.includes(s.status));
+    }
+
+    this.send(conn, { type: "workspace_snapshot", sessions });
   }
 
   // ── Cleanup ────────────────────────────────────────────────────────
