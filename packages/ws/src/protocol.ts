@@ -1,8 +1,8 @@
 // Shared WebSocket protocol types for client and server.
 // This is the single source of truth — both gateway and clients import from here.
 
-export type SessionStatus = "provisioning" | "starting" | "running" | "idle" | "stopping" | "stopped" | "error";
-export type DeviceType = "web" | "ios" | "android" | "desktop" | "other";
+export type SessionStatus = "provisioning" | "starting" | "running" | "idle" | "stopping" | "stopped" | "completed" | "failed" | "error";
+export type DeviceType = "web" | "ios" | "android" | "desktop" | "daemon" | "other";
 export type EventDirection = "client" | "agent" | "system";
 export type SessionEventType =
   | "output_chunk"
@@ -24,6 +24,8 @@ export interface ClientHello {
   deviceType: DeviceType;
   token: string;
   lastGlobalSeenAt?: string;
+  /** Required when deviceType === "daemon" */
+  workspaceId?: string;
 }
 
 export interface ClientSubscribe {
@@ -162,7 +164,23 @@ export interface ServerSessionStatusChanged {
   sessionId: string;
   status: SessionStatus;
   title?: string;
+  agentType?: string;
+}
+
+/** Gateway nudges a daemon that a new session is pending */
+export interface ServerSessionAvailable {
+  type: "session_available";
+  sessionId: string;
+  workingDirectory: string;
   agentType: string;
+  title?: string;
+}
+
+/** Gateway tells the browser it exceeded the replay window */
+export interface ServerReplayTruncated {
+  type: "replay_truncated";
+  sessionId: string;
+  oldestAvailableSeq: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -192,7 +210,9 @@ export type ServerMessage =
   | ServerSessionCreated
   | ServerSessionStopped
   | ServerWorkspaceSnapshot
-  | ServerSessionStatusChanged;
+  | ServerSessionStatusChanged
+  | ServerSessionAvailable
+  | ServerReplayTruncated;
 
 // ---------------------------------------------------------------------------
 // Helpers

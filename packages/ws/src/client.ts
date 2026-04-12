@@ -236,7 +236,9 @@ export class BobWsClient {
 
       case "input_ack":
       case "unsubscribed":
-        // Informational — no action needed on client
+      case "session_available":
+      case "replay_truncated":
+        // Informational — no action needed on browser client
         break;
     }
   }

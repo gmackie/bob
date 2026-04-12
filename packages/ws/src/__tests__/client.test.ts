@@ -460,7 +460,7 @@ describe("BobWsClient", () => {
           sessionId: "s-1",
           status: "running" as const,
           agentType: "claude",
-          updatedAt: new Date().toISOString(),
+          lastActivityAt: new Date().toISOString(),
         },
       ];
       ws.simulateMessage({ type: "workspace_snapshot", sessions });
