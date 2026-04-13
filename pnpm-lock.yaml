@@ -146,6 +146,9 @@ importers:
       '@bob/validators':
         specifier: workspace:*
         version: link:../../packages/validators
+      '@bob/ws':
+        specifier: workspace:*
+        version: link:../../packages/ws
       '@dnd-kit/core':
         specifier: ^6.3.1
         version: 6.3.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -17669,7 +17672,9 @@ snapshots:
       metro-runtime: 0.83.5
     transitivePeerDependencies:
       - '@babel/core'
+      - bufferutil
       - supports-color
+      - utf-8-validate
 
   '@react-native/normalize-colors@0.81.5': {}
 
