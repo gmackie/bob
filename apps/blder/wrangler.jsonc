@@ -22,6 +22,7 @@
   "vars": {
     "REQUIRE_AUTH": "true",
     "FRONTEND_URL": "https://blder.bot",
+    "GATEWAY_PUBLIC_URL": "https://ws.blder.bot",
     "NODE_ENV": "production"
   }
 }
