@@ -4,9 +4,10 @@ import { Text, View, ScrollView, Pressable, useWindowDimensions } from "react-na
 import type { FileReference } from "~/lib/file-references";
 import { CodeViewer } from "./CodeViewer";
 import { DiffViewer } from "./DiffViewer";
+import { TaskTree } from "./TaskTree";
 import { colors } from "~/lib/colors";
 
-type InspectorTab = "files" | "artifact" | "details";
+type InspectorTab = "files" | "artifact" | "tasks" | "details";
 
 export interface InspectorPanelProps {
   visible: boolean;
@@ -15,6 +16,7 @@ export interface InspectorPanelProps {
   fileReferences: FileReference[];
   selectedFilePath: string | null;
   onSelectFile: (path: string) => void;
+  workItemId?: string | null;
   workItemDetails?: {
     identifier: string;
     title: string;
@@ -168,6 +170,7 @@ export function InspectorPanel({
   fileReferences,
   selectedFilePath,
   onSelectFile,
+  workItemId,
   workItemDetails,
 }: InspectorPanelProps) {
   const [tab, setTab] = useState<InspectorTab>("files");
@@ -203,6 +206,7 @@ export function InspectorPanel({
       <View className="flex-row" style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}>
         <TabButton label="Files" isActive={tab === "files"} onPress={() => setTab("files")} />
         <TabButton label="Artifact" isActive={tab === "artifact"} onPress={() => setTab("artifact")} />
+        <TabButton label="Tasks" isActive={tab === "tasks"} onPress={() => setTab("tasks")} />
         <TabButton label="Details" isActive={tab === "details"} onPress={() => setTab("details")} />
       </View>
 
@@ -211,6 +215,16 @@ export function InspectorPanel({
         <FilesView files={fileReferences} selectedPath={selectedFilePath} onSelectFile={onSelectFile} />
       ) : tab === "artifact" ? (
         <ArtifactView content={artifactContent} />
+      ) : tab === "tasks" ? (
+        workItemId ? (
+          <ScrollView className="flex-1">
+            <TaskTree workItemId={workItemId} />
+          </ScrollView>
+        ) : (
+          <View className="flex-1 items-center justify-center px-4">
+            <Text className="text-sm" style={{ color: colors.muted }}>Select a work item to see subtasks</Text>
+          </View>
+        )
       ) : (
         <DetailsView details={workItemDetails} />
       )}

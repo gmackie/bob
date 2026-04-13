@@ -14,6 +14,15 @@ import {
 
 import { authClient } from "~/utils/auth";
 import { getBaseUrl } from "~/utils/base-url";
+import {
+  trackAgentSelected,
+  trackWorkItemSelected,
+  trackPlanningSessionOpened,
+  trackAgentAction,
+  trackConnectionStateChanged,
+  trackTabletSessionStart,
+  trackTabletSessionEnd,
+} from "~/lib/tablet-analytics";
 
 // Re-export for convenience
 const useSession = authClient.useSession;
@@ -72,6 +81,7 @@ export function useGateway(): UseGatewayResult {
   const selectedRef = useRef<string | null>(null);
 
   const selectSession = useCallback((sessionId: string | null) => {
+    if (sessionId) trackAgentSelected(sessionId, "selected");
     const prev = selectedRef.current;
     selectedRef.current = sessionId;
     setSelectedSessionId(sessionId);
@@ -88,6 +98,7 @@ export function useGateway(): UseGatewayResult {
   }, []);
 
   const selectWorkItem = useCallback((workItemId: string | null) => {
+    if (workItemId) trackWorkItemSelected(workItemId);
     setSelectedWorkItemId(workItemId);
     setActivePlanningSessionId(null);
     if (workItemId) {
@@ -100,6 +111,7 @@ export function useGateway(): UseGatewayResult {
   }, []);
 
   const openPlanningSession = useCallback((sessionId: string) => {
+    trackPlanningSessionOpened(sessionId);
     // Subscribe to this planning session's event stream
     const prev = selectedRef.current;
     selectedRef.current = sessionId;
@@ -115,10 +127,12 @@ export function useGateway(): UseGatewayResult {
   }, []);
 
   const sendInput = useCallback((sessionId: string, data: string) => {
+    trackAgentAction("send_input");
     clientRef.current?.sendInput(sessionId, data);
   }, []);
 
   const stopSession = useCallback((sessionId: string) => {
+    trackAgentAction("stop");
     clientRef.current?.stopSession(sessionId);
   }, []);
 
@@ -144,7 +158,11 @@ export function useGateway(): UseGatewayResult {
       token,
       clientId: clientIdRef.current,
       deviceType: Platform.OS as "ios" | "android" | "web",
-      onConnectionStateChange: setConnectionState,
+      onConnectionStateChange: (state) => {
+        setConnectionState(state);
+        trackConnectionStateChanged(state);
+        if (state === "connected") trackTabletSessionStart();
+      },
       onWorkspaceSnapshot: (snapshot: WorkspaceSessionInfo[]) => {
         setSessions(
           snapshot.map((s) => ({
@@ -210,6 +228,7 @@ export function useGateway(): UseGatewayResult {
 
     return () => {
       clientRef.current = null;
+      trackTabletSessionEnd();
       client.disconnect();
     };
     // Reconnect when user session changes (login/logout)

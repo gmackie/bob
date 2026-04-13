@@ -153,6 +153,7 @@ function TabletLayout() {
             fileReferences={fileReferences}
             selectedFilePath={selectedFilePath}
             onSelectFile={handleSelectFile}
+            workItemId={gateway.selectedWorkItemId}
           />
         </View>
       </SplitView.Column>
