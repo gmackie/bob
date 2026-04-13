@@ -32,6 +32,8 @@ export interface ClientSubscribe {
   type: "subscribe";
   sessionId: string;
   lastAckSeq: number;
+  /** When true, skip auto-starting the agent — observe only (mission control) */
+  observe?: boolean;
 }
 
 export interface ClientUnsubscribe {
@@ -71,6 +73,28 @@ export interface ClientCreateSession {
 export interface ClientStopSession {
   type: "stop_session";
   sessionId: string;
+}
+
+/** Daemon announces it has accepted a session_available nudge */
+export interface ClientSessionClaimed {
+  type: "session_claimed";
+  sessionId: string;
+}
+
+/** Daemon reports an event from the running agent */
+export interface ClientSessionEvent {
+  type: "session_event";
+  sessionId: string;
+  eventType: SessionEventType;
+  direction: EventDirection;
+  payload: Record<string, unknown>;
+}
+
+/** Daemon reports a session lifecycle change */
+export interface ClientSessionStatus {
+  type: "session_status";
+  sessionId: string;
+  status: SessionStatus;
 }
 
 export interface ClientSubscribeWorkspace {
@@ -196,6 +220,9 @@ export type ClientMessage =
   | ClientPing
   | ClientCreateSession
   | ClientStopSession
+  | ClientSessionClaimed
+  | ClientSessionEvent
+  | ClientSessionStatus
   | ClientSubscribeWorkspace
   | ClientUnsubscribeWorkspace;
 
@@ -243,4 +270,31 @@ export function parseServerMessage(data: string): ServerMessage | null {
 
 export function encodeClientMessage(msg: ClientMessage): string {
   return JSON.stringify(msg);
+}
+
+// Server-side codec (used by the gateway)
+
+export function parseClientMessage(data: string): ClientMessage | null {
+  try {
+    const msg = JSON.parse(data) as ClientMessage;
+    if (!msg || typeof msg !== "object" || !msg.type) {
+      return null;
+    }
+    return msg;
+  } catch {
+    return null;
+  }
+}
+
+export function encodeServerMessage(msg: ServerMessage): string {
+  return JSON.stringify(msg);
+}
+
+export function createError(
+  code: string,
+  message: string,
+  sessionId?: string,
+  retryable = false,
+): ServerError {
+  return { type: "error", code, message, sessionId, retryable };
 }

@@ -57,6 +57,7 @@ export interface BobWsClientOptions {
 interface SessionSubscription {
   sessionId: string;
   lastAckSeq: number;
+  observe?: boolean;
 }
 
 interface WorkspaceSubscription {
@@ -116,9 +117,9 @@ export class BobWsClient {
     this.setState("disconnected");
   }
 
-  subscribe(sessionId: string, lastAckSeq = 0): void {
-    this.sessionSubs.set(sessionId, { sessionId, lastAckSeq });
-    this.send({ type: "subscribe", sessionId, lastAckSeq });
+  subscribe(sessionId: string, lastAckSeq = 0, observe = false): void {
+    this.sessionSubs.set(sessionId, { sessionId, lastAckSeq, observe });
+    this.send({ type: "subscribe", sessionId, lastAckSeq, observe: observe || undefined });
   }
 
   unsubscribe(sessionId: string): void {
@@ -281,7 +282,7 @@ export class BobWsClient {
 
   private resubscribeAll(): void {
     for (const sub of this.sessionSubs.values()) {
-      this.send({ type: "subscribe", sessionId: sub.sessionId, lastAckSeq: sub.lastAckSeq });
+      this.send({ type: "subscribe", sessionId: sub.sessionId, lastAckSeq: sub.lastAckSeq, observe: sub.observe || undefined });
     }
     if (this.workspaceSub) {
       this.send({ type: "subscribe_workspace", statusFilter: this.workspaceSub.statusFilter });

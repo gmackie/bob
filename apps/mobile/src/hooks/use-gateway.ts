@@ -19,10 +19,16 @@ import { getBaseUrl } from "~/utils/base-url";
 const useSession = authClient.useSession;
 
 function getGatewayWsUrl(): string {
+  // Full URL override (production: wss://ws.blder.bot/sessions)
+  const explicitUrl = process.env.EXPO_PUBLIC_GATEWAY_URL;
+  if (explicitUrl) {
+    return explicitUrl.endsWith("/sessions") ? explicitUrl : `${explicitUrl}/sessions`;
+  }
+
+  // Development fallback: derive from API URL
   const apiUrl = getBaseUrl();
   const parsed = new URL(apiUrl);
   const protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
-  // Use GATEWAY_PORT env var if set, default to 3002
   const port = process.env.EXPO_PUBLIC_GATEWAY_PORT ?? "3002";
   return `${protocol}//${parsed.hostname}:${port}/sessions`;
 }
@@ -77,7 +83,8 @@ export function useGateway(): UseGatewayResult {
     if (!client) return;
 
     if (prev) client.unsubscribe(prev);
-    if (sessionId) client.subscribe(sessionId);
+    // observe: true — monitoring only, don't auto-start the agent
+    if (sessionId) client.subscribe(sessionId, 0, true);
   }, []);
 
   const selectWorkItem = useCallback((workItemId: string | null) => {
@@ -159,7 +166,7 @@ export function useGateway(): UseGatewayResult {
             next[idx] = {
               ...existing,
               status: info.status,
-              agentType: info.agentType,
+              agentType: info.agentType ?? existing.agentType,
               title: info.title ?? existing.title,
               lastActivityAt: new Date().toISOString(),
             };
@@ -169,7 +176,7 @@ export function useGateway(): UseGatewayResult {
           return [{
             sessionId: info.sessionId,
             status: info.status,
-            agentType: info.agentType,
+            agentType: info.agentType ?? "unknown",
             title: info.title,
             lastActivityAt: new Date().toISOString(),
           }, ...prev];

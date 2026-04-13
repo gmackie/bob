@@ -507,6 +507,9 @@ importers:
       '@bob/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@bob/ws':
+        specifier: workspace:*
+        version: link:../../packages/ws
       '@neondatabase/serverless':
         specifier: ^0.10.4
         version: 0.10.4
