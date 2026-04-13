@@ -260,6 +260,25 @@ export class Relay {
       heartbeatIntervalMs: this.cfg.heartbeatIntervalMs,
       userId: conn.userId!,
     });
+
+    // Send pending sessions on daemon connect (recovery for offline daemon)
+    if (conn.kind === "daemon") {
+      const pending = await db.query.chatConversations.findMany({
+        where: and(
+          eq(chatConversations.status, "pending"),
+          eq(chatConversations.userId, conn.userId!),
+        ),
+      });
+      for (const session of pending) {
+        this.send(conn, {
+          type: "session_available",
+          sessionId: session.id,
+          workingDirectory: session.workingDirectory ?? "",
+          agentType: session.agentType,
+          title: session.title ?? undefined,
+        });
+      }
+    }
   }
 
   // ── Browser subscribe ──────────────────────────────────────────────

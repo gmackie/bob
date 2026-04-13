@@ -30,7 +30,7 @@ vi.mock("@bob/db/client", () => {
   return {
     db: {
       query: {
-        chatConversations: { findFirst: vi.fn() },
+        chatConversations: { findFirst: vi.fn(), findMany: vi.fn(() => Promise.resolve([])) },
         sessionEvents: { findMany: vi.fn() },
       },
       update: vi.fn(() => makeUpdateChain()),
