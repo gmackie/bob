@@ -12,10 +12,7 @@
     "./planning/smolAgentReviewProfile": "./src/planning/smolAgentReviewProfile.ts"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts",
-    "dev": "tsx watch src/index.ts",
     "lint": "eslint --flag unstable_native_nodejs_ts_config",
-    "start": "node dist/index.js",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

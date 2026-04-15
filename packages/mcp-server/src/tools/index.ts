@@ -5,6 +5,7 @@ import type {
   ToolResult,
 } from "./types.js";
 import { contextTools } from "./context.js";
+import { planTools } from "./plan.js";
 import { prTools } from "./pr.js";
 import { secretTools } from "./secrets.js";
 import { statusTools } from "./status.js";
@@ -23,6 +24,7 @@ export function createToolRegistry(): ToolRegistry {
     ...taskTools,
     ...prTools,
     ...secretTools,
+    ...planTools,
   ];
 
   for (const tool of allTools) {

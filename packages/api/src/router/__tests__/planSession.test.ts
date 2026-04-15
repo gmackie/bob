@@ -8,11 +8,10 @@ import {
 
 let appRouter: typeof import("../../root").appRouter;
 
-const startPlanningSessionMock = vi.fn();
-
-vi.mock("@bob/execution/planning/startPlanningSession", () => ({
-  startPlanningSession: startPlanningSessionMock,
-}));
+// planSession.start now writes to chat_conversations + best-effort nudges
+// the ws-gateway over HTTP instead of delegating to @bob/execution.
+const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+vi.stubGlobal("fetch", fetchMock);
 
 const dbInsertMock = vi.fn();
 const dbInsertValuesMock = vi.fn();
@@ -155,7 +154,7 @@ describe("planSession router", () => {
     dbUpdateReturningMock.mockReset();
     dbQueryFindFirstMock.mockReset();
     dbQueryFindManyMock.mockReset();
-    startPlanningSessionMock.mockReset();
+    fetchMock.mockClear();
   });
 
   describe("create", () => {
@@ -310,14 +309,6 @@ describe("planSession router", () => {
         userId: "user-1",
         sessionType: "planning",
       });
-      dbQueryFindFirstMock.mockResolvedValueOnce({
-        id: PROJECT_ID,
-        automationSettings: {
-          reactFrontend: true,
-        },
-      });
-      startPlanningSessionMock.mockResolvedValueOnce({ sessionId: SESSION_ID });
-
       const caller = createCaller({ id: "user-1" });
 
       const result = await caller.planSession.start({
@@ -328,14 +319,15 @@ describe("planSession router", () => {
         workingDirectory: "/repo",
       });
 
-      expect(startPlanningSessionMock).toHaveBeenCalledWith(
+      expect(dbUpdateSetMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          userId: "user-1",
-          projectId: PROJECT_ID,
-          reactFrontend: true,
+          status: "pending",
+          planningWorkspaceId: WORKSPACE_ID,
+          planningProjectId: PROJECT_ID,
+          planningProjectName: "Acme App",
         }),
       );
-      expect(result).toEqual({ sessionId: SESSION_ID });
+      expect(result).toEqual({ ok: true, sessionId: SESSION_ID });
     });
 
     it("forwards workflow launch context into execution planning startup", async () => {
@@ -344,13 +336,8 @@ describe("planSession router", () => {
         userId: "user-1",
         sessionType: "planning",
       });
-      dbQueryFindFirstMock.mockResolvedValueOnce({
-        id: PROJECT_ID,
-        automationSettings: {
-          reactFrontend: false,
-        },
-      });
-      startPlanningSessionMock.mockResolvedValueOnce({ sessionId: SESSION_ID });
+      process.env.GATEWAY_URL = "http://gw.local";
+      process.env.NUDGE_SHARED_SECRET = "shh";
 
       const caller = createCaller({ id: "user-1" });
 
@@ -389,48 +376,25 @@ describe("planSession router", () => {
         },
       });
 
-      expect(startPlanningSessionMock).toHaveBeenCalledWith(
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://gw.local/internal/nudge",
         expect.objectContaining({
-          launchContext: {
-            intent: "shape",
-            notes:
-              "Shape this into an epic, clarify the API surface, and keep the parent item as the scope owner.",
-            workItem: {
-              id: "8d236647-d217-4273-9115-f6957d77b168",
-              identifier: "EPIC-42",
-              title: "Improve launch workflow",
-              kind: "epic",
-            },
-            selectedRepoSources: [
-              {
-                id: "repo-readme",
-                label: "Project overview",
-                path: "README.md",
-                detail: "Product overview and current setup guidance.",
-              },
-            ],
-            attachedFiles: [
-              {
-                name: "launch-brief.md",
-                sizeLabel: "14 KB",
-                content:
-                  "# Launch brief\n\nFocus the work on planning-session kickoff quality.",
-              },
-            ],
-          },
+          method: "POST",
+          headers: expect.objectContaining({
+            Authorization: "Bearer shh",
+          }),
         }),
+      );
+      const nudgeBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+      expect(nudgeBody.sessionType).toBe("planning");
+      expect(nudgeBody.planningContext.launchContext.intent).toBe("shape");
+      expect(nudgeBody.planningContext.launchContext.workItem.identifier).toBe(
+        "EPIC-42",
       );
     });
 
     it("rejects starting a planning session the caller does not own", async () => {
       dbQueryFindFirstMock.mockResolvedValueOnce(null);
-      dbQueryFindFirstMock.mockResolvedValueOnce({
-        id: PROJECT_ID,
-        automationSettings: {
-          reactFrontend: true,
-        },
-      });
-      startPlanningSessionMock.mockResolvedValueOnce({ sessionId: SESSION_ID });
 
       const caller = createCaller({ id: "user-1" });
 

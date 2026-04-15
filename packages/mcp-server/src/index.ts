@@ -12,6 +12,8 @@ import { callTool, createToolRegistry, getToolsList } from "./tools/index.js";
 const API_URL = process.env.BOB_API_URL ?? "http://localhost:3000";
 const API_KEY = process.env.BOB_API_KEY;
 const SESSION_ID = process.env.BOB_SESSION_ID ?? null;
+const WORKSPACE_ID = process.env.BOB_WORKSPACE_ID ?? null;
+const PROJECT_ID = process.env.BOB_PROJECT_ID ?? null;
 
 interface TrpcResponse<T> {
   result?: {
@@ -63,6 +65,8 @@ const toolRegistry = createToolRegistry();
 const toolContext: ToolContext = {
   callTrpc,
   sessionId: SESSION_ID,
+  workspaceId: WORKSPACE_ID,
+  projectId: PROJECT_ID,
 };
 
 const server = new Server(

@@ -1042,6 +1042,12 @@ export const chatConversations = pgTable(
       .$type<{ type: "human" | "timeout"; value: string }>(),
     planningSessionType: t.varchar({ length: 30 }),
     // values: "office_hours" | "ceo_review" | "eng_review" | "design_review" | "breakdown"
+    // Planning session execution context — populated by planSession.start,
+    // consumed by ws-gateway + daemon when sessionType = "planning".
+    planningWorkspaceId: t.uuid("planning_workspace_id"),
+    planningProjectId: t.uuid("planning_project_id"),
+    planningProjectName: t.text("planning_project_name"),
+    planningLaunchContext: t.json("planning_launch_context"),
     createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
     updatedAt: t.timestamp({ mode: "string", withTimezone: true }),
   }),

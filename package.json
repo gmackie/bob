@@ -21,7 +21,6 @@
     "dev": "turbo watch dev --continue",
     "dev:web": "turbo watch dev -F @bob/blder...",
     "dev:mobile": "turbo watch dev -F @bob/mobile...",
-    "dev:execution": "turbo watch dev -F @bob/execution...",
     "format": "turbo run format --continue -- --cache --cache-location .cache/.prettiercache",
     "format:fix": "turbo run format --continue -- --write --cache --cache-location .cache/.prettiercache",
     "lint": "turbo run lint --continue -- --cache --cache-location .cache/.eslintcache",
@@ -32,9 +31,6 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "dev:mobile:local": "./scripts/dev-mobile.sh",
-    "dev:gateway": "pnpm -F @bob/gateway dev",
-    "dev:web:gateway": "turbo watch dev -F @bob/blder... -F @bob/gateway"
-    ,
     "generate:work-item-rest": "pnpm exec tsx scripts/generate-work-item-rest-routes.ts"
   },
   "devDependencies": {

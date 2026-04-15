@@ -191,6 +191,35 @@ export interface ServerSessionStatusChanged {
   agentType?: string;
 }
 
+export interface PlanningLaunchContext {
+  intent: "shape" | "breakdown";
+  notes: string;
+  workItem?: {
+    id: string;
+    identifier: string;
+    title: string;
+    kind: string;
+  };
+  selectedRepoSources: Array<{
+    id: string;
+    label: string;
+    path: string;
+    detail: string;
+  }>;
+  attachedFiles: Array<{
+    name: string;
+    sizeLabel: string;
+    content?: string;
+  }>;
+}
+
+export interface PlanningContext {
+  workspaceId: string;
+  projectId: string;
+  projectName: string;
+  launchContext?: PlanningLaunchContext;
+}
+
 /** Gateway nudges a daemon that a new session is pending */
 export interface ServerSessionAvailable {
   type: "session_available";
@@ -198,6 +227,8 @@ export interface ServerSessionAvailable {
   workingDirectory: string;
   agentType: string;
   title?: string;
+  sessionType?: "execution" | "planning";
+  planningContext?: PlanningContext;
 }
 
 /** Gateway tells the browser it exceeded the replay window */

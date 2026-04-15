@@ -188,23 +188,53 @@ export const planSessionRouter = {
     .mutation(async ({ ctx, input }) => {
       await loadOwnedPlanningSession(ctx.db, ctx.session.user.id, input.sessionId);
 
-      const { startPlanningSession } = await import(
-        "@bob/execution/planning/startPlanningSession"
-      );
+      // Write planning execution context to chat_conversations and mark
+      // the session pending so the ws-gateway daemon loop picks it up.
+      await ctx.db
+        .update(chatConversations)
+        .set({
+          status: "pending",
+          workingDirectory: input.workingDirectory,
+          planningWorkspaceId: input.workspaceId,
+          planningProjectId: input.projectId,
+          planningProjectName: input.projectName,
+          planningLaunchContext: input.launchContext ?? null,
+        } as any)
+        .where(eq(chatConversations.id, input.sessionId));
 
-      const project = await ctx.db.query.projects.findFirst({
-        where: eq(projects.id, input.projectId),
-        columns: { automationSettings: true },
-      });
-      const projectAutomation =
-        (project?.automationSettings as { reactFrontend?: boolean } | undefined) ??
-        undefined;
+      // Best-effort nudge to ws-gateway so the daemon picks it up instantly
+      // instead of waiting for the next reconnect recovery sweep.
+      const gatewayUrl = process.env.GATEWAY_URL;
+      const nudgeSecret = process.env.NUDGE_SHARED_SECRET;
+      if (gatewayUrl && nudgeSecret) {
+        try {
+          await fetch(`${gatewayUrl}/internal/nudge`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${nudgeSecret}`,
+            },
+            body: JSON.stringify({
+              sessionId: input.sessionId,
+              workspaceId: input.workspaceId,
+              workingDirectory: input.workingDirectory,
+              agentType: "claude",
+              title: "Planning session",
+              sessionType: "planning",
+              planningContext: {
+                workspaceId: input.workspaceId,
+                projectId: input.projectId,
+                projectName: input.projectName,
+                launchContext: input.launchContext,
+              },
+            }),
+          });
+        } catch (err) {
+          console.warn("[planSession.start] nudge failed:", err);
+        }
+      }
 
-      return startPlanningSession({
-        userId: ctx.session.user.id,
-        ...input,
-        reactFrontend: Boolean(projectAutomation?.reactFrontend),
-      });
+      return { ok: true, sessionId: input.sessionId };
     }),
 
   /** Get a planning session with its drafts and dependencies. */

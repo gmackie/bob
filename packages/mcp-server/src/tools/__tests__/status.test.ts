@@ -15,6 +15,8 @@ function createMockContext(
   const mockCallTrpc = vi.fn();
   return {
     sessionId,
+    workspaceId: null,
+    projectId: null,
     callTrpc: mockCallTrpc,
     mockCallTrpc,
   };

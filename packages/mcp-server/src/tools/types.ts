@@ -3,6 +3,8 @@ import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 export interface ToolContext {
   callTrpc: <T>(path: string, input?: unknown) => Promise<T>;
   sessionId: string | null;
+  workspaceId: string | null;
+  projectId: string | null;
 }
 
 export type ToolResult = CallToolResult;

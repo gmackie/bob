@@ -43,6 +43,13 @@ interface NudgeInput {
   workingDirectory: string;
   agentType: string;
   title?: string;
+  sessionType?: "execution" | "planning";
+  planningContext?: {
+    workspaceId: string;
+    projectId: string;
+    projectName: string;
+    launchContext?: unknown;
+  };
 }
 
 export interface RelayConfig {
@@ -125,6 +132,8 @@ export class Relay {
       workingDirectory: input.workingDirectory,
       agentType: input.agentType,
       title: input.title,
+      sessionType: input.sessionType ?? "execution",
+      planningContext: input.planningContext as any,
     });
   }
 
@@ -284,12 +293,25 @@ export class Relay {
         ),
       });
       for (const session of pending) {
+        const isPlanning = session.sessionType === "planning";
         this.send(conn, {
           type: "session_available",
           sessionId: session.id,
           workingDirectory: session.workingDirectory ?? "",
           agentType: session.agentType,
           title: session.title ?? undefined,
+          sessionType: isPlanning ? "planning" : "execution",
+          planningContext:
+            isPlanning &&
+            (session as any).planningWorkspaceId &&
+            (session as any).planningProjectId
+              ? ({
+                  workspaceId: (session as any).planningWorkspaceId,
+                  projectId: (session as any).planningProjectId,
+                  projectName: (session as any).planningProjectName ?? "",
+                  launchContext: (session as any).planningLaunchContext ?? undefined,
+                } as any)
+              : undefined,
         });
       }
     }

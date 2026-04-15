@@ -4,8 +4,7 @@ Bob Builder is the merged monorepo for:
 
 - `apps/web`: the primary Next.js product shell
 - `apps/mobile`: the mobile app for planning and task execution
-- `apps/execution`: the long-running execution service
-- `apps/gateway`: the PTY/session gateway used by execution flows
+- `apps/ws-gateway`: slim WebSocket relay between clients and the Go daemon
 - `packages/*`: shared API, DB, auth, realtime, work-item, and agent libraries
 
 ## Development
@@ -21,8 +20,6 @@ Useful targets:
 ```bash
 pnpm dev:web
 pnpm dev:mobile
-pnpm dev:execution
-pnpm dev:web:gateway
 pnpm typecheck
 pnpm lint
 pnpm build
