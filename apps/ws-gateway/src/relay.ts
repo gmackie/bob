@@ -670,13 +670,11 @@ export class Relay {
 
         if (taskRun.workItemId) {
           // completed → in_review (agent done, needs human check)
-          // failed → keep current status (don't regress)
-          if (msg.status === "completed") {
-            await db
-              .update(workItems)
-              .set({ status: "in_review" })
-              .where(eq(workItems.id, taskRun.workItemId));
-          }
+          // failed → revert to ready so user can retry
+          await db
+            .update(workItems)
+            .set({ status: msg.status === "completed" ? "in_review" : "ready" })
+            .where(eq(workItems.id, taskRun.workItemId));
         }
       }
     }
