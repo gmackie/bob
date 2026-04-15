@@ -6,6 +6,11 @@ interface NudgeBody {
   workingDirectory: string;
   agentType: string;
   title?: string;
+  description?: string;
+  identifier?: string;
+  branch?: string;
+  sessionType?: "execution" | "planning";
+  planningContext?: Record<string, unknown>;
 }
 
 export interface NudgeConfig {
@@ -32,21 +37,21 @@ export function createNudgeHandler(cfg: NudgeConfig) {
     }
 
     // Validate fields
-    const { sessionId, workspaceId, workingDirectory, agentType, title } = body as Partial<NudgeBody>;
-    if (!sessionId || !workspaceId || !workingDirectory || !agentType) {
+    const nudge = body as Partial<NudgeBody>;
+    if (!nudge.sessionId || !nudge.workspaceId || !nudge.workingDirectory || !nudge.agentType) {
       res.writeHead(400, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Missing required fields" }));
       return;
     }
 
-    cfg.onNudge({ sessionId, workspaceId, workingDirectory, agentType, title });
+    cfg.onNudge(nudge as NudgeBody);
 
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ ok: true }));
   };
 }
 
-async function readJsonBody(req: IncomingMessage): Promise<unknown | null> {
+export async function readJsonBody(req: IncomingMessage): Promise<unknown | null> {
   return new Promise((resolve) => {
     const chunks: Buffer[] = [];
     req.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));

@@ -229,6 +229,10 @@ export interface ServerSessionAvailable {
   title?: string;
   sessionType?: "execution" | "planning";
   planningContext?: PlanningContext;
+  /** Execution context — gives the agent enough info to start working */
+  description?: string;
+  identifier?: string;
+  branch?: string;
 }
 
 /** Gateway tells the browser it exceeded the replay window */

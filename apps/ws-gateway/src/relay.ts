@@ -1,7 +1,7 @@
 import type { WebSocket } from "ws";
 import { eq, and, gt, asc, desc, sql } from "@bob/db";
 import { db } from "@bob/db/client";
-import { chatConversations, repositories, sessionEvents } from "@bob/db/schema";
+import { chatConversations, repositories, sessionEvents, taskRuns, workItems } from "@bob/db/schema";
 
 import {
   parseClientMessage,
@@ -53,6 +53,9 @@ interface NudgeInput {
     projectName: string;
     launchContext?: unknown;
   };
+  description?: string;
+  identifier?: string;
+  branch?: string;
 }
 
 export interface RelayConfig {
@@ -137,7 +140,48 @@ export class Relay {
       title: input.title,
       sessionType: input.sessionType ?? "execution",
       planningContext: input.planningContext as any,
+      description: input.description,
+      identifier: input.identifier,
+      branch: input.branch,
     });
+  }
+
+  /**
+   * Send a message to a running session's daemon via HTTP (server-to-server).
+   * Used by the Worker for resumeBlockedTask and forwardIssueContextUpdate.
+   * Returns true if the message was delivered, false if no daemon was found.
+   */
+  async sendToSession(sessionId: string, userId: string, message: string): Promise<boolean> {
+    const rows = await db
+      .select({
+        sessionUserId: chatConversations.userId,
+        workspaceId: repositories.workspaceId,
+      })
+      .from(chatConversations)
+      .leftJoin(repositories, eq(repositories.id, chatConversations.repositoryId))
+      .where(eq(chatConversations.id, sessionId))
+      .limit(1);
+
+    const row = rows[0];
+    if (!row || row.sessionUserId !== userId) return false;
+
+    const daemon = row.workspaceId
+      ? this.daemonByWorkspace.get(row.workspaceId) ?? null
+      : this.findDaemonForUser(userId);
+
+    if (!daemon) return false;
+
+    this.send(daemon, {
+      type: "event",
+      sessionId,
+      seq: 0,
+      eventType: "input",
+      direction: "client",
+      payload: { data: message },
+      createdAt: new Date().toISOString(),
+    });
+
+    return true;
   }
 
   getStats() {
@@ -315,6 +359,25 @@ export class Relay {
       });
       for (const session of pending) {
         const isPlanning = session.sessionType === "planning";
+
+        // Enrich execution sessions with task context from work_items
+        let description: string | undefined;
+        let identifier: string | undefined;
+        let branch: string | undefined;
+        if (!isPlanning && session.workItemId) {
+          const taskRun = await db.query.taskRuns.findFirst({
+            where: eq(taskRuns.sessionId, session.id),
+            columns: { branch: true, workItemIdentifierSnapshot: true },
+          });
+          const wi = await db.query.workItems.findFirst({
+            where: eq(workItems.id, session.workItemId),
+            columns: { description: true },
+          });
+          description = wi?.description ?? undefined;
+          identifier = taskRun?.workItemIdentifierSnapshot ?? undefined;
+          branch = taskRun?.branch ?? undefined;
+        }
+
         this.send(conn, {
           type: "session_available",
           sessionId: session.id,
@@ -333,6 +396,9 @@ export class Relay {
                   launchContext: (session as any).planningLaunchContext ?? undefined,
                 } as any)
               : undefined,
+          description,
+          identifier,
+          branch,
         });
       }
     }
@@ -498,6 +564,25 @@ export class Relay {
           eq(chatConversations.userId, conn.userId!),
         ),
       );
+
+    // Update associated task_run to "running" and work_item to "in_progress"
+    const taskRun = await db.query.taskRuns.findFirst({
+      where: eq(taskRuns.sessionId, claim.sessionId),
+      columns: { id: true, workItemId: true },
+    });
+    if (taskRun) {
+      await db
+        .update(taskRuns)
+        .set({ status: "running" })
+        .where(eq(taskRuns.id, taskRun.id));
+
+      if (taskRun.workItemId) {
+        await db
+          .update(workItems)
+          .set({ status: "in_progress" })
+          .where(eq(workItems.id, taskRun.workItemId));
+      }
+    }
   }
 
   // ── Daemon session_event → persist + fan out ───────────────────────
@@ -567,6 +652,34 @@ export class Relay {
       .update(chatConversations)
       .set({ status: msg.status })
       .where(eq(chatConversations.id, msg.sessionId));
+
+    // Sync task_run and work_item status on terminal states
+    if (msg.status === "completed" || msg.status === "failed") {
+      const taskRun = await db.query.taskRuns.findFirst({
+        where: eq(taskRuns.sessionId, msg.sessionId),
+        columns: { id: true, workItemId: true },
+      });
+      if (taskRun) {
+        await db
+          .update(taskRuns)
+          .set({
+            status: msg.status,
+            completedAt: sql`now()`,
+          })
+          .where(eq(taskRuns.id, taskRun.id));
+
+        if (taskRun.workItemId) {
+          // completed → in_review (agent done, needs human check)
+          // failed → keep current status (don't regress)
+          if (msg.status === "completed") {
+            await db
+              .update(workItems)
+              .set({ status: "in_review" })
+              .where(eq(workItems.id, taskRun.workItemId));
+          }
+        }
+      }
+    }
 
     const subs = this.subscribers.get(msg.sessionId);
     if (subs) {

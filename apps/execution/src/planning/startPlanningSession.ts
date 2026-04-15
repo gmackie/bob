@@ -2,7 +2,6 @@ import { eq } from "@bob/db";
 import { db } from "@bob/db/client";
 import { chatConversations, runLifecycleEvents, taskRuns } from "@bob/db/schema";
 
-import { gatewayRequest } from "../runtime/taskExecutor";
 import {
   buildPlanningPrompt,
   type PlanningContext,
@@ -56,56 +55,47 @@ export async function startPlanningSession(
         workingDirectory: input.workingDirectory,
       });
 
-  let agentType: string = profile.agentType;
+  const agentType: string = profile.agentType;
+  const phase = isShapeIntent ? "shape" : "plan";
 
   console.log(
-    `[planning] Starting ${isShapeIntent ? "shape" : "planning"} session ${input.sessionId} with ${agentType} for project "${input.projectName}"`,
+    `[planning] Starting ${phase} session ${input.sessionId} with ${agentType} for project "${input.projectName}"`,
   );
 
-  // Start the session on the gateway — try preferred agent, fall back to claude
-  try {
-    await gatewayRequest(input.userId, "/session/start", {
-      sessionId: input.sessionId,
-      workingDirectory: input.workingDirectory,
-      agentType,
-      initialPrompt: prompt,
-      env: {
-        ...profile.env,
-        BOB_API_URL: process.env.BOB_API_URL ?? "http://localhost:3000",
-        ...(process.env.BOB_API_KEY
-          ? { BOB_API_KEY: process.env.BOB_API_KEY }
-          : {}),
-      },
-    });
-  } catch (err) {
-    if (agentType !== "claude") {
-      console.warn(
-        `[planning] ${agentType} failed, falling back to claude:`,
-        err instanceof Error ? err.message : err,
-      );
-      agentType = "claude";
-      await gatewayRequest(input.userId, "/session/start", {
-        sessionId: input.sessionId,
-        workingDirectory: input.workingDirectory,
-        agentType: "claude",
-        initialPrompt: prompt,
+  // Set session to pending — the daemon picks it up via nudge or polling.
+  await db
+    .update(chatConversations)
+    .set({ status: "pending", agentType })
+    .where(eq(chatConversations.id, input.sessionId));
+
+  // Nudge ws-gateway so the daemon picks up the session immediately.
+  const gatewayUrl = process.env.GATEWAY_URL ?? "http://localhost:3002";
+  const nudgeSecret = process.env.NUDGE_SHARED_SECRET;
+  if (nudgeSecret) {
+    try {
+      await fetch(`${gatewayUrl}/internal/nudge`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${nudgeSecret}`,
+        },
+        body: JSON.stringify({
+          sessionId: input.sessionId,
+          workspaceId: input.workspaceId,
+          workingDirectory: input.workingDirectory,
+          agentType,
+          title: `${phase}: ${input.projectName}`,
+          sessionType: phase,
+        }),
       });
-    } else {
-      throw err;
+    } catch (err) {
+      console.warn("[planning] nudge failed:", err);
     }
   }
 
-  // Update session status
-  await db
-    .update(chatConversations)
-    .set({ status: "running" })
-    .where(eq(chatConversations.id, input.sessionId));
-
   // Fire-and-forget: write run_started lifecycle event
-  const phase = isShapeIntent ? "shape" : "plan";
   void (async () => {
     try {
-      // Look up the taskRun associated with this session (if any)
       const taskRun = await db.query.taskRuns.findFirst({
         where: eq(taskRuns.sessionId, input.sessionId),
         columns: { id: true, workItemId: true },

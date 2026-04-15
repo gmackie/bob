@@ -5,7 +5,7 @@ import { sessionEvents } from "@bob/db/schema";
 
 import { PersistenceWriter, type SessionEventRecord } from "./persistence.js";
 import { Relay } from "./relay.js";
-import { createNudgeHandler } from "./nudge.js";
+import { createNudgeHandler, readJsonBody } from "./nudge.js";
 import { validateBrowserToken, validateDaemonAuth } from "./auth.js";
 
 const PORT = parseInt(process.env.GATEWAY_PORT ?? "3002", 10);
@@ -49,7 +49,8 @@ const relay = new Relay({
 
 const nudgeHandler = createNudgeHandler({
   sharedSecret: NUDGE_SHARED_SECRET,
-  onNudge: (body) => relay.nudgeSession(body),
+  onNudge: (body) =>
+    relay.nudgeSession(body as unknown as Parameters<typeof relay.nudgeSession>[0]),
 });
 
 // HTTP server (handles /health and /internal/nudge)
@@ -76,6 +77,25 @@ const server = createServer(async (req, res) => {
 
   if (req.method === "POST" && req.url === "/internal/nudge") {
     await nudgeHandler(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/internal/session-send") {
+    const auth = req.headers.authorization;
+    if (!auth || auth !== `Bearer ${NUDGE_SHARED_SECRET}`) {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Unauthorized" }));
+      return;
+    }
+    const body = await readJsonBody(req) as { userId?: string; sessionId?: string; message?: string } | null;
+    if (!body?.userId || !body?.sessionId || !body?.message) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Missing userId, sessionId, or message" }));
+      return;
+    }
+    const delivered = await relay.sendToSession(body.sessionId, body.userId, body.message);
+    res.writeHead(delivered ? 200 : 404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: delivered }));
     return;
   }
 
