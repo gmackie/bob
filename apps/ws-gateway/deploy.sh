@@ -2,43 +2,47 @@
 # Deploy ws-gateway to hetzner-master
 #
 # Prerequisites:
-#   - SSH access to hetzner-master as bob user
+#   - SSH access to hetzner-master (uses ssh config user, typically root)
 #   - /opt/bob/ws-gateway/ directory exists on target
 #   - .env file configured on target
-#   - systemd service installed: sudo cp bob-ws-gateway.service /etc/systemd/system/
+#   - systemd service installed: cp bob-ws-gateway.service /etc/systemd/system/
 #
-# Usage: ./deploy.sh [host]
+# Usage: ./deploy.sh [host] [user]
 
 set -euo pipefail
 
 HOST="${1:-hetzner-master}"
+USER="${2:-root}"
+SSH_TARGET="${USER}@${HOST}"
 REMOTE_DIR="/opt/bob/ws-gateway"
+PORT="${WS_GATEWAY_PORT:-3003}"
 
 echo "==> Building ws-gateway..."
 cd "$(dirname "$0")"
 pnpm build
 
-echo "==> Deploying to ${HOST}:${REMOTE_DIR}..."
+echo "==> Deploying to ${SSH_TARGET}:${REMOTE_DIR}..."
+# Note: 'dist' (no trailing slash) preserves the directory so systemd's
+# `node dist/index.js` keeps working.
 rsync -avz --delete \
   --exclude='.env' \
   --exclude='node_modules' \
-  --exclude='src' \
   --exclude='*.test.ts' \
   --exclude='.turbo' \
-  dist/ package.json \
-  "bob@${HOST}:${REMOTE_DIR}/"
+  dist package.json \
+  "${SSH_TARGET}:${REMOTE_DIR}/"
 
 echo "==> Installing production deps on ${HOST}..."
-ssh "bob@${HOST}" "cd ${REMOTE_DIR} && npm install --omit=dev"
+ssh "${SSH_TARGET}" "cd ${REMOTE_DIR} && npm install --omit=dev"
 
 echo "==> Restarting service..."
-ssh "bob@${HOST}" "sudo systemctl restart bob-ws-gateway"
+ssh "${SSH_TARGET}" "systemctl restart bob-ws-gateway"
 
-echo "==> Checking health..."
+echo "==> Checking health on port ${PORT}..."
 sleep 2
-ssh "bob@${HOST}" "curl -sf http://localhost:3002/health | python3 -m json.tool" || {
+ssh "${SSH_TARGET}" "curl -sf http://localhost:${PORT}/health | python3 -m json.tool" || {
   echo "WARN: health check failed, checking logs..."
-  ssh "bob@${HOST}" "journalctl -u bob-ws-gateway -n 20 --no-pager"
+  ssh "${SSH_TARGET}" "journalctl -u bob-ws-gateway -n 20 --no-pager"
   exit 1
 }
 
