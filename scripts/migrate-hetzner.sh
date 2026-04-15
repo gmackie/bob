@@ -32,6 +32,12 @@ cleanup() { [ -n "${TUNNEL_PID:-}" ] && kill "${TUNNEL_PID}" 2>/dev/null || true
 trap cleanup EXIT
 
 echo "==> Reading DATABASE_URL from ${SSH_TARGET}:${REMOTE_ENV}..."
+# REMOTE_ENV is interpolated server-side; guard against shell metacharacters
+# by validating it locally before sending.
+if ! [[ "${REMOTE_ENV}" =~ ^[A-Za-z0-9_./-]+$ ]]; then
+  echo "ERROR: REMOTE_ENV contains unsafe characters: ${REMOTE_ENV}"
+  exit 1
+fi
 REMOTE_DB_URL=$(ssh "${SSH_TARGET}" "grep '^DATABASE_URL=' ${REMOTE_ENV} | cut -d= -f2- | tr -d '\"'")
 if [ -z "${REMOTE_DB_URL}" ]; then
   echo "ERROR: DATABASE_URL not found in ${REMOTE_ENV}"

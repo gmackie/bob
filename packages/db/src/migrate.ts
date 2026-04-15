@@ -71,6 +71,11 @@ async function main() {
   await client.connect();
 
   try {
+    // Advisory lock: serialize concurrent migrate runs (e.g. blder + ws-gateway
+    // deploys racing). Released automatically when the connection ends.
+    // Lock key is an arbitrary 64-bit int picked once for this tool.
+    await client.query(`SELECT pg_advisory_lock(8823427361421345)`);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS bob_migrations (
         filename text PRIMARY KEY,
