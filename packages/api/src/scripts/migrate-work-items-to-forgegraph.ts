@@ -3,7 +3,7 @@
  * One-time migration script: copies all local work items to ForgeGraph.
  *
  * Usage:
- *   FG_API_URL=https://forge.gmac.io FG_API_TOKEN=<token> \
+ *   FG_API_URL=https://forgegraf.com FG_API_TOKEN=<token> \
  *     pnpm -F @bob/api exec tsx src/scripts/migrate-work-items-to-forgegraph.ts
  *
  * Idempotent: uses externalId so re-runs are safe.
@@ -21,7 +21,7 @@ import { eq } from "@bob/db";
 
 import { ForgeGraphClient } from "../services/forgegraph/forgeGraphClient";
 
-const FG_API_URL = process.env.FG_API_URL ?? "https://forge.gmac.io";
+const FG_API_URL = process.env.FG_API_URL ?? "https://forgegraf.com";
 const FG_API_TOKEN = process.env.FG_API_TOKEN;
 
 if (!FG_API_TOKEN) {

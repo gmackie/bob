@@ -1,7 +1,7 @@
 /**
  * ForgeGraph HTTP Client
  *
- * Communicates with the ForgeGraph work-item API at forge.gmac.io.
+ * Communicates with the ForgeGraph work-item API at forgegraf.com.
  * Follows the OpenCodeClient pattern: Bearer auth, timeouts, single retry on 5xx.
  */
 

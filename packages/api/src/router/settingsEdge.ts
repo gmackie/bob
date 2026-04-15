@@ -189,7 +189,7 @@ export const settingsEdgeRouter: TRPCRouterRecord = {
       }
 
       // Validate token by calling ForgeGraph API
-      const fgServer = process.env.FORGEGRAPH_URL ?? "https://forge.gmac.io";
+      const fgServer = process.env.FORGEGRAPH_URL ?? process.env.FG_API_URL ?? "https://forgegraf.com";
       const resp = await fetch(`${fgServer}/api/fg/apps`, {
         headers: { Authorization: `Bearer ${input.apiToken}` },
       });
