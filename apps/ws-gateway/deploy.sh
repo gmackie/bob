@@ -17,27 +17,33 @@ SSH_TARGET="${USER}@${HOST}"
 REMOTE_DIR="/opt/bob/ws-gateway"
 PORT="${WS_GATEWAY_PORT:-3003}"
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
 echo "==> Building ws-gateway..."
-cd "$(dirname "$0")"
+cd "${SCRIPT_DIR}"
 pnpm build
 
 echo "==> Applying pending DB migrations..."
 HETZNER_HOST="${HOST}" HETZNER_SSH_USER="${USER}" \
-  "$(dirname "$0")/../../scripts/migrate-hetzner.sh"
+  "${REPO_ROOT}/scripts/migrate-hetzner.sh"
+
+echo "==> Producing deployable tree via pnpm deploy..."
+# pnpm deploy writes a self-contained directory with workspace: deps
+# resolved and node_modules installed. Overwrites on each run.
+DEPLOY_STAGE="${REPO_ROOT}/.deploy/ws-gateway"
+rm -rf "${DEPLOY_STAGE}"
+pnpm --filter @bob/ws-gateway deploy --legacy --prod "${DEPLOY_STAGE}"
 
 echo "==> Deploying to ${SSH_TARGET}:${REMOTE_DIR}..."
-# Note: 'dist' (no trailing slash) preserves the directory so systemd's
-# `node dist/index.js` keeps working.
 rsync -avz --delete \
   --exclude='.env' \
-  --exclude='node_modules' \
   --exclude='*.test.ts' \
   --exclude='.turbo' \
-  dist package.json \
+  "${DEPLOY_STAGE}/dist" \
+  "${DEPLOY_STAGE}/node_modules" \
+  "${DEPLOY_STAGE}/package.json" \
   "${SSH_TARGET}:${REMOTE_DIR}/"
-
-echo "==> Installing production deps on ${HOST}..."
-ssh "${SSH_TARGET}" "cd ${REMOTE_DIR} && npm install --omit=dev"
 
 echo "==> Restarting service..."
 ssh "${SSH_TARGET}" "systemctl restart bob-ws-gateway"

@@ -82,6 +82,9 @@ dist-electron/
 session-ses_*.md
 .creds
 
+# Deploy staging
+.deploy/
+
 # Superpowers / agents metadata
 .agents/
 .claude/skills/
