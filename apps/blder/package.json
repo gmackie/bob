@@ -6,6 +6,7 @@
     "dev": "vinext dev",
     "build": "vinext build",
     "start": "vinext start",
+    "predeploy": "bash ../../scripts/migrate-hetzner.sh",
     "deploy": "vinext deploy",
     "typecheck": "tsc --noEmit"
   },
