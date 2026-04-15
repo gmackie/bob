@@ -160,7 +160,7 @@ describe("Relay", () => {
   describe("browser subscribe", () => {
     it("verifies session ownership before subscribing", async () => {
       (db.query.chatConversations.findFirst as any).mockResolvedValueOnce({
-        id: "sess-1",
+        id: "11111111-1111-4111-8111-111111111111",
         userId: "user-2", // different user
         nextSeq: 5,
         status: "running",
@@ -176,7 +176,7 @@ describe("Relay", () => {
       });
       await new Promise((r) => setImmediate(r));
 
-      ws.receive({ type: "subscribe", sessionId: "sess-1", lastAckSeq: 0 });
+      ws.receive({ type: "subscribe", sessionId: "11111111-1111-4111-8111-111111111111", lastAckSeq: 0 });
       await new Promise((r) => setImmediate(r));
 
       const errors = ws.sentOfType("error");
@@ -185,14 +185,14 @@ describe("Relay", () => {
 
     it("replays missed events on subscribe", async () => {
       (db.query.chatConversations.findFirst as any).mockResolvedValueOnce({
-        id: "sess-1",
+        id: "11111111-1111-4111-8111-111111111111",
         userId: "user-1",
         nextSeq: 5,
         status: "running",
       });
       (db.query.sessionEvents.findMany as any).mockResolvedValueOnce([
         {
-          sessionId: "sess-1",
+          sessionId: "11111111-1111-4111-8111-111111111111",
           seq: 3,
           eventType: "output_chunk",
           direction: "agent",
@@ -200,7 +200,7 @@ describe("Relay", () => {
           createdAt: new Date("2026-04-10T00:00:00.000Z"),
         },
         {
-          sessionId: "sess-1",
+          sessionId: "11111111-1111-4111-8111-111111111111",
           seq: 4,
           eventType: "output_chunk",
           direction: "agent",
@@ -219,7 +219,7 @@ describe("Relay", () => {
       });
       await new Promise((r) => setImmediate(r));
 
-      ws.receive({ type: "subscribe", sessionId: "sess-1", lastAckSeq: 2 });
+      ws.receive({ type: "subscribe", sessionId: "11111111-1111-4111-8111-111111111111", lastAckSeq: 2 });
       await new Promise((r) => setImmediate(r));
       await new Promise((r) => setImmediate(r));
 
@@ -247,13 +247,13 @@ describe("Relay", () => {
       // Session exists owned by user-1 in workspace ws-1
       (db.query.chatConversations.findFirst as any)
         .mockResolvedValueOnce({
-          id: "sess-1",
+          id: "11111111-1111-4111-8111-111111111111",
           userId: "user-1",
           nextSeq: 1,
           status: "running",
         })
         .mockResolvedValueOnce({
-          id: "sess-1",
+          id: "11111111-1111-4111-8111-111111111111",
           userId: "user-1",
           nextSeq: 1,
           status: "running",
@@ -272,13 +272,13 @@ describe("Relay", () => {
       });
       await new Promise((r) => setImmediate(r));
 
-      browserWs.receive({ type: "subscribe", sessionId: "sess-1", lastAckSeq: 0 });
+      browserWs.receive({ type: "subscribe", sessionId: "11111111-1111-4111-8111-111111111111", lastAckSeq: 0 });
       await new Promise((r) => setImmediate(r));
 
       // Daemon sends an event
       daemonWs.receive({
         type: "session_event",
-        sessionId: "sess-1",
+        sessionId: "11111111-1111-4111-8111-111111111111",
         eventType: "output_chunk",
         direction: "agent",
         payload: { data: "hello" },
@@ -287,7 +287,7 @@ describe("Relay", () => {
 
       // Event was persisted
       expect(persistedEvents.length).toBe(1);
-      expect(persistedEvents[0].sessionId).toBe("sess-1");
+      expect(persistedEvents[0].sessionId).toBe("11111111-1111-4111-8111-111111111111");
 
       // Event was forwarded to the browser subscriber
       const forwarded = browserWs.sentOfType("event");

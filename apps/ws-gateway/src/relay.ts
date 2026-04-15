@@ -23,6 +23,9 @@ import type { SessionEventRecord } from "./persistence.js";
 
 const REPLAY_LIMIT = 500;
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isUuid = (s: unknown): s is string => typeof s === "string" && UUID_RE.test(s);
+
 interface Connection {
   id: string;
   ws: WebSocket;
@@ -163,15 +166,29 @@ export class Relay {
       return;
     }
 
+    // Helper: reject malformed sessionId before it reaches the DB, so a
+    // corrupt id from any client surfaces as INVALID_SESSION_ID instead of a
+    // Postgres 22P02 in the gateway logs.
+    const requireUuid = (sessionId: unknown): boolean => {
+      if (isUuid(sessionId)) return true;
+      this.send(
+        conn,
+        createError("INVALID_SESSION_ID", "sessionId must be a UUID", String(sessionId)),
+      );
+      return false;
+    };
+
     switch (msg.type) {
       case "subscribe":
         if (conn.kind !== "browser") {
           this.send(conn, createError("INVALID_FOR_DEVICE", "Subscribe is for browsers"));
           return;
         }
+        if (!requireUuid(msg.sessionId)) return;
         await this.handleSubscribe(conn, msg);
         return;
       case "unsubscribe":
+        if (!requireUuid(msg.sessionId)) return;
         this.handleUnsubscribe(conn, msg);
         return;
       case "input":
@@ -179,6 +196,7 @@ export class Relay {
           this.send(conn, createError("INVALID_FOR_DEVICE", "Input is for browsers"));
           return;
         }
+        if (!requireUuid(msg.sessionId)) return;
         await this.handleInput(conn, msg);
         return;
       case "ack":
@@ -190,6 +208,7 @@ export class Relay {
           this.send(conn, createError("INVALID_FOR_DEVICE", "session_claimed is for daemons"));
           return;
         }
+        if (!requireUuid(msg.sessionId)) return;
         await this.handleSessionClaimed(conn, msg);
         return;
       case "session_event":
@@ -197,6 +216,7 @@ export class Relay {
           this.send(conn, createError("INVALID_FOR_DEVICE", "session_event is for daemons"));
           return;
         }
+        if (!requireUuid(msg.sessionId)) return;
         await this.handleSessionEvent(conn, msg);
         return;
       case "session_status":
@@ -204,6 +224,7 @@ export class Relay {
           this.send(conn, createError("INVALID_FOR_DEVICE", "session_status is for daemons"));
           return;
         }
+        if (!requireUuid(msg.sessionId)) return;
         await this.handleSessionStatus(conn, msg);
         return;
       case "subscribe_workspace":
