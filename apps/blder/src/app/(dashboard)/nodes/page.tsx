@@ -112,7 +112,7 @@ export default function NodesPage() {
                         href={`/nodes/${encodeURIComponent(machineId)}`}
                         className="font-display font-semibold text-foreground transition-colors hover:text-primary"
                       >
-                        {machineId}
+                        {ws.name || machineId}
                       </Link>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">

@@ -1,8 +1,8 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { cn } from "@bob/ui";
 import { Card } from "@bob/ui/card";
@@ -37,9 +37,22 @@ export default function NodeDetailPage({
   const { machineId } = use(params);
   const decodedMachineId = decodeURIComponent(machineId);
   const trpc = useTRPC();
+  const queryClient = useQueryClient();
+
+  const [editing, setEditing] = useState(false);
+  const [draftName, setDraftName] = useState("");
 
   const { data: workspaceMemberships } = useQuery(
     trpc.workspace.list.queryOptions(undefined, { staleTime: 10_000, refetchInterval: 15_000 }),
+  );
+
+  const renameMutation = useMutation(
+    trpc.workspace.rename.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: trpc.workspace.list.queryKey() });
+        setEditing(false);
+      },
+    }),
   );
 
   const workspaces = (workspaceMemberships ?? [])
@@ -134,9 +147,48 @@ export default function NodeDetailPage({
             {/* Node header */}
             <div>
               <div className="flex items-center gap-3">
-                <h1 className="font-display text-2xl font-semibold text-foreground">
-                  {decodedMachineId}
-                </h1>
+                {editing ? (
+                  <form
+                    className="flex items-center gap-2"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const name = draftName.trim();
+                      if (!name || name === workspace.name) {
+                        setEditing(false);
+                        return;
+                      }
+                      renameMutation.mutate({ id: workspace.id, name });
+                    }}
+                  >
+                    <input
+                      autoFocus
+                      value={draftName}
+                      onChange={(e) => setDraftName(e.target.value)}
+                      onBlur={() => setEditing(false)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") setEditing(false);
+                      }}
+                      className="w-48 rounded-md border border-border bg-background px-2 py-1 font-display text-2xl font-semibold text-foreground focus:border-primary focus:outline-none"
+                    />
+                  </form>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDraftName(workspace.name ?? decodedMachineId);
+                      setEditing(true);
+                    }}
+                    className="group flex items-center gap-2 text-left"
+                    title="Rename node"
+                  >
+                    <h1 className="font-display text-2xl font-semibold text-foreground group-hover:text-primary">
+                      {workspace.name || decodedMachineId}
+                    </h1>
+                    <span className="text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+                      ✎
+                    </span>
+                  </button>
+                )}
                 <span
                   className={cn(
                     "rounded-full px-2.5 py-0.5 text-[10px] font-medium",

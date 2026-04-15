@@ -1,6 +1,7 @@
+import { TRPCError } from "@trpc/server";
 import { z } from "zod/v4";
 
-import { desc, eq } from "@bob/db";
+import { and, desc, eq } from "@bob/db";
 import {
   workspaceMembers,
   workspaces,
@@ -53,6 +54,36 @@ export const workspaceRouter = {
         .returning();
 
       return workspace;
+    }),
+
+  rename: protectedProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        name: z.string().min(1).max(128),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const membership = await ctx.db.query.workspaceMembers.findFirst({
+        where: and(
+          eq(workspaceMembers.workspaceId, input.id),
+          eq(workspaceMembers.userId, ctx.session.user.id),
+        ),
+      });
+      if (!membership) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Not a member of this workspace",
+        });
+      }
+
+      const [updated] = await ctx.db
+        .update(workspaces)
+        .set({ name: input.name })
+        .where(eq(workspaces.id, input.id))
+        .returning();
+
+      return updated;
     }),
 
   delete: protectedProcedure
