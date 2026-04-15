@@ -32,6 +32,7 @@ interface Connection {
   clientId: string;
   subscribedSessions: Set<string>;
   heartbeatTimer: NodeJS.Timeout | null;
+  alive: boolean;
   workspaceSubscribed: boolean;
   workspaceStatusFilter?: SessionStatus[];
 }
@@ -74,11 +75,18 @@ export class Relay {
       clientId: "",
       subscribedSessions: new Set(),
       heartbeatTimer: null,
+      alive: true,
       workspaceSubscribed: false,
     };
     this.connections.set(id, conn);
 
+    // WS-level pong (response to our ping) marks connection alive
+    ws.on("pong", () => {
+      conn.alive = true;
+    });
+
     ws.on("message", async (data: Buffer | string) => {
+      conn.alive = true;
       const raw = typeof data === "string" ? data : data.toString();
       const msg = parseClientMessage(raw);
       if (!msg) {
@@ -251,7 +259,13 @@ export class Relay {
     }
 
     conn.heartbeatTimer = setInterval(() => {
-      this.send(conn, { type: "pong", ts: new Date().toISOString() });
+      if (!conn.alive) {
+        console.log(`[Relay] Dead connection detected: ${conn.id} (${conn.kind})`);
+        conn.ws.terminate();
+        return;
+      }
+      conn.alive = false;
+      conn.ws.ping();
     }, this.cfg.heartbeatIntervalMs);
 
     this.send(conn, {
