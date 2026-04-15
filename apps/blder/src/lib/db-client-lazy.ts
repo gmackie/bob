@@ -25,6 +25,10 @@ function getDatabase() {
   const client = postgres(databaseUrl, {
     ssl: isHyperdrive ? false : "require",
     max: 1,
+    // Hyperdrive's pooled mode does not support session-level prepared statements.
+    // Without this, postgres.js's prepared-statement cache causes intermittent
+    // "Failed query" errors on parameterized inserts (e.g. discovered_dirs upsert).
+    prepare: !isHyperdrive,
   });
 
   return drizzle(client, { schema, casing: "snake_case" });
