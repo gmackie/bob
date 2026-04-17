@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "drizzle-orm": "^0.44.0",
+    "@electric-sql/pglite": "^0.2.0",
     "postgres": "^3.4.0",
     "zod": "^4.0.0",
     "drizzle-zod": "^0.7.0"

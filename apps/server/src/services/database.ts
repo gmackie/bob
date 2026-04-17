@@ -1,5 +1,5 @@
 import { Effect, Layer, ServiceMap } from "effect";
-import { db } from "@gmacko/db/client";
+import { getDb } from "@gmacko/db/client";
 import { thread, branch, message } from "@gmacko/db/schema";
 import { eq } from "drizzle-orm";
 
@@ -58,13 +58,14 @@ export class DatabaseService extends ServiceMap.Service<
 export const DatabaseServiceLive = Layer.succeed(DatabaseService)({
   listThreads: () =>
     Effect.tryPromise({
-      try: () => db.select().from(thread),
+      try: async () => (await getDb()).select().from(thread),
       catch: (error) => new Error(`Failed to list threads: ${error}`),
     }),
 
   getThreadById: (id: string) =>
     Effect.tryPromise({
       try: async () => {
+        const db = await getDb();
         const rows = await db.select().from(thread).where(eq(thread.id, id));
         return rows[0];
       },
@@ -74,6 +75,7 @@ export const DatabaseServiceLive = Layer.succeed(DatabaseService)({
   createThread: (input) =>
     Effect.tryPromise({
       try: async () => {
+        const db = await getDb();
         const rows = await db
           .insert(thread)
           .values({
@@ -89,6 +91,7 @@ export const DatabaseServiceLive = Layer.succeed(DatabaseService)({
   updateThreadStatus: (input) =>
     Effect.tryPromise({
       try: async () => {
+        const db = await getDb();
         const rows = await db
           .update(thread)
           .set({ status: input.status, updatedAt: new Date() })
@@ -110,6 +113,7 @@ export const DatabaseServiceLive = Layer.succeed(DatabaseService)({
   createBranch: (input) =>
     Effect.tryPromise({
       try: async () => {
+        const db = await getDb();
         const rows = await db
           .insert(branch)
           .values({
@@ -127,6 +131,7 @@ export const DatabaseServiceLive = Layer.succeed(DatabaseService)({
   setActiveBranch: (input) =>
     Effect.tryPromise({
       try: async () => {
+        const db = await getDb();
         await db
           .update(thread)
           .set({ activeBranchId: input.branchId })
@@ -149,6 +154,7 @@ export const DatabaseServiceLive = Layer.succeed(DatabaseService)({
   createMessage: (input) =>
     Effect.tryPromise({
       try: async () => {
+        const db = await getDb();
         const rows = await db
           .insert(message)
           .values({

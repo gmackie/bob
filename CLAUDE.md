@@ -7,7 +7,7 @@ Shared monorepo for Bob and OODA frontends. Will become the gmacko fork of t3cod
 - `packages/contracts` — Effect/Schema types, RPC group, tagged errors
 - `packages/ui` — Themeable shared UI components (@gmacko/ui)
 - `packages/models` — Core domain types (threads, messages, branches)
-- `packages/db` — Drizzle ORM schema (PostgreSQL)
+- `packages/db` — Drizzle ORM schema, dual-driver: PGlite (WASM, default) or PostgreSQL
 - `packages/agent` — Claude API streaming dispatch (Effect-wrapped)
 - `packages/wiki` — Wiki article writer + cross-linker (Effect-wrapped)
 - `apps/server` — Effect HTTP server with RPC handler (port 3001)
@@ -18,7 +18,7 @@ Shared monorepo for Bob and OODA frontends. Will become the gmacko fork of t3cod
 
 ## Stack
 
-- **Backend:** Effect 4.0.0-beta.43, Effect-RPC, Drizzle ORM, PostgreSQL
+- **Backend:** Effect 4.0.0-beta.43, Effect-RPC, Drizzle ORM, PGlite (WASM) / PostgreSQL
 - **Frontend:** React 19, React Query, Next.js 16 (web), Expo 55 (mobile)
 - **Styling:** Tailwind CSS 4, NativeWind 5 (mobile), CVA
 - **AI:** Anthropic Claude API via @anthropic-ai/sdk
@@ -30,13 +30,17 @@ Set `data-theme` attribute: `"ooda"` (dark + gold) or `"bob"` (purple/indigo).
 ## Development
 
 ```
-docker compose up -d postgres        # Start database
-cd packages/db && pnpm db:push       # Push schema
-cd apps/server && pnpm dev           # Start Effect server (port 3001)
+cd apps/server && pnpm dev           # Start Effect server (port 3001, PGlite auto-creates DB at ~/.gmacko/data)
 cd apps/web && pnpm dev              # Start web app (port 3000)
 cd apps/mobile && pnpm dev           # Start Expo dev server
+cd apps/desktop && pnpm dev          # Start Electron desktop app
 pnpm test                            # Run all tests
 ```
+
+### Database drivers
+
+- **Default (PGlite):** No setup needed — WASM Postgres runs in-process, data at `~/.gmacko/data`
+- **PostgreSQL:** Set `GMACKO_DB_DRIVER=postgres` and `DATABASE_URL=postgres://...`
 
 ## Key Patterns
 
