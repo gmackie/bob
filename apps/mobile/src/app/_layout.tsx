@@ -1,8 +1,13 @@
-import { Platform, View } from "react-native";
+import { useState, useCallback } from "react";
+import { Platform, Text, View } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { queryClient } from "~/utils/api";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { queryClient, trpc } from "~/utils/api";
+import { ThreadSidebar } from "~/components/tablet/ThreadSidebar";
+import { ThreadPane } from "~/components/tablet/ThreadPane";
+import { colors } from "~/lib/colors";
+import type { Thread, Message } from "@gmacko/models";
 
 import "../styles.css";
 
@@ -27,18 +32,70 @@ function PhoneLayout() {
 }
 
 function TabletLayout() {
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+
+  const threadsQuery = useQuery(trpc.threads.list.queryOptions());
+  const threads = (threadsQuery.data ?? []) as Thread[];
+
+  const selectedThread = threads.find((t) => t.id === selectedThreadId);
+
+  const messagesQuery = useQuery(
+    trpc.messages.listByBranch.queryOptions(
+      {
+        threadId: selectedThreadId ?? "",
+        branchId: selectedThread?.activeBranchId ?? "",
+      },
+      {
+        enabled: !!selectedThreadId && !!selectedThread?.activeBranchId,
+      },
+    ),
+  );
+  const messages = (messagesQuery.data ?? []) as Message[];
+
+  const handleRefresh = useCallback(() => {
+    void threadsQuery.refetch();
+  }, [threadsQuery]);
+
+  const handleSend = useCallback(
+    (_content: string) => {
+      // Will be wired to trpc.messages.create mutation in a follow-up task
+    },
+    [],
+  );
+
   if (!SplitView) return <PhoneLayout />;
 
   return (
     <SplitView>
       <SplitView.Column>
         <View className="flex-1 bg-background border-r border-border">
-          <Stack screenOptions={stackScreenOptions} />
+          <ThreadSidebar
+            threads={threads}
+            selectedThreadId={selectedThreadId}
+            onSelectThread={setSelectedThreadId}
+            onRefresh={handleRefresh}
+            isLoading={threadsQuery.isFetching}
+          />
         </View>
       </SplitView.Column>
       <SplitView.Column>
         <View className="flex-1 bg-background">
-          <Stack screenOptions={stackScreenOptions} />
+          {selectedThread ? (
+            <ThreadPane
+              threadTitle={selectedThread.title}
+              branchName="main"
+              messages={messages}
+              onSend={handleSend}
+              onSynthesize={() => {}}
+              isLoading={messagesQuery.isFetching}
+            />
+          ) : (
+            <View className="flex-1 items-center justify-center">
+              <Text style={{ color: colors.muted }}>
+                Select a thread to begin
+              </Text>
+            </View>
+          )}
         </View>
       </SplitView.Column>
     </SplitView>
