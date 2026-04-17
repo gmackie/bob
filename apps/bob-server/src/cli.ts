@@ -1,6 +1,9 @@
+import crypto from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { Command } from "commander";
+import { openFdStream, readBootstrapEnvelope } from "./bootstrap.js";
+import { startServer } from "./server.js";
 
 export type CliArgs = {
   port: number;
@@ -57,6 +60,50 @@ export function parseArgs(argv: string[]): CliArgs {
 
 export async function main(argv: string[]): Promise<void> {
   const args = parseArgs(argv);
-  // Full startup flow added in Task 6.
-  console.log(JSON.stringify({ parsed: args }));
+
+  let authToken = args.authToken;
+  if (args.bootstrapFd !== undefined) {
+    const envelope = await readBootstrapEnvelope(openFdStream(args.bootstrapFd));
+    authToken = envelope.authToken ?? authToken;
+  }
+  if (!authToken && args.host !== "127.0.0.1" && args.host !== "localhost") {
+    throw new Error(
+      "--auth-token (or --bootstrap-fd) is required when --host is not loopback",
+    );
+  }
+  const resolvedToken = authToken ?? crypto.randomBytes(32).toString("hex");
+
+  const { url, stop } = await startServer({ ...args, authToken: resolvedToken });
+
+  // Emit the ready line in a single JSON object so Electron can parse it.
+  console.log(JSON.stringify({ ready: true, url, authToken: resolvedToken }));
+
+  const shutdown = async (signal: NodeJS.Signals) => {
+    console.error(`[bob-server] received ${signal}, shutting down`);
+    try {
+      await stop();
+    } finally {
+      process.exit(0);
+    }
+  };
+  process.once("SIGTERM", () => {
+    void shutdown("SIGTERM");
+  });
+  process.once("SIGINT", () => {
+    void shutdown("SIGINT");
+  });
+
+  if (!args.noBrowser) {
+    const opener =
+      process.platform === "darwin"
+        ? "open"
+        : process.platform === "win32"
+          ? "start"
+          : "xdg-open";
+    const { spawn } = await import("node:child_process");
+    spawn(opener, [`${url}/?t=${resolvedToken}`], {
+      detached: true,
+      stdio: "ignore",
+    }).unref();
+  }
 }
