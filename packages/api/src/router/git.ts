@@ -10,253 +10,12 @@ import { JjClient } from "@bob/execution-lib/vcs/jj-client";
 import { createDraftPr } from "../services/git/prService";
 import { protectedProcedure } from "../trpc";
 
-function getGatewayUrl() { return process.env.GATEWAY_URL ?? "http://localhost:3002"; }
-
-async function gatewayRequest(
-  userId: string,
-  endpoint: string,
-  body: Record<string, unknown>,
-): Promise<unknown> {
-  const response = await fetch(`${getGatewayUrl()}${endpoint}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId, ...body }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: `Gateway error: ${error}`,
-    });
-  }
-
-  return response.json();
-}
-
 export const gitRouter = {
-  status: protectedProcedure
-    .input(z.object({ path: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const result = (await gatewayRequest(ctx.session.user.id, "/git/status", {
-        path: input.path,
-      })) as {
-        branch: string;
-        ahead: number;
-        behind: number;
-        staged: string[];
-        unstaged: string[];
-        untracked: string[];
-      };
-
-      return result;
-    }),
-
-  diff: protectedProcedure
-    .input(
-      z.object({
-        path: z.string(),
-        staged: z.boolean().default(false),
-        file: z.string().optional(),
-      }),
-    )
-    .query(async ({ ctx, input }) => {
-      const result = (await gatewayRequest(ctx.session.user.id, "/git/diff", {
-        path: input.path,
-        staged: input.staged,
-        file: input.file,
-      })) as { diff: string };
-
-      return result.diff;
-    }),
-
-  log: protectedProcedure
-    .input(
-      z.object({
-        path: z.string(),
-        limit: z.number().min(1).max(100).default(20),
-        branch: z.string().optional(),
-      }),
-    )
-    .query(async ({ ctx, input }) => {
-      const result = (await gatewayRequest(ctx.session.user.id, "/git/log", {
-        path: input.path,
-        limit: input.limit,
-        branch: input.branch,
-      })) as {
-        commits: Array<{
-          hash: string;
-          shortHash: string;
-          message: string;
-          author: string;
-          date: string;
-        }>;
-      };
-
-      return result.commits;
-    }),
-
-  branches: protectedProcedure
-    .input(z.object({ path: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const result = (await gatewayRequest(
-        ctx.session.user.id,
-        "/git/branches",
-        {
-          path: input.path,
-        },
-      )) as {
-        current: string;
-        local: string[];
-        remote: string[];
-      };
-
-      return result;
-    }),
-
-  add: protectedProcedure
-    .input(
-      z.object({
-        path: z.string(),
-        files: z.array(z.string()).default([]),
-        all: z.boolean().default(false),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      await gatewayRequest(ctx.session.user.id, "/git/add", {
-        path: input.path,
-        files: input.files,
-        all: input.all,
-      });
-
-      return { success: true };
-    }),
-
-  commit: protectedProcedure
-    .input(
-      z.object({
-        path: z.string(),
-        message: z.string().min(1),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      const result = (await gatewayRequest(ctx.session.user.id, "/git/commit", {
-        path: input.path,
-        message: input.message,
-      })) as { hash: string };
-
-      return result;
-    }),
-
-  push: protectedProcedure
-    .input(
-      z.object({
-        path: z.string(),
-        remote: z.string().default("origin"),
-        branch: z.string().optional(),
-        setUpstream: z.boolean().default(false),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      await gatewayRequest(ctx.session.user.id, "/git/push", {
-        path: input.path,
-        remote: input.remote,
-        branch: input.branch,
-        setUpstream: input.setUpstream,
-      });
-
-      return { success: true };
-    }),
-
-  pull: protectedProcedure
-    .input(
-      z.object({
-        path: z.string(),
-        remote: z.string().default("origin"),
-        branch: z.string().optional(),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      await gatewayRequest(ctx.session.user.id, "/git/pull", {
-        path: input.path,
-        remote: input.remote,
-        branch: input.branch,
-      });
-
-      return { success: true };
-    }),
-
-  checkout: protectedProcedure
-    .input(
-      z.object({
-        path: z.string(),
-        branch: z.string(),
-        create: z.boolean().default(false),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      await gatewayRequest(ctx.session.user.id, "/git/checkout", {
-        path: input.path,
-        branch: input.branch,
-        create: input.create,
-      });
-
-      return { success: true };
-    }),
-
-  reset: protectedProcedure
-    .input(
-      z.object({
-        path: z.string(),
-        files: z.array(z.string()).default([]),
-        hard: z.boolean().default(false),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      await gatewayRequest(ctx.session.user.id, "/git/reset", {
-        path: input.path,
-        files: input.files,
-        hard: input.hard,
-      });
-
-      return { success: true };
-    }),
-
-  stash: protectedProcedure
-    .input(
-      z.object({
-        path: z.string(),
-        action: z.enum(["push", "pop", "list", "drop"]).default("push"),
-        message: z.string().optional(),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      const result = (await gatewayRequest(ctx.session.user.id, "/git/stash", {
-        path: input.path,
-        action: input.action,
-        message: input.message,
-      })) as { stashes?: string[] };
-
-      return result;
-    }),
-
-  clone: protectedProcedure
-    .input(
-      z.object({
-        url: z.string(),
-        destination: z.string(),
-        branch: z.string().optional(),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      await gatewayRequest(ctx.session.user.id, "/git/clone", {
-        url: input.url,
-        destination: input.destination,
-        branch: input.branch,
-      });
-
-      return { success: true };
-    }),
+  // Git operations (status, diff, log, branches, add, commit, push, pull,
+  // checkout, reset, stash, clone) previously proxied to the old monolithic
+  // gateway which has been removed. These operations now run on the Go daemon.
+  // The daemon streams results via the WS connection. If tRPC access is needed
+  // in the future, add an HTTP API to the Go daemon.
 
   pushAndCreatePr: protectedProcedure
     .input(
@@ -270,8 +29,6 @@ export const gitRouter = {
         baseBranch: z.string().optional(),
         draft: z.boolean().default(true),
         planningTaskId: z.string().optional(),
-        remote: z.string().default("origin"),
-        setUpstream: z.boolean().default(true),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -289,12 +46,9 @@ export const gitRouter = {
         });
       }
 
-      await gatewayRequest(ctx.session.user.id, "/git/push", {
-        path: input.path,
-        remote: input.remote,
-        branch: input.headBranch,
-        setUpstream: input.setUpstream,
-      });
+      // The branch is expected to be already pushed by the agent or daemon.
+      // Previously this endpoint pushed via the old gateway, but the daemon
+      // now owns git operations.
 
       let pr;
       try {
@@ -353,7 +107,9 @@ export const gitRouter = {
         pullRequest: pr,
       };
     }),
+
   // ── JJ (Jujutsu) procedures ───────────────────────────────────────
+  // These run JjClient directly (no gateway proxy), so they still work.
 
   jjIsRepo: protectedProcedure
     .input(z.object({ path: z.string() }))

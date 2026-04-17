@@ -11,11 +11,9 @@
 
 import { eq } from "@bob/db";
 import { db } from "@bob/db/client";
-import { chatConversations, repositories, taskRuns, workItems } from "@bob/db/schema";
+import { repositories, taskRuns, workItems } from "@bob/db/schema";
 
 import { createDraftPr } from "../git/prService";
-
-function getGatewayUrl() { return process.env.GATEWAY_URL ?? "http://localhost:3002"; }
 
 export interface SessionStartParams {
   sessionId: string;
@@ -34,22 +32,6 @@ export interface SessionCompleteParams {
   userId: string;
 }
 
-async function gatewayRequest(
-  endpoint: string,
-  body: Record<string, unknown>,
-): Promise<unknown> {
-  const response = await fetch(`${getGatewayUrl()}${endpoint}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Gateway error: ${error}`);
-  }
-  return response.json();
-}
-
 /**
  * Derive a branch name from a task identifier and record it for later
  * PR creation. The actual `git branch` command is executed by the
@@ -64,7 +46,8 @@ export async function onSessionStart(
 
 /**
  * Called when an agent session finishes work on a task.
- * Pushes the feature branch to remote, then creates a PR.
+ * Creates a PR for the branch. The agent (or Go daemon) is expected to
+ * have pushed the branch already during execution.
  */
 export async function onSessionComplete(
   params: SessionCompleteParams,
@@ -78,37 +61,6 @@ export async function onSessionComplete(
       where: eq(repositories.id, params.repositoryId),
     });
     if (!repo) return { prId: undefined };
-
-    // Find the session's working directory (may be a worktree)
-    const session = await db.query.chatConversations.findFirst({
-      where: eq(chatConversations.id, params.sessionId),
-    });
-    const workingDir = session?.workingDirectory ?? repo.path;
-
-    // Get the real commit SHA from the branch head
-    let headSha: string | undefined;
-    try {
-      const revResult = await gatewayRequest("/git/log", {
-        path: workingDir,
-        maxCount: 1,
-      }) as { commits?: Array<{ hash: string }> };
-      headSha = revResult?.commits?.[0]?.hash;
-    } catch {
-      // If we can't get the SHA, continue with branch name as fallback
-    }
-
-    // Push the branch to remote
-    try {
-      await gatewayRequest("/git/push", {
-        path: workingDir,
-        branch: params.branch,
-        setUpstream: true,
-      });
-      console.log(`[branch-automation] Pushed ${params.branch} to origin`);
-    } catch (pushErr) {
-      console.error(`[branch-automation] Push failed for ${params.branch}:`, pushErr);
-      // Continue with PR creation anyway — branch may already be pushed
-    }
 
     // Get work item title for PR title
     let title = `Bob: ${params.branch}`;
@@ -132,15 +84,7 @@ export async function onSessionComplete(
       planningTaskId: params.workItemId,
     });
 
-    // Update the task run with the real commit SHA
-    if (headSha && params.sessionId) {
-      await db
-        .update(taskRuns)
-        .set({ forgegraphRevisionId: headSha })
-        .where(eq(taskRuns.sessionId, params.sessionId));
-    }
-
-    return { prId: pr?.id, headSha };
+    return { prId: pr?.id };
   } catch (err) {
     console.error("[branch-automation] Failed to create PR:", err);
     return { prId: undefined };

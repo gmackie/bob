@@ -7,7 +7,6 @@ import {
   chatAttachments,
   chatConversations,
   chatMessages,
-  messageRoleEnum,
   repositories,
   workItems,
   workspaceMembers,
@@ -15,8 +14,6 @@ import {
 } from "@bob/db/schema";
 
 import { protectedProcedure } from "../trpc";
-
-function getGatewayUrl() { return process.env.GATEWAY_URL ?? "http://localhost:3002"; }
 
 async function loadAccessibleWorkItem(db: any, userId: string, workItemId: string) {
   const workItem = await db.query.workItems.findFirst({
@@ -209,12 +206,13 @@ export const chatRouter = {
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const conversation = await loadOwnedConversation(
+      await loadOwnedConversation(
         ctx.db,
         ctx.session.user.id,
         input.conversationId,
       );
 
+      // Persist the user message in the DB
       const [userMessage] = await ctx.db
         .insert(chatMessages)
         .values({
@@ -224,64 +222,12 @@ export const chatRouter = {
         })
         .returning();
 
-      try {
-        const response = await fetch(`${getGatewayUrl()}/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: ctx.session.user.id,
-            conversationId: input.conversationId,
-            message: input.content,
-            workingDirectory: conversation.workingDirectory,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`Gateway error: ${response.status}`);
-        }
-
-        const data = await response.json() as { 
-          content: string; 
-          toolCalls?: Array<{ id: string; name: string; arguments: string }>;
-        };
-
-        const [assistantMessage] = await ctx.db
-          .insert(chatMessages)
-          .values({
-            conversationId: input.conversationId,
-            role: "assistant",
-            content: data.content,
-            toolCalls: data.toolCalls ?? null,
-          })
-          .returning();
-
-        if (!conversation.title && input.content.length > 0) {
-          const title = input.content.slice(0, 50) + (input.content.length > 50 ? "..." : "");
-          await ctx.db
-            .update(chatConversations)
-            .set({ title })
-            .where(eq(chatConversations.id, input.conversationId));
-        }
-
-        return {
-          userMessage,
-          assistantMessage,
-        };
-      } catch (error) {
-        const [errorMessage] = await ctx.db
-          .insert(chatMessages)
-          .values({
-            conversationId: input.conversationId,
-            role: "assistant",
-            content: `Error: ${String(error)}`,
-          })
-          .returning();
-
-        return {
-          userMessage,
-          assistantMessage: errorMessage,
-        };
-      }
+      // Chat input delivery now goes through the WS connection (BobWsClient.sendInput),
+      // not through this tRPC endpoint. Return the saved message so callers can migrate.
+      throw new TRPCError({
+        code: "NOT_IMPLEMENTED",
+        message: "Chat messages are delivered via WebSocket. Use the WS connection to send input to a running session.",
+      });
     }),
 
   getMessages: protectedProcedure

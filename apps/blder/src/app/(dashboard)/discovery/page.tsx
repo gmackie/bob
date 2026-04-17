@@ -13,9 +13,6 @@ import { toast } from "@bob/ui/toast";
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { useTRPC } from "~/trpc/react";
 
-const GATEWAY_URL =
-  process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:3002";
-
 export default function DiscoveryPage() {
   const trpc = useTRPC();
   const searchParams = useSearchParams();

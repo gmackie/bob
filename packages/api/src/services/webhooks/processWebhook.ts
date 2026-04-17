@@ -592,6 +592,8 @@ interface NormalizedPlanningCommentPayload {
 
 function getGatewayUrl() { return process.env.GATEWAY_URL ?? "http://localhost:3002"; }
 
+function getNudgeSecret() { return process.env.NUDGE_SHARED_SECRET ?? ""; }
+
 function truncateStatusMessage(value: string): string {
   return value.slice(0, 100);
 }
@@ -691,9 +693,13 @@ async function sendMessageToGateway(
   sessionId: string,
   message: string,
 ) {
-  const response = await fetch(`${getGatewayUrl()}/session/send`, {
+  const nudgeSecret = getNudgeSecret();
+  const response = await fetch(`${getGatewayUrl()}/internal/session-send`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(nudgeSecret ? { Authorization: `Bearer ${nudgeSecret}` } : {}),
+    },
     body: JSON.stringify({
       userId,
       sessionId,

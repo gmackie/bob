@@ -1,47 +1,9 @@
 import type { TRPCRouterRecord } from "@trpc/server";
-import { z } from "zod/v4";
 
 import { count, eq } from "@bob/db";
 import { repositories, worktrees, agentInstances } from "@bob/db/schema";
 
 import { protectedProcedure, publicProcedure } from "../trpc";
-
-const agentInfoSchema = z.object({
-  type: z.string(),
-  name: z.string(),
-  isAvailable: z.boolean(),
-  version: z.string().optional(),
-  path: z.string().optional(),
-});
-
-const systemStatusSchema = z.object({
-  agents: z.array(agentInfoSchema),
-  github: z.object({
-    status: z.enum(["available", "not_available", "not_authenticated", "unknown"]),
-    version: z.string(),
-    user: z.string(),
-  }),
-  metrics: z.object({
-    repositories: z.number(),
-    worktrees: z.number(),
-    totalInstances: z.number(),
-    activeInstances: z.number(),
-  }),
-  server: z.object({
-    uptime: z.number(),
-    memory: z.object({
-      rss: z.number(),
-      heapTotal: z.number(),
-      heapUsed: z.number(),
-      external: z.number(),
-    }),
-    nodeVersion: z.string(),
-  }),
-});
-
-export type SystemStatus = z.infer<typeof systemStatusSchema>;
-
-function getGatewayUrl() { return process.env.GATEWAY_URL ?? "http://localhost:3002"; }
 
 export const systemRouter = {
   health: publicProcedure.query(() => {
@@ -49,35 +11,6 @@ export const systemRouter = {
       status: "ok",
       timestamp: new Date().toISOString(),
     };
-  }),
-
-  ensureContainer: protectedProcedure.mutation(async ({ ctx }) => {
-    const userId = ctx.session.user.id;
-
-    try {
-      const response = await fetch(`${getGatewayUrl()}/container/ensure`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Gateway returned ${response.status}`);
-      }
-
-      const data = await response.json() as { status: string; port: number };
-      return { 
-        status: "ready", 
-        port: data.port,
-        gatewayUrl: getGatewayUrl(),
-      };
-    } catch (error) {
-      console.error("Failed to ensure container:", error);
-      return { 
-        status: "error", 
-        error: String(error),
-      };
-    }
   }),
 
   status: protectedProcedure.query(async ({ ctx }) => {

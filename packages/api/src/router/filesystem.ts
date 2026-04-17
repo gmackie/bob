@@ -4,29 +4,13 @@ import { z } from "zod/v4";
 
 import { protectedProcedure } from "../trpc";
 
-function getGatewayUrl() { return process.env.GATEWAY_URL ?? "http://localhost:3002"; }
+// Filesystem operations previously proxied to the old monolithic gateway
+// which has been removed. These operations now run on the Go daemon.
+// TODO: Add an HTTP file API to the Go daemon so tRPC can proxy to it,
+// or stream file data over the WS connection.
 
-async function gatewayRequest(
-  userId: string,
-  endpoint: string,
-  body: Record<string, unknown>
-): Promise<unknown> {
-  const response = await fetch(`${getGatewayUrl()}${endpoint}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId, ...body }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: `Gateway error: ${error}`,
-    });
-  }
-
-  return response.json();
-}
+const NOT_IMPLEMENTED_MSG =
+  "Filesystem operations are not available. The Go daemon now owns file access.";
 
 export const filesystemRouter = {
   list: protectedProcedure
@@ -36,22 +20,8 @@ export const filesystemRouter = {
         showHidden: z.boolean().default(false),
       })
     )
-    .query(async ({ ctx, input }) => {
-      const result = await gatewayRequest(ctx.session.user.id, "/fs/list", {
-        path: input.path,
-        showHidden: input.showHidden,
-      }) as {
-        entries: Array<{
-          name: string;
-          path: string;
-          isDirectory: boolean;
-          isFile: boolean;
-          size: number;
-          modified: string;
-        }>;
-      };
-
-      return result.entries;
+    .query(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: NOT_IMPLEMENTED_MSG });
     }),
 
   read: protectedProcedure
@@ -61,13 +31,8 @@ export const filesystemRouter = {
         encoding: z.enum(["utf-8", "base64"]).default("utf-8"),
       })
     )
-    .query(async ({ ctx, input }) => {
-      const result = await gatewayRequest(ctx.session.user.id, "/fs/read", {
-        path: input.path,
-        encoding: input.encoding,
-      }) as { content: string; size: number };
-
-      return result;
+    .query(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: NOT_IMPLEMENTED_MSG });
     }),
 
   write: protectedProcedure
@@ -78,14 +43,8 @@ export const filesystemRouter = {
         createDirs: z.boolean().default(true),
       })
     )
-    .mutation(async ({ ctx, input }) => {
-      await gatewayRequest(ctx.session.user.id, "/fs/write", {
-        path: input.path,
-        content: input.content,
-        createDirs: input.createDirs,
-      });
-
-      return { success: true };
+    .mutation(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: NOT_IMPLEMENTED_MSG });
     }),
 
   delete: protectedProcedure
@@ -95,13 +54,8 @@ export const filesystemRouter = {
         recursive: z.boolean().default(false),
       })
     )
-    .mutation(async ({ ctx, input }) => {
-      await gatewayRequest(ctx.session.user.id, "/fs/delete", {
-        path: input.path,
-        recursive: input.recursive,
-      });
-
-      return { success: true };
+    .mutation(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: NOT_IMPLEMENTED_MSG });
     }),
 
   mkdir: protectedProcedure
@@ -111,13 +65,8 @@ export const filesystemRouter = {
         recursive: z.boolean().default(true),
       })
     )
-    .mutation(async ({ ctx, input }) => {
-      await gatewayRequest(ctx.session.user.id, "/fs/mkdir", {
-        path: input.path,
-        recursive: input.recursive,
-      });
-
-      return { success: true };
+    .mutation(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: NOT_IMPLEMENTED_MSG });
     }),
 
   move: protectedProcedure
@@ -127,13 +76,8 @@ export const filesystemRouter = {
         destination: z.string(),
       })
     )
-    .mutation(async ({ ctx, input }) => {
-      await gatewayRequest(ctx.session.user.id, "/fs/move", {
-        source: input.source,
-        destination: input.destination,
-      });
-
-      return { success: true };
+    .mutation(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: NOT_IMPLEMENTED_MSG });
     }),
 
   copy: protectedProcedure
@@ -143,13 +87,8 @@ export const filesystemRouter = {
         destination: z.string(),
       })
     )
-    .mutation(async ({ ctx, input }) => {
-      await gatewayRequest(ctx.session.user.id, "/fs/copy", {
-        source: input.source,
-        destination: input.destination,
-      });
-
-      return { success: true };
+    .mutation(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: NOT_IMPLEMENTED_MSG });
     }),
 
   search: protectedProcedure
@@ -160,14 +99,8 @@ export const filesystemRouter = {
         maxResults: z.number().min(1).max(1000).default(100),
       })
     )
-    .query(async ({ ctx, input }) => {
-      const result = await gatewayRequest(ctx.session.user.id, "/fs/search", {
-        path: input.path,
-        pattern: input.pattern,
-        maxResults: input.maxResults,
-      }) as { matches: string[] };
-
-      return result.matches;
+    .query(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: NOT_IMPLEMENTED_MSG });
     }),
 
   gitStatus: protectedProcedure
@@ -176,48 +109,7 @@ export const filesystemRouter = {
         path: z.string(),
       })
     )
-    .query(async ({ ctx, input }) => {
-      try {
-        const result = await gatewayRequest(ctx.session.user.id, "/git/status", {
-          path: input.path,
-        }) as {
-          branch: string;
-          ahead: number;
-          behind: number;
-          staged: string[];
-          unstaged: string[];
-          untracked: string[];
-        };
-
-        const files: Array<{ file: string; status: "M" | "A" | "D" | "??" | "R" | "C" }> = [];
-        const seen = new Set<string>();
-
-        // Staged files are added/modified in the index
-        for (const file of result.staged) {
-          seen.add(file);
-          files.push({ file, status: "A" });
-        }
-
-        // Unstaged (modified in working tree) — override staged status if present
-        for (const file of result.unstaged) {
-          if (!seen.has(file)) {
-            seen.add(file);
-            files.push({ file, status: "M" });
-          }
-        }
-
-        // Untracked files
-        for (const file of result.untracked) {
-          if (!seen.has(file)) {
-            seen.add(file);
-            files.push({ file, status: "??" });
-          }
-        }
-
-        return files;
-      } catch {
-        // Not a git repo or other error — return empty array
-        return [] as Array<{ file: string; status: "M" | "A" | "D" | "??" | "R" | "C" }>;
-      }
+    .query(async () => {
+      throw new TRPCError({ code: "NOT_IMPLEMENTED", message: NOT_IMPLEMENTED_MSG });
     }),
 } satisfies TRPCRouterRecord;

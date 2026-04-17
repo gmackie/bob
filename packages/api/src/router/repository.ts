@@ -10,36 +10,11 @@ import {
   worktreePlans,
   projects,
   workspaceMembers,
-  CreateRepositorySchema,
   agentTypeEnum,
   planStatusEnum,
 } from "@bob/db/schema";
 
 import { protectedProcedure } from "../trpc";
-
-function getGatewayUrl() { return process.env.GATEWAY_URL ?? "http://localhost:3002"; }
-
-async function gatewayRequest(
-  userId: string,
-  endpoint: string,
-  body: Record<string, unknown>
-): Promise<unknown> {
-  const response = await fetch(`${getGatewayUrl()}${endpoint}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId, ...body }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: `Gateway error: ${error}`,
-    });
-  }
-
-  return response.json();
-}
 
 async function assertProjectAccess(db: any, userId: string, projectId: string) {
   const project = await db.query.projects.findFirst({
@@ -62,116 +37,6 @@ async function assertProjectAccess(db: any, userId: string, projectId: string) {
   if (!membership) {
     throw new TRPCError({ code: "NOT_FOUND" });
   }
-}
-
-function generatePlanningMd(options: {
-  title?: string;
-  goal?: string;
-  planningTaskId?: string;
-  worktreeId: string;
-  tasks?: Array<{ key: string; content: string; status?: string }>;
-}): string {
-  const lines: string[] = [];
-  
-  lines.push("---");
-  lines.push(`bob_worktree_id: ${options.worktreeId}`);
-  if (options.planningTaskId) {
-    lines.push(`planning_task_id: ${options.planningTaskId}`);
-  }
-  lines.push(`created_at: ${new Date().toISOString()}`);
-  lines.push("---");
-  lines.push("");
-  
-  if (options.title) {
-    lines.push(`# ${options.title}`);
-    lines.push("");
-  }
-  
-  if (options.goal) {
-    lines.push("## Goal");
-    lines.push("");
-    lines.push(options.goal);
-    lines.push("");
-  }
-  
-  lines.push("## Tasks");
-  lines.push("");
-  
-  if (options.tasks && options.tasks.length > 0) {
-    for (const task of options.tasks) {
-      const checkbox = task.status === "completed" ? "[x]" : "[ ]";
-      lines.push(`- ${checkbox} **${task.key}**: ${task.content}`);
-    }
-  } else {
-    lines.push("- [ ] **T1**: Define task here");
-  }
-  lines.push("");
-  
-  lines.push("## Progress Log");
-  lines.push("");
-  lines.push(`- ${new Date().toISOString().split("T")[0]}: Plan created`);
-  lines.push("");
-  
-  lines.push("## Notes");
-  lines.push("");
-  
-  return lines.join("\n");
-}
-
-function parsePlanningMd(content: string): {
-  frontmatter: Record<string, string>;
-  title?: string;
-  goal?: string;
-  tasks: Array<{ key: string; content: string; completed: boolean }>;
-} {
-  const result: {
-    frontmatter: Record<string, string>;
-    title?: string;
-    goal?: string;
-    tasks: Array<{ key: string; content: string; completed: boolean }>;
-  } = {
-    frontmatter: {},
-    tasks: [],
-  };
-  
-  const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
-  if (fmMatch && fmMatch[1]) {
-    const fmLines = fmMatch[1].split("\n");
-    for (const line of fmLines) {
-      const colonIdx = line.indexOf(":");
-      if (colonIdx > 0) {
-        const key = line.slice(0, colonIdx).trim();
-        const value = line.slice(colonIdx + 1).trim();
-        result.frontmatter[key] = value;
-      }
-    }
-  }
-  
-  const titleMatch = content.match(/^#\s+(.+)$/m);
-  if (titleMatch && titleMatch[1]) {
-    result.title = titleMatch[1].trim();
-  }
-  
-  const goalMatch = content.match(/## Goal\s*\n\n([\s\S]*?)(?=\n## |\n---|\n$)/);
-  if (goalMatch && goalMatch[1]) {
-    result.goal = goalMatch[1].trim();
-  }
-  
-  const taskMatches = content.matchAll(/- \[([ x])\] \*\*([^*]+)\*\*:\s*(.+)/g);
-  for (const match of taskMatches) {
-    const key = match[2];
-    const taskContent = match[3];
-    const completed = match[1];
-    if (key && taskContent && completed !== undefined) {
-      result.tasks.push({
-        key: key.trim(),
-        content: taskContent.trim(),
-        completed: completed === "x",
-      });
-    }
-  }
-  
-  return result;
 }
 
 export const repositoryRouter = {
@@ -267,19 +132,8 @@ export const repositoryRouter = {
         return existing;
       }
 
-      // Clone via gateway (fire-and-forget — gateway handles the git clone)
-      try {
-        await gatewayRequest(ctx.session.user.id, "/git/clone", {
-          cloneUrl: input.cloneUrl,
-          targetPath: localPath,
-          branch: input.defaultBranch,
-        });
-      } catch (err) {
-        console.warn(
-          `[repository] Clone failed for ${input.fullName}, registering with path anyway:`,
-          err instanceof Error ? err.message : err,
-        );
-      }
+      // The Go daemon handles git clone on the node when it discovers
+      // the registered repo. We just register the metadata here.
 
       const [repo] = await ctx.db
         .insert(repositories)
@@ -408,25 +262,10 @@ export const repositoryRouter = {
       }
 
       if (input.planning) {
-        const planningContent = generatePlanningMd({
-          title: input.planning.title,
-          goal: input.planning.goal,
-          planningTaskId: input.planning.planningTaskId,
-          worktreeId: wt.id,
-          tasks: input.planning.tasks,
-        });
-
         const planningPath = `${worktreePath}/planning.md`;
 
-        try {
-          await gatewayRequest(ctx.session.user.id, "/fs/write", {
-            path: planningPath,
-            content: planningContent,
-            createDirs: true,
-          });
-        } catch (error) {
-          console.error("Failed to write planning.md:", error);
-        }
+        // The planning.md file will be written by the Go daemon when it
+        // sets up the worktree. We store the content in the DB for now.
 
         await ctx.db.insert(worktreePlans).values({
           worktreeId: wt.id,
@@ -463,29 +302,15 @@ export const repositoryRouter = {
 
       const planningPath = plan?.filePath ?? `${wt.path}/planning.md`;
 
-      try {
-        const result = await gatewayRequest(ctx.session.user.id, "/fs/read", {
-          path: planningPath,
-        }) as { content: string; size: number };
-
-        const parsed = parsePlanningMd(result.content);
-
-        return {
-          exists: true,
-          path: planningPath,
-          content: result.content,
-          parsed,
-          dbRecord: plan,
-        };
-      } catch {
-        return {
-          exists: false,
-          path: planningPath,
-          content: null,
-          parsed: null,
-          dbRecord: plan,
-        };
-      }
+      // File reads now go through the Go daemon, not the old gateway.
+      // Return what we have in the DB.
+      return {
+        exists: !!plan,
+        path: planningPath,
+        content: null,
+        parsed: plan ? { frontmatter: {}, title: plan.title ?? undefined, goal: plan.goal ?? undefined, tasks: [] } : null,
+        dbRecord: plan,
+      };
     }),
 
   updateWorktreePlanning: protectedProcedure
@@ -526,26 +351,8 @@ export const repositoryRouter = {
 
       const planningPath = plan?.filePath ?? `${wt.path}/planning.md`;
 
-      let contentToWrite = input.content;
-
-      if (!contentToWrite && (input.title || input.goal || input.tasks)) {
-        contentToWrite = generatePlanningMd({
-          title: input.title ?? plan?.title ?? undefined,
-          goal: input.goal ?? plan?.goal ?? undefined,
-          planningTaskId:
-            input.planningTaskId ?? plan?.planningTaskId ?? undefined,
-          worktreeId: input.worktreeId,
-          tasks: input.tasks,
-        });
-      }
-
-      if (contentToWrite) {
-        await gatewayRequest(ctx.session.user.id, "/fs/write", {
-          path: planningPath,
-          content: contentToWrite,
-          createDirs: true,
-        });
-      }
+      // File writes now go through the Go daemon. The DB record is
+      // updated here; the daemon syncs it to disk when it runs.
 
       if (!plan) {
         const [newPlan] = await ctx.db
