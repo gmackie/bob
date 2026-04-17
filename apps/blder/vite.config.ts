@@ -40,6 +40,13 @@ export default defineConfig({
   },
   ssr: {
     noExternal: [/^@bob\//, "postgres", "drizzle-orm"],
-    external: ["pg", "pg-native", "pg-pool", "@electric-sql/pglite"],
+    external: [
+      "pg",
+      "pg-native",
+      "pg-pool",
+      "@electric-sql/pglite",
+      "drizzle-kit",
+      "drizzle-kit/api",
+    ],
   },
 });
