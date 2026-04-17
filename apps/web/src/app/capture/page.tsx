@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useCreateThread, useAgentChat } from "@/rpc/hooks";
+import { VoiceInput } from "@/components/voice-input";
 
 export default function CapturePage() {
   const [input, setInput] = useState("");
@@ -43,6 +44,13 @@ export default function CapturePage() {
     }
   };
 
+  const handleVoiceTranscript = useCallback(
+    (text: string) => {
+      setInput((prev) => (prev ? prev + " " + text : text));
+    },
+    [],
+  );
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && e.metaKey) {
       e.preventDefault();
@@ -70,13 +78,16 @@ export default function CapturePage() {
           <span className="text-xs text-[var(--color-text-muted)]">
             Cmd+Enter to send - Esc to close
           </span>
-          <button
-            onClick={handleSubmit}
-            disabled={!input.trim() || isLoading}
-            className="rounded-lg bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-[var(--color-bg)] disabled:opacity-50"
-          >
-            {isLoading ? "Thinking..." : "Capture"}
-          </button>
+          <div className="flex items-center gap-2">
+            <VoiceInput onTranscript={handleVoiceTranscript} />
+            <button
+              onClick={handleSubmit}
+              disabled={!input.trim() || isLoading}
+              className="rounded-lg bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-[var(--color-bg)] disabled:opacity-50"
+            >
+              {isLoading ? "Thinking..." : "Capture"}
+            </button>
+          </div>
         </div>
         {response && (
           <div className="mt-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] p-4 text-sm text-[var(--color-text)]">
