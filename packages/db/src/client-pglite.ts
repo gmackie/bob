@@ -35,6 +35,34 @@ export type PgliteDbHandle = {
 const DEFAULT_DIR = path.join(os.homedir(), ".bob", "userdata", "db");
 
 /**
+ * Resolve the directory containing forward `drizzle/*.sql` migration files.
+ *
+ * Priority order:
+ *   1. `BOB_DB_MIGRATIONS_DIR` env var — explicit override. Required when the
+ *      caller lives in a bundled context (e.g. vinext SSR) where
+ *      `import.meta.url` points at the emitted bundle path, not the original
+ *      source file. Phase 2's `apps/bob-server` will set this to the on-disk
+ *      location of `packages/db/drizzle/`.
+ *   2. Source-relative fallback — `packages/db/drizzle/` resolved from this
+ *      file's own location. Correct for the tsx / direct-import path (tests,
+ *      CLI, non-bundled runtimes).
+ *
+ * Callers should treat a missing directory as non-fatal; the from-scratch
+ * bootstrap DDL (see `bootstrapSchema`) already takes empty PGlite to the full
+ * schema state, and the pre-mark-applied pass is only an optimization for the
+ * `applyMigrations` follow-up.
+ */
+export function resolveMigrationsDir(): string {
+  const override = process.env.BOB_DB_MIGRATIONS_DIR;
+  if (override && override.length > 0) return override;
+  return path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "drizzle",
+  );
+}
+
+/**
  * Sentinel name used in `bob_migrations` to record that the drizzle-kit
  * from-scratch bootstrap has already taken an empty PGlite to the full schema
  * state described by `schema.ts` + `auth-schema.ts`. Subsequent inits check
@@ -90,24 +118,44 @@ export async function bootstrapSchema(client: PGlite): Promise<void> {
 
   // Pre-compute the drizzle/*.sql roster now so the transactional body below
   // has no fs/path async work to do mid-DDL.
-  const migrationsDir = path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    "..",
-    "drizzle",
-  );
-  const files = fs
-    .readdirSync(migrationsDir)
-    .filter((f) => f.endsWith(".sql"))
-    .map((filename) => {
-      const sqlText = fs.readFileSync(
-        path.join(migrationsDir, filename),
-        "utf8",
-      );
-      return {
-        filename,
-        hash: createHash("sha256").update(sqlText).digest("hex"),
-      };
-    });
+  //
+  // Tolerate a missing dir: the from-scratch DDL from `generateMigration` below
+  // has already applied the full schema, so pre-marking every drizzle/*.sql as
+  // applied is only an optimization for the `applyMigrations` follow-up. In a
+  // bundled context (vinext SSR) the source-relative fallback of
+  // `resolveMigrationsDir()` can't reach the original files, and that's fine —
+  // we log and move on. The env-var override exists so properly-packaged hosts
+  // (e.g. Phase 2's `apps/bob-server`) can still opt in to the optimization.
+  const migrationsDir = resolveMigrationsDir();
+  let files: Array<{ filename: string; hash: string }> = [];
+  try {
+    files = fs
+      .readdirSync(migrationsDir)
+      .filter((f) => f.endsWith(".sql"))
+      .map((filename) => {
+        const sqlText = fs.readFileSync(
+          path.join(migrationsDir, filename),
+          "utf8",
+        );
+        return {
+          filename,
+          hash: createHash("sha256").update(sqlText).digest("hex"),
+        };
+      });
+  } catch (err) {
+    const isEnoent =
+      err !== null &&
+      typeof err === "object" &&
+      "code" in err &&
+      (err as { code?: string }).code === "ENOENT";
+    if (!isEnoent) throw err;
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[@bob/db] migrations dir not found at ${migrationsDir}; ` +
+        `skipping pre-mark step. Set BOB_DB_MIGRATIONS_DIR to opt in. ` +
+        `(Non-fatal — the from-scratch DDL has already applied the full schema.)`,
+    );
+  }
 
   // Wrap all DDL + tracking inserts in a single transaction so a mid-bootstrap
   // failure leaves the DB empty (rolled back) instead of half-created.
@@ -158,7 +206,16 @@ export async function makePgliteDb(options: PgliteDbOptions = {}): Promise<Pglit
     // to `drizzle/` after the schema.ts snapshot still apply. On a freshly
     // bootstrapped DB these are all recorded as already-applied, so this is a
     // no-op. On an upgrade path it picks up the genuinely new files.
-    await applyMigrations({ client, log: () => {} });
+    //
+    // Pass the resolved migrations dir through so bundled hosts (vinext SSR)
+    // honour `BOB_DB_MIGRATIONS_DIR`; `applyMigrations` also tolerates a
+    // missing dir via `loadMigrations`, so this stays a no-op when neither the
+    // env var nor the source-relative default resolves.
+    await applyMigrations({
+      client,
+      log: () => {},
+      migrationsDir: resolveMigrationsDir(),
+    });
   }
 
   const db = drizzle(client, { schema });
@@ -239,7 +296,13 @@ export function makePgliteDbSync(
     await client.waitReady;
     if (options.bootstrap !== false) {
       await bootstrapSchema(client);
-      await applyMigrations({ client, log: () => {} });
+      // Same migrations-dir story as `makePgliteDb` above: honour the env-var
+      // override for bundled hosts, tolerate a missing dir (no-op).
+      await applyMigrations({
+        client,
+        log: () => {},
+        migrationsDir: resolveMigrationsDir(),
+      });
     }
   })();
 

@@ -47,9 +47,30 @@ interface MigrationFile {
 }
 
 function loadMigrations(dir: string = MIGRATIONS_DIR): MigrationFile[] {
-  const files = readdirSync(dir)
-    .filter((f) => f.endsWith(".sql"))
-    .sort();
+  let entries: string[];
+  try {
+    entries = readdirSync(dir);
+  } catch (err) {
+    const isEnoent =
+      err !== null &&
+      typeof err === "object" &&
+      "code" in err &&
+      (err as { code?: string }).code === "ENOENT";
+    if (!isEnoent) throw err;
+    // Bundled-host fallback: when the runtime can't resolve the source-relative
+    // drizzle/ dir and the caller didn't pass an explicit `migrationsDir`, treat
+    // it as "no pending migrations". Callers that need the real roster must set
+    // `BOB_DB_MIGRATIONS_DIR` (consumed by `client-pglite.ts`'s
+    // `resolveMigrationsDir`) or pass the directory explicitly.
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[@bob/db] migrations dir not found at ${dir}; ` +
+        `treating as no pending migrations. Set BOB_DB_MIGRATIONS_DIR or pass ` +
+        `\`migrationsDir\` explicitly to opt in.`,
+    );
+    return [];
+  }
+  const files = entries.filter((f) => f.endsWith(".sql")).sort();
   return files.map((filename) => {
     const path = join(dir, filename);
     const sql = readFileSync(path, "utf8");
