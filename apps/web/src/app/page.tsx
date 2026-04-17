@@ -1,10 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Shell, Sidebar, MessageList, Composer, BranchTree } from "@gmacko/ui";
 import type { Message, BranchTree as BranchTreeModel } from "@gmacko/models";
-import { trpc } from "@/trpc/react";
+import {
+  useThreadsList,
+  useCreateThread,
+  useBranchesByThread,
+  useMessagesByBranch,
+  useAgentChat,
+} from "@/rpc/hooks";
 
 /* ------------------------------------------------------------------ */
 /* Fallback data for when the DB is unavailable                       */
@@ -35,45 +41,24 @@ export default function Home() {
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [activeBranchId, setActiveBranchId] = useState("main");
 
-  // --- tRPC queries -------------------------------------------------
-  const threadsQuery = useQuery(trpc.threads.list.queryOptions());
+  // --- RPC queries --------------------------------------------------
+  const threadsQuery = useThreadsList();
 
   const threads = threadsQuery.data ?? [];
   const activeThreadId = selectedThreadId ?? threads[0]?.id;
 
-  const branchesQuery = useQuery(
-    trpc.branches.listByThread.queryOptions(
-      { threadId: activeThreadId! },
-      { enabled: !!activeThreadId },
-    ),
+  const branchesQuery = useBranchesByThread(activeThreadId ?? undefined);
+
+  const messagesQuery = useMessagesByBranch(
+    activeThreadId ?? undefined,
+    activeBranchId,
+    !!activeThreadId && activeBranchId !== "main",
   );
 
-  const messagesQuery = useQuery(
-    trpc.messages.listByBranch.queryOptions(
-      { threadId: activeThreadId!, branchId: activeBranchId },
-      { enabled: !!activeThreadId && activeBranchId !== "main" },
-    ),
-  );
+  // --- RPC mutations ------------------------------------------------
+  const createThread = useCreateThread();
 
-  // --- tRPC mutations ------------------------------------------------
-  const createThread = useMutation(
-    trpc.threads.create.mutationOptions({
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: [["threads", "list"]] });
-      },
-    }),
-  );
-
-  const agentChat = useMutation(
-    trpc.agent.chat.mutationOptions({
-      onSuccess: () => {
-        setLocalMessages([]);
-        queryClient.invalidateQueries({
-          queryKey: [["messages", "listByBranch"]],
-        });
-      },
-    }),
-  );
+  const agentChat = useAgentChat();
 
   // --- Derived state -------------------------------------------------
   const apiAvailable = !threadsQuery.isError;
@@ -116,11 +101,21 @@ export default function Home() {
       };
       setLocalMessages((prev) => [...prev, optimisticMsg]);
 
-      agentChat.mutate({
-        threadId: activeThreadId,
-        branchId: activeBranchId,
-        content,
-      });
+      agentChat.mutate(
+        {
+          threadId: activeThreadId,
+          branchId: activeBranchId,
+          content,
+        },
+        {
+          onSuccess: () => {
+            setLocalMessages([]);
+            queryClient.invalidateQueries({
+              queryKey: ["messages", "listByBranch"],
+            });
+          },
+        },
+      );
     } else {
       // Fallback: local state
       const msg: Message = {
@@ -138,7 +133,7 @@ export default function Home() {
 
   const handleNewThread = () => {
     if (apiAvailable) {
-      createThread.mutate({ title: "New Thread" });
+      createThread.mutate({ title: "New Thread", tags: [] });
     }
   };
 

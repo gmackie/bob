@@ -1,5 +1,5 @@
 import { ThemeProvider } from "@gmacko/ui";
-import { TRPCProvider } from "@/trpc/react";
+import { RpcProvider } from "@/rpc/provider";
 import "./globals.css";
 
 export const metadata = {
@@ -15,9 +15,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
-        <TRPCProvider>
+        <RpcProvider>
           <ThemeProvider defaultTheme="ooda">{children}</ThemeProvider>
-        </TRPCProvider>
+        </RpcProvider>
       </body>
     </html>
   );
