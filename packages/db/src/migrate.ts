@@ -83,6 +83,9 @@ async function runMigrationSql(
   client: MigrationClient,
   sqlText: string,
 ): Promise<void> {
+  // Invariant: migration SQL is DDL-only (drizzle-kit emits no bound params).
+  // Both branches below are paramless on purpose; do not extend this helper
+  // to accept params without also rethinking the multi-statement case.
   if (typeof client.exec === "function") {
     await client.exec(sqlText);
     return;
@@ -122,6 +125,14 @@ export type ApplyMigrationsOptions = {
  * used by the CLI wrapper, because advisory locks are pg-specific and
  * unsupported by PGlite. CLI callers wrap this with advisory locking in
  * `main()`; other callers (e.g. auto-migrate on PGlite init) don't need it.
+ *
+ * IMPORTANT — empty-DB bootstrap gap: the files under `packages/db/drizzle/`
+ * today are incremental patches authored on top of a pre-existing
+ * ngi-kanbanger/better-auth baseline. They DO NOT compose into a from-scratch
+ * schema and will fail if pointed at an empty PGlite (or any empty pg DB).
+ * Task 7 of the Electron Phase 1 plan wires a schema-bootstrap path onto
+ * PGlite init to close this gap; until then, callers targeting empty
+ * databases should pass a `migrationsDir` of their own prepared fixtures.
  */
 export async function applyMigrations(
   options: ApplyMigrationsOptions,

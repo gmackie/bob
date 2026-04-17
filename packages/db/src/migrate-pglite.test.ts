@@ -63,13 +63,61 @@ describe("applyMigrations against PGlite", () => {
     });
 
     const applied = await handle.db.execute(
-      sql`select filename from bob_migrations order by applied_at`,
+      sql`select filename from bob_migrations order by filename`,
     );
     expect(applied.rows.length).toBeGreaterThan(0);
     // Sanity: the first committed migration filename starts with "0001"
     expect(applied.rows[0]).toMatchObject({
       filename: expect.stringContaining("0001"),
     });
+  });
+
+  it("throws when an applied migration's SQL is edited after the fact", async () => {
+    await applyMigrations({
+      client: handle.client,
+      migrationsDir: tmpDir,
+      log: () => {},
+    });
+
+    // Mutate an already-applied file on disk, then re-run.
+    writeFileSync(
+      join(tmpDir, FIXTURE_MIGRATIONS[0]!.filename),
+      `-- tampered\n${FIXTURE_MIGRATIONS[0]!.sql}`,
+    );
+
+    await expect(
+      applyMigrations({
+        client: handle.client,
+        migrationsDir: tmpDir,
+        log: () => {},
+      }),
+    ).rejects.toThrow(/hash has changed|immutable/i);
+  });
+
+  it("rolls back the transaction and does not record tracking row on failure", async () => {
+    // Add a third migration that is deliberately broken SQL.
+    const brokenFile = "0003_broken.sql";
+    writeFileSync(
+      join(tmpDir, brokenFile),
+      `CREATE TABLE "bar" ("id" serial PRIMARY KEY); -- already exists: will fail`,
+    );
+
+    await expect(
+      applyMigrations({
+        client: handle.client,
+        migrationsDir: tmpDir,
+        log: () => {},
+      }),
+    ).rejects.toThrow();
+
+    // bar table was already created by 0002 on first two migrations (so those
+    // are still applied). 0003 must NOT be recorded.
+    const applied = await handle.db.execute(
+      sql`select filename from bob_migrations order by filename`,
+    );
+    const names = applied.rows.map((r) => (r as { filename: string }).filename);
+    expect(names).toEqual(["0001_initial.sql", "0002_add_bar.sql"]);
+    expect(names).not.toContain(brokenFile);
   });
 
   it("is idempotent when run twice", async () => {
