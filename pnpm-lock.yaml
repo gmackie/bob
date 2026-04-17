@@ -15,6 +15,14 @@ importers:
         specifier: ^5.9.0
         version: 5.9.3
 
+  tooling/tailwind:
+    dependencies:
+      tailwindcss:
+        specifier: ^4.2.0
+        version: 4.2.2
+
+  tooling/typescript: {}
+
 packages:
 
   '@turbo/darwin-64@2.9.6':
@@ -47,6 +55,9 @@ packages:
     cpu: [arm64]
     os: [win32]
 
+  tailwindcss@4.2.2:
+    resolution: {integrity: sha512-KWBIxs1Xb6NoLdMVqhbhgwZf2PGBpPEiwOqgI4pFIYbNTfBXiKYyWoTsXgBQ9WFg/OlhnvHaY+AEpW7wSmFo2Q==}
+
   turbo@2.9.6:
     resolution: {integrity: sha512-+v2QJey7ZUeUiuigkU+uFfklvNUyPI2VO2vBpMYJA+a1hKFLFiKtUYlRHdb3P9CrAvMzi0upbjI4WT+zKtqkBg==}
     hasBin: true
@@ -75,6 +86,8 @@ snapshots:
 
   '@turbo/windows-arm64@2.9.6':
     optional: true
+
+  tailwindcss@4.2.2: {}
 
   turbo@2.9.6:
     optionalDependencies:
