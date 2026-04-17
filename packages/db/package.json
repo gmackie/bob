@@ -1,0 +1,28 @@
+{
+  "name": "@gmacko/db",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./schema": "./src/schema/index.ts"
+  },
+  "scripts": {
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.44.0",
+    "postgres": "^3.4.0",
+    "zod": "^4.0.0",
+    "drizzle-zod": "^0.7.0"
+  },
+  "devDependencies": {
+    "@gmacko/tsconfig": "workspace:*",
+    "drizzle-kit": "^0.31.0",
+    "typescript": "^5.9.0"
+  }
+}
