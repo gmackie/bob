@@ -12,6 +12,7 @@
   "dependencies": {
     "@gmacko/agent": "workspace:*",
     "@gmacko/db": "workspace:*",
+    "@gmacko/wiki": "workspace:*",
     "@trpc/server": "^11.0.0",
     "superjson": "^2.2.0",
     "zod": "^4.0.0"
