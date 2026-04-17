@@ -516,18 +516,25 @@ export function makePgliteDbSync(options: PgliteDbOptions = {}): PgliteDatabase<
   // drizzle-orm/pglite accepts a PGlite instance; queries internally await waitReady.
   const db = drizzle(client, { schema });
 
-  // Fire-and-forget migration on first tick. Callers that need guaranteed
-  // migration-before-query should use `makePgliteDb` instead.
+  // Fire-and-forget bootstrap + migration on first tick. Callers that need
+  // guaranteed ready-before-query should use `makePgliteDb` instead.
+  //
+  // IMPORTANT — bootstrap MUST run before applyMigrations, because the
+  // drizzle/*.sql files assume a pre-existing ngi-kanbanger/better-auth
+  // baseline and can't bootstrap an empty DB. `bootstrapSchema` both creates
+  // the target schema from `schema.ts` AND pre-marks every drizzle/*.sql as
+  // already-applied, so `applyMigrations` becomes a no-op on a fresh DB.
   void (async () => {
     await client.waitReady;
-    await applyMigrations({ client });
+    await bootstrapSchema(client);
+    await applyMigrations({ client, log: () => {} });
   })();
 
   return db;
 }
 ```
 
-**Caveat to verify during execution:** If `drizzle-orm/pglite` errors on queries before `waitReady` resolves, this approach needs revision — e.g., wrapping the client in a proxy that awaits `waitReady` inside each query method. Verify in Task 10 smoke test; if it fails, adjust.
+**Caveat to verify during execution:** If `drizzle-orm/pglite` errors on queries before `waitReady` resolves OR before the async bootstrap finishes, this approach needs revision — e.g., wrapping the client in a proxy that awaits a shared ready promise before delegating `query`/`exec`. There IS a real race here: drizzle consumers may fire queries before bootstrap completes, hitting an empty DB. Verify in Task 10 smoke test; if it fails, add the proxy wrapper.
 
 **Step 4: Run dispatcher test**
 

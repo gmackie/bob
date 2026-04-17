@@ -1,6 +1,8 @@
-import path from "node:path";
-import os from "node:os";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle, type PgliteDatabase } from "drizzle-orm/pglite";
 import {
@@ -8,7 +10,6 @@ import {
   generateMigration,
 } from "drizzle-kit/api";
 import * as schema from "./schema.js";
-import * as authSchema from "./auth-schema.js";
 import { applyMigrations } from "./migrate.js";
 
 export type PgliteDbOptions = {
@@ -80,49 +81,63 @@ export async function bootstrapSchema(client: PGlite): Promise<void> {
     return;
   }
 
-  // drizzle-kit needs ALL pgTable / pgEnum instances as a flat imports object.
-  // `schema.ts` imports `user` from `auth-schema.ts` but doesn't re-export the
-  // auth tables, so we merge both modules here.
-  const imports = { ...schema, ...authSchema };
+  // `schema.ts` already does `export * from "./auth-schema"` so the star-import
+  // above includes auth tables (user, session, account, verification). No
+  // explicit merge needed.
   const prev = generateDrizzleJson({}, undefined, undefined, "snake_case");
-  const cur = generateDrizzleJson(imports, undefined, undefined, "snake_case");
+  const cur = generateDrizzleJson(schema, undefined, undefined, "snake_case");
   const statements = await generateMigration(prev, cur);
 
-  for (const stmt of statements) {
-    await client.exec(stmt);
-  }
-
-  // Record every existing drizzle/*.sql as already applied, so a subsequent
-  // `applyMigrations({ client })` call is a no-op. We can't rely on just the
-  // sentinel because `applyMigrations` iterates `drizzle/` filenames and will
-  // happily try to re-run every one of them otherwise.
-  const { readFileSync, readdirSync } = await import("node:fs");
-  const { createHash } = await import("node:crypto");
-  const { dirname, join, resolve } = await import("node:path");
-  const { fileURLToPath } = await import("node:url");
-  const migrationsDir = resolve(
-    dirname(fileURLToPath(import.meta.url)),
+  // Pre-compute the drizzle/*.sql roster now so the transactional body below
+  // has no fs/path async work to do mid-DDL.
+  const migrationsDir = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
     "..",
     "drizzle",
   );
-  const files = readdirSync(migrationsDir).filter((f) => f.endsWith(".sql"));
-  for (const filename of files) {
-    const sqlText = readFileSync(join(migrationsDir, filename), "utf8");
-    const hash = createHash("sha256").update(sqlText).digest("hex");
-    await client.query(
+  const files = fs
+    .readdirSync(migrationsDir)
+    .filter((f) => f.endsWith(".sql"))
+    .map((filename) => {
+      const sqlText = fs.readFileSync(
+        path.join(migrationsDir, filename),
+        "utf8",
+      );
+      return {
+        filename,
+        hash: createHash("sha256").update(sqlText).digest("hex"),
+      };
+    });
+
+  // Wrap all DDL + tracking inserts in a single transaction so a mid-bootstrap
+  // failure leaves the DB empty (rolled back) instead of half-created.
+  // Without this, a failure at statement N would commit statements 1..N-1 and
+  // the next init would crash on "relation already exists" with no sentinel
+  // telling us to short-circuit.
+  await client.transaction(async (tx) => {
+    for (const stmt of statements) {
+      await tx.exec(stmt);
+    }
+
+    // Record every existing drizzle/*.sql as already applied, so a subsequent
+    // `applyMigrations({ client })` call is a no-op on a freshly bootstrapped
+    // DB (iterates drizzle/ filenames, finds recorded hashes, skips each).
+    for (const { filename, hash } of files) {
+      await tx.query(
+        `INSERT INTO bob_migrations (filename, hash) VALUES ($1, $2)
+         ON CONFLICT (filename) DO NOTHING`,
+        [filename, hash],
+      );
+    }
+
+    // Sentinel row — lets future inits detect "bootstrap has already happened
+    // on this database" without scanning for every individual table.
+    await tx.query(
       `INSERT INTO bob_migrations (filename, hash) VALUES ($1, $2)
        ON CONFLICT (filename) DO NOTHING`,
-      [filename, hash],
+      [BOOTSTRAP_MARKER, "bootstrap"],
     );
-  }
-
-  // Sentinel row — lets future inits detect "bootstrap has already happened on
-  // this database" without scanning for every individual table.
-  await client.query(
-    `INSERT INTO bob_migrations (filename, hash) VALUES ($1, $2)
-     ON CONFLICT (filename) DO NOTHING`,
-    [BOOTSTRAP_MARKER, "bootstrap"],
-  );
+  });
 }
 
 export async function makePgliteDb(options: PgliteDbOptions = {}): Promise<PgliteDbHandle> {
