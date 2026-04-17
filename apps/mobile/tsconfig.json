@@ -1,12 +1,9 @@
 {
   "extends": "../../tooling/typescript/tsconfig.base.json",
-  "include": ["app", "**/*.ts", "**/*.tsx"],
+  "include": ["src", "app.config.js", "nativewind-env.d.ts", "**/*.ts", "**/*.tsx"],
   "compilerOptions": {
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "jsx": "react-jsx",
     "paths": {
-      "@/*": ["./*"]
+      "~/*": ["./src/*"]
     }
   }
 }
