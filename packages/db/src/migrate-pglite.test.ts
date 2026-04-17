@@ -47,7 +47,10 @@ describe("applyMigrations against PGlite", () => {
     for (const m of FIXTURE_MIGRATIONS) {
       writeFileSync(join(tmpDir, m.filename), m.sql);
     }
-    handle = await makePgliteDb({ dataDir: ":memory:" });
+    // Raw empty PGlite: this suite is about `applyMigrations` itself; the
+    // auto-bootstrap path in `makePgliteDb` would pre-populate `bob_migrations`
+    // with real drizzle filenames and invalidate the assertions below.
+    handle = await makePgliteDb({ dataDir: ":memory:", bootstrap: false });
   });
 
   afterEach(async () => {
