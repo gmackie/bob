@@ -1,6 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
 import type {
-  Thread, Branch, Message, WikiArticle,
+  Thread, Branch, Message, WikiArticle, ExplorationSummary,
 } from "@gmacko/contracts";
 import { METHODS } from "@gmacko/contracts";
 import { getBaseUrl } from "./base-url";
@@ -39,5 +39,14 @@ export const rpc = {
   },
   wiki: {
     list: () => rpcCall<WikiArticle[]>(METHODS.wikiList),
+  },
+  exploration: {
+    start: (input: { threadId: string; branchId: string; topic: string; maxDepth?: number }) =>
+      rpcCall<ExplorationSummary>(METHODS.explorationStart, input),
+    respond: (input: { explorationId: string; checkInId: string; direction: string; redirectTopic?: string }) =>
+      rpcCall<ExplorationSummary>(METHODS.explorationRespond, input),
+    status: (explorationId: string) =>
+      rpcCall<ExplorationSummary>(METHODS.explorationStatus, { explorationId }),
+    list: () => rpcCall<ExplorationSummary[]>(METHODS.explorationList),
   },
 };

@@ -147,4 +147,21 @@ export const rpcClient = {
     list: () => rpcCall<WikiArticle[]>(METHODS.wikiList),
     orphans: () => rpcCall<string[]>(METHODS.wikiOrphans),
   },
+  exploration: {
+    start: (input: {
+      threadId: string;
+      branchId: string;
+      topic: string;
+      maxDepth?: number;
+    }) => rpcCall<unknown>(METHODS.explorationStart, input),
+    respond: (input: {
+      explorationId: string;
+      checkInId: string;
+      direction: string;
+      redirectTopic?: string;
+    }) => rpcCall<unknown>(METHODS.explorationRespond, input),
+    status: (explorationId: string) =>
+      rpcCall<unknown>(METHODS.explorationStatus, { explorationId }),
+    list: () => rpcCall<unknown[]>(METHODS.explorationList),
+  },
 };

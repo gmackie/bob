@@ -127,3 +127,30 @@ export function useWikiOrphans() {
     queryFn: () => rpcClient.wiki.orphans(),
   });
 }
+
+/* ------------------------------------------------------------------ */
+/* Exploration hooks                                                   */
+/* ------------------------------------------------------------------ */
+
+export function useExplorationList() {
+  return useQuery({
+    queryKey: ["explorations"],
+    queryFn: () => rpcClient.exploration.list(),
+  });
+}
+
+export function useStartExploration() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: rpcClient.exploration.start,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["explorations"] }),
+  });
+}
+
+export function useRespondToCheckIn() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: rpcClient.exploration.respond,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["explorations"] }),
+  });
+}
