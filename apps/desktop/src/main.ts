@@ -5,9 +5,44 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
+import { RotatingFileSink } from "./rotatingFileSink.js";
 
 // apps/desktop/dist-electron/main.js → ../../.. lands at the monorepo root.
 const APP_ROOT = path.resolve(__dirname, "../../..");
+
+const USERDATA_DIR = path.join(os.homedir(), ".bob", "userdata");
+const LOG_DIR = path.join(USERDATA_DIR, "logs");
+const LOG_PATH = path.join(LOG_DIR, "main.log");
+const LOG_MAX_BYTES = 10 * 1024 * 1024;
+const LOG_MAX_FILES = 10;
+
+const logSink = new RotatingFileSink({
+  filePath: LOG_PATH,
+  maxBytes: LOG_MAX_BYTES,
+  maxFiles: LOG_MAX_FILES,
+});
+
+function logLine(source: string, line: string): void {
+  const stamp = new Date().toISOString();
+  logSink.writeLine(`${stamp} [${source}] ${line}`);
+}
+
+function pipeChildLogs(source: string, child: ChildProcess): void {
+  if (child.stdout) {
+    const rl = readline.createInterface({ input: child.stdout });
+    rl.on("line", (line) => {
+      logLine(source, line);
+      process.stdout.write(`[${source}] ${line}\n`);
+    });
+  }
+  if (child.stderr) {
+    const rl = readline.createInterface({ input: child.stderr });
+    rl.on("line", (line) => {
+      logLine(`${source}.err`, line);
+      process.stderr.write(`[${source}] ${line}\n`);
+    });
+  }
+}
 const BOB_SERVER_BIN = path.join(
   APP_ROOT,
   "apps",
@@ -41,23 +76,35 @@ async function spawnBobServer(): Promise<ServerReady> {
     ],
     {
       cwd: APP_ROOT,
-      stdio: ["ignore", "pipe", "inherit"],
+      stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env },
     },
   );
   serverChild = child;
+  logLine("bob-server", `spawned pid=${child.pid ?? "?"}`);
 
   if (!child.stdout) {
     throw new Error("bob-server child has no stdout");
   }
 
-  const rl = readline.createInterface({ input: child.stdout });
+  // We need to watch stdout for the JSON ready line AND mirror the whole
+  // stream (plus stderr) into the rotating log sink. Attach two listeners
+  // to the same readline on stdout, one for ready detection, one for logging.
+  const stdoutRl = readline.createInterface({ input: child.stdout });
+  if (child.stderr) {
+    const stderrRl = readline.createInterface({ input: child.stderr });
+    stderrRl.on("line", (line) => {
+      logLine("bob-server.err", line);
+      process.stderr.write(`[bob-server] ${line}\n`);
+    });
+  }
+
   const readyPromise = new Promise<ServerReady>((resolve, reject) => {
     const cleanup = () => {
-      rl.off("line", onLine);
+      stdoutRl.off("line", onReadyLine);
       child.off("exit", onExit);
     };
-    const onLine = (line: string) => {
+    const onReadyLine = (line: string) => {
       try {
         const parsed = JSON.parse(line) as { ready?: boolean; url?: string };
         if (parsed.ready === true && typeof parsed.url === "string") {
@@ -76,8 +123,14 @@ async function spawnBobServer(): Promise<ServerReady> {
         ),
       );
     };
-    rl.on("line", onLine);
+    stdoutRl.on("line", onReadyLine);
     child.once("exit", onExit);
+  });
+
+  // Always mirror stdout to the log sink in parallel with the ready detector.
+  stdoutRl.on("line", (line) => {
+    logLine("bob-server", line);
+    process.stdout.write(`[bob-server] ${line}\n`);
   });
 
   return await readyPromise;
@@ -119,19 +172,15 @@ function spawnDaemon(serverUrl: string, token: string): void {
     },
   });
   daemonChild = child;
+  logLine("bob-daemon", `spawned pid=${child.pid ?? "?"} bin=${binPath}`);
 
-  child.stdout?.on("data", (chunk: Buffer) => {
-    process.stdout.write(`[bob-daemon] ${chunk.toString("utf8")}`);
-  });
-  child.stderr?.on("data", (chunk: Buffer) => {
-    process.stderr.write(`[bob-daemon] ${chunk.toString("utf8")}`);
-  });
+  pipeChildLogs("bob-daemon", child);
+
   child.on("exit", (code, signal) => {
-    if (code !== 0) {
-      console.warn(
-        `[desktop] bob daemon exited (code=${code}, signal=${signal})`,
-      );
-    }
+    logLine(
+      "bob-daemon",
+      `exited code=${code ?? "null"} signal=${signal ?? "null"}`,
+    );
   });
 }
 
