@@ -185,6 +185,11 @@ function spawnDaemon(serverUrl: string, token: string): void {
 }
 
 app.whenReady().then(async () => {
+  const devMode = process.env.BOB_DESKTOP_DEV === "1";
+  logLine(
+    "desktop",
+    `electron ready — mode=${devMode ? "dev (blder HMR via vinext)" : "start (prebuilt blder)"} logs=${LOG_PATH}`,
+  );
   const { url, token } = await spawnBobServer();
   spawnDaemon(url, token);
 
