@@ -1,6 +1,8 @@
 import { app, BrowserWindow } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import crypto from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
 
@@ -13,8 +15,12 @@ const BOB_SERVER_BIN = path.join(
   "dist",
   "bin.js",
 );
+// Go daemon binary bundled under apps/desktop/resources/bin/.
+// dist-electron/main.js → ../resources/bin.
+const DAEMON_BIN_DIR = path.resolve(__dirname, "..", "resources", "bin");
 
 let serverChild: ChildProcess | null = null;
+let daemonChild: ChildProcess | null = null;
 let win: BrowserWindow | null = null;
 
 type ServerReady = { url: string; token: string };
@@ -77,8 +83,61 @@ async function spawnBobServer(): Promise<ServerReady> {
   return await readyPromise;
 }
 
+function resolveDaemonBinaryPath(): string | null {
+  if (process.platform !== "darwin") {
+    return null;
+  }
+  const arch = os.arch() === "arm64" ? "arm64" : "amd64";
+  const binPath = path.join(DAEMON_BIN_DIR, `bob-darwin-${arch}`);
+  if (!fs.existsSync(binPath)) {
+    return null;
+  }
+  return binPath;
+}
+
+function spawnDaemon(serverUrl: string, token: string): void {
+  const binPath = resolveDaemonBinaryPath();
+  if (!binPath) {
+    console.warn(
+      `[desktop] bob daemon binary not found under ${DAEMON_BIN_DIR} for arch ${os.arch()} — skipping daemon spawn`,
+    );
+    return;
+  }
+
+  // The Go CLI reads config from ~/.config/bob/config.yaml — it does not yet
+  // accept --server-url / --auth-token flags. We still pass BOB_SERVER_URL /
+  // BOB_AUTH_TOKEN through the env so a future daemon build can pick them up
+  // without touching Electron. For now the daemon will start but will not
+  // usefully contact the local bob-server until the Go CLI grows flag support.
+  const child = spawn(binPath, ["daemon", "start"], {
+    cwd: APP_ROOT,
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      BOB_SERVER_URL: serverUrl,
+      BOB_AUTH_TOKEN: token,
+    },
+  });
+  daemonChild = child;
+
+  child.stdout?.on("data", (chunk: Buffer) => {
+    process.stdout.write(`[bob-daemon] ${chunk.toString("utf8")}`);
+  });
+  child.stderr?.on("data", (chunk: Buffer) => {
+    process.stderr.write(`[bob-daemon] ${chunk.toString("utf8")}`);
+  });
+  child.on("exit", (code, signal) => {
+    if (code !== 0) {
+      console.warn(
+        `[desktop] bob daemon exited (code=${code}, signal=${signal})`,
+      );
+    }
+  });
+}
+
 app.whenReady().then(async () => {
   const { url, token } = await spawnBobServer();
+  spawnDaemon(url, token);
 
   win = new BrowserWindow({
     width: 1280,
@@ -98,4 +157,5 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   serverChild?.kill("SIGTERM");
+  daemonChild?.kill("SIGTERM");
 });
