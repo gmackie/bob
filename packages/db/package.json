@@ -37,6 +37,7 @@
     "with-env": "dotenv -e ../../.env --"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.3.0",
     "@neondatabase/serverless": "^0.10.4",
     "drizzle-orm": "^0.44.7",
     "drizzle-zod": "^0.8.3",

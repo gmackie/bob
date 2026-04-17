@@ -230,7 +230,7 @@ importers:
         version: link:../../tooling/typescript
       '@cloudflare/vite-plugin':
         specifier: latest
-        version: 1.32.2(vite@8.0.8(@types/node@22.19.5)(esbuild@0.27.3)(jiti@2.6.1)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2))(workerd@1.20260410.1)(wrangler@4.82.2)
+        version: 1.32.3(vite@8.0.8(@types/node@22.19.5)(esbuild@0.27.3)(jiti@2.6.1)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2))(workerd@1.20260415.1)(wrangler@4.83.0)
       '@types/node':
         specifier: 'catalog:'
         version: 22.19.5
@@ -251,7 +251,7 @@ importers:
         version: 8.0.8(@types/node@22.19.5)(esbuild@0.27.3)(jiti@2.6.1)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
       wrangler:
         specifier: latest
-        version: 4.82.2
+        version: 4.83.0
 
   apps/execution:
     dependencies:
@@ -469,7 +469,7 @@ importers:
         version: 0.10.4
       drizzle-orm:
         specifier: ^0.44.7
-        version: 0.44.7(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.6.0)(kysely@0.28.9)(pg@8.17.1)(postgres@3.4.8)(prisma@5.22.0)(sqlite3@5.1.7)
+        version: 0.44.7(@electric-sql/pglite@0.3.16)(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.6.0)(kysely@0.28.9)(pg@8.17.1)(postgres@3.4.8)(prisma@5.22.0)(sqlite3@5.1.7)
       pg:
         specifier: ^8.17.1
         version: 8.17.1
@@ -647,7 +647,7 @@ importers:
     devDependencies:
       '@better-auth/cli':
         specifier: 'catalog:'
-        version: 1.4.0-beta.9(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.0)(@types/pg@8.16.0)(@types/react@19.2.14)(kysely@0.28.9)(magicast@0.5.1)(pg@8.17.1)(postgres@3.4.8)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sqlite3@5.1.7)
+        version: 1.4.0-beta.9(@electric-sql/pglite@0.3.16)(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.0)(@types/pg@8.16.0)(@types/react@19.2.14)(kysely@0.28.9)(magicast@0.5.1)(pg@8.17.1)(postgres@3.4.8)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sqlite3@5.1.7)
       '@bob/eslint-config':
         specifier: workspace:*
         version: link:../../tooling/eslint
@@ -752,15 +752,18 @@ importers:
 
   packages/db:
     dependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.3.0
+        version: 0.3.16
       '@neondatabase/serverless':
         specifier: ^0.10.4
         version: 0.10.4
       drizzle-orm:
         specifier: ^0.44.7
-        version: 0.44.7(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.6.0)(kysely@0.28.9)(pg@8.17.1)(postgres@3.4.8)(prisma@5.22.0)(sqlite3@5.1.7)
+        version: 0.44.7(@electric-sql/pglite@0.3.16)(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.6.0)(kysely@0.28.9)(pg@8.17.1)(postgres@3.4.8)(prisma@5.22.0)(sqlite3@5.1.7)
       drizzle-zod:
         specifier: ^0.8.3
-        version: 0.8.3(drizzle-orm@0.44.7(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.6.0)(kysely@0.28.9)(pg@8.17.1)(postgres@3.4.8)(prisma@5.22.0)(sqlite3@5.1.7))(zod@4.3.5)
+        version: 0.8.3(drizzle-orm@0.44.7(@electric-sql/pglite@0.3.16)(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.6.0)(kysely@0.28.9)(pg@8.17.1)(postgres@3.4.8)(prisma@5.22.0)(sqlite3@5.1.7))(zod@4.3.5)
       pg:
         specifier: ^8.17.1
         version: 8.17.1
@@ -2055,38 +2058,38 @@ packages:
       workerd:
         optional: true
 
-  '@cloudflare/vite-plugin@1.32.2':
-    resolution: {integrity: sha512-sEI/jusfDvzHIL4oiBBV5iUxAXfTRvguecIDWQ/AxBgEjGO1ZslHOEy4rlxfgqrdRWtq0TM9m3oC+hT32hajEg==}
+  '@cloudflare/vite-plugin@1.32.3':
+    resolution: {integrity: sha512-a8ZkCA/SOiJ36jT3LlBLkUb7ZzGInhYJoTY4BMRBGdk+nsh44HavbNvtu/RdaqS5VJEMLM4+LqVIJ+V0ahGeFg==}
     peerDependencies:
       vite: ^6.1.0 || ^7.0.0 || ^8.0.0
-      wrangler: ^4.82.2
+      wrangler: ^4.83.0
 
-  '@cloudflare/workerd-darwin-64@1.20260410.1':
-    resolution: {integrity: sha512-0sh6xPmCKUfv/lUklP1dfyeKxCuEZGS0HeduxnucL8ECxSgAdWTOD42h/lQTwZCIiWtyHB+ZNB9hsS2Mlf0tMQ==}
+  '@cloudflare/workerd-darwin-64@1.20260415.1':
+    resolution: {integrity: sha512-dsxaKsQm3LnPGNPEdsRv09QN3Y4DqCw7kX5j6noKqbAtro2jTr95sVlYM1jUxZ5FkOl1f7SXgaKKB9t5H5Nkbg==}
     engines: {node: '>=16'}
     cpu: [x64]
     os: [darwin]
 
-  '@cloudflare/workerd-darwin-arm64@1.20260410.1':
-    resolution: {integrity: sha512-r2On29gPvlk/eiH/OpeUT23xoB8W8D1PHr8lul5nyxElLqvh3yNxZUnJWrbcOl+ubfrvw7+jFwgopMe17xyf0g==}
+  '@cloudflare/workerd-darwin-arm64@1.20260415.1':
+    resolution: {integrity: sha512-+JgSgVA49KyKteHRA1SnonE4Zn5Ei5zdAp5FQMxFmXI8qulZw4Hl7safXxRyK4i9sTO8gl7TFOKO5Q64VPvSDQ==}
     engines: {node: '>=16'}
     cpu: [arm64]
     os: [darwin]
 
-  '@cloudflare/workerd-linux-64@1.20260410.1':
-    resolution: {integrity: sha512-qWORRcAzPZeHJjrcYBNZTN6Y9l+iZQUz4KBdWbNrM6My4CpNrXS5kErPR373vG//5QPaDGwMXgBqyn9xfzarJQ==}
+  '@cloudflare/workerd-linux-64@1.20260415.1':
+    resolution: {integrity: sha512-tU+9pwsqCy8afOVlGtiWrWQc/fedQK4SRm4KPIAt+zOiQWDxWASm6YGBUJis5c648WN80yz47qnmdDi8DQNOcA==}
     engines: {node: '>=16'}
     cpu: [x64]
     os: [linux]
 
-  '@cloudflare/workerd-linux-arm64@1.20260410.1':
-    resolution: {integrity: sha512-jQfuHL4mnGDFyomSS3JNs9TpTvCu6Vzz2QSNCfJRstMzTICUFLMc4Vp/xKK+M5xkb0PoAu/G0hHx7jrxB2j+OQ==}
+  '@cloudflare/workerd-linux-arm64@1.20260415.1':
+    resolution: {integrity: sha512-bR9uITnV19r5NQ14xnypi2xHXu2iQvfYV8cVgx0JouFUmWwTEEAwFVojDdssGq93VHX9hr/pi2IRUZeegbYBog==}
     engines: {node: '>=16'}
     cpu: [arm64]
     os: [linux]
 
-  '@cloudflare/workerd-windows-64@1.20260410.1':
-    resolution: {integrity: sha512-h8q/nbheDqpknY7AAOz19MuQkZAR1/bnoZnKipyeUPXt5No+y6HlTtva9Bohx5Fhc1MW2CX2MQVdb55qtkkqZQ==}
+  '@cloudflare/workerd-windows-64@1.20260415.1':
+    resolution: {integrity: sha512-4NuMLlerI0Ijua3Ir8HXQ+qyNvCUDEG5gDco5Om+sAiK6rnWiz+aGoSlbB8W16yW9QAgzCstbmXLiVknUBflfQ==}
     engines: {node: '>=16'}
     cpu: [x64]
     os: [win32]
@@ -2159,6 +2162,9 @@ packages:
   '@egjs/hammerjs@2.0.17':
     resolution: {integrity: sha512-XQsZgjm2EcVUiZQf11UBJQfmZeEmOW8DpI1gsFeln6w0ae0ii4dMQEQ0kjl6DspdWX1aGY1/loyXnP0JS06e/A==}
     engines: {node: '>=0.8.0'}
+
+  '@electric-sql/pglite@0.3.16':
+    resolution: {integrity: sha512-mZkZfOd9OqTMHsK+1cje8OSzfAQcpD7JmILXTl5ahdempjUDdmg4euf1biDex5/LfQIDJ3gvCu6qDgdnDxfJmA==}
 
   '@elevenlabs/client@0.13.0':
     resolution: {integrity: sha512-0UjouSOVK+mECJuYg/DqM9V1NIsabIrlRmw/RjEMS5UmOpsAga3KxMC3et8fKh8G/MI2cZtLr2764wIOZgyrQg==}
@@ -9717,8 +9723,8 @@ packages:
     resolution: {integrity: sha512-z0yWI+4FDrrweS8Zmt4Ej5HdJmky15+L2e6Wgn3+iK5fWzb6T3fhNFq2+MeTRb064c6Wr4N/wv0DzQTjNzHNGQ==}
     engines: {node: '>=10'}
 
-  miniflare@4.20260410.0:
-    resolution: {integrity: sha512-94LEU8d+XPVGp18eW4+bu1v7Tnq7srhqWMIsrx2jhSkdbTnGqg1I613R0GKY4eygBYl9MbqXEhzK/bczJb6uMg==}
+  miniflare@4.20260415.0:
+    resolution: {integrity: sha512-JoExRWN4YBI2luA5BoSMFEgi8rQWXUGzo3mtE+58VXCLV3jj/Xnk5Yeqs/IXWz8Es5GJIaq6BtsixDvAxXSIng==}
     engines: {node: '>=18.0.0'}
     hasBin: true
 
@@ -11812,8 +11818,8 @@ packages:
     resolution: {integrity: sha512-VfQPToRA5FZs/qJxLIinmU59u0r7LXqoJkCzinq3ckNJp3vKEh7jTWN589YQ5+aoAC/TGRLyJLCPKcLQbM8r9g==}
     engines: {node: '>=18.17'}
 
-  undici@7.24.4:
-    resolution: {integrity: sha512-BM/JzwwaRXxrLdElV2Uo6cTLEjhSb3WXboncJamZ15NgUURmvlXvxa6xkwIOILIjPNo9i8ku136ZvWV0Uly8+w==}
+  undici@7.24.8:
+    resolution: {integrity: sha512-6KQ/+QxK49Z/p3HO6E5ZCZWNnCasyZLa5ExaVYyvPxUwKtbCPMKELJOqh7EqOle0t9cH/7d2TaaTRRa6Nhs4YQ==}
     engines: {node: '>=20.18.1'}
 
   unenv@2.0.0-rc.24:
@@ -12291,17 +12297,17 @@ packages:
   wordwrap@1.0.0:
     resolution: {integrity: sha512-gvVzJFlPycKc5dZN4yPkP8w7Dc37BtP1yczEneOb4uq34pXZcvrtRTmWV8W+Ume+XCxKgbjM+nevkyFPMybd4Q==}
 
-  workerd@1.20260410.1:
-    resolution: {integrity: sha512-T/GRD6Y5vN9g4CnGmOlfST1w7bj+1IjRFvX0K7CodZPJuPVPNPGhz8Wppah0WdT6A7I8Kad3zgZ2OkDdWtENrg==}
+  workerd@1.20260415.1:
+    resolution: {integrity: sha512-phyPjRnx+mQDfkhN9ENPioL1L0SdhYs4S0YmJK/xF9Oga+ykNfdSy1MHnsOj8yqnOV96zcVQMx32dJ0r3pq0jQ==}
     engines: {node: '>=16'}
     hasBin: true
 
-  wrangler@4.82.2:
-    resolution: {integrity: sha512-SKfW21sTJUkM/Qd8zc9oc8TBkAWHRsXuTxE6XdToC55Ct84pR+IfRdaTjCTuC0dL+KYvauSvSn2rtqS2Ae+Dcw==}
+  wrangler@4.83.0:
+    resolution: {integrity: sha512-gw5g3LCiuAqVWxaoKY6+quE0HzAUEFb/FV3oAlNkE1ttd4XP3FiV91XDkkzUCcdqxS4WjhQvPhIDBNdhEi8P0A==}
     engines: {node: '>=20.3.0'}
     hasBin: true
     peerDependencies:
-      '@cloudflare/workers-types': ^4.20260410.1
+      '@cloudflare/workers-types': ^4.20260415.1
     peerDependenciesMeta:
       '@cloudflare/workers-types':
         optional: true
@@ -13167,7 +13173,7 @@ snapshots:
 
   '@bcoe/v8-coverage@1.0.2': {}
 
-  '@better-auth/cli@1.4.0-beta.9(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.0)(@types/pg@8.16.0)(@types/react@19.2.14)(kysely@0.28.9)(magicast@0.5.1)(pg@8.17.1)(postgres@3.4.8)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sqlite3@5.1.7)':
+  '@better-auth/cli@1.4.0-beta.9(@electric-sql/pglite@0.3.16)(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.0)(@types/pg@8.16.0)(@types/react@19.2.14)(kysely@0.28.9)(magicast@0.5.1)(pg@8.17.1)(postgres@3.4.8)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sqlite3@5.1.7)':
     dependencies:
       '@babel/core': 7.28.6
       '@babel/preset-react': 7.28.5(@babel/core@7.28.6)
@@ -13184,7 +13190,7 @@ snapshots:
       chalk: 5.6.2
       commander: 12.1.0
       dotenv: 17.2.3
-      drizzle-orm: 0.33.0(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(@types/react@19.2.14)(better-sqlite3@12.6.0)(kysely@0.28.9)(pg@8.17.1)(postgres@3.4.8)(prisma@5.22.0)(react@19.2.5)(sqlite3@5.1.7)
+      drizzle-orm: 0.33.0(@electric-sql/pglite@0.3.16)(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(@types/react@19.2.14)(better-sqlite3@12.6.0)(kysely@0.28.9)(pg@8.17.1)(postgres@3.4.8)(prisma@5.22.0)(react@19.2.5)(sqlite3@5.1.7)
       get-tsconfig: 4.13.0
       jiti: 2.6.1
       open: 10.2.0
@@ -13314,38 +13320,38 @@ snapshots:
 
   '@cloudflare/kv-asset-handler@0.4.2': {}
 
-  '@cloudflare/unenv-preset@2.16.0(unenv@2.0.0-rc.24)(workerd@1.20260410.1)':
+  '@cloudflare/unenv-preset@2.16.0(unenv@2.0.0-rc.24)(workerd@1.20260415.1)':
     dependencies:
       unenv: 2.0.0-rc.24
     optionalDependencies:
-      workerd: 1.20260410.1
+      workerd: 1.20260415.1
 
-  '@cloudflare/vite-plugin@1.32.2(vite@8.0.8(@types/node@22.19.5)(esbuild@0.27.3)(jiti@2.6.1)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2))(workerd@1.20260410.1)(wrangler@4.82.2)':
+  '@cloudflare/vite-plugin@1.32.3(vite@8.0.8(@types/node@22.19.5)(esbuild@0.27.3)(jiti@2.6.1)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2))(workerd@1.20260415.1)(wrangler@4.83.0)':
     dependencies:
-      '@cloudflare/unenv-preset': 2.16.0(unenv@2.0.0-rc.24)(workerd@1.20260410.1)
-      miniflare: 4.20260410.0
+      '@cloudflare/unenv-preset': 2.16.0(unenv@2.0.0-rc.24)(workerd@1.20260415.1)
+      miniflare: 4.20260415.0
       unenv: 2.0.0-rc.24
       vite: 8.0.8(@types/node@22.19.5)(esbuild@0.27.3)(jiti@2.6.1)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
-      wrangler: 4.82.2
+      wrangler: 4.83.0
       ws: 8.18.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
       - workerd
 
-  '@cloudflare/workerd-darwin-64@1.20260410.1':
+  '@cloudflare/workerd-darwin-64@1.20260415.1':
     optional: true
 
-  '@cloudflare/workerd-darwin-arm64@1.20260410.1':
+  '@cloudflare/workerd-darwin-arm64@1.20260415.1':
     optional: true
 
-  '@cloudflare/workerd-linux-64@1.20260410.1':
+  '@cloudflare/workerd-linux-64@1.20260415.1':
     optional: true
 
-  '@cloudflare/workerd-linux-arm64@1.20260410.1':
+  '@cloudflare/workerd-linux-arm64@1.20260415.1':
     optional: true
 
-  '@cloudflare/workerd-windows-64@1.20260410.1':
+  '@cloudflare/workerd-windows-64@1.20260415.1':
     optional: true
 
   '@cspotcode/source-map-support@0.8.1':
@@ -13418,6 +13424,8 @@ snapshots:
   '@egjs/hammerjs@2.0.17':
     dependencies:
       '@types/hammerjs': 2.0.46
+
+  '@electric-sql/pglite@0.3.16': {}
 
   '@elevenlabs/client@0.13.0(@types/dom-mediacapture-record@1.0.22)':
     dependencies:
@@ -14578,7 +14586,7 @@ snapshots:
       postcss: 8.4.49
       resolve-from: 5.0.0
     optionalDependencies:
-      expo: 55.0.11(@babel/core@7.28.6)(@expo/dom-webview@55.0.5)(@expo/metro-runtime@55.0.9)(expo-router@55.0.10)(react-dom@19.2.4(react@19.2.4))(react-native@0.84.1(@babel/core@7.28.6)(@react-native/metro-config@0.84.1(@babel/core@7.28.6))(@types/react@19.1.17)(react@19.2.4))(react-server-dom-webpack@19.2.4(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(webpack@5.104.1(@swc/core@1.15.8)))(react@19.2.4)(typescript@5.9.3)
+      expo: 55.0.11(@babel/core@7.28.6)(@expo/dom-webview@55.0.5)(@expo/metro-runtime@55.0.9)(expo-router@55.0.10)(react-dom@19.2.5(react@19.2.3))(react-native@0.84.1(@babel/core@7.28.6)(@react-native/metro-config@0.84.1(@babel/core@7.28.6))(@types/react@19.1.17)(react@19.2.3))(react-server-dom-webpack@19.2.4(react-dom@19.2.5(react@19.2.3))(react@19.2.3)(webpack@5.104.1(@swc/core@1.15.8)))(react@19.2.3)(typescript@5.9.3)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -14770,7 +14778,7 @@ snapshots:
       '@expo/json-file': 10.0.13
       '@react-native/normalize-colors': 0.83.4
       debug: 4.4.3
-      expo: 55.0.11(@babel/core@7.28.6)(@expo/dom-webview@55.0.5)(@expo/metro-runtime@55.0.9)(expo-router@55.0.10)(react-dom@19.2.4(react@19.2.4))(react-native@0.84.1(@babel/core@7.28.6)(@react-native/metro-config@0.84.1(@babel/core@7.28.6))(@types/react@19.1.17)(react@19.2.4))(react-server-dom-webpack@19.2.4(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(webpack@5.104.1(@swc/core@1.15.8)))(react@19.2.4)(typescript@5.9.3)
+      expo: 55.0.11(@babel/core@7.28.6)(@expo/dom-webview@55.0.5)(@expo/metro-runtime@55.0.9)(expo-router@55.0.10)(react-dom@19.2.5(react@19.2.3))(react-native@0.84.1(@babel/core@7.28.6)(@react-native/metro-config@0.84.1(@babel/core@7.28.6))(@types/react@19.1.17)(react@19.2.3))(react-server-dom-webpack@19.2.4(react-dom@19.2.5(react@19.2.3))(react@19.2.3)(webpack@5.104.1(@swc/core@1.15.8)))(react@19.2.3)(typescript@5.9.3)
       resolve-from: 5.0.0
       semver: 7.7.3
       xml2js: 0.6.0
@@ -17766,7 +17774,9 @@ snapshots:
       metro-runtime: 0.83.5
     transitivePeerDependencies:
       - '@babel/core'
+      - bufferutil
       - supports-color
+      - utf-8-validate
 
   '@react-native/normalize-colors@0.81.5': {}
 
@@ -19944,7 +19954,7 @@ snapshots:
       resolve-from: 5.0.0
     optionalDependencies:
       '@babel/runtime': 7.28.6
-      expo: 55.0.11(@babel/core@7.28.6)(@expo/dom-webview@55.0.5)(@expo/metro-runtime@55.0.9)(expo-router@55.0.10)(react-dom@19.2.4(react@19.2.4))(react-native@0.84.1(@babel/core@7.28.6)(@react-native/metro-config@0.84.1(@babel/core@7.28.6))(@types/react@19.1.17)(react@19.2.4))(react-server-dom-webpack@19.2.4(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(webpack@5.104.1(@swc/core@1.15.8)))(react@19.2.4)(typescript@5.9.3)
+      expo: 55.0.11(@babel/core@7.28.6)(@expo/dom-webview@55.0.5)(@expo/metro-runtime@55.0.9)(expo-router@55.0.10)(react-dom@19.2.5(react@19.2.3))(react-native@0.84.1(@babel/core@7.28.6)(@react-native/metro-config@0.84.1(@babel/core@7.28.6))(@types/react@19.1.17)(react@19.2.3))(react-server-dom-webpack@19.2.4(react-dom@19.2.5(react@19.2.3))(react@19.2.3)(webpack@5.104.1(@swc/core@1.15.8)))(react@19.2.3)(typescript@5.9.3)
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
@@ -20803,8 +20813,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  drizzle-orm@0.33.0(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(@types/react@19.2.14)(better-sqlite3@12.6.0)(kysely@0.28.9)(pg@8.17.1)(postgres@3.4.8)(prisma@5.22.0)(react@19.2.5)(sqlite3@5.1.7):
+  drizzle-orm@0.33.0(@electric-sql/pglite@0.3.16)(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(@types/react@19.2.14)(better-sqlite3@12.6.0)(kysely@0.28.9)(pg@8.17.1)(postgres@3.4.8)(prisma@5.22.0)(react@19.2.5)(sqlite3@5.1.7):
     optionalDependencies:
+      '@electric-sql/pglite': 0.3.16
       '@neondatabase/serverless': 0.10.4
       '@opentelemetry/api': 1.9.0
       '@prisma/client': 5.22.0(prisma@5.22.0)
@@ -20819,8 +20830,9 @@ snapshots:
       react: 19.2.5
       sqlite3: 5.1.7
 
-  drizzle-orm@0.44.7(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.6.0)(kysely@0.28.9)(pg@8.17.1)(postgres@3.4.8)(prisma@5.22.0)(sqlite3@5.1.7):
+  drizzle-orm@0.44.7(@electric-sql/pglite@0.3.16)(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.6.0)(kysely@0.28.9)(pg@8.17.1)(postgres@3.4.8)(prisma@5.22.0)(sqlite3@5.1.7):
     optionalDependencies:
+      '@electric-sql/pglite': 0.3.16
       '@neondatabase/serverless': 0.10.4
       '@opentelemetry/api': 1.9.0
       '@prisma/client': 5.22.0(prisma@5.22.0)
@@ -20833,9 +20845,9 @@ snapshots:
       prisma: 5.22.0
       sqlite3: 5.1.7
 
-  drizzle-zod@0.8.3(drizzle-orm@0.44.7(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.6.0)(kysely@0.28.9)(pg@8.17.1)(postgres@3.4.8)(prisma@5.22.0)(sqlite3@5.1.7))(zod@4.3.5):
+  drizzle-zod@0.8.3(drizzle-orm@0.44.7(@electric-sql/pglite@0.3.16)(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.6.0)(kysely@0.28.9)(pg@8.17.1)(postgres@3.4.8)(prisma@5.22.0)(sqlite3@5.1.7))(zod@4.3.5):
     dependencies:
-      drizzle-orm: 0.44.7(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.6.0)(kysely@0.28.9)(pg@8.17.1)(postgres@3.4.8)(prisma@5.22.0)(sqlite3@5.1.7)
+      drizzle-orm: 0.44.7(@electric-sql/pglite@0.3.16)(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0(prisma@5.22.0))(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.6.0)(kysely@0.28.9)(pg@8.17.1)(postgres@3.4.8)(prisma@5.22.0)(sqlite3@5.1.7)
       zod: 4.3.5
 
   dunder-proto@1.0.1:
@@ -21502,7 +21514,7 @@ snapshots:
   expo-crypto@15.0.8(expo@55.0.11):
     dependencies:
       base64-js: 1.5.1
-      expo: 55.0.11(@babel/core@7.28.6)(@expo/dom-webview@55.0.5)(@expo/metro-runtime@55.0.9)(expo-router@55.0.10)(react-dom@19.2.4(react@19.2.4))(react-native@0.84.1(@babel/core@7.28.6)(@react-native/metro-config@0.84.1(@babel/core@7.28.6))(@types/react@19.1.17)(react@19.2.4))(react-server-dom-webpack@19.2.4(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(webpack@5.104.1(@swc/core@1.15.8)))(react@19.2.4)(typescript@5.9.3)
+      expo: 55.0.11(@babel/core@7.28.6)(@expo/dom-webview@55.0.5)(@expo/metro-runtime@55.0.9)(expo-router@55.0.10)(react-dom@19.2.5(react@19.2.5))(react-native@0.84.1(@babel/core@7.28.6)(@react-native/metro-config@0.84.1(@babel/core@7.28.6))(@types/react@19.2.14)(react@19.2.5))(react-server-dom-webpack@19.2.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(webpack@5.104.1(@swc/core@1.15.8)))(react@19.2.5)(typescript@5.9.3)
 
   expo-dev-client@55.0.22(expo@55.0.11)(typescript@5.9.3):
     dependencies:
@@ -21542,7 +21554,7 @@ snapshots:
 
   expo-device@55.0.12(expo@55.0.11):
     dependencies:
-      expo: 55.0.11(@babel/core@7.28.6)(@expo/dom-webview@55.0.5)(@expo/metro-runtime@55.0.9)(expo-router@55.0.10)(react-dom@19.2.4(react@19.2.4))(react-native@0.84.1(@babel/core@7.28.6)(@react-native/metro-config@0.84.1(@babel/core@7.28.6))(@types/react@19.1.17)(react@19.2.4))(react-server-dom-webpack@19.2.4(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(webpack@5.104.1(@swc/core@1.15.8)))(react@19.2.4)(typescript@5.9.3)
+      expo: 55.0.11(@babel/core@7.28.6)(@expo/dom-webview@55.0.5)(@expo/metro-runtime@55.0.9)(expo-router@55.0.10)(react-dom@19.2.5(react@19.2.3))(react-native@0.84.1(@babel/core@7.28.6)(@react-native/metro-config@0.84.1(@babel/core@7.28.6))(@types/react@19.1.17)(react@19.2.3))(react-server-dom-webpack@19.2.4(react-dom@19.2.5(react@19.2.3))(react@19.2.3)(webpack@5.104.1(@swc/core@1.15.8)))(react@19.2.3)(typescript@5.9.3)
       ua-parser-js: 0.7.41
 
   expo-eas-client@55.0.5: {}
@@ -22153,7 +22165,7 @@ snapshots:
 
   expo-secure-store@55.0.11(expo@55.0.11):
     dependencies:
-      expo: 55.0.11(@babel/core@7.28.6)(@expo/dom-webview@55.0.5)(@expo/metro-runtime@55.0.9)(expo-router@55.0.10)(react-dom@19.2.4(react@19.2.4))(react-native@0.84.1(@babel/core@7.28.6)(@react-native/metro-config@0.84.1(@babel/core@7.28.6))(@types/react@19.1.17)(react@19.2.4))(react-server-dom-webpack@19.2.4(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(webpack@5.104.1(@swc/core@1.15.8)))(react@19.2.4)(typescript@5.9.3)
+      expo: 55.0.11(@babel/core@7.28.6)(@expo/dom-webview@55.0.5)(@expo/metro-runtime@55.0.9)(expo-router@55.0.10)(react-dom@19.2.5(react@19.2.5))(react-native@0.84.1(@babel/core@7.28.6)(@react-native/metro-config@0.84.1(@babel/core@7.28.6))(@types/react@19.2.14)(react@19.2.5))(react-server-dom-webpack@19.2.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(webpack@5.104.1(@swc/core@1.15.8)))(react@19.2.5)(typescript@5.9.3)
 
   expo-server@1.0.5: {}
 
@@ -24428,12 +24440,12 @@ snapshots:
 
   mimic-response@3.1.0: {}
 
-  miniflare@4.20260410.0:
+  miniflare@4.20260415.0:
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       sharp: 0.34.5
-      undici: 7.24.4
-      workerd: 1.20260410.1
+      undici: 7.24.8
+      workerd: 1.20260415.1
       ws: 8.18.0
       youch: 4.1.0-beta.10
     transitivePeerDependencies:
@@ -27412,7 +27424,7 @@ snapshots:
 
   undici@6.23.0: {}
 
-  undici@7.24.4: {}
+  undici@7.24.8: {}
 
   unenv@2.0.0-rc.24:
     dependencies:
@@ -28036,24 +28048,24 @@ snapshots:
 
   wordwrap@1.0.0: {}
 
-  workerd@1.20260410.1:
+  workerd@1.20260415.1:
     optionalDependencies:
-      '@cloudflare/workerd-darwin-64': 1.20260410.1
-      '@cloudflare/workerd-darwin-arm64': 1.20260410.1
-      '@cloudflare/workerd-linux-64': 1.20260410.1
-      '@cloudflare/workerd-linux-arm64': 1.20260410.1
-      '@cloudflare/workerd-windows-64': 1.20260410.1
+      '@cloudflare/workerd-darwin-64': 1.20260415.1
+      '@cloudflare/workerd-darwin-arm64': 1.20260415.1
+      '@cloudflare/workerd-linux-64': 1.20260415.1
+      '@cloudflare/workerd-linux-arm64': 1.20260415.1
+      '@cloudflare/workerd-windows-64': 1.20260415.1
 
-  wrangler@4.82.2:
+  wrangler@4.83.0:
     dependencies:
       '@cloudflare/kv-asset-handler': 0.4.2
-      '@cloudflare/unenv-preset': 2.16.0(unenv@2.0.0-rc.24)(workerd@1.20260410.1)
+      '@cloudflare/unenv-preset': 2.16.0(unenv@2.0.0-rc.24)(workerd@1.20260415.1)
       blake3-wasm: 2.1.5
       esbuild: 0.27.3
-      miniflare: 4.20260410.0
+      miniflare: 4.20260415.0
       path-to-regexp: 6.3.0
       unenv: 2.0.0-rc.24
-      workerd: 1.20260410.1
+      workerd: 1.20260415.1
     optionalDependencies:
       fsevents: 2.3.3
     transitivePeerDependencies:
