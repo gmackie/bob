@@ -12,6 +12,11 @@
     "lint": "turbo run lint --continue",
     "typecheck": "turbo run typecheck"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron"
+    ]
+  },
   "devDependencies": {
     "turbo": "^2.8.0",
     "typescript": "^5.9.0"

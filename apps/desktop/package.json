@@ -1,0 +1,21 @@
+{
+  "name": "@gmacko/desktop",
+  "private": true,
+  "version": "0.1.0",
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "vite build --watch --config vite.main.config.ts & sleep 2 && electron .",
+    "build": "vite build --config vite.main.config.ts && electron-builder",
+    "start": "electron ."
+  },
+  "dependencies": {
+    "electron-updater": "^6.0.0"
+  },
+  "devDependencies": {
+    "@gmacko/tsconfig": "workspace:*",
+    "electron": "^40.0.0",
+    "electron-builder": "^25.0.0",
+    "typescript": "^5.9.0",
+    "vite": "^8.0.0"
+  }
+}
