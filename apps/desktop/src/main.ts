@@ -200,11 +200,94 @@ app.whenReady().then(async () => {
   await win.loadURL(`${url}/?t=${token}`);
 });
 
+const SHUTDOWN_GRACE_MS = 3_000;
+
+async function killChildGracefully(
+  label: string,
+  child: ChildProcess | null,
+): Promise<void> {
+  if (!child || child.exitCode !== null || child.killed) return;
+  logLine("desktop", `SIGTERM ${label} pid=${child.pid ?? "?"}`);
+  child.kill("SIGTERM");
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(() => {
+      if (child.exitCode === null && !child.killed) {
+        logLine(
+          "desktop",
+          `SIGKILL ${label} pid=${child.pid ?? "?"} (grace elapsed)`,
+        );
+        try {
+          child.kill("SIGKILL");
+        } catch {
+          // best-effort
+        }
+      }
+      resolve();
+    }, SHUTDOWN_GRACE_MS);
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
+let shuttingDown = false;
+async function shutdownChildren(): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  try {
+    await Promise.all([
+      killChildGracefully("bob-server", serverChild),
+      killChildGracefully("bob-daemon", daemonChild),
+    ]);
+  } finally {
+    logSink.close();
+  }
+}
+
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 
-app.on("before-quit", () => {
-  serverChild?.kill("SIGTERM");
-  daemonChild?.kill("SIGTERM");
+app.on("before-quit", (event) => {
+  if (shuttingDown) return;
+  event.preventDefault();
+  void shutdownChildren().finally(() => {
+    // Re-issue the quit so Electron can proceed now that children are down.
+    app.quit();
+  });
+});
+
+// POSIX signals from the parent (e.g. terminal Ctrl-C when launched via
+// `pnpm start`) — tear down children before the process dies.
+process.once("SIGINT", () => {
+  void shutdownChildren().finally(() => process.exit(130));
+});
+process.once("SIGTERM", () => {
+  void shutdownChildren().finally(() => process.exit(143));
+});
+
+// Last-resort synchronous kill — `exit` cannot await, so we best-effort
+// SIGKILL both children so zombies do not survive a hard crash.
+process.on("exit", () => {
+  for (const [label, child] of [
+    ["bob-server", serverChild],
+    ["bob-daemon", daemonChild],
+  ] as const) {
+    if (child && child.exitCode === null && !child.killed) {
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        // best-effort
+      }
+      // No-op if sink is closed; still a best-effort trace.
+      try {
+        logSink.writeLine(
+          `${new Date().toISOString()} [desktop] exit handler SIGKILL ${label} pid=${child.pid ?? "?"}`,
+        );
+      } catch {
+        // best-effort
+      }
+    }
+  }
 });
