@@ -1,4 +1,5 @@
 import { cn } from "../utils";
+import { ThemeSwitcher } from "../theme-switcher";
 
 interface SidebarProps {
   children: React.ReactNode;
@@ -13,7 +14,10 @@ export function Sidebar({ children, className }: SidebarProps) {
         className,
       )}
     >
-      {children}
+      <div className="flex-1 overflow-auto">{children}</div>
+      <div className="border-t border-[var(--color-border)] p-3">
+        <ThemeSwitcher />
+      </div>
     </aside>
   );
 }

@@ -11,6 +11,19 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
+const STORAGE_KEY = "gmacko-theme";
+
+function getStoredTheme(fallback: Theme): Theme {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === "ooda" || stored === "bob") return stored;
+  } catch {
+    // localStorage may be unavailable (SSR, private browsing)
+  }
+  return fallback;
+}
+
 export function ThemeProvider({
   children,
   defaultTheme,
@@ -18,7 +31,18 @@ export function ThemeProvider({
   children: React.ReactNode;
   defaultTheme: Theme;
 }) {
-  const [theme, setTheme] = useState<Theme>(defaultTheme);
+  const [theme, setThemeState] = useState<Theme>(() =>
+    getStoredTheme(defaultTheme),
+  );
+
+  const setTheme = (next: Theme) => {
+    setThemeState(next);
+    try {
+      localStorage.setItem(STORAGE_KEY, next);
+    } catch {
+      // ignore
+    }
+  };
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
