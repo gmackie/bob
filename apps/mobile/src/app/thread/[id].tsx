@@ -2,8 +2,8 @@ import { useState, useRef, useCallback } from "react";
 import { Text, FlatList, TextInput, View, KeyboardAvoidingView, Platform } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import type { Message } from "@gmacko/models";
-import { trpc, queryClient } from "~/utils/api";
+import type { Message } from "@gmacko/contracts";
+import { rpc, queryClient } from "~/utils/api";
 import { Screen } from "~/components/ui/Screen";
 import { Button } from "~/components/ui/Button";
 import { Badge } from "~/components/ui/Badge";
@@ -16,15 +16,17 @@ export default function ThreadDetail() {
   const flatListRef = useRef<FlatList>(null);
 
   // Load thread to get activeBranchId
-  const threadQuery = useQuery(trpc.threads.byId.queryOptions({ id: id! }));
+  const threadQuery = useQuery({
+    queryKey: ["threads", id],
+    queryFn: () => rpc.threads.byId(id!),
+    enabled: !!id,
+  });
   const branchId = threadQuery.data?.activeBranchId;
 
   // Load messages from API when we have a branchId
   const messagesQuery = useQuery({
-    ...trpc.messages.listByBranch.queryOptions({
-      threadId: id!,
-      branchId: branchId!,
-    }),
+    queryKey: ["messages", id, branchId],
+    queryFn: () => rpc.messages.listByBranch(id!, branchId!),
     enabled: !!branchId,
   });
 
@@ -32,16 +34,17 @@ export default function ThreadDetail() {
   const messages = messagesQuery.data ?? localMessages;
 
   // Send message via agent.chat mutation
-  const chatMutation = useMutation(trpc.agent.chat.mutationOptions({
+  const chatMutation = useMutation({
+    mutationFn: (input: { threadId: string; branchId: string; content: string }) =>
+      rpc.agent.chat(input),
     onSuccess: () => {
-      // Refetch messages after successful chat
       if (branchId) {
         void queryClient.invalidateQueries({
-          queryKey: [["messages", "listByBranch"]],
+          queryKey: ["messages", id, branchId],
         });
       }
     },
-  }));
+  });
 
   const handleSend = useCallback(() => {
     if (!input.trim()) return;

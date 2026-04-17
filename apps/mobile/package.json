@@ -9,11 +9,8 @@
     "build:android": "eas build --platform android"
   },
   "dependencies": {
-    "@gmacko/api": "workspace:*",
-    "@gmacko/models": "workspace:*",
+    "@gmacko/contracts": "workspace:*",
     "@tanstack/react-query": "^5.91.0",
-    "@trpc/client": "^11.0.0",
-    "@trpc/tanstack-react-query": "^11.0.0",
     "expo": "~55.0.11",
     "expo-constants": "~55.0.13",
     "expo-router": "~55.0.10",
@@ -22,7 +19,6 @@
     "expo-status-bar": "~55.0.5",
     "expo-web-browser": "~15.0.0",
     "react": "^19.0.0",
-    "superjson": "^2.2.0",
     "react-dom": "^19.0.0",
     "react-native": "~0.84.1",
     "react-native-css": "~3.0.0",

@@ -1,5 +1,5 @@
 import { FlatList, Text, Pressable, View, RefreshControl } from "react-native";
-import type { Thread } from "@gmacko/models";
+import type { Thread } from "@gmacko/contracts";
 import { Badge } from "../ui/Badge";
 import { colors } from "~/lib/colors";
 

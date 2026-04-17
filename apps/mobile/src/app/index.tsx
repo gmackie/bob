@@ -1,8 +1,8 @@
 import { Text, FlatList, Pressable, View, ActivityIndicator } from "react-native";
 import { Link } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import type { Thread } from "@gmacko/models";
-import { trpc } from "~/utils/api";
+import type { Thread } from "@gmacko/contracts";
+import { rpc } from "~/utils/api";
 import { Screen } from "~/components/ui/Screen";
 import { Card } from "~/components/ui/Card";
 import { Badge } from "~/components/ui/Badge";
@@ -46,7 +46,10 @@ const statusVariant = {
 } as const;
 
 export default function ThreadList() {
-  const threadsQuery = useQuery(trpc.threads.list.queryOptions());
+  const threadsQuery = useQuery({
+    queryKey: ["threads"],
+    queryFn: () => rpc.threads.list(),
+  });
   const threads = threadsQuery.data ?? mockThreads;
 
   return (

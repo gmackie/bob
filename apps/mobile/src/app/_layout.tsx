@@ -3,11 +3,11 @@ import { Platform, Text, View } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
-import { queryClient, trpc } from "~/utils/api";
+import { queryClient, rpc } from "~/utils/api";
 import { ThreadSidebar } from "~/components/tablet/ThreadSidebar";
 import { ThreadPane } from "~/components/tablet/ThreadPane";
 import { colors } from "~/lib/colors";
-import type { Thread, Message } from "@gmacko/models";
+import type { Thread, Message } from "@gmacko/contracts";
 
 import "../styles.css";
 
@@ -34,22 +34,23 @@ function PhoneLayout() {
 function TabletLayout() {
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
 
-  const threadsQuery = useQuery(trpc.threads.list.queryOptions());
+  const threadsQuery = useQuery({
+    queryKey: ["threads"],
+    queryFn: () => rpc.threads.list(),
+  });
   const threads = (threadsQuery.data ?? []) as Thread[];
 
   const selectedThread = threads.find((t) => t.id === selectedThreadId);
 
-  const messagesQuery = useQuery(
-    trpc.messages.listByBranch.queryOptions(
-      {
-        threadId: selectedThreadId ?? "",
-        branchId: selectedThread?.activeBranchId ?? "",
-      },
-      {
-        enabled: !!selectedThreadId && !!selectedThread?.activeBranchId,
-      },
-    ),
-  );
+  const messagesQuery = useQuery({
+    queryKey: ["messages", selectedThreadId, selectedThread?.activeBranchId],
+    queryFn: () =>
+      rpc.messages.listByBranch(
+        selectedThreadId!,
+        selectedThread!.activeBranchId,
+      ),
+    enabled: !!selectedThreadId && !!selectedThread?.activeBranchId,
+  });
   const messages = (messagesQuery.data ?? []) as Message[];
 
   const handleRefresh = useCallback(() => {
@@ -58,7 +59,7 @@ function TabletLayout() {
 
   const handleSend = useCallback(
     (_content: string) => {
-      // Will be wired to trpc.messages.create mutation in a follow-up task
+      // Will be wired to rpc.agent.chat mutation in a follow-up task
     },
     [],
   );
