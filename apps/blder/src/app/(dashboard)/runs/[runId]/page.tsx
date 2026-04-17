@@ -441,7 +441,7 @@ function DiffTab({ run, useMock }: { run: any; useMock: boolean }) {
   return (
     <div className="rounded-lg border border-border overflow-hidden">
       <pre className="overflow-x-auto p-4 font-mono text-xs leading-relaxed max-h-[700px] overflow-y-auto bg-[#1C1B18] text-[#EEEDEA]">
-        {(rawDiff ?? "").split("\n").map((line, i) => (
+        {(rawDiff ?? "").split("\n").map((line: string, i: number) => (
           <div
             key={i}
             className={cn(
@@ -477,7 +477,7 @@ function ArtifactsTab({ run }: { run: any }) {
         <Card key={artifact.id} className="p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="text-[10px] capitalize">
+              <Badge variant="slate" className="text-[10px] capitalize">
                 {artifact.type}
               </Badge>
               <span className="font-mono text-xs text-muted-foreground">

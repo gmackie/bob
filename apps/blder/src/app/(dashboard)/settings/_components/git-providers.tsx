@@ -43,7 +43,7 @@ function GitHubConnection() {
             </p>
           </div>
         </div>
-        <Badge variant={githubConnection ? "default" : "secondary"}>
+        <Badge variant={githubConnection ? "default" : "slate"}>
           {isLoading ? "..." : githubConnection ? "Connected" : "Sign in to connect"}
         </Badge>
       </div>

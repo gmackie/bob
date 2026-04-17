@@ -30,6 +30,10 @@ export async function POST() {
         })
         .returning();
 
+      if (!record) {
+        throw new Error("Failed to insert device code");
+      }
+
       const baseUrl =
         process.env.NEXT_PUBLIC_SITE_URL ?? "https://blder.bot";
 

@@ -7,7 +7,11 @@ export async function POST(
 ) {
   try {
     const { workspaceId } = await params;
-    const body = await request.json().catch(() => ({}));
+    const body = (await request.json().catch(() => ({}))) as {
+      agentTypes?: unknown;
+      forgeAvailable?: unknown;
+      repos?: unknown;
+    };
     const caller = await createPublicApiCaller(request);
     const result = await caller.publicApi.heartbeat({
       workspaceId,

@@ -160,7 +160,7 @@ export default function RunsPage() {
               {(instances as any[]).map((inst: any) => (
                 <Card key={inst.id} className="p-4">
                   <div className="flex items-center gap-2 mb-1">
-                    <Badge variant={inst.status === "running" ? "default" : "secondary"} className="text-[10px]">
+                    <Badge variant={inst.status === "running" ? "default" : "slate"} className="text-[10px]">
                       {inst.status}
                     </Badge>
                     <span className="text-sm font-medium">{inst.agentType}</span>

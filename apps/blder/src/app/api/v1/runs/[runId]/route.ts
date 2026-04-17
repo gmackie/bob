@@ -22,8 +22,8 @@ export async function PATCH(
   try {
     const { runId } = await params;
     const caller = await createPublicApiCaller(request);
-    const body = await request.json();
-    const result = await caller.publicApi.updateRun({ runId, ...body });
+    const body = (await request.json()) as Record<string, unknown>;
+    const result = await caller.publicApi.updateRun({ runId, ...body } as Parameters<typeof caller.publicApi.updateRun>[0]);
     return NextResponse.json(result);
   } catch (error) {
     return errorResponse(error);
