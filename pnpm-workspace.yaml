@@ -41,6 +41,7 @@ linkWorkspacePackages: true
 
 onlyBuiltDependencies:
   - '@tailwindcss/oxide'
+  - electron
   - esbuild
   - node-pty
   - sqlite3
