@@ -50,6 +50,7 @@
       "react-dom": "19.2.5"
     },
     "onlyBuiltDependencies": [
+      "electron",
       "node-pty",
       "@swc/core"
     ]

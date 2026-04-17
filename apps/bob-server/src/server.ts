@@ -62,6 +62,10 @@ export async function startServer(
         BOB_BUILD_TARGET: "node",
       },
       stdio: ["ignore", "inherit", "inherit"],
+      // Put the child in its own process group so we can signal the whole
+      // tree (pnpm → vinext → etc.) on stop. Without this, pnpm exits but
+      // its grandchildren survive as orphans.
+      detached: process.platform !== "win32",
     },
   );
 
@@ -107,12 +111,12 @@ export async function startServer(
   const stop = async (): Promise<void> => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     if (!child.killed && child.exitCode === null) {
-      child.kill("SIGTERM");
+      killProcessTree(child, "SIGTERM");
       // Hard-kill if still alive after 3s.
       await new Promise<void>((resolve) => {
         const timer = setTimeout(() => {
           if (!child.killed && child.exitCode === null) {
-            child.kill("SIGKILL");
+            killProcessTree(child, "SIGKILL");
           }
           resolve();
         }, 3_000);
@@ -125,6 +129,29 @@ export async function startServer(
   };
 
   return { url, stop };
+}
+
+/**
+ * Signal a child process and — on POSIX — the whole process group rooted at
+ * its pid. We spawn with detached:true so the child becomes its own group
+ * leader; process.kill(-pid, signal) then targets every member. Falls back
+ * to plain child.kill on Windows or if the process-group call fails.
+ */
+function killProcessTree(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (child.pid !== undefined && process.platform !== "win32") {
+    try {
+      process.kill(-child.pid, signal);
+      return;
+    } catch {
+      // Fall through to direct kill if the group signal fails (process may
+      // already be gone, or not actually a group leader on some shells).
+    }
+  }
+  try {
+    child.kill(signal);
+  } catch {
+    // best-effort
+  }
 }
 
 async function findFreePort(): Promise<number> {
