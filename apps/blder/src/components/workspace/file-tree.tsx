@@ -212,7 +212,7 @@ export function FileTree({ rootPath, onFileSelect, className, sessionId }: FileT
   const gitStatusMap = useMemo(() => {
     const map = new Map<string, GitStatusCode>();
     if (gitStatusData) {
-      for (const entry of gitStatusData) {
+      for (const entry of gitStatusData as Array<{ file: string; status: GitStatusCode }>) {
         map.set(entry.file, entry.status);
       }
     }

@@ -115,27 +115,6 @@ export function PlanningSessionClient({
     trpc.planSession.saveArtifact.mutationOptions(),
   );
 
-  // Also check the live session status — if it's stuck at provisioning, retry
-  const shouldStart =
-    !isReadOnly &&
-    !startedRef.current &&
-    workItem.projectId &&
-    (session.status === "provisioning" ||
-      (sessionStatus === "stopped" && session.status !== "stopped"));
-
-  useEffect(() => {
-    if (shouldStart) {
-      startedRef.current = true;
-      startSession.mutate({
-        sessionId: session.id,
-        workspaceId: workItem.workspaceId,
-        projectId: workItem.projectId,
-        projectName: workItem.projectName ?? "Project",
-        workingDirectory: "/",
-      });
-    }
-  }, [shouldStart, session.id, workItem, startSession]);
-
   // Wire up the chat session (same hook as ChatPanel uses)
   const {
     events,
@@ -148,6 +127,27 @@ export function PlanningSessionClient({
     isConnected,
     canSend,
   } = useChatSession({ sessionId: session.id, enabled: true });
+
+  // Also check the live session status — if it's stuck at provisioning, retry
+  const shouldStart =
+    !isReadOnly &&
+    !startedRef.current &&
+    workItem.projectId &&
+    (session.status === "provisioning" ||
+      (sessionStatus === "stopped" && session.status !== "stopped"));
+
+  useEffect(() => {
+    if (shouldStart && workItem.projectId) {
+      startedRef.current = true;
+      startSession.mutate({
+        sessionId: session.id,
+        workspaceId: workItem.workspaceId,
+        projectId: workItem.projectId,
+        projectName: workItem.projectName ?? "Project",
+        workingDirectory: "/",
+      });
+    }
+  }, [shouldStart, session.id, workItem, startSession]);
 
   // Extract artifact content from events whenever they change
   useEffect(() => {

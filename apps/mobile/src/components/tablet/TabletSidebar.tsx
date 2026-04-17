@@ -289,7 +289,6 @@ function ItemsTab({
   const workspacesQuery = useQuery(trpc.workspace.list.queryOptions(undefined, { enabled: Boolean(session) }));
   const primaryWorkspace = (workspacesQuery.data as Array<{ workspace: { id: string; name: string } }> | undefined)?.[0]?.workspace ?? null;
 
-  // @ts-expect-error — tRPC type inference depth exceeded (pre-existing)
   const workItemsQuery = useQuery(trpc.workItem.list.queryOptions(
     { workspaceId: primaryWorkspace?.id ?? "", limit: 30 },
     { enabled: Boolean(primaryWorkspace?.id) },

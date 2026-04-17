@@ -42,7 +42,7 @@ export function SystemStatusPanel() {
       if (!res.ok) {
         throw new Error(`Status ${res.status}`);
       }
-      const json = await res.json();
+      const json = (await res.json()) as SystemStatusResponse;
       setData(json);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");

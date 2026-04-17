@@ -4,7 +4,7 @@ import { createPublicApiCaller, errorResponse } from "~/lib/rest/api-helpers";
 export async function POST(request: Request) {
   try {
     const caller = await createPublicApiCaller(request);
-    const body = await request.json();
+    const body = (await request.json()) as Parameters<typeof caller.publicApi.createRun>[0];
     const result = await caller.publicApi.createRun(body);
     return NextResponse.json(result);
   } catch (error) {

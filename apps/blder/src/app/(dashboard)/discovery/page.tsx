@@ -83,7 +83,7 @@ export default function DiscoveryPage() {
         body: JSON.stringify({ path }),
       });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(body.error ?? `Registration failed (${res.status})`);
       }
       toast("Registered with ForgeGraph");

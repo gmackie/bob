@@ -287,7 +287,9 @@ export async function stopIssueSession(
       .set({
         workflowStatus: "blocked",
         statusMessage: reason,
-        updatedAt: new Date(),
+        // Schema declares updatedAt as timestamp({ mode: "string" }), so pass
+        // an ISO string rather than a Date.
+        updatedAt: new Date().toISOString(),
       })
       .where(eq(chatConversations.id, latestTaskRun.sessionId));
   }

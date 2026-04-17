@@ -26,7 +26,6 @@ function TaskTreeNode({ item, workspaceId, depth }: TaskTreeNodeProps) {
   const [expanded, setExpanded] = useState(false);
   const hasChildren = (item.childCount ?? 0) > 0;
 
-  // @ts-expect-error — tRPC type inference depth exceeded (pre-existing)
   const childrenQuery = useQuery(trpc.workItem.list.queryOptions(
     { workspaceId, parentId: item.id, limit: 50 },
     { enabled: expanded && hasChildren },
@@ -107,14 +106,12 @@ interface TaskTreeProps {
 
 export function TaskTree({ workItemId, workspaceId: providedWsId }: TaskTreeProps) {
   // If workspaceId not provided, fetch the work item to get it
-  // @ts-expect-error — tRPC type inference depth exceeded (pre-existing)
   const itemQuery = useQuery(trpc.workItem.get.queryOptions(
     { id: workItemId },
     { enabled: Boolean(workItemId) && !providedWsId },
   ));
   const workspaceId = providedWsId ?? (itemQuery.data as { workspaceId?: string } | undefined)?.workspaceId;
 
-  // @ts-expect-error — tRPC type inference depth exceeded (pre-existing)
   const childrenQuery = useQuery(trpc.workItem.list.queryOptions(
     { workspaceId: workspaceId ?? "", parentId: workItemId, limit: 50 },
     { enabled: Boolean(workItemId && workspaceId) },

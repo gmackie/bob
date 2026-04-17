@@ -21,7 +21,6 @@ interface WorkItemPaneProps {
 }
 
 export function WorkItemPane({ workItemId, onOpenInspector, onOpenSession }: WorkItemPaneProps) {
-  // @ts-expect-error — tRPC type inference depth exceeded (pre-existing)
   const workItemQuery = useQuery(trpc.workItem.get.queryOptions(
     { id: workItemId },
     { enabled: Boolean(workItemId) },

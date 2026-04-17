@@ -12,7 +12,9 @@ interface SessionEventRecord {
   direction: string;
   eventType: string;
   payload: Record<string, unknown>;
-  createdAt: Date;
+  // tRPC events may arrive pre-serialized (string) or as Date depending on
+  // the route's serializer. Allow both so this hook stays transport-agnostic.
+  createdAt: Date | string;
 }
 
 interface UseSessionEventsOptions {

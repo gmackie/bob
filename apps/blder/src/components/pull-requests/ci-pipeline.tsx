@@ -8,7 +8,7 @@ export interface CiBuild {
   ciProvider: string | null;
   externalJobId: string | null;
   durationMs: number | null;
-  createdAt: Date;
+  createdAt: Date | string;
 }
 
 interface CiPipelineProps {

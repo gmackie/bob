@@ -45,7 +45,9 @@
   "pnpm": {
     "overrides": {
       "@types/pg": "8.16.0",
-      "node-gyp": "^10.0.0"
+      "node-gyp": "^10.0.0",
+      "react": "19.2.5",
+      "react-dom": "19.2.5"
     },
     "onlyBuiltDependencies": [
       "node-pty",

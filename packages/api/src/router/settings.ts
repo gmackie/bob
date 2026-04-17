@@ -5,13 +5,18 @@ import path from "node:path";
 import type { TRPCRouterRecord } from "@trpc/server";
 import { z } from "zod/v4";
 
-import { and, eq, isNull } from "@bob/db";
+import { and, eq, isNull, sql } from "@bob/db";
 import {
   apiKeys,
+  gitProviderConnections,
   UpdateUserPreferencesSchema,
   userPreferences,
 } from "@bob/db/schema";
 
+import {
+  encryptToken,
+  isEncryptionConfigured,
+} from "../services/crypto/tokenVault";
 import { protectedProcedure } from "../trpc";
 
 const CONFIG_ROOT_IDS = [
@@ -382,4 +387,96 @@ export const settingsRouter = {
       await fs.unlink(absPath);
       return { success: true };
     }),
+
+  // ForgeGraph token management (mirrored from settingsEdge for UI parity).
+  getForgeGraphConnection: protectedProcedure.query(async ({ ctx }) => {
+    const connection = await ctx.db.query.gitProviderConnections.findFirst({
+      where: and(
+        eq(gitProviderConnections.userId, ctx.session.user.id),
+        eq(gitProviderConnections.provider, "forgegraph"),
+        isNull(gitProviderConnections.revokedAt),
+      ),
+      columns: {
+        id: true,
+        providerUsername: true,
+        createdAt: true,
+      },
+    });
+
+    return connection ?? null;
+  }),
+
+  connectForgeGraph: protectedProcedure
+    .input(
+      z.object({
+        apiToken: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!isEncryptionConfigured()) {
+        throw new Error(
+          "Token encryption not configured (GIT_TOKEN_ENCRYPTION_KEY)",
+        );
+      }
+
+      const fgServer =
+        process.env.FORGEGRAPH_URL ??
+        process.env.FG_API_URL ??
+        "https://forgegraf.com";
+      const resp = await fetch(`${fgServer}/api/fg/apps`, {
+        headers: { Authorization: `Bearer ${input.apiToken}` },
+      });
+
+      if (!resp.ok) {
+        throw new Error("Invalid ForgeGraph API token");
+      }
+
+      const fgUser = { login: "forgegraph", id: 0 };
+
+      await ctx.db
+        .update(gitProviderConnections)
+        .set({ revokedAt: new Date().toISOString() })
+        .where(
+          and(
+            eq(gitProviderConnections.userId, ctx.session.user.id),
+            eq(gitProviderConnections.provider, "forgegraph"),
+            isNull(gitProviderConnections.revokedAt),
+          ),
+        );
+
+      const connectionId = crypto.randomUUID();
+      const encrypted = encryptToken(input.apiToken, connectionId);
+
+      await ctx.db.insert(gitProviderConnections).values({
+        id: connectionId,
+        userId: ctx.session.user.id,
+        provider: "forgegraph",
+        instanceUrl: fgServer,
+        providerAccountId: String(fgUser.id ?? "unknown"),
+        providerUsername: fgUser.login ?? null,
+        accessTokenCiphertext: encrypted.ciphertext,
+        accessTokenIv: encrypted.iv,
+        accessTokenTag: encrypted.tag,
+        scopes: "api",
+      });
+
+      return {
+        id: connectionId,
+        providerUsername: fgUser.login ?? null,
+      };
+    }),
+
+  disconnectForgeGraph: protectedProcedure.mutation(async ({ ctx }) => {
+    await ctx.db
+      .update(gitProviderConnections)
+      .set({ revokedAt: sql`now()` })
+      .where(
+        and(
+          eq(gitProviderConnections.userId, ctx.session.user.id),
+          eq(gitProviderConnections.provider, "forgegraph"),
+          isNull(gitProviderConnections.revokedAt),
+        ),
+      );
+    return { success: true };
+  }),
 } satisfies TRPCRouterRecord;
