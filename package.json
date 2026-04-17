@@ -1,0 +1,19 @@
+{
+  "name": "gmacko",
+  "private": true,
+  "packageManager": "pnpm@10.12.1",
+  "engines": { "node": ">=24.0.0" },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo watch dev --continue",
+    "dev:web": "turbo watch dev --filter=@gmacko/web",
+    "dev:mobile": "turbo watch dev --filter=@gmacko/mobile",
+    "test": "turbo run test",
+    "lint": "turbo run lint --continue",
+    "typecheck": "turbo run typecheck"
+  },
+  "devDependencies": {
+    "turbo": "^2.8.0",
+    "typescript": "^5.9.0"
+  }
+}
