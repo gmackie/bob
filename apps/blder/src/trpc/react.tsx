@@ -11,7 +11,7 @@ import {
 import { createTRPCContext } from "@trpc/tanstack-react-query";
 import SuperJSON from "superjson";
 
-import type { EdgeRouter } from "~/lib/edge-router";
+import type { AppRouter } from "@bob/api";
 import { createQueryClient } from "./query-client";
 
 let clientQueryClientSingleton: QueryClient | undefined;
@@ -22,12 +22,17 @@ function getQueryClient() {
   return (clientQueryClientSingleton ??= createQueryClient());
 }
 
-export const { TRPCProvider, useTRPC } = createTRPCContext<EdgeRouter>();
+// Type the client against the full AppRouter so UI components compile
+// regardless of which subset the active deploy target mounts. Cloudflare
+// deploys still mount `edgeRouter` at the server layer — calls to excluded
+// routes (git/capture/system/settings-full) 404 there. The Node/Electron
+// target (Phase 2 `apps/bob-server`) will mount the full AppRouter.
+export const { TRPCProvider, useTRPC } = createTRPCContext<AppRouter>();
 
 export function TRPCReactProvider(props: { children: React.ReactNode }) {
   const queryClient = getQueryClient();
   const [trpcClient] = useState(() =>
-    createTRPCClient<EdgeRouter>({
+    createTRPCClient<AppRouter>({
       links: [
         loggerLink({
           enabled: (op) =>
