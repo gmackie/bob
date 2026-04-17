@@ -15,8 +15,20 @@ importers:
         specifier: ^5.9.0
         version: 5.9.3
 
+  packages/models:
+    devDependencies:
+      '@gmacko/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
   packages/ui:
     dependencies:
+      '@gmacko/models':
+        specifier: workspace:*
+        version: link:../models
       class-variance-authority:
         specifier: ^0.7.0
         version: 0.7.1
