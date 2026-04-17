@@ -171,3 +171,83 @@ export async function makePgliteDb(options: PgliteDbOptions = {}): Promise<Pglit
     },
   };
 }
+
+/**
+ * Wrap a PGlite client so every query-surface method awaits `ready` before
+ * delegating. This closes the race window that would otherwise exist between
+ * constructing a synchronous `db` export and finishing the async bootstrap +
+ * applyMigrations pipeline: consumers (tRPC routers imported via
+ * `@bob/db/client`) can fire a query immediately after module evaluation and
+ * the query will transparently wait for bootstrap to complete.
+ *
+ * Only the query/exec/transaction surface is gated. Other properties (e.g.
+ * `waitReady`, `closed`, internal symbols drizzle-orm inspects to determine
+ * the client shape) pass through untouched — gating them would break drizzle
+ * adapter detection.
+ */
+function gateOnReady(client: PGlite, ready: Promise<void>): PGlite {
+  return new Proxy(client, {
+    get(target, prop, receiver) {
+      const original = Reflect.get(target, prop, receiver);
+
+      // Gate only the three async entry points drizzle-orm/pglite uses
+      // to run SQL. Everything else (property access, sync getters,
+      // internal markers) must pass through for drizzle's own driver
+      // detection and for close()/waitReady to behave.
+      if (prop === "query" || prop === "exec" || prop === "transaction") {
+        return async (...args: unknown[]) => {
+          await ready;
+          return (original as (...a: unknown[]) => unknown).apply(
+            target,
+            args,
+          );
+        };
+      }
+
+      return typeof original === "function" ? original.bind(target) : original;
+    },
+  });
+}
+
+/**
+ * Synchronous factory used by the env-dispatched `@bob/db/client`.
+ *
+ * Returns a drizzle instance immediately (no top-level await) backed by a
+ * PGlite client whose query/exec/transaction methods transparently await a
+ * shared `ready` promise. That promise resolves once:
+ *   1. `client.waitReady` resolves (PGlite WASM is initialized)
+ *   2. `bootstrapSchema` has taken an empty DB to the full target schema
+ *   3. `applyMigrations` has applied any forward migrations authored after
+ *      the schema.ts snapshot
+ *
+ * This keeps consumers' `import { db } from "@bob/db/client"` usage fully
+ * synchronous while preventing the "query fires before bootstrap completes"
+ * race — callers can query `db` on the same tick it's imported.
+ */
+export function makePgliteDbSync(
+  options: PgliteDbOptions = {},
+): PgliteDatabase<typeof schema> {
+  const dataDir = options.dataDir ?? DEFAULT_DIR;
+
+  if (dataDir !== ":memory:") {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+
+  const client = new PGlite(dataDir === ":memory:" ? undefined : dataDir);
+
+  const ready = (async () => {
+    await client.waitReady;
+    if (options.bootstrap !== false) {
+      await bootstrapSchema(client);
+      await applyMigrations({ client, log: () => {} });
+    }
+  })();
+
+  // Surface any bootstrap failure rather than leaving it as an unhandled
+  // rejection: every gated call awaits `ready`, but if nothing ever calls
+  // the db this keeps node's unhandled-rejection handler quiet.
+  ready.catch(() => {});
+
+  const gatedClient = gateOnReady(client, ready);
+  return drizzle(gatedClient, { schema });
+}
