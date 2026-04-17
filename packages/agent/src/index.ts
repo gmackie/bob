@@ -1,5 +1,6 @@
 export {
   dispatchAgent,
+  dispatchAgentEffect,
   type DispatchOptions,
   type AgentEvent,
   type TextChunk,

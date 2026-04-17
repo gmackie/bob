@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { Effect } from "effect";
 
 const client = new Anthropic();
 
@@ -52,3 +53,17 @@ export async function* dispatchAgent(
     usage: finalMessage.usage,
   };
 }
+
+export const dispatchAgentEffect = (
+  opts: DispatchOptions,
+): Effect.Effect<string, Error> =>
+  Effect.tryPromise({
+    try: async () => {
+      let content = "";
+      for await (const event of dispatchAgent(opts)) {
+        if (event.type === "done") content = event.content;
+      }
+      return content;
+    },
+    catch: (err) => (err instanceof Error ? err : new Error(String(err))),
+  });

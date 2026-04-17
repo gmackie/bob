@@ -164,6 +164,9 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.52.0
         version: 0.52.0
+      effect:
+        specifier: 4.0.0-beta.43
+        version: 4.0.0-beta.43
     devDependencies:
       '@gmacko/tsconfig':
         specifier: workspace:*
@@ -171,40 +174,6 @@ importers:
       typescript:
         specifier: ^5.9.0
         version: 5.9.3
-
-  packages/api:
-    dependencies:
-      '@gmacko/agent':
-        specifier: workspace:*
-        version: link:../agent
-      '@gmacko/db':
-        specifier: workspace:*
-        version: link:../db
-      '@gmacko/wiki':
-        specifier: workspace:*
-        version: link:../wiki
-      '@trpc/server':
-        specifier: ^11.0.0
-        version: 11.16.0(typescript@5.9.3)
-      superjson:
-        specifier: ^2.2.0
-        version: 2.2.6
-      zod:
-        specifier: ^4.0.0
-        version: 4.3.6
-    devDependencies:
-      '@gmacko/tsconfig':
-        specifier: workspace:*
-        version: link:../../tooling/typescript
-      drizzle-orm:
-        specifier: ^0.44.0
-        version: 0.44.7(postgres@3.4.9)
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
   packages/contracts:
     dependencies:
@@ -295,6 +264,9 @@ importers:
 
   packages/wiki:
     dependencies:
+      effect:
+        specifier: 4.0.0-beta.43
+        version: 4.0.0-beta.43
       gray-matter:
         specifier: ^4.0.0
         version: 4.0.3
@@ -2416,12 +2388,6 @@ packages:
         optional: true
       '@types/react-dom':
         optional: true
-
-  '@trpc/server@11.16.0':
-    resolution: {integrity: sha512-XgGuUMddrUTd04+za/WE5GFuZ1/YU9XQG0t3VL5WOIu2JspkOlq6k4RYEiqS6HSJt+S0RXaPdIoE2anIP/BBRQ==}
-    hasBin: true
-    peerDependencies:
-      typescript: '>=5.7.2'
 
   '@turbo/darwin-64@2.9.6':
     resolution: {integrity: sha512-X/56SnVXIQZBLKwniGTwEQTGmtE5brSACnKMBWpY3YafuxVYefrC2acamfjgxP7BG5w3I+6jf0UrLoSzgPcSJg==}
@@ -7348,10 +7314,6 @@ snapshots:
       react-dom: 19.2.5(react@19.2.5)
     optionalDependencies:
       '@types/react': 19.2.14
-
-  '@trpc/server@11.16.0(typescript@5.9.3)':
-    dependencies:
-      typescript: 5.9.3
 
   '@turbo/darwin-64@2.9.6':
     optional: true

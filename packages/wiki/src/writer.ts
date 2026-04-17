@@ -1,6 +1,7 @@
 import { writeFile, mkdir } from "fs/promises";
 import { join, dirname } from "path";
 import matter from "gray-matter";
+import { Effect } from "effect";
 
 export interface WikiArticle {
   title: string;
@@ -38,3 +39,12 @@ export async function writeArticle(
   await writeFile(filePath, output, "utf-8");
   return filePath;
 }
+
+export const writeArticleEffect = (
+  vaultPath: string,
+  article: WikiArticle,
+): Effect.Effect<string, Error> =>
+  Effect.tryPromise({
+    try: () => writeArticle(vaultPath, article),
+    catch: (err) => (err instanceof Error ? err : new Error(String(err))),
+  });

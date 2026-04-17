@@ -1,6 +1,7 @@
 import { readdir, readFile } from "fs/promises";
 import { join } from "path";
 import matter from "gray-matter";
+import { Effect } from "effect";
 
 export interface WikiIndex {
   slug: string;
@@ -34,3 +35,15 @@ export function findOrphanedArticles(index: WikiIndex[]): string[] {
   const allLinkedSlugs = new Set(index.flatMap((a) => a.outboundLinks));
   return index.filter((a) => !allLinkedSlugs.has(a.slug)).map((a) => a.slug);
 }
+
+export const buildIndexEffect = (
+  vaultPath: string,
+): Effect.Effect<WikiIndex[], Error> =>
+  Effect.tryPromise({
+    try: () => buildIndex(vaultPath),
+    catch: (err) => (err instanceof Error ? err : new Error(String(err))),
+  });
+
+export const findOrphanedArticlesEffect = (
+  index: WikiIndex[],
+): Effect.Effect<string[], never> => Effect.succeed(findOrphanedArticles(index));
