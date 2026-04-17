@@ -1,0 +1,25 @@
+{
+  "name": "@gmacko/server",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@gmacko/contracts": "workspace:*",
+    "@gmacko/db": "workspace:*",
+    "@gmacko/agent": "workspace:*",
+    "@gmacko/wiki": "workspace:*",
+    "drizzle-orm": "^0.44.0",
+    "effect": "4.0.0-beta.43",
+    "@effect/platform-node": "4.0.0-beta.43"
+  },
+  "devDependencies": {
+    "@gmacko/tsconfig": "workspace:*",
+    "tsx": "^4.0.0",
+    "typescript": "^5.9.0"
+  }
+}

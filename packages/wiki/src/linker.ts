@@ -18,7 +18,7 @@ export async function buildIndex(vaultPath: string): Promise<WikiIndex[]> {
     if (!file.endsWith(".md")) continue;
     const content = await readFile(join(wikiDir, file), "utf-8");
     const { data, content: body } = matter(content);
-    const links = [...body.matchAll(/\[\[([^\]]+)\]\]/g)].map((m) => m[1]);
+    const links = [...body.matchAll(/\[\[([^\]]+)\]\]/g)].map((m) => m[1]!).filter(Boolean);
     index.push({
       slug: file.replace(".md", ""),
       title: (data.title as string) ?? file.replace(".md", ""),
