@@ -9,6 +9,7 @@ import { RpcHandlerLayer } from "./rpc-handler.js";
 import { DatabaseServiceLive } from "./services/database.js";
 import { AgentServiceLive } from "./services/agent.js";
 import { WikiServiceLive } from "./services/wiki.js";
+import { ExplorerServiceLive } from "./services/explorer.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -16,11 +17,13 @@ const PORT = Number(process.env.PORT ?? 3001);
 const RpcServerLayer = RpcServer.layerHttp({
   group: GmackoRpcGroup,
   path: "/rpc",
+  protocol: "http",
 }).pipe(
   Layer.provide(RpcHandlerLayer),
   Layer.provide(DatabaseServiceLive),
   Layer.provide(AgentServiceLive),
   Layer.provide(WikiServiceLive),
+  Layer.provide(Layer.provide(ExplorerServiceLive, Layer.merge(AgentServiceLive, WikiServiceLive))),
   Layer.provide(RpcSerialization.layerJson),
 );
 

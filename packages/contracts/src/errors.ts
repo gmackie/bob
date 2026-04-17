@@ -19,3 +19,8 @@ export class WikiError extends Schema.TaggedErrorClass()(
   "WikiError",
   { message: Schema.String },
 ) {}
+
+export class ExplorationError extends Schema.TaggedErrorClass()(
+  "ExplorationError",
+  { message: Schema.String },
+) {}

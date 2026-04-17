@@ -4,7 +4,8 @@ import { Thread, CreateThreadInput, UpdateThreadStatusInput } from "./schemas/th
 import { Branch, CreateBranchInput, SetActiveBranchInput } from "./schemas/branch";
 import { Message, CreateMessageInput, ChatInput } from "./schemas/message";
 import { WikiArticle, SynthesizeInput, SynthesizeResult } from "./schemas/wiki";
-import { ThreadNotFoundError, BranchNotFoundError, AgentError, WikiError } from "./errors";
+import { StartExplorationInput, RespondToCheckInInput, ExplorationSummary } from "./schemas/exploration";
+import { ThreadNotFoundError, BranchNotFoundError, AgentError, WikiError, ExplorationError } from "./errors";
 
 export const METHODS = {
   // Threads
@@ -25,6 +26,11 @@ export const METHODS = {
   wikiSynthesize: "wiki.synthesize",
   wikiList: "wiki.list",
   wikiOrphans: "wiki.orphans",
+  // Exploration
+  explorationStart: "exploration.start",
+  explorationRespond: "exploration.respond",
+  explorationStatus: "exploration.status",
+  explorationList: "exploration.list",
 } as const;
 
 // --- Thread RPCs ---
@@ -101,6 +107,30 @@ export const WikiOrphansRpc = Rpc.make(METHODS.wikiOrphans, {
   success: Schema.Array(Schema.String),
 });
 
+// --- Exploration RPCs ---
+export const ExplorationStartRpc = Rpc.make(METHODS.explorationStart, {
+  payload: StartExplorationInput,
+  success: ExplorationSummary,
+  error: ExplorationError,
+});
+
+export const ExplorationRespondRpc = Rpc.make(METHODS.explorationRespond, {
+  payload: RespondToCheckInInput,
+  success: ExplorationSummary,
+  error: ExplorationError,
+});
+
+export const ExplorationStatusRpc = Rpc.make(METHODS.explorationStatus, {
+  payload: Schema.Struct({ explorationId: Schema.String.check(Schema.isUUID()) }),
+  success: ExplorationSummary,
+  error: ExplorationError,
+});
+
+export const ExplorationListRpc = Rpc.make(METHODS.explorationList, {
+  payload: Schema.Struct({}),
+  success: Schema.Array(ExplorationSummary),
+});
+
 // --- RPC Group ---
 export const GmackoRpcGroup = RpcGroup.make(
   ThreadsListRpc,
@@ -116,4 +146,8 @@ export const GmackoRpcGroup = RpcGroup.make(
   WikiSynthesizeRpc,
   WikiListRpc,
   WikiOrphansRpc,
+  ExplorationStartRpc,
+  ExplorationRespondRpc,
+  ExplorationStatusRpc,
+  ExplorationListRpc,
 );

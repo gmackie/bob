@@ -1,13 +1,15 @@
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import {
   GmackoRpcGroup,
   ThreadNotFoundError,
   AgentError,
   WikiError,
+  ExplorationError,
 } from "@gmacko/contracts";
 import { DatabaseService } from "./services/database.js";
 import { AgentService } from "./services/agent.js";
 import { WikiService } from "./services/wiki.js";
+import { ExplorerService } from "./services/explorer.js";
 
 /** Promote unexpected Error to a defect (die) so it doesn't pollute the error channel. */
 const orDie = <A>(effect: Effect.Effect<A, Error>) =>
@@ -18,6 +20,7 @@ export const RpcHandlerLayer = GmackoRpcGroup.toLayer(
     const database = yield* DatabaseService;
     const agent = yield* AgentService;
     const wiki = yield* WikiService;
+    const explorer = yield* ExplorerService;
 
     return GmackoRpcGroup.of({
       "threads.list": () =>
@@ -320,6 +323,37 @@ export const RpcHandlerLayer = GmackoRpcGroup.toLayer(
             return [...orphans];
           }),
         ),
+
+      "exploration.start": (payload) =>
+        Effect.mapError(
+          explorer.start({
+            threadId: payload.threadId,
+            branchId: payload.branchId,
+            topic: payload.topic,
+            maxDepth: payload.maxDepth,
+          }),
+          (error) => new ExplorationError({ message: String(error) }),
+        ),
+
+      "exploration.respond": (payload) =>
+        Effect.mapError(
+          explorer.respond({
+            explorationId: payload.explorationId,
+            checkInId: payload.checkInId,
+            direction: payload.direction,
+            redirectTopic: payload.redirectTopic ?? Option.none(),
+          }),
+          (error) => new ExplorationError({ message: String(error) }),
+        ),
+
+      "exploration.status": (payload) =>
+        Effect.mapError(
+          explorer.getStatus(payload.explorationId),
+          (error) => new ExplorationError({ message: String(error) }),
+        ),
+
+      "exploration.list": () =>
+        orDie(explorer.list()),
     });
   }),
 );
