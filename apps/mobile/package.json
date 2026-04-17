@@ -1,0 +1,25 @@
+{
+  "name": "@gmacko/mobile",
+  "private": true,
+  "version": "0.0.0",
+  "main": "expo-router/entry",
+  "scripts": {
+    "dev": "expo start",
+    "build:ios": "eas build --platform ios",
+    "build:android": "eas build --platform android"
+  },
+  "dependencies": {
+    "@gmacko/models": "workspace:*",
+    "expo": "~53.0.0",
+    "expo-router": "~5.0.0",
+    "expo-status-bar": "~2.2.0",
+    "react": "^19.0.0",
+    "react-native": "~0.79.0",
+    "react-native-safe-area-context": "~5.4.0",
+    "react-native-screens": "~4.11.0"
+  },
+  "devDependencies": {
+    "@gmacko/tsconfig": "workspace:*",
+    "typescript": "^5.9.0"
+  }
+}

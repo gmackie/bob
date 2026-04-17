@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "Gmacko",
+    "slug": "gmacko",
+    "version": "0.0.1",
+    "scheme": "gmacko",
+    "platforms": ["ios", "android"],
+    "ios": { "bundleIdentifier": "io.gmac.gmacko" },
+    "android": { "package": "io.gmac.gmacko" },
+    "plugins": ["expo-router"]
+  }
+}

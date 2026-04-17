@@ -1,0 +1,12 @@
+{
+  "extends": "../../tooling/typescript/tsconfig.base.json",
+  "include": ["app", "**/*.ts", "**/*.tsx"],
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "paths": {
+      "@/*": ["./*"]
+    }
+  }
+}
