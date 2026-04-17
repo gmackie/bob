@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@gmacko/agent": "workspace:*",
     "@gmacko/db": "workspace:*",
     "@trpc/server": "^11.0.0",
     "superjson": "^2.2.0",

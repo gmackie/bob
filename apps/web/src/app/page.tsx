@@ -64,9 +64,10 @@ export default function Home() {
     }),
   );
 
-  const sendMessage = useMutation(
-    trpc.messages.create.mutationOptions({
+  const agentChat = useMutation(
+    trpc.agent.chat.mutationOptions({
       onSuccess: () => {
+        setLocalMessages([]);
         queryClient.invalidateQueries({
           queryKey: [["messages", "listByBranch"]],
         });
@@ -76,8 +77,12 @@ export default function Home() {
 
   // --- Derived state -------------------------------------------------
   const apiAvailable = !threadsQuery.isError;
+  const apiMessages = messagesQuery.data ?? [];
+  // Merge API messages with optimistic local messages (dedup by id)
+  const apiMessageIds = new Set(apiMessages.map((m) => m.id));
+  const pendingLocal = localMessages.filter((m) => !apiMessageIds.has(m.id));
   const messages = apiAvailable
-    ? (messagesQuery.data ?? [])
+    ? [...apiMessages, ...pendingLocal]
     : localMessages;
 
   const branches = branchesQuery.data ?? [];
@@ -99,11 +104,21 @@ export default function Home() {
   // --- Handlers ------------------------------------------------------
   const handleSend = (content: string) => {
     if (apiAvailable && activeThreadId && activeBranchId !== "main") {
-      sendMessage.mutate({
+      // Optimistically add user message to the list
+      const optimisticMsg: Message = {
+        id: crypto.randomUUID(),
         threadId: activeThreadId,
         branchId: activeBranchId,
         parentId: (messages as Message[]).at(-1)?.id ?? null,
         role: "user",
+        content,
+        createdAt: new Date(),
+      };
+      setLocalMessages((prev) => [...prev, optimisticMsg]);
+
+      agentChat.mutate({
+        threadId: activeThreadId,
+        branchId: activeBranchId,
         content,
       });
     } else {
