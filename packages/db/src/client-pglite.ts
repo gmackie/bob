@@ -243,10 +243,34 @@ export function makePgliteDbSync(
     }
   })();
 
-  // Surface any bootstrap failure rather than leaving it as an unhandled
-  // rejection: every gated call awaits `ready`, but if nothing ever calls
-  // the db this keeps node's unhandled-rejection handler quiet.
-  ready.catch(() => {});
+  // Surface any bootstrap failure: every gated call still awaits `ready` and
+  // will reject with the underlying error, but if nothing ever calls the db
+  // we still want the root cause visible in logs rather than silenced.
+  ready.catch((err: unknown) => {
+    // eslint-disable-next-line no-console
+    console.error("[@bob/db] PGlite bootstrap failed:", err);
+  });
+
+  // Register a shutdown hook so persistent PGlite instances flush cleanly
+  // when the host process exits. In-memory dbs are a no-op to close but the
+  // hook is harmless. Handles both graceful exit (`beforeExit`) and signal
+  // termination (SIGINT/SIGTERM — relevant for Electron-spawned bob-server).
+  let closed = false;
+  const shutdown = async () => {
+    if (closed) return;
+    closed = true;
+    try {
+      await client.close();
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("[@bob/db] PGlite close failed:", err);
+    }
+  };
+  if (typeof process !== "undefined" && typeof process.once === "function") {
+    process.once("beforeExit", shutdown);
+    process.once("SIGINT", shutdown);
+    process.once("SIGTERM", shutdown);
+  }
 
   const gatedClient = gateOnReady(client, ready);
   return drizzle(gatedClient, { schema });
