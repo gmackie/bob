@@ -157,11 +157,16 @@ function spawnDaemon(serverUrl: string, token: string): void {
     return;
   }
 
-  // The Go CLI reads config from ~/.config/bob/config.yaml — it does not yet
-  // accept --server-url / --auth-token flags. We still pass BOB_SERVER_URL /
-  // BOB_AUTH_TOKEN through the env so a future daemon build can pick them up
-  // without touching Electron. For now the daemon will start but will not
-  // usefully contact the local bob-server until the Go CLI grows flag support.
+  // The Go CLI (github.com/blder/bob) honors BOB_SERVER_URL / BOB_AUTH_TOKEN /
+  // BOB_GATEWAY_URL env vars at runtime (internal/config/config.go), so we can
+  // point the bundled daemon at Electron's local bob-server without touching
+  // ~/.config/bob/config.yaml on disk.
+  //
+  // Derive a ws:// gateway URL from the http:// server URL. In Phase 2's
+  // proxy-through-bob-server model the WS endpoint is served by the same
+  // host/port; the spawned bob-server's HTTP server upgrades WS requests
+  // that match the session-relay path. A cleaner split lands in Phase 3.
+  const wsUrl = serverUrl.replace(/^http(s?):\/\//, "ws$1://") + "/sessions";
   const child = spawn(binPath, ["daemon", "start"], {
     cwd: APP_ROOT,
     stdio: ["ignore", "pipe", "pipe"],
@@ -169,6 +174,7 @@ function spawnDaemon(serverUrl: string, token: string): void {
       ...process.env,
       BOB_SERVER_URL: serverUrl,
       BOB_AUTH_TOKEN: token,
+      BOB_GATEWAY_URL: wsUrl,
     },
   });
   daemonChild = child;
