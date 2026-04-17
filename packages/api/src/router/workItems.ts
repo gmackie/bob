@@ -39,6 +39,17 @@ import {
   protectedProcedure,
 } from "../trpc";
 
+/**
+ * Union of the procedure builders that the factories below accept. Keeping
+ * the concrete `typeof` union (rather than `any`) preserves the query/mutation
+ * discriminator so tRPC client inference sees `.query()` vs `.mutation()`
+ * correctly.
+ */
+type WorkItemProcedureBuilder =
+  | typeof protectedProcedure
+  | typeof apiKeyReadProcedure
+  | typeof apiKeyWriteProcedure;
+
 async function assertWorkspaceAccess(db: any, userId: string, workspaceId: string) {
   const membership = await db.query.workspaceMembers.findFirst({
     where: and(
@@ -149,8 +160,10 @@ function formatWorkItemIdentifier(input: {
   return input.projectKey ? `${input.projectKey}-${suffix}` : `TASK-${suffix}`;
 }
 
-const buildListWorkItemsProcedure = (procedure: any) =>
-  procedure.input(listWorkItemsInputSchema).query(async ({ ctx, input }: any) => {
+const buildListWorkItemsProcedure = <T extends WorkItemProcedureBuilder>(
+  procedure: T,
+) =>
+  procedure.input(listWorkItemsInputSchema).query(async ({ ctx, input }) => {
     await assertWorkspaceAccess(ctx.db, ctx.session.user.id, input.workspaceId);
 
     // ── Local DB path ─────────────────────────────────────────────────
@@ -206,8 +219,10 @@ function parseIdentifier(id: string): { projectKey: string; sequenceNumber: numb
   return { projectKey: match[1]!.toUpperCase(), sequenceNumber: parseInt(match[2]!, 10) };
 }
 
-const buildGetWorkItemProcedure = (procedure: any) =>
-  procedure.input(getWorkItemInputSchema).query(async ({ ctx, input }: any) => {
+const buildGetWorkItemProcedure = <T extends WorkItemProcedureBuilder>(
+  procedure: T,
+) =>
+  procedure.input(getWorkItemInputSchema).query(async ({ ctx, input }) => {
     // ── Local DB path ─────────────────────────────────────────────────
     // Try UUID lookup first
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.id);
@@ -274,8 +289,10 @@ const buildGetWorkItemProcedure = (procedure: any) =>
     };
   });
 
-const buildListCommentsProcedure = (procedure: any) =>
-  procedure.input(listCommentsInputSchema).query(async ({ ctx, input }: any) => {
+const buildListCommentsProcedure = <T extends WorkItemProcedureBuilder>(
+  procedure: T,
+) =>
+  procedure.input(listCommentsInputSchema).query(async ({ ctx, input }) => {
     await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
 
     return ctx.db.query.comments.findMany({
@@ -284,8 +301,10 @@ const buildListCommentsProcedure = (procedure: any) =>
     });
   });
 
-const buildCreateCommentProcedure = (procedure: any) =>
-  procedure.input(createCommentInputSchema).mutation(async ({ ctx, input }: any) => {
+const buildCreateCommentProcedure = <T extends WorkItemProcedureBuilder>(
+  procedure: T,
+) =>
+  procedure.input(createCommentInputSchema).mutation(async ({ ctx, input }) => {
     await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
 
     const [comment] = await ctx.db
@@ -312,8 +331,10 @@ const buildCreateCommentProcedure = (procedure: any) =>
     return comment;
   });
 
-const buildCreateArtifactProcedure = (procedure: any) =>
-  procedure.input(createArtifactInputSchema).mutation(async ({ ctx, input }: any) => {
+const buildCreateArtifactProcedure = <T extends WorkItemProcedureBuilder>(
+  procedure: T,
+) =>
+  procedure.input(createArtifactInputSchema).mutation(async ({ ctx, input }) => {
     await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
 
     const existingArtifacts: any[] = await ctx.db.query.workItemArtifacts.findMany({
@@ -352,13 +373,18 @@ const buildCreateArtifactProcedure = (procedure: any) =>
         .returning();
     }
 
+    // The zod schema in @bob/work-items and the DB enum in @bob/db diverge on
+    // producerType values ("session"/"task_run"/"integration"/"manual" vs
+    // "bob"/"forgegraph"/"human"/"system"). That mismatch predates this change;
+    // cast through `any` to preserve the previous runtime behavior until the
+    // schemas are reconciled.
     const [artifact] = await ctx.db
       .insert(workItemArtifacts)
       .values({
         workItemId: input.workItemId,
         taskRunId: input.taskRunId ?? null,
         sessionId: input.sessionId ?? null,
-        producerType: input.producerType,
+        producerType: input.producerType as any,
         producerId: input.producerId ?? null,
         artifactType: input.artifactType,
         artifactRole: input.artifactRole,
@@ -374,8 +400,10 @@ const buildCreateArtifactProcedure = (procedure: any) =>
     return artifact;
   });
 
-const buildPromoteToTaskProcedure = (procedure: any) =>
-  procedure.input(promoteToTaskInputSchema).mutation(async ({ ctx, input }: any) => {
+const buildPromoteToTaskProcedure = <T extends WorkItemProcedureBuilder>(
+  procedure: T,
+) =>
+  procedure.input(promoteToTaskInputSchema).mutation(async ({ ctx, input }) => {
     const existing = await loadAccessibleWorkItem(
       ctx.db,
       ctx.session.user.id,
@@ -416,8 +444,10 @@ const buildPromoteToTaskProcedure = (procedure: any) =>
     return workItem ?? existing;
   });
 
-const buildUpdateWorkItemProcedure = (procedure: any) =>
-  procedure.input(updateWorkItemInputSchema).mutation(async ({ ctx, input }: any) => {
+const buildUpdateWorkItemProcedure = <T extends WorkItemProcedureBuilder>(
+  procedure: T,
+) =>
+  procedure.input(updateWorkItemInputSchema).mutation(async ({ ctx, input }) => {
     const existing = await loadAccessibleWorkItem(
       ctx.db,
       ctx.session.user.id,
@@ -474,7 +504,7 @@ const buildUpdateWorkItemProcedure = (procedure: any) =>
         changedFields.map((change) => ({
           workItemId: input.id,
           userId: ctx.session.user.id,
-          type: "status_changed",
+          type: "status_changed" as const,
           fromValue: change.previousValue,
           toValue: change.nextValue,
           metadata: { field: change.field },
@@ -485,8 +515,10 @@ const buildUpdateWorkItemProcedure = (procedure: any) =>
     return nextWorkItem;
   });
 
-const buildListActivitiesProcedure = (procedure: any) =>
-  procedure.input(listActivitiesInputSchema).query(async ({ ctx, input }: any) => {
+const buildListActivitiesProcedure = <T extends WorkItemProcedureBuilder>(
+  procedure: T,
+) =>
+  procedure.input(listActivitiesInputSchema).query(async ({ ctx, input }) => {
     await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
 
     // ── Local DB path ─────────────────────────────────────────────────
@@ -497,10 +529,12 @@ const buildListActivitiesProcedure = (procedure: any) =>
     });
   });
 
-const buildListCurrentArtifactsProcedure = (procedure: any) =>
+const buildListCurrentArtifactsProcedure = <T extends WorkItemProcedureBuilder>(
+  procedure: T,
+) =>
   procedure
     .input(listCurrentArtifactsInputSchema)
-    .query(async ({ ctx, input }: any) => {
+    .query(async ({ ctx, input }) => {
     await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
 
     // ── Local DB path ─────────────────────────────────────────────────
@@ -513,10 +547,14 @@ const buildListCurrentArtifactsProcedure = (procedure: any) =>
     });
   });
 
-const buildListChildArtifactGroupsProcedure = (procedure: any) =>
+const buildListChildArtifactGroupsProcedure = <
+  T extends WorkItemProcedureBuilder,
+>(
+  procedure: T,
+) =>
   procedure
     .input(listChildArtifactGroupsInputSchema)
-    .query(async ({ ctx, input }: any) => {
+    .query(async ({ ctx, input }) => {
     await loadAccessibleWorkItem(
       ctx.db,
       ctx.session.user.id,
@@ -549,10 +587,12 @@ const buildListChildArtifactGroupsProcedure = (procedure: any) =>
       return groups.filter((group: any) => group.artifacts.length > 0);
     });
 
-const buildListNotificationsProcedure = (procedure: any) =>
+const buildListNotificationsProcedure = <T extends WorkItemProcedureBuilder>(
+  procedure: T,
+) =>
   procedure
     .input(listNotificationsInputSchema)
-    .query(async ({ ctx, input }: any) => {
+    .query(async ({ ctx, input }) => {
     const filters = [
       eq(notifications.userId, ctx.session.user.id),
       isNull(notifications.archivedAt),
@@ -571,10 +611,12 @@ const buildListNotificationsProcedure = (procedure: any) =>
       return { items };
     });
 
-const buildCreateNotificationProcedure = (procedure: any) =>
+const buildCreateNotificationProcedure = <T extends WorkItemProcedureBuilder>(
+  procedure: T,
+) =>
   procedure
     .input(createNotificationInputSchema)
-    .mutation(async ({ ctx, input }: any) => {
+    .mutation(async ({ ctx, input }) => {
     const [notification] = await ctx.db
       .insert(notifications)
       .values({
@@ -591,10 +633,14 @@ const buildCreateNotificationProcedure = (procedure: any) =>
       return notification;
     });
 
-const buildMarkNotificationAsReadProcedure = (procedure: any) =>
+const buildMarkNotificationAsReadProcedure = <
+  T extends WorkItemProcedureBuilder,
+>(
+  procedure: T,
+) =>
   procedure
     .input(markNotificationAsReadInputSchema)
-    .mutation(async ({ ctx, input }: any) => {
+    .mutation(async ({ ctx, input }) => {
     const [notification] = await ctx.db
       .update(notifications)
       .set({

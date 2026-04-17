@@ -52,16 +52,9 @@ export function useLiveActivity({
     refetchInterval: useWorkspace ? interval : false,
   });
 
-  // Work-item-level query (listByWorkItem).
-  // Note: `listByWorkItem` is declared via a shared procedure factory typed as
-  // `(procedure: any) => …` in packages/api, which erases the .query()
-  // discriminator and causes tRPC client inference to widen to a mutation
-  // procedure shape. The underlying procedure IS a query (see
-  // `buildListActivitiesProcedure` in `packages/api/src/router/workItems.ts`),
-  // so we widen to `any` at the call site until the factory is retyped.
+  // Work-item-level query (listByWorkItem)
   const workItemQuery = useQuery({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ...(trpc.activity.listByWorkItem as any).queryOptions({
+    ...trpc.activity.listByWorkItem.queryOptions({
       workItemId: workItemId ?? "",
       limit,
     }),
@@ -81,12 +74,7 @@ export function useLiveActivity({
   const lastSeen = lastSeenRef.current;
 
   const workspaceActivities = workspaceQuery.data ?? [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const workItemActivities: readonly { createdAt: Date | string }[] =
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ((workItemQuery.data as any) ?? []) as readonly {
-      createdAt: Date | string;
-    }[];
+  const workItemActivities = workItemQuery.data ?? [];
 
   return {
     /** Activities from the active query (workspace or work-item scoped). */
