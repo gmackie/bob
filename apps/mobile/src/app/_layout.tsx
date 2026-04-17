@@ -1,7 +1,8 @@
 import { Platform, View } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "~/utils/api";
 
 import "../styles.css";
 
@@ -14,8 +15,6 @@ if (Platform.OS === "ios") {
 }
 
 const isTablet = Platform.OS === "ios" && Platform.isPad;
-
-const queryClient = new QueryClient();
 
 const stackScreenOptions = {
   headerShown: false,

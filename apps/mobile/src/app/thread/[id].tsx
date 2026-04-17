@@ -1,7 +1,9 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Text, FlatList, TextInput, View, KeyboardAvoidingView, Platform } from "react-native";
 import { useLocalSearchParams } from "expo-router";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import type { Message } from "@gmacko/models";
+import { trpc, queryClient } from "~/utils/api";
 import { Screen } from "~/components/ui/Screen";
 import { Button } from "~/components/ui/Button";
 import { Badge } from "~/components/ui/Badge";
@@ -9,25 +11,66 @@ import { colors } from "~/lib/colors";
 
 export default function ThreadDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [localMessages, setLocalMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const flatListRef = useRef<FlatList>(null);
 
-  const handleSend = () => {
-    if (!input.trim()) return;
-    const msg: Message = {
-      id: crypto.randomUUID(),
+  // Load thread to get activeBranchId
+  const threadQuery = useQuery(trpc.threads.byId.queryOptions({ id: id! }));
+  const branchId = threadQuery.data?.activeBranchId;
+
+  // Load messages from API when we have a branchId
+  const messagesQuery = useQuery({
+    ...trpc.messages.listByBranch.queryOptions({
       threadId: id!,
-      branchId: "main",
-      parentId: messages.at(-1)?.id ?? null,
-      role: "user",
-      content: input.trim(),
-      createdAt: new Date(),
-    };
-    setMessages((prev) => [...prev, msg]);
+      branchId: branchId!,
+    }),
+    enabled: !!branchId,
+  });
+
+  // Use API messages if available, otherwise fall back to local state
+  const messages = messagesQuery.data ?? localMessages;
+
+  // Send message via agent.chat mutation
+  const chatMutation = useMutation(trpc.agent.chat.mutationOptions({
+    onSuccess: () => {
+      // Refetch messages after successful chat
+      if (branchId) {
+        void queryClient.invalidateQueries({
+          queryKey: [["messages", "listByBranch"]],
+        });
+      }
+    },
+  }));
+
+  const handleSend = useCallback(() => {
+    if (!input.trim()) return;
+    const content = input.trim();
     setInput("");
+
+    // If we have a live API connection, use the mutation
+    if (branchId && !messagesQuery.isError) {
+      chatMutation.mutate({
+        threadId: id!,
+        branchId,
+        content,
+      });
+    } else {
+      // Fallback: local-only message
+      const msg: Message = {
+        id: crypto.randomUUID(),
+        threadId: id!,
+        branchId: "main",
+        parentId: localMessages.at(-1)?.id ?? null,
+        role: "user",
+        content,
+        createdAt: new Date(),
+      };
+      setLocalMessages((prev) => [...prev, msg]);
+    }
+
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-  };
+  }, [input, id, branchId, messagesQuery.isError, chatMutation, localMessages]);
 
   return (
     <KeyboardAvoidingView
@@ -39,9 +82,9 @@ export default function ThreadDetail() {
         {/* Header */}
         <View className="px-5 py-3 border-b border-border flex-row items-center">
           <Text className="text-lg font-semibold flex-1" style={{ color: colors.foreground }}>
-            Thread
+            {threadQuery.data?.title ?? "Thread"}
           </Text>
-          <Badge variant="accent">main</Badge>
+          <Badge variant="accent">{branchId ? "live" : "offline"}</Badge>
         </View>
 
         {/* Messages */}
@@ -96,9 +139,9 @@ export default function ThreadDetail() {
           <Button
             onPress={handleSend}
             size="sm"
-            disabled={!input.trim()}
+            disabled={!input.trim() || chatMutation.isPending}
           >
-            Send
+            {chatMutation.isPending ? "..." : "Send"}
           </Button>
         </View>
       </View>

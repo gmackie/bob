@@ -17,15 +17,27 @@ importers:
 
   apps/mobile:
     dependencies:
+      '@gmacko/api':
+        specifier: workspace:*
+        version: link:../../packages/api
       '@gmacko/models':
         specifier: workspace:*
         version: link:../../packages/models
       '@tanstack/react-query':
         specifier: ^5.91.0
         version: 5.99.0(react@19.2.5)
+      '@trpc/client':
+        specifier: ^11.0.0
+        version: 11.16.0(@trpc/server@11.16.0(typescript@5.9.3))(typescript@5.9.3)
+      '@trpc/tanstack-react-query':
+        specifier: ^11.0.0
+        version: 11.16.0(@tanstack/react-query@5.99.0(react@19.2.5))(@trpc/client@11.16.0(@trpc/server@11.16.0(typescript@5.9.3))(typescript@5.9.3))(@trpc/server@11.16.0(typescript@5.9.3))(react@19.2.5)(typescript@5.9.3)
       expo:
         specifier: ~55.0.11
         version: 55.0.15(@babel/core@7.29.0)(@expo/dom-webview@55.0.5)(@expo/metro-runtime@5.0.4(react-native@0.84.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5)))(expo-router@55.0.12)(react-dom@19.2.5(react@19.2.5))(react-native@0.84.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5))(react@19.2.5)(typescript@5.9.3)
+      expo-constants:
+        specifier: ~55.0.13
+        version: 55.0.14(expo@55.0.15)(react-native@0.84.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5))(typescript@5.9.3)
       expo-router:
         specifier: ~55.0.10
         version: 55.0.12(@expo/log-box@55.0.10)(@expo/metro-runtime@5.0.4(react-native@0.84.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5)))(@types/react@19.2.14)(expo-constants@55.0.14)(expo-font@55.0.6)(expo-linking@55.0.13)(expo@55.0.15)(react-dom@19.2.5(react@19.2.5))(react-native-safe-area-context@5.7.0(react-native@0.84.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5))(react@19.2.5))(react-native-screens@4.24.0(react-native@0.84.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5))(react@19.2.5))(react-native@0.84.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5))(react@19.2.5)
@@ -62,6 +74,9 @@ importers:
       react-native-screens:
         specifier: ~4.24.0
         version: 4.24.0(react-native@0.84.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5))(react@19.2.5)
+      superjson:
+        specifier: ^2.2.0
+        version: 2.2.6
     devDependencies:
       '@gmacko/tsconfig':
         specifier: workspace:*
@@ -155,6 +170,9 @@ importers:
       '@gmacko/db':
         specifier: workspace:*
         version: link:../db
+      '@gmacko/wiki':
+        specifier: workspace:*
+        version: link:../wiki
       '@trpc/server':
         specifier: ^11.0.0
         version: 11.16.0(typescript@5.9.3)
