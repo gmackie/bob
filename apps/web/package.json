@@ -1,0 +1,25 @@
+{
+  "name": "@gmacko/web",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@gmacko/models": "workspace:*",
+    "@gmacko/ui": "workspace:*",
+    "next": "^16.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@gmacko/tailwind": "workspace:*",
+    "@gmacko/tsconfig": "workspace:*",
+    "@tailwindcss/postcss": "^4.2.0",
+    "@types/node": "25.6.0",
+    "@types/react": "19.2.14",
+    "typescript": "^5.9.0"
+  }
+}
