@@ -111,6 +111,59 @@ async function rpcCall<T>(method: string, payload: unknown = {}): Promise<T> {
 /* Typed RPC client                                                    */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/* SSE streaming client for agent chat                                 */
+/* ------------------------------------------------------------------ */
+
+const STREAM_URL =
+  typeof window !== "undefined"
+    ? "/api/chat/stream"
+    : "http://localhost:3001/api/chat/stream";
+
+export async function streamChat(
+  input: { threadId: string; branchId: string; content: string },
+  onToken: (text: string) => void,
+  onDone: (messageId: string) => void,
+) {
+  const res = await fetch(STREAM_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Stream request failed: ${res.status}`);
+  }
+
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n\n");
+    buffer = lines.pop()!;
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      try {
+        const data = JSON.parse(line.slice(6));
+        if (data.type === "token") onToken(data.text);
+        if (data.type === "done") onDone(data.messageId);
+        if (data.type === "error") throw new Error(data.message);
+      } catch (e) {
+        if (e instanceof SyntaxError) continue;
+        throw e;
+      }
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Typed RPC client                                                    */
+/* ------------------------------------------------------------------ */
+
 export const rpcClient = {
   threads: {
     list: () => rpcCall<Thread[]>(METHODS.threadsList),

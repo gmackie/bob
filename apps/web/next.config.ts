@@ -8,6 +8,10 @@ const config: NextConfig = {
         source: "/rpc",
         destination: "http://localhost:3001/rpc",
       },
+      {
+        source: "/api/chat/stream",
+        destination: "http://localhost:3001/api/chat/stream",
+      },
     ];
   },
 };

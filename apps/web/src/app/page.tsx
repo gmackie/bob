@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { Shell, Sidebar, MessageList, Composer, BranchTree } from "@gmacko/ui";
@@ -10,8 +10,8 @@ import {
   useCreateThread,
   useBranchesByThread,
   useMessagesByBranch,
-  useAgentChat,
 } from "@/rpc/hooks";
+import { streamChat } from "@/rpc/client";
 
 /* ------------------------------------------------------------------ */
 /* Fallback data for when the DB is unavailable                       */
@@ -59,7 +59,11 @@ export default function Home() {
   // --- RPC mutations ------------------------------------------------
   const createThread = useCreateThread();
 
-  const agentChat = useAgentChat();
+  // --- Streaming state -----------------------------------------------
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(
+    null,
+  );
+  const streamingRef = useRef(false);
 
   // --- Derived state -------------------------------------------------
   const apiAvailable = !threadsQuery.isError;
@@ -88,49 +92,86 @@ export default function Home() {
       : fallbackBranch;
 
   // --- Handlers ------------------------------------------------------
-  const handleSend = (content: string) => {
-    if (apiAvailable && activeThreadId && activeBranchId !== "main") {
-      // Optimistically add user message to the list
-      const optimisticMsg: Message = {
-        id: crypto.randomUUID(),
-        threadId: activeThreadId,
-        branchId: activeBranchId,
-        parentId: (messages as Message[]).at(-1)?.id ?? null,
-        role: "user",
-        content,
-        createdAt: new Date(),
-      };
-      setLocalMessages((prev) => [...prev, optimisticMsg]);
+  const handleSend = useCallback(
+    (content: string) => {
+      if (apiAvailable && activeThreadId && activeBranchId !== "main") {
+        if (streamingRef.current) return; // prevent double-sends while streaming
 
-      agentChat.mutate(
-        {
+        // 1. Optimistically add user message
+        const userMsgId = crypto.randomUUID();
+        const assistantMsgId = crypto.randomUUID();
+        const optimisticUser: Message = {
+          id: userMsgId,
           threadId: activeThreadId,
           branchId: activeBranchId,
+          parentId: (messages as Message[]).at(-1)?.id ?? null,
+          role: "user",
           content,
-        },
-        {
-          onSuccess: () => {
+          createdAt: new Date(),
+        };
+
+        // 2. Add empty assistant bubble for streaming
+        const optimisticAssistant: Message = {
+          id: assistantMsgId,
+          threadId: activeThreadId,
+          branchId: activeBranchId,
+          parentId: userMsgId,
+          role: "assistant",
+          content: "",
+          createdAt: new Date(),
+        };
+
+        setLocalMessages((prev) => [...prev, optimisticUser, optimisticAssistant]);
+        setStreamingMessageId(assistantMsgId);
+        streamingRef.current = true;
+
+        // 3. Stream tokens from the server
+        streamChat(
+          {
+            threadId: activeThreadId,
+            branchId: activeBranchId,
+            content,
+          },
+          // onToken: append text to the streaming assistant bubble
+          (text) => {
+            setLocalMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantMsgId
+                  ? { ...m, content: m.content + text }
+                  : m,
+              ),
+            );
+          },
+          // onDone: clear streaming state and refresh from server
+          (_messageId) => {
+            setStreamingMessageId(null);
+            streamingRef.current = false;
             setLocalMessages([]);
             queryClient.invalidateQueries({
               queryKey: ["messages", "listByBranch"],
             });
           },
-        },
-      );
-    } else {
-      // Fallback: local state
-      const msg: Message = {
-        id: crypto.randomUUID(),
-        threadId: activeThreadId ?? "t1",
-        branchId: activeBranchId,
-        parentId: localMessages.at(-1)?.id ?? null,
-        role: "user",
-        content,
-        createdAt: new Date(),
-      };
-      setLocalMessages((prev) => [...prev, msg]);
-    }
-  };
+        ).catch(() => {
+          // On error, clear streaming state
+          setStreamingMessageId(null);
+          streamingRef.current = false;
+        });
+      } else {
+        // Fallback: local state
+        const msg: Message = {
+          id: crypto.randomUUID(),
+          threadId: activeThreadId ?? "t1",
+          branchId: activeBranchId,
+          parentId: localMessages.at(-1)?.id ?? null,
+          role: "user",
+          content,
+          createdAt: new Date(),
+        };
+        setLocalMessages((prev) => [...prev, msg]);
+      }
+    },
+    [apiAvailable, activeThreadId, activeBranchId, messages, localMessages, queryClient],
+  );
 
   const handleNewThread = () => {
     if (apiAvailable) {
