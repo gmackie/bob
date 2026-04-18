@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { Shell, Sidebar, MessageList, Composer, BranchTree } from "@gmacko/ui";
 import type { Message, BranchTree as BranchTreeModel } from "@gmacko/models";
@@ -168,6 +169,22 @@ export default function Home() {
                 {t.title}
               </button>
             ))}
+          </div>
+
+          {/* Navigation links */}
+          <div className="flex gap-2 border-t border-[var(--color-border)] p-3">
+            <Link
+              href="/wiki"
+              className="flex-1 rounded bg-[var(--color-bg-elevated)] px-3 py-1.5 text-center text-xs font-medium text-[var(--color-text)] hover:text-[var(--color-accent)]"
+            >
+              Wiki
+            </Link>
+            <Link
+              href="/explore"
+              className="flex-1 rounded bg-[var(--color-bg-elevated)] px-3 py-1.5 text-center text-xs font-medium text-[var(--color-text)] hover:text-[var(--color-accent)]"
+            >
+              Explore
+            </Link>
           </div>
 
           {/* Branch tree */}
