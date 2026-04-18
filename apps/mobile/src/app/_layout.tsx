@@ -6,6 +6,8 @@ import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { queryClient, rpc } from "~/utils/api";
 import { ThreadSidebar } from "~/components/tablet/ThreadSidebar";
 import { ThreadPane } from "~/components/tablet/ThreadPane";
+import { NotificationProvider } from "~/providers/notification-provider";
+import { usePushNotifications } from "~/hooks/use-push-notifications";
 import { colors } from "~/lib/colors";
 import type { Thread, Message } from "@gmacko/contracts";
 
@@ -103,11 +105,19 @@ function TabletLayout() {
   );
 }
 
+function NotificationSetup() {
+  usePushNotifications();
+  return null;
+}
+
 export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
-      {isTablet ? <TabletLayout /> : <PhoneLayout />}
-      <StatusBar style="light" />
+      <NotificationProvider>
+        <NotificationSetup />
+        {isTablet ? <TabletLayout /> : <PhoneLayout />}
+        <StatusBar style="light" />
+      </NotificationProvider>
     </QueryClientProvider>
   );
 }
