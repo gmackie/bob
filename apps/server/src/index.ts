@@ -5,6 +5,7 @@ import { NodeHttpServer } from "@effect/platform-node";
 import { createServer } from "node:http";
 
 import { GmackoRpcGroup } from "@gmacko/contracts";
+import { migrate } from "@gmacko/db";
 import { RpcHandlerLayer } from "./rpc-handler.js";
 import { DatabaseServiceLive } from "./services/database.js";
 import { AgentServiceLive } from "./services/agent.js";
@@ -47,5 +48,6 @@ const HttpLive = Layer.effectDiscard(
   Layer.provide(NodeServerLayer),
 );
 
-// Run the server
+// Run schema migration, then start the server
+await migrate();
 Effect.runFork(Layer.launch(HttpLive));

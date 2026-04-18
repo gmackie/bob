@@ -10,7 +10,8 @@
     "dev:mobile": "turbo watch dev --filter=@gmacko/mobile",
     "test": "turbo run test",
     "lint": "turbo run lint --continue",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "dev:all": "bash scripts/dev.sh"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

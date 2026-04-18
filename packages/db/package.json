@@ -11,6 +11,7 @@
   "scripts": {
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:migrate:pglite": "tsx src/migrate.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
   },
@@ -24,6 +25,7 @@
   "devDependencies": {
     "@gmacko/tsconfig": "workspace:*",
     "drizzle-kit": "^0.31.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.9.0"
   }
 }
