@@ -50,7 +50,7 @@ export const chatConversations = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     title: varchar("title", { length: 256 }),
-    adapterId: varchar("adapter_id", { length: 64 }).notNull(),
+    adapterId: varchar("adapter_id", { length: 128 }).notNull(),
     status: sessionStatus("status").notNull().default("pending"),
     metadata: jsonb("metadata")
       .$type<Record<string, unknown>>()
