@@ -12,3 +12,4 @@ export * from "./messages";
 export * from "./auth.js";
 export * from "./tenancy.js";
 export * from "./secrets.js";
+export * from "./sessions.js";
