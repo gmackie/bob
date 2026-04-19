@@ -1036,8 +1036,22 @@ git tag phase-6b-complete
 
 ---
 
+## Phase 6B — Completed ✅
+
+Tagged `phase-6b-complete`. 30 packages (unchanged from 6A). 24 typechecks passing. 71 tests passing (up from 46). Migration `0000_curly_jimmy_woo.sql` applies cleanly to fresh PGlite with 18 tables + 6 new enums + 21 indexes.
+
 ## Open items carried into 6C onboarding
 
-(Will be filled in retrospectively at 6B completion.)
+From the Phase 6B final code review (three Important follow-ups + several onramp recommendations):
 
-- TBD from final code review
+- **`migrate.ts` is not idempotent** (`packages/db/src/migrate.ts`). Current version re-executes every statement on every run — second invocation against a persistent `~/.gmacko/data` will throw "relation already exists". Replace with drizzle's built-in `migrate()` helper (tracks applied migrations via `__drizzle_migrations`) before 6C lands. This will also be needed when 6C adds `0001_auth_policies.sql`.
+- **`chat_conversations.adapterId` is `varchar(64)`** (`packages/db/src/schema/sessions.ts:53`). Too tight for future compound adapter IDs like `claude-code:anthropic:workspace-uuid`. Widen to `varchar(128)` in the first 6C migration, before any production data lands.
+- **`applyTestMigrations` needs hardening** (`packages/db/src/__tests__/helpers.ts:41-42`). Sort by filename works for `0000_*` convention but breaks at migration #10000 (drizzle-kit pads to 4 digits). Add a guard that throws on empty `drizzle/*.sql` glob so tests don't silently pass against an unmigrated DB.
+- **`session_secret_usages.sessionId` should become a real FK** (`packages/db/src/schema/secrets.ts:87`). Currently a bare UUID to avoid cyclic dep with sessions; now that both tables exist, a 6E-scoped migration can promote to `ON DELETE SET NULL` FK.
+- **Add a downstream-usage cross-schema test in 6C** that imports from all 5 subpaths and does a JOIN traversal (tenant → members → users → chat_conversations) to prove the graph hangs together before auth tries it at runtime.
+- **Perf: composite indexes** on `(tenantId, status)` for `task_runs` and `chat_conversations`, and `(tenantId, userId)` for `chat_conversations`. Defer to a perf pass when real query patterns emerge.
+
+## Convention reinforced
+
+- Each sub-phase: dedicated plan doc → TDD tasks with individual commits → exit-criteria verification → tag. Phase 6B followed this cleanly; keep for 6C.
+- Effect 4 API drift findings land in the master plan's reference table as they're discovered. Run a preemptive drift check at the start of each phase for the APIs it will touch.
