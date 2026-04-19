@@ -1,3 +1,8 @@
+// NOTE: OODA-adjacent. This table is part of the current gmacko skeleton's
+// exploration/chat UI and will move to @ooda/thread-model during OODA migration
+// (Phase 8). It is NOT the agent session primitive — that lives in
+// chat_conversations + chat_messages (packages/db/src/schema/sessions.ts),
+// landed in Phase 6B.
 import { pgTable, uuid, varchar, timestamp } from "drizzle-orm/pg-core";
 import { thread } from "./threads";
 
