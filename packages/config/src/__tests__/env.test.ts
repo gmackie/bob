@@ -20,6 +20,11 @@ describe("@gmacko/config/env PostgresUrl", () => {
     expect(Schema.decodeUnknownSync(PostgresUrl)(url)).toBe(url);
   });
 
+  it("accepts postgresql:// scheme (long form)", () => {
+    const url = "postgresql://user:pass@localhost:5432/db";
+    expect(Schema.decodeUnknownSync(PostgresUrl)(url)).toBe(url);
+  });
+
   it("rejects an http:// URL", () => {
     expect(() =>
       Schema.decodeUnknownSync(PostgresUrl)("http://example.com"),

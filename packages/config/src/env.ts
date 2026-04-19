@@ -8,7 +8,7 @@ import { Schema } from "effect";
 export const NodeEnv = Schema.Literals(["development", "test", "production"]);
 
 export const PostgresUrl = Schema.String.pipe(
-  Schema.check(Schema.isStartsWith("postgres://")),
+  Schema.check(Schema.isPattern(/^postgres(?:ql)?:\/\//)),
 );
 
 export const Port = Schema.NumberFromString.pipe(
