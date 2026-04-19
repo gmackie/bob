@@ -118,6 +118,15 @@ The installed version is `effect@4.0.0-beta.43`, which differs significantly fro
 | `Schema.int()` | `Schema.check(Schema.isInt())` — `isInt` is a function, must be invoked | `effect/Schema.d.ts` |
 | `Schema.between(min, max)` | `Schema.check(Schema.isBetween({ minimum, maximum }))` — options object | `effect/Schema.d.ts` |
 | Generic constraint `<T, I>` with `Schema.Schema<A, I>` | `<S extends Schema.Top>` with `S["Type"]`, `S["Encoded"]`, `S["DecodingServices"]` | `effect/Schema.d.ts` |
+| `Layer.effect(tag, effect)` | `Layer.effect(effect)` — tag moved into `ServiceMap.Service` itself; no tag param | `effect/Layer.d.ts:891` |
+| `Layer.succeed(tag, value)` | `Layer.succeed(value)` — same; no tag param | `effect/Layer.d.ts:624` |
+| `Layer.scoped(tag, scopedEffect)` | `Layer.effectServices(scopedEffect)` (no direct `scoped` export) | `effect/Layer.d.ts:983` |
+| `Stream.async(emit => ...)` callback push-style | **REMOVED** — use Queue + `Stream.fromQueue` for push, or pull-based Channel primitives | not in `Stream.d.ts` |
+| `Stream.asyncEffect(...)` | **REMOVED** — same; wrap a Queue | not in `Stream.d.ts` |
+| `RpcResolver.make(group)` | `RpcClient.make(group)` — no RpcResolver module anymore | `effect/unstable/rpc/RpcClient.d.ts:93` |
+| `RpcClient.make(group, protocol)` with Protocol arg | `RpcClient.make(group)` — Protocol is a service; provide via `RpcClient.layerProtocolHttp()` | `effect/unstable/rpc/RpcClient.d.ts:93, 156` |
+
+> **SSE in Effect 4:** Because `Stream.async` is gone, the idiomatic push-style SSE producer is: create a `Queue.bounded(n)`, offer to it from the producer side, consume via `Stream.fromQueue(queue)`. The stream yields a value per `Queue.offer` and completes when the queue is `.shutdown`'d. This applies to 6E agent-token streams and 6G realtime event fan-out.
 
 **When a task's code snippet doesn't compile:** the fix is almost always one of the table rows above. Don't invent shims; translate and proceed. If a translation isn't in the table, stop and investigate (check `node_modules/effect/*.d.ts` for the real surface) rather than guessing.
 
