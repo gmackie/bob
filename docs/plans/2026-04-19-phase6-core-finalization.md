@@ -1059,6 +1059,22 @@ git commit -m "feat: add @gmacko/config env loader with effect/schema"
 
 ---
 
+## Phase 6A — Completed ✅
+
+Tagged `phase-6a-complete`. 30 packages present. 23 typechecks passing. 45 tests passing. `apps/server` removed. Clean tree.
+
+### Open items carried into 6B onboarding
+
+From the Phase 6A final code review (`agent-teams:team-reviewer`):
+
+- **Effect 4 API drift-check before 6B.** The API reference table in §Conventions currently covers `RpcServer`, `Schema`, `DateTime`. Before starting 6B, spend 10 minutes in `node_modules/effect/unstable/rpc/RpcClient.d.ts`, `effect/Stream.d.ts`, and `effect/Layer.d.ts` and append any 3.x→4.x drift to the table. 6E (`@gmacko/agent` streaming) and 6G (`@gmacko/realtime` SSE) will hit these first.
+- **`@gmacko/rpc` needs real coverage when 6C lands.** Current tests are smoke-only (`server.test.ts:29`). When `@gmacko/auth` adds `CurrentUser` population, add: (1) `requireAuth` success path with a provided `CurrentUser`, (2) `requireAuth` failure path returning `UnauthorizedError`, (3) full RPC round-trip exercising error serialization. Carry this into the 6C plan doc.
+- **`PostgresUrl` should also accept `postgresql://`** (`packages/config/src/env.ts:10-12`). Drizzle + pg both accept the longer scheme. Fix when 6B wires `DATABASE_URL`.
+- **Scaffolded stubs lack descriptions.** Each of the 20 unfilled packages has `// … scaffolded … export {};` with no package.json `description` field. When 6B–6K pick up each package, add a one-line planned responsibility + `description` — improves discoverability and shows up in `pnpm ls`.
+- **Convention to carry forward:** every sub-phase commits a dedicated plan doc first (with drift table updates), then tasks with TDD, then an exit-criteria verification commit before tagging. 6A followed this pattern; keep it.
+
+---
+
 ## Task 9: Verify 6A exit criteria
 
 **Step 1: Check package inventory**
