@@ -1,3 +1,3 @@
 export { getDb, type Database } from "./client";
-export { migrate } from "./migrate";
+export { migrate, runMigrations } from "./migrate";
 export * from "./schema";
