@@ -111,6 +111,13 @@ The installed version is `effect@4.0.0-beta.43`, which differs significantly fro
 | `Schema.DateFromString` | compose: `Schema.DateTimeUtcFromString.pipe(Schema.decodeTo(Schema.Date, { decode: SchemaGetter.transform(DateTime.toDateUtc), encode: SchemaGetter.transform(DateTime.fromDateUnsafe) }))` — no literal equivalent | see `packages/validators/src/common.ts` |
 | `Schema.transform(source, target, { decode, encode })` standalone | does not exist; use `Schema.decodeTo(target, { decode: SchemaGetter.transform(fn), encode: SchemaGetter.transform(fn) })` piped onto source | `effect/Schema.d.ts`, `effect/SchemaGetter.d.ts` |
 | `DateTime.unsafeFromDate` | `DateTime.fromDateUnsafe` (suffix style) | `effect/DateTime.d.ts` |
+| `Schema.decodeUnknown(schema)(input)` (Effect) | `Schema.decodeUnknownEffect(schema)(input)` — explicit variant suffix | `effect/Schema.d.ts` |
+| `Schema.ParseResult.ParseError` / `ParseError` | `Schema.SchemaError` (flat class, tag `"SchemaError"`) | `effect/Schema.d.ts` |
+| `Schema.Literal("a", "b", "c")` for union | `Schema.Literals(["a", "b", "c"])` (array arg; `Literal` is single-value only) | `effect/Schema.d.ts` |
+| `Schema.startsWith(s)` | `Schema.check(Schema.isStartsWith(s))` | `effect/Schema.d.ts` |
+| `Schema.int()` | `Schema.check(Schema.isInt())` — `isInt` is a function, must be invoked | `effect/Schema.d.ts` |
+| `Schema.between(min, max)` | `Schema.check(Schema.isBetween({ minimum, maximum }))` — options object | `effect/Schema.d.ts` |
+| Generic constraint `<T, I>` with `Schema.Schema<A, I>` | `<S extends Schema.Top>` with `S["Type"]`, `S["Encoded"]`, `S["DecodingServices"]` | `effect/Schema.d.ts` |
 
 **When a task's code snippet doesn't compile:** the fix is almost always one of the table rows above. Don't invent shims; translate and proceed. If a translation isn't in the table, stop and investigate (check `node_modules/effect/*.d.ts` for the real surface) rather than guessing.
 
