@@ -1,0 +1,2 @@
+// @gmacko/mcp-server — scaffolded in Phase 6A; implementation in a later sub-phase
+export {};

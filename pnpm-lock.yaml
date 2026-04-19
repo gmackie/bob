@@ -169,11 +169,74 @@ importers:
         specifier: ^5.9.0
         version: 5.9.3
 
+  packages/agent-toolkit:
+    devDependencies:
+      '@gmacko/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
+  packages/analytics:
+    devDependencies:
+      '@gmacko/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
+  packages/app-shell:
+    devDependencies:
+      '@gmacko/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
+  packages/auth:
+    devDependencies:
+      '@gmacko/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
+  packages/billing:
+    devDependencies:
+      '@gmacko/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
+  packages/config:
+    devDependencies:
+      '@gmacko/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
   packages/contracts:
     dependencies:
       effect:
         specifier: 4.0.0-beta.43
         version: 4.0.0-beta.43
+    devDependencies:
+      '@gmacko/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
+  packages/cookies:
     devDependencies:
       '@gmacko/tsconfig':
         specifier: workspace:*
@@ -213,6 +276,24 @@ importers:
         specifier: ^5.9.0
         version: 5.9.3
 
+  packages/desktop-shell:
+    devDependencies:
+      '@gmacko/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
+  packages/email:
+    devDependencies:
+      '@gmacko/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
   packages/ext-ooda:
     dependencies:
       '@gmacko/contracts':
@@ -232,7 +313,115 @@ importers:
         specifier: ^5.9.0
         version: 5.9.3
 
+  packages/i18n:
+    devDependencies:
+      '@gmacko/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
+  packages/mcp-server:
+    devDependencies:
+      '@gmacko/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
+  packages/mobile-shell:
+    devDependencies:
+      '@gmacko/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
   packages/models:
+    devDependencies:
+      '@gmacko/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
+  packages/monitoring:
+    devDependencies:
+      '@gmacko/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
+  packages/notifications:
+    devDependencies:
+      '@gmacko/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
+  packages/realtime:
+    devDependencies:
+      '@gmacko/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
+  packages/rpc:
+    devDependencies:
+      '@gmacko/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
+  packages/runner-base:
+    devDependencies:
+      '@gmacko/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
+  packages/runner-protocol:
+    devDependencies:
+      '@gmacko/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
+  packages/secrets:
+    devDependencies:
+      '@gmacko/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
+  packages/settings:
+    devDependencies:
+      '@gmacko/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
+  packages/storage:
     devDependencies:
       '@gmacko/tsconfig':
         specifier: workspace:*
@@ -281,6 +470,15 @@ importers:
         specifier: ^3.0.0
         version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
+  packages/validators:
+    devDependencies:
+      '@gmacko/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
   packages/wiki:
     dependencies:
       effect:
@@ -299,6 +497,15 @@ importers:
       vitest:
         specifier: ^3.0.0
         version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
+
+  packages/ws-gateway:
+    devDependencies:
+      '@gmacko/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
 
   tooling/tailwind:
     dependencies:
