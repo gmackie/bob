@@ -10,8 +10,7 @@ Shared monorepo for Bob and OODA frontends. Will become the gmacko fork of t3cod
 - `packages/db` — Drizzle ORM schema, dual-driver: PGlite (WASM, default) or PostgreSQL
 - `packages/agent` — Claude API streaming dispatch (Effect-wrapped)
 - `packages/wiki` — Wiki article writer + cross-linker (Effect-wrapped)
-- `apps/server` — Effect HTTP server with RPC handler (port 3001)
-- `apps/web` — Next.js 16 web app
+- `apps/web` — Next.js 16 web app (hosts the Effect-RPC route handler)
 - `apps/mobile` — Expo 55 mobile app
 - `tooling/typescript` — Shared TypeScript config
 - `tooling/tailwind` — Shared Tailwind theme with OODA + Bob presets
@@ -30,8 +29,7 @@ Set `data-theme` attribute: `"ooda"` (dark + gold — placeholder) or `"bob"` (a
 ## Development
 
 ```
-cd apps/server && pnpm dev           # Start Effect server (port 3001, PGlite auto-creates DB at ~/.gmacko/data)
-cd apps/web && pnpm dev              # Start web app (port 3000)
+cd apps/web && pnpm dev              # Start Next.js web app (port 3000, hosts RPC route)
 cd apps/mobile && pnpm dev           # Start Expo dev server
 cd apps/desktop && pnpm dev          # Start Electron desktop app
 pnpm test                            # Run all tests
