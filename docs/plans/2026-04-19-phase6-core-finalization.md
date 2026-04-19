@@ -318,7 +318,7 @@ EOF
 
   cat > "packages/$pkg/tsconfig.json" <<EOF
 {
-  "extends": "@gmacko/tsconfig/base.json",
+  "extends": "../../tooling/typescript/tsconfig.base.json",
   "include": ["src/**/*"]
 }
 EOF

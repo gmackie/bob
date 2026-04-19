@@ -30,7 +30,7 @@
   --color-info: #60a5fa;
 }
 
-/* Bob Theme (purple/indigo) */
+/* Bob Theme (amber — per Bob's DESIGN.md, finalized in Phase 6H) */
 [data-theme="bob"] {
   --color-bg: #0f0f14;
   --color-bg-secondary: #16161d;
