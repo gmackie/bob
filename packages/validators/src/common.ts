@@ -1,10 +1,17 @@
-import { Schema } from "effect";
+import { DateTime, Schema, SchemaGetter } from "effect";
 
-// Effect 4 translation: `Schema.DateFromString` (Effect 3.x) does not exist in
-// effect@4.0.0-beta.43. The closest analog is `Schema.DateTimeUtcFromString`,
-// which decodes a string into a `DateTime.Utc`. See the plan's Effect 4 API
-// reference table.
-export const Timestamp = Schema.DateTimeUtcFromString;
+// Effect 4 does not ship a literal `Schema.DateFromString`. We compose one by
+// piping the built-in `DateTimeUtcFromString` (which handles `Date.parse`
+// validation and ISO 8601 round-tripping) through a final `decodeTo(Schema.Date)`
+// step that unwraps `DateTime.Utc` → JS `Date`. This keeps Effect's string
+// validation but yields a native `Date` for downstream consumers (Drizzle
+// timestamp columns, JSON serializers, React props) that don't speak Effect.
+export const Timestamp = Schema.DateTimeUtcFromString.pipe(
+  Schema.decodeTo(Schema.Date, {
+    decode: SchemaGetter.transform((dt: DateTime.Utc) => DateTime.toDateUtc(dt)),
+    encode: SchemaGetter.transform((d: Date) => DateTime.fromDateUnsafe(d)),
+  }),
+);
 
 export const NonEmptyString = Schema.String.pipe(
   Schema.check(Schema.isMinLength(1)),
