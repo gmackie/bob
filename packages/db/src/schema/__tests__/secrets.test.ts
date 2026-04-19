@@ -13,10 +13,6 @@ describe("@gmacko/db secrets schema", () => {
 
   beforeEach(async () => {
     ctx = await createTestDb();
-    // Apply raw DDL — per-test until Task 11 wires drizzle-kit migrations
-    // into the shared helper. DDL includes prerequisites (users, tenants,
-    // tenant_members) because the secrets tables reference tenants.
-    await ctx.pglite.exec(DDL);
   });
 
   afterEach(async () => {
@@ -233,75 +229,3 @@ describe("@gmacko/db secrets schema", () => {
   });
 });
 
-// Raw DDL — applied per-test because drizzle-kit push infrastructure comes
-// later (Task 11). This block is replaced with applyTestMigrations() after
-// Task 11. Includes users + tenants + tenant_members because the secrets
-// tables reference tenants (and because applyTestMigrations will apply the
-// full migration).
-const DDL = `
-CREATE TABLE users (
-  id text PRIMARY KEY,
-  name text NOT NULL,
-  email text NOT NULL UNIQUE,
-  email_verified boolean NOT NULL DEFAULT false,
-  image text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE TYPE tenant_role AS ENUM ('owner', 'admin', 'member');
-CREATE TABLE tenants (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name varchar(128) NOT NULL,
-  slug varchar(64) NOT NULL UNIQUE,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE TABLE tenant_members (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  role tenant_role NOT NULL DEFAULT 'member',
-  joined_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT tenant_members_tenant_user_unique UNIQUE (tenant_id, user_id)
-);
-CREATE INDEX tenant_members_tenant_id_idx ON tenant_members(tenant_id);
-CREATE INDEX tenant_members_user_id_idx ON tenant_members(user_id);
-CREATE TABLE session_secrets (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  name varchar(128) NOT NULL,
-  ciphertext text NOT NULL,
-  iv text NOT NULL,
-  auth_tag text NOT NULL,
-  policy jsonb NOT NULL DEFAULT '{}'::jsonb,
-  uses_remaining integer,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT session_secrets_tenant_name_unique UNIQUE (tenant_id, name)
-);
-CREATE INDEX session_secrets_tenant_id_idx ON session_secrets(tenant_id);
-CREATE TABLE session_secret_usages (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  secret_id uuid NOT NULL REFERENCES session_secrets(id) ON DELETE CASCADE,
-  session_id uuid,
-  used_at timestamptz NOT NULL DEFAULT now(),
-  template_id varchar(128),
-  command_prefix text,
-  success boolean NOT NULL DEFAULT true
-);
-CREATE INDEX session_secret_usages_secret_id_idx ON session_secret_usages(secret_id);
-CREATE INDEX session_secret_usages_session_id_idx ON session_secret_usages(session_id);
-CREATE TABLE project_deploy_secret_bindings (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  secret_id uuid NOT NULL REFERENCES session_secrets(id) ON DELETE CASCADE,
-  project_slug varchar(128) NOT NULL,
-  deploy_environment varchar(64) NOT NULL,
-  deploy_env_var_name varchar(128) NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT project_deploy_secret_bindings_unique UNIQUE (tenant_id, project_slug, deploy_environment, deploy_env_var_name)
-);
-CREATE INDEX project_deploy_secret_bindings_tenant_id_idx ON project_deploy_secret_bindings(tenant_id);
-CREATE INDEX project_deploy_secret_bindings_secret_id_idx ON project_deploy_secret_bindings(secret_id);
-`;

@@ -1,50 +1,38 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { sql } from "drizzle-orm";
 import { getDb } from "./client";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Apply all drizzle-generated migrations (in `packages/db/drizzle/`) to the
+// active db client, in filename-sorted order. Splits on drizzle's
+// `--> statement-breakpoint` delimiter so each statement runs individually.
+//
+// This replaces the previous inline raw-DDL migrate script — the source of
+// truth for schema is now `packages/db/src/schema/` via `drizzle-kit generate`.
 export async function migrate() {
   const db = await getDb();
-  // Use raw SQL since drizzle-kit doesn't support PGlite directly
-  await db.execute(`
-    DO $$ BEGIN
-      CREATE TYPE thread_status AS ENUM ('active', 'paused', 'archived', 'completed');
-    EXCEPTION WHEN duplicate_object THEN null;
-    END $$;
+  const migrationsDir = path.resolve(__dirname, "../drizzle");
+  const entries = await fs.readdir(migrationsDir);
+  const files = entries.filter((f) => f.endsWith(".sql")).sort();
 
-    DO $$ BEGIN
-      CREATE TYPE message_role AS ENUM ('user', 'assistant', 'system');
-    EXCEPTION WHEN duplicate_object THEN null;
-    END $$;
-
-    CREATE TABLE IF NOT EXISTS thread (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      title VARCHAR(256) NOT NULL,
-      status thread_status NOT NULL DEFAULT 'active',
-      active_branch_id UUID,
-      tags TEXT[] DEFAULT '{}',
-      created_at TIMESTAMP NOT NULL DEFAULT now(),
-      updated_at TIMESTAMP NOT NULL DEFAULT now()
+  for (const file of files) {
+    const fileSql = await fs.readFile(
+      path.join(migrationsDir, file),
+      "utf8",
     );
-
-    CREATE TABLE IF NOT EXISTS branch (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      thread_id UUID NOT NULL REFERENCES thread(id) ON DELETE CASCADE,
-      parent_branch_id UUID,
-      fork_point_message_id UUID,
-      name VARCHAR(256) NOT NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT now()
-    );
-
-    CREATE TABLE IF NOT EXISTS message (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      thread_id UUID NOT NULL REFERENCES thread(id) ON DELETE CASCADE,
-      branch_id UUID NOT NULL REFERENCES branch(id) ON DELETE CASCADE,
-      parent_id UUID,
-      role message_role NOT NULL,
-      content TEXT NOT NULL,
-      metadata JSONB,
-      created_at TIMESTAMP NOT NULL DEFAULT now()
-    );
-  `);
-  console.log("Schema migrated successfully");
+    const statements = fileSql
+      .split("--> statement-breakpoint")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    for (const statement of statements) {
+      await db.execute(sql.raw(statement));
+    }
+  }
+  console.log(`Applied ${files.length} migration file(s)`);
 }
 
 // Allow running directly via tsx

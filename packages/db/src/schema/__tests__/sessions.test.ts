@@ -10,12 +10,6 @@ describe("@gmacko/db sessions schema", () => {
 
   beforeEach(async () => {
     ctx = await createTestDb();
-    // Apply raw DDL — per-test until Task 11 wires drizzle-kit migrations
-    // into the shared helper. DDL includes prerequisites (users, tenants,
-    // tenant_members) because the session tables reference tenants and
-    // users. The session_status + chat_message_role pgEnums are declared
-    // here as well.
-    await ctx.pglite.exec(DDL);
   });
 
   afterEach(async () => {
@@ -222,66 +216,3 @@ describe("@gmacko/db sessions schema", () => {
   });
 });
 
-// Raw DDL — applied per-test because drizzle-kit push infrastructure comes
-// later (Task 11). This block is replaced with applyTestMigrations() after
-// Task 11. Includes users + tenants + tenant_members because the session
-// tables reference tenants (uuid) and users (text). Declares both the
-// session_status and chat_message_role pgEnums; chat_message_role is
-// distinct from the OODA-adjacent `message_role` used by the legacy
-// messages.ts table so the two enums never collide.
-const DDL = `
-CREATE TABLE users (
-  id text PRIMARY KEY,
-  name text NOT NULL,
-  email text NOT NULL UNIQUE,
-  email_verified boolean NOT NULL DEFAULT false,
-  image text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE TYPE tenant_role AS ENUM ('owner', 'admin', 'member');
-CREATE TABLE tenants (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name varchar(128) NOT NULL,
-  slug varchar(64) NOT NULL UNIQUE,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE TABLE tenant_members (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  role tenant_role NOT NULL DEFAULT 'member',
-  joined_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT tenant_members_tenant_user_unique UNIQUE (tenant_id, user_id)
-);
-CREATE INDEX tenant_members_tenant_id_idx ON tenant_members(tenant_id);
-CREATE INDEX tenant_members_user_id_idx ON tenant_members(user_id);
-CREATE TYPE session_status AS ENUM ('pending', 'active', 'completed', 'failed', 'canceled');
-CREATE TYPE chat_message_role AS ENUM ('user', 'assistant', 'system', 'tool');
-CREATE TABLE chat_conversations (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  title varchar(256),
-  adapter_id varchar(64) NOT NULL,
-  status session_status NOT NULL DEFAULT 'pending',
-  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE INDEX chat_conversations_tenant_id_idx ON chat_conversations(tenant_id);
-CREATE INDEX chat_conversations_user_id_idx ON chat_conversations(user_id);
-CREATE INDEX chat_conversations_status_idx ON chat_conversations(status);
-CREATE TABLE chat_messages (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  conversation_id uuid NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
-  seq integer NOT NULL,
-  role chat_message_role NOT NULL,
-  content text NOT NULL,
-  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT chat_messages_conversation_seq_unique UNIQUE (conversation_id, seq)
-);
-CREATE INDEX chat_messages_conversation_id_idx ON chat_messages(conversation_id);
-`;

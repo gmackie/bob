@@ -9,9 +9,6 @@ describe("@gmacko/db tenancy schema", () => {
 
   beforeEach(async () => {
     ctx = await createTestDb();
-    // Apply raw DDL — tests run per-table DDL here until Task 11 wires
-    // drizzle-kit migrations into the shared helper.
-    await ctx.pglite.exec(DDL);
   });
 
   afterEach(async () => {
@@ -102,35 +99,3 @@ describe("@gmacko/db tenancy schema", () => {
   });
 });
 
-// Raw DDL — applied per-test because drizzle-kit push infrastructure comes later
-// (Task 11). This block is replaced with applyTestMigrations() after Task 11.
-// Includes `users` because tenant_members.user_id references it.
-const DDL = `
-CREATE TABLE users (
-  id text PRIMARY KEY,
-  name text NOT NULL,
-  email text NOT NULL UNIQUE,
-  email_verified boolean NOT NULL DEFAULT false,
-  image text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE TYPE tenant_role AS ENUM ('owner', 'admin', 'member');
-CREATE TABLE tenants (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name varchar(128) NOT NULL,
-  slug varchar(64) NOT NULL UNIQUE,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE TABLE tenant_members (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  role tenant_role NOT NULL DEFAULT 'member',
-  joined_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT tenant_members_tenant_user_unique UNIQUE (tenant_id, user_id)
-);
-CREATE INDEX tenant_members_tenant_id_idx ON tenant_members(tenant_id);
-CREATE INDEX tenant_members_user_id_idx ON tenant_members(user_id);
-`;
