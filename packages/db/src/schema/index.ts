@@ -10,3 +10,4 @@ export * from "./threads";
 export * from "./branches";
 export * from "./messages";
 export * from "./auth.js";
+export * from "./tenancy.js";
