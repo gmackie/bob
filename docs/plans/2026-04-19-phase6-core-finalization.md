@@ -86,9 +86,30 @@ packages/<name>/
 
 - RPC groups defined with `RpcGroup.make()` in `@gmacko/contracts`
 - Services declared via `Effect.Service<MyService>()("@gmacko/<pkg>/MyService", { effect: ... })`
-- Errors are `Schema.TaggedError` subclasses
-- Context tags (e.g. `CurrentUser`) are `Context.Tag`s
+- Errors are `Schema.TaggedErrorClass` subclasses (see Effect 4 API reference below)
+- Service tags (e.g. `CurrentUser`) are `ServiceMap.Service<Self, Shape>()(idString)` — consumed via `yield* ServiceTag.asEffect()` inside `Effect.gen`
 - Layers are composed at the app boundary, not in libraries
+
+### Effect 4 API reference (IMPORTANT — read before any Effect task)
+
+The installed version is `effect@4.0.0-beta.43`, which differs significantly from Effect 3.x docs/examples you may encounter. Below are the API renames that apply to gmacko packages. When a later task prompt cites a 3.x-style API, translate using this table:
+
+| Effect 3.x (common in examples) | Effect 4.0.0-beta.43 (use this) | Where verified |
+|---|---|---|
+| `@effect/rpc` package | `effect/unstable/rpc` (subpath of `effect`) | `node_modules/effect/unstable/rpc/*.d.ts` |
+| `@effect/platform` package | `effect/unstable/http` (subpath of `effect`) | `node_modules/effect/unstable/http/*.d.ts` |
+| `@effect/platform-node` | `effect/platform/node` subpath or app-layer adapter | verify per use; don't add this dep to shared libraries |
+| `Schema.TaggedError<Self>()(id, fields)` | `Schema.TaggedErrorClass<Self>()(id, fields)` | `effect/Schema.d.ts` |
+| `Context.Tag("id")<Self, Shape>()` | `ServiceMap.Service<Self, Shape>()("id")` with `yield* Tag.asEffect()` to consume | `effect/ServiceMap.d.ts` |
+| `Context` namespace | `ServiceMap` namespace (renamed) | |
+| `RpcServer.layerHttpRouter(...)` | `RpcServer.layerHttp(...)` | `effect/unstable/rpc/RpcServer.d.ts` |
+| `HttpRouter.HttpRouter.Default` (subtype) | `HttpRouter.HttpRouter` (the service directly) | `effect/unstable/http/HttpRouter.d.ts` |
+| `RpcGroup.HandlersContext<R>` type | `Rpc.HandlersServices<Rpcs>` (per-handler) | `effect/unstable/rpc/Rpc.d.ts` |
+| Tag consumed via `Tag.pipe(Effect.flatMap(...))` | `Effect.gen(function* () { const svc = yield* Tag.asEffect(); ... })` | |
+
+**When a task's code snippet doesn't compile:** the fix is almost always one of the table rows above. Don't invent shims; translate and proceed. If a translation isn't in the table, stop and investigate (check `node_modules/effect/*.d.ts` for the real surface) rather than guessing.
+
+**Verified reference implementation:** `packages/rpc/src/*.ts` (landed in Task 6) is idiomatic Effect 4 and can be treated as the canonical example for shared gmacko packages that use RPC/services/tagged errors.
 
 ### Test conventions
 
