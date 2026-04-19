@@ -6,7 +6,12 @@
   "exports": {
     ".": "./src/index.ts",
     "./client": "./src/client.ts",
-    "./schema": "./src/schema/index.ts"
+    "./schema": "./src/schema/index.ts",
+    "./schema/auth": "./src/schema/auth.ts",
+    "./schema/tenancy": "./src/schema/tenancy.ts",
+    "./schema/secrets": "./src/schema/secrets.ts",
+    "./schema/sessions": "./src/schema/sessions.ts",
+    "./schema/runner": "./src/schema/runner.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",
