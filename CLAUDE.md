@@ -25,7 +25,7 @@ Shared monorepo for Bob and OODA frontends. Will become the gmacko fork of t3cod
 
 ## Themes
 
-Set `data-theme` attribute: `"ooda"` (dark + gold) or `"bob"` (purple/indigo).
+Set `data-theme` attribute: `"ooda"` (dark + gold — placeholder) or `"bob"` (amber + warm gray — per Bob's DESIGN.md: primary #D4850A, Satoshi + DM Sans, Industrial/utilitarian).
 
 ## Development
 
