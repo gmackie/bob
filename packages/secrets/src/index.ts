@@ -1,2 +1,3 @@
-// @gmacko/secrets — scaffolded in Phase 6A; implementation in a later sub-phase
-export {};
+// @gmacko/secrets — encrypted secret storage with policy enforcement.
+// Real exports land in Tasks 6-10 of Phase 6D.
+export const __gmackoSecretsPhase = "6d" as const;
