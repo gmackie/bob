@@ -6,6 +6,7 @@ import {
   SessionId,
   ApiKeyId,
   DeviceCodeId,
+  ProjectId,
   TenantMemberRole,
 } from "../ids.js";
 
@@ -16,6 +17,7 @@ describe("@gmacko/validators/ids", () => {
     expect(Schema.decodeUnknownSync(SessionId)(id)).toBe(id);
     expect(Schema.decodeUnknownSync(ApiKeyId)(id)).toBe(id);
     expect(Schema.decodeUnknownSync(DeviceCodeId)(id)).toBe(id);
+    expect(Schema.decodeUnknownSync(ProjectId)(id)).toBe(id);
   });
 
   it("rejects non-UUIDs for TenantId (UUID brand)", () => {

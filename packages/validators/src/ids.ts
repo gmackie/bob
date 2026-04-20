@@ -36,6 +36,9 @@ export type ApiKeyId = typeof ApiKeyId.Type;
 export const DeviceCodeId = UuidString.pipe(Schema.brand("DeviceCodeId"));
 export type DeviceCodeId = typeof DeviceCodeId.Type;
 
+export const ProjectId = UuidString.pipe(Schema.brand("ProjectId"));
+export type ProjectId = typeof ProjectId.Type;
+
 // Tenant membership role enum. Used by CurrentUser (rpc) and Tenancy service.
 export const TenantMemberRole = Schema.Literals(["owner", "admin", "member"]);
 export type TenantMemberRole = typeof TenantMemberRole.Type;

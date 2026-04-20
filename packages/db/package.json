@@ -14,6 +14,7 @@
     "./schema/runner": "./src/schema/runner.ts",
     "./schema/api-keys": "./src/schema/api-keys.ts",
     "./schema/device-codes": "./src/schema/device-codes.ts",
+    "./schema/projects": "./src/schema/projects.ts",
     "./service": "./src/service.ts",
     "./testing": "./src/__tests__/helpers.ts"
   },
