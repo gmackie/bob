@@ -216,6 +216,9 @@ importers:
       effect:
         specifier: 4.0.0-beta.43
         version: 4.0.0-beta.43
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
     devDependencies:
       '@effect/vitest':
         specifier: 4.0.0-beta.43
