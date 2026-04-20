@@ -12,7 +12,8 @@
     "./schema/secrets": "./src/schema/secrets.ts",
     "./schema/sessions": "./src/schema/sessions.ts",
     "./schema/runner": "./src/schema/runner.ts",
-    "./schema/api-keys": "./src/schema/api-keys.ts"
+    "./schema/api-keys": "./src/schema/api-keys.ts",
+    "./schema/device-codes": "./src/schema/device-codes.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",
