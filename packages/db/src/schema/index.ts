@@ -14,3 +14,4 @@ export * from "./tenancy.js";
 export * from "./secrets.js";
 export * from "./sessions.js";
 export * from "./runner.js";
+export * from "./api-keys.js";
