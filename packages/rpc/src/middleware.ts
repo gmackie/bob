@@ -9,7 +9,7 @@ export const requireAuth = <A, E, R>(
 ): Effect.Effect<A, E | UnauthorizedError, R | CurrentUser> =>
   Effect.gen(function* () {
     const user = yield* CurrentUser.asEffect();
-    if (!user.userId) {
+    if (!user.userId || !user.tenantId) {
       return yield* Effect.fail(
         new UnauthorizedError({ message: "No authenticated user" }),
       );
