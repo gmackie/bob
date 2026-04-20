@@ -6,6 +6,7 @@ import { chatConversations } from "@gmacko/db/schema/sessions";
 import { taskRuns } from "@gmacko/db/schema/runner";
 import { apiKeys } from "@gmacko/db/schema/api-keys";
 import { deviceCodes } from "@gmacko/db/schema/device-codes";
+import { createTestDb } from "@gmacko/db/testing";
 
 describe("@gmacko/db subpath exports", () => {
   it("resolves every schema subpath", () => {
@@ -16,5 +17,9 @@ describe("@gmacko/db subpath exports", () => {
     expect(taskRuns).toBeDefined();
     expect(apiKeys).toBeDefined();
     expect(deviceCodes).toBeDefined();
+  });
+
+  it("exposes testing helpers via the ./testing subpath", () => {
+    expect(typeof createTestDb).toBe("function");
   });
 });
