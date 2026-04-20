@@ -10,9 +10,9 @@ Port Bob's session-secret vault + service into gmacko, introduce the `projects` 
 - Migration 0003 with both changes.
 - Port Bob's `sessionSecretVault.ts` (AES-256-GCM + per-secret HMAC-derived key) into `@gmacko/secrets`, env rename `GIT_TOKEN_ENCRYPTION_KEY` → `GMACKO_SECRET_ENCRYPTION_KEY`.
 - `@gmacko/secrets` package with `Secrets` Effect service: `createSecret`, `listForTenant`, `getSecret` (envelope only), `decryptForUse` (policy + usesRemaining decrement + audit), `markSecretUsed` (audit-only), `deleteSecret`.
-- `Projects` Effect service in `@gmacko/secrets` (sibling module): `createProject`, `listForTenant`, `getById`, `getBySlug`, `deleteProject`.
+- `@gmacko/projects` (new standalone package, brings monorepo to 32 packages) with `Projects` Effect service: `createProject`, `listForTenant`, `getById`, `getBySlug`, `deleteProject`. Lives on its own dep boundary so Bob/OODA can extend the primitive via their own downstream packages (`@bob/projects-ext` etc.).
 - `ProjectId` brand in `@gmacko/validators`.
-- Public barrel + `layerSecrets` + `layerProjects` + combined `layerSecretsAndProjects` bundle.
+- Public barrels + `layerSecrets` (in `@gmacko/secrets`) + `layerProjects` (in `@gmacko/projects`). No combined bundle — app bootstrap composes them since the two services share no deps beyond `GmackoDb`.
 
 **Deferred:**
 - `project_deploy_secret_bindings` CRUD service — lands when app wiring (6J) needs it.
@@ -23,20 +23,22 @@ Port Bob's session-secret vault + service into gmacko, introduce the `projects` 
 
 ## Exit criteria
 
-- 31 packages (unchanged). `pnpm -r typecheck` green.
+- **32 packages** (added `@gmacko/projects`). `pnpm -r typecheck` green.
 - Full test suite ≥ 175 tests passing (up from 150). Breakdown:
   - Baseline 6C: 150
   - Task 1 (projects schema): +4
   - Task 2 (bindings rewrite): +2
   - Task 4 (vault crypto): +5
-  - Task 5 (pkg scaffold): +1
+  - Task 5 (@gmacko/secrets scaffold): +1
   - Task 6 (createSecret/delete/listForTenant): +6
   - Task 7 (getSecret): +3
   - Task 8 (decryptForUse + policy): +7
   - Task 9 (markSecretUsed): +2
-  - Task 10 (Projects service): +6
-  - Task 11 (barrel + layer bundle): +2
-  - **Expected total: ~188** (comfortably > 175).
+  - Task 10 (@gmacko/secrets barrel + layer test): +2
+  - Task 11 (@gmacko/projects scaffold): +1
+  - Task 12 (Projects service): +6
+  - Task 13 (@gmacko/projects barrel + layer test): +2
+  - **Expected total: ~191** (comfortably > 175).
 - Migration `0003_*.sql` applies cleanly to fresh PGlite + idempotent on re-apply (verified by `migrate.test.ts` unchanged).
 - `GMACKO_SECRET_ENCRYPTION_KEY` env var required at service construction; missing/short key throws a clear error.
 - `decryptForUse` enforces `allowedTemplates`, `allowedArgPrefixes`, and `usesRemaining` atomically (tests prove race safety on concurrent decrypts).
@@ -242,9 +244,37 @@ Tests — 2 cases:
 
 Commit: `feat(secrets): add markSecretUsed (audit-only primitive)`
 
-### Task 10: `Projects` service
+### Task 10: `@gmacko/secrets` public barrel + layer test
 
-`packages/secrets/src/projects.ts`:
+`packages/secrets/src/index.ts`:
+- Re-export `Secrets`, `layerSecrets`, all secrets errors + types
+- Export crypto primitives `encryptSecretValue` / `decryptSecretValue` (some callers may want to encrypt out-of-band — e.g. import scripts)
+- `__gmackoSecretsPhase = "6d"` sentinel
+
+Update `packages/secrets/package.json` exports with `.`, `./crypt`.
+
+Tests — 2 cases:
+1. package.test.ts (already from Task 5): `__gmackoSecretsPhase === "6d"` — passes
+2. New `layer.test.ts`: provide `layerSecrets` with `layerGmackoDb`, verify `Secrets` resolves and all methods are callable.
+
+Commit: `feat(secrets): finalize @gmacko/secrets public barrel`
+
+### Task 11: Scaffold `@gmacko/projects` package
+
+Create `packages/projects/`:
+- `package.json` — deps: `effect@4.0.0-beta.43`, `@gmacko/db`, `@gmacko/validators` workspace, `drizzle-orm`. devDeps mirror `@gmacko/secrets`. scripts: `test`, `typecheck`. exports: `.` only (barrel in Task 13).
+- `tsconfig.json` extends `@gmacko/tsconfig`
+- `vitest.config.ts` mirrors `@gmacko/secrets`
+
+Smoke test (`src/__tests__/package.test.ts`): import `__gmackoProjectsPhase` sentinel; assert `=== "6d"`.
+
+Run `pnpm install` at repo root so workspace wires up.
+
+Commit: `chore: scaffold @gmacko/projects package (deps, tsconfig, vitest, smoke)`
+
+### Task 12: `Projects` service
+
+`packages/projects/src/projects.ts`:
 ```ts
 export class ProjectNotFoundError extends Schema.TaggedErrorClass<...>()(...)
 export class ProjectSlugConflictError extends Schema.TaggedErrorClass<...>()(...)
@@ -266,7 +296,7 @@ export interface ProjectsShape {
   readonly deleteProject: (input: { projectId, tenantId }) => Effect<void, ProjectNotFoundError>;
 }
 
-export class Projects extends ServiceMap.Service<Projects, ProjectsShape>()("@gmacko/secrets/Projects") {}
+export class Projects extends ServiceMap.Service<Projects, ProjectsShape>()("@gmacko/projects/Projects") {}
 export const layerProjects: Layer.Layer<Projects, never, GmackoDb> = Layer.effect(Projects)(...);
 ```
 
@@ -276,28 +306,23 @@ Tests — 6 cases:
 3. createProject: different tenants can share a slug
 4. getById + getBySlug + listForTenant all tenant-scoped
 5. deleteProject for a project owned by another tenant → ProjectNotFoundError
-6. deleteProject cascades to project_deploy_secret_bindings (schema-level, via cascade test)
+6. deleteProject cascades to project_deploy_secret_bindings (via schema-level cascade; seed a binding through direct drizzle insert and verify it disappears)
 
-Commit: `feat(secrets): add Projects service (CRUD, tenant-scoped)`
+Commit: `feat(projects): add Projects service (CRUD, tenant-scoped)`
 
-### Task 11: Public barrel + layer bundle
+### Task 13: `@gmacko/projects` public barrel + layer test
 
-`packages/secrets/src/index.ts`:
-- Re-export `Secrets`, `layerSecrets`, all secrets errors + types
-- Re-export `Projects`, `layerProjects`, all projects errors + types
-- Export crypto primitives `encryptSecretValue` / `decryptSecretValue` (some callers may want to encrypt out-of-band — e.g. import scripts)
-- `layerSecretsAndProjects: Layer.Layer<Secrets | Projects, never, GmackoDb>` = `Layer.merge(layerSecrets, layerProjects)`
-- `__gmackoSecretsPhase = "6d"` sentinel
-
-Update `packages/secrets/package.json` exports with `.`, `./crypt`.
+`packages/projects/src/index.ts`:
+- Re-export `Projects`, `layerProjects`, `Project`, `ProjectNotFoundError`, `ProjectSlugConflictError`, `ProjectsShape`
+- `__gmackoProjectsPhase = "6d"` sentinel
 
 Tests — 2 cases:
-1. package.test.ts (already from Task 5): `__gmackoSecretsPhase === "6d"` — passes
-2. New `layer.test.ts`: provide `layerSecretsAndProjects` with `layerGmackoDb` and verify both services resolve.
+1. package.test.ts (from Task 11): passes
+2. `layer.test.ts`: provide `layerProjects` with `layerGmackoDb`, verify `Projects` resolves and all methods are callable.
 
-Commit: `feat(secrets): finalize public barrel + layerSecretsAndProjects bundle`
+Commit: `feat(projects): finalize @gmacko/projects public barrel`
 
-### Task 12: Exit verification + tag
+### Task 14: Exit verification + tag
 
 1. `pnpm -r --filter '!./apps/*' typecheck` green
 2. `pnpm --filter @gmacko/db test && pnpm --filter @gmacko/secrets test && pnpm -r --filter '!@gmacko/db' --filter '!@gmacko/secrets' --filter '!./apps/*' test` all green, ≥ 175 total
