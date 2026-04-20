@@ -6,18 +6,74 @@ import {
   sessionSecretUsages,
   projectDeploySecretBindings,
 } from "../secrets.js";
+import { projects } from "../projects.js";
 import { tenants } from "../tenancy.js";
+
+// Inline DDL mirroring what migration 0003 will later generate (Task 3).
+// Creates `projects` and rebuilds `project_deploy_secret_bindings` so its
+// `project_id` column is a proper FK to `projects.id`. Once 0003 lands and
+// `createTestDb` applies it automatically, this DDL becomes a no-op
+// (CREATE TABLE IF NOT EXISTS + ALTER ... IF NOT EXISTS patterns).
+const PROJECTS_DDL = `
+CREATE TABLE IF NOT EXISTS "projects" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE CASCADE,
+  "slug" varchar(128) NOT NULL,
+  "name" varchar(128) NOT NULL,
+  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+  "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+  CONSTRAINT "projects_tenant_slug_unique" UNIQUE ("tenant_id", "slug")
+);
+CREATE INDEX IF NOT EXISTS "projects_tenant_id_idx" ON "projects" ("tenant_id");
+`;
+
+// Rebuild project_deploy_secret_bindings so its column set matches the FK
+// schema. Migration 0002 created the table with `project_slug varchar(128)`;
+// we drop the old unique constraint + column and replace with `project_id
+// uuid FK`. This mirrors what migration 0003 will do in production.
+const BINDINGS_FK_DDL = `
+ALTER TABLE "project_deploy_secret_bindings"
+  DROP CONSTRAINT IF EXISTS "project_deploy_secret_bindings_unique";
+ALTER TABLE "project_deploy_secret_bindings"
+  DROP COLUMN IF EXISTS "project_slug";
+ALTER TABLE "project_deploy_secret_bindings"
+  ADD COLUMN IF NOT EXISTS "project_id" uuid NOT NULL
+  REFERENCES "projects"("id") ON DELETE CASCADE;
+ALTER TABLE "project_deploy_secret_bindings"
+  ADD CONSTRAINT "project_deploy_secret_bindings_unique"
+  UNIQUE ("tenant_id", "project_id", "deploy_environment", "deploy_env_var_name");
+CREATE INDEX IF NOT EXISTS "project_deploy_secret_bindings_project_id_idx"
+  ON "project_deploy_secret_bindings" ("project_id");
+`;
 
 describe("@gmacko/db secrets schema", () => {
   let ctx: Awaited<ReturnType<typeof createTestDb>>;
 
   beforeEach(async () => {
     ctx = await createTestDb();
+    await ctx.pglite.exec(PROJECTS_DDL);
+    await ctx.pglite.exec(BINDINGS_FK_DDL);
   });
 
   afterEach(async () => {
     await ctx.teardown();
   });
+
+  async function seedProject(opts: {
+    tenantId: string;
+    slug: string;
+    name: string;
+  }) {
+    const [project] = await ctx.db
+      .insert(projects)
+      .values({
+        tenantId: opts.tenantId,
+        slug: opts.slug,
+        name: opts.name,
+      })
+      .returning();
+    return project!;
+  }
 
   it("session_secrets: insert + query by (tenantId, name)", async () => {
     const [tenant] = await ctx.db
@@ -155,11 +211,21 @@ describe("@gmacko/db secrets schema", () => {
     expect(remaining).toHaveLength(0);
   });
 
-  it("project_deploy_secret_bindings: insert + query by (tenantId, projectSlug)", async () => {
+  it("project_deploy_secret_bindings: insert + query by (tenantId, projectId)", async () => {
     const [tenant] = await ctx.db
       .insert(tenants)
       .values({ name: "Deploy Co", slug: "deploy" })
       .returning();
+    const bobProject = await seedProject({
+      tenantId: tenant!.id,
+      slug: "bob-web",
+      name: "Bob Web",
+    });
+    const oodaProject = await seedProject({
+      tenantId: tenant!.id,
+      slug: "ooda-api",
+      name: "OODA API",
+    });
     const [dbSecret] = await ctx.db
       .insert(sessionSecrets)
       .values({
@@ -184,14 +250,14 @@ describe("@gmacko/db secrets schema", () => {
     await ctx.db.insert(projectDeploySecretBindings).values({
       tenantId: tenant!.id,
       secretId: dbSecret!.id,
-      projectSlug: "bob-web",
+      projectId: bobProject.id,
       deployEnvironment: "production",
       deployEnvVarName: "DATABASE_URL",
     });
     await ctx.db.insert(projectDeploySecretBindings).values({
       tenantId: tenant!.id,
       secretId: ghSecret!.id,
-      projectSlug: "bob-web",
+      projectId: bobProject.id,
       deployEnvironment: "production",
       deployEnvVarName: "GITHUB_TOKEN",
     });
@@ -199,7 +265,7 @@ describe("@gmacko/db secrets schema", () => {
     await ctx.db.insert(projectDeploySecretBindings).values({
       tenantId: tenant!.id,
       secretId: dbSecret!.id,
-      projectSlug: "ooda-api",
+      projectId: oodaProject.id,
       deployEnvironment: "production",
       deployEnvVarName: "DATABASE_URL",
     });
@@ -208,7 +274,7 @@ describe("@gmacko/db secrets schema", () => {
       {
         where: and(
           eq(projectDeploySecretBindings.tenantId, tenant!.id),
-          eq(projectDeploySecretBindings.projectSlug, "bob-web"),
+          eq(projectDeploySecretBindings.projectId, bobProject.id),
         ),
       },
     );
@@ -216,16 +282,117 @@ describe("@gmacko/db secrets schema", () => {
     const envVarNames = bobBindings.map((b) => b.deployEnvVarName).sort();
     expect(envVarNames).toEqual(["DATABASE_URL", "GITHUB_TOKEN"]);
 
-    // Uniqueness: same (tenant, project, env, envVarName) should fail
+    // Uniqueness: same (tenant, projectId, env, envVarName) should fail
     await expect(
       ctx.db.insert(projectDeploySecretBindings).values({
         tenantId: tenant!.id,
         secretId: ghSecret!.id,
-        projectSlug: "bob-web",
+        projectId: bobProject.id,
         deployEnvironment: "production",
         deployEnvVarName: "DATABASE_URL",
       }),
     ).rejects.toThrow();
   });
-});
 
+  it("project_deploy_secret_bindings: cascade on project delete", async () => {
+    const [tenant] = await ctx.db
+      .insert(tenants)
+      .values({ name: "Cascade Project Co", slug: "cascade-project" })
+      .returning();
+    const project = await seedProject({
+      tenantId: tenant!.id,
+      slug: "project-to-delete",
+      name: "Project to Delete",
+    });
+    const [secret] = await ctx.db
+      .insert(sessionSecrets)
+      .values({
+        tenantId: tenant!.id,
+        name: "ENV_SECRET",
+        ciphertext: "ct",
+        iv: "iv",
+        authTag: "tag",
+      })
+      .returning();
+
+    await ctx.db.insert(projectDeploySecretBindings).values({
+      tenantId: tenant!.id,
+      secretId: secret!.id,
+      projectId: project.id,
+      deployEnvironment: "production",
+      deployEnvVarName: "ENV_SECRET",
+    });
+
+    // Sanity: binding exists
+    const before = await ctx.db.query.projectDeploySecretBindings.findMany({
+      where: eq(projectDeploySecretBindings.projectId, project.id),
+    });
+    expect(before).toHaveLength(1);
+
+    // Delete the project — binding should cascade away.
+    await ctx.db.delete(projects).where(eq(projects.id, project.id));
+
+    const after = await ctx.db.query.projectDeploySecretBindings.findMany({
+      where: eq(projectDeploySecretBindings.projectId, project.id),
+    });
+    expect(after).toHaveLength(0);
+
+    // The underlying secret row should still exist — cascade is project-scoped.
+    const secretAfter = await ctx.db.query.sessionSecrets.findFirst({
+      where: eq(sessionSecrets.id, secret!.id),
+    });
+    expect(secretAfter).toBeDefined();
+  });
+
+  it("project_deploy_secret_bindings: unique (tenantId, projectId, deployEnvironment, deployEnvVarName)", async () => {
+    const [tenant] = await ctx.db
+      .insert(tenants)
+      .values({ name: "Unique Binding Co", slug: "unique-binding" })
+      .returning();
+    const project = await seedProject({
+      tenantId: tenant!.id,
+      slug: "unique-binding-project",
+      name: "Unique Binding Project",
+    });
+    const [secretA] = await ctx.db
+      .insert(sessionSecrets)
+      .values({
+        tenantId: tenant!.id,
+        name: "SECRET_A",
+        ciphertext: "ctA",
+        iv: "ivA",
+        authTag: "tagA",
+      })
+      .returning();
+    const [secretB] = await ctx.db
+      .insert(sessionSecrets)
+      .values({
+        tenantId: tenant!.id,
+        name: "SECRET_B",
+        ciphertext: "ctB",
+        iv: "ivB",
+        authTag: "tagB",
+      })
+      .returning();
+
+    await ctx.db.insert(projectDeploySecretBindings).values({
+      tenantId: tenant!.id,
+      secretId: secretA!.id,
+      projectId: project.id,
+      deployEnvironment: "production",
+      deployEnvVarName: "SHARED_ENV_VAR",
+    });
+
+    // A second binding with the same 4-tuple — even pointing at a different
+    // secret — must violate the unique constraint.
+    await expect(
+      ctx.db.insert(projectDeploySecretBindings).values({
+        tenantId: tenant!.id,
+        secretId: secretB!.id,
+        projectId: project.id,
+        deployEnvironment: "production",
+        deployEnvVarName: "SHARED_ENV_VAR",
+      }),
+    ).rejects.toThrow();
+  });
+});

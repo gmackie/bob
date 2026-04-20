@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { tenants } from "./tenancy.js";
+import { projects } from "./projects.js";
 
 // Secrets tables — gmacko-owned. `session_secrets` is the primary encrypted
 // secret store (AES-256-GCM ciphertext + IV + auth tag, all base64). The
@@ -21,8 +22,10 @@ import { tenants } from "./tenancy.js";
 // `sessionId` reference (plain uuid, no FK) avoids a cyclic dependency with
 // the `chat_conversations` table that lands in Task 8.
 // `project_deploy_secret_bindings` maps a stored secret to a
-// (project, environment, env var name) triple so deploys can materialize
-// the right secret into the right env var without hard-coding names.
+// (projectId FK → projects.id, environment, env var name) triple so deploys
+// can materialize the right secret into the right env var without
+// hard-coding names. Deleting the underlying project cascades to its
+// bindings.
 
 /**
  * Structured policy governing how a stored secret may be used by an agent
@@ -112,7 +115,9 @@ export const projectDeploySecretBindings = pgTable(
     secretId: uuid("secret_id")
       .notNull()
       .references(() => sessionSecrets.id, { onDelete: "cascade" }),
-    projectSlug: varchar("project_slug", { length: 128 }).notNull(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
     deployEnvironment: varchar("deploy_environment", { length: 64 }).notNull(),
     deployEnvVarName: varchar("deploy_env_var_name", { length: 128 }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
@@ -129,9 +134,12 @@ export const projectDeploySecretBindings = pgTable(
     secretIdIdx: index("project_deploy_secret_bindings_secret_id_idx").on(
       table.secretId,
     ),
+    projectIdIdx: index("project_deploy_secret_bindings_project_id_idx").on(
+      table.projectId,
+    ),
     uniqueBinding: unique("project_deploy_secret_bindings_unique").on(
       table.tenantId,
-      table.projectSlug,
+      table.projectId,
       table.deployEnvironment,
       table.deployEnvVarName,
     ),
