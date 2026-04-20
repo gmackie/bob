@@ -901,3 +901,61 @@ Items deliberately deferred from 6C:
 - Subagent per task via `subagent-driven-development` for isolation.
 - Effect 4 drift findings from 6C land in the master plan's reference table during Task 18.
 - Every new service ships with `layerX` factory next to it — app composes Layers at the boundary.
+
+---
+
+## Phase 6C — Completed ✅
+
+Tagged `phase-6c-complete`. 31 packages (added `@gmacko/auth`). Workspace typecheck green. **150 tests passing** across 11 test files (up from 71 at end of 6B; plan forecast was ~121, we overshot because the final services each gained coverage beyond the minimums). Migrations `0001_wild_ezekiel_stane.sql` (api_keys + adapterId widen) + `0002_sticky_zarek.sql` (device_codes) apply cleanly and idempotently to fresh and persistent PGlite dirs (verified by `migrate.test.ts`).
+
+### What landed
+
+- **`@gmacko/db`** carry-forward fixes:
+  - `runMigrations` rewritten around `drizzle-orm/pglite/migrator` → fully idempotent.
+  - `applyTestMigrations` hardened: empty-glob guard + numeric-prefix-safe sort (handles the >9999 migration case).
+  - Cross-schema JOIN smoke (`cross-schema.test.ts`) proves users→tenant_members→tenants→chat_conversations hangs together and cascade rules fire.
+  - `chat_conversations.adapterId` widened to `varchar(128)`.
+- **`@gmacko/db`** new schemas:
+  - `api_keys` — tenant-scoped, hashed via sha256, permissions as jsonb, cascade on tenant/user delete.
+  - `device_codes` — OAuth device flow with `device_flow_status` enum and `apiKeyId` set-null linkage.
+  - New subpath exports: `@gmacko/db/testing`, `@gmacko/db/service`, `@gmacko/db/schema/api-keys`, `@gmacko/db/schema/device-codes`.
+- **`@gmacko/rpc`** widen: `CurrentUser` shape now carries `{ userId, tenantId, email, role }`; `UserId` relaxed from UUID brand to `Schema.String + isMinLength(1) + brand` so better-auth's opaque text IDs are accepted (6A bug fix).
+- **`@gmacko/auth`** (new package, 11 modules, 55 tests):
+  - `BetterAuth` — better-auth instance wrapped as `ServiceMap.Service`; `initAuth(opts)` factory with drizzle adapter, GitHub OAuth, expo plugin, trusted-origins dedup.
+  - `Sessions` — validates session tokens and `Authorization: Bearer` headers against the `sessions` + `users` tables.
+  - `ApiKeys` — tenant-scoped key issuing/validation/revocation, configurable prefix list (default `["gmk_"]`), sha256 hashed, fire-and-forget `lastUsedAt` update via `Effect.forkDetach`.
+  - `DeviceCodes` — OAuth device flow (start/approve/poll) with Crockford base32 user-codes (4-`-`4), race-safe claim via conditional `UPDATE ... WHERE status='approved' RETURNING`, rollback on lost race.
+  - `Tenancy` — memberships, RBAC (`assertRole` with ranked roles), **Option B** tenant resolution (`x-tenant-id` header wins → single-membership auto-selects → `TenantNotSelectedError` carrying membership list).
+  - `resolveCurrentUser` / `provideCurrentUser` — plain-function middleware that extracts session/API-key credentials from an HTTP-like request, validates, and populates `CurrentUser` for wrapped effects. RpcMiddleware wrapping deferred to 6J (rationale inline).
+  - `createGmackoAuthClient` (react) + `createGmackoExpoAuthClient` (expo, async) on the `./client` subpath.
+  - `layerAuth({ apiKeys?, deviceCodes? })` convenience bundle that internally wires ApiKeys into DeviceCodes so callers only need `GmackoDb`.
+
+### Effect 4 drift findings from 6C (already appended to master plan reference table)
+
+1. `Effect.either` — not exported; use `Effect.catchTag` / `Effect.catchCause` / `Effect.exit`.
+2. `Cause.failures()` — not a function in beta.43; iterate via `Cause.match`.
+3. `Effect.forkDaemon` → `Effect.forkDetach` (renamed).
+4. `Effect.catchAllCause` → `Effect.catchCause` (renamed).
+5. `Layer.provideMerge` propagates requirements outward (unwanted); use explicit `Layer.provide(child, parent)` + `Layer.merge`.
+6. `RpcMiddleware.Service` receives an `Effect<SuccessValue, ...>` where `SuccessValue` is an opaque unique symbol — unit-testing in isolation is fragile; prefer plain-function middleware and wrap at the transport boundary.
+7. `HttpServerRequest.cookies` is on the `HttpServerRequest` service (not `RpcMiddleware` headers); cookie-aware middleware needs both services.
+8. Drizzle `.returning({ fields })` TS2554 under a union-type `Db` (pglite + postgres-js) — overloads collapse to 0-arg. Use bare `.returning()` and read the array.
+9. Drizzle thenables don't satisfy `PromiseLike<T>` structural check used by `Effect.promise`; wrap in `Effect.promise(async () => db.<query>())` instead of passing the query directly.
+
+### Known rough edges (non-blocking)
+
+- **Parallel `pnpm -r test` flakiness on PGlite-backed tests.** PGlite bringup can exceed the 10s hook timeout under workspace parallelism. Running db + auth serially (or via `--concurrency 1`) is clean. Flagged for a future retro; current workaround is the two-step invocation used in this phase's exit verification.
+- **Expo client factory is async.** `@better-auth/expo/client` statically imports `expo-linking` / `expo-constants` / `react-native` / `expo-modules-core`; those fail in plain Node. Solution baked into the factory: `await import("@better-auth/expo/client")` inside `createGmackoExpoAuthClient` so the module is importable from web/SSR runtimes.
+- **AuthMiddleware lives as plain functions, not `RpcMiddleware.Service`.** Deferred to 6J along with the full RPC server wiring; breadcrumb TODO in `middleware.ts` header.
+
+### Open items for 6D onboarding
+
+Carried forward as-planned:
+- `session_secret_usages.sessionId` FK promotion (still UUID-without-FK) — promote to `ON DELETE SET NULL` when 6E exercises the secret-session linkage.
+- API-key rotation scheduled jobs — manual `ApiKeys.revokeKey` only.
+- Device-code cleanup cron — expired rows accumulate; defer to 6J.
+- Composite indexes on `chat_conversations (tenantId, status)` etc. — defer until real query patterns emerge.
+- Better-auth generated schema cross-check — we hand-wrote the schema to better-auth's expected shape; revisit if upstream changes.
+
+New for 6D:
+- **Secret encryption is available in the DB** (`session_secrets` table exists from 6B), but no service wraps it yet. 6D owns `@gmacko/secrets` with AES-256-GCM + HMAC-derived keys, porting Bob's vault.

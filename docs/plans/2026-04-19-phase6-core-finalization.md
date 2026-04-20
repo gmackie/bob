@@ -125,6 +125,13 @@ The installed version is `effect@4.0.0-beta.43`, which differs significantly fro
 | `Stream.asyncEffect(...)` | **REMOVED** — same; wrap a Queue | not in `Stream.d.ts` |
 | `RpcResolver.make(group)` | `RpcClient.make(group)` — no RpcResolver module anymore | `effect/unstable/rpc/RpcClient.d.ts:93` |
 | `RpcClient.make(group, protocol)` with Protocol arg | `RpcClient.make(group)` — Protocol is a service; provide via `RpcClient.layerProtocolHttp()` | `effect/unstable/rpc/RpcClient.d.ts:93, 156` |
+| `Effect.either(effect)` | **not exported** — use `Effect.catchTag` / `Effect.catchCause` or `Effect.exit` | not in `effect/Effect.d.ts` (6C) |
+| `Cause.failures(cause)` fn | **not a function** — `Cause` in beta.43 uses different iteration; use `Effect.catchCause` with `Cause.match` for cases | `effect/Cause.d.ts` (6C) |
+| `Effect.forkDaemon(effect)` | `Effect.forkDetach(effect)` (renamed) | `effect/Effect.d.ts` (6C) |
+| `Effect.catchAllCause(handler)` | `Effect.catchCause(handler)` (renamed) | `effect/Effect.d.ts` (6C) |
+| `Layer.provideMerge(child, parent)` | `Layer.provide(child, parent)` + `Layer.merge(a, b)` explicitly — `provideMerge` propagates requirements to outer layer | `effect/Layer.d.ts` (6C) |
+| `RpcMiddleware.Service` ergonomics | Runtime shape receives `Effect<SuccessValue, ...>` where `SuccessValue` is an opaque unique-symbol type; unit-testing in isolation requires casting. Prefer plain-function middleware + wrap with `RpcMiddleware.Service` at transport boundary. | `effect/unstable/rpc/RpcMiddleware.d.ts` (6C) |
+| `HttpServerRequest.cookies` access | Cookies live on `HttpServerRequest` (a `ServiceMap.Service`), not on `RpcMiddleware` headers. Middleware needing cookies needs both services injected. | `effect/unstable/http/HttpServerRequest.d.ts` (6C) |
 
 > **SSE in Effect 4:** Because `Stream.async` is gone, the idiomatic push-style SSE producer is: create a `Queue.bounded(n)`, offer to it from the producer side, consume via `Stream.fromQueue(queue)`. The stream yields a value per `Queue.offer` and completes when the queue is `.shutdown`'d. This applies to 6E agent-token streams and 6G realtime event fan-out.
 
