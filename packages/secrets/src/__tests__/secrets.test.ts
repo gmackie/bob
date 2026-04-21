@@ -567,6 +567,85 @@ describe("@gmacko/secrets Secrets service", () => {
       expect(audits.every((a) => a.success === true)).toBe(true);
     }).pipe(Effect.provide(secretsLayer)),
   );
+
+  it.effect("markSecretUsed writes a usage row for a tenant-owned secret without decrementing usesRemaining", () =>
+    Effect.gen(function* () {
+      const svc = yield* Secrets.asEffect();
+      const created = yield* svc.createSecret({
+        tenantId: TENANT_A,
+        name: "audit-only",
+        plaintext: "ghp_reuse",
+        usesRemaining: 7,
+      });
+
+      const sessionId =
+        "00000000-0000-0000-0000-000000000001" as SessionId;
+
+      yield* svc.markSecretUsed({
+        secretId: created.id,
+        tenantId: TENANT_A,
+        templateId: "git-clone",
+        commandPrefix: "git clone",
+        sessionId,
+      });
+
+      const audits = yield* Effect.promise(() =>
+        ctx.db
+          .select()
+          .from(sessionSecretUsages)
+          .where(eq(sessionSecretUsages.secretId, created.id)),
+      );
+      expect(audits).toHaveLength(1);
+      expect(audits[0]!.secretId).toBe(created.id);
+      expect(audits[0]!.templateId).toBe("git-clone");
+      expect(audits[0]!.commandPrefix).toBe("git clone");
+      expect(audits[0]!.success).toBe(true);
+      expect(audits[0]!.sessionId).toBe(sessionId);
+
+      // usesRemaining must be untouched — markSecretUsed is audit-only.
+      const rows = yield* Effect.promise(() =>
+        ctx.db
+          .select({ usesRemaining: sessionSecrets.usesRemaining })
+          .from(sessionSecrets)
+          .where(eq(sessionSecrets.id, created.id)),
+      );
+      expect(rows[0]!.usesRemaining).toBe(7);
+    }).pipe(Effect.provide(secretsLayer)),
+  );
+
+  it.effect("markSecretUsed for another tenant's secret → SecretNotFoundError (no audit row written)", () =>
+    Effect.gen(function* () {
+      const svc = yield* Secrets.asEffect();
+      const aSecret = yield* svc.createSecret({
+        tenantId: TENANT_A,
+        name: "a-only-audit",
+        plaintext: "a-plaintext",
+      });
+
+      const caught = yield* svc
+        .markSecretUsed({
+          secretId: aSecret.id,
+          tenantId: TENANT_B,
+          templateId: "x",
+        })
+        .pipe(
+          Effect.catchTag("SecretNotFoundError", (err) => Effect.succeed(err)),
+        );
+
+      expect(caught).toBeInstanceOf(SecretNotFoundError);
+      expect((caught as SecretNotFoundError).secretId).toBe(aSecret.id);
+      expect((caught as SecretNotFoundError).tenantId).toBe(TENANT_B);
+
+      // No audit row should have been written.
+      const audits = yield* Effect.promise(() =>
+        ctx.db
+          .select()
+          .from(sessionSecretUsages)
+          .where(eq(sessionSecretUsages.secretId, aSecret.id)),
+      );
+      expect(audits).toHaveLength(0);
+    }).pipe(Effect.provide(secretsLayer)),
+  );
 });
 
 // Type-only assertion — ensure the SecretEnvelope brand types line up.

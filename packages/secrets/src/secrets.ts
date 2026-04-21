@@ -4,8 +4,8 @@
 // `./crypt.ts` for the envelope crypto.
 //
 // Phase 6D surface: `createSecret`, `deleteSecret`, `getSecret`,
-// `listForTenant`, `decryptForUse`. `markSecretUsed` lands in Task 9. NOT
-// exported from the package barrel yet — Task 10 owns the public API.
+// `listForTenant`, `decryptForUse`, `markSecretUsed`. NOT exported from the
+// package barrel yet — Task 10 owns the public API.
 //
 // `decryptForUse` is the only entry point that returns plaintext. Flow:
 //   1. A race-safe conditional UPDATE decrements `usesRemaining` atomically
@@ -115,6 +115,14 @@ export interface SecretsShape {
     DecryptForUseResult,
     SecretNotFoundError | PolicyDeniedError | MaxUsesExceededError
   >;
+  readonly markSecretUsed: (input: {
+    secretId: SessionSecretIdT;
+    tenantId: TenantIdT;
+    sessionId?: SessionIdT;
+    templateId?: string;
+    commandPrefix?: string;
+    success?: boolean;
+  }) => Effect.Effect<void, SecretNotFoundError>;
 }
 
 export class Secrets extends ServiceMap.Service<Secrets, SecretsShape>()(
@@ -452,12 +460,50 @@ export const layerSecrets: Layer.Layer<Secrets, never, GmackoDb> =
           };
         });
 
+      const markSecretUsed: SecretsShape["markSecretUsed"] = ({
+        secretId,
+        tenantId,
+        sessionId,
+        templateId,
+        commandPrefix,
+        success,
+      }) =>
+        Effect.gen(function* () {
+          // Tenant-scoped existence check — so a cross-tenant or missing id
+          // surfaces as SecretNotFoundError without relying on FK driver
+          // errors leaking out of Effect.promise.
+          const rows = yield* Effect.promise(async () =>
+            db
+              .select({ id: sessionSecrets.id })
+              .from(sessionSecrets)
+              .where(
+                and(
+                  eq(sessionSecrets.id, secretId),
+                  eq(sessionSecrets.tenantId, tenantId),
+                ),
+              ),
+          );
+          if (rows.length === 0) {
+            return yield* Effect.fail(
+              new SecretNotFoundError({ secretId, tenantId }),
+            );
+          }
+          yield* writeAudit({
+            secretId,
+            sessionId,
+            templateId,
+            commandPrefix,
+            success: success ?? true,
+          });
+        });
+
       return {
         createSecret,
         deleteSecret,
         getSecret,
         listForTenant,
         decryptForUse,
+        markSecretUsed,
       } satisfies SecretsShape;
     }),
   );
