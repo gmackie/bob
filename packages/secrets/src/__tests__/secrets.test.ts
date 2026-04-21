@@ -7,11 +7,20 @@ import { and, eq } from "drizzle-orm";
 import { createTestDb } from "@gmacko/db/testing";
 import { layerGmackoDb } from "@gmacko/db";
 import { tenants } from "@gmacko/db/schema/tenancy";
-import { sessionSecrets } from "@gmacko/db/schema/secrets";
-import type { SessionSecretId, TenantId } from "@gmacko/validators";
+import {
+  sessionSecrets,
+  sessionSecretUsages,
+} from "@gmacko/db/schema/secrets";
+import type {
+  SessionId,
+  SessionSecretId,
+  TenantId,
+} from "@gmacko/validators";
 
 import { decryptSecretValue } from "../crypt.js";
 import {
+  MaxUsesExceededError,
+  PolicyDeniedError,
   Secrets,
   SecretNameConflictError,
   SecretNotFoundError,
@@ -286,6 +295,276 @@ describe("@gmacko/secrets Secrets service", () => {
       });
       expect(owned.id).toBe(aSecret.id);
       expect(owned.tenantId).toBe(TENANT_A);
+    }).pipe(Effect.provide(secretsLayer)),
+  );
+
+  it.effect("decryptForUse happy path: no policy, unlimited uses → returns plaintext and writes success audit", () =>
+    Effect.gen(function* () {
+      const svc = yield* Secrets.asEffect();
+      const created = yield* svc.createSecret({
+        tenantId: TENANT_A,
+        name: "unl",
+        plaintext: "s3cr3t",
+      });
+
+      const result = yield* svc.decryptForUse({
+        secretId: created.id,
+        tenantId: TENANT_A,
+      });
+
+      expect(result.plaintext).toBe("s3cr3t");
+      expect(result.envelope.id).toBe(created.id);
+      expect(result.envelope.usesRemaining).toBeNull();
+
+      const audits = yield* Effect.promise(() =>
+        ctx.db
+          .select()
+          .from(sessionSecretUsages)
+          .where(eq(sessionSecretUsages.secretId, created.id)),
+      );
+      expect(audits).toHaveLength(1);
+      expect(audits[0]!.success).toBe(true);
+    }).pipe(Effect.provide(secretsLayer)),
+  );
+
+  it.effect("decryptForUse allows when templateId is in allowedTemplates", () =>
+    Effect.gen(function* () {
+      const svc = yield* Secrets.asEffect();
+      const created = yield* svc.createSecret({
+        tenantId: TENANT_A,
+        name: "tpl-allow",
+        plaintext: "ghp_xxx",
+        policy: { allowedTemplates: ["git-clone", "git-push"] },
+      });
+
+      const result = yield* svc.decryptForUse({
+        secretId: created.id,
+        tenantId: TENANT_A,
+        templateId: "git-clone",
+      });
+
+      expect(result.plaintext).toBe("ghp_xxx");
+
+      const audits = yield* Effect.promise(() =>
+        ctx.db
+          .select()
+          .from(sessionSecretUsages)
+          .where(eq(sessionSecretUsages.secretId, created.id)),
+      );
+      expect(audits).toHaveLength(1);
+      expect(audits[0]!.success).toBe(true);
+      expect(audits[0]!.templateId).toBe("git-clone");
+    }).pipe(Effect.provide(secretsLayer)),
+  );
+
+  it.effect("decryptForUse denies when templateId is NOT in allowedTemplates (writes failure audit, preserves usesRemaining)", () =>
+    Effect.gen(function* () {
+      const svc = yield* Secrets.asEffect();
+      const created = yield* svc.createSecret({
+        tenantId: TENANT_A,
+        name: "tpl-deny",
+        plaintext: "ghp_denied",
+        policy: { allowedTemplates: ["git-clone", "git-push"] },
+      });
+
+      const caught = yield* svc
+        .decryptForUse({
+          secretId: created.id,
+          tenantId: TENANT_A,
+          templateId: "rm",
+        })
+        .pipe(
+          Effect.catchTag("PolicyDeniedError", (err) => Effect.succeed(err)),
+        );
+
+      expect(caught).toBeInstanceOf(PolicyDeniedError);
+      const err = caught as PolicyDeniedError;
+      expect(err.reason).toBe("template");
+      expect(err.templateId).toBe("rm");
+      expect(err.expected).toEqual(["git-clone", "git-push"]);
+
+      const audits = yield* Effect.promise(() =>
+        ctx.db
+          .select()
+          .from(sessionSecretUsages)
+          .where(eq(sessionSecretUsages.secretId, created.id)),
+      );
+      expect(audits).toHaveLength(1);
+      expect(audits[0]!.success).toBe(false);
+      expect(audits[0]!.templateId).toBe("rm");
+
+      // usesRemaining remains null (unlimited) — the decrement still happened
+      // (CASE NULL → NULL), so the row is still unlimited.
+      const rows = yield* Effect.promise(() =>
+        ctx.db
+          .select()
+          .from(sessionSecrets)
+          .where(eq(sessionSecrets.id, created.id)),
+      );
+      expect(rows[0]!.usesRemaining).toBeNull();
+    }).pipe(Effect.provide(secretsLayer)),
+  );
+
+  it.effect("decryptForUse allows when args[0] matches an allowedArgPrefixes entry", () =>
+    Effect.gen(function* () {
+      const svc = yield* Secrets.asEffect();
+      const created = yield* svc.createSecret({
+        tenantId: TENANT_A,
+        name: "arg-allow",
+        plaintext: "ghp_arg_ok",
+        policy: {
+          allowedTemplates: ["git-clone"],
+          allowedArgPrefixes: {
+            "git-clone": ["https://github.com/acme/"],
+          },
+        },
+      });
+
+      const result = yield* svc.decryptForUse({
+        secretId: created.id,
+        tenantId: TENANT_A,
+        templateId: "git-clone",
+        args: ["https://github.com/acme/thing.git"],
+      });
+
+      expect(result.plaintext).toBe("ghp_arg_ok");
+
+      const audits = yield* Effect.promise(() =>
+        ctx.db
+          .select()
+          .from(sessionSecretUsages)
+          .where(eq(sessionSecretUsages.secretId, created.id)),
+      );
+      expect(audits).toHaveLength(1);
+      expect(audits[0]!.success).toBe(true);
+      expect(audits[0]!.templateId).toBe("git-clone");
+      expect(audits[0]!.commandPrefix).toBe(
+        "https://github.com/acme/thing.git",
+      );
+    }).pipe(Effect.provide(secretsLayer)),
+  );
+
+  it.effect("decryptForUse denies when no arg matches an allowedArgPrefixes entry", () =>
+    Effect.gen(function* () {
+      const svc = yield* Secrets.asEffect();
+      const created = yield* svc.createSecret({
+        tenantId: TENANT_A,
+        name: "arg-deny",
+        plaintext: "ghp_arg_deny",
+        policy: {
+          allowedTemplates: ["git-clone"],
+          allowedArgPrefixes: {
+            "git-clone": ["https://github.com/acme/"],
+          },
+        },
+      });
+
+      const caught = yield* svc
+        .decryptForUse({
+          secretId: created.id,
+          tenantId: TENANT_A,
+          templateId: "git-clone",
+          args: ["https://evil.example/leak.git"],
+        })
+        .pipe(
+          Effect.catchTag("PolicyDeniedError", (err) => Effect.succeed(err)),
+        );
+
+      expect(caught).toBeInstanceOf(PolicyDeniedError);
+      const err = caught as PolicyDeniedError;
+      expect(err.reason).toBe("argPrefix");
+      expect(err.templateId).toBe("git-clone");
+      expect(err.expected).toEqual(["https://github.com/acme/"]);
+
+      const audits = yield* Effect.promise(() =>
+        ctx.db
+          .select()
+          .from(sessionSecretUsages)
+          .where(eq(sessionSecretUsages.secretId, created.id)),
+      );
+      expect(audits).toHaveLength(1);
+      expect(audits[0]!.success).toBe(false);
+    }).pipe(Effect.provide(secretsLayer)),
+  );
+
+  it.effect("decryptForUse with usesRemaining=1 succeeds once, then fails with MaxUsesExceededError", () =>
+    Effect.gen(function* () {
+      const svc = yield* Secrets.asEffect();
+      const created = yield* svc.createSecret({
+        tenantId: TENANT_A,
+        name: "one-shot",
+        plaintext: "only-once",
+        usesRemaining: 1,
+      });
+
+      const first = yield* svc.decryptForUse({
+        secretId: created.id,
+        tenantId: TENANT_A,
+      });
+      expect(first.plaintext).toBe("only-once");
+
+      const afterFirst = yield* Effect.promise(() =>
+        ctx.db
+          .select({ usesRemaining: sessionSecrets.usesRemaining })
+          .from(sessionSecrets)
+          .where(eq(sessionSecrets.id, created.id)),
+      );
+      expect(afterFirst[0]!.usesRemaining).toBe(0);
+
+      const caught = yield* svc
+        .decryptForUse({ secretId: created.id, tenantId: TENANT_A })
+        .pipe(
+          Effect.catchTag("MaxUsesExceededError", (err) => Effect.succeed(err)),
+        );
+
+      expect(caught).toBeInstanceOf(MaxUsesExceededError);
+      expect((caught as MaxUsesExceededError).secretId).toBe(created.id);
+
+      // Row stays at 0 — no negative counter.
+      const afterSecond = yield* Effect.promise(() =>
+        ctx.db
+          .select({ usesRemaining: sessionSecrets.usesRemaining })
+          .from(sessionSecrets)
+          .where(eq(sessionSecrets.id, created.id)),
+      );
+      expect(afterSecond[0]!.usesRemaining).toBe(0);
+    }).pipe(Effect.provide(secretsLayer)),
+  );
+
+  it.effect("decryptForUse with usesRemaining=null stays null across 3 successful calls", () =>
+    Effect.gen(function* () {
+      const svc = yield* Secrets.asEffect();
+      const created = yield* svc.createSecret({
+        tenantId: TENANT_A,
+        name: "unbounded",
+        plaintext: "forever",
+      });
+
+      for (let i = 0; i < 3; i++) {
+        const r = yield* svc.decryptForUse({
+          secretId: created.id,
+          tenantId: TENANT_A,
+        });
+        expect(r.plaintext).toBe("forever");
+      }
+
+      const rows = yield* Effect.promise(() =>
+        ctx.db
+          .select({ usesRemaining: sessionSecrets.usesRemaining })
+          .from(sessionSecrets)
+          .where(eq(sessionSecrets.id, created.id)),
+      );
+      expect(rows[0]!.usesRemaining).toBeNull();
+
+      // Three audit rows, all success=true.
+      const audits = yield* Effect.promise(() =>
+        ctx.db
+          .select()
+          .from(sessionSecretUsages)
+          .where(eq(sessionSecretUsages.secretId, created.id)),
+      );
+      expect(audits).toHaveLength(3);
+      expect(audits.every((a) => a.success === true)).toBe(true);
     }).pipe(Effect.provide(secretsLayer)),
   );
 });

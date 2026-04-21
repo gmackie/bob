@@ -4,24 +4,40 @@
 // `./crypt.ts` for the envelope crypto.
 //
 // Phase 6D surface: `createSecret`, `deleteSecret`, `getSecret`,
-// `listForTenant`. The `decryptForUse` / `markSecretUsed` methods land in
-// Tasks 8-9. NOT exported from the package barrel yet — Task 10 owns the
-// public API.
+// `listForTenant`, `decryptForUse`. `markSecretUsed` lands in Task 9. NOT
+// exported from the package barrel yet — Task 10 owns the public API.
+//
+// `decryptForUse` is the only entry point that returns plaintext. Flow:
+//   1. A race-safe conditional UPDATE decrements `usesRemaining` atomically
+//      (guard: `IS NULL OR > 0`). Zero rows returned → disambiguate via a
+//      follow-up SELECT: either `SecretNotFoundError` (missing/cross-tenant)
+//      or `MaxUsesExceededError` (row exists but counter hit 0).
+//   2. Policy checks (`allowedTemplates`, `allowedArgPrefixes`) run on the
+//      freshly-decremented row. A failed check still writes an audit row
+//      (success=false) and does NOT roll back the decrement — a denied use
+//      still counts toward the cap as a hostile-actor signal.
+//   3. On success, the envelope is decrypted and a success audit row is
+//      written (with sessionId/templateId/commandPrefix).
+// We intentionally do NOT wrap this in a drizzle transaction; pglite's
+// transaction semantics under drizzle-orm are brittle, and the non-rollback
+// behavior is the Bob-flavored semantics we want.
 import { randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
 import { Effect, Layer, Schema, ServiceMap } from "effect";
 
 import { GmackoDb } from "@gmacko/db";
 import {
+  sessionSecretUsages,
   sessionSecrets,
   type SessionSecretPolicy,
 } from "@gmacko/db/schema/secrets";
 import type {
+  SessionId as SessionIdT,
   SessionSecretId as SessionSecretIdT,
   TenantId as TenantIdT,
 } from "@gmacko/validators";
 
-import { encryptSecretValue } from "./crypt.js";
+import { decryptSecretValue, encryptSecretValue } from "./crypt.js";
 
 export class SecretNotFoundError extends Schema.TaggedErrorClass<SecretNotFoundError>()(
   "SecretNotFoundError",
@@ -31,6 +47,20 @@ export class SecretNotFoundError extends Schema.TaggedErrorClass<SecretNotFoundE
 export class SecretNameConflictError extends Schema.TaggedErrorClass<SecretNameConflictError>()(
   "SecretNameConflictError",
   { tenantId: Schema.String, name: Schema.String },
+) {}
+
+export class PolicyDeniedError extends Schema.TaggedErrorClass<PolicyDeniedError>()(
+  "PolicyDeniedError",
+  {
+    reason: Schema.Literals(["template", "argPrefix", "noTemplateId"]),
+    templateId: Schema.optional(Schema.String),
+    expected: Schema.optional(Schema.Array(Schema.String)),
+  },
+) {}
+
+export class MaxUsesExceededError extends Schema.TaggedErrorClass<MaxUsesExceededError>()(
+  "MaxUsesExceededError",
+  { secretId: Schema.String, maxUses: Schema.Number },
 ) {}
 
 export interface SecretEnvelope {
@@ -51,6 +81,19 @@ export interface CreateSecretInput {
   readonly usesRemaining?: number | null;
 }
 
+export interface DecryptForUseInput {
+  readonly secretId: SessionSecretIdT;
+  readonly tenantId: TenantIdT;
+  readonly templateId?: string;
+  readonly args?: readonly string[];
+  readonly sessionId?: SessionIdT;
+}
+
+export interface DecryptForUseResult {
+  readonly plaintext: string;
+  readonly envelope: SecretEnvelope;
+}
+
 export interface SecretsShape {
   readonly createSecret: (
     input: CreateSecretInput,
@@ -66,6 +109,12 @@ export interface SecretsShape {
   readonly listForTenant: (
     tenantId: TenantIdT,
   ) => Effect.Effect<readonly SecretEnvelope[], never>;
+  readonly decryptForUse: (
+    input: DecryptForUseInput,
+  ) => Effect.Effect<
+    DecryptForUseResult,
+    SecretNotFoundError | PolicyDeniedError | MaxUsesExceededError
+  >;
 }
 
 export class Secrets extends ServiceMap.Service<Secrets, SecretsShape>()(
@@ -225,11 +274,190 @@ export const layerSecrets: Layer.Layer<Secrets, never, GmackoDb> =
           }));
         });
 
+      const toEnvelope = (row: typeof sessionSecrets.$inferSelect): SecretEnvelope => ({
+        id: row.id as SessionSecretIdT,
+        tenantId: row.tenantId as TenantIdT,
+        name: row.name,
+        policy: (row.policy ?? {}) as SessionSecretPolicy,
+        usesRemaining: row.usesRemaining,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      });
+
+      const writeAudit = (args: {
+        secretId: SessionSecretIdT;
+        sessionId?: SessionIdT;
+        templateId?: string;
+        commandPrefix?: string;
+        success: boolean;
+      }) =>
+        Effect.promise(async () => {
+          await db.insert(sessionSecretUsages).values({
+            secretId: args.secretId,
+            sessionId: args.sessionId ?? null,
+            templateId: args.templateId ?? null,
+            commandPrefix: args.commandPrefix ?? null,
+            success: args.success,
+          });
+        });
+
+      const decryptForUse: SecretsShape["decryptForUse"] = ({
+        secretId,
+        tenantId,
+        templateId,
+        args,
+        sessionId,
+      }) =>
+        Effect.gen(function* () {
+          // Step 1: race-safe conditional UPDATE. The guard `usesRemaining IS
+          // NULL OR usesRemaining > 0` ensures two concurrent callers against
+          // a `usesRemaining: 1` row cannot both decrement — only the caller
+          // whose WHERE matched gets a row back. The CASE expression keeps a
+          // NULL row NULL (unlimited) while decrementing concrete integers.
+          const updated = yield* Effect.promise(async () =>
+            db
+              .update(sessionSecrets)
+              .set({
+                usesRemaining: sql`CASE WHEN ${sessionSecrets.usesRemaining} IS NULL THEN NULL ELSE ${sessionSecrets.usesRemaining} - 1 END`,
+                updatedAt: new Date(),
+              })
+              .where(
+                and(
+                  eq(sessionSecrets.id, secretId),
+                  eq(sessionSecrets.tenantId, tenantId),
+                  or(
+                    isNull(sessionSecrets.usesRemaining),
+                    gt(sessionSecrets.usesRemaining, 0),
+                  ),
+                ),
+              )
+              .returning(),
+          );
+
+          if (updated.length === 0) {
+            // Disambiguate: is the row missing/cross-tenant, or is
+            // usesRemaining already 0?
+            const existing = yield* Effect.promise(async () =>
+              db
+                .select()
+                .from(sessionSecrets)
+                .where(
+                  and(
+                    eq(sessionSecrets.id, secretId),
+                    eq(sessionSecrets.tenantId, tenantId),
+                  ),
+                )
+                .limit(1),
+            );
+            if (existing.length === 0) {
+              return yield* Effect.fail(
+                new SecretNotFoundError({ secretId, tenantId }),
+              );
+            }
+            const row = existing[0]!;
+            const cap = row.policy?.maxUses ?? 0;
+            return yield* Effect.fail(
+              new MaxUsesExceededError({ secretId, maxUses: cap }),
+            );
+          }
+
+          const row = updated[0]!;
+          const policy = (row.policy ?? {}) as SessionSecretPolicy;
+          const commandPrefix = args?.[0];
+
+          // Step 3a: allowedTemplates check.
+          if (
+            Array.isArray(policy.allowedTemplates) &&
+            policy.allowedTemplates.length > 0
+          ) {
+            if (!templateId) {
+              yield* writeAudit({
+                secretId,
+                sessionId,
+                templateId: undefined,
+                commandPrefix,
+                success: false,
+              });
+              return yield* Effect.fail(
+                new PolicyDeniedError({
+                  reason: "noTemplateId",
+                  expected: policy.allowedTemplates,
+                }),
+              );
+            }
+            if (!policy.allowedTemplates.includes(templateId)) {
+              yield* writeAudit({
+                secretId,
+                sessionId,
+                templateId,
+                commandPrefix,
+                success: false,
+              });
+              return yield* Effect.fail(
+                new PolicyDeniedError({
+                  reason: "template",
+                  templateId,
+                  expected: policy.allowedTemplates,
+                }),
+              );
+            }
+          }
+
+          // Step 3b: allowedArgPrefixes check (only if templateId + entry exist).
+          if (templateId) {
+            const prefixes = policy.allowedArgPrefixes?.[templateId];
+            if (Array.isArray(prefixes) && prefixes.length > 0) {
+              const argList = args ?? [];
+              const ok = argList.some((a) =>
+                prefixes.some((p) => a.startsWith(p)),
+              );
+              if (!ok) {
+                yield* writeAudit({
+                  secretId,
+                  sessionId,
+                  templateId,
+                  commandPrefix,
+                  success: false,
+                });
+                return yield* Effect.fail(
+                  new PolicyDeniedError({
+                    reason: "argPrefix",
+                    templateId,
+                    expected: prefixes,
+                  }),
+                );
+              }
+            }
+          }
+
+          // Step 3c: policy passed — decrypt and write success audit.
+          const plaintext = decryptSecretValue(
+            {
+              ciphertext: row.ciphertext,
+              iv: row.iv,
+              tag: row.authTag,
+            },
+            secretId,
+          );
+          yield* writeAudit({
+            secretId,
+            sessionId,
+            templateId,
+            commandPrefix,
+            success: true,
+          });
+          return {
+            plaintext,
+            envelope: toEnvelope(row),
+          };
+        });
+
       return {
         createSecret,
         deleteSecret,
         getSecret,
         listForTenant,
+        decryptForUse,
       } satisfies SecretsShape;
     }),
   );
