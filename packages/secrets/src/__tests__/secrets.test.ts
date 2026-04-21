@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
@@ -208,6 +209,83 @@ describe("@gmacko/secrets Secrets service", () => {
       const byName = new Map(list.map((s) => [s.name, s] as const));
       expect(byName.get("limited")!.usesRemaining).toBe(5);
       expect(byName.get("unlimited")!.usesRemaining).toBeNull();
+    }).pipe(Effect.provide(secretsLayer)),
+  );
+
+  it.effect("getSecret returns the envelope for an existing tenant-owned secret", () =>
+    Effect.gen(function* () {
+      const svc = yield* Secrets.asEffect();
+      const created = yield* svc.createSecret({
+        tenantId: TENANT_A,
+        name: "gh-token",
+        plaintext: "supersecret-value",
+        usesRemaining: 3,
+      });
+
+      const result = yield* svc.getSecret({
+        secretId: created.id,
+        tenantId: TENANT_A,
+      });
+
+      expect(result.id).toBe(created.id);
+      expect(result.tenantId).toBe(TENANT_A);
+      expect(result.name).toBe("gh-token");
+      expect(result.policy).toEqual({});
+      expect(result.usesRemaining).toBe(3);
+      expect(result.createdAt).toBeInstanceOf(Date);
+      expect(result.updatedAt).toBeInstanceOf(Date);
+
+      // Envelope-only: no crypto material or plaintext on the result.
+      expect(result).not.toHaveProperty("ciphertext");
+      expect(result).not.toHaveProperty("iv");
+      expect(result).not.toHaveProperty("authTag");
+      expect(result).not.toHaveProperty("plaintext");
+    }).pipe(Effect.provide(secretsLayer)),
+  );
+
+  it.effect("getSecret for a non-existent id → SecretNotFoundError", () =>
+    Effect.gen(function* () {
+      const svc = yield* Secrets.asEffect();
+      const missingId = randomUUID() as SessionSecretId;
+
+      const caught = yield* svc
+        .getSecret({ secretId: missingId, tenantId: TENANT_A })
+        .pipe(
+          Effect.catchTag("SecretNotFoundError", (err) => Effect.succeed(err)),
+        );
+
+      expect(caught).toBeInstanceOf(SecretNotFoundError);
+      expect((caught as SecretNotFoundError).secretId).toBe(missingId);
+      expect((caught as SecretNotFoundError).tenantId).toBe(TENANT_A);
+    }).pipe(Effect.provide(secretsLayer)),
+  );
+
+  it.effect("getSecret for another tenant's secret → SecretNotFoundError (cross-tenant hardening)", () =>
+    Effect.gen(function* () {
+      const svc = yield* Secrets.asEffect();
+      const aSecret = yield* svc.createSecret({
+        tenantId: TENANT_A,
+        name: "a-only",
+        plaintext: "a-plaintext",
+      });
+
+      const caught = yield* svc
+        .getSecret({ secretId: aSecret.id, tenantId: TENANT_B })
+        .pipe(
+          Effect.catchTag("SecretNotFoundError", (err) => Effect.succeed(err)),
+        );
+
+      expect(caught).toBeInstanceOf(SecretNotFoundError);
+      expect((caught as SecretNotFoundError).secretId).toBe(aSecret.id);
+      expect((caught as SecretNotFoundError).tenantId).toBe(TENANT_B);
+
+      // Tenant A can still fetch their own secret — row must be intact.
+      const owned = yield* svc.getSecret({
+        secretId: aSecret.id,
+        tenantId: TENANT_A,
+      });
+      expect(owned.id).toBe(aSecret.id);
+      expect(owned.tenantId).toBe(TENANT_A);
     }).pipe(Effect.provide(secretsLayer)),
   );
 });

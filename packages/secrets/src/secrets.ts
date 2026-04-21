@@ -3,9 +3,10 @@
 // auth tag) whose row keys are HMAC-derived from a master env-var key; see
 // `./crypt.ts` for the envelope crypto.
 //
-// Phase 6D surface: `createSecret`, `deleteSecret`, `listForTenant`. The
-// `getSecret` / `decryptForUse` / `markSecretUsed` methods land in Tasks 7-9.
-// NOT exported from the package barrel yet — Task 10 owns the public API.
+// Phase 6D surface: `createSecret`, `deleteSecret`, `getSecret`,
+// `listForTenant`. The `decryptForUse` / `markSecretUsed` methods land in
+// Tasks 8-9. NOT exported from the package barrel yet — Task 10 owns the
+// public API.
 import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { Effect, Layer, Schema, ServiceMap } from "effect";
@@ -58,6 +59,10 @@ export interface SecretsShape {
     secretId: SessionSecretIdT;
     tenantId: TenantIdT;
   }) => Effect.Effect<void, SecretNotFoundError>;
+  readonly getSecret: (input: {
+    secretId: SessionSecretIdT;
+    tenantId: TenantIdT;
+  }) => Effect.Effect<SecretEnvelope, SecretNotFoundError>;
   readonly listForTenant: (
     tenantId: TenantIdT,
   ) => Effect.Effect<readonly SecretEnvelope[], never>;
@@ -156,6 +161,44 @@ export const layerSecrets: Layer.Layer<Secrets, never, GmackoDb> =
           }
         });
 
+      const getSecret: SecretsShape["getSecret"] = ({ secretId, tenantId }) =>
+        Effect.gen(function* () {
+          const rows = yield* Effect.promise(async () =>
+            db
+              .select({
+                id: sessionSecrets.id,
+                tenantId: sessionSecrets.tenantId,
+                name: sessionSecrets.name,
+                policy: sessionSecrets.policy,
+                usesRemaining: sessionSecrets.usesRemaining,
+                createdAt: sessionSecrets.createdAt,
+                updatedAt: sessionSecrets.updatedAt,
+              })
+              .from(sessionSecrets)
+              .where(
+                and(
+                  eq(sessionSecrets.id, secretId),
+                  eq(sessionSecrets.tenantId, tenantId),
+                ),
+              ),
+          );
+          if (rows.length === 0) {
+            return yield* Effect.fail(
+              new SecretNotFoundError({ secretId, tenantId }),
+            );
+          }
+          const r = rows[0]!;
+          return {
+            id: r.id as SessionSecretIdT,
+            tenantId: r.tenantId as TenantIdT,
+            name: r.name,
+            policy: (r.policy ?? {}) as SessionSecretPolicy,
+            usesRemaining: r.usesRemaining,
+            createdAt: r.createdAt,
+            updatedAt: r.updatedAt,
+          };
+        });
+
       const listForTenant: SecretsShape["listForTenant"] = (tenantId) =>
         Effect.promise(async () => {
           const rows = await db
@@ -182,6 +225,11 @@ export const layerSecrets: Layer.Layer<Secrets, never, GmackoDb> =
           }));
         });
 
-      return { createSecret, deleteSecret, listForTenant } satisfies SecretsShape;
+      return {
+        createSecret,
+        deleteSecret,
+        getSecret,
+        listForTenant,
+      } satisfies SecretsShape;
     }),
   );
