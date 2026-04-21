@@ -346,3 +346,43 @@ Commit: `feat(projects): finalize @gmacko/projects public barrel`
 - Each task = RED → GREEN → COMMIT with a dedicated subagent.
 - Envelope encryption with HMAC-derived row keys stays the gmacko primitive until KMS is unavoidable.
 - Projects = minimum shared primitive; product-specific extensions live in the product's own downstream tables.
+
+---
+
+## Phase 6D — Completed ✅
+
+Tagged `phase-6d-complete`. **32 packages** (added `@gmacko/projects`). Workspace typecheck green. **189 tests passing** (up from 150 at end of 6C; forecast was ~191, actual undershoot of 2). Migration `0003_free_red_shift.sql` applies cleanly and idempotently.
+
+### What landed
+
+- **`@gmacko/db`** schema additions + cleanup:
+  - New `projects` table: `(id, tenantId, slug, name, createdAt, updatedAt)` with `(tenantId, slug)` unique + cascade on tenant delete.
+  - `project_deploy_secret_bindings` rewritten: bare `projectSlug varchar(128)` replaced with `projectId uuid FK → projects.id ON DELETE CASCADE`. Unique binding constraint updated accordingly.
+  - Migration 0003 generated via drizzle-kit. Statement ordering correct on first pass (no manual reorder needed).
+  - Subpath export: `@gmacko/db/schema/projects`.
+- **`@gmacko/validators`:** added `ProjectId` brand (UuidString-based, matching `TenantId`/`SessionSecretId`).
+- **`@gmacko/secrets`** (new package, 25 tests): envelope encryption (AES-256-GCM + HMAC-derived per-secret row keys, env var `GMACKO_SECRET_ENCRYPTION_KEY`), `Secrets` Effect service with 6 methods (`createSecret`, `deleteSecret`, `listForTenant`, `getSecret`, `decryptForUse`, `markSecretUsed`), 4 tagged errors (`SecretNotFoundError`, `SecretNameConflictError`, `PolicyDeniedError`, `MaxUsesExceededError`). `decryptForUse` atomically decrements `usesRemaining` via `sql\`CASE WHEN IS NULL THEN NULL ELSE -1 END\`` guarded by `OR IS NULL OR > 0` WHERE — race-safe. Policy denials write audit rows with `success=false` (hostile-actor signal). Crypto helpers (`encryptSecretValue`/`decryptSecretValue`) exposed on `./crypt` subpath for out-of-band callers.
+- **`@gmacko/projects`** (new package, 8 tests): `Projects` Effect service with 5 methods (`createProject`, `listForTenant`, `getById`, `getBySlug`, `deleteProject`), 2 tagged errors. MVP primitive — Bob/OODA extend via their own downstream tables referencing `projects.id`. Delete cascades to `project_deploy_secret_bindings` (verified by test 6).
+
+### Scope deviation from plan
+
+- **No transactional wrapper around `decryptForUse`.** Plan said "atomic" — conditional UPDATE alone satisfies usesRemaining race-safety. Policy-denial path intentionally preserves the decrement (hostile-actor signal semantics from Bob). Documented in `secrets.ts` header comment. This is the same behavior the plan's Step 4 fallback approved.
+- **No `layerSecretsAndProjects` bundle.** Removed when we split `@gmacko/projects` into its own package; services share nothing beyond `GmackoDb`, so app bootstrap composes them independently via `Layer.mergeAll(layerSecrets, layerProjects)` at the consumer site.
+
+### Effect 4 drift finding added to master plan
+
+**`Effect.tryPromise({try, catch})` leaks driver errors through `@effect/vitest`.** Discovered when catching PGlite unique-violations to map to `SecretNameConflictError`/`ProjectSlugConflictError`: even with a proper typed `catch:`, the original `DrizzleQueryError` surfaces on the fiber Cause and `@effect/vitest`'s logger marks the test failed with the raw driver message. **Workaround (applied in Tasks 6 + 12):** pre-check via SELECT before INSERT/UPDATE; surface typed errors from the SELECT-miss path. Race window (two concurrent inserts both passing the SELECT) is acceptable for user-initiated serial call sites; the DB unique index remains as a last-resort guard. One new row added to the master plan drift table.
+
+### Known rough edges (non-blocking)
+
+- **SELECT-then-INSERT race.** The workaround above is not race-safe for concurrent writers racing past the SELECT. gmacko's call sites are user-initiated and effectively serial. If a future caller needs true atomicity here, switch to an explicit transaction + catch the driver error with a different strategy (not `tryPromise`), or accept the rare 500-on-race.
+- **Bob's richer `templatePolicies` policy shape** (nested `{allowedArgPrefixes}` per template) is NOT adopted — we stuck with the flat `SessionSecretPolicy` already in the schema. Widening is trivial when Bob's migration requires it.
+
+### Open items carried into 6E onboarding
+
+Still deferred, unchanged from 6C retro:
+- `session_secret_usages.sessionId` bare-UUID → FK promotion (6E owns, when agent session primitive exercises it).
+- `project_deploy_secret_bindings` CRUD service — 6J app wiring.
+- `project_members` (per-project RBAC) — tenant_members suffices for MVP.
+- Policy rotation / KMS integration — not yet needed.
+- Bob's `promoteSessionSecret` — stays in Bob; product-specific.
