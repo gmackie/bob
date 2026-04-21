@@ -4,29 +4,11 @@ import { createTestDb } from "../../__tests__/helpers.js";
 import { tenants } from "../tenancy.js";
 import { projects } from "../projects.js";
 
-// Inline DDL mirroring what migration 0003 will later generate (Task 3).
-// This allows the schema module's round-trip tests to run before the
-// migration is generated. Once 0003 lands and `createTestDb` applies it
-// automatically, this DDL becomes a no-op (CREATE TABLE IF NOT EXISTS).
-const PROJECTS_DDL = `
-CREATE TABLE IF NOT EXISTS "projects" (
-  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-  "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE CASCADE,
-  "slug" varchar(128) NOT NULL,
-  "name" varchar(128) NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-  CONSTRAINT "projects_tenant_slug_unique" UNIQUE ("tenant_id", "slug")
-);
-CREATE INDEX IF NOT EXISTS "projects_tenant_id_idx" ON "projects" ("tenant_id");
-`;
-
 describe("@gmacko/db projects schema", () => {
   let ctx: Awaited<ReturnType<typeof createTestDb>>;
 
   beforeEach(async () => {
     ctx = await createTestDb();
-    await ctx.pglite.exec(PROJECTS_DDL);
   });
 
   afterEach(async () => {

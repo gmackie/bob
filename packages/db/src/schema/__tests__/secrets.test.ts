@@ -9,50 +9,11 @@ import {
 import { projects } from "../projects.js";
 import { tenants } from "../tenancy.js";
 
-// Inline DDL mirroring what migration 0003 will later generate (Task 3).
-// Creates `projects` and rebuilds `project_deploy_secret_bindings` so its
-// `project_id` column is a proper FK to `projects.id`. Once 0003 lands and
-// `createTestDb` applies it automatically, this DDL becomes a no-op
-// (CREATE TABLE IF NOT EXISTS + ALTER ... IF NOT EXISTS patterns).
-const PROJECTS_DDL = `
-CREATE TABLE IF NOT EXISTS "projects" (
-  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-  "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE CASCADE,
-  "slug" varchar(128) NOT NULL,
-  "name" varchar(128) NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-  CONSTRAINT "projects_tenant_slug_unique" UNIQUE ("tenant_id", "slug")
-);
-CREATE INDEX IF NOT EXISTS "projects_tenant_id_idx" ON "projects" ("tenant_id");
-`;
-
-// Rebuild project_deploy_secret_bindings so its column set matches the FK
-// schema. Migration 0002 created the table with `project_slug varchar(128)`;
-// we drop the old unique constraint + column and replace with `project_id
-// uuid FK`. This mirrors what migration 0003 will do in production.
-const BINDINGS_FK_DDL = `
-ALTER TABLE "project_deploy_secret_bindings"
-  DROP CONSTRAINT IF EXISTS "project_deploy_secret_bindings_unique";
-ALTER TABLE "project_deploy_secret_bindings"
-  DROP COLUMN IF EXISTS "project_slug";
-ALTER TABLE "project_deploy_secret_bindings"
-  ADD COLUMN IF NOT EXISTS "project_id" uuid NOT NULL
-  REFERENCES "projects"("id") ON DELETE CASCADE;
-ALTER TABLE "project_deploy_secret_bindings"
-  ADD CONSTRAINT "project_deploy_secret_bindings_unique"
-  UNIQUE ("tenant_id", "project_id", "deploy_environment", "deploy_env_var_name");
-CREATE INDEX IF NOT EXISTS "project_deploy_secret_bindings_project_id_idx"
-  ON "project_deploy_secret_bindings" ("project_id");
-`;
-
 describe("@gmacko/db secrets schema", () => {
   let ctx: Awaited<ReturnType<typeof createTestDb>>;
 
   beforeEach(async () => {
     ctx = await createTestDb();
-    await ctx.pglite.exec(PROJECTS_DDL);
-    await ctx.pglite.exec(BINDINGS_FK_DDL);
   });
 
   afterEach(async () => {
