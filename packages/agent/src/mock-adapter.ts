@@ -33,13 +33,20 @@
 //   surfaces on the consumer's stream — only a clean end. We therefore
 //   type the queue as `Queue<AgentEvent, AdapterError | Cause.Done>`.
 //
-// The emitter runs in a detached fiber (`Effect.forkDetach` with
+// The emitter runs in a scope-bound fiber (`Effect.forkScoped` with
 // `startImmediately: true`) so `sendTurn` returns the consumer stream
 // immediately and the emitter kicks off before the caller reads.
-// `forkDetach` attaches the fiber to the global scope rather than the
-// caller's scope — the emitter survives `Effect.scoped` closing around the
-// outer `sendTurn` Effect, which is important because the returned stream
-// is what the caller actually reads from.
+//
+// `forkScoped` (NOT `forkDetach`) binds the emitter to the caller's
+// `Scope` — when the caller closes its scope (e.g. via `Effect.scoped`
+// wrapping `Stream.runCollect`, or via cancellation-driven interruption
+// of the consumer fiber), the emitter fiber is also interrupted. This
+// matters for Task 12's cancel test: without scope-bound emission, a
+// cancel-mid-stream races against a background emitter that keeps
+// offering into the queue and holds PGlite transactions open, producing
+// teardown hangs. The adapter's `AgentAdapter.sendTurn` contract already
+// requires `Scope.Scope` in its Effect requirement, so `forkScoped` type-
+// checks without additional plumbing.
 import { Effect, Queue, Stream, type Cause } from "effect";
 
 import {
@@ -102,14 +109,15 @@ export const mockAdapter = (script: MockAdapterScript): AgentAdapter => ({
       const stderr = script.stderr ?? "";
       const events = script.events;
 
-      // Detached emitter fiber. `startImmediately: true` ensures the fiber
-      // kicks off before we hand the stream back to the caller, so
-      // consumers using `Stream.runCollect` don't race against an unstarted
-      // producer. `forkDetach` attaches to the global scope rather than the
-      // caller's scope — the emitter survives `Effect.scoped` closing around
-      // the outer `sendTurn` Effect, which is important because the returned
-      // stream is what the caller actually reads from.
-      yield* Effect.forkDetach(
+      // Scope-bound emitter fiber. `startImmediately: true` ensures the
+      // fiber kicks off before we hand the stream back to the caller, so
+      // consumers using `Stream.runCollect` don't race against an
+      // unstarted producer. `forkScoped` attaches the fiber to the
+      // caller's scope — when the caller exits scope (including via
+      // cancel-driven interruption), the emitter is interrupted too.
+      // This prevents PGlite teardown hangs in cancel-mid-stream tests
+      // where a forgotten emitter would keep offering into the queue.
+      yield* Effect.forkScoped(
         Effect.gen(function* () {
           for (const evt of events) {
             if (delayMs > 0) {

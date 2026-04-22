@@ -8,8 +8,20 @@
 // final batch of assistant/tool rows lands + the conversation's status is
 // transitioned to `completed` or `failed`.
 //
-// `cancel` + `close` land in Task 12; the public barrel (`src/index.ts`)
-// lands in Task 13.
+// `cancel` + `close` — Task 12 — extend the service with two new methods:
+//   - `cancel({conversationId, tenantId})`: interrupts an in-flight turn
+//     (if any), transitions status → "canceled", and writes a
+//     `role="tool", metadata.type="canceled"` marker message. Interruption
+//     of the in-flight turn's stream is driven by a per-conversation
+//     `Deferred<void>` held in a closure-scoped `Map`. `sendTurn` wraps its
+//     returned stream with `Stream.interruptWhen(Deferred.await(abort))`
+//     (Effect 4.0.0-beta.43 Stream.d.ts:11412) — when `cancel` fires the
+//     Deferred, the stream ends at the next pull boundary and the scope
+//     unwinds cleanly.
+//   - `close({conversationId, tenantId})`: idempotent transition to
+//     "completed" for sessions in "pending" or "active" state. No-op for
+//     already-terminal ("completed", "canceled", "failed") sessions.
+// The public barrel (`src/index.ts`) lands in Task 13.
 //
 // Effect 4 drift notes already captured in Phase 6E Tasks 6-8 and re-applied
 // here:
@@ -21,9 +33,20 @@
 //     `Stream.ensuringWith` name used in earlier Effect 3 APIs.
 //   - `Stream.tap` preserves elements while running an Effect per element —
 //     used here to accumulate per-turn state in a `Ref`.
+//   - `Stream.interruptWhen(deferredAwaitEffect)` halts the stream when the
+//     effect completes; success is discarded, failures fail the stream.
 import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
-import { Effect, Exit, Layer, Ref, Schema, ServiceMap, Stream } from "effect";
+import {
+  Deferred,
+  Effect,
+  Exit,
+  Layer,
+  Ref,
+  Schema,
+  ServiceMap,
+  Stream,
+} from "effect";
 
 import { GmackoDb } from "@gmacko/db";
 import {
@@ -70,6 +93,16 @@ export interface SendTurnInput {
   readonly prompt: string;
 }
 
+export interface CancelInput {
+  readonly conversationId: string;
+  readonly tenantId: TenantId;
+}
+
+export interface CloseInput {
+  readonly conversationId: string;
+  readonly tenantId: TenantId;
+}
+
 // --- Tagged errors ---------------------------------------------------------
 
 export class AgentSessionNotFoundError extends Schema.TaggedErrorClass<AgentSessionNotFoundError>()(
@@ -95,7 +128,12 @@ export interface AgentSessionShape {
     AgentSessionNotFoundError | TurnInProgressError | AdapterError,
     import("effect/Scope").Scope
   >;
-  // cancel + close land in Task 12.
+  readonly cancel: (
+    input: CancelInput,
+  ) => Effect.Effect<void, AgentSessionNotFoundError>;
+  readonly close: (
+    input: CloseInput,
+  ) => Effect.Effect<void, AgentSessionNotFoundError>;
 }
 
 export class AgentSession extends ServiceMap.Service<
@@ -120,6 +158,13 @@ export const layerAgent = (
   Layer.effect(AgentSession)(
     Effect.gen(function* () {
       const db = yield* GmackoDb;
+
+      // Active-turn abort registry. Each key is a conversation id with an
+      // in-flight turn; the value is a `Deferred<void>` that, when
+      // completed, causes the turn's stream to terminate via
+      // `Stream.interruptWhen`. Entries are removed on stream exit
+      // (success, failure, or cancel-driven interruption).
+      const activeTurns = new Map<string, Deferred.Deferred<void>>();
 
       const create: AgentSessionShape["create"] = ({
         tenantId,
@@ -262,6 +307,14 @@ export const layerAgent = (
             cwd,
           });
 
+          // 6b) Register an abort Deferred in the active-turn registry.
+          //     `cancel` fires this Deferred to interrupt the stream via
+          //     `Stream.interruptWhen`. The registry entry is cleaned up
+          //     in the Stream.onExit finalizer so `cancel` can distinguish
+          //     "turn in flight" from "turn already done".
+          const abortSignal = yield* Deferred.make<void>();
+          activeTurns.set(conversationId, abortSignal);
+
           // 7) Per-turn event buffer held in a Ref so the Stream.tap +
           //    Stream.onExit finalizers both see the same accumulation.
           interface TurnBuffer {
@@ -279,11 +332,19 @@ export const layerAgent = (
           // update the conversation's status + metadata. Called from
           // `Stream.onExit` so it runs whether the stream completes cleanly
           // or errors. On failure (non-success Exit), status -> "failed";
-          // otherwise -> "completed".
+          // otherwise -> "completed". If `cancel` set status to "canceled"
+          // first (Task 12), we preserve it here — the Exit will be an
+          // interrupt-only Failure due to `Stream.interruptWhen`, which
+          // would otherwise be mapped to "failed".
           const persist = (
             exit: Exit.Exit<unknown, AdapterError>,
           ): Effect.Effect<void> =>
             Effect.gen(function* () {
+              // Always unregister the abort Deferred first so a late
+              // `cancel` is a no-op instead of attempting to signal a
+              // stream that's already over.
+              activeTurns.delete(conversationId);
+
               const buf = yield* Ref.get(turnBuffer);
 
               // Re-read the seq counter — we already wrote the user row,
@@ -359,11 +420,29 @@ export const layerAgent = (
                 mergedMeta.externalSessionId = buf.externalSessionId;
               }
 
+              // Re-read current status. If `cancel` ran concurrently, the
+              // row is already in "canceled"; the Stream.interruptWhen
+              // gives us an interrupt-only Failure Exit which naive logic
+              // below would map to "failed" and clobber the cancellation.
+              const currentStatusRows = yield* Effect.promise(async () =>
+                db
+                  .select({ status: chatConversations.status })
+                  .from(chatConversations)
+                  .where(eq(chatConversations.id, conversationId)),
+              );
+              const currentStatus = currentStatusRows[0]?.status;
+              const nextStatus =
+                currentStatus === "canceled"
+                  ? "canceled"
+                  : Exit.isSuccess(exit)
+                    ? "completed"
+                    : "failed";
+
               yield* Effect.promise(async () =>
                 db
                   .update(chatConversations)
                   .set({
-                    status: Exit.isSuccess(exit) ? "completed" : "failed",
+                    status: nextStatus,
                     metadata: mergedMeta,
                     updatedAt: new Date(),
                   })
@@ -372,8 +451,15 @@ export const layerAgent = (
             });
 
           // 8) Wrapping stream: observe each event (accumulate into buffer),
-          //    pass it through unchanged, and run end-of-turn persistence
-          //    when the stream exits.
+          //    pass it through unchanged, interrupt on abort signal, and run
+          //    end-of-turn persistence when the stream exits.
+          //
+          //    Stream.interruptWhen(Deferred.await(abort)) terminates the
+          //    stream when `cancel` fires the abort Deferred. The stream
+          //    ends at the next pull boundary and the Stream.onExit
+          //    finalizer runs with an interrupt-only Failure Exit, which
+          //    `persist` maps to the `canceled` status by re-reading the
+          //    current DB state (cancel has already written it).
           const outer = inner.pipe(
             Stream.tap((evt) =>
               Ref.update(turnBuffer, (b) => {
@@ -389,12 +475,134 @@ export const layerAgent = (
                 return b;
               }),
             ),
+            Stream.interruptWhen(Deferred.await(abortSignal)),
             Stream.onExit(persist),
           );
 
           return outer;
         });
 
-      return { create, sendTurn } satisfies AgentSessionShape;
+      // --- cancel --------------------------------------------------------
+      // Verify the conversation exists + belongs to tenant; fail with
+      // `AgentSessionNotFoundError` on mismatch. Fire the abort Deferred
+      // (if the conversation has a turn in flight) so `sendTurn`'s
+      // `Stream.interruptWhen` ends the stream. Then transition the DB
+      // status to "canceled" (idempotent — only if currently "pending" or
+      // "active") and write a `role="tool", metadata.type="canceled"`
+      // marker message. Ordering is "write the canceled marker + flip
+      // status BEFORE firing the abort" so the stream's `persist`
+      // finalizer sees the canceled status and preserves it.
+      const cancel: AgentSessionShape["cancel"] = ({
+        conversationId,
+        tenantId,
+      }) =>
+        Effect.gen(function* () {
+          const rows = yield* Effect.promise(async () =>
+            db
+              .select()
+              .from(chatConversations)
+              .where(
+                and(
+                  eq(chatConversations.id, conversationId),
+                  eq(chatConversations.tenantId, tenantId),
+                ),
+              ),
+          );
+          const row = rows[0];
+          if (!row) {
+            return yield* Effect.fail(
+              new AgentSessionNotFoundError({
+                conversationId,
+                tenantId: tenantId as string,
+              }),
+            );
+          }
+
+          // Only transition pending/active → canceled. Terminal states
+          // (completed, canceled, failed) stay as-is, but we still fire
+          // the abort Deferred below in case a racing `sendTurn` fiber
+          // is still mid-stream.
+          if (row.status === "pending" || row.status === "active") {
+            yield* Effect.promise(async () =>
+              db
+                .update(chatConversations)
+                .set({ status: "canceled", updatedAt: new Date() })
+                .where(eq(chatConversations.id, conversationId)),
+            );
+
+            // Append canceled marker row using next seq.
+            const prev = yield* Effect.promise(async () =>
+              db
+                .select({ seq: chatMessages.seq })
+                .from(chatMessages)
+                .where(eq(chatMessages.conversationId, conversationId))
+                .orderBy(desc(chatMessages.seq))
+                .limit(1),
+            );
+            const nextSeq = (prev[0]?.seq ?? 0) + 1;
+            yield* Effect.promise(async () =>
+              db.insert(chatMessages).values({
+                conversationId,
+                seq: nextSeq,
+                role: "tool",
+                content: "",
+                metadata: { type: "canceled" },
+              }),
+            );
+          }
+
+          // Fire the abort Deferred (if present) so any in-flight
+          // sendTurn stream terminates via Stream.interruptWhen. The
+          // Deferred is removed from `activeTurns` by the stream's
+          // Stream.onExit finalizer; we don't delete it here because
+          // doing so would race with the finalizer.
+          const abortSignal = activeTurns.get(conversationId);
+          if (abortSignal !== undefined) {
+            yield* Deferred.succeed(abortSignal, void 0);
+          }
+        });
+
+      // --- close ---------------------------------------------------------
+      // Idempotent transition to "completed" for pending/active sessions.
+      // Terminal states (already completed/canceled/failed) are left
+      // unchanged. Returns `AgentSessionNotFoundError` if the
+      // conversation doesn't exist or belongs to a different tenant.
+      const close: AgentSessionShape["close"] = ({
+        conversationId,
+        tenantId,
+      }) =>
+        Effect.gen(function* () {
+          const rows = yield* Effect.promise(async () =>
+            db
+              .select()
+              .from(chatConversations)
+              .where(
+                and(
+                  eq(chatConversations.id, conversationId),
+                  eq(chatConversations.tenantId, tenantId),
+                ),
+              ),
+          );
+          const row = rows[0];
+          if (!row) {
+            return yield* Effect.fail(
+              new AgentSessionNotFoundError({
+                conversationId,
+                tenantId: tenantId as string,
+              }),
+            );
+          }
+
+          if (row.status === "pending" || row.status === "active") {
+            yield* Effect.promise(async () =>
+              db
+                .update(chatConversations)
+                .set({ status: "completed", updatedAt: new Date() })
+                .where(eq(chatConversations.id, conversationId)),
+            );
+          }
+        });
+
+      return { create, sendTurn, cancel, close } satisfies AgentSessionShape;
     }),
   );
