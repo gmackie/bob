@@ -411,3 +411,61 @@ Commit: `feat(agent): finalize @gmacko/agent public barrel`
 - Adapter interface + MockAdapter up front; real CLI adapter is "just another implementation."
 - Transcript is a projection of adapter events, not a ground-truth log.
 - `Queue.bounded + Stream.fromQueue` is the canonical Effect 4 push-stream pattern — first real use in gmacko.
+
+---
+
+## Phase 6E — Completed ✅
+
+Tagged `phase-6e-complete`. **32 packages** (no new packages — `@gmacko/agent` was scaffolded at 6A, pivoted in 6E). Workspace typecheck green. **222 tests passing** (up from 189 at end of 6D; forecast was ~221, actual 222). No schema changes in 6E, so migration idempotency test (`migrate.test.ts`) still passes unchanged.
+
+### What landed
+
+- **Pivot commit** `a6b7529` — deleted `dispatch.ts` (Anthropic SDK async generator), dropped `@anthropic-ai/sdk`, scaffolded deps for CLI orchestration.
+- **`@gmacko/agent`** rebuilt from scratch as a CLI subprocess orchestrator with 33 tests across 11 files:
+  - `AgentAdapter` contract + `AgentEvent` tagged union (`session_init`, `turn_start`, `text_delta`, `tool_use`, `tool_result`, `turn_end`, `canceled`).
+  - `parseStreamJsonLine` + `StreamJsonBuffer` — pure NDJSON parser for Claude Code's `--output-format stream-json`, separately testable.
+  - `claudeCodeAdapter({binary?})` — spawns `claude --bare -p <prompt> --output-format stream-json --no-session-persistence [--resume …] [--allowedTools …] [--append-system-prompt …]` per turn. Subprocess lifecycle via `Effect.acquireRelease` (SIGTERM on release, escalating to SIGKILL after 500 ms). Stdout bridged to a `Queue.bounded<AgentEvent, AdapterError | Cause.Done>` via `Effect.forkDetach({startImmediately: true})` + `StreamJsonBuffer`. Exit code 0 → `Queue.end`; exit 130 → emit `{type:"canceled"}` then end; other non-zero → `Queue.fail(AdapterExitError)`. `spawnClaudeCode` + `emitAgentEventsFromChild` exported as reusable helpers.
+  - `mockAdapter({events, perEventDelayMs?, exitCode?, failSpawn?, stderr?})` — in-memory deterministic adapter for tests. Emitter forked with `Effect.forkScoped` so it tears down cleanly with the caller's scope (Task 12 fixed a subtle leak where `forkDetach` held PGlite transactions open past `afterEach`).
+  - `AgentSession` Effect service with 4 methods: `create`, `sendTurn`, `cancel`, `close`. Tenant-scoped via explicit `{tenantId, userId}` (same pattern as `Secrets`/`Projects`). `layerAgent(adapter)` takes the adapter as a constructor arg, NOT as an Effect service — keeps it runtime-swappable per session.
+  - Transcript persistence: user prompt → `role:"user"` row; text_deltas → one `role:"assistant"` row with concatenated text; each tool_use/tool_result → `role:"tool"` row with structured metadata; SIGINT/cancel → `role:"tool"` marker with `metadata.type="canceled"`. Sequence allocation via `COALESCE(MAX(seq), 0) + 1` per-turn batch.
+  - Per-turn subprocess, multi-turn via `--resume <externalSessionId>` captured from the first turn's `session_init` event into `chat_conversations.metadata.externalSessionId`.
+  - In-flight turn cancellation: `Map<conversationId, Deferred<void>>` in the Layer closure; `sendTurn` registers the deferred and wraps its stream in `Stream.interruptWhen(Deferred.await(d))`; `cancel` fires the deferred and writes status + marker row. Uses `Cause.hasInterruptsOnly` inside `Stream.onExit` to distinguish interrupt-only exits from true failures so the post-cancel status doesn't get clobbered to `"failed"`.
+
+### Effect 4 drift findings added to master plan
+
+Nine new rows in the reference table — this phase was the first real use of `Queue + Stream + Effect.acquireRelease + fiber interruption` in gmacko and surfaced a lot:
+
+1. **`Effect.async` renamed to `Effect.callback`** in beta.43. Register callback may return an `Effect<void>` cleanup that runs on interruption.
+2. **`Effect.fork` does not exist.** Use `Effect.forkChild` / `Effect.forkDetach` / `Effect.forkScoped`.
+3. **`Effect.forkDetach` needs `{startImmediately: true}`** for a producer fiber to run before the current fiber yields.
+4. **Prefer `Effect.forkScoped` for caller-scope-bound emitters.** `forkDetach` leaked past PGlite test teardown.
+5. **`Queue.shutdown` is WRONG for drain-then-close.** Use `Queue.end` (queue typed `Queue<A, E | Cause.Done>`); `Queue.fail(q, error)` for errored end.
+6. **`Stream.ensuringWith` does not exist.** Use `Stream.onExit(finalizer)` where finalizer gets the `Exit<unknown, E>`.
+7. **`Stream.catchAll` does not exist.** Use `catchCause` / `catchTag` / etc.
+8. **`@effect/vitest` `it.effect` installs TestClock.** Use `it.live` for real-wall-clock observation (subprocess timing, real timers in release clauses).
+9. **`Stream.interruptWhen(Deferred.await(d))` + `Cause.hasInterruptsOnly`** is the idiomatic mid-stream cancel pattern.
+
+The master plan's SSE-in-Effect-4 callout has been rewritten accordingly (`Queue.end`, not `Queue.shutdown`).
+
+### Scope deviation from plan
+
+- **Task 11 was absorbed into Task 10.** The plan split seq-allocation + role-mapping out as a separate task; in practice they're inseparable from `sendTurn`'s implementation and one commit. Net task count: 13 (of the planned 14).
+- **Test-file layout.** Ended up with one test file per concern (`adapter.test.ts`, `claude-code-adapter.test.ts`, `claude-code-subprocess.test.ts`, `claude-code-stream.test.ts`, `mock-adapter.test.ts`, `stream-json-parser.test.ts`, `agent-session.test.ts`, `agent-send-turn.test.ts`, `agent-cancel.test.ts`, `layer.test.ts`, `package.test.ts`) — 11 files, 33 tests. Readable split but more files than the typical 6C/6D service.
+- **Real-spawn e2e tests.** Cover real-subprocess behavior against `node -e "…"` subprocess scripts (via `claudeCodeAdapter({binary: process.execPath})` bypassing `buildArgs`'s `claude`-specific args) inside `it.live`. No gate behind `GMACKO_E2E_CLAUDE_CODE=1` was actually needed — we never invoke the `claude` binary in the test suite, so CI works without it installed.
+- **Task 10 ordering tradeoff.** Cancel writes `status="canceled"` + marker row **before** firing the abort Deferred, because `Stream.onExit` would otherwise see the interrupt-only exit and can't reliably distinguish cancel-from-fiber-interruption vs. genuine failure. The final persistence effect re-reads current DB status and preserves `"canceled"` instead of clobbering it. Documented in `agent-session.ts` header comment.
+
+### Known rough edges (non-blocking)
+
+- **PGlite parallel test flakiness** (carried over from 6B/6C/6D) got worse with 6E because `@gmacko/agent` adds another PGlite-heavy suite. Default `pnpm -r test` fails one test per file due to bringup timing under worker parallelism; `--no-file-parallelism` is green. Exit verification here used the serial runner. Fix (out of scope): a workspace-level vitest config that caps concurrency on db-bound suites, or per-package `poolOptions.threads.singleThread`.
+- **Streaming bridge uses `Effect.runPromise(Queue.offer(...))` inside a node event handler.** Acknowledged throughput tradeoff — fine for stream-json's event rate, would need revisiting for a high-throughput scenario. Pattern documented inline in `claude-code-adapter.ts`.
+- **No real Claude Code invocation tested.** All tests target `node -e` subprocesses with scripted NDJSON. When 6J wires real Claude Code into a real app, exercise the happy path + SIGINT against the actual `claude` binary; surface any real-world divergence from the research reference.
+
+### Open items carried into 6F onboarding
+
+Still deferred as planned:
+- **`CodexCliAdapter` + `CursorAcpAdapter` + `AgentSdkAdapter`** — each is a follow-up phase implementing `AgentAdapter`. Architecturally parallel to `claudeCodeAdapter`.
+- **`AgentRpc` RPC group** — 6J app wiring.
+- **Per-tenant Anthropic API keys** via `@gmacko/secrets` — 6E uses env `ANTHROPIC_API_KEY` only. When 6J exercises `CurrentUser`, tenant-scoped keys become the story.
+- **`session_secret_usages.sessionId → chat_conversations.id` FK promotion** — `chat_conversations` is now exercised by the agent layer, so the FK can finally land. Carry to 6F or 6J.
+- **`chat_conversations.projectId`** — optional FK to `projects.id` for project-scoped conversations. Schema change + service plumbing.
+- **Token usage + cost tracking** — `stream-json` exposes it; `chat_messages.metadata.usage` is the natural home. Opportunistic capture in `sendTurn` is straightforward; a dedicated cost-tracking pass is its own story.
