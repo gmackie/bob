@@ -1,6 +1,6 @@
 # Phase 6: gmacko Core Finalization — Master Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Each sub-phase (6B–6K) has its own detailed plan doc that gets written when that sub-phase is picked up. This master doc contains the full detail for **6A (Scaffolding & Foundation)** inline, plus roadmap-level specs for the rest.
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Each sub-phase (6B–6L) has its own detailed plan doc that gets written when that sub-phase is picked up. This master doc contains the full detail for **6A (Scaffolding & Foundation)** inline, plus roadmap-level specs for the rest.
 
 **Goal:** Finalize gmacko core so Bob can be migrated onto it. Add 23 core packages (auth, secrets, agent session primitive, runner protocol/base, realtime, app shells, theme mechanism + Bob reference theme). Hit the §7 success criteria in `docs/plans/2026-04-19-gmacko-core-finalization-design.md`.
 
@@ -31,8 +31,8 @@
 - Moving `packages/wiki` out to `@ooda/wiki` (happens with OODA migration; stays in gmacko for now but not imported by core)
 - Moving `packages/ext-ooda` disposition (stays; will be reshaped during OODA migration)
 - Research → OODA fold-in (post-OODA-migration)
-- Redis pubsub backend implementation (stub only in 6H; real impl during Bob migration when needed)
-- ws-gateway backend implementation (stub only in 6H; real impl during Bob migration when needed)
+- Redis pubsub backend implementation (stub only in 6I; real impl during Bob migration when needed)
+- ws-gateway backend implementation (stub only in 6I; real impl during Bob migration when needed)
 - Full implementations of peripheral packages — `@gmacko/{notifications,storage,monitoring,mcp-server,email,cookies,i18n,settings,analytics,billing,agent-toolkit,mobile-shell,desktop-shell}` get scaffolded with stable public-API surfaces in Phase 6, but their full implementations land during Phase 7 (Bob migration) when concrete callers exist
 
 ### Success criteria (from design §7)
@@ -53,14 +53,15 @@
 | **6C** | `@gmacko/auth` — better-auth wrapped as Effect Service, CurrentUser context, tenancy, GitHub OAuth + device flow | Own plan doc TBD |
 | **6D** | `@gmacko/secrets` — envelope encryption crypto vault, policies, session scoping, audit, CLI-auth probes, MCP tool surface | Own plan doc TBD |
 | **6E** | `@gmacko/agent` — evolve existing `dispatch.ts` into full session primitive (streaming, tool-use, transcript persistence, cancellation) | Own plan doc TBD |
-| **6F** | `@gmacko/runner-protocol` + `@gmacko/runner-base` — Effect/Schema wire contract + shared runtime | Own plan doc TBD |
-| **6G** | `@gmacko/realtime` — SSE helpers + in-memory pubsub backend; ws-gateway + Redis backends stubbed | Own plan doc TBD |
-| **6H** | `@gmacko/ui` theme mechanism + Bob reference theme (amber, per Bob's DESIGN.md); theme-aware components | Own plan doc TBD |
-| **6I** | `@gmacko/app-shell` — auth UI, layout, provider stack for Next.js reference app | Own plan doc TBD |
-| **6J** | Wire reference `apps/web` end-to-end; drop `apps/server` | Own plan doc TBD |
-| **6K** | E2E validation of §7 success criteria; peripheral package stub-outs | Own plan doc TBD |
+| **6F** | **RPC contract surface + `@gmacko/client` SDK (inserted 2026-04-21 for OODA integration)** — contract groups + stubbed handlers + typed client SDK ahead of service implementations | `docs/plans/2026-04-21-phase6f-contracts.md` |
+| **6G** | `@gmacko/runner-protocol` + `@gmacko/runner-base` — Effect/Schema wire contract + shared runtime | Own plan doc TBD |
+| **6H** | `@gmacko/realtime` — SSE helpers + in-memory pubsub backend; ws-gateway + Redis backends stubbed | Own plan doc TBD |
+| **6I** | `@gmacko/ui` theme mechanism + Bob reference theme (amber, per Bob's DESIGN.md); theme-aware components | Own plan doc TBD |
+| **6J** | `@gmacko/app-shell` — auth UI, layout, provider stack for Next.js reference app | Own plan doc TBD |
+| **6K** | Wire reference `apps/web` end-to-end; drop `apps/server` | Own plan doc TBD |
+| **6L** | E2E validation of §7 success criteria; peripheral package stub-outs | Own plan doc TBD |
 
-Each sub-phase gets its own dedicated detailed plan doc at the time it's picked up (following the `docs/plans/2026-04-17-phase*.md` house style). **Do not attempt to execute 6B–6K from this master doc** — get the dedicated plan first.
+Each sub-phase gets its own dedicated detailed plan doc at the time it's picked up (following the `docs/plans/2026-04-17-phase*.md` house style). **Do not attempt to execute 6B–6L from this master doc** — get the dedicated plan first.
 
 ---
 
@@ -305,7 +306,7 @@ Current packages (from `ls packages/`):
 - `db` (exists — evolves in 6B)
 - `ext-ooda` (exists — stays, reshaped in OODA migration)
 - `models` (exists — see Task 4)
-- `ui` (exists — evolves in 6H)
+- `ui` (exists — evolves in 6I)
 - `wiki` (exists — stays, not imported by core)
 
 Packages to create (empty stubs):
@@ -482,7 +483,7 @@ Expected: list of files that reference `apps/server`.
 
 **Step 2: Verify nothing in apps/server is irreplaceable**
 
-Read `apps/server/src/` files. Any Effect-RPC handler shells, middleware patterns, or examples should be preserved by copying useful snippets into notes for 6I (app-shell wiring). The directory's contents get deleted once snippets are captured.
+Read `apps/server/src/` files. Any Effect-RPC handler shells, middleware patterns, or examples should be preserved by copying useful snippets into notes for 6J (app-shell wiring). The directory's contents get deleted once snippets are captured.
 
 Save useful patterns to a scratch file: `docs/plans/scratch/apps-server-salvage.md` (temporary; will delete at end of 6A).
 
@@ -1093,10 +1094,10 @@ Tagged `phase-6a-complete`. 30 packages present. 23 typechecks passing. 45 tests
 
 From the Phase 6A final code review (`agent-teams:team-reviewer`):
 
-- **Effect 4 API drift-check before 6B.** The API reference table in §Conventions currently covers `RpcServer`, `Schema`, `DateTime`. Before starting 6B, spend 10 minutes in `node_modules/effect/unstable/rpc/RpcClient.d.ts`, `effect/Stream.d.ts`, and `effect/Layer.d.ts` and append any 3.x→4.x drift to the table. 6E (`@gmacko/agent` streaming) and 6G (`@gmacko/realtime` SSE) will hit these first.
+- **Effect 4 API drift-check before 6B.** The API reference table in §Conventions currently covers `RpcServer`, `Schema`, `DateTime`. Before starting 6B, spend 10 minutes in `node_modules/effect/unstable/rpc/RpcClient.d.ts`, `effect/Stream.d.ts`, and `effect/Layer.d.ts` and append any 3.x→4.x drift to the table. 6E (`@gmacko/agent` streaming) and 6H (`@gmacko/realtime` SSE) will hit these first.
 - **`@gmacko/rpc` needs real coverage when 6C lands.** Current tests are smoke-only (`server.test.ts:29`). When `@gmacko/auth` adds `CurrentUser` population, add: (1) `requireAuth` success path with a provided `CurrentUser`, (2) `requireAuth` failure path returning `UnauthorizedError`, (3) full RPC round-trip exercising error serialization. Carry this into the 6C plan doc.
 - **`PostgresUrl` should also accept `postgresql://`** (`packages/config/src/env.ts:10-12`). Drizzle + pg both accept the longer scheme. Fix when 6B wires `DATABASE_URL`.
-- **Scaffolded stubs lack descriptions.** Each of the 20 unfilled packages has `// … scaffolded … export {};` with no package.json `description` field. When 6B–6K pick up each package, add a one-line planned responsibility + `description` — improves discoverability and shows up in `pnpm ls`.
+- **Scaffolded stubs lack descriptions.** Each of the 20 unfilled packages has `// … scaffolded … export {};` with no package.json `description` field. When 6B–6L pick up each package, add a one-line planned responsibility + `description` — improves discoverability and shows up in `pnpm ls`.
 - **Convention to carry forward:** every sub-phase commits a dedicated plan doc first (with drift table updates), then tasks with TDD, then an exit-criteria verification commit before tagging. 6A followed this pattern; keep it.
 
 ---
@@ -1198,7 +1199,7 @@ When 6A is done and all exit criteria pass, the next sub-phase is **6B: `@gmacko
 
 ---
 
-# Sub-Phase Summaries for 6B–6K
+# Sub-Phase Summaries for 6B–6L
 
 Each of these gets its own detailed plan doc when picked up. These summaries are the scope envelope, not the work breakdown.
 
@@ -1264,7 +1265,24 @@ Each of these gets its own detailed plan doc when picked up. These summaries are
 - Cancel mid-stream aborts within 1s and marks the session `canceled` in DB
 - Both adapters pass the same session-contract test suite
 
-## 6F: `@gmacko/runner-protocol` + `@gmacko/runner-base`
+## 6F: RPC contract surface + `@gmacko/client` SDK (inserted 2026-04-21 for OODA integration)
+
+**Scope:**
+- Wrap `resolveCurrentUser` in `RpcMiddleware.Service` (6C carryover) so contract procedures can declare `requires: [CurrentUser]`.
+- Add RpcGroups for every gmacko-shared service: `AuthRpc`, `ProjectsRpc`, `SecretsRpc`, `AgentRpc` (with streaming `agent.sendTurn`).
+- New `@gmacko/client` package (33rd in monorepo) — typed client SDK with per-group facades returning Promise/AsyncIterable for browser consumers.
+- Stub handlers in `@gmacko/contracts/stubs/*` so OODA can hit real RPC endpoints with deterministic mock data while real handlers land in 6K.
+- Legacy OODA procedures (`threads.*`, `branches.*`, `messages.*`, `exploration.*`) stay as compat surface.
+- OODA integration README.
+
+**Exit criteria:**
+- OODA can `pnpm add @gmacko/contracts @gmacko/client` and write typed calls against a stub server.
+- Stubs and real services must share identical Schema shapes — swapping in real implementations in 6K must not break OODA's consumer code.
+- Full test suite ≥ 245 passing.
+
+Full plan: `docs/plans/2026-04-21-phase6f-contracts.md`.
+
+## 6G: `@gmacko/runner-protocol` + `@gmacko/runner-base`
 
 **Scope:**
 - Define Effect/Schema wire contract in `@gmacko/runner-protocol`:
@@ -1284,7 +1302,7 @@ Each of these gets its own detailed plan doc when picked up. These summaries are
 - Retry test: simulated transient error on heartbeat recovers within budget
 - Drain test: in-flight task completes before runtime exits, even under SIGTERM
 
-## 6G: `@gmacko/realtime`
+## 6H: `@gmacko/realtime`
 
 **Scope:**
 - SSE helpers for Effect-RPC streams in `@gmacko/realtime/sse` — reuses what's already in gmacko for agent chat streaming (see commit `30d11da`)
@@ -1299,7 +1317,7 @@ Each of these gets its own detailed plan doc when picked up. These summaries are
 - Stub backends throw the expected error when called
 - Backend is chosen by config env var
 
-## 6H: `@gmacko/ui` theme mechanism + Bob reference theme
+## 6I: `@gmacko/ui` theme mechanism + Bob reference theme
 
 **Scope:**
 - Theme mechanism: `data-theme` attribute on `<html>`; CSS custom properties for `--color-bg`, `--color-fg`, `--color-primary`, `--color-accent`, `--color-muted`, `--font-sans`, `--font-mono`, spacing scale, radii, shadows
@@ -1313,7 +1331,7 @@ Each of these gets its own detailed plan doc when picked up. These summaries are
 - Existing 15 `@gmacko/ui` tests still pass
 - Snapshot test for a Button rendered under both themes
 
-## 6I: `@gmacko/app-shell` (web)
+## 6J: `@gmacko/app-shell` (web)
 
 **Scope:**
 - Auth UI: login page, tenancy picker, device-flow entry for mobile/desktop
@@ -1326,7 +1344,7 @@ Each of these gets its own detailed plan doc when picked up. These summaries are
 - A stub Next.js app (the reference `apps/web`) renders the login page using only `@gmacko/app-shell` primitives
 - Login → redirect to `/` → app-shell renders with `AuthedOnly` gate working
 
-## 6J: Wire reference `apps/web` end-to-end
+## 6K: Wire reference `apps/web` end-to-end
 
 **Scope:**
 - Move Effect-RPC server into `apps/web` as a Next.js route handler (`app/api/rpc/route.ts`)
@@ -1343,7 +1361,7 @@ Each of these gets its own detailed plan doc when picked up. These summaries are
 - `pnpm --filter @gmacko/web dev` boots and hits all the critical-path services
 - End-to-end test (Playwright or similar): login → session → stream → runner → secret → transcript all work
 
-## 6K: E2E validation + peripheral package stubs
+## 6L: E2E validation + peripheral package stubs
 
 **Scope:**
 - Write a single E2E integration test that covers all §7 #2 bullet points
