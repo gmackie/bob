@@ -84,6 +84,8 @@ export {
 } from "./middleware.js";
 export type { AuthRequest } from "./middleware.js";
 
+export { AuthMiddleware, layerAuthMiddleware } from "./rpc-middleware.js";
+
 /**
  * Bundle of the four db-backed auth services. Callers provide `GmackoDb`
  * (via `@gmacko/db/service`) at app bootstrap; the merged layer internally
