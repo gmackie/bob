@@ -287,6 +287,9 @@ importers:
 
   packages/contracts:
     dependencies:
+      '@gmacko/agent':
+        specifier: workspace:*
+        version: link:../agent
       '@gmacko/auth':
         specifier: workspace:*
         version: link:../auth

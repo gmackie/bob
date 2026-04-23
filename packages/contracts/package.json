@@ -7,16 +7,20 @@
     ".": "./src/index.ts",
     "./groups/auth": "./src/groups/auth.ts",
     "./groups/projects": "./src/groups/projects.ts",
+    "./groups/agent": "./src/groups/agent.ts",
     "./schemas/auth": "./src/schemas/auth.ts",
     "./schemas/projects": "./src/schemas/projects.ts",
+    "./schemas/agent": "./src/schemas/agent.ts",
     "./stubs/auth": "./src/stubs/auth.ts",
-    "./stubs/projects": "./src/stubs/projects.ts"
+    "./stubs/projects": "./src/stubs/projects.ts",
+    "./stubs/agent": "./src/stubs/agent.ts"
   },
   "scripts": {
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@gmacko/agent": "workspace:*",
     "@gmacko/auth": "workspace:*",
     "@gmacko/projects": "workspace:*",
     "@gmacko/rpc": "workspace:*",
