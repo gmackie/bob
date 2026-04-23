@@ -565,13 +565,32 @@ importers:
         version: 5.9.3
 
   packages/runner-protocol:
+    dependencies:
+      '@gmacko/auth':
+        specifier: workspace:*
+        version: link:../auth
+      '@gmacko/validators':
+        specifier: workspace:*
+        version: link:../validators
+      effect:
+        specifier: 4.0.0-beta.43
+        version: 4.0.0-beta.43
     devDependencies:
+      '@effect/vitest':
+        specifier: 4.0.0-beta.43
+        version: 4.0.0-beta.43(effect@4.0.0-beta.43)(vitest@3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
       '@gmacko/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/typescript
+      '@types/node':
+        specifier: 25.6.0
+        version: 25.6.0
       typescript:
         specifier: ^5.9.0
         version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
   packages/secrets:
     dependencies:
