@@ -144,20 +144,35 @@ export const makeRuntime = (opts: ClientRuntimeOptions): ClientRuntime => {
   ): AsyncIterable<A> => {
     // Defer materialization until someone actually iterates. That way, if
     // the caller never touches the iterable, we never spin up a scope.
+    //
+    // SCOPE LIFECYCLE NOTE — Task 9 drift finding:
+    //   The RpcClient streaming path in effect@4.0.0-beta.43 attaches the
+    //   stream's queue to the current scope (see RpcClient.js:139
+    //   `Scope.addFinalizerExit`). If we split "extract stream" from "iterate
+    //   stream" across scope boundaries, the scope closes at the end of the
+    //   first `runPromise` and the queue interrupts with no elements — the
+    //   consumer sees "All fibers interrupted without error".
+    //
+    //   To keep things simple AND correct, we fold "build the stream" and
+    //   "run the stream to completion" into a single scoped effect and buffer
+    //   the elements into an array. For a browser consumer this is fine: the
+    //   stream semantics of RPC responses are still correct (error-on-failure,
+    //   element-by-element iteration), and the wire is still end-to-end the
+    //   same. Real long-lived streams (e.g. unbounded agent transcripts) will
+    //   want a proper scope-across-iteration runtime — tracked for 6G/6J.
     return {
       async *[Symbol.asyncIterator]() {
-        const stream = await Effect.runPromise(
+        const elements = await Effect.runPromise(
           (
-            streamEffect.pipe(
+            Effect.flatMap(streamEffect, (stream) =>
+              Stream.runCollect(stream),
+            ).pipe(
               Effect.scoped,
               Effect.provide(transport),
-            ) as Effect.Effect<Stream.Stream<A, E>, never, never>
+            ) as Effect.Effect<ReadonlyArray<A>, E, never>
           ),
         );
-        // `Stream.toAsyncIterable` converts a resource-free Stream into a
-        // plain AsyncIterable. Runtime services are empty at this point
-        // because we've already provided the transport layer above.
-        for await (const event of Stream.toAsyncIterable(stream)) {
+        for (const event of elements) {
           yield event;
         }
       },
