@@ -86,6 +86,23 @@ export type { AuthRequest } from "./middleware.js";
 
 export { AuthMiddleware, layerAuthMiddleware } from "./rpc-middleware.js";
 
+export {
+  RunnerSessions,
+  layerRunnerSessions,
+  InvalidRunnerSessionError,
+} from "./runner-sessions.js";
+export type {
+  RunnerSessionClaims,
+  RunnerSessionsShape,
+  MintInput,
+  MintResult,
+} from "./runner-sessions.js";
+
+export {
+  RunnerSessionMiddleware,
+  layerRunnerSessionMiddleware,
+} from "./runner-session-middleware.js";
+
 /**
  * Bundle of the four db-backed auth services. Callers provide `GmackoDb`
  * (via `@gmacko/db/service`) at app bootstrap; the merged layer internally
