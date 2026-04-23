@@ -60,3 +60,36 @@ export {
 } from "./stubs/projects";
 export { ProjectSchema } from "./schemas/projects";
 export type { ProjectWire } from "./schemas/projects";
+
+// --- Secrets -------------------------------------------------------------
+// Standalone RpcGroup. `secrets.decryptForUse` is the only plaintext-returning
+// procedure — its error channel is a Schema.Union of SecretNotFoundError |
+// PolicyDeniedError | MaxUsesExceededError (array-arg form, verified in
+// effect@4.0.0-beta.43).
+export {
+  SecretsRpc,
+  SecretsCreateRpc,
+  SecretsListRpc,
+  SecretsGetEnvelopeRpc,
+  SecretsDecryptForUseRpc,
+  SecretsMarkUsedRpc,
+  SecretsDeleteRpc,
+} from "./groups/secrets";
+export {
+  stubSecretsHandlers,
+  layerStubSecretsHandlers,
+  STUB_SECRET_ENVELOPE_1,
+  STUB_SECRET_ENVELOPE_2,
+  STUB_SECRET_ID_1,
+  STUB_SECRET_ID_2,
+  STUB_CONFLICT_NAME,
+  STUB_TENANT_ID as STUB_SECRETS_TENANT_ID,
+} from "./stubs/secrets";
+export {
+  SecretEnvelopeSchema,
+  SessionSecretPolicySchema,
+} from "./schemas/secrets";
+export type {
+  SecretEnvelopeWire,
+  SessionSecretPolicyWire,
+} from "./schemas/secrets";
