@@ -3,12 +3,30 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts",
+    "./groups/auth": "./src/groups/auth.ts",
+    "./groups/projects": "./src/groups/projects.ts",
+    "./schemas/auth": "./src/schemas/auth.ts",
+    "./schemas/projects": "./src/schemas/projects.ts",
+    "./stubs/auth": "./src/stubs/auth.ts",
+    "./stubs/projects": "./src/stubs/projects.ts"
+  },
+  "scripts": {
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
+    "@gmacko/auth": "workspace:*",
+    "@gmacko/projects": "workspace:*",
+    "@gmacko/rpc": "workspace:*",
     "effect": "4.0.0-beta.43"
   },
   "devDependencies": {
     "@gmacko/tsconfig": "workspace:*",
-    "typescript": "^5.9.0"
+    "@effect/vitest": "4.0.0-beta.43",
+    "@types/node": "25.6.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.0.0"
   }
 }
