@@ -1,3 +1,5 @@
+"use client";
+
 import { type FormEvent, useRef, useEffect } from "react";
 
 interface CreateBranchDialogProps {

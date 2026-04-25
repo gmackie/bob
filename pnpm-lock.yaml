@@ -154,6 +154,9 @@ importers:
       '@gmacko/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@gmacko/validators':
+        specifier: workspace:*
+        version: link:../../packages/validators
       '@tanstack/react-query':
         specifier: ^5.91.0
         version: 5.99.0(react@19.2.5)

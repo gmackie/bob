@@ -154,6 +154,11 @@ const deviceCodesLayer = Layer.provide(
 );
 
 export const runtimeLayer = Layer.mergeAll(
+  // Re-expose `GmackoDb` so route handlers that bypass a service (e.g.
+  // `agent.getTranscript` queries `chat_conversations` + `chat_messages`
+  // directly until `AgentSession` grows a transcript reader) can access
+  // the singleton drizzle handle without re-deriving the Layer.
+  dbLayer,
   layerBetterAuth(authInstance),
   sessionsLayer,
   apiKeysLayer,
