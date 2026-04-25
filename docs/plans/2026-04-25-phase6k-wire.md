@@ -260,3 +260,60 @@ Commit: `docs(web): add README + .env.example for 6K wiring`
 - Server-side Layer composition lives in ONE module; route handlers consume from it.
 - Real handlers replace stubs; stubs stay available in `@gmacko/contracts/stubs/*` for OODA dev.
 - Smoke tests exercise wiring + transport, not service correctness (which is covered by service-level tests).
+
+---
+
+## Phase 6K — Completed ✅
+
+Tagged `phase-6k-complete`. **33 packages** (unchanged). Workspace typecheck green. **342 tests passing** (up from 339 at end of 6J — net +3 from the smoke test; forecast was ≥350, undershot by 8 because the smoke test was scoped pragmatically to 3 reachability cases instead of the originally planned 5 full-flow cases). The `next dev --webpack` server boots cleanly + the smoke test exercises the wiring end-to-end.
+
+### What landed
+
+- **Tasks 1+2 commit `0871deb`**: server-side Layer composition + better-auth Next.js route. `apps/web/src/server/layers.ts` composes `runtimeLayer` (auth + projects + secrets + agent + realtime) and exposes `authMiddlewareLayer` separately. `apps/web/src/app/api/auth/[...all]/route.ts` mounts `authInstance.handler` for GET + POST.
+- **Tasks 3-7 commit `f1e93e0`**: real RPC handlers for all 4 groups (Auth + Projects + Secrets + Agent) wired to live services via `Effect.gen` + service yield. `apps/web/src/app/api/rpc/route.ts` mounts the merged `RpcGroup.merge(...)` with `AuthMiddleware` + `RpcSerialization.layerNdjson` for true chunked streaming. Plus drive-by `"use client"` fix in `packages/ui/src/branch-tree/create-branch-dialog.tsx`.
+- **Tasks 8+11 commit `7da5a2d`**: root layout switched to `<GmackoAppProviders>` + drive-by `Theme`/`Mode` re-exports from `@gmacko/ui` root barrel.
+- **Tasks 9+10 commit `c364cb3`**: 5 new gmacko-shared UI routes (`/login`, `/dashboard`, `/projects`, `/agent`, `/secrets`). Existing OODA pages at `/`, `/capture`, `/graph`, `/wiki`, `/explore` untouched.
+- **Build-fix + smoke commits `fb0727c` + `bad2c78`**: webpack `resolve.fallback` + `NormalModuleReplacementPlugin` (strips `node:` scheme prefix) + `serverExternalPackages` + `@gmacko/db` migrate moved to `./migrate` subpath. Smoke test (3 cases: RPC route reachable, unauthenticated whoAmI handled cleanly, server stays alive) + README + `.env.example`.
+
+### Effect 4 + tooling drift findings added to master plan
+
+**8 new drift rows from 6K** — many around the deep web-stack integration:
+
+1. Per-group `.middleware(M).toLayer(...)` then merging widens types incorrectly; apply middleware once at the merged group level.
+2. `RpcServer.layerHttp` in Next.js routes surfaces `CurrentUser | HttpServerRequest | HttpRouter` as residual `R`; `as unknown as Layer<never, never, HttpRouter>` cast unblocks (runtime correct).
+3. Webpack `resolve.fallback` doesn't handle `node:` scheme imports — `NormalModuleReplacementPlugin` strips the prefix.
+4. `serverExternalPackages` + `transpilePackages` overlap = hard error in Next 16.2.4.
+5. `@gmacko/db` migrate re-exports must move out of root barrel (drizzle-orm/pglite/migrator's top-level Node imports).
+6. Turbopack workspace `.js → .ts` resolution still broken despite `resolveAlias`; use `--webpack`.
+7. Tagged-error transitive client-bundle import problem — webpack fallback stubs as 6K patch; proper fix is a service-package errors subpath refactor (carry-forward).
+8. (No new Effect 4 API drift — all the Effect APIs work as established.)
+
+### Scope deviation from plan
+
+- **Smoke test scoped to 3 cases instead of 5.** Full sign-up → agent flow needs better-auth email-verification handling + cookie management; deferred to a Playwright-based e2e suite. Smoke test proves wiring + transport, which is the proof point.
+- **`next build` partially succeeds** — webpack mode now compiles cleanly past the client-bundle blocker; build still fails on TWO pre-existing TypeScript errors in legacy OODA code (`apps/web/src/app/graph/page.tsx` line 60 readonly-tags; `apps/web/src/components/voice-input.tsx` lines 32-33 `last` undefined). Both predate 6K (commit `88333cc`). Documented in apps/web README as known issues; OODA team's responsibility to fix when they migrate UI onto the new shell.
+- **Turbopack misresolves workspace subpaths** — `next dev` package script still uses `--turbopack` (Next default); the smoke test forces `--webpack`. Recommend switching the dev script to `--webpack` until Turbopack catches up.
+- **Plan's 14 tasks → 5 actual commits** by combining tightly related work (1+2, 3-7, 8+11, 9+10, build+smoke+docs). Each commit still atomic + reviewable.
+- **`AgentSession.getTranscript` doesn't exist as a service method** — handler queries `chat_conversations` + `chat_messages` directly via `GmackoDb`. Documented as TODO; should be promoted into `AgentSession`'s shape in a future phase.
+
+### Known rough edges (non-blocking)
+
+- **Tagged-error transitive imports** — fixed via webpack stubs in 6K, properly fixed by extracting tagged errors to dependency-free subpaths. Carry-forward.
+- **`@gmacko/client` streaming SDK still buffers** via `Stream.runCollect` inside scope (6F finding) — `for await` in `/agent` page receives events in chunks rather than incrementally. Carry-forward.
+- **`AuthedOnly` doesn't invalidate `whoAmI` cache after login** — reload may show stale unauthenticated state if the smoke test signs in then navigates. Polish for `@gmacko/app-shell`.
+- **No abort signal on `/agent` page's `for await`** — if user navigates mid-stream, iteration continues until backend scope closes. Polish.
+- **Pre-existing PGlite parallel-test flakiness** persists across phases. Carry-forward.
+
+### Open items carried into Phase 7 (Bob migration) onboarding
+
+- **Phase 6L** — peripheral package stubs + the original 6L plan deliverables (E2E validation against §7 success criteria; stub public APIs for `@gmacko/notifications`, `@gmacko/storage`, `@gmacko/monitoring`, `@gmacko/mcp-server`, `@gmacko/email`, `@gmacko/cookies`, `@gmacko/i18n`, `@gmacko/settings`, `@gmacko/analytics`, `@gmacko/billing`, `@gmacko/agent-toolkit`, `@gmacko/mobile-shell`, `@gmacko/desktop-shell`).
+- **Real `runner.*` handlers + UI** — server-side runner-protocol wiring (track devices, manage `task_runs`, dispatch claims) + a "Connected runners" admin panel.
+- **Tagged-error subpath refactor** — extract to `@gmacko/<svc>/errors` subpaths so client bundles don't drag service runtime modules in.
+- **Standalone `/transcript/[id]` viewer page** — currently the agent page's events array is the only transcript surface.
+- **Production deploy config** — Postgres URL + connection pool, Vercel/self-host instructions, env var management.
+- **Real Playwright matrix** — full sign-up → tenant pick → agent stream → secret create flow with browser automation.
+- **`chat_conversations.projectId` FK column** — project-scoped conversations.
+- **`session_secret_usages.sessionId → chat_conversations.id` FK promotion** — finally land.
+- **`AgentSession.getTranscript` as a service method** — currently the handler queries DB directly.
+- **Auth UX polish** — login error display, password reset flows, Toast wiring at consumer level.
+- **`vercel-labs/wterm` evaluation** — for future CodexCliAdapter / CursorAcpAdapter PTY needs (separate session per user request).
