@@ -3,9 +3,11 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
     "./client": "./src/client.ts",
+    "./migrate": "./src/migrate.ts",
     "./schema": "./src/schema/index.ts",
     "./schema/auth": "./src/schema/auth.ts",
     "./schema/tenancy": "./src/schema/tenancy.ts",
