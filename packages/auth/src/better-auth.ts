@@ -29,6 +29,22 @@ export interface InitAuthOptions {
    * surface; propagating a precise type through cross-driver code is brittle.
    */
   readonly db: unknown;
+  /**
+   * Optional drizzle schema map. The drizzle adapter looks up tables by name
+   * — when omitted it scrapes table identifiers from the `db` instance's
+   * relational metadata, which works in many setups but fails when our PG
+   * schema deviates from better-auth's expected table name (we use plural
+   * `users`/`sessions` etc.). Passing the schema explicitly + `pluralizeTables`
+   * keeps the adapter aligned with our actual DDL.
+   */
+  readonly schema?: Record<string, unknown>;
+  /**
+   * Set to `true` when the schema map uses plural keys (`users`, `sessions`,
+   * `accounts`, `verifications`) — the gmacko convention. Better-auth itself
+   * expects singular (`user`, `session`, …). Defaults to `false` for
+   * backwards compatibility with callers that pass a singular schema.
+   */
+  readonly pluralizeTables?: boolean;
   /** The base URL better-auth serves from (e.g. `http://localhost:3000`). */
   readonly baseUrl: string;
   /** The production/public URL for constructing redirect URIs. */
@@ -39,15 +55,46 @@ export interface InitAuthOptions {
   readonly githubClientSecret: string;
   /** Additional origins (beyond the built-in defaults) trusted for CORS/redirects. */
   readonly trustedOrigins?: readonly string[];
+  /**
+   * Enable better-auth's email + password provider. Defaults to `false`
+   * because the production wiring relies on GitHub OAuth + the device-code
+   * pairing flow. Tests / dev environments that want the `/sign-up/email`
+   * + `/sign-in/email` endpoints flip this to `true` and (typically) also
+   * set `requireEmailVerification: false` so a sign-in immediately returns
+   * a session cookie.
+   */
+  readonly emailAndPassword?: {
+    readonly enabled: boolean;
+    readonly requireEmailVerification?: boolean;
+  };
 }
 
 export function initAuth(opts: InitAuthOptions): AuthInstance {
+  // Build the `emailAndPassword` block conditionally — better-auth treats an
+  // omitted block as "provider disabled" (default), so we only pass it when
+  // the caller wants it on. Confirmed against
+  // `better-auth@1.4.0-beta.9`'s api/index.mjs:175 which gates the
+  // `/sign-up/email` route on `options.emailAndPassword?.enabled`.
+  const emailAndPassword = opts.emailAndPassword?.enabled
+    ? {
+        enabled: true,
+        requireEmailVerification:
+          opts.emailAndPassword.requireEmailVerification ?? true,
+      }
+    : undefined;
+
   const config = {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see note on InitAuthOptions.db
-    database: drizzleAdapter(opts.db as any, { provider: "pg" }),
+    database: drizzleAdapter(opts.db as any, {
+      provider: "pg",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...(opts.schema ? { schema: opts.schema as any } : {}),
+      ...(opts.pluralizeTables ? { usePlural: true } : {}),
+    }),
     baseURL: opts.baseUrl,
     secret: opts.secret,
     plugins: [expo()],
+    ...(emailAndPassword ? { emailAndPassword } : {}),
     socialProviders: {
       github: {
         clientId: opts.githubClientId,

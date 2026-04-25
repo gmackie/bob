@@ -94,13 +94,36 @@ const { db } = getDb();
 
 const baseUrl = env.PUBLIC_BASE_URL ?? "http://localhost:3000";
 
+// Email + password provider toggle. Production wiring stays GitHub-OAuth +
+// device-code only (provider stays off). The apps/web smoke test sets the
+// env var so /sign-up/email + /sign-in/email become reachable.
+const emailAndPasswordEnabled =
+  env.GMACKO_BETTER_AUTH_EMAIL_PASSWORD === "true";
+const emailAndPassword = emailAndPasswordEnabled
+  ? {
+      enabled: true,
+      requireEmailVerification:
+        env.GMACKO_BETTER_AUTH_REQUIRE_EMAIL_VERIFICATION !== "false",
+    }
+  : undefined;
+
 export const authInstance = initAuth({
   db,
+  // Pass the gmacko schema map so better-auth's drizzle adapter can resolve
+  // tables by name. We use plural conventions (`users`, `sessions`, …)
+  // whereas better-auth defaults to singular — `pluralizeTables: true` flips
+  // the lookup. Without this, sign-up/sign-in returns 500 with
+  // `[# Drizzle Adapter]: The model "user" was not found in the schema
+  // object.` (only an issue when the email + password provider is on, since
+  // GitHub OAuth callbacks are still 6L-deferred).
+  schema: schema as unknown as Record<string, unknown>,
+  pluralizeTables: true,
   baseUrl,
   productionUrl: baseUrl,
   secret: env.BETTER_AUTH_SECRET,
   githubClientId: env.GITHUB_CLIENT_ID ?? "",
   githubClientSecret: env.GITHUB_CLIENT_SECRET ?? "",
+  ...(emailAndPassword ? { emailAndPassword } : {}),
 });
 
 // ---------------------------------------------------------------------------

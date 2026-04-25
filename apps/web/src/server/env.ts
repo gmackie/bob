@@ -34,6 +34,16 @@ export const ServerEnv = Schema.Struct({
   PUBLIC_BASE_URL: Schema.optional(Schema.String),
   // PGlite data directory override (defaults to ~/.gmacko/data)
   PGLITE_DATA_DIR: Schema.optional(Schema.String),
+  // Enable better-auth's email + password provider. Off by default because
+  // production uses GitHub OAuth + the device-code pairing flow; flipped on
+  // (with verification disabled) for the apps/web smoke test so the
+  // /sign-up/email + /sign-in/email endpoints become reachable.
+  GMACKO_BETTER_AUTH_EMAIL_PASSWORD: Schema.optional(
+    Schema.Literals(["true", "false"]),
+  ),
+  GMACKO_BETTER_AUTH_REQUIRE_EMAIL_VERIFICATION: Schema.optional(
+    Schema.Literals(["true", "false"]),
+  ),
   // Runner session HMAC sub-key (used by @gmacko/auth/runner-sessions). The
   // service derives a sub-key from `GMACKO_SECRET_ENCRYPTION_KEY` if not set,
   // so we don't surface it as a required field here.
