@@ -349,3 +349,45 @@ Commit: `feat(app-shell): add GmackoAppProviders bundle + finalize public barrel
 - `"use client"` directive at the top of every interactive component.
 - Auth UI components are presentational; auth state lives in `<CurrentUserProvider>`.
 - Bundled providers + individual exports — consumers pick.
+
+---
+
+## Phase 6J — Completed ✅
+
+Tagged `phase-6j-complete`. **33 packages** (no new — `app-shell` filled out from scaffold). Workspace typecheck green. **339 tests passing** (up from 314 at end of 6I; forecast ≥325).
+
+### What landed
+
+- **Tasks 1+2+3 commit `6890241`**: scaffold deps + ToastProvider + EffectErrorBoundary. 7 tests.
+- **Tasks 4+5+6 commit `db0953c`**: RpcClientProvider + CurrentUserProvider + AuthedOnly. 8 tests.
+- **Tasks 7+8+9 commit `d37927d`**: LoginForm + TenantPicker + DeviceFlowEntry. 6 tests.
+- **Tasks 10+11 commit `4d48c1d`**: AppShell layout + GmackoAppProviders bundle + finalize barrel. 4 tests.
+- **Exit verify cleanup commit (this retro)**: added `@types/react` + `@types/react-dom` to `@gmacko/ui` devDeps to fix cross-package type bleed-through. UI typecheck no longer fails when transitively consumed.
+
+### Effect 4 drift findings
+
+None new — pure React + RPC client consumption.
+
+### Scope deviation from plan
+
+- **Tasks combined into 4 commits** (1+2+3, 4+5+6, 7+8+9, 10+11) instead of the planned 12 to reduce subagent overhead. Each combined commit is still atomic + reviewable.
+- **`@gmacko/ui` `Theme` / `Mode` types** had to be imported via the `@gmacko/ui/theme` subpath because the root barrel re-exports `ThemeProvider` + `useTheme` as values only. Carry-forward note for 6K: promote `Theme`/`Mode` types to the root barrel.
+- **`@types/react-dom@19.2.6` doesn't exist** — used `19.2.3`. Documented for future package scaffolds.
+- **`@gmacko/ui` was missing `@types/react`** in devDeps; bled through to `@gmacko/app-shell` typecheck. Fixed inline as part of exit verification. (Pre-existing condition revealed by 6J's first cross-package consumer.)
+
+### Known rough edges (non-blocking)
+
+- **Never-resolving promises wedge RTL cleanup.** Tests using `new Promise(() => {})` for loading-state verification cause `afterEach` 10s timeouts. Use deferred promises that resolve at test end. Documented in subagent retros.
+- **`useMutation` test patterns** require `await waitFor(...)` even when underlying mocks resolve synchronously — `mutate(...)` is fire-and-forget and the assertion needs a flush.
+- **`window.location.assign` mocking** uses `Object.defineProperty(window, "location", ...)` — works under jsdom 26.
+- **Auth UI is presentational only.** Real auth flow (OAuth callback, session cookie management, redirect-after-login) is 6K's job.
+
+### Open items carried into 6K onboarding
+
+- **Reference `apps/web` integration** — wire `@gmacko/app-shell` into a real Next.js test app to validate end-to-end. Likely the 6K centerpiece.
+- **`@gmacko/ui` barrel polish** — re-export `Theme`/`Mode` types from root, not just from `./theme` subpath.
+- **Real auth flow wiring** — OAuth callback handler, session cookie/header management, login redirect persistence.
+- **Accessibility audit** — semantic HTML in 6J; full a11y pass deferred.
+- **i18n** — strings hardcoded English. `@gmacko/i18n` peripheral package handles strings later.
+- **Toast positioning + animation** — fixed bottom-right, no animation. Polish later.
+- **Error boundary auto-recovery** — current pattern is reset-button only. Auto-recover on prop change is a polish.
