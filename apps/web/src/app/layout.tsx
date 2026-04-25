@@ -1,6 +1,5 @@
-import { ThemeProvider } from "@gmacko/ui";
-import { RpcProvider } from "@/rpc/provider";
 import "./globals.css";
+import { GmackoAppProviders } from "@gmacko/app-shell";
 
 export const metadata = {
   title: "Gmacko",
@@ -15,9 +14,13 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
-        <RpcProvider>
-          <ThemeProvider defaultTheme="ooda">{children}</ThemeProvider>
-        </RpcProvider>
+        <GmackoAppProviders
+          defaultTheme="ooda"
+          defaultMode="system"
+          rpcOptions={{ baseURL: "/api/rpc" }}
+        >
+          {children}
+        </GmackoAppProviders>
       </body>
     </html>
   );

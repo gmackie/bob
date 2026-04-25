@@ -1,10 +1,7 @@
 "use client";
 
 import { ThemeProvider } from "@gmacko/ui";
-// Theme/Mode types live in `@gmacko/ui/theme` — the package barrel re-exports
-// runtime values only. Importing types from the subpath avoids modifying
-// `@gmacko/ui` (out of scope for this task).
-import type { Mode, Theme } from "@gmacko/ui/theme";
+import type { Mode, Theme } from "@gmacko/ui";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import type { GmackoClientOptions } from "@gmacko/client";
