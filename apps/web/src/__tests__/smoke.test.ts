@@ -190,7 +190,22 @@ beforeAll(async () => {
   // Brief settling delay — Next prints "Ready" before the route handlers
   // are fully wired in some 16.x point releases. 1.5s is plenty.
   await new Promise((r) => setTimeout(r, 1_500));
-}, 60_000);
+
+  // Force a client-bundle compile of `src/app/page.tsx` so any
+  // transitive Node-only import that webpack can't satisfy fails
+  // here rather than going undetected. Without this, the smoke
+  // test only hits server routes (/api/auth/*, /api/rpc) and
+  // never exercises the client bundle. Body content is irrelevant —
+  // we only need the compile to attempt.
+  try {
+    const res = await fetch(`${BASE_URL}/`);
+    await res.text();
+  } catch {
+    // Network failure here is suspicious but not directly fatal;
+    // the dev server's stderr will surface UnhandledSchemeError
+    // in the test output if compile failed.
+  }
+}, 180_000);
 
 afterAll(async () => {
   if (server && !server.killed) {

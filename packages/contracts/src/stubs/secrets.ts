@@ -4,7 +4,7 @@
 // so consumers can write golden-style tests.
 import { Effect } from "effect";
 
-import { SecretNameConflictError, SecretNotFoundError } from "@gmacko/secrets";
+import { SecretNameConflictError, SecretNotFoundError } from "@gmacko/secrets/errors";
 
 import { SecretsRpc } from "../groups/secrets.js";
 import type { SecretEnvelopeWire } from "../schemas/secrets.js";
