@@ -25,6 +25,28 @@
 //     `effect/dist/Stream.d.ts:13911`. No manual push/pull loop needed.
 //   - `FetchHttpClient.Fetch` is a `ServiceMap.Reference<typeof fetch>` — we
 //     override it via `Layer.succeed(Fetch, opts.fetch)` when provided.
+//
+// Phase 6H Task 8 — serialization:
+//   - The client SDK now defaults to `RpcSerialization.layerNdjson` so the
+//     `agent.sendTurn` streaming procedure participates in true chunked
+//     responses end-to-end (server emits one newline-terminated JSON line
+//     per event; transport pipes them straight to the client without
+//     buffering the full sequence first). Non-streaming procedures
+//     (`auth.whoAmI`, `projects.list`, etc.) work identically under either
+//     framing because their parser still produces a single decoded
+//     element. Callers running against legacy gmacko servers that mount
+//     `layerJson` can opt back via `{ serialization: "json" }`.
+//   - `RpcSerialization.layerJson` and `layerNdjson` are interchangeable
+//     `Layer.Layer<RpcSerialization>` values per
+//     `effect/unstable/rpc/RpcSerialization.d.ts:60,70` — pure layer-level
+//     swap, no API shape change anywhere else in this file.
+//   - The browser-facing consumer SDK still buffers stream output via
+//     `Stream.runCollect` in `runStream` below (a deliberate scope
+//     trade-off documented in the SCOPE LIFECYCLE NOTE). Even so, the
+//     wire benefits from NDJSON: the underlying HTTP transport is
+//     chunked, and once the runtime gains a long-lived scope (planned
+//     for the next streaming pass after 6K), incremental yielding falls
+//     out naturally.
 
 import { Effect, Layer, Stream, type Scope } from "effect";
 import {
@@ -35,6 +57,21 @@ import {
 import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
 
 /**
+ * Wire-format selection for RPC serialization. Both options are
+ * functionally equivalent for non-streaming procedures; only streaming
+ * procedures (e.g. `agent.sendTurn`) differ:
+ *
+ * - `"ndjson"` (default) — true chunked streaming. The server writes one
+ *   newline-delimited JSON envelope per emitted element to the response
+ *   body as it produces them.
+ * - `"json"` — legacy buffered framing. The server collects the full
+ *   stream into one JSON array, then sends it as a single response body.
+ *   Use when targeting an older gmacko deployment that hasn't migrated
+ *   off `RpcSerialization.layerJson` yet.
+ */
+export type ClientRuntimeSerialization = "json" | "ndjson";
+
+/**
  * Options accepted by {@link makeRuntime}. Shared with
  * {@link GmackoClientOptions} from the public barrel.
  */
@@ -42,6 +79,12 @@ export interface ClientRuntimeOptions {
   readonly baseURL: string;
   readonly fetch?: typeof fetch;
   readonly headers?: Record<string, string>;
+  /**
+   * Wire-format the client uses to (de)serialize RPC envelopes. Must
+   * match the server. Defaults to `"ndjson"` to enable true chunked
+   * streaming for `agent.sendTurn` and any future streaming procedures.
+   */
+  readonly serialization?: ClientRuntimeSerialization;
 }
 
 /**
@@ -95,9 +138,14 @@ const buildTransportLayer = (opts: ClientRuntimeOptions) => {
       : undefined,
   });
 
-  // Serialization — JSON is the default. `layerJson` is used in
-  // `@gmacko/rpc/server.ts` so the client matches.
-  const serializationLayer = RpcSerialization.layerJson;
+  // Serialization — defaults to NDJSON so streaming procedures
+  // (`agent.sendTurn`) get true chunked transport. Falls back to JSON
+  // when a caller explicitly opts in for compatibility with a server
+  // still on `RpcSerialization.layerJson`.
+  const serializationLayer =
+    (opts.serialization ?? "ndjson") === "ndjson"
+      ? RpcSerialization.layerNdjson
+      : RpcSerialization.layerJson;
 
   // HttpClient — default to globalThis.fetch, overrideable via
   // FetchHttpClient.Fetch reference when the caller supplies one.

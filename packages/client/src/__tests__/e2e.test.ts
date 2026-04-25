@@ -28,13 +28,14 @@
 //     pre-provide `HttpRouter.layer` — it's implicit.
 //   - `RpcGroup.merge(...groups)` is the documented way to combine groups
 //     behind one mount path. Handler composition is via `Layer.mergeAll`.
-//   - `RpcServer.layerHttp({ protocol: "http" })` + `RpcSerialization.layerJson`
-//     handles streaming by buffering all events server-side and returning
-//     them as one JSON array in a single response body (per
-//     `RpcServer.js:628-633`, `!includesFraming` branch). That's why a plain
-//     POST-response transport works for `agent.sendTurn` without any SSE
-//     plumbing. If/when we need true chunked streaming, switch to
-//     `RpcSerialization.layerNdjson` on both ends.
+//   - `RpcServer.layerHttp({ protocol: "http" })` is composed with
+//     `RpcSerialization.layerNdjson` (Phase 6H Task 8). Under NDJSON the
+//     `includesFraming` branch in `RpcServer.js:628-633` returns a
+//     `HttpServerResponse.stream(...)` body — each emitted event is a
+//     newline-terminated JSON line, written to the wire as it's produced
+//     rather than buffered into a single JSON array. The matching client
+//     SDK (see `internal/runtime.ts`) defaults to NDJSON serialization so
+//     the framing agrees on both ends.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createServer, type Server } from "node:http";
@@ -72,7 +73,7 @@ const serverLayer = RpcServer.layerHttp({
   protocol: "http",
 }).pipe(
   Layer.provide(mergedHandlers),
-  Layer.provide(RpcSerialization.layerJson),
+  Layer.provide(RpcSerialization.layerNdjson),
 );
 
 // --- Node HTTP server binding ---------------------------------------------
@@ -235,5 +236,71 @@ describe("@gmacko/client e2e round-trip against stub server", () => {
     expect(events[0]).toMatchObject({ type: "session_init" });
     expect(events[1]).toMatchObject({ type: "text_delta", text: "you said: hi" });
     expect(events[2]).toMatchObject({ type: "turn_end" });
+  });
+
+  // Phase 6H Task 8 — verify true chunked streaming via `layerNdjson`.
+  //
+  // We bypass the `@gmacko/client` SDK (which currently buffers via
+  // `Stream.runCollect` — a known 6G/6J limitation) and hit the RPC
+  // endpoint directly with `fetch`, then assert the on-wire shape:
+  //
+  //   - Response `Content-Type` is `application/ndjson` (not
+  //     `application/json` as it was under `layerJson`).
+  //   - The body has multiple newline-delimited JSON objects rather than
+  //     one buffered JSON array. Under `layerJson`, the server emits a
+  //     single `[ {…}, {…}, {…} ]` text response after the stream drains;
+  //     under `layerNdjson`, each response chunk is a self-contained line.
+  //
+  // Together these prove the server is using `RpcServer.layerHttp`'s
+  // `includesFraming` branch (`RpcServer.js:628-633`) rather than the
+  // buffering branch.
+  it("agent.sendTurn uses layerNdjson framing on the wire", async () => {
+    // The RPC payload shape mirrors what `RpcClient` sends. Build it by
+    // hand so we don't depend on the SDK's transport. The server's
+    // request parser accepts an array of envelope messages — see
+    // `RpcMessage.RequestEncoded`.
+    const STUB_CONVERSATION_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+    const requestBody = [
+      {
+        _tag: "Request",
+        id: "1",
+        tag: "agent.sendTurn",
+        payload: {
+          conversationId: STUB_CONVERSATION_ID,
+          prompt: "hi",
+        },
+        // `RequestEncoded.headers` is `ReadonlyArray<[string, string]>`
+        // per `RpcMessage.d.ts:38`, NOT a `Record<string, string>`.
+        headers: [] as ReadonlyArray<readonly [string, string]>,
+      },
+      { _tag: "Eof" },
+    ];
+
+    const response = await fetch(`${baseURL}/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/ndjson" },
+      body: requestBody.map((m) => JSON.stringify(m)).join("\n") + "\n",
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toMatch(
+      /application\/ndjson/,
+    );
+
+    const text = await response.text();
+    // NDJSON: each non-empty line parses to a single JSON object/value.
+    // JSON-array buffering would produce a single line starting with `[`.
+    const lines = text.split("\n").filter((line) => line.length > 0);
+    expect(lines.length).toBeGreaterThan(1);
+    for (const line of lines) {
+      // Each line MUST parse as standalone JSON. If the response were a
+      // buffered JSON array (`layerJson`), the body would be one line
+      // starting with `[` — `JSON.parse` of any partial line would fail,
+      // OR the single-line array would only have lines.length === 1.
+      expect(() => JSON.parse(line)).not.toThrow();
+      // Each line is an envelope, not the wrapping array.
+      const parsed = JSON.parse(line);
+      expect(Array.isArray(parsed)).toBe(false);
+    }
   });
 });
