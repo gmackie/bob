@@ -106,12 +106,51 @@ importers:
 
   apps/web:
     dependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.2.0
+        version: 0.2.17
+      '@gmacko/agent':
+        specifier: workspace:*
+        version: link:../../packages/agent
+      '@gmacko/app-shell':
+        specifier: workspace:*
+        version: link:../../packages/app-shell
+      '@gmacko/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@gmacko/client':
+        specifier: workspace:*
+        version: link:../../packages/client
+      '@gmacko/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       '@gmacko/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@gmacko/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@gmacko/models':
         specifier: workspace:*
         version: link:../../packages/models
+      '@gmacko/projects':
+        specifier: workspace:*
+        version: link:../../packages/projects
+      '@gmacko/realtime':
+        specifier: workspace:*
+        version: link:../../packages/realtime
+      '@gmacko/rpc':
+        specifier: workspace:*
+        version: link:../../packages/rpc
+      '@gmacko/runner-base':
+        specifier: workspace:*
+        version: link:../../packages/runner-base
+      '@gmacko/runner-protocol':
+        specifier: workspace:*
+        version: link:../../packages/runner-protocol
+      '@gmacko/secrets':
+        specifier: workspace:*
+        version: link:../../packages/secrets
       '@gmacko/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -121,6 +160,15 @@ importers:
       '@xyflow/react':
         specifier: ^12.6.0
         version: 12.10.2(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      better-auth:
+        specifier: 1.4.0-beta.9
+        version: 1.4.0-beta.9(better-sqlite3@12.9.0)(next@16.2.4(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      drizzle-orm:
+        specifier: ^0.44.0
+        version: 0.44.7(@electric-sql/pglite@0.2.17)(better-sqlite3@12.9.0)(kysely@0.28.16)(postgres@3.4.9)
+      effect:
+        specifier: 4.0.0-beta.43
+        version: 4.0.0-beta.43
       next:
         specifier: ^16.0.0
         version: 16.2.4(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -267,7 +315,7 @@ importers:
         version: link:../validators
       better-auth:
         specifier: 1.4.0-beta.9
-        version: 1.4.0-beta.9(better-sqlite3@12.9.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+        version: 1.4.0-beta.9(better-sqlite3@12.9.0)(next@16.2.4(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       effect:
         specifier: 4.0.0-beta.43
         version: 4.0.0-beta.43
@@ -7679,7 +7727,7 @@ snapshots:
   '@better-auth/expo@1.4.0-beta.9(better-auth@1.4.0-beta.9(better-sqlite3@12.9.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(expo-constants@55.0.14)(expo-crypto@55.0.14(expo@55.0.15))(expo-linking@55.0.13)(expo-secure-store@15.0.8(expo@55.0.15))(expo-web-browser@15.0.10(expo@55.0.15)(react-native@0.84.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5)))':
     dependencies:
       '@better-fetch/fetch': 1.1.18
-      better-auth: 1.4.0-beta.9(better-sqlite3@12.9.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      better-auth: 1.4.0-beta.9(better-sqlite3@12.9.0)(next@16.2.4(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       expo-constants: 55.0.14(expo@55.0.15)(react-native@0.84.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5))(typescript@5.9.3)
       expo-crypto: 55.0.14(expo@55.0.15)
       expo-linking: 55.0.13(expo@55.0.15)(react-native@0.84.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5))(react@19.2.5)(typescript@5.9.3)
@@ -10125,7 +10173,7 @@ snapshots:
 
   baseline-browser-mapping@2.10.19: {}
 
-  better-auth@1.4.0-beta.9(better-sqlite3@12.9.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5):
+  better-auth@1.4.0-beta.9(better-sqlite3@12.9.0)(next@16.2.4(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5):
     dependencies:
       '@better-auth/core': 1.4.0-beta.9(@better-auth/utils@0.3.0)(@better-fetch/fetch@1.1.18)(better-call@1.0.19)(better-sqlite3@12.9.0)(jose@6.2.2)(kysely@0.28.16)(nanostores@1.3.0)
       '@better-auth/telemetry': 1.4.0-beta.9(@better-auth/core@1.4.0-beta.9(@better-auth/utils@0.3.0)(@better-fetch/fetch@1.1.18)(better-call@1.0.19)(better-sqlite3@12.9.0)(jose@6.2.2)(kysely@0.28.16)(nanostores@1.3.0))
@@ -10142,6 +10190,7 @@ snapshots:
       nanostores: 1.3.0
       zod: 4.3.6
     optionalDependencies:
+      next: 16.2.4(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       react: 19.2.5
       react-dom: 19.2.5(react@19.2.5)
     transitivePeerDependencies:
