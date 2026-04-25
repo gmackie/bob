@@ -7,7 +7,7 @@
 // NOTE: not exported from the package barrel yet — Task 17 handles the
 // public surface.
 import { and, eq, gt } from "drizzle-orm";
-import { Effect, Layer, Schema, ServiceMap } from "effect";
+import { Effect, Layer, ServiceMap } from "effect";
 
 import { GmackoDb } from "@gmacko/db";
 import {
@@ -17,11 +17,9 @@ import {
 import type { UserId } from "@gmacko/validators";
 
 import { BetterAuth } from "./better-auth.js";
+import { SessionExpiredError } from "./errors.js";
 
-export class SessionExpiredError extends Schema.TaggedErrorClass<SessionExpiredError>()(
-  "SessionExpiredError",
-  { message: Schema.String },
-) {}
+export { SessionExpiredError };
 
 export interface SessionValidationResult {
   readonly userId: UserId;

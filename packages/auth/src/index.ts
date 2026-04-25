@@ -31,6 +31,12 @@ import {
 } from "./device-codes.js";
 import { layerTenancy, Tenancy } from "./tenancy.js";
 
+// Re-export the dependency-free tagged errors from `./errors`. Client
+// bundles can also import these directly via `@gmacko/auth/errors` to avoid
+// pulling in better-auth / drizzle / @gmacko/db. See
+// docs/plans/2026-04-25-phase7a-punchlist.md Task 6.
+export * from "./errors.js";
+
 export { BetterAuth, initAuth, layerBetterAuth } from "./better-auth.js";
 export type { AuthInstance, InitAuthOptions } from "./better-auth.js";
 

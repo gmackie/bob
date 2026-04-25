@@ -9,43 +9,26 @@
 // NOTE: not exported from the package barrel yet — Task 17 handles the
 // public surface.
 import { and, eq } from "drizzle-orm";
-import { Effect, Layer, Schema, ServiceMap } from "effect";
+import { Effect, Layer, ServiceMap } from "effect";
 
 import { GmackoDb } from "@gmacko/db";
 import { tenantMembers } from "@gmacko/db/schema/tenancy";
 import {
-  TenantMemberRole,
   type TenantId,
   type TenantMemberRole as Role,
   type UserId,
 } from "@gmacko/validators";
 
-// Tagged errors. We deliberately use `Schema.String` for the branded id
-// fields (UserId, TenantId) to keep the tagged errors structural and avoid
-// running the brand decoders at construct time — the branding is enforced
-// by the service method signatures at the boundary.
-export class NotAMemberError extends Schema.TaggedErrorClass<NotAMemberError>()(
-  "NotAMemberError",
-  { userId: Schema.String, tenantId: Schema.String },
-) {}
+// Tagged errors are hoisted to ./errors.js so client bundles can import them
+// without dragging in @gmacko/db / drizzle / node:* via this module. See
+// docs/plans/2026-04-25-phase7a-punchlist.md Task 6.
+import {
+  InsufficientRoleError,
+  NotAMemberError,
+  TenantNotSelectedError,
+} from "./errors.js";
 
-export class InsufficientRoleError extends Schema.TaggedErrorClass<InsufficientRoleError>()(
-  "InsufficientRoleError",
-  {
-    required: TenantMemberRole,
-    actual: TenantMemberRole,
-  },
-) {}
-
-export class TenantNotSelectedError extends Schema.TaggedErrorClass<TenantNotSelectedError>()(
-  "TenantNotSelectedError",
-  {
-    message: Schema.String,
-    memberships: Schema.Array(
-      Schema.Struct({ tenantId: Schema.String, role: TenantMemberRole }),
-    ),
-  },
-) {}
+export { InsufficientRoleError, NotAMemberError, TenantNotSelectedError };
 
 export interface Membership {
   readonly tenantId: TenantId;
