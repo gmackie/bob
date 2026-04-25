@@ -235,14 +235,20 @@ afterAll(async () => {
 });
 
 // Minimal NDJson RPC envelope helper. The transport from 6H uses
-// `RpcSerialization.layerNdjson` — each request is a JSON-encoded
-// `RpcRequest` per line. We POST a single-line array body.
+// `RpcSerialization.layerNdjson` — each frame is a JSON-encoded
+// `RpcMessage` on its own line, terminated with `\n`. We send the
+// request frame plus an explicit `Eof` frame in a single POST so the
+// server knows to flush and close the response.
 async function rpcCall(
   tag: string,
-  payload: unknown = {},
+  payload: unknown = null,
   opts: { headers?: Record<string, string> } = {},
 ): Promise<Response> {
-  const body = [{ id: "1", _tag: "Request", tag, payload, headers: [] }];
+  const frames = [
+    { id: "1", _tag: "Request", tag, payload, headers: [] },
+    { _tag: "Eof" },
+  ];
+  const body = frames.map((f) => JSON.stringify(f)).join("\n") + "\n";
   const cookies = cookieHeader();
   const res = await fetch(`${BASE_URL}/api/rpc`, {
     method: "POST",
@@ -251,7 +257,7 @@ async function rpcCall(
       ...(cookies ? { Cookie: cookies } : {}),
       ...opts.headers,
     },
-    body: JSON.stringify(body),
+    body,
   });
   ingestSetCookie(res);
   return res;
