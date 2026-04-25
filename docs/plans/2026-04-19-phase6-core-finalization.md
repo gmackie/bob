@@ -1414,3 +1414,65 @@ Full plan: `docs/plans/2026-04-21-phase6f-contracts.md`.
 ## End of Master Plan
 
 After this phase completes, Phase 7 (Bob migration) begins. Bob gets rewritten onto gmacko core, replacing `@bob/api`, `@bob/db`, `@bob/auth`, `@bob/agents`, `@bob/execution`, `@bob/realtime`, `@bob/ws` with their gmacko equivalents. Peripheral packages (`notifications`, `storage`, etc.) get fleshed out during Bob migration when concrete callers emerge.
+
+---
+
+## Phase 6 — Completed ✅ (capstone, 2026-04-25)
+
+Tagged `phase-6-complete` on top of `phase-6l-complete`. The entire 12-sub-phase arc (6A → 6L) shipped between 2026-04-17 and 2026-04-25.
+
+### Final numbers
+
+- **33 packages** with stable public APIs.
+- **360 tests passing**. Test growth across the arc: 6A→46, 6B→71, 6C→150, 6D→189, 6E→222, 6F→246, 6G→276, 6H→299, 6I→314, 6J→339, 6K→342, 6L→360.
+- **~50 Effect 4 drift table rows** captured. Major findings: `Schema.Literals` array form, `Stream.async` removed → `Queue.bounded + Stream.fromQueue` (with `Queue.end` for drain-then-close), `RpcMiddleware.Service` Config keys (`provides`/`requires`/`clientError`, NOT `failure`), `Effect.catchAll` → `Effect.catch`, `Effect.async` → `Effect.callback`, `Schedule.intersect/compose/union` removed → `Schedule.both/either`, `Fiber.RuntimeFiber` → `Fiber.Fiber`, `Fiber.interrupt` returns `Effect<void>`, handler-fiber scope ordering trap (use dedicated `Scope.make("sequential")`), `RpcSerialization.layerJson` buffers streams (use `layerNdjson`), `node:` scheme imports need `NormalModuleReplacementPlugin` (webpack `resolve.fallback` doesn't), tagged-error transitive client-bundle imports need stubbing or errors-subpath refactor.
+- **Real reference web app** at `apps/web` with 5 gmacko-shared routes (login, dashboard, projects, agent, secrets) coexisting with OODA's existing pages.
+
+### Sub-phase summary
+
+| Sub-phase | Date | Tests | Highlights |
+|---|---|---|---|
+| 6A | 2026-04-17 | 46 | Scaffolding + foundation packages (`@gmacko/rpc`, `validators`, `config`) |
+| 6B | 2026-04-19 | 71 | `@gmacko/db` schema normalization (auth/tenancy/secrets/sessions/runner tables) |
+| 6C | 2026-04-19 | 150 | `@gmacko/auth` (better-auth + Effect) + tenancy + GitHub OAuth + device flow |
+| 6D | 2026-04-19 | 189 | `@gmacko/secrets` envelope encryption + `@gmacko/projects` shared primitive |
+| 6E | 2026-04-21 | 222 | `@gmacko/agent` CLI subprocess orchestrator (Claude Code adapter) |
+| 6F | 2026-04-22 | 246 | RPC contract surface + `@gmacko/client` SDK (inserted ahead of services for OODA) |
+| 6G | 2026-04-22 | 276 | `@gmacko/runner-protocol` + `@gmacko/runner-base` + RunnerSessions in auth |
+| 6H | 2026-04-24 | 299 | `@gmacko/realtime` PubSub + 3 backends + agent NdJson chunked streaming |
+| 6I | 2026-04-24 | 314 | `@gmacko/ui` Bob theme port (faithful from DESIGN.md) + theme×mode separation |
+| 6J | 2026-04-24 | 339 | `@gmacko/app-shell` provider stack + auth UI + AppShell layout |
+| 6K | 2026-04-25 | 342 | Wire reference `apps/web` end-to-end with real RPC handlers |
+| 6L | 2026-04-25 | 360 | 13 peripheral package stubs + smoke test expansion + capstone |
+
+### What shipped vs deferred
+
+**Shipped (success criteria #1-5):**
+1. ✅ All 33 core packages with stable public APIs.
+2. ⚠️ Reference `apps/web` runs end-to-end **partially** — login → agent session → SSE stream → transcript persists works for the mock-adapter happy path; **full sign-in→session flow blocked by better-auth signed-cookie verification mismatch** (Phase 7 fix). Runner pickup deferred (no real `runner.*` server-side handlers).
+3. ✅ Bob theme renders correctly (jsdom token tests verify hex resolutions; Button snapshots confirm DOM shape).
+4. ✅ `@gmacko/db` migrations apply cleanly.
+5. ✅ Tests pass for all core packages.
+
+**Major deferrals carried into Phase 7:**
+- Real implementations for all 13 peripheral packages.
+- Real `runner.*` server-side handlers + Connected Runners admin UI.
+- Real Redis + ws-gateway backends for `@gmacko/realtime`.
+- Other CLI agent adapters (CodexCliAdapter, CursorAcpAdapter) — `vercel-labs/wterm` as candidate PTY substrate.
+- **`Sessions.validateToken` signature-aware verification** to support better-auth's signed cookies (blocks full sign-in flow today).
+- Tagged-error subpath refactor (eliminates webpack `resolve.fallback` workarounds).
+- `@gmacko/client` streaming SDK consumer-scope refactor (currently buffers via `Stream.runCollect`).
+- Schema evolutions: `chat_conversations.projectId` FK, `session_secret_usages.sessionId → chat_conversations.id` FK promotion, `AgentSession.getTranscript` as a service method, `project_deploy_secret_bindings` CRUD service, `project_members` per-project RBAC.
+- Real Playwright matrix.
+- Production deploy config (Postgres, Vercel/self-host, env management).
+- OODA proper light theme design.
+- Bob and OODA UI migrations onto `@gmacko/app-shell` + `@gmacko/ui`.
+
+### Tags
+
+- `phase-6a-complete` through `phase-6l-complete` — sub-phase milestones.
+- **`phase-6-complete`** — capstone marking the entire arc done.
+
+### What's next
+
+Phase 7 (Bob migration) starts here. Bob's source at `/Volumes/dev/bob/` migrates onto gmacko core. OODA's existing `apps/web` pages migrate onto `@gmacko/app-shell` + `@gmacko/ui` incrementally. Per-package real implementations land as concrete consumers materialize.

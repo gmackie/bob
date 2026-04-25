@@ -159,3 +159,35 @@ Phase 7 starts with Bob's source at `/Volumes/dev/bob/` migrating onto gmacko co
 - Stubs over guessed implementations — peripheral packages get type-rich public APIs and `NotImplementedError` impls until concrete callers materialize.
 - Each task = RED → GREEN → COMMIT with dedicated subagent.
 - Phase capstone tags both the final sub-phase + the overall arc completion.
+
+---
+
+## Phase 6L — Completed ✅
+
+Tagged `phase-6l-complete` AND `phase-6-complete` (capstone). 33 packages, **360 tests passing** (forecast ≥360 — hit it exactly).
+
+### What landed
+
+- **Batch A commit `09783ce`**: stubs for `@gmacko/{notifications,storage,monitoring,mcp-server,email}`. 5 type-rich public APIs + `NotImplementedError` impls + 5 smoke tests.
+- **Batch B commit `0a41a5d`**: stubs for `@gmacko/{cookies,i18n,settings,analytics}`. 4 packages. `@gmacko/cookies` is pure helpers (no Effect service); `@gmacko/i18n` has graceful-degradation `t(key)` returning the key.
+- **Batch C commit `81dd9b3`**: stubs for `@gmacko/{billing,agent-toolkit,mobile-shell,desktop-shell}`. 4 packages. `@gmacko/agent-toolkit` exposes 3 services (Memory, WebSearch, CodeIndex). Mobile + Desktop shells are types-only with no React/Electron runtime deps.
+- **Smoke test expansion commit `b5c1ccc`**: 3 → 8 tests. Drive-by fixes to `@gmacko/auth/initAuth` (drizzle adapter `schema` + `pluralizeTables` options; better-auth `emailAndPassword.requireEmailVerification` toggle via `skipEmailVerification` option). Sign-up + sign-in via better-auth verified working; full RPC round-trip with cookie blocked by `Sessions.validateToken` not understanding signed cookie format (carry-forward to Phase 7).
+
+### Effect 4 / better-auth drift
+
+No new Effect 4 drift — all stubs follow established patterns. Better-auth drift findings:
+- `emailAndPassword.{enabled, requireEmailVerification}` config keys verified.
+- Drizzle adapter accepts `schema` (table-name override map) and `usePlural` (called `pluralizeTables` in our wrapper).
+- Sign-up endpoint gated on `emailAndPassword.enabled` — without it, `/sign-up/email` returns 404 (route not registered).
+- **Signed cookies**: better-auth produces `<token>.<HMAC>` via `setSessionCookie` → `setSignedCookie`. Gmacko's `Sessions.validateToken` does raw `WHERE token = $1` against the DB — no signature stripping. Full sign-in → RPC round-trip blocked by this. Phase 7 fix: signature-aware validation OR delegate to better-auth's `api.getSession`.
+
+### Scope deviation from plan
+
+- **Smoke test landed at 8 tests** (originally targeted 5-8 depending on better-auth feasibility). Two tests have relaxed assertions (response-status only) because the RPC transport short-circuits empty bodies on `UnauthorizedError`.
+- **`@gmacko/auth` drive-by fixes** (drizzle adapter options + skipEmailVerification flag) happened as part of the smoke test expansion. Documented in 6L plan + commit message.
+
+### Carry-forward to Phase 7
+
+- `Sessions.validateToken` signature-aware verification (HIGH PRIORITY — blocks full sign-in flow).
+- Tenant/membership bootstrap on first sign-up (currently `auth.whoAmI` after sign-in fails because the new user has no tenant_members row).
+- All other Phase 6 carry-forwards documented in the master plan capstone section.
