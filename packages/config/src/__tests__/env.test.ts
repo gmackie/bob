@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Schema } from "effect";
-import { NodeEnv, Port, PostgresUrl } from "../env.js";
+import { NodeEnv, Port, PostgresUrl, RealtimeBackend } from "../env.js";
 
 describe("@gmacko/config/env NodeEnv", () => {
   it("accepts 'development', 'test', and 'production'", () => {
@@ -43,5 +43,23 @@ describe("@gmacko/config/env Port", () => {
 
   it("rejects 'abc' (not a number)", () => {
     expect(() => Schema.decodeUnknownSync(Port)("abc")).toThrow();
+  });
+});
+
+describe("@gmacko/config/env RealtimeBackend", () => {
+  it("accepts 'memory', 'redis', and 'ws-gateway'", () => {
+    expect(Schema.decodeUnknownSync(RealtimeBackend)("memory")).toBe("memory");
+    expect(Schema.decodeUnknownSync(RealtimeBackend)("redis")).toBe("redis");
+    expect(Schema.decodeUnknownSync(RealtimeBackend)("ws-gateway")).toBe(
+      "ws-gateway",
+    );
+  });
+
+  it("rejects 'kafka', empty string, and undefined", () => {
+    expect(() => Schema.decodeUnknownSync(RealtimeBackend)("kafka")).toThrow();
+    expect(() => Schema.decodeUnknownSync(RealtimeBackend)("")).toThrow();
+    expect(() =>
+      Schema.decodeUnknownSync(RealtimeBackend)(undefined),
+    ).toThrow();
   });
 });

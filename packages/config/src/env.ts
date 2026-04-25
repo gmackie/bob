@@ -15,3 +15,9 @@ export const Port = Schema.NumberFromString.pipe(
   Schema.check(Schema.isInt()),
   Schema.check(Schema.isBetween({ minimum: 1, maximum: 65535 })),
 );
+
+// Pubsub / streaming backend selection for `@gmacko/realtime`. The literals
+// match the three backend Layers (memory in-process, Redis cross-process,
+// hosted ws-gateway). Consumers read this from env to drive `layerRealtime`.
+export const RealtimeBackend = Schema.Literals(["memory", "redis", "ws-gateway"]);
+export type RealtimeBackend = typeof RealtimeBackend.Type;
