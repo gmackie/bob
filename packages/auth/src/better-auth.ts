@@ -135,7 +135,17 @@ export function initAuth(opts: InitAuthOptions): AuthInstance {
                       slug,
                     })
                     .returning();
-                  if (!tenantRow) return;
+                  if (!tenantRow) {
+                    // `.returning()` returning empty would mean the insert
+                    // didn't materialise a row — drizzle/PGlite shouldn't
+                    // ever produce this state, but if they do, surface it
+                    // loudly rather than silently leaving the user with no
+                    // tenancy. Better-auth turns this into a 500 on the
+                    // sign-up call so the client knows to retry.
+                    throw new Error(
+                      `Tenant bootstrap failed: insert returned no row for user ${user.id}`,
+                    );
+                  }
                   await tx.insert(membersTable).values({
                     tenantId: tenantRow.id,
                     userId: user.id,
