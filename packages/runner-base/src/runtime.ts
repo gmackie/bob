@@ -56,12 +56,13 @@
 import {
   Duration,
   Effect,
+  Exit,
   Fiber,
   Layer,
   Ref,
   Schedule,
   Schema,
-  type Scope,
+  Scope,
   ServiceMap,
 } from "effect";
 import {
@@ -88,6 +89,11 @@ export interface StartOptions {
   readonly heartbeatInterval?: Duration.Input;
   /** Claim-loop cadence. Default: 1 second. */
   readonly claimInterval?: Duration.Input;
+  /**
+   * Grace period for the SIGTERM drain finalizer to wait for in-flight
+   * handlers before force-interrupting them. Default: 30 seconds.
+   */
+  readonly gracePeriodMs?: Duration.Input;
   /** Optional fetch override (e.g. for tests). */
   readonly fetch?: typeof fetch;
 }
@@ -254,6 +260,21 @@ export const layerRunnerRuntime: Layer.Layer<RunnerRuntime> = Layer.effect(
           status: "idle" as RunnerStatus,
         });
 
+        // --- Handlers scope (Task 11 drain coordination) ------------------
+        //
+        // We deliberately fork user-supplied `WorkHandler` fibers into a
+        // *separate* scope from the heartbeat/claim loops and the caller's
+        // scope. Why: when the caller's scope closes, finalizers run in
+        // LIFO order — but `forkScoped` registers an interrupt-on-close
+        // finalizer per fiber as it's forked, and the dispatch fiber forks
+        // the handler at runtime *after* the drain finalizer is registered
+        // (since dispatch happens during loop ticks, post-`start`). LIFO
+        // means a handler's interrupt would run *before* the drain
+        // finalizer, defeating the whole purpose. Pinning handlers to a
+        // dedicated scope we close ourselves keeps drain in control of when
+        // they get interrupted.
+        const handlersScope = yield* Scope.make("sequential");
+
         // --- Heartbeat fiber (scoped) ---
         const interval = opts.heartbeatInterval ?? Duration.seconds(10);
 
@@ -371,7 +392,13 @@ export const layerRunnerRuntime: Layer.Layer<RunnerRuntime> = Layer.effect(
             }),
           );
 
-          const handlerFiber = yield* Effect.forkScoped(handlerEffect);
+          // Handler fiber lives in `handlersScope`, NOT the surrounding
+          // (claim-loop) scope, so `forkIn` instead of `forkScoped`. This is
+          // what gives the drain finalizer authority over interrupt timing.
+          const handlerFiber = yield* Effect.forkIn(
+            handlerEffect,
+            handlersScope,
+          );
           // `Fiber<void, never>` from the matchEffect-narrowed branch widens
           // to the in-flight set's `Fiber<unknown, unknown>` covariantly.
           const trackedFiber =
@@ -396,6 +423,94 @@ export const layerRunnerRuntime: Layer.Layer<RunnerRuntime> = Layer.effect(
         }).pipe(Effect.repeat(Schedule.fixed(claimInterval)));
 
         yield* Effect.forkScoped(claimLoop);
+
+        // --- SIGTERM drain finalizer (Task 11) ------------------------------
+        //
+        // Register a finalizer on the caller's scope. When the scope closes
+        // (which happens automatically on `Effect.scoped` teardown — the
+        // production analogue is a `process.on("SIGTERM", ...)` handler that
+        // closes the runtime's scope), this runs four steps in order:
+        //   1. Flip status → "draining" (the claim loop's check at the top
+        //      of each tick exits early once it sees this).
+        //   2. Best-effort draining heartbeat so the server learns the
+        //      runner is going away even if `unregister` later fails.
+        //   3. Wait for `inFlightFibers` to drain, racing a grace timer.
+        //      Past grace, force-interrupt remaining fibers.
+        //   4. Best-effort `runner.unregister`.
+        //
+        // Drift notes:
+        //   - `Scope.addFinalizer(scope, finalizer: Effect<unknown>)` —
+        //     finalizer is an Effect *value*, NOT a `() => Effect<...>`.
+        //     For the "exit-aware" variant use `Scope.addFinalizerExit`
+        //     (we don't need the Exit here).
+        //   - `Effect.scope` is the canonical way to grab the current scope
+        //     from inside `Effect.gen` (typed `Effect<Scope, never, Scope>`).
+        //   - `Fiber.interrupt(fiber): Effect<void>` (NOT `Effect<Exit>`).
+        //     `Fiber.interruptAll(iter)` is the multi-fiber convenience.
+        //   - `Effect.race(a, b)` — first to complete wins; loser is
+        //     interrupted automatically. We use it to bound the drain wait
+        //     by `gracePeriodMs`: the drain-loop branch wins the natural
+        //     case; the timer branch wins on hang and force-interrupts.
+        const grace = opts.gracePeriodMs ?? Duration.seconds(30);
+        const scope = yield* Effect.scope;
+
+        const drainFinalizer = Effect.gen(function* () {
+          // 1. Flip status to draining so the claim loop stops claiming.
+          yield* Ref.update(stateRef, (s): RuntimeState | null =>
+            s ? { ...s, status: "draining" as RunnerStatus } : s,
+          );
+
+          // 2. Send a final draining heartbeat — best-effort. We swallow
+          //    errors here because the finalizer must always run to
+          //    completion even if the network is gone.
+          const drainingHeartbeat = client["runner.heartbeat"]!({
+            status: "draining",
+          }) as Effect.Effect<unknown, unknown, never>;
+          yield* Effect.catch(withRetry(drainingHeartbeat), () => Effect.void);
+
+          // 3. Drain in-flight fibers, bounded by grace.
+          //    `drainAll` polls because handlers complete and remove
+          //    themselves from the set asynchronously; snapshotting then
+          //    `Fiber.await`-ing each one is the simplest race-free wait.
+          const drainAll = Effect.gen(function* () {
+            while (inFlightFibers.size > 0) {
+              const snapshot = Array.from(inFlightFibers);
+              yield* Effect.all(snapshot.map((f) => Fiber.await(f)));
+            }
+          });
+
+          const graceTimer = Effect.gen(function* () {
+            yield* Effect.sleep(grace);
+            // Grace expired — force-interrupt anything still in-flight.
+            // We grab a fresh snapshot here because the set might have
+            // shrunk between the timer firing and this line running.
+            const stragglers = Array.from(inFlightFibers);
+            yield* Fiber.interruptAll(stragglers);
+          });
+
+          yield* Effect.race(drainAll, graceTimer);
+
+          // Now that handlers have either finished or been interrupted,
+          // close the handlers scope so any straggler resources release.
+          yield* Scope.close(handlersScope, Exit.void);
+
+          // 4. Unregister — best-effort.
+          const unregisterEffect = client["runner.unregister"]!({
+            reason: "graceful shutdown",
+          }) as Effect.Effect<unknown, unknown, never>;
+          yield* Effect.catch(withRetry(unregisterEffect), () => Effect.void);
+        });
+
+        // Add the drain finalizer *and* a fallback that closes
+        // `handlersScope` unconditionally. Order matters here — the drain
+        // finalizer is registered last so LIFO runs it first; the fallback
+        // is registered first so it always runs at the end as a safety net
+        // even if the drain effect is interrupted partway through.
+        yield* Scope.addFinalizer(
+          scope,
+          Scope.close(handlersScope, Exit.void),
+        );
+        yield* Scope.addFinalizer(scope, drainFinalizer);
       });
 
     const setStatus = (status: RunnerStatus): Effect.Effect<void> =>

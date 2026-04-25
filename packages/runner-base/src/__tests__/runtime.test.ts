@@ -62,8 +62,12 @@ interface MockState {
   registerCalls: number;
   heartbeatCalls: number;
   claimWorkCalls: number;
+  unregisterCalls: number;
   registerShouldFail: boolean;
   heartbeatFailuresRemaining: number;
+  // Last heartbeat status the server saw — Task 11's drain test asserts a
+  // final `draining` heartbeat is sent before unregister.
+  lastHeartbeatStatus: string | null;
   // FIFO queue of tasks the next matching `claimWork` will dequeue (matched
   // by capability filter intersection).
   taskQueue: TaskRunWire[];
@@ -72,16 +76,28 @@ interface MockState {
   // error event, so this is the contract by which Task 10 tests verify
   // "events flowed back".
   reportedEvents: RecordedEvent[];
+  // Wall-clock timestamps captured for ordering assertions in Task 11
+  // drain tests. Recorded as `Date.now()` at the moment the corresponding
+  // mock handler ran.
+  unregisterAt: number | null;
+  // Map of runId → wall-clock Date.now() of the last reportEvent received
+  // for that run. Drain test uses this to assert
+  // "terminal handler event arrived before unregister".
+  lastReportEventAt: number | null;
 }
 
 const initialState = (): MockState => ({
   registerCalls: 0,
   heartbeatCalls: 0,
   claimWorkCalls: 0,
+  unregisterCalls: 0,
   registerShouldFail: false,
   heartbeatFailuresRemaining: 0,
+  lastHeartbeatStatus: null,
   taskQueue: [],
   reportedEvents: [],
+  unregisterAt: null,
+  lastReportEventAt: null,
 });
 
 // Shared test fixture: build a TaskRunWire with sensible defaults.
@@ -139,7 +155,7 @@ const buildHandlersLayer = (ref: Ref.Ref<MockState>) =>
         };
       }),
 
-    "runner.heartbeat": () =>
+    "runner.heartbeat": ({ status }) =>
       Effect.gen(function* () {
         // Compose all state mutations in a single Ref.update so the call
         // counter and failure counter stay consistent under any future
@@ -153,6 +169,7 @@ const buildHandlersLayer = (ref: Ref.Ref<MockState>) =>
               0,
               s.heartbeatFailuresRemaining - 1,
             ),
+            lastHeartbeatStatus: status,
           },
         ]);
         if (previous.heartbeatFailuresRemaining > 0) {
@@ -208,12 +225,20 @@ const buildHandlersLayer = (ref: Ref.Ref<MockState>) =>
               seq: payload.seq,
             },
           ],
+          lastReportEventAt: Date.now(),
         }));
         return undefined;
       }),
 
     "runner.unregister": () =>
-      Effect.die("unregister not used in Task 9/10 tests"),
+      Effect.gen(function* () {
+        yield* Ref.update(ref, (s) => ({
+          ...s,
+          unregisterCalls: s.unregisterCalls + 1,
+          unregisterAt: Date.now(),
+        }));
+        return undefined;
+      }),
   });
 
 // --- Server lifecycle ------------------------------------------------------
@@ -623,6 +648,143 @@ describe("RunnerRuntime claim + dispatch", () => {
         Effect.scoped,
         Effect.provide(layerRunnerRuntime),
       ),
+    20_000,
+  );
+});
+
+// --- Task 11: SIGTERM drain ------------------------------------------------
+//
+// Drain is implemented via `Scope.addFinalizer` registered inside `start()`.
+// When the caller's scope closes (which is what `Effect.scoped` does at the
+// end of an effect, mirroring SIGTERM in production where a signal handler
+// triggers scope teardown), the finalizer:
+//   1. Transitions status → draining (stops new claims).
+//   2. Sends a final draining heartbeat (best-effort).
+//   3. Waits for `inFlightFibers` to drain, bounded by `gracePeriodMs`
+//      (default 30s); past grace, force-interrupts remaining fibers.
+//   4. Calls `runner.unregister`.
+//
+// Both tests run a `runtime.start` inside an *inner* `Effect.scoped` so we
+// can assert post-finalizer state from the *outer* effect after the inner
+// scope has fully torn down. The mock records timestamps for ordering
+// assertions ("handler completion happened before unregister") and counts
+// unregister calls.
+
+describe("RunnerRuntime SIGTERM drain", () => {
+  it.live(
+    "in-flight handler completes before unregister",
+    () =>
+      Effect.gen(function* () {
+        const task = makeTask("run-drain-happy", ["claude-code"]);
+        yield* Ref.update(mockStateRef, (s) => ({
+          ...s,
+          taskQueue: [...s.taskQueue, task],
+        }));
+
+        // Handler sleeps for 200ms then emits a terminal-ish event. The
+        // drain finalizer must wait for this to finish before unregistering.
+        const handler: WorkHandler = ({ runId, emit }) =>
+          Effect.gen(function* () {
+            yield* Effect.sleep(Duration.millis(200));
+            yield* emit({
+              type: "stdout",
+              payload: { text: `done-${runId}` },
+            });
+          });
+
+        // Inner-scoped block: when this returns, the scope unwinds and the
+        // drain finalizer fires. We give the claim loop ~150ms to pick up
+        // the task before we exit the inner scope, ensuring the handler is
+        // already in-flight when drain begins.
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const runtime = yield* RunnerRuntime;
+            yield* runtime.handle("claude-code", handler);
+            yield* runtime.start({
+              ...baseStartOpts(),
+              heartbeatInterval: Duration.minutes(10),
+              claimInterval: Duration.millis(50),
+            });
+            // Wait for the claim to land but exit *before* the handler's
+            // 200ms sleep elapses — drain must wait for it.
+            yield* Effect.sleep(Duration.millis(120));
+          }).pipe(Effect.provide(layerRunnerRuntime)),
+        );
+
+        const state = yield* Ref.get(mockStateRef);
+
+        // Unregister was called exactly once.
+        expect(state.unregisterCalls).toBe(1);
+
+        // Handler's stdout event arrived before unregister.
+        const stdoutEvent = state.reportedEvents.find(
+          (e) => e.runId === "run-drain-happy" && e.type === "stdout",
+        );
+        expect(stdoutEvent).toBeDefined();
+        expect(state.lastReportEventAt).not.toBeNull();
+        expect(state.unregisterAt).not.toBeNull();
+        expect(state.unregisterAt!).toBeGreaterThanOrEqual(
+          state.lastReportEventAt!,
+        );
+
+        // A draining heartbeat was sent before unregister (drain step 2).
+        expect(state.lastHeartbeatStatus).toBe("draining");
+      }).pipe(Effect.scoped),
+    20_000,
+  );
+
+  it.live(
+    "grace timeout fires when handler hangs; runtime unregisters anyway",
+    () =>
+      Effect.gen(function* () {
+        const task = makeTask("run-drain-hang", ["claude-code"]);
+        yield* Ref.update(mockStateRef, (s) => ({
+          ...s,
+          taskQueue: [...s.taskQueue, task],
+        }));
+
+        // Handler hangs for 5 seconds — way longer than the 100ms grace
+        // we configure below. Drain must give up after grace and force-
+        // interrupt the fiber, then call unregister.
+        let interrupted = false;
+        const handler: WorkHandler = () =>
+          Effect.gen(function* () {
+            yield* Effect.sleep(Duration.seconds(5));
+          }).pipe(
+            Effect.onInterrupt(() =>
+              Effect.sync(() => {
+                interrupted = true;
+              }),
+            ),
+          );
+
+        const startMs = Date.now();
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const runtime = yield* RunnerRuntime;
+            yield* runtime.handle("claude-code", handler);
+            yield* runtime.start({
+              ...baseStartOpts(),
+              heartbeatInterval: Duration.minutes(10),
+              claimInterval: Duration.millis(50),
+              gracePeriodMs: Duration.millis(100),
+            });
+            yield* Effect.sleep(Duration.millis(120));
+          }).pipe(Effect.provide(layerRunnerRuntime)),
+        );
+        const elapsedMs = Date.now() - startMs;
+
+        // Whole sequence (start + claim + grace + interrupt + unregister)
+        // wraps up well under 1 second — proves we didn't wait the full 5s
+        // handler sleep.
+        expect(elapsedMs).toBeLessThan(1500);
+
+        const state = yield* Ref.get(mockStateRef);
+        // Unregister still happened despite the hung handler.
+        expect(state.unregisterCalls).toBe(1);
+        // Handler fiber was force-interrupted after grace expired.
+        expect(interrupted).toBe(true);
+      }).pipe(Effect.scoped),
     20_000,
   );
 });
