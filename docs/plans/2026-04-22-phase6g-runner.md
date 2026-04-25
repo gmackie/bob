@@ -339,3 +339,65 @@ Then:
 - Protocol packages own schemas + RpcGroups; runtime packages own loops + SDK composition.
 - Retries are always `Schedule.exponential + jittered + recurs(budget)` — never ad-hoc sleeps.
 - All long-lived workers live inside `Effect.scoped` so SIGTERM cleanup is automatic.
+
+---
+
+## Phase 6G — Completed ✅
+
+Tagged `phase-6g-complete`. **33 packages** (no new packages — runner-protocol + runner-base scaffolded at 6A, filled out here). Workspace typecheck green. **276 tests passing** (up from 246 at end of 6F; forecast was ≥270, actual 276).
+
+### What landed
+
+- **Tasks 1+2 combined commit `4a8f0cc`**: `RunnerSessions` Effect service in `@gmacko/auth` (stateless HMAC-signed opaque tokens keyed via `HMAC(GMACKO_SECRET_ENCRYPTION_KEY, "runner-session")`) + `RunnerSessionMiddleware` (sibling of `AuthMiddleware`, validates `X-Runner-Session` header, populates `RunnerSession` ServiceMap.Service for procedure handlers). 8 new tests in @gmacko/auth (58 → 66).
+- **Task 3 + Task 7 (parallel) commits `69f93b9` + `3d8ba99`**: scaffolds for `@gmacko/runner-protocol` and `@gmacko/runner-base` packages (deps, vitest, smoke).
+- **Task 4 commit `91a704d`**: wire schemas (`TaskRunSchema`, `TaskRunEventSchema`, `RunnerDeviceStatusSchema`, etc.) + 3 tagged errors (`RunnerNotRegisteredError`, `InvalidApiKeyForRunnerError`, `TaskRunNotClaimableError`).
+- **Task 5 commit `4ac642c`**: `RunnerRpc` group with 5 procedures (register, heartbeat, claimWork, reportEvent, unregister) + `RUNNER_SESSION_REQUIRED` manifest.
+- **Task 6 commit `200fecf`**: runner-protocol public barrel.
+- **Task 8 commit `93f239b`**: `retrySchedule` + `withRetry` helper. Used `Schedule.both` instead of `Schedule.intersect` (intersect doesn't exist in beta.43).
+- **Task 9 commit `278ade5`**: `RunnerRuntime.start` with register-then-heartbeat loop. Per-request `X-Runner-Session` injection via `HttpClient.mapRequest` closing over a plain `let currentToken: string | null = null` (avoids `Effect.runSync` inside the synchronous `transformClient` callback).
+- **Task 10 commit `a3a03bb`**: claim + dispatch loop with `WorkHandler` registry. Used `Effect.matchEffect` for two-branch handler dispatch (success → status_change "completed"; failure → error event). Tracks in-flight fibers in a `Set<Fiber.Fiber<unknown, unknown>>`.
+- **Task 11 commit `5a66e59`**: SIGTERM drain via scope finalizer. **Critical fix**: handler fibers in a dedicated `handlersScope = Scope.make("sequential")` instead of the caller's scope, because LIFO finalizer ordering otherwise interrupts handlers BEFORE drain runs. Drain finalizer awaits in-flight fibers (bounded by configurable grace), races against the grace timer for force-interrupt, then unregisters.
+- **Tasks 13+14 combined commit `b3ad29b`**: end-to-end integration test (full register → heartbeats → claim → events → drain → unregister in one test) + finalized `@gmacko/runner-base` public barrel. **Task 12 deliberately skipped** — the inline MockServer pattern in `runtime.test.ts` covers the e2e harness needs; promoting it to a `./testing` subpath would be premature without a current external consumer. Documented in commit and barrel header comment.
+
+### Effect 4 drift findings added to master plan
+
+**11 new drift rows from 6G** — second-heaviest drift phase (only 6F's RPC introduction had more):
+
+1. `Schedule.intersect` / `Schedule.compose` / `Schedule.union` do NOT exist; use `Schedule.both` (AND-intersection) or `Schedule.either` (OR-union).
+2. `Effect.catchAll` → `Effect.catch` (renamed; docstring confirms).
+3. `Duration.DurationInput` → `Duration.Input` (renamed).
+4. `HttpClient.mapRequest(client, fn)` data-first 2-arg; `HttpClientRequest.setHeader(req, key, value)` data-first 3-arg.
+5. `Fiber.RuntimeFiber<A, E>` doesn't exist; use `Fiber.Fiber<A, E>`.
+6. `Fiber.interrupt(fiber): Effect<void>` (not `Effect<Exit<A, E>>`); `Fiber.interruptAll(iter)` for batch.
+7. **Handler-fiber scope ordering trap**: `Effect.forkScoped` puts handlers in the same scope as outer finalizers; LIFO ordering interrupts handlers before drain. Fix: dedicated `Scope.make("sequential")` + `Effect.forkIn`.
+8. `Scope.addFinalizer(scope, finalizer)` takes an `Effect<unknown>` value, not a thunk.
+9. `Effect.scope` exists as a value to yield inside `Effect.gen`.
+10. `Effect.matchEffect({onFailure, onSuccess})` for two-branch terminal effects.
+11. `Scope.make("sequential" | "parallel")` returns `Closeable` for explicit-close patterns.
+
+### Scope deviation from plan
+
+- **Task 12 skipped.** No formalized MockServer at `./testing`. Inline mock in `runtime.test.ts` + `e2e.test.ts` was sufficient and shared via copy (the two have slightly different mock-state shapes, so a shared helper would have bloated the interface). Future task formalizes this in 6K when real handlers ship.
+- **Test forecast +32 actual +30.** Two tests missing from the forecast — probably an off-by-one in the per-task estimates. Total still well over the floor.
+- **Task 9 used closure-variable for session token** instead of `Effect.runSync(Ref.get)` inside `transformClient`. Cleaner and the plan's sketch was over-engineered. Ref still tracks status for `setStatus`/`currentStatus`; the token is mirrored on assignment alongside the Ref.
+- **Subagent rate-limit interrupt during Tasks 5 + 8.** Both subagents got their files written but committed nothing before hitting the rate limit; recovered by completing the commits inline (verified types + tests + committed). Two small drift findings I caught while patching: `Schedule.compose` doesn't exist (the test referenced it), `Schedule.both` is the right primitive.
+
+### Known rough edges (non-blocking)
+
+- **MockServer pattern duplicated** between `runtime.test.ts` and `e2e.test.ts`. Promote to a shared helper in 6K when real handlers + real SSE transport land.
+- **No real signal-handler wiring.** `Effect.scoped` + scope-close is the gmacko primitive; consumers map `process.on("SIGTERM", ...)` to scope close. 6K may want a tiny `signal-bridge` helper.
+- **Stateless HMAC tokens have no revocation.** Once minted, valid until expiry. For runner sessions this is acceptable (1h TTL, the runner just re-registers). If revocation becomes needed, switch to a `runner_sessions` table with a deny-list or short JWT + token-introspection.
+- **`Effect.runSync(Ref.get(stateRef))` rejected in favor of plain closure.** This is fine for single-fiber state but if multiple fibers ever need to read the token, refactor to a Ref + careful sync read.
+
+### Open items carried into 6H onboarding
+
+Still deferred from earlier:
+- Real server-side `runner.*` handlers — 6K (now `task_runs` + `runner_devices` tables get wired).
+- Long-poll `claimWork` — perf optimization, defer.
+- Reservation leases + zombie detection — needs 6H realtime pubsub.
+- Encrypted task payloads via `@gmacko/secrets` — when a workload demands it.
+
+New from 6G:
+- **Runner SDK polish** — current `RunnerRuntime` requires consumers to construct `StartOptions` manually. A `createGmackoRunner({apiKey, capabilities, handlers, baseURL})` one-shot factory + signal-handler bridge is a nice 6K follow-up.
+- **Cross-tenant runner pools** — every runner is bound to one tenant via its API key. Multi-tenant fleets would need a different auth model; defer.
+- **Priority queues** — current claim is FIFO-by-creation. Workload-driven prioritization waits.
