@@ -1,7 +1,11 @@
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { Effect } from "effect";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+
+import * as schema from "@gmacko/db/schema";
+import { runMigrations } from "@gmacko/db/migrate";
+import { tenants, tenantMembers } from "@gmacko/db/schema/tenancy";
 
 import {
   BetterAuth,
@@ -69,5 +73,44 @@ describe("@gmacko/auth BetterAuth service", () => {
     );
 
     expect(result).toBe(auth);
+  });
+});
+
+describe("initAuth tenant bootstrap", () => {
+  let pglite: PGlite;
+  let db: ReturnType<typeof drizzle<typeof schema>>;
+
+  beforeEach(async () => {
+    pglite = new PGlite();
+    db = drizzle(pglite, { schema });
+    await runMigrations(pglite);
+  });
+
+  it("creates a personal tenant + tenant_members row when a user signs up", async () => {
+    const auth = initAuth({
+      db,
+      schema: schema as unknown as Record<string, unknown>,
+      pluralizeTables: true,
+      baseUrl: "http://localhost:3000",
+      productionUrl: "http://localhost:3000",
+      secret: "test-secret-32-chars-minimum-1234",
+      githubClientId: "x",
+      githubClientSecret: "x",
+      emailAndPassword: { enabled: true, requireEmailVerification: false },
+    });
+
+    await auth.api.signUpEmail({
+      body: {
+        email: "alice@example.test",
+        password: "password-123",
+        name: "Alice",
+      },
+    });
+
+    const tenantRows = await db.select().from(tenants);
+    expect(tenantRows.length).toBe(1);
+    const memberRows = await db.select().from(tenantMembers);
+    expect(memberRows.length).toBe(1);
+    expect(memberRows[0]?.role).toBe("owner");
   });
 });
