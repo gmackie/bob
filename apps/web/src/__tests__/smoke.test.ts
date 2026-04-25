@@ -359,7 +359,7 @@ describe("@gmacko/web smoke (mock adapter)", () => {
     expect(body).toContain(TEST_EMAIL);
   });
 
-  it("/get-session response embeds the bootstrapped tenant info indirectly", async () => {
+  it("/get-session still 200s after the tenant-bootstrap hook runs", async () => {
     // Direct DB introspection isn't available from the smoke test (it talks
     // only over HTTP). Instead, verify a downstream symptom: a follow-up
     // /get-session call still 200s — i.e. nothing in the user-create
@@ -367,6 +367,7 @@ describe("@gmacko/web smoke (mock adapter)", () => {
     // via Task 10's whoAmI round-trip.)
     const res = await authGet("/get-session");
     expect(res.status).toBe(200);
+    await res.text();
   });
 
   // ── RPC reachability with the cookie ferried (Phase 6L expansion) ─────
