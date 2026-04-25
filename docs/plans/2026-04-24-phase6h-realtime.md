@@ -309,3 +309,53 @@ Commit: `feat(realtime): finalize @gmacko/realtime public barrel`
 - Stubs over guessed implementations — Redis + ws-gateway can land later when callers materialize.
 - Backend selection is a Layer composition concern, not a runtime branch.
 - Subscribers are scoped — scope close = subscription release.
+
+---
+
+## Phase 6H — Completed ✅
+
+Tagged `phase-6h-complete`. **33 packages** (no new — `realtime` filled out from scaffold). Workspace typecheck green. **299 tests passing** (up from 276 at end of 6G; forecast ≥295).
+
+### What landed
+
+- **Tasks 1+2 commit `60c498a`**: `RealtimeBackend` env schema in `@gmacko/config` + `RealtimeChannel` interface + 2 tagged errors (`RealtimePublishError`, `RealtimeBackendNotImplementedError`) + `makeRealtimeChannelTag<A>(name)` factory using single-call `ServiceMap.Service` form (workaround for TS4023 + NodeInspectSymbol).
+- **Tasks 3 + 4 + 5 (parallel)** commits `9cc2ed8` / `26f72ec` / `0b35465`: memory backend (real, wraps `PubSub.unbounded` per channel via `Stream.fromSubscription`), redis stub, ws-gateway stub.
+- **Task 6 commit `c94aba8`**: `layerRealtime(backend, tag)` factory dispatching to the right backend Layer.
+- **Tasks 7 + 8 (parallel)** commits `c0591c3` / `e98e748`: `streamToSseResponse` SSE helper for HTTP route handlers + agent.sendTurn transport migration to `RpcSerialization.layerNdjson` (true chunked streaming, configurable via `serialization?: "json" | "ndjson"` on `createGmackoRpcClient`, default `"ndjson"`).
+- **Task 9 commit `0832bcb`**: public barrel finalization with full re-export surface + 2 smoke tests.
+
+### Effect 4 drift findings added to master plan
+
+5 new rows from 6H:
+1. `ServiceMap.Service<Self, Shape>()(name)` two-call class form is unsafe inside generic factories (TS4023 on `NodeInspectSymbol`); workaround uses the single-call function form.
+2. `Stream.fromQueue(sub)` doesn't accept `PubSub.Subscription<A>` (distinct branded type); use `Stream.fromSubscription`.
+3. `RpcSerialization.layerJson` vs `layerNdjson` — drop-in swap; `layerJson` buffers streams, `layerNdjson` is true chunked. Framing branch selected by `includesFraming` at `RpcServer.js:628-633`.
+4. `RpcMessage.RequestEncoded.headers` is `ReadonlyArray<[string, string]>`, NOT a Record — hand-built fetch envelopes for raw RPC tests must use the array form.
+5. `ServiceMap.Service<Shape>(name)` returns a callable (typeof === "function").
+
+### Scope deviation from plan
+
+- **Task 8 went with the configurable serialization option** (default `"ndjson"`). Both server and client agree; `serialization?: "json" | "ndjson"` opens a backwards-compat door for legacy consumers but defaults to true chunked streaming.
+- **Task 8 fell back to a wire-shape smoke test** (raw fetch + `Content-Type: application/ndjson` + line-delimited JSON envelopes) instead of timing-based incremental-arrival assertion. Rationale: `runStream` in `client/src/internal/runtime.ts` deliberately collects via `Stream.runCollect` for scope-lifecycle reasons (deferred fix per 6F retro), so SDK-level `for await` always looks buffered even when the wire is chunked. The wire-shape check tests the actual layer-swap behavior more directly than timing.
+- **Test 5 of Task 3 (memory backend scope cleanup)** verified behaviorally — re-subscribe after first scope closes still works, proving the underlying `PubSub.Subscription` was released without affecting the long-lived per-channel `PubSub` map.
+
+### Known rough edges (non-blocking)
+
+- **`RpcClient` streaming scope leak workaround unchanged.** `client/src/internal/runtime.ts:146-162` still buffers via `Stream.runCollect` inside the scope. Real fix (long-lived async-iterable consumer scope) carries forward to 6K.
+- **`packages/rpc/src/server.ts` still uses `RpcSerialization.layerJson`** by default (server-internal default Layer). Documented with a TODO; 6K wires the real Next.js handler with the proper serialization choice.
+- **`packages/runner-base` runtime + tests still use `layerJson`** for the runner ↔ orchestrator transport. Out of scope for 6H — Task 8's migration is `agent.sendTurn`-specific. If runner streaming materializes in 6K, swap then.
+- **Memory backend is per-process**; cross-process fan-out requires a real Redis or ws-gateway implementation (both stubbed).
+
+### Open items carried into 6I onboarding
+
+Still deferred:
+- Real Redis backend impl — when concrete cross-process consumer lands.
+- Real ws-gateway impl — when `@gmacko/ws-gateway` materializes.
+- Channel persistence / replay — for "missed message" semantics. Backend-side history (Redis Streams, Kafka) required.
+- Tenant-scoped channel enforcement — schema-level wrapper that requires tenant prefix.
+- Backpressure tuning for memory backend — `PubSub.unbounded` is fine for low-volume; high-volume use might need `bounded` + slow-subscriber drop policy.
+- Long-poll / SSE-over-fetch fallback — out of scope.
+
+New from 6H:
+- **`runStream` async-iterable scope fix.** Carry forward — client SDK still buffers internally despite ndjson on the wire. Need a long-lived consumer scope or a different bridging primitive.
+- **Server-default serialization layer.** `packages/rpc/src/server.ts`'s `serializationLayer` default → review and align with the 6H ndjson-default direction when 6K wires real handlers.
