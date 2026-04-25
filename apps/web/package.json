@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "vitest run --passWithNoTests",
+    "test:smoke": "vitest run src/__tests__/smoke.test.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.2.0",
@@ -41,6 +43,7 @@
     "@tailwindcss/postcss": "^4.2.0",
     "@types/node": "25.6.0",
     "@types/react": "19.2.14",
-    "typescript": "^5.9.0"
+    "typescript": "^5.9.0",
+    "vitest": "^3.0.0"
   }
 }
