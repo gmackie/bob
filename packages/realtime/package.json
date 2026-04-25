@@ -7,7 +7,8 @@
     ".": "./src/index.ts",
     "./backends/memory": "./src/backends/memory.ts",
     "./backends/redis": "./src/backends/redis.ts",
-    "./backends/ws-gateway": "./src/backends/ws-gateway.ts"
+    "./backends/ws-gateway": "./src/backends/ws-gateway.ts",
+    "./sse": "./src/sse.ts"
   },
   "scripts": {
     "test": "vitest run --passWithNoTests",
