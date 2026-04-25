@@ -10,6 +10,7 @@ import type { TenantId, UserId } from "@gmacko/validators";
 import { UnauthorizedError } from "@gmacko/rpc/errors";
 
 import { ApiKeys, layerApiKeys } from "../api-keys.js";
+import { layerBetterAuth } from "../better-auth.js";
 import { Sessions, layerSessions } from "../sessions.js";
 import { Tenancy, TenantNotSelectedError, layerTenancy } from "../tenancy.js";
 import {
@@ -27,6 +28,13 @@ const VALID_SESSION_TOKEN = "tok_mw_valid_abc123";
 const SECOND_USER_ID = "user_no_members_xyz" as UserId;
 const SECOND_USER_EMAIL = "no-members@example.com";
 const SECOND_SESSION_TOKEN = "tok_mw_no_members";
+
+// Minimal better-auth stub. These tests cover the bearer + cookie-token
+// paths via `validateBearer` / `validateToken` (drizzle-only); the new
+// signature-aware `validateRequest` path isn't exercised here.
+const fakeAuth = {
+  api: { getSession: async () => null },
+} as unknown as Parameters<typeof layerBetterAuth>[0];
 
 let ctx: TestCtx;
 let deps: Layer.Layer<ApiKeys | Sessions | Tenancy>;
@@ -71,9 +79,10 @@ async function seedBase(memberships: ReadonlyArray<TenantId>, role: "owner" | "a
 beforeEach(async () => {
   ctx = await createTestDb();
   const dbLayer = layerGmackoDb(ctx.db);
+  const authBaseLayer = Layer.mergeAll(dbLayer, layerBetterAuth(fakeAuth));
   deps = Layer.mergeAll(
     Layer.provide(layerApiKeys(), dbLayer),
-    Layer.provide(layerSessions, dbLayer),
+    Layer.provide(layerSessions, authBaseLayer),
     Layer.provide(layerTenancy, dbLayer),
   );
 });

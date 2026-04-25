@@ -4,10 +4,18 @@ import { Effect, Layer } from "effect";
 import { createTestDb } from "@gmacko/db/testing";
 import { layerGmackoDb } from "@gmacko/db";
 
+import { layerBetterAuth } from "../better-auth.js";
 import { ApiKeys, DeviceCodes, Sessions, Tenancy, layerAuth } from "../index.js";
 
 type TestCtx = Awaited<ReturnType<typeof createTestDb>>;
 let ctx: TestCtx;
+
+// Minimal better-auth stub. `layerAuth`'s `Sessions` member now requires
+// `BetterAuth` for the cookie/signature path, but these bundle tests only
+// poke method shapes — never invoke `validateRequest`.
+const fakeAuth = {
+  api: { getSession: async () => null },
+} as unknown as Parameters<typeof layerBetterAuth>[0];
 
 beforeEach(async () => {
   ctx = await createTestDb();
@@ -18,7 +26,7 @@ afterEach(async () => {
 });
 
 describe("@gmacko/auth layerAuth bundle", () => {
-  it.effect("provides Sessions + ApiKeys + DeviceCodes + Tenancy when given GmackoDb", () =>
+  it.effect("provides Sessions + ApiKeys + DeviceCodes + Tenancy when given GmackoDb + BetterAuth", () =>
     Effect.gen(function* () {
       const sessions = yield* Sessions;
       const apiKeys = yield* ApiKeys;
@@ -28,7 +36,14 @@ describe("@gmacko/auth layerAuth bundle", () => {
       expect(typeof apiKeys.issueKey).toBe("function");
       expect(typeof deviceCodes.start).toBe("function");
       expect(typeof tenancy.listMemberships).toBe("function");
-    }).pipe(Effect.provide(Layer.provide(layerAuth(), layerGmackoDb(ctx.db)))),
+    }).pipe(
+      Effect.provide(
+        Layer.provide(
+          layerAuth(),
+          Layer.mergeAll(layerGmackoDb(ctx.db), layerBetterAuth(fakeAuth)),
+        ),
+      ),
+    ),
   );
 
   it.effect("accepts LayerAuthOptions (custom apiKey prefixes propagate to ApiKeys)", () =>
@@ -41,7 +56,7 @@ describe("@gmacko/auth layerAuth bundle", () => {
       Effect.provide(
         Layer.provide(
           layerAuth({ apiKeys: { prefixes: ["zzz_"] } }),
-          layerGmackoDb(ctx.db),
+          Layer.mergeAll(layerGmackoDb(ctx.db), layerBetterAuth(fakeAuth)),
         ),
       ),
     ),
