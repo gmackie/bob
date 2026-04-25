@@ -1,4 +1,5 @@
 import { render, screen, fireEvent } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "../theme-provider";
 import { ThemeSwitcher } from "../theme-switcher";
 
@@ -25,6 +26,26 @@ Object.defineProperty(globalThis, "localStorage", {
 
 beforeEach(() => {
   localStorageMock.clear();
+  // Default matchMedia stub — light preference. Individual tests may override.
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  );
+  document.documentElement.removeAttribute("data-theme");
+  document.documentElement.removeAttribute("data-mode");
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 function renderSwitcher(defaultTheme: "ooda" | "bob" = "ooda") {
@@ -64,5 +85,40 @@ describe("ThemeSwitcher", () => {
     localStorageMock.setItem("gmacko-theme", "bob");
     renderSwitcher("ooda"); // default is ooda, but localStorage has bob
     expect(document.documentElement.getAttribute("data-theme")).toBe("bob");
+  });
+
+  it("clicking 'Dark' sets mode to dark", () => {
+    render(
+      <ThemeProvider defaultTheme="bob" defaultMode="light">
+        <ThemeSwitcher />
+      </ThemeProvider>,
+    );
+    fireEvent.click(screen.getByText("Dark"));
+    // Mode change reflects in data-mode on <html>
+    expect(document.documentElement.getAttribute("data-mode")).toBe("dark");
+  });
+
+  it("clicking 'System' sets mode to system (resolved from matchMedia)", () => {
+    // Override default stub to return light preference explicitly.
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+    render(
+      <ThemeProvider defaultTheme="bob" defaultMode="dark">
+        <ThemeSwitcher />
+      </ThemeProvider>,
+    );
+    fireEvent.click(screen.getByText("System"));
+    expect(document.documentElement.getAttribute("data-mode")).toBe("light");
   });
 });
