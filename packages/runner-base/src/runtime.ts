@@ -1,12 +1,18 @@
-// Phase 6G Task 9 — RunnerRuntime: register + heartbeat half.
+// Phase 6G Tasks 9 + 10 — RunnerRuntime: register + heartbeat + claim/dispatch.
 //
 // `RunnerRuntime.start(opts)` builds a transport-bound `RunnerRpc` client,
 // calls `runner.register` (with retry), stashes the returned session token
-// in an internal Ref, then forks a heartbeat fiber inside the caller's scope.
-// The fiber runs until scope close and is automatically interrupted by
+// in an internal Ref, then forks two scope-tied fibers:
+//   1. A heartbeat loop that POSTs `runner.heartbeat` on `heartbeatInterval`.
+//   2. A claim loop that polls `runner.claimWork` on `claimInterval`,
+//      dispatches matching tasks to user-registered `WorkHandler`s, and
+//      streams handler events back via `runner.reportEvent`.
+//
+// Both fibers run until scope close and are automatically interrupted by
 // `Effect.scoped`'s teardown.
 //
-// Claim/dispatch/SIGTERM-drain land in Tasks 10–11 (extending this file).
+// SIGTERM-drain (Task 11) extends this file: it reads `inFlightFibers` to
+// wait for in-flight handler work to drain before unregistering.
 //
 // Design decisions / drift notes:
 //   - `RpcClient.layerProtocolHttp({ url, transformClient? })` — the only
@@ -25,14 +31,23 @@
 //     a closure variable doesn't already give us. We *also* mirror the
 //     value into a Ref so that `currentStatus()` and `setStatus` can
 //     interact with it via Effect from outside `start`.
-//   - `Effect.forkScoped` ties the heartbeat fiber to the caller's scope
-//     so SIGTERM / `Effect.scoped` cleanup interrupts it (verified in 6E
+//   - `Effect.forkScoped` ties background fibers to the caller's scope so
+//     SIGTERM / `Effect.scoped` cleanup interrupts them (verified in 6E
 //     retro).
-//   - `Schedule.fixed(interval)` for the heartbeat cadence (verified in
-//     `effect/Schedule.d.ts:3192`).
-//   - Heartbeat errors are swallowed via `Effect.catch` (the Effect 4 name
-//     for the old `Effect.catchAll`; see `Effect.d.ts:3935`) so the loop
-//     keeps running even after the retry budget is exhausted.
+//   - `Schedule.fixed(interval)` for both heartbeat and claim cadences
+//     (verified in `effect/Schedule.d.ts:3192`).
+//   - Loop errors are swallowed via `Effect.catch` (the Effect 4 name for
+//     the old `Effect.catchAll`; see `Effect.d.ts:3935`) so the loop keeps
+//     running even after the retry budget is exhausted.
+//   - Handler failures: a `WorkHandler` returns `Effect<void, unknown>`.
+//     We can't try/catch a generator that yields Effects (Effect doesn't
+//     throw synchronously inside `Effect.gen`), so the handler's effect is
+//     wrapped with `Effect.matchEffect({ onFailure, onSuccess })` — that
+//     way both branches end in a `runner.reportEvent` call (terminal
+//     `error` for failure, `status_change → completed` for success) and
+//     the dispatch fiber surfaces a never-failing effect to `forkScoped`
+//     and `Fiber.await`. `matchEffect` is preferred over `Effect.catch`
+//     here because we want a *terminal* event on the success path too.
 //   - Client procedure access: same OpaqueClient cast pattern used in
 //     `@gmacko/client/agent.ts` — opaque-type the client and look up
 //     procedures by tag string. Avoids fighting `RpcClient<Rpcs>`'s
@@ -41,6 +56,7 @@
 import {
   Duration,
   Effect,
+  Fiber,
   Layer,
   Ref,
   Schedule,
@@ -55,7 +71,7 @@ import {
 } from "effect/unstable/http";
 import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
 
-import { RunnerRpc } from "@gmacko/runner-protocol";
+import { RunnerRpc, type TaskRunEventType } from "@gmacko/runner-protocol";
 
 import { withRetry } from "./retry.js";
 
@@ -70,6 +86,8 @@ export interface StartOptions {
   readonly apiKeyBearer: string;
   /** Heartbeat cadence. Default: 10 seconds. */
   readonly heartbeatInterval?: Duration.Input;
+  /** Claim-loop cadence. Default: 1 second. */
+  readonly claimInterval?: Duration.Input;
   /** Optional fetch override (e.g. for tests). */
   readonly fetch?: typeof fetch;
 }
@@ -82,10 +100,35 @@ export class RuntimeStartError extends Schema.TaggedErrorClass<RuntimeStartError
   },
 ) {}
 
+/**
+ * A user-supplied callback that processes a single task run. Called by the
+ * claim/dispatch loop after a `runner.claimWork` returns a matching task.
+ *
+ * `emit` calls `runner.reportEvent` (with retries + error swallowing) for
+ * each event the handler wants to surface back to the server. The runtime
+ * fires its own terminal `status_change → completed` event after the
+ * handler resolves successfully, and an `error` event if the handler
+ * effect fails.
+ */
+export type WorkHandler = (input: {
+  readonly runId: string;
+  readonly capability: string;
+  readonly input: unknown;
+  readonly emit: (event: {
+    readonly type: TaskRunEventType;
+    readonly payload: unknown;
+    readonly seq?: number;
+  }) => Effect.Effect<void>;
+}) => Effect.Effect<void, unknown>;
+
 export interface RunnerRuntimeShape {
   readonly start: (
     opts: StartOptions,
   ) => Effect.Effect<void, RuntimeStartError, Scope.Scope>;
+  readonly handle: (
+    capability: string,
+    handler: WorkHandler,
+  ) => Effect.Effect<void>;
   readonly setStatus: (status: RunnerStatus) => Effect.Effect<void>;
   readonly currentStatus: () => Effect.Effect<RunnerStatus | null>;
 }
@@ -130,6 +173,19 @@ export const layerRunnerRuntime: Layer.Layer<RunnerRuntime> = Layer.effect(
     // The single source-of-truth for deviceId/sessionToken/status. Reads
     // from `currentStatus` and writes from `setStatus` go through this Ref.
     const stateRef = yield* Ref.make<RuntimeState | null>(null);
+
+    // Capability → handler map. Mutated synchronously via `handle()`. The
+    // claim loop reads it by snapshot per tick (`Array.from(handlers.keys())`)
+    // so adding a handler after `start()` is safe — it'll be picked up on the
+    // next tick. We deliberately use a plain `Map` rather than a Ref because
+    // (a) all reads/writes happen on JS's single thread (b) we don't need
+    // STM-style atomic update semantics here.
+    const handlers = new Map<string, WorkHandler>();
+
+    // In-flight handler fibers. Populated when a handler is dispatched,
+    // removed when it completes. Task 11's drain logic reads this set to
+    // know when "all in-flight work is done"; Task 10 just maintains it.
+    const inFlightFibers = new Set<Fiber.Fiber<unknown, unknown>>();
 
     const start = (
       opts: StartOptions,
@@ -214,6 +270,132 @@ export const layerRunnerRuntime: Layer.Layer<RunnerRuntime> = Layer.effect(
         }).pipe(Effect.repeat(Schedule.fixed(interval)));
 
         yield* Effect.forkScoped(heartbeatLoop);
+
+        // --- Claim + dispatch fiber (scoped) ---
+        //
+        // Polls `runner.claimWork` on `claimInterval` with the current set of
+        // registered capabilities. On a hit, dispatches to the matching
+        // handler in a child fiber tracked in `inFlightFibers`. We
+        // `Fiber.await` that fiber from the loop tick so we don't claim a
+        // second task in parallel — sequential claim/run/claim is the
+        // intended contract for v1 (Phase 6G).
+        const claimInterval = opts.claimInterval ?? Duration.seconds(1);
+
+        const claimLoop = Effect.gen(function* () {
+          const state = yield* Ref.get(stateRef);
+          if (state === null || state.status === "draining") return;
+
+          const capabilityFilter = Array.from(handlers.keys());
+          if (capabilityFilter.length === 0) return;
+
+          const claimEffect = client["runner.claimWork"]!({
+            capabilityFilter,
+          }) as Effect.Effect<unknown, unknown, never>;
+          const claimed = yield* Effect.catch(withRetry(claimEffect), () =>
+            Effect.succeed(null),
+          );
+          if (claimed === null || claimed === undefined) return;
+
+          // The wire schema for claimWork's success is `NullOr(TaskRunSchema)`.
+          // We've already filtered out null above; treat the rest as a task.
+          const task = claimed as {
+            readonly id: string;
+            readonly capabilitiesRequired: ReadonlyArray<string>;
+            readonly input: unknown;
+          };
+
+          const matched = task.capabilitiesRequired.find((c) =>
+            handlers.has(c),
+          );
+          const reportEvent = (event: {
+            readonly type: TaskRunEventType;
+            readonly payload: unknown;
+            readonly seq?: number;
+          }): Effect.Effect<void> => {
+            const reportEffect = client["runner.reportEvent"]!({
+              runId: task.id,
+              type: event.type,
+              payload: event.payload,
+              seq: event.seq,
+            }) as Effect.Effect<unknown, unknown, never>;
+            return Effect.catch(
+              withRetry(reportEffect),
+              () => Effect.void,
+            ).pipe(Effect.asVoid);
+          };
+
+          if (matched === undefined) {
+            // Server handed us a task whose capabilities don't intersect our
+            // registered handlers. Report no_handler and bail — server will
+            // re-queue or fail the task by policy.
+            yield* reportEvent({
+              type: "error",
+              payload: {
+                reason: "no_handler",
+                capabilities: task.capabilitiesRequired,
+              },
+            });
+            return;
+          }
+
+          const handler = handlers.get(matched)!;
+          yield* Ref.update(stateRef, (s): RuntimeState | null =>
+            s ? { ...s, status: "busy" as RunnerStatus } : s,
+          );
+
+          // Build the handler effect with both terminal paths baked in: on
+          // success, emit `status_change → completed`; on failure, emit
+          // `error` with the message. `Effect.matchEffect` lets us replace
+          // the whole result with a single terminal reportEvent on either
+          // branch, which is what the runtime contract requires (every
+          // dispatched task gets exactly one terminal event).
+          const handlerEffect = handler({
+            runId: task.id,
+            capability: matched,
+            input: task.input,
+            emit: reportEvent,
+          }).pipe(
+            Effect.matchEffect({
+              onFailure: (err) =>
+                reportEvent({
+                  type: "error",
+                  payload: {
+                    message: err instanceof Error ? err.message : String(err),
+                  },
+                }),
+              onSuccess: () =>
+                reportEvent({
+                  type: "status_change",
+                  payload: { status: "completed" },
+                }),
+            }),
+          );
+
+          const handlerFiber = yield* Effect.forkScoped(handlerEffect);
+          // `Fiber<void, never>` from the matchEffect-narrowed branch widens
+          // to the in-flight set's `Fiber<unknown, unknown>` covariantly.
+          const trackedFiber =
+            handlerFiber as unknown as Fiber.Fiber<unknown, unknown>;
+          inFlightFibers.add(trackedFiber);
+          // Wait for the handler to finish before claiming again. `await`
+          // returns an Exit; we don't care about the value here — failures
+          // already routed through `matchEffect` above.
+          yield* Fiber.await(trackedFiber);
+          inFlightFibers.delete(trackedFiber);
+
+          // Drop back to idle if no other fibers are in-flight. (Today we
+          // only ever fork one at a time, but Task 11's drain logic will
+          // appreciate the explicit check.)
+          if (inFlightFibers.size === 0) {
+            yield* Ref.update(stateRef, (s): RuntimeState | null =>
+              s && s.status === "busy"
+                ? { ...s, status: "idle" as RunnerStatus }
+                : s,
+            );
+          }
+        }).pipe(Effect.repeat(Schedule.fixed(claimInterval)));
+
+        yield* Effect.forkScoped(claimLoop);
       });
 
     const setStatus = (status: RunnerStatus): Effect.Effect<void> =>
@@ -224,8 +406,21 @@ export const layerRunnerRuntime: Layer.Layer<RunnerRuntime> = Layer.effect(
     const currentStatus = (): Effect.Effect<RunnerStatus | null> =>
       Ref.get(stateRef).pipe(Effect.map((s) => (s ? s.status : null)));
 
+    // Handler registration is synchronous — we just mutate the closure-scoped
+    // Map. Effect-typing the return as `Effect<void>` keeps the API uniform
+    // with the rest of the surface (every other RunnerRuntime method is an
+    // Effect). Newly-added handlers are picked up on the next claim tick.
+    const handle = (
+      capability: string,
+      handler: WorkHandler,
+    ): Effect.Effect<void> =>
+      Effect.sync(() => {
+        handlers.set(capability, handler);
+      });
+
     return {
       start,
+      handle,
       setStatus,
       currentStatus,
     } satisfies RunnerRuntimeShape;

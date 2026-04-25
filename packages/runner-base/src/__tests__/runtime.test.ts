@@ -1,4 +1,5 @@
-// Phase 6G Task 9 — RunnerRuntime register + heartbeat tests.
+// Phase 6G Tasks 9 + 10 — RunnerRuntime register + heartbeat + claim/dispatch
+// tests.
 //
 // Strategy:
 //   - Spin up ONE real Node HTTP server (shared via beforeAll/afterAll) running
@@ -15,6 +16,9 @@
 //     fire on the configured interval (live clock), (3) transient heartbeat
 //     failures are retried, (4) register failures surface as
 //     `RuntimeStartError`.
+//   - Task 10 extends the same harness with `runner.claimWork` and
+//     `runner.reportEvent` handlers backed by a per-test queue + recorded
+//     events list, exercising the claim → dispatch → emit loop.
 
 import { afterAll, beforeAll, beforeEach, describe, expect } from "vitest";
 import { it } from "@effect/vitest";
@@ -29,12 +33,15 @@ import {
   RunnerRpc,
   InvalidApiKeyForRunnerError,
   RunnerNotRegisteredError,
+  type TaskRunEventType,
+  type TaskRunWire,
 } from "@gmacko/runner-protocol";
 
 import {
   RunnerRuntime,
   RuntimeStartError,
   layerRunnerRuntime,
+  type WorkHandler,
 } from "../runtime.js";
 
 // --- Mock server state -----------------------------------------------------
@@ -44,18 +51,58 @@ import {
 // them is mounted into the persistent server — but `Ref.set` mutates them
 // safely between tests.
 
+interface RecordedEvent {
+  readonly runId: string;
+  readonly type: TaskRunEventType;
+  readonly payload: unknown;
+  readonly seq?: number;
+}
+
 interface MockState {
   registerCalls: number;
   heartbeatCalls: number;
+  claimWorkCalls: number;
   registerShouldFail: boolean;
   heartbeatFailuresRemaining: number;
+  // FIFO queue of tasks the next matching `claimWork` will dequeue (matched
+  // by capability filter intersection).
+  taskQueue: TaskRunWire[];
+  // All `runner.reportEvent` payloads in arrival order. The dispatch loop
+  // calls reportEvent once per `emit(...)` plus a terminal status_change /
+  // error event, so this is the contract by which Task 10 tests verify
+  // "events flowed back".
+  reportedEvents: RecordedEvent[];
 }
 
 const initialState = (): MockState => ({
   registerCalls: 0,
   heartbeatCalls: 0,
+  claimWorkCalls: 0,
   registerShouldFail: false,
   heartbeatFailuresRemaining: 0,
+  taskQueue: [],
+  reportedEvents: [],
+});
+
+// Shared test fixture: build a TaskRunWire with sensible defaults.
+const makeTask = (
+  id: string,
+  capabilitiesRequired: ReadonlyArray<string>,
+  input: Record<string, unknown> = {},
+): TaskRunWire => ({
+  id,
+  tenantId: "tenant-test",
+  status: "pending",
+  capabilitiesRequired,
+  claimedByDeviceId: null,
+  input,
+  result: null,
+  errorMessage: null,
+  claimedAt: null,
+  startedAt: null,
+  completedAt: null,
+  createdAt: new Date("2026-04-22T00:00:00.000Z"),
+  updatedAt: new Date("2026-04-22T00:00:00.000Z"),
 });
 
 let mockStateRef: Ref.Ref<MockState>;
@@ -116,11 +163,57 @@ const buildHandlersLayer = (ref: Ref.Ref<MockState>) =>
         return { serverTime: new Date("2026-04-22T00:00:01.000Z") };
       }),
 
-    "runner.claimWork": () => Effect.die("claimWork not used in Task 9 tests"),
-    "runner.reportEvent": () =>
-      Effect.die("reportEvent not used in Task 9 tests"),
+    "runner.claimWork": ({ capabilityFilter }) =>
+      Effect.gen(function* () {
+        // Atomically: increment counter, dequeue the first task whose
+        // `capabilitiesRequired` intersects with the runner's filter.
+        const dequeued = yield* Ref.modify(ref, (s) => {
+          const filterSet = new Set(capabilityFilter);
+          const idx = s.taskQueue.findIndex((t) =>
+            t.capabilitiesRequired.some((c) => filterSet.has(c)),
+          );
+          if (idx === -1) {
+            return [
+              null as TaskRunWire | null,
+              { ...s, claimWorkCalls: s.claimWorkCalls + 1 },
+            ];
+          }
+          const next = s.taskQueue[idx]!;
+          const remaining = [
+            ...s.taskQueue.slice(0, idx),
+            ...s.taskQueue.slice(idx + 1),
+          ];
+          return [
+            next,
+            {
+              ...s,
+              claimWorkCalls: s.claimWorkCalls + 1,
+              taskQueue: remaining,
+            },
+          ];
+        });
+        return dequeued;
+      }),
+
+    "runner.reportEvent": (payload) =>
+      Effect.gen(function* () {
+        yield* Ref.update(ref, (s) => ({
+          ...s,
+          reportedEvents: [
+            ...s.reportedEvents,
+            {
+              runId: payload.runId,
+              type: payload.type,
+              payload: payload.payload,
+              seq: payload.seq,
+            },
+          ],
+        }));
+        return undefined;
+      }),
+
     "runner.unregister": () =>
-      Effect.die("unregister not used in Task 9 tests"),
+      Effect.die("unregister not used in Task 9/10 tests"),
   });
 
 // --- Server lifecycle ------------------------------------------------------
@@ -351,6 +444,181 @@ describe("RunnerRuntime register + heartbeat", () => {
           expect(rendered).toContain("RuntimeStartError");
           expect(rendered).toContain("register failed");
         }
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(layerRunnerRuntime),
+      ),
+    20_000,
+  );
+});
+
+// --- Task 10: claim + dispatch loop ----------------------------------------
+//
+// These tests register a `WorkHandler` *before* `start()`, enqueue tasks via
+// the mutable mock state, and assert: handler invocation, event passthrough,
+// terminal status_change/error events, and the no-match branch (handler not
+// invoked when capabilityFilter doesn't intersect the queued task).
+//
+// All tests use `it.live` because the claim loop polls in real time. We tune
+// `heartbeatInterval` to be effectively dormant during the window so the
+// heartbeat noise doesn't crowd the test logs (heartbeats are exercised in
+// the Task 9 tests above).
+
+describe("RunnerRuntime claim + dispatch", () => {
+  it.live(
+    "claims matching task, dispatches to handler, events flow back",
+    () =>
+      Effect.gen(function* () {
+        // Enqueue one task before starting the runtime so the first claim
+        // tick picks it up.
+        const task = makeTask("run-happy-1", ["claude-code"], {
+          prompt: "do the thing",
+        });
+        yield* Ref.update(mockStateRef, (s) => ({
+          ...s,
+          taskQueue: [...s.taskQueue, task],
+        }));
+
+        // Capture each invocation of the handler so we can assert it ran
+        // exactly once with the expected payload. We can't read this from
+        // the runtime side, so it lives in a closure variable — fine for
+        // a vitest test, since handler runs after `Effect.scoped` and the
+        // test body sees the mutated array.
+        const invocations: Array<{
+          runId: string;
+          capability: string;
+          input: unknown;
+        }> = [];
+
+        const handler: WorkHandler = ({ runId, capability, input, emit }) =>
+          Effect.gen(function* () {
+            invocations.push({ runId, capability, input });
+            yield* emit({
+              type: "stdout",
+              payload: { text: "hello from handler" },
+              seq: 1,
+            });
+          });
+
+        const runtime = yield* RunnerRuntime;
+        yield* runtime.handle("claude-code", handler);
+        yield* runtime.start({
+          ...baseStartOpts(),
+          heartbeatInterval: Duration.minutes(10),
+          claimInterval: Duration.millis(100),
+        });
+
+        yield* Effect.sleep(Duration.millis(500));
+
+        // Handler should have been invoked once with the queued task.
+        expect(invocations.length).toBe(1);
+        expect(invocations[0]?.runId).toBe("run-happy-1");
+        expect(invocations[0]?.capability).toBe("claude-code");
+        expect(invocations[0]?.input).toEqual({ prompt: "do the thing" });
+
+        const state = yield* Ref.get(mockStateRef);
+
+        // We expect at least 2 reportEvent calls: 1 from handler.emit + 1
+        // terminal status_change → completed.
+        expect(state.reportedEvents.length).toBeGreaterThanOrEqual(2);
+
+        const stdoutEvent = state.reportedEvents.find(
+          (e) => e.type === "stdout",
+        );
+        expect(stdoutEvent).toBeDefined();
+        expect(stdoutEvent?.runId).toBe("run-happy-1");
+
+        const completedEvent = state.reportedEvents.find(
+          (e) =>
+            e.type === "status_change" &&
+            (e.payload as { status?: string } | null)?.status === "completed",
+        );
+        expect(completedEvent).toBeDefined();
+        expect(completedEvent?.runId).toBe("run-happy-1");
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(layerRunnerRuntime),
+      ),
+    20_000,
+  );
+
+  it.live(
+    "task with no matching capability is not claimed; handler not invoked",
+    () =>
+      Effect.gen(function* () {
+        // Queue a task that requires "claude-code" but only register a
+        // handler for "unrelated". The runner sends ["unrelated"] as the
+        // capabilityFilter — the mock won't dequeue the claude-code task.
+        const task = makeTask("run-nomatch-1", ["claude-code"]);
+        yield* Ref.update(mockStateRef, (s) => ({
+          ...s,
+          taskQueue: [...s.taskQueue, task],
+        }));
+
+        let invoked = false;
+        const handler: WorkHandler = () =>
+          Effect.sync(() => {
+            invoked = true;
+          });
+
+        const runtime = yield* RunnerRuntime;
+        yield* runtime.handle("unrelated", handler);
+        yield* runtime.start({
+          ...baseStartOpts(),
+          heartbeatInterval: Duration.minutes(10),
+          claimInterval: Duration.millis(100),
+        });
+
+        yield* Effect.sleep(Duration.millis(400));
+
+        expect(invoked).toBe(false);
+        const state = yield* Ref.get(mockStateRef);
+        // Runner did poll for work — but the mock returned null every time
+        // because nothing in the queue intersected with ["unrelated"].
+        expect(state.claimWorkCalls).toBeGreaterThanOrEqual(1);
+        // Task is still in the queue (not dequeued).
+        expect(state.taskQueue.length).toBe(1);
+        // No events ever reported.
+        expect(state.reportedEvents.length).toBe(0);
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(layerRunnerRuntime),
+      ),
+    20_000,
+  );
+
+  it.live(
+    "handler failure reports an error event with the message",
+    () =>
+      Effect.gen(function* () {
+        const task = makeTask("run-boom-1", ["claude-code"]);
+        yield* Ref.update(mockStateRef, (s) => ({
+          ...s,
+          taskQueue: [...s.taskQueue, task],
+        }));
+
+        const handler: WorkHandler = () =>
+          Effect.fail(new Error("boom"));
+
+        const runtime = yield* RunnerRuntime;
+        yield* runtime.handle("claude-code", handler);
+        yield* runtime.start({
+          ...baseStartOpts(),
+          heartbeatInterval: Duration.minutes(10),
+          claimInterval: Duration.millis(100),
+        });
+
+        yield* Effect.sleep(Duration.millis(500));
+
+        const state = yield* Ref.get(mockStateRef);
+        const errorEvents = state.reportedEvents.filter(
+          (e) => e.type === "error",
+        );
+        expect(errorEvents.length).toBeGreaterThanOrEqual(1);
+        const first = errorEvents[0]!;
+        expect(first.runId).toBe("run-boom-1");
+        const rendered = JSON.stringify(first.payload);
+        expect(rendered).toContain("boom");
       }).pipe(
         Effect.scoped,
         Effect.provide(layerRunnerRuntime),
