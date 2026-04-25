@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import * as schema from "@gmacko/db/schema";
 import { runMigrations } from "@gmacko/db/migrate";
 import { tenants, tenantMembers } from "@gmacko/db/schema/tenancy";
+import { users as usersTable } from "@gmacko/db/schema/auth";
 
 import {
   BetterAuth,
@@ -112,5 +113,8 @@ describe("initAuth tenant bootstrap", () => {
     const memberRows = await db.select().from(tenantMembers);
     expect(memberRows.length).toBe(1);
     expect(memberRows[0]?.role).toBe("owner");
+    const userRows = await db.select().from(usersTable);
+    expect(memberRows[0]?.tenantId).toBe(tenantRows[0]?.id);
+    expect(memberRows[0]?.userId).toBe(userRows[0]?.id);
   });
 });

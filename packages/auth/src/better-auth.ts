@@ -97,12 +97,12 @@ export function initAuth(opts: InitAuthOptions): AuthInstance {
 
   // Tenant bootstrap hook — see InitAuthOptions.bootstrapTenancy.
   //
-  // Better-auth's `databaseHooks.user.create.after` fires once per inserted
-  // `users` row (verified against better-auth@1.4.0-beta.9 source). We use it
-  // to give every newly-signed-up user a paired `tenants` row plus
-  // `tenant_members` row (role: owner) so `Tenancy.resolveForUser` finds a
-  // single membership and auto-selects it. Without this, fresh sign-ups land
-  // with `TenantNotSelectedError` and `/api/rpc` rejects them.
+  // Better-auth's `databaseHooks.user.create.after` runs sequentially AFTER the
+  // user row is committed — NOT inside the same transaction. If this hook
+  // throws (e.g. transient DB error on tenant insert), the user row stays
+  // orphaned with no tenancy. The two inserts below are wrapped in their own
+  // transaction so tenant + tenant_members are atomic with each other; future
+  // work may add a startup self-heal pass for users with no membership.
   //
   // Note: tenants.slug is NOT NULL UNIQUE; we derive it from the user id so
   // it's stable + unique without coordination. tenants has no
@@ -126,18 +126,21 @@ export function initAuth(opts: InitAuthOptions): AuthInstance {
                   user.email.split("@")[0] ||
                   "Personal";
                 const slug = `personal-${user.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 32)}`;
-                const [tenantRow] = await drizzleDb
-                  .insert(tenantsTable)
-                  .values({
-                    name: `${personalName}'s workspace`,
-                    slug,
-                  })
-                  .returning();
-                if (!tenantRow) return;
-                await drizzleDb.insert(membersTable).values({
-                  tenantId: tenantRow.id,
-                  userId: user.id,
-                  role: "owner",
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle tx type varies by driver
+                await drizzleDb.transaction(async (tx: any) => {
+                  const [tenantRow] = await tx
+                    .insert(tenantsTable)
+                    .values({
+                      name: `${personalName}'s workspace`,
+                      slug,
+                    })
+                    .returning();
+                  if (!tenantRow) return;
+                  await tx.insert(membersTable).values({
+                    tenantId: tenantRow.id,
+                    userId: user.id,
+                    role: "owner",
+                  });
                 });
               },
             },
