@@ -1,4 +1,4 @@
-// End-to-end smoke test for `apps/web`'s wired RPC + better-auth stack.
+// End-to-end smoke test for `apps/core`'s wired RPC + better-auth stack.
 //
 // Phase 6L expansion (this file): grew from 3 reachability tests to 8 by
 // turning on better-auth's email + password provider in the test env (via
@@ -78,9 +78,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 const PORT = 3500;
 const BASE_URL = `http://localhost:${PORT}`;
 
-// Resolve the apps/web directory from the test file's runtime cwd. Vitest
+// Resolve the apps/core directory from the test file's runtime cwd. Vitest
 // runs each project in its own package root, so `process.cwd()` is
-// `apps/web` regardless of where the worktree lives — sidestepping the
+// `apps/core` regardless of where the worktree lives — sidestepping the
 // hardcoded absolute path that broke this test when the worktree moved
 // across phases (e.g. phase-6k-wire → phase-6l-stubs).
 const APP_DIR = resolve(process.cwd());
@@ -305,7 +305,7 @@ async function authGet(path: string): Promise<Response> {
   return res;
 }
 
-describe("@gmacko/web smoke (mock adapter)", () => {
+describe("@gmacko/core-web smoke (mock adapter)", () => {
   // ── Reachability baseline (carried over from Phase 6K) ────────────────
 
   it("RPC route is reachable", async () => {

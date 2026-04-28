@@ -1,4 +1,4 @@
-# @gmacko/web — gmacko reference web app
+# @gmacko/core-web — gmacko reference web app
 
 Next.js 16 (app router) reference app for the gmacko stack. Coexists with OODA's existing pages (capture, graph, wiki, explore) at `/`. New gmacko-shared routes:
 
@@ -11,12 +11,12 @@ Next.js 16 (app router) reference app for the gmacko stack. Coexists with OODA's
 ## Setup
 
 1. `pnpm install` at the repo root.
-2. `cp apps/web/.env.example apps/web/.env.local` and fill in:
+2. `cp apps/core/.env.example apps/core/.env.local` and fill in:
    - `BETTER_AUTH_SECRET` — random 32+ char string for session cookie signing.
    - `GMACKO_SECRET_ENCRYPTION_KEY` — random 32+ char string for `@gmacko/secrets` envelope encryption.
    - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — GitHub OAuth app credentials.
    - `ANTHROPIC_API_KEY` — for the Claude Code CLI agent adapter (or set `GMACKO_AGENT_ADAPTER=mock` to skip).
-3. `pnpm --filter @gmacko/web dev` — server runs at http://localhost:3000.
+3. `pnpm --filter @gmacko/core-web dev` — server runs at http://localhost:3000.
 
 ## Environment variables
 
@@ -52,8 +52,8 @@ The webpack config in `next.config.ts` carries two non-default knobs that are lo
 
 ## Tests
 
-- `pnpm --filter @gmacko/web test` — runs the full vitest suite.
-- `pnpm --filter @gmacko/web test:smoke` — spawns `next dev --webpack`, hits `/api/rpc` end-to-end, asserts the wiring holds. Uses `GMACKO_AGENT_ADAPTER=mock` so it doesn't shell out to `claude`.
+- `pnpm --filter @gmacko/core-web test` — runs the full vitest suite.
+- `pnpm --filter @gmacko/core-web test:smoke` — spawns `next dev --webpack`, hits `/api/rpc` end-to-end, asserts the wiring holds. Uses `GMACKO_AGENT_ADAPTER=mock` so it doesn't shell out to `claude`.
 
 ## Deferred for a future phase
 

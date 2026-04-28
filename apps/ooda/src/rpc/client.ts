@@ -23,8 +23,8 @@ import { METHODS } from "@gmacko/core/contracts";
 /* The response is a JSON array of FromServerEncoded messages.          */
 /* ------------------------------------------------------------------ */
 
-// apps/ooda doesn't host its own RPC route yet — apps/web stays the RPC
-// host until 7B-N migrations split the routes. Default to apps/web's
+// apps/ooda doesn't host its own RPC route yet — apps/core stays the RPC
+// host until 7B-N migrations split the routes. Default to apps/core's
 // localhost:3000 in dev; override with NEXT_PUBLIC_RPC_BASE_URL.
 const RPC_BASE_URL =
   process.env.NEXT_PUBLIC_RPC_BASE_URL ?? "http://localhost:3000";

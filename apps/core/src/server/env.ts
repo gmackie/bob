@@ -36,7 +36,7 @@ export const ServerEnv = Schema.Struct({
   PGLITE_DATA_DIR: Schema.optional(Schema.String),
   // Enable better-auth's email + password provider. Off by default because
   // production uses GitHub OAuth + the device-code pairing flow; flipped on
-  // (with verification disabled) for the apps/web smoke test so the
+  // (with verification disabled) for the apps/core smoke test so the
   // /sign-up/email + /sign-in/email endpoints become reachable.
   GMACKO_BETTER_AUTH_EMAIL_PASSWORD: Schema.optional(
     Schema.Literals(["true", "false"]),

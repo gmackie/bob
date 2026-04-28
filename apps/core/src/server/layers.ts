@@ -95,7 +95,7 @@ const { db } = getDb();
 const baseUrl = env.PUBLIC_BASE_URL ?? "http://localhost:3000";
 
 // Email + password provider toggle. Production wiring stays GitHub-OAuth +
-// device-code only (provider stays off). The apps/web smoke test sets the
+// device-code only (provider stays off). The apps/core smoke test sets the
 // env var so /sign-up/email + /sign-in/email become reachable.
 const emailAndPasswordEnabled =
   env.GMACKO_BETTER_AUTH_EMAIL_PASSWORD === "true";
@@ -133,7 +133,7 @@ export const authInstance = initAuth({
 // ---------------------------------------------------------------------------
 
 export const AgentEventsChannel = makeRealtimeChannelTag<AgentEvent>(
-  "@gmacko/web/AgentEventsChannel",
+  "@gmacko/core-web/AgentEventsChannel",
 );
 
 // ---------------------------------------------------------------------------

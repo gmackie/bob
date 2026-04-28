@@ -35,7 +35,7 @@ const config: NextConfig = {
   ],
   webpack: (cfg) => {
     // `cfg` is webpack's `Configuration` type — kept loosely typed here
-    // because pulling `webpack` into `apps/web`'s direct deps just for the
+    // because pulling `webpack` into `apps/core`'s direct deps just for the
     // type isn't worth it (Next.js owns the webpack install).
     cfg.resolve = cfg.resolve ?? {};
     cfg.resolve.extensionAlias = {
