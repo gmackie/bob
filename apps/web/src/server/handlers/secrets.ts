@@ -3,8 +3,8 @@ import { Effect } from "effect";
 
 import { SecretsRpc } from "@gmacko/contracts/groups/secrets";
 import { CurrentUser } from "@gmacko/rpc/context";
-import { AuthMiddleware } from "@gmacko/auth";
-import { Secrets } from "@gmacko/secrets";
+import { AuthMiddleware } from "@gmacko/core/auth";
+import { Secrets } from "@gmacko/core/secrets";
 import type { SessionSecretId } from "@gmacko/core/validators";
 
 // Real handlers for SecretsRpc — replaces the deterministic stubs from

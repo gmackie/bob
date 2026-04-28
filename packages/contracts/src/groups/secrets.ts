@@ -14,7 +14,7 @@ import {
   PolicyDeniedError,
   SecretNameConflictError,
   SecretNotFoundError,
-} from "@gmacko/secrets/errors";
+} from "@gmacko/core/secrets/errors";
 
 import {
   SecretEnvelopeSchema,

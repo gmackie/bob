@@ -24,10 +24,8 @@
   },
   "dependencies": {
     "@gmacko/agent": "workspace:*",
-    "@gmacko/auth": "workspace:*",
-    "@gmacko/projects": "workspace:*",
+    "@gmacko/core": "workspace:*",
     "@gmacko/rpc": "workspace:*",
-    "@gmacko/secrets": "workspace:*",
     "effect": "4.0.0-beta.43"
   },
   "devDependencies": {

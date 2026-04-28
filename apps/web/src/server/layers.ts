@@ -24,9 +24,9 @@ import {
   layerTenancy,
   Sessions,
   Tenancy,
-} from "@gmacko/auth";
-import { layerProjects } from "@gmacko/projects";
-import { layerSecrets } from "@gmacko/secrets";
+} from "@gmacko/core/auth";
+import { layerProjects } from "@gmacko/core/projects";
+import { layerSecrets } from "@gmacko/core/secrets";
 import {
   claudeCodeAdapter,
   layerAgent,

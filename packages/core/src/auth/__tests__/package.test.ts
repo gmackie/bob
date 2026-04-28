@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { __gmackoAuthPhase } from "@gmacko/auth";
+import { __gmackoAuthPhase } from "@gmacko/core/auth";
 
 describe("@gmacko/auth package smoke", () => {
   it("resolves via workspace + exports the 6C sentinel", () => {

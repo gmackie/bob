@@ -16,7 +16,7 @@
 // than runtime assertions.
 import { DateTime, Effect } from "effect";
 
-import { InvalidApiKeyError, InvalidDeviceCodeError } from "@gmacko/auth/errors";
+import { InvalidApiKeyError, InvalidDeviceCodeError } from "@gmacko/core/auth/errors";
 
 import { AuthRpc } from "../groups/auth.js";
 

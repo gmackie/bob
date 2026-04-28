@@ -27,7 +27,19 @@
     "./db/testing": "./src/db/__tests__/helpers.ts",
     "./storage": "./src/storage/index.ts",
     "./monitoring": "./src/monitoring/index.ts",
-    "./analytics": "./src/analytics/index.ts"
+    "./analytics": "./src/analytics/index.ts",
+    "./auth": "./src/auth/index.ts",
+    "./auth/errors": "./src/auth/errors.ts",
+    "./auth/middleware": "./src/auth/middleware.ts",
+    "./auth/client": "./src/auth/client.ts",
+    "./secrets": "./src/secrets/index.ts",
+    "./secrets/errors": "./src/secrets/errors.ts",
+    "./secrets/crypt": "./src/secrets/crypt.ts",
+    "./projects": "./src/projects/index.ts",
+    "./projects/errors": "./src/projects/errors.ts",
+    "./billing": "./src/billing/index.ts",
+    "./email": "./src/email/index.ts",
+    "./notifications": "./src/notifications/index.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",
@@ -39,12 +51,23 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@better-auth/expo": "1.4.0-beta.9",
+    "@gmacko/rpc": "workspace:*",
+    "better-auth": "1.4.0-beta.9",
     "drizzle-orm": "^0.44.0",
     "@electric-sql/pglite": "^0.2.0",
     "effect": "4.0.0-beta.43",
     "postgres": "^3.4.0",
     "zod": "^4.0.0",
     "drizzle-zod": "^0.7.0"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@gmacko/tsconfig": "workspace:*",
