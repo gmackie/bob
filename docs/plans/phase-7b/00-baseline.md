@@ -9,10 +9,24 @@
 
 From the worktree root:
 
-    pnpm exec turbo run test --concurrency=1
+    pnpm exec turbo run test --concurrency=1 -- --no-file-parallelism
 
-Expected: 363/363 across 30 packages.
+Expected after Batch 1: 363/363 across 26 reporting projects (`@gmacko/core`
+absorbs `@gmacko/{validators,config,cookies,i18n,settings}` totalling 31 of those
+363 tests).
+
+Each subsequent batch reduces the reporter count by N − 1 (N packages move into
+`@gmacko/core`, +0 since `@gmacko/core` is already a reporter). Total test count
+must remain ≥ 363 throughout 7B-0.
+
 For smoke: `cd apps/web && pnpm test -- smoke` (expect 9/9).
+
+**Why `--no-file-parallelism`:** PGlite-using packages (`db`, `auth`, and any
+others that boot a PGlite instance per test file) flake under vitest's default
+worker pool, which parallelises files within a single package. The flag forces
+intra-package vitest to run files serially, which reliably resolves the flake.
+Turbo `--concurrency=1` alone is not enough — it serialises packages but does
+nothing about file-level parallelism inside a package.
 
 ## Pre-conditions confirmed
 
@@ -72,11 +86,12 @@ Captured via `pnpm exec turbo run test --concurrency=1` to avoid PGlite parallel
    and commit, but the directory does not exist on master and was an untracked
    artifact in earlier worktrees. Skipping that delete-and-commit step; this
    baseline doc serves as the explicit record.
-4. **PGlite parallelism flake under default `pnpm test`:** running `turbo run test`
-   without a concurrency cap produces sporadic failures in agent / projects /
-   secrets / app-shell because many packages spin up their own in-process PGlite
-   instance simultaneously, and a few exceed timing budgets. Each package passes
-   cleanly when run in isolation, and `pnpm exec turbo run test --concurrency=1`
-   gives 30/30. Future Phase 7B-0 verification gates should use `--concurrency=1`
-   (or per-package isolation) to get a deterministic signal — otherwise we will
-   be chasing flakes that aren't real regressions.
+4. **PGlite parallelism flake (corrected after Task 2 review):** the original
+   diagnosis blamed inter-package parallelism and prescribed `turbo run test
+   --concurrency=1`. That isn't enough — the flake is **intra-package**: vitest
+   runs files inside a single package on parallel workers, and PGlite-heavy
+   suites (`db`, `auth`, sometimes `secrets` / `projects` / `app-shell`) bust
+   their timing budgets when multiple PGlite instances boot in the same
+   package's worker pool. The fix is `-- --no-file-parallelism` passed through
+   turbo to vitest. With that flag, full sweep is 28/28 turbo tasks green,
+   ≥363/363 tests across the workspace, smoke 9/9 in apps/web.
