@@ -9,7 +9,7 @@
 // mountable handlers layer (`stubProjectsHandlersLayer`).
 import { Effect } from "effect";
 
-import { ProjectNotFoundError } from "@gmacko/projects/errors";
+import { ProjectNotFoundError } from "@gmacko/core/projects/errors";
 
 import { ProjectsRpc } from "../groups/projects.js";
 import type { ProjectWire } from "../schemas/projects.js";

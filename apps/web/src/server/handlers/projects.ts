@@ -3,8 +3,8 @@ import { Effect } from "effect";
 
 import { ProjectsRpc } from "@gmacko/contracts/groups/projects";
 import { CurrentUser } from "@gmacko/rpc/context";
-import { AuthMiddleware } from "@gmacko/auth";
-import { Projects } from "@gmacko/projects";
+import { AuthMiddleware } from "@gmacko/core/auth";
+import { Projects } from "@gmacko/core/projects";
 import type { ProjectId } from "@gmacko/core/validators";
 
 // Real handlers for ProjectsRpc — replaces the deterministic stubs from

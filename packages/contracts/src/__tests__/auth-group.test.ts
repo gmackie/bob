@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 import { Effect, Schema } from "effect";
 import { RpcTest } from "effect/unstable/rpc";
 
-import { InvalidApiKeyError } from "@gmacko/auth/errors";
+import { InvalidApiKeyError } from "@gmacko/core/auth/errors";
 
 import { AuthRpc } from "../groups/auth.js";
 import { stubAuthHandlers } from "../stubs/auth.js";

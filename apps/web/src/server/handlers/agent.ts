@@ -4,7 +4,7 @@ import { Effect, Stream } from "effect";
 
 import { AgentRpc } from "@gmacko/contracts/groups/agent";
 import { CurrentUser } from "@gmacko/rpc/context";
-import { AuthMiddleware } from "@gmacko/auth";
+import { AuthMiddleware } from "@gmacko/core/auth";
 import {
   AgentSession,
   AgentSessionNotFoundError,

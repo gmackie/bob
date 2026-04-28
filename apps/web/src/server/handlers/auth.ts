@@ -10,7 +10,7 @@ import {
   InvalidApiKeyError,
   Tenancy,
   TenantNotSelectedError,
-} from "@gmacko/auth";
+} from "@gmacko/core/auth";
 import type { ApiKeyId, TenantId } from "@gmacko/core/validators";
 
 import { getServerEnv } from "../env.js";

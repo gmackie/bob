@@ -47,17 +47,14 @@ const config: NextConfig = {
   transpilePackages: [
     "@gmacko/agent",
     "@gmacko/app-shell",
-    "@gmacko/auth",
     "@gmacko/client",
     "@gmacko/contracts",
     "@gmacko/core",
     "@gmacko/models",
-    "@gmacko/projects",
     "@gmacko/realtime",
     "@gmacko/rpc",
     "@gmacko/runner-base",
     "@gmacko/runner-protocol",
-    "@gmacko/secrets",
     "@gmacko/ui",
   ],
   async rewrites() {

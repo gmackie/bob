@@ -25,7 +25,7 @@ import {
   InvalidDeviceCodeError,
   InvalidUserCodeError,
   TenantNotSelectedError,
-} from "@gmacko/auth/errors";
+} from "@gmacko/core/auth/errors";
 
 import {
   ApiKeyIssueResultSchema,
