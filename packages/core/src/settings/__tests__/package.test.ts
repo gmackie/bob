@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { __gmackoSettingsPhase } from "@gmacko/settings";
+import { __gmackoSettingsPhase } from "@gmacko/core/settings";
 
 describe("@gmacko/settings package smoke", () => {
   it("resolves via workspace + exports the 6L sentinel", () => {

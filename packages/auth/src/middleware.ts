@@ -39,7 +39,7 @@ import {
   TenantNotSelectedError,
   type Membership,
 } from "./tenancy.js";
-import type { TenantId, UserId } from "@gmacko/validators";
+import type { TenantId, UserId } from "@gmacko/core/validators";
 
 /**
  * Default cookie name used by better-auth for session tokens.

@@ -10,7 +10,7 @@
 // DB-backed (drizzle on a `user_settings` / `tenant_settings` table).
 import { Effect, Layer, Schema, ServiceMap } from "effect";
 
-import type { TenantId, UserId } from "@gmacko/validators";
+import type { TenantId, UserId } from "@gmacko/core/validators";
 
 export type SettingsScope = "user" | "tenant";
 

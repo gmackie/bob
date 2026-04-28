@@ -15,8 +15,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@gmacko/config": "workspace:*",
-    "@gmacko/validators": "workspace:*",
+    "@gmacko/core": "workspace:*",
     "effect": "4.0.0-beta.43"
   },
   "devDependencies": {

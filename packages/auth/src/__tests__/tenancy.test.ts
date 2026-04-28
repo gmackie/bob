@@ -5,7 +5,7 @@ import { createTestDb } from "@gmacko/db/testing";
 import { layerGmackoDb } from "@gmacko/db";
 import { users } from "@gmacko/db/schema/auth";
 import { tenants, tenantMembers } from "@gmacko/db/schema/tenancy";
-import type { TenantId, TenantMemberRole, UserId } from "@gmacko/validators";
+import type { TenantId, TenantMemberRole, UserId } from "@gmacko/core/validators";
 
 import {
   Tenancy,

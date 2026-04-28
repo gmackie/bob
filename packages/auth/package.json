@@ -16,8 +16,8 @@
   "dependencies": {
     "better-auth": "1.4.0-beta.9",
     "@better-auth/expo": "1.4.0-beta.9",
+    "@gmacko/core": "workspace:*",
     "@gmacko/db": "workspace:*",
-    "@gmacko/validators": "workspace:*",
     "@gmacko/rpc": "workspace:*",
     "effect": "4.0.0-beta.43"
   },

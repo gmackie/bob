@@ -15,7 +15,7 @@
 // callers; this factory is the documented public-facing constructor.
 import type { Layer, ServiceMap } from "effect";
 
-import type { RealtimeBackend } from "@gmacko/config";
+import type { RealtimeBackend } from "@gmacko/core/config";
 
 import { layerMemory } from "./backends/memory.js";
 import { layerRedis } from "./backends/redis.js";

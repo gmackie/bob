@@ -17,7 +17,7 @@ import {
   type TenantId,
   type TenantMemberRole as Role,
   type UserId,
-} from "@gmacko/validators";
+} from "@gmacko/core/validators";
 
 // Tagged errors are hoisted to ./errors.js so client bundles can import them
 // without dragging in @gmacko/db / drizzle / node:* via this module. See

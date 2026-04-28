@@ -121,12 +121,12 @@ importers:
       '@gmacko/client':
         specifier: workspace:*
         version: link:../../packages/client
-      '@gmacko/config':
-        specifier: workspace:*
-        version: link:../../packages/config
       '@gmacko/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@gmacko/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@gmacko/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -154,9 +154,6 @@ importers:
       '@gmacko/ui':
         specifier: workspace:*
         version: link:../../packages/ui
-      '@gmacko/validators':
-        specifier: workspace:*
-        version: link:../../packages/validators
       '@tanstack/react-query':
         specifier: ^5.91.0
         version: 5.99.0(react@19.2.5)
@@ -209,12 +206,12 @@ importers:
 
   packages/agent:
     dependencies:
+      '@gmacko/core':
+        specifier: workspace:*
+        version: link:../core
       '@gmacko/db':
         specifier: workspace:*
         version: link:../db
-      '@gmacko/validators':
-        specifier: workspace:*
-        version: link:../validators
       drizzle-orm:
         specifier: ^0.44.0
         version: 0.44.7(@electric-sql/pglite@0.2.17)(better-sqlite3@12.9.0)(kysely@0.28.16)(postgres@3.4.9)
@@ -330,15 +327,15 @@ importers:
       '@better-auth/expo':
         specifier: 1.4.0-beta.9
         version: 1.4.0-beta.9(better-auth@1.4.0-beta.9(better-sqlite3@12.9.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(expo-constants@55.0.14)(expo-crypto@55.0.14(expo@55.0.15))(expo-linking@55.0.13)(expo-secure-store@15.0.8(expo@55.0.15))(expo-web-browser@15.0.10(expo@55.0.15)(react-native@0.84.1(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.5)))
+      '@gmacko/core':
+        specifier: workspace:*
+        version: link:../core
       '@gmacko/db':
         specifier: workspace:*
         version: link:../db
       '@gmacko/rpc':
         specifier: workspace:*
         version: link:../rpc
-      '@gmacko/validators':
-        specifier: workspace:*
-        version: link:../validators
       better-auth:
         specifier: 1.4.0-beta.9
         version: 1.4.0-beta.9(better-sqlite3@12.9.0)(next@16.2.4(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -437,22 +434,6 @@ importers:
         specifier: ^3.0.0
         version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
-  packages/config:
-    dependencies:
-      effect:
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43
-    devDependencies:
-      '@gmacko/tsconfig':
-        specifier: workspace:*
-        version: link:../../tooling/typescript
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
   packages/contracts:
     dependencies:
       '@gmacko/agent':
@@ -477,25 +458,6 @@ importers:
       '@effect/vitest':
         specifier: 4.0.0-beta.43
         version: 4.0.0-beta.43(effect@4.0.0-beta.43)(vitest@3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
-      '@gmacko/tsconfig':
-        specifier: workspace:*
-        version: link:../../tooling/typescript
-      '@types/node':
-        specifier: 25.6.0
-        version: 25.6.0
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
-  packages/cookies:
-    dependencies:
-      effect:
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43
-    devDependencies:
       '@gmacko/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/typescript
@@ -536,9 +498,9 @@ importers:
       '@electric-sql/pglite':
         specifier: ^0.2.0
         version: 0.2.17
-      '@gmacko/validators':
+      '@gmacko/core':
         specifier: workspace:*
-        version: link:../validators
+        version: link:../core
       drizzle-orm:
         specifier: ^0.44.0
         version: 0.44.7(@electric-sql/pglite@0.2.17)(better-sqlite3@12.9.0)(kysely@0.28.16)(postgres@3.4.9)
@@ -630,25 +592,6 @@ importers:
       typescript:
         specifier: ^5.9.0
         version: 5.9.3
-
-  packages/i18n:
-    dependencies:
-      effect:
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43
-    devDependencies:
-      '@gmacko/tsconfig':
-        specifier: workspace:*
-        version: link:../../tooling/typescript
-      '@types/node':
-        specifier: 25.6.0
-        version: 25.6.0
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
   packages/mcp-server:
     dependencies:
@@ -759,12 +702,12 @@ importers:
 
   packages/projects:
     dependencies:
+      '@gmacko/core':
+        specifier: workspace:*
+        version: link:../core
       '@gmacko/db':
         specifier: workspace:*
         version: link:../db
-      '@gmacko/validators':
-        specifier: workspace:*
-        version: link:../validators
       drizzle-orm:
         specifier: ^0.44.0
         version: 0.44.7(@electric-sql/pglite@0.2.17)(better-sqlite3@12.9.0)(kysely@0.28.16)(postgres@3.4.9)
@@ -793,12 +736,9 @@ importers:
 
   packages/realtime:
     dependencies:
-      '@gmacko/config':
+      '@gmacko/core':
         specifier: workspace:*
-        version: link:../config
-      '@gmacko/validators':
-        specifier: workspace:*
-        version: link:../validators
+        version: link:../core
       effect:
         specifier: 4.0.0-beta.43
         version: 4.0.0-beta.43
@@ -821,9 +761,9 @@ importers:
 
   packages/rpc:
     dependencies:
-      '@gmacko/validators':
+      '@gmacko/core':
         specifier: workspace:*
-        version: link:../validators
+        version: link:../core
       effect:
         specifier: 4.0.0-beta.43
         version: 4.0.0-beta.43
@@ -846,12 +786,12 @@ importers:
       '@gmacko/auth':
         specifier: workspace:*
         version: link:../auth
+      '@gmacko/core':
+        specifier: workspace:*
+        version: link:../core
       '@gmacko/runner-protocol':
         specifier: workspace:*
         version: link:../runner-protocol
-      '@gmacko/validators':
-        specifier: workspace:*
-        version: link:../validators
       effect:
         specifier: 4.0.0-beta.43
         version: 4.0.0-beta.43
@@ -877,9 +817,9 @@ importers:
       '@gmacko/auth':
         specifier: workspace:*
         version: link:../auth
-      '@gmacko/validators':
+      '@gmacko/core':
         specifier: workspace:*
-        version: link:../validators
+        version: link:../core
       effect:
         specifier: 4.0.0-beta.43
         version: 4.0.0-beta.43
@@ -902,12 +842,12 @@ importers:
 
   packages/secrets:
     dependencies:
+      '@gmacko/core':
+        specifier: workspace:*
+        version: link:../core
       '@gmacko/db':
         specifier: workspace:*
         version: link:../db
-      '@gmacko/validators':
-        specifier: workspace:*
-        version: link:../validators
       drizzle-orm:
         specifier: ^0.44.0
         version: 0.44.7(@electric-sql/pglite@0.2.17)(better-sqlite3@12.9.0)(kysely@0.28.16)(postgres@3.4.9)
@@ -921,28 +861,6 @@ importers:
       '@electric-sql/pglite':
         specifier: ^0.2.0
         version: 0.2.17
-      '@gmacko/tsconfig':
-        specifier: workspace:*
-        version: link:../../tooling/typescript
-      '@types/node':
-        specifier: 25.6.0
-        version: 25.6.0
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
-  packages/settings:
-    dependencies:
-      '@gmacko/validators':
-        specifier: workspace:*
-        version: link:../validators
-      effect:
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43
-    devDependencies:
       '@gmacko/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/typescript
@@ -1014,22 +932,6 @@ importers:
       react-dom:
         specifier: ^19.0.0
         version: 19.2.5(react@19.2.5)
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
-  packages/validators:
-    dependencies:
-      effect:
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43
-    devDependencies:
-      '@gmacko/tsconfig':
-        specifier: workspace:*
-        version: link:../../tooling/typescript
       typescript:
         specifier: ^5.9.0
         version: 5.9.3

@@ -24,7 +24,7 @@ import { Effect, Layer, ServiceMap } from "effect";
 
 import { GmackoDb } from "@gmacko/db";
 import { deviceCodes as deviceCodesTable } from "@gmacko/db/schema/device-codes";
-import type { ApiKeyId, TenantId, UserId } from "@gmacko/validators";
+import type { ApiKeyId, TenantId, UserId } from "@gmacko/core/validators";
 
 import { ApiKeys } from "./api-keys.js";
 import {

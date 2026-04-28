@@ -1,7 +1,7 @@
 import { describe, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
-import { TenantId, TenantMemberRole, UserId } from "@gmacko/validators";
+import { TenantId, TenantMemberRole, UserId } from "@gmacko/core/validators";
 import { CurrentUser, type CurrentUserShape } from "../context.js";
 import { requireAuth } from "../middleware.js";
 import { UnauthorizedError } from "../errors.js";

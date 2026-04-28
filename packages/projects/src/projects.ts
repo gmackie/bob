@@ -21,7 +21,7 @@ import { projects as projectsTable } from "@gmacko/db/schema/projects";
 import type {
   ProjectId as ProjectIdT,
   TenantId as TenantIdT,
-} from "@gmacko/validators";
+} from "@gmacko/core/validators";
 
 import {
   ProjectNotFoundError,

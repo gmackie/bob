@@ -1,7 +1,7 @@
 import "server-only";
 import { Effect, Schema } from "effect";
 
-import { NodeEnv, RealtimeBackend, loadConfig } from "@gmacko/config";
+import { NodeEnv, RealtimeBackend, loadConfig } from "@gmacko/core/config";
 
 // Server-only env schema. `loadConfig` returns an Effect that decodes
 // `process.env` against this Schema; we run it synchronously at module
