@@ -1,4 +1,4 @@
-# `apps/web` deployment notes
+# `apps/core` deployment notes
 
 This is a stub. Phase 7A scope: capture the env vars + driver choices that
 the in-process Next.js + Effect-RPC server expects. Bob/OODA migration in
@@ -43,7 +43,7 @@ Phase 7B+ will flesh this into a full deploy runbook.
 
 ## Database migrations
 
-`apps/web` runs `runMigrations(pglite | pg)` at first request via the
+`apps/core` runs `runMigrations(pglite | pg)` at first request via the
 `ensureMigrated` sandwich in `src/app/api/rpc/route.ts` and
 `src/app/api/auth/[...all]/route.ts`. Migrations are idempotent — a
 fresh deploy migrates on first traffic. Production deployments should
@@ -52,7 +52,7 @@ the standalone migration entry point).
 
 ## Smoke test in CI
 
-`apps/web/src/__tests__/smoke.test.ts` boots `next dev --webpack` and
+`apps/core/src/__tests__/smoke.test.ts` boots `next dev --webpack` and
 exercises sign-up → sign-in → `/api/rpc` round-trip + a forced page
 compile (catches client-bundle regressions like the `node:` scheme
 errors removed in Phase 7A Task 9).
@@ -83,7 +83,7 @@ authenticated round-trip.
   (`last` possibly undefined). Block `next build` in some configs.
   Out of scope for Phase 7A; cleanup pass scheduled for OODA migration
   (Phase 7C+).
-- **No `typecheck` script** in `apps/web/package.json`. Use
+- **No `typecheck` script** in `apps/core/package.json`. Use
   `npx tsc --noEmit` from this directory until added.
 
 ## Phase 7B/C carry-forward

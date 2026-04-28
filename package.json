@@ -6,8 +6,8 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo watch dev --continue",
-    "dev:web": "turbo watch dev --filter=@gmacko/web",
-    "dev:mobile": "turbo watch dev --filter=@gmacko/mobile",
+    "dev:web": "turbo watch dev --filter=@gmacko/core-web",
+    "dev:mobile": "turbo watch dev --filter=@gmacko/core-mobile",
     "test": "turbo run test",
     "lint": "turbo run lint --continue",
     "typecheck": "turbo run typecheck",

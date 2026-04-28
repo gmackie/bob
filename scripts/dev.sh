@@ -10,7 +10,7 @@ cd packages/db && pnpm db:migrate:pglite && cd ../..
 
 # 2. Start web (hosts the Effect-RPC route handler)
 echo "[2/2] Starting Next.js on :3000..."
-cd apps/web && pnpm dev &
+cd apps/core && pnpm dev &
 WEB_PID=$!
 
 echo ""

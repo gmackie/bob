@@ -15,9 +15,10 @@ Three package namespaces, six eventual apps + Bob's services + desktops.
 ### Apps
 
 Reference (gmacko stack):
-- `apps/web` — gmacko reference Next.js app, hosts the Effect-RPC route. Renames to `apps/core` in 7B-1b.
-- `apps/mobile` — gmacko reference Expo app. Renames to `apps/mobile-core`.
+- `apps/core` — gmacko reference Next.js app, hosts the Effect-RPC route (formerly `apps/web`).
+- `apps/mobile-core` — gmacko reference Expo app (formerly `apps/mobile`).
 - `apps/desktop` — gmacko reference desktop (Electron).
+- `apps/ooda` — OODA-specific routes (capture/explore/graph/wiki), promoted out of `apps/core` in 7B-1b.
 
 Bob (copied verbatim, runs unchanged):
 - `apps/bob/` — Bob's main web app (Vite + CF Workers).
@@ -50,9 +51,10 @@ Themes will eventually be co-located in `@gmacko/core/ui` (locked decision).
 ## Development
 
 ```
-cd apps/web && pnpm dev              # gmacko reference Next.js (port 3000, hosts RPC route)
-cd apps/mobile && pnpm dev           # gmacko reference Expo
+cd apps/core && pnpm dev             # gmacko reference Next.js (port 3000, hosts RPC route)
+cd apps/mobile-core && pnpm dev      # gmacko reference Expo
 cd apps/desktop && pnpm dev          # gmacko reference Electron
+cd apps/ooda && pnpm dev             # OODA Next.js app
 cd apps/bob && pnpm dev              # Bob's main web app (Vite)
 cd apps/bob-server && pnpm dev       # Bob's Node server
 cd apps/mobile-bob && pnpm dev       # Bob mobile (Expo)

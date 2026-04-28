@@ -1,4 +1,4 @@
-// apps/web/src/app/page.tsx — gmacko reference impl landing page.
+// apps/core/src/app/page.tsx — gmacko reference impl landing page.
 // Agent-harness UI lives at /agent. This page is intentionally minimal.
 export default function HomePage() {
   return (
