@@ -118,15 +118,6 @@ importers:
       '@gmacko/models':
         specifier: workspace:*
         version: link:../../packages/models
-      '@gmacko/realtime':
-        specifier: workspace:*
-        version: link:../../packages/realtime
-      '@gmacko/runner-base':
-        specifier: workspace:*
-        version: link:../../packages/runner-base
-      '@gmacko/runner-protocol':
-        specifier: workspace:*
-        version: link:../../packages/runner-protocol
       '@gmacko/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -173,25 +164,6 @@ importers:
       '@types/react':
         specifier: 19.2.14
         version: 19.2.14
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
-  packages/agent-toolkit:
-    dependencies:
-      effect:
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43
-    devDependencies:
-      '@gmacko/tsconfig':
-        specifier: workspace:*
-        version: link:../../tooling/typescript
-      '@types/node':
-        specifier: 25.6.0
-        version: 25.6.0
       typescript:
         specifier: ^5.9.0
         version: 5.9.3
@@ -357,25 +329,6 @@ importers:
         specifier: ^5.9.0
         version: 5.9.3
 
-  packages/mcp-server:
-    dependencies:
-      effect:
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43
-    devDependencies:
-      '@gmacko/tsconfig':
-        specifier: workspace:*
-        version: link:../../tooling/typescript
-      '@types/node':
-        specifier: 25.6.0
-        version: 25.6.0
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
   packages/mobile-shell:
     dependencies:
       effect:
@@ -406,84 +359,6 @@ importers:
 
   packages/ooda:
     dependencies:
-      effect:
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43
-    devDependencies:
-      '@effect/vitest':
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43(effect@4.0.0-beta.43)(vitest@3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
-      '@gmacko/tsconfig':
-        specifier: workspace:*
-        version: link:../../tooling/typescript
-      '@types/node':
-        specifier: 25.6.0
-        version: 25.6.0
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
-  packages/realtime:
-    dependencies:
-      '@gmacko/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43
-    devDependencies:
-      '@effect/vitest':
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43(effect@4.0.0-beta.43)(vitest@3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
-      '@gmacko/tsconfig':
-        specifier: workspace:*
-        version: link:../../tooling/typescript
-      '@types/node':
-        specifier: 25.6.0
-        version: 25.6.0
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
-  packages/runner-base:
-    dependencies:
-      '@gmacko/core':
-        specifier: workspace:*
-        version: link:../core
-      '@gmacko/runner-protocol':
-        specifier: workspace:*
-        version: link:../runner-protocol
-      effect:
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43
-    devDependencies:
-      '@effect/vitest':
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43(effect@4.0.0-beta.43)(vitest@3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
-      '@gmacko/tsconfig':
-        specifier: workspace:*
-        version: link:../../tooling/typescript
-      '@types/node':
-        specifier: 25.6.0
-        version: 25.6.0
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
-  packages/runner-protocol:
-    dependencies:
-      '@gmacko/core':
-        specifier: workspace:*
-        version: link:../core
       effect:
         specifier: 4.0.0-beta.43
         version: 4.0.0-beta.43
@@ -568,15 +443,6 @@ importers:
       vitest:
         specifier: ^3.0.0
         version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
-  packages/ws-gateway:
-    devDependencies:
-      '@gmacko/tsconfig':
-        specifier: workspace:*
-        version: link:../../tooling/typescript
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
 
   tooling/tailwind:
     dependencies:

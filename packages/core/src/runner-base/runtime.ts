@@ -72,7 +72,7 @@ import {
 } from "effect/unstable/http";
 import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
 
-import { RunnerRpc, type TaskRunEventType } from "@gmacko/runner-protocol";
+import { RunnerRpc, type TaskRunEventType } from "@gmacko/core/runner-protocol";
 
 import { withRetry } from "./retry.js";
 

@@ -48,9 +48,6 @@ const config: NextConfig = {
     "@gmacko/app-shell",
     "@gmacko/core",
     "@gmacko/models",
-    "@gmacko/realtime",
-    "@gmacko/runner-base",
-    "@gmacko/runner-protocol",
     "@gmacko/ui",
   ],
   async rewrites() {

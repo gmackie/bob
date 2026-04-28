@@ -28,7 +28,7 @@ import {
   RunnerRpc,
   type TaskRunEventType,
   type TaskRunWire,
-} from "@gmacko/runner-protocol";
+} from "@gmacko/core/runner-protocol";
 
 import {
   RunnerRuntime,
