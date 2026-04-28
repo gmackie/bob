@@ -47,11 +47,11 @@ import {
   Stream,
 } from "effect";
 
-import { GmackoDb } from "@gmacko/db";
+import { GmackoDb } from "@gmacko/core/db";
 import {
   chatConversations,
   chatMessages,
-} from "@gmacko/db/schema/sessions";
+} from "@gmacko/core/db/schema/sessions";
 import type { TenantId, UserId } from "@gmacko/core/validators";
 
 import type {

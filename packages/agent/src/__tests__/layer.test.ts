@@ -1,8 +1,8 @@
 import { describe, beforeEach, afterEach, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
-import { createTestDb } from "@gmacko/db/testing";
-import { layerGmackoDb } from "@gmacko/db";
+import { createTestDb } from "@gmacko/core/db/testing";
+import { layerGmackoDb } from "@gmacko/core/db";
 
 import { AgentSession, layerAgent, mockAdapter } from "../index.js";
 

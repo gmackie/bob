@@ -3,10 +3,10 @@ import { drizzle } from "drizzle-orm/pglite";
 import { Effect } from "effect";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import * as schema from "@gmacko/db/schema";
-import { runMigrations } from "@gmacko/db/migrate";
-import { tenants, tenantMembers } from "@gmacko/db/schema/tenancy";
-import { users as usersTable } from "@gmacko/db/schema/auth";
+import * as schema from "@gmacko/core/db/schema";
+import { runMigrations } from "@gmacko/core/db/migrate";
+import { tenants, tenantMembers } from "@gmacko/core/db/schema/tenancy";
+import { users as usersTable } from "@gmacko/core/db/schema/auth";
 
 import {
   BetterAuth,

@@ -15,12 +15,12 @@ import { and, desc, eq } from "drizzle-orm";
 import { createHash, randomBytes } from "node:crypto";
 import { Effect, Layer, ServiceMap } from "effect";
 
-import { GmackoDb } from "@gmacko/db";
+import { GmackoDb } from "@gmacko/core/db";
 import {
   apiKeys as apiKeysTable,
   type ApiKeyPermission,
-} from "@gmacko/db/schema/api-keys";
-import { users as usersTable } from "@gmacko/db/schema/auth";
+} from "@gmacko/core/db/schema/api-keys";
+import { users as usersTable } from "@gmacko/core/db/schema/auth";
 import type { ApiKeyId, TenantId, UserId } from "@gmacko/core/validators";
 
 import { InvalidApiKeyError } from "./errors.js";

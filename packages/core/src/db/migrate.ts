@@ -7,9 +7,9 @@ import { migrate as drizzleMigrate } from "drizzle-orm/pglite/migrator";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const MIGRATIONS_FOLDER = resolve(__dirname, "../drizzle");
+const MIGRATIONS_FOLDER = resolve(__dirname, "../../drizzle");
 
-// Apply all drizzle-generated migrations (in `packages/db/drizzle/`) to the
+// Apply all drizzle-generated migrations (in `packages/core/drizzle/`) to the
 // given PGlite instance, using drizzle's built-in migrator.
 //
 // The migrator tracks applied migrations in a `__drizzle_migrations` table, so

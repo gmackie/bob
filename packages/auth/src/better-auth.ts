@@ -19,7 +19,7 @@ import { Layer, ServiceMap } from "effect";
 import {
   tenants as tenantsTable,
   tenantMembers as membersTable,
-} from "@gmacko/db/schema/tenancy";
+} from "@gmacko/core/db/schema/tenancy";
 
 export type AuthInstance = ReturnType<typeof betterAuth>;
 

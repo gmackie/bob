@@ -51,7 +51,6 @@ const config: NextConfig = {
     "@gmacko/client",
     "@gmacko/contracts",
     "@gmacko/core",
-    "@gmacko/db",
     "@gmacko/models",
     "@gmacko/projects",
     "@gmacko/realtime",

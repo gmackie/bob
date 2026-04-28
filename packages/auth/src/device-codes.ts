@@ -22,8 +22,8 @@ import { randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { Effect, Layer, ServiceMap } from "effect";
 
-import { GmackoDb } from "@gmacko/db";
-import { deviceCodes as deviceCodesTable } from "@gmacko/db/schema/device-codes";
+import { GmackoDb } from "@gmacko/core/db";
+import { deviceCodes as deviceCodesTable } from "@gmacko/core/db/schema/device-codes";
 import type { ApiKeyId, TenantId, UserId } from "@gmacko/core/validators";
 
 import { ApiKeys } from "./api-keys.js";

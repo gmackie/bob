@@ -21,14 +21,14 @@ import { it } from "@effect/vitest";
 import { Effect, Exit, Fiber, Layer, Stream } from "effect";
 import { asc, eq } from "drizzle-orm";
 
-import { createTestDb } from "@gmacko/db/testing";
-import { layerGmackoDb } from "@gmacko/db";
+import { createTestDb } from "@gmacko/core/db/testing";
+import { layerGmackoDb } from "@gmacko/core/db";
 import {
   chatConversations,
   chatMessages,
-} from "@gmacko/db/schema/sessions";
-import { tenants } from "@gmacko/db/schema/tenancy";
-import { users } from "@gmacko/db/schema/auth";
+} from "@gmacko/core/db/schema/sessions";
+import { tenants } from "@gmacko/core/db/schema/tenancy";
+import { users } from "@gmacko/core/db/schema/auth";
 import type { TenantId, UserId } from "@gmacko/core/validators";
 
 import {

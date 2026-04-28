@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
-import { createTestDb } from "@gmacko/db/testing";
-import { layerGmackoDb } from "@gmacko/db";
-import { users } from "@gmacko/db/schema/auth";
-import { tenants, tenantMembers } from "@gmacko/db/schema/tenancy";
-import { apiKeys as apiKeysTable } from "@gmacko/db/schema/api-keys";
-import { deviceCodes as deviceCodesTable } from "@gmacko/db/schema/device-codes";
+import { createTestDb } from "@gmacko/core/db/testing";
+import { layerGmackoDb } from "@gmacko/core/db";
+import { users } from "@gmacko/core/db/schema/auth";
+import { tenants, tenantMembers } from "@gmacko/core/db/schema/tenancy";
+import { apiKeys as apiKeysTable } from "@gmacko/core/db/schema/api-keys";
+import { deviceCodes as deviceCodesTable } from "@gmacko/core/db/schema/device-codes";
 import { and, eq, isNull } from "drizzle-orm";
 import type { TenantId, UserId } from "@gmacko/core/validators";
 

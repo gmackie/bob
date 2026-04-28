@@ -3,14 +3,14 @@ import { Layer } from "effect";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 
-import * as schema from "@gmacko/db/schema";
-import { layerGmackoDb } from "@gmacko/db";
+import * as schema from "@gmacko/core/db/schema";
+import { layerGmackoDb } from "@gmacko/core/db";
 // `runMigrations` is imported via the `./migrate` subpath rather than the
 // root barrel — `migrate.ts` pulls in `drizzle-orm/pglite/migrator` and Node
 // built-ins, which webpack can't bundle into the client SSR pass when the
 // root barrel is transitively reached via the `@gmacko/contracts` tagged
 // errors → `@gmacko/client` → `@gmacko/app-shell` chain.
-import { runMigrations } from "@gmacko/db/migrate";
+import { runMigrations } from "@gmacko/core/db/migrate";
 import {
   ApiKeys,
   AuthMiddleware,

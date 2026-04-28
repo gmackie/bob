@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { __gmackoStoragePhase } from "@gmacko/storage";
+import { __gmackoStoragePhase } from "@gmacko/core/storage";
 
 describe("@gmacko/storage package smoke", () => {
   it("resolves via workspace + exports the 6L sentinel", () => {

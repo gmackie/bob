@@ -9,11 +9,11 @@ import {
   AgentSession,
   AgentSessionNotFoundError,
 } from "@gmacko/agent";
-import { GmackoDb } from "@gmacko/db";
+import { GmackoDb } from "@gmacko/core/db";
 import {
   chatConversations,
   chatMessages,
-} from "@gmacko/db/schema/sessions";
+} from "@gmacko/core/db/schema/sessions";
 
 // Real handlers for AgentRpc — replaces the in-memory stubs from
 // `@gmacko/contracts/stubs/agent`.
