@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it as vitestIt } from "vitest";
 import { it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
-import { createTestDb } from "@gmacko/db/testing";
-import { GmackoDb, layerGmackoDb } from "@gmacko/db";
-import { sessions, users } from "@gmacko/db/schema/auth";
+import { createTestDb } from "@gmacko/core/db/testing";
+import { GmackoDb, layerGmackoDb } from "@gmacko/core/db";
+import { sessions, users } from "@gmacko/core/db/schema/auth";
 
 import { layerBetterAuth } from "../better-auth.js";
 import {

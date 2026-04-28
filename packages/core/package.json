@@ -3,25 +3,55 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
     "./validators": "./src/validators/index.ts",
     "./config": "./src/config/index.ts",
     "./cookies": "./src/cookies/index.ts",
     "./i18n": "./src/i18n/index.ts",
-    "./settings": "./src/settings/index.ts"
+    "./settings": "./src/settings/index.ts",
+    "./db": "./src/db/index.ts",
+    "./db/client": "./src/db/client.ts",
+    "./db/migrate": "./src/db/migrate.ts",
+    "./db/schema": "./src/db/schema/index.ts",
+    "./db/schema/auth": "./src/db/schema/auth.ts",
+    "./db/schema/tenancy": "./src/db/schema/tenancy.ts",
+    "./db/schema/secrets": "./src/db/schema/secrets.ts",
+    "./db/schema/sessions": "./src/db/schema/sessions.ts",
+    "./db/schema/runner": "./src/db/schema/runner.ts",
+    "./db/schema/api-keys": "./src/db/schema/api-keys.ts",
+    "./db/schema/device-codes": "./src/db/schema/device-codes.ts",
+    "./db/schema/projects": "./src/db/schema/projects.ts",
+    "./db/service": "./src/db/service.ts",
+    "./db/testing": "./src/db/__tests__/helpers.ts",
+    "./storage": "./src/storage/index.ts",
+    "./monitoring": "./src/monitoring/index.ts",
+    "./analytics": "./src/analytics/index.ts"
   },
   "scripts": {
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:migrate:pglite": "tsx src/db/migrate.ts",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "effect": "4.0.0-beta.43"
+    "drizzle-orm": "^0.44.0",
+    "@electric-sql/pglite": "^0.2.0",
+    "effect": "4.0.0-beta.43",
+    "postgres": "^3.4.0",
+    "zod": "^4.0.0",
+    "drizzle-zod": "^0.7.0"
   },
   "devDependencies": {
     "@gmacko/tsconfig": "workspace:*",
     "@effect/vitest": "4.0.0-beta.43",
     "@types/node": "25.6.0",
+    "drizzle-kit": "^0.31.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.9.0",
     "vitest": "^3.0.0"
   }

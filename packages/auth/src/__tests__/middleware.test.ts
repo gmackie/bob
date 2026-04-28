@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
-import { createTestDb } from "@gmacko/db/testing";
-import { layerGmackoDb } from "@gmacko/db";
-import { sessions, users } from "@gmacko/db/schema/auth";
-import { tenants, tenantMembers } from "@gmacko/db/schema/tenancy";
+import { createTestDb } from "@gmacko/core/db/testing";
+import { layerGmackoDb } from "@gmacko/core/db";
+import { sessions, users } from "@gmacko/core/db/schema/auth";
+import { tenants, tenantMembers } from "@gmacko/core/db/schema/tenancy";
 import type { TenantId, UserId } from "@gmacko/core/validators";
 
 import { UnauthorizedError } from "@gmacko/rpc/errors";

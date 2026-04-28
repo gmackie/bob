@@ -9,11 +9,11 @@
 import { and, eq, gt } from "drizzle-orm";
 import { Effect, Layer, ServiceMap } from "effect";
 
-import { GmackoDb } from "@gmacko/db";
+import { GmackoDb } from "@gmacko/core/db";
 import {
   sessions as sessionsTable,
   users as usersTable,
-} from "@gmacko/db/schema/auth";
+} from "@gmacko/core/db/schema/auth";
 import type { UserId } from "@gmacko/core/validators";
 
 import { BetterAuth } from "./better-auth.js";

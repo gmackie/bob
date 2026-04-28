@@ -17,7 +17,6 @@
     "@gmacko/client": "workspace:*",
     "@gmacko/contracts": "workspace:*",
     "@gmacko/core": "workspace:*",
-    "@gmacko/db": "workspace:*",
     "@gmacko/models": "workspace:*",
     "@gmacko/projects": "workspace:*",
     "@gmacko/realtime": "workspace:*",

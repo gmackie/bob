@@ -8,11 +8,11 @@ import { it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { eq } from "drizzle-orm";
 
-import { createTestDb } from "@gmacko/db/testing";
-import { layerGmackoDb } from "@gmacko/db";
-import { chatConversations } from "@gmacko/db/schema/sessions";
-import { tenants } from "@gmacko/db/schema/tenancy";
-import { users } from "@gmacko/db/schema/auth";
+import { createTestDb } from "@gmacko/core/db/testing";
+import { layerGmackoDb } from "@gmacko/core/db";
+import { chatConversations } from "@gmacko/core/db/schema/sessions";
+import { tenants } from "@gmacko/core/db/schema/tenancy";
+import { users } from "@gmacko/core/db/schema/auth";
 import type { TenantId, UserId } from "@gmacko/core/validators";
 
 import { AgentSession, layerAgent } from "../agent-session.js";

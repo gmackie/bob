@@ -19,7 +19,7 @@
 // dependencies out of server bundles.
 
 import { Layer } from "effect";
-import type { GmackoDb } from "@gmacko/db";
+import type { GmackoDb } from "@gmacko/core/db";
 
 import { BetterAuth } from "./better-auth.js";
 import { layerSessions, Sessions } from "./sessions.js";

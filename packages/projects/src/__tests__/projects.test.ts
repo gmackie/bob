@@ -3,13 +3,13 @@ import { afterEach, beforeEach, describe, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { and, eq } from "drizzle-orm";
-import { createTestDb } from "@gmacko/db/testing";
-import { layerGmackoDb } from "@gmacko/db";
-import { tenants } from "@gmacko/db/schema/tenancy";
+import { createTestDb } from "@gmacko/core/db/testing";
+import { layerGmackoDb } from "@gmacko/core/db";
+import { tenants } from "@gmacko/core/db/schema/tenancy";
 import {
   sessionSecrets,
   projectDeploySecretBindings,
-} from "@gmacko/db/schema/secrets";
+} from "@gmacko/core/db/schema/secrets";
 import type { ProjectId, TenantId } from "@gmacko/core/validators";
 
 import {

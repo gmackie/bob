@@ -30,10 +30,10 @@ import { Effect, Layer, Schema } from "effect";
 import { Rpc, RpcGroup, RpcTest } from "effect/unstable/rpc";
 import { HttpServerRequest } from "effect/unstable/http";
 
-import { createTestDb } from "@gmacko/db/testing";
-import { layerGmackoDb } from "@gmacko/db";
-import { sessions, users } from "@gmacko/db/schema/auth";
-import { tenants, tenantMembers } from "@gmacko/db/schema/tenancy";
+import { createTestDb } from "@gmacko/core/db/testing";
+import { layerGmackoDb } from "@gmacko/core/db";
+import { sessions, users } from "@gmacko/core/db/schema/auth";
+import { tenants, tenantMembers } from "@gmacko/core/db/schema/tenancy";
 import type { TenantId, UserId } from "@gmacko/core/validators";
 
 import { CurrentUser } from "@gmacko/rpc/context";

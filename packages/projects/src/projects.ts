@@ -16,8 +16,8 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { Effect, Layer, ServiceMap } from "effect";
 
-import { GmackoDb } from "@gmacko/db";
-import { projects as projectsTable } from "@gmacko/db/schema/projects";
+import { GmackoDb } from "@gmacko/core/db";
+import { projects as projectsTable } from "@gmacko/core/db/schema/projects";
 import type {
   ProjectId as ProjectIdT,
   TenantId as TenantIdT,

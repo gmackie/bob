@@ -25,12 +25,12 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
 import { Effect, Layer, ServiceMap } from "effect";
 
-import { GmackoDb } from "@gmacko/db";
+import { GmackoDb } from "@gmacko/core/db";
 import {
   sessionSecretUsages,
   sessionSecrets,
   type SessionSecretPolicy,
-} from "@gmacko/db/schema/secrets";
+} from "@gmacko/core/db/schema/secrets";
 import type {
   SessionId as SessionIdT,
   SessionSecretId as SessionSecretIdT,

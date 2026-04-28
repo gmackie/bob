@@ -127,9 +127,6 @@ importers:
       '@gmacko/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@gmacko/db':
-        specifier: workspace:*
-        version: link:../../packages/db
       '@gmacko/models':
         specifier: workspace:*
         version: link:../../packages/models
@@ -209,9 +206,6 @@ importers:
       '@gmacko/core':
         specifier: workspace:*
         version: link:../core
-      '@gmacko/db':
-        specifier: workspace:*
-        version: link:../db
       drizzle-orm:
         specifier: ^0.44.0
         version: 0.44.7(@electric-sql/pglite@0.2.17)(better-sqlite3@12.9.0)(kysely@0.28.16)(postgres@3.4.9)
@@ -239,25 +233,6 @@ importers:
         version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
   packages/agent-toolkit:
-    dependencies:
-      effect:
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43
-    devDependencies:
-      '@gmacko/tsconfig':
-        specifier: workspace:*
-        version: link:../../tooling/typescript
-      '@types/node':
-        specifier: 25.6.0
-        version: 25.6.0
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
-  packages/analytics:
     dependencies:
       effect:
         specifier: 4.0.0-beta.43
@@ -330,9 +305,6 @@ importers:
       '@gmacko/core':
         specifier: workspace:*
         version: link:../core
-      '@gmacko/db':
-        specifier: workspace:*
-        version: link:../db
       '@gmacko/rpc':
         specifier: workspace:*
         version: link:../rpc
@@ -473,34 +445,9 @@ importers:
 
   packages/core:
     dependencies:
-      effect:
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43
-    devDependencies:
-      '@effect/vitest':
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43(effect@4.0.0-beta.43)(vitest@3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
-      '@gmacko/tsconfig':
-        specifier: workspace:*
-        version: link:../../tooling/typescript
-      '@types/node':
-        specifier: 25.6.0
-        version: 25.6.0
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
-  packages/db:
-    dependencies:
       '@electric-sql/pglite':
         specifier: ^0.2.0
         version: 0.2.17
-      '@gmacko/core':
-        specifier: workspace:*
-        version: link:../core
       drizzle-orm:
         specifier: ^0.44.0
         version: 0.44.7(@electric-sql/pglite@0.2.17)(better-sqlite3@12.9.0)(kysely@0.28.16)(postgres@3.4.9)
@@ -517,6 +464,9 @@ importers:
         specifier: ^4.0.0
         version: 4.3.6
     devDependencies:
+      '@effect/vitest':
+        specifier: 4.0.0-beta.43
+        version: 4.0.0-beta.43(effect@4.0.0-beta.43)(vitest@3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
       '@gmacko/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/typescript
@@ -640,25 +590,6 @@ importers:
         specifier: ^5.9.0
         version: 5.9.3
 
-  packages/monitoring:
-    dependencies:
-      effect:
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43
-    devDependencies:
-      '@gmacko/tsconfig':
-        specifier: workspace:*
-        version: link:../../tooling/typescript
-      '@types/node':
-        specifier: 25.6.0
-        version: 25.6.0
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
   packages/notifications:
     dependencies:
       effect:
@@ -705,9 +636,6 @@ importers:
       '@gmacko/core':
         specifier: workspace:*
         version: link:../core
-      '@gmacko/db':
-        specifier: workspace:*
-        version: link:../db
       drizzle-orm:
         specifier: ^0.44.0
         version: 0.44.7(@electric-sql/pglite@0.2.17)(better-sqlite3@12.9.0)(kysely@0.28.16)(postgres@3.4.9)
@@ -845,9 +773,6 @@ importers:
       '@gmacko/core':
         specifier: workspace:*
         version: link:../core
-      '@gmacko/db':
-        specifier: workspace:*
-        version: link:../db
       drizzle-orm:
         specifier: ^0.44.0
         version: 0.44.7(@electric-sql/pglite@0.2.17)(better-sqlite3@12.9.0)(kysely@0.28.16)(postgres@3.4.9)
@@ -861,25 +786,6 @@ importers:
       '@electric-sql/pglite':
         specifier: ^0.2.0
         version: 0.2.17
-      '@gmacko/tsconfig':
-        specifier: workspace:*
-        version: link:../../tooling/typescript
-      '@types/node':
-        specifier: 25.6.0
-        version: 25.6.0
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
-  packages/storage:
-    dependencies:
-      effect:
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43
-    devDependencies:
       '@gmacko/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/typescript

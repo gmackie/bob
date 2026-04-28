@@ -11,7 +11,7 @@ const __dirname = path.dirname(__filename);
 
 // Create an in-memory PGlite + Drizzle client for tests.
 // Returns a disposable db + a teardown fn.
-// By default, applies all generated migrations in packages/db/drizzle/.
+// By default, applies all generated migrations in packages/core/drizzle/.
 export async function createTestDb(opts?: { applyMigrations?: boolean }) {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "gmacko-db-test-"));
   const pglite = new PGlite(tmpDir);
@@ -53,7 +53,7 @@ export function sortMigrationFiles(files: string[]): string[] {
   });
 }
 
-// Apply all drizzle-generated migrations (in `packages/db/drizzle/`) to the
+// Apply all drizzle-generated migrations (in `packages/core/drizzle/`) to the
 // provided PGlite instance, in numeric-prefix-sorted order. Splits on drizzle's
 // `--> statement-breakpoint` delimiter so each SQL statement runs individually
 // (PGlite's `exec` can be finicky with multi-statement strings that mix DDL
@@ -66,7 +66,7 @@ export async function applyTestMigrations(
   pglite: PGlite,
   options?: { migrationsDir?: string },
 ) {
-  const migrationsDir = options?.migrationsDir ?? path.resolve(__dirname, "../../drizzle");
+  const migrationsDir = options?.migrationsDir ?? path.resolve(__dirname, "../../../drizzle");
   const entries = await fs.readdir(migrationsDir);
   const files = sortMigrationFiles(entries.filter((f) => f.endsWith(".sql")));
   if (files.length === 0) {

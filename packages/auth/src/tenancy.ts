@@ -11,8 +11,8 @@
 import { and, eq } from "drizzle-orm";
 import { Effect, Layer, ServiceMap } from "effect";
 
-import { GmackoDb } from "@gmacko/db";
-import { tenantMembers } from "@gmacko/db/schema/tenancy";
+import { GmackoDb } from "@gmacko/core/db";
+import { tenantMembers } from "@gmacko/core/db/schema/tenancy";
 import {
   type TenantId,
   type TenantMemberRole as Role,
