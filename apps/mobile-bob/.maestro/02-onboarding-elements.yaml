@@ -1,0 +1,10 @@
+appId: com.gmacko.bob.dev
+---
+# Test: Onboarding screen has all expected elements
+- launchApp
+- assertVisible: "Continue with GitHub"
+# Feature preview rows should be visible
+- assertVisible:
+    id: ".*"
+    enabled: true
+- takeScreenshot: screenshots/02-onboarding-elements

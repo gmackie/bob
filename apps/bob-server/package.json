@@ -1,0 +1,27 @@
+{
+  "name": "@bob/server",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "bob-server": "./dist/bin.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "start": "node dist/bin.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@bob/blder": "workspace:*",
+    "@bob/db": "workspace:*",
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@bob/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "^4.0.0"
+  }
+}

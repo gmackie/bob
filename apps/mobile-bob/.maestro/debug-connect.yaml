@@ -1,0 +1,13 @@
+appId: com.gmacko.bob.dev
+---
+- launchApp
+- tapOn:
+    text: "Bob (Dev)"
+    optional: true
+- extendedWaitUntil:
+    visible: "Continue with GitHub"
+    timeout: 15000
+- assertVisible:
+    text: "Welcome to Bob"
+    optional: true
+- takeScreenshot: /tmp/debug-connect

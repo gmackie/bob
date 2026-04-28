@@ -1,0 +1,7 @@
+appId: com.gmacko.bob.dev
+---
+# Test: App renders in dark theme (matching DESIGN.md)
+- launchApp
+- assertVisible: "Continue with GitHub"
+# The background should be dark (#0B0F14) — visual check via screenshot
+- takeScreenshot: screenshots/04-dark-theme

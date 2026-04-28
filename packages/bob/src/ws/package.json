@@ -1,0 +1,23 @@
+{
+  "name": "@bob/ws",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/ws/src/index.d.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit --emitDeclarationOnly false",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@bob/tsconfig": "workspace:*",
+    "typescript": "catalog:",
+    "vitest": "^4.0.0"
+  }
+}
