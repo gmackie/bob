@@ -1,48 +1,89 @@
 # Gmacko
 
-Shared monorepo for Bob and OODA frontends. Will become the gmacko fork of t3code.
+Shared monorepo for gmacko (Effect-RPC + Next.js reference) and Bob (tRPC + CF + Vite). Will become the gmacko fork of t3code; OODA folds in.
 
 ## Architecture
 
-- `packages/contracts` — Effect/Schema types, RPC group, tagged errors
-- `packages/ui` — Themeable shared UI components (@gmacko/ui)
-- `packages/models` — Core domain types (threads, messages, branches)
-- `packages/db` — Drizzle ORM schema, dual-driver: PGlite (WASM, default) or PostgreSQL
-- `packages/agent` — Claude API streaming dispatch (Effect-wrapped)
-- `packages/wiki` — Wiki article writer + cross-linker (Effect-wrapped)
-- `apps/web` — Next.js 16 web app (hosts the Effect-RPC route handler)
-- `apps/mobile` — Expo 55 mobile app
-- `tooling/typescript` — Shared TypeScript config
-- `tooling/tailwind` — Shared Tailwind theme with OODA + Bob presets
+Three package namespaces, six eventual apps + Bob's services + desktops.
+
+### Packages
+
+- `packages/core` — Shared infrastructure. Former 30 `@gmacko/*` packages now live here as subpaths: `auth`, `db`, `agent`, `contracts`, `ui`, `models`, `wiki`-adjacent infra, etc.
+- `packages/ooda` — OODA-specific code (wiki article writer, cross-linker, ext).
+- `packages/bob` — Bob's source tree as nested workspace packages. 25 `@bob/*` packages (plus one unscoped `bob`) preserved unchanged for now; per-area rewriting happens in 7B-2..N. See `docs/plans/phase-7b/03-bob-copy-verification.md` for the full inventory.
+
+### Apps
+
+Reference (gmacko stack):
+- `apps/web` — gmacko reference Next.js app, hosts the Effect-RPC route. Renames to `apps/core` in 7B-1b.
+- `apps/mobile` — gmacko reference Expo app. Renames to `apps/mobile-core`.
+- `apps/desktop` — gmacko reference desktop (Electron).
+
+Bob (copied verbatim, runs unchanged):
+- `apps/bob/` — Bob's main web app (Vite + CF Workers).
+- `apps/mobile-bob/` — Bob mobile (Expo 55).
+- `apps/desktop-bob/` — Bob desktop (Electron 40).
+- `apps/bob-server/` — Bob's Node server.
+- `apps/bob-ws-gateway/` — Bob's realtime gateway.
+- `apps/bob-execution/` — Bob's execution runner.
+
+Eventual 6-app target: `apps/{core,bob,ooda,mobile-core,mobile-bob,mobile-ooda}` plus the desktops and Bob's services.
+
+### Tooling
+
+- `tooling/typescript`, `tooling/tailwind` — gmacko shared configs.
+- `tooling/bob-{typescript,tailwind,eslint,prettier,github}` — Bob's tooling, dirs renamed; package names preserved as `@bob/*`.
 
 ## Stack
 
-- **Backend:** Effect 4.0.0-beta.43, Effect-RPC, Drizzle ORM, PGlite (WASM) / PostgreSQL
-- **Frontend:** React 19, React Query, Next.js 16 (web), Expo 55 (mobile)
-- **Styling:** Tailwind CSS 4, NativeWind 5 (mobile), CVA
-- **AI:** Anthropic Claude API via @anthropic-ai/sdk
+Two stacks coexist until per-area migrations land in 7B-2..N:
+
+- **Gmacko reference:** Effect 4.0.0-beta.43, Effect-RPC, Drizzle ORM, PGlite/PostgreSQL, Next.js 16, React 19, Expo 55, Tailwind CSS 4, NativeWind 5, CVA, Anthropic SDK.
+- **Bob:** tRPC, better-auth, Pusher, Vite, CF Workers, Expo 55, Electron 40, Drizzle, React 19.
 
 ## Themes
 
 Set `data-theme` attribute: `"ooda"` (dark + gold — placeholder) or `"bob"` (amber + warm gray — per Bob's DESIGN.md: primary #D4850A, Satoshi + DM Sans, Industrial/utilitarian).
 
+Themes will eventually be co-located in `@gmacko/core/ui` (locked decision).
+
 ## Development
 
 ```
-cd apps/web && pnpm dev              # Start Next.js web app (port 3000, hosts RPC route)
-cd apps/mobile && pnpm dev           # Start Expo dev server
-cd apps/desktop && pnpm dev          # Start Electron desktop app
-pnpm test                            # Run all tests
+cd apps/web && pnpm dev              # gmacko reference Next.js (port 3000, hosts RPC route)
+cd apps/mobile && pnpm dev           # gmacko reference Expo
+cd apps/desktop && pnpm dev          # gmacko reference Electron
+cd apps/bob && pnpm dev              # Bob's main web app (Vite)
+cd apps/bob-server && pnpm dev       # Bob's Node server
+cd apps/mobile-bob && pnpm dev       # Bob mobile (Expo)
+cd apps/desktop-bob && pnpm dev      # Bob desktop (Electron)
 ```
 
 ### Database drivers
 
-- **Default (PGlite):** No setup needed — WASM Postgres runs in-process, data at `~/.gmacko/data`
-- **PostgreSQL:** Set `GMACKO_DB_DRIVER=postgres` and `DATABASE_URL=postgres://...`
+- **Default (PGlite):** No setup needed — WASM Postgres runs in-process, data at `~/.gmacko/data`.
+- **PostgreSQL:** Set `GMACKO_DB_DRIVER=postgres` and `DATABASE_URL=postgres://...`.
+
+### Testing
+
+Phase 7B-0+ verification command (keeps PGlite from flaking):
+
+```
+pnpm exec turbo run test --concurrency=1 -- --no-file-parallelism
+```
 
 ## Key Patterns
 
-- RPC contracts defined with Effect/Schema + Rpc.make()
-- Services use Effect ServiceMap.Service + Layer pattern
-- Web/mobile clients use typed fetch + React Query (no Effect runtime in browser)
-- All UI components use CSS custom properties for theming
+- RPC contracts defined with Effect/Schema + `Rpc.make()`.
+- Services use Effect `ServiceMap.Service` + Layer pattern.
+- Web/mobile clients use typed fetch + React Query (no Effect runtime in browser).
+- All UI components use CSS custom properties for theming.
+- Bob's tRPC pattern coexists with Effect-RPC pending per-area migration.
+
+## Bob coexistence (Phase 7B+)
+
+Bob's source lives under `packages/bob/src/<pkg>/` as nested workspace packages. The `@bob/*` namespace (and one unscoped `bob`) is preserved unchanged so Bob can be rebuilt and run inside gmacko on its existing Vite + CF Workers + Expo + Electron stack with no source rewriting.
+
+Per-area migrations onto gmacko's stack (auth, db, realtime, etc.) land incrementally in 7B-2..9. Until then, the two stacks run side-by-side.
+
+The 6 pre-existing Bob test failures (`@bob/execution` taskExecutor + `@bob/api` cookies/featureBranch/work-items) are documented in `docs/plans/phase-7b/02-bob-probe.md` and are out of scope for 7B-1a.
