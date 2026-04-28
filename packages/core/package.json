@@ -59,7 +59,17 @@
     "./rpc/errors": "./src/rpc/errors.ts",
     "./rpc/context": "./src/rpc/context.ts",
     "./agent": "./src/agent/index.ts",
-    "./agent/errors": "./src/agent/errors.ts"
+    "./agent/errors": "./src/agent/errors.ts",
+    "./agent-toolkit": "./src/agent-toolkit/index.ts",
+    "./realtime": "./src/realtime/index.ts",
+    "./realtime/backends/memory": "./src/realtime/backends/memory.ts",
+    "./realtime/backends/redis": "./src/realtime/backends/redis.ts",
+    "./realtime/backends/ws-gateway": "./src/realtime/backends/ws-gateway.ts",
+    "./realtime/sse": "./src/realtime/sse.ts",
+    "./ws-gateway": "./src/ws-gateway/index.ts",
+    "./runner-protocol": "./src/runner-protocol/index.ts",
+    "./runner-base": "./src/runner-base/index.ts",
+    "./mcp-server": "./src/mcp-server/index.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",

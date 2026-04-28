@@ -33,7 +33,7 @@ import {
   mockAdapter,
   type AgentEvent,
 } from "@gmacko/core/agent";
-import { layerRealtime, makeRealtimeChannelTag } from "@gmacko/realtime";
+import { layerRealtime, makeRealtimeChannelTag } from "@gmacko/core/realtime";
 
 import { getServerEnv } from "./env.js";
 
