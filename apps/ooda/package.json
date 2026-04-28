@@ -1,0 +1,30 @@
+{
+  "name": "@gmacko/ooda-web",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "next dev --turbopack -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@gmacko/core": "workspace:*",
+    "@gmacko/ooda": "workspace:*",
+    "@tanstack/react-query": "^5.91.0",
+    "@xyflow/react": "^12.6.0",
+    "next": "^16.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "superjson": "^2.2.0"
+  },
+  "devDependencies": {
+    "@gmacko/tailwind": "workspace:*",
+    "@gmacko/tsconfig": "workspace:*",
+    "@tailwindcss/postcss": "^4.2.0",
+    "@types/node": "25.6.0",
+    "@types/react": "19.2.14",
+    "typescript": "^5.9.0",
+    "vitest": "^3.0.0"
+  }
+}
