@@ -1,4 +1,4 @@
-// @gmacko/ooda barrel — populated in Phase 7B-0 batch 7 (wiki, ext-ooda)
-// as subpath exports. Root export intentionally exposes nothing; consumers
-// import from specific subpaths once they exist.
+// @gmacko/ooda barrel — wiki and ext live as subpath exports
+// (`@gmacko/ooda/wiki`, `@gmacko/ooda/ext`). Root export intentionally
+// exposes nothing; consumers import from specific subpaths.
 export {};
