@@ -6,11 +6,11 @@
 
 import { Effect } from "effect";
 import { RpcClient } from "effect/unstable/rpc";
-import { SecretsRpc } from "@gmacko/contracts/groups/secrets";
+import { SecretsRpc } from "@gmacko/core/contracts/groups/secrets";
 import type {
   SecretEnvelopeWire,
   SessionSecretPolicyWire,
-} from "@gmacko/contracts/schemas/secrets";
+} from "@gmacko/core/contracts/schemas/secrets";
 
 import type { ClientRuntime } from "./internal/runtime.js";
 

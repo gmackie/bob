@@ -1,8 +1,8 @@
 import { QueryClient } from "@tanstack/react-query";
 import type {
   Thread, Branch, Message, WikiArticle, ExplorationSummary,
-} from "@gmacko/contracts";
-import { METHODS } from "@gmacko/contracts";
+} from "@gmacko/core/contracts";
+import { METHODS } from "@gmacko/core/contracts";
 import { getBaseUrl } from "./base-url";
 
 export const queryClient = new QueryClient({

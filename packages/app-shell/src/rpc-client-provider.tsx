@@ -4,7 +4,7 @@ import { createContext, useContext, useState } from "react";
 import {
   createGmackoRpcClient,
   type GmackoClientOptions,
-} from "@gmacko/client";
+} from "@gmacko/core/client";
 
 type GmackoRpcClient = ReturnType<typeof createGmackoRpcClient>;
 

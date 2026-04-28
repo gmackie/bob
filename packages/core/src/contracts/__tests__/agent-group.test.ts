@@ -15,7 +15,7 @@ import { describe, it, expect } from "vitest";
 import { Cause, Effect, Exit, Stream } from "effect";
 import { RpcSchema, RpcTest } from "effect/unstable/rpc";
 
-import { AgentSessionNotFoundError } from "@gmacko/agent/errors";
+import { AgentSessionNotFoundError } from "@gmacko/core/agent/errors";
 
 import {
   AgentCancelSessionRpc,

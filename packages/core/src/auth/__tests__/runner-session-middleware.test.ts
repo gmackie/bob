@@ -11,8 +11,8 @@ import { Effect, Layer, Schema } from "effect";
 import { Rpc, RpcGroup, RpcTest } from "effect/unstable/rpc";
 import { HttpServerRequest } from "effect/unstable/http";
 
-import { UnauthorizedError } from "@gmacko/rpc/errors";
-import { RunnerSession } from "@gmacko/rpc/context";
+import { UnauthorizedError } from "@gmacko/core/rpc/errors";
+import { RunnerSession } from "@gmacko/core/rpc/context";
 
 import {
   InvalidRunnerSessionError,

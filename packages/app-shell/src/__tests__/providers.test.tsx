@@ -17,7 +17,7 @@ const mockWhoAmI = vi.fn().mockResolvedValue({
   role: "owner",
 });
 
-vi.mock("@gmacko/client", () => ({
+vi.mock("@gmacko/core/client", () => ({
   createGmackoRpcClient: () => ({
     auth: {
       whoAmI: mockWhoAmI,

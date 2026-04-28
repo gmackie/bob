@@ -23,8 +23,8 @@ import { Effect, Layer, Schema } from "effect";
 import { RpcMiddleware } from "effect/unstable/rpc";
 import { HttpServerRequest } from "effect/unstable/http";
 
-import { RunnerSession } from "@gmacko/rpc/context";
-import { UnauthorizedError } from "@gmacko/rpc/errors";
+import { RunnerSession } from "@gmacko/core/rpc/context";
+import { UnauthorizedError } from "@gmacko/core/rpc/errors";
 
 import { InvalidRunnerSessionError, RunnerSessions } from "./runner-sessions.js";
 

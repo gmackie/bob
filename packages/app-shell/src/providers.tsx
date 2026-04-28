@@ -4,7 +4,7 @@ import { ThemeProvider } from "@gmacko/ui";
 import type { Mode, Theme } from "@gmacko/ui";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
-import type { GmackoClientOptions } from "@gmacko/client";
+import type { GmackoClientOptions } from "@gmacko/core/client";
 
 import { CurrentUserProvider } from "./current-user-provider";
 import { RpcClientProvider } from "./rpc-client-provider";

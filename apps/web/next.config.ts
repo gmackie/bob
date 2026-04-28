@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const config: NextConfig = {
-  // Workspace packages (`@gmacko/auth`, `@gmacko/agent`, …) follow the
+  // Workspace packages (`@gmacko/core`, …) follow the
   // `moduleResolution: "bundler"` convention and write intra-package imports
   // with a `.js` extension that on disk is a `.ts` file. Both Turbopack and
   // webpack default to literal-extension resolution — so absent any
@@ -45,14 +45,10 @@ const config: NextConfig = {
     return cfg;
   },
   transpilePackages: [
-    "@gmacko/agent",
     "@gmacko/app-shell",
-    "@gmacko/client",
-    "@gmacko/contracts",
     "@gmacko/core",
     "@gmacko/models",
     "@gmacko/realtime",
-    "@gmacko/rpc",
     "@gmacko/runner-base",
     "@gmacko/runner-protocol",
     "@gmacko/ui",

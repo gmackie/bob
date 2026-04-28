@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@gmacko/client": "workspace:*",
+    "@gmacko/core": "workspace:*",
     "@gmacko/ui": "workspace:*"
   },
   "peerDependencies": {

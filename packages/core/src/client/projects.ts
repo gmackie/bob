@@ -2,8 +2,8 @@
 
 import { Effect } from "effect";
 import { RpcClient } from "effect/unstable/rpc";
-import { ProjectsRpc } from "@gmacko/contracts/groups/projects";
-import type { ProjectWire } from "@gmacko/contracts/schemas/projects";
+import { ProjectsRpc } from "@gmacko/core/contracts/groups/projects";
+import type { ProjectWire } from "@gmacko/core/contracts/schemas/projects";
 
 import type { ClientRuntime } from "./internal/runtime.js";
 

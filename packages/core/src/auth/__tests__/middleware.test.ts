@@ -7,7 +7,7 @@ import { sessions, users } from "@gmacko/core/db/schema/auth";
 import { tenants, tenantMembers } from "@gmacko/core/db/schema/tenancy";
 import type { TenantId, UserId } from "@gmacko/core/validators";
 
-import { UnauthorizedError } from "@gmacko/rpc/errors";
+import { UnauthorizedError } from "@gmacko/core/rpc/errors";
 
 import { ApiKeys, layerApiKeys } from "../api-keys.js";
 import { layerBetterAuth } from "../better-auth.js";

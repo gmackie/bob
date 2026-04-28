@@ -2,13 +2,13 @@ import "server-only";
 import { and, eq, asc } from "drizzle-orm";
 import { Effect, Stream } from "effect";
 
-import { AgentRpc } from "@gmacko/contracts/groups/agent";
-import { CurrentUser } from "@gmacko/rpc/context";
+import { AgentRpc } from "@gmacko/core/contracts/groups/agent";
+import { CurrentUser } from "@gmacko/core/rpc/context";
 import { AuthMiddleware } from "@gmacko/core/auth";
 import {
   AgentSession,
   AgentSessionNotFoundError,
-} from "@gmacko/agent";
+} from "@gmacko/core/agent";
 import { GmackoDb } from "@gmacko/core/db";
 import {
   chatConversations,

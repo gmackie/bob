@@ -1,9 +1,9 @@
 import "server-only";
 
-import { AuthRpc } from "@gmacko/contracts/groups/auth";
-import { ProjectsRpc } from "@gmacko/contracts/groups/projects";
-import { SecretsRpc } from "@gmacko/contracts/groups/secrets";
-import { AgentRpc } from "@gmacko/contracts/groups/agent";
+import { AuthRpc } from "@gmacko/core/contracts/groups/auth";
+import { ProjectsRpc } from "@gmacko/core/contracts/groups/projects";
+import { SecretsRpc } from "@gmacko/core/contracts/groups/secrets";
+import { AgentRpc } from "@gmacko/core/contracts/groups/agent";
 import { AuthMiddleware } from "@gmacko/core/auth";
 
 import { authHandlerMap } from "./auth.js";

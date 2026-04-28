@@ -9,7 +9,7 @@ import { ThreadPane } from "~/components/tablet/ThreadPane";
 import { NotificationProvider } from "~/providers/notification-provider";
 import { usePushNotifications } from "~/hooks/use-push-notifications";
 import { colors } from "~/lib/colors";
-import type { Thread, Message } from "@gmacko/contracts";
+import type { Thread, Message } from "@gmacko/core/contracts";
 
 import "../styles.css";
 

@@ -8,12 +8,12 @@
 
 import { Effect, type Stream } from "effect";
 import { RpcClient } from "effect/unstable/rpc";
-import { AgentRpc } from "@gmacko/contracts/groups/agent";
+import { AgentRpc } from "@gmacko/core/contracts/groups/agent";
 import type {
   AgentEventWire,
   ChatConversationWire,
   ChatMessageWire,
-} from "@gmacko/contracts/schemas/agent";
+} from "@gmacko/core/contracts/schemas/agent";
 
 import type { ClientRuntime } from "./internal/runtime.js";
 

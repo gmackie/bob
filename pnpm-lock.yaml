@@ -39,9 +39,9 @@ importers:
 
   apps/mobile:
     dependencies:
-      '@gmacko/contracts':
+      '@gmacko/core':
         specifier: workspace:*
-        version: link:../../packages/contracts
+        version: link:../../packages/core
       '@tanstack/react-query':
         specifier: ^5.91.0
         version: 5.99.0(react@19.2.5)
@@ -109,18 +109,9 @@ importers:
       '@electric-sql/pglite':
         specifier: ^0.2.0
         version: 0.2.17
-      '@gmacko/agent':
-        specifier: workspace:*
-        version: link:../../packages/agent
       '@gmacko/app-shell':
         specifier: workspace:*
         version: link:../../packages/app-shell
-      '@gmacko/client':
-        specifier: workspace:*
-        version: link:../../packages/client
-      '@gmacko/contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
       '@gmacko/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -130,9 +121,6 @@ importers:
       '@gmacko/realtime':
         specifier: workspace:*
         version: link:../../packages/realtime
-      '@gmacko/rpc':
-        specifier: workspace:*
-        version: link:../../packages/rpc
       '@gmacko/runner-base':
         specifier: workspace:*
         version: link:../../packages/runner-base
@@ -192,37 +180,6 @@ importers:
         specifier: ^3.0.0
         version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
-  packages/agent:
-    dependencies:
-      '@gmacko/core':
-        specifier: workspace:*
-        version: link:../core
-      drizzle-orm:
-        specifier: ^0.44.0
-        version: 0.44.7(@electric-sql/pglite@0.2.17)(better-sqlite3@12.9.0)(kysely@0.28.16)(postgres@3.4.9)
-      effect:
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43
-    devDependencies:
-      '@effect/vitest':
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43(effect@4.0.0-beta.43)(vitest@3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
-      '@electric-sql/pglite':
-        specifier: ^0.2.0
-        version: 0.2.17
-      '@gmacko/tsconfig':
-        specifier: workspace:*
-        version: link:../../tooling/typescript
-      '@types/node':
-        specifier: 25.6.0
-        version: 25.6.0
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
   packages/agent-toolkit:
     dependencies:
       effect:
@@ -244,9 +201,9 @@ importers:
 
   packages/app-shell:
     dependencies:
-      '@gmacko/client':
+      '@gmacko/core':
         specifier: workspace:*
-        version: link:../client
+        version: link:../core
       '@gmacko/ui':
         specifier: workspace:*
         version: link:../ui
@@ -310,62 +267,6 @@ importers:
         specifier: ^3.0.0
         version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
-  packages/client:
-    dependencies:
-      '@gmacko/contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      effect:
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43
-    devDependencies:
-      '@effect/vitest':
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43(effect@4.0.0-beta.43)(vitest@3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
-      '@gmacko/tsconfig':
-        specifier: workspace:*
-        version: link:../../tooling/typescript
-      '@types/node':
-        specifier: 25.6.0
-        version: 25.6.0
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
-  packages/contracts:
-    dependencies:
-      '@gmacko/agent':
-        specifier: workspace:*
-        version: link:../agent
-      '@gmacko/core':
-        specifier: workspace:*
-        version: link:../core
-      '@gmacko/rpc':
-        specifier: workspace:*
-        version: link:../rpc
-      effect:
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43
-    devDependencies:
-      '@effect/vitest':
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43(effect@4.0.0-beta.43)(vitest@3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
-      '@gmacko/tsconfig':
-        specifier: workspace:*
-        version: link:../../tooling/typescript
-      '@types/node':
-        specifier: 25.6.0
-        version: 25.6.0
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
   packages/core:
     dependencies:
       '@better-auth/expo':
@@ -374,9 +275,6 @@ importers:
       '@electric-sql/pglite':
         specifier: ^0.2.0
         version: 0.2.17
-      '@gmacko/rpc':
-        specifier: workspace:*
-        version: link:../rpc
       better-auth:
         specifier: 1.4.0-beta.9
         version: 1.4.0-beta.9(better-sqlite3@12.9.0)(next@16.2.4(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -442,9 +340,9 @@ importers:
 
   packages/ext-ooda:
     dependencies:
-      '@gmacko/contracts':
+      '@gmacko/core':
         specifier: workspace:*
-        version: link:../contracts
+        version: link:../core
       react:
         specifier: ^19.0.0
         version: 19.2.5
@@ -546,25 +444,6 @@ importers:
       '@types/node':
         specifier: 25.6.0
         version: 25.6.0
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
-  packages/rpc:
-    dependencies:
-      effect:
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43
-    devDependencies:
-      '@effect/vitest':
-        specifier: 4.0.0-beta.43
-        version: 4.0.0-beta.43(effect@4.0.0-beta.43)(vitest@3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
-      '@gmacko/tsconfig':
-        specifier: workspace:*
-        version: link:../../tooling/typescript
       typescript:
         specifier: ^5.9.0
         version: 5.9.3
