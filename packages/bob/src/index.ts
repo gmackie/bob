@@ -1,10 +1,4 @@
-// @gmacko/bob barrel — populated incrementally in Phase 7B-0 batches.
-// See subpath exports for the actual surfaces:
-//   import { Sessions } from "@gmacko/core/auth";
-//   import { GmackoDb } from "@gmacko/core/db";
-//   etc.
-//
-// The root export intentionally exposes nothing — consumers should
-// import from specific subpaths so tree-shaking + dependency tracking
-// stays accurate.
+// @gmacko/bob barrel — populated in Phase 7B-1a when Bob's @bob/* packages
+// fold into here as subpath exports. Root export intentionally exposes
+// nothing; consumers import from specific subpaths once they exist.
 export {};

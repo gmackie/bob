@@ -1,10 +1,4 @@
-// @gmacko/ooda barrel — populated incrementally in Phase 7B-0 batches.
-// See subpath exports for the actual surfaces:
-//   import { Sessions } from "@gmacko/core/auth";
-//   import { GmackoDb } from "@gmacko/core/db";
-//   etc.
-//
-// The root export intentionally exposes nothing — consumers should
-// import from specific subpaths so tree-shaking + dependency tracking
-// stays accurate.
+// @gmacko/ooda barrel — populated in Phase 7B-0 batch 7 (wiki, ext-ooda)
+// as subpath exports. Root export intentionally exposes nothing; consumers
+// import from specific subpaths once they exist.
 export {};
