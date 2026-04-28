@@ -1,0 +1,95 @@
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
+@import "tailwindcss/utilities.css";
+
+@import "nativewind/theme";
+
+/*
+ * Fix: NativeWind v5 preview + Tailwind v4 text color resolution.
+ *
+ * react-native-css 3.0.1 can't resolve CSS variables for the `color`
+ * property, so Tailwind v4's auto-generated `text-{color}` utilities
+ * (which use `color: var(--color-*)`) produce invisible text.
+ *
+ * Additionally, react-native-css applies CSS-derived styles AFTER
+ * inline React Native styles, so inline `style={{ color: "..." }}`
+ * gets overridden by the broken CSS.
+ *
+ * Fix: Define explicit @utility overrides with hard-coded hex values.
+ * These @utility rules are in the utilities layer and override the
+ * auto-generated var()-based ones. Also set a universal default color
+ * since RN doesn't inherit `color` through View components.
+ *
+ * TODO: Remove when upgrading to stable NativeWind v5 / react-native-css.
+ */
+
+@utility text-foreground {
+  color: #e6edf3;
+}
+@utility text-muted {
+  color: #8b949e;
+}
+@utility text-muted2 {
+  color: #667085;
+}
+@utility text-white {
+  color: #ffffff;
+}
+@utility text-primary-foreground {
+  color: #ffffff;
+}
+@utility text-secondary-foreground {
+  color: #e6edf3;
+}
+@utility text-card-foreground {
+  color: #e6edf3;
+}
+@utility text-accent-foreground {
+  color: #0b0f14;
+}
+@utility text-accent {
+  color: #22d3ee;
+}
+@utility text-success {
+  color: #22c55e;
+}
+@utility text-warning {
+  color: #f59e0b;
+}
+@utility text-danger {
+  color: #ef4444;
+}
+@utility text-primary {
+  color: #7c3aed;
+}
+
+@theme {
+  --color-background: #0b0f14;
+  --color-foreground: #e6edf3;
+  --color-card: #111827;
+  --color-card-elevated: #162033;
+  --color-card-foreground: #e6edf3;
+  --color-primary: #7c3aed;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #162033;
+  --color-secondary-foreground: #e6edf3;
+  --color-muted: #8b949e;
+  --color-muted2: #667085;
+  --color-accent: #22d3ee;
+  --color-accent-foreground: #0b0f14;
+  --color-border: #233047;
+  --color-input: #111827;
+  --color-ring: #7c3aed;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+}
+
+/*
+ * Unlayered CSS has highest cascade priority (beats all @layer rules).
+ * This ensures every element gets a visible default text color,
+ * regardless of what broken var()-based rules exist in the cascade.
+ */
+* {
+  color: #e6edf3;
+}

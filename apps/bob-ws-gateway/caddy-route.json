@@ -1,0 +1,22 @@
+{
+  "comment": "ForgeGraph route for ws.blder.bot → ws-gateway on port 3002",
+  "command": "forge route create --domain ws.blder.bot --target http://localhost:3002 --websocket --tls-auto",
+  "caddy_snippet": {
+    "ws.blder.bot": {
+      "reverse_proxy": "localhost:3002",
+      "header_up": {
+        "X-Forwarded-Proto": "{scheme}",
+        "X-Real-IP": "{remote_host}"
+      },
+      "flush_interval": -1,
+      "transport": {
+        "protocol": "http"
+      }
+    }
+  },
+  "notes": [
+    "ForgeGraph Caddy auto-provisions TLS via Let's Encrypt",
+    "flush_interval: -1 disables response buffering for WebSocket/SSE",
+    "DNS: ws.blder.bot A record → hetzner-master public IP"
+  ]
+}

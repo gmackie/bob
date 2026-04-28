@@ -1,0 +1,13 @@
+export function getPlanningWebhookSecret(
+  env: Record<string, string | undefined> = process.env,
+): string | null {
+  return env.PLANNING_WEBHOOK_SECRET?.trim() || null;
+}
+
+export function isPlanningWebhookHeader(key: string): boolean {
+  return (
+    key.startsWith("x-planning") ||
+    key.startsWith("x-webhook") ||
+    key === "content-type"
+  );
+}

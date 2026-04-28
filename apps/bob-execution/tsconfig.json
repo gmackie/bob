@@ -1,0 +1,19 @@
+{
+  "extends": "@bob/tsconfig/base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "skipLibCheck": true,
+    "paths": {
+      "@bob/db": ["../../packages/db/src/index.ts"],
+      "@bob/db/*": ["../../packages/db/src/*"],
+      "@bob/legacy": ["../../packages/legacy/src/index.ts"],
+      "@bob/legacy/*": ["../../packages/legacy/src/*"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["dist", "node_modules"]
+}

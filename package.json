@@ -14,8 +14,19 @@
     "dev:all": "bash scripts/dev.sh"
   },
   "pnpm": {
+    "overrides": {
+      "@types/pg": "8.16.0",
+      "node-gyp": "^10.0.0",
+      "react": "19.2.5",
+      "react-dom": "19.2.5"
+    },
     "onlyBuiltDependencies": [
-      "electron"
+      "@swc/core",
+      "@tailwindcss/oxide",
+      "electron",
+      "esbuild",
+      "node-pty",
+      "sqlite3"
     ]
   },
   "devDependencies": {

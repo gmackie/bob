@@ -1,0 +1,13 @@
+appId: com.gmacko.bob.dev
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Continue with GitHub"
+    timeout: 30000
+- assertVisible:
+    text: "Welcome to Bob"
+    optional: true
+- assertVisible:
+    text: "Workspaces"
+    optional: true
+- takeScreenshot: /tmp/debug-bob-loaded

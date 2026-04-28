@@ -1,0 +1,66 @@
+import type { Meta, StoryObj } from "@storybook/react";
+
+import { ComponentUnderTest } from "./component-under-test";
+
+const meta = {
+  title: "Generated/Component Under Test",
+  component: ComponentUnderTest,
+  parameters: {
+    layout: "centered",
+  },
+} satisfies Meta<typeof ComponentUnderTest>;
+
+export default meta;
+
+type Story = StoryObj<typeof meta>;
+
+const baseArgs = {
+  state: "ready",
+  data: {
+    title: "A realistic fixture value",
+  },
+};
+
+export const HappyPath_Ready: Story = {
+  args: baseArgs,
+};
+
+export const Loading_SlowNetwork: Story = {
+  args: {
+    ...baseArgs,
+    state: "loading",
+  },
+};
+
+export const Error_Retryable: Story = {
+  args: {
+    ...baseArgs,
+    state: "error",
+    errorMessage: "The request failed, but retry is available.",
+  },
+};
+
+export const Empty_FirstUse: Story = {
+  args: {
+    ...baseArgs,
+    state: "empty",
+    data: null,
+  },
+};
+
+export const Edge_LongTextOverflow: Story = {
+  args: {
+    ...baseArgs,
+    data: {
+      title:
+        "An intentionally long fixture value that proves the layout survives overflow, wrapping, and hierarchy pressure without collapsing.",
+    },
+  },
+};
+
+export const Accessibility_HighZoom: Story = {
+  args: baseArgs,
+  parameters: {
+    viewport: { defaultViewport: "mobile1" },
+  },
+};

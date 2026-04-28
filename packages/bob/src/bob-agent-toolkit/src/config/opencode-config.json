@@ -1,0 +1,45 @@
+{
+  "$schema": "https://opencode.ai/schemas/config.json",
+  "mcpServers": {
+    "bob": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["@bob/mcp-server"],
+      "env": {
+        "BOB_API_URL": "${env:BOB_API_URL}",
+        "BOB_API_KEY": "${env:BOB_API_KEY}",
+        "BOB_SESSION_ID": "${env:BOB_SESSION_ID}",
+        "BOB_SECRET_BROKER_URL": "${env:BOB_SECRET_BROKER_URL}",
+        "BOB_SECRET_BROKER_TOKEN": "${env:BOB_SECRET_BROKER_TOKEN}",
+        "BOB_SESSION_SECRET_MANIFEST": "${env:BOB_SESSION_SECRET_MANIFEST}"
+      }
+    }
+  },
+  "skills": [
+    {
+      "name": "bob-workflow",
+      "description": "Workflow and status reporting for Bob-managed sessions",
+      "path": "./skills/bob-workflow.md"
+    },
+    {
+      "name": "storybook-development",
+      "description": "State-first Storybook workflow for UI generation, state coverage, and prompt-driven iteration",
+      "path": "./skills/storybook-development.md"
+    },
+    {
+      "name": "create-gmacko-app-feature-development",
+      "description": "Feature placement guidance for create-gmacko-app repos so agents know where code belongs across apps/nextjs, packages/ui, packages/api, packages/db, helpers, and shared packages",
+      "path": "./skills/create-gmacko-app-feature-development.md"
+    },
+    {
+      "name": "work-item-shaping",
+      "description": "Question-driven shaping for turning rough ideas into Bob epics or issues, plus BRDs and requirement sets",
+      "path": "./skills/work-item-shaping.md"
+    },
+    {
+      "name": "work-item-breakdown",
+      "description": "Breaks Bob epics, issues, BRDs, and requirement sets into linked child tasks with dependencies and lifecycle guidance",
+      "path": "./skills/work-item-breakdown.md"
+    }
+  ]
+}
