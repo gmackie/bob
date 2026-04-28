@@ -23,10 +23,13 @@ import { METHODS } from "@gmacko/core/contracts";
 /* The response is a JSON array of FromServerEncoded messages.          */
 /* ------------------------------------------------------------------ */
 
-const RPC_URL =
-  typeof window !== "undefined"
-    ? "/rpc" // In browser: same-origin proxy via next.config.ts rewrites
-    : "http://localhost:3001/rpc";
+// apps/ooda doesn't host its own RPC route yet — apps/web stays the RPC
+// host until 7B-N migrations split the routes. Default to apps/web's
+// localhost:3000 in dev; override with NEXT_PUBLIC_RPC_BASE_URL.
+const RPC_BASE_URL =
+  process.env.NEXT_PUBLIC_RPC_BASE_URL ?? "http://localhost:3000";
+
+const RPC_URL = `${RPC_BASE_URL}/api/rpc`;
 
 let requestCounter = 0;
 
@@ -115,10 +118,7 @@ async function rpcCall<T>(method: string, payload: unknown = {}): Promise<T> {
 /* SSE streaming client for agent chat                                 */
 /* ------------------------------------------------------------------ */
 
-const STREAM_URL =
-  typeof window !== "undefined"
-    ? "/api/chat/stream"
-    : "http://localhost:3001/api/chat/stream";
+const STREAM_URL = `${RPC_BASE_URL}/api/chat/stream`;
 
 export async function streamChat(
   input: { threadId: string; branchId: string; content: string },
