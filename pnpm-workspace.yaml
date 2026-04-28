@@ -57,3 +57,15 @@ overrides:
 publicHoistPattern:
   - '@ianvs/prettier-plugin-sort-imports'
   - prettier-plugin-tailwindcss
+  # Hoist Bob's transitive deps to root so apps/bob (which imports them
+  # directly without declaring them, e.g. next/*, drizzle-orm) resolves them.
+  # Each gmacko/Bob package retains its own isolated node_modules, so version
+  # conflicts (vitest 3.x vs 4.x, effect 3.x vs 4.x) stay siloed locally.
+  # Bob's original repo at /Volumes/dev/bob used full node-linker=hoisted; we
+  # use the more targeted publicHoistPattern to keep gmacko's tests from
+  # accidentally picking up a hoisted copy of vitest etc.
+  - 'next'
+  - '@radix-ui/*'
+  - 'class-variance-authority'
+  - 'drizzle-orm'
+  - '@tailwindcss/typography'
