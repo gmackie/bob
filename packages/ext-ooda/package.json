@@ -5,7 +5,7 @@
   "type": "module",
   "exports": { ".": "./src/index.ts" },
   "dependencies": {
-    "@gmacko/contracts": "workspace:*",
+    "@gmacko/core": "workspace:*",
     "react": "^19.0.0"
   },
   "devDependencies": {

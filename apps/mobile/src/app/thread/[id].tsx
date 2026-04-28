@@ -2,7 +2,7 @@ import { useState, useRef, useCallback } from "react";
 import { Text, FlatList, TextInput, View, KeyboardAvoidingView, Platform } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import type { Message } from "@gmacko/contracts";
+import type { Message } from "@gmacko/core/contracts";
 import { rpc, queryClient } from "~/utils/api";
 import { Screen } from "~/components/ui/Screen";
 import { Button } from "~/components/ui/Button";

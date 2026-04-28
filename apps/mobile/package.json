@@ -9,7 +9,7 @@
     "build:android": "eas build --platform android"
   },
   "dependencies": {
-    "@gmacko/contracts": "workspace:*",
+    "@gmacko/core": "workspace:*",
     "@tanstack/react-query": "^5.91.0",
     "expo": "~55.0.11",
     "expo-constants": "~55.0.13",

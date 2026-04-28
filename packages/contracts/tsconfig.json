@@ -1,7 +1,0 @@
-{
-  "extends": "../../tooling/typescript/tsconfig.base.json",
-  "include": ["src"],
-  "compilerOptions": {
-    "outDir": "dist"
-  }
-}

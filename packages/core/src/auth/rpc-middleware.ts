@@ -26,8 +26,8 @@ import { Effect, Layer, Schema } from "effect";
 import { RpcMiddleware } from "effect/unstable/rpc";
 import { HttpServerRequest } from "effect/unstable/http";
 
-import { CurrentUser } from "@gmacko/rpc/context";
-import { UnauthorizedError } from "@gmacko/rpc/errors";
+import { CurrentUser } from "@gmacko/core/rpc/context";
+import { UnauthorizedError } from "@gmacko/core/rpc/errors";
 
 import { ApiKeys } from "./api-keys.js";
 import { Sessions } from "./sessions.js";

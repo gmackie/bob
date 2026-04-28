@@ -8,7 +8,7 @@
 
 import { Effect } from "effect";
 import { RpcClient } from "effect/unstable/rpc";
-import { AuthRpc } from "@gmacko/contracts/groups/auth";
+import { AuthRpc } from "@gmacko/core/contracts/groups/auth";
 import type {
   ApiKeyIssueResultWire,
   ApiKeyListItemWire,
@@ -16,7 +16,7 @@ import type {
   DeviceCodePollResultWire,
   DeviceFlowStartResultWire,
   MembershipWire,
-} from "@gmacko/contracts/schemas/auth";
+} from "@gmacko/core/contracts/schemas/auth";
 
 import type { ClientRuntime } from "./internal/runtime.js";
 

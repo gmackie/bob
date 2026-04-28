@@ -1,8 +1,8 @@
 import "server-only";
 import { DateTime, Effect } from "effect";
 
-import { AuthRpc } from "@gmacko/contracts/groups/auth";
-import { CurrentUser } from "@gmacko/rpc/context";
+import { AuthRpc } from "@gmacko/core/contracts/groups/auth";
+import { CurrentUser } from "@gmacko/core/rpc/context";
 import {
   ApiKeys,
   AuthMiddleware,

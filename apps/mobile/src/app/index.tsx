@@ -1,7 +1,7 @@
 import { Text, FlatList, Pressable, View, ActivityIndicator } from "react-native";
 import { Link } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import type { Thread } from "@gmacko/contracts";
+import type { Thread } from "@gmacko/core/contracts";
 import { rpc } from "~/utils/api";
 import { Screen } from "~/components/ui/Screen";
 import { Card } from "~/components/ui/Card";

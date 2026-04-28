@@ -8,7 +8,7 @@ import { TenantPicker } from "../tenant-picker";
 const mockListMemberships = vi.fn();
 const mockResolveTenant = vi.fn();
 
-vi.mock("@gmacko/client", () => ({
+vi.mock("@gmacko/core/client", () => ({
   createGmackoRpcClient: () => ({
     auth: {
       listMemberships: mockListMemberships,

@@ -29,8 +29,8 @@
 // assemble the `AuthRequest` shape below before calling into this module.
 import { Effect } from "effect";
 
-import { CurrentUser, type CurrentUserShape } from "@gmacko/rpc/context";
-import { UnauthorizedError } from "@gmacko/rpc/errors";
+import { CurrentUser, type CurrentUserShape } from "@gmacko/core/rpc/context";
+import { UnauthorizedError } from "@gmacko/core/rpc/errors";
 
 import { ApiKeys } from "./api-keys.js";
 import { Sessions } from "./sessions.js";

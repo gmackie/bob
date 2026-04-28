@@ -17,7 +17,7 @@ import {
   makeAuthClient,
   makeProjectsClient,
   makeSecretsClient,
-} from "@gmacko/client";
+} from "@gmacko/core/client";
 import type { ClientRuntime } from "../internal/runtime.js";
 
 const dummyRuntime: ClientRuntime = {

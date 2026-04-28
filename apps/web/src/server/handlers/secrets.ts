@@ -1,8 +1,8 @@
 import "server-only";
 import { Effect } from "effect";
 
-import { SecretsRpc } from "@gmacko/contracts/groups/secrets";
-import { CurrentUser } from "@gmacko/rpc/context";
+import { SecretsRpc } from "@gmacko/core/contracts/groups/secrets";
+import { CurrentUser } from "@gmacko/core/rpc/context";
 import { AuthMiddleware } from "@gmacko/core/auth";
 import { Secrets } from "@gmacko/core/secrets";
 import type { SessionSecretId } from "@gmacko/core/validators";

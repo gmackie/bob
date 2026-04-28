@@ -7,7 +7,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import type { Message } from "@gmacko/contracts";
+import type { Message } from "@gmacko/core/contracts";
 import { Button } from "../ui/Button";
 import { Badge } from "../ui/Badge";
 import { colors } from "~/lib/colors";

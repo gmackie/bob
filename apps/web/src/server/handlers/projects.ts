@@ -1,8 +1,8 @@
 import "server-only";
 import { Effect } from "effect";
 
-import { ProjectsRpc } from "@gmacko/contracts/groups/projects";
-import { CurrentUser } from "@gmacko/rpc/context";
+import { ProjectsRpc } from "@gmacko/core/contracts/groups/projects";
+import { CurrentUser } from "@gmacko/core/rpc/context";
 import { AuthMiddleware } from "@gmacko/core/auth";
 import { Projects } from "@gmacko/core/projects";
 import type { ProjectId } from "@gmacko/core/validators";

@@ -45,14 +45,14 @@ import { Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
-import { AuthRpc } from "@gmacko/contracts/groups/auth";
-import { ProjectsRpc } from "@gmacko/contracts/groups/projects";
-import { SecretsRpc } from "@gmacko/contracts/groups/secrets";
-import { AgentRpc } from "@gmacko/contracts/groups/agent";
-import { stubAuthHandlers } from "@gmacko/contracts/stubs/auth";
-import { stubProjectsHandlersLayer } from "@gmacko/contracts/stubs/projects";
-import { layerStubSecretsHandlers } from "@gmacko/contracts/stubs/secrets";
-import { stubAgentHandlers } from "@gmacko/contracts/stubs/agent";
+import { AuthRpc } from "@gmacko/core/contracts/groups/auth";
+import { ProjectsRpc } from "@gmacko/core/contracts/groups/projects";
+import { SecretsRpc } from "@gmacko/core/contracts/groups/secrets";
+import { AgentRpc } from "@gmacko/core/contracts/groups/agent";
+import { stubAuthHandlers } from "@gmacko/core/contracts/stubs/auth";
+import { stubProjectsHandlersLayer } from "@gmacko/core/contracts/stubs/projects";
+import { layerStubSecretsHandlers } from "@gmacko/core/contracts/stubs/secrets";
+import { stubAgentHandlers } from "@gmacko/core/contracts/stubs/agent";
 
 import { createGmackoRpcClient } from "../index.js";
 

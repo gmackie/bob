@@ -11,8 +11,8 @@ import type {
   WikiArticle,
   SynthesizeInput,
   SynthesizeResult,
-} from "@gmacko/contracts";
-import { METHODS } from "@gmacko/contracts";
+} from "@gmacko/core/contracts";
+import { METHODS } from "@gmacko/core/contracts";
 
 /* ------------------------------------------------------------------ */
 /* Effect-RPC HTTP protocol client                                     */

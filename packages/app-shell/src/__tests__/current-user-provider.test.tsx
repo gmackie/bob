@@ -6,7 +6,7 @@ import { CurrentUserProvider, useCurrentUser } from "../current-user-provider";
 import { RpcClientProvider } from "../rpc-client-provider";
 
 const mockWhoAmI = vi.fn();
-vi.mock("@gmacko/client", () => ({
+vi.mock("@gmacko/core/client", () => ({
   createGmackoRpcClient: () => ({
     auth: { whoAmI: mockWhoAmI },
     projects: {},
