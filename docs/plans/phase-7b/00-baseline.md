@@ -2,8 +2,17 @@
 
 **Date:** 2026-04-28
 **Branch:** `phase-7b-foundation`
-**HEAD SHA:** `7e5dc2b7152a5929036c3fee60f5080915448e18`
+**Base SHA (master):** `7e5dc2b7152a5929036c3fee60f5080915448e18`
 **Worktree:** `/Users/mackieg/.config/superpowers/worktrees/gmacko/phase-7b-foundation`
+
+## Verification command (Phase 7B-0)
+
+From the worktree root:
+
+    pnpm exec turbo run test --concurrency=1
+
+Expected: 363/363 across 30 packages.
+For smoke: `cd apps/web && pnpm test -- smoke` (expect 9/9).
 
 ## Pre-conditions confirmed
 
@@ -52,7 +61,7 @@ Captured via `pnpm exec turbo run test --concurrency=1` to avoid PGlite parallel
 
 ## Smoke result
 
-`apps/web` smoke suite: **9/9 passed** (`pnpm test -- smoke` from `apps/web`).
+`apps/web` smoke suite: **9/9 passed** (`cd apps/web && pnpm test -- smoke`).
 
 ## Notes / surprises
 
