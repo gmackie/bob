@@ -43,7 +43,6 @@ import {
   Exit,
   Layer,
   Ref,
-  Schema,
   ServiceMap,
   Stream,
 } from "effect";
@@ -60,6 +59,15 @@ import type {
   AgentAdapter,
   AgentEvent,
 } from "./adapter.js";
+import {
+  AgentSessionNotFoundError,
+  TurnInProgressError,
+} from "./errors.js";
+
+export {
+  AgentSessionNotFoundError,
+  TurnInProgressError,
+} from "./errors.js";
 
 // --- Inputs / outputs ------------------------------------------------------
 
@@ -104,16 +112,8 @@ export interface CloseInput {
 }
 
 // --- Tagged errors ---------------------------------------------------------
-
-export class AgentSessionNotFoundError extends Schema.TaggedErrorClass<AgentSessionNotFoundError>()(
-  "AgentSessionNotFoundError",
-  { conversationId: Schema.String, tenantId: Schema.String },
-) {}
-
-export class TurnInProgressError extends Schema.TaggedErrorClass<TurnInProgressError>()(
-  "TurnInProgressError",
-  { conversationId: Schema.String },
-) {}
+// Tagged error classes live in `./errors.js` (dependency-free subpath); they
+// are re-exported at the top of this file.
 
 // --- Service shape ---------------------------------------------------------
 

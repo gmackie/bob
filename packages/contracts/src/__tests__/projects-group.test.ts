@@ -8,7 +8,7 @@
 import { describe, it, expect } from "vitest";
 import { Cause, Effect, Exit, Option } from "effect";
 
-import { ProjectNotFoundError } from "@gmacko/projects";
+import { ProjectNotFoundError } from "@gmacko/projects/errors";
 
 import { ProjectsRpc } from "../groups/projects.js";
 import {

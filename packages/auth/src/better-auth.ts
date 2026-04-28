@@ -16,6 +16,11 @@ import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { Layer, ServiceMap } from "effect";
 
+import {
+  tenants as tenantsTable,
+  tenantMembers as membersTable,
+} from "@gmacko/db/schema/tenancy";
+
 export type AuthInstance = ReturnType<typeof betterAuth>;
 
 export class BetterAuth extends ServiceMap.Service<BetterAuth, AuthInstance>()(
@@ -67,6 +72,13 @@ export interface InitAuthOptions {
     readonly enabled: boolean;
     readonly requireEmailVerification?: boolean;
   };
+  /**
+   * When `true` (default), wires a `databaseHooks.user.create.after` that
+   * creates a personal `tenants` row + `tenant_members` row (role: owner)
+   * for every newly-signed-up user. Test setups that pre-seed tenancy can
+   * disable this by passing `false`.
+   */
+  readonly bootstrapTenancy?: boolean;
 }
 
 export function initAuth(opts: InitAuthOptions): AuthInstance {
@@ -82,6 +94,68 @@ export function initAuth(opts: InitAuthOptions): AuthInstance {
           opts.emailAndPassword.requireEmailVerification ?? true,
       }
     : undefined;
+
+  // Tenant bootstrap hook — see InitAuthOptions.bootstrapTenancy.
+  //
+  // Better-auth's `databaseHooks.user.create.after` runs sequentially AFTER the
+  // user row is committed — NOT inside the same transaction. If this hook
+  // throws (e.g. transient DB error on tenant insert), the user row stays
+  // orphaned with no tenancy. The two inserts below are wrapped in their own
+  // transaction so tenant + tenant_members are atomic with each other; future
+  // work may add a startup self-heal pass for users with no membership.
+  //
+  // Note: tenants.slug is NOT NULL UNIQUE; we derive it from the user id so
+  // it's stable + unique without coordination. tenants has no
+  // `createdByUserId` column — the membership row is the only persisted
+  // creator-link.
+  const databaseHooks =
+    opts.bootstrapTenancy === false
+      ? undefined
+      : {
+          user: {
+            create: {
+              after: async (user: {
+                id: string;
+                name?: string | null;
+                email: string;
+              }) => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see note on InitAuthOptions.db
+                const drizzleDb = opts.db as any;
+                const personalName =
+                  user.name?.trim() ||
+                  user.email.split("@")[0] ||
+                  "Personal";
+                const slug = `personal-${user.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 32)}`;
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle tx type varies by driver
+                await drizzleDb.transaction(async (tx: any) => {
+                  const [tenantRow] = await tx
+                    .insert(tenantsTable)
+                    .values({
+                      name: `${personalName}'s workspace`,
+                      slug,
+                    })
+                    .returning();
+                  if (!tenantRow) {
+                    // `.returning()` returning empty would mean the insert
+                    // didn't materialise a row — drizzle/PGlite shouldn't
+                    // ever produce this state, but if they do, surface it
+                    // loudly rather than silently leaving the user with no
+                    // tenancy. Better-auth turns this into a 500 on the
+                    // sign-up call so the client knows to retry.
+                    throw new Error(
+                      `Tenant bootstrap failed: insert returned no row for user ${user.id}`,
+                    );
+                  }
+                  await tx.insert(membersTable).values({
+                    tenantId: tenantRow.id,
+                    userId: user.id,
+                    role: "owner",
+                  });
+                });
+              },
+            },
+          },
+        };
 
   const config = {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see note on InitAuthOptions.db
@@ -115,6 +189,7 @@ export function initAuth(opts: InitAuthOptions): AuthInstance {
         ].filter(Boolean),
       ),
     ),
+    ...(databaseHooks ? { databaseHooks } : {}),
   } satisfies BetterAuthOptions;
 
   return betterAuth(config);

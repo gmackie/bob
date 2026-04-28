@@ -14,7 +14,7 @@ import { Rpc, RpcGroup } from "effect/unstable/rpc";
 import {
   ProjectNotFoundError,
   ProjectSlugConflictError,
-} from "@gmacko/projects";
+} from "@gmacko/projects/errors";
 
 import { ProjectSchema } from "../schemas/projects.js";
 

@@ -10,6 +10,7 @@ import type { TenantId, UserId } from "@gmacko/validators";
 import { UnauthorizedError } from "@gmacko/rpc/errors";
 
 import { ApiKeys, layerApiKeys } from "../api-keys.js";
+import { layerBetterAuth } from "../better-auth.js";
 import { Sessions, layerSessions } from "../sessions.js";
 import { Tenancy, TenantNotSelectedError, layerTenancy } from "../tenancy.js";
 import {
@@ -27,6 +28,31 @@ const VALID_SESSION_TOKEN = "tok_mw_valid_abc123";
 const SECOND_USER_ID = "user_no_members_xyz" as UserId;
 const SECOND_USER_EMAIL = "no-members@example.com";
 const SECOND_SESSION_TOKEN = "tok_mw_no_members";
+// Signed-cookie token used for the cookie-path tests. Intentionally NOT
+// present in the `sessions` table — the only way for the middleware to
+// resolve it is to delegate to `Sessions.validateRequest`, which routes
+// through the better-auth stub below.
+const SIGNED_COOKIE_TOKEN = "signed-cookie-tok";
+
+// Better-auth stub. The bearer/token paths still hit `validateToken`
+// (drizzle DB lookup), but the cookie path now goes through
+// `validateRequest` → `auth.api.getSession`. The stub recognises the
+// `SIGNED_COOKIE_TOKEN` substring on the request `Cookie` header and
+// returns the canonical USER_ID; otherwise returns null (no session).
+const fakeAuth = {
+  api: {
+    getSession: async ({ headers }: { headers: Headers }) => {
+      const cookie = headers.get("cookie") ?? "";
+      if (cookie.includes(SIGNED_COOKIE_TOKEN)) {
+        return {
+          session: { userId: USER_ID, token: SIGNED_COOKIE_TOKEN },
+          user: { id: USER_ID, email: USER_EMAIL },
+        };
+      }
+      return null;
+    },
+  },
+} as unknown as Parameters<typeof layerBetterAuth>[0];
 
 let ctx: TestCtx;
 let deps: Layer.Layer<ApiKeys | Sessions | Tenancy>;
@@ -71,9 +97,10 @@ async function seedBase(memberships: ReadonlyArray<TenantId>, role: "owner" | "a
 beforeEach(async () => {
   ctx = await createTestDb();
   const dbLayer = layerGmackoDb(ctx.db);
+  const authBaseLayer = Layer.mergeAll(dbLayer, layerBetterAuth(fakeAuth));
   deps = Layer.mergeAll(
     Layer.provide(layerApiKeys(), dbLayer),
-    Layer.provide(layerSessions, dbLayer),
+    Layer.provide(layerSessions, authBaseLayer),
     Layer.provide(layerTenancy, dbLayer),
   );
 });
@@ -115,12 +142,18 @@ describe("@gmacko/auth middleware resolveCurrentUser", () => {
     }).pipe(Effect.provide(deps)),
   );
 
-  it.effect("Session-cookie happy path: better-auth.session_token cookie resolves identity", () =>
+  it.effect("Session-cookie happy path: better-auth.session_token cookie resolves identity via validateRequest", () =>
     Effect.gen(function* () {
       yield* Effect.promise(() => seedBase([TENANT_A], "member"));
       const user = yield* resolveCurrentUser({
-        headers: new Headers(),
-        cookies: { [DEFAULT_SESSION_COOKIE_NAME]: VALID_SESSION_TOKEN },
+        // The signed-cookie token isn't in the DB; only the better-auth
+        // stub recognises it. This proves the cookie path delegates to
+        // `Sessions.validateRequest` (signature-aware) rather than
+        // doing a raw `validateToken` DB lookup.
+        headers: new Headers({
+          cookie: `${DEFAULT_SESSION_COOKIE_NAME}=${SIGNED_COOKIE_TOKEN}`,
+        }),
+        cookies: { [DEFAULT_SESSION_COOKIE_NAME]: SIGNED_COOKIE_TOKEN },
       });
       expect(user.userId).toBe(USER_ID);
       expect(user.tenantId).toBe(TENANT_A);
@@ -132,8 +165,11 @@ describe("@gmacko/auth middleware resolveCurrentUser", () => {
     Effect.gen(function* () {
       yield* Effect.promise(() => seedBase([TENANT_A, TENANT_B], "admin"));
       const user = yield* resolveCurrentUser({
-        headers: new Headers({ "x-tenant-id": TENANT_B }),
-        cookies: { [DEFAULT_SESSION_COOKIE_NAME]: VALID_SESSION_TOKEN },
+        headers: new Headers({
+          "x-tenant-id": TENANT_B,
+          cookie: `${DEFAULT_SESSION_COOKIE_NAME}=${SIGNED_COOKIE_TOKEN}`,
+        }),
+        cookies: { [DEFAULT_SESSION_COOKIE_NAME]: SIGNED_COOKIE_TOKEN },
       });
       expect(user.userId).toBe(USER_ID);
       expect(user.tenantId).toBe(TENANT_B);

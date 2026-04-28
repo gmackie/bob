@@ -39,7 +39,7 @@ import {
   TenantNotSelectedError,
   type Membership,
 } from "./tenancy.js";
-import type { TenantId } from "@gmacko/validators";
+import type { TenantId, UserId } from "@gmacko/validators";
 
 /**
  * Default cookie name used by better-auth for session tokens.
@@ -77,6 +77,22 @@ const readHeader = (
     }
   }
   return null;
+};
+
+/**
+ * Convert {@link AuthRequest.headers} (which may be a `Headers` instance or a
+ * plain `Record<string, string>`) into a real `Headers` object. Used by the
+ * cookie auth path to hand the raw request headers to
+ * `Sessions.validateRequest`, which delegates to better-auth's
+ * signature-aware `auth.api.getSession({ headers })`.
+ */
+const toHeaders = (h: AuthRequest["headers"]): Headers => {
+  if (h instanceof Headers) return h;
+  const out = new Headers();
+  for (const [k, v] of Object.entries(h)) {
+    if (typeof v === "string") out.set(k, v);
+  }
+  return out;
 };
 
 const readCookie = (
@@ -162,47 +178,77 @@ export const resolveCurrentUser = (
       };
     }
 
-    // --- Path 1b / 2: session token ------------------------------------
+    // Tenant resolution (Option B): `x-tenant-id` header wins; otherwise
+    // single-membership auto-selects; otherwise `TenantNotSelectedError`
+    // propagates unchanged so callers can render a picker. Shared by the
+    // session-bearer (Path 1b) and signed-cookie (Path 2) branches.
+    const resolveWithTenant = (identity: {
+      readonly userId: UserId;
+      readonly email: string;
+    }): Effect.Effect<
+      CurrentUserShape,
+      UnauthorizedError | TenantNotSelectedError
+    > =>
+      Effect.gen(function* () {
+        const hintRaw = readHeader(req.headers, "x-tenant-id");
+        const hint: TenantId | null =
+          hintRaw && hintRaw.length > 0 ? (hintRaw as TenantId) : null;
+        const membership: Membership = yield* tenancy
+          .resolveForUser(identity.userId, hint)
+          .pipe(
+            // `NotAMemberError` (hint pointed to a non-member tenant) is a
+            // 401 signal from the user's point of view;
+            // `TenantNotSelectedError` propagates unchanged so the caller
+            // can render a picker.
+            Effect.catchTag("NotAMemberError", () =>
+              Effect.fail(
+                new UnauthorizedError({
+                  message: "Not a member of the requested tenant",
+                }),
+              ),
+            ),
+          );
+        return {
+          userId: identity.userId,
+          tenantId: membership.tenantId,
+          email: identity.email,
+          role: membership.role,
+        };
+      });
+
+    // --- Path 1b: session bearer token (rare; CLI clients) -------------
+    // Bearer session tokens aren't HMAC-signed, so we keep the raw DB
+    // lookup here. Signature-aware verification is reserved for the
+    // cookie path (Path 2) below.
+    if (bearerToken) {
+      const identity = yield* sessions.validateToken(bearerToken).pipe(
+        Effect.catchTag("SessionExpiredError", (e) =>
+          Effect.fail(new UnauthorizedError({ message: e.message })),
+        ),
+      );
+      return yield* resolveWithTenant(identity);
+    }
+
+    // --- Path 2: signed cookie via better-auth -------------------------
+    // Cookie path delegates to `Sessions.validateRequest`, which calls
+    // better-auth's `api.getSession({ headers })` to unsign the cookie
+    // before doing the DB lookup. Without this, signature-blind raw
+    // lookups never match a real better-auth-issued cookie value.
     const cookieToken =
       readCookie(req.cookies, DEFAULT_SESSION_COOKIE_NAME) ??
       readCookie(req.cookies, "session");
-    const sessionToken = bearerToken ?? cookieToken;
-    if (!sessionToken) {
+    if (!cookieToken) {
       return yield* Effect.fail(
         new UnauthorizedError({ message: "No credentials" }),
       );
     }
-    const identity = yield* sessions.validateToken(sessionToken).pipe(
+    const headers = toHeaders(req.headers);
+    const identity = yield* sessions.validateRequest(headers).pipe(
       Effect.catchTag("SessionExpiredError", (e) =>
         Effect.fail(new UnauthorizedError({ message: e.message })),
       ),
     );
-
-    // Option B tenant resolution.
-    const hintRaw = readHeader(req.headers, "x-tenant-id");
-    const hint: TenantId | null =
-      hintRaw && hintRaw.length > 0 ? (hintRaw as TenantId) : null;
-    const membership: Membership = yield* tenancy
-      .resolveForUser(identity.userId, hint)
-      .pipe(
-        // `NotAMemberError` (hint pointed to a non-member tenant) is a 401
-        // signal from the user's point of view; `TenantNotSelectedError`
-        // propagates unchanged so the caller can render a picker.
-        Effect.catchTag("NotAMemberError", () =>
-          Effect.fail(
-            new UnauthorizedError({
-              message: "Not a member of the requested tenant",
-            }),
-          ),
-        ),
-      );
-
-    return {
-      userId: identity.userId,
-      tenantId: membership.tenantId,
-      email: identity.email,
-      role: membership.role,
-    };
+    return yield* resolveWithTenant(identity);
   });
 
 /**

@@ -7,7 +7,7 @@
 // NOTE: not exported from the package barrel yet — Task 17 handles the
 // public surface.
 import { and, eq, gt } from "drizzle-orm";
-import { Effect, Layer, Schema, ServiceMap } from "effect";
+import { Effect, Layer, ServiceMap } from "effect";
 
 import { GmackoDb } from "@gmacko/db";
 import {
@@ -16,10 +16,10 @@ import {
 } from "@gmacko/db/schema/auth";
 import type { UserId } from "@gmacko/validators";
 
-export class SessionExpiredError extends Schema.TaggedErrorClass<SessionExpiredError>()(
-  "SessionExpiredError",
-  { message: Schema.String },
-) {}
+import { BetterAuth } from "./better-auth.js";
+import { SessionExpiredError } from "./errors.js";
+
+export { SessionExpiredError };
 
 export interface SessionValidationResult {
   readonly userId: UserId;
@@ -33,17 +33,28 @@ export interface SessionsShape {
   readonly validateBearer: (
     headerValue: string | null | undefined,
   ) => Effect.Effect<SessionValidationResult | null, SessionExpiredError>;
+  /**
+   * Signature-aware verification: hand the raw request `Headers` to
+   * better-auth's own `api.getSession`, which unsigns the cookie and looks
+   * up the underlying token. Use this for cookie-based auth in the
+   * RPC AuthMiddleware. Bearer tokens (API keys + raw session tokens)
+   * still go through `validateBearer`/`validateToken`.
+   */
+  readonly validateRequest: (
+    headers: Headers,
+  ) => Effect.Effect<SessionValidationResult, SessionExpiredError>;
 }
 
 export class Sessions extends ServiceMap.Service<Sessions, SessionsShape>()(
   "@gmacko/auth/Sessions",
 ) {}
 
-export const layerSessions: Layer.Layer<Sessions, never, GmackoDb> = Layer.effect(
+export const layerSessions: Layer.Layer<Sessions, never, GmackoDb | BetterAuth> = Layer.effect(
   Sessions,
 )(
   Effect.gen(function* () {
     const db = yield* GmackoDb;
+    const auth = yield* BetterAuth.asEffect();
 
     const validateToken: SessionsShape["validateToken"] = (token) =>
       Effect.gen(function* () {
@@ -100,6 +111,22 @@ export const layerSessions: Layer.Layer<Sessions, never, GmackoDb> = Layer.effec
         return yield* validateToken(token);
       });
 
-    return { validateToken, validateBearer };
+    const validateRequest: SessionsShape["validateRequest"] = (headers) =>
+      Effect.gen(function* () {
+        const result = yield* Effect.promise(() =>
+          auth.api.getSession({ headers }),
+        );
+        if (!result || !result.user) {
+          return yield* Effect.fail(
+            new SessionExpiredError({ message: "No active session" }),
+          );
+        }
+        return {
+          userId: result.user.id as UserId,
+          email: result.user.email,
+        };
+      });
+
+    return { validateToken, validateBearer, validateRequest };
   }),
 );

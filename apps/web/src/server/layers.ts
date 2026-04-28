@@ -169,7 +169,10 @@ const dbLayer = layerGmackoDb(db);
 // Pre-built db-fed service layers. `Layer.provide(child, parent)` plumbs the
 // parent's outputs into the child's requirements; the resulting Layer
 // surfaces only the still-unsatisfied deps.
-const sessionsLayer = Layer.provide(layerSessions, dbLayer);
+const sessionsLayer = Layer.provide(
+  layerSessions,
+  Layer.mergeAll(dbLayer, layerBetterAuth(authInstance)),
+);
 const apiKeysLayer = Layer.provide(layerApiKeys(), dbLayer);
 const tenancyLayer = Layer.provide(layerTenancy, dbLayer);
 const projectsLayer = Layer.provide(layerProjects, dbLayer);

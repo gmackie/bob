@@ -14,7 +14,7 @@
 // API surface.
 import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
-import { Effect, Layer, Schema, ServiceMap } from "effect";
+import { Effect, Layer, ServiceMap } from "effect";
 
 import { GmackoDb } from "@gmacko/db";
 import { projects as projectsTable } from "@gmacko/db/schema/projects";
@@ -23,24 +23,15 @@ import type {
   TenantId as TenantIdT,
 } from "@gmacko/validators";
 
-// Tagged errors. Branded ids are serialised as bare `Schema.String` — we
-// already know the values are well-formed UUIDs by the time they reach the
-// error constructor, so running the brand decoder here is pure overhead.
-export class ProjectNotFoundError extends Schema.TaggedErrorClass<ProjectNotFoundError>()(
-  "ProjectNotFoundError",
-  {
-    tenantId: Schema.String,
-    // `identifier` is the id OR slug used for the failed lookup — whichever
-    // the caller supplied — so error messages can surface the right value
-    // without the service having to branch.
-    identifier: Schema.String,
-  },
-) {}
+import {
+  ProjectNotFoundError,
+  ProjectSlugConflictError,
+} from "./errors.js";
 
-export class ProjectSlugConflictError extends Schema.TaggedErrorClass<ProjectSlugConflictError>()(
-  "ProjectSlugConflictError",
-  { tenantId: Schema.String, slug: Schema.String },
-) {}
+// Tagged errors live in `./errors.js` so client bundles can import them
+// without dragging in drizzle / @gmacko/db / node:crypto. Re-exported here
+// for parity with the pre-refactor public surface.
+export { ProjectNotFoundError, ProjectSlugConflictError };
 
 export interface Project {
   readonly id: ProjectIdT;

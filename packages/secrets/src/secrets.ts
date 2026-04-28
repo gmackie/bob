@@ -23,7 +23,7 @@
 // behavior is the Bob-flavored semantics we want.
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
-import { Effect, Layer, Schema, ServiceMap } from "effect";
+import { Effect, Layer, ServiceMap } from "effect";
 
 import { GmackoDb } from "@gmacko/db";
 import {
@@ -38,30 +38,19 @@ import type {
 } from "@gmacko/validators";
 
 import { decryptSecretValue, encryptSecretValue } from "./crypt.js";
+import {
+  MaxUsesExceededError,
+  PolicyDeniedError,
+  SecretNameConflictError,
+  SecretNotFoundError,
+} from "./errors.js";
 
-export class SecretNotFoundError extends Schema.TaggedErrorClass<SecretNotFoundError>()(
-  "SecretNotFoundError",
-  { secretId: Schema.String, tenantId: Schema.String },
-) {}
-
-export class SecretNameConflictError extends Schema.TaggedErrorClass<SecretNameConflictError>()(
-  "SecretNameConflictError",
-  { tenantId: Schema.String, name: Schema.String },
-) {}
-
-export class PolicyDeniedError extends Schema.TaggedErrorClass<PolicyDeniedError>()(
-  "PolicyDeniedError",
-  {
-    reason: Schema.Literals(["template", "argPrefix", "noTemplateId"]),
-    templateId: Schema.optional(Schema.String),
-    expected: Schema.optional(Schema.Array(Schema.String)),
-  },
-) {}
-
-export class MaxUsesExceededError extends Schema.TaggedErrorClass<MaxUsesExceededError>()(
-  "MaxUsesExceededError",
-  { secretId: Schema.String, maxUses: Schema.Number },
-) {}
+export {
+  MaxUsesExceededError,
+  PolicyDeniedError,
+  SecretNameConflictError,
+  SecretNotFoundError,
+};
 
 export interface SecretEnvelope {
   readonly id: SessionSecretIdT;

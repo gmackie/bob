@@ -20,28 +20,20 @@
 // surface.
 import { randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { Effect, Layer, Schema, ServiceMap } from "effect";
+import { Effect, Layer, ServiceMap } from "effect";
 
 import { GmackoDb } from "@gmacko/db";
 import { deviceCodes as deviceCodesTable } from "@gmacko/db/schema/device-codes";
 import type { ApiKeyId, TenantId, UserId } from "@gmacko/validators";
 
 import { ApiKeys } from "./api-keys.js";
+import {
+  AlreadyApprovedError,
+  InvalidDeviceCodeError,
+  InvalidUserCodeError,
+} from "./errors.js";
 
-export class InvalidDeviceCodeError extends Schema.TaggedErrorClass<InvalidDeviceCodeError>()(
-  "InvalidDeviceCodeError",
-  { message: Schema.String },
-) {}
-
-export class InvalidUserCodeError extends Schema.TaggedErrorClass<InvalidUserCodeError>()(
-  "InvalidUserCodeError",
-  { message: Schema.String },
-) {}
-
-export class AlreadyApprovedError extends Schema.TaggedErrorClass<AlreadyApprovedError>()(
-  "AlreadyApprovedError",
-  { message: Schema.String },
-) {}
+export { AlreadyApprovedError, InvalidDeviceCodeError, InvalidUserCodeError };
 
 export interface StartResult {
   readonly deviceCode: string;

@@ -16,7 +16,11 @@
 // = HMAC check + expiry check. TTL defaults to 1h; runners refresh by
 // re-registering (6G has no separate refresh RPC).
 import { createHmac } from "node:crypto";
-import { Effect, Layer, Schema, ServiceMap } from "effect";
+import { Effect, Layer, ServiceMap } from "effect";
+
+import { InvalidRunnerSessionError } from "./errors.js";
+
+export { InvalidRunnerSessionError };
 
 const ENV_VAR_NAME = "GMACKO_SECRET_ENCRYPTION_KEY" as const;
 const MASTER_KEY_MIN_LENGTH = 32;
@@ -42,16 +46,6 @@ function getRunnerSessionKey(): Buffer {
     .update("runner-session")
     .digest();
 }
-
-/**
- * Reason tag surfaced to callers. `malformed` = structure invalid (wrong
- * dot count, non-JSON payload, missing fields); `signature` = HMAC mismatch;
- * `expired` = past `expiresAt`.
- */
-export class InvalidRunnerSessionError extends Schema.TaggedErrorClass<InvalidRunnerSessionError>()(
-  "InvalidRunnerSessionError",
-  { reason: Schema.Literals(["malformed", "signature", "expired"]) },
-) {}
 
 export interface RunnerSessionClaims {
   readonly deviceId: string;

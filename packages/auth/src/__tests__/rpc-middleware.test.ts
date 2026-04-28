@@ -40,6 +40,7 @@ import { CurrentUser } from "@gmacko/rpc/context";
 import { UnauthorizedError } from "@gmacko/rpc/errors";
 
 import { layerApiKeys } from "../api-keys.js";
+import { layerBetterAuth } from "../better-auth.js";
 import { layerSessions } from "../sessions.js";
 import { layerTenancy, TenantNotSelectedError } from "../tenancy.js";
 import { AuthMiddleware, layerAuthMiddleware } from "../rpc-middleware.js";
@@ -51,6 +52,13 @@ const USER_EMAIL = "rpc-mw-user@example.com";
 const TENANT_A = "33333333-aaaa-aaaa-aaaa-333333333333" as TenantId;
 const TENANT_B = "44444444-bbbb-bbbb-bbbb-444444444444" as TenantId;
 const VALID_SESSION_TOKEN = "tok_rpc_mw_valid";
+
+// Minimal better-auth stub. The signature-aware `validateRequest` cookie
+// path isn't exercised in these RPC middleware tests — bearer headers go
+// through `validateBearer`/`validateToken` (drizzle only).
+const fakeAuth = {
+  api: { getSession: async () => null },
+} as unknown as Parameters<typeof layerBetterAuth>[0];
 
 // ---- Test RpcGroup -------------------------------------------------------
 // One procedure declares the middleware via RpcGroup.middleware(...).
@@ -158,9 +166,10 @@ const fullLayer = (
   never
 > => {
   const dbLayer = layerGmackoDb(ctx.db);
+  const sessionsBaseLayer = Layer.mergeAll(dbLayer, layerBetterAuth(fakeAuth));
   const authServices = Layer.mergeAll(
     Layer.provide(layerApiKeys(), dbLayer),
-    Layer.provide(layerSessions, dbLayer),
+    Layer.provide(layerSessions, sessionsBaseLayer),
     Layer.provide(layerTenancy, dbLayer),
   );
   const middlewareLayer = Layer.provide(layerAuthMiddleware, authServices);

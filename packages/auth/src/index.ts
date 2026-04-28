@@ -21,6 +21,7 @@
 import { Layer } from "effect";
 import type { GmackoDb } from "@gmacko/db";
 
+import { BetterAuth } from "./better-auth.js";
 import { layerSessions, Sessions } from "./sessions.js";
 import { layerApiKeys, ApiKeys, type LayerApiKeysOptions } from "./api-keys.js";
 import {
@@ -29,6 +30,12 @@ import {
   type LayerDeviceCodesOptions,
 } from "./device-codes.js";
 import { layerTenancy, Tenancy } from "./tenancy.js";
+
+// Re-export the dependency-free tagged errors from `./errors`. Client
+// bundles can also import these directly via `@gmacko/auth/errors` to avoid
+// pulling in better-auth / drizzle / @gmacko/db. See
+// docs/plans/2026-04-25-phase7a-punchlist.md Task 6.
+export * from "./errors.js";
 
 export { BetterAuth, initAuth, layerBetterAuth } from "./better-auth.js";
 export type { AuthInstance, InitAuthOptions } from "./better-auth.js";
@@ -105,13 +112,16 @@ export {
 
 /**
  * Bundle of the four db-backed auth services. Callers provide `GmackoDb`
- * (via `@gmacko/db/service`) at app bootstrap; the merged layer internally
- * wires `ApiKeys` into `DeviceCodes` (device flow mints an API key on
- * completion).
+ * (via `@gmacko/db/service`) **and** `BetterAuth` (via `layerBetterAuth(...)`
+ * with a pre-built `AuthInstance` from `initAuth(...)`) at app bootstrap;
+ * the merged layer internally wires `ApiKeys` into `DeviceCodes` (device
+ * flow mints an API key on completion).
  *
- * `BetterAuth` is deliberately excluded: it requires a pre-constructed
- * `AuthInstance` (secrets, OAuth creds) that varies per environment and
- * shouldn't be lazily instantiated here.
+ * `BetterAuth` itself is **not** constructed here: the `AuthInstance`
+ * requires per-environment secrets / OAuth creds and shouldn't be lazily
+ * instantiated. It's listed in the requirements (R-channel) because
+ * `Sessions.validateRequest` delegates to `auth.api.getSession` for the
+ * cookie/signature path.
  */
 export interface LayerAuthOptions {
   readonly apiKeys?: LayerApiKeysOptions;
@@ -120,7 +130,11 @@ export interface LayerAuthOptions {
 
 export const layerAuth = (
   opts: LayerAuthOptions = {},
-): Layer.Layer<Sessions | ApiKeys | DeviceCodes | Tenancy, never, GmackoDb> => {
+): Layer.Layer<
+  Sessions | ApiKeys | DeviceCodes | Tenancy,
+  never,
+  GmackoDb | BetterAuth
+> => {
   const apiKeysLayer = layerApiKeys(opts.apiKeys);
   // DeviceCodes requires ApiKeys; provide it internally so callers only see
   // GmackoDb as the outstanding requirement.

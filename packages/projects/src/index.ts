@@ -6,6 +6,12 @@
 //   - Tagged errors: `ProjectNotFoundError`, `ProjectSlugConflictError`.
 //   - `Project` shape + `ProjectsShape` for consumers that need the contract type.
 
+// Re-export the dependency-free tagged errors from `./errors`. Client
+// bundles can also import these directly via `@gmacko/projects/errors` to
+// avoid pulling in drizzle / @gmacko/db / node:crypto. See
+// docs/plans/2026-04-25-phase7a-punchlist.md Task 7.
+export * from "./errors.js";
+
 export {
   Projects,
   layerProjects,

@@ -27,7 +27,7 @@ import {
   AdapterSpawnError,
   AgentSessionNotFoundError,
   TurnInProgressError,
-} from "@gmacko/agent";
+} from "@gmacko/agent/errors";
 
 import {
   AgentEventSchema,

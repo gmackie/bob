@@ -19,6 +19,12 @@
 // Other CLI adapters (CodexCliAdapter, CursorAcpAdapter) land in follow-up
 // phases implementing the same AgentAdapter contract.
 
+// Re-export the dependency-free tagged errors from `./errors`. Client
+// bundles can also import these directly via `@gmacko/agent/errors` to
+// avoid pulling in drizzle / @gmacko/db / node:*. See
+// docs/plans/2026-04-25-phase7a-punchlist.md Task 8.
+export * from "./errors.js";
+
 export {
   AgentSession,
   layerAgent,

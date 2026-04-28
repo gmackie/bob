@@ -21,7 +21,7 @@
 
 import { Effect, Stream } from "effect";
 
-import { AgentSessionNotFoundError } from "@gmacko/agent";
+import { AgentSessionNotFoundError } from "@gmacko/agent/errors";
 
 import { AgentRpc } from "../groups/agent.js";
 

@@ -8,7 +8,11 @@
 // This file is pure types + error classes — no runtime logic, no side
 // effects. Concrete adapter implementations land in Tasks 5 (ClaudeCode)
 // and 8 (Mock).
-import { Effect, Schema, Stream, type Scope } from "effect";
+import { Effect, Stream, type Scope } from "effect";
+
+import { AdapterExitError, AdapterSpawnError } from "./errors.js";
+
+export { AdapterSpawnError, AdapterExitError } from "./errors.js";
 
 // --- AgentEvent tagged union -----------------------------------------------
 // Emitted by any AgentAdapter's sendTurn stream. Concrete adapter
@@ -80,15 +84,8 @@ export interface AgentAdapter {
 }
 
 // --- Tagged errors ---------------------------------------------------------
-
-export class AdapterSpawnError extends Schema.TaggedErrorClass<AdapterSpawnError>()(
-  "AdapterSpawnError",
-  { adapterId: Schema.String, message: Schema.String },
-) {}
-
-export class AdapterExitError extends Schema.TaggedErrorClass<AdapterExitError>()(
-  "AdapterExitError",
-  { adapterId: Schema.String, code: Schema.Number, stderr: Schema.String },
-) {}
+// Tagged error classes live in `./errors.js` (dependency-free subpath); they
+// are re-exported at the top of this file. The `AdapterError` union below is
+// kept here because it references the local imports.
 
 export type AdapterError = AdapterSpawnError | AdapterExitError;
