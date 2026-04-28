@@ -69,7 +69,16 @@
     "./ws-gateway": "./src/ws-gateway/index.ts",
     "./runner-protocol": "./src/runner-protocol/index.ts",
     "./runner-base": "./src/runner-base/index.ts",
-    "./mcp-server": "./src/mcp-server/index.ts"
+    "./mcp-server": "./src/mcp-server/index.ts",
+    "./ui": "./src/ui/index.ts",
+    "./ui/button": "./src/ui/button.tsx",
+    "./ui/input": "./src/ui/input.tsx",
+    "./ui/theme": "./src/ui/theme-provider.tsx",
+    "./ui/chat": "./src/ui/chat/index.ts",
+    "./app-shell": "./src/app-shell/index.ts",
+    "./mobile-shell": "./src/mobile-shell/index.ts",
+    "./desktop-shell": "./src/desktop-shell/index.ts",
+    "./models": "./src/models/index.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",
@@ -88,21 +97,30 @@
     "effect": "4.0.0-beta.43",
     "postgres": "^3.4.0",
     "zod": "^4.0.0",
-    "drizzle-zod": "^0.7.0"
+    "drizzle-zod": "^0.7.0",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.0",
+    "tailwind-merge": "^3.0.0"
   },
   "peerDependencies": {
-    "react": "^19.0.0"
-  },
-  "peerDependenciesMeta": {
-    "react": {
-      "optional": true
-    }
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "@tanstack/react-query": "^5.91.0"
   },
   "devDependencies": {
     "@gmacko/tsconfig": "workspace:*",
     "@effect/vitest": "4.0.0-beta.43",
+    "@tanstack/react-query": "^5.91.0",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/jest-dom": "^6.0.0",
+    "@testing-library/react": "^16.3.0",
     "@types/node": "25.6.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
     "drizzle-kit": "^0.31.0",
+    "jsdom": "^26.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.9.0",
     "vitest": "^3.0.0"

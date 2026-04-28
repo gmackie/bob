@@ -3,8 +3,8 @@
 import { useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
-import { Shell, Sidebar, MessageList, Composer, BranchTree } from "@gmacko/ui";
-import type { Message, BranchTree as BranchTreeModel } from "@gmacko/models";
+import { Shell, Sidebar, MessageList, Composer, BranchTree } from "@gmacko/core/ui";
+import type { Message, BranchTree as BranchTreeModel } from "@gmacko/core/models";
 import {
   useThreadsList,
   useCreateThread,

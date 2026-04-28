@@ -1,5 +1,5 @@
 import "./globals.css";
-import { GmackoAppProviders } from "@gmacko/app-shell";
+import { GmackoAppProviders } from "@gmacko/core/app-shell";
 
 export const metadata = {
   title: "Gmacko",
