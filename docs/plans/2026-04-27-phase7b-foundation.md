@@ -332,15 +332,15 @@ The second pattern handles `from "@gmacko/auth/errors"` → `from "@gmacko/core/
 
 ---
 
-### Task 6: Batch 5 — Runtime (`realtime`, `ws-gateway`, `runner-protocol`, `runner-base`, `mcp-server`, `agent`, `agent-toolkit`)
+### Task 6: Batch 5 — Runtime (`agent-toolkit`, `realtime`, `ws-gateway`, `runner-protocol`, `runner-base`, `mcp-server`)
+
+> **Plan adjustment (2026-04-28):** `@gmacko/agent` was rolled forward into `@gmacko/core/agent` during Task 4-fix (alongside Batch 4's contracts/client/rpc) because `@gmacko/contracts` depended on `@gmacko/agent/errors` and the Task 4 transitional shim required Batch 4 to land atomically. Batch 5 therefore covers **6 packages**, not the 7 originally listed.
 
 **`@gmacko/realtime`** has backend subpaths (`./memory`, `./redis`, `./ws-gateway`?). Preserve all.
 
-**`@gmacko/agent`** has `./errors` (from Phase 7A). Preserve.
-
 **Steps follow Task 2 pattern.**
 
-**Commit message:** `refactor(workspace): batch 5 — move @gmacko/{realtime,ws-gateway,runner-protocol,runner-base,mcp-server,agent,agent-toolkit} into @gmacko/core subpaths`
+**Commit message:** `refactor(workspace): batch 5 — move @gmacko/{agent-toolkit,realtime,ws-gateway,runner-protocol,runner-base,mcp-server} into @gmacko/core subpaths`
 
 ---
 
