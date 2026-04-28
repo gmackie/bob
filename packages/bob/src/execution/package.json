@@ -1,0 +1,40 @@
+{
+  "name": "@bob/execution-lib",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./src/index.ts"
+    },
+    "./vcs/jj-client": {
+      "types": "./dist/vcs/jj-client.d.ts",
+      "default": "./src/vcs/jj-client.ts"
+    },
+    "./capture/playwright-capture": {
+      "types": "./dist/capture/playwright-capture.d.ts",
+      "default": "./src/capture/playwright-capture.ts"
+    }
+  },
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "clean": "git clean -xdf .cache .turbo dist node_modules",
+    "dev": "tsc",
+    "format": "prettier --check . --ignore-path ../../.gitignore",
+    "lint": "eslint --flag unstable_native_nodejs_ts_config",
+    "typecheck": "tsc --noEmit --emitDeclarationOnly false"
+  },
+  "optionalDependencies": {
+    "playwright": "^1.52.0"
+  },
+  "devDependencies": {
+    "@bob/eslint-config": "workspace:*",
+    "@bob/prettier-config": "workspace:*",
+    "@bob/tsconfig": "workspace:*",
+    "eslint": "catalog:",
+    "prettier": "catalog:",
+    "typescript": "catalog:"
+  },
+  "prettier": "@bob/prettier-config"
+}

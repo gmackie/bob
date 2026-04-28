@@ -1,0 +1,36 @@
+{
+  "name": "@bob/execution",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./services": "./src/services.ts",
+    "./runtime": "./src/runtime/index.ts",
+    "./runtime/planningControl": "./src/runtime/planningControl.ts",
+    "./runtime/taskExecutor": "./src/runtime/taskExecutor.ts",
+    "./planning/planningAgentTools": "./src/planning/planningAgentTools.ts",
+    "./planning/startPlanningSession": "./src/planning/startPlanningSession.ts",
+    "./planning/smolAgentReviewProfile": "./src/planning/smolAgentReviewProfile.ts"
+  },
+  "scripts": {
+    "lint": "eslint --flag unstable_native_nodejs_ts_config",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@bob/db": "workspace:*",
+    "@bob/legacy": "workspace:*"
+  },
+  "devDependencies": {
+    "@bob/eslint-config": "workspace:*",
+    "@bob/prettier-config": "workspace:*",
+    "@bob/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "prettier": "catalog:",
+    "tsup": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "^4.0.0"
+  },
+  "prettier": "@bob/prettier-config"
+}

@@ -1,0 +1,40 @@
+{
+  "name": "@bob/mcp-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "create-gmacko-app-mcp": "./dist/index.js"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "license": "MIT",
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts",
+    "clean": "git clean -xdf .cache .turbo dist node_modules",
+    "dev": "tsup src/index.ts --format esm --watch",
+    "format": "prettier --check . --ignore-path ../../.gitignore",
+    "lint": "eslint --flag unstable_native_nodejs_ts_config",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "superjson": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@bob/eslint-config": "workspace:*",
+    "@bob/prettier-config": "workspace:*",
+    "@bob/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "prettier": "catalog:",
+    "tsup": "^8.3.5",
+    "typescript": "catalog:",
+    "vitest": "^4.0.0"
+  },
+  "prettier": "@bob/prettier-config"
+}

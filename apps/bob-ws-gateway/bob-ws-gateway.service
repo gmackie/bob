@@ -1,0 +1,35 @@
+[Unit]
+Description=Bob WS Gateway (slim relay)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=bob
+Group=bob
+WorkingDirectory=/opt/bob/ws-gateway
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+Environment=GATEWAY_PORT=3002
+EnvironmentFile=/opt/bob/ws-gateway/.env
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/bob/ws-gateway
+PrivateTmp=true
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=512M
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bob-ws-gateway
+
+[Install]
+WantedBy=multi-user.target

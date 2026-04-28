@@ -1,0 +1,60 @@
+{
+  "name": "@bob/i18n",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./src/index.ts"
+    },
+    "./web": {
+      "types": "./dist/web/index.d.ts",
+      "default": "./src/web/index.tsx"
+    },
+    "./native": {
+      "types": "./dist/native/index.d.ts",
+      "default": "./src/native/index.tsx"
+    },
+    "./messages/*": "./messages/*"
+  },
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "clean": "git clean -xdf .cache .turbo dist node_modules",
+    "dev": "tsc",
+    "format": "prettier --check . --ignore-path ../../.gitignore",
+    "lint": "eslint --flag unstable_native_nodejs_ts_config",
+    "typecheck": "tsc --noEmit --emitDeclarationOnly false"
+  },
+  "dependencies": {
+    "@bob/config": "workspace:*",
+    "i18next": "^24.2.3",
+    "next-intl": "^4.1.0",
+    "react-i18next": "^15.5.1"
+  },
+  "devDependencies": {
+    "@bob/eslint-config": "workspace:*",
+    "@bob/prettier-config": "workspace:*",
+    "@bob/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:react19",
+    "eslint": "catalog:",
+    "expo-localization": "~17.0.8",
+    "prettier": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "expo-localization": ">=17.0.0",
+    "next": ">=15.0.0",
+    "react": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "expo-localization": {
+      "optional": true
+    },
+    "next": {
+      "optional": true
+    }
+  },
+  "prettier": "@bob/prettier-config"
+}

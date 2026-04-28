@@ -6,16 +6,28 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo watch dev --continue",
-    "dev:web": "turbo watch dev --filter=@gmacko/web",
-    "dev:mobile": "turbo watch dev --filter=@gmacko/mobile",
+    "dev:web": "turbo watch dev --filter=@gmacko/core-web",
+    "dev:mobile": "turbo watch dev --filter=@gmacko/core-mobile",
     "test": "turbo run test",
     "lint": "turbo run lint --continue",
     "typecheck": "turbo run typecheck",
     "dev:all": "bash scripts/dev.sh"
   },
   "pnpm": {
+    "overrides": {
+      "@electric-sql/pglite": "0.3.16",
+      "@types/pg": "8.16.0",
+      "node-gyp": "^10.0.0",
+      "react": "19.2.5",
+      "react-dom": "19.2.5"
+    },
     "onlyBuiltDependencies": [
-      "electron"
+      "@swc/core",
+      "@tailwindcss/oxide",
+      "electron",
+      "esbuild",
+      "node-pty",
+      "sqlite3"
     ]
   },
   "devDependencies": {

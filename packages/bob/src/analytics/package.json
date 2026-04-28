@@ -1,0 +1,54 @@
+{
+  "name": "@bob/analytics",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./src/index.ts"
+    },
+    "./web": {
+      "types": "./dist/web/index.d.ts",
+      "default": "./src/web/index.tsx"
+    },
+    "./native": {
+      "types": "./dist/native/index.d.ts",
+      "default": "./src/native/index.tsx"
+    }
+  },
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "clean": "git clean -xdf .cache .turbo dist node_modules",
+    "dev": "tsc",
+    "format": "prettier --check . --ignore-path ../../.gitignore",
+    "lint": "eslint --flag unstable_native_nodejs_ts_config",
+    "typecheck": "tsc --noEmit --emitDeclarationOnly false"
+  },
+  "dependencies": {
+    "@bob/config": "workspace:*",
+    "posthog-js": "^1.224.0",
+    "posthog-react-native": "^3.5.2"
+  },
+  "devDependencies": {
+    "@bob/eslint-config": "workspace:*",
+    "@bob/prettier-config": "workspace:*",
+    "@bob/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:react19",
+    "eslint": "catalog:",
+    "expo-constants": "~18.0.10",
+    "prettier": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "expo-constants": ">=17.0.0",
+    "react": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "expo-constants": {
+      "optional": true
+    }
+  },
+  "prettier": "@bob/prettier-config"
+}
