@@ -29,6 +29,13 @@ const makeDbMock = () => ({
         return Promise.resolve(scopeRows.length > 0 ? scopeRows[0] : null);
       }),
     },
+    chatConversations: {
+      // setSessionScopes verifies the user owns the session before writing
+      // scopes; tests use a fake user-1 owner so we always return a row.
+      findFirst: vi.fn(() =>
+        Promise.resolve({ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }),
+      ),
+    },
   },
   insert: vi.fn((table: any) => ({
     values: vi.fn((vals: any) => {
@@ -139,7 +146,10 @@ describe("cookies router", () => {
       });
 
       expect(result.imported).toBe(1);
-      expect(result.domains).toEqual([".github.com"]);
+      // Source intentionally normalizes domains (strips leading dot, lowercases)
+      // via normalizeDomain() in cookies.ts. Test was previously asserting the
+      // unnormalized form; updated to match production behavior.
+      expect(result.domains).toEqual(["github.com"]);
     });
 
     it("should accept up to 500 cookies", async () => {

@@ -415,8 +415,13 @@ describe("featureBranch router", () => {
         pullRequestId,
       });
 
+      // Source serializes the merged timestamp via `new Date().toISOString()`
+      // (Drizzle stores timestamp columns as text), so we assert the ISO 8601
+      // shape rather than a raw Date instance.
       expect(updateSetMock).toHaveBeenCalledWith({
-        mergedAt: expect.any(Date),
+        mergedAt: expect.stringMatching(
+          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+        ),
       });
       expect(result).toMatchObject({ mergedAt });
     });

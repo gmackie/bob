@@ -213,7 +213,11 @@ describe("workItems router", () => {
     const result = await caller.workItems.createArtifact({
       workItemId,
       taskRunId,
-      producerType: "bob",
+      // createArtifactInputSchema constrains producerType to
+      // "task_run"|"session"|"integration"|"manual". Test was originally
+      // sending "bob" — likely from a pre-rename schema. Using "task_run"
+      // since the request also carries taskRunId.
+      producerType: "task_run",
       artifactType: "pr",
       artifactRole: "review",
       url: "https://example.com/pr/123",
@@ -258,7 +262,10 @@ describe("workItems router", () => {
       caller.workItems.createArtifact({
         workItemId,
         taskRunId,
-        producerType: "bob",
+        // Same producerType fix as the sibling test — "bob" is rejected
+        // by Zod before the auth check fires, so we use a valid value
+        // ("task_run") to exercise the workspace-membership rejection path.
+        producerType: "task_run",
         artifactType: "pr",
         artifactRole: "review",
         url: "https://example.com/pr/123",
