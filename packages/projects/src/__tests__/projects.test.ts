@@ -10,7 +10,7 @@ import {
   sessionSecrets,
   projectDeploySecretBindings,
 } from "@gmacko/db/schema/secrets";
-import type { ProjectId, TenantId } from "@gmacko/validators";
+import type { ProjectId, TenantId } from "@gmacko/core/validators";
 
 import {
   Projects,

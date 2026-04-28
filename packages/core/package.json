@@ -4,7 +4,12 @@
   "version": "0.0.0",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./validators": "./src/validators/index.ts",
+    "./config": "./src/config/index.ts",
+    "./cookies": "./src/cookies/index.ts",
+    "./i18n": "./src/i18n/index.ts",
+    "./settings": "./src/settings/index.ts"
   },
   "scripts": {
     "test": "vitest run --passWithNoTests",

@@ -11,7 +11,7 @@ import {
   Tenancy,
   TenantNotSelectedError,
 } from "@gmacko/auth";
-import type { ApiKeyId, TenantId } from "@gmacko/validators";
+import type { ApiKeyId, TenantId } from "@gmacko/core/validators";
 
 import { getServerEnv } from "../env.js";
 

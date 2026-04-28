@@ -49,8 +49,8 @@ const config: NextConfig = {
     "@gmacko/app-shell",
     "@gmacko/auth",
     "@gmacko/client",
-    "@gmacko/config",
     "@gmacko/contracts",
+    "@gmacko/core",
     "@gmacko/db",
     "@gmacko/models",
     "@gmacko/projects",
@@ -60,7 +60,6 @@ const config: NextConfig = {
     "@gmacko/runner-protocol",
     "@gmacko/secrets",
     "@gmacko/ui",
-    "@gmacko/validators",
   ],
   async rewrites() {
     return [

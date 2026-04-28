@@ -21,7 +21,7 @@ import {
   type ApiKeyPermission,
 } from "@gmacko/db/schema/api-keys";
 import { users as usersTable } from "@gmacko/db/schema/auth";
-import type { ApiKeyId, TenantId, UserId } from "@gmacko/validators";
+import type { ApiKeyId, TenantId, UserId } from "@gmacko/core/validators";
 
 import { InvalidApiKeyError } from "./errors.js";
 export { InvalidApiKeyError };

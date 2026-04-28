@@ -5,7 +5,7 @@ import { ProjectsRpc } from "@gmacko/contracts/groups/projects";
 import { CurrentUser } from "@gmacko/rpc/context";
 import { AuthMiddleware } from "@gmacko/auth";
 import { Projects } from "@gmacko/projects";
-import type { ProjectId } from "@gmacko/validators";
+import type { ProjectId } from "@gmacko/core/validators";
 
 // Real handlers for ProjectsRpc — replaces the deterministic stubs from
 // `@gmacko/contracts/stubs/projects`. Tenant scope is read from CurrentUser

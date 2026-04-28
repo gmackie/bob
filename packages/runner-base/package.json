@@ -12,8 +12,8 @@
   },
   "dependencies": {
     "@gmacko/auth": "workspace:*",
+    "@gmacko/core": "workspace:*",
     "@gmacko/runner-protocol": "workspace:*",
-    "@gmacko/validators": "workspace:*",
     "effect": "4.0.0-beta.43"
   },
   "devDependencies": {

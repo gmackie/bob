@@ -14,7 +14,7 @@ import {
   sessions as sessionsTable,
   users as usersTable,
 } from "@gmacko/db/schema/auth";
-import type { UserId } from "@gmacko/validators";
+import type { UserId } from "@gmacko/core/validators";
 
 import { BetterAuth } from "./better-auth.js";
 import { SessionExpiredError } from "./errors.js";

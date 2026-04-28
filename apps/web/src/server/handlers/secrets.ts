@@ -5,7 +5,7 @@ import { SecretsRpc } from "@gmacko/contracts/groups/secrets";
 import { CurrentUser } from "@gmacko/rpc/context";
 import { AuthMiddleware } from "@gmacko/auth";
 import { Secrets } from "@gmacko/secrets";
-import type { SessionSecretId } from "@gmacko/validators";
+import type { SessionSecretId } from "@gmacko/core/validators";
 
 // Real handlers for SecretsRpc — replaces the deterministic stubs from
 // `@gmacko/contracts/stubs/secrets`. Tenant scope is read from CurrentUser

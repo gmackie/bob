@@ -13,7 +13,7 @@ import { layerGmackoDb } from "@gmacko/db";
 import { chatConversations } from "@gmacko/db/schema/sessions";
 import { tenants } from "@gmacko/db/schema/tenancy";
 import { users } from "@gmacko/db/schema/auth";
-import type { TenantId, UserId } from "@gmacko/validators";
+import type { TenantId, UserId } from "@gmacko/core/validators";
 
 import { AgentSession, layerAgent } from "../agent-session.js";
 import { mockAdapter } from "../mock-adapter.js";

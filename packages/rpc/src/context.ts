@@ -1,5 +1,5 @@
 import { ServiceMap } from "effect";
-import type { TenantId, TenantMemberRole, UserId } from "@gmacko/validators";
+import type { TenantId, TenantMemberRole, UserId } from "@gmacko/core/validators";
 
 // CurrentUser is populated by auth middleware and consumed by handlers.
 // The real shape lives in @gmacko/auth; this file declares the tag only

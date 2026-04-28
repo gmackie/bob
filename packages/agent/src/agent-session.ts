@@ -52,7 +52,7 @@ import {
   chatConversations,
   chatMessages,
 } from "@gmacko/db/schema/sessions";
-import type { TenantId, UserId } from "@gmacko/validators";
+import type { TenantId, UserId } from "@gmacko/core/validators";
 
 import type {
   AdapterError,

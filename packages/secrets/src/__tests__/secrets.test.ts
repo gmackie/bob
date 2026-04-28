@@ -15,7 +15,7 @@ import type {
   SessionId,
   SessionSecretId,
   TenantId,
-} from "@gmacko/validators";
+} from "@gmacko/core/validators";
 
 import { decryptSecretValue } from "../crypt.js";
 import {

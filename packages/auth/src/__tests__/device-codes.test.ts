@@ -8,7 +8,7 @@ import { tenants, tenantMembers } from "@gmacko/db/schema/tenancy";
 import { apiKeys as apiKeysTable } from "@gmacko/db/schema/api-keys";
 import { deviceCodes as deviceCodesTable } from "@gmacko/db/schema/device-codes";
 import { and, eq, isNull } from "drizzle-orm";
-import type { TenantId, UserId } from "@gmacko/validators";
+import type { TenantId, UserId } from "@gmacko/core/validators";
 
 import { layerApiKeys } from "../api-keys.js";
 import {

@@ -7,7 +7,7 @@ import { users } from "@gmacko/db/schema/auth";
 import { tenants, tenantMembers } from "@gmacko/db/schema/tenancy";
 import { apiKeys as apiKeysTable } from "@gmacko/db/schema/api-keys";
 import { eq } from "drizzle-orm";
-import type { TenantId, UserId, ApiKeyId } from "@gmacko/validators";
+import type { TenantId, UserId, ApiKeyId } from "@gmacko/core/validators";
 
 import {
   ApiKeys,
