@@ -1,4 +1,7 @@
 {
   "extends": "../../tooling/typescript/tsconfig.base.json",
-  "include": ["src/**/*"]
+  "include": ["src/**/*"],
+  "compilerOptions": {
+    "types": ["node", "vitest/globals", "@testing-library/jest-dom"]
+  }
 }

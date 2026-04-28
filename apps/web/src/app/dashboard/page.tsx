@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 
-import { AuthedOnly, useCurrentUser, useRpcClient, TenantPicker } from "@gmacko/app-shell";
-import { ThemeSwitcher } from "@gmacko/ui";
+import { AuthedOnly, useCurrentUser, useRpcClient, TenantPicker } from "@gmacko/core/app-shell";
+import { ThemeSwitcher } from "@gmacko/core/ui";
 
 function DashboardInner() {
   const me = useCurrentUser();

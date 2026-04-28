@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { LoginForm } from "@gmacko/app-shell";
+import { LoginForm } from "@gmacko/core/app-shell";
 
 export default function LoginPage() {
   const router = useRouter();

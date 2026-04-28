@@ -44,12 +44,7 @@ const config: NextConfig = {
     };
     return cfg;
   },
-  transpilePackages: [
-    "@gmacko/app-shell",
-    "@gmacko/core",
-    "@gmacko/models",
-    "@gmacko/ui",
-  ],
+  transpilePackages: ["@gmacko/core"],
   async rewrites() {
     return [
       {

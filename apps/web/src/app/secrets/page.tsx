@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { AuthedOnly, useRpcClient } from "@gmacko/app-shell";
+import { AuthedOnly, useRpcClient } from "@gmacko/core/app-shell";
 
 function SecretsInner() {
   const client = useRpcClient();

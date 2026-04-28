@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 
-import { AuthedOnly, useRpcClient } from "@gmacko/app-shell";
+import { AuthedOnly, useRpcClient } from "@gmacko/core/app-shell";
 
 interface CapturedEvent {
   readonly t: number;
