@@ -16,19 +16,31 @@
     "./domain-packs": "./src/domain-packs/index.ts",
     "./vault": "./src/vault/index.ts",
     "./buddy-tools": "./src/buddy-tools/index.ts",
-    "./agent-adapters": "./src/agent-adapters/index.ts"
+    "./agent-adapters": "./src/agent-adapters/index.ts",
+    "./db": "./src/db/index.ts",
+    "./db/client": "./src/db/client.ts",
+    "./db/schema": "./src/db/schema.ts",
+    "./db/auth": "./src/db/auth.ts",
+    "./db/listen-broker": "./src/db/listen-broker.ts"
   },
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:push": "dotenv -e ../../.env -- drizzle-kit push",
+    "db:migrate": "dotenv -e ../../.env -- drizzle-kit migrate",
+    "db:studio": "dotenv -e ../../.env -- drizzle-kit studio",
+    "db:seed": "dotenv -e ../../.env -- tsx src/db/seed.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",
     "@gmacko/core": "workspace:*",
     "@trpc/server": "catalog:",
+    "drizzle-orm": "^0.45.2",
+    "drizzle-zod": "^0.8.3",
     "effect": "4.0.0-beta.43",
     "gray-matter": "^4.0.0",
     "node-pty": "catalog:",
+    "postgres": "^3.4.9",
     "react": "^19.0.0",
     "simple-git": "^3.36.0",
     "zod": "^4.0.0"
@@ -38,6 +50,9 @@
     "@gmacko/tsconfig": "workspace:*",
     "@types/node": "25.6.0",
     "@types/react": "^19.0.0",
+    "dotenv-cli": "^11.0.0",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "catalog:",
     "typescript": "^5.9.0",
     "vitest": "^3.0.0"
   }
