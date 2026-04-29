@@ -962,6 +962,24 @@ importers:
         specifier: 'catalog:'
         version: 5.9.3
 
+  packages/bob/src/chat:
+    devDependencies:
+      '@bob/tsconfig':
+        specifier: workspace:*
+        version: link:../../../../tooling/bob-typescript
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  packages/bob/src/ci:
+    devDependencies:
+      '@bob/tsconfig':
+        specifier: workspace:*
+        version: link:../../../../tooling/bob-typescript
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
   packages/bob/src/config:
     devDependencies:
       '@bob/eslint-config':
@@ -1001,6 +1019,27 @@ importers:
 
   packages/bob/src/db:
     dependencies:
+      '@bob/chat':
+        specifier: workspace:*
+        version: link:../chat
+      '@bob/ci':
+        specifier: workspace:*
+        version: link:../ci
+      '@bob/git':
+        specifier: workspace:*
+        version: link:../git
+      '@bob/projects':
+        specifier: workspace:*
+        version: link:../projects
+      '@bob/secrets':
+        specifier: workspace:*
+        version: link:../secrets
+      '@bob/tenancy':
+        specifier: workspace:*
+        version: link:../tenancy
+      '@bob/webhooks':
+        specifier: workspace:*
+        version: link:../webhooks
       '@electric-sql/pglite':
         specifier: 0.3.16
         version: 0.3.16
@@ -1100,6 +1139,15 @@ importers:
       playwright:
         specifier: ^1.52.0
         version: 1.59.1
+
+  packages/bob/src/git:
+    devDependencies:
+      '@bob/tsconfig':
+        specifier: workspace:*
+        version: link:../../../../tooling/bob-typescript
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
 
   packages/bob/src/i18n:
     dependencies:
@@ -1326,6 +1374,15 @@ importers:
         specifier: 'catalog:'
         version: 5.9.3
 
+  packages/bob/src/projects:
+    devDependencies:
+      '@bob/tsconfig':
+        specifier: workspace:*
+        version: link:../../../../tooling/bob-typescript
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
   packages/bob/src/purchases:
     dependencies:
       '@bob/config':
@@ -1397,6 +1454,15 @@ importers:
         specifier: 'catalog:'
         version: 5.9.3
 
+  packages/bob/src/secrets:
+    devDependencies:
+      '@bob/tsconfig':
+        specifier: workspace:*
+        version: link:../../../../tooling/bob-typescript
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
   packages/bob/src/settings:
     dependencies:
       zod:
@@ -1446,6 +1512,15 @@ importers:
       prettier:
         specifier: 'catalog:'
         version: 3.8.3
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  packages/bob/src/tenancy:
+    devDependencies:
+      '@bob/tsconfig':
+        specifier: workspace:*
+        version: link:../../../../tooling/bob-typescript
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -1520,6 +1595,15 @@ importers:
       prettier:
         specifier: 'catalog:'
         version: 3.8.3
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  packages/bob/src/webhooks:
+    devDependencies:
+      '@bob/tsconfig':
+        specifier: workspace:*
+        version: link:../../../../tooling/bob-typescript
       typescript:
         specifier: 'catalog:'
         version: 5.9.3

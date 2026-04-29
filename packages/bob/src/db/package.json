@@ -41,6 +41,13 @@
     "with-env": "dotenv -e ../../.env --"
   },
   "dependencies": {
+    "@bob/chat": "workspace:*",
+    "@bob/ci": "workspace:*",
+    "@bob/git": "workspace:*",
+    "@bob/projects": "workspace:*",
+    "@bob/secrets": "workspace:*",
+    "@bob/tenancy": "workspace:*",
+    "@bob/webhooks": "workspace:*",
     "@electric-sql/pglite": "^0.3.0",
     "@neondatabase/serverless": "^0.10.4",
     "drizzle-kit": "^0.31.5",
