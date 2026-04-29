@@ -32,14 +32,14 @@ describe("client-pglite", () => {
     // assertion about "empty → fully schema'd" explicit.
     const h = await makePgliteDb({ dataDir: ":memory:" });
     try {
-      // Exercise a spread of real Bob tables from schema.ts + auth-schema.ts.
+      // Exercise a spread of real Bob tables from schema.ts (+ re-exports).
       // Each must return 0 rows without a schema error — proving the bootstrap
       // brought up the target schema, not just tracking tables.
       const tables = [
         "work_items", // packages/db/src/schema.ts
         "agent_runs",
         "tenants",
-        "user", // packages/db/src/auth-schema.ts
+        "user", // packages/bob/src/auth/src/schema.ts
       ];
       for (const t of tables) {
         const result = await h.db.execute(

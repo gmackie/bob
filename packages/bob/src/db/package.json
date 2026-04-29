@@ -41,6 +41,7 @@
     "with-env": "dotenv -e ../../.env --"
   },
   "dependencies": {
+    "@bob/auth": "workspace:*",
     "@bob/chat": "workspace:*",
     "@bob/ci": "workspace:*",
     "@bob/git": "workspace:*",

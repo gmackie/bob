@@ -65,7 +65,8 @@ export function resolveMigrationsDir(): string {
 /**
  * Sentinel name used in `bob_migrations` to record that the drizzle-kit
  * from-scratch bootstrap has already taken an empty PGlite to the full schema
- * state described by `schema.ts` + `auth-schema.ts`. Subsequent inits check
+ * state described by `schema.ts` (which re-exports `@bob/auth/schema` and
+ * other area schemas). Subsequent inits check
  * this marker and skip bootstrap, keeping `makePgliteDb` idempotent across
  * restarts.
  */
@@ -73,7 +74,7 @@ const BOOTSTRAP_MARKER = "__pglite_bootstrap__";
 
 /**
  * Bootstrap an empty PGlite instance to the full schema state described by
- * `src/schema.ts` + `src/auth-schema.ts`.
+ * `src/schema.ts` (which re-exports `@bob/auth/schema` + other area schemas).
  *
  * Why we can't just reuse `drizzle/*.sql`: those files are incremental patches
  * authored on top of a pre-existing ngi-kanbanger/better-auth baseline — they
@@ -109,9 +110,9 @@ export async function bootstrapSchema(client: PGlite): Promise<void> {
     return;
   }
 
-  // `schema.ts` already does `export * from "./auth-schema"` so the star-import
-  // above includes auth tables (user, session, account, verification). No
-  // explicit merge needed.
+  // `schema.ts` already does `export * from "@bob/auth/schema"` so the
+  // star-import above includes auth tables (user, session, account,
+  // verification). No explicit merge needed.
   const prev = generateDrizzleJson({}, undefined, undefined, "snake_case");
   const cur = generateDrizzleJson(schema, undefined, undefined, "snake_case");
   const statements = await generateMigration(prev, cur);

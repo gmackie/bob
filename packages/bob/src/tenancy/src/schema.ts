@@ -3,17 +3,14 @@
 // workspaceMembers).
 //
 // Cross-area TODOs (resolved in later Phase 7B-2 tasks):
-//   - `user` FK on workspaces.ownerUserId / workspaceMembers.userId — Task 9
-//     (auth move). Column kept as plain text for now; the DB-level FK already
-//     exists in migrations.
-//   - workspacesRelations.ownerUser → user — Task 9 (auth move). Commented out.
-//   - workspaceMembersRelations.user → user — Task 9 (auth move). Commented out.
 //   - workspacesRelations.projects → projects — Task 11 (projects move).
 //     Commented out.
 // =============================================================================
 
 import { relations, sql } from "drizzle-orm";
 import { pgEnum, pgTable, uniqueIndex } from "drizzle-orm/pg-core";
+
+import { user } from "@bob/auth/schema";
 
 // --- Tenants ---
 
@@ -75,8 +72,10 @@ export const workspaceMemberRoleEnum = pgEnum(
 
 export const workspaces = pgTable("workspaces", (t) => ({
   id: t.uuid().notNull().primaryKey().defaultRandom(),
-  // TODO Phase 7B-2 Task 9: re-enable .references(() => user.id, { onDelete: "cascade" }) when auth moves to @bob/auth/schema.
-  ownerUserId: t.text().notNull(),
+  ownerUserId: t
+    .text()
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
   name: t.varchar({ length: 128 }).notNull(),
   slug: t.varchar({ length: 64 }).notNull().unique(),
   description: t.text(),
@@ -101,8 +100,10 @@ export const workspaceMembers = pgTable("workspace_members", (t) => ({
     .uuid()
     .notNull()
     .references(() => workspaces.id, { onDelete: "cascade" }),
-  // TODO Phase 7B-2 Task 9: re-enable .references(() => user.id, { onDelete: "cascade" }) when auth moves to @bob/auth/schema.
-  userId: t.text().notNull(),
+  userId: t
+    .text()
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
   role: workspaceMemberRoleEnum().notNull().default("member"),
   joinedAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
 }));
@@ -121,11 +122,10 @@ export const tenantMembersRelations = relations(tenantMembers, ({ one }) => ({
 }));
 
 export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
-  // TODO Phase 7B-2 Task 9: re-enable ownerUser → user when auth moves.
-  // ownerUser: one(user, {
-  //   fields: [workspaces.ownerUserId],
-  //   references: [user.id],
-  // }),
+  ownerUser: one(user, {
+    fields: [workspaces.ownerUserId],
+    references: [user.id],
+  }),
   tenant: one(tenants, {
     fields: [workspaces.tenantId],
     references: [tenants.id],
@@ -142,10 +142,9 @@ export const workspaceMembersRelations = relations(
       fields: [workspaceMembers.workspaceId],
       references: [workspaces.id],
     }),
-    // TODO Phase 7B-2 Task 9: re-enable user → user when auth moves.
-    // user: one(user, {
-    //   fields: [workspaceMembers.userId],
-    //   references: [user.id],
-    // }),
+    user: one(user, {
+      fields: [workspaceMembers.userId],
+      references: [user.id],
+    }),
   }),
 );

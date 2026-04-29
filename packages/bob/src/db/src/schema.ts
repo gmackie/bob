@@ -3,7 +3,11 @@ import { type AnyPgColumn, index, pgEnum, pgTable, uniqueIndex } from "drizzle-o
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-import { user } from "./auth-schema";
+import { user } from "@bob/auth/schema";
+
+// Auth tables now live in @bob/auth/schema (Phase 7B-2 Task 9).
+// Re-exported here so existing `from "@bob/db/schema"` import sites keep working.
+export * from "@bob/auth/schema";
 
 // Tenancy tables now live in @bob/tenancy/schema (Phase 7B-2 Task 8).
 // Re-exported here so existing `from "@bob/db/schema"` import sites keep working.
@@ -47,34 +51,7 @@ export const userPreferences = pgTable("user_preferences", (t) => ({
     .$onUpdateFn(() => sql`now()`),
 }));
 
-export const apiKeys = pgTable("api_keys", (t) => ({
-  id: t.uuid().notNull().primaryKey().defaultRandom(),
-  userId: t
-    .text()
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  name: t.varchar({ length: 100 }).notNull(),
-  keyHash: t.text().notNull(),
-  keyPrefix: t.varchar({ length: 12 }).notNull(),
-  permissions: t.json().$type<string[]>().notNull().default(["read"]),
-  lastUsedAt: t.timestamp({ mode: "string", withTimezone: true }),
-  expiresAt: t.timestamp({ mode: "string", withTimezone: true }),
-  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-  revokedAt: t.timestamp({ mode: "string", withTimezone: true }),
-}));
-
-export const deviceCodes = pgTable("device_codes", (t) => ({
-  id: t.uuid().notNull().primaryKey().defaultRandom(),
-  deviceCode: t.uuid("device_code").notNull().unique().defaultRandom(),
-  userCode: t.varchar("user_code", { length: 16 }).notNull().unique(),
-  apiKey: t.text("api_key"),
-  userId: t
-    .text("user_id")
-    .references(() => user.id, { onDelete: "cascade" }),
-  status: t.varchar({ length: 16 }).notNull().default("pending"),
-  expiresAt: t.timestamp("expires_at", { mode: "string" }).notNull(),
-  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-}));
+// --- apiKeys + deviceCodes moved to @bob/auth/schema (Phase 7B-2 Task 9) ---
 
 // --- Tenants moved to @bob/tenancy/schema (Phase 7B-2 Task 8) ---
 
@@ -2706,4 +2683,3 @@ export const projectDeploySecretBindingsRelations = relations(
   }),
 );
 
-export * from "./auth-schema";
