@@ -12,22 +12,30 @@
     "./capability-registry": "./src/capability-registry/index.ts",
     "./runner-protocol": "./src/runner-protocol/index.ts",
     "./source-connectors": "./src/source-connectors/index.ts",
-    "./imports": "./src/imports/index.ts"
+    "./imports": "./src/imports/index.ts",
+    "./domain-packs": "./src/domain-packs/index.ts",
+    "./vault": "./src/vault/index.ts",
+    "./buddy-tools": "./src/buddy-tools/index.ts",
+    "./agent-adapters": "./src/agent-adapters/index.ts"
   },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.91.1",
     "@gmacko/core": "workspace:*",
+    "@trpc/server": "catalog:",
     "effect": "4.0.0-beta.43",
     "gray-matter": "^4.0.0",
+    "node-pty": "catalog:",
     "react": "^19.0.0",
+    "simple-git": "^3.36.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "@gmacko/tsconfig": "workspace:*",
     "@effect/vitest": "4.0.0-beta.43",
+    "@gmacko/tsconfig": "workspace:*",
     "@types/node": "25.6.0",
     "@types/react": "^19.0.0",
     "typescript": "^5.9.0",
