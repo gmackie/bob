@@ -1,16 +1,13 @@
 // =============================================================================
 // @bob/tenancy/schema — Tenancy tables (tenants, tenantMembers, workspaces,
 // workspaceMembers).
-//
-// Cross-area TODOs (resolved in later Phase 7B-2 tasks):
-//   - workspacesRelations.projects → projects — Task 11 (projects move).
-//     Commented out.
 // =============================================================================
 
 import { relations, sql } from "drizzle-orm";
 import { pgEnum, pgTable, uniqueIndex } from "drizzle-orm/pg-core";
 
 import { user } from "@bob/auth/schema";
+import { projects } from "@bob/projects/schema";
 
 // --- Tenants ---
 
@@ -131,8 +128,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
     references: [tenants.id],
   }),
   members: many(workspaceMembers),
-  // TODO Phase 7B-2 Task 11: re-enable projects → projects when projects moves.
-  // projects: many(projects),
+  projects: many(projects),
 }));
 
 export const workspaceMembersRelations = relations(
