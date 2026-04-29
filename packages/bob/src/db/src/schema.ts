@@ -14,6 +14,10 @@ export * from "@bob/auth/schema";
 export * from "@bob/tenancy/schema";
 import { tenants, workspaces } from "@bob/tenancy/schema";
 
+// userPreferences now lives in @bob/settings/schema (Phase 7B-2 Task 10).
+// Re-exported here so existing `from "@bob/db/schema"` import sites keep working.
+export * from "@bob/settings/schema";
+
 export const Post = pgTable("post", (t) => ({
   id: t.uuid().notNull().primaryKey().defaultRandom(),
   title: t.varchar({ length: 256 }).notNull(),
@@ -33,23 +37,7 @@ export const CreatePostSchema = createInsertSchema(Post, {
   updatedAt: true,
 });
 
-export const userPreferences = pgTable("user_preferences", (t) => ({
-  id: t.uuid().notNull().primaryKey().defaultRandom(),
-  userId: t
-    .text()
-    .notNull()
-    .unique()
-    .references(() => user.id, { onDelete: "cascade" }),
-  theme: t.varchar({ length: 20 }).notNull().default("system"),
-  language: t.varchar({ length: 10 }).notNull().default("en"),
-  timezone: t.varchar({ length: 50 }).notNull().default("UTC"),
-  emailNotifications: t.boolean().notNull().default(true),
-  pushNotifications: t.boolean().notNull().default(true),
-  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-  updatedAt: t
-    .timestamp({ mode: "string", withTimezone: true })
-    .$onUpdateFn(() => sql`now()`),
-}));
+// userPreferences moved to @bob/settings/schema (Phase 7B-2 Task 10).
 
 // --- apiKeys + deviceCodes moved to @bob/auth/schema (Phase 7B-2 Task 9) ---
 
@@ -407,20 +395,8 @@ export const dispatchItemsRelations = relations(
   }),
 );
 
-export const CreateUserPreferencesSchema = createInsertSchema(userPreferences, {
-  theme: z.enum(["light", "dark", "system"]).default("system"),
-  language: z.string().max(10).default("en"),
-  timezone: z.string().max(50).default("UTC"),
-}).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export const UpdateUserPreferencesSchema =
-  CreateUserPreferencesSchema.partial().omit({
-    userId: true,
-  });
+// CreateUserPreferencesSchema + UpdateUserPreferencesSchema moved to
+// @bob/settings/schema (Phase 7B-2 Task 10).
 
 export const CreateWorkItemSchema = createInsertSchema(workItems, {
   kind: z.enum(workItemKind),

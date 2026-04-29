@@ -47,6 +47,7 @@
     "@bob/git": "workspace:*",
     "@bob/projects": "workspace:*",
     "@bob/secrets": "workspace:*",
+    "@bob/settings": "workspace:*",
     "@bob/tenancy": "workspace:*",
     "@bob/webhooks": "workspace:*",
     "@electric-sql/pglite": "^0.3.0",
