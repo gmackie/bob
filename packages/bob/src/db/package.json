@@ -50,6 +50,7 @@
     "@bob/settings": "workspace:*",
     "@bob/tenancy": "workspace:*",
     "@bob/webhooks": "workspace:*",
+    "@bob/work-items": "workspace:*",
     "@electric-sql/pglite": "^0.3.0",
     "@neondatabase/serverless": "^0.10.4",
     "drizzle-kit": "^0.31.5",

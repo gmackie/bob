@@ -1,5 +1,5 @@
 import { relations, sql } from "drizzle-orm";
-import { type AnyPgColumn, index, pgEnum, pgTable, uniqueIndex } from "drizzle-orm/pg-core";
+import { index, pgEnum, pgTable, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -31,6 +31,22 @@ import {
   worktreePlans,
   worktrees,
 } from "@bob/projects/schema";
+
+// Work-items area tables (workItems, planDrafts, planDraftDependencies,
+// workItemDependencies, dispatchBatches, dispatchItems, requirements,
+// planTaskItems, taskRuns, comments, workItemArtifacts, workItemSnapshots)
+// now live in @bob/work-items/schema (Phase 7B-2 Task 12). Re-exported here so
+// existing `from "@bob/db/schema"` import sites keep working.
+export * from "@bob/work-items/schema";
+import {
+  comments,
+  planDrafts,
+  taskRuns,
+  workItemActivityTypeEnum,
+  workItemNotificationType,
+  workItemNotificationTypeEnum,
+  workItems,
+} from "@bob/work-items/schema";
 
 export const Post = pgTable("post", (t) => ({
   id: t.uuid().notNull().primaryKey().defaultRandom(),
@@ -117,301 +133,25 @@ export const runArtifacts = pgTable(
   (table) => [index("run_artifacts_run_idx").on(table.runId)],
 );
 
-export const workItemKind = ["issue", "epic", "task"] as const;
-export type WorkItemKind = (typeof workItemKind)[number];
-export const workItemKindEnum = pgEnum("work_item_kind", workItemKind);
+// workItemKind / WorkItemKind / workItemKindEnum moved to @bob/work-items/schema
+// (Phase 7B-2 Task 12).
 
 // workspaceMemberRole / workspaceMemberRoleEnum moved to @bob/tenancy/schema (Phase 7B-2 Task 8).
 
 // projectStatus / ProjectStatus / projectStatusEnum moved to @bob/projects/schema (Phase 7B-2 Task 11).
 
-export const workItemActivityType = [
-  "comment_added",
-  "status_changed",
-  "artifact_added",
-  "notification_created",
-  "build_status_changed",
-  "deploy_status_changed",
-  "planning_session_completed",
-  "review_requested",
-  "review_approved",
-  "review_changes_requested",
-] as const;
-export type WorkItemActivityType = (typeof workItemActivityType)[number];
-export const workItemActivityTypeEnum = pgEnum(
-  "work_item_activity_type",
-  workItemActivityType,
-);
+// workItemActivityType / workItemActivityTypeEnum moved to @bob/work-items/schema (Phase 7B-2 Task 12).
+// workItemNotificationType / workItemNotificationTypeEnum moved to @bob/work-items/schema (Phase 7B-2 Task 12).
+// workItemArtifactType / workItemArtifactTypeEnum moved to @bob/work-items/schema (Phase 7B-2 Task 12).
+// workItemArtifactProducerType / workItemArtifactProducerTypeEnum moved to @bob/work-items/schema (Phase 7B-2 Task 12).
 
-export const workItemNotificationType = [
-  "work_item_assigned",
-  "work_item_commented",
-  "work_item_needs_input",
-  "work_item_review_ready",
-  "task_completed",
-  "batch_completed",
-] as const;
-export type WorkItemNotificationType =
-  (typeof workItemNotificationType)[number];
-export const workItemNotificationTypeEnum = pgEnum(
-  "work_item_notification_type",
-  workItemNotificationType,
-);
-
-export const workItemArtifactType = [
-  "pr",
-  "verification",
-  "build",
-  "test_report",
-  "doc",
-  "deliverable",
-  "planning_doc",
-  "code_review",
-  "other",
-] as const;
-export type WorkItemArtifactType = (typeof workItemArtifactType)[number];
-export const workItemArtifactTypeEnum = pgEnum(
-  "work_item_artifact_type",
-  workItemArtifactType,
-);
-
-export const workItemArtifactProducerType = [
-  "bob",
-  "forgegraph",
-  "human",
-  "system",
-] as const;
-export type WorkItemArtifactProducerType =
-  (typeof workItemArtifactProducerType)[number];
-export const workItemArtifactProducerTypeEnum = pgEnum(
-  "work_item_artifact_producer_type",
-  workItemArtifactProducerType,
-);
-
-export const workItems = pgTable("work_items", (t) => ({
-  id: t.uuid().notNull().primaryKey().defaultRandom(),
-  parentId: t.uuid(),
-  ownerUserId: t
-    .text()
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  assigneeUserId: t.text(),
-  workspaceId: t.uuid(),
-  projectId: t.uuid(),
-  sequenceNumber: t.integer().notNull().default(0),
-  kind: workItemKindEnum().notNull(),
-  title: t.varchar({ length: 256 }).notNull(),
-  description: t.text(),
-  status: t.varchar({ length: 40 }).notNull().default("draft"),
-  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-  updatedAt: t
-    .timestamp({ mode: "string", withTimezone: true })
-    .$onUpdateFn(() => sql`now()`),
-}));
-
-export const planDrafts = pgTable(
-  "plan_drafts",
-  (t) => ({
-    id: t.uuid().notNull().primaryKey().defaultRandom(),
-    sessionId: t
-      .uuid()
-      .notNull()
-      .references(() => chatConversations.id, { onDelete: "cascade" }),
-    workspaceId: t.uuid().notNull(),
-    projectId: t.uuid().notNull(),
-    title: t.varchar({ length: 256 }).notNull(),
-    description: t.text(),
-    kind: workItemKindEnum().notNull().default("task"),
-    priority: t.varchar({ length: 20 }).notNull().default("no_priority"),
-    sortOrder: t.integer().notNull().default(0),
-    status: t.varchar({ length: 20 }).notNull().default("draft"),
-    // status: "draft" | "committed" | "discarded"
-    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-    updatedAt: t
-      .timestamp({ mode: "string", withTimezone: true })
-      .$onUpdateFn(() => sql`now()`),
-  }),
-  (table) => [
-    { name: "plan_drafts_session_idx", columns: [table.sessionId] },
-  ],
-);
-
-export const planDraftDependencies = pgTable(
-  "plan_draft_dependencies",
-  (t) => ({
-    id: t.uuid().notNull().primaryKey().defaultRandom(),
-    draftId: t
-      .uuid()
-      .notNull()
-      .references(() => planDrafts.id, { onDelete: "cascade" }),
-    dependsOnDraftId: t
-      .uuid()
-      .notNull()
-      .references(() => planDrafts.id, { onDelete: "cascade" }),
-  }),
-  (table) => [
-    {
-      name: "plan_draft_deps_unique_idx",
-      columns: [table.draftId, table.dependsOnDraftId],
-      unique: true,
-    },
-  ],
-);
-
-export const planDraftsRelations = relations(planDrafts, ({ one, many }) => ({
-  session: one(chatConversations, {
-    fields: [planDrafts.sessionId],
-    references: [chatConversations.id],
-  }),
-  dependencies: many(planDraftDependencies, { relationName: "draft" }),
-  dependedOnBy: many(planDraftDependencies, { relationName: "dependsOn" }),
-}));
-
-export const planDraftDependenciesRelations = relations(
-  planDraftDependencies,
-  ({ one }) => ({
-    draft: one(planDrafts, {
-      fields: [planDraftDependencies.draftId],
-      references: [planDrafts.id],
-      relationName: "draft",
-    }),
-    dependsOn: one(planDrafts, {
-      fields: [planDraftDependencies.dependsOnDraftId],
-      references: [planDrafts.id],
-      relationName: "dependsOn",
-    }),
-  }),
-);
-
-// =============================================================================
-// Work Item Dependencies (persisted from planDraftDependencies on commit)
-// =============================================================================
-
-export const workItemDependencies = pgTable(
-  "work_item_dependencies",
-  (t) => ({
-    id: t.uuid().notNull().primaryKey().defaultRandom(),
-    workItemId: t
-      .uuid()
-      .notNull()
-      .references(() => workItems.id, { onDelete: "cascade" }),
-    dependsOnWorkItemId: t
-      .uuid()
-      .notNull()
-      .references(() => workItems.id, { onDelete: "cascade" }),
-    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-  }),
-  (table) => [
-    {
-      name: "work_item_deps_unique_idx",
-      columns: [table.workItemId, table.dependsOnWorkItemId],
-      unique: true,
-    },
-  ],
-);
-
-export const workItemDependenciesRelations = relations(
-  workItemDependencies,
-  ({ one }) => ({
-    workItem: one(workItems, {
-      fields: [workItemDependencies.workItemId],
-      references: [workItems.id],
-      relationName: "work_item_dependencies",
-    }),
-    dependsOn: one(workItems, {
-      fields: [workItemDependencies.dependsOnWorkItemId],
-      references: [workItems.id],
-      relationName: "work_item_depended_on_by",
-    }),
-  }),
-);
-
-// =============================================================================
-// Dispatch Tables (batch execution of planning tasks)
-// =============================================================================
-
-export const dispatchBatches = pgTable("dispatch_batches", (t) => ({
-  id: t.uuid().notNull().primaryKey().defaultRandom(),
-  userId: t.text().notNull().references(() => user.id, { onDelete: "cascade" }),
-  sessionId: t.uuid().references(() => chatConversations.id, { onDelete: "set null" }),
-  workspaceId: t.text().notNull(),
-  projectId: t.text().notNull(),
-  status: t.varchar({ length: 20 }).notNull().default("pending"),
-  // status: "pending" | "dispatching" | "running" | "completed" | "failed"
-  concurrency: t.integer().notNull().default(2),
-  totalTasks: t.integer().notNull().default(0),
-  completedTasks: t.integer().notNull().default(0),
-  failedTasks: t.integer().notNull().default(0),
-  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-  updatedAt: t.timestamp({ mode: "string", withTimezone: true }).$onUpdateFn(() => sql`now()`),
-}));
-
-export const dispatchItems = pgTable(
-  "dispatch_items",
-  (t) => ({
-    id: t.uuid().notNull().primaryKey().defaultRandom(),
-    batchId: t.uuid().notNull().references(() => dispatchBatches.id, { onDelete: "cascade" }),
-    planningTaskId: t.text().notNull(),
-    planningTaskIdentifier: t.text().notNull(),
-    title: t.text().notNull(),
-    description: t.text(),
-    agentType: t.varchar({ length: 50 }).notNull().default("opencode"),
-    status: t.varchar({ length: 20 }).notNull().default("queued"),
-    // status: "queued" | "blocked" | "running" | "completed" | "failed"
-    blockedByItems: t.json().$type<string[]>().default([]),
-    // Array of dispatchItem IDs that must complete before this one starts
-    taskRunId: t.uuid().references(() => taskRuns.id, { onDelete: "set null" }),
-    sortOrder: t.integer().notNull().default(0),
-    pipelineState: t.varchar({ length: 30 }),
-    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-    updatedAt: t.timestamp({ mode: "string", withTimezone: true }).$onUpdateFn(() => sql`now()`),
-  }),
-  (table) => [
-    { name: "dispatch_items_batch_idx", columns: [table.batchId] },
-  ],
-);
-
-export const dispatchBatchesRelations = relations(
-  dispatchBatches,
-  ({ one, many }) => ({
-    user: one(user, {
-      fields: [dispatchBatches.userId],
-      references: [user.id],
-    }),
-    session: one(chatConversations, {
-      fields: [dispatchBatches.sessionId],
-      references: [chatConversations.id],
-    }),
-    items: many(dispatchItems),
-  }),
-);
-
-export const dispatchItemsRelations = relations(
-  dispatchItems,
-  ({ one }) => ({
-    batch: one(dispatchBatches, {
-      fields: [dispatchItems.batchId],
-      references: [dispatchBatches.id],
-    }),
-    taskRun: one(taskRuns, {
-      fields: [dispatchItems.taskRunId],
-      references: [taskRuns.id],
-    }),
-  }),
-);
+// workItems / CreateWorkItemSchema moved to @bob/work-items/schema (Phase 7B-2 Task 12).
+// planDrafts / planDraftDependencies / planDraftsRelations / planDraftDependenciesRelations moved to @bob/work-items/schema (Phase 7B-2 Task 12).
+// workItemDependencies / workItemDependenciesRelations moved to @bob/work-items/schema (Phase 7B-2 Task 12).
+// dispatchBatches / dispatchItems / dispatchBatchesRelations / dispatchItemsRelations moved to @bob/work-items/schema (Phase 7B-2 Task 12).
 
 // CreateUserPreferencesSchema + UpdateUserPreferencesSchema moved to
 // @bob/settings/schema (Phase 7B-2 Task 10).
-
-export const CreateWorkItemSchema = createInsertSchema(workItems, {
-  kind: z.enum(workItemKind),
-  title: z.string().max(256),
-  status: z.string().max(40).default("draft"),
-}).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
 
 // workspaces table moved to @bob/tenancy/schema (Phase 7B-2 Task 8).
 
@@ -538,96 +278,10 @@ export const dailyUsageStats = pgTable("daily_usage_stats", (t) => ({
 // repositoriesRelations moved to @bob/projects/schema (Phase 7B-2 Task 11).
 // `instances: many(agentInstances)` is commented out there pending Task 13.
 
-export const requirementCategory = [
-  "data",
-  "api",
-  "ui",
-  "infra",
-  "test",
-  "other",
-] as const;
-export type RequirementCategory = (typeof requirementCategory)[number];
-
-export const requirementStatus = [
-  "pending",
-  "in_progress",
-  "done",
-] as const;
-export type RequirementStatus = (typeof requirementStatus)[number];
-
-export const requirements = pgTable("requirements", (t) => ({
-  id: t.uuid().notNull().primaryKey().defaultRandom(),
-  workItemId: t
-    .uuid()
-    .notNull()
-    .references(() => workItems.id, { onDelete: "cascade" }),
-  category: t
-    .text({ enum: requirementCategory })
-    .notNull()
-    .default("other"),
-  description: t.text().notNull(),
-  status: t
-    .text({ enum: requirementStatus })
-    .notNull()
-    .default("pending"),
-  linkedTaskId: t.uuid(),
-  sortOrder: t.integer().notNull().default(0),
-  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-}), (table) => [
-  index("requirements_work_item_id_idx").on(table.workItemId),
-]);
-
-export const requirementsRelations = relations(
-  requirements,
-  ({ one }) => ({
-    workItem: one(workItems, {
-      fields: [requirements.workItemId],
-      references: [workItems.id],
-      relationName: "work_item_requirements",
-    }),
-    linkedTask: one(workItems, {
-      fields: [requirements.linkedTaskId],
-      references: [workItems.id],
-      relationName: "requirement_linked_task",
-    }),
-  }),
-);
-
-export const workItemsRelations = relations(workItems, ({ one, many }) => ({
-  ownerUser: one(user, {
-    fields: [workItems.ownerUserId],
-    references: [user.id],
-  }),
-  assigneeUser: one(user, {
-    fields: [workItems.assigneeUserId],
-    references: [user.id],
-  }),
-  workspace: one(workspaces, {
-    fields: [workItems.workspaceId],
-    references: [workspaces.id],
-  }),
-  project: one(projects, {
-    fields: [workItems.projectId],
-    references: [projects.id],
-  }),
-  parent: one(workItems, {
-    fields: [workItems.parentId],
-    references: [workItems.id],
-    relationName: "work_item_parent",
-  }),
-  children: many(workItems, {
-    relationName: "work_item_parent",
-  }),
-  requirements: many(requirements, {
-    relationName: "work_item_requirements",
-  }),
-  dependencies: many(workItemDependencies, {
-    relationName: "work_item_dependencies",
-  }),
-  dependedOnBy: many(workItemDependencies, {
-    relationName: "work_item_depended_on_by",
-  }),
-}));
+// requirementCategory / requirementStatus / RequirementCategory / RequirementStatus
+// moved to @bob/work-items/schema (Phase 7B-2 Task 12).
+// requirements / requirementsRelations moved to @bob/work-items/schema (Phase 7B-2 Task 12).
+// workItemsRelations moved to @bob/work-items/schema (Phase 7B-2 Task 12).
 
 // workspacesRelations + workspaceMembersRelations moved to @bob/tenancy/schema (Phase 7B-2 Task 8).
 
@@ -832,13 +486,7 @@ export const chatAttachmentsRelations = relations(
 
 // planStatusEnum / PlanStatus moved to @bob/projects/schema (Phase 7B-2 Task 11).
 
-export const taskStatusEnum = [
-  "pending",
-  "in_progress",
-  "completed",
-  "cancelled",
-] as const;
-export type TaskStatus = (typeof taskStatusEnum)[number];
+// taskStatusEnum / TaskStatus moved to @bob/work-items/schema (Phase 7B-2 Task 12).
 
 // linkTypeEnum / LinkType moved to @bob/projects/schema (Phase 7B-2 Task 11).
 
@@ -869,38 +517,7 @@ export type EventType = (typeof eventTypeEnum)[number];
 // worktreePlans + CreateWorktreePlanSchema moved to @bob/projects/schema (Phase 7B-2 Task 11).
 // worktreeLinks + CreateWorktreeLinkSchema moved to @bob/projects/schema (Phase 7B-2 Task 11).
 
-export const planTaskItems = pgTable("plan_task_items", (t) => ({
-  id: t.uuid().notNull().primaryKey().defaultRandom(),
-  planId: t
-    .uuid()
-    .notNull()
-    .references(() => worktreePlans.id, { onDelete: "cascade" }),
-  taskKey: t.varchar({ length: 20 }).notNull(),
-  content: t.text().notNull(),
-  status: t.varchar({ length: 20 }).notNull().default("pending"),
-  priority: t.varchar({ length: 10 }).notNull().default("medium"),
-  parentTaskKey: t.varchar({ length: 20 }),
-  sortOrder: t.integer().notNull().default(0),
-  completedAt: t.timestamp({ mode: "string", withTimezone: true }),
-  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-  updatedAt: t
-    .timestamp({ mode: "string", withTimezone: true })
-    .$onUpdateFn(() => sql`now()`),
-}));
-
-export const CreatePlanTaskItemSchema = createInsertSchema(planTaskItems, {
-  taskKey: z.string().max(20),
-  content: z.string(),
-  status: z.enum(taskStatusEnum).default("pending"),
-  priority: z.enum(["low", "medium", "high"]).default("medium"),
-  parentTaskKey: z.string().max(20).optional(),
-  sortOrder: z.number().int().default(0),
-}).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-  completedAt: true,
-});
+// planTaskItems / CreatePlanTaskItemSchema moved to @bob/work-items/schema (Phase 7B-2 Task 12).
 
 export const eventLog = pgTable("event_log", (t) => ({
   id: t.uuid().notNull().primaryKey().defaultRandom(),
@@ -985,15 +602,10 @@ export const sessionConnections = pgTable("session_connections", (t) => ({
 }));
 
 // worktreePlansRelations + worktreeLinksRelations moved to @bob/projects/schema
-// (Phase 7B-2 Task 11). `worktreePlansRelations.tasks: many(planTaskItems)` is
-// commented out there pending Task 12 (work-items move).
+// (Phase 7B-2 Task 11). `worktreePlansRelations.tasks: many(planTaskItems)`
+// re-enabled in @bob/projects/schema during Phase 7B-2 Task 12.
 
-export const planTaskItemsRelations = relations(planTaskItems, ({ one }) => ({
-  plan: one(worktreePlans, {
-    fields: [planTaskItems.planId],
-    references: [worktreePlans.id],
-  }),
-}));
+// planTaskItemsRelations moved to @bob/work-items/schema (Phase 7B-2 Task 12).
 
 export const eventLogRelations = relations(eventLog, ({ one }) => ({
   user: one(user, {
@@ -1055,14 +667,7 @@ export const prReviewStatusPgEnum = pgEnum(
 export const webhookStatusEnum = ["pending", "processed", "failed"] as const;
 export type WebhookStatus = (typeof webhookStatusEnum)[number];
 
-export const taskRunStatusEnum = [
-  "starting",
-  "running",
-  "blocked",
-  "completed",
-  "failed",
-] as const;
-export type TaskRunStatus = (typeof taskRunStatusEnum)[number];
+// taskRunStatusEnum / TaskRunStatus moved to @bob/work-items/schema (Phase 7B-2 Task 12).
 
 // 1.1 Git Provider Connections (encrypted tokens)
 export const gitProviderConnections = pgTable(
@@ -1525,86 +1130,9 @@ export const CreateWebhookDeliverySchema = createInsertSchema(
   processedAt: true,
 });
 
-// 1.5 Task Runs (planning execution tracking)
-export const taskRuns = pgTable("task_runs", (t) => ({
-  id: t.uuid().notNull().primaryKey().defaultRandom(),
-  userId: t
-    .text()
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  planningWorkspaceId: t.text("kanbanger_workspace_id").notNull(),
-  planningItemId: t.text("kanbanger_issue_id").notNull(),
-  planningItemIdentifier: t.text("kanbanger_issue_identifier").notNull(), // e.g., "PROJ-123"
-  workItemId: t.uuid().references(() => workItems.id, { onDelete: "set null" }),
-  workItemIdentifierSnapshot: t.text(),
-  sessionId: t
-    .uuid()
-    .references(() => chatConversations.id, { onDelete: "set null" }),
-  repositoryId: t
-    .uuid()
-    .references(() => repositories.id, { onDelete: "set null" }),
-  worktreeId: t.uuid().references(() => worktrees.id, { onDelete: "set null" }),
-  pullRequestId: t
-    .uuid()
-    .references(() => pullRequests.id, { onDelete: "set null" }),
-  status: t.varchar({ length: 20 }).notNull(), // 'starting' | 'running' | 'blocked' | 'completed' | 'failed'
-  blockedReason: t.text(),
-  branch: t.text(), // The git branch created for this task run
-  forgegraphRevisionId: t.text(), // VCS revision ID (commit SHA or jj change ID) for ForgeGraph tracking
-  parentTaskRunId: t.uuid().references((): AnyPgColumn => taskRuns.id, { onDelete: "set null" }),
-  runPhase: t.varchar({ length: 20 }).notNull().default("execute"),
-  // runPhase values: "shape" | "plan" | "execute" | "review" | "ship"
-  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-  updatedAt: t
-    .timestamp({ mode: "string", withTimezone: true })
-    .$onUpdateFn(() => sql`now()`),
-  completedAt: t.timestamp({ mode: "string", withTimezone: true }),
-}));
+// taskRuns / CreateTaskRunSchema moved to @bob/work-items/schema (Phase 7B-2 Task 12).
 
-export const CreateTaskRunSchema = createInsertSchema(taskRuns, {
-  planningWorkspaceId: z.string(),
-  planningItemId: z.string(),
-  planningItemIdentifier: z.string(),
-  workItemIdentifierSnapshot: z.string().optional(),
-  status: z.enum(taskRunStatusEnum),
-  blockedReason: z.string().optional(),
-  branch: z.string().optional(),
-}).omit({
-  id: true,
-  userId: true,
-  createdAt: true,
-  updatedAt: true,
-  completedAt: true,
-});
-
-export const comments = pgTable("comments", (t) => ({
-  id: t.uuid().notNull().primaryKey().defaultRandom(),
-  workItemId: t
-    .uuid()
-    .notNull()
-    .references(() => workItems.id, { onDelete: "cascade" }),
-  userId: t
-    .text()
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  parentId: t.uuid(),
-  body: t.text().notNull(),
-  bodyHtml: t.text(),
-  edited: t.boolean().notNull().default(false),
-  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-  updatedAt: t
-    .timestamp({ mode: "string", withTimezone: true })
-    .$onUpdateFn(() => sql`now()`),
-}));
-
-export const CreateCommentSchema = createInsertSchema(comments, {
-  body: z.string().min(1).max(10000),
-  bodyHtml: z.string().optional(),
-}).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
+// comments / CreateCommentSchema moved to @bob/work-items/schema (Phase 7B-2 Task 12).
 
 export const activities = pgTable("activities", (t) => ({
   id: t.uuid().notNull().primaryKey().defaultRandom(),
@@ -1620,42 +1148,7 @@ export const activities = pgTable("activities", (t) => ({
   createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
 }));
 
-export const workItemArtifacts = pgTable("work_item_artifacts", (t) => ({
-  id: t.uuid().notNull().primaryKey().defaultRandom(),
-  workItemId: t
-    .uuid()
-    .notNull()
-    .references(() => workItems.id, { onDelete: "cascade" }),
-  taskRunId: t.uuid().references(() => taskRuns.id, { onDelete: "set null" }),
-  producerType: workItemArtifactProducerTypeEnum().notNull(),
-  producerId: t.text(),
-  artifactType: workItemArtifactTypeEnum().notNull(),
-  artifactRole: t.text().notNull(),
-  url: t.text(),
-  title: t.text(),
-  summary: t.text(),
-  content: t.text(),
-  sessionId: t.uuid().references(() => chatConversations.id, { onDelete: "set null" }),
-  metadata: t.json().$type<Record<string, unknown>>(),
-  isCurrent: t.boolean().notNull().default(true),
-  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-}));
-
-export const CreateWorkItemArtifactSchema = createInsertSchema(
-  workItemArtifacts,
-  {
-    producerType: z.enum(workItemArtifactProducerType),
-    artifactType: z.enum(workItemArtifactType),
-    artifactRole: z.string().min(1),
-    url: z.string().url().optional(),
-    title: z.string().optional(),
-    summary: z.string().optional(),
-    content: z.string().optional(),
-  },
-).omit({
-  id: true,
-  createdAt: true,
-});
+// workItemArtifacts / CreateWorkItemArtifactSchema moved to @bob/work-items/schema (Phase 7B-2 Task 12).
 
 export const notifications = pgTable("notifications", (t) => ({
   id: t.uuid().notNull().primaryKey().defaultRandom(),
@@ -1820,40 +1313,10 @@ export const gitCommitsRelations = relations(gitCommits, ({ one }) => ({
   }),
 }));
 
-export const taskRunsRelations = relations(taskRuns, ({ one, many }) => ({
-  user: one(user, {
-    fields: [taskRuns.userId],
-    references: [user.id],
-  }),
-  session: one(chatConversations, {
-    fields: [taskRuns.sessionId],
-    references: [chatConversations.id],
-  }),
-  workItem: one(workItems, {
-    fields: [taskRuns.workItemId],
-    references: [workItems.id],
-  }),
-  repository: one(repositories, {
-    fields: [taskRuns.repositoryId],
-    references: [repositories.id],
-  }),
-  worktree: one(worktrees, {
-    fields: [taskRuns.worktreeId],
-    references: [worktrees.id],
-  }),
-  pullRequest: one(pullRequests, {
-    fields: [taskRuns.pullRequestId],
-    references: [pullRequests.id],
-  }),
-  parentRun: one(taskRuns, {
-    fields: [taskRuns.parentTaskRunId],
-    references: [taskRuns.id],
-    relationName: "task_run_parent",
-  }),
-  childRuns: many(taskRuns, {
-    relationName: "task_run_parent",
-  }),
-}));
+// taskRunsRelations moved to @bob/work-items/schema (Phase 7B-2 Task 12).
+// `taskRunsRelations.session: one(chatConversations)` is commented out there
+// pending Task 14 (chat). `taskRunsRelations.pullRequest: one(pullRequests)`
+// is commented out there pending Task 15 (git).
 
 // =============================================================================
 // Run Lifecycle Events (cross-phase event logging)
@@ -1902,16 +1365,7 @@ export const runLifecycleEventsRelations = relations(
   }),
 );
 
-export const commentsRelations = relations(comments, ({ one }) => ({
-  workItem: one(workItems, {
-    fields: [comments.workItemId],
-    references: [workItems.id],
-  }),
-  user: one(user, {
-    fields: [comments.userId],
-    references: [user.id],
-  }),
-}));
+// commentsRelations moved to @bob/work-items/schema (Phase 7B-2 Task 12).
 
 export const activitiesRelations = relations(activities, ({ one }) => ({
   workItem: one(workItems, {
@@ -1924,19 +1378,7 @@ export const activitiesRelations = relations(activities, ({ one }) => ({
   }),
 }));
 
-export const workItemArtifactsRelations = relations(
-  workItemArtifacts,
-  ({ one }) => ({
-    workItem: one(workItems, {
-      fields: [workItemArtifacts.workItemId],
-      references: [workItems.id],
-    }),
-    taskRun: one(taskRuns, {
-      fields: [workItemArtifacts.taskRunId],
-      references: [taskRuns.id],
-    }),
-  }),
-);
+// workItemArtifactsRelations moved to @bob/work-items/schema (Phase 7B-2 Task 12).
 
 export const notificationsRelations = relations(notifications, ({ one }) => ({
   user: one(user, {
@@ -2246,34 +1688,7 @@ export const skillExecutionsRelations = relations(
   }),
 );
 
-// ---------------------------------------------------------------------------
-// Work-item time-travel snapshots
-// ---------------------------------------------------------------------------
-
-export const workItemSnapshots = pgTable(
-  "work_item_snapshots",
-  (t) => ({
-    id: t.uuid().notNull().primaryKey().defaultRandom(),
-    workItemId: t
-      .uuid()
-      .notNull()
-      .references(() => workItems.id, { onDelete: "cascade" }),
-    stage: t.text().notNull(),
-    data: t.jsonb().notNull().default({}),
-    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-  }),
-  (table) => [index("work_item_snapshots_work_item_id_idx").on(table.workItemId)],
-);
-
-export const workItemSnapshotsRelations = relations(
-  workItemSnapshots,
-  ({ one }) => ({
-    workItem: one(workItems, {
-      fields: [workItemSnapshots.workItemId],
-      references: [workItems.id],
-    }),
-  }),
-);
+// workItemSnapshots / workItemSnapshotsRelations moved to @bob/work-items/schema (Phase 7B-2 Task 12).
 
 // ---------------------------------------------------------------------------
 // Session checkpoints (turn-level)

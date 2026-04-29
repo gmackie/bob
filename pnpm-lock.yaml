@@ -1046,6 +1046,9 @@ importers:
       '@bob/webhooks':
         specifier: workspace:*
         version: link:../webhooks
+      '@bob/work-items':
+        specifier: workspace:*
+        version: link:../work-items
       '@electric-sql/pglite':
         specifier: 0.3.16
         version: 0.3.16
@@ -1388,6 +1391,9 @@ importers:
       '@bob/tenancy':
         specifier: workspace:*
         version: link:../tenancy
+      '@bob/work-items':
+        specifier: workspace:*
+        version: link:../work-items
       drizzle-orm:
         specifier: ^0.44.7
         version: 0.44.7(@cloudflare/workers-types@4.20260426.1)(@electric-sql/pglite@0.3.16)(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.1)(@prisma/client@5.22.0(prisma@5.22.0))(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.9.0)(kysely@0.28.16)(pg@8.20.0)(postgres@3.4.9)(prisma@5.22.0)
@@ -1651,6 +1657,21 @@ importers:
 
   packages/bob/src/work-items:
     dependencies:
+      '@bob/auth':
+        specifier: workspace:*
+        version: link:../auth
+      '@bob/projects':
+        specifier: workspace:*
+        version: link:../projects
+      '@bob/tenancy':
+        specifier: workspace:*
+        version: link:../tenancy
+      drizzle-orm:
+        specifier: ^0.44.7
+        version: 0.44.7(@cloudflare/workers-types@4.20260426.1)(@electric-sql/pglite@0.3.16)(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.1)(@prisma/client@5.22.0(prisma@5.22.0))(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.9.0)(kysely@0.28.16)(pg@8.20.0)(postgres@3.4.9)(prisma@5.22.0)
+      drizzle-zod:
+        specifier: ^0.8.3
+        version: 0.8.3(drizzle-orm@0.44.7(@cloudflare/workers-types@4.20260426.1)(@electric-sql/pglite@0.3.16)(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.1)(@prisma/client@5.22.0(prisma@5.22.0))(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.9.0)(kysely@0.28.16)(pg@8.20.0)(postgres@3.4.9)(prisma@5.22.0))(zod@4.3.6)
       zod:
         specifier: 'catalog:'
         version: 4.3.6

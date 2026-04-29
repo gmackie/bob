@@ -15,6 +15,7 @@
   "dependencies": {
     "@bob/auth": "workspace:*",
     "@bob/tenancy": "workspace:*",
+    "@bob/work-items": "workspace:*",
     "drizzle-orm": "^0.44.7",
     "drizzle-zod": "^0.8.3",
     "zod": "catalog:"

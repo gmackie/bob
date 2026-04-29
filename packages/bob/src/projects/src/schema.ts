@@ -30,6 +30,7 @@ import { z } from "zod/v4";
 
 import { user } from "@bob/auth/schema";
 import { workspaces } from "@bob/tenancy/schema";
+import { planTaskItems } from "@bob/work-items/schema";
 
 // --- Project status enum ---
 
@@ -328,7 +329,7 @@ export const worktreesRelations = relations(worktrees, ({ one }) => ({
 
 export const worktreePlansRelations = relations(
   worktreePlans,
-  ({ one }) => ({
+  ({ one, many }) => ({
     worktree: one(worktrees, {
       fields: [worktreePlans.worktreeId],
       references: [worktrees.id],
@@ -337,8 +338,7 @@ export const worktreePlansRelations = relations(
       fields: [worktreePlans.userId],
       references: [user.id],
     }),
-    // TODO Phase 7B-2 Task 12: re-enable tasks → planTaskItems when work-items moves.
-    // tasks: many(planTaskItems),
+    tasks: many(planTaskItems),
   }),
 );
 
