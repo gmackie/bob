@@ -3,8 +3,11 @@
   "include": ["src", "next-env.d.ts", "*.ts"],
   "compilerOptions": {
     "plugins": [{ "name": "next" }],
+    "declaration": false,
+    "declarationMap": false,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "~/*": ["./src/*"]
     }
   }
 }

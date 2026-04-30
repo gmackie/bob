@@ -1,97 +1,126 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
-import { useCreateThread, useAgentChat } from "@/rpc/hooks";
-import { VoiceInput } from "@/components/voice-input";
+import { useState } from "react";
+import Link from "next/link";
+
+import { useTRPC } from "~/trpc/react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 export default function CapturePage() {
-  const [input, setInput] = useState("");
-  const [response, setResponse] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const createThread = useCreateThread();
-  const agentChat = useAgentChat();
+  const [note, setNote] = useState("");
+  const [importJson, setImportJson] = useState("");
+  const [tab, setTab] = useState<"note" | "import">("note");
+  const trpc = useTRPC();
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
-  const handleSubmit = async () => {
-    if (!input.trim() || isLoading) return;
-    setIsLoading(true);
-    try {
-      // Create a quick capture thread
-      const thread = await createThread.mutateAsync({
-        title: input.trim().slice(0, 60),
-        tags: [],
-      });
-      if (!thread.activeBranchId) {
-        throw new Error("Thread created without an active branch");
-      }
-      // Send to agent
-      const msg = await agentChat.mutateAsync({
-        threadId: thread.id,
-        branchId: thread.activeBranchId,
-        content: input.trim(),
-      });
-      setResponse(msg.content);
-    } catch (err) {
-      setResponse(
-        "Error: " + (err instanceof Error ? err.message : "Unknown error"),
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleVoiceTranscript = useCallback(
-    (text: string) => {
-      setInput((prev) => (prev ? prev + " " + text : text));
-    },
-    [],
+  const importMutation = useMutation(
+    trpc.imports.importConversations.mutationOptions({
+      onSuccess: (data) => {
+        setImportJson("");
+        void queryClient.invalidateQueries({
+          queryKey: trpc.research.listSources.queryKey(),
+        });
+      },
+    }),
   );
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && e.metaKey) {
-      e.preventDefault();
-      handleSubmit();
-    }
-    if (e.key === "Escape") {
-      // In Electron, this will blur -> close the window
-      window.blur();
-    }
-  };
-
   return (
-    <div className="flex h-screen w-screen items-center justify-center bg-[var(--color-bg)]/95 p-8">
-      <div className="w-full max-w-lg rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-6 shadow-2xl">
-        <textarea
-          ref={inputRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="What's on your mind?"
-          rows={3}
-          className="w-full resize-none rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-3 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent)] focus:outline-none"
-        />
-        <div className="mt-3 flex items-center justify-between">
-          <span className="text-xs text-[var(--color-text-muted)]">
-            Cmd+Enter to send - Esc to close
-          </span>
-          <div className="flex items-center gap-2">
-            <VoiceInput onTranscript={handleVoiceTranscript} />
-            <button
-              onClick={handleSubmit}
-              disabled={!input.trim() || isLoading}
-              className="rounded-lg bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-[var(--color-bg)] disabled:opacity-50"
-            >
-              {isLoading ? "Thinking..." : "Capture"}
-            </button>
-          </div>
+    <div className="min-h-screen bg-[#111113] text-[#E8E4DF]">
+      <div className="mx-auto max-w-3xl px-3 py-6 md:px-6 md:py-10">
+        <div className="flex items-center justify-between">
+          <h1 className="font-serif text-2xl text-[#D4A04A]">Capture</h1>
+          <Link
+            href="/"
+            className="text-sm text-[#5A5855] transition-colors hover:text-[#8A8580]"
+          >
+            Home
+          </Link>
         </div>
-        {response && (
-          <div className="mt-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] p-4 text-sm text-[var(--color-text)]">
-            {response}
+
+        {/* Tabs */}
+        <div className="mt-6 flex gap-1 rounded-[6px] bg-[#1A1A1E] p-1">
+          <button
+            onClick={() => setTab("note")}
+            className={`flex-1 rounded-[3px] px-4 py-2 text-sm font-medium transition-colors ${
+              tab === "note"
+                ? "bg-[#2A2A2F] text-[#E8E4DF]"
+                : "text-[#5A5855] hover:text-[#8A8580]"
+            }`}
+          >
+            Quick Note
+          </button>
+          <button
+            onClick={() => setTab("import")}
+            className={`flex-1 rounded-[3px] px-4 py-2 text-sm font-medium transition-colors ${
+              tab === "import"
+                ? "bg-[#2A2A2F] text-[#E8E4DF]"
+                : "text-[#5A5855] hover:text-[#8A8580]"
+            }`}
+          >
+            Import
+          </button>
+        </div>
+
+        {/* Note tab */}
+        {tab === "note" && (
+          <div className="mt-6">
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Capture a thought, link, or idea..."
+              className="w-full resize-none rounded-[6px] border border-[#2A2A2F] bg-[#1A1A1E] px-4 py-3 text-sm text-[#E8E4DF] placeholder-[#5A5855] focus:border-[#D4A04A]/50 focus:outline-none"
+              rows={8}
+            />
+            <div className="mt-3 flex justify-end">
+              <button
+                disabled={!note.trim()}
+                className="rounded-[3px] bg-[#D4A04A] px-4 py-2 text-sm font-medium text-[#111113] transition-opacity hover:opacity-90 disabled:opacity-40"
+              >
+                Save Note
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Import tab */}
+        {tab === "import" && (
+          <div className="mt-6">
+            <p className="mb-3 text-sm text-[#8A8580]">
+              Paste a Claude, ChatGPT, or OODA conversation JSON export to
+              import it as sources.
+            </p>
+            <textarea
+              value={importJson}
+              onChange={(e) => setImportJson(e.target.value)}
+              placeholder='Paste conversation JSON here...'
+              className="w-full resize-none rounded-[6px] border border-[#2A2A2F] bg-[#1A1A1E] px-4 py-3 font-mono text-xs text-[#E8E4DF] placeholder-[#5A5855] focus:border-[#D4A04A]/50 focus:outline-none"
+              rows={12}
+            />
+            <div className="mt-3 flex items-center justify-between">
+              <span className="text-xs text-[#5A5855]">
+                {importMutation.isPending
+                  ? "Importing..."
+                  : importMutation.isSuccess
+                    ? `Imported successfully`
+                    : importMutation.isError
+                      ? `Error: ${importMutation.error.message}`
+                      : ""}
+              </span>
+              <button
+                onClick={() => {
+                  try {
+                    const data = JSON.parse(importJson);
+                    importMutation.mutate({ rawJson: data, vaultKind: "research" });
+                  } catch {
+                    // invalid JSON
+                  }
+                }}
+                disabled={!importJson.trim() || importMutation.isPending}
+                className="rounded-[3px] bg-[#D4A04A] px-4 py-2 text-sm font-medium text-[#111113] transition-opacity hover:opacity-90 disabled:opacity-40"
+              >
+                Import
+              </button>
+            </div>
           </div>
         )}
       </div>
