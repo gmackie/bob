@@ -1,10 +1,16 @@
 import type { TRPCRouterRecord } from "@trpc/server";
 import { z } from "zod/v4";
 
-import { and, desc, eq, gte, lte } from "@bob/db";
-import { eventLog, eventTypeEnum } from "@bob/db/schema";
+import { eventTypeEnum } from "@bob/db/schema";
 
 import { protectedProcedure } from "../trpc";
+import {
+  eventList,
+  eventCreate,
+  eventRecentActivity,
+  eventByWorktree,
+  eventStats,
+} from "../handlers/event";
 
 export const eventRouter = {
   list: protectedProcedure
@@ -19,34 +25,9 @@ export const eventRouter = {
         until: z.date().optional(),
       })
     )
-    .query(async ({ ctx, input }) => {
-      const conditions = [eq(eventLog.userId, ctx.session.user.id)];
-
-      if (input.worktreeId) {
-        conditions.push(eq(eventLog.worktreeId, input.worktreeId));
-      }
-      if (input.repositoryId) {
-        conditions.push(eq(eventLog.repositoryId, input.repositoryId));
-      }
-      if (input.eventType) {
-        conditions.push(eq(eventLog.eventType, input.eventType));
-      }
-      if (input.since) {
-        conditions.push(gte(eventLog.createdAt, input.since.toISOString()));
-      }
-      if (input.until) {
-        conditions.push(lte(eventLog.createdAt, input.until.toISOString()));
-      }
-
-      const events = await ctx.db.query.eventLog.findMany({
-        where: and(...conditions),
-        orderBy: desc(eventLog.createdAt),
-        limit: input.limit,
-        offset: input.offset,
-      });
-
-      return events;
-    }),
+    .query(({ ctx, input }) =>
+      eventList({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
 
   create: protectedProcedure
     .input(
@@ -57,20 +38,9 @@ export const eventRouter = {
         payload: z.record(z.string(), z.unknown()).default({}),
       })
     )
-    .mutation(async ({ ctx, input }) => {
-      const [event] = await ctx.db
-        .insert(eventLog)
-        .values({
-          userId: ctx.session.user.id,
-          worktreeId: input.worktreeId,
-          repositoryId: input.repositoryId,
-          eventType: input.eventType,
-          payload: input.payload,
-        })
-        .returning();
-
-      return event;
-    }),
+    .mutation(({ ctx, input }) =>
+      eventCreate({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
 
   recentActivity: protectedProcedure
     .input(
@@ -78,19 +48,9 @@ export const eventRouter = {
         limit: z.number().min(1).max(100).default(20),
       })
     )
-    .query(async ({ ctx, input }) => {
-      const events = await ctx.db.query.eventLog.findMany({
-        where: eq(eventLog.userId, ctx.session.user.id),
-        orderBy: desc(eventLog.createdAt),
-        limit: input.limit,
-        with: {
-          worktree: true,
-          repository: true,
-        },
-      });
-
-      return events;
-    }),
+    .query(({ ctx, input }) =>
+      eventRecentActivity({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
 
   byWorktree: protectedProcedure
     .input(
@@ -100,24 +60,9 @@ export const eventRouter = {
         since: z.date().optional(),
       })
     )
-    .query(async ({ ctx, input }) => {
-      const conditions = [
-        eq(eventLog.userId, ctx.session.user.id),
-        eq(eventLog.worktreeId, input.worktreeId),
-      ];
-
-      if (input.since) {
-        conditions.push(gte(eventLog.createdAt, input.since.toISOString()));
-      }
-
-      const events = await ctx.db.query.eventLog.findMany({
-        where: and(...conditions),
-        orderBy: desc(eventLog.createdAt),
-        limit: input.limit,
-      });
-
-      return events;
-    }),
+    .query(({ ctx, input }) =>
+      eventByWorktree({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
 
   stats: protectedProcedure
     .input(
@@ -127,32 +72,7 @@ export const eventRouter = {
         since: z.date().optional(),
       })
     )
-    .query(async ({ ctx, input }) => {
-      const conditions = [eq(eventLog.userId, ctx.session.user.id)];
-
-      if (input.worktreeId) {
-        conditions.push(eq(eventLog.worktreeId, input.worktreeId));
-      }
-      if (input.repositoryId) {
-        conditions.push(eq(eventLog.repositoryId, input.repositoryId));
-      }
-      if (input.since) {
-        conditions.push(gte(eventLog.createdAt, input.since.toISOString()));
-      }
-
-      const events = await ctx.db.query.eventLog.findMany({
-        where: and(...conditions),
-      });
-
-      const byType = new Map<string, number>();
-      for (const event of events) {
-        const count = byType.get(event.eventType) ?? 0;
-        byType.set(event.eventType, count + 1);
-      }
-
-      return {
-        total: events.length,
-        byType: Object.fromEntries(byType),
-      };
-    }),
+    .query(({ ctx, input }) =>
+      eventStats({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
 } satisfies TRPCRouterRecord;
