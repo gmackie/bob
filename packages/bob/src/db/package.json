@@ -41,6 +41,7 @@
     "with-env": "dotenv -e ../../.env --"
   },
   "dependencies": {
+    "@gmacko/core": "workspace:*",
     "@bob/agents": "workspace:*",
     "@bob/auth": "workspace:*",
     "@bob/chat": "workspace:*",

@@ -1124,6 +1124,9 @@ importers:
       '@electric-sql/pglite':
         specifier: 0.3.16
         version: 0.3.16
+      '@gmacko/core':
+        specifier: workspace:*
+        version: link:../../../core
       '@neondatabase/serverless':
         specifier: ^0.10.4
         version: 0.10.4
