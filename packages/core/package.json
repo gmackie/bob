@@ -73,6 +73,11 @@
     "./ui": "./src/ui/index.ts",
     "./ui/button": "./src/ui/button.tsx",
     "./ui/input": "./src/ui/input.tsx",
+    "./ui/label": "./src/ui/label.tsx",
+    "./ui/separator": "./src/ui/separator.tsx",
+    "./ui/dropdown-menu": "./src/ui/dropdown-menu.tsx",
+    "./ui/field": "./src/ui/field.tsx",
+    "./ui/toast": "./src/ui/toast.tsx",
     "./ui/theme": "./src/ui/theme-provider.tsx",
     "./ui/chat": "./src/ui/chat/index.ts",
     "./app-shell": "./src/app-shell/index.ts",
@@ -98,8 +103,11 @@
     "postgres": "^3.4.0",
     "zod": "^4.0.0",
     "drizzle-zod": "^0.7.0",
+    "@radix-ui/react-icons": "^1.3.2",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
+    "radix-ui": "^1.4.3",
+    "sonner": "^2.0.7",
     "tailwind-merge": "^3.0.0"
   },
   "peerDependencies": {
