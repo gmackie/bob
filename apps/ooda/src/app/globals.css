@@ -27,7 +27,7 @@
 
 @layer base {
   * {
-    @apply border-border;
+    border-color: var(--color-border);
   }
   body {
     letter-spacing: var(--tracking-normal);
@@ -54,5 +54,8 @@
     --border: #2A2A2F;
     --input: #2A2A2F;
     --ring: #D4A04A;
+    --color-border: #2A2A2F;
+    --color-bg: #111113;
+    --color-text: #E8E4DF;
   }
 }
