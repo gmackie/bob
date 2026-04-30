@@ -36,7 +36,37 @@ const STUB_RUN_ID = "rrrrrrrr-rrrr-rrrr-rrrr-rrrrrrrrrrrr";
 const STUB_WORKSPACE_ID = "wwwwwwww-wwww-wwww-wwww-wwwwwwwwwwww";
 const STUB_SESSION_ID = "ssssssss-ssss-ssss-ssss-ssssssssssss";
 const STUB_GATEWAY_ID = "gw-stub-001";
+const STUB_INSTANCE_ID = "iiiiiiii-iiii-iiii-iiii-iiiiiiiiiiii";
+const STUB_REPO_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+const STUB_WORKTREE_ID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
 const STUB_DATE = new Date("2026-04-21T00:00:00.000Z");
+
+/** Minimal stub instance record reused across instance handlers. */
+const STUB_INSTANCE = {
+  id: STUB_INSTANCE_ID,
+  userId: STUB_USER_ID,
+  repositoryId: STUB_REPO_ID,
+  worktreeId: STUB_WORKTREE_ID,
+  agentType: "claude",
+  status: "running" as const,
+  pid: 12345,
+  port: null,
+  errorMessage: null,
+  lastActivity: null,
+  createdAt: "2026-04-21T00:00:00.000Z",
+  updatedAt: null,
+};
+
+/** Minimal stub event log record reused across event handlers. */
+const STUB_EVENT = {
+  id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+  userId: STUB_USER_ID,
+  worktreeId: STUB_WORKTREE_ID,
+  repositoryId: STUB_REPO_ID,
+  eventType: "instance.started",
+  payload: {},
+  createdAt: "2026-04-21T00:00:00.000Z",
+};
 
 /** Minimal stub session record reused across session handlers. */
 const STUB_SESSION = {
@@ -361,6 +391,99 @@ const handlers = AgentRpc.of({
     sessionId === STUB_SESSION_ID
       ? Effect.succeed({ assistantText: "Stub voice response" })
       : Effect.fail(new NotFoundError({ entity: "Session", id: sessionId })),
+
+  // --- 7B-4B Task 3: agent.instance stubs ---------------------------------
+
+  "agent.instance.list": () =>
+    Effect.succeed([STUB_INSTANCE]),
+
+  "agent.instance.byId": ({ id }) =>
+    id === STUB_INSTANCE_ID
+      ? Effect.succeed(STUB_INSTANCE)
+      : Effect.fail(new NotFoundError({ entity: "AgentInstance", id })),
+
+  "agent.instance.byRepository": (_payload) =>
+    Effect.succeed([STUB_INSTANCE]),
+
+  "agent.instance.byWorktree": (_payload) =>
+    Effect.succeed([STUB_INSTANCE]),
+
+  "agent.instance.start": (_payload) =>
+    Effect.succeed({
+      ...STUB_INSTANCE,
+      status: "starting" as const,
+      pid: null,
+    }),
+
+  "agent.instance.stop": ({ id }) =>
+    id === STUB_INSTANCE_ID
+      ? Effect.succeed({ ...STUB_INSTANCE, status: "stopped" as const, pid: null })
+      : Effect.fail(new NotFoundError({ entity: "AgentInstance", id })),
+
+  "agent.instance.restart": ({ id }) =>
+    id === STUB_INSTANCE_ID
+      ? Effect.succeed({ ...STUB_INSTANCE, status: "starting" as const, pid: null })
+      : Effect.fail(new NotFoundError({ entity: "AgentInstance", id })),
+
+  "agent.instance.delete": (_payload) =>
+    Effect.succeed({ success: true }),
+
+  "agent.instance.updateStatus": ({ id }) =>
+    id === STUB_INSTANCE_ID
+      ? Effect.succeed(STUB_INSTANCE)
+      : Effect.fail(new NotFoundError({ entity: "AgentInstance", id })),
+
+  // --- 7B-4B Task 3: agent.terminal stubs ---------------------------------
+
+  "agent.terminal.createAgentSession": ({ instanceId }) =>
+    instanceId === STUB_INSTANCE_ID
+      ? Effect.succeed({
+          sessionId: "ts-stub-001",
+          instanceId,
+          agentType: "claude",
+        })
+      : Effect.fail(new NotFoundError({ entity: "AgentInstance", id: instanceId })),
+
+  "agent.terminal.createDirectorySession": ({ instanceId }) =>
+    instanceId === STUB_INSTANCE_ID
+      ? Effect.succeed({
+          sessionId: "ts-stub-002",
+          instanceId,
+          path: "/tmp/stub-worktree",
+        })
+      : Effect.fail(new NotFoundError({ entity: "AgentInstance", id: instanceId })),
+
+  "agent.terminal.createSystemSession": (_payload) =>
+    Effect.succeed({
+      sessionId: "ts-stub-003",
+      cwd: "/tmp",
+      initialCommand: undefined,
+    }),
+
+  "agent.terminal.listByInstance": ({ instanceId }) =>
+    instanceId === STUB_INSTANCE_ID
+      ? Effect.succeed([])
+      : Effect.fail(new NotFoundError({ entity: "AgentInstance", id: instanceId })),
+
+  "agent.terminal.close": (_payload) =>
+    Effect.succeed({ success: true }),
+
+  // --- 7B-4B Task 3: agent.event stubs ------------------------------------
+
+  "agent.event.list": (_payload) =>
+    Effect.succeed([STUB_EVENT]),
+
+  "agent.event.create": (_payload) =>
+    Effect.succeed(STUB_EVENT),
+
+  "agent.event.recentActivity": (_payload) =>
+    Effect.succeed([STUB_EVENT]),
+
+  "agent.event.byWorktree": (_payload) =>
+    Effect.succeed([STUB_EVENT]),
+
+  "agent.event.stats": (_payload) =>
+    Effect.succeed({ total: 1, byType: { "instance.started": 1 } }),
 });
 
 /**

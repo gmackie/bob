@@ -91,6 +91,36 @@ export type {
   ArtifactType,
   ArtifactRole,
 } from "./schemas/agent-session";
+export {
+  AgentInstanceSchema,
+  InstanceStatusEnum,
+  AgentTypeEnum,
+} from "./schemas/agent-instance";
+export type {
+  AgentInstanceWire,
+  InstanceStatus,
+  AgentType,
+} from "./schemas/agent-instance";
+export {
+  AgentTerminalSessionSchema,
+  DirectoryTerminalSessionSchema,
+  SystemTerminalSessionSchema,
+} from "./schemas/agent-terminal";
+export type {
+  AgentTerminalSessionWire,
+  DirectoryTerminalSessionWire,
+  SystemTerminalSessionWire,
+} from "./schemas/agent-terminal";
+export {
+  EventLogSchema,
+  EventTypeEnum,
+  EventStatsSchema,
+} from "./schemas/agent-event";
+export type {
+  EventLogWire,
+  EventType,
+  EventStatsWire,
+} from "./schemas/agent-event";
 
 // --- Secrets -------------------------------------------------------------
 // Standalone RpcGroup. `secrets.decryptForUse` is the only plaintext-returning

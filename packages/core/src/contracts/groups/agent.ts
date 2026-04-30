@@ -51,6 +51,21 @@ import {
   ArtifactRoleEnum,
   SessionLeaseConflictError,
 } from "../schemas/agent-session.js";
+import {
+  AgentInstanceSchema,
+  InstanceStatusEnum,
+  AgentTypeEnum,
+} from "../schemas/agent-instance.js";
+import {
+  AgentTerminalSessionSchema,
+  DirectoryTerminalSessionSchema,
+  SystemTerminalSessionSchema,
+} from "../schemas/agent-terminal.js";
+import {
+  EventLogSchema,
+  EventTypeEnum,
+  EventStatsSchema,
+} from "../schemas/agent-event.js";
 import { NotFoundError } from "../../rpc/errors.js";
 
 /** Union of every error `agent.sendTurn` can surface (on its stream). */
@@ -594,6 +609,217 @@ export const AgentSessionHandleVoiceTranscriptRpc = Rpc.make(
   },
 );
 
+// ---------------------------------------------------------------------------
+// agent.instance.* — 9 RPCs (7B-4B Task 3)
+// ---------------------------------------------------------------------------
+
+// --- agent.instance.list ---------------------------------------------------
+
+export const AgentInstanceListRpc = Rpc.make("agent.instance.list", {
+  payload: Schema.Void,
+  success: Schema.Array(AgentInstanceSchema),
+});
+
+// --- agent.instance.byId ---------------------------------------------------
+
+export const AgentInstanceByIdRpc = Rpc.make("agent.instance.byId", {
+  payload: Schema.Struct({ id: Schema.String }),
+  success: AgentInstanceSchema,
+  error: NotFoundError,
+});
+
+// --- agent.instance.byRepository -------------------------------------------
+
+export const AgentInstanceByRepositoryRpc = Rpc.make(
+  "agent.instance.byRepository",
+  {
+    payload: Schema.Struct({ repositoryId: Schema.String }),
+    success: Schema.Array(AgentInstanceSchema),
+  },
+);
+
+// --- agent.instance.byWorktree ---------------------------------------------
+
+export const AgentInstanceByWorktreeRpc = Rpc.make(
+  "agent.instance.byWorktree",
+  {
+    payload: Schema.Struct({ worktreeId: Schema.String }),
+    success: Schema.Array(AgentInstanceSchema),
+  },
+);
+
+// --- agent.instance.start --------------------------------------------------
+
+export const AgentInstanceStartRpc = Rpc.make("agent.instance.start", {
+  payload: Schema.Struct({
+    worktreeId: Schema.String,
+    agentType: Schema.optional(AgentTypeEnum),
+  }),
+  success: AgentInstanceSchema,
+  error: NotFoundError,
+});
+
+// --- agent.instance.stop ---------------------------------------------------
+
+export const AgentInstanceStopRpc = Rpc.make("agent.instance.stop", {
+  payload: Schema.Struct({ id: Schema.String }),
+  success: AgentInstanceSchema,
+  error: NotFoundError,
+});
+
+// --- agent.instance.restart ------------------------------------------------
+
+export const AgentInstanceRestartRpc = Rpc.make("agent.instance.restart", {
+  payload: Schema.Struct({ id: Schema.String }),
+  success: AgentInstanceSchema,
+  error: NotFoundError,
+});
+
+// --- agent.instance.delete -------------------------------------------------
+
+export const AgentInstanceDeleteRpc = Rpc.make("agent.instance.delete", {
+  payload: Schema.Struct({ id: Schema.String }),
+  success: Schema.Struct({ success: Schema.Boolean }),
+});
+
+// --- agent.instance.updateStatus -------------------------------------------
+
+export const AgentInstanceUpdateStatusRpc = Rpc.make(
+  "agent.instance.updateStatus",
+  {
+    payload: Schema.Struct({
+      id: Schema.String,
+      status: InstanceStatusEnum,
+      pid: Schema.optional(Schema.Number),
+      errorMessage: Schema.optional(Schema.String),
+    }),
+    success: AgentInstanceSchema,
+    error: NotFoundError,
+  },
+);
+
+// ---------------------------------------------------------------------------
+// agent.terminal.* — 5 RPCs (7B-4B Task 3)
+// ---------------------------------------------------------------------------
+
+// --- agent.terminal.createAgentSession -------------------------------------
+
+export const AgentTerminalCreateAgentSessionRpc = Rpc.make(
+  "agent.terminal.createAgentSession",
+  {
+    payload: Schema.Struct({ instanceId: Schema.String }),
+    success: AgentTerminalSessionSchema,
+    error: NotFoundError,
+  },
+);
+
+// --- agent.terminal.createDirectorySession ---------------------------------
+
+export const AgentTerminalCreateDirectorySessionRpc = Rpc.make(
+  "agent.terminal.createDirectorySession",
+  {
+    payload: Schema.Struct({ instanceId: Schema.String }),
+    success: DirectoryTerminalSessionSchema,
+    error: NotFoundError,
+  },
+);
+
+// --- agent.terminal.createSystemSession ------------------------------------
+
+export const AgentTerminalCreateSystemSessionRpc = Rpc.make(
+  "agent.terminal.createSystemSession",
+  {
+    payload: Schema.Struct({
+      cwd: Schema.optional(Schema.String),
+      initialCommand: Schema.optional(Schema.String),
+    }),
+    success: SystemTerminalSessionSchema,
+  },
+);
+
+// --- agent.terminal.listByInstance ------------------------------------------
+
+export const AgentTerminalListByInstanceRpc = Rpc.make(
+  "agent.terminal.listByInstance",
+  {
+    payload: Schema.Struct({ instanceId: Schema.String }),
+    success: Schema.Array(AgentTerminalSessionSchema),
+    error: NotFoundError,
+  },
+);
+
+// --- agent.terminal.close --------------------------------------------------
+
+export const AgentTerminalCloseRpc = Rpc.make("agent.terminal.close", {
+  payload: Schema.Struct({ sessionId: Schema.String }),
+  success: Schema.Struct({ success: Schema.Boolean }),
+});
+
+// ---------------------------------------------------------------------------
+// agent.event.* — 5 RPCs (7B-4B Task 3)
+// ---------------------------------------------------------------------------
+
+// --- agent.event.list ------------------------------------------------------
+
+export const AgentEventListRpc = Rpc.make("agent.event.list", {
+  payload: Schema.Struct({
+    worktreeId: Schema.optional(Schema.String),
+    repositoryId: Schema.optional(Schema.String),
+    eventType: Schema.optional(EventTypeEnum),
+    limit: Schema.optional(Schema.Number),
+    offset: Schema.optional(Schema.Number),
+    since: Schema.optional(Schema.String),
+    until: Schema.optional(Schema.String),
+  }),
+  success: Schema.Array(EventLogSchema),
+});
+
+// --- agent.event.create ----------------------------------------------------
+
+export const AgentEventCreateRpc = Rpc.make("agent.event.create", {
+  payload: Schema.Struct({
+    worktreeId: Schema.optional(Schema.String),
+    repositoryId: Schema.optional(Schema.String),
+    eventType: EventTypeEnum,
+    payload: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  }),
+  success: EventLogSchema,
+});
+
+// --- agent.event.recentActivity --------------------------------------------
+
+export const AgentEventRecentActivityRpc = Rpc.make(
+  "agent.event.recentActivity",
+  {
+    payload: Schema.Struct({
+      limit: Schema.optional(Schema.Number),
+    }),
+    success: Schema.Array(EventLogSchema),
+  },
+);
+
+// --- agent.event.byWorktree ------------------------------------------------
+
+export const AgentEventByWorktreeRpc = Rpc.make("agent.event.byWorktree", {
+  payload: Schema.Struct({
+    worktreeId: Schema.String,
+    limit: Schema.optional(Schema.Number),
+    since: Schema.optional(Schema.String),
+  }),
+  success: Schema.Array(EventLogSchema),
+});
+
+// --- agent.event.stats -----------------------------------------------------
+
+export const AgentEventStatsRpc = Rpc.make("agent.event.stats", {
+  payload: Schema.Struct({
+    worktreeId: Schema.optional(Schema.String),
+    repositoryId: Schema.optional(Schema.String),
+    since: Schema.optional(Schema.String),
+  }),
+  success: EventStatsSchema,
+});
+
 // --- Group ------------------------------------------------------------------
 
 export const AgentRpc = RpcGroup.make(
@@ -639,4 +865,26 @@ export const AgentRpc = RpcGroup.make(
   AgentSessionCreateVoiceSessionRpc,
   AgentSessionStopVoiceSessionRpc,
   AgentSessionHandleVoiceTranscriptRpc,
+  // agent.instance (9) — Task 3
+  AgentInstanceListRpc,
+  AgentInstanceByIdRpc,
+  AgentInstanceByRepositoryRpc,
+  AgentInstanceByWorktreeRpc,
+  AgentInstanceStartRpc,
+  AgentInstanceStopRpc,
+  AgentInstanceRestartRpc,
+  AgentInstanceDeleteRpc,
+  AgentInstanceUpdateStatusRpc,
+  // agent.terminal (5) — Task 3
+  AgentTerminalCreateAgentSessionRpc,
+  AgentTerminalCreateDirectorySessionRpc,
+  AgentTerminalCreateSystemSessionRpc,
+  AgentTerminalListByInstanceRpc,
+  AgentTerminalCloseRpc,
+  // agent.event (5) — Task 3
+  AgentEventListRpc,
+  AgentEventCreateRpc,
+  AgentEventRecentActivityRpc,
+  AgentEventByWorktreeRpc,
+  AgentEventStatsRpc,
 );
