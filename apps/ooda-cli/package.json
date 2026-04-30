@@ -1,0 +1,28 @@
+{
+  "name": "@gmacko/ooda-cli",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "ooda": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "git clean -xdf .cache .turbo dist node_modules coverage",
+    "dev": "tsx src/index.ts",
+    "start": "tsx src/index.ts",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit --emitDeclarationOnly false"
+  },
+  "dependencies": {
+    "@gmacko/ooda": "workspace:*",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@gmacko/tsconfig": "workspace:*",
+    "@types/node": "25.6.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.0.0"
+  }
+}

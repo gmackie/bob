@@ -1,0 +1,27 @@
+{
+  "name": "@gmacko/ooda-runner",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "clean": "git clean -xdf .cache .turbo dist node_modules coverage",
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit --emitDeclarationOnly false"
+  },
+  "dependencies": {
+    "@gmacko/ooda": "workspace:*",
+    "@trpc/client": "catalog:",
+    "superjson": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@gmacko/tsconfig": "workspace:*",
+    "@types/node": "25.6.0",
+    "tsx": "catalog:",
+    "typescript": "^5.9.0",
+    "vitest": "^3.0.0"
+  }
+}
