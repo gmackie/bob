@@ -16,6 +16,9 @@
 //
 // Phase 7B-4B Task 7: Added stubs for 12 pullRequest + 7 featureBranch
 // procedures — 43 handlers total.
+//
+// Phase 7B-4B Task 8: Added stubs for 6 gitProvider + 7 git procedures
+// — 56 handlers total.
 import { Effect } from "effect";
 
 import { ProjectNotFoundError } from "@gmacko/core/projects/errors";
@@ -40,6 +43,8 @@ import type {
   FeatureBranchListItemWire,
   FeatureBranchDetailWire,
 } from "../schemas/project-feature-branch.js";
+import type { GitProviderConnectionWire, ConnectionTestResultWire, RemoteDetectionResultWire } from "../schemas/project-git-provider.js";
+import type { PushAndCreatePrResultWire, JjCommitWire, JjMutationResultWire, JjDiffResultWire } from "../schemas/project-git.js";
 
 export const STUB_TENANT_ID = "00000000-0000-0000-0000-000000000001";
 
@@ -167,6 +172,24 @@ export const STUB_FEATURE_BRANCH_TASK_PR_1: FeatureBranchTaskPRWire = {
   mergedAt: null,
   createdAt: "2026-04-21T12:00:00Z",
   pullRequest: STUB_PULL_REQUEST_1,
+};
+
+export const STUB_GIT_PROVIDER_CONNECTION_1: GitProviderConnectionWire = {
+  id: "gggggggg-gggg-gggg-gggg-gggggggggggg",
+  provider: "github",
+  instanceUrl: null,
+  providerAccountId: "12345",
+  providerUsername: "acme-dev",
+};
+
+export const STUB_JJ_COMMIT_1: JjCommitWire = {
+  changeId: "abcdef1234567890",
+  commitId: "1234567890abcdef",
+  description: "Initial commit",
+  author: "Test User <test@example.com>",
+  timestamp: "2026-04-21T12:00:00Z",
+  branches: ["main"],
+  isWorkingCopy: true,
 };
 
 export const STUB_WORKTREE_PLAN_1: WorktreePlanWire = {
@@ -750,6 +773,144 @@ export const stubProjectsHandlers = {
       status,
     } satisfies FeatureBranchWire);
   },
+
+  // --- Git provider (7B-4B Task 8) -------------------------------------------
+  "projects.gitProvider.listConnections": () =>
+    Effect.succeed([STUB_GIT_PROVIDER_CONNECTION_1]),
+  "projects.gitProvider.connectPat": ({
+    provider,
+    instanceUrl,
+  }: {
+    provider: "github" | "gitlab" | "gitea";
+    accessToken: string;
+    instanceUrl?: string;
+  }) =>
+    Effect.succeed({
+      ...STUB_GIT_PROVIDER_CONNECTION_1,
+      id: "ffffffff-ffff-ffff-ffff-fffffffffff5",
+      provider,
+      instanceUrl: instanceUrl ?? null,
+    } satisfies GitProviderConnectionWire),
+  "projects.gitProvider.disconnect": ({
+    connectionId,
+  }: {
+    connectionId: string;
+  }) => {
+    if (connectionId !== STUB_GIT_PROVIDER_CONNECTION_1.id)
+      return Effect.fail(
+        new NotFoundError({ entity: "GitProviderConnection", id: connectionId }),
+      );
+    return Effect.succeed({ success: true as const });
+  },
+  "projects.gitProvider.testConnection": (_payload: {
+    connectionId?: string;
+    provider?: "github" | "gitlab" | "gitea";
+    instanceUrl?: string;
+  }) =>
+    Effect.succeed({
+      valid: true,
+      user: {
+        id: STUB_GIT_PROVIDER_CONNECTION_1.providerAccountId,
+        username: STUB_GIT_PROVIDER_CONNECTION_1.providerUsername,
+        name: "Acme Developer" as string | null,
+        avatarUrl: null as string | null,
+      },
+    } satisfies ConnectionTestResultWire),
+  "projects.gitProvider.setDefaultForRepo": ({
+    repositoryId,
+    connectionId,
+  }: {
+    repositoryId: string;
+    connectionId: string;
+  }) => {
+    if (connectionId !== STUB_GIT_PROVIDER_CONNECTION_1.id)
+      return Effect.fail(
+        new NotFoundError({ entity: "GitProviderConnection", id: connectionId }),
+      );
+    if (repositoryId !== STUB_REPOSITORY_1.id)
+      return Effect.fail(
+        new NotFoundError({ entity: "Repository", id: repositoryId }),
+      );
+    return Effect.succeed({ success: true as const });
+  },
+  "projects.gitProvider.detectRemote": ({
+    repositoryId,
+  }: {
+    repositoryId: string;
+  }) => {
+    if (repositoryId !== STUB_REPOSITORY_1.id)
+      return Effect.fail(
+        new NotFoundError({ entity: "Repository", id: repositoryId }),
+      );
+    return Effect.succeed({
+      detected: true,
+      remoteUrl: STUB_REPOSITORY_1.remoteUrl!,
+      provider: "github" as const,
+      instanceUrl: null,
+      owner: STUB_REPOSITORY_1.remoteOwner,
+      name: STUB_REPOSITORY_1.remoteName,
+    } satisfies RemoteDetectionResultWire);
+  },
+
+  // --- Git (7B-4B Task 8) ----------------------------------------------------
+  "projects.git.pushAndCreatePr": ({
+    repositoryId,
+    title,
+    headBranch,
+    baseBranch,
+    body,
+    sessionId,
+    draft,
+    planningTaskId,
+  }: {
+    repositoryId: string;
+    path: string;
+    sessionId?: string;
+    title: string;
+    body?: string;
+    headBranch: string;
+    baseBranch?: string;
+    draft?: boolean;
+    planningTaskId?: string;
+  }) => {
+    if (repositoryId !== STUB_REPOSITORY_1.id)
+      return Effect.fail(
+        new NotFoundError({ entity: "Repository", id: repositoryId }),
+      );
+    return Effect.succeed({
+      pushed: true,
+      pullRequest: {
+        ...STUB_PULL_REQUEST_1,
+        id: "ffffffff-ffff-ffff-ffff-fffffffffff6",
+        repositoryId,
+        sessionId: sessionId ?? null,
+        title,
+        body: body ?? null,
+        headBranch,
+        baseBranch: baseBranch ?? "main",
+        status: (draft ? "draft" : "open") as "draft" | "open",
+        planningTaskId: planningTaskId ?? null,
+      },
+    } satisfies PushAndCreatePrResultWire);
+  },
+  "projects.git.jjIsRepo": (_payload: { path: string }) =>
+    Effect.succeed(true),
+  "projects.git.jjLog": (_payload: { path: string; limit?: number }) =>
+    Effect.succeed([STUB_JJ_COMMIT_1]),
+  "projects.git.jjNew": (_payload: { path: string; description?: string }) =>
+    Effect.succeed({ success: true as const } satisfies JjMutationResultWire),
+  "projects.git.jjDescribe": (_payload: {
+    path: string;
+    description: string;
+    revision?: string;
+  }) =>
+    Effect.succeed({ success: true as const } satisfies JjMutationResultWire),
+  "projects.git.jjSquash": (_payload: { path: string }) =>
+    Effect.succeed({ success: true as const } satisfies JjMutationResultWire),
+  "projects.git.jjDiff": (_payload: { path: string; revision?: string }) =>
+    Effect.succeed({
+      diff: "diff --git a/file.ts b/file.ts\n--- a/file.ts\n+++ b/file.ts\n",
+    } satisfies JjDiffResultWire),
 } as const;
 
 /** Layer form — pass to `RpcServer.layerHttp({ group, handlers })`. */

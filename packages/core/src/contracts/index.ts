@@ -94,6 +94,21 @@ export {
   ProjectsFeatureBranchMarkTaskPRMergedRpc,
   ProjectsFeatureBranchCreateFeaturePRRpc,
   ProjectsFeatureBranchUpdateStatusRpc,
+  // 7B-4B Task 8 — git provider
+  ProjectsGitProviderListConnectionsRpc,
+  ProjectsGitProviderConnectPatRpc,
+  ProjectsGitProviderDisconnectRpc,
+  ProjectsGitProviderTestConnectionRpc,
+  ProjectsGitProviderSetDefaultForRepoRpc,
+  ProjectsGitProviderDetectRemoteRpc,
+  // 7B-4B Task 8 — git
+  ProjectsGitPushAndCreatePrRpc,
+  ProjectsGitJjIsRepoRpc,
+  ProjectsGitJjLogRpc,
+  ProjectsGitJjNewRpc,
+  ProjectsGitJjDescribeRpc,
+  ProjectsGitJjSquashRpc,
+  ProjectsGitJjDiffRpc,
 } from "./groups/projects";
 export {
   stubProjectsHandlers,
@@ -114,6 +129,9 @@ export {
   STUB_PR_REVIEW_1,
   STUB_FEATURE_BRANCH_1,
   STUB_FEATURE_BRANCH_TASK_PR_1,
+  // 7B-4B Task 8 — git provider + git stubs
+  STUB_GIT_PROVIDER_CONNECTION_1,
+  STUB_JJ_COMMIT_1,
 } from "./stubs/projects";
 export { ProjectSchema } from "./schemas/projects";
 export type { ProjectWire } from "./schemas/projects";
@@ -177,6 +195,30 @@ export type {
   FeatureBranchDetailWire,
   FeatureBranchStatus,
 } from "./schemas/project-feature-branch";
+export {
+  GitProviderConnectionSchema,
+  GitProviderEnum,
+  ConnectionTestResultSchema,
+  RemoteDetectionResultSchema,
+} from "./schemas/project-git-provider";
+export type {
+  GitProviderConnectionWire,
+  GitProvider,
+  ConnectionTestResultWire,
+  RemoteDetectionResultWire,
+} from "./schemas/project-git-provider";
+export {
+  PushAndCreatePrResultSchema,
+  JjCommitSchema,
+  JjMutationResultSchema,
+  JjDiffResultSchema,
+} from "./schemas/project-git";
+export type {
+  PushAndCreatePrResultWire,
+  JjCommitWire,
+  JjMutationResultWire,
+  JjDiffResultWire,
+} from "./schemas/project-git";
 
 // --- Agent (7B-4B) -------------------------------------------------------
 // Agent schemas added alongside the AgentRpc group. The group itself is

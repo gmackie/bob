@@ -30,9 +30,9 @@ import {
 } from "../stubs/projects.js";
 
 describe("ProjectsRpc group — repository (7B-4B Task 6)", () => {
-  it("has 43 procedures total (4 existing + 8 Task 5 + 12 Task 6 + 19 Task 7)", () => {
+  it("has 56 procedures total (4 existing + 8 Task 5 + 12 Task 6 + 19 Task 7 + 13 Task 8)", () => {
     const tags = Array.from(ProjectsRpc.requests.keys());
-    expect(tags.length).toBe(43);
+    expect(tags.length).toBe(56);
   });
 
   it("includes the 12 repository procedures by tag", () => {

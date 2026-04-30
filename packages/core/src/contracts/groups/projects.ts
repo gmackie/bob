@@ -20,6 +20,8 @@
 //
 // Phase 7B-4B Task 7: Added 12 pullRequest RPCs + 7 featureBranch RPCs
 // — 43 total.
+//
+// Phase 7B-4B Task 8: Added 6 gitProvider RPCs + 7 git RPCs — 56 total.
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
@@ -57,6 +59,18 @@ import {
   FeatureBranchTaskPRSchema,
   FeatureBranchStatusEnum,
 } from "../schemas/project-feature-branch.js";
+import {
+  GitProviderConnectionSchema,
+  GitProviderEnum,
+  ConnectionTestResultSchema,
+  RemoteDetectionResultSchema,
+} from "../schemas/project-git-provider.js";
+import {
+  PushAndCreatePrResultSchema,
+  JjCommitSchema,
+  JjMutationResultSchema,
+  JjDiffResultSchema,
+} from "../schemas/project-git.js";
 
 // ---------------------------------------------------------------------------
 // Existing project procedures (Phase 6F)
@@ -541,6 +555,138 @@ export const ProjectsFeatureBranchUpdateStatusRpc = Rpc.make(
 );
 
 // ---------------------------------------------------------------------------
+// Git-provider procedures (7B-4B Task 8 — from Bob's gitProviders router)
+// ---------------------------------------------------------------------------
+
+export const ProjectsGitProviderListConnectionsRpc = Rpc.make(
+  "projects.gitProvider.listConnections",
+  {
+    payload: Schema.Void,
+    success: Schema.Array(GitProviderConnectionSchema),
+  },
+);
+
+export const ProjectsGitProviderConnectPatRpc = Rpc.make(
+  "projects.gitProvider.connectPat",
+  {
+    payload: Schema.Struct({
+      provider: GitProviderEnum,
+      accessToken: Schema.String,
+      instanceUrl: Schema.optional(Schema.String),
+    }),
+    success: GitProviderConnectionSchema,
+  },
+);
+
+export const ProjectsGitProviderDisconnectRpc = Rpc.make(
+  "projects.gitProvider.disconnect",
+  {
+    payload: Schema.Struct({ connectionId: Schema.String }),
+    success: Schema.Struct({ success: Schema.Boolean }),
+    error: NotFoundError,
+  },
+);
+
+export const ProjectsGitProviderTestConnectionRpc = Rpc.make(
+  "projects.gitProvider.testConnection",
+  {
+    payload: Schema.Struct({
+      connectionId: Schema.optional(Schema.String),
+      provider: Schema.optional(GitProviderEnum),
+      instanceUrl: Schema.optional(Schema.String),
+    }),
+    success: ConnectionTestResultSchema,
+  },
+);
+
+export const ProjectsGitProviderSetDefaultForRepoRpc = Rpc.make(
+  "projects.gitProvider.setDefaultForRepo",
+  {
+    payload: Schema.Struct({
+      repositoryId: Schema.String,
+      connectionId: Schema.String,
+    }),
+    success: Schema.Struct({ success: Schema.Boolean }),
+    error: NotFoundError,
+  },
+);
+
+export const ProjectsGitProviderDetectRemoteRpc = Rpc.make(
+  "projects.gitProvider.detectRemote",
+  {
+    payload: Schema.Struct({ repositoryId: Schema.String }),
+    success: RemoteDetectionResultSchema,
+    error: NotFoundError,
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Git procedures (7B-4B Task 8 — from Bob's git router)
+// ---------------------------------------------------------------------------
+
+export const ProjectsGitPushAndCreatePrRpc = Rpc.make(
+  "projects.git.pushAndCreatePr",
+  {
+    payload: Schema.Struct({
+      repositoryId: Schema.String,
+      path: Schema.String,
+      sessionId: Schema.optional(Schema.String),
+      title: Schema.String,
+      body: Schema.optional(Schema.String),
+      headBranch: Schema.String,
+      baseBranch: Schema.optional(Schema.String),
+      draft: Schema.optional(Schema.Boolean),
+      planningTaskId: Schema.optional(Schema.String),
+    }),
+    success: PushAndCreatePrResultSchema,
+    error: NotFoundError,
+  },
+);
+
+export const ProjectsGitJjIsRepoRpc = Rpc.make("projects.git.jjIsRepo", {
+  payload: Schema.Struct({ path: Schema.String }),
+  success: Schema.Boolean,
+});
+
+export const ProjectsGitJjLogRpc = Rpc.make("projects.git.jjLog", {
+  payload: Schema.Struct({
+    path: Schema.String,
+    limit: Schema.optional(Schema.Number),
+  }),
+  success: Schema.Array(JjCommitSchema),
+});
+
+export const ProjectsGitJjNewRpc = Rpc.make("projects.git.jjNew", {
+  payload: Schema.Struct({
+    path: Schema.String,
+    description: Schema.optional(Schema.String),
+  }),
+  success: JjMutationResultSchema,
+});
+
+export const ProjectsGitJjDescribeRpc = Rpc.make("projects.git.jjDescribe", {
+  payload: Schema.Struct({
+    path: Schema.String,
+    description: Schema.String,
+    revision: Schema.optional(Schema.String),
+  }),
+  success: JjMutationResultSchema,
+});
+
+export const ProjectsGitJjSquashRpc = Rpc.make("projects.git.jjSquash", {
+  payload: Schema.Struct({ path: Schema.String }),
+  success: JjMutationResultSchema,
+});
+
+export const ProjectsGitJjDiffRpc = Rpc.make("projects.git.jjDiff", {
+  payload: Schema.Struct({
+    path: Schema.String,
+    revision: Schema.optional(Schema.String),
+  }),
+  success: JjDiffResultSchema,
+});
+
+// ---------------------------------------------------------------------------
 // Group
 // ---------------------------------------------------------------------------
 
@@ -594,4 +740,19 @@ export const ProjectsRpc = RpcGroup.make(
   ProjectsFeatureBranchMarkTaskPRMergedRpc,
   ProjectsFeatureBranchCreateFeaturePRRpc,
   ProjectsFeatureBranchUpdateStatusRpc,
+  // Git provider (7B-4B Task 8)
+  ProjectsGitProviderListConnectionsRpc,
+  ProjectsGitProviderConnectPatRpc,
+  ProjectsGitProviderDisconnectRpc,
+  ProjectsGitProviderTestConnectionRpc,
+  ProjectsGitProviderSetDefaultForRepoRpc,
+  ProjectsGitProviderDetectRemoteRpc,
+  // Git (7B-4B Task 8)
+  ProjectsGitPushAndCreatePrRpc,
+  ProjectsGitJjIsRepoRpc,
+  ProjectsGitJjLogRpc,
+  ProjectsGitJjNewRpc,
+  ProjectsGitJjDescribeRpc,
+  ProjectsGitJjSquashRpc,
+  ProjectsGitJjDiffRpc,
 );
