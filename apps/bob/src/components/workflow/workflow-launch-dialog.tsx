@@ -3,8 +3,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { FileTextIcon, ImageIcon, UploadIcon } from "@radix-ui/react-icons";
 
-import { Badge } from "@bob/ui/badge";
-import { Button } from "@bob/ui/button";
+import { Badge } from "@gmacko/core/ui/badge";
+import { Button } from "@gmacko/core/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -12,9 +12,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@bob/ui/dialog";
-import { Textarea } from "@bob/ui/textarea";
-import { cn } from "@bob/ui";
+} from "@gmacko/core/ui/dialog";
+import { Textarea } from "@gmacko/core/ui/textarea";
+import { cn } from "@gmacko/core/ui";
 
 export type WorkflowLaunchIntent = "shape" | "breakdown";
 

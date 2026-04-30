@@ -1,9 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 
-import { cn } from "@bob/ui";
-import { ThemeProvider, ThemeToggle } from "@bob/ui/theme";
-import { Toaster } from "@bob/ui/toast";
+import { cn } from "@gmacko/core/ui";
+import { ThemeProvider } from "@gmacko/core/ui/theme";
+import { ThemeToggle } from "@gmacko/core/ui/theme-toggle";
+import { Toaster } from "@gmacko/core/ui/toast";
 
 import { TRPCReactProvider } from "~/trpc/react";
 import { Providers } from "./providers";
@@ -76,7 +77,7 @@ export default function RootLayout(props: { children: React.ReactNode; params: P
           jetBrainsMono.variable,
         )}
       >
-        <ThemeProvider>
+        <ThemeProvider defaultTheme="bob">
           <a
             href="#main-content"
             className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"

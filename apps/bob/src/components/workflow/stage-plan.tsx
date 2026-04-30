@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 
-import { cn } from "@bob/ui";
+import { cn } from "@gmacko/core/ui";
 
 import { SessionHistory } from "./session-history";
 

@@ -1,7 +1,7 @@
 // apps/web/src/components/review/task-selector.tsx
 "use client";
 
-import { cn } from "@bob/ui";
+import { cn } from "@gmacko/core/ui";
 
 export interface TaskTab {
   id: string;

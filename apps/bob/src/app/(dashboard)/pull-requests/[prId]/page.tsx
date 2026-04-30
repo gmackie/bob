@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 
-import { ErrorBoundary } from "@bob/ui/error-boundary";
+import { ErrorBoundary } from "@gmacko/core/ui/error-boundary";
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { CiPipeline } from "~/components/pull-requests/ci-pipeline";
 import { PrChangedFiles } from "~/components/pull-requests/pr-changed-files";

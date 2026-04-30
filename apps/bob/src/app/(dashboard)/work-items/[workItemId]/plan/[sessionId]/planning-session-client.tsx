@@ -6,8 +6,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ExternalLinkIcon } from "@radix-ui/react-icons";
 
-import { cn } from "@bob/ui";
-import { toast } from "@bob/ui/toast";
+import { cn } from "@gmacko/core/ui";
+import { toast } from "@gmacko/core/ui/toast";
 
 import { MessageStream } from "~/app/(dashboard)/chat/_components/message-stream";
 import { InputComposer } from "~/app/(dashboard)/chat/_components/input-composer";

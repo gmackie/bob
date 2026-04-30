@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { Button } from "@bob/ui/button";
+import { Button } from "@gmacko/core/ui/button";
 
 export function LoginForm() {
   const [loading, setLoading] = useState(false);

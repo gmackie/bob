@@ -5,9 +5,9 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PlusIcon } from "@radix-ui/react-icons";
 
-import { cn } from "@bob/ui";
-import { Button } from "@bob/ui/button";
-import { toast } from "@bob/ui/toast";
+import { cn } from "@gmacko/core/ui";
+import { Button } from "@gmacko/core/ui/button";
+import { toast } from "@gmacko/core/ui/toast";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { MissionControl } from "~/components/dashboard/mission-control";

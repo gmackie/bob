@@ -8,7 +8,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@bob/ui/select";
+} from "@gmacko/core/ui/select";
 
 interface WorkspaceSelectorProps {
   workspaces: Array<{ id: string; name: string; slug: string }>;

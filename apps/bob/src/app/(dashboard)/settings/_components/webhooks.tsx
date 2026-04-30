@@ -3,9 +3,9 @@
 import { useState, useTransition } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { Button } from "@bob/ui/button";
-import { Input } from "@bob/ui/input";
-import { Label } from "@bob/ui/label";
+import { Button } from "@gmacko/core/ui/button";
+import { Input } from "@gmacko/core/ui/input";
+import { Label } from "@gmacko/core/ui/label";
 
 import { useTRPC } from "~/trpc/react";
 

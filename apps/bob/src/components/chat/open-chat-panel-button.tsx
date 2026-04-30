@@ -2,7 +2,7 @@
 
 import { ChatBubbleIcon } from "@radix-ui/react-icons";
 
-import { Button } from "@bob/ui/button";
+import { Button } from "@gmacko/core/ui/button";
 
 import { useChatPanel } from "./chat-panel-provider";
 

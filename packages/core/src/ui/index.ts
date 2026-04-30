@@ -101,6 +101,7 @@ export {
 export { ThemeProvider, useTheme } from "./theme-provider";
 export type { Theme, Mode, ResolvedMode } from "./theme-provider";
 export { ThemeSwitcher } from "./theme-switcher";
+export { ThemeToggle } from "./theme-toggle";
 
 // Composite components
 export { MessageList, MessageBubble, Composer } from "./chat";

@@ -3,10 +3,10 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { toast } from "@bob/ui/toast";
-import { Badge } from "@bob/ui/badge";
+import { toast } from "@gmacko/core/ui/toast";
+import { Badge } from "@gmacko/core/ui/badge";
 
-import { ErrorBoundary } from "@bob/ui/error-boundary";
+import { ErrorBoundary } from "@gmacko/core/ui/error-boundary";
 import { OpenChatPanelButton } from "~/components/chat/open-chat-panel-button";
 import { KIND_COLOR, formatLabel } from "~/lib/design/colors";
 import { formatRelativeTime } from "~/lib/format/time";

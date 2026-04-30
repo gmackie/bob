@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { cn } from "@bob/ui";
+import { cn } from "@gmacko/core/ui";
 
 interface ResizableSplitViewProps {
   left: React.ReactNode;

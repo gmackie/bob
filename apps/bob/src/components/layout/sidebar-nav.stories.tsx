@@ -5,7 +5,7 @@ import {
   GearIcon,
 } from "@radix-ui/react-icons";
 
-import { cn } from "@bob/ui";
+import { cn } from "@gmacko/core/ui";
 
 interface NavItemDemoProps {
   icon: React.ComponentType<{ className?: string }>;

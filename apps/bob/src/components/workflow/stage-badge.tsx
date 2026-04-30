@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@bob/ui";
+import { cn } from "@gmacko/core/ui";
 import { detectStage, type StageDetectionInput } from "~/lib/workflow/stage";
 
 interface StageBadgeProps {

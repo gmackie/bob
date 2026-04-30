@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { cn } from "@bob/ui";
-import { Button } from "@bob/ui/button";
+import { cn } from "@gmacko/core/ui";
+import { Button } from "@gmacko/core/ui/button";
 
 interface HumanGateProps {
   question: string;

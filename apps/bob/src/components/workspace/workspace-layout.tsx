@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
-import { ErrorBoundary } from "@bob/ui/error-boundary";
+import { ErrorBoundary } from "@gmacko/core/ui/error-boundary";
 import { FileTree } from "~/components/workspace/file-tree";
 import { TerminalComponent } from "~/components/dashboard/Terminal";
 import { CapturePanel } from "~/components/workspace/capture-panel";

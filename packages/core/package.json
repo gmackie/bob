@@ -89,6 +89,7 @@
     "./ui/textarea": "./src/ui/textarea.tsx",
     "./ui/theme": "./src/ui/theme-provider.tsx",
     "./ui/toast": "./src/ui/toast.tsx",
+    "./ui/theme-toggle": "./src/ui/theme-toggle.tsx",
     "./ui/tooltip": "./src/ui/tooltip.tsx",
     "./ui/chat": "./src/ui/chat/index.ts",
     "./app-shell": "./src/app-shell/index.ts",

@@ -1,4 +1,4 @@
-import type { badgeVariants } from "@bob/ui/badge";
+import type { badgeVariants } from "@gmacko/core/ui/badge";
 import type { VariantProps } from "class-variance-authority";
 
 type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;

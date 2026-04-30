@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
-import { Badge } from "@bob/ui/badge";
+import { Badge } from "@gmacko/core/ui/badge";
 
 import { StageBadge } from "~/components/workflow/stage-badge";
 import type { StageDetectionInput } from "~/lib/workflow/stage";

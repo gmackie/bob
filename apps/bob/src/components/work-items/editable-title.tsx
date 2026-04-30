@@ -1,6 +1,6 @@
 "use client";
 
-import { InlineEditable } from "@bob/ui/inline-editable";
+import { InlineEditable } from "@gmacko/core/ui/inline-editable";
 
 interface EditableTitleProps {
   value: string;

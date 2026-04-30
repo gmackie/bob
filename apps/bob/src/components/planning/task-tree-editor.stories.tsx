@@ -16,9 +16,9 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-import { cn } from "@bob/ui";
-import { Badge } from "@bob/ui/badge";
-import { Button } from "@bob/ui/button";
+import { cn } from "@gmacko/core/ui";
+import { Badge } from "@gmacko/core/ui/badge";
+import { Button } from "@gmacko/core/ui/button";
 import { KIND_COLOR, PRIORITY_COLOR, formatLabel } from "~/lib/design/colors";
 
 // ---------------------------------------------------------------------------

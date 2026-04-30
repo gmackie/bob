@@ -1,8 +1,8 @@
 // apps/web/src/components/review/environment-lanes.tsx
 "use client";
 
-import { cn } from "@bob/ui";
-import { Button } from "@bob/ui/button";
+import { cn } from "@gmacko/core/ui";
+import { Button } from "@gmacko/core/ui/button";
 
 export interface DeploymentLane {
   id: string;

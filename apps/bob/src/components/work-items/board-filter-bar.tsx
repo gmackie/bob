@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 
-import { Badge } from "@bob/ui/badge";
-import { Input } from "@bob/ui/input";
+import { Badge } from "@gmacko/core/ui/badge";
+import { Input } from "@gmacko/core/ui/input";
 
 import { KIND_COLOR } from "~/lib/design/colors";
 
