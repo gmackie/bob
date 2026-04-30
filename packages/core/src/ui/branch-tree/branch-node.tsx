@@ -19,13 +19,13 @@ export function BranchNode({ node, activeBranchId, onSelect, depth = 0 }: Branch
         className={cn(
           "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
           isActive
-            ? "bg-[var(--color-accent-muted)] text-[var(--color-accent)]"
-            : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)]",
+            ? "bg-accent text-primary"
+            : "text-secondary-foreground hover:bg-muted",
         )}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
       >
         <span className="truncate">{node.branch.name}</span>
-        <span className="ml-auto text-xs text-[var(--color-text-muted)]">
+        <span className="ml-auto text-xs text-muted-foreground">
           {node.messageCount}
         </span>
       </button>

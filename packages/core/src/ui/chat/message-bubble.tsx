@@ -16,8 +16,8 @@ export function MessageBubble({ message, onFork }: MessageBubbleProps) {
       className={cn(
         "group relative max-w-[80%] rounded-lg px-4 py-3 text-sm",
         isUser
-          ? "ml-auto bg-[var(--color-accent)] text-[var(--color-bg)]"
-          : "mr-auto bg-[var(--color-bg-tertiary)] text-[var(--color-text)]",
+          ? "ml-auto bg-primary text-primary-foreground"
+          : "mr-auto bg-muted text-foreground",
       )}
     >
       {message.content}
@@ -25,7 +25,7 @@ export function MessageBubble({ message, onFork }: MessageBubbleProps) {
         <button
           data-testid="fork-button"
           onClick={() => onFork(message.id)}
-          className="absolute -right-8 top-1/2 -translate-y-1/2 rounded p-1 text-[var(--color-text-muted)] opacity-0 transition-opacity hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text)] group-hover:opacity-100"
+          className="absolute -right-8 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
           aria-label="Fork from this message"
           title="Fork from this message"
         >

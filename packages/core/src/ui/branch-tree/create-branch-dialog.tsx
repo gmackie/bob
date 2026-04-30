@@ -35,10 +35,10 @@ export function CreateBranchDialog({ isOpen, onClose, onSubmit }: CreateBranchDi
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm rounded-lg bg-[var(--color-bg)] p-6 shadow-lg"
+        className="w-full max-w-sm rounded-lg bg-background p-6 shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="mb-4 text-lg font-semibold text-[var(--color-text)]">
+        <h2 className="mb-4 text-lg font-semibold text-foreground">
           Create Branch
         </h2>
         <form onSubmit={handleSubmit}>
@@ -46,20 +46,20 @@ export function CreateBranchDialog({ isOpen, onClose, onSubmit }: CreateBranchDi
             ref={inputRef}
             type="text"
             placeholder="Branch name"
-            className="mb-4 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 py-2 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent)] focus:outline-none"
+            className="mb-4 w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
             required
           />
           <div className="flex justify-end gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md px-3 py-1.5 text-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)]"
+              className="rounded-md px-3 py-1.5 text-sm text-secondary-foreground hover:bg-muted"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-sm text-[var(--color-bg)] hover:opacity-90"
+              className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:opacity-90"
             >
               Create
             </button>

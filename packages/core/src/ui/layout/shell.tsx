@@ -11,7 +11,7 @@ export function Shell({ sidebar, panel, children, className }: ShellProps) {
   return (
     <div
       className={cn(
-        "flex h-screen w-screen bg-[var(--color-bg)] text-[var(--color-text)]",
+        "flex h-screen w-screen bg-background text-foreground",
         className,
       )}
     >

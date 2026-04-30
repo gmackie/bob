@@ -9,7 +9,7 @@ export function ThemeSwitcher({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "inline-flex flex-col gap-1 rounded-lg bg-[var(--color-bg-tertiary)] p-1",
+        "inline-flex flex-col gap-1 rounded-lg bg-muted p-1",
         className,
       )}
     >
@@ -21,8 +21,8 @@ export function ThemeSwitcher({ className }: { className?: string }) {
           className={cn(
             "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
             theme === "ooda"
-              ? "bg-[var(--color-accent)] text-[var(--color-bg)]"
-              : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]",
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground",
           )}
         >
           OODA
@@ -33,8 +33,8 @@ export function ThemeSwitcher({ className }: { className?: string }) {
           className={cn(
             "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
             theme === "bob"
-              ? "bg-[var(--color-accent)] text-[var(--color-bg)]"
-              : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]",
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground",
           )}
         >
           Bob
@@ -48,8 +48,8 @@ export function ThemeSwitcher({ className }: { className?: string }) {
           className={cn(
             "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
             mode === "light"
-              ? "bg-[var(--color-accent)] text-[var(--color-bg)]"
-              : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]",
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground",
           )}
         >
           Light
@@ -60,8 +60,8 @@ export function ThemeSwitcher({ className }: { className?: string }) {
           className={cn(
             "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
             mode === "dark"
-              ? "bg-[var(--color-accent)] text-[var(--color-bg)]"
-              : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]",
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground",
           )}
         >
           Dark
@@ -72,8 +72,8 @@ export function ThemeSwitcher({ className }: { className?: string }) {
           className={cn(
             "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
             mode === "system"
-              ? "bg-[var(--color-accent)] text-[var(--color-bg)]"
-              : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]",
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground",
           )}
         >
           System
