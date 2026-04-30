@@ -41,7 +41,7 @@ beforeEach(() => {
     })),
   );
   document.documentElement.removeAttribute("data-theme");
-  document.documentElement.removeAttribute("data-mode");
+  document.documentElement.classList.remove("light", "dark");
 });
 
 afterEach(() => {
@@ -94,8 +94,9 @@ describe("ThemeSwitcher", () => {
       </ThemeProvider>,
     );
     fireEvent.click(screen.getByText("Dark"));
-    // Mode change reflects in data-mode on <html>
-    expect(document.documentElement.getAttribute("data-mode")).toBe("dark");
+    // Mode change reflects in class on <html>
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    expect(document.documentElement.classList.contains("light")).toBe(false);
   });
 
   it("clicking 'System' sets mode to system (resolved from matchMedia)", () => {
@@ -119,6 +120,7 @@ describe("ThemeSwitcher", () => {
       </ThemeProvider>,
     );
     fireEvent.click(screen.getByText("System"));
-    expect(document.documentElement.getAttribute("data-mode")).toBe("light");
+    expect(document.documentElement.classList.contains("light")).toBe(true);
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
   });
 });
