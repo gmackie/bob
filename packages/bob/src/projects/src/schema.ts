@@ -11,12 +11,6 @@
 //   - worktreePlans
 //   - worktreeLinks
 //
-// Cross-area TODOs (resolved in later Phase 7B-2 tasks):
-//   - repositoriesRelations.instances → agentInstances — Task 13 (agents move).
-//     Commented out.
-//   - worktreesRelations.instances → agentInstances — Task 13 (agents move).
-//     Commented out.
-//
 // Note: agentTypeEnum / instanceStatusEnum live here because the projects-area
 // CreateWorktreeSchema needs agentTypeEnum. They are agents-domain values; if
 // Task 13 (agents move) decides to relocate them to @bob/agents/schema, the
@@ -28,6 +22,7 @@ import { pgEnum, pgTable } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
+import { agentInstances } from "@bob/agents/schema";
 import { user } from "@bob/auth/schema";
 import { workspaces } from "@bob/tenancy/schema";
 import { planTaskItems } from "@bob/work-items/schema";
@@ -298,8 +293,7 @@ export const repositoriesRelations = relations(
       references: [user.id],
     }),
     worktrees: many(worktrees),
-    // TODO Phase 7B-2 Task 13: re-enable instances → agentInstances when agents moves.
-    // instances: many(agentInstances),
+    instances: many(agentInstances),
   }),
 );
 
@@ -314,7 +308,7 @@ export const projectsRelations = relations(projects, ({ one }) => ({
   }),
 }));
 
-export const worktreesRelations = relations(worktrees, ({ one }) => ({
+export const worktreesRelations = relations(worktrees, ({ one, many }) => ({
   user: one(user, {
     fields: [worktrees.userId],
     references: [user.id],
@@ -323,8 +317,7 @@ export const worktreesRelations = relations(worktrees, ({ one }) => ({
     fields: [worktrees.repositoryId],
     references: [repositories.id],
   }),
-  // TODO Phase 7B-2 Task 13: re-enable instances → agentInstances when agents moves.
-  // instances: many(agentInstances),
+  instances: many(agentInstances),
 }));
 
 export const worktreePlansRelations = relations(
