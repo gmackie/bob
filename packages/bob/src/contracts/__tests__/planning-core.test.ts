@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { PlanningRpc } from "../groups/planning.js";
 
 describe("PlanningRpc — 7B-4C Task 4", () => {
-  it("has 21 procedures after Task 4", () => {
-    expect(PlanningRpc.requests.size).toBe(21);
+  it("has 36 procedures after Task 4 + Task 5", () => {
+    expect(PlanningRpc.requests.size).toBe(36);
   });
 
   it("contains core planning procedures", () => {

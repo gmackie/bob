@@ -1,5 +1,6 @@
 // PlanningRpc — wire contract for Bob planning operations.
 // 7B-4C Task 4: 21 core planning + agent procedures.
+// 7B-4C Task 5: +15 planning.session.* procedures (36 total).
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
@@ -30,6 +31,20 @@ import {
   AgentSessionResultSchema,
   AgentEndSessionResultSchema,
 } from "../schemas/planning-core.js";
+import {
+  PlanningSessionTypeEnum,
+  PlanSessionRecordSchema,
+  PlanDraftRecordSchema,
+  PlanDraftDependencySchema,
+  PlanArtifactResultSchema,
+  PriorContextResultSchema,
+  CommitPlanResultSchema,
+  CommitPlanLocalResultSchema,
+  LaunchContextSchema,
+  SessionStartResultSchema,
+  SessionGetResultSchema,
+  OkResultSchema,
+} from "../schemas/planning-session.js";
 
 // --- Core planning procedures ---
 
@@ -247,6 +262,186 @@ export const PlanningAgentEndSessionRpc = Rpc.make(
   },
 );
 
+// --- Planning session procedures (Task 5) ---
+
+export const PlanningSessionCreateRpc = Rpc.make("planning.session.create", {
+  payload: Schema.Struct({
+    workspaceId: Schema.optional(Schema.String),
+    projectId: Schema.optional(Schema.String),
+    workingDirectory: Schema.optional(Schema.String),
+    title: Schema.optional(Schema.String),
+    workItemId: Schema.optional(Schema.String),
+    planningSessionType: Schema.optional(PlanningSessionTypeEnum),
+  }),
+  success: PlanSessionRecordSchema,
+  error: Schema.Union([BobNotFoundError, BobForbiddenError]),
+});
+
+export const PlanningSessionStartRpc = Rpc.make("planning.session.start", {
+  payload: Schema.Struct({
+    sessionId: Schema.String,
+    workspaceId: Schema.String,
+    projectId: Schema.String,
+    projectName: Schema.String,
+    workingDirectory: Schema.String,
+    launchContext: Schema.optional(LaunchContextSchema),
+  }),
+  success: SessionStartResultSchema,
+  error: BobNotFoundError,
+});
+
+export const PlanningSessionGetRpc = Rpc.make("planning.session.get", {
+  payload: Schema.Struct({ sessionId: Schema.String }),
+  success: SessionGetResultSchema,
+  error: BobNotFoundError,
+});
+
+export const PlanningSessionListRpc = Rpc.make("planning.session.list", {
+  payload: Schema.Struct({
+    workspaceId: Schema.optional(Schema.String),
+    limit: Schema.optional(Schema.Number),
+  }),
+  success: Schema.Array(PlanSessionRecordSchema),
+  error: BobNotFoundError,
+});
+
+export const PlanningSessionListByWorkItemRpc = Rpc.make(
+  "planning.session.listByWorkItem",
+  {
+    payload: Schema.Struct({
+      workItemId: Schema.String,
+      limit: Schema.optional(Schema.Number),
+    }),
+    success: Schema.Array(PlanSessionRecordSchema),
+    error: BobNotFoundError,
+  },
+);
+
+export const PlanningSessionGetActiveForWorkItemRpc = Rpc.make(
+  "planning.session.getActiveForWorkItem",
+  {
+    payload: Schema.Struct({ workItemId: Schema.String }),
+    success: Schema.NullOr(PlanSessionRecordSchema),
+    error: BobNotFoundError,
+  },
+);
+
+export const PlanningSessionSaveArtifactRpc = Rpc.make(
+  "planning.session.saveArtifact",
+  {
+    payload: Schema.Struct({
+      sessionId: Schema.String,
+      workItemId: Schema.String,
+      title: Schema.String,
+      content: Schema.String,
+      planningSessionType: Schema.optional(PlanningSessionTypeEnum),
+    }),
+    success: PlanArtifactResultSchema,
+    error: Schema.Union([BobNotFoundError, BobForbiddenError]),
+  },
+);
+
+export const PlanningSessionGetPriorContextRpc = Rpc.make(
+  "planning.session.getPriorContext",
+  {
+    payload: Schema.Struct({
+      workItemId: Schema.String,
+      excludeSessionId: Schema.optional(Schema.String),
+      maxChars: Schema.optional(Schema.Number),
+    }),
+    success: PriorContextResultSchema,
+    error: Schema.Union([BobNotFoundError, BobForbiddenError]),
+  },
+);
+
+export const PlanningSessionCreateDraftRpc = Rpc.make(
+  "planning.session.createDraft",
+  {
+    payload: Schema.Struct({
+      sessionId: Schema.String,
+      workspaceId: Schema.String,
+      projectId: Schema.String,
+      title: Schema.String,
+      description: Schema.optional(Schema.String),
+      kind: Schema.optional(PlanningKindEnum),
+      priority: Schema.optional(PlanningPriorityEnum),
+      sortOrder: Schema.optional(Schema.Number),
+    }),
+    success: PlanDraftRecordSchema,
+    error: BobNotFoundError,
+  },
+);
+
+export const PlanningSessionUpdateDraftRpc = Rpc.make(
+  "planning.session.updateDraft",
+  {
+    payload: Schema.Struct({
+      id: Schema.String,
+      title: Schema.optional(Schema.String),
+      description: Schema.optional(Schema.String),
+      kind: Schema.optional(PlanningKindEnum),
+      priority: Schema.optional(PlanningPriorityEnum),
+      sortOrder: Schema.optional(Schema.Number),
+    }),
+    success: PlanDraftRecordSchema,
+    error: BobNotFoundError,
+  },
+);
+
+export const PlanningSessionRemoveDraftRpc = Rpc.make(
+  "planning.session.removeDraft",
+  {
+    payload: Schema.Struct({ id: Schema.String }),
+    success: OkResultSchema,
+    error: BobNotFoundError,
+  },
+);
+
+export const PlanningSessionSetDependencyRpc = Rpc.make(
+  "planning.session.setDependency",
+  {
+    payload: Schema.Struct({
+      draftId: Schema.String,
+      dependsOnDraftId: Schema.String,
+    }),
+    success: PlanDraftDependencySchema,
+    error: BobNotFoundError,
+  },
+);
+
+export const PlanningSessionRemoveDependencyRpc = Rpc.make(
+  "planning.session.removeDependency",
+  {
+    payload: Schema.Struct({
+      draftId: Schema.String,
+      dependsOnDraftId: Schema.String,
+    }),
+    success: OkResultSchema,
+    error: BobNotFoundError,
+  },
+);
+
+export const PlanningSessionCommitPlanRpc = Rpc.make(
+  "planning.session.commitPlan",
+  {
+    payload: Schema.Struct({ sessionId: Schema.String }),
+    success: CommitPlanResultSchema,
+    error: Schema.Union([BobNotFoundError, BobForbiddenError]),
+  },
+);
+
+export const PlanningSessionCommitPlanLocalRpc = Rpc.make(
+  "planning.session.commitPlanLocal",
+  {
+    payload: Schema.Struct({
+      sessionId: Schema.String,
+      parentWorkItemId: Schema.String,
+    }),
+    success: CommitPlanLocalResultSchema,
+    error: Schema.Union([BobNotFoundError, BobForbiddenError]),
+  },
+);
+
 export const PlanningRpc = RpcGroup.make(
   // Core planning (Task 4)
   PlanningListWorkspacesRpc,
@@ -271,4 +466,20 @@ export const PlanningRpc = RpcGroup.make(
   PlanningAgentGetAvailableTasksRpc,
   PlanningAgentStartSessionRpc,
   PlanningAgentEndSessionRpc,
+  // Planning session procedures (Task 5)
+  PlanningSessionCreateRpc,
+  PlanningSessionStartRpc,
+  PlanningSessionGetRpc,
+  PlanningSessionListRpc,
+  PlanningSessionListByWorkItemRpc,
+  PlanningSessionGetActiveForWorkItemRpc,
+  PlanningSessionSaveArtifactRpc,
+  PlanningSessionGetPriorContextRpc,
+  PlanningSessionCreateDraftRpc,
+  PlanningSessionUpdateDraftRpc,
+  PlanningSessionRemoveDraftRpc,
+  PlanningSessionSetDependencyRpc,
+  PlanningSessionRemoveDependencyRpc,
+  PlanningSessionCommitPlanRpc,
+  PlanningSessionCommitPlanLocalRpc,
 );

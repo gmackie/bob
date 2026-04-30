@@ -1,6 +1,6 @@
 // Deterministic in-memory stubs for the PlanningRpc contract group.
 // Returns plausible mock data so consumers can wire up typed calls before
-// real service handlers land. 7B-4C Task 4.
+// real service handlers land. 7B-4C Task 4 + Task 5.
 import { Effect } from "effect";
 
 import { PlanningRpc } from "../groups/planning.js";
@@ -78,5 +78,66 @@ export const PlanningStubLayer = PlanningRpc.toLayer({
     Effect.succeed({
       id: "stub-session-1",
       endedAt: "2026-01-01T00:00:00.000Z",
+    }),
+  // --- Planning session procedures (Task 5) ---
+  "planning.session.create": () =>
+    Effect.succeed({
+      id: "stub-plan-session-1",
+      userId: "stub-user-1",
+      title: "Planning session",
+      status: "provisioning",
+    }),
+  "planning.session.start": () =>
+    Effect.succeed({
+      ok: true,
+      sessionId: "stub-plan-session-1",
+    }),
+  "planning.session.get": () =>
+    Effect.succeed(null),
+  "planning.session.list": () =>
+    Effect.succeed([]),
+  "planning.session.listByWorkItem": () =>
+    Effect.succeed([]),
+  "planning.session.getActiveForWorkItem": () =>
+    Effect.succeed(null),
+  "planning.session.saveArtifact": () =>
+    Effect.succeed({
+      id: "stub-artifact-1",
+      workItemId: "stub-wi-1",
+    }),
+  "planning.session.getPriorContext": () =>
+    Effect.succeed([]),
+  "planning.session.createDraft": () =>
+    Effect.succeed({
+      id: "stub-draft-1",
+      sessionId: "stub-plan-session-1",
+      title: "stub draft",
+    }),
+  "planning.session.updateDraft": () =>
+    Effect.succeed({
+      id: "stub-draft-1",
+      sessionId: "stub-plan-session-1",
+      title: "stub draft updated",
+    }),
+  "planning.session.removeDraft": () =>
+    Effect.succeed({ ok: true }),
+  "planning.session.setDependency": () =>
+    Effect.succeed({
+      id: "stub-dep-1",
+      draftId: "stub-draft-1",
+      dependsOnDraftId: "stub-draft-2",
+    }),
+  "planning.session.removeDependency": () =>
+    Effect.succeed({ ok: true }),
+  "planning.session.commitPlan": () =>
+    Effect.succeed({
+      committed: 0,
+      tasks: [],
+    }),
+  "planning.session.commitPlanLocal": () =>
+    Effect.succeed({
+      committed: 0,
+      workItems: [],
+      dependencies: 0,
     }),
 });
