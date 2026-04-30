@@ -327,3 +327,82 @@ export type {
   SecretEnvelopeWire,
   SessionSecretPolicyWire,
 } from "./schemas/secrets";
+
+// --- Settings (7B-4B Task 9) ------------------------------------------------
+// SettingsRpc — standalone group covering general settings (13), cookies (5),
+// and system (2) procedures. One group, three sub-namespaces.
+export {
+  SettingsRpc,
+  SettingsGetPreferencesRpc,
+  SettingsUpdatePreferencesRpc,
+  SettingsListApiKeysRpc,
+  SettingsCreateApiKeyRpc,
+  SettingsRevokeApiKeyRpc,
+  SettingsListConfigRootsRpc,
+  SettingsListConfigEntriesRpc,
+  SettingsReadConfigFileRpc,
+  SettingsWriteConfigFileRpc,
+  SettingsDeleteConfigFileRpc,
+  SettingsGetForgeGraphConnectionRpc,
+  SettingsConnectForgeGraphRpc,
+  SettingsDisconnectForgeGraphRpc,
+  SettingsCookiesImportRpc,
+  SettingsCookiesListRpc,
+  SettingsCookiesRemoveRpc,
+  SettingsCookiesGetForSessionRpc,
+  SettingsCookiesSetSessionScopesRpc,
+  SettingsSystemHealthRpc,
+  SettingsSystemStatusRpc,
+} from "./groups/settings";
+export {
+  stubSettingsHandlers,
+  stubSettingsHandlersLayer,
+  STUB_USER_ID as STUB_SETTINGS_USER_ID,
+  STUB_SETTINGS_API_KEY_ID,
+  STUB_FG_CONNECTION_ID,
+  STUB_SESSION_ID as STUB_SETTINGS_SESSION_ID,
+} from "./stubs/settings";
+export {
+  UserPreferencesSchema,
+  SettingsApiKeySchema,
+  ConfigRootSchema,
+  ConfigEntrySchema,
+  ConfigFileSchema,
+  ForgeGraphConnectionSchema,
+  ConfigRootIdEnum,
+  ThemeEnum,
+} from "./schemas/settings-general";
+export type {
+  UserPreferencesWire,
+  SettingsApiKeyWire,
+  ConfigRootWire,
+  ConfigEntryWire,
+  ConfigFileWire,
+  ForgeGraphConnectionWire,
+  ConfigRootId,
+  Theme,
+} from "./schemas/settings-general";
+export {
+  CookieSchema,
+  CookieInputSchema,
+  CookieDomainSchema,
+  CookieSameSiteEnum,
+} from "./schemas/settings-cookies";
+export type {
+  CookieWire,
+  CookieInputWire,
+  CookieDomainWire,
+  CookieSameSite,
+} from "./schemas/settings-cookies";
+export {
+  SystemHealthSchema,
+  SystemStatusSchema,
+  SystemMemorySchema,
+  SystemMetricsSchema,
+  SystemGitHubStatusSchema,
+  SystemServerSchema,
+} from "./schemas/settings-system";
+export type {
+  SystemHealthWire,
+  SystemStatusWire,
+} from "./schemas/settings-system";
