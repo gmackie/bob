@@ -58,6 +58,8 @@ export interface InitAuthOptions {
   readonly secret: string;
   readonly githubClientId: string;
   readonly githubClientSecret: string;
+  /** Override GitHub OAuth scopes. Default `["user:email", "read:user"]`. */
+  readonly githubScopes?: readonly string[];
   /** Additional origins (beyond the built-in defaults) trusted for CORS/redirects. */
   readonly trustedOrigins?: readonly string[];
   /**
@@ -174,7 +176,9 @@ export function initAuth(opts: InitAuthOptions): AuthInstance {
         clientId: opts.githubClientId,
         clientSecret: opts.githubClientSecret,
         redirectURI: `${opts.productionUrl}/api/auth/callback/github`,
-        scope: ["user:email", "read:user"],
+        scope: opts.githubScopes
+          ? Array.from(opts.githubScopes)
+          : ["user:email", "read:user"],
       },
     },
     trustedOrigins: Array.from(

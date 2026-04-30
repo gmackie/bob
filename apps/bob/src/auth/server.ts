@@ -1,9 +1,5 @@
 import { cache } from "react";
 import { headers } from "next/headers";
-import { nextCookies } from "better-auth/next-js";
-import { expo } from "@better-auth/expo";
-import { betterAuth } from "better-auth";
-import { drizzleAdapter } from "better-auth/adapters/drizzle";
 
 import { createAuthRuntime, type AuthRuntimeBundle } from "@bob/auth/runtime";
 import { db } from "@bob/db/client";
@@ -25,49 +21,17 @@ const publicSiteUrl =
 const baseUrl = safeOrigin(publicSiteUrl);
 
 // ---------------------------------------------------------------------------
-// Legacy better-auth instance (inlined from retired `@bob/auth/initAuth`).
-// Kept for `getSession` in RSC — needs the `nextCookies()` plugin for
-// cookie-based session resolution in Next.js server components.
-// ---------------------------------------------------------------------------
-export const auth = betterAuth({
-  database: drizzleAdapter(db, { provider: "pg" }),
-  baseURL: baseUrl,
-  secret: process.env.AUTH_SECRET,
-  plugins: [expo(), nextCookies()],
-  socialProviders: {
-    github: {
-      clientId: process.env.AUTH_GITHUB_ID ?? "",
-      clientSecret: process.env.AUTH_GITHUB_SECRET ?? "",
-      redirectURI: `${baseUrl}/api/auth/callback/github`,
-      scope: ["user:email", "repo", "read:user"],
-    },
-  },
-  trustedOrigins: Array.from(
-    new Set(
-      [
-        "expo://",
-        "bob://",
-        "http://localhost:3000",
-        "https://bob-web.localhost",
-        baseUrl,
-        ...(process.env.TRUSTED_ORIGINS?.split(",").map((o: string) => o.trim()) ?? []),
-      ].filter(Boolean),
-    ),
-  ),
-  onAPIError: {
-    onError(error, ctx) {
-      console.error("BETTER AUTH API ERROR", error, ctx);
-    },
-  },
-});
-
-// ---------------------------------------------------------------------------
-// Effect auth runtime bridge (Phase 7B-3 Task 3).
+// Effect auth runtime bridge — single source of truth for auth.
 //
 // The `authBundle` exposes both the ManagedRuntime (for Effect-based auth
-// calls in future tasks) and the raw better-auth instance so the tRPC
-// context can call `authInstance.api.getSession()` and return the full
-// session shape that 370+ tRPC tests rely on.
+// calls) and the raw better-auth instance. The `authInstance` inside uses
+// `pluralizeTables: true` + the full schema, so it reads/writes from
+// gmacko's plural tables (users, sessions, accounts, verifications).
+//
+// Previously there was a separate legacy `betterAuth()` instance with
+// `nextCookies()` for RSC getSession — but it targeted non-existent
+// singular tables. The bundle's authInstance handles cookie resolution
+// from headers just fine without the nextCookies() plugin.
 // ---------------------------------------------------------------------------
 export const authBundle: AuthRuntimeBundle = createAuthRuntime({
   db,
@@ -78,8 +42,12 @@ export const authBundle: AuthRuntimeBundle = createAuthRuntime({
   secret: process.env.AUTH_SECRET ?? "",
   githubClientId: process.env.AUTH_GITHUB_ID ?? "",
   githubClientSecret: process.env.AUTH_GITHUB_SECRET ?? "",
+  githubScopes: ["user:email", "repo", "read:user"],
   trustedOrigins: process.env.TRUSTED_ORIGINS?.split(",").map((o) => o.trim()),
 });
+
+// Re-export the auth instance for the /api/auth/[...all] route handler.
+export const auth = authBundle.authInstance;
 
 export const getSession = cache(async () => {
   return auth.api.getSession({ headers: await headers() });

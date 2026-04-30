@@ -60,6 +60,8 @@ export interface AuthRuntimeOptions {
   readonly githubClientId: string;
   /** GitHub OAuth client secret. */
   readonly githubClientSecret: string;
+  /** Override GitHub OAuth scopes. Default `["user:email", "read:user"]`. */
+  readonly githubScopes?: readonly string[];
   /** Additional trusted origins. */
   readonly trustedOrigins?: readonly string[];
   /**
@@ -142,6 +144,7 @@ export function createAuthRuntime(opts: AuthRuntimeOptions): AuthRuntimeBundle {
     secret: opts.secret,
     githubClientId: opts.githubClientId,
     githubClientSecret: opts.githubClientSecret,
+    githubScopes: opts.githubScopes,
     trustedOrigins: opts.trustedOrigins,
     emailAndPassword: opts.emailAndPassword,
     bootstrapTenancy: opts.bootstrapTenancy,
