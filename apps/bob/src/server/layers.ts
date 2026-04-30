@@ -1,3 +1,4 @@
+import "server-only";
 import { Layer } from "effect";
 
 import { layerGmackoDb } from "@gmacko/core/db";
@@ -23,6 +24,8 @@ import { authBundle } from "~/auth/server";
 //   - Tenancy (via GmackoDb)
 // ---------------------------------------------------------------------------
 
+// Bob's Db (NodePgDatabase<bobSchema>) differs from gmacko's Db type.
+// Cast is safe — drizzle query API is compatible at runtime.
 const dbLayer = layerGmackoDb(db as never);
 const betterAuthLayer = layerBetterAuth(authBundle.authInstance);
 
