@@ -866,6 +866,9 @@ importers:
       '@gmacko/bob':
         specifier: workspace:*
         version: link:../..
+      '@gmacko/core':
+        specifier: workspace:*
+        version: link:../../../core
       '@trpc/server':
         specifier: 'catalog:'
         version: 11.7.2(typescript@5.9.3)
