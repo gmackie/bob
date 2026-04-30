@@ -1,6 +1,6 @@
 // Deterministic in-memory stubs for the PlanningRpc contract group.
 // Returns plausible mock data so consumers can wire up typed calls before
-// real service handlers land. 7B-4C Task 4 + Task 5 + Task 6.
+// real service handlers land. 7B-4C Task 4 + Task 5 + Task 6 + Task 7.
 import { Effect } from "effect";
 
 import { PlanningRpc } from "../groups/planning.js";
@@ -265,4 +265,46 @@ export const PlanningStubLayer = PlanningRpc.toLayer({
   "planning.dispatch.listBatches": () => Effect.succeed([]),
   "planning.dispatch.resetPipelineState": () =>
     Effect.succeed({ ok: true }),
+  // --- Skill procedures (Task 7) ---
+  "planning.skill.list": () => Effect.succeed([]),
+  "planning.skill.seed": () =>
+    Effect.succeed({ seeded: 0, total: 10 }),
+  "planning.skill.getExecution": () => Effect.succeed(null),
+  "planning.skill.listExecutions": () => Effect.succeed([]),
+  "planning.skill.recordExecution": () =>
+    Effect.succeed({
+      id: "stub-exec-1",
+      skillSlug: "review",
+      status: "running",
+    }),
+  "planning.skill.updateExecution": () =>
+    Effect.succeed({
+      id: "stub-exec-1",
+      skillSlug: "review",
+      status: "completed",
+    }),
+  // --- Snapshot procedures (Task 7) ---
+  "planning.snapshot.create": () =>
+    Effect.succeed({
+      id: "stub-snapshot-1",
+      workItemId: "stub-wi-1",
+      stage: "planning",
+      data: {},
+    }),
+  "planning.snapshot.list": () => Effect.succeed([]),
+  "planning.snapshot.get": () => Effect.succeed(null),
+  // --- Checkpoint procedures (Task 7) ---
+  "planning.checkpoint.create": () =>
+    Effect.succeed({
+      id: "stub-cp-1",
+      sessionId: "stub-session-1",
+      turnNumber: 0,
+      eventSeq: 0,
+    }),
+  "planning.checkpoint.list": () => Effect.succeed([]),
+  "planning.checkpoint.branchFrom": () =>
+    Effect.succeed({
+      id: "stub-branch-session-1",
+      userId: "stub-user-1",
+    }),
 });

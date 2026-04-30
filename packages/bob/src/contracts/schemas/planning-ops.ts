@@ -130,3 +130,114 @@ export const DispatchStartedResultSchema = Schema.Struct({
 export const SuccessResultSchema = Schema.Struct({
   success: Schema.Boolean,
 });
+
+// =============================================================================
+// Skill schemas (skill.ts) — Task 7
+// =============================================================================
+
+/** Category enum for skill templates. */
+export const SkillCategoryEnum = Schema.Literals([
+  "planning",
+  "execution",
+  "review",
+  "deploy",
+  "ops",
+  "other",
+]);
+
+/** Source enum for skill templates. */
+export const SkillSourceEnum = Schema.Literals([
+  "builtin",
+  "gstack",
+  "custom",
+]);
+
+/** Execution status enum for skill executions. */
+export const ExecutionStatusEnum = Schema.Literals([
+  "running",
+  "completed",
+  "failed",
+  "cancelled",
+]);
+
+/** Skill template record (skills table). */
+export const SkillRecordSchema = Schema.Struct({
+  id: Schema.String,
+  slug: Schema.String,
+  name: Schema.String,
+  category: Schema.String,
+  source: Schema.String,
+  description: Schema.optional(Schema.NullOr(Schema.String)),
+  createdAt: Schema.optional(Schema.String),
+  updatedAt: Schema.optional(Schema.NullOr(Schema.String)),
+});
+
+/** Skill execution record (skill_executions table). */
+export const SkillExecutionRecordSchema = Schema.Struct({
+  id: Schema.String,
+  sessionId: Schema.optional(Schema.NullOr(Schema.String)),
+  skillId: Schema.optional(Schema.NullOr(Schema.String)),
+  skillSlug: Schema.String,
+  workItemId: Schema.optional(Schema.NullOr(Schema.String)),
+  parentExecutionId: Schema.optional(Schema.NullOr(Schema.String)),
+  status: Schema.String,
+  input: Schema.optional(Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown))),
+  output: Schema.optional(Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown))),
+  findings: Schema.optional(Schema.NullOr(Schema.Array(Schema.Unknown))),
+  startedAt: Schema.optional(Schema.String),
+  completedAt: Schema.optional(Schema.NullOr(Schema.String)),
+  durationMs: Schema.optional(Schema.NullOr(Schema.Number)),
+  createdAt: Schema.optional(Schema.String),
+  updatedAt: Schema.optional(Schema.NullOr(Schema.String)),
+  // Joined fields from list/get
+  skillName: Schema.optional(Schema.NullOr(Schema.String)),
+  parentExecution: Schema.optional(Schema.NullOr(Schema.Unknown)),
+});
+
+/** Seed result for skill.seed. */
+export const SkillSeedResultSchema = Schema.Struct({
+  seeded: Schema.Number,
+  total: Schema.Number,
+});
+
+// =============================================================================
+// Snapshot schemas (snapshot.ts) — Task 7
+// =============================================================================
+
+/** Work item snapshot record (work_item_snapshots table). */
+export const WorkItemSnapshotRecordSchema = Schema.Struct({
+  id: Schema.String,
+  workItemId: Schema.String,
+  stage: Schema.String,
+  data: Schema.Record(Schema.String, Schema.Unknown),
+  createdAt: Schema.optional(Schema.String),
+});
+
+// =============================================================================
+// Checkpoint schemas (checkpoint.ts) — Task 7
+// =============================================================================
+
+/** Session checkpoint record (session_checkpoints table). */
+export const CheckpointRecordSchema = Schema.Struct({
+  id: Schema.String,
+  sessionId: Schema.String,
+  turnNumber: Schema.Number,
+  eventSeq: Schema.Number,
+  label: Schema.optional(Schema.NullOr(Schema.String)),
+  snapshotData: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  gitRef: Schema.optional(Schema.NullOr(Schema.String)),
+  createdAt: Schema.optional(Schema.String),
+});
+
+/** Result of branchFrom: a new session record. */
+export const BranchFromResultSchema = Schema.Struct({
+  id: Schema.String,
+  userId: Schema.String,
+  repositoryId: Schema.optional(Schema.NullOr(Schema.String)),
+  worktreeId: Schema.optional(Schema.NullOr(Schema.String)),
+  workingDirectory: Schema.optional(Schema.NullOr(Schema.String)),
+  title: Schema.optional(Schema.NullOr(Schema.String)),
+  sessionType: Schema.optional(Schema.NullOr(Schema.String)),
+  workItemId: Schema.optional(Schema.NullOr(Schema.String)),
+  createdAt: Schema.optional(Schema.String),
+});

@@ -2,6 +2,7 @@
 // 7B-4C Task 4: 21 core planning + agent procedures.
 // 7B-4C Task 5: +15 planning.session.* procedures (36 total).
 // 7B-4C Task 6: +11 planning.task.* + 8 planning.dispatch.* (55 total).
+// 7B-4C Task 7: +6 planning.skill.* + 3 planning.snapshot.* + 3 planning.checkpoint.* (67 total).
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
@@ -57,6 +58,15 @@ import {
   DispatchBatchWithItemsSchema,
   DispatchStartedResultSchema,
   SuccessResultSchema,
+  SkillCategoryEnum,
+  SkillSourceEnum,
+  ExecutionStatusEnum,
+  SkillRecordSchema,
+  SkillExecutionRecordSchema,
+  SkillSeedResultSchema,
+  WorkItemSnapshotRecordSchema,
+  CheckpointRecordSchema,
+  BranchFromResultSchema,
 } from "../schemas/planning-ops.js";
 
 // --- Core planning procedures ---
@@ -663,6 +673,142 @@ export const PlanningDispatchResetPipelineStateRpc = Rpc.make(
   },
 );
 
+// --- Skill procedures (Task 7: planning.skill.*) ---
+
+export const PlanningSkillListRpc = Rpc.make("planning.skill.list", {
+  payload: Schema.Struct({
+    category: Schema.optional(SkillCategoryEnum),
+    source: Schema.optional(SkillSourceEnum),
+  }),
+  success: Schema.Array(SkillRecordSchema),
+  error: BobNotFoundError,
+});
+
+export const PlanningSkillSeedRpc = Rpc.make("planning.skill.seed", {
+  payload: Schema.Void,
+  success: SkillSeedResultSchema,
+  error: BobNotFoundError,
+});
+
+export const PlanningSkillGetExecutionRpc = Rpc.make(
+  "planning.skill.getExecution",
+  {
+    payload: Schema.Struct({ id: Schema.String }),
+    success: Schema.NullOr(SkillExecutionRecordSchema),
+    error: Schema.Union([BobNotFoundError, BobForbiddenError]),
+  },
+);
+
+export const PlanningSkillListExecutionsRpc = Rpc.make(
+  "planning.skill.listExecutions",
+  {
+    payload: Schema.Struct({
+      sessionId: Schema.optional(Schema.String),
+      workItemId: Schema.optional(Schema.String),
+    }),
+    success: Schema.Array(SkillExecutionRecordSchema),
+    error: Schema.Union([BobNotFoundError, BobForbiddenError]),
+  },
+);
+
+export const PlanningSkillRecordExecutionRpc = Rpc.make(
+  "planning.skill.recordExecution",
+  {
+    payload: Schema.Struct({
+      sessionId: Schema.optional(Schema.String),
+      skillId: Schema.optional(Schema.String),
+      skillSlug: Schema.String,
+      workItemId: Schema.optional(Schema.String),
+      parentExecutionId: Schema.optional(Schema.String),
+      status: Schema.optional(ExecutionStatusEnum),
+      input: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+    }),
+    success: SkillExecutionRecordSchema,
+    error: Schema.Union([BobNotFoundError, BobForbiddenError]),
+  },
+);
+
+export const PlanningSkillUpdateExecutionRpc = Rpc.make(
+  "planning.skill.updateExecution",
+  {
+    payload: Schema.Struct({
+      id: Schema.String,
+      status: Schema.optional(ExecutionStatusEnum),
+      output: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+      findings: Schema.optional(Schema.Array(Schema.Unknown)),
+      completedAt: Schema.optional(Schema.String),
+      durationMs: Schema.optional(Schema.Number),
+    }),
+    success: SkillExecutionRecordSchema,
+    error: Schema.Union([BobNotFoundError, BobForbiddenError]),
+  },
+);
+
+// --- Snapshot procedures (Task 7: planning.snapshot.*) ---
+
+export const PlanningSnapshotCreateRpc = Rpc.make(
+  "planning.snapshot.create",
+  {
+    payload: Schema.Struct({
+      workItemId: Schema.String,
+      stage: Schema.String,
+      data: Schema.Record(Schema.String, Schema.Unknown),
+    }),
+    success: WorkItemSnapshotRecordSchema,
+    error: Schema.Union([BobNotFoundError, BobForbiddenError]),
+  },
+);
+
+export const PlanningSnapshotListRpc = Rpc.make("planning.snapshot.list", {
+  payload: Schema.Struct({ workItemId: Schema.String }),
+  success: Schema.Array(WorkItemSnapshotRecordSchema),
+  error: Schema.Union([BobNotFoundError, BobForbiddenError]),
+});
+
+export const PlanningSnapshotGetRpc = Rpc.make("planning.snapshot.get", {
+  payload: Schema.Struct({ id: Schema.String }),
+  success: Schema.NullOr(WorkItemSnapshotRecordSchema),
+  error: Schema.Union([BobNotFoundError, BobForbiddenError]),
+});
+
+// --- Checkpoint procedures (Task 7: planning.checkpoint.*) ---
+
+export const PlanningCheckpointCreateRpc = Rpc.make(
+  "planning.checkpoint.create",
+  {
+    payload: Schema.Struct({
+      sessionId: Schema.String,
+      turnNumber: Schema.Number,
+      eventSeq: Schema.Number,
+      label: Schema.optional(Schema.String),
+      snapshotData: Schema.optional(
+        Schema.Record(Schema.String, Schema.Unknown),
+      ),
+      gitRef: Schema.optional(Schema.String),
+    }),
+    success: CheckpointRecordSchema,
+    error: BobNotFoundError,
+  },
+);
+
+export const PlanningCheckpointListRpc = Rpc.make(
+  "planning.checkpoint.list",
+  {
+    payload: Schema.Struct({ sessionId: Schema.String }),
+    success: Schema.Array(CheckpointRecordSchema),
+    error: BobNotFoundError,
+  },
+);
+
+export const PlanningCheckpointBranchFromRpc = Rpc.make(
+  "planning.checkpoint.branchFrom",
+  {
+    payload: Schema.Struct({ checkpointId: Schema.String }),
+    success: BranchFromResultSchema,
+    error: BobNotFoundError,
+  },
+);
+
 export const PlanningRpc = RpcGroup.make(
   // Core planning (Task 4)
   PlanningListWorkspacesRpc,
@@ -724,4 +870,19 @@ export const PlanningRpc = RpcGroup.make(
   PlanningDispatchCheckProgressRpc,
   PlanningDispatchListBatchesRpc,
   PlanningDispatchResetPipelineStateRpc,
+  // Skill procedures (Task 7)
+  PlanningSkillListRpc,
+  PlanningSkillSeedRpc,
+  PlanningSkillGetExecutionRpc,
+  PlanningSkillListExecutionsRpc,
+  PlanningSkillRecordExecutionRpc,
+  PlanningSkillUpdateExecutionRpc,
+  // Snapshot procedures (Task 7)
+  PlanningSnapshotCreateRpc,
+  PlanningSnapshotListRpc,
+  PlanningSnapshotGetRpc,
+  // Checkpoint procedures (Task 7)
+  PlanningCheckpointCreateRpc,
+  PlanningCheckpointListRpc,
+  PlanningCheckpointBranchFromRpc,
 );
