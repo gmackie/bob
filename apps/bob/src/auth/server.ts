@@ -1,8 +1,10 @@
 import { cache } from "react";
 import { headers } from "next/headers";
 import { nextCookies } from "better-auth/next-js";
+import { expo } from "@better-auth/expo";
+import { betterAuth } from "better-auth";
+import { drizzleAdapter } from "better-auth/adapters/drizzle";
 
-import { initAuth } from "@bob/auth";
 import { createAuthRuntime, type AuthRuntimeBundle } from "@bob/auth/runtime";
 import { db } from "@bob/db/client";
 import * as bobSchema from "@bob/db/schema";
@@ -23,17 +25,40 @@ const publicSiteUrl =
 const baseUrl = safeOrigin(publicSiteUrl);
 
 // ---------------------------------------------------------------------------
-// Legacy better-auth instance (kept for `getSession` and backwards compat).
-// Bob's `initAuth` wires `nextCookies()` plugin for cookie-based session
-// resolution in Next.js RSC.
+// Legacy better-auth instance (inlined from retired `@bob/auth/initAuth`).
+// Kept for `getSession` in RSC — needs the `nextCookies()` plugin for
+// cookie-based session resolution in Next.js server components.
 // ---------------------------------------------------------------------------
-export const auth = initAuth({
-  baseUrl,
-  productionUrl: baseUrl,
+export const auth = betterAuth({
+  database: drizzleAdapter(db, { provider: "pg" }),
+  baseURL: baseUrl,
   secret: process.env.AUTH_SECRET,
-  githubClientId: process.env.AUTH_GITHUB_ID ?? "",
-  githubClientSecret: process.env.AUTH_GITHUB_SECRET ?? "",
-  extraPlugins: [nextCookies()],
+  plugins: [expo(), nextCookies()],
+  socialProviders: {
+    github: {
+      clientId: process.env.AUTH_GITHUB_ID ?? "",
+      clientSecret: process.env.AUTH_GITHUB_SECRET ?? "",
+      redirectURI: `${baseUrl}/api/auth/callback/github`,
+      scope: ["user:email", "repo", "read:user"],
+    },
+  },
+  trustedOrigins: Array.from(
+    new Set(
+      [
+        "expo://",
+        "bob://",
+        "http://localhost:3000",
+        "https://bob-web.localhost",
+        baseUrl,
+        ...(process.env.TRUSTED_ORIGINS?.split(",").map((o: string) => o.trim()) ?? []),
+      ].filter(Boolean),
+    ),
+  ),
+  onAPIError: {
+    onError(error, ctx) {
+      console.error("BETTER AUTH API ERROR", error, ctx);
+    },
+  },
 });
 
 // ---------------------------------------------------------------------------

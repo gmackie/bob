@@ -5,7 +5,6 @@
   "exports": {
     ".": "./src/index.ts",
     "./api-key": "./src/api-key.ts",
-    "./session": "./src/session.ts",
     "./context": "./src/context.ts",
     "./middleware": "./src/middleware.ts",
     "./client": "./src/client.ts",

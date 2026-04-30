@@ -1,79 +1,40 @@
-import type { BetterAuthOptions, BetterAuthPlugin } from "better-auth";
-import { expo } from "@better-auth/expo";
-import { betterAuth } from "better-auth";
-import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { oAuthProxy } from "better-auth/plugins";
+// @bob/auth — Public barrel.
+//
+// Phase 7B-3 Task 4: `initAuth()` and the `Auth` type have been retired.
+// Bob's auth now flows through the Effect auth runtime bridge
+// (`createAuthRuntime` from `@bob/auth/runtime`).
+//
+// The only consumer that needed `initAuth` (apps/bob/src/auth/server.ts)
+// now inlines the better-auth construction with `nextCookies()` directly.
 
-import { db } from "@bob/db/client";
+// --- Context -----------------------------------------------------------------
+export {
+  resolveAuthContext,
+  resolveWorkspaceSelection,
+  DEFAULT_USER_ID,
+  type RequestAuthContext,
+  type WorkspaceSelection,
+} from "./context";
 
-export function initAuth<
-  TExtraPlugins extends BetterAuthPlugin[] = [],
->(options: {
-  baseUrl: string;
-  productionUrl: string;
-  secret: string | undefined;
+// --- API keys (Bob-specific, not retired) ------------------------------------
+export {
+  type ApiKeyAuth,
+  type ApiKeyPermission,
+  isApiKey,
+  validateApiKey,
+  hashApiKey,
+  API_KEY_PREFIXES,
+} from "./api-key";
 
-  githubClientId: string;
-  githubClientSecret: string;
-  gitlabClientId?: string;
-  gitlabClientSecret?: string;
-  extraPlugins?: TExtraPlugins;
-}) {
-  const socialProviders: BetterAuthOptions["socialProviders"] = {
-    github: {
-      clientId: options.githubClientId,
-      clientSecret: options.githubClientSecret,
-      redirectURI: `${options.productionUrl}/api/auth/callback/github`,
-      scope: ["user:email", "repo", "read:user"],
-    },
-  };
-
-  if (options.gitlabClientId && options.gitlabClientSecret) {
-    socialProviders.gitlab = {
-      clientId: options.gitlabClientId,
-      clientSecret: options.gitlabClientSecret,
-      redirectURI: `${options.productionUrl}/api/auth/callback/gitlab`,
-      scope: ["api", "read_user", "read_repository", "write_repository"],
-    };
-  }
-
-  const config = {
-    database: drizzleAdapter(db, {
-      provider: "pg",
-    }),
-    baseURL: options.baseUrl,
-    secret: options.secret,
-    plugins: [
-      expo(),
-      ...(options.extraPlugins ?? []),
-    ],
-    socialProviders,
-    trustedOrigins: Array.from(
-      new Set(
-        [
-          "expo://",
-          "bob://",
-          "http://localhost:3000",
-          "https://bob-web.localhost",
-          options.baseUrl,
-          options.productionUrl,
-          // Allow extra trusted origins via env var (comma-separated)
-          ...(process.env.TRUSTED_ORIGINS?.split(",").map((o: string) => o.trim()) ?? []),
-        ].filter(Boolean),
-      ),
-    ),
-    onAPIError: {
-      onError(error, ctx) {
-        console.error("BETTER AUTH API ERROR", error, ctx);
-      },
-    },
-  } satisfies BetterAuthOptions;
-
-  return betterAuth(config);
-}
-
-export type Auth = ReturnType<typeof initAuth>;
-export type Session = Auth["$Infer"]["Session"];
-export * from "./api-key";
-export * from "./context";
-export * from "./session";
+// --- Effect auth runtime bridge ----------------------------------------------
+export {
+  createAuthRuntime,
+  type AuthRuntimeBundle,
+  type AuthRuntime,
+  type AuthRuntimeOptions,
+  type AuthServices,
+  Sessions,
+  ApiKeys,
+  Tenancy,
+  DeviceCodes,
+} from "./runtime";

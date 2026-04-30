@@ -3,11 +3,12 @@
 export * from "@bob/auth/schema";
 export * from "@bob/tenancy/schema";
 
-// gmacko auth tables — better-auth-shaped (plural table names: users, sessions,
-// accounts, verifications). These coexist with Bob's singular-named auth tables
-// (user, session, account, verification) so both schema sets bootstrap in one DB.
-// Tenancy / api-keys / device-codes are NOT re-exported because Bob already owns
-// those table names (tenants, api_keys, device_codes).
+// gmacko auth tables — canonical plural names (users, sessions, accounts,
+// verifications). These are the SAME underlying pgTable objects as the singular
+// aliases (user, session, account, verification) from `@bob/auth/schema` above.
+// Both are needed: singular for FK references in Bob's area packages, plural for
+// better-auth's drizzle adapter with `usePlural: true`. client-pglite.ts dedupes
+// by object identity before passing to drizzle-kit's DDL generator.
 export {
   users,
   sessions,

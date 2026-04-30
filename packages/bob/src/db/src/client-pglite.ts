@@ -110,11 +110,20 @@ export async function bootstrapSchema(client: PGlite): Promise<void> {
     return;
   }
 
-  // `schema.ts` already does `export * from "@bob/auth/schema"` so the
-  // star-import above includes auth tables (user, session, account,
-  // verification). No explicit merge needed.
+  // The schema barrel exports both singular aliases (user, session, account,
+  // verification) and canonical plural names (users, sessions, accounts,
+  // verifications) — the same pgTable objects under two keys. drizzle-kit's
+  // `generateDrizzleJson` treats each key as a distinct table and chokes on
+  // the duplicate index names. Deduplicate by object identity before passing.
+  const seen = new Set<unknown>();
+  const deduped: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(schema)) {
+    if (seen.has(value)) continue;
+    seen.add(value);
+    deduped[key] = value;
+  }
   const prev = generateDrizzleJson({}, undefined, undefined, "snake_case");
-  const cur = generateDrizzleJson(schema, undefined, undefined, "snake_case");
+  const cur = generateDrizzleJson(deduped, undefined, undefined, "snake_case");
   const statements = await generateMigration(prev, cur);
 
   // Pre-compute the drizzle/*.sql roster now so the transactional body below

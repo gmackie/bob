@@ -3,12 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const {
   validateApiKeyMock,
   isApiKeyMock,
-  validateSessionTokenMock,
   getSessionMock,
 } = vi.hoisted(() => ({
   validateApiKeyMock: vi.fn(),
   isApiKeyMock: vi.fn(),
-  validateSessionTokenMock: vi.fn(),
   getSessionMock: vi.fn(),
 }));
 
@@ -17,11 +15,7 @@ vi.mock("../api-key", () => ({
   validateApiKey: validateApiKeyMock,
 }));
 
-vi.mock("../session", () => ({
-  validateSessionToken: validateSessionTokenMock,
-}));
-
-describe("resolveRequestAuthContext", () => {
+describe("resolveAuthContext", () => {
   const defaultUser = {
     session: null,
     user: {
@@ -33,6 +27,15 @@ describe("resolveRequestAuthContext", () => {
       createdAt: new Date("2026-03-13T00:00:00.000Z"),
       updatedAt: new Date("2026-03-13T00:00:00.000Z"),
     },
+  };
+
+  const mockAuthBundle = {
+    authInstance: {
+      api: {
+        getSession: getSessionMock,
+      },
+    },
+    runtime: {} as any,
   };
 
   beforeEach(() => {
@@ -51,13 +54,9 @@ describe("resolveRequestAuthContext", () => {
       user: { id: "user-1" },
     });
 
-    const { resolveRequestAuthContext } = await import("../context");
-    const result = await resolveRequestAuthContext({
-      auth: {
-        api: {
-          getSession: getSessionMock,
-        },
-      } as any,
+    const { resolveAuthContext } = await import("../context");
+    const result = await resolveAuthContext({
+      authBundle: mockAuthBundle as any,
       defaultUser,
       headers: new Headers(),
     });
@@ -69,46 +68,12 @@ describe("resolveRequestAuthContext", () => {
     });
   });
 
-  it("falls back to bearer token validation for non-cookie session tokens", async () => {
-    process.env.REQUIRE_AUTH = "true";
-    getSessionMock.mockResolvedValueOnce(null);
-    isApiKeyMock.mockReturnValueOnce(false);
-    validateSessionTokenMock.mockResolvedValueOnce({
-      session: { id: "auth-session-2" },
-      user: { id: "user-2" },
-    });
-
-    const { resolveRequestAuthContext } = await import("../context");
-    const result = await resolveRequestAuthContext({
-      auth: {
-        api: {
-          getSession: getSessionMock,
-        },
-      } as any,
-      defaultUser,
-      headers: new Headers({
-        authorization: "Bearer session-token-123",
-      }),
-    });
-
-    expect(validateSessionTokenMock).toHaveBeenCalledWith("session-token-123");
-    expect(result.authMethod).toBe("session");
-    expect(result.session).toEqual({
-      session: { id: "auth-session-2" },
-      user: { id: "user-2" },
-    });
-  });
-
   it("returns the default user when auth is optional", async () => {
     getSessionMock.mockResolvedValueOnce(null);
 
-    const { resolveRequestAuthContext } = await import("../context");
-    const result = await resolveRequestAuthContext({
-      auth: {
-        api: {
-          getSession: getSessionMock,
-        },
-      } as any,
+    const { resolveAuthContext } = await import("../context");
+    const result = await resolveAuthContext({
+      authBundle: mockAuthBundle as any,
       defaultUser,
       headers: new Headers({
         "x-workspace-id": "workspace-1",
@@ -128,15 +93,10 @@ describe("resolveRequestAuthContext", () => {
     process.env.REQUIRE_AUTH = "true";
     getSessionMock.mockResolvedValueOnce(null);
     isApiKeyMock.mockReturnValueOnce(false);
-    validateSessionTokenMock.mockResolvedValueOnce(null);
 
-    const { resolveRequestAuthContext } = await import("../context");
-    const result = await resolveRequestAuthContext({
-      auth: {
-        api: {
-          getSession: getSessionMock,
-        },
-      } as any,
+    const { resolveAuthContext } = await import("../context");
+    const result = await resolveAuthContext({
+      authBundle: mockAuthBundle as any,
       defaultUser: null,
       headers: new Headers({
         authorization: "Bearer bad-token",
