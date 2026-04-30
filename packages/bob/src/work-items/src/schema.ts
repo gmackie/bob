@@ -35,7 +35,7 @@
 //   - planDrafts.sessionId → chatConversations.id (Task 14: chat)
 //   - dispatchBatches.sessionId → chatConversations.id (Task 14: chat)
 //   - taskRuns.sessionId → chatConversations.id (Task 14: chat)
-//   - taskRuns.pullRequestId → pullRequests.id (Task 15: git)
+//   - taskRuns.pullRequestId → pullRequests.id (Task 15: git) -- RE-ENABLED
 //   - workItemArtifacts.sessionId → chatConversations.id (Task 14: chat)
 // The columns themselves are preserved; only the runtime `.references()` link
 // is removed. Postgres-side FKs are unchanged (driven by migrations).
@@ -44,7 +44,11 @@
 //   - planDraftsRelations.session → chatConversations (Task 14: chat)
 //   - dispatchBatchesRelations.session → chatConversations (Task 14: chat)
 //   - taskRunsRelations.session → chatConversations (Task 14: chat)
-//   - taskRunsRelations.pullRequest → pullRequests (Task 15: git)
+//   - taskRunsRelations.pullRequest → pullRequests (Task 15: git) -- RE-ENABLED
+//
+// NOTE: The mutual dep (work-items → git for pullRequests, git → work-items
+// for workItems/taskRuns) is safe because both are declaration-only — pgTable/
+// relations are lazy, not runtime-evaluated (same pattern as agents ↔ chat).
 //
 // Note on workItemArtifactProducerType: the API contract zod enum
 // ("task_run" | "session" | "integration" | "manual") and the DB pgEnum
@@ -59,6 +63,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
 import { user } from "@bob/auth/schema";
+import { pullRequests } from "@bob/git/schema";
 import { projects, repositories, worktreePlans, worktrees } from "@bob/projects/schema";
 import { workspaces } from "@bob/tenancy/schema";
 
@@ -688,8 +693,7 @@ export const taskRuns = pgTable("task_runs", (t) => ({
     .uuid()
     .references(() => repositories.id, { onDelete: "set null" }),
   worktreeId: t.uuid().references(() => worktrees.id, { onDelete: "set null" }),
-  // pullRequestId FK to pullRequests.id dropped; re-enable in Task 15 (git).
-  pullRequestId: t.uuid(),
+  pullRequestId: t.uuid().references(() => pullRequests.id, { onDelete: "set null" }),
   status: t.varchar({ length: 20 }).notNull(), // 'starting' | 'running' | 'blocked' | 'completed' | 'failed'
   blockedReason: t.text(),
   branch: t.text(), // The git branch created for this task run
@@ -971,11 +975,10 @@ export const taskRunsRelations = relations(taskRuns, ({ one, many }) => ({
     fields: [taskRuns.worktreeId],
     references: [worktrees.id],
   }),
-  // TODO Phase 7B-2 Task 15: re-enable pullRequest → pullRequests when git moves.
-  // pullRequest: one(pullRequests, {
-  //   fields: [taskRuns.pullRequestId],
-  //   references: [pullRequests.id],
-  // }),
+  pullRequest: one(pullRequests, {
+    fields: [taskRuns.pullRequestId],
+    references: [pullRequests.id],
+  }),
   parentRun: one(taskRuns, {
     fields: [taskRuns.parentTaskRunId],
     references: [taskRuns.id],

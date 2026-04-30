@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@bob/auth": "workspace:*",
+    "@bob/git": "workspace:*",
     "@bob/projects": "workspace:*",
     "@bob/tenancy": "workspace:*",
     "drizzle-orm": "^0.44.7",
