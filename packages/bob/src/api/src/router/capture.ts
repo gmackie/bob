@@ -1,40 +1,13 @@
 import type { TRPCRouterRecord } from "@trpc/server";
 import { z } from "zod/v4";
-import { execSync } from "child_process";
-import { writeFile, mkdir } from "fs/promises";
-import { join } from "path";
-import { randomUUID } from "crypto";
 
 import { protectedProcedure } from "../trpc";
-
-const CAPTURE_DIR = join(process.cwd(), "public", "uploads", "captures");
+import { captureListTargets, captureCapture } from "../handlers/capture";
 
 export const captureRouter = {
-  listTargets: protectedProcedure.query(() => {
-    return [
-      {
-        id: "browser",
-        name: "Browser",
-        type: "browser" as const,
-        description: "Capture any URL",
-        connected: true,
-      },
-      {
-        id: "screen",
-        name: "Full Screen",
-        type: "screen" as const,
-        description: "Capture entire screen",
-        connected: true,
-      },
-      {
-        id: "window",
-        name: "Window",
-        type: "window" as const,
-        description: "Capture a specific window",
-        connected: process.platform === "darwin",
-      },
-    ];
-  }),
+  listTargets: protectedProcedure.query(({ ctx }) =>
+    captureListTargets({ db: ctx.db, userId: ctx.session.user.id }),
+  ),
 
   capture: protectedProcedure
     .input(
@@ -44,50 +17,7 @@ export const captureRouter = {
         url: z.string().optional(),
       }),
     )
-    .mutation(async ({ input }) => {
-      const { targetType, targetId, url } = input;
-
-      await mkdir(CAPTURE_DIR, { recursive: true });
-      const filename = `capture-${randomUUID()}.png`;
-      const filepath = join(CAPTURE_DIR, filename);
-
-      if (targetType === "browser" && url) {
-        // Generate a placeholder SVG for browser captures
-        // In production this would use Playwright
-        const placeholderSvg = generatePlaceholderCapture(url, 1280, 720);
-        await writeFile(filepath.replace(".png", ".svg"), placeholderSvg);
-      } else if (targetType === "window" && targetId) {
-        try {
-          execSync(`screencapture -l ${targetId} "${filepath}"`, {
-            timeout: 5000,
-          });
-        } catch {
-          execSync(`screencapture -x "${filepath}"`, { timeout: 5000 });
-        }
-      } else {
-        execSync(`screencapture -x "${filepath}"`, { timeout: 5000 });
-      }
-
-      const captureUrl = `/uploads/captures/${filename}`;
-      return {
-        url: captureUrl,
-        filename,
-        width: 1280,
-        height: 720,
-        capturedAt: new Date().toISOString(),
-      };
-    }),
+    .mutation(({ ctx, input }) =>
+      captureCapture({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
 } satisfies TRPCRouterRecord;
-
-function generatePlaceholderCapture(
-  url: string,
-  width: number,
-  height: number,
-): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-    <rect width="100%" height="100%" fill="#1C1B18"/>
-    <text x="50%" y="50%" text-anchor="middle" fill="#8A877E" font-family="monospace" font-size="14">
-      Capture: ${url}
-    </text>
-  </svg>`;
-}
