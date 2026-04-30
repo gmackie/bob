@@ -1,5 +1,5 @@
 import "./globals.css";
-import { GmackoAppProviders } from "@gmacko/core/app-shell";
+import { TRPCReactProvider } from "../trpc/react";
 
 export const metadata = {
   title: "OODA",
@@ -14,17 +14,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
-        <GmackoAppProviders
-          defaultTheme="ooda"
-          defaultMode="system"
-          rpcOptions={{
-            baseURL:
-              process.env.NEXT_PUBLIC_RPC_BASE_URL ??
-              "http://localhost:3000/api/rpc",
-          }}
-        >
-          {children}
-        </GmackoAppProviders>
+        <TRPCReactProvider>{children}</TRPCReactProvider>
       </body>
     </html>
   );
