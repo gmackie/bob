@@ -5,20 +5,30 @@ import { z, ZodError } from "zod/v4";
 import {
   type ApiKeyAuth,
   type ApiKeyPermission,
-  type Auth,
-  resolveRequestAuthContext,
+  resolveAuthContext,
 } from "@bob/auth";
+import type { AuthRuntimeBundle } from "@bob/auth/runtime";
 import { eq } from "@bob/db";
 import { db } from "@bob/db/client";
 import { user } from "@bob/db/schema";
 
 const DEFAULT_USER_ID = "default-user";
 
+/**
+ * Create the tRPC context using the Effect auth runtime bridge.
+ *
+ * Accepts an `AuthRuntimeBundle` (from `createAuthRuntime()`) and calls
+ * `authInstance.api.getSession()` internally to resolve the full better-auth
+ * session shape. The returned context has the exact same shape as before so
+ * all 370+ tRPC tests pass unchanged.
+ *
+ * Phase 7B-3 Task 3.
+ */
 export const createTRPCContext = async (opts: {
   headers: Headers;
-  auth: Auth;
+  authBundle: AuthRuntimeBundle;
 }) => {
-  const authApi = opts.auth.api;
+  const authApi = opts.authBundle.authInstance.api;
   let defaultUser:
     | {
         session: null;
@@ -41,8 +51,8 @@ export const createTRPCContext = async (opts: {
     }
   }
 
-  const authContext = await resolveRequestAuthContext({
-    auth: opts.auth,
+  const authContext = await resolveAuthContext({
+    authBundle: opts.authBundle,
     defaultUser,
     headers: opts.headers,
   });

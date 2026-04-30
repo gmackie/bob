@@ -83,6 +83,29 @@ export type AuthServices = Sessions | ApiKeys | DeviceCodes | Tenancy;
 /** The ManagedRuntime type Bob's tRPC context will hold. */
 export type AuthRuntime = ManagedRuntime.ManagedRuntime<AuthServices, never>;
 
+/**
+ * The return value of `createAuthRuntime()`.
+ *
+ * Exposes both the ManagedRuntime (for Effect-based auth calls) and the raw
+ * better-auth instance (so Bob's tRPC context can call `authInstance.api.getSession()`
+ * and return the full session shape that 370+ tRPC tests rely on).
+ */
+export interface AuthRuntimeBundle {
+  /** The ManagedRuntime providing Sessions, ApiKeys, DeviceCodes, Tenancy. */
+  readonly runtime: AuthRuntime;
+  /**
+   * The raw better-auth instance created by gmacko's `initAuth()`.
+   *
+   * Bob's tRPC context uses `authInstance.api.getSession({ headers })` to
+   * resolve the FULL better-auth session shape (with all fields like
+   * `session.token`, `session.ipAddress`, `user.emailVerified` etc.) that
+   * Bob's 370+ tRPC tests expect. The Effect `Sessions.validateRequest()`
+   * returns a narrower `SessionValidationResult`, which is NOT sufficient
+   * for backwards compatibility.
+   */
+  readonly authInstance: ReturnType<typeof initAuth>;
+}
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -108,7 +131,7 @@ export type AuthRuntime = ManagedRuntime.ManagedRuntime<AuthServices, never>;
  * );
  * ```
  */
-export function createAuthRuntime(opts: AuthRuntimeOptions): AuthRuntime {
+export function createAuthRuntime(opts: AuthRuntimeOptions): AuthRuntimeBundle {
   // 1. Create the better-auth instance using gmacko's initAuth.
   const authInstance = initAuth({
     db: opts.db,
@@ -143,7 +166,9 @@ export function createAuthRuntime(opts: AuthRuntimeOptions): AuthRuntime {
   );
 
   // 4. Create the ManagedRuntime.
-  return ManagedRuntime.make(fullLayer);
+  const runtime = ManagedRuntime.make(fullLayer);
+
+  return { runtime, authInstance };
 }
 
 export { Sessions, ApiKeys, Tenancy, DeviceCodes };

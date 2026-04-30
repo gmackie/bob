@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 
 import { appRouter, createTRPCContext } from "@bob/api";
 
-import { auth, getSession } from "~/auth/server";
+import { authBundle, getSession } from "~/auth/server";
 
 export async function createPlanningCaller() {
   const session = await getSession();
@@ -17,7 +17,7 @@ export async function createPlanningCaller() {
 
   const ctx = await createTRPCContext({
     headers: requestHeaders,
-    auth,
+    authBundle,
   });
 
   return appRouter.createCaller(ctx);

@@ -8,7 +8,7 @@ import { createTRPCContext } from "@bob/api";
 
 import type { EdgeRouter } from "~/lib/edge-router";
 import { edgeRouter } from "~/lib/edge-router";
-import { auth } from "~/auth/server";
+import { authBundle } from "~/auth/server";
 import { createQueryClient } from "./query-client";
 
 const createContext = cache(async () => {
@@ -17,7 +17,7 @@ const createContext = cache(async () => {
 
   return createTRPCContext({
     headers: heads,
-    auth,
+    authBundle,
   });
 });
 

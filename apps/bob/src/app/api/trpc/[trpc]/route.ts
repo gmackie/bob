@@ -4,7 +4,7 @@ import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { createTRPCContext } from "@bob/api";
 
 import { edgeRouter } from "~/lib/edge-router";
-import { auth } from "~/auth/server";
+import { authBundle } from "~/auth/server";
 
 const setCorsHeaders = (res: Response) => {
   res.headers.set("Access-Control-Allow-Origin", "*");
@@ -26,7 +26,7 @@ const handler = async (req: NextRequest) => {
     req,
     createContext: () =>
       createTRPCContext({
-        auth: auth,
+        authBundle,
         headers: req.headers,
       }),
     onError({ error, path }) {

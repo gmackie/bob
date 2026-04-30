@@ -21,7 +21,7 @@ beforeEach(async () => {
   // from Task 1). The `makePgliteDb` bootstrap applies all schema DDL.
   handle = await makePgliteDb({ dataDir: ":memory:" });
 
-  runtime = createAuthRuntime({
+  const bundle = createAuthRuntime({
     db: handle.db,
     // Pass Bob's schema so better-auth's drizzle adapter can resolve tables.
     // Bob's schema includes gmacko's plural auth tables (users, sessions, etc.)
@@ -37,6 +37,7 @@ beforeEach(async () => {
     // runtime bridge itself, not the sign-up flow.
     bootstrapTenancy: false,
   });
+  runtime = bundle.runtime;
 });
 
 afterEach(async () => {
@@ -53,7 +54,7 @@ describe("createAuthRuntime", () => {
     // The runtime was created in beforeEach; disposing it should not throw.
     // We create a second runtime to test the dispose path explicitly (the
     // afterEach cleanup handles the main one).
-    const rt2 = createAuthRuntime({
+    const bundle2 = createAuthRuntime({
       db: handle.db,
       schema: bobSchema as unknown as Record<string, unknown>,
       pluralizeTables: true,
@@ -66,7 +67,7 @@ describe("createAuthRuntime", () => {
     });
 
     // Disposing should resolve cleanly.
-    await expect(rt2.dispose()).resolves.toBeUndefined();
+    await expect(bundle2.runtime.dispose()).resolves.toBeUndefined();
   });
 
   it("resolves Sessions.validateRequest with empty headers (session error)", async () => {

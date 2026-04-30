@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { TRPCError } from "@trpc/server";
 import { createTRPCContext } from "@bob/api";
 import { edgeRouter } from "~/lib/edge-router";
-import { auth } from "~/auth/server";
+import { authBundle } from "~/auth/server";
 
 const STATUS_MAP: Record<string, number> = {
   UNAUTHORIZED: 401,
@@ -59,7 +59,7 @@ export function errorResponse(error: unknown) {
 export async function createPublicApiCaller(request: Request) {
   const ctx = await createTRPCContext({
     headers: request.headers,
-    auth,
+    authBundle,
   });
   return edgeRouter.createCaller(ctx);
 }
