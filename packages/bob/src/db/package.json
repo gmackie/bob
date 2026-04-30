@@ -58,9 +58,7 @@
     "@neondatabase/serverless": "^0.10.4",
     "drizzle-kit": "^0.31.5",
     "drizzle-orm": "^0.44.7",
-    "drizzle-zod": "^0.8.3",
-    "pg": "^8.17.1",
-    "zod": "catalog:"
+    "pg": "^8.17.1"
   },
   "devDependencies": {
     "@bob/eslint-config": "workspace:*",
