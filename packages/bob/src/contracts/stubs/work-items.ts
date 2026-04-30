@@ -54,4 +54,67 @@ export const WorkItemsStubLayer = WorkItemsRpc.toLayer({
       status: "starting",
     }),
   "workItem.taskRun.listLifecycleEvents": () => Effect.succeed([]),
+  // --- Requirement (Task 3) ---
+  "workItem.requirement.list": () => Effect.succeed([]),
+  "workItem.requirement.create": () =>
+    Effect.succeed({
+      id: "stub-req-1",
+      workItemId: "stub-wi-1",
+      category: "other",
+      description: "stub requirement",
+      status: "pending",
+      sortOrder: 0,
+    }),
+  "workItem.requirement.update": () =>
+    Effect.succeed({
+      id: "stub-req-1",
+      workItemId: "stub-wi-1",
+      category: "other",
+      description: "stub requirement",
+      status: "pending",
+      sortOrder: 0,
+    }),
+  "workItem.requirement.delete": () => Effect.succeed({ ok: true }),
+  "workItem.requirement.linkToTask": () =>
+    Effect.succeed({
+      id: "stub-req-1",
+      workItemId: "stub-wi-1",
+      category: "other",
+      description: "stub requirement",
+      status: "pending",
+      sortOrder: 0,
+    }),
+  // --- Link (Task 3) ---
+  "workItem.link.list": () => Effect.succeed([]),
+  "workItem.link.byId": () => Effect.succeed(null),
+  "workItem.link.byWorktree": () => Effect.succeed([]),
+  "workItem.link.create": () =>
+    Effect.succeed({
+      id: "stub-link-1",
+      worktreeId: "stub-wt-1",
+      userId: "stub-user-1",
+      linkType: "external",
+    }),
+  "workItem.link.update": () =>
+    Effect.succeed({
+      id: "stub-link-1",
+      worktreeId: "stub-wt-1",
+      userId: "stub-user-1",
+      linkType: "external",
+    }),
+  "workItem.link.delete": () => Effect.succeed({ ok: true }),
+  "workItem.link.linkToPlanningTask": () =>
+    Effect.succeed({
+      id: "stub-link-1",
+      worktreeId: "stub-wt-1",
+      userId: "stub-user-1",
+      linkType: "planning_task",
+    }),
+  "workItem.link.linkToGitHubPR": () =>
+    Effect.succeed({
+      id: "stub-link-1",
+      worktreeId: "stub-wt-1",
+      userId: "stub-user-1",
+      linkType: "github_pr",
+    }),
 });

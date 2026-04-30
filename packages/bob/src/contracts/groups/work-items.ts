@@ -22,6 +22,15 @@ import {
   TaskRunRecordSchema,
   LifecycleEventRecordSchema,
 } from "../schemas/work-item-sub.js";
+import {
+  RequirementCategoryEnum,
+  RequirementStatusEnum,
+  RequirementRecordSchema,
+} from "../schemas/work-item-requirement.js";
+import {
+  LinkTypeEnum,
+  WorktreeLinkRecordSchema,
+} from "../schemas/work-item-link.js";
 
 export const WorkItemListRpc = Rpc.make("workItem.list", {
   payload: Schema.Struct({
@@ -230,6 +239,151 @@ export const WorkItemTaskRunListLifecycleEventsRpc = Rpc.make(
   },
 );
 
+// --- Requirement sub-namespace (Task 3) ---
+
+export const WorkItemRequirementListRpc = Rpc.make(
+  "workItem.requirement.list",
+  {
+    payload: Schema.Struct({ workItemId: Schema.String }),
+    success: Schema.Array(RequirementRecordSchema),
+    error: BobNotFoundError,
+  },
+);
+
+export const WorkItemRequirementCreateRpc = Rpc.make(
+  "workItem.requirement.create",
+  {
+    payload: Schema.Struct({
+      workItemId: Schema.String,
+      category: RequirementCategoryEnum,
+      description: Schema.String,
+      sortOrder: Schema.optional(Schema.Number),
+    }),
+    success: RequirementRecordSchema,
+    error: BobNotFoundError,
+  },
+);
+
+export const WorkItemRequirementUpdateRpc = Rpc.make(
+  "workItem.requirement.update",
+  {
+    payload: Schema.Struct({
+      id: Schema.String,
+      description: Schema.optional(Schema.String),
+      status: Schema.optional(RequirementStatusEnum),
+      category: Schema.optional(RequirementCategoryEnum),
+      sortOrder: Schema.optional(Schema.Number),
+    }),
+    success: RequirementRecordSchema,
+    error: BobNotFoundError,
+  },
+);
+
+export const WorkItemRequirementDeleteRpc = Rpc.make(
+  "workItem.requirement.delete",
+  {
+    payload: Schema.Struct({ id: Schema.String }),
+    success: Schema.Struct({ ok: Schema.Boolean }),
+    error: BobNotFoundError,
+  },
+);
+
+export const WorkItemRequirementLinkToTaskRpc = Rpc.make(
+  "workItem.requirement.linkToTask",
+  {
+    payload: Schema.Struct({
+      id: Schema.String,
+      taskId: Schema.String,
+    }),
+    success: RequirementRecordSchema,
+    error: BobNotFoundError,
+  },
+);
+
+// --- Link sub-namespace (Task 3) ---
+
+export const WorkItemLinkListRpc = Rpc.make("workItem.link.list", {
+  payload: Schema.Struct({
+    worktreeId: Schema.optional(Schema.String),
+    linkType: Schema.optional(LinkTypeEnum),
+  }),
+  success: Schema.Array(WorktreeLinkRecordSchema),
+  error: BobNotFoundError,
+});
+
+export const WorkItemLinkByIdRpc = Rpc.make("workItem.link.byId", {
+  payload: Schema.Struct({ id: Schema.String }),
+  success: Schema.NullOr(WorktreeLinkRecordSchema),
+  error: BobNotFoundError,
+});
+
+export const WorkItemLinkByWorktreeRpc = Rpc.make("workItem.link.byWorktree", {
+  payload: Schema.Struct({ worktreeId: Schema.String }),
+  success: Schema.Array(WorktreeLinkRecordSchema),
+  error: BobNotFoundError,
+});
+
+export const WorkItemLinkCreateRpc = Rpc.make("workItem.link.create", {
+  payload: Schema.Struct({
+    worktreeId: Schema.String,
+    linkType: LinkTypeEnum,
+    externalId: Schema.optional(Schema.String),
+    url: Schema.optional(Schema.String),
+    title: Schema.optional(Schema.String),
+    metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  }),
+  success: WorktreeLinkRecordSchema,
+  error: BobNotFoundError,
+});
+
+export const WorkItemLinkUpdateRpc = Rpc.make("workItem.link.update", {
+  payload: Schema.Struct({
+    id: Schema.String,
+    externalId: Schema.optional(Schema.String),
+    url: Schema.optional(Schema.String),
+    title: Schema.optional(Schema.String),
+    metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  }),
+  success: WorktreeLinkRecordSchema,
+  error: BobNotFoundError,
+});
+
+export const WorkItemLinkDeleteRpc = Rpc.make("workItem.link.delete", {
+  payload: Schema.Struct({ id: Schema.String }),
+  success: Schema.Struct({ ok: Schema.Boolean }),
+  error: BobNotFoundError,
+});
+
+export const WorkItemLinkToPlanningTaskRpc = Rpc.make(
+  "workItem.link.linkToPlanningTask",
+  {
+    payload: Schema.Struct({
+      worktreeId: Schema.String,
+      taskId: Schema.String,
+      taskUrl: Schema.optional(Schema.String),
+      taskTitle: Schema.optional(Schema.String),
+    }),
+    success: WorktreeLinkRecordSchema,
+    error: BobNotFoundError,
+  },
+);
+
+export const WorkItemLinkToGitHubPRRpc = Rpc.make(
+  "workItem.link.linkToGitHubPR",
+  {
+    payload: Schema.Struct({
+      worktreeId: Schema.String,
+      prNumber: Schema.Number,
+      prUrl: Schema.String,
+      prTitle: Schema.String,
+      repoOwner: Schema.String,
+      repoName: Schema.String,
+    }),
+    success: WorktreeLinkRecordSchema,
+    error: BobNotFoundError,
+  },
+);
+
 export const WorkItemsRpc = RpcGroup.make(
   // Core (Task 1)
   WorkItemListRpc,
@@ -254,4 +408,19 @@ export const WorkItemsRpc = RpcGroup.make(
   WorkItemTaskRunListByWorkItemRpc,
   WorkItemTaskRunExecuteRpc,
   WorkItemTaskRunListLifecycleEventsRpc,
+  // Requirement (Task 3)
+  WorkItemRequirementListRpc,
+  WorkItemRequirementCreateRpc,
+  WorkItemRequirementUpdateRpc,
+  WorkItemRequirementDeleteRpc,
+  WorkItemRequirementLinkToTaskRpc,
+  // Link (Task 3)
+  WorkItemLinkListRpc,
+  WorkItemLinkByIdRpc,
+  WorkItemLinkByWorktreeRpc,
+  WorkItemLinkCreateRpc,
+  WorkItemLinkUpdateRpc,
+  WorkItemLinkDeleteRpc,
+  WorkItemLinkToPlanningTaskRpc,
+  WorkItemLinkToGitHubPRRpc,
 );
