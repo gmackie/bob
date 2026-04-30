@@ -73,6 +73,27 @@ export {
   ProjectsRepositoryUpdateWorktreePlanningRpc,
   ProjectsRepositoryDeleteWorktreeRpc,
   ProjectsRepositoryGetWorktreeMergeStatusRpc,
+  // 7B-4B Task 7 — pull request
+  ProjectsPullRequestListRpc,
+  ProjectsPullRequestGetRpc,
+  ProjectsPullRequestListByRepositoryRpc,
+  ProjectsPullRequestListBySessionRpc,
+  ProjectsPullRequestCreateRpc,
+  ProjectsPullRequestUpdateRpc,
+  ProjectsPullRequestMergeRpc,
+  ProjectsPullRequestSyncCommitsRpc,
+  ProjectsPullRequestLinkToPlanningTaskRpc,
+  ProjectsPullRequestRefreshRpc,
+  ProjectsPullRequestListReviewsRpc,
+  ProjectsPullRequestAddReviewRpc,
+  // 7B-4B Task 7 — feature branch
+  ProjectsFeatureBranchCreateRpc,
+  ProjectsFeatureBranchGetRpc,
+  ProjectsFeatureBranchListRpc,
+  ProjectsFeatureBranchAddTaskPRRpc,
+  ProjectsFeatureBranchMarkTaskPRMergedRpc,
+  ProjectsFeatureBranchCreateFeaturePRRpc,
+  ProjectsFeatureBranchUpdateStatusRpc,
 } from "./groups/projects";
 export {
   stubProjectsHandlers,
@@ -88,6 +109,11 @@ export {
   STUB_REPOSITORY_1,
   STUB_WORKTREE_1,
   STUB_WORKTREE_PLAN_1,
+  // 7B-4B Task 7 — pull request + feature branch stubs
+  STUB_PULL_REQUEST_1,
+  STUB_PR_REVIEW_1,
+  STUB_FEATURE_BRANCH_1,
+  STUB_FEATURE_BRANCH_TASK_PR_1,
 } from "./stubs/projects";
 export { ProjectSchema } from "./schemas/projects";
 export type { ProjectWire } from "./schemas/projects";
@@ -123,6 +149,34 @@ export type {
   PlanStatus,
   PlanTaskStatus,
 } from "./schemas/project-repository";
+export {
+  PullRequestSchema,
+  PRReviewSchema,
+  PRStatusEnum,
+  MergeMethodEnum,
+  ReviewStatusEnum,
+} from "./schemas/project-pull-request";
+export type {
+  PullRequestWire,
+  PRReviewWire,
+  PRStatus,
+  MergeMethod,
+  ReviewStatus,
+} from "./schemas/project-pull-request";
+export {
+  FeatureBranchSchema,
+  FeatureBranchTaskPRSchema,
+  FeatureBranchListItemSchema,
+  FeatureBranchDetailSchema,
+  FeatureBranchStatusEnum,
+} from "./schemas/project-feature-branch";
+export type {
+  FeatureBranchWire,
+  FeatureBranchTaskPRWire,
+  FeatureBranchListItemWire,
+  FeatureBranchDetailWire,
+  FeatureBranchStatus,
+} from "./schemas/project-feature-branch";
 
 // --- Agent (7B-4B) -------------------------------------------------------
 // Agent schemas added alongside the AgentRpc group. The group itself is

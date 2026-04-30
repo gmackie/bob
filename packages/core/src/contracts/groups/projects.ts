@@ -17,6 +17,9 @@
 // addFromProvider, delete, refreshMainBranch, getWorktrees,
 // createWorktree, getWorktreePlanning, updateWorktreePlanning,
 // deleteWorktree, getWorktreeMergeStatus) — 24 total.
+//
+// Phase 7B-4B Task 7: Added 12 pullRequest RPCs + 7 featureBranch RPCs
+// — 43 total.
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
@@ -40,6 +43,20 @@ import {
   WorktreePlanTaskSchema,
   PlanStatusEnum,
 } from "../schemas/project-repository.js";
+import {
+  PullRequestSchema,
+  PRReviewSchema,
+  PRStatusEnum,
+  MergeMethodEnum,
+  ReviewStatusEnum,
+} from "../schemas/project-pull-request.js";
+import {
+  FeatureBranchSchema,
+  FeatureBranchDetailSchema,
+  FeatureBranchListItemSchema,
+  FeatureBranchTaskPRSchema,
+  FeatureBranchStatusEnum,
+} from "../schemas/project-feature-branch.js";
 
 // ---------------------------------------------------------------------------
 // Existing project procedures (Phase 6F)
@@ -299,6 +316,231 @@ export const ProjectsRepositoryGetWorktreeMergeStatusRpc = Rpc.make(
 );
 
 // ---------------------------------------------------------------------------
+// Pull-request procedures (7B-4B Task 7 — from Bob's pullRequest router)
+// ---------------------------------------------------------------------------
+
+export const ProjectsPullRequestListRpc = Rpc.make(
+  "projects.pullRequest.list",
+  {
+    payload: Schema.Struct({
+      status: Schema.optional(PRStatusEnum),
+      limit: Schema.optional(Schema.Number),
+    }),
+    success: Schema.Array(PullRequestSchema),
+  },
+);
+
+export const ProjectsPullRequestGetRpc = Rpc.make(
+  "projects.pullRequest.get",
+  {
+    payload: Schema.Struct({ pullRequestId: Schema.String }),
+    success: PullRequestSchema,
+    error: NotFoundError,
+  },
+);
+
+export const ProjectsPullRequestListByRepositoryRpc = Rpc.make(
+  "projects.pullRequest.listByRepository",
+  {
+    payload: Schema.Struct({
+      repositoryId: Schema.String,
+      status: Schema.optional(PRStatusEnum),
+      limit: Schema.optional(Schema.Number),
+      includeCommits: Schema.optional(Schema.Boolean),
+    }),
+    success: Schema.Array(PullRequestSchema),
+  },
+);
+
+export const ProjectsPullRequestListBySessionRpc = Rpc.make(
+  "projects.pullRequest.listBySession",
+  {
+    payload: Schema.Struct({ sessionId: Schema.String }),
+    success: Schema.Array(PullRequestSchema),
+  },
+);
+
+export const ProjectsPullRequestCreateRpc = Rpc.make(
+  "projects.pullRequest.create",
+  {
+    payload: Schema.Struct({
+      repositoryId: Schema.String,
+      sessionId: Schema.optional(Schema.String),
+      title: Schema.String,
+      body: Schema.optional(Schema.String),
+      headBranch: Schema.String,
+      baseBranch: Schema.optional(Schema.String),
+      draft: Schema.optional(Schema.Boolean),
+      planningTaskId: Schema.optional(Schema.String),
+    }),
+    success: PullRequestSchema,
+  },
+);
+
+export const ProjectsPullRequestUpdateRpc = Rpc.make(
+  "projects.pullRequest.update",
+  {
+    payload: Schema.Struct({
+      pullRequestId: Schema.String,
+      title: Schema.optional(Schema.String),
+      body: Schema.optional(Schema.String),
+      state: Schema.optional(Schema.Literal("open", "closed")),
+    }),
+    success: PullRequestSchema,
+    error: NotFoundError,
+  },
+);
+
+export const ProjectsPullRequestMergeRpc = Rpc.make(
+  "projects.pullRequest.merge",
+  {
+    payload: Schema.Struct({
+      pullRequestId: Schema.String,
+      mergeMethod: Schema.optional(MergeMethodEnum),
+    }),
+    success: PullRequestSchema,
+    error: NotFoundError,
+  },
+);
+
+export const ProjectsPullRequestSyncCommitsRpc = Rpc.make(
+  "projects.pullRequest.syncCommits",
+  {
+    payload: Schema.Struct({ pullRequestId: Schema.String }),
+    success: PullRequestSchema,
+    error: NotFoundError,
+  },
+);
+
+export const ProjectsPullRequestLinkToPlanningTaskRpc = Rpc.make(
+  "projects.pullRequest.linkToPlanningTask",
+  {
+    payload: Schema.Struct({
+      pullRequestId: Schema.String,
+      planningTaskId: Schema.String,
+    }),
+    success: Schema.Struct({ success: Schema.Boolean }),
+  },
+);
+
+export const ProjectsPullRequestRefreshRpc = Rpc.make(
+  "projects.pullRequest.refresh",
+  {
+    payload: Schema.Struct({ pullRequestId: Schema.String }),
+    success: PullRequestSchema,
+    error: NotFoundError,
+  },
+);
+
+export const ProjectsPullRequestListReviewsRpc = Rpc.make(
+  "projects.pullRequest.listReviews",
+  {
+    payload: Schema.Struct({ pullRequestId: Schema.String }),
+    success: Schema.Array(PRReviewSchema),
+    error: NotFoundError,
+  },
+);
+
+export const ProjectsPullRequestAddReviewRpc = Rpc.make(
+  "projects.pullRequest.addReview",
+  {
+    payload: Schema.Struct({
+      pullRequestId: Schema.String,
+      status: ReviewStatusEnum,
+      body: Schema.optional(Schema.String),
+    }),
+    success: PRReviewSchema,
+    error: NotFoundError,
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Feature-branch procedures (7B-4B Task 7 — from Bob's featureBranch router)
+// ---------------------------------------------------------------------------
+
+export const ProjectsFeatureBranchCreateRpc = Rpc.make(
+  "projects.featureBranch.create",
+  {
+    payload: Schema.Struct({
+      workItemId: Schema.String,
+      repositoryId: Schema.String,
+      branchName: Schema.String,
+      baseBranch: Schema.optional(Schema.String),
+    }),
+    success: FeatureBranchSchema,
+  },
+);
+
+export const ProjectsFeatureBranchGetRpc = Rpc.make(
+  "projects.featureBranch.get",
+  {
+    payload: Schema.Struct({ id: Schema.String }),
+    success: FeatureBranchDetailSchema,
+    error: NotFoundError,
+  },
+);
+
+export const ProjectsFeatureBranchListRpc = Rpc.make(
+  "projects.featureBranch.list",
+  {
+    payload: Schema.Struct({ workItemId: Schema.String }),
+    success: Schema.Array(FeatureBranchListItemSchema),
+  },
+);
+
+export const ProjectsFeatureBranchAddTaskPRRpc = Rpc.make(
+  "projects.featureBranch.addTaskPR",
+  {
+    payload: Schema.Struct({
+      featureBranchId: Schema.String,
+      pullRequestId: Schema.String,
+    }),
+    success: FeatureBranchTaskPRSchema,
+    error: NotFoundError,
+  },
+);
+
+export const ProjectsFeatureBranchMarkTaskPRMergedRpc = Rpc.make(
+  "projects.featureBranch.markTaskPRMerged",
+  {
+    payload: Schema.Struct({
+      featureBranchId: Schema.String,
+      pullRequestId: Schema.String,
+    }),
+    success: FeatureBranchTaskPRSchema,
+    error: NotFoundError,
+  },
+);
+
+export const ProjectsFeatureBranchCreateFeaturePRRpc = Rpc.make(
+  "projects.featureBranch.createFeaturePR",
+  {
+    payload: Schema.Struct({
+      featureBranchId: Schema.String,
+      title: Schema.String,
+      repositoryId: Schema.String,
+    }),
+    success: Schema.Struct({
+      featureBranch: FeatureBranchSchema,
+      pullRequest: PullRequestSchema,
+    }),
+    error: NotFoundError,
+  },
+);
+
+export const ProjectsFeatureBranchUpdateStatusRpc = Rpc.make(
+  "projects.featureBranch.updateStatus",
+  {
+    payload: Schema.Struct({
+      id: Schema.String,
+      status: FeatureBranchStatusEnum,
+    }),
+    success: FeatureBranchSchema,
+    error: NotFoundError,
+  },
+);
+
+// ---------------------------------------------------------------------------
 // Group
 // ---------------------------------------------------------------------------
 
@@ -331,4 +573,25 @@ export const ProjectsRpc = RpcGroup.make(
   ProjectsRepositoryUpdateWorktreePlanningRpc,
   ProjectsRepositoryDeleteWorktreeRpc,
   ProjectsRepositoryGetWorktreeMergeStatusRpc,
+  // Pull request (7B-4B Task 7)
+  ProjectsPullRequestListRpc,
+  ProjectsPullRequestGetRpc,
+  ProjectsPullRequestListByRepositoryRpc,
+  ProjectsPullRequestListBySessionRpc,
+  ProjectsPullRequestCreateRpc,
+  ProjectsPullRequestUpdateRpc,
+  ProjectsPullRequestMergeRpc,
+  ProjectsPullRequestSyncCommitsRpc,
+  ProjectsPullRequestLinkToPlanningTaskRpc,
+  ProjectsPullRequestRefreshRpc,
+  ProjectsPullRequestListReviewsRpc,
+  ProjectsPullRequestAddReviewRpc,
+  // Feature branch (7B-4B Task 7)
+  ProjectsFeatureBranchCreateRpc,
+  ProjectsFeatureBranchGetRpc,
+  ProjectsFeatureBranchListRpc,
+  ProjectsFeatureBranchAddTaskPRRpc,
+  ProjectsFeatureBranchMarkTaskPRMergedRpc,
+  ProjectsFeatureBranchCreateFeaturePRRpc,
+  ProjectsFeatureBranchUpdateStatusRpc,
 );

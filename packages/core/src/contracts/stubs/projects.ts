@@ -13,6 +13,9 @@
 //
 // Phase 7B-4B Task 6: Added stubs for 12 repository procedures — 24
 // handlers total.
+//
+// Phase 7B-4B Task 7: Added stubs for 12 pullRequest + 7 featureBranch
+// procedures — 43 handlers total.
 import { Effect } from "effect";
 
 import { ProjectNotFoundError } from "@gmacko/core/projects/errors";
@@ -30,6 +33,13 @@ import type {
   WorktreeWire,
   WorktreePlanWire,
 } from "../schemas/project-repository.js";
+import type { PullRequestWire, PRReviewWire } from "../schemas/project-pull-request.js";
+import type {
+  FeatureBranchWire,
+  FeatureBranchTaskPRWire,
+  FeatureBranchListItemWire,
+  FeatureBranchDetailWire,
+} from "../schemas/project-feature-branch.js";
 
 export const STUB_TENANT_ID = "00000000-0000-0000-0000-000000000001";
 
@@ -107,6 +117,56 @@ export const STUB_WORKTREE_1: WorktreeWire = {
   isMainWorktree: false,
   createdAt: "2026-04-21T12:00:00Z",
   updatedAt: null,
+};
+
+export const STUB_PULL_REQUEST_1: PullRequestWire = {
+  id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  userId: "00000000-0000-0000-0000-000000000099",
+  repositoryId: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+  sessionId: null,
+  title: "feat: add widget support",
+  body: "Adds the widget feature.",
+  headBranch: "feat/widgets",
+  baseBranch: "main",
+  status: "open",
+  remoteNumber: 42,
+  remoteUrl: "https://github.com/acme/acme-repo/pull/42",
+  mergedAt: null,
+  planningTaskId: null,
+  createdAt: "2026-04-21T12:00:00Z",
+  updatedAt: null,
+};
+
+export const STUB_PR_REVIEW_1: PRReviewWire = {
+  id: "aaaaaaaa-bbbb-cccc-dddd-ffffffffffff",
+  pullRequestId: STUB_PULL_REQUEST_1.id,
+  userId: "00000000-0000-0000-0000-000000000099",
+  status: "approved",
+  body: "LGTM",
+  createdAt: "2026-04-21T13:00:00Z",
+  userName: "Test User",
+  userImage: null,
+};
+
+export const STUB_FEATURE_BRANCH_1: FeatureBranchWire = {
+  id: "ffffffff-aaaa-bbbb-cccc-dddddddddddd",
+  workItemId: "11111111-aaaa-bbbb-cccc-dddddddddddd",
+  repositoryId: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+  branchName: "feature/acme-widgets",
+  baseBranch: "main",
+  status: "active",
+  featurePrId: null,
+  createdAt: "2026-04-21T12:00:00Z",
+  updatedAt: null,
+};
+
+export const STUB_FEATURE_BRANCH_TASK_PR_1: FeatureBranchTaskPRWire = {
+  id: "ffffffff-aaaa-bbbb-cccc-eeeeeeeeeeee",
+  featureBranchId: STUB_FEATURE_BRANCH_1.id,
+  pullRequestId: STUB_PULL_REQUEST_1.id,
+  mergedAt: null,
+  createdAt: "2026-04-21T12:00:00Z",
+  pullRequest: STUB_PULL_REQUEST_1,
 };
 
 export const STUB_WORKTREE_PLAN_1: WorktreePlanWire = {
@@ -412,6 +472,283 @@ export const stubProjectsHandlers = {
       merged: false as const,
       hasUncommittedChanges: false as const,
     });
+  },
+
+  // --- Pull request (7B-4B Task 7) -----------------------------------------
+  "projects.pullRequest.list": (_payload: {
+    status?: string;
+    limit?: number;
+  }) => Effect.succeed([STUB_PULL_REQUEST_1]),
+  "projects.pullRequest.get": ({
+    pullRequestId,
+  }: {
+    pullRequestId: string;
+  }) => {
+    if (pullRequestId === STUB_PULL_REQUEST_1.id)
+      return Effect.succeed(STUB_PULL_REQUEST_1);
+    return Effect.fail(
+      new NotFoundError({ entity: "PullRequest", id: pullRequestId }),
+    );
+  },
+  "projects.pullRequest.listByRepository": (_payload: {
+    repositoryId: string;
+    status?: string;
+    limit?: number;
+    includeCommits?: boolean;
+  }) => Effect.succeed([STUB_PULL_REQUEST_1]),
+  "projects.pullRequest.listBySession": (_payload: {
+    sessionId: string;
+  }) => Effect.succeed([STUB_PULL_REQUEST_1]),
+  "projects.pullRequest.create": ({
+    repositoryId,
+    title,
+    headBranch,
+    baseBranch,
+    body,
+    sessionId,
+    draft,
+    planningTaskId,
+  }: {
+    repositoryId: string;
+    title: string;
+    headBranch: string;
+    baseBranch?: string;
+    body?: string;
+    sessionId?: string;
+    draft?: boolean;
+    planningTaskId?: string;
+  }) =>
+    Effect.succeed({
+      ...STUB_PULL_REQUEST_1,
+      id: "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      repositoryId,
+      sessionId: sessionId ?? null,
+      title,
+      body: body ?? null,
+      headBranch,
+      baseBranch: baseBranch ?? "main",
+      status: (draft ? "draft" : "open") as "draft" | "open",
+      planningTaskId: planningTaskId ?? null,
+      remoteNumber: null,
+      remoteUrl: null,
+    } satisfies PullRequestWire),
+  "projects.pullRequest.update": ({
+    pullRequestId,
+    title,
+    body,
+    state,
+  }: {
+    pullRequestId: string;
+    title?: string;
+    body?: string;
+    state?: "open" | "closed";
+  }) => {
+    if (pullRequestId !== STUB_PULL_REQUEST_1.id)
+      return Effect.fail(
+        new NotFoundError({ entity: "PullRequest", id: pullRequestId }),
+      );
+    return Effect.succeed({
+      ...STUB_PULL_REQUEST_1,
+      ...(title !== undefined ? { title } : {}),
+      ...(body !== undefined ? { body } : {}),
+      ...(state === "closed" ? { status: "closed" as const } : {}),
+    } satisfies PullRequestWire);
+  },
+  "projects.pullRequest.merge": ({
+    pullRequestId,
+  }: {
+    pullRequestId: string;
+    mergeMethod?: string;
+  }) => {
+    if (pullRequestId !== STUB_PULL_REQUEST_1.id)
+      return Effect.fail(
+        new NotFoundError({ entity: "PullRequest", id: pullRequestId }),
+      );
+    return Effect.succeed({
+      ...STUB_PULL_REQUEST_1,
+      status: "merged" as const,
+      mergedAt: "2026-04-21T14:00:00Z",
+    } satisfies PullRequestWire);
+  },
+  "projects.pullRequest.syncCommits": ({
+    pullRequestId,
+  }: {
+    pullRequestId: string;
+  }) => {
+    if (pullRequestId !== STUB_PULL_REQUEST_1.id)
+      return Effect.fail(
+        new NotFoundError({ entity: "PullRequest", id: pullRequestId }),
+      );
+    return Effect.succeed(STUB_PULL_REQUEST_1);
+  },
+  "projects.pullRequest.linkToPlanningTask": (_payload: {
+    pullRequestId: string;
+    planningTaskId: string;
+  }) => Effect.succeed({ success: true as const }),
+  "projects.pullRequest.refresh": ({
+    pullRequestId,
+  }: {
+    pullRequestId: string;
+  }) => {
+    if (pullRequestId !== STUB_PULL_REQUEST_1.id)
+      return Effect.fail(
+        new NotFoundError({ entity: "PullRequest", id: pullRequestId }),
+      );
+    return Effect.succeed(STUB_PULL_REQUEST_1);
+  },
+  "projects.pullRequest.listReviews": ({
+    pullRequestId,
+  }: {
+    pullRequestId: string;
+  }) => {
+    if (pullRequestId !== STUB_PULL_REQUEST_1.id)
+      return Effect.fail(
+        new NotFoundError({ entity: "PullRequest", id: pullRequestId }),
+      );
+    return Effect.succeed([STUB_PR_REVIEW_1]);
+  },
+  "projects.pullRequest.addReview": ({
+    pullRequestId,
+    status,
+    body,
+  }: {
+    pullRequestId: string;
+    status: "approved" | "changes_requested" | "commented";
+    body?: string;
+  }) => {
+    if (pullRequestId !== STUB_PULL_REQUEST_1.id)
+      return Effect.fail(
+        new NotFoundError({ entity: "PullRequest", id: pullRequestId }),
+      );
+    return Effect.succeed({
+      ...STUB_PR_REVIEW_1,
+      id: "ffffffff-ffff-ffff-ffff-fffffffffff1",
+      status,
+      body: body ?? null,
+    } satisfies PRReviewWire);
+  },
+
+  // --- Feature branch (7B-4B Task 7) ----------------------------------------
+  "projects.featureBranch.create": ({
+    workItemId,
+    repositoryId,
+    branchName,
+    baseBranch,
+  }: {
+    workItemId: string;
+    repositoryId: string;
+    branchName: string;
+    baseBranch?: string;
+  }) =>
+    Effect.succeed({
+      ...STUB_FEATURE_BRANCH_1,
+      id: "ffffffff-ffff-ffff-ffff-fffffffffff2",
+      workItemId,
+      repositoryId,
+      branchName,
+      baseBranch: baseBranch ?? "main",
+    } satisfies FeatureBranchWire),
+  "projects.featureBranch.get": ({ id }: { id: string }) => {
+    if (id !== STUB_FEATURE_BRANCH_1.id)
+      return Effect.fail(
+        new NotFoundError({ entity: "FeatureBranch", id }),
+      );
+    return Effect.succeed({
+      ...STUB_FEATURE_BRANCH_1,
+      taskPRs: [STUB_FEATURE_BRANCH_TASK_PR_1],
+    } satisfies FeatureBranchDetailWire);
+  },
+  "projects.featureBranch.list": (_payload: { workItemId: string }) =>
+    Effect.succeed([
+      {
+        id: STUB_FEATURE_BRANCH_1.id,
+        workItemId: STUB_FEATURE_BRANCH_1.workItemId,
+        repositoryId: STUB_FEATURE_BRANCH_1.repositoryId,
+        branchName: STUB_FEATURE_BRANCH_1.branchName,
+        baseBranch: STUB_FEATURE_BRANCH_1.baseBranch,
+        status: STUB_FEATURE_BRANCH_1.status,
+        featurePrId: STUB_FEATURE_BRANCH_1.featurePrId,
+        createdAt: STUB_FEATURE_BRANCH_1.createdAt,
+        taskPRCount: 1,
+      } satisfies FeatureBranchListItemWire,
+    ]),
+  "projects.featureBranch.addTaskPR": ({
+    featureBranchId,
+    pullRequestId,
+  }: {
+    featureBranchId: string;
+    pullRequestId: string;
+  }) => {
+    if (featureBranchId !== STUB_FEATURE_BRANCH_1.id)
+      return Effect.fail(
+        new NotFoundError({ entity: "FeatureBranch", id: featureBranchId }),
+      );
+    return Effect.succeed({
+      ...STUB_FEATURE_BRANCH_TASK_PR_1,
+      id: "ffffffff-ffff-ffff-ffff-fffffffffff3",
+      pullRequestId,
+    } satisfies FeatureBranchTaskPRWire);
+  },
+  "projects.featureBranch.markTaskPRMerged": ({
+    featureBranchId,
+  }: {
+    featureBranchId: string;
+    pullRequestId: string;
+  }) => {
+    if (featureBranchId !== STUB_FEATURE_BRANCH_1.id)
+      return Effect.fail(
+        new NotFoundError({ entity: "FeatureBranch", id: featureBranchId }),
+      );
+    return Effect.succeed({
+      ...STUB_FEATURE_BRANCH_TASK_PR_1,
+      mergedAt: "2026-04-21T14:00:00Z",
+    } satisfies FeatureBranchTaskPRWire);
+  },
+  "projects.featureBranch.createFeaturePR": ({
+    featureBranchId,
+    title,
+    repositoryId,
+  }: {
+    featureBranchId: string;
+    title: string;
+    repositoryId: string;
+  }) => {
+    if (featureBranchId !== STUB_FEATURE_BRANCH_1.id)
+      return Effect.fail(
+        new NotFoundError({ entity: "FeatureBranch", id: featureBranchId }),
+      );
+    const pr: PullRequestWire = {
+      ...STUB_PULL_REQUEST_1,
+      id: "ffffffff-ffff-ffff-ffff-fffffffffff4",
+      repositoryId,
+      title,
+      headBranch: STUB_FEATURE_BRANCH_1.branchName,
+      baseBranch: STUB_FEATURE_BRANCH_1.baseBranch,
+      status: "open",
+    };
+    return Effect.succeed({
+      featureBranch: {
+        ...STUB_FEATURE_BRANCH_1,
+        featurePrId: pr.id,
+      } satisfies FeatureBranchWire,
+      pullRequest: pr,
+    });
+  },
+  "projects.featureBranch.updateStatus": ({
+    id,
+    status,
+  }: {
+    id: string;
+    status: "active" | "ready" | "merged" | "abandoned";
+  }) => {
+    if (id !== STUB_FEATURE_BRANCH_1.id)
+      return Effect.fail(
+        new NotFoundError({ entity: "FeatureBranch", id }),
+      );
+    return Effect.succeed({
+      ...STUB_FEATURE_BRANCH_1,
+      status,
+    } satisfies FeatureBranchWire);
   },
 } as const;
 

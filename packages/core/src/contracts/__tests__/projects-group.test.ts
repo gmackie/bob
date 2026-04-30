@@ -1,7 +1,7 @@
 // Tests for the ProjectsRpc contract group + stub handlers.
 //
 // Two cases:
-//   1. `ProjectsRpc` resolves the 24 projects.* procedures by tag.
+//   1. `ProjectsRpc` resolves the 43 projects.* procedures by tag.
 //   2. Stub handlers: `projects.list` returns the 2 stub projects;
 //      `projects.getBySlug` fails with `ProjectNotFoundError` on an
 //      unknown slug.
@@ -19,7 +19,7 @@ import {
 } from "../stubs/projects.js";
 
 describe("ProjectsRpc group", () => {
-  it("resolves the 24 projects.* procedures by tag", () => {
+  it("resolves the 43 projects.* procedures by tag", () => {
     // `RpcGroup` exposes its constituent Rpcs on `.requests` (a Map keyed
     // by the procedure tag). Pull the tag list out and assert ordering.
     const tags = Array.from(
@@ -53,6 +53,27 @@ describe("ProjectsRpc group", () => {
       "projects.repository.updateWorktreePlanning",
       "projects.repository.deleteWorktree",
       "projects.repository.getWorktreeMergeStatus",
+      // 7B-4B Task 7 — pull request
+      "projects.pullRequest.list",
+      "projects.pullRequest.get",
+      "projects.pullRequest.listByRepository",
+      "projects.pullRequest.listBySession",
+      "projects.pullRequest.create",
+      "projects.pullRequest.update",
+      "projects.pullRequest.merge",
+      "projects.pullRequest.syncCommits",
+      "projects.pullRequest.linkToPlanningTask",
+      "projects.pullRequest.refresh",
+      "projects.pullRequest.listReviews",
+      "projects.pullRequest.addReview",
+      // 7B-4B Task 7 — feature branch
+      "projects.featureBranch.create",
+      "projects.featureBranch.get",
+      "projects.featureBranch.list",
+      "projects.featureBranch.addTaskPR",
+      "projects.featureBranch.markTaskPRMerged",
+      "projects.featureBranch.createFeaturePR",
+      "projects.featureBranch.updateStatus",
     ]);
   });
 });
