@@ -2,8 +2,16 @@ import type { TRPCRouterRecord } from "@trpc/server";
 import { z } from "zod/v4";
 
 import { apiKeyWriteProcedure, protectedProcedure } from "../trpc";
-import { SessionSecretService } from "../services/secrets/sessionSecretService";
-import { ForgeGraphSecretAdapter } from "../services/secrets/forgegraphSecretAdapter";
+import {
+  secretsGetSessionSecretManifest,
+  secretsGetSessionSecretForExecution,
+  secretsCreateSessionSecret,
+  secretsListSessionSecrets,
+  secretsDeleteSessionSecret,
+  secretsMarkSecretUsed,
+  secretsUpsertProjectDeployBinding,
+  secretsPromoteSessionSecret,
+} from "../handlers/secrets";
 
 const secretPolicySchema = z.object({
   allowedTemplates: z.array(z.string()).default([]),
@@ -26,13 +34,9 @@ export const secretsRouter = {
         sessionId: z.string().uuid(),
       }),
     )
-    .query(async ({ ctx, input }) => {
-      const service = new SessionSecretService(ctx.db as any);
-      return service.listSessionSecrets({
-        ...input,
-        userId: ctx.session.user.id,
-      });
-    }),
+    .query(({ ctx, input }) =>
+      secretsGetSessionSecretManifest({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
 
   getSessionSecretForExecution: apiKeyWriteProcedure
     .input(
@@ -41,13 +45,9 @@ export const secretsRouter = {
         handle: z.string().min(1).max(64),
       }),
     )
-    .query(async ({ ctx, input }) => {
-      const service = new SessionSecretService(ctx.db as any);
-      return service.getSecretForSessionExecution({
-        ...input,
-        userId: ctx.session.user.id,
-      });
-    }),
+    .query(({ ctx, input }) =>
+      secretsGetSessionSecretForExecution({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
 
   createSessionSecret: protectedProcedure
     .input(
@@ -63,13 +63,9 @@ export const secretsRouter = {
         }),
       }),
     )
-    .mutation(async ({ ctx, input }) => {
-      const service = new SessionSecretService(ctx.db as any);
-      return service.createSessionSecret({
-        ...input,
-        userId: ctx.session.user.id,
-      });
-    }),
+    .mutation(({ ctx, input }) =>
+      secretsCreateSessionSecret({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
 
   listSessionSecrets: protectedProcedure
     .input(
@@ -77,13 +73,9 @@ export const secretsRouter = {
         sessionId: z.string().uuid(),
       }),
     )
-    .query(async ({ ctx, input }) => {
-      const service = new SessionSecretService(ctx.db as any);
-      return service.listSessionSecrets({
-        ...input,
-        userId: ctx.session.user.id,
-      });
-    }),
+    .query(({ ctx, input }) =>
+      secretsListSessionSecrets({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
 
   deleteSessionSecret: protectedProcedure
     .input(
@@ -91,13 +83,9 @@ export const secretsRouter = {
         secretId: z.string(),
       }),
     )
-    .mutation(async ({ ctx, input }) => {
-      const service = new SessionSecretService(ctx.db as any);
-      return service.deleteSessionSecret({
-        ...input,
-        userId: ctx.session.user.id,
-      });
-    }),
+    .mutation(({ ctx, input }) =>
+      secretsDeleteSessionSecret({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
 
   markSecretUsed: protectedProcedure
     .input(
@@ -111,10 +99,9 @@ export const secretsRouter = {
         durationMs: z.number().int().optional(),
       }),
     )
-    .mutation(async ({ ctx, input }) => {
-      const service = new SessionSecretService(ctx.db as any);
-      return service.markSecretUsed(input);
-    }),
+    .mutation(({ ctx, input }) =>
+      secretsMarkSecretUsed({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
 
   upsertProjectDeployBinding: protectedProcedure
     .input(
@@ -128,10 +115,9 @@ export const secretsRouter = {
         templateId: z.string().max(64).optional(),
       }),
     )
-    .mutation(async ({ ctx, input }) => {
-      const service = new SessionSecretService(ctx.db as any);
-      return service.upsertProjectDeployBinding(input);
-    }),
+    .mutation(({ ctx, input }) =>
+      secretsUpsertProjectDeployBinding({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
 
   promoteSessionSecret: protectedProcedure
     .input(
@@ -142,13 +128,7 @@ export const secretsRouter = {
         forgegraphKey: z.string().min(1).max(128),
       }),
     )
-    .mutation(async ({ ctx, input }) => {
-      const service = new SessionSecretService(ctx.db as any);
-      const adapter = new ForgeGraphSecretAdapter();
-      return service.promoteSessionSecret({
-        ...input,
-        userId: ctx.session.user.id,
-        adapter,
-      });
-    }),
+    .mutation(({ ctx, input }) =>
+      secretsPromoteSessionSecret({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
 } satisfies TRPCRouterRecord;
