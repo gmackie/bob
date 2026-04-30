@@ -1057,9 +1057,18 @@ importers:
 
   packages/bob/src/cookies:
     dependencies:
+      '@bob/auth':
+        specifier: workspace:*
+        version: link:../auth
+      '@bob/chat':
+        specifier: workspace:*
+        version: link:../chat
       better-sqlite3:
         specifier: ^11.0.0
         version: 11.10.0
+      drizzle-orm:
+        specifier: ^0.44.7
+        version: 0.44.7(@cloudflare/workers-types@4.20260426.1)(@electric-sql/pglite@0.3.16)(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.1)(@prisma/client@5.22.0(prisma@5.22.0))(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@11.10.0)(kysely@0.28.16)(pg@8.20.0)(postgres@3.4.9)(prisma@5.22.0)
     devDependencies:
       '@bob/tsconfig':
         specifier: workspace:*
@@ -1085,6 +1094,9 @@ importers:
       '@bob/ci':
         specifier: workspace:*
         version: link:../ci
+      '@bob/cookies':
+        specifier: workspace:*
+        version: link:../cookies
       '@bob/git':
         specifier: workspace:*
         version: link:../git
@@ -21380,6 +21392,21 @@ snapshots:
       postgres: 3.4.9
       prisma: 5.22.0
       react: 19.2.5
+
+  drizzle-orm@0.44.7(@cloudflare/workers-types@4.20260426.1)(@electric-sql/pglite@0.3.16)(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.1)(@prisma/client@5.22.0(prisma@5.22.0))(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@11.10.0)(kysely@0.28.16)(pg@8.20.0)(postgres@3.4.9)(prisma@5.22.0):
+    optionalDependencies:
+      '@cloudflare/workers-types': 4.20260426.1
+      '@electric-sql/pglite': 0.3.16
+      '@neondatabase/serverless': 0.10.4
+      '@opentelemetry/api': 1.9.1
+      '@prisma/client': 5.22.0(prisma@5.22.0)
+      '@types/better-sqlite3': 7.6.13
+      '@types/pg': 8.16.0
+      better-sqlite3: 11.10.0
+      kysely: 0.28.16
+      pg: 8.20.0
+      postgres: 3.4.9
+      prisma: 5.22.0
 
   drizzle-orm@0.44.7(@cloudflare/workers-types@4.20260426.1)(@electric-sql/pglite@0.3.16)(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.1)(@prisma/client@5.22.0(prisma@5.22.0))(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.9.0)(kysely@0.28.16)(pg@8.20.0)(postgres@3.4.9)(prisma@5.22.0):
     optionalDependencies:
