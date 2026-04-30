@@ -66,6 +66,13 @@ import {
   EventTypeEnum,
   EventStatsSchema,
 } from "../schemas/agent-event.js";
+import {
+  FileEntrySchema,
+  GitStatusEntrySchema,
+  FileSearchResultSchema,
+} from "../schemas/agent-filesystem.js";
+import { ChatAttachmentSchema } from "../schemas/agent-chat.js";
+import { PostSchema } from "../schemas/agent-post.js";
 import { NotFoundError } from "../../rpc/errors.js";
 
 /** Union of every error `agent.sendTurn` can surface (on its stream). */
@@ -820,6 +827,245 @@ export const AgentEventStatsRpc = Rpc.make("agent.event.stats", {
   success: EventStatsSchema,
 });
 
+// ---------------------------------------------------------------------------
+// agent.filesystem.* — 9 RPCs (7B-4B Task 4)
+// ---------------------------------------------------------------------------
+
+// --- agent.filesystem.list -------------------------------------------------
+
+export const AgentFilesystemListRpc = Rpc.make("agent.filesystem.list", {
+  payload: Schema.Struct({
+    path: Schema.String,
+    showHidden: Schema.optional(Schema.Boolean),
+  }),
+  success: Schema.Array(FileEntrySchema),
+});
+
+// --- agent.filesystem.read -------------------------------------------------
+
+export const AgentFilesystemReadRpc = Rpc.make("agent.filesystem.read", {
+  payload: Schema.Struct({
+    path: Schema.String,
+    encoding: Schema.optional(Schema.Literal("utf-8", "base64")),
+  }),
+  success: Schema.Struct({ content: Schema.String }),
+});
+
+// --- agent.filesystem.write ------------------------------------------------
+
+export const AgentFilesystemWriteRpc = Rpc.make("agent.filesystem.write", {
+  payload: Schema.Struct({
+    path: Schema.String,
+    content: Schema.String,
+    createDirs: Schema.optional(Schema.Boolean),
+  }),
+  success: Schema.Struct({ success: Schema.Boolean }),
+});
+
+// --- agent.filesystem.delete -----------------------------------------------
+
+export const AgentFilesystemDeleteRpc = Rpc.make("agent.filesystem.delete", {
+  payload: Schema.Struct({
+    path: Schema.String,
+    recursive: Schema.optional(Schema.Boolean),
+  }),
+  success: Schema.Struct({ success: Schema.Boolean }),
+});
+
+// --- agent.filesystem.mkdir ------------------------------------------------
+
+export const AgentFilesystemMkdirRpc = Rpc.make("agent.filesystem.mkdir", {
+  payload: Schema.Struct({
+    path: Schema.String,
+    recursive: Schema.optional(Schema.Boolean),
+  }),
+  success: Schema.Struct({ success: Schema.Boolean }),
+});
+
+// --- agent.filesystem.move -------------------------------------------------
+
+export const AgentFilesystemMoveRpc = Rpc.make("agent.filesystem.move", {
+  payload: Schema.Struct({
+    source: Schema.String,
+    destination: Schema.String,
+  }),
+  success: Schema.Struct({ success: Schema.Boolean }),
+});
+
+// --- agent.filesystem.copy -------------------------------------------------
+
+export const AgentFilesystemCopyRpc = Rpc.make("agent.filesystem.copy", {
+  payload: Schema.Struct({
+    source: Schema.String,
+    destination: Schema.String,
+  }),
+  success: Schema.Struct({ success: Schema.Boolean }),
+});
+
+// --- agent.filesystem.search -----------------------------------------------
+
+export const AgentFilesystemSearchRpc = Rpc.make("agent.filesystem.search", {
+  payload: Schema.Struct({
+    path: Schema.String,
+    pattern: Schema.String,
+    maxResults: Schema.optional(Schema.Number),
+  }),
+  success: Schema.Array(FileSearchResultSchema),
+});
+
+// --- agent.filesystem.gitStatus --------------------------------------------
+
+export const AgentFilesystemGitStatusRpc = Rpc.make(
+  "agent.filesystem.gitStatus",
+  {
+    payload: Schema.Struct({ path: Schema.String }),
+    success: Schema.Array(GitStatusEntrySchema),
+  },
+);
+
+// ---------------------------------------------------------------------------
+// agent.chat.* — 8 RPCs (7B-4B Task 4)
+// ---------------------------------------------------------------------------
+
+// --- agent.chat.listConversations ------------------------------------------
+
+export const AgentChatListConversationsRpc = Rpc.make(
+  "agent.chat.listConversations",
+  {
+    payload: Schema.Struct({
+      repositoryId: Schema.optional(Schema.String),
+      limit: Schema.optional(Schema.Number),
+    }),
+    success: Schema.Array(ChatConversationSchema),
+  },
+);
+
+// --- agent.chat.getConversation --------------------------------------------
+
+export const AgentChatGetConversationRpc = Rpc.make(
+  "agent.chat.getConversation",
+  {
+    payload: Schema.Struct({ id: Schema.String }),
+    success: Schema.Struct({
+      conversation: ChatConversationSchema,
+      messages: Schema.Array(ChatMessageSchema),
+    }),
+    error: NotFoundError,
+  },
+);
+
+// --- agent.chat.createConversation -----------------------------------------
+
+export const AgentChatCreateConversationRpc = Rpc.make(
+  "agent.chat.createConversation",
+  {
+    payload: Schema.Struct({
+      repositoryId: Schema.optional(Schema.String),
+      worktreeId: Schema.optional(Schema.String),
+      workingDirectory: Schema.optional(Schema.String),
+      title: Schema.optional(Schema.String),
+      sessionType: Schema.optional(Schema.String),
+      workItemId: Schema.optional(Schema.String),
+    }),
+    success: ChatConversationSchema,
+  },
+);
+
+// --- agent.chat.deleteConversation -----------------------------------------
+
+export const AgentChatDeleteConversationRpc = Rpc.make(
+  "agent.chat.deleteConversation",
+  {
+    payload: Schema.Struct({ id: Schema.String }),
+    success: Schema.Struct({ success: Schema.Boolean }),
+  },
+);
+
+// --- agent.chat.sendMessage ------------------------------------------------
+
+export const AgentChatSendMessageRpc = Rpc.make("agent.chat.sendMessage", {
+  payload: Schema.Struct({
+    conversationId: Schema.String,
+    content: Schema.String,
+  }),
+  success: ChatMessageSchema,
+  error: NotFoundError,
+});
+
+// --- agent.chat.getMessages ------------------------------------------------
+
+export const AgentChatGetMessagesRpc = Rpc.make("agent.chat.getMessages", {
+  payload: Schema.Struct({
+    conversationId: Schema.String,
+    limit: Schema.optional(Schema.Number),
+    before: Schema.optional(Schema.String),
+  }),
+  success: Schema.Array(ChatMessageSchema),
+  error: NotFoundError,
+});
+
+// --- agent.chat.attachImage ------------------------------------------------
+
+export const AgentChatAttachImageRpc = Rpc.make("agent.chat.attachImage", {
+  payload: Schema.Struct({
+    messageId: Schema.String,
+    url: Schema.String,
+    filename: Schema.optional(Schema.String),
+    mimeType: Schema.optional(Schema.String),
+    width: Schema.optional(Schema.Number),
+    height: Schema.optional(Schema.Number),
+    sizeBytes: Schema.optional(Schema.Number),
+  }),
+  success: ChatAttachmentSchema,
+  error: NotFoundError,
+});
+
+// --- agent.chat.getAttachments ---------------------------------------------
+
+export const AgentChatGetAttachmentsRpc = Rpc.make(
+  "agent.chat.getAttachments",
+  {
+    payload: Schema.Struct({ messageId: Schema.String }),
+    success: Schema.Array(ChatAttachmentSchema),
+    error: NotFoundError,
+  },
+);
+
+// ---------------------------------------------------------------------------
+// agent.post.* — 4 RPCs (7B-4B Task 4)
+// ---------------------------------------------------------------------------
+
+// --- agent.post.all --------------------------------------------------------
+
+export const AgentPostAllRpc = Rpc.make("agent.post.all", {
+  payload: Schema.Void,
+  success: Schema.Array(PostSchema),
+});
+
+// --- agent.post.byId -------------------------------------------------------
+
+export const AgentPostByIdRpc = Rpc.make("agent.post.byId", {
+  payload: Schema.Struct({ id: Schema.String }),
+  success: Schema.NullOr(PostSchema),
+});
+
+// --- agent.post.create -----------------------------------------------------
+
+export const AgentPostCreateRpc = Rpc.make("agent.post.create", {
+  payload: Schema.Struct({
+    title: Schema.String,
+    content: Schema.String,
+  }),
+  success: PostSchema,
+});
+
+// --- agent.post.delete -----------------------------------------------------
+
+export const AgentPostDeleteRpc = Rpc.make("agent.post.delete", {
+  payload: Schema.Struct({ id: Schema.String }),
+  success: Schema.Struct({ success: Schema.Boolean }),
+});
+
 // --- Group ------------------------------------------------------------------
 
 export const AgentRpc = RpcGroup.make(
@@ -887,4 +1133,28 @@ export const AgentRpc = RpcGroup.make(
   AgentEventRecentActivityRpc,
   AgentEventByWorktreeRpc,
   AgentEventStatsRpc,
+  // agent.filesystem (9) — Task 4
+  AgentFilesystemListRpc,
+  AgentFilesystemReadRpc,
+  AgentFilesystemWriteRpc,
+  AgentFilesystemDeleteRpc,
+  AgentFilesystemMkdirRpc,
+  AgentFilesystemMoveRpc,
+  AgentFilesystemCopyRpc,
+  AgentFilesystemSearchRpc,
+  AgentFilesystemGitStatusRpc,
+  // agent.chat (8) — Task 4
+  AgentChatListConversationsRpc,
+  AgentChatGetConversationRpc,
+  AgentChatCreateConversationRpc,
+  AgentChatDeleteConversationRpc,
+  AgentChatSendMessageRpc,
+  AgentChatGetMessagesRpc,
+  AgentChatAttachImageRpc,
+  AgentChatGetAttachmentsRpc,
+  // agent.post (4) — Task 4
+  AgentPostAllRpc,
+  AgentPostByIdRpc,
+  AgentPostCreateRpc,
+  AgentPostDeleteRpc,
 );

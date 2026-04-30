@@ -484,6 +484,174 @@ const handlers = AgentRpc.of({
 
   "agent.event.stats": (_payload) =>
     Effect.succeed({ total: 1, byType: { "instance.started": 1 } }),
+
+  // --- 7B-4B Task 4: agent.filesystem stubs --------------------------------
+
+  "agent.filesystem.list": (_payload) =>
+    Effect.succeed([
+      {
+        name: "README.md",
+        path: "/tmp/stub/README.md",
+        isDirectory: false,
+        size: 1024,
+        modifiedAt: "2026-04-21T00:00:00.000Z",
+      },
+    ]),
+
+  "agent.filesystem.read": (_payload) =>
+    Effect.succeed({ content: "# Stub file content\n" }),
+
+  "agent.filesystem.write": (_payload) =>
+    Effect.succeed({ success: true }),
+
+  "agent.filesystem.delete": (_payload) =>
+    Effect.succeed({ success: true }),
+
+  "agent.filesystem.mkdir": (_payload) =>
+    Effect.succeed({ success: true }),
+
+  "agent.filesystem.move": (_payload) =>
+    Effect.succeed({ success: true }),
+
+  "agent.filesystem.copy": (_payload) =>
+    Effect.succeed({ success: true }),
+
+  "agent.filesystem.search": (_payload) =>
+    Effect.succeed([]),
+
+  "agent.filesystem.gitStatus": (_payload) =>
+    Effect.succeed([
+      { path: "README.md", status: "modified" },
+    ]),
+
+  // --- 7B-4B Task 4: agent.chat stubs -------------------------------------
+
+  "agent.chat.listConversations": (_payload) =>
+    Effect.succeed([
+      {
+        id: STUB_CONVERSATION_ID,
+        tenantId: STUB_TENANT_ID,
+        userId: STUB_USER_ID,
+        title: null,
+        adapterId: "claude-code",
+        status: "active" as const,
+        metadata: {},
+        createdAt: STUB_DATE,
+        updatedAt: STUB_DATE,
+      },
+    ]),
+
+  "agent.chat.getConversation": ({ id }) =>
+    id === STUB_CONVERSATION_ID
+      ? Effect.succeed({
+          conversation: {
+            id: STUB_CONVERSATION_ID,
+            tenantId: STUB_TENANT_ID,
+            userId: STUB_USER_ID,
+            title: null,
+            adapterId: "claude-code",
+            status: "active" as const,
+            metadata: {},
+            createdAt: STUB_DATE,
+            updatedAt: STUB_DATE,
+          },
+          messages: [],
+        })
+      : Effect.fail(new NotFoundError({ entity: "Conversation", id })),
+
+  "agent.chat.createConversation": (_payload) =>
+    Effect.succeed({
+      id: STUB_CONVERSATION_ID,
+      tenantId: STUB_TENANT_ID,
+      userId: STUB_USER_ID,
+      title: null,
+      adapterId: "claude-code",
+      status: "pending" as const,
+      metadata: {},
+      createdAt: STUB_DATE,
+      updatedAt: STUB_DATE,
+    }),
+
+  "agent.chat.deleteConversation": (_payload) =>
+    Effect.succeed({ success: true }),
+
+  "agent.chat.sendMessage": ({ conversationId }) =>
+    conversationId === STUB_CONVERSATION_ID
+      ? Effect.succeed({
+          id: "msg-stub-1",
+          conversationId,
+          seq: 1,
+          role: "user" as const,
+          content: "stub message",
+          metadata: {},
+          createdAt: STUB_DATE,
+        })
+      : Effect.fail(
+          new NotFoundError({ entity: "Conversation", id: conversationId }),
+        ),
+
+  "agent.chat.getMessages": ({ conversationId }) =>
+    conversationId === STUB_CONVERSATION_ID
+      ? Effect.succeed([])
+      : Effect.fail(
+          new NotFoundError({ entity: "Conversation", id: conversationId }),
+        ),
+
+  "agent.chat.attachImage": ({ messageId }) =>
+    messageId === "msg-stub-1"
+      ? Effect.succeed({
+          id: "att-stub-1",
+          messageId,
+          type: "image",
+          url: "/uploads/stub.png",
+          filename: null,
+          mimeType: null,
+          width: null,
+          height: null,
+          sizeBytes: null,
+          createdAt: STUB_DATE,
+        })
+      : Effect.fail(new NotFoundError({ entity: "Message", id: messageId })),
+
+  "agent.chat.getAttachments": ({ messageId }) =>
+    messageId === "msg-stub-1"
+      ? Effect.succeed([])
+      : Effect.fail(new NotFoundError({ entity: "Message", id: messageId })),
+
+  // --- 7B-4B Task 4: agent.post stubs -------------------------------------
+
+  "agent.post.all": () =>
+    Effect.succeed([
+      {
+        id: "post-stub-1",
+        title: "Stub Post",
+        content: "Stub content",
+        createdAt: STUB_DATE,
+      },
+    ]),
+
+  "agent.post.byId": ({ id }) =>
+    Effect.succeed(
+      id === "post-stub-1"
+        ? {
+            id: "post-stub-1",
+            title: "Stub Post",
+            content: "Stub content",
+            createdAt: STUB_DATE,
+          }
+        : null,
+    ),
+
+  "agent.post.create": ({ title, content }) =>
+    Effect.succeed({
+      id: "post-stub-new",
+      title,
+      content,
+      createdAt: STUB_DATE,
+    }),
+
+  "agent.post.delete": (_payload) =>
+    Effect.succeed({ success: true }),
 });
 
 /**
