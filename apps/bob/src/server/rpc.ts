@@ -20,6 +20,9 @@ const HealthRpc = Rpc.make("health", {
   success: Schema.Struct({ ok: Schema.Boolean }),
 });
 
+// TODO 7B-4D-beta: Merge PlanningRpc handlers here.
+// The makeSnapshotRpcHandlers pattern from packages/bob/src/api/src/rpc-handlers/
+// produces handler objects that plug into PlanningRpc.toLayer().
 const BobRpcGroup = RpcGroup.make(HealthRpc).middleware(AuthMiddleware);
 
 const handlers = BobRpcGroup.toLayer({
