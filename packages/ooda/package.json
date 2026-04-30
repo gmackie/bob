@@ -21,7 +21,9 @@
     "./db/client": "./src/db/client.ts",
     "./db/schema": "./src/db/schema.ts",
     "./db/auth": "./src/db/auth.ts",
-    "./db/listen-broker": "./src/db/listen-broker.ts"
+    "./db/listen-broker": "./src/db/listen-broker.ts",
+    "./thread-workspace": "./src/thread-workspace/index.ts",
+    "./api": "./src/api/index.ts"
   },
   "scripts": {
     "test": "vitest run",
@@ -43,6 +45,7 @@
     "postgres": "^3.4.9",
     "react": "^19.0.0",
     "simple-git": "^3.36.0",
+    "superjson": "catalog:",
     "zod": "^4.0.0"
   },
   "devDependencies": {

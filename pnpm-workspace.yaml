@@ -1,8 +1,8 @@
 packages:
-  - "apps/*"
-  - "packages/*"
-  - "packages/bob/src/*"
-  - "tooling/*"
+  - apps/*
+  - packages/*
+  - packages/bob/src/*
+  - tooling/*
 
 catalog:
   '@better-auth/cli': 1.4.0-beta.9
@@ -13,19 +13,19 @@ catalog:
   '@tanstack/react-form': ^1.23.8
   '@tanstack/react-query': ^5.90.8
   '@trpc/client': ~11.7.2
-  '@trpc/server': ~11.7.2
+  '@trpc/server': 11.7.2
   '@trpc/tanstack-react-query': ~11.7.2
   '@types/node': ^22.18.12
   '@types/ws': ^8.18.1
   '@vitejs/plugin-react': 5.1.0
   better-auth: 1.4.0-beta.9
   eslint: ^9.38.0
-  node-pty: ^1.0.0
+  node-pty: ^1.1.0
   prettier: ^3.6.2
   superjson: 2.2.3
   tailwindcss: 4.1.18
   tsup: ^8.5.0
-  tsx: ^4.19.0
+  tsx: 4.21.0
   typescript: ^5.9.3
   vite: 7.1.12
   ws: ^8.18.0
@@ -57,15 +57,8 @@ overrides:
 publicHoistPattern:
   - '@ianvs/prettier-plugin-sort-imports'
   - prettier-plugin-tailwindcss
-  # Hoist Bob's transitive deps to root so apps/bob (which imports them
-  # directly without declaring them, e.g. next/*, drizzle-orm) resolves them.
-  # Each gmacko/Bob package retains its own isolated node_modules, so version
-  # conflicts (vitest 3.x vs 4.x, effect 3.x vs 4.x) stay siloed locally.
-  # Bob's original repo at /Volumes/dev/bob used full node-linker=hoisted; we
-  # use the more targeted publicHoistPattern to keep gmacko's tests from
-  # accidentally picking up a hoisted copy of vitest etc.
-  - 'next'
+  - next
   - '@radix-ui/*'
-  - 'class-variance-authority'
-  - 'drizzle-orm'
+  - class-variance-authority
+  - drizzle-orm
   - '@tailwindcss/typography'
