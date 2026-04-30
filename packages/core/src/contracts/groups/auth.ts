@@ -104,6 +104,18 @@ export const AuthApproveDeviceCodeRpc = Rpc.make("auth.approveDeviceCode", {
   error: Schema.Union([InvalidUserCodeError, AlreadyApprovedError]),
 });
 
+// --- Bob auth (7B-4B Task 11) --------------------------------------------
+
+export const AuthGetSessionRpc = Rpc.make("auth.getSession", {
+  payload: Schema.Void,
+  success: Schema.NullOr(Schema.Unknown),
+});
+
+export const AuthGetSecretMessageRpc = Rpc.make("auth.getSecretMessage", {
+  payload: Schema.Void,
+  success: Schema.String,
+});
+
 // --- Group ----------------------------------------------------------------
 
 export const AuthRpc = RpcGroup.make(
@@ -116,4 +128,7 @@ export const AuthRpc = RpcGroup.make(
   AuthStartDeviceFlowRpc,
   AuthPollDeviceCodeRpc,
   AuthApproveDeviceCodeRpc,
+  // 7B-4B Task 11 — Bob auth
+  AuthGetSessionRpc,
+  AuthGetSecretMessageRpc,
 );

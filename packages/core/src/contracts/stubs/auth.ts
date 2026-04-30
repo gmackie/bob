@@ -112,4 +112,21 @@ export const stubAuthHandlers = AuthRpc.toLayer({
   "auth.approveDeviceCode": () =>
     // Stub always succeeds; error-path replacement lives in real handler.
     Effect.void,
+
+  // 7B-4B Task 11 — Bob auth
+  "auth.getSession": () =>
+    Effect.succeed({
+      user: {
+        id: STUB_USER_ID,
+        email: STUB_EMAIL,
+        name: "Stub User",
+      },
+      session: {
+        id: "session_stub_001",
+        userId: STUB_USER_ID,
+      },
+    }),
+
+  "auth.getSecretMessage": () =>
+    Effect.succeed("you can see this secret message!"),
 });

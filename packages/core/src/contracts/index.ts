@@ -21,6 +21,9 @@ export {
   AuthStartDeviceFlowRpc,
   AuthPollDeviceCodeRpc,
   AuthApproveDeviceCodeRpc,
+  // 7B-4B Task 11 — Bob auth
+  AuthGetSessionRpc,
+  AuthGetSecretMessageRpc,
 } from "./groups/auth";
 export { stubAuthHandlers } from "./stubs/auth";
 export {

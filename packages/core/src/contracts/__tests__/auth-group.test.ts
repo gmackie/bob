@@ -32,13 +32,16 @@ const EXPECTED_TAGS = [
   "auth.startDeviceFlow",
   "auth.pollDeviceCode",
   "auth.approveDeviceCode",
+  // 7B-4B Task 11 — Bob auth
+  "auth.getSession",
+  "auth.getSecretMessage",
 ] as const;
 
 describe("@gmacko/contracts AuthRpc group", () => {
-  it("declares all 9 expected procedure tags", () => {
+  it("declares all 11 expected procedure tags", () => {
     const tags = Array.from(AuthRpc.requests.keys()).sort();
     expect(tags).toEqual([...EXPECTED_TAGS].sort());
-    expect(AuthRpc.requests.size).toBe(9);
+    expect(AuthRpc.requests.size).toBe(11);
   });
 
   it("stub handlers return deterministic mock data that round-trips through the success schemas", async () => {
