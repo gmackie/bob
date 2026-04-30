@@ -1,4 +1,6 @@
-export type WorkItemKind = "issue" | "epic" | "task";
+// WorkItemKind type is re-exported from ./schema (DB enum source of truth).
+import type { WorkItemKind } from "./schema";
+export type { WorkItemKind };
 
 export interface WorkItemRef {
   id: string;

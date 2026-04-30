@@ -9,6 +9,7 @@
     "./context": "./src/context.ts",
     "./middleware": "./src/middleware.ts",
     "./client": "./src/client.ts",
+    "./schema": "./src/schema.ts",
     "./env": "./env.ts"
   },
   "license": "MIT",
@@ -16,7 +17,7 @@
     "clean": "git clean -xdf .cache .turbo dist node_modules",
     "format": "prettier --check . --ignore-path ../../.gitignore",
     "lint": "eslint --flag unstable_native_nodejs_ts_config",
-    "generate": "dotenv -e ../../.env -- pnpx @better-auth/cli generate --config script/auth-cli.ts --output ../db/src/auth-schema.ts",
+    "generate": "dotenv -e ../../.env -- pnpx @better-auth/cli generate --config script/auth-cli.ts --output src/schema.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

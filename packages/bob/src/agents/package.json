@@ -6,6 +6,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./src/index.ts"
+    },
+    "./schema": {
+      "types": "./dist/schema.d.ts",
+      "default": "./src/schema.ts"
     }
   },
   "license": "MIT",
@@ -16,6 +20,16 @@
     "format": "prettier --check . --ignore-path ../../.gitignore",
     "lint": "eslint --flag unstable_native_nodejs_ts_config",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
+  },
+  "dependencies": {
+    "@bob/auth": "workspace:*",
+    "@bob/chat": "workspace:*",
+    "@bob/projects": "workspace:*",
+    "@bob/tenancy": "workspace:*",
+    "@bob/work-items": "workspace:*",
+    "drizzle-orm": "^0.44.7",
+    "drizzle-zod": "^0.8.3",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@bob/eslint-config": "workspace:*",

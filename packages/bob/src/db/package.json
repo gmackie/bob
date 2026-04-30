@@ -41,13 +41,24 @@
     "with-env": "dotenv -e ../../.env --"
   },
   "dependencies": {
+    "@bob/agents": "workspace:*",
+    "@bob/auth": "workspace:*",
+    "@bob/chat": "workspace:*",
+    "@bob/ci": "workspace:*",
+    "@bob/cookies": "workspace:*",
+    "@bob/git": "workspace:*",
+    "@bob/notifications": "workspace:*",
+    "@bob/projects": "workspace:*",
+    "@bob/secrets": "workspace:*",
+    "@bob/settings": "workspace:*",
+    "@bob/tenancy": "workspace:*",
+    "@bob/webhooks": "workspace:*",
+    "@bob/work-items": "workspace:*",
     "@electric-sql/pglite": "^0.3.0",
     "@neondatabase/serverless": "^0.10.4",
     "drizzle-kit": "^0.31.5",
     "drizzle-orm": "^0.44.7",
-    "drizzle-zod": "^0.8.3",
-    "pg": "^8.17.1",
-    "zod": "catalog:"
+    "pg": "^8.17.1"
   },
   "devDependencies": {
     "@bob/eslint-config": "workspace:*",
