@@ -16,12 +16,17 @@ import { makeSettingsRpcHandlers } from "../rpc-handlers/settings.js";
 import { makeCookiesRpcHandlers } from "../rpc-handlers/cookies.js";
 import { makeSystemRpcHandlers } from "../rpc-handlers/system.js";
 
-export const makeSettingsLayer = (ctx: HandlerContext) => {
+/**
+ * Returns the raw handler mapping object for SettingsRpc (20 entries).
+ * Can be used standalone with `liftHandlers` in the server, or called
+ * by `makeSettingsLayer` which wraps the result in `SettingsRpc.toLayer()`.
+ */
+export const makeSettingsHandlers = (ctx: HandlerContext) => {
   const set = makeSettingsRpcHandlers(ctx);
   const ck = makeCookiesRpcHandlers(ctx);
   const sys = makeSystemRpcHandlers(ctx);
 
-  return SettingsRpc.toLayer({
+  return {
     // --- Settings (13) — settings.* → settings.* (direct match) ---
     "settings.getPreferences": set["settings.getPreferences"],
     "settings.updatePreferences": set["settings.updatePreferences"],
@@ -47,5 +52,8 @@ export const makeSettingsLayer = (ctx: HandlerContext) => {
     // --- System (2) — system.* → settings.system.* ---
     "settings.system.health": sys["system.health"],
     "settings.system.status": sys["system.status"],
-  });
+  } as const;
 };
+
+export const makeSettingsLayer = (ctx: HandlerContext) =>
+  SettingsRpc.toLayer(makeSettingsHandlers(ctx));

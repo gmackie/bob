@@ -18,10 +18,15 @@ import { SecretsRpc } from "@gmacko/core/contracts/groups/secrets";
 import { BobNotFoundError } from "@gmacko/bob/contracts";
 import { makeSecretsRpcHandlers } from "../rpc-handlers/secrets.js";
 
-export const makeSecretsLayer = (ctx: HandlerContext) => {
+/**
+ * Returns the raw handler mapping object for SecretsRpc (14 entries).
+ * Can be used standalone with `liftHandlers` in the server, or called
+ * by `makeSecretsLayer` which wraps the result in `SecretsRpc.toLayer()`.
+ */
+export const makeSecretsHandlers = (ctx: HandlerContext) => {
   const sec = makeSecretsRpcHandlers(ctx);
 
-  return SecretsRpc.toLayer({
+  return {
     // --- Stubs (6) — gmacko-only tenant-scoped secrets, no Bob equivalent ---
     "secrets.create": () =>
       Effect.fail(
@@ -60,5 +65,8 @@ export const makeSecretsLayer = (ctx: HandlerContext) => {
     "secrets.session.upsertDeployBinding":
       sec["secrets.upsertProjectDeployBinding"],
     "secrets.session.promote": sec["secrets.promoteSessionSecret"],
-  });
+  } as const;
 };
+
+export const makeSecretsLayer = (ctx: HandlerContext) =>
+  SecretsRpc.toLayer(makeSecretsHandlers(ctx));

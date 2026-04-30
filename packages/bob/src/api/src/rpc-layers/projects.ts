@@ -24,7 +24,12 @@ import { makeFeatureBranchRpcHandlers } from "../rpc-handlers/featureBranch.js";
 import { makeGitProvidersRpcHandlers } from "../rpc-handlers/gitProviders.js";
 import { makeGitRpcHandlers } from "../rpc-handlers/git.js";
 
-export const makeProjectsLayer = (ctx: HandlerContext) => {
+/**
+ * Returns the raw handler mapping object for ProjectsRpc (56 entries).
+ * Can be used standalone with `liftHandlers` in the server, or called
+ * by `makeProjectsLayer` which wraps the result in `ProjectsRpc.toLayer()`.
+ */
+export const makeProjectsHandlers = (ctx: HandlerContext) => {
   const proj = makeProjectRpcHandlers(ctx);
   const ws = makeWorkspaceRpcHandlers(ctx);
   const repo = makeRepositoryRpcHandlers(ctx);
@@ -33,7 +38,7 @@ export const makeProjectsLayer = (ctx: HandlerContext) => {
   const gp = makeGitProvidersRpcHandlers(ctx);
   const git = makeGitRpcHandlers(ctx);
 
-  return ProjectsRpc.toLayer({
+  return {
     // --- Stubs (2) — gmacko-only, no Bob equivalent ---
     "projects.getBySlug": () =>
       Effect.fail(
@@ -121,5 +126,8 @@ export const makeProjectsLayer = (ctx: HandlerContext) => {
     "projects.git.jjDescribe": git["git.jjDescribe"],
     "projects.git.jjSquash": git["git.jjSquash"],
     "projects.git.jjDiff": git["git.jjDiff"],
-  });
+  } as const;
 };
+
+export const makeProjectsLayer = (ctx: HandlerContext) =>
+  ProjectsRpc.toLayer(makeProjectsHandlers(ctx));

@@ -19,10 +19,15 @@ import { AuthRpc } from "@gmacko/core/contracts/groups/auth";
 import { BobNotFoundError } from "@gmacko/bob/contracts";
 import { makeAuthRpcHandlers } from "../rpc-handlers/auth.js";
 
-export const makeAuthLayer = (ctx: HandlerContext) => {
+/**
+ * Returns the raw handler mapping object for AuthRpc (11 entries).
+ * Can be used standalone with `liftHandlers` in the server, or called
+ * by `makeAuthLayer` which wraps the result in `AuthRpc.toLayer()`.
+ */
+export const makeAuthHandlers = (ctx: HandlerContext) => {
   const au = makeAuthRpcHandlers(ctx);
 
-  return AuthRpc.toLayer({
+  return {
     // --- Stubs (9) — gmacko-only auth, no Bob equivalent ---
     "auth.whoAmI": () =>
       Effect.fail(
@@ -64,5 +69,8 @@ export const makeAuthLayer = (ctx: HandlerContext) => {
     // --- Auth (2) — auth.* → auth.* (direct match) ---
     "auth.getSession": au["auth.getSession"],
     "auth.getSecretMessage": au["auth.getSecretMessage"],
-  });
+  } as const;
 };
+
+export const makeAuthLayer = (ctx: HandlerContext) =>
+  AuthRpc.toLayer(makeAuthHandlers(ctx));

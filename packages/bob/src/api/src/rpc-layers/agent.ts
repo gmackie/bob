@@ -27,7 +27,12 @@ import { makeFilesystemRpcHandlers } from "../rpc-handlers/filesystem.js";
 import { makeChatRpcHandlers } from "../rpc-handlers/chat.js";
 import { makePostRpcHandlers } from "../rpc-handlers/post.js";
 
-export const makeAgentLayer = (ctx: HandlerContext) => {
+/**
+ * Returns the raw handler mapping object for AgentRpc (78 entries).
+ * Can be used standalone with `liftHandlers` in the server, or called
+ * by `makeAgentLayer` which wraps the result in `AgentRpc.toLayer()`.
+ */
+export const makeAgentHandlers = (ctx: HandlerContext) => {
   const ar = makeAgentRunRpcHandlers(ctx);
   const cap = makeCaptureRpcHandlers(ctx);
   const sess = makeSessionRpcHandlers(ctx);
@@ -38,7 +43,7 @@ export const makeAgentLayer = (ctx: HandlerContext) => {
   const ch = makeChatRpcHandlers(ctx);
   const po = makePostRpcHandlers(ctx);
 
-  return AgentRpc.toLayer({
+  return {
     // --- Stubs (5) — gmacko-only session lifecycle, no Bob equivalent ---
     "agent.createSession": () =>
       Effect.fail(
@@ -159,5 +164,8 @@ export const makeAgentLayer = (ctx: HandlerContext) => {
     "agent.post.byId": po["post.byId"],
     "agent.post.create": po["post.create"],
     "agent.post.delete": po["post.delete"],
-  });
+  } as const;
 };
+
+export const makeAgentLayer = (ctx: HandlerContext) =>
+  AgentRpc.toLayer(makeAgentHandlers(ctx));

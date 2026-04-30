@@ -14,6 +14,12 @@ import {
   ExternalRpc,
 } from "@gmacko/bob/contracts";
 
+import { AgentRpc } from "@gmacko/core/contracts/groups/agent";
+import { ProjectsRpc } from "@gmacko/core/contracts/groups/projects";
+import { SettingsRpc } from "@gmacko/core/contracts/groups/settings";
+import { SecretsRpc } from "@gmacko/core/contracts/groups/secrets";
+import { AuthRpc } from "@gmacko/core/contracts/groups/auth";
+
 import type { HandlerContext } from "@bob/api/handlers/context.js";
 import { makeWorkItemsRpcHandlers } from "@bob/api/rpc-handlers/workItems.js";
 import { makePlanningRpcHandlers } from "@bob/api/rpc-handlers/planning.js";
@@ -29,16 +35,27 @@ import { makePublicApiRpcHandlers } from "@bob/api/rpc-handlers/publicApi.js";
 import { makeRequirementRpcHandlers } from "@bob/api/rpc-handlers/requirement.js";
 import { makeLinkRpcHandlers } from "@bob/api/rpc-handlers/link.js";
 
+import { makeAgentHandlers } from "@bob/api/rpc-layers/agent.js";
+import { makeProjectsHandlers } from "@bob/api/rpc-layers/projects.js";
+import { makeSettingsHandlers } from "@bob/api/rpc-layers/settings.js";
+import { makeSecretsHandlers } from "@bob/api/rpc-layers/secrets.js";
+import { makeAuthHandlers } from "@bob/api/rpc-layers/auth.js";
+
 import { runtimeLayer, authMiddlewareLayer } from "./layers.js";
 
 // ---------------------------------------------------------------------------
 // Bob Effect-RPC server — mounts at /api/rpc alongside the existing /api/trpc.
 //
-// Serves 4 groups behind AuthMiddleware:
+// Serves 9 groups behind AuthMiddleware (309 total procedures):
 //   - HealthRpc          (1 procedure  — built-in probe)
 //   - WorkItemsRpc       (31 procedures — work-items, artifacts, links, etc.)
 //   - PlanningRpc        (67 procedures — planning, sessions, dispatch, skills)
 //   - ExternalRpc        (31 procedures — forgegraph, webhooks, public API)
+//   - AgentRpc           (78 procedures — agent runs, sessions, instances, etc.)
+//   - ProjectsRpc        (56 procedures — projects, repos, PRs, git, etc.)
+//   - SettingsRpc        (20 procedures — preferences, config, cookies, system)
+//   - SecretsRpc         (14 procedures — tenant + session secrets)
+//   - AuthRpc            (11 procedures — auth sessions + gmacko-only stubs)
 //
 // Handler context bridging: the tRPC-era handler functions expect a
 // `HandlerContext { db, userId }` provided eagerly. In the Effect-RPC server,
@@ -60,7 +77,16 @@ const HealthRpc = Rpc.make("health", {
 // -- Merged group -----------------------------------------------------------
 
 const BobRpcGroup = RpcGroup.make(HealthRpc)
-  .merge(WorkItemsRpc, PlanningRpc, ExternalRpc)
+  .merge(
+    WorkItemsRpc,
+    PlanningRpc,
+    ExternalRpc,
+    AgentRpc,
+    ProjectsRpc,
+    SettingsRpc,
+    SecretsRpc,
+    AuthRpc,
+  )
   .middleware(AuthMiddleware);
 
 // -- Handler-context bridge -------------------------------------------------
@@ -276,6 +302,31 @@ const externalHandlers = ExternalRpc.toLayer({
   }),
 } as any);
 
+// AgentRpc (78 procedures)
+const agentHandlers = AgentRpc.toLayer({
+  ...liftHandlers(makeAgentHandlers),
+} as any);
+
+// ProjectsRpc (56 procedures)
+const projectsHandlers = ProjectsRpc.toLayer({
+  ...liftHandlers(makeProjectsHandlers),
+} as any);
+
+// SettingsRpc (20 procedures)
+const settingsHandlers = SettingsRpc.toLayer({
+  ...liftHandlers(makeSettingsHandlers),
+} as any);
+
+// SecretsRpc (14 procedures)
+const secretsHandlers = SecretsRpc.toLayer({
+  ...liftHandlers(makeSecretsHandlers),
+} as any);
+
+// AuthRpc (11 procedures)
+const authHandlers = AuthRpc.toLayer({
+  ...liftHandlers(makeAuthHandlers),
+} as any);
+
 // -- Server -----------------------------------------------------------------
 
 const allHandlers = Layer.mergeAll(
@@ -283,6 +334,11 @@ const allHandlers = Layer.mergeAll(
   workItemsHandlers,
   planningHandlers,
   externalHandlers,
+  agentHandlers,
+  projectsHandlers,
+  settingsHandlers,
+  secretsHandlers,
+  authHandlers,
 );
 
 const serverLayer = RpcServer.layerHttp({

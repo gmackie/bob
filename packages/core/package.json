@@ -45,6 +45,7 @@
     "./contracts/groups/projects": "./src/contracts/groups/projects.ts",
     "./contracts/groups/secrets": "./src/contracts/groups/secrets.ts",
     "./contracts/groups/agent": "./src/contracts/groups/agent.ts",
+    "./contracts/groups/settings": "./src/contracts/groups/settings.ts",
     "./contracts/schemas/auth": "./src/contracts/schemas/auth.ts",
     "./contracts/schemas/projects": "./src/contracts/schemas/projects.ts",
     "./contracts/schemas/secrets": "./src/contracts/schemas/secrets.ts",
