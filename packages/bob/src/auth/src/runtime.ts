@@ -129,6 +129,8 @@ export function createAuthRuntime(opts: AuthRuntimeOptions): AuthRuntime {
   //    - layerBetterAuth wraps the auth instance as the BetterAuth Effect service.
   //    - layerAuth() bundles Sessions + ApiKeys + DeviceCodes + Tenancy,
   //      requiring GmackoDb | BetterAuth.
+  // `as never` — Db is typed against gmacko's schema but Bob's drizzle instance
+  // is structurally compatible; auth services use direct table refs, not relational queries.
   const dbLayer = layerGmackoDb(opts.db as never);
   const betterAuthLayer = layerBetterAuth(authInstance);
   const authServicesLayer = layerAuth();
