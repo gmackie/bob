@@ -50,6 +50,16 @@ export {
   ProjectsListRpc,
   ProjectsGetBySlugRpc,
   ProjectsDeleteRpc,
+  // 7B-4B Task 5 — project core
+  ProjectsGetRpc,
+  ProjectsDiscoveryRpc,
+  ProjectsUpdateAutomationSettingsRpc,
+  ProjectsDismissDirRpc,
+  // 7B-4B Task 5 — workspace
+  ProjectsWorkspaceListRpc,
+  ProjectsWorkspaceCreateRpc,
+  ProjectsWorkspaceRenameRpc,
+  ProjectsWorkspaceDeleteRpc,
 } from "./groups/projects";
 export {
   stubProjectsHandlers,
@@ -57,9 +67,29 @@ export {
   STUB_PROJECT_1,
   STUB_PROJECT_2,
   STUB_TENANT_ID as STUB_PROJECTS_TENANT_ID,
+  // 7B-4B Task 5 — workspace stubs
+  STUB_WORKSPACE_1,
+  STUB_WORKSPACE_MEMBER_1,
+  STUB_DISCOVERY_RESULT,
 } from "./stubs/projects";
 export { ProjectSchema } from "./schemas/projects";
 export type { ProjectWire } from "./schemas/projects";
+export {
+  WorkspaceSchema,
+  WorkspaceMemberSchema,
+  AutomationSettingsSchema,
+  StageSkillSchema,
+  DiscoveryResultSchema,
+  DiscoveryRepoSchema,
+  DiscoveryLinkedRepoSchema,
+  DiscoveredDirSchema,
+} from "./schemas/project-workspace";
+export type {
+  WorkspaceWire,
+  WorkspaceMemberWire,
+  AutomationSettingsWire,
+  DiscoveryResultWire,
+} from "./schemas/project-workspace";
 
 // --- Agent (7B-4B) -------------------------------------------------------
 // Agent schemas added alongside the AgentRpc group. The group itself is

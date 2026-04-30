@@ -1,7 +1,7 @@
 // Tests for the ProjectsRpc contract group + stub handlers.
 //
 // Two cases:
-//   1. `ProjectsRpc` resolves the 4 projects.* procedures by tag.
+//   1. `ProjectsRpc` resolves the 12 projects.* procedures by tag.
 //   2. Stub handlers: `projects.list` returns the 2 stub projects;
 //      `projects.getBySlug` fails with `ProjectNotFoundError` on an
 //      unknown slug.
@@ -19,7 +19,7 @@ import {
 } from "../stubs/projects.js";
 
 describe("ProjectsRpc group", () => {
-  it("resolves the 4 projects.* procedures by tag", () => {
+  it("resolves the 12 projects.* procedures by tag", () => {
     // `RpcGroup` exposes its constituent Rpcs on `.requests` (a Map keyed
     // by the procedure tag). Pull the tag list out and assert ordering.
     const tags = Array.from(
@@ -30,6 +30,16 @@ describe("ProjectsRpc group", () => {
       "projects.list",
       "projects.getBySlug",
       "projects.delete",
+      // 7B-4B Task 5 — project core
+      "projects.get",
+      "projects.discovery",
+      "projects.updateAutomationSettings",
+      "projects.dismissDir",
+      // 7B-4B Task 5 — workspace
+      "projects.workspace.list",
+      "projects.workspace.create",
+      "projects.workspace.rename",
+      "projects.workspace.delete",
     ]);
   });
 });
