@@ -31,15 +31,10 @@
 //   - repositories, worktrees from @bob/projects/schema
 //   - workItems, taskRuns from @bob/work-items/schema
 //
-// NOTE: Several tables have sessionId columns that FK-reference
-// chatConversations.id.  chatConversations still lives in @bob/db/schema
-// (moves to @bob/chat/schema in Task 14).  Importing it here would create a
-// binding-level ESM cycle (agents → db → agents) that causes runtime errors.
-// To avoid this, the sessionId columns are defined as plain uuid columns
-// WITHOUT .references(), and the relations that reference chatConversations
-// are kept in @bob/db/schema as cross-cutting relations.  Task 14 will
-// restore the FK refs and move the relations once chatConversations lives
-// in @bob/chat/schema (breaking the cycle).
+// NOTE: chatConversations moved to @bob/chat/schema in Task 14.  The mutual
+// dependency (chat → agents for agentInstances/sessionEvents/sessionConnections,
+// agents → chat for chatConversations) is safe because both are
+// declaration-only — pgTable/relations are lazy, not runtime-evaluated.
 // =============================================================================
 
 import { relations, sql } from "drizzle-orm";
@@ -54,6 +49,7 @@ import {
   worktrees,
 } from "@bob/projects/schema";
 import { taskRuns, workItems } from "@bob/work-items/schema";
+import { chatConversations } from "@bob/chat/schema";
 
 // agentTypeEnum / instanceStatusEnum are canonically defined in
 // @bob/projects/schema. We duplicate the literal arrays here to break the
@@ -285,9 +281,10 @@ export const sessionEvents = pgTable(
   "session_events",
   (t) => ({
     id: t.uuid().notNull().primaryKey().defaultRandom(),
-    // FK to chatConversations — .references() omitted to avoid agents→db ESM
-    // cycle.  Restored in Task 14 when chatConversations moves to @bob/chat.
-    sessionId: t.uuid().notNull(),
+    sessionId: t
+      .uuid()
+      .notNull()
+      .references(() => chatConversations.id, { onDelete: "cascade" }),
     seq: t.bigint({ mode: "number" }).notNull(),
     direction: t.varchar({ length: 20 }).notNull(),
     eventType: t.varchar({ length: 30 }).notNull(),
@@ -316,9 +313,10 @@ export type DeviceType = (typeof deviceTypeEnum)[number];
 
 export const sessionConnections = pgTable("session_connections", (t) => ({
   id: t.uuid().notNull().primaryKey().defaultRandom(),
-  // FK to chatConversations — .references() omitted to avoid agents→db ESM
-  // cycle.  Restored in Task 14 when chatConversations moves to @bob/chat.
-  sessionId: t.uuid().notNull(),
+  sessionId: t
+    .uuid()
+    .notNull()
+    .references(() => chatConversations.id, { onDelete: "cascade" }),
   userId: t
     .text()
     .notNull()
@@ -346,9 +344,9 @@ export const runLifecycleEvents = pgTable(
     workItemId: t
       .uuid()
       .references(() => workItems.id, { onDelete: "set null" }),
-    // FK to chatConversations — .references() omitted to avoid agents→db ESM
-    // cycle.  Restored in Task 14 when chatConversations moves to @bob/chat.
-    sessionId: t.uuid(),
+    sessionId: t
+      .uuid()
+      .references(() => chatConversations.id, { onDelete: "set null" }),
     eventType: t.varchar({ length: 40 }).notNull(),
     phase: t.varchar({ length: 20 }).notNull(),
     metadata: t.json().$type<Record<string, unknown>>().default({}),
@@ -406,9 +404,9 @@ export const skillExecutions = pgTable(
   "skill_executions",
   (t) => ({
     id: t.uuid().notNull().primaryKey().defaultRandom(),
-    // FK to chatConversations — .references() omitted to avoid agents→db ESM
-    // cycle.  Restored in Task 14 when chatConversations moves to @bob/chat.
-    sessionId: t.uuid(),
+    sessionId: t
+      .uuid()
+      .references(() => chatConversations.id, { onDelete: "set null" }),
     skillId: t
       .uuid()
       .references(() => skills.id, { onDelete: "set null" }),
@@ -442,9 +440,10 @@ export const sessionCheckpoints = pgTable(
   "session_checkpoints",
   (t) => ({
     id: t.uuid().notNull().primaryKey().defaultRandom(),
-    // FK to chatConversations — .references() omitted to avoid agents→db ESM
-    // cycle.  Restored in Task 14 when chatConversations moves to @bob/chat.
-    sessionId: t.uuid().notNull(),
+    sessionId: t
+      .uuid()
+      .notNull()
+      .references(() => chatConversations.id, { onDelete: "cascade" }),
     turnNumber: t.integer().notNull(),
     eventSeq: t.integer().notNull(),
     label: t.text(),
@@ -493,12 +492,6 @@ export const runArtifactsRelations = relations(runArtifacts, ({ one }) => ({
   }),
 }));
 
-// sessionEventsRelations, sessionConnectionsRelations,
-// runLifecycleEventsRelations, sessionCheckpointsRelations, and the
-// chatConversations legs of skillExecutionsRelations remain in @bob/db/schema
-// as cross-cutting relations until chatConversations moves to @bob/chat
-// (Task 14).
-
 export const runLifecycleEventsRelations = relations(
   runLifecycleEvents,
   ({ one }) => ({
@@ -510,7 +503,10 @@ export const runLifecycleEventsRelations = relations(
       fields: [runLifecycleEvents.workItemId],
       references: [workItems.id],
     }),
-    // session: one(chatConversations) — deferred to @bob/db/schema (Task 14)
+    session: one(chatConversations, {
+      fields: [runLifecycleEvents.sessionId],
+      references: [chatConversations.id],
+    }),
   }),
 );
 
@@ -525,7 +521,10 @@ export const skillExecutionsRelations = relations(
       fields: [skillExecutions.skillId],
       references: [skills.id],
     }),
-    // session: one(chatConversations) — deferred to @bob/db/schema (Task 14)
+    session: one(chatConversations, {
+      fields: [skillExecutions.sessionId],
+      references: [chatConversations.id],
+    }),
     workItem: one(workItems, {
       fields: [skillExecutions.workItemId],
       references: [workItems.id],
@@ -533,6 +532,43 @@ export const skillExecutionsRelations = relations(
     parentExecution: one(skillExecutions, {
       fields: [skillExecutions.parentExecutionId],
       references: [skillExecutions.id],
+    }),
+  }),
+);
+
+// =============================================================================
+// Cross-cutting relations — tables that FK-reference chatConversations.
+// Moved from @bob/db/schema in Task 14 (previously kept there as cross-cutting
+// because chatConversations was still inline in the monolith).
+// =============================================================================
+
+export const sessionEventsRelations = relations(sessionEvents, ({ one }) => ({
+  session: one(chatConversations, {
+    fields: [sessionEvents.sessionId],
+    references: [chatConversations.id],
+  }),
+}));
+
+export const sessionConnectionsRelations = relations(
+  sessionConnections,
+  ({ one }) => ({
+    session: one(chatConversations, {
+      fields: [sessionConnections.sessionId],
+      references: [chatConversations.id],
+    }),
+    user: one(user, {
+      fields: [sessionConnections.userId],
+      references: [user.id],
+    }),
+  }),
+);
+
+export const sessionCheckpointsRelations = relations(
+  sessionCheckpoints,
+  ({ one }) => ({
+    session: one(chatConversations, {
+      fields: [sessionCheckpoints.sessionId],
+      references: [chatConversations.id],
     }),
   }),
 );

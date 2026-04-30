@@ -36,7 +36,6 @@ import {
 // existing `from "@bob/db/schema"` import sites keep working.
 export * from "@bob/work-items/schema";
 import {
-  planDrafts,
   taskRuns,
   workItemActivityTypeEnum,
   workItemNotificationType,
@@ -50,14 +49,12 @@ import {
 // @bob/agents/schema (Phase 7B-2 Task 13). Re-exported here so existing
 // `from "@bob/db/schema"` import sites keep working.
 export * from "@bob/agents/schema";
-import {
-  agentInstances,
-  runLifecycleEvents,
-  sessionCheckpoints,
-  sessionConnections,
-  sessionEvents,
-  skillExecutions,
-} from "@bob/agents/schema";
+
+// Chat-area tables (chatConversations, chatMessages, chatAttachments) now live
+// in @bob/chat/schema (Phase 7B-2 Task 14). Re-exported here so existing
+// `from "@bob/db/schema"` import sites keep working.
+export * from "@bob/chat/schema";
+import { chatConversations } from "@bob/chat/schema";
 
 export const Post = pgTable("post", (t) => ({
   id: t.uuid().notNull().primaryKey().defaultRandom(),
@@ -155,161 +152,8 @@ export const CreateWorkspaceSchema = createInsertSchema(workspaces, {
 // workflowStatusEnum / WorkflowStatus moved to @bob/agents/schema
 // (Phase 7B-2 Task 13).
 
-export const chatConversations = pgTable(
-  "chat_conversations",
-  (t) => ({
-    id: t.uuid().notNull().primaryKey().defaultRandom(),
-    userId: t
-      .text()
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-    repositoryId: t
-      .uuid()
-      .references(() => repositories.id, { onDelete: "set null" }),
-    worktreeId: t
-      .uuid()
-      .references(() => worktrees.id, { onDelete: "set null" }),
-    agentInstanceId: t
-      .uuid()
-      .references(() => agentInstances.id, { onDelete: "set null" }),
-    title: t.varchar({ length: 256 }),
-    workingDirectory: t.text(),
-    agentType: t.varchar({ length: 50 }).notNull().default("opencode"),
-    sessionType: t.varchar({ length: 20 }).notNull().default("execution"),
-    opencodeSessionId: t.text(),
-    status: t.varchar({ length: 20 }).notNull().default("stopped"),
-    nextSeq: t.bigint({ mode: "number" }).notNull().default(1),
-    lastActivityAt: t.timestamp({ mode: "string", withTimezone: true }),
-    lastError: t
-      .json()
-      .$type<{ code: string; message: string; timestamp: string }>(),
-    claimedByGatewayId: t.text(),
-    leaseExpiresAt: t.timestamp({ mode: "string", withTimezone: true }),
-    gitBranch: t.text(),
-    pullRequestId: t.uuid(),
-    planningTaskId: t.text("kanbanger_task_id"),
-    workItemId: t.uuid().references(() => workItems.id, { onDelete: "set null" }),
-    workItemIdentifierSnapshot: t.text(),
-    blockedReason: t.text(),
-    workflowStatus: t.varchar({ length: 30 }).notNull().default("started"),
-    statusMessage: t.text(),
-    awaitingInputQuestion: t.text(),
-    awaitingInputOptions: t.json().$type<string[]>(),
-    awaitingInputDefault: t.text(),
-    awaitingInputExpiresAt: t.timestamp({ mode: "string", withTimezone: true }),
-    awaitingInputResolvedAt: t.timestamp({ mode: "string", withTimezone: true }),
-    awaitingInputResolution: t
-      .json()
-      .$type<{ type: "human" | "timeout"; value: string }>(),
-    planningSessionType: t.varchar({ length: 30 }),
-    // values: "office_hours" | "ceo_review" | "eng_review" | "design_review" | "breakdown"
-    // Planning session execution context — populated by planSession.start,
-    // consumed by ws-gateway + daemon when sessionType = "planning".
-    planningWorkspaceId: t.uuid("planning_workspace_id"),
-    planningProjectId: t.uuid("planning_project_id"),
-    planningProjectName: t.text("planning_project_name"),
-    planningLaunchContext: t.json("planning_launch_context"),
-    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-    updatedAt: t.timestamp({ mode: "string", withTimezone: true }),
-  }),
-  (table) => [
-    {
-      name: "chat_conversations_workflow_expires_idx",
-      columns: [table.workflowStatus, table.awaitingInputExpiresAt],
-    },
-    {
-      name: "chat_conversations_kanbanger_task_idx",
-      columns: [table.planningTaskId],
-    },
-    {
-      name: "chat_conversations_work_item_idx",
-      columns: [table.workItemId],
-    },
-  ],
-);
-
-export const chatMessages = pgTable("chat_messages", (t) => ({
-  id: t.uuid().notNull().primaryKey().defaultRandom(),
-  conversationId: t
-    .uuid()
-    .notNull()
-    .references(() => chatConversations.id, { onDelete: "cascade" }),
-  role: t.varchar({ length: 20 }).notNull(),
-  content: t.text().notNull(),
-  toolCalls: t
-    .json()
-    .$type<Array<{ id: string; name: string; arguments: string }>>(),
-  toolCallId: t.varchar({ length: 100 }),
-  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-}));
-
-export const chatConversationsRelations = relations(
-  chatConversations,
-  ({ one, many }) => ({
-    user: one(user, {
-      fields: [chatConversations.userId],
-      references: [user.id],
-    }),
-    repository: one(repositories, {
-      fields: [chatConversations.repositoryId],
-      references: [repositories.id],
-    }),
-    worktree: one(worktrees, {
-      fields: [chatConversations.worktreeId],
-      references: [worktrees.id],
-    }),
-    agentInstance: one(agentInstances, {
-      fields: [chatConversations.agentInstanceId],
-      references: [agentInstances.id],
-    }),
-    workItem: one(workItems, {
-      fields: [chatConversations.workItemId],
-      references: [workItems.id],
-    }),
-    messages: many(chatMessages),
-    events: many(sessionEvents),
-    connections: many(sessionConnections),
-    planDrafts: many(planDrafts),
-  }),
-);
-
-export const chatAttachments = pgTable("chat_attachments", (t) => ({
-  id: t.uuid().notNull().primaryKey().defaultRandom(),
-  messageId: t
-    .uuid()
-    .references(() => chatMessages.id, { onDelete: "cascade" }),
-  type: t.text({ enum: ["image", "file"] }).notNull().default("image"),
-  url: t.text().notNull(),
-  filename: t.text(),
-  mimeType: t.text(),
-  width: t.integer(),
-  height: t.integer(),
-  sizeBytes: t.integer(),
-  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-}), (table) => [
-  index("chat_attachments_message_id_idx").on(table.messageId),
-]);
-
-export const chatMessagesRelations = relations(
-  chatMessages,
-  ({ one, many }) => ({
-    conversation: one(chatConversations, {
-      fields: [chatMessages.conversationId],
-      references: [chatConversations.id],
-    }),
-    attachments: many(chatAttachments),
-  }),
-);
-
-export const chatAttachmentsRelations = relations(
-  chatAttachments,
-  ({ one }) => ({
-    message: one(chatMessages, {
-      fields: [chatAttachments.messageId],
-      references: [chatMessages.id],
-    }),
-  }),
-);
+// chatConversations / chatMessages / chatAttachments + their relations moved
+// to @bob/chat/schema (Phase 7B-2 Task 14).
 
 // planStatusEnum / PlanStatus moved to @bob/projects/schema (Phase 7B-2 Task 11).
 
@@ -386,9 +230,8 @@ export const eventLogRelations = relations(eventLog, ({ one }) => ({
   }),
 }));
 
-// sessionEventsRelations / sessionConnectionsRelations — tables moved to
-// @bob/agents/schema (Phase 7B-2 Task 13); relations kept here as
-// cross-cutting (they reference chatConversations which stays inline).
+// sessionEventsRelations / sessionConnectionsRelations / sessionCheckpointsRelations
+// moved to @bob/agents/schema (Phase 7B-2 Task 14).
 
 // =============================================================================
 // GitHub Integration Tables (Phase 1)
@@ -1297,8 +1140,8 @@ export const forgeRunEventsRelations = relations(
 
 // workItemSnapshots / workItemSnapshotsRelations moved to @bob/work-items/schema (Phase 7B-2 Task 12).
 
-// sessionCheckpoints table moved to @bob/agents/schema; sessionCheckpointsRelations
-// kept here as cross-cutting (references chatConversations) (Phase 7B-2 Task 13).
+// sessionCheckpoints + sessionCheckpointsRelations moved to @bob/agents/schema
+// (Phase 7B-2 Task 13 table, Task 14 relations).
 
 // tenantsRelations + tenantMembersRelations moved to @bob/tenancy/schema (Phase 7B-2 Task 8).
 
@@ -1368,41 +1211,7 @@ export const projectDeploySecretBindingsRelations = relations(
   }),
 );
 
-// =============================================================================
-// Cross-cutting relations for agents-area tables that reference
-// chatConversations (which still lives inline above, moves in Task 14).
-// These relations live here temporarily because agents/schema cannot import
-// chatConversations without creating an ESM cycle.
-// =============================================================================
-
-export const sessionEventsRelations = relations(sessionEvents, ({ one }) => ({
-  session: one(chatConversations, {
-    fields: [sessionEvents.sessionId],
-    references: [chatConversations.id],
-  }),
-}));
-
-export const sessionConnectionsRelations = relations(
-  sessionConnections,
-  ({ one }) => ({
-    session: one(chatConversations, {
-      fields: [sessionConnections.sessionId],
-      references: [chatConversations.id],
-    }),
-    user: one(user, {
-      fields: [sessionConnections.userId],
-      references: [user.id],
-    }),
-  }),
-);
-
-export const sessionCheckpointsRelations = relations(
-  sessionCheckpoints,
-  ({ one }) => ({
-    session: one(chatConversations, {
-      fields: [sessionCheckpoints.sessionId],
-      references: [chatConversations.id],
-    }),
-  }),
-);
+// sessionEventsRelations / sessionConnectionsRelations /
+// sessionCheckpointsRelations moved to @bob/agents/schema (Phase 7B-2 Task 14,
+// now that chatConversations lives in @bob/chat/schema).
 
