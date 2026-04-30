@@ -26,12 +26,36 @@ import { NotFoundError } from "../../rpc/errors.js";
 
 import { AgentRpc } from "../groups/agent.js";
 
+import { SessionLeaseConflictError } from "../schemas/agent-session.js";
+
 const STUB_CONVERSATION_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc";
 const STUB_TENANT_ID = "00000000-0000-0000-0000-000000000001";
 const STUB_USER_ID = "user_stub_abc";
 const STUB_MODEL = "claude-sonnet-4";
 const STUB_RUN_ID = "rrrrrrrr-rrrr-rrrr-rrrr-rrrrrrrrrrrr";
 const STUB_WORKSPACE_ID = "wwwwwwww-wwww-wwww-wwww-wwwwwwwwwwww";
+const STUB_SESSION_ID = "ssssssss-ssss-ssss-ssss-ssssssssssss";
+const STUB_GATEWAY_ID = "gw-stub-001";
+const STUB_DATE = new Date("2026-04-21T00:00:00.000Z");
+
+/** Minimal stub session record reused across session handlers. */
+const STUB_SESSION = {
+  id: STUB_SESSION_ID,
+  title: "Stub session",
+  repositoryId: null,
+  worktreeId: null,
+  workingDirectory: "/tmp/stub",
+  agentType: "opencode",
+  status: "running" as const,
+  nextSeq: 1,
+  lastActivityAt: null,
+  lastError: null,
+  workItemId: null,
+  workItemIdentifierSnapshot: null,
+  planningTaskId: null,
+  createdAt: STUB_DATE,
+  updatedAt: STUB_DATE,
+};
 
 const handlers = AgentRpc.of({
   "agent.createSession": (_payload) =>
@@ -179,6 +203,164 @@ const handlers = AgentRpc.of({
       height: 720,
       capturedAt: "2026-04-21T00:00:00.000Z",
     }),
+
+  // --- 7B-4B Task 2: agent.session stubs -----------------------------------
+
+  "agent.session.list": (_payload) =>
+    Effect.succeed({
+      items: [STUB_SESSION],
+      nextCursor: undefined,
+    }),
+
+  "agent.session.get": ({ id }) =>
+    id === STUB_SESSION_ID
+      ? Effect.succeed(STUB_SESSION)
+      : Effect.fail(new NotFoundError({ entity: "Session", id })),
+
+  "agent.session.create": (_payload) =>
+    Effect.succeed({
+      ...STUB_SESSION,
+      status: "provisioning" as const,
+    }),
+
+  "agent.session.bootstrapForChat": (_payload) =>
+    Effect.succeed({
+      session: { ...STUB_SESSION, status: "provisioning" as const },
+      gateway: { url: "ws://localhost:3002/sessions", shouldStartOnConnect: true },
+    }),
+
+  "agent.session.updateTitle": ({ id, title }) =>
+    id === STUB_SESSION_ID
+      ? Effect.succeed({ ...STUB_SESSION, title })
+      : Effect.fail(new NotFoundError({ entity: "Session", id })),
+
+  "agent.session.stop": ({ id }) =>
+    id === STUB_SESSION_ID
+      ? Effect.succeed({ ...STUB_SESSION, status: "stopped" as const })
+      : Effect.fail(new NotFoundError({ entity: "Session", id })),
+
+  "agent.session.delete": (_payload) =>
+    Effect.succeed({ success: true }),
+
+  "agent.session.getEvents": ({ sessionId }) =>
+    sessionId === STUB_SESSION_ID
+      ? Effect.succeed({ events: [], latestSeq: 0 })
+      : Effect.fail(new NotFoundError({ entity: "Session", id: sessionId })),
+
+  "agent.session.getConnections": ({ sessionId }) =>
+    sessionId === STUB_SESSION_ID
+      ? Effect.succeed([])
+      : Effect.fail(new NotFoundError({ entity: "Session", id: sessionId })),
+
+  "agent.session.sendHeadlessInput": ({ sessionId }) =>
+    sessionId === STUB_SESSION_ID
+      ? Effect.succeed({ sessionId, seq: { input: 0, assistant: 1 } })
+      : Effect.fail(new NotFoundError({ entity: "Session", id: sessionId })),
+
+  "agent.session.updateStatus": ({ id }) =>
+    id === STUB_SESSION_ID
+      ? Effect.succeed(STUB_SESSION)
+      : Effect.fail(new NotFoundError({ entity: "Session", id })),
+
+  "agent.session.claimLease": ({ sessionId, gatewayId }) => {
+    if (sessionId !== STUB_SESSION_ID) {
+      return Effect.fail(
+        new NotFoundError({ entity: "Session", id: sessionId }),
+      );
+    }
+    if (gatewayId !== STUB_GATEWAY_ID) {
+      return Effect.fail(
+        new SessionLeaseConflictError({
+          sessionId,
+          claimedByGatewayId: STUB_GATEWAY_ID,
+        }),
+      );
+    }
+    return Effect.succeed(STUB_SESSION);
+  },
+
+  "agent.session.releaseLease": ({ sessionId }) =>
+    sessionId === STUB_SESSION_ID
+      ? Effect.succeed(STUB_SESSION)
+      : Effect.fail(new NotFoundError({ entity: "Session", id: sessionId })),
+
+  "agent.session.recordEvent": ({ sessionId }) =>
+    sessionId === STUB_SESSION_ID
+      ? Effect.succeed({
+          id: "evt-stub-1",
+          sessionId,
+          seq: 1,
+          direction: "client" as const,
+          eventType: "input",
+          payload: {},
+          createdAt: STUB_DATE,
+        })
+      : Effect.fail(new NotFoundError({ entity: "Session", id: sessionId })),
+
+  "agent.session.recordEventBatch": ({ sessionId, events }) =>
+    sessionId === STUB_SESSION_ID
+      ? Effect.succeed({ count: events.length })
+      : Effect.fail(new NotFoundError({ entity: "Session", id: sessionId })),
+
+  "agent.session.getGatewayWebSocketUrl": () =>
+    Effect.succeed({
+      url: "ws://localhost:3002/sessions",
+      userId: STUB_USER_ID,
+    }),
+
+  "agent.session.reportWorkflowStatus": (_payload) =>
+    Effect.succeed({ success: true }),
+
+  "agent.session.reportTaskProgress": (_payload) =>
+    Effect.succeed({ success: true }),
+
+  "agent.session.linkTaskArtifact": (_payload) =>
+    Effect.succeed({ success: true }),
+
+  "agent.session.markTaskReviewReady": (_payload) =>
+    Effect.succeed({ success: true }),
+
+  "agent.session.recordVerificationResult": (_payload) =>
+    Effect.succeed({ success: true }),
+
+  "agent.session.completeTask": (_payload) =>
+    Effect.succeed({ success: true }),
+
+  "agent.session.requestInput": (_payload) =>
+    Effect.succeed({ promptId: "prompt-stub-1", status: "pending" }),
+
+  "agent.session.resolveAwaitingInput": (_payload) =>
+    Effect.succeed({ success: true }),
+
+  "agent.session.getWorkflowState": ({ sessionId }) =>
+    sessionId === STUB_SESSION_ID
+      ? Effect.succeed({
+          sessionId,
+          status: "implementing" as const,
+          message: "Working on task",
+          phase: null,
+          progress: null,
+          updatedAt: STUB_DATE,
+        })
+      : Effect.fail(new NotFoundError({ entity: "Session", id: sessionId })),
+
+  "agent.session.createVoiceSession": ({ sessionId }) =>
+    sessionId === STUB_SESSION_ID
+      ? Effect.succeed({
+          voiceSessionId: "voice-stub-1",
+          url: "wss://voice.stub/session",
+        })
+      : Effect.fail(new NotFoundError({ entity: "Session", id: sessionId })),
+
+  "agent.session.stopVoiceSession": ({ sessionId }) =>
+    sessionId === STUB_SESSION_ID
+      ? Effect.succeed({ success: true })
+      : Effect.fail(new NotFoundError({ entity: "Session", id: sessionId })),
+
+  "agent.session.handleVoiceTranscript": ({ sessionId }) =>
+    sessionId === STUB_SESSION_ID
+      ? Effect.succeed({ assistantText: "Stub voice response" })
+      : Effect.fail(new NotFoundError({ entity: "Session", id: sessionId })),
 });
 
 /**

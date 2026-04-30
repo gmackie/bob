@@ -68,6 +68,29 @@ export { AgentRunSchema } from "./schemas/agent-run";
 export type { AgentRunWire } from "./schemas/agent-run";
 export { CaptureTargetSchema, CaptureResultSchema } from "./schemas/agent-capture";
 export type { CaptureTargetWire, CaptureResultWire } from "./schemas/agent-capture";
+export {
+  SessionSchema,
+  SessionEventSchema,
+  SessionConnectionSchema,
+  SessionStatusEnum,
+  EventDirectionEnum,
+  WorkflowStatusEnum,
+  WorkflowStateSchema,
+  ArtifactTypeEnum,
+  ArtifactRoleEnum,
+  SessionLeaseConflictError,
+} from "./schemas/agent-session";
+export type {
+  SessionWire,
+  SessionEventWire,
+  SessionConnectionWire,
+  SessionStatus,
+  EventDirection,
+  WorkflowStatus,
+  WorkflowStateWire,
+  ArtifactType,
+  ArtifactRole,
+} from "./schemas/agent-session";
 
 // --- Secrets -------------------------------------------------------------
 // Standalone RpcGroup. `secrets.decryptForUse` is the only plaintext-returning

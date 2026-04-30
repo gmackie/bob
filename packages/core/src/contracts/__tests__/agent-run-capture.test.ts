@@ -14,9 +14,9 @@ import {
 } from "../groups/agent.js";
 
 describe("AgentRpc group — agent.run + agent.capture (7B-4B Task 1)", () => {
-  it("has 10 procedures total (5 existing + 5 new)", () => {
+  it("has 38 procedures total (5 original + 5 Task 1 + 28 Task 2)", () => {
     const tags = Array.from(AgentRpc.requests.keys());
-    expect(tags.length).toBe(10);
+    expect(tags.length).toBe(38);
   });
 
   it("includes the 5 new procedures by tag", () => {
