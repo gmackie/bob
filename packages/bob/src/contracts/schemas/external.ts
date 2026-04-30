@@ -96,3 +96,87 @@ export const ImportedProjectRecordSchema = Schema.Struct({
   forgeGraphAppId: Schema.optional(Schema.NullOr(Schema.String)),
   repoUrl: Schema.optional(Schema.NullOr(Schema.String)),
 });
+
+// ---------------------------------------------------------------------------
+// Webhook schemas (7B-4C Task 9)
+// ---------------------------------------------------------------------------
+
+export const WebhookConfigRecordSchema = Schema.Struct({
+  id: Schema.String,
+  workspaceId: Schema.optional(Schema.NullOr(Schema.String)),
+  url: Schema.String,
+  secret: Schema.String,
+  events: Schema.Array(Schema.String),
+  active: Schema.Boolean,
+  description: Schema.optional(Schema.NullOr(Schema.String)),
+  createdAt: Schema.optional(Schema.String),
+});
+
+export const WebhookDeliveryRecordSchema = Schema.Struct({
+  id: Schema.String,
+  configId: Schema.String,
+  event: Schema.String,
+  status: Schema.String,
+  responseCode: Schema.optional(Schema.NullOr(Schema.Number)),
+  responseBody: Schema.optional(Schema.NullOr(Schema.String)),
+  error: Schema.optional(Schema.NullOr(Schema.String)),
+  deliveredAt: Schema.optional(Schema.NullOr(Schema.String)),
+  createdAt: Schema.optional(Schema.String),
+});
+
+// ---------------------------------------------------------------------------
+// PublicApi schemas (7B-4C Task 9)
+// ---------------------------------------------------------------------------
+
+export const RunStatusEnum = Schema.Literals(["running", "completed", "failed"]);
+
+export const PublicApiArtifactTypeEnum = Schema.Literals([
+  "diff",
+  "log",
+  "test-report",
+  "file-snapshot",
+]);
+
+export const PublicApiRunRecordSchema = Schema.Struct({
+  id: Schema.String,
+  workItemId: Schema.String,
+  workspaceId: Schema.String,
+  agentType: Schema.String,
+  status: Schema.String,
+  summary: Schema.optional(Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown))),
+  createdAt: Schema.optional(Schema.String),
+});
+
+export const PublicApiArtifactRecordSchema = Schema.Struct({
+  id: Schema.String,
+  runId: Schema.String,
+  type: Schema.String,
+  storageKey: Schema.String,
+  metadata: Schema.optional(Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown))),
+  createdAt: Schema.optional(Schema.String),
+});
+
+export const HeartbeatRepoSchema = Schema.Struct({
+  name: Schema.String,
+  path: Schema.String,
+  isGit: Schema.Boolean,
+  remoteUrl: Schema.optional(Schema.String),
+  branch: Schema.optional(Schema.String),
+  dirty: Schema.optional(Schema.Boolean),
+  buildSystem: Schema.optional(Schema.String),
+  forgeAppId: Schema.optional(Schema.String),
+});
+
+export const WorkspaceRegistrationResultSchema = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  slug: Schema.String,
+  machineId: Schema.optional(Schema.NullOr(Schema.String)),
+  createdAt: Schema.optional(Schema.String),
+});
+
+export const ApiKeyResultSchema = Schema.Struct({
+  id: Schema.String,
+  key: Schema.String,
+  prefix: Schema.String,
+});

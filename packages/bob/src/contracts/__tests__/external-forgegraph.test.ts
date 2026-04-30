@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { ExternalRpc } from "../groups/external.js";
 
 describe("ExternalRpc — 7B-4C Task 8", () => {
-  it("has exactly 14 procedures", () => {
-    expect(ExternalRpc.requests.size).toBe(14);
+  it("has exactly 31 procedures (14 forgegraph + 17 webhook/publicApi)", () => {
+    expect(ExternalRpc.requests.size).toBe(31);
   });
 
   it("contains all expected procedure names", () => {
