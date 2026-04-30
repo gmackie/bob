@@ -1,6 +1,6 @@
 // Deterministic in-memory stubs for the PlanningRpc contract group.
 // Returns plausible mock data so consumers can wire up typed calls before
-// real service handlers land. 7B-4C Task 4 + Task 5.
+// real service handlers land. 7B-4C Task 4 + Task 5 + Task 6.
 import { Effect } from "effect";
 
 import { PlanningRpc } from "../groups/planning.js";
@@ -140,4 +140,129 @@ export const PlanningStubLayer = PlanningRpc.toLayer({
       workItems: [],
       dependencies: 0,
     }),
+  // --- Worktree plan + task item procedures (Task 6) ---
+  "planning.task.list": () => Effect.succeed([]),
+  "planning.task.byId": () =>
+    Effect.succeed({
+      id: "stub-plan-1",
+      worktreeId: "stub-wt-1",
+      userId: "stub-user-1",
+      filePath: "/stub/plan.md",
+      status: "draft",
+    }),
+  "planning.task.byWorktree": () => Effect.succeed(null),
+  "planning.task.create": () =>
+    Effect.succeed({
+      id: "stub-plan-1",
+      worktreeId: "stub-wt-1",
+      userId: "stub-user-1",
+      filePath: "/stub/plan.md",
+      status: "draft",
+    }),
+  "planning.task.update": () =>
+    Effect.succeed({
+      id: "stub-plan-1",
+      worktreeId: "stub-wt-1",
+      userId: "stub-user-1",
+      filePath: "/stub/plan.md",
+      status: "active",
+    }),
+  "planning.task.delete": () => Effect.succeed({ success: true }),
+  "planning.task.syncFromFile": () => Effect.succeed({ success: true }),
+  "planning.task.addTask": () =>
+    Effect.succeed({
+      id: "stub-task-item-1",
+      planId: "stub-plan-1",
+      taskKey: "T1",
+      content: "stub task item",
+      status: "pending",
+      priority: "medium",
+      sortOrder: 0,
+    }),
+  "planning.task.updateTask": () =>
+    Effect.succeed({
+      id: "stub-task-item-1",
+      planId: "stub-plan-1",
+      taskKey: "T1",
+      content: "stub task item updated",
+      status: "in_progress",
+      priority: "medium",
+      sortOrder: 0,
+    }),
+  "planning.task.deleteTask": () => Effect.succeed({ success: true }),
+  "planning.task.reorderTasks": () => Effect.succeed({ success: true }),
+  // --- Dispatch procedures (Task 6) ---
+  "planning.dispatch.createBatch": () =>
+    Effect.succeed({
+      batch: {
+        id: "stub-batch-1",
+        userId: "stub-user-1",
+        workspaceId: "stub-ws-1",
+        projectId: "stub-proj-1",
+        status: "pending",
+        concurrency: 2,
+        totalTasks: 0,
+        completedTasks: 0,
+        failedTasks: 0,
+      },
+      items: [],
+    }),
+  "planning.dispatch.getBatch": () =>
+    Effect.succeed({
+      batch: {
+        id: "stub-batch-1",
+        userId: "stub-user-1",
+        workspaceId: "stub-ws-1",
+        projectId: "stub-proj-1",
+        status: "pending",
+        concurrency: 2,
+        totalTasks: 0,
+        completedTasks: 0,
+        failedTasks: 0,
+      },
+      items: [],
+    }),
+  "planning.dispatch.updateItemAgent": () =>
+    Effect.succeed({
+      id: "stub-item-1",
+      batchId: "stub-batch-1",
+      planningTaskId: "stub-task-1",
+      planningTaskIdentifier: "PROJ-1",
+      title: "stub dispatch item",
+      agentType: "opencode",
+      status: "queued",
+      sortOrder: 0,
+    }),
+  "planning.dispatch.updateConcurrency": () =>
+    Effect.succeed({
+      id: "stub-batch-1",
+      userId: "stub-user-1",
+      workspaceId: "stub-ws-1",
+      projectId: "stub-proj-1",
+      status: "pending",
+      concurrency: 3,
+      totalTasks: 0,
+      completedTasks: 0,
+      failedTasks: 0,
+    }),
+  "planning.dispatch.dispatch": () =>
+    Effect.succeed({ started: 0 }),
+  "planning.dispatch.checkProgress": () =>
+    Effect.succeed({
+      batch: {
+        id: "stub-batch-1",
+        userId: "stub-user-1",
+        workspaceId: "stub-ws-1",
+        projectId: "stub-proj-1",
+        status: "running",
+        concurrency: 2,
+        totalTasks: 0,
+        completedTasks: 0,
+        failedTasks: 0,
+      },
+      items: [],
+    }),
+  "planning.dispatch.listBatches": () => Effect.succeed([]),
+  "planning.dispatch.resetPipelineState": () =>
+    Effect.succeed({ ok: true }),
 });

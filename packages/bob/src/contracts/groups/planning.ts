@@ -1,6 +1,7 @@
 // PlanningRpc — wire contract for Bob planning operations.
 // 7B-4C Task 4: 21 core planning + agent procedures.
 // 7B-4C Task 5: +15 planning.session.* procedures (36 total).
+// 7B-4C Task 6: +11 planning.task.* + 8 planning.dispatch.* (55 total).
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
@@ -45,6 +46,18 @@ import {
   SessionGetResultSchema,
   OkResultSchema,
 } from "../schemas/planning-session.js";
+import {
+  PlanStatusEnum,
+  PlanTaskStatusEnum,
+  PlanTaskPriorityEnum,
+  WorktreePlanRecordSchema,
+  PlanTaskItemRecordSchema,
+  DispatchBatchRecordSchema,
+  DispatchItemRecordSchema,
+  DispatchBatchWithItemsSchema,
+  DispatchStartedResultSchema,
+  SuccessResultSchema,
+} from "../schemas/planning-ops.js";
 
 // --- Core planning procedures ---
 
@@ -442,6 +455,214 @@ export const PlanningSessionCommitPlanLocalRpc = Rpc.make(
   },
 );
 
+// --- Worktree plan + task item procedures (Task 6: planning.task.*) ---
+
+export const PlanningTaskListRpc = Rpc.make("planning.task.list", {
+  payload: Schema.Struct({
+    worktreeId: Schema.optional(Schema.String),
+  }),
+  success: Schema.Array(WorktreePlanRecordSchema),
+  error: BobNotFoundError,
+});
+
+export const PlanningTaskByIdRpc = Rpc.make("planning.task.byId", {
+  payload: Schema.Struct({ id: Schema.String }),
+  success: WorktreePlanRecordSchema,
+  error: BobNotFoundError,
+});
+
+export const PlanningTaskByWorktreeRpc = Rpc.make(
+  "planning.task.byWorktree",
+  {
+    payload: Schema.Struct({ worktreeId: Schema.String }),
+    success: Schema.NullOr(WorktreePlanRecordSchema),
+    error: BobNotFoundError,
+  },
+);
+
+export const PlanningTaskCreateRpc = Rpc.make("planning.task.create", {
+  payload: Schema.Struct({
+    worktreeId: Schema.String,
+    filePath: Schema.String,
+    title: Schema.optional(Schema.String),
+    goal: Schema.optional(Schema.String),
+    status: Schema.optional(PlanStatusEnum),
+    planningTaskId: Schema.optional(Schema.String),
+  }),
+  success: WorktreePlanRecordSchema,
+  error: BobNotFoundError,
+});
+
+export const PlanningTaskUpdateRpc = Rpc.make("planning.task.update", {
+  payload: Schema.Struct({
+    id: Schema.String,
+    title: Schema.optional(Schema.String),
+    goal: Schema.optional(Schema.String),
+    status: Schema.optional(PlanStatusEnum),
+    planningTaskId: Schema.optional(Schema.NullOr(Schema.String)),
+  }),
+  success: WorktreePlanRecordSchema,
+  error: BobNotFoundError,
+});
+
+export const PlanningTaskDeleteRpc = Rpc.make("planning.task.delete", {
+  payload: Schema.Struct({ id: Schema.String }),
+  success: SuccessResultSchema,
+  error: BobNotFoundError,
+});
+
+export const PlanningTaskSyncFromFileRpc = Rpc.make(
+  "planning.task.syncFromFile",
+  {
+    payload: Schema.Struct({ id: Schema.String }),
+    success: SuccessResultSchema,
+    error: BobNotFoundError,
+  },
+);
+
+export const PlanningTaskAddTaskRpc = Rpc.make("planning.task.addTask", {
+  payload: Schema.Struct({
+    planId: Schema.String,
+    taskKey: Schema.String,
+    content: Schema.String,
+    status: Schema.optional(PlanTaskStatusEnum),
+    priority: Schema.optional(PlanTaskPriorityEnum),
+    parentTaskKey: Schema.optional(Schema.String),
+    sortOrder: Schema.optional(Schema.Number),
+  }),
+  success: PlanTaskItemRecordSchema,
+  error: BobNotFoundError,
+});
+
+export const PlanningTaskUpdateTaskRpc = Rpc.make(
+  "planning.task.updateTask",
+  {
+    payload: Schema.Struct({
+      id: Schema.String,
+      content: Schema.optional(Schema.String),
+      status: Schema.optional(PlanTaskStatusEnum),
+      priority: Schema.optional(PlanTaskPriorityEnum),
+      sortOrder: Schema.optional(Schema.Number),
+    }),
+    success: PlanTaskItemRecordSchema,
+    error: BobNotFoundError,
+  },
+);
+
+export const PlanningTaskDeleteTaskRpc = Rpc.make(
+  "planning.task.deleteTask",
+  {
+    payload: Schema.Struct({ id: Schema.String }),
+    success: SuccessResultSchema,
+    error: BobNotFoundError,
+  },
+);
+
+export const PlanningTaskReorderTasksRpc = Rpc.make(
+  "planning.task.reorderTasks",
+  {
+    payload: Schema.Struct({
+      planId: Schema.String,
+      taskIds: Schema.Array(Schema.String),
+    }),
+    success: SuccessResultSchema,
+    error: BobNotFoundError,
+  },
+);
+
+// --- Dispatch procedures (Task 6: planning.dispatch.*) ---
+
+export const PlanningDispatchCreateBatchRpc = Rpc.make(
+  "planning.dispatch.createBatch",
+  {
+    payload: Schema.Struct({
+      sessionId: Schema.String,
+      concurrency: Schema.optional(Schema.Number),
+      tasks: Schema.Array(
+        Schema.Struct({
+          draftId: Schema.String,
+          taskId: Schema.String,
+          identifier: Schema.String,
+        }),
+      ),
+    }),
+    success: DispatchBatchWithItemsSchema,
+    error: Schema.Union([BobNotFoundError, BobForbiddenError]),
+  },
+);
+
+export const PlanningDispatchGetBatchRpc = Rpc.make(
+  "planning.dispatch.getBatch",
+  {
+    payload: Schema.Struct({ batchId: Schema.String }),
+    success: DispatchBatchWithItemsSchema,
+    error: BobNotFoundError,
+  },
+);
+
+export const PlanningDispatchUpdateItemAgentRpc = Rpc.make(
+  "planning.dispatch.updateItemAgent",
+  {
+    payload: Schema.Struct({
+      itemId: Schema.String,
+      agentType: Schema.String,
+    }),
+    success: DispatchItemRecordSchema,
+    error: BobNotFoundError,
+  },
+);
+
+export const PlanningDispatchUpdateConcurrencyRpc = Rpc.make(
+  "planning.dispatch.updateConcurrency",
+  {
+    payload: Schema.Struct({
+      batchId: Schema.String,
+      concurrency: Schema.Number,
+    }),
+    success: DispatchBatchRecordSchema,
+    error: BobNotFoundError,
+  },
+);
+
+export const PlanningDispatchDispatchRpc = Rpc.make(
+  "planning.dispatch.dispatch",
+  {
+    payload: Schema.Struct({ batchId: Schema.String }),
+    success: DispatchStartedResultSchema,
+    error: BobNotFoundError,
+  },
+);
+
+export const PlanningDispatchCheckProgressRpc = Rpc.make(
+  "planning.dispatch.checkProgress",
+  {
+    payload: Schema.Struct({ batchId: Schema.String }),
+    success: DispatchBatchWithItemsSchema,
+    error: BobNotFoundError,
+  },
+);
+
+export const PlanningDispatchListBatchesRpc = Rpc.make(
+  "planning.dispatch.listBatches",
+  {
+    payload: Schema.Struct({
+      status: Schema.optional(Schema.String),
+      limit: Schema.optional(Schema.Number),
+    }),
+    success: Schema.Array(DispatchBatchRecordSchema),
+    error: BobNotFoundError,
+  },
+);
+
+export const PlanningDispatchResetPipelineStateRpc = Rpc.make(
+  "planning.dispatch.resetPipelineState",
+  {
+    payload: Schema.Struct({ itemId: Schema.String }),
+    success: OkResultSchema,
+    error: BobNotFoundError,
+  },
+);
+
 export const PlanningRpc = RpcGroup.make(
   // Core planning (Task 4)
   PlanningListWorkspacesRpc,
@@ -482,4 +703,25 @@ export const PlanningRpc = RpcGroup.make(
   PlanningSessionRemoveDependencyRpc,
   PlanningSessionCommitPlanRpc,
   PlanningSessionCommitPlanLocalRpc,
+  // Worktree plan + task item procedures (Task 6)
+  PlanningTaskListRpc,
+  PlanningTaskByIdRpc,
+  PlanningTaskByWorktreeRpc,
+  PlanningTaskCreateRpc,
+  PlanningTaskUpdateRpc,
+  PlanningTaskDeleteRpc,
+  PlanningTaskSyncFromFileRpc,
+  PlanningTaskAddTaskRpc,
+  PlanningTaskUpdateTaskRpc,
+  PlanningTaskDeleteTaskRpc,
+  PlanningTaskReorderTasksRpc,
+  // Dispatch procedures (Task 6)
+  PlanningDispatchCreateBatchRpc,
+  PlanningDispatchGetBatchRpc,
+  PlanningDispatchUpdateItemAgentRpc,
+  PlanningDispatchUpdateConcurrencyRpc,
+  PlanningDispatchDispatchRpc,
+  PlanningDispatchCheckProgressRpc,
+  PlanningDispatchListBatchesRpc,
+  PlanningDispatchResetPipelineStateRpc,
 );
