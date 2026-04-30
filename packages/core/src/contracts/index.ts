@@ -300,6 +300,7 @@ export type { PostWire } from "./schemas/agent-post";
 // procedure — its error channel is a Schema.Union of SecretNotFoundError |
 // PolicyDeniedError | MaxUsesExceededError (array-arg form, verified in
 // effect@4.0.0-beta.43).
+// 7B-4B Task 10: 8 `secrets.session.*` procedures added.
 export {
   SecretsRpc,
   SecretsCreateRpc,
@@ -308,6 +309,15 @@ export {
   SecretsDecryptForUseRpc,
   SecretsMarkUsedRpc,
   SecretsDeleteRpc,
+  // 7B-4B Task 10 — session-scoped secrets
+  SecretsSessionGetManifestRpc,
+  SecretsSessionGetForExecutionRpc,
+  SecretsSessionCreateRpc,
+  SecretsSessionListRpc,
+  SecretsSessionDeleteRpc,
+  SecretsSessionMarkUsedRpc,
+  SecretsSessionUpsertDeployBindingRpc,
+  SecretsSessionPromoteRpc,
 } from "./groups/secrets";
 export {
   stubSecretsHandlers,
@@ -318,6 +328,11 @@ export {
   STUB_SECRET_ID_2,
   STUB_CONFLICT_NAME,
   STUB_TENANT_ID as STUB_SECRETS_TENANT_ID,
+  // 7B-4B Task 10 — session stubs
+  STUB_SESSION_SECRET_ID,
+  STUB_SESSION_SECRET_1,
+  STUB_SESSION_ID as STUB_SECRETS_SESSION_ID,
+  STUB_PROJECT_ID as STUB_SECRETS_PROJECT_ID,
 } from "./stubs/secrets";
 export {
   SecretEnvelopeSchema,
@@ -327,6 +342,28 @@ export type {
   SecretEnvelopeWire,
   SessionSecretPolicyWire,
 } from "./schemas/secrets";
+export {
+  SessionSecretSchema,
+  SessionSecretManifestSchema,
+  SessionSecretPolicyInputSchema,
+  SessionSecretUsageSchema,
+  ProjectDeployBindingSchema,
+  SessionSecretForExecutionSchema,
+  SessionSecretDeleteResultSchema,
+  SecretTransportEnum,
+  DeployEnvironmentEnum,
+} from "./schemas/secrets-session";
+export type {
+  SessionSecretWire,
+  SessionSecretManifestWire,
+  SessionSecretPolicyInputWire,
+  SessionSecretUsageWire,
+  ProjectDeployBindingWire,
+  SessionSecretForExecutionWire,
+  SessionSecretDeleteResultWire,
+  SecretTransport,
+  DeployEnvironment,
+} from "./schemas/secrets-session";
 
 // --- Settings (7B-4B Task 9) ------------------------------------------------
 // SettingsRpc — standalone group covering general settings (13), cookies (5),

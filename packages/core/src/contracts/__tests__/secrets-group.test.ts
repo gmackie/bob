@@ -17,7 +17,7 @@ import {
 } from "../stubs/secrets.js";
 
 describe("SecretsRpc", () => {
-  it("resolves the 6 declared secret procedures by tag", () => {
+  it("resolves all 14 declared secret procedures by tag (6 tenant + 8 session)", () => {
     const expectedTags = [
       "secrets.create",
       "secrets.list",
@@ -25,6 +25,15 @@ describe("SecretsRpc", () => {
       "secrets.decryptForUse",
       "secrets.markUsed",
       "secrets.delete",
+      // 7B-4B Task 10 — session-scoped
+      "secrets.session.getManifest",
+      "secrets.session.getForExecution",
+      "secrets.session.create",
+      "secrets.session.list",
+      "secrets.session.delete",
+      "secrets.session.markUsed",
+      "secrets.session.upsertDeployBinding",
+      "secrets.session.promote",
     ];
 
     expect(SecretsCreateRpc._tag).toBe("secrets.create");
