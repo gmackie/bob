@@ -12,6 +12,11 @@
 // Phase 7B-4B Task 5: Added project core (get, discovery,
 // updateAutomationSettings, dismissDir) and workspace (list, create,
 // rename, delete) RPCs — 8 new procedures, 12 total.
+//
+// Phase 7B-4B Task 6: Added 12 repository RPCs (list, byId, add,
+// addFromProvider, delete, refreshMainBranch, getWorktrees,
+// createWorktree, getWorktreePlanning, updateWorktreePlanning,
+// deleteWorktree, getWorktreeMergeStatus) — 24 total.
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
@@ -28,6 +33,13 @@ import {
   AutomationSettingsSchema,
   DiscoveryResultSchema,
 } from "../schemas/project-workspace.js";
+import {
+  RepositorySchema,
+  WorktreeSchema,
+  WorktreePlanSchema,
+  WorktreePlanTaskSchema,
+  PlanStatusEnum,
+} from "../schemas/project-repository.js";
 
 // ---------------------------------------------------------------------------
 // Existing project procedures (Phase 6F)
@@ -134,6 +146,159 @@ export const ProjectsWorkspaceDeleteRpc = Rpc.make(
 );
 
 // ---------------------------------------------------------------------------
+// Repository procedures (7B-4B Task 6 — from Bob's repository router)
+// ---------------------------------------------------------------------------
+
+export const ProjectsRepositoryListRpc = Rpc.make("projects.repository.list", {
+  payload: Schema.Void,
+  success: Schema.Array(RepositorySchema),
+});
+
+export const ProjectsRepositoryByIdRpc = Rpc.make(
+  "projects.repository.byId",
+  {
+    payload: Schema.Struct({ id: Schema.String }),
+    success: RepositorySchema,
+    error: NotFoundError,
+  },
+);
+
+export const ProjectsRepositoryAddRpc = Rpc.make("projects.repository.add", {
+  payload: Schema.Struct({ repositoryPath: Schema.String }),
+  success: RepositorySchema,
+});
+
+export const ProjectsRepositoryAddFromProviderRpc = Rpc.make(
+  "projects.repository.addFromProvider",
+  {
+    payload: Schema.Struct({
+      fullName: Schema.String,
+      cloneUrl: Schema.String,
+      htmlUrl: Schema.String,
+      defaultBranch: Schema.optional(Schema.String),
+      provider: Schema.optional(Schema.String),
+      instanceUrl: Schema.optional(Schema.String),
+      projectId: Schema.optional(Schema.String),
+    }),
+    success: RepositorySchema,
+  },
+);
+
+export const ProjectsRepositoryDeleteRpc = Rpc.make(
+  "projects.repository.delete",
+  {
+    payload: Schema.Struct({ id: Schema.String }),
+    success: Schema.Struct({ success: Schema.Boolean }),
+  },
+);
+
+export const ProjectsRepositoryRefreshMainBranchRpc = Rpc.make(
+  "projects.repository.refreshMainBranch",
+  {
+    payload: Schema.Struct({ id: Schema.String }),
+    success: RepositorySchema,
+    error: NotFoundError,
+  },
+);
+
+export const ProjectsRepositoryGetWorktreesRpc = Rpc.make(
+  "projects.repository.getWorktrees",
+  {
+    payload: Schema.Struct({ repositoryId: Schema.String }),
+    success: Schema.Array(WorktreeSchema),
+  },
+);
+
+export const ProjectsRepositoryCreateWorktreeRpc = Rpc.make(
+  "projects.repository.createWorktree",
+  {
+    payload: Schema.Struct({
+      repositoryId: Schema.String,
+      branchName: Schema.String,
+      baseBranch: Schema.optional(Schema.String),
+      agentType: Schema.optional(Schema.String),
+      planning: Schema.optional(
+        Schema.Struct({
+          title: Schema.optional(Schema.String),
+          goal: Schema.optional(Schema.String),
+          planningTaskId: Schema.optional(Schema.String),
+          tasks: Schema.optional(Schema.Array(WorktreePlanTaskSchema)),
+        }),
+      ),
+    }),
+    success: WorktreeSchema,
+    error: NotFoundError,
+  },
+);
+
+export const ProjectsRepositoryGetWorktreePlanningRpc = Rpc.make(
+  "projects.repository.getWorktreePlanning",
+  {
+    payload: Schema.Struct({ worktreeId: Schema.String }),
+    success: Schema.Struct({
+      exists: Schema.Boolean,
+      path: Schema.String,
+      content: Schema.NullOr(Schema.String),
+      parsed: Schema.NullOr(
+        Schema.Struct({
+          frontmatter: Schema.Unknown,
+          title: Schema.optional(Schema.String),
+          goal: Schema.optional(Schema.String),
+          tasks: Schema.Array(WorktreePlanTaskSchema),
+        }),
+      ),
+      dbRecord: Schema.NullOr(WorktreePlanSchema),
+    }),
+    error: NotFoundError,
+  },
+);
+
+export const ProjectsRepositoryUpdateWorktreePlanningRpc = Rpc.make(
+  "projects.repository.updateWorktreePlanning",
+  {
+    payload: Schema.Struct({
+      worktreeId: Schema.String,
+      content: Schema.optional(Schema.String),
+      title: Schema.optional(Schema.String),
+      goal: Schema.optional(Schema.String),
+      status: Schema.optional(PlanStatusEnum),
+      planningTaskId: Schema.optional(Schema.NullOr(Schema.String)),
+      tasks: Schema.optional(Schema.Array(WorktreePlanTaskSchema)),
+    }),
+    success: Schema.Struct({
+      success: Schema.Boolean,
+      plan: Schema.NullOr(WorktreePlanSchema),
+      path: Schema.String,
+    }),
+    error: NotFoundError,
+  },
+);
+
+export const ProjectsRepositoryDeleteWorktreeRpc = Rpc.make(
+  "projects.repository.deleteWorktree",
+  {
+    payload: Schema.Struct({
+      worktreeId: Schema.String,
+      force: Schema.optional(Schema.Boolean),
+    }),
+    success: Schema.Struct({ success: Schema.Boolean }),
+    error: NotFoundError,
+  },
+);
+
+export const ProjectsRepositoryGetWorktreeMergeStatusRpc = Rpc.make(
+  "projects.repository.getWorktreeMergeStatus",
+  {
+    payload: Schema.Struct({ worktreeId: Schema.String }),
+    success: Schema.Struct({
+      merged: Schema.Boolean,
+      hasUncommittedChanges: Schema.Boolean,
+    }),
+    error: NotFoundError,
+  },
+);
+
+// ---------------------------------------------------------------------------
 // Group
 // ---------------------------------------------------------------------------
 
@@ -153,4 +318,17 @@ export const ProjectsRpc = RpcGroup.make(
   ProjectsWorkspaceCreateRpc,
   ProjectsWorkspaceRenameRpc,
   ProjectsWorkspaceDeleteRpc,
+  // Repository (7B-4B Task 6)
+  ProjectsRepositoryListRpc,
+  ProjectsRepositoryByIdRpc,
+  ProjectsRepositoryAddRpc,
+  ProjectsRepositoryAddFromProviderRpc,
+  ProjectsRepositoryDeleteRpc,
+  ProjectsRepositoryRefreshMainBranchRpc,
+  ProjectsRepositoryGetWorktreesRpc,
+  ProjectsRepositoryCreateWorktreeRpc,
+  ProjectsRepositoryGetWorktreePlanningRpc,
+  ProjectsRepositoryUpdateWorktreePlanningRpc,
+  ProjectsRepositoryDeleteWorktreeRpc,
+  ProjectsRepositoryGetWorktreeMergeStatusRpc,
 );

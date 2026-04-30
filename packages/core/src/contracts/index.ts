@@ -60,6 +60,19 @@ export {
   ProjectsWorkspaceCreateRpc,
   ProjectsWorkspaceRenameRpc,
   ProjectsWorkspaceDeleteRpc,
+  // 7B-4B Task 6 — repository
+  ProjectsRepositoryListRpc,
+  ProjectsRepositoryByIdRpc,
+  ProjectsRepositoryAddRpc,
+  ProjectsRepositoryAddFromProviderRpc,
+  ProjectsRepositoryDeleteRpc,
+  ProjectsRepositoryRefreshMainBranchRpc,
+  ProjectsRepositoryGetWorktreesRpc,
+  ProjectsRepositoryCreateWorktreeRpc,
+  ProjectsRepositoryGetWorktreePlanningRpc,
+  ProjectsRepositoryUpdateWorktreePlanningRpc,
+  ProjectsRepositoryDeleteWorktreeRpc,
+  ProjectsRepositoryGetWorktreeMergeStatusRpc,
 } from "./groups/projects";
 export {
   stubProjectsHandlers,
@@ -71,6 +84,10 @@ export {
   STUB_WORKSPACE_1,
   STUB_WORKSPACE_MEMBER_1,
   STUB_DISCOVERY_RESULT,
+  // 7B-4B Task 6 — repository stubs
+  STUB_REPOSITORY_1,
+  STUB_WORKTREE_1,
+  STUB_WORKTREE_PLAN_1,
 } from "./stubs/projects";
 export { ProjectSchema } from "./schemas/projects";
 export type { ProjectWire } from "./schemas/projects";
@@ -90,6 +107,22 @@ export type {
   AutomationSettingsWire,
   DiscoveryResultWire,
 } from "./schemas/project-workspace";
+export {
+  RepositorySchema,
+  WorktreeSchema,
+  WorktreePlanSchema,
+  WorktreePlanTaskSchema,
+  PlanStatusEnum,
+  PlanTaskStatusEnum,
+} from "./schemas/project-repository";
+export type {
+  RepositoryWire,
+  WorktreeWire,
+  WorktreePlanWire,
+  WorktreePlanTaskWire,
+  PlanStatus,
+  PlanTaskStatus,
+} from "./schemas/project-repository";
 
 // --- Agent (7B-4B) -------------------------------------------------------
 // Agent schemas added alongside the AgentRpc group. The group itself is

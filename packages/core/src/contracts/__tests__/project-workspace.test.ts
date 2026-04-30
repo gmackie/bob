@@ -17,9 +17,9 @@ import {
 } from "../groups/projects.js";
 
 describe("ProjectsRpc group — project core + workspace (7B-4B Task 5)", () => {
-  it("has 12 procedures total (4 existing + 8 new)", () => {
+  it("has 24 procedures total (4 existing + 8 Task 5 + 12 Task 6)", () => {
     const tags = Array.from(ProjectsRpc.requests.keys());
-    expect(tags.length).toBe(12);
+    expect(tags.length).toBe(24);
   });
 
   it("includes the 8 new procedures by tag", () => {

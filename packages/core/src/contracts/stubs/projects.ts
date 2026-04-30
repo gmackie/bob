@@ -10,6 +10,9 @@
 //
 // Phase 7B-4B Task 5: Added stubs for 8 new procedures (project core +
 // workspace) — 12 handlers total.
+//
+// Phase 7B-4B Task 6: Added stubs for 12 repository procedures — 24
+// handlers total.
 import { Effect } from "effect";
 
 import { ProjectNotFoundError } from "@gmacko/core/projects/errors";
@@ -22,6 +25,11 @@ import type {
   WorkspaceMemberWire,
   DiscoveryResultWire,
 } from "../schemas/project-workspace.js";
+import type {
+  RepositoryWire,
+  WorktreeWire,
+  WorktreePlanWire,
+} from "../schemas/project-repository.js";
 
 export const STUB_TENANT_ID = "00000000-0000-0000-0000-000000000001";
 
@@ -70,6 +78,49 @@ export const STUB_DISCOVERY_RESULT: DiscoveryResultWire = {
   forgeReady: [],
   gitOnly: [],
   nonGit: [],
+};
+
+export const STUB_REPOSITORY_1: RepositoryWire = {
+  id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+  userId: "00000000-0000-0000-0000-000000000099",
+  planningProjectId: null,
+  name: "acme-repo",
+  path: "/home/mackieg/repos/acme-repo",
+  branch: "main",
+  mainBranch: "main",
+  remoteUrl: "https://github.com/acme/acme-repo.git",
+  remoteProvider: "github",
+  remoteOwner: "acme",
+  remoteName: "acme-repo",
+  remoteInstanceUrl: null,
+  createdAt: "2026-04-21T12:00:00Z",
+  updatedAt: null,
+};
+
+export const STUB_WORKTREE_1: WorktreeWire = {
+  id: "dddddddd-dddd-dddd-dddd-dddddddddddd",
+  userId: "00000000-0000-0000-0000-000000000099",
+  repositoryId: STUB_REPOSITORY_1.id,
+  path: "/home/mackieg/.bob/acme-repo-feat-1",
+  branch: "feat-1",
+  preferredAgent: "claude",
+  isMainWorktree: false,
+  createdAt: "2026-04-21T12:00:00Z",
+  updatedAt: null,
+};
+
+export const STUB_WORKTREE_PLAN_1: WorktreePlanWire = {
+  id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+  worktreeId: STUB_WORKTREE_1.id,
+  userId: "00000000-0000-0000-0000-000000000099",
+  filePath: "/home/mackieg/.bob/acme-repo-feat-1/planning.md",
+  title: "Feature 1",
+  goal: "Implement feature 1",
+  status: "active",
+  planningTaskId: null,
+  lastSyncedAt: "2026-04-21T12:00:00Z",
+  createdAt: "2026-04-21T12:00:00Z",
+  updatedAt: null,
 };
 
 /**
@@ -196,6 +247,171 @@ export const stubProjectsHandlers = {
     return Effect.fail(
       new NotFoundError({ entity: "Workspace", id }),
     );
+  },
+
+  // --- Repository (7B-4B Task 6) -------------------------------------------
+  "projects.repository.list": () =>
+    Effect.succeed([STUB_REPOSITORY_1]),
+  "projects.repository.byId": ({ id }: { id: string }) => {
+    if (id === STUB_REPOSITORY_1.id) return Effect.succeed(STUB_REPOSITORY_1);
+    return Effect.fail(
+      new NotFoundError({ entity: "Repository", id }),
+    );
+  },
+  "projects.repository.add": ({
+    repositoryPath,
+  }: {
+    repositoryPath: string;
+  }) =>
+    Effect.succeed({
+      ...STUB_REPOSITORY_1,
+      id: "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      name: repositoryPath.split("/").pop() ?? "unknown",
+      path: repositoryPath,
+      remoteUrl: null,
+      remoteProvider: null,
+      remoteOwner: null,
+      remoteName: null,
+    } satisfies RepositoryWire),
+  "projects.repository.addFromProvider": ({
+    fullName,
+    cloneUrl,
+    defaultBranch,
+  }: {
+    fullName: string;
+    cloneUrl: string;
+    htmlUrl: string;
+    defaultBranch?: string;
+    provider?: string;
+    instanceUrl?: string;
+    projectId?: string;
+  }) => {
+    const [owner, name] = fullName.split("/");
+    const repoName = name ?? fullName;
+    return Effect.succeed({
+      ...STUB_REPOSITORY_1,
+      id: "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      name: repoName,
+      path: `/home/mackieg/repos/${repoName}`,
+      branch: defaultBranch ?? "main",
+      mainBranch: defaultBranch ?? "main",
+      remoteUrl: cloneUrl,
+      remoteOwner: owner ?? "",
+      remoteName: repoName,
+    } satisfies RepositoryWire);
+  },
+  "projects.repository.delete": ({ id }: { id: string }) => {
+    void id;
+    return Effect.succeed({ success: true as const });
+  },
+  "projects.repository.refreshMainBranch": ({ id }: { id: string }) => {
+    if (id === STUB_REPOSITORY_1.id) return Effect.succeed(STUB_REPOSITORY_1);
+    return Effect.fail(
+      new NotFoundError({ entity: "Repository", id }),
+    );
+  },
+  "projects.repository.getWorktrees": (_payload: {
+    repositoryId: string;
+  }) => Effect.succeed([STUB_WORKTREE_1]),
+  "projects.repository.createWorktree": ({
+    repositoryId,
+    branchName,
+  }: {
+    repositoryId: string;
+    branchName: string;
+    baseBranch?: string;
+    agentType?: string;
+    planning?: {
+      title?: string;
+      goal?: string;
+      planningTaskId?: string;
+      tasks?: Array<{ key: string; content: string; status?: string }>;
+    };
+  }) => {
+    if (repositoryId !== STUB_REPOSITORY_1.id) {
+      return Effect.fail(
+        new NotFoundError({ entity: "Repository", id: repositoryId }),
+      );
+    }
+    return Effect.succeed({
+      ...STUB_WORKTREE_1,
+      id: "ffffffff-ffff-ffff-ffff-fffffffffff0",
+      branch: branchName,
+      path: `/home/mackieg/.bob/acme-repo-${branchName}`,
+    } satisfies WorktreeWire);
+  },
+  "projects.repository.getWorktreePlanning": ({
+    worktreeId,
+  }: {
+    worktreeId: string;
+  }) => {
+    if (worktreeId !== STUB_WORKTREE_1.id) {
+      return Effect.fail(
+        new NotFoundError({ entity: "Worktree", id: worktreeId }),
+      );
+    }
+    return Effect.succeed({
+      exists: true,
+      path: STUB_WORKTREE_PLAN_1.filePath,
+      content: null,
+      parsed: {
+        frontmatter: {},
+        title: STUB_WORKTREE_PLAN_1.title ?? undefined,
+        goal: STUB_WORKTREE_PLAN_1.goal ?? undefined,
+        tasks: [],
+      },
+      dbRecord: STUB_WORKTREE_PLAN_1,
+    });
+  },
+  "projects.repository.updateWorktreePlanning": ({
+    worktreeId,
+  }: {
+    worktreeId: string;
+    content?: string;
+    title?: string;
+    goal?: string;
+    status?: string;
+    planningTaskId?: string | null;
+    tasks?: Array<{ key: string; content: string; status?: string }>;
+  }) => {
+    if (worktreeId !== STUB_WORKTREE_1.id) {
+      return Effect.fail(
+        new NotFoundError({ entity: "Worktree", id: worktreeId }),
+      );
+    }
+    return Effect.succeed({
+      success: true as const,
+      plan: STUB_WORKTREE_PLAN_1,
+      path: STUB_WORKTREE_PLAN_1.filePath,
+    });
+  },
+  "projects.repository.deleteWorktree": ({
+    worktreeId,
+  }: {
+    worktreeId: string;
+    force?: boolean;
+  }) => {
+    if (worktreeId !== STUB_WORKTREE_1.id) {
+      return Effect.fail(
+        new NotFoundError({ entity: "Worktree", id: worktreeId }),
+      );
+    }
+    return Effect.succeed({ success: true as const });
+  },
+  "projects.repository.getWorktreeMergeStatus": ({
+    worktreeId,
+  }: {
+    worktreeId: string;
+  }) => {
+    if (worktreeId !== STUB_WORKTREE_1.id) {
+      return Effect.fail(
+        new NotFoundError({ entity: "Worktree", id: worktreeId }),
+      );
+    }
+    return Effect.succeed({
+      merged: false as const,
+      hasUncommittedChanges: false as const,
+    });
   },
 } as const;
 
