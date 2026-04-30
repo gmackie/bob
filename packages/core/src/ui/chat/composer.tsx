@@ -48,7 +48,7 @@ export function Composer({
       />
       <Button
         type="submit"
-        size="md"
+        size="default"
         disabled={disabled || !value.trim()}
         aria-label="Send"
       >
