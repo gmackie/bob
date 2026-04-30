@@ -61,6 +61,14 @@ export {
 export { ProjectSchema } from "./schemas/projects";
 export type { ProjectWire } from "./schemas/projects";
 
+// --- Agent (7B-4B) -------------------------------------------------------
+// Agent schemas added alongside the AgentRpc group. The group itself is
+// exported via `@gmacko/core/contracts/groups/agent`.
+export { AgentRunSchema } from "./schemas/agent-run";
+export type { AgentRunWire } from "./schemas/agent-run";
+export { CaptureTargetSchema, CaptureResultSchema } from "./schemas/agent-capture";
+export type { CaptureTargetWire, CaptureResultWire } from "./schemas/agent-capture";
+
 // --- Secrets -------------------------------------------------------------
 // Standalone RpcGroup. `secrets.decryptForUse` is the only plaintext-returning
 // procedure — its error channel is a Schema.Union of SecretNotFoundError |

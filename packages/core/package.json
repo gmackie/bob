@@ -49,6 +49,8 @@
     "./contracts/schemas/projects": "./src/contracts/schemas/projects.ts",
     "./contracts/schemas/secrets": "./src/contracts/schemas/secrets.ts",
     "./contracts/schemas/agent": "./src/contracts/schemas/agent.ts",
+    "./contracts/schemas/agent-run": "./src/contracts/schemas/agent-run.ts",
+    "./contracts/schemas/agent-capture": "./src/contracts/schemas/agent-capture.ts",
     "./contracts/stubs/auth": "./src/contracts/stubs/auth.ts",
     "./contracts/stubs/projects": "./src/contracts/stubs/projects.ts",
     "./contracts/stubs/secrets": "./src/contracts/stubs/secrets.ts",

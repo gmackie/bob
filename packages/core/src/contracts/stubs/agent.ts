@@ -22,6 +22,7 @@
 import { Effect, Stream } from "effect";
 
 import { AgentSessionNotFoundError } from "@gmacko/core/agent/errors";
+import { NotFoundError } from "../../rpc/errors.js";
 
 import { AgentRpc } from "../groups/agent.js";
 
@@ -29,6 +30,8 @@ const STUB_CONVERSATION_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc";
 const STUB_TENANT_ID = "00000000-0000-0000-0000-000000000001";
 const STUB_USER_ID = "user_stub_abc";
 const STUB_MODEL = "claude-sonnet-4";
+const STUB_RUN_ID = "rrrrrrrr-rrrr-rrrr-rrrr-rrrrrrrrrrrr";
+const STUB_WORKSPACE_ID = "wwwwwwww-wwww-wwww-wwww-wwwwwwwwwwww";
 
 const handlers = AgentRpc.of({
   "agent.createSession": (_payload) =>
@@ -126,6 +129,56 @@ const handlers = AgentRpc.of({
       ],
     });
   },
+
+  // --- 7B-4B Task 1: agent.run + agent.capture stubs ----------------------
+
+  "agent.run.get": ({ runId }) => {
+    if (runId !== STUB_RUN_ID) {
+      return Effect.fail(new NotFoundError({ entity: "AgentRun", id: runId }));
+    }
+    return Effect.succeed({
+      id: STUB_RUN_ID,
+      workspaceId: STUB_WORKSPACE_ID,
+      sessionId: null,
+      workItemId: null,
+      status: "completed" as const,
+      startedAt: "2026-04-21T00:00:00.000Z",
+      completedAt: "2026-04-21T00:00:10.000Z",
+      createdAt: "2026-04-21T00:00:00.000Z",
+    });
+  },
+
+  "agent.run.list": (_payload) =>
+    Effect.succeed([]),
+
+  "agent.run.listByWorkItem": ({ workItemId }) => {
+    if (workItemId !== "stub-work-item") {
+      return Effect.fail(
+        new NotFoundError({ entity: "WorkItem", id: workItemId }),
+      );
+    }
+    return Effect.succeed([]);
+  },
+
+  "agent.capture.listTargets": () =>
+    Effect.succeed([
+      {
+        id: "browser",
+        name: "Browser",
+        type: "browser" as const,
+        description: "Capture any URL",
+        connected: true,
+      },
+    ]),
+
+  "agent.capture.capture": (_payload) =>
+    Effect.succeed({
+      url: "/uploads/captures/stub.png",
+      filename: "stub.png",
+      width: 1280,
+      height: 720,
+      capturedAt: "2026-04-21T00:00:00.000Z",
+    }),
 });
 
 /**

@@ -34,6 +34,12 @@ import {
   ChatConversationSchema,
   ChatMessageSchema,
 } from "../schemas/agent.js";
+import { AgentRunSchema } from "../schemas/agent-run.js";
+import {
+  CaptureTargetSchema,
+  CaptureResultSchema,
+} from "../schemas/agent-capture.js";
+import { NotFoundError } from "../../rpc/errors.js";
 
 /** Union of every error `agent.sendTurn` can surface (on its stream). */
 export const AgentStreamErrorSchema = Schema.Union([
@@ -105,6 +111,58 @@ export const AgentGetTranscriptRpc = Rpc.make("agent.getTranscript", {
   error: AgentSessionNotFoundError,
 });
 
+// --- agent.run.get -----------------------------------------------------------
+
+export const AgentRunGetRpc = Rpc.make("agent.run.get", {
+  payload: Schema.Struct({
+    runId: Schema.String, // UUID
+  }),
+  success: AgentRunSchema,
+  error: NotFoundError,
+});
+
+// --- agent.run.list ----------------------------------------------------------
+
+export const AgentRunListRpc = Rpc.make("agent.run.list", {
+  payload: Schema.Struct({
+    workspaceId: Schema.String, // UUID
+    limit: Schema.optional(Schema.Number),
+  }),
+  success: Schema.Array(AgentRunSchema),
+});
+
+// --- agent.run.listByWorkItem ------------------------------------------------
+
+export const AgentRunListByWorkItemRpc = Rpc.make("agent.run.listByWorkItem", {
+  payload: Schema.Struct({
+    workItemId: Schema.String,
+    limit: Schema.optional(Schema.Number),
+  }),
+  success: Schema.Array(AgentRunSchema),
+  error: NotFoundError,
+});
+
+// --- agent.capture.listTargets -----------------------------------------------
+
+export const AgentCaptureListTargetsRpc = Rpc.make(
+  "agent.capture.listTargets",
+  {
+    payload: Schema.Void,
+    success: Schema.Array(CaptureTargetSchema),
+  },
+);
+
+// --- agent.capture.capture ---------------------------------------------------
+
+export const AgentCaptureCaptureRpc = Rpc.make("agent.capture.capture", {
+  payload: Schema.Struct({
+    targetType: Schema.Literal("browser", "window", "screen"),
+    targetId: Schema.optional(Schema.String),
+    url: Schema.optional(Schema.String),
+  }),
+  success: CaptureResultSchema,
+});
+
 // --- Group ------------------------------------------------------------------
 
 export const AgentRpc = RpcGroup.make(
@@ -113,4 +171,9 @@ export const AgentRpc = RpcGroup.make(
   AgentCancelSessionRpc,
   AgentCloseSessionRpc,
   AgentGetTranscriptRpc,
+  AgentRunGetRpc,
+  AgentRunListRpc,
+  AgentRunListByWorkItemRpc,
+  AgentCaptureListTargetsRpc,
+  AgentCaptureCaptureRpc,
 );
