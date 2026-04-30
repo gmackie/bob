@@ -9,6 +9,7 @@
     "./context": "./src/context.ts",
     "./middleware": "./src/middleware.ts",
     "./client": "./src/client.ts",
+    "./runtime": "./src/runtime.ts",
     "./schema": "./src/schema.ts",
     "./env": "./env.ts"
   },
@@ -24,8 +25,10 @@
   "dependencies": {
     "@better-auth/expo": "catalog:",
     "@bob/db": "workspace:*",
+    "@gmacko/core": "workspace:*",
     "@t3-oss/env-core": "^0.13.8",
     "better-auth": "catalog:",
+    "effect": "4.0.0-beta.43",
     "zod": "catalog:"
   },
   "devDependencies": {
