@@ -1,0 +1,790 @@
+/**
+ * Plan session handler functions — pure business logic extracted from the tRPC
+ * planSession router.
+ *
+ * Phase 7B-4D-beta Task 8.
+ */
+import { TRPCError } from "@trpc/server";
+import { and, desc, eq, inArray, ne } from "@bob/db";
+import {
+  chatConversations,
+  planDraftDependencies,
+  planDrafts,
+  repositories,
+  runLifecycleEvents,
+  workItemArtifacts,
+  workItemDependencies,
+  workItems,
+  workspaceMembers,
+} from "@bob/db/schema";
+
+import {
+  getPlanningApiKey,
+  getPlanningBaseUrl,
+} from "../services/integrations/planningRemoteConfig";
+
+import type { HandlerContext } from "./context.js";
+
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+
+async function assertWorkspaceAccess(db: any, userId: string, workspaceId: string) {
+  const membership = await db.query.workspaceMembers.findFirst({
+    where: and(
+      eq(workspaceMembers.workspaceId, workspaceId),
+      eq(workspaceMembers.userId, userId),
+    ),
+    columns: { id: true },
+  });
+
+  if (!membership) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+}
+
+async function loadAccessibleWorkItem(db: any, userId: string, workItemId: string) {
+  const workItem = await db.query.workItems.findFirst({
+    where: eq(workItems.id, workItemId),
+  });
+
+  if (!workItem?.workspaceId) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+
+  await assertWorkspaceAccess(db, userId, workItem.workspaceId);
+  return workItem;
+}
+
+async function loadOwnedPlanningSession(db: any, userId: string, sessionId: string) {
+  const session = await db.query.chatConversations.findFirst({
+    where: and(
+      eq(chatConversations.id, sessionId),
+      eq(chatConversations.userId, userId),
+      eq(chatConversations.sessionType, "planning"),
+    ),
+  });
+
+  if (!session) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+
+  return session;
+}
+
+async function loadOwnedDraft(db: any, userId: string, draftId: string) {
+  const draft = await db.query.planDrafts.findFirst({
+    where: eq(planDrafts.id, draftId),
+  });
+
+  if (!draft) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+
+  await loadOwnedPlanningSession(db, userId, draft.sessionId);
+  return draft;
+}
+
+// ---------------------------------------------------------------------------
+// Handler functions
+// ---------------------------------------------------------------------------
+
+export async function planSessionCreate(
+  ctx: HandlerContext,
+  input: {
+    workspaceId?: string;
+    projectId?: string;
+    workingDirectory?: string;
+    title?: string;
+    workItemId?: string;
+    planningSessionType?: string;
+  },
+) {
+  // If workItemId is provided, look up workspace/project from the work item
+  let resolvedWorkItemId = input.workItemId ?? null;
+
+  if (input.workItemId) {
+    const wi = await loadAccessibleWorkItem(
+      ctx.db,
+      ctx.userId,
+      input.workItemId,
+    );
+    resolvedWorkItemId = wi.id;
+  }
+
+  // Resolve working directory from mapped repository if not explicitly provided
+  let workingDirectory = input.workingDirectory ?? "/";
+  if (workingDirectory === "/" && input.projectId) {
+    const repo = await ctx.db.query.repositories.findFirst({
+      where: eq(repositories.planningProjectId, input.projectId),
+      columns: { path: true },
+    });
+    if (repo?.path) {
+      workingDirectory = repo.path;
+      console.log(`[planSession] Resolved working directory from repo: ${repo.path}`);
+    }
+  }
+
+  const [session] = await ctx.db
+    .insert(chatConversations)
+    .values({
+      userId: ctx.userId,
+      workingDirectory,
+      agentType: "claude",
+      sessionType: "planning",
+      title: input.title ?? "Planning session",
+      status: "provisioning",
+      workItemId: resolvedWorkItemId,
+      planningSessionType: input.planningSessionType ?? null,
+    })
+    .returning();
+
+  return session!;
+}
+
+export async function planSessionStart(
+  ctx: HandlerContext,
+  input: {
+    sessionId: string;
+    workspaceId: string;
+    projectId: string;
+    projectName: string;
+    workingDirectory: string;
+    launchContext?: {
+      intent: "shape" | "breakdown";
+      notes: string;
+      workItem?: {
+        id: string;
+        identifier: string;
+        title: string;
+        kind: string;
+      };
+      selectedRepoSources: Array<{
+        id: string;
+        label: string;
+        path: string;
+        detail: string;
+      }>;
+      attachedFiles: Array<{
+        name: string;
+        sizeLabel: string;
+        content?: string;
+      }>;
+    };
+  },
+) {
+  await loadOwnedPlanningSession(ctx.db, ctx.userId, input.sessionId);
+
+  // Write planning execution context to chat_conversations and mark
+  // the session pending so the ws-gateway daemon loop picks it up.
+  await ctx.db
+    .update(chatConversations)
+    .set({
+      status: "pending",
+      workingDirectory: input.workingDirectory,
+      planningWorkspaceId: input.workspaceId,
+      planningProjectId: input.projectId,
+      planningProjectName: input.projectName,
+      planningLaunchContext: input.launchContext ?? null,
+    } as any)
+    .where(eq(chatConversations.id, input.sessionId));
+
+  // Best-effort nudge to ws-gateway so the daemon picks it up instantly
+  // instead of waiting for the next reconnect recovery sweep.
+  const gatewayUrl = process.env.GATEWAY_URL;
+  const nudgeSecret = process.env.NUDGE_SHARED_SECRET;
+  if (gatewayUrl && nudgeSecret) {
+    try {
+      await fetch(`${gatewayUrl}/internal/nudge`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${nudgeSecret}`,
+        },
+        body: JSON.stringify({
+          sessionId: input.sessionId,
+          workspaceId: input.workspaceId,
+          workingDirectory: input.workingDirectory,
+          agentType: "claude",
+          title: "Planning session",
+          sessionType: "planning",
+          planningContext: {
+            workspaceId: input.workspaceId,
+            projectId: input.projectId,
+            projectName: input.projectName,
+            launchContext: input.launchContext,
+          },
+        }),
+      });
+    } catch (err) {
+      console.warn("[planSession.start] nudge failed:", err);
+    }
+  }
+
+  return { ok: true, sessionId: input.sessionId };
+}
+
+export async function planSessionGet(
+  ctx: HandlerContext,
+  input: { sessionId: string },
+) {
+  const session = await ctx.db.query.chatConversations.findFirst({
+    where: and(
+      eq(chatConversations.id, input.sessionId),
+      eq(chatConversations.sessionType, "planning"),
+      eq(chatConversations.userId, ctx.userId),
+    ),
+  });
+
+  if (!session) return null;
+
+  const drafts = await ctx.db.query.planDrafts.findMany({
+    where: eq(planDrafts.sessionId, input.sessionId),
+    orderBy: [planDrafts.sortOrder, planDrafts.createdAt],
+  });
+
+  const draftIds = drafts.map((d: any) => d.id);
+
+  const deps =
+    draftIds.length > 0
+      ? await ctx.db.query.planDraftDependencies.findMany({
+          where: inArray(planDraftDependencies.draftId, draftIds),
+        })
+      : [];
+
+  return { session, drafts, dependencies: deps };
+}
+
+export async function planSessionList(
+  ctx: HandlerContext,
+  input: {
+    workspaceId?: string;
+    limit: number;
+  },
+) {
+  const sessions = await ctx.db.query.chatConversations.findMany({
+    where: and(
+      eq(chatConversations.userId, ctx.userId),
+      eq(chatConversations.sessionType, "planning"),
+    ),
+    orderBy: desc(chatConversations.createdAt),
+    limit: input.limit,
+  });
+
+  return sessions;
+}
+
+export async function planSessionListByWorkItem(
+  ctx: HandlerContext,
+  input: {
+    workItemId: string;
+    limit: number;
+  },
+) {
+  const sessions = await ctx.db.query.chatConversations.findMany({
+    where: and(
+      eq(chatConversations.userId, ctx.userId),
+      eq(chatConversations.sessionType, "planning"),
+      eq(chatConversations.workItemId, input.workItemId),
+    ),
+    orderBy: desc(chatConversations.createdAt),
+    limit: input.limit,
+  });
+
+  return sessions;
+}
+
+export async function planSessionGetActiveForWorkItem(
+  ctx: HandlerContext,
+  input: { workItemId: string },
+) {
+  const session = await ctx.db.query.chatConversations.findFirst({
+    where: and(
+      eq(chatConversations.userId, ctx.userId),
+      eq(chatConversations.sessionType, "planning"),
+      eq(chatConversations.workItemId, input.workItemId),
+      ne(chatConversations.status, "stopped"),
+    ),
+    orderBy: desc(chatConversations.createdAt),
+  });
+
+  return session ?? null;
+}
+
+export async function planSessionSaveArtifact(
+  ctx: HandlerContext,
+  input: {
+    sessionId: string;
+    workItemId: string;
+    title: string;
+    content: string;
+    planningSessionType?: string;
+  },
+) {
+  await loadAccessibleWorkItem(ctx.db, ctx.userId, input.workItemId);
+
+  const [artifact] = await ctx.db
+    .insert(workItemArtifacts)
+    .values({
+      workItemId: input.workItemId,
+      sessionId: input.sessionId,
+      artifactType: "planning_doc",
+      artifactRole: input.planningSessionType ?? "planning",
+      producerType: "bob",
+      title: input.title,
+      content: input.content,
+      isCurrent: true,
+    })
+    .returning();
+
+  return artifact!;
+}
+
+export async function planSessionGetPriorContext(
+  ctx: HandlerContext,
+  input: {
+    workItemId: string;
+    excludeSessionId?: string;
+    maxChars: number;
+  },
+) {
+  await loadAccessibleWorkItem(ctx.db, ctx.userId, input.workItemId);
+
+  const conditions = [
+    eq(workItemArtifacts.workItemId, input.workItemId),
+    eq(workItemArtifacts.artifactType, "planning_doc"),
+    eq(workItemArtifacts.isCurrent, true),
+  ];
+
+  if (input.excludeSessionId) {
+    conditions.push(
+      ne(workItemArtifacts.sessionId, input.excludeSessionId),
+    );
+  }
+
+  const artifacts = await ctx.db.query.workItemArtifacts.findMany({
+    where: and(...conditions),
+    orderBy: desc(workItemArtifacts.createdAt),
+  });
+
+  // Truncate content to fit within the total character budget
+  let remainingChars = input.maxChars;
+  const result: Array<{
+    id: string;
+    title: string | null;
+    sessionId: string | null;
+    content: string | null;
+    createdAt: string;
+  }> = [];
+
+  for (const artifact of artifacts) {
+    if (remainingChars <= 0) break;
+
+    const content = artifact.content ?? "";
+    const truncatedContent =
+      content.length > remainingChars
+        ? content.slice(0, remainingChars)
+        : content;
+    remainingChars -= truncatedContent.length;
+
+    result.push({
+      id: artifact.id,
+      title: artifact.title,
+      sessionId: artifact.sessionId,
+      content: truncatedContent,
+      createdAt: artifact.createdAt,
+    });
+  }
+
+  return result;
+}
+
+// --- Draft CRUD ---
+
+export async function planSessionCreateDraft(
+  ctx: HandlerContext,
+  input: {
+    sessionId: string;
+    workspaceId: string;
+    projectId: string;
+    title: string;
+    description?: string;
+    kind: string;
+    priority: string;
+    sortOrder: number;
+  },
+) {
+  await loadOwnedPlanningSession(ctx.db, ctx.userId, input.sessionId);
+
+  const [draft] = await ctx.db
+    .insert(planDrafts)
+    .values({
+      sessionId: input.sessionId,
+      workspaceId: input.workspaceId,
+      projectId: input.projectId,
+      title: input.title,
+      description: input.description ?? null,
+      kind: input.kind,
+      priority: input.priority,
+      sortOrder: input.sortOrder,
+    })
+    .returning();
+
+  console.log(
+    `[planning] Draft created: "${input.title}" (${input.kind}) in session ${input.sessionId}`,
+  );
+
+  return draft!;
+}
+
+export async function planSessionUpdateDraft(
+  ctx: HandlerContext,
+  input: {
+    id: string;
+    title?: string;
+    description?: string;
+    kind?: string;
+    priority?: string;
+    sortOrder?: number;
+  },
+) {
+  const { id, ...updates } = input;
+  await loadOwnedDraft(ctx.db, ctx.userId, id);
+
+  const [draft] = await ctx.db
+    .update(planDrafts)
+    .set(updates)
+    .where(eq(planDrafts.id, id))
+    .returning();
+
+  return draft!;
+}
+
+export async function planSessionRemoveDraft(
+  ctx: HandlerContext,
+  input: { id: string },
+) {
+  await loadOwnedDraft(ctx.db, ctx.userId, input.id);
+
+  await ctx.db.delete(planDrafts).where(eq(planDrafts.id, input.id));
+  return { ok: true };
+}
+
+export async function planSessionSetDependency(
+  ctx: HandlerContext,
+  input: {
+    draftId: string;
+    dependsOnDraftId: string;
+  },
+) {
+  await loadOwnedDraft(ctx.db, ctx.userId, input.draftId);
+  await loadOwnedDraft(ctx.db, ctx.userId, input.dependsOnDraftId);
+
+  const [dep] = await ctx.db
+    .insert(planDraftDependencies)
+    .values({
+      draftId: input.draftId,
+      dependsOnDraftId: input.dependsOnDraftId,
+    })
+    .returning();
+
+  console.log(
+    `[planning] Dependency set: ${input.draftId} depends on ${input.dependsOnDraftId}`,
+  );
+
+  return dep!;
+}
+
+export async function planSessionRemoveDependency(
+  ctx: HandlerContext,
+  input: {
+    draftId: string;
+    dependsOnDraftId: string;
+  },
+) {
+  await loadOwnedDraft(ctx.db, ctx.userId, input.draftId);
+  await loadOwnedDraft(ctx.db, ctx.userId, input.dependsOnDraftId);
+
+  await ctx.db
+    .delete(planDraftDependencies)
+    .where(
+      and(
+        eq(planDraftDependencies.draftId, input.draftId),
+        eq(
+          planDraftDependencies.dependsOnDraftId,
+          input.dependsOnDraftId,
+        ),
+      ),
+    );
+  return { ok: true };
+}
+
+export async function planSessionCommitPlan(
+  ctx: HandlerContext,
+  input: { sessionId: string },
+) {
+  await loadOwnedPlanningSession(ctx.db, ctx.userId, input.sessionId);
+
+  const drafts = await ctx.db.query.planDrafts.findMany({
+    where: and(
+      eq(planDrafts.sessionId, input.sessionId),
+      eq(planDrafts.status, "draft"),
+    ),
+    orderBy: [planDrafts.sortOrder, planDrafts.createdAt],
+  });
+
+  if (drafts.length === 0) {
+    return { committed: 0, tasks: [] };
+  }
+
+  const planningApiKey = getPlanningApiKey();
+  if (!planningApiKey) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "PLANNING_API_KEY not configured",
+    });
+  }
+
+  // Create tasks on planning API one by one, collecting results
+  const createdTasks: Array<{
+    draftId: string;
+    taskId: string;
+    identifier: string;
+  }> = [];
+
+  for (const draft of drafts) {
+    const url = `${getPlanningBaseUrl()}/api/trpc/issue.create`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": planningApiKey,
+      },
+      body: JSON.stringify({
+        "0": {
+          json: {
+            projectId: draft.projectId,
+            title: draft.title,
+            description: draft.description,
+            status: "todo",
+            priority: draft.priority,
+          },
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(
+        `[planSession] Failed to create task for draft ${draft.id}: ${response.status}`,
+      );
+      continue;
+    }
+
+    const result = (await response.json()) as Array<{
+      result?: { data?: { json?: { id: string; identifier: string } } };
+    }>;
+    const created = result[0]?.result?.data?.json;
+
+    if (created) {
+      createdTasks.push({
+        draftId: draft.id,
+        taskId: created.id,
+        identifier: created.identifier,
+      });
+    }
+  }
+
+  // Mark drafts as committed
+  if (createdTasks.length > 0) {
+    const committedIds = createdTasks.map((t) => t.draftId);
+    await ctx.db
+      .update(planDrafts)
+      .set({ status: "committed" })
+      .where(inArray(planDrafts.id, committedIds));
+  }
+
+  return { committed: createdTasks.length, tasks: createdTasks };
+}
+
+export async function planSessionCommitPlanLocal(
+  ctx: HandlerContext,
+  input: {
+    sessionId: string;
+    parentWorkItemId: string;
+  },
+) {
+  const drafts = await ctx.db.query.planDrafts.findMany({
+    where: and(
+      eq(planDrafts.sessionId, input.sessionId),
+      eq(planDrafts.status, "draft"),
+    ),
+    orderBy: [planDrafts.sortOrder, planDrafts.createdAt],
+  });
+
+  if (drafts.length === 0) {
+    return { committed: 0, workItems: [], dependencies: 0 };
+  }
+
+  // Get parent work item for workspace/project context
+  const parentWI = await ctx.db.query.workItems.findFirst({
+    where: eq(workItems.id, input.parentWorkItemId),
+  });
+  if (!parentWI) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Parent work item not found",
+    });
+  }
+
+  // Fetch draft dependencies
+  const draftIds = drafts.map((d: any) => d.id);
+  const draftDeps =
+    draftIds.length > 0
+      ? await ctx.db.query.planDraftDependencies.findMany({
+          where: inArray(planDraftDependencies.draftId, draftIds),
+        })
+      : [];
+
+  // Cycle detection via topological sort
+  if (draftDeps.length > 0) {
+    const inDegree = new Map<string, number>();
+    const adjList = new Map<string, string[]>();
+    for (const id of draftIds) {
+      inDegree.set(id, 0);
+      adjList.set(id, []);
+    }
+    for (const dep of draftDeps) {
+      // dep.draftId depends on dep.dependsOnDraftId
+      // Edge: dependsOnDraftId → draftId (must complete before)
+      adjList.get(dep.dependsOnDraftId)?.push(dep.draftId);
+      inDegree.set(dep.draftId, (inDegree.get(dep.draftId) ?? 0) + 1);
+    }
+    const queue = draftIds.filter((id: string) => (inDegree.get(id) ?? 0) === 0);
+    let visited = 0;
+    while (queue.length > 0) {
+      const node = queue.shift()!;
+      visited++;
+      for (const neighbor of adjList.get(node) ?? []) {
+        const deg = (inDegree.get(neighbor) ?? 1) - 1;
+        inDegree.set(neighbor, deg);
+        if (deg === 0) queue.push(neighbor);
+      }
+    }
+    if (visited < draftIds.length) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message:
+          "Cyclic dependencies detected in plan drafts. Remove circular dependencies before committing.",
+      });
+    }
+  }
+
+  console.log(
+    `[planning] Committing plan: ${drafts.length} drafts, ${draftDeps.length} dependencies in session ${input.sessionId}`,
+  );
+
+  // ── Local DB path ─────────────────────────────────────────────
+  // All DB writes in a single transaction
+  const result = await ctx.db.transaction(async (tx: any) => {
+    // Batch insert all work items (epics first for ordering, but all under same parent)
+    const sorted = [
+      ...drafts.filter((d: any) => d.kind === "epic"),
+      ...drafts.filter((d: any) => d.kind !== "epic"),
+    ];
+
+    const workItemValues = sorted.map((draft: any) => ({
+      ownerUserId: ctx.userId,
+      workspaceId: parentWI.workspaceId,
+      projectId: parentWI.projectId,
+      parentId: input.parentWorkItemId,
+      kind: draft.kind as "epic" | "task" | "issue",
+      title: draft.title,
+      description: draft.description,
+      status: "todo" as const,
+    }));
+
+    const createdRows = await tx
+      .insert(workItems)
+      .values(workItemValues)
+      .returning({ id: workItems.id, title: workItems.title });
+
+    // Build draftId → workItemId map
+    const draftToWorkItem = new Map<string, string>();
+    const created: Array<{
+      draftId: string;
+      workItemId: string;
+      title: string;
+    }> = [];
+
+    for (let i = 0; i < sorted.length; i++) {
+      const draft = sorted[i]!;
+      const row = createdRows[i]!;
+      draftToWorkItem.set(draft.id, row.id);
+      created.push({
+        draftId: draft.id,
+        workItemId: row.id,
+        title: row.title,
+      });
+    }
+
+    // Persist dependencies as work_item_dependencies
+    let depCount = 0;
+    if (draftDeps.length > 0) {
+      const depValues = draftDeps
+        .map((dep: any) => {
+          const workItemId = draftToWorkItem.get(dep.draftId);
+          const dependsOnWorkItemId = draftToWorkItem.get(
+            dep.dependsOnDraftId,
+          );
+          if (!workItemId || !dependsOnWorkItemId) return null;
+          return { workItemId, dependsOnWorkItemId };
+        })
+        .filter(
+          (v: any): v is { workItemId: string; dependsOnWorkItemId: string } =>
+            v !== null,
+        );
+
+      if (depValues.length > 0) {
+        await tx.insert(workItemDependencies).values(depValues);
+        depCount = depValues.length;
+      }
+    }
+
+    // Mark drafts as committed
+    const committedIds = created.map((c) => c.draftId);
+    await tx
+      .update(planDrafts)
+      .set({ status: "committed" })
+      .where(inArray(planDrafts.id, committedIds));
+
+    return { created, depCount };
+  });
+
+  console.log(
+    `[planning] Plan committed: ${result.created.length} work items, ${result.depCount} dependencies`,
+  );
+
+  // Fire-and-forget lifecycle event
+  void ctx.db
+    .insert(runLifecycleEvents)
+    .values({
+      taskRunId: `plan-commit-${input.sessionId}`,
+      workItemId: input.parentWorkItemId,
+      sessionId: input.sessionId,
+      eventType: "plan_approved",
+      phase: "plan",
+      metadata: {
+        committed: result.created.length,
+        dependencies: result.depCount,
+      },
+    })
+    .catch((err: unknown) =>
+      console.error("[planning] Failed to log lifecycle event:", err),
+    );
+
+  return {
+    committed: result.created.length,
+    workItems: result.created,
+    dependencies: result.depCount,
+  };
+}

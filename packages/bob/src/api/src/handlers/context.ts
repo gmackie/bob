@@ -10,3 +10,16 @@ export interface HandlerContext {
   /** Authenticated user's ID. */
   readonly userId: string;
 }
+
+/**
+ * Context for public (unauthenticated) handler functions.
+ *
+ * Same shape as `HandlerContext` but `session` is nullable — callers that
+ * don't require authentication pass `null`.
+ */
+export interface PublicHandlerContext {
+  /** Database client — typed as `any` to avoid coupling to a specific Drizzle generic. */
+  readonly db: any;
+  /** Session with user info, or `null` for unauthenticated requests. */
+  readonly session: { user: { id: string } } | null;
+}
