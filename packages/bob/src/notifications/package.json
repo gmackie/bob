@@ -6,6 +6,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./src/index.ts"
+    },
+    "./schema": {
+      "types": "./dist/schema.d.ts",
+      "default": "./src/schema.ts"
     }
   },
   "license": "MIT",
@@ -18,10 +22,16 @@
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
   },
   "dependencies": {
+    "@bob/auth": "workspace:*",
     "@bob/config": "workspace:*",
+    "@bob/projects": "workspace:*",
+    "@bob/work-items": "workspace:*",
+    "drizzle-orm": "^0.44.7",
+    "drizzle-zod": "^0.8.3",
     "expo-constants": "~55.0.11",
     "expo-device": "~55.0.12",
-    "expo-notifications": "~55.0.16"
+    "expo-notifications": "~55.0.16",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@bob/eslint-config": "workspace:*",

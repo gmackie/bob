@@ -1088,6 +1088,9 @@ importers:
       '@bob/git':
         specifier: workspace:*
         version: link:../git
+      '@bob/notifications':
+        specifier: workspace:*
+        version: link:../notifications
       '@bob/projects':
         specifier: workspace:*
         version: link:../projects
@@ -1390,9 +1393,24 @@ importers:
 
   packages/bob/src/notifications:
     dependencies:
+      '@bob/auth':
+        specifier: workspace:*
+        version: link:../auth
       '@bob/config':
         specifier: workspace:*
         version: link:../config
+      '@bob/projects':
+        specifier: workspace:*
+        version: link:../projects
+      '@bob/work-items':
+        specifier: workspace:*
+        version: link:../work-items
+      drizzle-orm:
+        specifier: ^0.44.7
+        version: 0.44.7(@cloudflare/workers-types@4.20260426.1)(@electric-sql/pglite@0.3.16)(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.1)(@prisma/client@5.22.0(prisma@5.22.0))(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.9.0)(kysely@0.28.16)(pg@8.20.0)(postgres@3.4.9)(prisma@5.22.0)
+      drizzle-zod:
+        specifier: ^0.8.3
+        version: 0.8.3(drizzle-orm@0.44.7(@cloudflare/workers-types@4.20260426.1)(@electric-sql/pglite@0.3.16)(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.1)(@prisma/client@5.22.0(prisma@5.22.0))(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.9.0)(kysely@0.28.16)(pg@8.20.0)(postgres@3.4.9)(prisma@5.22.0))(zod@4.3.6)
       expo:
         specifier: '>=52.0.0'
         version: 55.0.15(@babel/core@7.29.0)(@expo/dom-webview@55.0.5)(@expo/metro-runtime@55.0.10)(expo-router@55.0.12)(react-dom@19.2.5(react@19.2.5))(react-native-worklets@0.8.1(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(react-native@0.84.1(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.1.17)(react@19.2.5))(react@19.2.5))(react-native@0.84.1(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.1.17)(react@19.2.5))(react@19.2.5)(typescript@5.9.3)
@@ -1411,6 +1429,9 @@ importers:
       react-native:
         specifier: '>=0.76.0'
         version: 0.84.1(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.1.17)(react@19.2.5)
+      zod:
+        specifier: 'catalog:'
+        version: 4.3.6
     devDependencies:
       '@bob/eslint-config':
         specifier: workspace:*

@@ -46,6 +46,7 @@
     "@bob/chat": "workspace:*",
     "@bob/ci": "workspace:*",
     "@bob/git": "workspace:*",
+    "@bob/notifications": "workspace:*",
     "@bob/projects": "workspace:*",
     "@bob/secrets": "workspace:*",
     "@bob/settings": "workspace:*",

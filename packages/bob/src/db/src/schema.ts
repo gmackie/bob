@@ -25,8 +25,6 @@ export * from "@bob/settings/schema";
 export * from "@bob/projects/schema";
 import {
   projects,
-  repositories,
-  worktrees,
 } from "@bob/projects/schema";
 
 // Work-items area tables (workItems, planDrafts, planDraftDependencies,
@@ -35,12 +33,9 @@ import {
 // now live in @bob/work-items/schema (Phase 7B-2 Task 12). Re-exported here so
 // existing `from "@bob/db/schema"` import sites keep working.
 export * from "@bob/work-items/schema";
-import {
-  workItemActivityTypeEnum,
-  workItemNotificationType,
-  workItemNotificationTypeEnum,
-  workItems,
-} from "@bob/work-items/schema";
+// workItemActivityTypeEnum, workItemNotificationType,
+// workItemNotificationTypeEnum, workItems — no longer imported here;
+// consumed only by @bob/notifications/schema (Phase 7B-2 Task 18).
 
 // Agents-area tables (agentRuns, runArtifacts, agentInstances, tokenUsageSessions,
 // instanceUsageSummary, dailyUsageStats, sessionEvents, sessionConnections,
@@ -72,6 +67,12 @@ export * from "@bob/webhooks/schema";
 // Task 17). Re-exported here so existing `from "@bob/db/schema"` import sites
 // keep working.
 export * from "@bob/ci/schema";
+
+// Notifications-area tables (eventLog, activities, notifications,
+// devicePushTokens) + eventTypeEnum + relations now live in
+// @bob/notifications/schema (Phase 7B-2 Task 18). Re-exported here so
+// existing `from "@bob/db/schema"` import sites keep working.
+export * from "@bob/notifications/schema";
 
 export const Post = pgTable("post", (t) => ({
   id: t.uuid().notNull().primaryKey().defaultRandom(),
@@ -178,49 +179,14 @@ export const CreateWorkspaceSchema = createInsertSchema(workspaces, {
 
 // linkTypeEnum / LinkType moved to @bob/projects/schema (Phase 7B-2 Task 11).
 
-export const eventTypeEnum = [
-  "instance.started",
-  "instance.stopped",
-  "instance.error",
-  "git.commit",
-  "git.push",
-  "git.pull",
-  "git.checkout",
-  "file.created",
-  "file.modified",
-  "file.deleted",
-  "plan.created",
-  "plan.updated",
-  "plan.task_completed",
-  "chat.message",
-  "chat.tool_call",
-  "chat.tool_result",
-  "worktree.created",
-  "worktree.deleted",
-  "link.created",
-  "link.removed",
-] as const;
-export type EventType = (typeof eventTypeEnum)[number];
+// eventTypeEnum / EventType moved to @bob/notifications/schema (Phase 7B-2 Task 18).
 
 // worktreePlans + CreateWorktreePlanSchema moved to @bob/projects/schema (Phase 7B-2 Task 11).
 // worktreeLinks + CreateWorktreeLinkSchema moved to @bob/projects/schema (Phase 7B-2 Task 11).
 
 // planTaskItems / CreatePlanTaskItemSchema moved to @bob/work-items/schema (Phase 7B-2 Task 12).
 
-export const eventLog = pgTable("event_log", (t) => ({
-  id: t.uuid().notNull().primaryKey().defaultRandom(),
-  userId: t
-    .text()
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  worktreeId: t.uuid().references(() => worktrees.id, { onDelete: "set null" }),
-  repositoryId: t
-    .uuid()
-    .references(() => repositories.id, { onDelete: "set null" }),
-  eventType: t.varchar({ length: 50 }).notNull(),
-  payload: t.json().$type<Record<string, unknown>>().notNull().default({}),
-  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-}));
+// eventLog moved to @bob/notifications/schema (Phase 7B-2 Task 18).
 
 // sessionEventDirectionEnum / SessionEventDirection / sessionEventTypeEnum /
 // SessionEventType / sessionEvents / deviceTypeEnum / DeviceType /
@@ -232,20 +198,7 @@ export const eventLog = pgTable("event_log", (t) => ({
 
 // planTaskItemsRelations moved to @bob/work-items/schema (Phase 7B-2 Task 12).
 
-export const eventLogRelations = relations(eventLog, ({ one }) => ({
-  user: one(user, {
-    fields: [eventLog.userId],
-    references: [user.id],
-  }),
-  worktree: one(worktrees, {
-    fields: [eventLog.worktreeId],
-    references: [worktrees.id],
-  }),
-  repository: one(repositories, {
-    fields: [eventLog.repositoryId],
-    references: [repositories.id],
-  }),
-}));
+// eventLogRelations moved to @bob/notifications/schema (Phase 7B-2 Task 18).
 
 // sessionEventsRelations / sessionConnectionsRelations / sessionCheckpointsRelations
 // moved to @bob/agents/schema (Phase 7B-2 Task 14).
@@ -442,84 +395,13 @@ export const projectDeploySecretBindings = pgTable(
 
 // comments / CreateCommentSchema moved to @bob/work-items/schema (Phase 7B-2 Task 12).
 
-export const activities = pgTable("activities", (t) => ({
-  id: t.uuid().notNull().primaryKey().defaultRandom(),
-  workItemId: t
-    .uuid()
-    .notNull()
-    .references(() => workItems.id, { onDelete: "cascade" }),
-  userId: t.text().references(() => user.id, { onDelete: "set null" }),
-  type: workItemActivityTypeEnum().notNull(),
-  fromValue: t.text(),
-  toValue: t.text(),
-  metadata: t.json().$type<Record<string, unknown>>(),
-  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-}));
+// activities moved to @bob/notifications/schema (Phase 7B-2 Task 18).
 
 // workItemArtifacts / CreateWorkItemArtifactSchema moved to @bob/work-items/schema (Phase 7B-2 Task 12).
 
-export const notifications = pgTable("notifications", (t) => ({
-  id: t.uuid().notNull().primaryKey().defaultRandom(),
-  userId: t
-    .text()
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  workItemId: t
-    .uuid()
-    .references(() => workItems.id, { onDelete: "cascade" }),
-  actorId: t.text().references(() => user.id, { onDelete: "set null" }),
-  type: workItemNotificationTypeEnum().notNull(),
-  title: t.text().notNull(),
-  body: t.text(),
-  url: t.text(),
-  read: t.boolean().notNull().default(false),
-  readAt: t.timestamp({ mode: "string", withTimezone: true }),
-  archivedAt: t.timestamp({ mode: "string", withTimezone: true }),
-  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-}));
+// notifications / CreateNotificationSchema moved to @bob/notifications/schema (Phase 7B-2 Task 18).
 
-export const CreateNotificationSchema = createInsertSchema(notifications, {
-  type: z.enum(workItemNotificationType),
-  title: z.string().min(1).max(256),
-  body: z.string().optional(),
-  url: z.string().url().optional(),
-}).omit({
-  id: true,
-  read: true,
-  readAt: true,
-  archivedAt: true,
-  createdAt: true,
-});
-
-// 6.1a Device Push Tokens (for mobile notifications)
-export const devicePushTokens = pgTable("device_push_tokens", (t) => ({
-  id: t.uuid().notNull().primaryKey().defaultRandom(),
-  userId: t
-    .text()
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  deviceType: t.varchar({ length: 20 }).notNull(), // 'ios' | 'android' | 'web'
-  expoPushToken: t.text().notNull(),
-  deviceName: t.text(),
-  enabled: t.boolean().notNull().default(true),
-  lastSeenAt: t.timestamp({ mode: "string", withTimezone: true }),
-  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-}));
-
-export const CreateDevicePushTokenSchema = createInsertSchema(
-  devicePushTokens,
-  {
-    deviceType: z.enum(["ios", "android", "web"]),
-    expoPushToken: z.string(),
-    deviceName: z.string().optional(),
-    enabled: z.boolean().default(true),
-  },
-).omit({
-  id: true,
-  userId: true,
-  createdAt: true,
-  lastSeenAt: true,
-});
+// devicePushTokens / CreateDevicePushTokenSchema moved to @bob/notifications/schema (Phase 7B-2 Task 18).
 
 // gitProviderConnectionsRelations / pullRequestsRelations / prReviewsRelations /
 // featureBranchesRelations / featureBranchTaskPRsRelations / gitCommitsRelations
@@ -535,43 +417,13 @@ export const CreateDevicePushTokenSchema = createInsertSchema(
 
 // commentsRelations moved to @bob/work-items/schema (Phase 7B-2 Task 12).
 
-export const activitiesRelations = relations(activities, ({ one }) => ({
-  workItem: one(workItems, {
-    fields: [activities.workItemId],
-    references: [workItems.id],
-  }),
-  user: one(user, {
-    fields: [activities.userId],
-    references: [user.id],
-  }),
-}));
+// activitiesRelations moved to @bob/notifications/schema (Phase 7B-2 Task 18).
 
 // workItemArtifactsRelations moved to @bob/work-items/schema (Phase 7B-2 Task 12).
 
-export const notificationsRelations = relations(notifications, ({ one }) => ({
-  user: one(user, {
-    fields: [notifications.userId],
-    references: [user.id],
-  }),
-  workItem: one(workItems, {
-    fields: [notifications.workItemId],
-    references: [workItems.id],
-  }),
-  actor: one(user, {
-    fields: [notifications.actorId],
-    references: [user.id],
-  }),
-}));
+// notificationsRelations moved to @bob/notifications/schema (Phase 7B-2 Task 18).
 
-export const devicePushTokensRelations = relations(
-  devicePushTokens,
-  ({ one }) => ({
-    user: one(user, {
-      fields: [devicePushTokens.userId],
-      references: [user.id],
-    }),
-  }),
-);
+// devicePushTokensRelations moved to @bob/notifications/schema (Phase 7B-2 Task 18).
 
 // webhookConfigsRelations / webhookDeliveriesRelations moved to
 // @bob/webhooks/schema (Phase 7B-2 Task 16).
