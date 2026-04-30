@@ -13,24 +13,6 @@ export {
   sessions,
   accounts,
   verifications,
-  usersInsertSchema,
-  usersSelectSchema,
-  sessionsInsertSchema,
-  sessionsSelectSchema,
-  accountsInsertSchema,
-  accountsSelectSchema,
-  verificationsInsertSchema,
-  verificationsSelectSchema,
-} from "@gmacko/core/db/schema/auth";
-export type {
-  User,
-  NewUser,
-  Session,
-  NewSession,
-  Account,
-  NewAccount,
-  Verification,
-  NewVerification,
 } from "@gmacko/core/db/schema/auth";
 export * from "@bob/settings/schema";
 export * from "@bob/projects/schema";

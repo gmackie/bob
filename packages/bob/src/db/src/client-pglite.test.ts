@@ -40,6 +40,7 @@ describe("client-pglite", () => {
         "agent_runs",
         "tenants",
         "user", // packages/bob/src/auth/src/schema.ts
+        "users", // gmacko auth table (Phase 7B-3)
       ];
       for (const t of tables) {
         const result = await h.db.execute(
