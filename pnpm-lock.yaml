@@ -863,9 +863,15 @@ importers:
       '@elevenlabs/client':
         specifier: ^0.13.0
         version: 0.13.1(@types/dom-mediacapture-record@1.0.22)
+      '@gmacko/bob':
+        specifier: workspace:*
+        version: link:../..
       '@trpc/server':
         specifier: 'catalog:'
         version: 11.7.2(typescript@5.9.3)
+      effect:
+        specifier: 4.0.0-beta.43
+        version: 4.0.0-beta.43
       superjson:
         specifier: 2.2.3
         version: 2.2.3
