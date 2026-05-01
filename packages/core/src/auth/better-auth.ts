@@ -81,6 +81,12 @@ export interface InitAuthOptions {
    * disable this by passing `false`.
    */
   readonly bootstrapTenancy?: boolean;
+  /**
+   * When set, enables cross-subdomain cookie sharing by configuring
+   * better-auth's `advanced.crossSubDomainCookies`. The value should be
+   * a domain like `.blder.bot` (leading dot includes all subdomains).
+   */
+  readonly cookieDomain?: string;
 }
 
 export function initAuth(opts: InitAuthOptions): AuthInstance {
@@ -194,6 +200,16 @@ export function initAuth(opts: InitAuthOptions): AuthInstance {
       ),
     ),
     ...(databaseHooks ? { databaseHooks } : {}),
+    ...(opts.cookieDomain
+      ? {
+          advanced: {
+            crossSubDomainCookies: {
+              enabled: true,
+              domain: opts.cookieDomain,
+            },
+          },
+        }
+      : {}),
   } satisfies BetterAuthOptions;
 
   return betterAuth(config);

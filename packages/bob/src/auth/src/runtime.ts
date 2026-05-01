@@ -73,6 +73,11 @@ export interface AuthRuntimeOptions {
    * Defaults to the gmacko default (true). Tests can disable with `false`.
    */
   readonly bootstrapTenancy?: boolean;
+  /**
+   * When set, enables cross-subdomain cookie sharing (e.g. `.blder.bot`).
+   * Forwarded to `initAuth`'s `cookieDomain` option.
+   */
+  readonly cookieDomain?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -148,6 +153,7 @@ export function createAuthRuntime(opts: AuthRuntimeOptions): AuthRuntimeBundle {
     trustedOrigins: opts.trustedOrigins,
     emailAndPassword: opts.emailAndPassword,
     bootstrapTenancy: opts.bootstrapTenancy,
+    cookieDomain: opts.cookieDomain,
   });
 
   // 2. Build layers.
