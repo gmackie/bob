@@ -7,6 +7,9 @@ dist/
 .env
 .env.local
 
+# Generated OpenAPI specs
+dist/openapi/
+
 # Python
 __pycache__/
 *.egg-info/
