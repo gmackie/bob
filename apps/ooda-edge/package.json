@@ -1,0 +1,40 @@
+{
+  "name": "@gmacko/ooda-edge",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vinext dev --port 3002",
+    "build": "vinext build",
+    "start": "vinext start",
+    "deploy": "vinext deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@gmacko/core": "workspace:*",
+    "@gmacko/ooda": "workspace:*",
+    "@tanstack/react-query": "catalog:",
+    "@trpc/client": "catalog:",
+    "@trpc/server": "catalog:",
+    "@trpc/tanstack-react-query": "catalog:",
+    "better-auth": "catalog:",
+    "drizzle-orm": "^0.45.2",
+    "postgres": "^3.4.9",
+    "react": "catalog:react19",
+    "react-dom": "catalog:react19",
+    "reagraph": "^4.30.8",
+    "superjson": "catalog:",
+    "vinext": "0.0.41"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "1.32.3",
+    "@gmacko/tailwind": "workspace:*",
+    "@gmacko/tsconfig": "workspace:*",
+    "@tailwindcss/postcss": "catalog:",
+    "@types/react": "catalog:react19",
+    "@types/react-dom": "catalog:react19",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "vite": "8.0.8",
+    "wrangler": "4.83.0"
+  }
+}
