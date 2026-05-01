@@ -27,7 +27,6 @@ import { planningRouter } from "@bob/api/router/planning";
 import { planSessionRouter } from "@bob/api/router/planSession";
 import { linkRouter } from "@bob/api/router/link";
 import { planRouter } from "@bob/api/router/plan";
-import { postRouter } from "@bob/api/router/post";
 import { projectRouter } from "@bob/api/router/project";
 import { publicApiRouter } from "@bob/api/router/publicApi";
 import { pullRequestRouter } from "@bob/api/router/pullRequest";
@@ -72,7 +71,6 @@ const edgeRouterRecord = {
   planSession: planSessionRouter,
   link: linkRouter,
   plan: planRouter,
-  post: postRouter,
   project: projectRouter,
   publicApi: publicApiRouter,
   publicWorkItems: publicWorkItemsRouter,

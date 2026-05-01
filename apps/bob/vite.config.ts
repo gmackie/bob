@@ -9,6 +9,33 @@ const target = (process.env.BOB_BUILD_TARGET ?? "cloudflare") as
 const isDev = process.env.NODE_ENV !== "production" && !process.env.CF_PAGES;
 const useCloudflarePlugin = !isDev && target === "cloudflare";
 
+const rpcStubPath = path.resolve(__dirname, "src/lib/rpc-stub.ts");
+const rpcRealPath = path.resolve(__dirname, "src/server/rpc");
+
+/**
+ * Custom Vite plugin that redirects ~/server/rpc to the edge-safe stub
+ * when building for Cloudflare Workers. This must be a plugin (not a simple
+ * alias) because the `~` alias resolves first, turning `~/server/rpc` into
+ * the absolute path before other aliases can match.
+ */
+function rpcStubPlugin() {
+  return {
+    name: "bob-rpc-stub",
+    enforce: "pre" as const,
+    resolveId(source: string) {
+      // vinext resolves `~` before plugins run, so the import arrives as
+      // "/src/server/rpc" rather than "~/server/rpc". Match both forms.
+      if (
+        source === "~/server/rpc" ||
+        source === "/src/server/rpc" ||
+        source.startsWith(rpcRealPath)
+      ) {
+        return rpcStubPath;
+      }
+    },
+  };
+}
+
 const nodeAliases: Record<string, string> = {
   "~": path.resolve(__dirname, "src"),
 };
@@ -23,6 +50,7 @@ const cloudflareAliases: Record<string, string> = {
 
 export default defineConfig({
   plugins: [
+    ...(target === "cloudflare" ? [rpcStubPlugin()] : []),
     vinext(),
     ...(useCloudflarePlugin
       ? [
