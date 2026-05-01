@@ -16,3 +16,5 @@ __pycache__/
 .pytest_cache/
 packages/research-backend/.venv/
 .ruff_cache/
+.gstack/
+.wrangler/

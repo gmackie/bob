@@ -1,10 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { GraphCanvas as Reagraph } from "reagraph";
 
 import { useTRPC } from "~/trpc/react";
+
+const Reagraph = lazy(() =>
+  import("reagraph").then((m) => ({ default: m.GraphCanvas })),
+);
 
 interface GraphCanvasProps {
   threadId: string;
@@ -176,12 +179,20 @@ export function GraphCanvas({ threadId }: GraphCanvasProps) {
 
   return (
     <div className="relative h-full w-full">
-      <Reagraph
-        nodes={nodes}
-        edges={edges}
-        onNodeClick={(node) => setSelectedNodeId(node.id)}
-        onCanvasClick={() => setSelectedNodeId(null)}
-      />
+      <Suspense
+        fallback={
+          <div className="flex h-full items-center justify-center text-sm text-[#8A8580]">
+            loading graph...
+          </div>
+        }
+      >
+        <Reagraph
+          nodes={nodes}
+          edges={edges}
+          onNodeClick={(node) => setSelectedNodeId(node.id)}
+          onCanvasClick={() => setSelectedNodeId(null)}
+        />
+      </Suspense>
       {selectedNode && (
         <NodeDetailPanel
           node={selectedNode}
