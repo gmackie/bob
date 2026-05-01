@@ -22,6 +22,13 @@ export default defineConfig({
   resolve: {
     alias: {
       "~": path.resolve(__dirname, "src"),
+      "node:fs": path.resolve(__dirname, "src/lib/fs-stub.ts"),
+      "node:os": path.resolve(__dirname, "src/lib/os-stub.ts"),
+      "pg-native": path.resolve(__dirname, "src/lib/pg-native-stub.ts"),
     },
+  },
+  ssr: {
+    noExternal: ["postgres", "drizzle-orm", /^@gmacko\//],
+    external: ["pg", "pg-native", "pg-pool", "@electric-sql/pglite"],
   },
 });
