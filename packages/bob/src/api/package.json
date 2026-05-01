@@ -91,7 +91,6 @@
     "@bob/execution": "workspace:*",
     "@bob/execution-lib": "workspace:*",
     "@bob/work-items": "workspace:*",
-    "@bob/validators": "workspace:*",
     "@elevenlabs/client": "^0.13.0",
     "@gmacko/bob": "workspace:*",
     "@gmacko/core": "workspace:*",
