@@ -16,6 +16,7 @@ export const toolsRouter = {
    * without re-fetching the full history each time.
    */
   toolLogsByThread: publicProcedure
+    .meta({ openapi: { method: "GET", path: "/api/research/tools/logs", tags: ["research.tools"] } })
     .input(
       z.object({
         threadId: z.string().uuid(),
@@ -23,6 +24,7 @@ export const toolsRouter = {
         since: z.date().optional(),
       }),
     )
+    .output(z.any())
     .query(async ({ ctx, input }) => {
       const conditions = [eq(toolCallLog.threadId, input.threadId)];
       if (input.since) {
@@ -76,6 +78,7 @@ export const toolsRouter = {
    * `startedAt` is populated server-side via the column default.
    */
   toolCallLogInsert: authedProcedure
+    .meta({ openapi: { method: "POST", path: "/api/research/tools/insert", tags: ["research.tools"], protect: true } })
     .input(
       z.object({
         threadId: z.string().uuid(),
@@ -84,6 +87,7 @@ export const toolsRouter = {
         args: z.unknown().optional(),
       }),
     )
+    .output(z.any())
     .mutation(async ({ ctx, input }) => {
       const rows = await ctx.db
         .insert(toolCallLog)
@@ -103,6 +107,7 @@ export const toolsRouter = {
    * never calls this with both populated.
    */
   toolCallLogFinish: authedProcedure
+    .meta({ openapi: { method: "POST", path: "/api/research/tools/finish", tags: ["research.tools"], protect: true } })
     .input(
       z.object({
         id: z.string().uuid(),
@@ -110,6 +115,7 @@ export const toolsRouter = {
         error: z.string().nullable().optional(),
       }),
     )
+    .output(z.any())
     .mutation(async ({ ctx, input }) => {
       const updated = await ctx.db
         .update(toolCallLog)

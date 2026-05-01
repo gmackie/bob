@@ -22,6 +22,7 @@ export const entitiesRouter = {
    * the dashboard can link back to the originating thread.
    */
   notesByEntity: vaultScopedProcedure
+    .meta({ openapi: { method: "GET", path: "/api/research/entities/notes", tags: ["research.entities"] } })
     .input(
       z.object({
         entityName: z.string().min(1),
@@ -39,6 +40,7 @@ export const entitiesRouter = {
         limit: z.number().int().min(1).max(100).default(20),
       }),
     )
+    .output(z.any())
     .query(async ({ ctx, input }) => {
       const conditions = [eq(noteEntity.name, input.entityName)];
       if (input.entityType) {
@@ -87,12 +89,14 @@ export const entitiesRouter = {
    * an empty list when the sidecar is unreachable or unconfigured.
    */
   relatedNotes: vaultScopedProcedure
+    .meta({ openapi: { method: "GET", path: "/api/research/entities/related", tags: ["research.entities"] } })
     .input(
       z.object({
         noteId: z.string().min(1),
         limit: z.number().int().min(1).max(50).default(10),
       }),
     )
+    .output(z.any())
     .query(async ({ input }) => {
       const apiUrl = process.env.RESEARCH_API_URL;
       if (!apiUrl) {
@@ -134,6 +138,7 @@ export const entitiesRouter = {
    * Optionally filter to a single entity type.
    */
   entityIndex: vaultScopedProcedure
+    .meta({ openapi: { method: "GET", path: "/api/research/entities", tags: ["research.entities"] } })
     .input(
       z.object({
         entityType: z
@@ -150,6 +155,7 @@ export const entitiesRouter = {
         limit: z.number().int().min(1).max(200).default(50),
       }),
     )
+    .output(z.any())
     .query(async ({ ctx, input }) => {
       const conditions = [];
       if (input.entityType) {

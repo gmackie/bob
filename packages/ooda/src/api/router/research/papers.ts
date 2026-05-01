@@ -29,6 +29,7 @@ export const papersRouter = {
    * keeps those fields so we can wire them in when the data lands.
    */
   papersSearchVault: vaultScopedProcedure
+    .meta({ openapi: { method: "GET", path: "/api/research/papers/search", tags: ["research.papers"] } })
     .input(
       z.object({
         query: z.string().min(1),
@@ -37,6 +38,7 @@ export const papersRouter = {
         limit: z.number().int().min(1).max(100).default(20),
       }),
     )
+    .output(z.any())
     .query(async ({ ctx, input }) => {
       const t = ctx.vaultTables;
       const { query, yearFrom, minInfluence, limit } = input;
@@ -140,22 +142,26 @@ export const papersRouter = {
    *   - otherwise     → fallback to sources.external_id
    */
   paperById: vaultScopedProcedure
+    .meta({ openapi: { method: "GET", path: "/api/research/papers/get", tags: ["research.papers"] } })
     .input(
       z.object({
-        id: z.union([z.number().int().positive(), z.string().min(1)]),
+        id: z.string().min(1),
       }),
     )
+    .output(z.any())
     .query(async ({ ctx, input }) => {
       const t = ctx.vaultTables;
 
       // Build the right join target based on which field the id looks
       // like. Picking ONE condition keeps the query plan small vs
       // OR-ing across four columns on every lookup.
+      // Note: id is always a string (OpenAPI query param); detect
+      // numeric ids by regex and coerce for the sources.id lookup.
       let whereExpr;
-      if (typeof input.id === "number") {
-        whereExpr = eq(t.sources.id, input.id);
+      const s = input.id;
+      if (/^\d+$/.test(s)) {
+        whereExpr = eq(t.sources.id, Number(s));
       } else {
-        const s = input.id;
         if (/^10\./.test(s)) {
           whereExpr = eq(t.graphNode.doi, s);
         } else if (/^[0-9a-f]{40}$/i.test(s)) {

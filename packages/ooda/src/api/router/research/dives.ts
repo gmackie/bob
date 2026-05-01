@@ -25,7 +25,9 @@ export const divesRouter = {
   // write-side during a dive). When personal-vault support lands, swap
   // this to `vaultScopedProcedure` and forward `ctx.vaultSchema`.
   diveSpawn: authedProcedure
+    .meta({ openapi: { method: "POST", path: "/api/research/dives/spawn", tags: ["research.dives"], protect: true } })
     .input(DiveSpawnInput)
+    .output(z.any())
     .mutation(async ({ input }) => {
       const client = getBackendClient();
       return client.spawnDive({
@@ -39,7 +41,9 @@ export const divesRouter = {
     }),
 
   diveStatus: publicProcedure
+    .meta({ openapi: { method: "GET", path: "/api/research/dives/status", tags: ["research.dives"] } })
     .input(z.object({ id: z.string().uuid() }))
+    .output(z.any())
     .query(async ({ input }) => {
       const client = getBackendClient();
       const row = await client.getDiveStatus(input.id);
@@ -53,12 +57,14 @@ export const divesRouter = {
     }),
 
   diveResults: publicProcedure
+    .meta({ openapi: { method: "GET", path: "/api/research/dives/results", tags: ["research.dives"] } })
     .input(
       z.object({
         id: z.string().uuid(),
         topK: z.number().int().min(1).max(100).default(10),
       }),
     )
+    .output(z.any())
     .query(async ({ input }) => {
       const client = getBackendClient();
       const row = await client.getDiveResults(input.id, input.topK);
@@ -78,12 +84,14 @@ export const divesRouter = {
    * "Active dives" panel to surface what the buddy's been up to.
    */
   divesRecent: vaultScopedProcedure
+    .meta({ openapi: { method: "GET", path: "/api/research/dives/recent", tags: ["research.dives"] } })
     .input(
       z.object({
         limit: z.number().int().min(1).max(100).default(20),
         sinceDays: z.number().int().min(1).max(90).default(7),
       }),
     )
+    .output(z.any())
     .query(async ({ ctx, input }) => {
       const sinceDate = new Date(
         Date.now() - input.sinceDays * 24 * 60 * 60 * 1000,
