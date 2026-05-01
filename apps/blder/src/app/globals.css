@@ -1,0 +1,14 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "@gmacko/tailwind/theme";
+
+@source "../../../../packages/core/src/ui/*.{ts,tsx}";
+
+@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant light (&:where(.light, .light *));
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+}

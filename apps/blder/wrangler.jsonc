@@ -1,0 +1,23 @@
+{
+  "name": "blder-bot-platform",
+  "main": "./worker/index.js",
+  "compatibility_date": "2025-12-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "routes": [{ "pattern": "blder.bot", "custom_domain": true }],
+  "assets": {
+    "directory": "dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "none"
+  },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "c1f467f772dc4ce99d99e572df74c121"
+    }
+  ],
+  "vars": {
+    "FRONTEND_URL": "https://blder.bot",
+    "NODE_ENV": "production"
+  }
+}
