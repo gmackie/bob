@@ -4,6 +4,8 @@ import type { OpenAPIV3_1 } from "openapi-types";
 import { integrations } from "@bob/config";
 
 import { workItemsRestOperations } from "./contracts/work-items-rest";
+import { generateOpenApiFromRouter } from "./contracts/router-openapi";
+import type { RouterOpenApiConfig } from "./contracts/router-openapi";
 
 export interface OpenApiConfig {
   title: string;
@@ -118,4 +120,30 @@ export function getOpenApiSpec(config?: Partial<OpenApiConfig>): string {
   }
 
   return JSON.stringify(generateApiDocument(config), null, 2);
+}
+
+// ---------------------------------------------------------------------------
+// Full-router OpenAPI generation (auto-introspects the tRPC router tree)
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate a complete OpenAPI 3.1 document covering every procedure in a
+ * tRPC router. This introspects the router's `_def.record` at runtime,
+ * so no manual annotation is needed.
+ *
+ * @param router - The tRPC `appRouter` (or any router / raw record).
+ * @param config - Optional overrides for document metadata.
+ */
+export function generateFullBobApiDocument(
+  router: Record<string, unknown>,
+  config: Partial<OpenApiConfig> = {},
+): OpenAPIV3_1.Document {
+  const merged = { ...defaultConfig, ...config };
+
+  return generateOpenApiFromRouter(router, {
+    title: merged.title,
+    version: merged.version,
+    description: merged.description,
+    baseUrl: merged.baseUrl,
+  } satisfies RouterOpenApiConfig);
 }
