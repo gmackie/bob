@@ -1,12 +1,60 @@
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap");
+
+@import "tailwindcss";
+@import "tw-animate-css";
 @import "@gmacko/tailwind/theme";
 
-@custom-variant dark (&:where(.dark, .dark *));
-@custom-variant light (&:where(.light, .light *));
+@theme {
+  --font-serif: "Instrument Serif", serif;
+}
 
 @source "../../../../packages/core/src/ui/*.{ts,tsx}";
 
+@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant light (&:where(.light, .light *));
+@custom-variant auto (&:where(.auto, .auto *));
+
+@utility container {
+  margin-inline: auto;
+  padding-inline: 2rem;
+  @media (width >= --theme(--breakpoint-sm)) {
+    max-width: none;
+  }
+  @media (width >= 1400px) {
+    max-width: 1400px;
+  }
+}
+
 @layer base {
   * {
-    @apply border-border;
+    border-color: var(--color-border);
+  }
+  body {
+    letter-spacing: var(--tracking-normal);
+  }
+
+  :root {
+    --background: #111113;
+    --foreground: #E8E4DF;
+    --card: #1A1A1E;
+    --card-foreground: #E8E4DF;
+    --popover: #1A1A1E;
+    --popover-foreground: #E8E4DF;
+    --primary: #D4A04A;
+    --primary-foreground: #111113;
+    --secondary: #1A1A1E;
+    --secondary-foreground: #E8E4DF;
+    --muted: #1A1A1E;
+    --muted-foreground: #8A8580;
+    --accent: #D4A04A;
+    --accent-foreground: #111113;
+    --destructive: #C45454;
+    --destructive-foreground: #E8E4DF;
+    --border: #2A2A2F;
+    --input: #2A2A2F;
+    --ring: #D4A04A;
+    --color-border: #2A2A2F;
+    --color-bg: #111113;
+    --color-text: #E8E4DF;
   }
 }

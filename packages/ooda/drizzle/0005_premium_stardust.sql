@@ -1,0 +1,1 @@
+ALTER TABLE "thread_memory" ADD COLUMN "embedding_model" text;

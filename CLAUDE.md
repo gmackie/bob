@@ -9,7 +9,7 @@ Three package namespaces, six eventual apps + Bob's services + desktops.
 ### Packages
 
 - `packages/core` — Shared infrastructure. Former 30 `@gmacko/*` packages now live here as subpaths: `auth`, `db`, `agent`, `contracts`, `ui`, `models`, `wiki`-adjacent infra, etc.
-- `packages/ooda` — OODA-specific code (wiki article writer, cross-linker, ext).
+- `packages/ooda` — OODA research workstation. 16 subpath exports: `db`, `api`, `thread-model`, `thread-workspace`, `provenance`, `capability-registry`, `runner-protocol`, `source-connectors`, `imports`, `domain-packs`, `vault`, `buddy-tools`, `agent-adapters`, `wiki`, `ext`. Uses tRPC (not Effect-RPC) — conversion to Effect-RPC deferred to Phase 8C.
 - `packages/bob` — Bob's source tree as nested workspace packages. 25 `@bob/*` packages (plus one unscoped `bob`) preserved unchanged for now; per-area rewriting happens in 7B-2..N. See `docs/plans/phase-7b/03-bob-copy-verification.md` for the full inventory.
 
 ### Apps
@@ -18,7 +18,9 @@ Reference (gmacko stack):
 - `apps/core` — gmacko reference Next.js app, hosts the Effect-RPC route (formerly `apps/web`).
 - `apps/mobile-core` — gmacko reference Expo app (formerly `apps/mobile`).
 - `apps/desktop` — gmacko reference desktop (Electron).
-- `apps/ooda` — OODA-specific routes (capture/explore/graph/wiki), promoted out of `apps/core` in 7B-1b.
+- `apps/ooda` — OODA research workstation (Next.js 16, port 3001). Full web app with tRPC handler at `/api/trpc/`. Pages: threads, research, capture, health.
+- `apps/ooda-runner` — OODA runner process. Long-lived Node process, registers with API, claims sessions, executes Codex/Claude adapters.
+- `apps/ooda-cli` — OODA CLI tool. Thin wrapper around thread-workspace operations.
 
 Bob (copied verbatim, runs unchanged):
 - `apps/bob/` — Bob's main web app (Vite + CF Workers).
@@ -37,10 +39,11 @@ Eventual 6-app target: `apps/{core,bob,ooda,mobile-core,mobile-bob,mobile-ooda}`
 
 ## Stack
 
-Two stacks coexist until per-area migrations land in 7B-2..N:
+Three stacks coexist until per-area migrations land:
 
 - **Gmacko reference:** Effect 4.0.0-beta.43, Effect-RPC, Drizzle ORM, PGlite/PostgreSQL, Next.js 16, React 19, Expo 55, Tailwind CSS 4, NativeWind 5, CVA, Anthropic SDK.
 - **Bob:** tRPC, better-auth, Pusher, Vite, CF Workers, Expo 55, Electron 40, Drizzle, React 19.
+- **OODA:** tRPC v11.7, Drizzle ORM 0.45, Next.js 16, Vitest 4, Python/FastAPI sidecar (`packages/research-backend/`). Schema + runner convergence in Phase 8B; tRPC → Effect-RPC in Phase 8C.
 
 ## Themes
 
@@ -54,7 +57,9 @@ Themes will eventually be co-located in `@gmacko/core/ui` (locked decision).
 cd apps/core && pnpm dev             # gmacko reference Next.js (port 3000, hosts RPC route)
 cd apps/mobile-core && pnpm dev      # gmacko reference Expo
 cd apps/desktop && pnpm dev          # gmacko reference Electron
-cd apps/ooda && pnpm dev             # OODA Next.js app
+cd apps/ooda && pnpm dev             # OODA Next.js app (port 3001)
+cd apps/ooda-runner && pnpm dev      # OODA runner process
+cd packages/research-backend && uv run uvicorn research_backend.main:app --reload --port 8000  # Python sidecar
 cd apps/bob && pnpm dev              # Bob's main web app (Vite)
 cd apps/bob-server && pnpm dev       # Bob's Node server
 cd apps/mobile-bob && pnpm dev       # Bob mobile (Expo)

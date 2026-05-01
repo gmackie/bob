@@ -1,0 +1,35 @@
+{
+  "_comment": "Five synthetic threads with known overlaps. 'topic' is a short keyword bag used to derive a deterministic embedding in tests; 'papers' are source_ids for citation-overlap. Pairs (T1,T2) and (T1,T3) share a topic; (T1,T2) also share >=3 papers. T4 is isolated. T5 shares papers with T1 but a different topic.",
+  "threads": [
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "label": "T1 attention mechanisms",
+      "topic": "attention transformer",
+      "papers": [101, 102, 103, 104, 105]
+    },
+    {
+      "id": "22222222-2222-2222-2222-222222222222",
+      "label": "T2 transformer scaling",
+      "topic": "attention transformer",
+      "papers": [101, 102, 103, 201]
+    },
+    {
+      "id": "33333333-3333-3333-3333-333333333333",
+      "label": "T3 self-attention survey",
+      "topic": "attention transformer",
+      "papers": [301, 302]
+    },
+    {
+      "id": "44444444-4444-4444-4444-444444444444",
+      "label": "T4 protein folding",
+      "topic": "protein folding",
+      "papers": [401, 402]
+    },
+    {
+      "id": "55555555-5555-5555-5555-555555555555",
+      "label": "T5 graph neural nets",
+      "topic": "graph neural network",
+      "papers": [101, 102, 103, 501]
+    }
+  ]
+}

@@ -11,7 +11,10 @@
     "test": "turbo run test",
     "lint": "turbo run lint --continue",
     "typecheck": "turbo run typecheck",
-    "dev:all": "bash scripts/dev.sh"
+    "dev:all": "bash scripts/dev.sh",
+    "dev:ooda": "turbo watch dev --filter=@gmacko/ooda-web",
+    "dev:ooda-runner": "turbo watch dev --filter=@gmacko/ooda-runner",
+    "dev:research": "cd packages/research-backend && uv run uvicorn research_backend.main:app --reload --port 8000"
   },
   "pnpm": {
     "overrides": {
