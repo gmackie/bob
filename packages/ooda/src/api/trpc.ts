@@ -27,6 +27,16 @@ export const createTRPCRouter = t.router;
 
 export const publicProcedure = t.procedure;
 
+export const runnerProcedure = t.procedure.use(async ({ ctx, next }) => {
+  const secret = process.env.OODA_RUNNER_SECRET;
+  if (!secret) return next();
+  const bearer = ctx.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  if (!bearer || bearer !== secret) {
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid runner secret" });
+  }
+  return next();
+});
+
 export const authedProcedure = t.procedure.use(async ({ ctx, next }) => {
   const token = extractSessionToken(ctx.headers);
   if (!token) {

@@ -96,7 +96,7 @@ export const threadsRouter = {
     };
   }),
 
-  updateStatus: publicProcedure
+  updateStatus: authedProcedure
     .input(
       z.object({
         id: z.string(),

@@ -13,7 +13,7 @@ import {
 import { graphExploration } from "@gmacko/ooda/db/schema";
 
 import { vaultScopedProcedure } from "../../middleware/vault-scope";
-import { publicProcedure } from "../../trpc";
+import { publicProcedure, authedProcedure } from "../../trpc";
 import { DiveSpawnInput, getBackendClient } from "./_helpers";
 
 export const divesRouter = {
@@ -24,7 +24,7 @@ export const divesRouter = {
   // Vault scoping: V1.5 is research-vault-only (research-backend owns the
   // write-side during a dive). When personal-vault support lands, swap
   // this to `vaultScopedProcedure` and forward `ctx.vaultSchema`.
-  diveSpawn: publicProcedure
+  diveSpawn: authedProcedure
     .input(DiveSpawnInput)
     .mutation(async ({ input }) => {
       const client = getBackendClient();

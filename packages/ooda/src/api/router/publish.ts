@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { publishDraft, listFiles } from "@gmacko/ooda/vault";
 
-import { publicProcedure } from "../trpc";
+import { publicProcedure, authedProcedure } from "../trpc";
 
 /**
  * Resolve PERSONAL_WEBSITE_PATH from the environment.
@@ -28,7 +28,7 @@ function getWebsitePath(): string {
 const siteSchema = z.enum(["gmacko", "grahammackie", "gmac"]);
 
 export const publishRouter = {
-  draft: publicProcedure
+  draft: authedProcedure
     .input(
       z.object({
         title: z.string().min(1),

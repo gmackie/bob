@@ -5,7 +5,7 @@ import { z } from "zod";
 import { and, desc, eq, gt } from "@gmacko/ooda/db";
 import { toolCallLog } from "@gmacko/ooda/db/schema";
 
-import { publicProcedure } from "../../trpc";
+import { publicProcedure, authedProcedure } from "../../trpc";
 
 export const toolsRouter = {
   /**
@@ -75,7 +75,7 @@ export const toolsRouter = {
    *
    * `startedAt` is populated server-side via the column default.
    */
-  toolCallLogInsert: publicProcedure
+  toolCallLogInsert: authedProcedure
     .input(
       z.object({
         threadId: z.string().uuid(),
@@ -102,7 +102,7 @@ export const toolsRouter = {
    * `resultSummary` (on success) or `error` (on failure). The middleware
    * never calls this with both populated.
    */
-  toolCallLogFinish: publicProcedure
+  toolCallLogFinish: authedProcedure
     .input(
       z.object({
         id: z.string().uuid(),

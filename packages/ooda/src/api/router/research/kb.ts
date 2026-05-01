@@ -47,7 +47,7 @@ export const kbRouter = {
       );
     }),
 
-  compileKb: publicProcedure
+  compileKb: authedProcedure
     .input(z.object({ name: z.string() }))
     .mutation(({ input }) => {
       return sidecarPostValidated(
@@ -56,7 +56,7 @@ export const kbRouter = {
       );
     }),
 
-  importChats: publicProcedure
+  importChats: authedProcedure
     .input(z.object({ data: z.unknown() }))
     .mutation(({ input }) => {
       return sidecarPost("/api/chats/import", input.data);

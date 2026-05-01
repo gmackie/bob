@@ -10,9 +10,11 @@ export function createRunnerTRPCClient(serverUrl: string): TRPCClient<AppRouter>
         transformer: SuperJSON,
         url: `${serverUrl}/api/trpc`,
         headers() {
-          return {
-            "x-trpc-source": "runner",
-          };
+          const h: Record<string, string> = { "x-trpc-source": "runner" };
+          if (process.env.OODA_RUNNER_SECRET) {
+            h["authorization"] = `Bearer ${process.env.OODA_RUNNER_SECRET}`;
+          }
+          return h;
         },
       }),
     ],

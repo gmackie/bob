@@ -47,11 +47,10 @@ def create_app(overrides: dict[str, str] | None = None) -> FastAPI:
 
     app = FastAPI(title="OODA Research Backend", version="0.1.0", lifespan=lifespan)
 
-    # CORS — allow all origins in development; tighten for production
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
+        allow_origins=[os.getenv("OODA_CORS_ORIGIN", "http://localhost:3000")],
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )

@@ -12,7 +12,7 @@ import {
   hasConflicts,
 } from "@gmacko/ooda/vault";
 
-import { publicProcedure } from "../trpc";
+import { publicProcedure, authedProcedure } from "../trpc";
 
 const vaultKindSchema = z.enum(["personal", "research"]);
 
@@ -66,7 +66,7 @@ export const vaultRouter = {
       return readFile(vaultPath, input.filePath);
     }),
 
-  write: publicProcedure
+  write: authedProcedure
     .input(
       z.object({
         vaultKind: vaultKindSchema,
@@ -82,7 +82,7 @@ export const vaultRouter = {
       return { success: true };
     }),
 
-  promote: publicProcedure
+  promote: authedProcedure
     .input(
       z.object({
         vaultKind: vaultKindSchema,
@@ -103,7 +103,7 @@ export const vaultRouter = {
       return { success: true };
     }),
 
-  sync: publicProcedure
+  sync: authedProcedure
     .input(z.object({ vaultKind: vaultKindSchema }))
     .mutation(async ({ input }) => {
       const vaultPath = getVaultPath(input.vaultKind);

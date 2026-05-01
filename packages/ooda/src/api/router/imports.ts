@@ -12,7 +12,7 @@ import {
   type ImportFormat,
 } from "@gmacko/ooda/imports";
 
-import { publicProcedure } from "../trpc";
+import { publicProcedure, authedProcedure } from "../trpc";
 
 const vaultKindSchema = z.enum(["personal", "research"]);
 
@@ -35,7 +35,7 @@ export const importsRouter = {
    * Dry-run normalization. Detects format and returns a preview of the first
    * few conversations without touching the database.
    */
-  normalize: publicProcedure
+  normalize: authedProcedure
     .input(z.object({ rawJson: z.unknown() }))
     .mutation(({ input }) => {
       const { format, conversations } = normalizeOrThrow(input.rawJson);
@@ -54,7 +54,7 @@ export const importsRouter = {
    * Normalize the payload, convert each conversation to a source record,
    * and insert into the chosen vault's `sources` table.
    */
-  importConversations: publicProcedure
+  importConversations: authedProcedure
     .input(
       z.object({
         rawJson: z.unknown(),

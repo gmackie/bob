@@ -1,5 +1,5 @@
 import { readdir, readFile as fsReadFile } from "node:fs/promises";
-import { join, relative, extname, basename } from "node:path";
+import { join, relative, extname, basename, resolve, normalize } from "node:path";
 
 import matter from "gray-matter";
 
@@ -37,6 +37,14 @@ export async function readFile(
   vaultPath: string,
   filePath: string,
 ): Promise<VaultFile> {
+  if (filePath.includes("..")) {
+    throw new Error(`Path traversal detected: "${filePath}" contains ".."`);
+  }
+  const resolved = resolve(vaultPath, filePath);
+  const normalizedVault = normalize(vaultPath);
+  if (!resolved.startsWith(normalizedVault + "/") && resolved !== normalizedVault) {
+    throw new Error(`Path "${filePath}" resolves outside vault root`);
+  }
   const fullPath = join(vaultPath, filePath);
   const raw = await fsReadFile(fullPath, "utf-8");
   const parsed = matter(raw);

@@ -4,10 +4,10 @@ import { z } from "zod";
 import { eq, and, gt } from "@gmacko/ooda/db";
 import { runnerDevice, runnerSession, sessionEvent } from "@gmacko/ooda/db/schema";
 
-import { publicProcedure } from "../trpc";
+import { publicProcedure, runnerProcedure } from "../trpc";
 
 export const runnerRouter = {
-  register: publicProcedure
+  register: runnerProcedure
     .input(
       z.object({
         name: z.string(),
@@ -43,7 +43,7 @@ export const runnerRouter = {
         .returning();
     }),
 
-  heartbeat: publicProcedure
+  heartbeat: runnerProcedure
     .input(z.object({ runnerId: z.string() }))
     .mutation(({ ctx, input }) => {
       return ctx.db
@@ -60,7 +60,7 @@ export const runnerRouter = {
     return ctx.db.query.runnerDevice.findMany();
   }),
 
-  createSession: publicProcedure
+  createSession: runnerProcedure
     .input(
       z.object({
         threadId: z.string(),
@@ -93,7 +93,7 @@ export const runnerRouter = {
       });
     }),
 
-  sendPrompt: publicProcedure
+  sendPrompt: runnerProcedure
     .input(
       z.object({
         threadId: z.string(),
@@ -155,7 +155,7 @@ export const runnerRouter = {
       });
     }),
 
-  pushSessionEvent: publicProcedure
+  pushSessionEvent: runnerProcedure
     .input(
       z.object({
         sessionId: z.string(),
@@ -171,7 +171,7 @@ export const runnerRouter = {
       return event;
     }),
 
-  claimSession: publicProcedure
+  claimSession: runnerProcedure
     .input(z.object({ sessionId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       // Atomically claim: UPDATE WHERE status='pending' ensures only one caller wins
@@ -188,7 +188,7 @@ export const runnerRouter = {
       return claimed ?? null;
     }),
 
-  updateSessionStatus: publicProcedure
+  updateSessionStatus: runnerProcedure
     .input(
       z.object({
         sessionId: z.string(),
@@ -266,7 +266,7 @@ export const runnerRouter = {
       return (device?.capabilities ?? []) as string[];
     }),
 
-  requestPromotion: publicProcedure
+  requestPromotion: runnerProcedure
     .input(
       z.object({
         sessionId: z.string(),
