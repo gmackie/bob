@@ -43,7 +43,13 @@ export const authBundle: AuthRuntimeBundle = createAuthRuntime({
   githubClientId: process.env.AUTH_GITHUB_ID ?? "",
   githubClientSecret: process.env.AUTH_GITHUB_SECRET ?? "",
   githubScopes: ["user:email", "repo", "read:user"],
-  trustedOrigins: process.env.TRUSTED_ORIGINS?.split(",").map((o) => o.trim()),
+  cookieDomain: ".blder.bot",
+  trustedOrigins: [
+    "https://blder.bot",
+    "https://bob.blder.bot",
+    "https://ooda.blder.bot",
+    ...(process.env.TRUSTED_ORIGINS?.split(",").map((o) => o.trim()) ?? []),
+  ],
 });
 
 // Re-export the auth instance for the /api/auth/[...all] route handler.
