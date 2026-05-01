@@ -2,14 +2,14 @@ import { existsSync, readdirSync, statSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 
-import { getAgentCommand } from "@bob/legacy";
-import { agentFactory } from "@bob/legacy/agents";
+import { getAgentCommand } from "./legacy";
+import { agentFactory } from "./legacy/agents";
 import {
   AgentService,
   DEFAULT_USER_ID,
   GitService,
   TerminalService,
-} from "@bob/legacy/services";
+} from "./legacy/services";
 
 declare global {
   var __executionServiceManager: any;

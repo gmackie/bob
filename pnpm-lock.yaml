@@ -112,9 +112,6 @@ importers:
       '@bob/execution':
         specifier: workspace:*
         version: link:../bob-execution
-      '@bob/legacy':
-        specifier: workspace:*
-        version: link:../../packages/bob/src/legacy
       '@bob/monitoring':
         specifier: workspace:*
         version: link:../../packages/bob/src/monitoring
@@ -242,9 +239,12 @@ importers:
       '@bob/db':
         specifier: workspace:*
         version: link:../../packages/bob/src/db
-      '@bob/legacy':
-        specifier: workspace:*
-        version: link:../../packages/bob/src/legacy
+      node-pty:
+        specifier: ^1.0.0
+        version: 1.1.0
+      ws:
+        specifier: ^8.18.0
+        version: 8.20.0
     devDependencies:
       '@bob/eslint-config':
         specifier: workspace:*
@@ -258,6 +258,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 22.19.17
+      '@types/ws':
+        specifier: ^8.5.13
+        version: 8.18.1
       eslint:
         specifier: 'catalog:'
         version: 9.39.4(jiti@2.6.1)
@@ -1300,28 +1303,6 @@ importers:
       prettier:
         specifier: 'catalog:'
         version: 3.8.3
-      typescript:
-        specifier: 'catalog:'
-        version: 5.9.3
-
-  packages/bob/src/legacy:
-    dependencies:
-      node-pty:
-        specifier: ^1.0.0
-        version: 1.1.0
-      ws:
-        specifier: ^8.18.0
-        version: 8.20.0
-    devDependencies:
-      '@bob/tsconfig':
-        specifier: workspace:*
-        version: link:../../../../tooling/bob-typescript
-      '@types/node':
-        specifier: 'catalog:'
-        version: 22.19.17
-      '@types/ws':
-        specifier: ^8.5.13
-        version: 8.18.1
       typescript:
         specifier: 'catalog:'
         version: 5.9.3

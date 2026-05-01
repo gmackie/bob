@@ -1,10 +1,52 @@
 import "server-only";
 
 import { exec, spawn } from "child_process";
+import { existsSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
 import { promisify } from "util";
 
-import type { AgentType } from "@bob/legacy";
-import { getAgentCommand } from "@bob/legacy";
+// Inlined from former @bob/legacy (retired in 7B-9)
+type AgentType =
+  | "claude"
+  | "cursor-agent"
+  | "codex"
+  | "gemini"
+  | "kiro"
+  | "opencode";
+
+const AGENT_COMMANDS: Record<AgentType, string> = {
+  claude: "claude",
+  codex: "codex",
+  gemini: "gemini",
+  opencode: "opencode",
+  kiro: "kiro-cli",
+  "cursor-agent": "cursor-agent",
+};
+
+function getAgentCommand(agentType: AgentType): string {
+  const command = AGENT_COMMANDS[agentType];
+  if (!command) return agentType;
+
+  const isDocker = process.env.DOCKER_ENV === "true";
+  const searchPaths: string[] = isDocker
+    ? ["/usr/local/bin", "/usr/bin"]
+    : [
+        ...(agentType === "opencode"
+          ? [join(homedir(), ".opencode", "bin")]
+          : []),
+        join(homedir(), ".local", "bin"),
+        "/usr/local/bin",
+        "/usr/bin",
+      ];
+
+  for (const searchPath of searchPaths) {
+    const fullPath = join(searchPath, command);
+    if (existsSync(fullPath)) return fullPath;
+  }
+
+  return command;
+}
 
 export const execAsync = promisify(exec);
 
