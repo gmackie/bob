@@ -43,6 +43,7 @@ export const graphRouter = {
    * deduped set of counterpart source_ids.
    */
   paperNeighborhood: vaultScopedProcedure
+    .meta({ openapi: { method: "GET", path: "/api/research/graph/neighborhood", tags: ["research.graph"] } })
     .input(
       z.object({
         sourceId: z.number().int().positive(),
@@ -53,6 +54,7 @@ export const graphRouter = {
         limit: z.number().int().min(1).max(100).default(20),
       }),
     )
+    .output(z.any())
     .query(async ({ ctx, input }) => {
       const t = ctx.vaultTables;
       const { sourceId, kinds, limit } = input;
@@ -173,6 +175,7 @@ export const graphRouter = {
    * the bound.
    */
   paperPath: vaultScopedProcedure
+    .meta({ openapi: { method: "GET", path: "/api/research/graph/path", tags: ["research.graph"] } })
     .input(
       z.object({
         from: z.number().int().positive(),
@@ -180,6 +183,7 @@ export const graphRouter = {
         maxHops: z.number().int().min(1).max(5).default(3),
       }),
     )
+    .output(z.any())
     .query(async ({ ctx, input }) => {
       const t = ctx.vaultTables;
       const { from, to, maxHops } = input;
@@ -270,11 +274,13 @@ export const graphRouter = {
     }),
 
   graphByThread: vaultScopedProcedure
+    .meta({ openapi: { method: "GET", path: "/api/research/graph/by-thread", tags: ["research.graph"] } })
     .input(
       z.object({
         threadId: z.string().uuid(),
       }),
     )
+    .output(z.any())
     .query(async ({ ctx, input }) => {
       const t = ctx.vaultTables;
 
@@ -355,7 +361,9 @@ export const graphRouter = {
    * counters so users see the vault's overall "shape" at a glance.
    */
   graphStats: vaultScopedProcedure
+    .meta({ openapi: { method: "GET", path: "/api/research/graph/stats", tags: ["research.graph"] } })
     .input(z.object({}))
+    .output(z.any())
     .query(async ({ ctx }) => {
       const t = ctx.vaultTables;
 

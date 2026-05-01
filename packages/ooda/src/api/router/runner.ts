@@ -8,6 +8,7 @@ import { publicProcedure, runnerProcedure } from "../trpc";
 
 export const runnerRouter = {
   register: runnerProcedure
+    .meta({ openapi: { method: "POST", path: "/api/runner/register", tags: ["runner"], protect: true } })
     .input(
       z.object({
         name: z.string(),
@@ -15,6 +16,7 @@ export const runnerRouter = {
         capabilities: z.array(z.string()).default([]),
       }),
     )
+    .output(z.any())
     .mutation(async ({ ctx, input }) => {
       // Upsert by name — avoid creating duplicate devices on runner restart
       const existing = await ctx.db.query.runnerDevice.findFirst({
@@ -44,7 +46,9 @@ export const runnerRouter = {
     }),
 
   heartbeat: runnerProcedure
+    .meta({ openapi: { method: "POST", path: "/api/runner/heartbeat", tags: ["runner"], protect: true } })
     .input(z.object({ runnerId: z.string() }))
+    .output(z.any())
     .mutation(({ ctx, input }) => {
       return ctx.db
         .update(runnerDevice)
@@ -56,11 +60,15 @@ export const runnerRouter = {
         .returning();
     }),
 
-  listDevices: publicProcedure.query(({ ctx }) => {
+  listDevices: publicProcedure
+    .meta({ openapi: { method: "GET", path: "/api/runner/devices", tags: ["runner"] } })
+    .output(z.any())
+    .query(({ ctx }) => {
     return ctx.db.query.runnerDevice.findMany();
   }),
 
   createSession: runnerProcedure
+    .meta({ openapi: { method: "POST", path: "/api/runner/sessions", tags: ["runner"], protect: true } })
     .input(
       z.object({
         threadId: z.string(),
@@ -70,6 +78,7 @@ export const runnerRouter = {
         comparisonId: z.string().optional(),
       }),
     )
+    .output(z.any())
     .mutation(({ ctx, input }) => {
       return ctx.db
         .insert(runnerSession)
@@ -78,7 +87,9 @@ export const runnerRouter = {
     }),
 
   listSessions: publicProcedure
+    .meta({ openapi: { method: "GET", path: "/api/runner/sessions", tags: ["runner"] } })
     .input(z.object({ threadId: z.string() }))
+    .output(z.any())
     .query(({ ctx, input }) => {
       return ctx.db.query.runnerSession.findMany({
         where: eq(runnerSession.threadId, input.threadId),
@@ -86,7 +97,9 @@ export const runnerRouter = {
     }),
 
   listSessionsByRunner: publicProcedure
+    .meta({ openapi: { method: "GET", path: "/api/runner/sessions/by-runner", tags: ["runner"] } })
     .input(z.object({ runnerId: z.string() }))
+    .output(z.any())
     .query(({ ctx, input }) => {
       return ctx.db.query.runnerSession.findMany({
         where: eq(runnerSession.runnerId, input.runnerId),
@@ -94,6 +107,7 @@ export const runnerRouter = {
     }),
 
   sendPrompt: runnerProcedure
+    .meta({ openapi: { method: "POST", path: "/api/runner/send-prompt", tags: ["runner"], protect: true } })
     .input(
       z.object({
         threadId: z.string(),
@@ -103,6 +117,7 @@ export const runnerRouter = {
         prompt: z.string().min(1),
       }),
     )
+    .output(z.any())
     .mutation(async ({ ctx, input }) => {
       // Create session record
       const [session] = await ctx.db
@@ -129,12 +144,14 @@ export const runnerRouter = {
     }),
 
   getSessionEvents: publicProcedure
+    .meta({ openapi: { method: "GET", path: "/api/runner/session-events", tags: ["runner"] } })
     .input(
       z.object({
         sessionId: z.string(),
         afterId: z.string().optional(),
       }),
     )
+    .output(z.any())
     .query(async ({ ctx, input }) => {
       // Build WHERE conditions
       const conditions = [eq(sessionEvent.sessionId, input.sessionId)];
@@ -156,6 +173,7 @@ export const runnerRouter = {
     }),
 
   pushSessionEvent: runnerProcedure
+    .meta({ openapi: { method: "POST", path: "/api/runner/session-events", tags: ["runner"], protect: true } })
     .input(
       z.object({
         sessionId: z.string(),
@@ -163,6 +181,7 @@ export const runnerRouter = {
         content: z.string(),
       }),
     )
+    .output(z.any())
     .mutation(async ({ ctx, input }) => {
       const [event] = await ctx.db
         .insert(sessionEvent)
@@ -172,7 +191,9 @@ export const runnerRouter = {
     }),
 
   claimSession: runnerProcedure
+    .meta({ openapi: { method: "POST", path: "/api/runner/claim-session", tags: ["runner"], protect: true } })
     .input(z.object({ sessionId: z.string() }))
+    .output(z.any())
     .mutation(async ({ ctx, input }) => {
       // Atomically claim: UPDATE WHERE status='pending' ensures only one caller wins
       const [claimed] = await ctx.db
@@ -189,6 +210,7 @@ export const runnerRouter = {
     }),
 
   updateSessionStatus: runnerProcedure
+    .meta({ openapi: { method: "POST", path: "/api/runner/update-session-status", tags: ["runner"], protect: true } })
     .input(
       z.object({
         sessionId: z.string(),
@@ -196,6 +218,7 @@ export const runnerRouter = {
         exitCode: z.number().optional(),
       }),
     )
+    .output(z.any())
     .mutation(async ({ ctx, input }) => {
       const updates: Record<string, unknown> = { status: input.status };
       if (input.status === "running") {
@@ -212,7 +235,10 @@ export const runnerRouter = {
         .returning();
     }),
 
-  getHealth: publicProcedure.query((): {
+  getHealth: publicProcedure
+    .meta({ openapi: { method: "GET", path: "/api/runner/health", tags: ["runner"] } })
+    .output(z.any())
+    .query((): {
     connectorId: string;
     status: "up" | "degraded" | "down" | "unknown";
     rateLimitRemaining: number | undefined;
@@ -258,7 +284,9 @@ export const runnerRouter = {
   }),
 
   listAdapters: publicProcedure
+    .meta({ openapi: { method: "GET", path: "/api/runner/adapters", tags: ["runner"] } })
     .input(z.object({ runnerId: z.string() }))
+    .output(z.any())
     .query(async ({ ctx, input }) => {
       const device = await ctx.db.query.runnerDevice.findFirst({
         where: eq(runnerDevice.id, input.runnerId),
@@ -267,6 +295,7 @@ export const runnerRouter = {
     }),
 
   requestPromotion: runnerProcedure
+    .meta({ openapi: { method: "POST", path: "/api/runner/request-promotion", tags: ["runner"], protect: true } })
     .input(
       z.object({
         sessionId: z.string(),
@@ -277,6 +306,7 @@ export const runnerRouter = {
         content: z.string().min(1),
       }),
     )
+    .output(z.any())
     .mutation(async ({ ctx, input }) => {
       // Store as a pending promotion event
       const [event] = await ctx.db

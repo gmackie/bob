@@ -14,7 +14,8 @@
     "dev:all": "bash scripts/dev.sh",
     "dev:ooda": "turbo watch dev --filter=@gmacko/ooda-web",
     "dev:ooda-runner": "turbo watch dev --filter=@gmacko/ooda-runner",
-    "dev:research": "cd packages/research-backend && uv run uvicorn research_backend.main:app --reload --port 8000"
+    "dev:research": "cd packages/research-backend && uv run uvicorn research_backend.main:app --reload --port 8000",
+    "generate:openapi": "tsx scripts/generate-openapi.ts"
   },
   "pnpm": {
     "overrides": {

@@ -43,6 +43,7 @@ export const interestsRouter = {
    * requested bucket.
    */
   inboxByThread: vaultScopedProcedure
+    .meta({ openapi: { method: "GET", path: "/api/research/interests/inbox-by-thread", tags: ["research.interests"] } })
     .input(
       z.object({
         threadId: z.string().uuid(),
@@ -52,6 +53,7 @@ export const interestsRouter = {
         limit: z.number().int().min(1).max(200).default(50),
       }),
     )
+    .output(z.any())
     .query(async ({ ctx, input }) => {
       const t = ctx.vaultTables;
 
@@ -127,12 +129,14 @@ export const interestsRouter = {
    * describe the OTHER side so the dashboard doesn't have to flip them.
    */
   linksByThread: publicProcedure
+    .meta({ openapi: { method: "GET", path: "/api/research/interests/links-by-thread", tags: ["research.interests"] } })
     .input(
       z.object({
         threadId: z.string().uuid(),
         limit: z.number().int().min(1).max(200).default(50),
       }),
     )
+    .output(z.any())
     .query(async ({ ctx, input }) => {
       // Alias `researchThread` on each side of the OR so we can join it
       // twice (once for the from-endpoint, once for the to-endpoint) and
@@ -197,12 +201,14 @@ export const interestsRouter = {
    * bridges the two so callers don't have to think about the enum.
    */
   inboxTriage: vaultScopedAuthedProcedure
+    .meta({ openapi: { method: "POST", path: "/api/research/interests/inbox-triage", tags: ["research.interests"], protect: true } })
     .input(
       z.object({
         id: z.string().uuid(),
         action: z.enum(["save", "dismiss", "promote"]),
       }),
     )
+    .output(z.any())
     .mutation(async ({ ctx, input }) => {
       const { findingsInbox } = ctx.vaultTables;
       const triage = (
@@ -242,7 +248,9 @@ export const interestsRouter = {
    * `ctx.vaultSchema` (Task 4.5 middleware).
    */
   interestRegister: vaultScopedAuthedProcedure
+    .meta({ openapi: { method: "POST", path: "/api/research/interests/register", tags: ["research.interests"], protect: true } })
     .input(CreateStandingInterestSchema)
+    .output(z.any())
     .mutation(async ({ ctx, input }) => {
       const { standingInterest } = ctx.vaultTables;
       const rows = await ctx.db
@@ -267,11 +275,13 @@ export const interestsRouter = {
    * at the top of the list, with a stable label-alpha tiebreak.
    */
   interestList: vaultScopedProcedure
+    .meta({ openapi: { method: "GET", path: "/api/research/interests/list", tags: ["research.interests"] } })
     .input(
       z.object({
         threadId: z.string().uuid().optional(),
       }),
     )
+    .output(z.any())
     .query(async ({ ctx, input }) => {
       const { standingInterest } = ctx.vaultTables;
 
@@ -300,6 +310,7 @@ export const interestsRouter = {
    * UPDATE that still burns a DB round-trip + acquires a row lock.
    */
   interestUpdate: vaultScopedAuthedProcedure
+    .meta({ openapi: { method: "POST", path: "/api/research/interests/update", tags: ["research.interests"], protect: true } })
     .input(
       z.object({
         id: z.string().uuid(),
@@ -309,6 +320,7 @@ export const interestsRouter = {
         label: z.string().min(1).optional(),
       }),
     )
+    .output(z.any())
     .mutation(async ({ ctx, input }) => {
       const { standingInterest } = ctx.vaultTables;
       const { id, ...patch } = input;
@@ -343,11 +355,13 @@ export const interestsRouter = {
    * "pause this interest" action.
    */
   interestDisable: vaultScopedAuthedProcedure
+    .meta({ openapi: { method: "POST", path: "/api/research/interests/disable", tags: ["research.interests"], protect: true } })
     .input(
       z.object({
         id: z.string().uuid(),
       }),
     )
+    .output(z.any())
     .mutation(async ({ ctx, input }) => {
       const { standingInterest } = ctx.vaultTables;
       const updated = await ctx.db
@@ -383,6 +397,7 @@ export const interestsRouter = {
    * drafts can only be written to a configured vault clone.
    */
   kbPromoteRequest: threadOwnerProcedure
+    .meta({ openapi: { method: "POST", path: "/api/research/interests/kb-promote", tags: ["research.interests"], protect: true } })
     .input(
       z.object({
         threadId: z.string().uuid(),
@@ -403,6 +418,7 @@ export const interestsRouter = {
         createdByThreadId: z.string().uuid().optional(),
       }),
     )
+    .output(z.any())
     .mutation(async ({ input }) => {
       const vaultPath = process.env.RESEARCH_VAULT_PATH;
       if (!vaultPath || vaultPath.trim() === "") {
@@ -451,7 +467,9 @@ export const interestsRouter = {
   // post-dates the cold memory — documented V1.5 simplification so we
   // still surface *something* for a brand-new-but-then-abandoned thread.
   coldThreadUpdatesByThread: vaultScopedProcedure
+    .meta({ openapi: { method: "GET", path: "/api/research/interests/cold-thread-updates", tags: ["research.interests"] } })
     .input(z.object({ threadId: z.string().uuid() }))
+    .output(z.any())
     .query(async ({ ctx, input }) => {
       const t = ctx.vaultTables;
 
@@ -530,6 +548,7 @@ export const interestsRouter = {
    * need thread scoping should use `inboxByThread` instead.
    */
   inboxVaultWide: vaultScopedProcedure
+    .meta({ openapi: { method: "GET", path: "/api/research/interests/inbox-vault-wide", tags: ["research.interests"] } })
     .input(
       z.object({
         triage: z
@@ -539,6 +558,7 @@ export const interestsRouter = {
         limit: z.number().int().min(1).max(200).default(50),
       }),
     )
+    .output(z.any())
     .query(async ({ ctx, input }) => {
       const t = ctx.vaultTables;
 

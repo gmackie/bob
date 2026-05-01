@@ -19,7 +19,10 @@ import {
 import { publicProcedure, authedProcedure } from "../trpc";
 
 export const threadsRouter = {
-  list: publicProcedure.query(({ ctx }) => {
+  list: publicProcedure
+    .meta({ openapi: { method: "GET", path: "/api/threads", tags: ["threads"] } })
+    .output(z.any())
+    .query(({ ctx }) => {
     return ctx.db.query.researchThread.findMany({
       orderBy: desc(researchThread.createdAt),
       limit: 50,
@@ -27,7 +30,9 @@ export const threadsRouter = {
   }),
 
   byId: publicProcedure
+    .meta({ openapi: { method: "GET", path: "/api/threads/by-id", tags: ["threads"] } })
     .input(z.object({ id: z.string() }))
+    .output(z.any())
     .query(({ ctx, input }) => {
       return ctx.db.query.researchThread.findFirst({
         where: eq(researchThread.id, input.id),
@@ -35,7 +40,9 @@ export const threadsRouter = {
     }),
 
   bySlug: publicProcedure
+    .meta({ openapi: { method: "GET", path: "/api/threads/by-slug", tags: ["threads"] } })
     .input(z.object({ slug: z.string() }))
+    .output(z.any())
     .query(({ ctx, input }) => {
       return ctx.db.query.researchThread.findFirst({
         where: eq(researchThread.slug, input.slug),
@@ -43,7 +50,9 @@ export const threadsRouter = {
     }),
 
   create: authedProcedure
+    .meta({ openapi: { method: "POST", path: "/api/threads", tags: ["threads"], protect: true } })
     .input(CreateResearchThreadSchema)
+    .output(z.any())
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.db
         .insert(researchThread)
@@ -63,7 +72,10 @@ export const threadsRouter = {
       return result;
     }),
 
-  sync: authedProcedure.mutation(async ({ ctx }) => {
+  sync: authedProcedure
+    .meta({ openapi: { method: "POST", path: "/api/threads/sync", tags: ["threads"], protect: true } })
+    .output(z.any())
+    .mutation(async ({ ctx }) => {
     const storageRoot =
       process.env.OODA_STORAGE_ROOT ?? join(homedir(), ".ooda", "threads");
 
@@ -97,12 +109,14 @@ export const threadsRouter = {
   }),
 
   updateStatus: authedProcedure
+    .meta({ openapi: { method: "POST", path: "/api/threads/update-status", tags: ["threads"], protect: true } })
     .input(
       z.object({
         id: z.string(),
         status: z.enum(["active", "paused", "archived", "completed"]),
       }),
     )
+    .output(z.any())
     .mutation(({ ctx, input }) => {
       return ctx.db
         .update(researchThread)
@@ -112,7 +126,9 @@ export const threadsRouter = {
     }),
 
   listNotes: publicProcedure
+    .meta({ openapi: { method: "GET", path: "/api/threads/notes", tags: ["threads"] } })
     .input(z.object({ slug: z.string() }))
+    .output(z.any())
     .query(({ input }) => {
       const storageRoot =
         process.env.OODA_STORAGE_ROOT ??
@@ -127,7 +143,10 @@ export const threadsRouter = {
       }
     }),
 
-  listDomainPacks: publicProcedure.query(() => {
+  listDomainPacks: publicProcedure
+    .meta({ openapi: { method: "GET", path: "/api/threads/domain-packs", tags: ["threads"] } })
+    .output(z.any())
+    .query(() => {
     return listPacks().map((p) => ({
       id: p.id,
       name: p.name,
@@ -137,7 +156,9 @@ export const threadsRouter = {
   }),
 
   getDomainPackTemplate: publicProcedure
+    .meta({ openapi: { method: "GET", path: "/api/threads/domain-pack-template", tags: ["threads"] } })
     .input(z.object({ packId: z.string() }))
+    .output(z.any())
     .query(({ input }) => {
       return getDomainPackTemplate(input.packId) ?? null;
     }),

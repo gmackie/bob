@@ -41,6 +41,7 @@ export const memoryRouter = {
    *     land alongside multi-user support).
    */
   threadMemorySearch: vaultScopedProcedure
+    .meta({ openapi: { method: "GET", path: "/api/research/memory/search", tags: ["research.memory"] } })
     .input(
       z.object({
         query: z.string().min(1),
@@ -49,6 +50,7 @@ export const memoryRouter = {
         limit: z.number().int().min(1).max(50).default(10),
       }),
     )
+    .output(z.any())
     .query(async ({ ctx, input }) => {
       const { query, scope, threadId, limit } = input;
 
@@ -150,6 +152,7 @@ export const memoryRouter = {
    * memories alongside scheduler-authored ones.
    */
   threadMemoryUpdate: vaultScopedAuthedProcedure
+    .meta({ openapi: { method: "POST", path: "/api/research/memory/update", tags: ["research.memory"], protect: true } })
     .input(
       z.object({
         threadId: z.string().uuid(),
@@ -157,6 +160,7 @@ export const memoryRouter = {
         topics: z.array(z.string()).max(64).default([]),
       }),
     )
+    .output(z.any())
     .mutation(async ({ ctx, input }) => {
       const { threadId, summaryMd, topics } = input;
 

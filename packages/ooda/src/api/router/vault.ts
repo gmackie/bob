@@ -43,30 +43,35 @@ function getVaultPath(kind: z.infer<typeof vaultKindSchema>): string {
 
 export const vaultRouter = {
   list: publicProcedure
+    .meta({ openapi: { method: "GET", path: "/api/vault", tags: ["vault"] } })
     .input(
       z.object({
         vaultKind: vaultKindSchema,
         glob: z.string().optional(),
       }),
     )
+    .output(z.any())
     .query(async ({ input }) => {
       const vaultPath = getVaultPath(input.vaultKind);
       return listFiles(vaultPath, input.glob);
     }),
 
   read: publicProcedure
+    .meta({ openapi: { method: "GET", path: "/api/vault/read", tags: ["vault"] } })
     .input(
       z.object({
         vaultKind: vaultKindSchema,
         filePath: z.string(),
       }),
     )
+    .output(z.any())
     .query(async ({ input }) => {
       const vaultPath = getVaultPath(input.vaultKind);
       return readFile(vaultPath, input.filePath);
     }),
 
   write: authedProcedure
+    .meta({ openapi: { method: "POST", path: "/api/vault/write", tags: ["vault"], protect: true } })
     .input(
       z.object({
         vaultKind: vaultKindSchema,
@@ -75,6 +80,7 @@ export const vaultRouter = {
         frontmatter: z.record(z.string(), z.unknown()).optional(),
       }),
     )
+    .output(z.any())
     .mutation(async ({ input }) => {
       const vaultPath = getVaultPath(input.vaultKind);
       await writeFile(vaultPath, input.filePath, input.content, input.frontmatter);
@@ -83,6 +89,7 @@ export const vaultRouter = {
     }),
 
   promote: authedProcedure
+    .meta({ openapi: { method: "POST", path: "/api/vault/promote", tags: ["vault"], protect: true } })
     .input(
       z.object({
         vaultKind: vaultKindSchema,
@@ -92,6 +99,7 @@ export const vaultRouter = {
         frontmatter: z.record(z.string(), z.unknown()).optional(),
       }),
     )
+    .output(z.any())
     .mutation(async ({ input }) => {
       const vaultPath = getVaultPath(input.vaultKind);
       const filePath = `notes/${input.threadId}/${input.noteId}.md`;
@@ -104,14 +112,18 @@ export const vaultRouter = {
     }),
 
   sync: authedProcedure
+    .meta({ openapi: { method: "POST", path: "/api/vault/sync", tags: ["vault"], protect: true } })
     .input(z.object({ vaultKind: vaultKindSchema }))
+    .output(z.any())
     .mutation(async ({ input }) => {
       const vaultPath = getVaultPath(input.vaultKind);
       return pull(vaultPath);
     }),
 
   health: publicProcedure
+    .meta({ openapi: { method: "GET", path: "/api/vault/health", tags: ["vault"] } })
     .input(z.object({ vaultKind: vaultKindSchema }))
+    .output(z.any())
     .query(async ({ input }) => {
       const vaultPath = getVaultPath(input.vaultKind);
       const locked = await isLocked(vaultPath);

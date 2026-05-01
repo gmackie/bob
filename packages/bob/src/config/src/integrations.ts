@@ -32,8 +32,8 @@ export const integrations = {
   // Internationalization (default OFF)
   i18n: false,
 
-  // OpenAPI documentation (default OFF)
-  openapi: false,
+  // OpenAPI documentation (default ON)
+  openapi: true,
 } as const;
 
 export type Integrations = typeof integrations;

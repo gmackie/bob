@@ -23,7 +23,8 @@
     "./db/auth": "./src/db/auth.ts",
     "./db/listen-broker": "./src/db/listen-broker.ts",
     "./thread-workspace": "./src/thread-workspace/index.ts",
-    "./api": "./src/api/index.ts"
+    "./api": "./src/api/index.ts",
+    "./api/openapi": "./src/api/openapi.ts"
   },
   "scripts": {
     "test": "vitest run",
@@ -46,7 +47,9 @@
     "react": "^19.0.0",
     "simple-git": "^3.36.0",
     "superjson": "catalog:",
-    "zod": "^4.0.0"
+    "trpc-to-openapi": "catalog:",
+    "zod": "^4.0.0",
+    "zod-openapi": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "4.0.0-beta.43",

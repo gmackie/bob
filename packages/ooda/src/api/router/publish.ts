@@ -29,6 +29,7 @@ const siteSchema = z.enum(["gmacko", "grahammackie", "gmac"]);
 
 export const publishRouter = {
   draft: authedProcedure
+    .meta({ openapi: { method: "POST", path: "/api/publish/draft", tags: ["publish"], protect: true } })
     .input(
       z.object({
         title: z.string().min(1),
@@ -38,6 +39,7 @@ export const publishRouter = {
         date: z.string().optional(),
       }),
     )
+    .output(z.any())
     .mutation(async ({ input }) => {
       const websitePath = getWebsitePath();
       const filePath = await publishDraft(websitePath, {
@@ -50,7 +52,10 @@ export const publishRouter = {
       return { filePath };
     }),
 
-  listDrafts: publicProcedure.query(async () => {
+  listDrafts: publicProcedure
+    .meta({ openapi: { method: "GET", path: "/api/publish/drafts", tags: ["publish"] } })
+    .output(z.any())
+    .query(async () => {
     const websitePath = getWebsitePath();
     const draftsPath = `${websitePath}/_drafts`;
     try {
