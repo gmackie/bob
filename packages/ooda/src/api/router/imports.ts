@@ -36,7 +36,9 @@ export const importsRouter = {
    * few conversations without touching the database.
    */
   normalize: authedProcedure
+    .meta({ openapi: { method: "POST", path: "/api/imports/normalize", tags: ["imports"], protect: true } })
     .input(z.object({ rawJson: z.unknown() }))
+    .output(z.any())
     .mutation(({ input }) => {
       const { format, conversations } = normalizeOrThrow(input.rawJson);
       const preview = conversations.slice(0, 5).map((c) => ({
@@ -55,12 +57,14 @@ export const importsRouter = {
    * and insert into the chosen vault's `sources` table.
    */
   importConversations: authedProcedure
+    .meta({ openapi: { method: "POST", path: "/api/imports/import", tags: ["imports"], protect: true } })
     .input(
       z.object({
         rawJson: z.unknown(),
         vaultKind: vaultKindSchema,
       }),
     )
+    .output(z.any())
     .mutation(async ({ ctx, input }) => {
       const { conversations } = normalizeOrThrow(input.rawJson);
 
