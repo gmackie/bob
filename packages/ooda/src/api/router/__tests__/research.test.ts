@@ -6,15 +6,6 @@ vi.mock("@gmacko/ooda/db/client", () => ({
   db: {},
 }));
 
-// Mock session auth so authedProcedure passes without a real DB session.
-vi.mock("@gmacko/ooda/db/auth", () => ({
-  validateSessionToken: vi.fn().mockResolvedValue({ userId: "test-user", email: "test@example.com" }),
-  extractSessionToken: vi.fn().mockReturnValue("mock-session-token"),
-  SessionNotFoundError: class SessionNotFoundError extends Error {
-    constructor() { super("Session not found or expired"); this.name = "SessionNotFoundError"; }
-  },
-}));
-
 const { researchRouter } = await import("../research");
 
 describe("researchRouter", () => {
@@ -134,17 +125,31 @@ describe("researchRouter", () => {
  * pulling the full `appRouter` to keep the test hermetic: no Drizzle
  * schemas touched, no other routers imported.
  */
-const t = initTRPC.context<{ db: unknown; headers: Headers }>().create();
+/**
+ * Fake auth instance for tests. The `api.getSession` mock resolves to a
+ * valid session by default so `authedProcedure` passes. Tests that want
+ * to simulate unauthenticated callers can override `mockAuth.api.getSession`
+ * to return `null`.
+ */
+const mockAuth = {
+  api: {
+    getSession: vi.fn().mockResolvedValue({
+      user: { id: "test-user", email: "test@example.com" },
+      session: { id: "mock-session-id" },
+    }),
+  },
+} as unknown as import("@gmacko/core/auth").AuthInstance;
+
+const t = initTRPC.context<{ db: unknown; headers: Headers; auth?: unknown }>().create();
 const testRouter = t.router({ research: researchRouter });
 const createCallerRaw = t.createCallerFactory(testRouter);
 
-// Default headers for test callers. The `@gmacko/ooda/db/auth` mock above makes
-// `extractSessionToken` return a token and `validateSessionToken` resolve
-// for every request, so no real session is needed.
+// Default headers for test callers. The mock auth above makes
+// `api.getSession` resolve for every request, so no real session is needed.
 const defaultHeaders = () => new Headers({ host: "localhost:3100" });
 const createCaller = (
-  ctx: { db: unknown; headers?: Headers },
-) => createCallerRaw({ headers: defaultHeaders(), ...ctx });
+  ctx: { db: unknown; headers?: Headers; auth?: unknown },
+) => createCallerRaw({ headers: defaultHeaders(), auth: mockAuth, ...ctx });
 
 // --- Task 4.5: vault-scope middleware -----------------------------------
 
@@ -832,17 +837,20 @@ describe("researchRouter read procedures (Task 4.2)", () => {
 describe("researchRouter session auth guard", () => {
   // Write-side buddy mutations are gated on `authedProcedure` so
   // unauthenticated callers cannot mutate another user's rows.
-  // When `extractSessionToken` returns null, the procedure rejects
+  // When `auth.api.getSession` returns null, the procedure rejects
   // with UNAUTHORIZED before any tRPC resolver runs.
   it("rejects inboxTriage from an unauthenticated caller with UNAUTHORIZED", async () => {
-    // Temporarily override the mock to simulate missing token.
-    const authMock = await import("@gmacko/ooda/db/auth");
-    const extractMock = vi.mocked(authMock.extractSessionToken);
-    extractMock.mockReturnValueOnce(null);
+    // Create a mock auth that returns no session.
+    const noSessionAuth = {
+      api: {
+        getSession: vi.fn().mockResolvedValue(null),
+      },
+    } as unknown as import("@gmacko/core/auth").AuthInstance;
 
     const unauthCaller = createCallerRaw({
       db: {},
       headers: new Headers({ host: "ooda.example.com" }),
+      auth: noSessionAuth,
     });
     await expect(
       unauthCaller.research.inboxTriage({
@@ -850,6 +858,20 @@ describe("researchRouter session auth guard", () => {
         action: "save",
       }),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("rejects with INTERNAL_SERVER_ERROR when auth is not configured", async () => {
+    const noAuthCaller = createCallerRaw({
+      db: {},
+      headers: new Headers({ host: "ooda.example.com" }),
+      // auth intentionally omitted
+    });
+    await expect(
+      noAuthCaller.research.inboxTriage({
+        id: "3a4b6a8c-1122-4cdd-9eef-abcdef012345",
+        action: "save",
+      }),
+    ).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
   });
 });
 

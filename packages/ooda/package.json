@@ -20,7 +20,6 @@
     "./db": "./src/db/index.ts",
     "./db/client": "./src/db/client.ts",
     "./db/schema": "./src/db/schema.ts",
-    "./db/auth": "./src/db/auth.ts",
     "./db/listen-broker": "./src/db/listen-broker.ts",
     "./thread-workspace": "./src/thread-workspace/index.ts",
     "./api": "./src/api/index.ts",

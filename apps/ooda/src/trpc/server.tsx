@@ -6,8 +6,20 @@ import { createTRPCOptionsProxy } from "@trpc/tanstack-react-query";
 
 import type { AppRouter } from "@gmacko/ooda/api";
 import { appRouter, createTRPCContext } from "@gmacko/ooda/api";
+import { initAuth } from "@gmacko/core/auth";
+import { db } from "@gmacko/ooda/db/client";
 
 import { createQueryClient } from "./query-client";
+
+const auth = initAuth({
+  db,
+  pluralizeTables: true,
+  baseUrl: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3001",
+  productionUrl: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3001",
+  secret: process.env.AUTH_SECRET ?? "",
+  githubClientId: process.env.AUTH_GITHUB_ID ?? "",
+  githubClientSecret: process.env.AUTH_GITHUB_SECRET ?? "",
+});
 
 /**
  * This wraps the `createTRPCContext` helper and provides the required context for the tRPC API when
@@ -19,6 +31,7 @@ const createContext = cache(async () => {
 
   return createTRPCContext({
     headers: heads,
+    auth,
   });
 });
 

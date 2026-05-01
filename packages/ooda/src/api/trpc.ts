@@ -3,11 +3,14 @@ import superjson from "superjson";
 import type { OpenApiMeta } from "trpc-to-openapi";
 import { z, ZodError } from "zod";
 
+import type { AuthInstance } from "@gmacko/core/auth";
 import { db } from "@gmacko/ooda/db/client";
-import { validateSessionToken, extractSessionToken, SessionNotFoundError } from "@gmacko/ooda/db/auth";
 
-export const createTRPCContext = async (opts: { headers: Headers }) => {
-  return { db, headers: opts.headers };
+export const createTRPCContext = async (opts: {
+  headers: Headers;
+  auth?: AuthInstance;
+}) => {
+  return { db, headers: opts.headers, auth: opts.auth };
 };
 
 export const t = initTRPC
@@ -42,24 +45,30 @@ export const runnerProcedure = t.procedure.use(async ({ ctx, next }) => {
 });
 
 export const authedProcedure = t.procedure.use(async ({ ctx, next }) => {
-  const token = extractSessionToken(ctx.headers);
-  if (!token) {
+  if (!ctx.auth) {
     throw new TRPCError({
-      code: "UNAUTHORIZED",
-      message: "Missing session token",
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Auth not configured",
     });
   }
 
-  try {
-    const { userId, email } = await validateSessionToken(ctx.db, token);
-    return next({ ctx: { ...ctx, userId, email } });
-  } catch (err) {
-    if (err instanceof SessionNotFoundError) {
-      throw new TRPCError({
-        code: "UNAUTHORIZED",
-        message: "Invalid or expired session",
-      });
-    }
-    throw err;
+  const session = await ctx.auth.api.getSession({
+    headers: ctx.headers,
+  });
+
+  if (!session?.user) {
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "Not authenticated",
+    });
   }
+
+  return next({
+    ctx: {
+      ...ctx,
+      userId: session.user.id,
+      email: session.user.email,
+      session,
+    },
+  });
 });
