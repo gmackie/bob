@@ -1,6 +1,6 @@
 "use client";
 
-import { Badge } from "@bob/ui/badge";
+import { Badge } from "@gmacko/core/ui/badge";
 
 import { DEPLOY_COLOR, formatLabel } from "~/lib/design/colors";
 

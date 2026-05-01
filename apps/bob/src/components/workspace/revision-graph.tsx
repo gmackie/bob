@@ -2,8 +2,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { cn } from "@bob/ui";
-import { Badge } from "@bob/ui/badge";
+import { cn } from "@gmacko/core/ui";
+import { Badge } from "@gmacko/core/ui/badge";
 
 import { formatRelativeTime } from "~/lib/format/time";
 import { useTRPC } from "~/trpc/react";

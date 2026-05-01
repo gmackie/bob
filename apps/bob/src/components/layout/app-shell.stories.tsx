@@ -9,9 +9,9 @@ import {
   ChevronLeftIcon,
 } from "@radix-ui/react-icons";
 
-import { cn } from "@bob/ui";
-import { Badge } from "@bob/ui/badge";
-import { Button } from "@bob/ui/button";
+import { cn } from "@gmacko/core/ui";
+import { Badge } from "@gmacko/core/ui/badge";
+import { Button } from "@gmacko/core/ui/button";
 
 const meta: Meta = {
   title: "App/App Shell",

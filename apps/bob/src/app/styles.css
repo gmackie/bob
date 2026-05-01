@@ -1,10 +1,10 @@
 @import "tailwindcss/index.css";
 @import "tw-animate-css";
-@import "@bob/tailwind-config/theme";
+@import "@gmacko/tailwind/theme";
 
 @plugin "@tailwindcss/typography";
 
-@source "../../../../packages/ui/src/*.{ts,tsx}";
+@source "../../../../packages/core/src/ui/*.{ts,tsx}";
 
 @custom-variant dark (&:where(.dark, .dark *));
 @custom-variant light (&:where(.light, .light *));

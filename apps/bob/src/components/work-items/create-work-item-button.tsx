@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { PlusIcon } from "@radix-ui/react-icons";
 
-import { Button } from "@bob/ui/button";
+import { Button } from "@gmacko/core/ui/button";
 
 import { CreateWorkItemDialog } from "./create-work-item-dialog";
 

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 
-import { Badge } from "@bob/ui/badge";
+import { Badge } from "@gmacko/core/ui/badge";
 
 const meta: Meta = {
   title: "App/Command Palette",

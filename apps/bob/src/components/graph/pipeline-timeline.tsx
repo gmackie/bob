@@ -3,8 +3,8 @@
 import React from "react";
 import Link from "next/link";
 
-import { cn } from "@bob/ui";
-import { Badge } from "@bob/ui/badge";
+import { cn } from "@gmacko/core/ui";
+import { Badge } from "@gmacko/core/ui/badge";
 
 import { KIND_COLOR, STATUS_COLOR, formatLabel } from "~/lib/design/colors";
 

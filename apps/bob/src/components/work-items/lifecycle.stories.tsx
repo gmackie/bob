@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/react";
 
-import { cn } from "@bob/ui";
-import { Badge } from "@bob/ui/badge";
-import { Button } from "@bob/ui/button";
-import { Card, CardContent, CardHeader, CardFooter } from "@bob/ui/card";
-import { Separator } from "@bob/ui/separator";
+import { cn } from "@gmacko/core/ui";
+import { Badge } from "@gmacko/core/ui/badge";
+import { Button } from "@gmacko/core/ui/button";
+import { Card, CardContent, CardHeader, CardFooter } from "@gmacko/core/ui/card";
+import { Separator } from "@gmacko/core/ui/separator";
 
 const meta: Meta = {
   title: "Lifecycle/Work Items",

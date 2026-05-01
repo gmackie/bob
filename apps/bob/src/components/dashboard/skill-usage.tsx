@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { cn } from "@bob/ui";
+import { cn } from "@gmacko/core/ui";
 import { useTRPC } from "~/trpc/react";
 
 interface SkillStat {

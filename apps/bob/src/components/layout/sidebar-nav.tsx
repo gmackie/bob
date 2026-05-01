@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { DashboardIcon, GearIcon, BellIcon } from "@radix-ui/react-icons";
-import { cn } from "@bob/ui";
+import { cn } from "@gmacko/core/ui";
 
 export interface NavItem {
   icon: React.ComponentType<{ className?: string }>;

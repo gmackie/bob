@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { Badge } from "@bob/ui/badge";
+import { Badge } from "@gmacko/core/ui/badge";
 
 import { useChatPanel } from "~/components/chat/chat-panel-provider";
 import { useTRPC } from "~/trpc/react";

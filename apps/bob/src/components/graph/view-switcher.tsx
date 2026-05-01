@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 
-import { cn } from "@bob/ui";
+import { cn } from "@gmacko/core/ui";
 
 import type { WorkItemBoardItem } from "~/components/work-items/work-item-board";
 import { FilterableBoard } from "~/components/work-items/board-filter-bar";

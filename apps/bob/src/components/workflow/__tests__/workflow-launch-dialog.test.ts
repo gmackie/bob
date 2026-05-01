@@ -2,12 +2,12 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@bob/ui/badge", () => ({
+vi.mock("@gmacko/core/ui/badge", () => ({
   Badge: ({ children }: { children?: React.ReactNode }) =>
     React.createElement("span", null, children),
 }));
 
-vi.mock("@bob/ui/button", () => ({
+vi.mock("@gmacko/core/ui/button", () => ({
   Button: ({
     children,
     ...props
@@ -15,12 +15,12 @@ vi.mock("@bob/ui/button", () => ({
     React.createElement("button", props, children),
 }));
 
-vi.mock("@bob/ui/textarea", () => ({
+vi.mock("@gmacko/core/ui/textarea", () => ({
   Textarea: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) =>
     React.createElement("textarea", props),
 }));
 
-vi.mock("@bob/ui/dialog", () => ({
+vi.mock("@gmacko/core/ui/dialog", () => ({
   DialogFooter: ({
     children,
     ...props

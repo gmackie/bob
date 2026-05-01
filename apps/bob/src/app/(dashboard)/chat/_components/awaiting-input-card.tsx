@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { cn } from "@bob/ui";
+import { cn } from "@gmacko/core/ui";
 
 interface AwaitingInputCardProps {
   question: string;

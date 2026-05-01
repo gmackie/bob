@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 
-import { Button } from "@bob/ui/button";
+import { Button } from "@gmacko/core/ui/button";
 
 import { ProjectTemplatePanel } from "./project-template-panel";
 

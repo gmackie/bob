@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { cn } from "@bob/ui";
+import { cn } from "@gmacko/core/ui";
 import { useTRPC } from "~/trpc/react";
 
 const SESSION_TYPE_LABELS: Record<string, string> = {

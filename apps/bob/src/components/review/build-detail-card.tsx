@@ -1,8 +1,8 @@
 // apps/web/src/components/review/build-detail-card.tsx
 "use client";
 
-import { cn } from "@bob/ui";
-import { Badge } from "@bob/ui/badge";
+import { cn } from "@gmacko/core/ui";
+import { Badge } from "@gmacko/core/ui/badge";
 import { BUILD_COLOR, formatLabel } from "~/lib/design/colors";
 
 export interface BuildData {

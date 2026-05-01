@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { cn } from "@bob/ui";
+import { cn } from "@gmacko/core/ui";
 import { useTRPC } from "~/trpc/react";
 
 interface CaptureResult {

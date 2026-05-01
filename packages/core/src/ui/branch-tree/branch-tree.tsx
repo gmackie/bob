@@ -16,7 +16,7 @@ export function BranchTree({ tree, activeBranchId, onSelect, onCreateBranch }: B
         <button
           data-testid="create-branch-button"
           onClick={onCreateBranch}
-          className="mt-1 flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-sm text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-secondary)]"
+          className="mt-1 flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-secondary-foreground"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"

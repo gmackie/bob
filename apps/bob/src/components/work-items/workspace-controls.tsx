@@ -3,9 +3,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { toast } from "@bob/ui/toast";
-import { Badge } from "@bob/ui/badge";
-import { Button } from "@bob/ui/button";
+import { toast } from "@gmacko/core/ui/toast";
+import { Badge } from "@gmacko/core/ui/badge";
+import { Button } from "@gmacko/core/ui/button";
 
 import { OpenChatPanelButton } from "~/components/chat/open-chat-panel-button";
 import { BUILD_COLOR, formatLabel } from "~/lib/design/colors";

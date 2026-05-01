@@ -5,7 +5,7 @@ import Link from "next/link";
 import { MagnifyingGlassIcon } from "@radix-ui/react-icons";
 import { useQuery } from "@tanstack/react-query";
 
-import { Badge } from "@bob/ui/badge";
+import { Badge } from "@gmacko/core/ui/badge";
 
 import { KIND_COLOR } from "~/lib/design/colors";
 import { useTRPC } from "~/trpc/react";

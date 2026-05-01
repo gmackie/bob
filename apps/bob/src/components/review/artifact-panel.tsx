@@ -1,7 +1,7 @@
 // apps/web/src/components/review/artifact-panel.tsx
 "use client";
 
-import { cn } from "@bob/ui";
+import { cn } from "@gmacko/core/ui";
 
 export interface ArtifactItem {
   id: string;

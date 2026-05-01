@@ -1,13 +1,13 @@
 "use client";
 
-import { Badge } from "@bob/ui/badge";
+import { Badge } from "@gmacko/core/ui/badge";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@bob/ui/select";
+} from "@gmacko/core/ui/select";
 
 import { STATUS_COLOR, formatLabel } from "~/lib/design/colors";
 

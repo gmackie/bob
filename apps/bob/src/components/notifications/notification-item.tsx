@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import { cn } from "@bob/ui";
+import { cn } from "@gmacko/core/ui";
 
 import { formatRelativeTime } from "~/lib/format/time";
 

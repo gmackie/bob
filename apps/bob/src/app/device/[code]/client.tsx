@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@bob/ui/button";
+import { Button } from "@gmacko/core/ui/button";
 
 export function DeviceApprovalClient({ userCode }: { userCode: string }) {
   const [state, setState] = useState<"idle" | "loading" | "approved" | "error">(

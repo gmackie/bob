@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { cn } from "@bob/ui";
+import { cn } from "@gmacko/core/ui";
 
 interface PullRequest {
   id: string;

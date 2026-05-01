@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { toast } from "@bob/ui/toast";
-import { Button } from "@bob/ui/button";
-import { Textarea } from "@bob/ui/textarea";
+import { toast } from "@gmacko/core/ui/toast";
+import { Button } from "@gmacko/core/ui/button";
+import { Textarea } from "@gmacko/core/ui/textarea";
 
 import { useTRPC } from "~/trpc/react";
 

@@ -1,7 +1,7 @@
 import React from "react";
 import { notFound } from "next/navigation";
 
-import { Badge } from "@bob/ui/badge";
+import { Badge } from "@gmacko/core/ui/badge";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { NewIdeaButton } from "~/components/planning/new-idea-button";

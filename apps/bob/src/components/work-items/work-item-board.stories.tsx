@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react";
 
-import { cn } from "@bob/ui";
-import { Badge } from "@bob/ui/badge";
+import { cn } from "@gmacko/core/ui";
+import { Badge } from "@gmacko/core/ui/badge";
 
 const meta: Meta = {
   title: "App/Kanban Board",

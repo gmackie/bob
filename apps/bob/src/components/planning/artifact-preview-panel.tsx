@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { cn } from "@bob/ui";
+import { cn } from "@gmacko/core/ui";
 
 interface ArtifactPreviewPanelProps {
   /** Live content being built during the session */

@@ -4,7 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { ChevronRightIcon } from "@radix-ui/react-icons";
 
-import { cn } from "@bob/ui";
+import { cn } from "@gmacko/core/ui";
 
 export interface BreadcrumbItem {
   label: string;

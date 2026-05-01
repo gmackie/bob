@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@bob/ui";
+import { cn } from "@gmacko/core/ui";
 
 // Extension-to-color mapping for file type indicators
 function getFileIndicatorColor(name: string): string {

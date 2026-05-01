@@ -77,10 +77,11 @@ export function ThemeProvider({
     return () => mql.removeEventListener("change", handler);
   }, [mode]);
 
-  // Apply data-theme + data-mode to <html>.
+  // Apply data-theme + dark/light class to <html>.
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
-    document.documentElement.setAttribute("data-mode", resolvedMode);
+    document.documentElement.classList.remove("light", "dark");
+    document.documentElement.classList.add(resolvedMode);
   }, [theme, resolvedMode]);
 
   const setTheme = useCallback((next: Theme) => {

@@ -18,10 +18,10 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { cn } from "@bob/ui";
-import { Badge } from "@bob/ui/badge";
-import { Button } from "@bob/ui/button";
-import { toast } from "@bob/ui/toast";
+import { cn } from "@gmacko/core/ui";
+import { Badge } from "@gmacko/core/ui/badge";
+import { Button } from "@gmacko/core/ui/button";
+import { toast } from "@gmacko/core/ui/toast";
 
 import { KIND_COLOR, PRIORITY_COLOR, formatLabel } from "~/lib/design/colors";
 import { useTRPC } from "~/trpc/react";

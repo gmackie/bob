@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@bob/ui";
+import { cn } from "@gmacko/core/ui";
 
 import { STAGES, type WorkflowStage } from "~/lib/workflow/stage";
 

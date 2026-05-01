@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 
-import { cn } from "@bob/ui";
-import { Card } from "@bob/ui/card";
-import { Badge } from "@bob/ui/badge";
+import { cn } from "@gmacko/core/ui";
+import { Card } from "@gmacko/core/ui/card";
+import { Badge } from "@gmacko/core/ui/badge";
 
 import { useTRPC } from "~/trpc/react";
 

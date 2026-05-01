@@ -3,9 +3,9 @@
 import { useTransition } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { Button } from "@bob/ui/button";
-import { Label } from "@bob/ui/label";
-import { useTheme } from "@bob/ui/theme";
+import { Button } from "@gmacko/core/ui/button";
+import { Label } from "@gmacko/core/ui/label";
+import { useTheme } from "@gmacko/core/ui/theme";
 
 import { useTRPC } from "~/trpc/react";
 
@@ -28,11 +28,11 @@ export function PreferencesSection() {
     }),
   );
 
-  const { setTheme: applyTheme } = useTheme();
+  const { setMode } = useTheme();
 
   const handleThemeChange = (theme: "light" | "dark" | "system") => {
-    // Apply theme immediately via ThemeProvider
-    applyTheme(theme === "system" ? "auto" : theme);
+    // Apply mode immediately via ThemeProvider
+    setMode(theme);
     // Persist to database
     startTransition(() => {
       updatePreferences.mutate({ theme });

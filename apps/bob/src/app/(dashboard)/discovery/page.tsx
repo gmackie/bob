@@ -4,11 +4,11 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { cn } from "@bob/ui";
-import { Badge } from "@bob/ui/badge";
-import { Button } from "@bob/ui/button";
-import { Card } from "@bob/ui/card";
-import { toast } from "@bob/ui/toast";
+import { cn } from "@gmacko/core/ui";
+import { Badge } from "@gmacko/core/ui/badge";
+import { Button } from "@gmacko/core/ui/button";
+import { Card } from "@gmacko/core/ui/card";
+import { toast } from "@gmacko/core/ui/toast";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { useTRPC } from "~/trpc/react";

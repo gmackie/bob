@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 
-import { cn } from "@bob/ui";
+import { cn } from "@gmacko/core/ui";
 
 const meta: Meta = {
   title: "App/Notification Item",

@@ -2,7 +2,7 @@
 "use client";
 
 import { useState } from "react";
-import { cn } from "@bob/ui";
+import { cn } from "@gmacko/core/ui";
 
 export interface TestCase {
   name: string;

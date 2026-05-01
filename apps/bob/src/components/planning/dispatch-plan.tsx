@@ -3,21 +3,21 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { Badge } from "@bob/ui/badge";
-import { Button } from "@bob/ui/button";
+import { Badge } from "@gmacko/core/ui/badge";
+import { Button } from "@gmacko/core/ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@bob/ui/select";
-import { toast } from "@bob/ui/toast";
+} from "@gmacko/core/ui/select";
+import { toast } from "@gmacko/core/ui/toast";
 
 import { formatLabel } from "~/lib/design/colors";
 import { useTRPC } from "~/trpc/react";
 
-import type { badgeVariants } from "@bob/ui/badge";
+import type { badgeVariants } from "@gmacko/core/ui/badge";
 import type { VariantProps } from "class-variance-authority";
 
 type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;

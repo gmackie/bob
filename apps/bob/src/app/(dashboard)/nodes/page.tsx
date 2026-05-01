@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 
-import { cn } from "@bob/ui";
-import { Card } from "@bob/ui/card";
+import { cn } from "@gmacko/core/ui";
+import { Card } from "@gmacko/core/ui/card";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { useTRPC } from "~/trpc/react";

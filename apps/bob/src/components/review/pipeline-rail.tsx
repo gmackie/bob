@@ -1,7 +1,7 @@
 // apps/web/src/components/review/pipeline-rail.tsx
 "use client";
 
-import { cn } from "@bob/ui";
+import { cn } from "@gmacko/core/ui";
 
 export type PipelineNodeStatus = "done" | "active" | "failed" | "pending" | "approval";
 

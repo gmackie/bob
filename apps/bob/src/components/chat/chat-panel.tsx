@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Cross1Icon, ExternalLinkIcon } from "@radix-ui/react-icons";
 
-import { cn } from "@bob/ui";
+import { cn } from "@gmacko/core/ui";
 
 import { MessageStream } from "~/app/(dashboard)/chat/_components/message-stream";
 import { InputComposer } from "~/app/(dashboard)/chat/_components/input-composer";

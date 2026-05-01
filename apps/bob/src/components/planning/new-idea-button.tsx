@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { PlusIcon } from "@radix-ui/react-icons";
 
-import { Button } from "@bob/ui/button";
-import { toast } from "@bob/ui/toast";
+import { Button } from "@gmacko/core/ui/button";
+import { toast } from "@gmacko/core/ui/toast";
 import { useTRPC } from "~/trpc/react";
 
 interface NewIdeaButtonProps {

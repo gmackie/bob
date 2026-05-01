@@ -28,7 +28,7 @@ export function Composer({
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex items-end gap-2 border-t border-[var(--color-border)] bg-[var(--color-bg)] p-4"
+      className="flex items-end gap-2 border-t border-border bg-background p-4"
     >
       <textarea
         value={value}
@@ -37,7 +37,7 @@ export function Composer({
         disabled={disabled}
         rows={1}
         className={cn(
-          "flex-1 resize-none rounded-md border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 py-2 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]",
+          "flex-1 resize-none rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring",
         )}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey) {
@@ -48,7 +48,7 @@ export function Composer({
       />
       <Button
         type="submit"
-        size="md"
+        size="default"
         disabled={disabled || !value.trim()}
         aria-label="Send"
       >

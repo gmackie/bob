@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { toast } from "@bob/ui/toast";
-import { Button } from "@bob/ui/button";
+import { toast } from "@gmacko/core/ui/toast";
+import { Button } from "@gmacko/core/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -12,9 +12,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@bob/ui/dialog";
-import { Input } from "@bob/ui/input";
-import { Textarea } from "@bob/ui/textarea";
+} from "@gmacko/core/ui/dialog";
+import { Input } from "@gmacko/core/ui/input";
+import { Textarea } from "@gmacko/core/ui/textarea";
 
 import { useTRPC } from "~/trpc/react";
 

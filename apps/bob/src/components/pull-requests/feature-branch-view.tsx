@@ -5,10 +5,10 @@ import Link from "next/link";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 
-import { cn } from "@bob/ui";
-import { Button } from "@bob/ui/button";
-import { Input } from "@bob/ui/input";
-import { toast } from "@bob/ui/toast";
+import { cn } from "@gmacko/core/ui";
+import { Button } from "@gmacko/core/ui/button";
+import { Input } from "@gmacko/core/ui/input";
+import { toast } from "@gmacko/core/ui/toast";
 
 import { useTRPC } from "~/trpc/react";
 

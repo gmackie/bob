@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
-import { cn } from "@bob/ui";
+import { cn } from "@gmacko/core/ui";
 
 import type { SessionEvent } from "~/hooks/use-session-socket";
 

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { toast } from "@bob/ui/toast";
+import { toast } from "@gmacko/core/ui/toast";
 
 import { useTRPC } from "~/trpc/react";
 import type { WorkflowStage } from "~/lib/workflow/stage";

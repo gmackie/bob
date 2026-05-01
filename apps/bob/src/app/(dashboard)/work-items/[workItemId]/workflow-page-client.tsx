@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
-import { toast } from "@bob/ui/toast";
+import { toast } from "@gmacko/core/ui/toast";
 
 import { useTRPC } from "~/trpc/react";
 import { WorkflowPage, type WorkflowPageProps } from "~/components/workflow/workflow-page";

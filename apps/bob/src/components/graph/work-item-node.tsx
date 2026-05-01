@@ -4,8 +4,8 @@ import React, { memo } from "react";
 import Link from "next/link";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 
-import { cn } from "@bob/ui";
-import { Badge } from "@bob/ui/badge";
+import { cn } from "@gmacko/core/ui";
+import { Badge } from "@gmacko/core/ui/badge";
 
 import { KIND_COLOR, STATUS_COLOR, PRIORITY_COLOR, formatLabel } from "~/lib/design/colors";
 

@@ -24,7 +24,7 @@ beforeEach(() => {
     })),
   );
   document.documentElement.removeAttribute("data-theme");
-  document.documentElement.removeAttribute("data-mode");
+  document.documentElement.classList.remove("light", "dark");
   try {
     localStorage.clear();
   } catch {
@@ -80,51 +80,54 @@ describe("ThemeProvider", () => {
     expect(document.documentElement.getAttribute("data-theme")).toBe("bob");
   });
 
-  it("sets data-mode=light on <html> when defaultMode=light", () => {
+  it("sets .light class on <html> when defaultMode=light", () => {
     render(
       <ThemeProvider defaultTheme="bob" defaultMode="light">
         <ThemeConsumer />
       </ThemeProvider>,
     );
-    expect(document.documentElement.getAttribute("data-mode")).toBe("light");
+    expect(document.documentElement.classList.contains("light")).toBe(true);
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
     expect(screen.getByTestId("resolved-mode").textContent).toBe("light");
   });
 
-  it("sets data-mode=dark on <html> when defaultMode=dark", () => {
+  it("sets .dark class on <html> when defaultMode=dark", () => {
     render(
       <ThemeProvider defaultTheme="bob" defaultMode="dark">
         <ThemeConsumer />
       </ThemeProvider>,
     );
-    expect(document.documentElement.getAttribute("data-mode")).toBe("dark");
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    expect(document.documentElement.classList.contains("light")).toBe(false);
     expect(screen.getByTestId("resolved-mode").textContent).toBe("dark");
   });
 
-  it("resolves system mode via matchMedia (dark preference -> data-mode=dark)", () => {
+  it("resolves system mode via matchMedia (dark preference -> .dark class)", () => {
     mediaQueryMatches = true;
     render(
       <ThemeProvider defaultTheme="bob" defaultMode="system">
         <ThemeConsumer />
       </ThemeProvider>,
     );
-    expect(document.documentElement.getAttribute("data-mode")).toBe("dark");
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
     expect(screen.getByTestId("mode").textContent).toBe("system");
     expect(screen.getByTestId("resolved-mode").textContent).toBe("dark");
   });
 
-  it("listens to media-query change events and flips data-mode", () => {
+  it("listens to media-query change events and flips dark/light class", () => {
     mediaQueryMatches = true;
     render(
       <ThemeProvider defaultTheme="bob" defaultMode="system">
         <ThemeConsumer />
       </ThemeProvider>,
     );
-    expect(document.documentElement.getAttribute("data-mode")).toBe("dark");
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
     expect(mediaQueryListener).toBeTruthy();
     act(() => {
       mediaQueryListener?.({ matches: false } as unknown as MediaQueryListEvent);
     });
-    expect(document.documentElement.getAttribute("data-mode")).toBe("light");
+    expect(document.documentElement.classList.contains("light")).toBe(true);
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
     expect(screen.getByTestId("resolved-mode").textContent).toBe("light");
   });
 });
