@@ -30,15 +30,15 @@ vi.mock("os", () => ({
   homedir: () => "/Users/tester",
 }));
 
-vi.mock("@bob/legacy", () => ({
+vi.mock("./legacy", () => ({
   getAgentCommand: vi.fn(),
 }));
 
-vi.mock("@bob/legacy/agents", () => ({
+vi.mock("./legacy/agents", () => ({
   agentFactory: {},
 }));
 
-vi.mock("@bob/legacy/services", () => ({
+vi.mock("./legacy/services", () => ({
   DEFAULT_USER_ID: "default-user",
   GitService: vi.fn().mockImplementation(function GitService() {
     return {

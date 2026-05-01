@@ -9,9 +9,7 @@
     "skipLibCheck": true,
     "paths": {
       "@bob/db": ["../../packages/db/src/index.ts"],
-      "@bob/db/*": ["../../packages/db/src/*"],
-      "@bob/legacy": ["../../packages/legacy/src/index.ts"],
-      "@bob/legacy/*": ["../../packages/legacy/src/*"]
+      "@bob/db/*": ["../../packages/db/src/*"]
     }
   },
   "include": ["src/**/*.ts"],
