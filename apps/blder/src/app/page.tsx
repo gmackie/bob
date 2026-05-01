@@ -26,6 +26,15 @@ export default function HomePage() {
               &rarr;
             </span>
           </a>
+          <a
+            href="/nodes"
+            className="inline-flex items-center gap-2 rounded-xl border border-border bg-secondary px-6 py-3 text-sm font-medium text-foreground shadow-sm transition hover:bg-accent"
+          >
+            Nodes
+            <span className="text-muted-foreground" aria-hidden="true">
+              &rarr;
+            </span>
+          </a>
         </nav>
 
         <div className="mt-12">
