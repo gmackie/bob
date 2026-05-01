@@ -24,6 +24,7 @@
     "./db/listen-broker": "./src/db/listen-broker.ts",
     "./thread-workspace": "./src/thread-workspace/index.ts",
     "./api": "./src/api/index.ts",
+    "./api/edge": "./src/api/edge-router.ts",
     "./api/openapi": "./src/api/openapi.ts"
   },
   "scripts": {
