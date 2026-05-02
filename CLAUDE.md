@@ -94,3 +94,21 @@ Bob's source lives under `packages/bob/src/<pkg>/` as nested workspace packages.
 Per-area migrations onto gmacko's stack (auth, db, realtime, etc.) land incrementally in 7B-2..9. Until then, the two stacks run side-by-side.
 
 The 6 pre-existing Bob test failures (`@bob/execution` taskExecutor + `@bob/api` cookies/featureBranch/work-items) are documented in `docs/plans/phase-7b/02-bob-probe.md` and are out of scope for 7B-1a.
+
+## Skill routing
+
+When the user's request matches an available skill, invoke it via the Skill tool. When in doubt, invoke the skill.
+
+Key routing rules:
+- Product ideas/brainstorming → invoke /office-hours
+- Strategy/scope → invoke /plan-ceo-review
+- Architecture → invoke /plan-eng-review
+- Design system/plan review → invoke /design-consultation or /plan-design-review
+- Full review pipeline → invoke /autoplan
+- Bugs/errors → invoke /investigate
+- QA/testing site behavior → invoke /qa or /qa-only
+- Code review/diff check → invoke /review
+- Visual polish → invoke /design-review
+- Ship/deploy/PR → invoke /ship or /land-and-deploy
+- Save progress → invoke /context-save
+- Resume context → invoke /context-restore
