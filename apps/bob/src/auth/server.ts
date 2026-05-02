@@ -20,19 +20,6 @@ const publicSiteUrl =
 
 const baseUrl = safeOrigin(publicSiteUrl);
 
-// ---------------------------------------------------------------------------
-// Effect auth runtime bridge — single source of truth for auth.
-//
-// The `authBundle` exposes both the ManagedRuntime (for Effect-based auth
-// calls) and the raw better-auth instance. The `authInstance` inside uses
-// `pluralizeTables: true` + the full schema, so it reads/writes from
-// gmacko's plural tables (users, sessions, accounts, verifications).
-//
-// Previously there was a separate legacy `betterAuth()` instance with
-// `nextCookies()` for RSC getSession — but it targeted non-existent
-// singular tables. The bundle's authInstance handles cookie resolution
-// from headers just fine without the nextCookies() plugin.
-// ---------------------------------------------------------------------------
 export const authBundle: AuthRuntimeBundle = createAuthRuntime({
   db,
   schema: bobSchema as unknown as Record<string, unknown>,
