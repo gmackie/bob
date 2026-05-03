@@ -51,8 +51,7 @@ function LinearIntegration({ workspaceId }: { workspaceId: string }) {
 
   const [apiKey, setApiKey] = useState("");
   const [teamId, setTeamId] = useState("");
-  const [teamIdTouched, setTeamIdTouched] = useState(false);
-  const [webhookSecret, setWebhookSecret] = useState("");
+  const [teams, setTeams] = useState<{ id: string; name: string; key: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
 
@@ -63,36 +62,54 @@ function LinearIntegration({ workspaceId }: { workspaceId: string }) {
     ),
   );
 
-  const saveMutation = useMutation(
-    trpc.integration.save.mutationOptions({
-      onSuccess: () => {
-        setApiKey("");
-        setWebhookSecret("");
-        setTeamId("");
-        setTeamIdTouched(false);
+  const invalidate = () =>
+    void queryClient.invalidateQueries({
+      queryKey: trpc.integration.get.queryKey({ workspaceId, provider: "linear" }),
+    });
+
+  const fetchTeamsMutation = useMutation(
+    trpc.integration.fetchLinearTeams.mutationOptions({
+      onSuccess: (data) => {
+        setTeams(data);
+        if (data.length === 1) setTeamId(data[0]!.id);
         setError(null);
-        setEditing(false);
-        void queryClient.invalidateQueries({
-          queryKey: trpc.integration.get.queryKey({ workspaceId, provider: "linear" }),
-        });
       },
       onError: (e: unknown) => {
-        setError(e instanceof Error ? e.message : "Failed to save");
+        setError(e instanceof Error ? e.message : "Invalid API key");
+        setTeams([]);
+      },
+    }),
+  );
+
+  const setupMutation = useMutation(
+    trpc.integration.setupLinear.mutationOptions({
+      onSuccess: () => {
+        resetForm();
+        invalidate();
+      },
+      onError: (e: unknown) => {
+        setError(e instanceof Error ? e.message : "Failed to connect");
       },
     }),
   );
 
   const deleteMutation = useMutation(
-    trpc.integration.delete.mutationOptions({
-      onSuccess: () => {
-        void queryClient.invalidateQueries({
-          queryKey: trpc.integration.get.queryKey({ workspaceId, provider: "linear" }),
-        });
-      },
-    }),
+    trpc.integration.delete.mutationOptions({ onSuccess: invalidate }),
   );
 
+  const resetForm = () => {
+    setApiKey("");
+    setTeamId("");
+    setTeams([]);
+    setError(null);
+    setEditing(false);
+  };
+
   const connected = integration && integration.enabled;
+  const webhookUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/api/webhooks/linear`
+      : "/api/webhooks/linear";
 
   return (
     <div className="rounded-lg border border-border p-4">
@@ -132,23 +149,21 @@ function LinearIntegration({ workspaceId }: { workspaceId: string }) {
               </p>
             </div>
             <div>
-              <span className="text-muted-foreground">Webhook Secret</span>
+              <span className="text-muted-foreground">Webhook</span>
               <p className="mt-0.5 font-mono">
-                {integration.hasWebhookSecret ? "••••••••" : "Not set"}
+                {integration.hasWebhookSecret ? "Configured" : "Not set"}
               </p>
             </div>
             <div>
               <span className="text-muted-foreground">Webhook URL</span>
               <p className="mt-0.5 font-mono text-[10px] break-all">
-                {typeof window !== "undefined"
-                  ? `${window.location.origin}/api/webhooks/linear`
-                  : "/api/webhooks/linear"}
+                {webhookUrl}
               </p>
             </div>
           </div>
           <div className="flex gap-2 pt-2">
             <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
-              Edit
+              Reconnect
             </Button>
             <Button
               variant="outline"
@@ -173,103 +188,78 @@ function LinearIntegration({ workspaceId }: { workspaceId: string }) {
               value={apiKey}
               onChange={(e) => {
                 setApiKey(e.target.value);
+                setTeams([]);
+                setTeamId("");
                 setError(null);
               }}
-              placeholder={
-                integration?.hasApiKey
-                  ? "Leave blank to keep current key"
-                  : "lin_api_..."
-              }
+              placeholder="lin_api_..."
               className="mt-1"
             />
           </div>
-          <div>
-            <Label htmlFor="linear-team-id" className="text-xs">
-              Team ID
-            </Label>
-            <Input
-              id="linear-team-id"
-              value={teamIdTouched ? teamId : (editing ? integration?.linearTeamId ?? "" : teamId)}
-              onChange={(e) => {
-                setTeamId(e.target.value);
-                setTeamIdTouched(true);
-                setError(null);
-              }}
-              placeholder="UUID of your Linear team"
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <Label htmlFor="linear-webhook-secret" className="text-xs">
-              Webhook Signing Secret
-            </Label>
-            <Input
-              id="linear-webhook-secret"
-              type="password"
-              value={webhookSecret}
-              onChange={(e) => {
-                setWebhookSecret(e.target.value);
-                setError(null);
-              }}
-              placeholder={
-                integration?.hasWebhookSecret
-                  ? "Leave blank to keep current secret"
-                  : "From Linear webhook settings"
-              }
-              className="mt-1"
-            />
-            <p className="mt-1 text-[10px] text-muted-foreground">
-              Set the webhook URL in Linear to:{" "}
-              <code className="rounded bg-muted px-1">
-                {typeof window !== "undefined"
-                  ? `${window.location.origin}/api/webhooks/linear`
-                  : "/api/webhooks/linear"}
-              </code>
-            </p>
-          </div>
-          {error && <p className="text-xs text-destructive">{error}</p>}
-          <div className="flex gap-2">
+
+          {teams.length === 0 ? (
             <Button
+              type="button"
+              variant="outline"
               size="sm"
-              onClick={() => {
-                const payload: Record<string, string> = {
-                  workspaceId,
-                  provider: "linear",
-                };
-                if (apiKey) payload.apiKey = apiKey;
-                if (teamIdTouched) payload.linearTeamId = teamId;
-                else if (teamId) payload.linearTeamId = teamId;
-                if (webhookSecret) payload.webhookSigningSecret = webhookSecret;
-                saveMutation.mutate(payload as any);
-              }}
-              disabled={
-                saveMutation.isPending ||
-                (!apiKey && !teamId && !webhookSecret && !editing)
-              }
+              onClick={() => fetchTeamsMutation.mutate({ apiKey })}
+              disabled={fetchTeamsMutation.isPending || !apiKey}
             >
-              {saveMutation.isPending
-                ? "Saving..."
-                : connected
-                  ? "Update"
-                  : "Connect"}
+              {fetchTeamsMutation.isPending ? "Validating key..." : "Next: select team"}
             </Button>
-            {editing && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setEditing(false);
-                  setApiKey("");
-                  setTeamId("");
-                  setTeamIdTouched(false);
-                  setWebhookSecret("");
-                  setError(null);
-                }}
-              >
-                Cancel
-              </Button>
-            )}
-          </div>
+          ) : (
+            <>
+              <div>
+                <Label className="text-xs">Team</Label>
+                <select
+                  value={teamId}
+                  onChange={(e) => setTeamId(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="">Select a team...</option>
+                  {teams.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.key})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <p className="text-[10px] text-muted-foreground">
+                Clicking Connect will automatically create a webhook in Linear
+                pointing to <code className="rounded bg-muted px-1">{webhookUrl}</code>
+              </p>
+
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    setupMutation.mutate({
+                      workspaceId,
+                      apiKey,
+                      teamId,
+                      webhookUrl,
+                    })
+                  }
+                  disabled={setupMutation.isPending || !teamId}
+                >
+                  {setupMutation.isPending ? "Connecting..." : "Connect"}
+                </Button>
+                {editing && (
+                  <Button variant="outline" size="sm" onClick={resetForm}>
+                    Cancel
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
+
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          {editing && !teams.length && (
+            <Button variant="outline" size="sm" onClick={resetForm}>
+              Cancel
+            </Button>
+          )}
         </div>
       )}
     </div>

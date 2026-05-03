@@ -112,6 +112,117 @@ export async function integrationDelete(
   return { deleted: true };
 }
 
+export async function integrationSetupLinear(
+  ctx: HandlerContext,
+  input: {
+    workspaceId: string;
+    apiKey: string;
+    teamId: string;
+    webhookUrl: string;
+  },
+) {
+  await assertWorkspaceAccess(ctx.db, ctx.userId, input.workspaceId);
+
+  const teamsRes = await linearGraphQL(input.apiKey, `{ teams { nodes { id name key } } }`);
+  const teams = teamsRes.data?.teams?.nodes ?? [];
+  const team = teams.find((t: any) => t.id === input.teamId);
+  if (!team) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Team not found" });
+  }
+
+  const webhookRes = await linearGraphQL(input.apiKey, `
+    mutation($url: String!, $teamId: String!, $label: String!) {
+      webhookCreate(input: {
+        url: $url,
+        teamId: $teamId,
+        label: $label,
+        resourceTypes: ["Issue"]
+        enabled: true
+      }) {
+        success
+        webhook { id enabled secret }
+      }
+    }
+  `, { url: input.webhookUrl, teamId: input.teamId, label: "blder.bot" });
+
+  const webhook = webhookRes.data?.webhookCreate;
+  if (!webhook?.success) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Failed to create Linear webhook",
+    });
+  }
+
+  const existing = await ctx.db.query.workspaceIntegrations.findFirst({
+    where: and(
+      eq(workspaceIntegrations.workspaceId, input.workspaceId),
+      eq(workspaceIntegrations.provider, "linear"),
+    ),
+  });
+
+  const values = {
+    apiKey: input.apiKey,
+    linearTeamId: input.teamId,
+    webhookSigningSecret: webhook.webhook.secret,
+    enabled: true,
+  };
+
+  if (existing) {
+    await ctx.db
+      .update(workspaceIntegrations)
+      .set(values)
+      .where(eq(workspaceIntegrations.id, existing.id));
+    return { id: existing.id, created: false, webhookId: webhook.webhook.id };
+  }
+
+  const [created] = await ctx.db
+    .insert(workspaceIntegrations)
+    .values({
+      workspaceId: input.workspaceId,
+      provider: "linear",
+      ...values,
+    })
+    .returning({ id: workspaceIntegrations.id });
+
+  return { id: created!.id, created: true, webhookId: webhook.webhook.id };
+}
+
+async function linearGraphQL(apiKey: string, query: string, variables?: Record<string, unknown>) {
+  const res = await fetch("https://api.linear.app/graphql", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: apiKey,
+    },
+    body: JSON.stringify({ query, variables }),
+  });
+
+  if (!res.ok) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `Linear API error: ${res.status}`,
+    });
+  }
+
+  const data = await res.json() as any;
+  if (data.errors?.length) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: data.errors[0].message,
+    });
+  }
+
+  return data;
+}
+
+export async function integrationFetchLinearTeams(
+  _ctx: HandlerContext,
+  input: { apiKey: string },
+) {
+  const data = await linearGraphQL(input.apiKey, `{ teams { nodes { id name key } } }`);
+  return data.data?.teams?.nodes ?? [];
+}
+
 export async function integrationList(
   ctx: HandlerContext,
   input: { workspaceId: string },

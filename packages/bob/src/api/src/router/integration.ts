@@ -7,6 +7,8 @@ import {
   integrationSave,
   integrationDelete,
   integrationList,
+  integrationFetchLinearTeams,
+  integrationSetupLinear,
 } from "../handlers/integration";
 
 export const integrationRouter = {
@@ -40,6 +42,31 @@ export const integrationRouter = {
     )
     .mutation(({ ctx, input }) =>
       integrationSave({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
+
+  fetchLinearTeams: protectedProcedure
+    .input(z.object({ apiKey: z.string().min(1) }))
+    .mutation(({ ctx, input }) =>
+      integrationFetchLinearTeams(
+        { db: ctx.db, userId: ctx.session.user.id },
+        input,
+      ),
+    ),
+
+  setupLinear: protectedProcedure
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+        apiKey: z.string().min(1),
+        teamId: z.string().min(1),
+        webhookUrl: z.string().url(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      integrationSetupLinear(
+        { db: ctx.db, userId: ctx.session.user.id },
+        input,
+      ),
     ),
 
   delete: protectedProcedure
