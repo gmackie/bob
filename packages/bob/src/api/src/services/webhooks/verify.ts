@@ -61,3 +61,24 @@ export function verifyGiteaSignature(
     return false;
   }
 }
+
+export function verifyLinearSignature(
+  payload: string,
+  signature: string | null,
+  secret: string,
+): boolean {
+  if (!signature) return false;
+
+  const expectedSignature = createHmac("sha256", secret)
+    .update(payload, "utf8")
+    .digest("hex");
+
+  try {
+    return timingSafeEqual(
+      Buffer.from(signature, "hex"),
+      Buffer.from(expectedSignature, "hex"),
+    );
+  } catch {
+    return false;
+  }
+}

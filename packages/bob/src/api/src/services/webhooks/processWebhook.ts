@@ -20,7 +20,7 @@ import {
 
 import { z } from "zod/v4";
 
-export type WebhookProvider = "github" | "gitlab" | "gitea" | "planning";
+export type WebhookProvider = "github" | "gitlab" | "gitea" | "linear" | "planning";
 
 // Zod schemas for webhook payloads that touch the delivery pipeline.
 // These validate at the boundary before any DB writes happen.

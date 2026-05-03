@@ -14,6 +14,7 @@ import { filesystemRouter } from "./router/filesystem";
 import { gitRouter } from "./router/git";
 import { gitProvidersRouter } from "./router/gitProviders";
 import { instanceRouter } from "./router/instance";
+import { integrationRouter } from "./router/integration";
 import { planningRouter } from "./router/planning";
 import { planSessionRouter } from "./router/planSession";
 import { linkRouter } from "./router/link";
@@ -61,6 +62,7 @@ const appRouterRecord = {
   git: gitRouter,
   gitProviders: gitProvidersRouter,
   instance: instanceRouter,
+  integration: integrationRouter,
   planning: planningRouter,
   planSession: planSessionRouter,
   link: linkRouter,

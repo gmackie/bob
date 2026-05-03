@@ -128,6 +128,7 @@ export const workspaceIntegrations = pgTable(
     provider: t.varchar({ length: 20 }).notNull(),
     enabled: t.boolean().notNull().default(true),
     apiKey: t.text(),
+    webhookSigningSecret: t.text(),
     linearTeamId: t.text(),
     createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
     updatedAt: t

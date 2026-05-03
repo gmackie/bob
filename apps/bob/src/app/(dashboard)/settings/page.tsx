@@ -8,6 +8,7 @@ import { ApiKeysSection } from "./_components/api-keys";
 import { CookieJar } from "./_components/cookie-jar";
 import { ConfigFilesSection } from "./_components/config-files";
 import { GitProvidersSection } from "./_components/git-providers";
+import { IntegrationsSection } from "./_components/integrations";
 import { PreferencesSection } from "./_components/preferences";
 import { WebhooksSection } from "./_components/webhooks";
 
@@ -33,6 +34,9 @@ export default function SettingsPage() {
       <div className="space-y-8">
         <CollapsibleSection title="Preferences" sectionId="preferences" defaultOpen>
           <PreferencesSection />
+        </CollapsibleSection>
+        <CollapsibleSection title="Integrations" sectionId="integrations" defaultOpen forceOpen={openSection === "integrations"}>
+          <IntegrationsSection />
         </CollapsibleSection>
         <CollapsibleSection title="Git Providers" sectionId="git-providers" defaultOpen>
           <GitProvidersSection />

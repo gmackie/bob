@@ -477,6 +477,8 @@ export const workItems = pgTable("work_items", (t) => ({
   title: t.varchar({ length: 256 }).notNull(),
   description: t.text(),
   status: t.varchar({ length: 40 }).notNull().default("draft"),
+  externalId: t.text(),
+  externalProvider: t.varchar({ length: 20 }),
   createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t
     .timestamp({ mode: "string", withTimezone: true })

@@ -23,6 +23,7 @@ import { forgegraphRouter } from "@bob/api/router/forgegraph";
 import { filesystemRouter } from "@bob/api/router/filesystem";
 import { gitProvidersRouter } from "@bob/api/router/gitProviders";
 import { instanceRouter } from "@bob/api/router/instance";
+import { integrationRouter } from "@bob/api/router/integration";
 import { planningRouter } from "@bob/api/router/planning";
 import { planSessionRouter } from "@bob/api/router/planSession";
 import { linkRouter } from "@bob/api/router/link";
@@ -67,6 +68,7 @@ const edgeRouterRecord = {
   forgegraph: forgegraphRouter,
   gitProviders: gitProvidersRouter,
   instance: instanceRouter,
+  integration: integrationRouter,
   planning: planningRouter,
   planSession: planSessionRouter,
   link: linkRouter,

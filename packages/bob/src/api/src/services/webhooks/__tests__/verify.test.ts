@@ -5,6 +5,7 @@ import {
   verifyGiteaSignature,
   verifyGitHubSignature,
   verifyGitLabToken,
+  verifyLinearSignature,
 } from "../verify";
 
 describe("webhook verification", () => {
@@ -189,6 +190,49 @@ describe("webhook verification", () => {
       const signature = generateGiteaSignature(unicodePayload, secret);
       expect(verifyGiteaSignature(unicodePayload, signature, secret)).toBe(
         true,
+      );
+    });
+  });
+
+  describe("verifyLinearSignature", () => {
+    const secret = "linear-webhook-secret";
+    const payload = JSON.stringify({ action: "create", type: "Issue" });
+
+    function generateLinearSignature(body: string, key: string): string {
+      return createHmac("sha256", key).update(body, "utf8").digest("hex");
+    }
+
+    it("should verify valid signature", () => {
+      const signature = generateLinearSignature(payload, secret);
+      expect(verifyLinearSignature(payload, signature, secret)).toBe(true);
+    });
+
+    it("should reject null signature", () => {
+      expect(verifyLinearSignature(payload, null, secret)).toBe(false);
+    });
+
+    it("should reject invalid signature", () => {
+      const wrongSignature =
+        "0000000000000000000000000000000000000000000000000000000000000000";
+      expect(verifyLinearSignature(payload, wrongSignature, secret)).toBe(false);
+    });
+
+    it("should reject signature with wrong secret", () => {
+      const signature = generateLinearSignature(payload, "wrong-secret");
+      expect(verifyLinearSignature(payload, signature, secret)).toBe(false);
+    });
+
+    it("should reject tampered payload", () => {
+      const signature = generateLinearSignature(payload, secret);
+      const tamperedPayload = JSON.stringify({ action: "update", type: "Issue" });
+      expect(verifyLinearSignature(tamperedPayload, signature, secret)).toBe(
+        false,
+      );
+    });
+
+    it("should reject malformed hex signature", () => {
+      expect(verifyLinearSignature(payload, "not-valid-hex", secret)).toBe(
+        false,
       );
     });
   });
