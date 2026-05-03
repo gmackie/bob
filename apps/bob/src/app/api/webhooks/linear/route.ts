@@ -40,12 +40,16 @@ export async function POST(request: Request) {
     )
     .then((rows) => rows[0]);
 
-  const secret = integration?.webhookSigningSecret;
+  if (!integration) {
+    return NextResponse.json({ error: "No integration for team" }, { status: 404 });
+  }
+
+  const secret = integration.webhookSigningSecret;
   const signatureValid = secret
     ? verifyLinearSignature(rawBody, signature, secret)
-    : false;
+    : true;
 
-  if (secret && !signatureValid) {
+  if (!signatureValid) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 

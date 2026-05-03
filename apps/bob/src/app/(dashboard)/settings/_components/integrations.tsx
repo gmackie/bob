@@ -12,7 +12,7 @@ import { useTRPC } from "~/trpc/react";
 
 export function IntegrationsSection() {
   const trpc = useTRPC();
-  const { data: workspaceMemberships } = useQuery(
+  const { data: workspaceMemberships, isLoading } = useQuery(
     trpc.workspace.list.queryOptions(undefined),
   );
 
@@ -23,6 +23,12 @@ export function IntegrationsSection() {
   const currentWorkspace = workspaces[0] as
     | { id: string; name: string }
     | undefined;
+
+  if (isLoading) {
+    return (
+      <p className="text-sm text-muted-foreground">Loading integrations...</p>
+    );
+  }
 
   if (!currentWorkspace) {
     return (
@@ -45,6 +51,7 @@ function LinearIntegration({ workspaceId }: { workspaceId: string }) {
 
   const [apiKey, setApiKey] = useState("");
   const [teamId, setTeamId] = useState("");
+  const [teamIdTouched, setTeamIdTouched] = useState(false);
   const [webhookSecret, setWebhookSecret] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -62,6 +69,7 @@ function LinearIntegration({ workspaceId }: { workspaceId: string }) {
         setApiKey("");
         setWebhookSecret("");
         setTeamId("");
+        setTeamIdTouched(false);
         setError(null);
         setEditing(false);
         void queryClient.invalidateQueries({
@@ -181,9 +189,10 @@ function LinearIntegration({ workspaceId }: { workspaceId: string }) {
             </Label>
             <Input
               id="linear-team-id"
-              value={teamId || (editing ? integration?.linearTeamId ?? "" : "")}
+              value={teamIdTouched ? teamId : (editing ? integration?.linearTeamId ?? "" : teamId)}
               onChange={(e) => {
                 setTeamId(e.target.value);
+                setTeamIdTouched(true);
                 setError(null);
               }}
               placeholder="UUID of your Linear team"
@@ -228,7 +237,8 @@ function LinearIntegration({ workspaceId }: { workspaceId: string }) {
                   provider: "linear",
                 };
                 if (apiKey) payload.apiKey = apiKey;
-                if (teamId) payload.linearTeamId = teamId;
+                if (teamIdTouched) payload.linearTeamId = teamId;
+                else if (teamId) payload.linearTeamId = teamId;
                 if (webhookSecret) payload.webhookSigningSecret = webhookSecret;
                 saveMutation.mutate(payload as any);
               }}
@@ -251,6 +261,7 @@ function LinearIntegration({ workspaceId }: { workspaceId: string }) {
                   setEditing(false);
                   setApiKey("");
                   setTeamId("");
+                  setTeamIdTouched(false);
                   setWebhookSecret("");
                   setError(null);
                 }}
