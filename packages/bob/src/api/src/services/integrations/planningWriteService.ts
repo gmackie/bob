@@ -1,12 +1,11 @@
 import { and, desc, eq } from "@bob/db";
 import { db } from "@bob/db/client";
-import { chatConversations, taskRuns } from "@bob/db/schema";
+import { chatConversations, projects, taskRuns } from "@bob/db/schema";
 
-import { createHash } from "node:crypto";
 import {
-  getPlanningApiKey,
-  getPlanningBaseUrl,
-} from "./planningRemoteConfig";
+  resolvePlanningProvider,
+  type PlanningProvider,
+} from "./planningProvider.js";
 
 export type PlanningIssueStatus =
   | "todo"
@@ -46,6 +45,9 @@ interface SessionTaskContext {
   issueId: string | null;
   taskRunId: string | null;
   issueIdentifier: string | null;
+  planningProvider: string;
+  workspaceId: string | null;
+  projectId: string | null;
 }
 
 interface SessionScopedInput {
@@ -109,6 +111,10 @@ export interface MarkRunCompletedAfterMergeInput extends SessionScopedInput {
   prUrl?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Context resolution
+// ---------------------------------------------------------------------------
+
 async function getSessionTaskContext(
   userId: string,
   sessionId: string,
@@ -146,469 +152,204 @@ async function getSessionTaskContext(
       taskRun?.workItemIdentifierSnapshot ??
       taskRun?.planningItemIdentifier ??
       null,
+    planningProvider: (taskRun as any)?.planningProvider ?? "internal",
+    workspaceId: (taskRun as any)?.planningWorkspaceId ?? null,
+    projectId: null,
   };
 }
 
-function createIdempotencyKey(parts: Array<string | number | null | undefined>) {
-  const payload = parts.map((part) => part ?? "").join("|");
-  return createHash("sha256").update(payload).digest("hex");
-}
+async function resolveProvider(context: SessionTaskContext): Promise<PlanningProvider | null> {
+  if (!context.workspaceId) return null;
 
-async function planningMutation<T>(
-  path: string,
-  input: unknown,
-  idempotencyKey: string,
-): Promise<T | null> {
-  const planningApiKey = getPlanningApiKey();
+  const project = await db
+    .select({
+      planningProvider: projects.planningProvider,
+      linearProjectId: projects.linearProjectId,
+    })
+    .from(projects)
+    .where(eq(projects.workspaceId, context.workspaceId))
+    .then((rows: any[]) => rows[0]);
 
-  if (!planningApiKey) {
-    console.warn(
-      `[PlanningWriteService] PLANNING_API_KEY not set, skipping ${path}`,
-    );
+  if (!project) return null;
+
+  try {
+    return await resolvePlanningProvider(db, project, context.workspaceId);
+  } catch {
     return null;
   }
-
-  const response = await fetch(`${getPlanningBaseUrl()}/api/trpc/${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-API-Key": planningApiKey,
-      "Idempotency-Key": idempotencyKey,
-    },
-    body: JSON.stringify({ "0": { json: input } }),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Planning API error for ${path}: ${text}`);
-  }
-
-  const result = (await response.json()) as Array<{
-    result?: { data?: { json?: T } };
-    error?: { message?: string };
-  }>;
-
-  if (result[0]?.error) {
-    throw new Error(result[0].error.message ?? `Planning error for ${path}`);
-  }
-
-  return result[0]?.result?.data?.json ?? null;
 }
 
-async function createIssueComment(
-  issueId: string | null,
-  body: string,
-  idempotencyKey: string,
-) {
-  if (!issueId) {
-    return null;
-  }
+// ---------------------------------------------------------------------------
+// Status mapping
+// ---------------------------------------------------------------------------
 
-  return planningMutation<{ id?: string }>(
-    "comment.create",
-    { issueId, body },
-    idempotencyKey,
-  );
-}
-
-async function syncBobRunProjection(
-  context: SessionTaskContext,
-  input: {
-    workflowStatus?: string;
-    runStatus?: "in_progress" | "completed" | "failed";
-    latestSummary?: string;
-    lastPromptCommentId?: string;
-    reviewUrl?: string;
-    issueStatus?: Exclude<PlanningIssueStatus, "blocked">;
-  },
-  idempotencyKey: string,
-) {
-  if (!context.issueId || !context.taskRunId) {
-    return null;
-  }
-
-  return planningMutation(
-    "agent.syncBobRun",
-    {
-      issueId: context.issueId,
-      taskRunId: context.taskRunId,
-      sessionId: context.sessionId,
-      executionBackend: "bob",
-      workflowStatus: input.workflowStatus,
-      runStatus: input.runStatus,
-      latestSummary: input.latestSummary,
-      lastPromptCommentId: input.lastPromptCommentId,
-      reviewUrl: input.reviewUrl,
-      issueStatus: input.issueStatus,
-      idempotencyKey,
-    },
-    idempotencyKey,
-  );
-}
-
-async function createCanonicalArtifact(
-  context: SessionTaskContext,
-  input: AttachArtifactInput,
-  idempotencyKey: string,
-) {
-  if (!context.issueId) {
-    return null;
-  }
-
-  return planningMutation(
-    "issueArtifact.create",
-    {
-      issueId: context.issueId,
-      agentTaskRunId: context.taskRunId,
-      executionBackend: "bob",
-      producerType: "bob",
-      producerId: idempotencyKey,
-      artifactType: input.artifactType,
-      artifactRole: input.artifactRole ?? "other",
-      url: input.url,
-      title: input.title,
-      summary: input.summary,
-    },
-    idempotencyKey,
-  );
-}
-
-function formatMilestoneComment(input: ReportMilestoneInput): string | null {
-  switch (input.kind) {
-    case "progress":
-      return null;
-    case "blocked":
-      return `🚫 **Blocked:** ${input.message}`;
-    case "review_ready":
-      return `👀 **Ready for review:** ${input.message}`;
-    case "completed":
-      return `✅ **Completed:** ${input.message}`;
-    case "verification_result": {
-      const verb = input.verificationResult === "passed" ? "passed" : "failed";
-      return `🧪 **Verification ${verb}:** ${input.message}`;
-    }
+function mapStatusToProvider(status: PlanningIssueStatus): "started" | "review_ready" | "completed" | null {
+  switch (status) {
+    case "in_progress": return "started";
+    case "in_review": return "review_ready";
+    case "done": return "completed";
+    default: return null;
   }
 }
 
-function formatArtifactComment(input: AttachArtifactInput): string {
-  const label = input.title ?? input.url;
-  const summary = input.summary ? `\n\n${input.summary}` : "";
-  const role = input.artifactRole
-    ? ` (${input.artifactRole.replace(/_/g, " ")})`
-    : "";
-  return `🔗 **Artifact${role}:** [${label}](${input.url})${summary}`;
-}
+// ---------------------------------------------------------------------------
+// Public API — delegates to PlanningProvider
+// ---------------------------------------------------------------------------
 
 export async function reportMilestone(input: ReportMilestoneInput) {
   const context = await getSessionTaskContext(input.userId, input.sessionId);
+  if (!context.issueId || !context.taskRunId) return;
 
-  if (!context.issueId) {
-    return;
-  }
+  const provider = await resolveProvider(context);
+  if (!provider) return;
 
-  if (input.kind === "progress" && context.taskRunId) {
-    const syncIdempotencyKey = createIdempotencyKey([
-      "agent.syncBobRun.progress",
-      context.taskRunId,
-      input.message,
-      input.phase,
-      input.progress,
-    ]);
-    await syncBobRunProjection(
-      context,
-      {
-        workflowStatus: "working",
-        runStatus: "in_progress",
-        latestSummary: input.message,
-      },
-      syncIdempotencyKey,
-    );
-    return;
-  }
-
-  const body = formatMilestoneComment(input);
-  if (!body) {
-    return;
-  }
-
-  await createIssueComment(
-    context.issueId,
-    body,
-    createIdempotencyKey(["comment.milestone", context.issueId, input.kind, body]),
-  );
+  await provider.reportMilestone(context.issueId, context.taskRunId, {
+    title: input.kind,
+    body: input.message,
+  });
 }
 
 export async function requestInputPrompt(input: RequestInputPromptInput) {
   const context = await getSessionTaskContext(input.userId, input.sessionId);
-  const optionsText = input.options?.length
-    ? `\n\nOptions:\n${input.options.map((option) => `- ${option}`).join("\n")}`
-    : "";
-  const body =
-    `💭 **Question:** ${input.question}${optionsText}\n\n` +
-    `Default action: **${input.defaultAction}**\n` +
-    `Timeout: ${input.timeoutMinutes} minutes (${input.expiresAt.toISOString()})`;
+  if (!context.issueId || !context.taskRunId) return;
 
-  const comment = await createIssueComment(
-    context.issueId,
-    body,
-    createIdempotencyKey([
-      "comment.prompt",
-      context.issueId,
-      input.question,
-      input.defaultAction,
-      input.expiresAt.toISOString(),
-    ]),
-  );
+  const provider = await resolveProvider(context);
+  if (!provider) return;
 
-  await syncBobRunProjection(
-    context,
-    {
-      workflowStatus: "awaiting_input",
-      latestSummary: input.question,
-      lastPromptCommentId: comment?.id,
-    },
-    createIdempotencyKey([
-      "agent.syncBobRun.awaiting_input",
-      context.taskRunId,
-      input.question,
-      comment?.id,
-    ]),
-  );
+  await provider.requestInput(context.issueId, context.taskRunId, {
+    promptId: `${context.sessionId}-${Date.now()}`,
+    question: input.question,
+    options: input.options,
+  });
 }
 
-export async function recordPromptResolution(
-  input: RecordPromptResolutionInput,
-) {
+export async function recordPromptResolution(input: RecordPromptResolutionInput) {
   const context = await getSessionTaskContext(input.userId, input.sessionId);
-  const prefix =
-    input.resolutionType === "timeout"
-      ? "⏱️ **Prompt timed out:**"
-      : "💬 **Input received:**";
+  if (!context.issueId || !context.taskRunId) return;
 
-  await createIssueComment(
-    context.issueId,
-    `${prefix} ${input.value}`,
-    createIdempotencyKey([
-      "comment.prompt-resolution",
-      context.issueId,
-      input.resolutionType,
-      input.value,
-    ]),
-  );
+  const provider = await resolveProvider(context);
+  if (!provider) return;
+
+  await provider.resolveInput(context.issueId, context.taskRunId, {
+    promptId: `${context.sessionId}-resolution`,
+    answer: input.value,
+  });
 }
 
 export async function setIssueStatus(input: SetIssueStatusInput) {
   const context = await getSessionTaskContext(input.userId, input.sessionId);
+  if (!context.issueId || !context.taskRunId) return;
 
-  if (!context.issueId || input.status === "blocked") {
-    return;
-  }
+  const providerStatus = mapStatusToProvider(input.status);
+  if (!providerStatus) return;
 
-  const remoteStatus = input.status;
+  const provider = await resolveProvider(context);
+  if (!provider) return;
 
-  await planningMutation(
-    "issue.update",
-    {
-      id: context.issueId,
-      status: remoteStatus,
-    },
-    createIdempotencyKey(["issue.update", context.issueId, remoteStatus]),
-  );
+  await provider.setStatus(context.issueId, context.taskRunId, providerStatus);
 }
 
 export async function attachArtifact(input: AttachArtifactInput) {
   const context = await getSessionTaskContext(input.userId, input.sessionId);
-  const artifactIdempotencyKey = createIdempotencyKey([
-    "issueArtifact.create",
-    context.issueId,
-    context.taskRunId,
-    input.artifactType,
-    input.artifactRole,
-    input.url,
-  ]);
+  if (!context.issueId || !context.taskRunId) return;
 
-  await createCanonicalArtifact(
-    context,
-    input,
-    artifactIdempotencyKey,
-  );
+  const provider = await resolveProvider(context);
+  if (!provider) return;
 
-  await createIssueComment(
-    context.issueId,
-    formatArtifactComment(input),
-    createIdempotencyKey([
-      "comment.artifact",
-      context.issueId,
-      input.artifactType,
-      input.artifactRole,
-      input.url,
-    ]),
-  );
+  await provider.attachArtifact(context.issueId, context.taskRunId, {
+    type: input.artifactType,
+    role: input.artifactRole ?? "other",
+    title: input.title ?? input.url,
+    url: input.url,
+    summary: input.summary,
+  });
 }
 
 export async function markRunReviewReady(input: MarkRunReviewReadyInput) {
-  await setIssueStatus({
-    userId: input.userId,
-    sessionId: input.sessionId,
-    status: "in_review",
-  });
-  await attachArtifact({
-    userId: input.userId,
-    sessionId: input.sessionId,
-    artifactType: "pr",
-    artifactRole: "review",
-    url: input.prUrl,
+  const context = await getSessionTaskContext(input.userId, input.sessionId);
+  if (!context.issueId || !context.taskRunId) return;
+
+  const provider = await resolveProvider(context);
+  if (!provider) return;
+
+  await provider.markReviewReady(context.issueId, context.taskRunId, input.summary);
+
+  await provider.attachArtifact(context.issueId, context.taskRunId, {
+    type: "pr",
+    role: "review",
     title: "Pull request",
+    url: input.prUrl,
     summary: input.summary,
-  });
-
-  const commentBody = input.notesForReviewer
-    ? `${input.summary}\n\nNotes for reviewer:\n${input.notesForReviewer}`
-    : input.summary;
-
-  await syncBobRunProjection(
-    await getSessionTaskContext(input.userId, input.sessionId),
-    {
-      workflowStatus: "awaiting_review",
-      runStatus: "in_progress",
-      latestSummary: input.summary,
-      reviewUrl: input.prUrl,
-      issueStatus: "in_review",
-    },
-    createIdempotencyKey([
-      "agent.syncBobRun.review_ready",
-      input.sessionId,
-      input.prUrl,
-      input.summary,
-    ]),
-  );
-
-  await reportMilestone({
-    userId: input.userId,
-    sessionId: input.sessionId,
-    kind: "review_ready",
-    message: commentBody,
   });
 }
 
 export async function completeTaskRun(input: CompleteTaskRunInput) {
   const context = await getSessionTaskContext(input.userId, input.sessionId);
+  if (!context.issueId || !context.taskRunId) return;
 
-  if (!context.taskRunId) {
-    throw new Error("No active task run for this session");
-  }
+  const provider = await resolveProvider(context);
+  if (!provider) return;
 
-  await planningMutation(
-    "agent.completeTask",
-    {
-      taskRunId: context.taskRunId,
-      result: {
-        success: true,
-        summary: input.summary,
-        artifacts: input.prUrl
-          ? [
-              {
-                type: "pr",
-                url: input.prUrl,
-                description: "Pull request",
-              },
-            ]
-          : undefined,
-      },
-      markIssueDone: false,
-    },
-    createIdempotencyKey([
-      "agent.completeTask",
-      context.taskRunId,
-      input.summary,
-      input.prUrl,
-    ]),
-  );
+  await provider.completeTask(context.issueId, context.taskRunId, {
+    outcome: "success",
+    summary: input.summary,
+  });
 
   if (input.prUrl) {
-    await attachArtifact({
-      userId: input.userId,
-      sessionId: input.sessionId,
-      artifactType: "pr",
-      artifactRole: "review",
-      url: input.prUrl,
+    await provider.attachArtifact(context.issueId, context.taskRunId, {
+      type: "pr",
+      role: "review",
       title: "Pull request",
+      url: input.prUrl,
       summary: input.summary,
     });
   }
-
-  await syncBobRunProjection(
-    context,
-    {
-      workflowStatus: "completed",
-      runStatus: "completed",
-      latestSummary: input.summary,
-    },
-    createIdempotencyKey([
-      "agent.syncBobRun.completed",
-      context.taskRunId,
-      input.summary,
-      input.prUrl,
-    ]),
-  );
-
-  await reportMilestone({
-    userId: input.userId,
-    sessionId: input.sessionId,
-    kind: "completed",
-    message: input.summary,
-  });
 }
 
-export async function recordVerificationResult(
-  input: RecordVerificationResultInput,
-) {
+export async function recordVerificationResult(input: RecordVerificationResultInput) {
+  const context = await getSessionTaskContext(input.userId, input.sessionId);
+  if (!context.issueId || !context.taskRunId) return;
+
+  const provider = await resolveProvider(context);
+  if (!provider) return;
+
   if (input.artifactUrl) {
-    await attachArtifact({
-      userId: input.userId,
-      sessionId: input.sessionId,
-      artifactType: "verification",
-      artifactRole: "verification",
-      url: input.artifactUrl,
+    await provider.attachArtifact(context.issueId, context.taskRunId, {
+      type: "verification",
+      role: "verification",
       title: "Verification artifact",
+      url: input.artifactUrl,
       summary: input.summary,
     });
   }
 
-  await reportMilestone({
-    userId: input.userId,
-    sessionId: input.sessionId,
-    kind: "verification_result",
-    message: input.summary,
-    verificationResult: input.result,
+  await provider.reportMilestone(context.issueId, context.taskRunId, {
+    title: "verification_result",
+    body: `Verification ${input.result}: ${input.summary}`,
   });
 }
 
-export async function markRunCompletedAfterMerge(
-  input: MarkRunCompletedAfterMergeInput,
-) {
-  await setIssueStatus({
-    userId: input.userId,
-    sessionId: input.sessionId,
-    status: "done",
-  });
+export async function markRunCompletedAfterMerge(input: MarkRunCompletedAfterMergeInput) {
+  const context = await getSessionTaskContext(input.userId, input.sessionId);
+  if (!context.issueId || !context.taskRunId) return;
+
+  const provider = await resolveProvider(context);
+  if (!provider) return;
+
+  await provider.setStatus(context.issueId, context.taskRunId, "completed");
 
   if (input.prUrl) {
-    await attachArtifact({
-      userId: input.userId,
-      sessionId: input.sessionId,
-      artifactType: "pr",
-      artifactRole: "primary",
-      url: input.prUrl,
+    await provider.attachArtifact(context.issueId, context.taskRunId, {
+      type: "pr",
+      role: "primary",
       title: "Merged pull request",
+      url: input.prUrl,
       summary: input.summary,
     });
   }
 
-  await reportMilestone({
-    userId: input.userId,
-    sessionId: input.sessionId,
-    kind: "completed",
-    message: input.summary,
+  await provider.reportMilestone(context.issueId, context.taskRunId, {
+    title: "completed",
+    body: input.summary,
   });
 }

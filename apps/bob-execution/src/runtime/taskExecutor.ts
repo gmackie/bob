@@ -9,6 +9,7 @@ import {
   runLifecycleEvents,
   taskRuns,
 } from "@bob/db/schema";
+import { applySnapshotToTask, snapshotTaskFromProvider } from "./providerSnapshot.js";
 
 function getGatewayUrl() {
   return process.env.GATEWAY_URL ?? "http://localhost:3002";
@@ -221,8 +222,23 @@ export async function executeTask(
   options?: {
     contextPreamble?: string;
     agentType?: string;
+    planningProvider?: string;
   },
 ): Promise<TaskExecutionResult> {
+  // Resolve the planning provider and snapshot fresh task details.
+  // This ensures the executor works with the latest title/description/labels
+  // from the upstream source (Linear, internal work items, etc.).
+  const providerResult = await snapshotTaskFromProvider(task, options?.planningProvider);
+  const resolvedProvider = providerResult.provider;
+
+  if (providerResult.snapshot) {
+    applySnapshotToTask(task, providerResult.snapshot);
+  } else if (providerResult.error) {
+    console.warn(
+      `[taskExecutor] Provider snapshot failed (provider=${resolvedProvider}): ${providerResult.error}. Proceeding with caller-supplied task details.`,
+    );
+  }
+
   const repoInfo = await findRepositoryForTask(userId, task);
 
   if (!repoInfo) {
@@ -235,6 +251,7 @@ export async function executeTask(
         planningWorkspaceId: task.workspaceId,
         planningItemId: task.id,
         planningItemIdentifier: task.identifier,
+        planningProvider: resolvedProvider,
         status: "blocked",
         blockedReason: "No repository found for this task",
       })
@@ -289,6 +306,7 @@ export async function executeTask(
       planningWorkspaceId: task.workspaceId,
       planningItemId: task.id,
       planningItemIdentifier: task.identifier,
+      planningProvider: resolvedProvider,
       sessionId: insertedSession.id,
       repositoryId: repoInfo.repositoryId,
       status: "starting",

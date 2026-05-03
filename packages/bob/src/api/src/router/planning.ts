@@ -25,6 +25,10 @@ import {
   planningAgentStartSession,
   planningAgentEndSession,
 } from "../handlers/planning";
+import {
+  listLinearProjects,
+  connectLinearProject,
+} from "../handlers/linearSetup";
 
 const taskStatusEnum = [
   "backlog",
@@ -276,5 +280,23 @@ export const planningRouter = {
     .input(z.object({ sessionId: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       planningAgentEndSession({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
+
+  listLinearProjects: protectedProcedure
+    .input(z.object({ workspaceId: z.string().uuid() }))
+    .query(({ ctx, input }) =>
+      listLinearProjects({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
+
+  connectLinearProject: protectedProcedure
+    .input(
+      z.object({
+        projectId: z.string().uuid(),
+        linearProjectId: z.string().optional(),
+        createName: z.string().optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      connectLinearProject({ db: ctx.db, userId: ctx.session.user.id }, input),
     ),
 } satisfies TRPCRouterRecord;

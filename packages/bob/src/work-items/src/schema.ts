@@ -601,6 +601,7 @@ export const dispatchItems = pgTable(
     taskRunId: t.uuid().references(() => taskRuns.id, { onDelete: "set null" }),
     sortOrder: t.integer().notNull().default(0),
     pipelineState: t.varchar({ length: 30 }),
+    planningProvider: t.varchar({ length: 20 }).notNull().default("internal"),
     createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
     updatedAt: t.timestamp({ mode: "string", withTimezone: true }).$onUpdateFn(() => sql`now()`),
   }),
@@ -701,6 +702,8 @@ export const taskRuns = pgTable("task_runs", (t) => ({
   parentTaskRunId: t.uuid().references((): AnyPgColumn => taskRuns.id, { onDelete: "set null" }),
   runPhase: t.varchar({ length: 20 }).notNull().default("execute"),
   // runPhase values: "shape" | "plan" | "execute" | "review" | "ship"
+  planningProvider: t.varchar({ length: 20 }).notNull().default("internal"),
+  syncFailures: t.jsonb().$type<Array<{ method: string; error: string; timestamp: string }>>(),
   createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t
     .timestamp({ mode: "string", withTimezone: true })
@@ -716,6 +719,7 @@ export const CreateTaskRunSchema = createInsertSchema(taskRuns, {
   status: z.enum(taskRunStatusEnum),
   blockedReason: z.string().optional(),
   branch: z.string().optional(),
+  planningProvider: z.string().max(20).default("internal"),
 }).omit({
   id: true,
   userId: true,

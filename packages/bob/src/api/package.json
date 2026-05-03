@@ -94,6 +94,7 @@
     "@elevenlabs/client": "^0.13.0",
     "@gmacko/bob": "workspace:*",
     "@gmacko/core": "workspace:*",
+    "@linear/sdk": "^83.0.0",
     "@trpc/server": "catalog:",
     "effect": "4.0.0-beta.43",
     "superjson": "2.2.3",

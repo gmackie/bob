@@ -109,11 +109,39 @@ export const projects = pgTable("projects", (t) => ({
     }>()
     .notNull()
     .default({}),
+  planningProvider: t.varchar({ length: 20 }).notNull().default("internal"),
+  linearProjectId: t.text(),
   createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t
     .timestamp({ mode: "string", withTimezone: true })
     .$onUpdateFn(() => sql`now()`),
 }));
+
+export const workspaceIntegrations = pgTable(
+  "workspace_integrations",
+  (t) => ({
+    id: t.uuid().notNull().primaryKey().defaultRandom(),
+    workspaceId: t
+      .uuid()
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    provider: t.varchar({ length: 20 }).notNull(),
+    enabled: t.boolean().notNull().default(true),
+    apiKey: t.text(),
+    linearTeamId: t.text(),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
+    updatedAt: t
+      .timestamp({ mode: "string", withTimezone: true })
+      .$onUpdateFn(() => sql`now()`),
+  }),
+  (table) => [
+    {
+      name: "workspace_integrations_workspace_provider_idx",
+      columns: [table.workspaceId, table.provider],
+      unique: true,
+    },
+  ],
+);
 
 export const CreateProjectSchema = createInsertSchema(projects, {
   name: z.string().min(1).max(128),
@@ -305,6 +333,13 @@ export const projectsRelations = relations(projects, ({ one }) => ({
   leadUser: one(user, {
     fields: [projects.leadUserId],
     references: [user.id],
+  }),
+}));
+
+export const workspaceIntegrationsRelations = relations(workspaceIntegrations, ({ one }) => ({
+  workspace: one(workspaces, {
+    fields: [workspaceIntegrations.workspaceId],
+    references: [workspaces.id],
   }),
 }));
 

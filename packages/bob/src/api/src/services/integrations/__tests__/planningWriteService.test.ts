@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const findConversationMock = vi.fn();
 const findTaskRunMock = vi.fn();
+const selectMock = vi.fn();
+const fromMock = vi.fn();
+const whereMock = vi.fn();
+const thenMock = vi.fn();
 
 vi.mock("@bob/db/client", () => ({
   db: {
@@ -13,28 +17,55 @@ vi.mock("@bob/db/client", () => ({
         findFirst: findTaskRunMock,
       },
     },
+    select: selectMock,
+    from: fromMock,
+    where: whereMock,
   },
 }));
 
 vi.mock("@bob/db", () => ({
-  and: vi.fn((...args) => args),
-  desc: vi.fn((value) => value),
-  eq: vi.fn((left, right) => ({ left, right })),
+  and: vi.fn((...args: any[]) => args),
+  desc: vi.fn((value: any) => value),
+  eq: vi.fn((left: any, right: any) => ({ left, right })),
 }));
 
-describe("planningWriteService", () => {
+vi.mock("@bob/db/schema", () => ({
+  chatConversations: { id: "id", userId: "userId" },
+  taskRuns: { sessionId: "sessionId", userId: "userId", createdAt: "createdAt" },
+  projects: { workspaceId: "workspaceId", planningProvider: "planningProvider", linearProjectId: "linearProjectId" },
+  workspaceIntegrations: { workspaceId: "workspaceId", provider: "provider", enabled: "enabled" },
+}));
+
+const mockProvider = {
+  createTask: vi.fn(),
+  getTask: vi.fn(),
+  getTaskByIdentifier: vi.fn(),
+  listTasks: vi.fn(),
+  updateTask: vi.fn(),
+  reportMilestone: vi.fn(),
+  requestInput: vi.fn(),
+  resolveInput: vi.fn(),
+  setStatus: vi.fn(),
+  attachArtifact: vi.fn(),
+  markReviewReady: vi.fn(),
+  completeTask: vi.fn(),
+  addComment: vi.fn(),
+};
+
+vi.mock("../planningProvider.js", () => ({
+  resolvePlanningProvider: vi.fn().mockResolvedValue(mockProvider),
+}));
+
+describe("planningWriteService (provider delegation)", () => {
   beforeEach(() => {
-    vi.resetModules();
     vi.clearAllMocks();
-    delete process.env.PLANNING_URL;
-    delete process.env.PLANNING_API_KEY;
-    process.env.PLANNING_URL = "https://tasks.example.com";
-    process.env.PLANNING_API_KEY = "test-api-key";
 
     findConversationMock.mockResolvedValue({
       id: "session-123",
       userId: "user-123",
       planningTaskId: "issue-123",
+      workItemId: null,
+      workItemIdentifierSnapshot: null,
     });
     findTaskRunMock.mockResolvedValue({
       id: "run-123",
@@ -42,221 +73,113 @@ describe("planningWriteService", () => {
       userId: "user-123",
       planningItemId: "issue-123",
       planningItemIdentifier: "ENG-123",
+      workItemId: null,
+      workItemIdentifierSnapshot: null,
+      planningProvider: "linear",
+      planningWorkspaceId: "ws-123",
     });
-    global.fetch = vi.fn();
+
+    // Mock the project lookup chain
+    selectMock.mockReturnValue({ from: fromMock });
+    fromMock.mockReturnValue({ where: whereMock });
+    whereMock.mockReturnValue({
+      then: thenMock,
+    });
+    thenMock.mockImplementation((cb: any) =>
+      Promise.resolve(cb([{ planningProvider: "linear", linearProjectId: "lin-proj-1" }])),
+    );
   });
 
-  it("routes progress milestones through agent.syncBobRun", async () => {
-    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      new Response(
-        JSON.stringify([
-          {
-            result: {
-              data: {
-                json: {
-                  duplicated: false,
-                },
-              },
-            },
-          },
-        ]),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
-    );
-
+  it("delegates reportMilestone to provider", async () => {
     const { reportMilestone } = await import("../planningWriteService");
 
     await reportMilestone({
       userId: "user-123",
       sessionId: "session-123",
       kind: "progress",
-      message: "Implemented Bob run sync router",
-      phase: "implementation",
-      progress: "1/2",
+      message: "Built the auth module",
     });
 
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-
-    const [url, init] = (global.fetch as unknown as ReturnType<typeof vi.fn>)
-      .mock.calls[0] as [string, { headers: Record<string, string>; body: string }];
-    const body = JSON.parse(init.body) as { "0": { json: Record<string, unknown> } };
-
-    expect(url).toBe("https://tasks.example.com/api/trpc/agent.syncBobRun");
-    expect(init.headers["X-API-Key"]).toBe("test-api-key");
-    expect(init.headers["Idempotency-Key"]).toBeTruthy();
-    expect(body["0"].json).toMatchObject({
-      issueId: "issue-123",
-      taskRunId: "run-123",
-      sessionId: "session-123",
-      executionBackend: "bob",
-      runStatus: "in_progress",
-      workflowStatus: "working",
-      latestSummary: "Implemented Bob run sync router",
-    });
-    expect(body["0"].json.idempotencyKey).toBeTruthy();
+    expect(mockProvider.reportMilestone).toHaveBeenCalledWith(
+      "issue-123",
+      "run-123",
+      { title: "progress", body: "Built the auth module" },
+    );
   });
 
-  it("creates issue artifacts through issueArtifact.create", async () => {
-    (global.fetch as unknown as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify([
-            {
-              result: {
-                data: {
-                  json: {
-                    id: "artifact-123",
-                  },
-                },
-              },
-            },
-          ]),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify([
-            {
-              result: {
-                data: {
-                  json: {
-                    id: "comment-456",
-                  },
-                },
-              },
-            },
-          ]),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        ),
-      );
-
+  it("delegates attachArtifact to provider", async () => {
     const { attachArtifact } = await import("../planningWriteService");
 
     await attachArtifact({
       userId: "user-123",
       sessionId: "session-123",
-      artifactType: "doc",
-      artifactRole: "documentation",
-      url: "https://example.com/design-doc",
-      title: "Design doc",
-      summary: "Updated implementation notes",
+      artifactType: "pr",
+      artifactRole: "review",
+      url: "https://github.com/org/repo/pull/42",
+      title: "Pull request #42",
+      summary: "Adds auth provider",
     });
 
-    const fetchCalls = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock
-      .calls as Array<[string, { body: string }]>;
-    const artifactCall = fetchCalls.find(
-      ([url]) => url === "https://tasks.example.com/api/trpc/issueArtifact.create",
+    expect(mockProvider.attachArtifact).toHaveBeenCalledWith(
+      "issue-123",
+      "run-123",
+      {
+        type: "pr",
+        role: "review",
+        title: "Pull request #42",
+        url: "https://github.com/org/repo/pull/42",
+        summary: "Adds auth provider",
+      },
     );
-
-    expect(artifactCall).toBeDefined();
-    const artifactBody = JSON.parse(artifactCall![1].body) as {
-      "0": { json: Record<string, unknown> };
-    };
-    expect(artifactBody["0"].json).toMatchObject({
-      issueId: "issue-123",
-      agentTaskRunId: "run-123",
-      executionBackend: "bob",
-      producerType: "bob",
-      artifactType: "doc",
-      artifactRole: "documentation",
-      url: "https://example.com/design-doc",
-      title: "Design doc",
-      summary: "Updated implementation notes",
-    });
   });
 
-  it("records prompt comment ids in the Bob run projection after posting a question", async () => {
-    (global.fetch as unknown as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify([
-            {
-              result: {
-                data: {
-                  json: {
-                    id: "comment-123",
-                  },
-                },
-              },
-            },
-          ]),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify([
-            {
-              result: {
-                data: {
-                  json: {
-                    duplicated: false,
-                  },
-                },
-              },
-            },
-          ]),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        ),
-      );
+  it("delegates completeTaskRun to provider.completeTask", async () => {
+    const { completeTaskRun } = await import("../planningWriteService");
 
-    const { requestInputPrompt } = await import("../planningWriteService");
-
-    await requestInputPrompt({
+    await completeTaskRun({
       userId: "user-123",
       sessionId: "session-123",
-      question: "Which path should I take?",
-      options: ["A", "B"],
-      defaultAction: "Take path A",
-      timeoutMinutes: 30,
-      expiresAt: new Date("2026-03-10T18:00:00.000Z"),
+      summary: "All done",
+      prUrl: "https://github.com/org/repo/pull/42",
     });
 
-    const [commentUrl] = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock
-      .calls[0] as [string];
-    const [syncUrl, syncInit] = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock
-      .calls[1] as [string, { body: string }];
-    const syncBody = JSON.parse(syncInit.body) as {
-      "0": { json: Record<string, unknown> };
-    };
-
-    expect(commentUrl).toBe("https://tasks.example.com/api/trpc/comment.create");
-    expect(syncUrl).toBe("https://tasks.example.com/api/trpc/agent.syncBobRun");
-    expect(syncBody["0"].json).toMatchObject({
-      issueId: "issue-123",
-      taskRunId: "run-123",
-      sessionId: "session-123",
-      executionBackend: "bob",
-      workflowStatus: "awaiting_input",
-      latestSummary: "Which path should I take?",
-      lastPromptCommentId: "comment-123",
-    });
-    expect(syncBody["0"].json.idempotencyKey).toBeTruthy();
+    expect(mockProvider.completeTask).toHaveBeenCalledWith(
+      "issue-123",
+      "run-123",
+      { outcome: "success", summary: "All done" },
+    );
+    expect(mockProvider.attachArtifact).toHaveBeenCalledWith(
+      "issue-123",
+      "run-123",
+      expect.objectContaining({ type: "pr", url: "https://github.com/org/repo/pull/42" }),
+    );
   });
 
-  it("prefers planning env aliases when writing remote task updates", async () => {
-    delete process.env.PLANNING_URL;
-    delete process.env.PLANNING_API_KEY;
-    process.env.PLANNING_URL = "https://planning.example.com";
-    process.env.PLANNING_API_KEY = "planning-api-key";
+  it("delegates setIssueStatus to provider.setStatus", async () => {
+    const { setIssueStatus } = await import("../planningWriteService");
 
-    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      new Response(
-        JSON.stringify([
-          {
-            result: {
-              data: {
-                json: {
-                  duplicated: false,
-                },
-              },
-            },
-          },
-        ]),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
+    await setIssueStatus({
+      userId: "user-123",
+      sessionId: "session-123",
+      status: "in_progress",
+    });
+
+    expect(mockProvider.setStatus).toHaveBeenCalledWith(
+      "issue-123",
+      "run-123",
+      "started",
     );
+  });
+
+  it("does nothing when no taskRunId in context", async () => {
+    findTaskRunMock.mockResolvedValue(null);
+    findConversationMock.mockResolvedValue({
+      id: "session-123",
+      userId: "user-123",
+      planningTaskId: null,
+      workItemId: null,
+      workItemIdentifierSnapshot: null,
+    });
 
     const { reportMilestone } = await import("../planningWriteService");
 
@@ -264,35 +187,9 @@ describe("planningWriteService", () => {
       userId: "user-123",
       sessionId: "session-123",
       kind: "progress",
-      message: "Moved aliases to planning config",
+      message: "No task run",
     });
 
-    const [url, init] = (global.fetch as unknown as ReturnType<typeof vi.fn>)
-      .mock.calls[0] as [string, { headers: Record<string, string> }];
-
-    expect(url).toBe(
-      "https://planning.example.com/api/trpc/agent.syncBobRun",
-    );
-    expect(init.headers["X-API-Key"]).toBe("planning-api-key");
-  });
-
-  it("logs with planning naming when the API key is missing", async () => {
-    delete process.env.PLANNING_API_KEY;
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-    const { reportMilestone } = await import("../planningWriteService");
-
-    await reportMilestone({
-      userId: "user-123",
-      sessionId: "session-123",
-      kind: "progress",
-      message: "No API key path",
-    });
-
-    expect(warnSpy).toHaveBeenCalledWith(
-      "[PlanningWriteService] PLANNING_API_KEY not set, skipping agent.syncBobRun",
-    );
-
-    warnSpy.mockRestore();
+    expect(mockProvider.reportMilestone).not.toHaveBeenCalled();
   });
 });

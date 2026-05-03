@@ -12,6 +12,7 @@ import {
   getPlanningApiKey,
   getPlanningBaseUrl,
 } from "../services/integrations/planningRemoteConfig";
+import { resolvePlanningProvider, PlanningProviderError } from "../services/integrations/planningProvider.js";
 import { onTaskStatusChange } from "../services/automation/task-trigger";
 
 import type { HandlerContext } from "./context.js";
@@ -438,30 +439,51 @@ export async function planningGetTask(
   ctx: HandlerContext,
   input: { id: string },
 ) {
-  const accessibleItem = await loadAccessibleWorkItem(
-    ctx.db,
-    ctx.userId,
-    input.id,
-  );
+  // Try to find as internal work item first (backwards compat)
+  const item = await ctx.db.query.workItems.findFirst({
+    where: eq(workItems.id, input.id),
+  });
 
-  const planningApiKey = getPlanningApiKey();
-  if (!planningApiKey) {
-    const project = accessibleItem.projectId
+  if (item && item.workspaceId) {
+    await assertWorkspaceAccess(ctx.db, ctx.userId, item.workspaceId);
+
+    const project = item.projectId
       ? await ctx.db.query.projects.findFirst({
-          where: eq(projects.id, accessibleItem.projectId),
+          where: eq(projects.id, item.projectId),
         })
       : null;
 
+    if (project && project.planningProvider === "linear" && project.linearProjectId) {
+      const provider = await resolvePlanningProvider(ctx.db, project, project.workspaceId);
+      const task = await provider.getTask(input.id);
+      if (!task) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Task not found in Linear" });
+      }
+      return {
+        id: task.externalId,
+        identifier: task.identifier,
+        title: task.title,
+        description: task.description ?? undefined,
+        status: task.status,
+        priority: task.priority,
+        labels: task.labels.map((l) => ({ id: l, name: l, color: "" })),
+        dueDate: undefined,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    // Internal provider path
     return {
-      id: accessibleItem.id,
+      id: item.id,
       identifier: formatWorkItemIdentifier({
         projectKey: project?.key ?? null,
-        sequenceNumber: accessibleItem.sequenceNumber,
-        id: accessibleItem.id,
+        sequenceNumber: item.sequenceNumber,
+        id: item.id,
       }),
-      title: accessibleItem.title,
-      description: accessibleItem.description ?? undefined,
-      status: accessibleItem.status,
+      title: item.title,
+      description: item.description ?? undefined,
+      status: item.status,
       priority: "no_priority" as string,
       project: project
         ? { id: project.id, name: project.name, key: project.key }
@@ -469,105 +491,86 @@ export async function planningGetTask(
       assignee: undefined,
       labels: [] as Array<{ id: string; name: string; color: string }>,
       dueDate: undefined,
-      createdAt: accessibleItem.createdAt.toISOString(),
-      updatedAt:
-        accessibleItem.updatedAt?.toISOString() ??
-        accessibleItem.createdAt.toISOString(),
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt ?? item.createdAt,
       completedAt: undefined,
     };
   }
 
-  return planningQuery<{
-    id: string;
-    identifier: string;
-    title: string;
-    description?: string;
-    status: string;
-    priority: string;
-    project?: { id: string; name: string; key: string };
-    assignee?: { id: string; name: string };
-    labels?: Array<{ id: string; name: string; color: string }>;
-    dueDate?: string;
-    createdAt: string;
-    updatedAt: string;
-    completedAt?: string;
-  }>("issue.get", input);
+  throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
 }
 
 export async function planningGetTaskByIdentifier(
   ctx: HandlerContext,
   input: { identifier: string; workspaceId?: string },
 ) {
-  const planningApiKey = getPlanningApiKey();
-  if (!planningApiKey) {
-    // Parse identifier like "PROJ-123"
-    const match = input.identifier.match(/^([A-Z]+)-(\d+)$/);
-    if (!match) {
-      throw new TRPCError({
-        code: "NOT_FOUND",
-        message: "Task not found",
-      });
+  if (input.workspaceId) {
+    await assertWorkspaceAccess(ctx.db, ctx.userId, input.workspaceId);
+  }
+
+  // Parse identifier like "PROJ-123"
+  const match = input.identifier.match(/^([A-Z]+)-(\d+)$/);
+  if (!match) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
+  }
+
+  const [, projectKey, seqStr] = match;
+  const seqNum = parseInt(seqStr!, 10);
+
+  const project = await ctx.db.query.projects.findFirst({
+    where: eq(projects.key, projectKey!),
+  });
+
+  if (!project) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
+  }
+
+  if (input.workspaceId && project.workspaceId !== input.workspaceId) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
+  }
+
+  await assertWorkspaceAccess(ctx.db, ctx.userId, project.workspaceId);
+
+  if (project.planningProvider === "linear" && project.linearProjectId) {
+    const provider = await resolvePlanningProvider(ctx.db, project, project.workspaceId);
+    const task = await provider.getTaskByIdentifier(input.identifier);
+    if (!task) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
     }
-
-    const [, projectKey, seqStr] = match;
-    const seqNum = parseInt(seqStr!, 10);
-
-    const project = await ctx.db.query.projects.findFirst({
-      where: eq(projects.key, projectKey!),
-    });
-
-    if (!project) {
-      throw new TRPCError({
-        code: "NOT_FOUND",
-        message: "Task not found",
-      });
-    }
-
-    if (input.workspaceId && project.workspaceId !== input.workspaceId) {
-      throw new TRPCError({
-        code: "NOT_FOUND",
-        message: "Task not found",
-      });
-    }
-
-    await assertWorkspaceAccess(ctx.db, ctx.userId, project.workspaceId);
-
-    const item = await ctx.db.query.workItems.findFirst({
-      where: and(
-        eq(workItems.projectId, project.id),
-        eq(workItems.sequenceNumber, seqNum),
-      ),
-    });
-
-    if (!item) {
-      throw new TRPCError({
-        code: "NOT_FOUND",
-        message: "Task not found",
-      });
-    }
-
     return {
-      id: item.id,
-      identifier: `${project.key}-${item.sequenceNumber}`,
-      title: item.title,
-      description: item.description ?? undefined,
-      status: item.status,
-      priority: "no_priority" as string,
+      id: task.externalId,
+      identifier: task.identifier,
+      title: task.title,
+      description: task.description ?? undefined,
+      status: task.status,
+      priority: task.priority,
       projectId: project.id,
       dueDate: undefined,
     };
   }
 
-  return planningQuery<{
-    id: string;
-    identifier: string;
-    title: string;
-    description?: string;
-    status: string;
-    priority: string;
-    projectId: string;
-    dueDate?: string;
-  }>("issue.getByIdentifier", input);
+  // Internal path
+  const item = await ctx.db.query.workItems.findFirst({
+    where: and(
+      eq(workItems.projectId, project.id),
+      eq(workItems.sequenceNumber, seqNum),
+    ),
+  });
+
+  if (!item) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
+  }
+
+  return {
+    id: item.id,
+    identifier: `${project.key}-${item.sequenceNumber}`,
+    title: item.title,
+    description: item.description ?? undefined,
+    status: item.status,
+    priority: "no_priority" as string,
+    projectId: project.id,
+    dueDate: undefined,
+  };
 }
 
 export async function planningCreateTask(
@@ -590,48 +593,23 @@ export async function planningCreateTask(
     input.projectId,
   );
 
-  const planningApiKey = getPlanningApiKey();
-  if (!planningApiKey) {
-    // Auto-generate sequence number: max+1 for project
-    const maxSeqResult = await ctx.db
-      .select({ maxSeq: sql<number>`coalesce(max(${workItems.sequenceNumber}), 0)` })
-      .from(workItems)
-      .where(eq(workItems.projectId, input.projectId));
-    const nextSeq = (maxSeqResult[0]?.maxSeq ?? 0) + 1;
-
-    const [created] = await ctx.db
-      .insert(workItems)
-      .values({
-        ownerUserId: ctx.userId,
-        workspaceId: project.workspaceId,
-        projectId: input.projectId,
-        sequenceNumber: nextSeq,
-        kind: input.kind ?? "task",
-        title: input.title,
-        description: input.description ?? null,
-        status: input.status ?? "todo",
-      })
-      .returning();
-
-    return {
-      id: created!.id,
-      identifier: `${project.key}-${nextSeq}`,
-      title: created!.title,
-      status: created!.status,
-      priority: "no_priority" as string,
-    };
-  }
-
-  return planningMutation<{
-    id: string;
-    identifier: string;
-    title: string;
-    status: string;
-    priority: string;
-  }>("issue.create", {
-    ...input,
-    dueDate: input.dueDate ? new Date(input.dueDate) : undefined,
+  const provider = await resolvePlanningProvider(ctx.db, project, project.workspaceId);
+  const result = await provider.createTask({
+    title: input.title,
+    description: input.description ?? null,
+    providerProjectId: project.linearProjectId ?? project.id,
+    priority: input.priority,
+    assigneeId: input.assigneeId,
+    labels: input.labelIds,
   });
+
+  return {
+    id: result.externalId,
+    identifier: result.identifier,
+    title: result.title,
+    status: result.status,
+    priority: result.priority,
+  };
 }
 
 export async function planningUpdateTask(
@@ -646,98 +624,81 @@ export async function planningUpdateTask(
     dueDate?: string | null;
   },
 ) {
-  const oldItem = await loadAccessibleWorkItem(ctx.db, ctx.userId, input.id);
+  // Load item to find its project for provider resolution
+  const oldItem = await ctx.db.query.workItems.findFirst({
+    where: eq(workItems.id, input.id),
+  });
 
-  const planningApiKey = getPlanningApiKey();
-  if (!planningApiKey) {
-    const updateValues: Record<string, unknown> = {};
-    if (input.title !== undefined) updateValues.title = input.title;
-    if (input.description !== undefined)
-      updateValues.description = input.description;
-    if (input.status !== undefined) updateValues.status = input.status;
+  if (!oldItem || !oldItem.workspaceId) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
+  }
 
-    const [updated] = await ctx.db
-      .update(workItems)
-      .set(updateValues)
-      .where(eq(workItems.id, input.id))
-      .returning();
+  await assertWorkspaceAccess(ctx.db, ctx.userId, oldItem.workspaceId);
 
-    const project = oldItem.projectId
-      ? await ctx.db.query.projects.findFirst({
-          where: eq(projects.id, oldItem.projectId),
-        })
-      : null;
+  const project = oldItem.projectId
+    ? await ctx.db.query.projects.findFirst({
+        where: eq(projects.id, oldItem.projectId),
+      })
+    : null;
 
-    const identifier = formatWorkItemIdentifier({
-      projectKey: project?.key ?? null,
-      sequenceNumber: oldItem.sequenceNumber,
-      id: oldItem.id,
+  if (project && project.planningProvider === "linear" && project.linearProjectId) {
+    const provider = await resolvePlanningProvider(ctx.db, project, project.workspaceId);
+    const result = await provider.updateTask(input.id, {
+      title: input.title,
+      description: input.description,
+      status: input.status,
+      priority: input.priority,
+      assigneeId: input.assigneeId,
     });
 
-    // Fire-and-forget: check if status changed and trigger automation
-    if (input.status && oldItem.status !== input.status) {
-      onTaskStatusChange({
-        taskId: input.id,
-        projectId: oldItem.projectId ?? null,
-        oldStatus: oldItem.status,
-        newStatus: input.status,
-        userId: ctx.userId,
-        identifier,
-        title: oldItem.title,
-      }).catch((err: any) =>
-        console.error("[automation] task trigger failed:", err),
-      );
-    }
-
     return {
-      id: updated!.id,
-      identifier,
-      title: updated!.title,
-      status: updated!.status,
-      priority: "no_priority" as string,
+      id: result.externalId,
+      identifier: result.identifier,
+      title: result.title,
+      status: result.status,
+      priority: result.priority,
     };
   }
 
-  // Fetch current task to detect status transitions
-  const oldTask = input.status
-    ? await planningQuery<{ id: string; status: string; identifier: string; title: string; projectId?: string }>(
-        "issue.get",
-        { id: input.id },
-      ).catch(() => null)
-    : null;
+  // Internal path
+  const updateValues: Record<string, unknown> = {};
+  if (input.title !== undefined) updateValues.title = input.title;
+  if (input.description !== undefined) updateValues.description = input.description;
+  if (input.status !== undefined) updateValues.status = input.status;
 
-  const { dueDate, ...rest } = input;
-  const result = await planningMutation<{
-    id: string;
-    identifier: string;
-    title: string;
-    status: string;
-    priority: string;
-  }>("issue.update", {
-    ...rest,
-    dueDate: dueDate
-      ? new Date(dueDate)
-      : dueDate === null
-        ? null
-        : undefined,
+  const [updated] = await ctx.db
+    .update(workItems)
+    .set(updateValues)
+    .where(eq(workItems.id, input.id))
+    .returning();
+
+  const identifier = formatWorkItemIdentifier({
+    projectKey: project?.key ?? null,
+    sequenceNumber: oldItem.sequenceNumber,
+    id: oldItem.id,
   });
 
-  // Fire-and-forget: check if status changed and trigger automation
-  if (input.status && oldTask && oldTask.status !== input.status) {
+  if (input.status && oldItem.status !== input.status) {
     onTaskStatusChange({
       taskId: input.id,
-      projectId: oldTask.projectId ?? null,
-      oldStatus: oldTask.status,
+      projectId: oldItem.projectId ?? null,
+      oldStatus: oldItem.status,
       newStatus: input.status,
       userId: ctx.userId,
-      identifier: oldTask.identifier ?? result.identifier,
-      title: oldTask.title ?? result.title,
+      identifier,
+      title: oldItem.title,
     }).catch((err: any) =>
       console.error("[automation] task trigger failed:", err),
     );
   }
 
-  return result;
+  return {
+    id: updated!.id,
+    identifier,
+    title: updated!.title,
+    status: updated!.status,
+    priority: "no_priority" as string,
+  };
 }
 
 export async function planningAddComment(
