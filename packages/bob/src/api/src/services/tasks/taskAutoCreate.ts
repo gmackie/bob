@@ -2,9 +2,12 @@ import { and, eq } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
   chatConversations,
+  comments,
+  projects,
   pullRequests,
   repositories,
   taskRuns,
+  workItems,
 } from "@bob/db/schema";
 
 import type { ContextReadiness } from "./contextHeuristics";
@@ -12,10 +15,7 @@ import {
   buildContextFromPR,
   evaluateContextReadiness,
 } from "./contextHeuristics";
-import {
-  getPlanningApiKey,
-  getPlanningApiUrl,
-} from "../integrations/planningRemoteConfig";
+import { resolvePlanningProvider } from "../integrations/planningProvider.js";
 
 export interface PlanningCreateIssueInput {
   workspaceId: string;
@@ -45,60 +45,50 @@ export interface AutoCreateResult {
   reason: string;
 }
 
-async function planningRequest<T>(
-  endpoint: string,
-  method: "GET" | "POST" | "PATCH" = "GET",
-  body?: Record<string, unknown>,
-): Promise<T> {
-  const planningApiKey = getPlanningApiKey();
-
-  if (!planningApiKey) {
-    throw new Error("PLANNING_API_KEY is not configured");
-  }
-
-  const response = await fetch(`${getPlanningApiUrl()}${endpoint}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${planningApiKey}`,
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Planning API error (${response.status}): ${errorText}`);
-  }
-
-  return response.json() as Promise<T>;
-}
-
 async function createPlanningIssue(
   input: PlanningCreateIssueInput,
 ): Promise<PlanningIssue> {
-  return planningRequest<PlanningIssue>(
-    `/workspaces/${input.workspaceId}/issues`,
-    "POST",
-    {
-      projectId: input.projectId,
-      title: input.title,
-      description: input.description,
-      labels: input.labels,
-      priority: input.priority ?? 2,
-    },
-  );
+  const project = await db.query.projects.findFirst({
+    where: eq(projects.id, input.projectId),
+  });
+
+  if (!project) {
+    throw new Error(`Project ${input.projectId} not found`);
+  }
+
+  const provider = await resolvePlanningProvider(db, project, project.workspaceId);
+  const result = await provider.createTask({
+    title: input.title,
+    description: input.description ?? null,
+    providerProjectId: project.linearProjectId ?? project.id,
+    labels: input.labels,
+  });
+
+  return {
+    id: result.externalId,
+    identifier: result.identifier,
+    title: result.title,
+    description: result.description,
+    url: result.url ?? "",
+    priority: 2,
+    state: result.status,
+  };
 }
 
 export async function addCommentToPlanningIssue(
-  workspaceId: string,
+  _workspaceId: string,
   issueId: string,
   body: string,
 ): Promise<void> {
-  await planningRequest(
-    `/workspaces/${workspaceId}/issues/${issueId}/comments`,
-    "POST",
-    { body },
-  );
+  await db
+    .insert(comments)
+    .values({
+      workItemId: issueId,
+      userId: "system",
+      parentId: null,
+      body,
+      bodyHtml: null,
+    });
 }
 
 function generateTaskDescription(

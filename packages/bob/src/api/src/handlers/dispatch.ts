@@ -19,10 +19,6 @@ import {
   workItems,
 } from "@bob/db/schema";
 
-import {
-  getPlanningApiKey,
-  getPlanningBaseUrl,
-} from "../services/integrations/planningRemoteConfig";
 import { suggestAgent } from "../services/dispatch/agentHeuristics";
 
 import type { HandlerContext } from "./context.js";
@@ -81,29 +77,16 @@ async function loadOwnedDispatchItem(db: any, userId: string, itemId: string) {
   return item;
 }
 
-/**
- * Fire-and-forget update of a planning task's status via the planning API.
- * Gracefully degrades if no API key is configured.
- */
 async function updatePlanningTaskStatus(
+  database: any,
   taskId: string,
   status: string,
 ): Promise<void> {
-  const planningApiKey = getPlanningApiKey();
-  if (!planningApiKey) return;
-
-  const url = `${getPlanningBaseUrl()}/api/trpc/issue.update`;
   try {
-    await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": planningApiKey,
-      },
-      body: JSON.stringify({
-        "0": { json: { id: taskId, status } },
-      }),
-    });
+    await database
+      .update(workItems)
+      .set({ status })
+      .where(eq(workItems.id, taskId));
   } catch (err) {
     console.error(
       `[dispatch] Failed to update planning task ${taskId}: ${err}`,
@@ -593,7 +576,7 @@ export async function dispatchCheckProgress(
         newCompleted++;
 
         // Update planning API status to "in_review"
-        void updatePlanningTaskStatus(item.planningTaskId, "in_review");
+        void updatePlanningTaskStatus(ctx.db, item.planningTaskId, "in_review");
 
         // Auto-trigger code reviewer if PR exists on the task run
         void triggerCodeReview(ctx.db, item, batch.userId).catch((err) =>

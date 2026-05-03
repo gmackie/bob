@@ -8,11 +8,7 @@ import { TRPCError } from "@trpc/server";
 import { and, desc, eq, sql } from "@bob/db";
 import { comments, projects, workItems, workspaceMembers } from "@bob/db/schema";
 
-import {
-  getPlanningApiKey,
-  getPlanningBaseUrl,
-} from "../services/integrations/planningRemoteConfig";
-import { resolvePlanningProvider, PlanningProviderError } from "../services/integrations/planningProvider.js";
+import { resolvePlanningProvider } from "../services/integrations/planningProvider.js";
 import { onTaskStatusChange } from "../services/automation/task-trigger";
 
 import type { HandlerContext } from "./context.js";
@@ -80,92 +76,6 @@ function formatWorkItemIdentifier(input: {
   return input.projectKey ? `${input.projectKey}-${suffix}` : `TASK-${suffix}`;
 }
 
-async function planningQuery<T>(path: string, input?: unknown): Promise<T> {
-  const planningApiKey = getPlanningApiKey();
-
-  if (!planningApiKey) {
-    // Return empty result when remote planning API is not configured
-    return [] as unknown as T;
-  }
-
-  // tasks.gmac.io rejects POST for query procedures; use GET batch format.
-  const inputObj = { "0": { json: input ?? {} } };
-  const qs = new URLSearchParams({
-    batch: "1",
-    input: JSON.stringify(inputObj),
-  });
-
-  const url = `${getPlanningBaseUrl()}/api/trpc/${path}?${qs.toString()}`;
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "X-API-Key": planningApiKey,
-    },
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: `Planning API error: ${text}`,
-    });
-  }
-
-  const result = (await response.json()) as Array<{
-    result?: { data?: { json?: T } };
-    error?: { message?: string };
-  }>;
-  if (result[0]?.error) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: result[0].error.message ?? "Planning error",
-    });
-  }
-
-  return result[0]?.result?.data?.json as T;
-}
-
-async function planningMutation<T>(path: string, input?: unknown): Promise<T> {
-  const planningApiKey = getPlanningApiKey();
-
-  if (!planningApiKey) {
-    // Return empty result when remote planning API is not configured
-    return {} as unknown as T;
-  }
-
-  const url = `${getPlanningBaseUrl()}/api/trpc/${path}`;
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-API-Key": planningApiKey,
-    },
-    body: JSON.stringify(
-      input ? { "0": { json: input } } : { "0": { json: {} } },
-    ),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: `Planning API error: ${text}`,
-    });
-  }
-
-  const result = (await response.json()) as Array<{
-    result?: { data?: { json?: T } };
-    error?: { message?: string };
-  }>;
-  if (result[0]?.error) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: result[0].error.message ?? "Planning error",
-    });
-  }
-
-  return result[0]?.result?.data?.json as T;
-}
 
 // ---------------------------------------------------------------------------
 // Handler functions
@@ -175,31 +85,18 @@ export async function planningListWorkspaces(
   ctx: HandlerContext,
   _input: void,
 ) {
-  const planningApiKey = getPlanningApiKey();
-  if (!planningApiKey) {
-    const rows = await ctx.db.query.workspaceMembers.findMany({
-      where: eq(workspaceMembers.userId, ctx.userId),
-      with: {
-        workspace: true,
-      },
-      orderBy: desc(workspaceMembers.joinedAt),
-    });
-    return rows.map((membership: any) => ({
-      id: membership.workspace.id,
-      name: membership.workspace.name,
-      slug: membership.workspace.slug,
-    }));
-  }
-
-  const memberships = await planningQuery<any[]>("workspace.list");
-  return memberships
-    .map((m: any) => m?.workspace ?? m)
-    .filter(Boolean)
-    .map((w: any) => ({
-      id: w.id as string,
-      name: w.name as string,
-      slug: w.slug as string,
-    }));
+  const rows = await ctx.db.query.workspaceMembers.findMany({
+    where: eq(workspaceMembers.userId, ctx.userId),
+    with: {
+      workspace: true,
+    },
+    orderBy: desc(workspaceMembers.joinedAt),
+  });
+  return rows.map((membership: any) => ({
+    id: membership.workspace.id,
+    name: membership.workspace.name,
+    slug: membership.workspace.slug,
+  }));
 }
 
 export async function planningListProjects(
@@ -208,50 +105,33 @@ export async function planningListProjects(
 ) {
   await assertWorkspaceAccess(ctx.db, ctx.userId, input.workspaceId);
 
-  const planningApiKey = getPlanningApiKey();
-  if (!planningApiKey) {
-    const projectRows = await ctx.db.query.projects.findMany({
-      where: eq(projects.workspaceId, input.workspaceId),
-      orderBy: desc(projects.updatedAt),
-    });
+  const projectRows = await ctx.db.query.projects.findMany({
+    where: eq(projects.workspaceId, input.workspaceId),
+    orderBy: desc(projects.updatedAt),
+  });
 
-    const items = await ctx.db.query.workItems.findMany({
-      where: eq(workItems.workspaceId, input.workspaceId),
-    });
+  const items = await ctx.db.query.workItems.findMany({
+    where: eq(workItems.workspaceId, input.workspaceId),
+  });
 
-    return projectRows.map((project: any) => {
-      const projectItems = items.filter(
-        (item: any) => item.projectId === project.id,
-      );
-      return {
-        project: {
-          id: project.id,
-          name: project.name,
-          key: project.key,
-          status: project.status,
-          color: project.color ?? "#6366f1",
-        },
-        issueCount: projectItems.length,
-        completedCount: projectItems.filter(
-          (item: any) => item.status === "done",
-        ).length,
-      };
-    });
-  }
-
-  return planningQuery<
-    Array<{
+  return projectRows.map((project: any) => {
+    const projectItems = items.filter(
+      (item: any) => item.projectId === project.id,
+    );
+    return {
       project: {
-        id: string;
-        name: string;
-        key: string;
-        status: string;
-        color: string;
-      };
-      issueCount: number;
-      completedCount: number;
-    }>
-  >("project.list", input);
+        id: project.id,
+        name: project.name,
+        key: project.key,
+        status: project.status,
+        color: project.color ?? "#6366f1",
+      },
+      issueCount: projectItems.length,
+      completedCount: projectItems.filter(
+        (item: any) => item.status === "done",
+      ).length,
+    };
+  });
 }
 
 export async function planningGetProject(
@@ -260,46 +140,28 @@ export async function planningGetProject(
 ) {
   const project = await loadAccessibleProject(ctx.db, ctx.userId, input.id);
 
-  const planningApiKey = getPlanningApiKey();
-  if (!planningApiKey) {
-    const items = await ctx.db.query.workItems.findMany({
-      where: eq(workItems.projectId, input.id),
-    });
+  const items = await ctx.db.query.workItems.findMany({
+    where: eq(workItems.projectId, input.id),
+  });
 
-    return {
-      project: {
-        id: project.id,
-        name: project.name,
-        key: project.key,
-        description: project.description ?? undefined,
-        status: project.status,
-        color: project.color ?? "#6366f1",
-      },
-      issueCount: items.length,
-      completedCount: items.filter((item: any) => item.status === "done").length,
-      inProgressCount: items.filter(
-        (item: any) =>
-          item.status === "in_progress" || item.status === "in_review",
-      ).length,
-      backlogCount: items.filter((item: any) => item.status === "backlog")
-        .length,
-    };
-  }
-
-  return planningQuery<{
+  return {
     project: {
-      id: string;
-      name: string;
-      key: string;
-      description?: string;
-      status: string;
-      color: string;
-    };
-    issueCount: number;
-    completedCount: number;
-    inProgressCount: number;
-    backlogCount: number;
-  }>("project.get", input);
+      id: project.id,
+      name: project.name,
+      key: project.key,
+      description: project.description ?? undefined,
+      status: project.status,
+      color: project.color ?? "#6366f1",
+    },
+    issueCount: items.length,
+    completedCount: items.filter((item: any) => item.status === "done").length,
+    inProgressCount: items.filter(
+      (item: any) =>
+        item.status === "in_progress" || item.status === "in_review",
+    ).length,
+    backlogCount: items.filter((item: any) => item.status === "backlog")
+      .length,
+  };
 }
 
 export async function planningListTasks(
@@ -326,112 +188,67 @@ export async function planningListTasks(
     }
   }
 
-  const planningApiKey = getPlanningApiKey();
-  if (!planningApiKey) {
-    const {
-      workspaceId,
-      projectId,
-      status,
-      search,
-      limit,
-    } = input;
-
-    const filters = [eq(workItems.workspaceId, workspaceId)];
-    if (projectId) filters.push(eq(workItems.projectId, projectId));
-    if (status) filters.push(eq(workItems.status, status));
-
-    const items = await ctx.db.query.workItems.findMany({
-      where: and(...filters),
-      orderBy: desc(workItems.updatedAt),
-      limit,
-    });
-
-    // Filter by search in memory (no ilike available)
-    const filtered = search
-      ? items.filter((item: any) =>
-          item.title.toLowerCase().includes(search.toLowerCase()),
-        )
-      : items;
-
-    // Gather projects for identifiers
-    const projectIds = Array.from(
-      new Set(filtered.map((item: any) => item.projectId).filter(Boolean)),
-    ) as string[];
-    const projectRows =
-      projectIds.length > 0
-        ? await ctx.db.query.projects.findMany({
-            where: eq(projects.workspaceId, workspaceId),
-          })
-        : [];
-    const projectById = new Map(
-      projectRows.map((p: any) => [p.id, p]),
-    );
-
-    return filtered.map((item: any) => {
-      const project = item.projectId
-        ? projectById.get(item.projectId) ?? null
-        : null;
-      return {
-        id: item.id,
-        identifier: formatWorkItemIdentifier({
-          projectKey: project?.key ?? null,
-          sequenceNumber: item.sequenceNumber,
-          id: item.id,
-        }),
-        title: item.title,
-        status: item.status,
-        priority: "no_priority" as string,
-        kind: item.kind,
-        project: project
-          ? { id: project.id, name: project.name, key: project.key }
-          : undefined,
-        assignee: undefined,
-        labels: [] as Array<{ id: string; name: string; color: string }>,
-        dueDate: undefined,
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt ?? item.createdAt,
-      };
-    });
-  }
-
   const {
     workspaceId,
     projectId,
     status,
-    priority,
-    assigneeId,
     search,
     limit,
   } = input;
-  return planningQuery<
-    Array<{
-      id: string;
-      identifier: string;
-      title: string;
-      status: string;
-      priority: string;
-      project?: { id: string; name: string; key: string };
-      assignee?: { id: string; name: string };
-      labels?: Array<{ id: string; name: string; color: string }>;
-      dueDate?: string;
-      createdAt: string;
-      updatedAt: string;
-    }>
-  >("issue.list", {
-    workspaceId,
-    filter: {
-      projectId,
-      status: status ? [status] : undefined,
-      priority: priority ? [priority] : undefined,
-      assigneeId,
-      search,
-    },
-    pagination: {
-      limit,
-      offset: 0,
-      sortBy: "updatedAt",
-      sortDirection: "desc",
-    },
+
+  const filters = [eq(workItems.workspaceId, workspaceId)];
+  if (projectId) filters.push(eq(workItems.projectId, projectId));
+  if (status) filters.push(eq(workItems.status, status));
+
+  const items = await ctx.db.query.workItems.findMany({
+    where: and(...filters),
+    orderBy: desc(workItems.updatedAt),
+    limit,
+  });
+
+  const filtered = search
+    ? items.filter((item: any) =>
+        item.title.toLowerCase().includes(search.toLowerCase()),
+      )
+    : items;
+
+  const projectIds = Array.from(
+    new Set(filtered.map((item: any) => item.projectId).filter(Boolean)),
+  ) as string[];
+  const projectRows =
+    projectIds.length > 0
+      ? await ctx.db.query.projects.findMany({
+          where: eq(projects.workspaceId, workspaceId),
+        })
+      : [];
+  const projectById = new Map(
+    projectRows.map((p: any) => [p.id, p]),
+  );
+
+  return filtered.map((item: any) => {
+    const project = item.projectId
+      ? projectById.get(item.projectId) ?? null
+      : null;
+    return {
+      id: item.id,
+      identifier: formatWorkItemIdentifier({
+        projectKey: project?.key ?? null,
+        sequenceNumber: item.sequenceNumber,
+        id: item.id,
+      }),
+      title: item.title,
+      status: item.status,
+      priority: "no_priority" as string,
+      kind: item.kind,
+      project: project
+        ? { id: project.id, name: project.name, key: project.key }
+        : undefined,
+      assignee: undefined,
+      labels: [] as Array<{ id: string; name: string; color: string }>,
+      dueDate: undefined,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt ?? item.createdAt,
+    };
   });
 }
 
@@ -707,31 +524,22 @@ export async function planningAddComment(
 ) {
   await loadAccessibleWorkItem(ctx.db, ctx.userId, input.issueId);
 
-  const planningApiKey = getPlanningApiKey();
-  if (!planningApiKey) {
-    const [comment] = await ctx.db
-      .insert(comments)
-      .values({
-        workItemId: input.issueId,
-        userId: ctx.userId,
-        parentId: null,
-        body: input.body,
-        bodyHtml: null,
-      })
-      .returning();
+  const [comment] = await ctx.db
+    .insert(comments)
+    .values({
+      workItemId: input.issueId,
+      userId: ctx.userId,
+      parentId: null,
+      body: input.body,
+      bodyHtml: null,
+    })
+    .returning();
 
-    return {
-      id: comment!.id,
-      body: comment!.body,
-      createdAt: comment!.createdAt,
-    };
-  }
-
-  return planningMutation<{
-    id: string;
-    body: string;
-    createdAt: string;
-  }>("comment.create", input);
+  return {
+    id: comment!.id,
+    body: comment!.body,
+    createdAt: comment!.createdAt,
+  };
 }
 
 export async function planningListComments(
@@ -740,41 +548,23 @@ export async function planningListComments(
 ) {
   await loadAccessibleWorkItem(ctx.db, ctx.userId, input.issueId);
 
-  const planningApiKey = getPlanningApiKey();
-  if (!planningApiKey) {
-    const rows = await ctx.db.query.comments.findMany({
-      where: eq(comments.workItemId, input.issueId),
-      orderBy: desc(comments.createdAt),
-    });
+  const rows = await ctx.db.query.comments.findMany({
+    where: eq(comments.workItemId, input.issueId),
+    orderBy: desc(comments.createdAt),
+  });
 
-    return rows.map((c: any) => ({
-      id: c.id,
-      body: c.body,
-      user: undefined as { id: string; name: string } | undefined,
-      createdAt: c.createdAt,
-      replies: [] as Array<{
-        id: string;
-        body: string;
-        user?: { id: string; name: string };
-        createdAt: string;
-      }>,
-    }));
-  }
-
-  return planningQuery<
-    Array<{
+  return rows.map((c: any) => ({
+    id: c.id,
+    body: c.body,
+    user: undefined as { id: string; name: string } | undefined,
+    createdAt: c.createdAt,
+    replies: [] as Array<{
       id: string;
       body: string;
       user?: { id: string; name: string };
       createdAt: string;
-      replies?: Array<{
-        id: string;
-        body: string;
-        user?: { id: string; name: string };
-        createdAt: string;
-      }>;
-    }>
-  >("comment.list", input);
+    }>,
+  }));
 }
 
 export async function planningSearchTasks(
@@ -783,75 +573,51 @@ export async function planningSearchTasks(
 ) {
   await assertWorkspaceAccess(ctx.db, ctx.userId, input.workspaceId);
 
-  const planningApiKey = getPlanningApiKey();
-  if (!planningApiKey) {
-    const searchPattern = `%${input.query}%`;
-    const items = await ctx.db
-      .select()
-      .from(workItems)
-      .where(
-        and(
-          eq(workItems.workspaceId, input.workspaceId),
-          sql`${workItems.title} ILIKE ${searchPattern}`,
-        ),
-      )
-      .orderBy(desc(workItems.updatedAt))
-      .limit(input.limit ?? 20);
+  const searchPattern = `%${input.query}%`;
+  const items = await ctx.db
+    .select()
+    .from(workItems)
+    .where(
+      and(
+        eq(workItems.workspaceId, input.workspaceId),
+        sql`${workItems.title} ILIKE ${searchPattern}`,
+      ),
+    )
+    .orderBy(desc(workItems.updatedAt))
+    .limit(input.limit ?? 20);
 
-    const projectIds = Array.from(
-      new Set(items.map((item: any) => item.projectId).filter(Boolean)),
-    ) as string[];
-    const projectRows =
-      projectIds.length > 0
-        ? await ctx.db.query.projects.findMany({
-            where: eq(projects.workspaceId, input.workspaceId),
-          })
-        : [];
-    const projectById = new Map(
-      projectRows.map((p: any) => [p.id, p]),
-    );
+  const projectIds = Array.from(
+    new Set(items.map((item: any) => item.projectId).filter(Boolean)),
+  ) as string[];
+  const projectRows =
+    projectIds.length > 0
+      ? await ctx.db.query.projects.findMany({
+          where: eq(projects.workspaceId, input.workspaceId),
+        })
+      : [];
+  const projectById = new Map(
+    projectRows.map((p: any) => [p.id, p]),
+  );
 
-    return items.map((item: any) => {
-      const project = item.projectId
-        ? projectById.get(item.projectId) ?? null
-        : null;
-      return {
+  return items.map((item: any) => {
+    const project = item.projectId
+      ? projectById.get(item.projectId) ?? null
+      : null;
+    return {
+      id: item.id,
+      identifier: formatWorkItemIdentifier({
+        projectKey: project?.key ?? null,
+        sequenceNumber: item.sequenceNumber,
         id: item.id,
-        identifier: formatWorkItemIdentifier({
-          projectKey: project?.key ?? null,
-          sequenceNumber: item.sequenceNumber,
-          id: item.id,
-        }),
-        title: item.title,
-        status: item.status,
-        priority: "no_priority" as string,
-        project: project
-          ? { id: project.id, name: project.name }
-          : undefined,
-        assignee: undefined,
-      };
-    });
-  }
-
-  return planningQuery<
-    Array<{
-      id: string;
-      identifier: string;
-      title: string;
-      status: string;
-      priority: string;
-      project?: { id: string; name: string };
-      assignee?: { id: string; name: string };
-    }>
-  >("issue.list", {
-    workspaceId: input.workspaceId,
-    filter: { search: input.query },
-    pagination: {
-      limit: input.limit ?? 20,
-      offset: 0,
-      sortBy: "updatedAt",
-      sortDirection: "desc",
-    },
+      }),
+      title: item.title,
+      status: item.status,
+      priority: "no_priority" as string,
+      project: project
+        ? { id: project.id, name: project.name }
+        : undefined,
+      assignee: undefined,
+    };
   });
 }
 
@@ -860,20 +626,7 @@ export async function planningListLabels(
   input: { workspaceId: string },
 ) {
   await assertWorkspaceAccess(ctx.db, ctx.userId, input.workspaceId);
-
-  const planningApiKey = getPlanningApiKey();
-  if (!planningApiKey) {
-    return [];
-  }
-
-  return planningQuery<
-    Array<{
-      id: string;
-      name: string;
-      color: string;
-      description?: string;
-    }>
-  >("label.listFlat", input);
+  return [];
 }
 
 export async function planningListCycles(
@@ -881,25 +634,7 @@ export async function planningListCycles(
   input: { workspaceId: string; status?: string },
 ) {
   await assertWorkspaceAccess(ctx.db, ctx.userId, input.workspaceId);
-
-  const planningApiKey = getPlanningApiKey();
-  if (!planningApiKey) {
-    return [];
-  }
-
-  return planningQuery<
-    Array<{
-      id: string;
-      name: string;
-      number: number;
-      status: string;
-      startDate: string;
-      endDate: string;
-      progress: number;
-      issueCount: number;
-      completedCount: number;
-    }>
-  >("cycle.listByWorkspace", input);
+  return [];
 }
 
 /**
@@ -918,23 +653,13 @@ export async function planningGetCurrentUser(
   ctx: GetCurrentUserContext,
   _input: void,
 ) {
-  const planningApiKey = getPlanningApiKey();
-  if (!planningApiKey) {
-    const user = ctx.session.user;
-    return {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      avatarUrl: user.image ?? undefined,
-    };
-  }
-
-  return planningQuery<{
-    id: string;
-    email: string;
-    name: string;
-    avatarUrl?: string;
-  }>("user.me");
+  const user = ctx.session.user;
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    avatarUrl: user.image ?? undefined,
+  };
 }
 
 export async function planningAgentClaimTask(
@@ -943,40 +668,22 @@ export async function planningAgentClaimTask(
 ) {
   await loadAccessibleWorkItem(ctx.db, ctx.userId, input.issueId);
 
-  const planningApiKey = getPlanningApiKey();
-  if (!planningApiKey) {
-    return {
-      id: input.issueId,
-      issueId: input.issueId,
-      status: "claimed",
-      claimedAt: new Date().toISOString(),
-    };
-  }
-
-  return planningMutation<{
-    id: string;
-    issueId: string;
-    status: string;
-    claimedAt: string;
-  }>("agent.claimTask", input);
+  return {
+    id: input.issueId,
+    issueId: input.issueId,
+    status: "claimed",
+    claimedAt: new Date().toISOString(),
+  };
 }
 
 export async function planningAgentReportProgress(
   _ctx: HandlerContext,
   input: { taskRunId: string; progress: string },
 ) {
-  const planningApiKey = getPlanningApiKey();
-  if (!planningApiKey) {
-    return {
-      id: input.taskRunId,
-      status: "in_progress",
-    };
-  }
-
-  return planningMutation<{
-    id: string;
-    status: string;
-  }>("agent.reportProgress", input);
+  return {
+    id: input.taskRunId,
+    status: "in_progress",
+  };
 }
 
 export async function planningAgentCompleteTask(
@@ -992,28 +699,11 @@ export async function planningAgentCompleteTask(
     markIssueDone?: boolean;
   },
 ) {
-  const planningApiKey = getPlanningApiKey();
-  if (!planningApiKey) {
-    return {
-      id: input.taskRunId,
-      status: "completed",
-      completedAt: new Date().toISOString(),
-    };
-  }
-
-  return planningMutation<{
-    id: string;
-    status: string;
-    completedAt: string;
-  }>("agent.completeTask", {
-    taskRunId: input.taskRunId,
-    result: {
-      success: true,
-      summary: input.summary,
-      artifacts: input.artifacts,
-    },
-    markIssueDone: input.markIssueDone ?? true,
-  });
+  return {
+    id: input.taskRunId,
+    status: "completed",
+    completedAt: new Date().toISOString(),
+  };
 }
 
 export async function planningAgentFailTask(
@@ -1026,18 +716,10 @@ export async function planningAgentFailTask(
     returnToBacklog?: boolean;
   },
 ) {
-  const planningApiKey = getPlanningApiKey();
-  if (!planningApiKey) {
-    return {
-      id: input.taskRunId,
-      status: "failed",
-    };
-  }
-
-  return planningMutation<{
-    id: string;
-    status: string;
-  }>("agent.failTask", input);
+  return {
+    id: input.taskRunId,
+    status: "failed",
+  };
 }
 
 export async function planningAgentGetAvailableTasks(
@@ -1045,23 +727,7 @@ export async function planningAgentGetAvailableTasks(
   input: { agentId: string; workspaceId: string; limit?: number },
 ) {
   await assertWorkspaceAccess(ctx.db, ctx.userId, input.workspaceId);
-
-  const planningApiKey = getPlanningApiKey();
-  if (!planningApiKey) {
-    return [];
-  }
-
-  return planningQuery<
-    Array<{
-      id: string;
-      identifier: string;
-      title: string;
-      description?: string;
-      priority: string;
-      project?: { id: string; name: string; key: string };
-      labels?: Array<{ id: string; name: string }>;
-    }>
-  >("agent.getAvailableTasks", input);
+  return [];
 }
 
 export async function planningAgentStartSession(
@@ -1070,34 +736,18 @@ export async function planningAgentStartSession(
 ) {
   await assertWorkspaceAccess(ctx.db, ctx.userId, input.workspaceId);
 
-  const planningApiKey = getPlanningApiKey();
-  if (!planningApiKey) {
-    return {
-      id: input.agentId,
-      startedAt: new Date().toISOString(),
-    };
-  }
-
-  return planningMutation<{
-    id: string;
-    startedAt: string;
-  }>("agent.startSession", input);
+  return {
+    id: input.agentId,
+    startedAt: new Date().toISOString(),
+  };
 }
 
 export async function planningAgentEndSession(
   _ctx: HandlerContext,
   input: { sessionId: string },
 ) {
-  const planningApiKey = getPlanningApiKey();
-  if (!planningApiKey) {
-    return {
-      id: input.sessionId,
-      endedAt: new Date().toISOString(),
-    };
-  }
-
-  return planningMutation<{
-    id: string;
-    endedAt: string;
-  }>("agent.endSession", input);
+  return {
+    id: input.sessionId,
+    endedAt: new Date().toISOString(),
+  };
 }

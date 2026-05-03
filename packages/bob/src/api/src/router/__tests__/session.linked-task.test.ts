@@ -56,7 +56,6 @@ describe("session router linked task URLs", () => {
   beforeAll(async () => {
     process.env.DATABASE_URL ??=
       "postgres://postgres:postgres@localhost:5432/test";
-    process.env.PLANNING_URL = "https://planning.example.internal";
     ({ appRouter } = await import("../../root"));
   });
 
@@ -94,7 +93,7 @@ describe("session router linked task URLs", () => {
     expect(result.linkedTask).toEqual({
       id: workItemId,
       identifier: "PLAN-123",
-      url: `https://planning.example.internal/work-items/${workItemId}`,
+      url: `/work-items/${workItemId}`,
     });
     expect(result.workItemId).toBe(workItemId);
     expect(result.workItemIdentifier).toBe("PLAN-123");

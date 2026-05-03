@@ -736,7 +736,8 @@ describe("planSession router", () => {
   });
 
   describe("commitPlan", () => {
-    it("marks drafts as committed via planning API", async () => {
+    it("marks drafts as committed via provider", async () => {
+      // loadOwnedPlanningSession
       dbQueryFindFirstMock.mockResolvedValueOnce({
         id: SESSION_ID,
         userId: "user-1",
@@ -757,22 +758,18 @@ describe("planSession router", () => {
       // findMany for drafts
       dbQueryFindManyMock.mockResolvedValueOnce(drafts);
 
-      // Set PLANNING_API_KEY so commitPlan doesn't throw
-      process.env.PLANNING_API_KEY = "test-api-key";
+      // findFirst for project lookup (inside commitPlan loop)
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: PROJECT_ID,
+        workspaceId: WORKSPACE_ID,
+        planningProvider: "internal",
+        linearProjectId: null,
+      });
 
-      // Mock global fetch
-      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
-        ok: true,
-        json: async () => [
-          {
-            result: {
-              data: {
-                json: { id: "task-1", identifier: "TSK-1" },
-              },
-            },
-          },
-        ],
-      } as any);
+      // InternalPlanningProvider.createTask calls insert().values().returning()
+      dbInsertReturningMock.mockResolvedValueOnce([
+        { id: "task-1", title: "Task A", description: "Do A", status: "draft", ownerUserId: "system", workspaceId: WORKSPACE_ID, projectId: PROJECT_ID, kind: "task" },
+      ]);
 
       // update().set().where() for marking committed (no returning)
       dbUpdateMock.mockReturnValue({
@@ -792,11 +789,8 @@ describe("planSession router", () => {
       expect(result.tasks[0]).toMatchObject({
         draftId: DRAFT_ID,
         taskId: "task-1",
-        identifier: "TSK-1",
+        identifier: "task-1",
       });
-
-      fetchSpy.mockRestore();
-      delete process.env.PLANNING_API_KEY;
     });
 
     it("returns { committed: 0 } when no drafts exist", async () => {

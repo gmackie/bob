@@ -10,6 +10,7 @@ import {
   chatConversations,
   planDraftDependencies,
   planDrafts,
+  projects,
   repositories,
   runLifecycleEvents,
   workItemArtifacts,
@@ -18,10 +19,7 @@ import {
   workspaceMembers,
 } from "@bob/db/schema";
 
-import {
-  getPlanningApiKey,
-  getPlanningBaseUrl,
-} from "../services/integrations/planningRemoteConfig";
+import { resolvePlanningProvider } from "../services/integrations/planningProvider.js";
 
 import type { HandlerContext } from "./context.js";
 
@@ -537,15 +535,6 @@ export async function planSessionCommitPlan(
     return { committed: 0, tasks: [] };
   }
 
-  const planningApiKey = getPlanningApiKey();
-  if (!planningApiKey) {
-    throw new TRPCError({
-      code: "PRECONDITION_FAILED",
-      message: "PLANNING_API_KEY not configured",
-    });
-  }
-
-  // Create tasks on planning API one by one, collecting results
   const createdTasks: Array<{
     draftId: string;
     taskId: string;
@@ -553,48 +542,37 @@ export async function planSessionCommitPlan(
   }> = [];
 
   for (const draft of drafts) {
-    const url = `${getPlanningBaseUrl()}/api/trpc/issue.create`;
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": planningApiKey,
-      },
-      body: JSON.stringify({
-        "0": {
-          json: {
-            projectId: draft.projectId,
-            title: draft.title,
-            description: draft.description,
-            status: "todo",
-            priority: draft.priority,
-          },
-        },
-      }),
-    });
+    try {
+      const project = await ctx.db.query.projects.findFirst({
+        where: eq(projects.id, draft.projectId),
+      });
 
-    if (!response.ok) {
-      console.error(
-        `[planSession] Failed to create task for draft ${draft.id}: ${response.status}`,
-      );
-      continue;
-    }
+      if (!project) {
+        console.error(`[planSession] Project not found for draft ${draft.id}`);
+        continue;
+      }
 
-    const result = (await response.json()) as Array<{
-      result?: { data?: { json?: { id: string; identifier: string } } };
-    }>;
-    const created = result[0]?.result?.data?.json;
+      const provider = await resolvePlanningProvider(ctx.db, project, project.workspaceId);
+      const result = await provider.createTask({
+        title: draft.title,
+        description: draft.description ?? null,
+        providerProjectId: project.linearProjectId ?? project.id,
+        priority: draft.priority,
+      });
 
-    if (created) {
       createdTasks.push({
         draftId: draft.id,
-        taskId: created.id,
-        identifier: created.identifier,
+        taskId: result.externalId,
+        identifier: result.identifier,
       });
+    } catch (err) {
+      console.error(
+        `[planSession] Failed to create task for draft ${draft.id}:`,
+        err,
+      );
     }
   }
 
-  // Mark drafts as committed
   if (createdTasks.length > 0) {
     const committedIds = createdTasks.map((t) => t.draftId);
     await ctx.db

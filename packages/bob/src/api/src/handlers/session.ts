@@ -30,7 +30,10 @@ import {
 } from "../services/sessions/workflowStatusService";
 import { createElevenLabsSessionService } from "../services/voice/elevenlabsSession";
 import { createOpenCodeClient } from "../services/opencode/opencodeClient";
-import { buildPlanningWorkItemUrl } from "../services/integrations/planningRemoteConfig";
+function buildWorkItemUrl(workItemId: string | null | undefined): string | null {
+  if (!workItemId) return null;
+  return `/work-items/${workItemId}`;
+}
 
 import type { HandlerContext } from "./context.js";
 
@@ -168,7 +171,7 @@ export async function sessionList(
     linkedTaskBySessionId.set(row.sessionId, {
       id: workItemId,
       identifier: workItemIdentifier,
-      url: buildPlanningWorkItemUrl(workItemId),
+      url: buildWorkItemUrl(workItemId),
     });
   }
 
@@ -256,7 +259,7 @@ export async function sessionGet(
           identifier:
             latestTaskRun.workItemIdentifierSnapshot ??
             latestTaskRun.planningItemIdentifier,
-          url: buildPlanningWorkItemUrl(
+          url: buildWorkItemUrl(
             latestTaskRun.workItemId ?? latestTaskRun.planningItemId,
           ),
         }
