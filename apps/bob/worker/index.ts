@@ -19,6 +19,7 @@ interface Env {
       };
     };
   };
+  GATEWAY_URL?: string;
 }
 
 interface ExecutionContext {
@@ -35,6 +36,13 @@ interface ExecutionContext {
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+
+    // WebSocket proxy to gateway — forward upgrade to origin
+    if (url.pathname === "/ws/sessions" && request.headers.get("Upgrade") === "websocket") {
+      const gatewayOrigin = env.GATEWAY_URL || "https://ws.blder.bot";
+      const target = `${gatewayOrigin}/sessions${url.search}`;
+      return fetch(target, request);
+    }
 
     // Image optimization via Cloudflare Images binding.
     // The parseImageParams validation inside handleImageOptimization
