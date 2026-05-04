@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { and, eq } from "@bob/db";
 import { workspaceIntegrations, workspaceMembers } from "@bob/db/schema";
+import { LinearClient } from "@linear/sdk";
 
 import type { HandlerContext } from "./context.js";
 
@@ -123,33 +124,34 @@ export async function integrationSetupLinear(
 ) {
   await assertWorkspaceAccess(ctx.db, ctx.userId, input.workspaceId);
 
-  const teamsRes = await linearGraphQL(input.apiKey, `{ teams { nodes { id name key } } }`);
-  const teams = teamsRes.data?.teams?.nodes ?? [];
-  const team = teams.find((t: any) => t.id === input.teamId);
+  const client = new LinearClient({ apiKey: input.apiKey });
+
+  const teamsResult = await client.teams();
+  const team = teamsResult.nodes.find((t) => t.id === input.teamId);
   if (!team) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "Team not found" });
   }
 
-  const webhookRes = await linearGraphQL(input.apiKey, `
-    mutation($url: String!, $teamId: String!, $label: String!) {
-      webhookCreate(input: {
-        url: $url,
-        teamId: $teamId,
-        label: $label,
-        resourceTypes: ["Issue"]
-        enabled: true
-      }) {
-        success
-        webhook { id enabled secret }
-      }
-    }
-  `, { url: input.webhookUrl, teamId: input.teamId, label: "blder.bot" });
+  const webhookResult = await client.createWebhook({
+    url: input.webhookUrl,
+    teamId: input.teamId,
+    label: "Bob (blder)",
+    resourceTypes: ["Issue"],
+    enabled: true,
+  });
 
-  const webhook = webhookRes.data?.webhookCreate;
-  if (!webhook?.success) {
+  if (!webhookResult.success) {
     throw new TRPCError({
       code: "BAD_REQUEST",
       message: "Failed to create Linear webhook",
+    });
+  }
+
+  const webhook = await webhookResult.webhook;
+  if (!webhook) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Webhook created but could not retrieve details",
     });
   }
 
@@ -163,7 +165,7 @@ export async function integrationSetupLinear(
   const values = {
     apiKey: input.apiKey,
     linearTeamId: input.teamId,
-    webhookSigningSecret: webhook.webhook.secret,
+    webhookSigningSecret: (webhook as any).secret ?? null,
     enabled: true,
   };
 
@@ -172,7 +174,7 @@ export async function integrationSetupLinear(
       .update(workspaceIntegrations)
       .set(values)
       .where(eq(workspaceIntegrations.id, existing.id));
-    return { id: existing.id, created: false, webhookId: webhook.webhook.id };
+    return { id: existing.id, created: false, webhookId: webhook.id };
   }
 
   const [created] = await ctx.db
@@ -184,43 +186,24 @@ export async function integrationSetupLinear(
     })
     .returning({ id: workspaceIntegrations.id });
 
-  return { id: created!.id, created: true, webhookId: webhook.webhook.id };
+  return { id: created!.id, created: true, webhookId: webhook.id };
 }
 
-async function linearGraphQL(apiKey: string, query: string, variables?: Record<string, unknown>) {
-  const res = await fetch("https://api.linear.app/graphql", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: apiKey,
-    },
-    body: JSON.stringify({ query, variables }),
-  });
-
-  if (!res.ok) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: `Linear API error: ${res.status}`,
-    });
-  }
-
-  const data = await res.json() as any;
-  if (data.errors?.length) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: data.errors[0].message,
-    });
-  }
-
-  return data;
-}
 
 export async function integrationFetchLinearTeams(
   _ctx: HandlerContext,
   input: { apiKey: string },
 ) {
-  const data = await linearGraphQL(input.apiKey, `{ teams { nodes { id name key } } }`);
-  return data.data?.teams?.nodes ?? [];
+  try {
+    const client = new LinearClient({ apiKey: input.apiKey });
+    const result = await client.teams();
+    return result.nodes.map((t) => ({ id: t.id, name: t.name, key: t.key }));
+  } catch (e: any) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: e?.message ?? "Invalid API key",
+    });
+  }
 }
 
 export async function integrationList(

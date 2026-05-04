@@ -14,10 +14,11 @@ import { MissionControl } from "~/components/dashboard/mission-control";
 import { CreateProjectDialog } from "~/components/projects/create-project-dialog";
 import { ImportGitHubDialog } from "~/components/projects/import-github-dialog";
 import { ProjectCard } from "~/components/projects/project-card";
+import { KanbanBoard } from "~/components/planning/kanban-board";
 import { WorkspaceSelector } from "~/components/planning/workspace-selector";
 import { useTRPC } from "~/trpc/react";
 
-type PlanningView = "dashboard" | "projects";
+type PlanningView = "dashboard" | "projects" | "board";
 
 export default function PlanningPage() {
   const trpc = useTRPC();
@@ -170,7 +171,7 @@ export default function PlanningPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-1 mb-2">
-            {(["dashboard", "projects"] as const).map((v) => (
+            {(["dashboard", "projects", "board"] as const).map((v) => (
               <button
                 key={v}
                 onClick={() => setView(v)}
@@ -181,17 +182,19 @@ export default function PlanningPage() {
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                {v === "dashboard" ? "Dashboard" : "Projects"}
+                {v === "dashboard" ? "Dashboard" : v === "projects" ? "Projects" : "Board"}
               </button>
             ))}
           </div>
           <h1 className="font-display text-4xl font-bold tracking-tight leading-[1.15] text-foreground">
-            {view === "dashboard" ? "Mission Control" : "Projects"}
+            {view === "dashboard" ? "Mission Control" : view === "board" ? "Board" : "Projects"}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {view === "dashboard"
               ? "Live overview of your agents and projects"
-              : "Your workspaces and projects"}
+              : view === "board"
+                ? "Work items across all statuses"
+                : "Your workspaces and projects"}
           </p>
         </div>
         {view === "projects" && (
@@ -211,6 +214,13 @@ export default function PlanningPage() {
       {view === "dashboard" && (
         <section className="mt-8">
           <MissionControl workspaceId={currentWorkspace?.id} />
+        </section>
+      )}
+
+      {/* Board view */}
+      {view === "board" && (
+        <section className="mt-8">
+          <KanbanBoard workspaceId={currentWorkspace?.id} />
         </section>
       )}
 
