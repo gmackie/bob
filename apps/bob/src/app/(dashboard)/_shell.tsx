@@ -7,12 +7,14 @@ import { ChevronLeftIcon, ChevronRightIcon } from "@radix-ui/react-icons";
 import { SidebarNav, NotificationButton } from "~/components/layout/sidebar-nav";
 import { ChatPanelProvider } from "~/components/chat/chat-panel-provider";
 import { ChatPanel } from "~/components/chat/chat-panel";
+import { useWorkspaceEvents } from "~/hooks/use-workspace-events";
 
 const SIDEBAR_EXPANDED_WIDTH = 240;
 const SIDEBAR_COLLAPSED_WIDTH = 56;
 const STORAGE_KEY = "bob:sidebar-collapsed";
 
 export default function BilderShell({ children }: { children: React.ReactNode }) {
+  useWorkspaceEvents();
   const pathname = usePathname() ?? "";
   const [showNotif, setShowNotif] = useState(false);
   const [collapsed, setCollapsed] = useState(false);

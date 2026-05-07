@@ -6,9 +6,10 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTRPC } from "~/trpc/react";
 
 /**
- * Polls `dispatch.checkProgress` every 10 seconds while a batch is actively
- * dispatching or running. This ensures dependent tasks get auto-started as
- * predecessors complete.
+ * Monitors dispatch batch progress. Primary updates come via the workspace
+ * WebSocket subscription (instant invalidation from useWorkspaceEvents).
+ * Polling at 30s serves as a fallback for missed events and ensures
+ * dependent tasks get auto-started as predecessors complete.
  *
  * @param batchId - The dispatch batch to monitor, or null to disable.
  * @returns The latest batch data and items, or undefined while loading.
@@ -17,13 +18,14 @@ export function useDispatchProgress(batchId: string | null) {
   const trpc = useTRPC();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Fetch the batch data (polls every 10s so we always have fresh status)
+  // Fetch the batch data — workspace WebSocket pushes instant invalidation,
+  // polling is fallback only
   const batchQuery = useQuery(
     trpc.dispatch.getBatch.queryOptions(
       { batchId: batchId! },
       {
         enabled: !!batchId,
-        refetchInterval: 10_000,
+        refetchInterval: 30_000,
       },
     ),
   );
@@ -46,12 +48,12 @@ export function useDispatchProgress(batchId: string | null) {
       return;
     }
 
-    // Immediately check once, then every 10s
+    // Immediately check once, then every 30s as fallback
     checkProgress.mutate({ batchId });
 
     intervalRef.current = setInterval(() => {
       checkProgress.mutate({ batchId });
-    }, 10_000);
+    }, 30_000);
 
     return () => {
       if (intervalRef.current) {

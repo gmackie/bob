@@ -6,6 +6,7 @@ import {
   type ConnectionState as WsConnectionState,
   type ServerEvent,
   type ServerError,
+  type ServerSessionStatusChanged,
   type SessionStatus,
   type EventDirection,
   type SessionEventType,
@@ -55,6 +56,7 @@ interface UseSessionSocketOptions {
   token: string;
   onEvent?: (event: SessionEvent) => void;
   onStatusChange?: (sessionId: string, status: SessionStatus) => void;
+  onWorkspaceStatusChanged?: (info: ServerSessionStatusChanged) => void;
   onConnectionChange?: (state: ConnectionState) => void;
   enabled?: boolean;
 }
@@ -64,6 +66,7 @@ export function useSessionSocket({
   token,
   onEvent,
   onStatusChange,
+  onWorkspaceStatusChanged,
   onConnectionChange,
   enabled = true,
 }: UseSessionSocketOptions) {
@@ -82,9 +85,11 @@ export function useSessionSocket({
   // Stable refs for callbacks to avoid stale closures
   const onEventRef = useRef(onEvent);
   const onStatusChangeRef = useRef(onStatusChange);
+  const onWorkspaceStatusChangedRef = useRef(onWorkspaceStatusChanged);
   const onConnectionChangeRef = useRef(onConnectionChange);
   onEventRef.current = onEvent;
   onStatusChangeRef.current = onStatusChange;
+  onWorkspaceStatusChangedRef.current = onWorkspaceStatusChanged;
   onConnectionChangeRef.current = onConnectionChange;
 
   useEffect(() => {
@@ -119,6 +124,9 @@ export function useSessionSocket({
       },
       onSessionStatus: (sessionId: string, status: SessionStatus) => {
         onStatusChangeRef.current?.(sessionId, status);
+      },
+      onSessionStatusChanged: (info: ServerSessionStatusChanged) => {
+        onWorkspaceStatusChangedRef.current?.(info);
       },
       onError: (error: ServerError) => {
         console.error("[SessionSocket] Error:", error.code, error.message);
@@ -170,6 +178,13 @@ export function useSessionSocket({
     clientRef.current?.stopSession(sessionId);
   }, []);
 
+  const subscribeWorkspace = useCallback(
+    (statusFilter?: SessionStatus[]) => {
+      clientRef.current?.subscribeWorkspace(statusFilter);
+    },
+    [],
+  );
+
   const reconnect = useCallback(() => {
     clientRef.current?.disconnect();
     clientRef.current?.connect();
@@ -180,6 +195,7 @@ export function useSessionSocket({
     userId,
     subscribe,
     unsubscribe,
+    subscribeWorkspace,
     sendInput,
     createSession,
     stopSession,
