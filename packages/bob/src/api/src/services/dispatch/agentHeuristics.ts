@@ -18,6 +18,6 @@ export function suggestAgent(draft: {
     return "codex";
   }
 
-  // Default implementation task execution → smol-agent
-  return "smol-agent";
+  // Default implementation task execution → claude
+  return "claude";
 }
