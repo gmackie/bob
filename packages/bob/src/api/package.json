@@ -93,6 +93,7 @@
     "@bob/config": "workspace:*",
     "@bob/db": "workspace:*",
     "@bob/execution": "workspace:*",
+    "@bob/telemetry": "workspace:*",
     "@bob/execution-lib": "workspace:*",
     "@bob/work-items": "workspace:*",
     "@elevenlabs/client": "^0.13.0",

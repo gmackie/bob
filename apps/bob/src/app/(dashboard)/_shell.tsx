@@ -14,7 +14,7 @@ const SIDEBAR_COLLAPSED_WIDTH = 56;
 const STORAGE_KEY = "bob:sidebar-collapsed";
 
 export default function BilderShell({ children }: { children: React.ReactNode }) {
-  useWorkspaceEvents();
+  const { connectionState } = useWorkspaceEvents();
   const pathname = usePathname() ?? "";
   const [showNotif, setShowNotif] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -48,8 +48,18 @@ export default function BilderShell({ children }: { children: React.ReactNode })
       >
         <div className="flex h-14 items-center px-4">
           {!collapsed && (
-            <span className="font-display text-sm font-bold tracking-tight">
+            <span className="font-display text-sm font-bold tracking-tight flex items-center gap-2">
               blder.bot
+              <span
+                className={`size-1.5 rounded-full ${
+                  connectionState.status === "connected"
+                    ? "bg-emerald-500"
+                    : connectionState.status === "connecting"
+                      ? "bg-amber-500 animate-pulse"
+                      : "bg-muted-foreground/40"
+                }`}
+                title={`WebSocket: ${connectionState.status}`}
+              />
             </span>
           )}
           {collapsed && (

@@ -17,7 +17,7 @@ import type {
 import { PlanningProviderError } from "./planningProvider.js";
 
 export class InternalPlanningProvider implements PlanningProvider {
-  constructor(private db: any) {}
+  constructor(private db: any, private workspaceId: string, private userId?: string) {}
 
   // ===========================================================================
   // CRUD (Tier 1)
@@ -27,8 +27,8 @@ export class InternalPlanningProvider implements PlanningProvider {
     const [item] = await this.db
       .insert(workItems)
       .values({
-        ownerUserId: "system",
-        workspaceId: input.providerProjectId,
+        ownerUserId: this.userId ?? "system",
+        workspaceId: this.workspaceId,
         projectId: input.providerProjectId,
         kind: "task",
         title: input.title,

@@ -43,84 +43,6 @@ function getSummary(run: any, key: string): unknown {
   return run?.summary?.[key] ?? null;
 }
 
-// ── Mock Data ─────────────────────────────────────────────────────────
-
-const MOCK_CHAT = [
-  { role: "user", content: "Add a health check endpoint to the API that returns service status, uptime, and dependency health." },
-  { role: "assistant", content: "I'll add a health check endpoint. Let me start by examining the existing API structure.", tool: "Read apps/api/src/index.ts" },
-  { role: "assistant", content: "I can see the Express app setup. I'll add a `/health` endpoint that checks:\n1. Database connectivity\n2. Redis connection\n3. Service uptime\n4. Memory usage", tool: "Write apps/api/src/routes/health.ts" },
-  { role: "assistant", content: "Now let me register the route and add tests.", tool: "Edit apps/api/src/index.ts" },
-  { role: "assistant", content: "Writing the test file for the health endpoint.", tool: "Write apps/api/src/routes/__tests__/health.test.ts" },
-  { role: "tool", content: "✓ 4 tests passed (health.test.ts)" },
-  { role: "assistant", content: "Health check endpoint is live at `GET /health`. Returns `{ status: 'ok', uptime: 12345, checks: { db: 'ok', redis: 'ok' } }`. All 4 tests pass." },
-];
-
-const MOCK_FILES = [
-  { path: "apps/api/src/routes/health.ts", status: "added", additions: 47, deletions: 0 },
-  { path: "apps/api/src/routes/__tests__/health.test.ts", status: "added", additions: 82, deletions: 0 },
-  { path: "apps/api/src/index.ts", status: "modified", additions: 3, deletions: 0 },
-  { path: "apps/api/package.json", status: "modified", additions: 1, deletions: 0 },
-];
-
-const MOCK_DIFF = `diff --git a/apps/api/src/routes/health.ts b/apps/api/src/routes/health.ts
-new file mode 100644
-index 0000000..a1b2c3d
---- /dev/null
-+++ b/apps/api/src/routes/health.ts
-@@ -0,0 +1,47 @@
-+import { Router } from "express";
-+import { db } from "../db";
-+import { redis } from "../redis";
-+
-+const router = Router();
-+const startTime = Date.now();
-+
-+router.get("/health", async (req, res) => {
-+  const checks: Record<string, string> = {};
-+
-+  // Database check
-+  try {
-+    await db.raw("SELECT 1");
-+    checks.db = "ok";
-+  } catch {
-+    checks.db = "error";
-+  }
-+
-+  // Redis check
-+  try {
-+    await redis.ping();
-+    checks.redis = "ok";
-+  } catch {
-+    checks.redis = "error";
-+  }
-+
-+  const allOk = Object.values(checks).every((v) => v === "ok");
-+
-+  res.status(allOk ? 200 : 503).json({
-+    status: allOk ? "ok" : "degraded",
-+    uptime: Date.now() - startTime,
-+    checks,
-+    memory: process.memoryUsage(),
-+  });
-+});
-+
-+export default router;
-
-diff --git a/apps/api/src/index.ts b/apps/api/src/index.ts
-index 1234567..89abcde 100644
---- a/apps/api/src/index.ts
-+++ b/apps/api/src/index.ts
-@@ -12,6 +12,7 @@ import { authRouter } from "./routes/auth";
- import { apiRouter } from "./routes/api";
-+import healthRouter from "./routes/health";
- 
- const app = express();
-@@ -24,6 +25,7 @@ app.use("/auth", authRouter);
- app.use("/api", apiRouter);
-+app.use(healthRouter);
- 
- export default app;`;
-
 // ── Tab types ─────────────────────────────────────────────────────────
 
 type Tab = "summary" | "chat" | "files" | "diff" | "artifacts";
@@ -143,7 +65,6 @@ export default function RunDetailPage({
   const { runId } = use(params);
   const trpc = useTRPC();
   const [activeTab, setActiveTab] = useState<Tab>("summary");
-  const [useMock, setUseMock] = useState(false);
 
   const { data: run, isLoading } = useQuery(
     trpc.agentRun.get.queryOptions(
@@ -212,23 +133,12 @@ export default function RunDetailPage({
             {duration && <> in {formatDuration(duration)}</>}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={useMock}
-              onChange={(e) => setUseMock(e.target.checked)}
-              className="rounded"
-            />
-            Mock data
-          </label>
-          <Link
-            href="/runs"
-            className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm"
-          >
-            <ArrowLeftIcon className="size-3.5" /> All runs
-          </Link>
-        </div>
+        <Link
+          href="/runs"
+          className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm"
+        >
+          <ArrowLeftIcon className="size-3.5" /> All runs
+        </Link>
       </div>
 
       {/* Tabs */}
@@ -251,9 +161,9 @@ export default function RunDetailPage({
 
       {/* Tab content */}
       {activeTab === "summary" && <SummaryTab run={run} duration={duration} filesChanged={filesChanged} exitCode={exitCode} />}
-      {activeTab === "chat" && <ChatTab run={run} useMock={useMock} />}
-      {activeTab === "files" && <FilesTab run={run} useMock={useMock} />}
-      {activeTab === "diff" && <DiffTab run={run} useMock={useMock} />}
+      {activeTab === "chat" && <ChatTab run={run} />}
+      {activeTab === "files" && <FilesTab run={run} />}
+      {activeTab === "diff" && <DiffTab run={run} />}
       {activeTab === "artifacts" && <ArtifactsTab run={run} />}
     </div>
   );
@@ -303,87 +213,46 @@ function SummaryTab({ run, duration, filesChanged, exitCode }: {
 
 // ── Chat Tab ──────────────────────────────────────────────────────────
 
-function ChatTab({ run, useMock }: { run: any; useMock: boolean }) {
-  const messages = useMock ? MOCK_CHAT : [];
+function ChatTab({ run }: { run: any }) {
   const logArtifact = run.artifacts?.find((a: any) => a.type === "log");
 
-  if (!useMock && !logArtifact) {
+  if (!logArtifact) {
     return (
       <Card className="p-8 text-center">
         <p className="text-muted-foreground text-sm">
-          No chat log captured for this run. Toggle "Mock data" to preview the UI.
+          No agent output captured for this run.
         </p>
-      </Card>
-    );
-  }
-
-  if (!useMock && logArtifact) {
-    return (
-      <Card className="p-4">
-        <h3 className="mb-3 text-sm font-medium">Agent Output</h3>
-        <pre className="overflow-x-auto rounded bg-muted p-4 font-mono text-xs leading-relaxed max-h-[600px] overflow-y-auto">
-          {logArtifact.metadata?.content || `${logArtifact.metadata?.lines ?? 0} lines captured`}
-        </pre>
       </Card>
     );
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      {messages.map((msg, i) => (
-        <div
-          key={i}
-          className={cn(
-            "rounded-lg p-4",
-            msg.role === "user" && "bg-primary/5 border border-primary/10",
-            msg.role === "assistant" && "bg-card border border-border",
-            msg.role === "tool" && "bg-muted/50 border border-border",
-          )}
-        >
-          <div className="mb-1 flex items-center gap-2">
-            <span className={cn(
-              "text-[10px] font-semibold uppercase tracking-wider",
-              msg.role === "user" && "text-primary",
-              msg.role === "assistant" && "text-foreground",
-              msg.role === "tool" && "text-green-600",
-            )}>
-              {msg.role === "user" ? "You" : msg.role === "assistant" ? "Claude" : "Tool"}
-            </span>
-            {msg.tool && (
-              <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                {msg.tool}
-              </span>
-            )}
-          </div>
-          <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-        </div>
-      ))}
-    </div>
+    <Card className="p-4">
+      <h3 className="mb-3 text-sm font-medium">Agent Output</h3>
+      <pre className="overflow-x-auto rounded bg-muted p-4 font-mono text-xs leading-relaxed max-h-[600px] overflow-y-auto">
+        {logArtifact.metadata?.content || `${logArtifact.metadata?.lines ?? 0} lines captured`}
+      </pre>
+    </Card>
   );
 }
 
 // ── Files Tab ─────────────────────────────────────────────────────────
 
-function FilesTab({ run, useMock }: { run: any; useMock: boolean }) {
-  const files = useMock ? MOCK_FILES : [];
+function FilesTab({ run }: { run: any }) {
   const diffArtifact = run.artifacts?.find((a: any) => a.type === "diff");
 
-  if (!useMock && !diffArtifact) {
+  if (!diffArtifact?.metadata?.files) {
     return (
       <Card className="p-8 text-center">
         <p className="text-muted-foreground text-sm">
-          No file change data for this run. Toggle "Mock data" to preview.
+          No file change data for this run.
         </p>
       </Card>
     );
   }
 
-  if (!useMock && diffArtifact?.metadata?.files) {
-    const fileList = diffArtifact.metadata.files as Array<{ path: string; status: string; additions: number; deletions: number }>;
-    return <FileList files={fileList} />;
-  }
-
-  return <FileList files={files} />;
+  const fileList = diffArtifact.metadata.files as Array<{ path: string; status: string; additions: number; deletions: number }>;
+  return <FileList files={fileList} />;
 }
 
 function FileList({ files }: { files: Array<{ path: string; status: string; additions: number; deletions: number }> }) {
@@ -420,23 +289,20 @@ function FileList({ files }: { files: Array<{ path: string; status: string; addi
 
 // ── Diff Tab ──────────────────────────────────────────────────────────
 
-function DiffTab({ run, useMock }: { run: any; useMock: boolean }) {
-  const diffContent = useMock ? MOCK_DIFF : null;
+function DiffTab({ run }: { run: any }) {
   const diffArtifact = run.artifacts?.find((a: any) => a.type === "diff");
 
-  if (!useMock && !diffArtifact) {
+  if (!diffArtifact) {
     return (
       <Card className="p-8 text-center">
         <p className="text-muted-foreground text-sm">
-          No diff data for this run. Toggle "Mock data" to preview.
+          No diff data for this run.
         </p>
       </Card>
     );
   }
 
-  const rawDiff = useMock
-    ? diffContent
-    : diffArtifact?.metadata?.patch || `${diffArtifact?.metadata?.files_changed ?? 0} files changed, ${diffArtifact?.metadata?.insertions ?? 0} insertions(+), ${diffArtifact?.metadata?.deletions ?? 0} deletions(-)`;
+  const rawDiff = diffArtifact?.metadata?.patch || `${diffArtifact?.metadata?.files_changed ?? 0} files changed, ${diffArtifact?.metadata?.insertions ?? 0} insertions(+), ${diffArtifact?.metadata?.deletions ?? 0} deletions(-)`;
 
   return (
     <div className="rounded-lg border border-border overflow-hidden">

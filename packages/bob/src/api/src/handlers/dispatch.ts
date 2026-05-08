@@ -392,10 +392,29 @@ export async function dispatchGetBatch(
 ) {
   const batch = await loadOwnedBatch(ctx.db, ctx.userId, input.batchId);
 
-  const items = await ctx.db.query.dispatchItems.findMany({
+  const rawItems = await ctx.db.query.dispatchItems.findMany({
     where: eq(dispatchItems.batchId, input.batchId),
     orderBy: [dispatchItems.sortOrder],
+    with: {
+      taskRun: {
+        columns: {
+          sessionId: true,
+          branch: true,
+          status: true,
+          createdAt: true,
+          completedAt: true,
+        },
+      },
+    },
   });
+
+  const items = rawItems.map(({ taskRun, ...item }: any) => ({
+    ...item,
+    sessionId: taskRun?.sessionId ?? null,
+    branch: taskRun?.branch ?? null,
+    runStartedAt: taskRun?.createdAt ?? null,
+    runCompletedAt: taskRun?.completedAt ?? null,
+  }));
 
   return { batch, items };
 }

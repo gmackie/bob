@@ -14,6 +14,7 @@ import {
   markDeliveryProcessed,
   type WebhookProvider,
 } from "./processWebhook";
+import { traceWebhook } from "@bob/telemetry";
 
 const LINEAR_BOB_ACTOR = "bob-automation";
 
@@ -191,7 +192,7 @@ async function handleIssueCreate(payload: LinearIssuePayload): Promise<void> {
   const owner = await db.query.workspaceMembers.findFirst({
     where: eq(workspaceMembers.workspaceId, project.workspaceId),
     columns: { userId: true },
-    orderBy: (m: any, { asc }: any) => [asc(m.createdAt)],
+    orderBy: (m: any, { asc }: any) => [asc(m.joinedAt)],
   });
 
   if (!owner) {
@@ -333,32 +334,34 @@ export async function processLinearWebhook(
   payload: Record<string, unknown>,
   deliveryId: string,
 ): Promise<void> {
-  try {
-    const linearPayload = payload as unknown as LinearIssuePayload;
+  return traceWebhook("linear", eventType, async () => {
+    try {
+      const linearPayload = payload as unknown as LinearIssuePayload;
 
-    if (linearPayload.type !== "Issue") {
+      if (linearPayload.type !== "Issue") {
+        await markDeliveryProcessed(deliveryId);
+        return;
+      }
+
+      switch (linearPayload.action) {
+        case "create":
+          await handleIssueCreate(linearPayload);
+          break;
+        case "update":
+          await handleIssueUpdate(linearPayload);
+          break;
+        case "remove":
+          await handleIssueRemove(linearPayload);
+          break;
+      }
+
       await markDeliveryProcessed(deliveryId);
-      return;
+    } catch (error) {
+      await markDeliveryFailed(
+        deliveryId,
+        error instanceof Error ? error.message : "Unknown error",
+      );
+      throw error;
     }
-
-    switch (linearPayload.action) {
-      case "create":
-        await handleIssueCreate(linearPayload);
-        break;
-      case "update":
-        await handleIssueUpdate(linearPayload);
-        break;
-      case "remove":
-        await handleIssueRemove(linearPayload);
-        break;
-    }
-
-    await markDeliveryProcessed(deliveryId);
-  } catch (error) {
-    await markDeliveryFailed(
-      deliveryId,
-      error instanceof Error ? error.message : "Unknown error",
-    );
-    throw error;
-  }
+  });
 }

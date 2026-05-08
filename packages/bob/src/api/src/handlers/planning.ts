@@ -410,7 +410,7 @@ export async function planningCreateTask(
     input.projectId,
   );
 
-  const provider = await resolvePlanningProvider(ctx.db, project, project.workspaceId);
+  const provider = await resolvePlanningProvider(ctx.db, project, project.workspaceId, ctx.userId);
   const result = await provider.createTask({
     title: input.title,
     description: input.description ?? null,

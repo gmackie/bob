@@ -131,10 +131,11 @@ export async function resolvePlanningProvider(
   db: any,
   project: ProjectProviderConfig,
   workspaceId: string,
+  userId?: string,
 ): Promise<PlanningProvider> {
   if (project.planningProvider === "internal") {
     const { InternalPlanningProvider } = await import("./internalProvider.js");
-    return new InternalPlanningProvider(db);
+    return new InternalPlanningProvider(db, workspaceId, userId);
   }
 
   if (project.planningProvider === "linear") {

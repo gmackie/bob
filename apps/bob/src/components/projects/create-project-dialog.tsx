@@ -84,6 +84,22 @@ export function CreateProjectDialog({
     }),
   );
 
+  const importAllApps = useMutation(
+    trpc.forgegraph.importAllApps.mutationOptions({
+      onSuccess: (data) => {
+        toast(`Imported ${data.imported} projects from ForgeGraph`);
+        onOpenChange(false);
+        resetForm();
+        router.refresh();
+      },
+      onError: (err) => {
+        toast(err.message, {
+          style: { background: "#1a0000", borderColor: "#f43f5e40" },
+        });
+      },
+    }),
+  );
+
   const createProject = useMutation(
     trpc.project.create.mutationOptions({
       onSuccess: () => {
@@ -147,7 +163,7 @@ export function CreateProjectDialog({
     }
   }
 
-  const isPending = importApp.isPending || createProject.isPending;
+  const isPending = importApp.isPending || createProject.isPending || importAllApps.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -208,6 +224,22 @@ export function CreateProjectDialog({
                   <p className="mt-1.5 text-xs text-muted-foreground">
                     All ForgeGraph apps are already linked. Connect your token in Settings if you don't see apps.
                   </p>
+                )}
+                {fgApps && fgApps.length > 1 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 w-full"
+                    disabled={importAllApps.isPending}
+                    onClick={() =>
+                      importAllApps.mutate({ workspaceId })
+                    }
+                  >
+                    {importAllApps.isPending
+                      ? "Importing..."
+                      : `Import all ${fgApps.length} unlinked apps`}
+                  </Button>
                 )}
               </div>
             )}

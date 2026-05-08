@@ -15,6 +15,7 @@ import {
 import { toast } from "@gmacko/core/ui/toast";
 
 import { formatLabel } from "~/lib/design/colors";
+import { useChatPanel } from "~/components/chat/chat-panel-provider";
 import { useTRPC } from "~/trpc/react";
 
 import type { badgeVariants } from "@gmacko/core/ui/badge";
@@ -82,6 +83,7 @@ interface DispatchPlanProps {
 export function DispatchPlan({ batchId }: DispatchPlanProps) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
+  const { openPanel } = useChatPanel();
 
   const { data, isLoading } = useQuery({
     ...trpc.dispatch.getBatch.queryOptions({ batchId }),
@@ -257,6 +259,8 @@ export function DispatchPlan({ batchId }: DispatchPlanProps) {
               <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">
                 Blocked By
               </th>
+              <th className="w-16 px-4 py-2.5 text-left font-medium text-muted-foreground">
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -278,6 +282,11 @@ export function DispatchPlan({ batchId }: DispatchPlanProps) {
                         {item.planningTaskIdentifier}
                       </span>
                       <span className="text-foreground">{item.title}</span>
+                      {item.branch && (
+                        <span className="mt-0.5 font-mono text-[10px] text-muted-foreground/70 truncate max-w-[280px]">
+                          {item.branch}
+                        </span>
+                      )}
                     </div>
                   </td>
 
@@ -312,14 +321,29 @@ export function DispatchPlan({ batchId }: DispatchPlanProps) {
 
                   {/* Status */}
                   <td className="px-4 py-2.5">
-                    <Badge
-                      variant={
-                        DISPATCH_STATUS_COLOR[item.status] ?? "slate"
-                      }
-                      className="text-[10px]"
-                    >
-                      {formatLabel(item.status)}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant={
+                          DISPATCH_STATUS_COLOR[item.status] ?? "slate"
+                        }
+                        className="text-[10px]"
+                      >
+                        {formatLabel(item.status)}
+                      </Badge>
+                      {item.status === "running" && item.runStartedAt && (
+                        <ElapsedTimer since={item.runStartedAt} />
+                      )}
+                      {(item.status === "completed" || item.status === "failed") &&
+                        item.runStartedAt &&
+                        item.runCompletedAt && (
+                          <span className="text-[10px] tabular-nums text-muted-foreground">
+                            {formatDuration(
+                              new Date(item.runCompletedAt).getTime() -
+                                new Date(item.runStartedAt).getTime(),
+                            )}
+                          </span>
+                        )}
+                    </div>
                   </td>
 
                   {/* Pipeline */}
@@ -344,6 +368,25 @@ export function DispatchPlan({ batchId }: DispatchPlanProps) {
                     {blockerLabels.length > 0
                       ? blockerLabels.join(", ")
                       : "\u2014"}
+                  </td>
+
+                  {/* View output */}
+                  <td className="px-4 py-2.5">
+                    {item.sessionId && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-[10px]"
+                        onClick={() =>
+                          openPanel({
+                            sessionId: item.sessionId!,
+                            label: `${item.planningTaskIdentifier}: ${item.title}`,
+                          })
+                        }
+                      >
+                        {item.status === "running" ? "Live" : "Output"}
+                      </Button>
+                    )}
                   </td>
                 </tr>
               );

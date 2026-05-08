@@ -480,3 +480,115 @@ export async function forgegraphImportApp(
 
   return project;
 }
+
+export async function forgegraphImportAllApps(
+  ctx: HandlerContextWithSession,
+  input: { workspaceId: string },
+) {
+  const fg = getForgeGraphClient();
+  if (!fg) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "ForgeGraph not configured",
+    });
+  }
+
+  const [allApps, linkedProjects] = await Promise.all([
+    fg.listApps(),
+    ctx.db.query.projects.findMany({
+      where: eq(projects.workspaceId, input.workspaceId),
+      columns: { forgeGraphAppId: true, key: true },
+    }),
+  ]);
+
+  const linkedIds = new Set(
+    linkedProjects.map((p: any) => p.forgeGraphAppId).filter(Boolean),
+  );
+  const existingKeys = new Set(
+    linkedProjects.map((p: any) => p.key as string),
+  );
+
+  const unlinked = allApps.filter((app: any) => !linkedIds.has(app.id));
+  if (unlinked.length === 0) return { imported: 0, projects: [] };
+
+  const imported: Array<typeof projects.$inferSelect> = [];
+
+  for (const app of unlinked) {
+    let remoteUrl: string | null = null;
+    let remoteOwner: string | null = null;
+    let remoteName: string | null = null;
+    let mainBranch = "main";
+    if (app.flakeRef) {
+      const gitMatch = app.flakeRef.match(/git\+?(https?:\/\/[^?#]+)/);
+      if (gitMatch) {
+        remoteUrl = gitMatch[1]!;
+        const pathParts = new URL(remoteUrl).pathname
+          .replace(/\.git$/, "")
+          .split("/")
+          .filter(Boolean);
+        if (pathParts.length >= 2) {
+          remoteOwner = pathParts[0]!;
+          remoteName = pathParts[1]!;
+        }
+      }
+      const refMatch = app.flakeRef.match(/[?&]ref=([^&#]+)/);
+      if (refMatch) mainBranch = refMatch[1]!;
+    }
+
+    let key = deriveKeyFromName(app.name);
+    let suffix = 1;
+    while (existingKeys.has(key)) {
+      key = deriveKeyFromName(app.name).slice(0, 14) + String(suffix++);
+    }
+    existingKeys.add(key);
+
+    try {
+      const [project] = await ctx.db
+        .insert(projects)
+        .values({
+          workspaceId: input.workspaceId,
+          forgeGraphAppId: app.id,
+          name: app.name,
+          key,
+          description: app.description,
+          repoUrl: remoteUrl ?? app.flakeRef ?? null,
+        })
+        .returning();
+
+      if (remoteUrl && project) {
+        await ctx.db
+          .insert(repositories)
+          .values({
+            userId: ctx.session.user.id,
+            planningProjectId: project.id,
+            name: remoteName ?? app.name,
+            path: `/repos/${app.slug}`,
+            branch: mainBranch,
+            mainBranch,
+            remoteUrl,
+            remoteProvider: "gitea",
+            remoteOwner,
+            remoteName,
+          })
+          .onConflictDoNothing();
+      }
+
+      if (project) imported.push(project);
+    } catch {
+      // skip apps that fail (e.g. key collision)
+    }
+  }
+
+  return { imported: imported.length, projects: imported };
+}
+
+function deriveKeyFromName(name: string): string {
+  const key = name
+    .replace(/[^a-zA-Z0-9\s]/g, "")
+    .split(/\s+/)
+    .map((w) => w.charAt(0))
+    .join("")
+    .toUpperCase()
+    .slice(0, 16);
+  return key || "APP";
+}

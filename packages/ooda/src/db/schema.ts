@@ -29,3 +29,5 @@ export {
 } from "./schema/research-buddy";
 
 export { users, sessions } from "./schema/auth";
+
+export { oracleQueryLog } from "./schema/oracle";

@@ -14,10 +14,12 @@
   "scripts": {
     "lint": "eslint --flag unstable_native_nodejs_ts_config",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:daemon": "tsup --config tsup.daemon.ts"
   },
   "dependencies": {
     "@bob/db": "workspace:*",
+    "@bob/telemetry": "workspace:*",
     "node-pty": "^1.0.0",
     "ws": "^8.18.0"
   },

@@ -1,5 +1,6 @@
 "use client";
 
+import { ActiveDispatches } from "./active-dispatches";
 import { ActivityFeed } from "./activity-feed";
 import { AgentStatusBar } from "./agent-status-bar";
 import { AttentionPanel } from "./attention-panel";
@@ -25,8 +26,9 @@ export function MissionControl({ workspaceId }: MissionControlProps) {
         {/* Center column — Activity feed */}
         <ActivityFeed />
 
-        {/* Right column — Recent runs + Attention + Skill usage */}
+        {/* Right column — Dispatches + Recent runs + Attention + Skill usage */}
         <div className="flex flex-col gap-5">
+          <ActiveDispatches />
           <RecentRuns workspaceId={workspaceId ?? ""} />
           <AttentionPanel />
           <SkillUsage />

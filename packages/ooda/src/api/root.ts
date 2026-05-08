@@ -1,4 +1,5 @@
 import { importsRouter } from "./router/imports";
+import { oracleRouter } from "./router/oracle";
 import { publishRouter } from "./router/publish";
 import { researchRouter } from "./router/research";
 import { runnerRouter } from "./router/runner";
@@ -13,6 +14,7 @@ export const appRouter = createTRPCRouter({
   vault: vaultRouter,
   publish: publishRouter,
   imports: importsRouter,
+  oracle: oracleRouter,
 });
 
 export type AppRouter = typeof appRouter;

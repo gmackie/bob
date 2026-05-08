@@ -9,6 +9,7 @@
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import type { ImageConfig } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
+import { runWithDb } from "../src/lib/db-client-lazy";
 
 interface Env {
   ASSETS: Fetcher;
@@ -19,7 +20,10 @@ interface Env {
       };
     };
   };
+  HYPERDRIVE: { connectionString: string };
   GATEWAY_URL?: string;
+  NUDGE_SHARED_SECRET?: string;
+  [key: string]: unknown;
 }
 
 interface ExecutionContext {
@@ -58,9 +62,15 @@ export default {
       }, allowedWidths);
     }
 
-    // Delegate everything else to vinext, forwarding ctx so that
-    // ctx.waitUntil() is available to background cache writes and
-    // other deferred work via getRequestExecutionContext().
-    return handler.fetch(request, env, ctx);
+    // Expose secrets to server-side code via globalThis.
+    if (env.NUDGE_SHARED_SECRET) {
+      (globalThis as any).NUDGE_SHARED_SECRET = env.NUDGE_SHARED_SECRET;
+    }
+
+    // Run vinext with a request-scoped DB client. This ensures all queries
+    // within this request share one postgres connection (avoids exhausting
+    // Hyperdrive's per-request TCP limit and cross-request I/O errors).
+    const dbUrl = env.HYPERDRIVE.connectionString;
+    return runWithDb(dbUrl, true, () => handler.fetch(request, env, ctx));
   },
 };

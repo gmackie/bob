@@ -309,8 +309,11 @@ export class Relay {
       // If another daemon was registered for this workspace, boot it.
       const existing = this.daemonByWorkspace.get(hello.workspaceId);
       if (existing && existing !== conn) {
+        console.log(`[Relay] SUPERSEDING daemon ${existing.id} (clientId=${existing.clientId}) for workspace ${hello.workspaceId} — new daemon ${conn.id} (clientId=${hello.clientId})`);
         this.send(existing, createError("SUPERSEDED", "Another daemon connected for this workspace", undefined, false));
         existing.ws.close();
+      } else {
+        console.log(`[Relay] Daemon registered: ${conn.id} (clientId=${hello.clientId}) for workspace ${hello.workspaceId}`);
       }
       this.daemonByWorkspace.set(hello.workspaceId, conn);
     } else {

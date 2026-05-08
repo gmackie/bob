@@ -24,7 +24,8 @@
     "./thread-workspace": "./src/thread-workspace/index.ts",
     "./api": "./src/api/index.ts",
     "./api/edge": "./src/api/edge-router.ts",
-    "./api/openapi": "./src/api/openapi.ts"
+    "./api/openapi": "./src/api/openapi.ts",
+    "./oracle": "./src/oracle/index.ts"
   },
   "scripts": {
     "test": "vitest run",
@@ -36,11 +37,13 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",
+    "@bob/telemetry": "workspace:*",
     "@gmacko/core": "workspace:*",
     "@trpc/server": "catalog:",
     "drizzle-orm": "^0.45.2",
     "drizzle-zod": "^0.8.3",
     "effect": "4.0.0-beta.43",
+    "gpt-tokenizer": "^3.4.0",
     "gray-matter": "^4.0.0",
     "node-pty": "catalog:",
     "postgres": "^3.4.9",

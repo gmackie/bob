@@ -2,11 +2,15 @@ import {
   personalVaultFindingsInbox,
   personalVaultGraphEdges,
   personalVaultGraphNodes,
+  personalVaultRetrievalUnitEmbeddings,
+  personalVaultRetrievalUnits,
   personalVaultSources,
   personalVaultStandingInterests,
   researchVaultFindingsInbox,
   researchVaultGraphEdges,
   researchVaultGraphNodes,
+  researchVaultRetrievalUnitEmbeddings,
+  researchVaultRetrievalUnits,
   researchVaultSources,
   researchVaultStandingInterests,
 } from "@gmacko/ooda/db/schema";
@@ -26,6 +30,8 @@ function pickVaultTables(schema: "research_vault" | "personal_vault") {
       graphEdge: personalVaultGraphEdges,
       findingsInbox: personalVaultFindingsInbox,
       standingInterest: personalVaultStandingInterests,
+      retrievalUnit: personalVaultRetrievalUnits,
+      retrievalUnitEmbedding: personalVaultRetrievalUnitEmbeddings,
     };
   }
   return {
@@ -34,6 +40,8 @@ function pickVaultTables(schema: "research_vault" | "personal_vault") {
     graphEdge: researchVaultGraphEdges,
     findingsInbox: researchVaultFindingsInbox,
     standingInterest: researchVaultStandingInterests,
+    retrievalUnit: researchVaultRetrievalUnits,
+    retrievalUnitEmbedding: researchVaultRetrievalUnitEmbeddings,
   };
 }
 

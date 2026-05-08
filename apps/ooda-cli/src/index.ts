@@ -124,6 +124,126 @@ async function main() {
       break;
     }
 
+    case "oracle": {
+      const subcommand = args[1];
+      if (subcommand === "ingest-bookmarks") {
+        const jsonlPath = args[2];
+        if (!jsonlPath) {
+          console.error("Usage: ooda oracle ingest-bookmarks <path-to-bookmarks.jsonl> [--embed]");
+          process.exit(1);
+        }
+        const shouldEmbed = args.includes("--embed");
+        const { importFieldtheoryJsonl } = await import("@gmacko/ooda/oracle");
+        const { db } = await import("@gmacko/ooda/db/client");
+        const {
+          researchVaultSources,
+          researchVaultRetrievalUnits,
+          researchVaultRetrievalUnitEmbeddings,
+        } = await import("@gmacko/ooda/db/schema");
+
+        console.log(`Importing bookmarks from ${jsonlPath}...`);
+        const result = await importFieldtheoryJsonl(
+          db as any,
+          {
+            sources: researchVaultSources,
+            retrievalUnit: researchVaultRetrievalUnits,
+            retrievalUnitEmbedding: researchVaultRetrievalUnitEmbeddings,
+          },
+          jsonlPath,
+          { embed: shouldEmbed, apiKey: process.env.OPENAI_API_KEY },
+        );
+        console.log(`  Imported: ${result.imported}`);
+        console.log(`  Skipped: ${result.skipped}`);
+        if (result.errors.length > 0) {
+          console.log(`  Errors: ${result.errors.length}`);
+          for (const err of result.errors.slice(0, 5)) {
+            console.log(`    ${err.tweetId}: ${err.error}`);
+          }
+        }
+      } else if (subcommand === "ingest-conversations") {
+        const filePath = args[2];
+        if (!filePath) {
+          console.error("Usage: ooda oracle ingest-conversations <path-to-export.json> [--embed]");
+          process.exit(1);
+        }
+        const shouldEmbed = args.includes("--embed");
+        const { readFileSync } = await import("node:fs");
+        const { importConversations } = await import("@gmacko/ooda/oracle");
+        const { db } = await import("@gmacko/ooda/db/client");
+        const {
+          researchVaultSources,
+          researchVaultRetrievalUnits,
+          researchVaultRetrievalUnitEmbeddings,
+        } = await import("@gmacko/ooda/db/schema");
+
+        console.log(`Importing conversations from ${filePath}...`);
+        const jsonData = JSON.parse(readFileSync(filePath, "utf-8"));
+        const result = await importConversations(
+          db as any,
+          {
+            sources: researchVaultSources,
+            retrievalUnit: researchVaultRetrievalUnits,
+            retrievalUnitEmbedding: researchVaultRetrievalUnitEmbeddings,
+          },
+          jsonData,
+          { embed: shouldEmbed, apiKey: process.env.OPENAI_API_KEY },
+        );
+        console.log(`  Imported: ${result.imported}`);
+        console.log(`  Skipped: ${result.skipped}`);
+        if (result.errors.length > 0) {
+          console.log(`  Errors: ${result.errors.length}`);
+          for (const err of result.errors.slice(0, 5)) {
+            console.log(`    ${err.conversationId}: ${err.error}`);
+          }
+        }
+      } else if (subcommand === "query") {
+        const question = args.slice(2).join(" ");
+        if (!question) {
+          console.error("Usage: ooda oracle query <question>");
+          process.exit(1);
+        }
+        const { oracleQuery } = await import("@gmacko/ooda/oracle");
+        const { db } = await import("@gmacko/ooda/db/client");
+        const {
+          researchVaultSources,
+          researchVaultRetrievalUnits,
+          researchVaultRetrievalUnitEmbeddings,
+        } = await import("@gmacko/ooda/db/schema");
+
+        const apiKey = process.env.OPENAI_API_KEY;
+        if (!apiKey) {
+          console.error("OPENAI_API_KEY not set");
+          process.exit(1);
+        }
+
+        const result = await oracleQuery(
+          db as any,
+          {
+            sources: researchVaultSources,
+            retrievalUnit: researchVaultRetrievalUnits,
+            retrievalUnitEmbedding: researchVaultRetrievalUnitEmbeddings,
+          },
+          { task: "CLI query", question },
+          apiKey,
+        );
+
+        console.log(`\nOracle results (${result.chunks.length} chunks, ${result.latencyMs}ms):\n`);
+        for (const chunk of result.chunks) {
+          console.log(`--- [${chunk.sourceKind}] ${chunk.sourceTitle ?? "untitled"} (score: ${chunk.score.toFixed(3)}) ---`);
+          console.log(chunk.content.slice(0, 300));
+          if (chunk.sourceUrl) console.log(`  URL: ${chunk.sourceUrl}`);
+          console.log();
+        }
+      } else {
+        console.log(`Oracle commands:
+  ooda oracle ingest-bookmarks <path.jsonl> [--embed]   Import fieldtheory X bookmarks
+  ooda oracle ingest-conversations <path.json> [--embed] Import AI conversation exports
+  ooda oracle query <question>                          Query the oracle
+`);
+      }
+      break;
+    }
+
     default:
       console.log(`OODA Research Workstation CLI
 
@@ -136,6 +256,7 @@ Commands:
   ooda init <remote-url>    Initialize vault with ForgeGraph remote
   ooda sync                 Pull + push vault repo
   ooda migrate <remote-url>  Migrate per-thread repos to vault repo
+  ooda oracle               Oracle knowledge system commands
 `);
   }
 }

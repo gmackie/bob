@@ -12,6 +12,7 @@ import type { TRPCRouterRecord } from "@trpc/server";
 import { threadsEdgeRouter } from "./router/threads-edge";
 import { runnerRouter } from "./router/runner";
 import { researchRouter } from "./router/research";
+import { oracleRouter } from "./router/oracle";
 import { importsRouter } from "./router/imports";
 import { createTRPCRouter } from "./trpc";
 
@@ -20,6 +21,7 @@ const edgeRouterRecord = {
   runner: runnerRouter,
   research: researchRouter,
   imports: importsRouter,
+  oracle: oracleRouter,
 } satisfies TRPCRouterRecord;
 
 export const edgeRouter = createTRPCRouter(edgeRouterRecord);

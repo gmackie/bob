@@ -12,7 +12,11 @@ import {
 import { applySnapshotToTask, snapshotTaskFromProvider } from "./providerSnapshot.js";
 
 function getGatewayUrl() {
-  return process.env.GATEWAY_URL ?? "http://localhost:3002";
+  return (globalThis as any).GATEWAY_URL ?? process.env.GATEWAY_URL ?? "http://localhost:3002";
+}
+
+function getNudgeSecret(): string | undefined {
+  return (globalThis as any).NUDGE_SHARED_SECRET ?? process.env.NUDGE_SHARED_SECRET;
 }
 
 export interface PlanningTask {
@@ -70,7 +74,7 @@ export async function gatewayRequest(
   body: Record<string, unknown>,
 ): Promise<unknown> {
   const gatewayUrl = getGatewayUrl();
-  const nudgeSecret = process.env.NUDGE_SHARED_SECRET;
+  const nudgeSecret = getNudgeSecret();
 
   // Route /session/send through ws-gateway's /internal/session-send
   if (endpoint === "/session/send" && nudgeSecret) {
@@ -322,7 +326,7 @@ export async function executeTask(
   // Same pattern as planSession.start — best-effort, daemon will also
   // discover pending sessions on reconnect.
   const gatewayUrl = getGatewayUrl();
-  const nudgeSecret = process.env.NUDGE_SHARED_SECRET;
+  const nudgeSecret = getNudgeSecret();
   if (nudgeSecret) {
     try {
       await fetch(`${gatewayUrl}/internal/nudge`, {

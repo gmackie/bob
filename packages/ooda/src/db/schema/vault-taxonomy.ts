@@ -13,6 +13,7 @@ import {
   index,
   primaryKey,
   customType,
+  vector,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 
@@ -24,6 +25,8 @@ const bytea = customType<{ data: Buffer }>({
     return "bytea";
   },
 });
+
+const EMBEDDING_DIMS = 1536;
 
 // --- Schema factory: one call per vault ---
 
@@ -289,6 +292,52 @@ function createVaultTaxonomyTables(schema: ReturnType<typeof pgSchema>) {
     (t) => [index("s2_cache_expires_at_idx").on(t.expiresAt)],
   );
 
+  // --- Oracle retrieval layer ---
+
+  const retrievalUnit = schema.table(
+    "retrieval_unit",
+    {
+      id: uuid().primaryKey().defaultRandom(),
+      sourceId: integer()
+        .notNull()
+        .references(() => sources.id, { onDelete: "cascade" }),
+      chunkIndex: integer().notNull(),
+      content: text().notNull(),
+      tokenCount: integer().notNull(),
+      startOffset: integer(),
+      endOffset: integer(),
+      headingContext: text(),
+      confidence: real().notNull().default(1.0),
+      sourceQuality: real().notNull().default(1.0),
+      createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+      contentAsOf: timestamp({ withTimezone: true }),
+    },
+    (t) => [
+      uniqueIndex("retrieval_unit_source_chunk_idx").on(
+        t.sourceId,
+        t.chunkIndex,
+      ),
+      index("retrieval_unit_source_id_idx").on(t.sourceId),
+    ],
+  );
+
+  const retrievalUnitEmbedding = schema.table(
+    "retrieval_unit_embedding",
+    {
+      unitId: uuid()
+        .notNull()
+        .references(() => retrievalUnit.id, { onDelete: "cascade" }),
+      model: text().notNull(),
+      embedding: vector({ dimensions: EMBEDDING_DIMS }).notNull(),
+      createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+      primaryKey({ columns: [t.unitId, t.model] }),
+      index("retrieval_unit_embedding_vec_idx")
+        .using("hnsw", t.embedding.op("vector_cosine_ops")),
+    ],
+  );
+
   return {
     sources,
     embeddings,
@@ -302,6 +351,8 @@ function createVaultTaxonomyTables(schema: ReturnType<typeof pgSchema>) {
     standingInterest,
     findingsInbox,
     s2Cache,
+    retrievalUnit,
+    retrievalUnitEmbedding,
     graphEdgeKindEnum,
     findingsTriageEnum,
   };
@@ -324,6 +375,9 @@ export const personalVaultGraphEdges = personalTables.graphEdge;
 export const personalVaultStandingInterests = personalTables.standingInterest;
 export const personalVaultFindingsInbox = personalTables.findingsInbox;
 export const personalVaultS2Cache = personalTables.s2Cache;
+export const personalVaultRetrievalUnits = personalTables.retrievalUnit;
+export const personalVaultRetrievalUnitEmbeddings =
+  personalTables.retrievalUnitEmbedding;
 export const personalVaultGraphEdgeKindEnum = personalTables.graphEdgeKindEnum;
 export const personalVaultFindingsTriageEnum =
   personalTables.findingsTriageEnum;
@@ -345,6 +399,9 @@ export const researchVaultGraphEdges = researchTables.graphEdge;
 export const researchVaultStandingInterests = researchTables.standingInterest;
 export const researchVaultFindingsInbox = researchTables.findingsInbox;
 export const researchVaultS2Cache = researchTables.s2Cache;
+export const researchVaultRetrievalUnits = researchTables.retrievalUnit;
+export const researchVaultRetrievalUnitEmbeddings =
+  researchTables.retrievalUnitEmbedding;
 export const researchVaultGraphEdgeKindEnum = researchTables.graphEdgeKindEnum;
 export const researchVaultFindingsTriageEnum =
   researchTables.findingsTriageEnum;

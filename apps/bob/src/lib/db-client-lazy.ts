@@ -1,15 +1,37 @@
 /**
  * Cloudflare Workers-compatible database client.
  *
- * Uses postgres.js (not node-postgres) because it works natively in Workers.
- * Creates a fresh connection per request (max: 1) because Workers can't reuse
- * TCP sockets across requests. SSL disabled for Hyperdrive (internal connection).
+ * Uses postgres.js (not node-postgres) and AsyncLocalStorage to scope one
+ * drizzle client per request. The worker entry calls `runWithDb()` to set
+ * up the request-scoped client; the Proxy reads it on every access.
  */
+import { AsyncLocalStorage } from "node:async_hooks";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "@bob/db/schema";
 
-function getDatabase() {
+type DatabaseClient = ReturnType<typeof drizzle<typeof schema>>;
+
+const als = new AsyncLocalStorage<DatabaseClient>();
+
+export function createDbClient(databaseUrl: string, isHyperdrive: boolean): DatabaseClient {
+  const client = postgres(databaseUrl, {
+    ssl: isHyperdrive ? false : "require",
+    max: 1,
+    prepare: !isHyperdrive,
+  });
+  return drizzle(client, { schema, casing: "snake_case" });
+}
+
+export function runWithDb<T>(databaseUrl: string, isHyperdrive: boolean, fn: () => T): T {
+  const client = createDbClient(databaseUrl, isHyperdrive);
+  return als.run(client, fn);
+}
+
+function getDb(): DatabaseClient {
+  const fromAls = als.getStore();
+  if (fromAls) return fromAls;
+
   const databaseUrl =
     (globalThis as any).DATABASE_URL ??
     process.env.DATABASE_URL;
@@ -22,26 +44,15 @@ function getDatabase() {
     (globalThis as any).DATABASE_HYPERDRIVE === "true" ||
     process.env.DATABASE_HYPERDRIVE === "true";
 
-  const client = postgres(databaseUrl, {
-    ssl: isHyperdrive ? false : "require",
-    max: 1,
-    // Hyperdrive's pooled mode does not support session-level prepared statements.
-    // Without this, postgres.js's prepared-statement cache causes intermittent
-    // "Failed query" errors on parameterized inserts (e.g. discovered_dirs upsert).
-    prepare: !isHyperdrive,
-  });
-
-  return drizzle(client, { schema, casing: "snake_case" });
+  return createDbClient(databaseUrl, isHyperdrive);
 }
-
-type DatabaseClient = ReturnType<typeof getDatabase>;
 
 export const db = new Proxy({} as DatabaseClient, {
   get(_target, prop) {
-    const dbClient = getDatabase();
-    const value = (dbClient as any)[prop as string];
+    const instance = getDb();
+    const value = (instance as any)[prop as string];
     if (typeof value === "function") {
-      return value.bind(dbClient);
+      return value.bind(instance);
     }
     return value;
   },
