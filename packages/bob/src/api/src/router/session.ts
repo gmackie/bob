@@ -18,7 +18,7 @@ import {
   sessionReleaseLease,
   sessionRecordEvent,
   sessionRecordEventBatch,
-  sessionGetGatewayWebSocketUrl,
+  getGatewaySocketUrl,
   sessionReportWorkflowStatus,
   sessionReportTaskProgress,
   sessionLinkTaskArtifact,
@@ -214,9 +214,10 @@ export const sessionRouter = {
       sessionRecordEventBatch({ db: ctx.db, userId: ctx.session.user.id }, input),
     ),
 
-  getGatewayWebSocketUrl: protectedProcedure.query(({ ctx }) =>
-    sessionGetGatewayWebSocketUrl({ db: ctx.db, userId: ctx.session.user.id }, undefined as void),
-  ),
+  getGatewayWebSocketUrl: protectedProcedure.query(({ ctx }) => ({
+    url: getGatewaySocketUrl(),
+    token: ctx.session.session?.token ?? "",
+  })),
 
   reportWorkflowStatus: protectedProcedure
     .input(

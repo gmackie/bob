@@ -47,7 +47,7 @@ function getGatewayUrl() {
 function getGatewayPublicUrl() {
   return process.env.GATEWAY_PUBLIC_URL ?? getGatewayUrl();
 }
-const getGatewaySocketUrl = (): string =>
+export const getGatewaySocketUrl = (): string =>
   `${getGatewayPublicUrl().replace(/^http/, "ws")}/sessions`;
 
 // Initialize ElevenLabs session service (singleton)

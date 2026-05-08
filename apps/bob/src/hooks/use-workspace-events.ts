@@ -24,8 +24,8 @@ export function useWorkspaceEvents() {
 
   const { connectionState, subscribeWorkspace } = useSessionSocket({
     gatewayUrl: gatewayInfo?.url ?? "",
-    token: gatewayInfo?.userId ?? "",
-    enabled: !!gatewayInfo?.url,
+    token: gatewayInfo?.token ?? "",
+    enabled: !!gatewayInfo?.url && !!gatewayInfo?.token,
     onWorkspaceStatusChanged: (_info: ServerSessionStatusChanged) => {
       queryClient.invalidateQueries({
         predicate: (query) => {
