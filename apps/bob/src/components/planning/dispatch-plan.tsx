@@ -60,11 +60,17 @@ const PULSING_PIPELINE_STATES = new Set([
   "deploying_prod",
 ]);
 
+function parseTimestamp(ts: string): number {
+  if (/[Zz]$/.test(ts) || /[+-]\d{2}:?\d{2}$/.test(ts)) return new Date(ts).getTime();
+  return new Date(ts + "Z").getTime();
+}
+
 function formatDuration(ms: number): string {
-  if (ms < 60_000) return `${Math.floor(ms / 1000)}s`;
-  if (ms < 3600_000)
-    return `${Math.floor(ms / 60_000)}m ${Math.floor((ms % 60_000) / 1000)}s`;
-  return `${Math.floor(ms / 3600_000)}h ${Math.floor((ms % 3600_000) / 60_000)}m`;
+  const abs = Math.abs(ms);
+  if (abs < 60_000) return `${Math.floor(abs / 1000)}s`;
+  if (abs < 3600_000)
+    return `${Math.floor(abs / 60_000)}m ${Math.floor((abs % 60_000) / 1000)}s`;
+  return `${Math.floor(abs / 3600_000)}h ${Math.floor((abs % 3600_000) / 60_000)}m`;
 }
 
 const AGENT_OPTIONS = [
@@ -207,9 +213,14 @@ export function DispatchPlan({ batchId }: DispatchPlanProps) {
 
       {/* Completed banner */}
       {isCompleted && (
-        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-sm text-emerald-400">
-          All tasks have been dispatched and completed.
-          {failed > 0 && ` (${failed} failed)`}
+        <div className={`rounded-lg border px-4 py-3 text-sm ${
+          failed > 0
+            ? "border-rose-500/20 bg-rose-500/5 text-rose-400"
+            : "border-emerald-500/20 bg-emerald-500/5 text-emerald-400"
+        }`}>
+          {failed > 0
+            ? `Dispatch finished with ${failed} failed task${failed === 1 ? "" : "s"}.`
+            : "All tasks have been dispatched and completed."}
         </div>
       )}
 
@@ -338,8 +349,8 @@ export function DispatchPlan({ batchId }: DispatchPlanProps) {
                         item.runCompletedAt && (
                           <span className="text-[10px] tabular-nums text-muted-foreground">
                             {formatDuration(
-                              new Date(item.runCompletedAt).getTime() -
-                                new Date(item.runStartedAt).getTime(),
+                              parseTimestamp(item.runCompletedAt) -
+                                parseTimestamp(item.runStartedAt),
                             )}
                           </span>
                         )}
