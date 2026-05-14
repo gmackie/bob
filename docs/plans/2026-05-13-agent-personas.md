@@ -2,20 +2,29 @@
 
 **Date:** 2026-05-13
 **Status:** Draft
-**Scope:** Bob/blder persona system + gmacko-ops management repo
+**Scope:** Bob/blder persona system + gmacko-ops reference repo
 **Related:** BizPulse agent registry (separate plan — handles attribution, cost tracking, mandate linking)
 
 ## Context
 
-Bob handles agent execution (adapters, sessions, runners, task dispatch). BizPulse handles business attribution (cost tracking, startup linkage, mandate enforcement). Today, agents exist as loose strings (`agentType`, `adapterId`) with no identity, lifecycle, or cost tracking. This plan makes agents first-class entities in Bob via a persona system, and defines the gmacko-ops management repo that serves as the canonical source of truth for persona definitions.
+Bob handles agent execution (adapters, sessions, runners, task dispatch). BizPulse handles business attribution (cost tracking, startup linkage, mandate enforcement). Today, agents exist as loose strings (`agentType`, `adapterId`) with no identity, lifecycle, or cost tracking. This plan makes agents first-class entities in Bob via a persona system, and defines the gmacko-ops reference repo that demonstrates the canonical persona YAML format.
 
 **Responsibility split:**
-- Bob owns execution identity (persona config, session creation, adapter dispatch)
+- Bob owns execution identity (persona config, session creation, adapter dispatch, cost calculation)
 - BizPulse owns business identity (agent registry, cost attribution, mandate policies)
-- Bob pushes session completion data to BizPulse at close time
-- gmacko-ops defines canonical persona YAML; a sync script writes to both systems
+- Bob pushes session completion data (including cost in microcents) to BizPulse at close time
+- gmacko-ops defines reference persona YAML; Bob pulls the repo at startup and syncs to DB
 
-## Part 1: Bob Schema -- `agentPersonas` Table
+**Key design decisions (from grilling session 2026-05-13):**
+- Persona resolution targets the **Bob session router** (`agent.session.*`), not the legacy `AgentSession.create()` / `chatConversations` system
+- `adapterId` on the persona maps to `agentType` on the session (naming cleanup deferred); `agentType` reserved for future role concept (planning/coding/testing)
+- BizPulse cross-link fields live in `metadata jsonb`, not typed columns — keeps Bob's schema decoupled
+- `autonomyLevel` and `budgetLimitCents` are stored and displayed but **enforcement is deferred** — autonomy is injected into the system prompt as a hint; budget accumulator is built but no gate exists yet
+- Token/cost tracking is Bob's responsibility; pricing via a hardcoded `model-pricing.ts` config map
+- Two persona sources: `source: "repo"` (read-only in Blder, pulled from git) and `source: "ui"` (fully editable in Blder)
+- Persona slugs use the ForgeGraph slug as canonical identity
+
+## Part 1: Bob Schema — `agentPersonas` Table
 
 **New file:** `packages/core/src/db/schema/agent-personas.ts`
 **Re-export from:** `packages/core/src/db/schema/index.ts`
@@ -24,221 +33,198 @@ Bob handles agent execution (adapters, sessions, runners, task dispatch). BizPul
 agent_personas
   id              uuid PK (defaultRandom)
   tenantId        uuid FK->tenants (cascade)
-  projectId       uuid FK->projects (nullable, cascade)  -- null = tenant-wide
 
   name            varchar(256)     -- "Growth Agent", "Backend Lead"
-  slug            varchar(128)     -- unique per tenant
-  adapterId       varchar(128)     -- "claude-code", "codex", etc.
+  slug            varchar(128)     -- ForgeGraph slug, unique per tenant, [a-z0-9-], immutable after creation
+  description     text             -- human-readable summary for UI display
+  adapterId       varchar(128)     -- "claude", "codex", "kiro", etc.
   model           varchar(80)      -- "claude-sonnet-4-6"
 
   systemPrompt    text             -- persona instructions
-  allowedTools    jsonb string[]   -- tool allowlist
-  cwd             text             -- default working directory
+  allowedTools    jsonb string[]   -- tool allowlist (enforced via CLI flags where adapter supports it)
 
-  autonomyLevel   varchar(32)      -- observe|recommend|draft|safe_execute|full_execute
-  budgetLimitCents integer         -- per-session cost cap
+  autonomyLevel   varchar(32)      -- observe|recommend|draft|safe_execute|full_execute (enforcement deferred; injected into system prompt as hint)
+  budgetLimitCents integer         -- per-session cost cap (enforcement deferred; accumulator built but no gate)
 
-  -- BizPulse cross-links
-  externalMandateId varchar(200)   -- BizPulse agentMandate.id (policy sync)
-  externalAgentSlug varchar(100)   -- BizPulse agent.slug (session reporting)
-  bizpulseApiUrl    text           -- BizPulse API endpoint for push
-  bizpulseApiKey    text           -- API key (encrypted via Bob's secrets system)
-
+  source          varchar(16)      -- "repo" | "ui" — repo-managed personas are read-only in Blder
   active          boolean default true
-  metadata        jsonb default {}
+  metadata        jsonb default {} -- extensible; BizPulse cross-links stored here as metadata.bizpulse = { agentSlug, mandateId, apiUrl }
 
   createdAt       timestamp
   updatedAt       timestamp
 ```
 
-**Indexes:** `(tenantId, slug)` unique, `(projectId)`, `(tenantId, active)`
+**Indexes:** `(tenantId, slug)` unique, `(tenantId, active)`
 
-The table follows the existing pattern in `packages/core/src/db/schema/sessions.ts` -- pgTable with `uuid().primaryKey().defaultRandom()`, FK references via arrow functions, and jsonb columns with `.$type<>()`.
+**Dropped from original design:**
+- `projectId` — all personas are tenant-wide for now; project-scoped overrides are a future feature
+- `cwd` — working directory is a session-level concern, determined by repository/worktree at runtime
+- `externalMandateId`, `externalAgentSlug`, `bizpulseApiUrl`, `bizpulseApiKey` — moved to `metadata` jsonb
 
-## Part 2: Extend CreateSessionInput for Persona Resolution
+The table follows the existing pattern in `packages/core/src/db/schema/sessions.ts` — pgTable with `uuid().primaryKey().defaultRandom()`, FK references via arrow functions, and jsonb columns with `.$type<>()`.
 
-**Modify:** `packages/core/src/agent/agent-session.ts`
+## Part 2: Extend Session Creation for Persona Resolution
 
-Add optional `personaId` to the existing `CreateSessionInput` interface:
+**Target:** Bob session router (`agent.session.create`, `agent.session.bootstrapForChat`), NOT the legacy `AgentSession.create()`
+
+Add optional `personaId` to the session creation RPCs in `packages/core/src/contracts/groups/agent.ts`:
 
 ```typescript
-export interface CreateSessionInput {
-  readonly tenantId: TenantId;
-  readonly userId: UserId;
-  readonly adapterId: string;
-  readonly title?: string;
-  readonly personaId?: string;       // NEW -- resolve config from persona
-  readonly systemPrompt?: string;    // overrides persona default
-  readonly allowedTools?: readonly string[];
-  readonly cwd?: string;
-}
+// agent.session.create — add personaId to payload
+personaId: Schema.optional(Schema.String),
+
+// agent.session.bootstrapForChat — add personaId to payload
+personaId: Schema.optional(Schema.String),
 ```
 
-In `AgentSession.create()`:
+**Resolution logic** (in the session creation handler):
 1. If `personaId` provided, SELECT persona from `agent_personas` where `id = personaId` and `tenantId` matches
-2. Use persona's `adapterId`, `systemPrompt`, `allowedTools`, `cwd`, `model` as defaults
-3. Direct fields in `CreateSessionInput` override persona defaults (explicit > persona)
-4. Store `personaId`, `externalAgentSlug`, `bizpulseApiUrl` in `chatConversations.metadata`
+2. Use persona's `adapterId`, `systemPrompt`, `allowedTools`, `model` as defaults
+3. Direct fields in the creation request override persona defaults (explicit > persona)
+4. Store `personaId` and persona metadata (including BizPulse cross-links from `metadata.bizpulse`) in the session's metadata
+5. Map `persona.adapterId` → `session.agentType` (the existing session field)
 
-Also extend `AgentCreateSessionRpc` in `packages/core/src/contracts/groups/agent.ts`:
+**Override semantics:** All session creators are trusted internal callers (Blder, runner, sync). Overrides can widen or narrow persona defaults. If session creation is ever exposed to external callers, override semantics need revisiting (overrides should only narrow, not widen).
 
-```typescript
-export const AgentCreateSessionRpc = Rpc.make("agent.createSession", {
-  payload: Schema.Struct({
-    adapterId: Schema.String,
-    title: Schema.optional(Schema.String),
-    systemPrompt: Schema.optional(Schema.String),
-    allowedTools: Schema.optional(Schema.Array(Schema.String)),
-    cwd: Schema.optional(Schema.String),
-    personaId: Schema.optional(Schema.String),  // NEW
-  }),
-  // ...
-});
-```
+## Part 3: Token/Cost Tracking + BizPulse Push
 
-And add `personaId` to `AgentSessionCreateRpc` and `AgentSessionBootstrapForChatRpc` in the same file.
+**Prerequisites — parser and schema changes:**
+1. Extend `AgentEventTurnEndSchema` in `packages/core/src/contracts/schemas/agent.ts` to include `inputTokens?: number`, `outputTokens?: number`, `cacheReadTokens?: number`, `cacheCreationTokens?: number`
+2. Update `parseStreamJsonLine()` in `packages/core/src/agent/stream-json-parser.ts` to extract usage fields from Claude CLI's stream-json output
+3. Write token data to the existing `tokenUsageSessions` table in `packages/bob/src/agents/src/schema.ts` (no new table needed)
 
-## Part 3: Session Completion -> BizPulse Push
+**Cost calculation:**
+- New file: `packages/core/src/agent/model-pricing.ts` — hardcoded `Record<string, { inputPer1M: number, outputPer1M: number }>` map
+- On session close, compute cost from accumulated tokens × model pricing
+- Report cost in microcents
 
-**Modify:** `packages/core/src/agent/agent-session.ts` (sendTurn finalizer / close method)
+**Token accumulator:**
+- Add a `Ref` accumulator (same pattern used for turn state in sendTurn) that sums token counts from `turn_end` events across all turns in a session
+- On close, read the ref and compute cost from `model-pricing.ts`
 
-When a conversation closes (status -> completed/failed/canceled), if `metadata.externalAgentSlug` and `metadata.bizpulseApiUrl` are set:
+**BizPulse push (fire-and-forget):**
+When a session closes (status → completed/failed/canceled), if `metadata.bizpulse.agentSlug` and `metadata.bizpulse.apiUrl` are set:
 
-1. Accumulate token counts from adapter events during the session (already available via `session_init` and `turn_end` events)
-2. Fire a background HTTP POST to `{bizpulseApiUrl}/agent.reportSession`:
+1. Fire a background HTTP POST to `{bizpulseApiUrl}/agent.reportSession`:
    ```json
    {
-     "agentSlug": "<externalAgentSlug>",
-     "externalSessionId": "<conversationId>",
+     "agentSlug": "<from metadata.bizpulse.agentSlug>",
+     "externalSessionId": "<sessionId>",
      "startupSlug": "<from metadata, if set>",
-     "title": "<conversation title>",
+     "title": "<session title>",
      "status": "completed|failed|cancelled",
-     "tokensUsed": 12345,
-     "costCents": 42,
+     "inputTokens": 10000,
+     "outputTokens": 2345,
+     "costMicrocents": 4200,
      "durationMs": 180000,
      "actionsProposed": 5,
      "actionsCompleted": 4,
      "summary": "<agent-generated summary>"
    }
    ```
-3. Best-effort fire-and-forget with single retry. If it fails, the session data remains in Bob's DB and can be reconciled later.
+2. Inline fire-and-forget — no job queue. If it fails, session data remains in Bob's DB and can be reconciled later.
 
-Token/cost tracking: add a `Ref` accumulator (same pattern used for turn state in sendTurn) that sums `input_tokens` + `output_tokens` from adapter events. On close, read the ref and compute cost from model pricing stored in persona config.
+## Part 4: Adapter Extensions
 
-## Part 4: New RPC Procedures for Persona CRUD
+Extend adapter `buildCommand()` to accept and pass through persona configuration:
+
+**Claude adapter** (`packages/core/src/agent/claude-code-adapter.ts`):
+- `--model <model>` flag from persona config
+- `--allowedTools <tool1,tool2,...>` flag from persona config (hard enforcement — CLI respects this)
+
+**Codex adapter** (`packages/ooda/src/agent-adapters/codex-adapter.ts`):
+- Pass model via environment or CLI flag if supported
+- `allowedTools` — pass through if adapter supports it, ignore with a note otherwise
+
+**All adapters:**
+- `autonomyLevel` is injected into the system prompt text, not as a CLI flag (soft enforcement only)
+
+## Part 5: New RPC Procedures for Persona CRUD
 
 **Modify:** `packages/core/src/contracts/groups/agent.ts`
 
-Add five new RPCs to the AgentRpc group:
+Add six RPCs to the agent group under `agent.persona.*`:
 
 ```typescript
 // agent.persona.create
-export const AgentPersonaCreateRpc = Rpc.make("agent.persona.create", {
-  payload: Schema.Struct({
-    name: Schema.String,
-    slug: Schema.String,
-    adapterId: Schema.String,
-    model: Schema.optional(Schema.String),
-    systemPrompt: Schema.optional(Schema.String),
-    allowedTools: Schema.optional(Schema.Array(Schema.String)),
-    cwd: Schema.optional(Schema.String),
-    autonomyLevel: Schema.optional(Schema.String),
-    budgetLimitCents: Schema.optional(Schema.Number),
-    projectId: Schema.optional(Schema.String),
-    externalAgentSlug: Schema.optional(Schema.String),
-    bizpulseApiUrl: Schema.optional(Schema.String),
-    bizpulseApiKey: Schema.optional(Schema.String),
-  }),
-  success: AgentPersonaSchema,
-});
+payload: { name, slug, description?, adapterId, model?, systemPrompt?, allowedTools?, autonomyLevel?, budgetLimitCents?, metadata? }
+success: AgentPersonaSchema
 
 // agent.persona.list
-export const AgentPersonaListRpc = Rpc.make("agent.persona.list", {
-  payload: Schema.Struct({
-    projectId: Schema.optional(Schema.String),
-    active: Schema.optional(Schema.Boolean),
-  }),
-  success: Schema.Array(AgentPersonaSchema),
-});
+payload: { active?: boolean }
+success: AgentPersonaSchema[]
 
 // agent.persona.get
-export const AgentPersonaGetRpc = Rpc.make("agent.persona.get", {
-  payload: Schema.Struct({ id: Schema.String }),
-  success: AgentPersonaSchema,
-  error: NotFoundError,
-});
+payload: { id }
+success: AgentPersonaSchema
+error: NotFoundError
 
-// agent.persona.update
-export const AgentPersonaUpdateRpc = Rpc.make("agent.persona.update", {
-  payload: Schema.Struct({
-    id: Schema.String,
-    name: Schema.optional(Schema.String),
-    // ... same optional fields as create
-  }),
-  success: AgentPersonaSchema,
-  error: NotFoundError,
-});
+// agent.persona.update (only for source: "ui" personas)
+payload: { id, name?, description?, adapterId?, model?, systemPrompt?, allowedTools?, autonomyLevel?, budgetLimitCents?, metadata? }
+success: AgentPersonaSchema
+error: NotFoundError
 
-// agent.persona.delete (soft-delete: sets active=false)
-export const AgentPersonaDeleteRpc = Rpc.make("agent.persona.delete", {
-  payload: Schema.Struct({ id: Schema.String }),
-  success: Schema.Void,
-  error: NotFoundError,
-});
+// agent.persona.delete (soft-delete: sets active=false; only for source: "ui" personas)
+payload: { id }
+success: Void
+error: NotFoundError
+
+// agent.persona.syncRepo (pulls personas repo, upserts source: "repo" records)
+payload: {}
+success: { created: number, updated: number, unchanged: number }
 ```
 
-Add `AgentPersonaSchema` to `packages/core/src/contracts/schemas/` following the existing pattern (e.g. `agent-session.ts`).
+Notes:
+- `update` and `delete` reject operations on `source: "repo"` personas (those are managed via git)
+- Slug reuse after soft-delete is not supported in this phase (requires partial unique index `WHERE active = true`)
+
+Add `AgentPersonaSchema` to `packages/core/src/contracts/schemas/` following the existing pattern.
 
 Wire handlers in `packages/bob/src/api/src/rpc-handlers/` following the existing agent handler pattern.
 
-## Part 5: Blder UI Additions
+## Part 6: Blder UI Additions
 
 **App:** `apps/blder/`
-**Current routes:** `api/`, `login/`, `nodes/`
+**Data layer:** Plain fetch + Drizzle (existing pattern — no tRPC/Effect-RPC)
 
 Add new routes:
 
-- `apps/blder/src/app/personas/page.tsx` -- list all registered personas
-  - Table columns: name, slug, adapter, model, project, autonomy level, active status
-  - Filter by active/inactive, project
-  - Create button -> form
+- `apps/blder/src/app/personas/page.tsx` — list all registered personas
+  - Table columns: name, slug, adapter, model, autonomy level, source, active status
+  - Filter by active/inactive, source
+  - Create button → form (for `source: "ui"` personas only)
+  - Repo-managed personas shown with a badge, edit/delete disabled
 
-- `apps/blder/src/app/personas/[id]/page.tsx` -- persona detail
+- `apps/blder/src/app/personas/[id]/page.tsx` — persona detail
   - Profile: name, description, adapter, model, system prompt preview
-  - BizPulse linkage: external agent slug, mandate ID, API URL
-  - Recent sessions that used this persona (query chatConversations where metadata.personaId matches)
-  - Edit button -> inline form
+  - BizPulse linkage (from metadata.bizpulse): agent slug, mandate ID, API URL
+  - Recent sessions that used this persona
+  - Edit button → inline form (disabled for `source: "repo"` personas)
 
-- `apps/blder/src/app/personas/new/page.tsx` -- create persona form
+- `apps/blder/src/app/personas/new/page.tsx` — create persona form
   - All fields from the create RPC
   - System prompt as a resizable textarea
   - Allowed tools as a tag input
+  - `source` automatically set to `"ui"`
 
-## Part 6: gmacko-ops Management Repo
+- `apps/blder/src/app/api/personas/route.ts` — API route for list/create
+- `apps/blder/src/app/api/personas/[id]/route.ts` — API route for get/update/delete
+- `apps/blder/src/app/api/personas/sync/route.ts` — API route triggering `agent.persona.syncRepo`
 
-New repo on git.forgegraf.com: `gmacko-ops`
+## Part 7: gmacko-ops Reference Repo
 
-### Repository structure
+Reference implementation on git.forgegraf.com: `gmacko-ops`
+
+Other users can fork this repo and point their Bob instance at their own persona repo.
+
+### Repository structure (minimal viable scope)
 
 ```
 gmacko-ops/
   CLAUDE.md                    -- agent instructions for operating in this repo
+  README.md                   -- explains the persona YAML contract
 
-  playbooks/
-    customer-validation.md     -- interview script + survey template
-    landing-page-audit.md      -- SEO + conversion checklist
-    compliance-check.md        -- entity + filing status verification
-    launch-readiness.md        -- pre-launch checklist (Stripe, legal, marketing)
-    kb-update.md               -- sync gmacko-company docs -> BizPulse KB
-    weekly-portfolio-review.md -- portfolio-wide status review
-    competitor-scan.md         -- market research update
-
-  skills/                      -- Bob/blder skill packs (executable by agents)
-    bizpulse-context.md        -- skill: fetch startup context from BizPulse API
-    bizpulse-report.md         -- skill: report results back to BizPulse
-    repo-health-check.md       -- skill: check a startup's repo for CI, tests, deps
-
-  personas/                    -- canonical persona definitions (source of truth)
+  personas/
     growth-agent.yaml
     compliance-agent.yaml
     devops-agent.yaml
@@ -246,20 +232,16 @@ gmacko-ops/
 
   templates/
     persona.template.yaml
-    playbook.template.md
-
-  scripts/
-    sync-personas.ts           -- sync persona YAML -> Bob API + BizPulse API
-    seed-agents.ts             -- create agent records in BizPulse from persona defs
 ```
 
-### Persona YAML format
+### Persona YAML format (v1)
 
 ```yaml
+apiVersion: v1
 name: Growth Agent
 slug: growth-agent
 description: Drives user acquisition, activation, and retention across portfolio startups
-adapter: claude-code
+adapter: claude
 model: claude-sonnet-4-6
 autonomy_level: safe_execute
 
@@ -278,27 +260,21 @@ allowed_tools:
   - WebSearch
   - WebFetch
 
-playbooks:
-  - customer-validation
-  - landing-page-audit
-  - competitor-scan
+metadata:
+  bizpulse:
+    agentSlug: growth-agent
+    mandateId: mandate-growth-001
+    apiUrl: https://bizpulse.gmac.io
 ```
 
-### Sync script design
+### Repo pull mechanism
 
-`scripts/sync-personas.ts` reads all `personas/*.yaml` files and:
+Bob pulls the personas repo on runner startup and on manual trigger (`agent.persona.syncRepo` RPC):
 
-1. **Parses** each YAML file, validates against the persona schema
-2. **Upserts to Bob** via Bob's API: calls `agent.persona.create` or `agent.persona.update` (matching by slug)
-3. **Upserts to BizPulse** via BizPulse's API: calls `agent.create` or `agent.update` (matching by slug)
-4. **Cross-links** the records:
-   - Sets `externalPersonaId` on the BizPulse agent record (pointing to Bob's persona ID)
-   - Sets `externalAgentSlug` on the Bob persona record (pointing to BizPulse's agent slug)
-5. **Outputs** a summary table: persona name, Bob ID, BizPulse agent ID, status (created/updated/unchanged)
-
-CLI usage: `npx tsx scripts/sync-personas.ts --bob-url https://blder.gmac.io --bizpulse-url https://bizpulse.gmac.io --bob-key $BOB_API_KEY --bizpulse-key $BIZPULSE_API_KEY`
-
-The script is idempotent -- running it twice with the same YAML produces no changes.
+1. Clone/pull the configured personas repo URL (from environment config)
+2. Parse all `personas/*.yaml` files, validate against v1 schema
+3. Upsert into `agent_personas` with `source: "repo"`, matching by `(tenantId, slug)`
+4. Personas in DB with `source: "repo"` whose slug is no longer in the repo are soft-deleted (active=false)
 
 ## Implementation Order
 
@@ -307,32 +283,42 @@ The script is idempotent -- running it twice with the same YAML produces no chan
 2. Add re-export to `packages/core/src/db/schema/index.ts`
 3. Run `drizzle-kit push` to create the table
 4. Add `AgentPersonaSchema` to `packages/core/src/contracts/schemas/`
-5. Add five persona RPCs to `packages/core/src/contracts/groups/agent.ts`
+5. Add six persona RPCs to `packages/core/src/contracts/groups/agent.ts`
 6. Wire RPC handlers in `packages/bob/src/api/src/rpc-handlers/`
 7. Verify: `tsc --noEmit` clean, persona CRUD works via RPC
 
 ### Phase B: Persona resolution in session creation
-1. Extend `CreateSessionInput` with optional `personaId`
-2. Add persona lookup logic to `AgentSession.create()` in `packages/core/src/agent/agent-session.ts`
-3. Extend `AgentCreateSessionRpc`, `AgentSessionCreateRpc`, `AgentSessionBootstrapForChatRpc` payloads
-4. Verify: create a session with `personaId`, confirm persona config applied
+1. Add `personaId` to `agent.session.create` and `agent.session.bootstrapForChat` payloads
+2. Add persona lookup + default resolution logic in session creation handler
+3. Map `persona.adapterId` → `session.agentType`
+4. Extend adapter `buildCommand()` to accept `model` and `allowedTools`
+5. Inject `autonomyLevel` into system prompt text
+6. Verify: create a session with `personaId`, confirm persona config applied and adapter receives model/tools
 
-### Phase C: BizPulse push on session completion
-1. Add token/cost accumulator `Ref` to sendTurn
-2. Add HTTP POST to BizPulse in close/cancel/fail paths
-3. Verify: complete a persona-linked session, confirm BizPulse receives session report
+### Phase C: Token/cost tracking + BizPulse push
+1. Extend `AgentEventTurnEndSchema` with token count fields
+2. Update `parseStreamJsonLine()` to extract usage from Claude CLI stream-json output
+3. Create `model-pricing.ts` hardcoded pricing map
+4. Add token `Ref` accumulator to session turn processing
+5. Write accumulated tokens to existing `tokenUsageSessions` table on session close
+6. Compute cost from pricing map
+7. Add fire-and-forget BizPulse HTTP POST on session close (if metadata.bizpulse configured)
+8. Verify: complete a persona-linked session, confirm tokens accumulated, cost computed, BizPulse receives report
 
 ### Phase D: Blder UI
-1. Add `/personas` list page
+1. Add `/personas` list page with filtering
 2. Add `/personas/[id]` detail page
 3. Add `/personas/new` create form
-4. Wire tRPC calls to persona CRUD RPCs
+4. Add API routes with Drizzle queries
+5. Add sync trigger button (calls `agent.persona.syncRepo`)
+6. Verify: CRUD personas via UI, repo-managed personas are read-only
 
-### Phase E: gmacko-ops repo + sync
+### Phase E: gmacko-ops reference repo
 1. Create `gmacko-ops` repo on git.forgegraf.com
-2. Define initial persona YAML files (growth, compliance, devops, research)
-3. Write `sync-personas.ts` script
-4. Test end-to-end: persona YAML -> Bob persona -> agent session -> BizPulse attribution
+2. Define four persona YAML files (growth, compliance, devops, research)
+3. Create `persona.template.yaml`
+4. Implement repo pull logic in Bob (startup + syncRepo RPC)
+5. Verify: Bob pulls repo on startup, personas appear in Blder with `source: "repo"`, read-only
 
 ## Key Files Summary
 
@@ -340,9 +326,14 @@ The script is idempotent -- running it twice with the same YAML produces no chan
 |------|------|
 | Persona DB schema (new) | `packages/core/src/db/schema/agent-personas.ts` |
 | Schema barrel | `packages/core/src/db/schema/index.ts` |
-| Agent session service | `packages/core/src/agent/agent-session.ts` |
+| Model pricing (new) | `packages/core/src/agent/model-pricing.ts` |
+| Stream JSON parser | `packages/core/src/agent/stream-json-parser.ts` |
+| Claude adapter | `packages/core/src/agent/claude-code-adapter.ts` |
 | RPC contracts | `packages/core/src/contracts/groups/agent.ts` |
-| RPC schemas | `packages/core/src/contracts/schemas/` |
-| RPC handlers | `packages/bob/src/api/src/rpc-handlers/` |
-| Blder app routes | `apps/blder/src/app/` |
-| Management repo | `gmacko-ops/` (git.forgegraf.com) |
+| RPC schemas (new) | `packages/core/src/contracts/schemas/agent-persona.ts` |
+| Session creation handler | `packages/bob/src/api/src/handlers/session.ts` |
+| RPC handlers (new) | `packages/bob/src/api/src/rpc-handlers/persona.ts` |
+| Token usage table (existing) | `packages/bob/src/agents/src/schema.ts` |
+| Blder persona pages (new) | `apps/blder/src/app/personas/` |
+| Blder API routes (new) | `apps/blder/src/app/api/personas/` |
+| Reference repo (new) | `gmacko-ops/` (git.forgegraf.com) |
