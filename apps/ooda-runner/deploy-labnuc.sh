@@ -2,7 +2,7 @@
 set -euo pipefail
 
 DEPLOY_DIR="/opt/ooda-runner"
-REPO_URL="https://git.forgegraf.com/gmacko/bob.git"
+REPO_URL="https://git.forgegraf.com/gmackie/bob.git"
 BRANCH="${1:-master}"
 
 echo "==> Deploying ooda-runner to $DEPLOY_DIR (branch: $BRANCH)"

@@ -1,0 +1,26 @@
+[Unit]
+Description=OODA Research Backend (Python/FastAPI sidecar)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mackieg
+Group=users
+ExecStart=/usr/bin/podman run --rm --name ooda-research-backend \
+  -p 127.0.0.1:8000:8000 \
+  --env-file /opt/ooda-runner/.env.research \
+  localhost/ooda-research-backend:latest
+ExecStop=/usr/bin/podman stop ooda-research-backend
+Restart=always
+RestartSec=10
+
+LimitNOFILE=65536
+MemoryMax=2G
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ooda-research-backend
+
+[Install]
+WantedBy=multi-user.target
