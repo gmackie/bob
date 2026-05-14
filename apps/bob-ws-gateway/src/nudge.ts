@@ -11,6 +11,14 @@ interface NudgeBody {
   branch?: string;
   sessionType?: "execution" | "planning";
   planningContext?: Record<string, unknown>;
+  personaId?: string;
+  personaConfig?: {
+    model?: string;
+    systemPrompt?: string;
+    allowedTools?: string[];
+    autonomyLevel?: string;
+    metadata?: Record<string, unknown>;
+  };
 }
 
 export interface NudgeConfig {

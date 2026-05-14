@@ -107,7 +107,7 @@ function liftHandlers<
   // Call once with a dummy ctx to discover keys (no side effects — factories
   // just return object literals of closures that capture ctx). The closures
   // are never invoked.
-  const sentinel: HandlerContext = { db: null as any, userId: "" };
+  const sentinel: HandlerContext = { db: null as any, userId: "", tenantId: "" };
   const keys = Object.keys(factory(sentinel)) as Array<keyof H & string>;
 
   const lifted = {} as Record<string, (input: any) => Effect.Effect<any, any, any>>;
@@ -116,7 +116,7 @@ function liftHandlers<
       Effect.gen(function* () {
         const db = yield* GmackoDb.asEffect();
         const user = yield* CurrentUser.asEffect();
-        const ctx: HandlerContext = { db, userId: user.userId };
+        const ctx: HandlerContext = { db, userId: user.userId, tenantId: process.env.BOB_TENANT_ID };
         const handlers = factory(ctx);
         return yield* handlers[key]!(input);
       });

@@ -83,6 +83,13 @@ const makeDbMock = () => ({
       },
     };
   },
+  select: () => ({
+    from: () => ({
+      where: () => ({
+        limit: () => Promise.resolve([]),
+      }),
+    }),
+  }),
   query: {
     chatConversations: {
       findFirst: (...args: unknown[]) => dbQueryFindFirstMock("chatConversations", ...args),

@@ -65,8 +65,9 @@ export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
       repositoryId?: string;
       worktreeId?: string;
       workingDirectory: string;
-      agentType: string;
+      agentType?: string;
       title?: string;
+      personaId?: string;
     };
   }) => wrapHandler(sessionCreate, ctx, payload, "session"),
 
@@ -77,8 +78,9 @@ export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
       repositoryId?: string;
       worktreeId?: string;
       workingDirectory: string;
-      agentType: string;
+      agentType?: string;
       title?: string;
+      personaId?: string;
     };
   }) => wrapHandler(sessionBootstrapForChat, ctx, payload, "session"),
 

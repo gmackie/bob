@@ -7,6 +7,7 @@
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray, ne } from "@bob/db";
 import {
+  agentPersonas,
   chatConversations,
   planDraftDependencies,
   planDrafts,
@@ -173,22 +174,43 @@ export async function planSessionStart(
 ) {
   await loadOwnedPlanningSession(ctx.db, ctx.userId, input.sessionId);
 
-  // Write planning execution context to chat_conversations and mark
-  // the session pending so the ws-gateway daemon loop picks it up.
+  // Resolve Planner persona by slug (graceful fallback if not found)
+  const [plannerPersona] = await ctx.db
+    .select()
+    .from(agentPersonas)
+    .where(
+      and(
+        eq(agentPersonas.slug, "planner"),
+        eq(agentPersonas.active, true),
+      ),
+    )
+    .limit(1);
+
+  const agentType = plannerPersona?.adapterId ?? "claude";
+  const personaConfig = plannerPersona
+    ? {
+        model: plannerPersona.model as string | undefined,
+        systemPrompt: plannerPersona.systemPrompt as string | undefined,
+        allowedTools: plannerPersona.allowedTools as string[] | undefined,
+        autonomyLevel: plannerPersona.autonomyLevel as string | undefined,
+        metadata: plannerPersona.metadata as Record<string, unknown> | undefined,
+      }
+    : undefined;
+
   await ctx.db
     .update(chatConversations)
     .set({
       status: "pending",
       workingDirectory: input.workingDirectory,
+      agentType,
       planningWorkspaceId: input.workspaceId,
       planningProjectId: input.projectId,
       planningProjectName: input.projectName,
       planningLaunchContext: input.launchContext ?? null,
+      ...(plannerPersona ? { personaId: plannerPersona.id, personaMetadata: personaConfig } : {}),
     } as any)
     .where(eq(chatConversations.id, input.sessionId));
 
-  // Best-effort nudge to ws-gateway so the daemon picks it up instantly
-  // instead of waiting for the next reconnect recovery sweep.
   const gatewayUrl = process.env.GATEWAY_URL;
   const nudgeSecret = process.env.NUDGE_SHARED_SECRET;
   if (gatewayUrl && nudgeSecret) {
@@ -203,9 +225,11 @@ export async function planSessionStart(
           sessionId: input.sessionId,
           workspaceId: input.workspaceId,
           workingDirectory: input.workingDirectory,
-          agentType: "claude",
+          agentType,
           title: "Planning session",
           sessionType: "planning",
+          personaId: plannerPersona?.id,
+          personaConfig,
           planningContext: {
             workspaceId: input.workspaceId,
             projectId: input.projectId,

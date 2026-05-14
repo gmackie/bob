@@ -233,6 +233,15 @@ export interface ServerSessionAvailable {
   description?: string;
   identifier?: string;
   branch?: string;
+  /** Persona-based session config */
+  personaId?: string;
+  personaConfig?: {
+    model?: string;
+    systemPrompt?: string;
+    allowedTools?: string[];
+    autonomyLevel?: string;
+    metadata?: Record<string, unknown>;
+  };
 }
 
 /** Gateway tells the browser it exceeded the replay window */

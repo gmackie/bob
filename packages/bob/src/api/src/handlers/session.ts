@@ -7,6 +7,7 @@
 import { TRPCError } from "@trpc/server";
 import { and, asc, desc, eq, gt, inArray, lt, sql } from "@bob/db";
 import {
+  agentPersonas,
   chatConversations,
   sessionConnections,
   sessionEvents,
@@ -85,6 +86,50 @@ const sessionStatusValues = [
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   return "Unknown error";
+}
+
+// ---------------------------------------------------------------------------
+// Persona resolution
+// ---------------------------------------------------------------------------
+
+async function resolvePersonaDefaults(
+  ctx: HandlerContext,
+  input: { agentType?: string; personaId?: string },
+) {
+  if (!input.personaId) {
+    return {
+      agentType: input.agentType ?? "opencode",
+      personaId: null as string | null,
+      personaMetadata: null as Record<string, unknown> | null,
+    };
+  }
+
+  const [persona] = await ctx.db
+    .select()
+    .from(agentPersonas)
+    .where(eq(agentPersonas.id, input.personaId))
+    .limit(1);
+
+  if (!persona) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: `Persona ${input.personaId} not found`,
+    });
+  }
+
+  return {
+    agentType: input.agentType ?? persona.adapterId,
+    personaId: persona.id,
+    personaMetadata: {
+      personaSlug: persona.slug,
+      personaName: persona.name,
+      model: persona.model,
+      systemPrompt: persona.systemPrompt,
+      allowedTools: persona.allowedTools,
+      autonomyLevel: persona.autonomyLevel,
+      ...persona.metadata,
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -279,10 +324,13 @@ export async function sessionCreate(
     repositoryId?: string;
     worktreeId?: string;
     workingDirectory: string;
-    agentType: string;
+    agentType?: string;
     title?: string;
+    personaId?: string;
   },
 ) {
+  const resolved = await resolvePersonaDefaults(ctx, input);
+
   const [session] = await ctx.db
     .insert(chatConversations)
     .values({
@@ -290,9 +338,11 @@ export async function sessionCreate(
       repositoryId: input.repositoryId ?? null,
       worktreeId: input.worktreeId ?? null,
       workingDirectory: input.workingDirectory,
-      agentType: input.agentType,
+      agentType: resolved.agentType,
       title: input.title ?? null,
       status: "provisioning",
+      personaId: resolved.personaId,
+      personaMetadata: resolved.personaMetadata,
     })
     .returning();
 
@@ -305,10 +355,13 @@ export async function sessionBootstrapForChat(
     repositoryId?: string;
     worktreeId?: string;
     workingDirectory: string;
-    agentType: string;
+    agentType?: string;
     title?: string;
+    personaId?: string;
   },
 ) {
+  const resolved = await resolvePersonaDefaults(ctx, input);
+
   const [session] = await ctx.db
     .insert(chatConversations)
     .values({
@@ -316,9 +369,11 @@ export async function sessionBootstrapForChat(
       repositoryId: input.repositoryId ?? null,
       worktreeId: input.worktreeId ?? null,
       workingDirectory: input.workingDirectory,
-      agentType: input.agentType,
+      agentType: resolved.agentType,
       title: input.title ?? null,
       status: "provisioning",
+      personaId: resolved.personaId,
+      personaMetadata: resolved.personaMetadata,
     })
     .returning();
 

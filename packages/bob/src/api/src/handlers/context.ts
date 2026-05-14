@@ -9,6 +9,8 @@ export interface HandlerContext {
   readonly db: any;
   /** Authenticated user's ID. */
   readonly userId: string;
+  /** Tenant ID for multi-tenant scoping. Falls back to BOB_TENANT_ID env var when not set. */
+  readonly tenantId?: string;
 }
 
 /**

@@ -26,3 +26,11 @@ export * from "@bob/ci/schema";
 export * from "@bob/notifications/schema";
 export * from "@bob/cookies/schema";
 export * from "@bob/secrets/schema";
+export {
+  agentPersonas,
+  personaSource,
+  agentPersonasInsertSchema,
+  agentPersonasSelectSchema,
+  type AgentPersona,
+  type NewAgentPersona,
+} from "@gmacko/core/db/schema/agent-personas";

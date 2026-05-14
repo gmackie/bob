@@ -7,8 +7,6 @@
     "./runtime": "./src/runtime/index.ts",
     "./runtime/planningControl": "./src/runtime/planningControl.ts",
     "./runtime/taskExecutor": "./src/runtime/taskExecutor.ts",
-    "./planning/planningAgentTools": "./src/planning/planningAgentTools.ts",
-    "./planning/startPlanningSession": "./src/planning/startPlanningSession.ts",
     "./planning/smolAgentReviewProfile": "./src/planning/smolAgentReviewProfile.ts"
   },
   "scripts": {
@@ -20,6 +18,7 @@
   "dependencies": {
     "@bob/db": "workspace:*",
     "@bob/telemetry": "workspace:*",
+    "@gmacko/core": "workspace:*",
     "node-pty": "^1.0.0",
     "ws": "^8.18.0"
   },

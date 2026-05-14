@@ -56,6 +56,14 @@ interface NudgeInput {
   description?: string;
   identifier?: string;
   branch?: string;
+  personaId?: string;
+  personaConfig?: {
+    model?: string;
+    systemPrompt?: string;
+    allowedTools?: string[];
+    autonomyLevel?: string;
+    metadata?: Record<string, unknown>;
+  };
 }
 
 export interface RelayConfig {
@@ -143,6 +151,8 @@ export class Relay {
       description: input.description,
       identifier: input.identifier,
       branch: input.branch,
+      personaId: input.personaId,
+      personaConfig: input.personaConfig,
     });
   }
 
@@ -381,6 +391,8 @@ export class Relay {
           branch = taskRun?.branch ?? undefined;
         }
 
+        const personaMetadata = (session as any).personaMetadata as Record<string, unknown> | null;
+
         this.send(conn, {
           type: "session_available",
           sessionId: session.id,
@@ -402,6 +414,14 @@ export class Relay {
           description,
           identifier,
           branch,
+          personaId: (session as any).personaId ?? undefined,
+          personaConfig: personaMetadata ? {
+            model: typeof personaMetadata.model === "string" ? personaMetadata.model : undefined,
+            systemPrompt: typeof personaMetadata.systemPrompt === "string" ? personaMetadata.systemPrompt : undefined,
+            allowedTools: Array.isArray(personaMetadata.allowedTools) ? personaMetadata.allowedTools as string[] : undefined,
+            autonomyLevel: typeof personaMetadata.autonomyLevel === "string" ? personaMetadata.autonomyLevel : undefined,
+            metadata: typeof personaMetadata.metadata === "object" ? personaMetadata.metadata as Record<string, unknown> : undefined,
+          } : undefined,
         });
       }
     }

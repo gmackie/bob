@@ -12,6 +12,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import WebSocket from "ws";
 import { initTelemetry, traceAgentExecution, setAgentResult, type AgentExecutionResult } from "@bob/telemetry";
+import { computeCostUsd, type TokenCounts } from "@gmacko/core/agent/model-pricing";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -45,6 +46,26 @@ interface ServerSessionAvailable {
   description?: string;
   identifier?: string;
   branch?: string;
+  personaId?: string;
+  personaConfig?: {
+    model?: string;
+    systemPrompt?: string;
+    allowedTools?: string[];
+    autonomyLevel?: string;
+    metadata?: Record<string, unknown>;
+  };
+  planningContext?: {
+    workspaceId?: string;
+    projectId?: string;
+    projectName?: string;
+    launchContext?: {
+      intent: "shape" | "breakdown";
+      notes: string;
+      workItem?: { id: string; identifier: string; title: string; kind: string };
+      selectedRepoSources: Array<{ id: string; label: string; path: string; detail: string }>;
+      attachedFiles: Array<{ name: string; sizeLabel: string; content?: string }>;
+    };
+  };
 }
 
 type ServerMessage =
@@ -164,11 +185,6 @@ async function handleSessionAvailable(session: ServerSessionAvailable): Promise<
     return;
   }
 
-  if (session.sessionType === "planning") {
-    console.log(`[executor] Skipping planning session ${session.sessionId}`);
-    return;
-  }
-
   console.log(`[executor] Claiming session ${session.sessionId}: ${session.title}`);
 
   // Claim the session
@@ -215,7 +231,8 @@ async function handleSessionAvailable(session: ServerSessionAvailable): Promise<
         branch: session.branch,
       },
       async (span) => {
-        const result = await runAgent(session.sessionId, agentType, workDir, prompt);
+        const persona = getPersonaConfig(session);
+        const result = await runAgent(session, workDir, prompt, persona);
         setAgentResult(span, result);
       },
     );
@@ -256,7 +273,48 @@ function buildPrompt(session: ServerSessionAvailable): string {
     parts.push(`\nWork on branch: ${session.branch}`);
   }
 
-  parts.push("\n\nImplement this task. Create a commit when done.");
+  if (session.planningContext) {
+    const pc = session.planningContext;
+    if (pc.projectName) {
+      parts.push(`\nProject: ${pc.projectName}`);
+    }
+    if (pc.launchContext) {
+      const lc = pc.launchContext;
+      parts.push(`\nPlanning intent: ${lc.intent}`);
+      if (lc.notes) parts.push(`\nBrief: ${lc.notes}`);
+      if (lc.workItem) {
+        parts.push(`\nWork item: ${lc.workItem.identifier} - ${lc.workItem.title} (${lc.workItem.kind})`);
+      }
+      if (lc.selectedRepoSources?.length) {
+        parts.push(`\nRepo context:`);
+        for (const src of lc.selectedRepoSources) {
+          parts.push(`  - ${src.label} (${src.path}): ${src.detail}`);
+        }
+      }
+      if (lc.attachedFiles?.length) {
+        parts.push(`\nAttached files:`);
+        for (const f of lc.attachedFiles) {
+          parts.push(`  - ${f.name} [${f.sizeLabel}]`);
+          if (f.content?.trim()) {
+            parts.push(`    ${f.content.trim().split("\n").join("\n    ")}`);
+          }
+        }
+      }
+    }
+  }
+
+  const bizpulse = session.personaConfig?.metadata?.bizpulse as
+    | { startupSlug?: string }
+    | undefined;
+  if (bizpulse?.startupSlug) {
+    parts.push(`\nYou are operating on startup: ${bizpulse.startupSlug}`);
+  }
+
+  if (session.sessionType === "planning") {
+    parts.push("\n\nAnalyze the codebase and create a structured plan with draft tasks.");
+  } else {
+    parts.push("\n\nImplement this task. Create a commit when done.");
+  }
 
   return parts.join("\n");
 }
@@ -297,10 +355,14 @@ function gitCheckoutBranch(workDir: string, branch: string): Promise<void> {
 // Agent runner
 // ---------------------------------------------------------------------------
 
-function runAgent(sessionId: string, agentType: string, workDir: string, prompt: string): Promise<AgentExecutionResult> {
+function runAgent(session: ServerSessionAvailable, workDir: string, prompt: string, persona?: PersonaConfig): Promise<AgentExecutionResult> {
   return new Promise((resolve, reject) => {
-    const { command, args } = getAgentCommand(agentType, prompt);
+    const sessionId = session.sessionId;
+    const agentType = session.agentType || "claude";
+    const { command, args } = getAgentCommand(agentType, prompt, persona);
     console.log(`[executor] Spawning: ${command} ${args.join(" ").slice(0, 80)}...`);
+
+    const startTime = Date.now();
 
     const child = spawn(command, args, {
       cwd: workDir,
@@ -309,6 +371,8 @@ function runAgent(sessionId: string, agentType: string, workDir: string, prompt:
         ...process.env,
         CI: "true",
         TERM: "dumb",
+        PULSE_API_KEY: process.env.PULSE_API_KEY ?? "",
+        PULSE_API_URL: process.env.PULSE_API_URL ?? "https://bizpulse.cc",
       },
     });
 
@@ -334,11 +398,22 @@ function runAgent(sessionId: string, agentType: string, workDir: string, prompt:
     });
 
     child.on("close", (code) => {
-      const tokenUsage = parseTokenUsage(output);
+      const durationMs = Date.now() - startTime;
+      const tokenUsage = parseTokenUsage(output, persona?.model);
       const result: AgentExecutionResult = {
         exitCode: code ?? 1,
-        ...tokenUsage,
+        inputTokens: tokenUsage.inputTokens,
+        outputTokens: tokenUsage.outputTokens,
+        costUsd: tokenUsage.costUsd,
       };
+
+      void reportToBizPulse(
+        session,
+        code === 0 ? "completed" : "failed",
+        tokenUsage,
+        durationMs,
+        output,
+      );
 
       if (code === 0) {
         sendEvent(sessionId, "message_final", "agent", {
@@ -368,45 +443,163 @@ function runAgent(sessionId: string, agentType: string, workDir: string, prompt:
   });
 }
 
-function parseTokenUsage(output: string): { inputTokens?: number; outputTokens?: number; costUsd?: number } {
+interface ParsedTokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  costUsd: number;
+  model: string;
+}
+
+function parseTokenUsage(output: string, personaModel?: string): ParsedTokenUsage {
+  const defaults: ParsedTokenUsage = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheCreationTokens: 0,
+    costUsd: 0,
+    model: personaModel ?? "claude-sonnet-4-6",
+  };
+
   try {
     const lines = output.split("\n");
     for (let i = lines.length - 1; i >= 0; i--) {
       const trimmed = lines[i]!.trim();
-      if (trimmed.startsWith("{") && trimmed.includes("usage")) {
-        const json = JSON.parse(trimmed);
-        if (json.usage) {
-          const inputTokens = json.usage.input_tokens ?? json.usage.prompt_tokens ?? 0;
-          const outputTokens = json.usage.output_tokens ?? json.usage.completion_tokens ?? 0;
-          const cacheCreation = json.usage.cache_creation_input_tokens ?? 0;
-          const cacheRead = json.usage.cache_read_input_tokens ?? 0;
-          const inputCost = (inputTokens / 1_000_000) * 3.0;
-          const outputCost = (outputTokens / 1_000_000) * 15.0;
-          const cacheCost = (cacheCreation / 1_000_000) * 3.75 + (cacheRead / 1_000_000) * 0.3;
-          return {
-            inputTokens,
-            outputTokens,
-            costUsd: inputCost + outputCost + cacheCost,
-          };
-        }
+      if (!trimmed.startsWith("{")) continue;
+      const json = JSON.parse(trimmed);
+      if (json.type === "result" && json.usage) {
+        const tokens: TokenCounts = {
+          input: json.usage.input_tokens ?? 0,
+          output: json.usage.output_tokens ?? 0,
+          cacheRead: json.usage.cache_read_input_tokens ?? 0,
+          cacheCreation: json.usage.cache_creation_input_tokens ?? 0,
+        };
+        const model = personaModel ?? "claude-sonnet-4-6";
+        return {
+          inputTokens: tokens.input,
+          outputTokens: tokens.output,
+          cacheReadTokens: tokens.cacheRead,
+          cacheCreationTokens: tokens.cacheCreation,
+          costUsd: json.total_cost_usd ?? computeCostUsd(model, tokens),
+          model,
+        };
       }
     }
   } catch {
     // best-effort parsing
   }
-  return {};
+  return defaults;
 }
 
-function getAgentCommand(agentType: string, prompt: string): { command: string; args: string[] } {
+async function reportToBizPulse(
+  session: ServerSessionAvailable,
+  status: "completed" | "failed",
+  tokenUsage: ParsedTokenUsage,
+  durationMs: number,
+  finalOutput: string,
+): Promise<void> {
+  const bizpulse = session.personaConfig?.metadata?.bizpulse as
+    | { apiUrl?: string; agentSlug?: string; startupSlug?: string }
+    | undefined;
+
+  if (!bizpulse?.apiUrl || !bizpulse?.agentSlug) return;
+
+  const costMicrocents = Math.round(tokenUsage.costUsd * 100_000_000);
+
+  try {
+    await fetch(`${bizpulse.apiUrl}/api/agent/report-session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.PULSE_API_KEY ?? ""}`,
+      },
+      body: JSON.stringify({
+        agentSlug: bizpulse.agentSlug,
+        externalSessionId: session.sessionId,
+        startupSlug: bizpulse.startupSlug ?? null,
+        title: session.title ?? null,
+        status,
+        inputTokens: tokenUsage.inputTokens,
+        outputTokens: tokenUsage.outputTokens,
+        cacheReadTokens: tokenUsage.cacheReadTokens,
+        cacheCreationTokens: tokenUsage.cacheCreationTokens,
+        costMicrocents,
+        durationMs,
+        summary: finalOutput.slice(-2000),
+      }),
+    });
+    console.log(`[executor] BizPulse report sent for session ${session.sessionId}`);
+  } catch (err) {
+    console.warn(`[executor] BizPulse report failed (fire-and-forget):`, err);
+  }
+}
+
+interface PersonaConfig {
+  model?: string;
+  allowedTools?: string[];
+  systemPrompt?: string;
+  autonomyLevel?: string;
+}
+
+function getPersonaConfig(session: ServerSessionAvailable): PersonaConfig {
+  if (session.personaConfig) {
+    let systemPrompt = session.personaConfig.systemPrompt;
+    const autonomyLevel = session.personaConfig.autonomyLevel;
+    if (autonomyLevel && systemPrompt) {
+      systemPrompt = `${systemPrompt}\n\nAutonomy level: ${autonomyLevel}. Operate within this level.`;
+    } else if (autonomyLevel) {
+      systemPrompt = `Autonomy level: ${autonomyLevel}. Operate within this level.`;
+    }
+    return {
+      model: session.personaConfig.model,
+      allowedTools: session.personaConfig.allowedTools,
+      systemPrompt,
+      autonomyLevel,
+    };
+  }
+
+  const meta = (session as any).personaMetadata as Record<string, unknown> | null;
+  if (!meta) return {};
+
+  let systemPrompt = typeof meta.systemPrompt === "string" ? meta.systemPrompt : undefined;
+  const autonomyLevel = typeof meta.autonomyLevel === "string" ? meta.autonomyLevel : undefined;
+  if (autonomyLevel && systemPrompt) {
+    systemPrompt = `${systemPrompt}\n\nAutonomy level: ${autonomyLevel}. Operate within this level.`;
+  } else if (autonomyLevel) {
+    systemPrompt = `Autonomy level: ${autonomyLevel}. Operate within this level.`;
+  }
+
+  return {
+    model: typeof meta.model === "string" ? meta.model : undefined,
+    allowedTools: Array.isArray(meta.allowedTools) ? meta.allowedTools as string[] : undefined,
+    systemPrompt,
+    autonomyLevel,
+  };
+}
+
+function getAgentCommand(agentType: string, prompt: string, persona?: PersonaConfig): { command: string; args: string[] } {
   switch (agentType) {
-    case "claude":
-      return { command: "claude", args: ["--print", "--dangerously-skip-permissions", prompt] };
+    case "claude": {
+      const args = ["--output-format", "stream-json", "--dangerously-skip-permissions"];
+      if (persona?.model) args.push("--model", persona.model);
+      if (persona?.allowedTools?.length) args.push("--allowedTools", persona.allowedTools.join(","));
+      if (persona?.systemPrompt) args.push("--append-system-prompt", persona.systemPrompt);
+      args.push(prompt);
+      return { command: "claude", args };
+    }
     case "codex":
       return { command: "codex", args: ["--quiet", "--full-auto", prompt] };
     case "opencode":
       return { command: "opencode", args: ["run", prompt] };
-    default:
-      return { command: "claude", args: ["--print", "--dangerously-skip-permissions", prompt] };
+    default: {
+      const defaultArgs = ["--output-format", "stream-json", "--dangerously-skip-permissions"];
+      if (persona?.model) defaultArgs.push("--model", persona.model);
+      if (persona?.allowedTools?.length) defaultArgs.push("--allowedTools", persona.allowedTools.join(","));
+      if (persona?.systemPrompt) defaultArgs.push("--append-system-prompt", persona.systemPrompt);
+      defaultArgs.push(prompt);
+      return { command: "claude", args: defaultArgs };
+    }
   }
 }
 

@@ -284,10 +284,10 @@ describe("RPC handler factory key counts", () => {
 
   // --- Platform aggregate handler key counts (5 groups) ---
 
-  describe("Agent group (78 procedures — 73 from factories + 5 stubs)", () => {
-    it("makeAgentHandlers produces 78 keys", () => {
+  describe("Agent group (84 procedures — 79 from factories + 5 stubs)", () => {
+    it("makeAgentHandlers produces 84 keys", () => {
       const handlers = makeAgentHandlers(mockCtx);
-      expect(Object.keys(handlers)).toHaveLength(78);
+      expect(Object.keys(handlers)).toHaveLength(84);
     });
   });
 
@@ -322,7 +322,7 @@ describe("RPC handler factory key counts", () => {
   // --- Grand total: all 8 RpcGroups ---
 
   describe("Grand total — all 8 RpcGroups", () => {
-    it("308 contract procedures + 1 health = 309 total", () => {
+    it("314 contract procedures + 1 health = 315 total", () => {
       // Domain groups (3): WorkItems 31 + Planning 67 + External 31 = 129
       const workItemsKeys =
         Object.keys(makeWorkItemsRpcHandlers(mockCtx)).length +
@@ -343,7 +343,7 @@ describe("RPC handler factory key counts", () => {
         Object.keys(makeWebhookRpcHandlers(mockCtx)).length +
         Object.keys(makePublicApiRpcHandlers(mockCtx)).length;
 
-      // Platform groups (5): Agent 78 + Projects 56 + Settings 20 + Secrets 14 + Auth 11 = 179
+      // Platform groups (5): Agent 84 + Projects 56 + Settings 20 + Secrets 14 + Auth 11 = 185
       const agentKeys = Object.keys(makeAgentHandlers(mockCtx)).length;
       const projectsKeys = Object.keys(makeProjectsHandlers(mockCtx)).length;
       const settingsKeys = Object.keys(makeSettingsHandlers(mockCtx)).length;
@@ -357,9 +357,9 @@ describe("RPC handler factory key counts", () => {
       const grandTotal = contractTotal + 1; // +1 for health endpoint
 
       expect(domainTotal).toBe(129);
-      expect(platformTotal).toBe(179);
-      expect(contractTotal).toBe(308);
-      expect(grandTotal).toBe(309);
+      expect(platformTotal).toBe(185);
+      expect(contractTotal).toBe(314);
+      expect(grandTotal).toBe(315);
     });
   });
 });

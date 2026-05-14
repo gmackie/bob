@@ -26,6 +26,7 @@ import { makeEventRpcHandlers } from "../rpc-handlers/event.js";
 import { makeFilesystemRpcHandlers } from "../rpc-handlers/filesystem.js";
 import { makeChatRpcHandlers } from "../rpc-handlers/chat.js";
 import { makePostRpcHandlers } from "../rpc-handlers/post.js";
+import { makePersonaRpcHandlers } from "../rpc-handlers/persona.js";
 
 /**
  * Returns the raw handler mapping object for AgentRpc (78 entries).
@@ -42,6 +43,7 @@ export const makeAgentHandlers = (ctx: HandlerContext) => {
   const fs = makeFilesystemRpcHandlers(ctx);
   const ch = makeChatRpcHandlers(ctx);
   const po = makePostRpcHandlers(ctx);
+  const per = makePersonaRpcHandlers(ctx);
 
   return {
     // --- Stubs (5) — gmacko-only session lifecycle, no Bob equivalent ---
@@ -164,6 +166,14 @@ export const makeAgentHandlers = (ctx: HandlerContext) => {
     "agent.post.byId": po["post.byId"],
     "agent.post.create": po["post.create"],
     "agent.post.delete": po["post.delete"],
+
+    // --- Persona (6) ---
+    "agent.persona.create": per["persona.create"],
+    "agent.persona.list": per["persona.list"],
+    "agent.persona.get": per["persona.get"],
+    "agent.persona.update": per["persona.update"],
+    "agent.persona.delete": per["persona.delete"],
+    "agent.persona.syncRepo": per["persona.syncRepo"],
   } as const;
 };
 

@@ -79,6 +79,8 @@ export const chatConversations = pgTable(
     awaitingInputResolution: t
       .json()
       .$type<{ type: "human" | "timeout"; value: string }>(),
+    personaId: t.uuid(),
+    personaMetadata: t.json().$type<Record<string, unknown>>(),
     planningSessionType: t.varchar({ length: 30 }),
     // values: "office_hours" | "ceo_review" | "eng_review" | "design_review" | "breakdown"
     // Planning session execution context — populated by planSession.start,

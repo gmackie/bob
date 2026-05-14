@@ -74,6 +74,9 @@ export function buildArgs(input: AdapterTurnInput): string[] {
   if (input.resumeSessionId) {
     args.push("--resume", input.resumeSessionId);
   }
+  if (input.model) {
+    args.push("--model", input.model);
+  }
   if (input.allowedTools && input.allowedTools.length > 0) {
     args.push("--allowedTools", input.allowedTools.join(","));
   }

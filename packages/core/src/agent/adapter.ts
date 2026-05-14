@@ -55,6 +55,7 @@ export interface AdapterTurnInput {
   readonly resumeSessionId?: string;
   readonly systemPrompt?: string;
   readonly allowedTools?: readonly string[];
+  readonly model?: string;
   /** Working directory for the subprocess, if applicable to the adapter. */
   readonly cwd?: string;
 }

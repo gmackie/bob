@@ -73,6 +73,13 @@ import {
 } from "../schemas/agent-filesystem.js";
 import { ChatAttachmentSchema } from "../schemas/agent-chat.js";
 import { PostSchema } from "../schemas/agent-post.js";
+import {
+  AgentPersonaSchema,
+  PersonaSourceEnum,
+  PersonaNotFoundError,
+  PersonaReadOnlyError,
+  PersonaSyncResultSchema,
+} from "../schemas/agent-persona.js";
 import { NotFoundError } from "../../rpc/errors.js";
 
 /** Union of every error `agent.sendTurn` can surface (on its stream). */
@@ -234,6 +241,7 @@ export const AgentSessionCreateRpc = Rpc.make("agent.session.create", {
     workingDirectory: Schema.String,
     agentType: Schema.optional(Schema.String),
     title: Schema.optional(Schema.String),
+    personaId: Schema.optional(Schema.String),
   }),
   success: SessionSchema,
 });
@@ -249,6 +257,7 @@ export const AgentSessionBootstrapForChatRpc = Rpc.make(
       workingDirectory: Schema.String,
       agentType: Schema.optional(Schema.String),
       title: Schema.optional(Schema.String),
+      personaId: Schema.optional(Schema.String),
     }),
     success: Schema.Struct({
       session: SessionSchema,
@@ -1066,6 +1075,65 @@ export const AgentPostDeleteRpc = Rpc.make("agent.post.delete", {
   success: Schema.Struct({ success: Schema.Boolean }),
 });
 
+// --- agent.persona (6) ------------------------------------------------------
+
+export const AgentPersonaCreateRpc = Rpc.make("agent.persona.create", {
+  payload: Schema.Struct({
+    name: Schema.String,
+    slug: Schema.String,
+    description: Schema.optional(Schema.String),
+    adapterId: Schema.String,
+    model: Schema.optional(Schema.String),
+    systemPrompt: Schema.optional(Schema.String),
+    allowedTools: Schema.optional(Schema.Array(Schema.String)),
+    autonomyLevel: Schema.optional(Schema.String),
+    budgetLimitCents: Schema.optional(Schema.Number),
+    metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  }),
+  success: AgentPersonaSchema,
+});
+
+export const AgentPersonaListRpc = Rpc.make("agent.persona.list", {
+  payload: Schema.Struct({
+    active: Schema.optional(Schema.Boolean),
+  }),
+  success: Schema.Array(AgentPersonaSchema),
+});
+
+export const AgentPersonaGetRpc = Rpc.make("agent.persona.get", {
+  payload: Schema.Struct({ id: Schema.String }),
+  success: AgentPersonaSchema,
+  error: PersonaNotFoundError,
+});
+
+export const AgentPersonaUpdateRpc = Rpc.make("agent.persona.update", {
+  payload: Schema.Struct({
+    id: Schema.String,
+    name: Schema.optional(Schema.String),
+    description: Schema.optional(Schema.String),
+    adapterId: Schema.optional(Schema.String),
+    model: Schema.optional(Schema.String),
+    systemPrompt: Schema.optional(Schema.String),
+    allowedTools: Schema.optional(Schema.Array(Schema.String)),
+    autonomyLevel: Schema.optional(Schema.String),
+    budgetLimitCents: Schema.optional(Schema.Number),
+    metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  }),
+  success: AgentPersonaSchema,
+  error: Schema.Union([PersonaNotFoundError, PersonaReadOnlyError]),
+});
+
+export const AgentPersonaDeleteRpc = Rpc.make("agent.persona.delete", {
+  payload: Schema.Struct({ id: Schema.String }),
+  success: Schema.Void,
+  error: Schema.Union([PersonaNotFoundError, PersonaReadOnlyError]),
+});
+
+export const AgentPersonaSyncRepoRpc = Rpc.make("agent.persona.syncRepo", {
+  payload: Schema.Struct({}),
+  success: PersonaSyncResultSchema,
+});
+
 // --- Group ------------------------------------------------------------------
 
 export const AgentRpc = RpcGroup.make(
@@ -1157,4 +1225,11 @@ export const AgentRpc = RpcGroup.make(
   AgentPostByIdRpc,
   AgentPostCreateRpc,
   AgentPostDeleteRpc,
+  // agent.persona (6)
+  AgentPersonaCreateRpc,
+  AgentPersonaListRpc,
+  AgentPersonaGetRpc,
+  AgentPersonaUpdateRpc,
+  AgentPersonaDeleteRpc,
+  AgentPersonaSyncRepoRpc,
 );

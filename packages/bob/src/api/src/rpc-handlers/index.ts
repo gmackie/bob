@@ -33,3 +33,4 @@ export { makeTerminalRpcHandlers } from "./terminal.js";
 export { makeWebhookRpcHandlers } from "./webhook.js";
 export { makeWorkItemsRpcHandlers } from "./workItems.js";
 export { makeWorkspaceRpcHandlers } from "./workspace.js";
+export { makePersonaRpcHandlers } from "./persona.js";
