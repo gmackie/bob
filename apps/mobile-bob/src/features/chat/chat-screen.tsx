@@ -1,22 +1,26 @@
 import { Redirect, router } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import { Screen } from "~/components/ui";
+import { env } from "~/config/env";
 import { colors } from "~/lib/colors";
 import { authClient } from "~/utils/auth";
 
+import type { ChatMessage } from "./chat-messages";
 import { MessageList } from "./components/message-list";
 import { ModeToggle } from "./components/mode-toggle";
 import { OracleResults } from "./components/oracle-results";
 import { ThreadPicker } from "./components/thread-picker";
+import { VaultBrowser } from "./components/vault-browser";
 import { VoiceInputBar } from "./components/voice-input-bar";
 import { useAgentMode } from "./hooks/use-agent-mode";
 import { useBobChat } from "./hooks/use-bob-chat";
 import { useOodaChat } from "./hooks/use-ooda-chat";
 import { useOracleSearch } from "./hooks/use-oracle-search";
-
-const SLASH_SEARCH = /^\/search\s+/i;
+import { useVaultBrowser } from "./hooks/use-vault-browser";
+import type { CommandContext } from "./slash-commands";
+import { executeSlashCommand, parseSlashCommand } from "./slash-commands";
 
 export function ChatScreen() {
   const { data: session, isPending } = authClient.useSession();
@@ -24,19 +28,39 @@ export function ChatScreen() {
   const bobChat = useBobChat(mode === "bob");
   const oodaChat = useOodaChat(mode === "ooda");
   const oracle = useOracleSearch();
+  const vault = useVaultBrowser();
   const [threadPickerVisible, setThreadPickerVisible] = useState(false);
+  const [vaultVisible, setVaultVisible] = useState(false);
+  const [commandMessages, setCommandMessages] = useState<ChatMessage[]>([]);
   const activeChat = mode === "bob" ? bobChat : oodaChat;
-  const canSend = activeChat.status === "connected";
+  const canSend = activeChat.status === "connected" || mode === "ooda";
+
+  const commandContext = useMemo<CommandContext>(
+    () => ({
+      oodaBaseUrl: env.oodaApiUrl,
+      getCookies: () => authClient.getCookie(),
+      threadId: oodaChat.selectedThreadId ?? undefined,
+    }),
+    [oodaChat.selectedThreadId],
+  );
+
+  const allMessages = useMemo(
+    () => [...activeChat.messages, ...commandMessages],
+    [activeChat.messages, commandMessages],
+  );
 
   const handleSend = useCallback(
-    (text: string) => {
-      if (mode === "ooda" && SLASH_SEARCH.test(text)) {
-        oracle.search(text.replace(SLASH_SEARCH, "").trim());
+    async (text: string) => {
+      if (mode === "ooda" && parseSlashCommand(text)) {
+        const result = await executeSlashCommand(text, commandContext);
+        if (result.handled && result.messages) {
+          setCommandMessages((prev) => [...prev, ...result.messages!]);
+        }
         return;
       }
       activeChat.send(text);
     },
-    [activeChat, mode, oracle],
+    [activeChat, commandContext, mode],
   );
 
   if (isPending || modeLoading) {
@@ -94,9 +118,19 @@ export function ChatScreen() {
           {activeChat.statusText}
         </Text>
         {mode === "ooda" ? (
-          <Text className="ml-2 text-xs" style={{ color: colors.accent }}>
-            Threads
-          </Text>
+          <View className="ml-2 flex-row items-center gap-2">
+            <Pressable
+              onPress={() => setVaultVisible(true)}
+              className="active:opacity-70"
+            >
+              <Text className="text-xs" style={{ color: colors.accent }}>
+                Vault
+              </Text>
+            </Pressable>
+            <Text className="text-xs" style={{ color: colors.accent }}>
+              Threads
+            </Text>
+          </View>
         ) : null}
       </Pressable>
 
@@ -115,7 +149,7 @@ export function ChatScreen() {
 
       <View className="min-h-0 flex-1">
         <MessageList
-          messages={activeChat.messages}
+          messages={allMessages}
           isStreaming={activeChat.isStreaming}
           statusText={activeChat.statusText}
           onPromote={activeChat.promote}
@@ -127,14 +161,21 @@ export function ChatScreen() {
       </View>
 
       {mode === "ooda" ? (
-        <ThreadPicker
-          threads={oodaChat.threads}
-          selectedId={oodaChat.selectedThreadId}
-          onSelect={oodaChat.selectThread}
-          onCreate={oodaChat.createThread}
-          visible={threadPickerVisible}
-          onClose={() => setThreadPickerVisible(false)}
-        />
+        <>
+          <ThreadPicker
+            threads={oodaChat.threads}
+            selectedId={oodaChat.selectedThreadId}
+            onSelect={oodaChat.selectThread}
+            onCreate={oodaChat.createThread}
+            visible={threadPickerVisible}
+            onClose={() => setThreadPickerVisible(false)}
+          />
+          <VaultBrowser
+            vault={vault}
+            visible={vaultVisible}
+            onClose={() => setVaultVisible(false)}
+          />
+        </>
       ) : null}
     </Screen>
   );
