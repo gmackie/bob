@@ -6,6 +6,8 @@ import { useTRPC } from "~/trpc/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSessionStream } from "~/hooks/use-session-stream";
 
+import { chooseDefaultAdapter, type RunnerDevice } from "./adapter-selection";
+
 interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -68,7 +70,8 @@ export function ChatPanel({ threadId, runnerId, onPromoted }: ChatPanelProps) {
 
   // Get available runners
   const runnersQuery = useQuery(trpc.runner.listDevices.queryOptions());
-  const availableRunner = runnerId ?? runnersQuery.data?.[0]?.id;
+  const runners = (runnersQuery.data ?? []) as RunnerDevice[];
+  const availableRunner = runnerId ?? runners[0]?.id;
 
   const sendMutation = useMutation(
     trpc.runner.sendPrompt.mutationOptions({
@@ -112,7 +115,9 @@ export function ChatPanel({ threadId, runnerId, onPromoted }: ChatPanelProps) {
     sendMutation.mutate({
       threadId,
       runnerId: availableRunner,
-      adapterId: "codex", // Default adapter
+      adapterId: chooseDefaultAdapter(
+        runners.find((runner) => runner.id === availableRunner),
+      ),
       toolProfileId: "default",
       prompt: input.trim(),
     });

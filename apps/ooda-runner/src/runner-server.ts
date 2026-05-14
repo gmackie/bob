@@ -1,4 +1,7 @@
 import { hostname } from "node:os";
+import { execSync } from "node:child_process";
+import { existsSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 
 import type { RunnerConfig } from "./config";
 import { SessionManager } from "./session/session-manager";
@@ -17,6 +20,62 @@ import {
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const POLL_INTERVAL_MS = 2_000;
 
+type PromotionKind =
+  | "observation"
+  | "hypothesis"
+  | "action"
+  | "reflection"
+  | "source-extract";
+
+interface PromotionRequestPayload {
+  kind: PromotionKind;
+  title: string;
+  content: string;
+  threadId: string;
+  runnerId: string;
+}
+
+function ensureStorageRoot(storageRoot: string): void {
+  mkdirSync(storageRoot, { recursive: true });
+  if (existsSync(join(storageRoot, ".git"))) return;
+  execSync("git init", { cwd: storageRoot, stdio: "pipe" });
+}
+
+function isPromotionKind(value: unknown): value is PromotionKind {
+  return (
+    value === "observation" ||
+    value === "hypothesis" ||
+    value === "action" ||
+    value === "reflection" ||
+    value === "source-extract"
+  );
+}
+
+function parsePromotionRequest(content: string): PromotionRequestPayload | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    return null;
+  }
+
+  if (!parsed || typeof parsed !== "object") return null;
+  const payload = parsed as Record<string, unknown>;
+  if (!isPromotionKind(payload.kind)) return null;
+  if (typeof payload.title !== "string" || payload.title.length === 0) return null;
+  if (typeof payload.content !== "string" || payload.content.length === 0) return null;
+  if (typeof payload.threadId !== "string" || payload.threadId.length === 0) return null;
+  if (typeof payload.runnerId !== "string" || payload.runnerId.length === 0) return null;
+
+  return {
+    kind: payload.kind,
+    title: payload.title,
+    content: payload.content,
+    threadId: payload.threadId,
+    runnerId: payload.runnerId,
+  };
+}
+
 export class RunnerServer {
   public readonly sessions: SessionManager;
   private adapters: Map<string, AgentAdapter>;
@@ -25,6 +84,7 @@ export class RunnerServer {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private activeSessions = new Set<string>();
+  private activePromotions = new Set<string>();
 
   constructor(private config: RunnerConfig) {
     this.sessions = new SessionManager();
@@ -59,6 +119,7 @@ export class RunnerServer {
       `[runner] available adapters: ${[...this.adapters.keys()].join(", ") || "none"}`,
     );
     console.log(`[runner] server URL: ${this.config.serverUrl}`);
+    ensureStorageRoot(this.config.storageRoot);
 
     // Generate or load token
     const token = generateRunnerToken(this.config.storageRoot);
@@ -149,8 +210,77 @@ export class RunnerServer {
           void this.executeSession(session);
         }
       }
+
+      await this.processPromotionRequests(sessions);
     } catch {
       // Polling failures are expected during startup
+    }
+  }
+
+  private async processPromotionRequests(
+    sessions: {
+      id: string;
+      threadId: string;
+      runnerId: string;
+    }[],
+  ): Promise<void> {
+    for (const session of sessions) {
+      const events = await this.trpc.runner.getSessionEvents.query({
+        sessionId: session.id,
+      });
+
+      const completedPromotionIds = new Set<string>();
+      for (const event of events) {
+        if (event.type !== "promotion_available") continue;
+        try {
+          const content = JSON.parse(event.content) as { sourceEventId?: string };
+          if (content.sourceEventId) completedPromotionIds.add(content.sourceEventId);
+        } catch {
+          // Ignore legacy/invalid promotion events.
+        }
+      }
+
+      for (const event of events) {
+        if (event.type !== "promote_request") continue;
+        if (this.activePromotions.has(event.id)) continue;
+        if (completedPromotionIds.has(event.id)) continue;
+
+        const request = parsePromotionRequest(event.content);
+        if (!request || request.runnerId !== session.runnerId) continue;
+
+        this.activePromotions.add(event.id);
+        try {
+          const thread = await this.trpc.threads.byId.query({
+            id: request.threadId,
+          });
+          if (!thread?.slug || !thread?.title) {
+            throw new Error(`Thread not found: ${request.threadId}`);
+          }
+
+          await this.executePromotion({
+            sessionId: session.id,
+            sourceEventId: event.id,
+            threadSlug: thread.slug,
+            threadId: request.threadId,
+            kind: request.kind,
+            title: request.title,
+            content: request.content,
+          });
+        } catch (error) {
+          await this.trpc.runner.pushSessionEvent
+            .mutate({
+              sessionId: session.id,
+              type: "promotion_error",
+              content: JSON.stringify({
+                sourceEventId: event.id,
+                message: error instanceof Error ? error.message : String(error),
+              }),
+            })
+            .catch(() => {});
+        } finally {
+          this.activePromotions.delete(event.id);
+        }
+      }
     }
   }
 
@@ -198,6 +328,20 @@ export class RunnerServer {
               content: event.data,
             });
           }
+          if (event.type === "stderr") {
+            void this.trpc.runner.pushSessionEvent.mutate({
+              sessionId: session.id,
+              type: "stderr_chunk",
+              content: event.data,
+            });
+          }
+          if (event.type === "error") {
+            void this.trpc.runner.pushSessionEvent.mutate({
+              sessionId: session.id,
+              type: "error",
+              content: event.data,
+            });
+          }
           if (event.type === "exit") {
             void this.trpc.runner.pushSessionEvent.mutate({
               sessionId: session.id,
@@ -229,6 +373,14 @@ export class RunnerServer {
       );
     } catch (err) {
       console.error(`[runner] session ${session.id} failed:`, err);
+      const message = err instanceof Error ? err.message : String(err);
+      await this.trpc.runner.pushSessionEvent
+        .mutate({
+          sessionId: session.id,
+          type: "error",
+          content: message,
+        })
+        .catch(() => {});
       await this.trpc.runner.updateSessionStatus
         .mutate({
           sessionId: session.id,
@@ -242,6 +394,7 @@ export class RunnerServer {
 
   async executePromotion(params: {
     sessionId: string;
+    sourceEventId?: string;
     threadSlug: string;
     /** Thread UUID for entity extraction. */
     threadId?: string;
@@ -275,6 +428,7 @@ export class RunnerServer {
       sessionId: params.sessionId,
       type: "promotion_available",
       content: JSON.stringify({
+        sourceEventId: params.sourceEventId,
         noteId: result.noteId,
         artifactId: result.artifactId,
         kind: params.kind,

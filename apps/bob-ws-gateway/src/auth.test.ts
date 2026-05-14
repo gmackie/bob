@@ -25,6 +25,38 @@ describe("validateBrowserToken", () => {
     vi.clearAllMocks();
   });
 
+  it("returns userId when the Better Auth cookie header contains a signed session token", async () => {
+    const future = new Date(Date.now() + 60 * 60 * 1000);
+    (db.query.session.findFirst as any).mockResolvedValueOnce({
+      id: "sess-1",
+      token: "session-token",
+      userId: "user-cookie",
+      expiresAt: future,
+    });
+
+    const result = await validateBrowserToken(
+      "better-auth.session_token=session-token.signature; other=value",
+    );
+
+    expect(result).toBe("user-cookie");
+  });
+
+  it("accepts the secure Better Auth cookie name", async () => {
+    const future = new Date(Date.now() + 60 * 60 * 1000);
+    (db.query.session.findFirst as any).mockResolvedValueOnce({
+      id: "sess-1",
+      token: "secure-token",
+      userId: "user-secure",
+      expiresAt: future,
+    });
+
+    const result = await validateBrowserToken(
+      "__Secure-better-auth.session_token=secure-token.signature",
+    );
+
+    expect(result).toBe("user-secure");
+  });
+
   it("returns userId when session token is valid and not expired", async () => {
     const future = new Date(Date.now() + 60 * 60 * 1000);
     (db.query.session.findFirst as any).mockResolvedValueOnce({

@@ -12,6 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Badge, Button, Card, ListRow, Screen } from "~/components/ui";
 import {
   buildPlanningSections,
+  getAgentChatHref,
   getNotificationsHref,
   getProjectHref,
   getTaskWorkspaceHref,
@@ -24,6 +25,57 @@ import {
 import { authClient } from "~/utils/auth";
 import { trpc } from "~/utils/api";
 import { colors } from "~/lib/colors";
+
+interface WorkspaceListEntry {
+  workspace: {
+    id: string;
+    name: string;
+  };
+}
+
+interface ProjectListEntry {
+  project: {
+    id: string;
+    name: string;
+    key: string;
+  };
+  counts: {
+    active: number;
+    issues: number;
+    tasks: number;
+  };
+}
+
+interface WorkItemListItem {
+  id: string;
+  identifier: string;
+  title: string;
+  kind: "issue" | "epic" | "task";
+  status: string;
+  project?: {
+    key: string | null;
+  } | null;
+}
+
+interface NotificationListItem {
+  id: string;
+  title: string;
+  body: string | null;
+  read: boolean;
+  type: string;
+  url: string | null;
+  workItemId: string | null;
+}
+
+interface NotificationListData {
+  items: NotificationListItem[];
+}
+
+function isNotificationListData(value: unknown): value is NotificationListData {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as { items?: unknown };
+  return Array.isArray(candidate.items);
+}
 
 function formatWorkItemSubtitle(input: {
   kind: string;
@@ -42,7 +94,11 @@ export default function PlanningScreen() {
     }),
   );
 
-  const primaryWorkspace = workspacesQuery.data?.[0]?.workspace ?? null;
+  const workspaces = useMemo(
+    () => (workspacesQuery.data as WorkspaceListEntry[] | undefined) ?? [],
+    [workspacesQuery.data],
+  );
+  const primaryWorkspace = workspaces[0]?.workspace ?? null;
 
   const projectsQuery = useQuery(
     trpc.project.list.queryOptions(
@@ -65,17 +121,33 @@ export default function PlanningScreen() {
     ),
   );
 
+  const projects = useMemo(
+    () => (projectsQuery.data as ProjectListEntry[] | undefined) ?? [],
+    [projectsQuery.data],
+  );
+  const workItems = useMemo(
+    () => (workItemsQuery.data as WorkItemListItem[] | undefined) ?? [],
+    [workItemsQuery.data],
+  );
+  const notifications = useMemo(
+    () =>
+      isNotificationListData(notificationsQuery.data)
+        ? notificationsQuery.data.items
+        : [],
+    [notificationsQuery.data],
+  );
+
   const projectKeyByWorkItemId = useMemo(
     () =>
       new Map(
-        (workItemsQuery.data ?? []).map((item) => [item.id, item.project?.key ?? null]),
+        workItems.map((item) => [item.id, item.project?.key ?? null]),
       ),
-    [workItemsQuery.data],
+    [workItems],
   );
 
   const notificationById = useMemo(
-    () => new Map((notificationsQuery.data?.items ?? []).map((item) => [item.id, item])),
-    [notificationsQuery.data?.items],
+    () => new Map(notifications.map((item) => [item.id, item])),
+    [notifications],
   );
 
   const sections = useMemo(
@@ -86,50 +158,46 @@ export default function PlanningScreen() {
               {
                 id: primaryWorkspace.id,
                 name: primaryWorkspace.name,
-                projectCount: projectsQuery.data?.length ?? 0,
+                projectCount: projects.length,
                 activeTaskCount:
-                  workItemsQuery.data?.filter(
+                  workItems.filter(
                     (item) =>
                       item.kind === "task" &&
                       (item.status === "in_progress" ||
                         item.status === "in_review" ||
                         item.status === "blocked"),
-                  ).length ?? 0,
+                  ).length,
               },
             ]
           : [],
         projects:
-          projectsQuery.data?.map((entry) => ({
+          projects.map((entry) => ({
             id: entry.project.id,
             name: entry.project.name,
             key: entry.project.key,
             activeCount: entry.counts.active,
             issueCount: entry.counts.issues,
             taskCount: entry.counts.tasks,
-          })) ?? [],
+          })),
         workItems:
-          workItemsQuery.data?.map((item) => ({
+          workItems.map((item) => ({
             id: item.id,
             identifier: item.identifier,
             title: item.title,
             kind: item.kind,
             status: item.status,
-          })) ?? [],
+          })),
         notifications:
-          notificationsQuery.data?.items.map((item) => ({
+          notifications.map((item) => ({
             id: item.id,
             title: item.title,
             body: item.body,
             read: item.read,
-          })) ?? [],
+          })),
       }),
-    [
-      notificationsQuery.data?.items,
-      primaryWorkspace,
-      projectsQuery.data,
-      workItemsQuery.data,
-    ],
+    [notifications, primaryWorkspace, projects, workItems],
   );
+  const latestProject = sections.featuredProjects[0] ?? null;
 
   if (isPending) {
     return (
@@ -189,6 +257,15 @@ export default function PlanningScreen() {
           </Pressable>
         </View>
 
+        <View className="mb-5">
+          <Button
+            onPress={() => router.push(getAgentChatHref() as never)}
+            variant="secondary"
+          >
+            Open Agent Chat
+          </Button>
+        </View>
+
         <Card variant="elevated" className="mb-5">
           <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>
             Execution snapshot
@@ -228,12 +305,12 @@ export default function PlanningScreen() {
         <View className="mb-5">
           <View className="mb-3 flex-row items-center justify-between">
             <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>Projects</Text>
-            {sections.featuredProjects[0] ? (
+            {latestProject ? (
               <Button
                 variant="ghost"
                 size="sm"
                 onPress={() =>
-                  router.push(getProjectHref(sections.featuredProjects[0]!.id) as never)
+                  router.push(getProjectHref(latestProject.id) as never)
                 }
               >
                 Open latest

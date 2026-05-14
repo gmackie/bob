@@ -4,7 +4,7 @@ import { z } from "zod";
 import { eq, and, gt } from "@gmacko/ooda/db";
 import { runnerDevice, runnerSession, sessionEvent } from "@gmacko/ooda/db/schema";
 
-import { publicProcedure, runnerProcedure } from "../trpc";
+import { authedProcedure, publicProcedure, runnerProcedure } from "../trpc";
 
 export const runnerRouter = {
   register: runnerProcedure
@@ -106,7 +106,7 @@ export const runnerRouter = {
       });
     }),
 
-  sendPrompt: runnerProcedure
+  sendPrompt: authedProcedure
     .meta({ openapi: { method: "POST", path: "/api/runner/send-prompt", tags: ["runner"], protect: true } })
     .input(
       z.object({
@@ -294,7 +294,7 @@ export const runnerRouter = {
       return (device?.capabilities ?? []) as string[];
     }),
 
-  requestPromotion: runnerProcedure
+  requestPromotion: authedProcedure
     .meta({ openapi: { method: "POST", path: "/api/runner/request-promotion", tags: ["runner"], protect: true } })
     .input(
       z.object({

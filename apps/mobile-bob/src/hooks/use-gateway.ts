@@ -1,16 +1,17 @@
+import Constants from "expo-constants";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 import { v4 as uuid } from "uuid";
 
-import {
-  BobWsClient,
-  type ConnectionState,
-  type ServerEvent,
-  type ServerError,
-  type ServerSessionStatusChanged,
-  type SessionStatus,
-  type WorkspaceSessionInfo,
+import type {
+  ConnectionState,
+  ServerError,
+  ServerEvent,
+  ServerSessionStatusChanged,
+  SessionStatus,
+  WorkspaceSessionInfo,
 } from "@bob/ws";
+import { BobWsClient } from "@bob/ws";
 
 import { authClient } from "~/utils/auth";
 import { getBaseUrl } from "~/utils/base-url";
@@ -27,9 +28,24 @@ import {
 // Re-export for convenience
 const useSession = authClient.useSession;
 
+function getExpoExtraString(key: string): string | undefined {
+  const extra: unknown = Constants.expoConfig?.extra;
+  if (!extra || typeof extra !== "object") return undefined;
+
+  const value = (extra as Record<string, unknown>)[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function getProcessEnvString(key: string): string | undefined {
+  const value = process.env[key] as unknown;
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
 function getGatewayWsUrl(): string {
   // Full URL override (production: wss://ws.blder.bot/sessions)
-  const explicitUrl = process.env.EXPO_PUBLIC_GATEWAY_URL;
+  const explicitUrl =
+    getExpoExtraString("GATEWAY_PUBLIC_URL") ??
+    getProcessEnvString("EXPO_PUBLIC_GATEWAY_URL");
   if (explicitUrl) {
     return explicitUrl.endsWith("/sessions") ? explicitUrl : `${explicitUrl}/sessions`;
   }
@@ -38,7 +54,7 @@ function getGatewayWsUrl(): string {
   const apiUrl = getBaseUrl();
   const parsed = new URL(apiUrl);
   const protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
-  const port = process.env.EXPO_PUBLIC_GATEWAY_PORT ?? "3002";
+  const port = getProcessEnvString("EXPO_PUBLIC_GATEWAY_PORT") ?? "3002";
   return `${protocol}//${parsed.hostname}:${port}/sessions`;
 }
 
@@ -179,7 +195,8 @@ export function useGateway(): UseGatewayResult {
           const idx = prev.findIndex((s) => s.sessionId === info.sessionId);
           if (idx >= 0) {
             // Merge — preserve existing title if the update doesn't include one
-            const existing = prev[idx]!;
+            const existing = prev[idx];
+            if (!existing) return prev;
             const next = [...prev];
             next[idx] = {
               ...existing,
@@ -232,8 +249,7 @@ export function useGateway(): UseGatewayResult {
       client.disconnect();
     };
     // Reconnect when user session changes (login/logout)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.user?.id]);
+  }, [session?.user.id]);
 
   return {
     connectionState,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildPlanningSections,
+  getAgentChatHref,
   getNotificationsHref,
   getPlanningHref,
   getProjectHref,
@@ -13,6 +14,7 @@ import {
 describe("planning navigation", () => {
   it("builds stable planning and execution routes", () => {
     expect(getPlanningHref()).toBe("/planning");
+    expect(getAgentChatHref()).toBe("/chat");
     expect(getProjectHref("project-123")).toBe("/projects/project-123");
     expect(getWorkItemHref("task-456")).toBe("/work-items/task-456");
     expect(getTaskWorkspaceHref("task-456")).toBe(

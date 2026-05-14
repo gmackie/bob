@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import type { AgentAdapter, AdapterCommand, AdapterEvent } from "./types";
 
 export class CodexAdapter implements AgentAdapter {
@@ -41,32 +41,54 @@ export class CodexAdapter implements AgentAdapter {
     command: AdapterCommand,
     onEvent: (event: AdapterEvent) => void,
   ): Promise<{ exitCode: number }> {
-    const { spawn } = await import("node-pty");
-
-    const pty = spawn(command.binary, command.args, {
+    const child = spawn(command.binary, command.args, {
       cwd: command.cwd,
-      env: { ...process.env, ...command.env } as Record<string, string>,
-      cols: 120,
-      rows: 40,
+      env: { ...process.env, ...command.env },
+      stdio: ["ignore", "pipe", "pipe"] as const,
     });
 
     return new Promise((resolve) => {
-      pty.onData((data: string) => {
+      let settled = false;
+      const finish = (exitCode: number) => {
+        if (settled) return;
+        settled = true;
+        resolve({ exitCode });
+      };
+
+      child.stdout.on("data", (data: Buffer) => {
         onEvent({
           type: "stdout",
-          data,
+          data: data.toString(),
           timestamp: new Date().toISOString(),
         });
       });
 
-      pty.onExit(({ exitCode }: { exitCode: number }) => {
+      child.stderr.on("data", (data: Buffer) => {
+        onEvent({
+          type: "stderr",
+          data: data.toString(),
+          timestamp: new Date().toISOString(),
+        });
+      });
+
+      child.on("error", (error: Error) => {
+        onEvent({
+          type: "error",
+          data: error.message,
+          timestamp: new Date().toISOString(),
+        });
+        finish(1);
+      });
+
+      child.on("close", (exitCode: number | null) => {
+        const resolvedExitCode = exitCode ?? 1;
         onEvent({
           type: "exit",
           data: "",
           timestamp: new Date().toISOString(),
-          exitCode,
+          exitCode: resolvedExitCode,
         });
-        resolve({ exitCode });
+        finish(resolvedExitCode);
       });
     });
   }

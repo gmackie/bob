@@ -16,7 +16,10 @@ import type { RouterRecord } from "@trpc/server/unstable-core-do-not-import";
 import { z } from "zod";
 
 import { desc, eq } from "@gmacko/ooda/db";
-import { researchThread } from "@gmacko/ooda/db/schema";
+import {
+  CreateResearchThreadSchema,
+  researchThread,
+} from "@gmacko/ooda/db/schema";
 
 import { publicProcedure, authedProcedure } from "../trpc";
 
@@ -49,6 +52,17 @@ export const threadsEdgeRouter = {
       return ctx.db.query.researchThread.findFirst({
         where: eq(researchThread.slug, input.slug),
       });
+    }),
+
+  create: authedProcedure
+    .meta({ openapi: { method: "POST", path: "/api/threads", tags: ["threads"], protect: true } })
+    .input(CreateResearchThreadSchema)
+    .output(z.any())
+    .mutation(({ ctx, input }) => {
+      return ctx.db
+        .insert(researchThread)
+        .values({ ...input, ownerId: ctx.userId })
+        .returning();
     }),
 
   updateStatus: authedProcedure

@@ -1,7 +1,20 @@
 /** @type {import('expo/config').ConfigContext} */
 
 const APP_ENV = process.env.APP_ENV ?? "development";
-const API_URL = process.env.API_URL ?? "http://localhost:3000";
+const isHostedEnv = APP_ENV === "production" || APP_ENV === "staging";
+const API_URL =
+  process.env.API_URL ??
+  process.env.EXPO_PUBLIC_API_URL ??
+  process.env.EXPO_PUBLIC_PRODUCTION_API_URL ??
+  (isHostedEnv ? "https://bob.blder.bot" : "http://localhost:3000");
+const OODA_API_URL =
+  process.env.OODA_API_URL ??
+  process.env.EXPO_PUBLIC_OODA_API_URL ??
+  (isHostedEnv ? "https://ooda.blder.bot" : "http://localhost:3001");
+const GATEWAY_PUBLIC_URL =
+  process.env.GATEWAY_PUBLIC_URL ??
+  process.env.EXPO_PUBLIC_GATEWAY_URL ??
+  (isHostedEnv ? "wss://ws.blder.bot" : undefined);
 
 const SENTRY_DSN = process.env.SENTRY_DSN;
 const POSTHOG_KEY = process.env.POSTHOG_KEY;
@@ -49,6 +62,14 @@ module.exports = ({ config }) => {
     "expo-router",
     "expo-secure-store",
     "expo-web-browser",
+    [
+      "expo-speech-recognition",
+      {
+        microphonePermission: "Allow Bob to use the microphone for voice prompts.",
+        speechRecognitionPermission: "Allow Bob to transcribe voice prompts.",
+        androidSpeechServicePackages: ["com.google.android.googlequicksearchbox"],
+      },
+    ],
     [
       "expo-splash-screen",
       {
@@ -102,6 +123,8 @@ module.exports = ({ config }) => {
     extra: {
       APP_ENV,
       API_URL,
+      OODA_API_URL,
+      GATEWAY_PUBLIC_URL,
       SENTRY_DSN,
       POSTHOG_KEY,
       POSTHOG_HOST,

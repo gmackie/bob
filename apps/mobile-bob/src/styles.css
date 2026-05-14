@@ -1,5 +1,4 @@
 @import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/preflight.css" layer(base);
 @import "tailwindcss/utilities.css";
 
 @import "nativewind/theme";
@@ -17,8 +16,9 @@
  *
  * Fix: Define explicit @utility overrides with hard-coded hex values.
  * These @utility rules are in the utilities layer and override the
- * auto-generated var()-based ones. Also set a universal default color
- * since RN doesn't inherit `color` through View components.
+ * auto-generated var()-based ones. Browser preflight and universal selectors
+ * are intentionally omitted because react-native-css cannot deserialize them
+ * for native bundles, and React Native does not need browser reset styles.
  *
  * TODO: Remove when upgrading to stable NativeWind v5 / react-native-css.
  */
@@ -83,13 +83,4 @@
   --color-success: #22c55e;
   --color-warning: #f59e0b;
   --color-danger: #ef4444;
-}
-
-/*
- * Unlayered CSS has highest cascade priority (beats all @layer rules).
- * This ensures every element gets a visible default text color,
- * regardless of what broken var()-based rules exist in the cascade.
- */
-* {
-  color: #e6edf3;
 }

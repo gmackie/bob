@@ -33,6 +33,10 @@ export function getPlanningHref(): string {
   return "/planning";
 }
 
+export function getAgentChatHref(): string {
+  return "/chat";
+}
+
 export function getProjectHref(projectId: string): string {
   return `/projects/${projectId}`;
 }

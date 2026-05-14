@@ -1,18 +1,29 @@
 import { createHash } from "node:crypto";
 import { db } from "@bob/db/client";
 
+const SESSION_COOKIE_NAMES = new Set([
+  "better-auth.session_token",
+  "__Secure-better-auth.session_token",
+]);
+
 /**
- * Validate a better-auth session token and return the userId.
- * Returns null if the token is invalid or the session is expired.
+ * Validate a browser Better Auth credential and return the userId.
  *
- * The session table is owned by better-auth but we query it directly —
- * we share the same Postgres and don't need to call better-auth's HTTP API.
+ * Mobile and web clients send the full cookie header from better-auth's
+ * client helper. Better Auth stores signed session cookies as
+ * `<session-token>.<signature>` and looks up the database session by the
+ * token prefix; raw tokens are still accepted for older local tooling.
+ *
+ * Returns null if the credential is invalid or the session is expired.
  */
 export async function validateBrowserToken(token: string): Promise<string | null> {
   if (!token) return null;
 
+  const sessionToken = extractBrowserSessionToken(token);
+  if (!sessionToken) return null;
+
   const row = await db.query.session.findFirst({
-    where: (session, { eq }) => eq(session.token, token),
+    where: (session, { eq }) => eq(session.token, sessionToken),
   });
 
   if (!row) return null;
@@ -21,6 +32,29 @@ export async function validateBrowserToken(token: string): Promise<string | null
   if (expiresAt.getTime() <= Date.now()) return null;
 
   return row.userId;
+}
+
+function extractBrowserSessionToken(credential: string): string | null {
+  if (!credential.includes("=")) return credential;
+
+  for (const part of credential.split(";")) {
+    const [rawName = "", ...rawValueParts] = part.trim().split("=");
+    if (!SESSION_COOKIE_NAMES.has(rawName)) continue;
+
+    const rawValue = rawValueParts.join("=");
+    if (!rawValue) return null;
+
+    let value = rawValue;
+    try {
+      value = decodeURIComponent(rawValue);
+    } catch {
+      // Keep the raw value if a non-browser client sends an unescaped token.
+    }
+
+    return value.split(".")[0] ?? null;
+  }
+
+  return null;
 }
 
 /**
