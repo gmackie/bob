@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import type { AnyRouter } from "@trpc/server";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import SuperJSON from "superjson";
 
 import { env } from "~/config/env";
@@ -10,6 +11,7 @@ import { authClient } from "~/utils/auth";
 import type { ChatMessage, OodaSessionEvent } from "../chat-messages";
 import { collapseOodaEventsToMessages } from "../chat-messages";
 import { readSseMessages } from "../ooda-sse";
+import { slugify } from "../slugify";
 import type { AgentChat, AgentChatStatus } from "./use-bob-chat";
 
 interface OodaThread {
@@ -75,6 +77,8 @@ interface OodaClient {
 
 const DEFAULT_THREAD_TITLE = "Mobile Agent Chat";
 const DEFAULT_THREAD_SLUG = "mobile-agent-chat";
+const SESSION_STORAGE_KEY = "bob:ooda-session-id";
+const THREAD_STORAGE_KEY = "bob:ooda-thread-id";
 
 function createOodaClient(baseUrl: string): OodaClient {
   const client = createTRPCClient<AnyRouter>({
@@ -132,13 +136,32 @@ async function listOrCreateDefaultThread(
   return [];
 }
 
-export function useOodaChat(enabled: boolean): AgentChat {
+export interface OodaChatExtensions {
+  threads: OodaThread[];
+  selectedThreadId: string | null;
+  selectThread: (threadId: string) => void;
+  createThread: (title: string) => Promise<void>;
+}
+
+export function useOodaChat(enabled: boolean): AgentChat & OodaChatExtensions {
   const queryClient = useQueryClient();
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [sseTicket, setSseTicket] = useState(0);
   const [sseConnected, setSseConnected] = useState(false);
   const baseUrl = env.oodaApiUrl;
   const client = useMemo(() => createOodaClient(baseUrl), [baseUrl]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    Promise.all([
+      AsyncStorage.getItem(SESSION_STORAGE_KEY),
+      AsyncStorage.getItem(THREAD_STORAGE_KEY),
+    ]).then(([storedSession, storedThread]) => {
+      if (storedSession) setActiveSessionId(storedSession);
+      if (storedThread) setSelectedThreadId(storedThread);
+    });
+  }, [enabled]);
 
   const threadsQuery = useQuery({
     queryKey: ["mobile-bob", "ooda", "threads", baseUrl],
@@ -152,7 +175,11 @@ export function useOodaChat(enabled: boolean): AgentChat {
     queryFn: () => client.runner.listDevices.query() as Promise<OodaRunnerDevice[]>,
   });
 
-  const activeThread = threadsQuery.data?.find((thread) => thread.status === "active") ??
+  const activeThread =
+    (selectedThreadId
+      ? threadsQuery.data?.find((t) => t.id === selectedThreadId)
+      : undefined) ??
+    threadsQuery.data?.find((t) => t.status === "active") ??
     threadsQuery.data?.[0];
   const activeRunner = runnersQuery.data?.find((runner) => runner.status === "online") ??
     runnersQuery.data?.[0];
@@ -265,6 +292,7 @@ export function useOodaChat(enabled: boolean): AgentChat {
     onSuccess: (session) => {
       if (!session?.id) return;
       setActiveSessionId(session.id);
+      void AsyncStorage.setItem(SESSION_STORAGE_KEY, session.id);
       void queryClient.invalidateQueries({
         queryKey: ["mobile-bob", "ooda", "events", session.id],
       });
@@ -311,6 +339,27 @@ export function useOodaChat(enabled: boolean): AgentChat {
     [promoteMutation],
   );
 
+  const selectThread = useCallback(
+    (threadId: string) => {
+      setSelectedThreadId(threadId);
+      void AsyncStorage.setItem(THREAD_STORAGE_KEY, threadId);
+      setActiveSessionId(null);
+      void AsyncStorage.removeItem(SESSION_STORAGE_KEY);
+    },
+    [],
+  );
+
+  const createThread = useCallback(
+    async (title: string) => {
+      const slug = slugify(title);
+      await client.threads.create.mutate({ title, slug });
+      await queryClient.invalidateQueries({
+        queryKey: ["mobile-bob", "ooda", "threads", baseUrl],
+      });
+    },
+    [baseUrl, client.threads.create, queryClient],
+  );
+
   const status: AgentChatStatus = (() => {
     if (!enabled) return "idle";
     if (threadsQuery.isLoading || runnersQuery.isLoading) return "connecting";
@@ -331,7 +380,7 @@ export function useOodaChat(enabled: boolean): AgentChat {
     promote,
     isStreaming,
     status,
-      statusText:
+    statusText:
       status === "connected"
         ? `OODA ${activeThread?.title ?? "thread"} via ${activeRunner?.name ?? "runner"}${sseConnected ? " live" : ""}`
         : !activeThread
@@ -339,5 +388,9 @@ export function useOodaChat(enabled: boolean): AgentChat {
           : !activeRunner
             ? "No OODA runner is available"
             : "Connecting to OODA",
+    threads: threadsQuery.data ?? [],
+    selectedThreadId: activeThread?.id ?? null,
+    selectThread,
+    createThread,
   };
 }
