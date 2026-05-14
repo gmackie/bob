@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { suggestAgent } from "../agentHeuristics";
 
 describe("suggestAgent", () => {
-  it("recommends smol-agent for implementation-oriented task execution", () => {
+  it("recommends claude for implementation-oriented task execution", () => {
     expect(
       suggestAgent({
         kind: "task",
@@ -11,6 +11,6 @@ describe("suggestAgent", () => {
         description:
           "Build the gateway adapter and task execution wiring for smol-agent",
       }),
-    ).toBe("smol-agent");
+    ).toBe("claude");
   });
 });

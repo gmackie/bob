@@ -2,7 +2,12 @@
 // Found by /qa on 2026-03-29
 // Report: .gstack/qa-reports/qa-report-bob-tail1e1a32-ts-net-2026-03-29.md
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@bob/db/client", () => ({
+  db: {},
+}));
+
 import { agentRunRouter } from "../agentRun";
 
 describe("agentRun router", () => {

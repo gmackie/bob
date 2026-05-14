@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@bob/db/client", () => ({
+  db: {},
+}));
+
 import {
   advancePipeline,
   handleDeliveryEvidence,
@@ -169,8 +173,9 @@ describe("advancePipeline", () => {
 
       await advancePipeline(db as any, item, makeBatch());
 
-      // Should NOT transition — stays in awaiting_review
-      expect(dbUpdateSetMock).not.toHaveBeenCalled();
+      // Marks the review artifact as stale (isCurrent: false) but does NOT
+      // transition pipeline state — it stays in awaiting_review.
+      expect(dbUpdateSetMock).toHaveBeenCalledWith({ isCurrent: false });
     });
   });
 

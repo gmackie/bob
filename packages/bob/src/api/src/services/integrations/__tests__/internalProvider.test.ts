@@ -34,7 +34,7 @@ describe("InternalPlanningProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockDb = createMockDb();
-    provider = new InternalPlanningProvider(mockDb);
+    provider = new InternalPlanningProvider(mockDb, "proj-1");
   });
 
   function createMockDb() {
