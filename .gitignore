@@ -18,3 +18,4 @@ packages/research-backend/.venv/
 .ruff_cache/
 .gstack/
 .wrangler/
+.deploy/
