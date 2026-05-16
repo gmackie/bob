@@ -9,7 +9,6 @@ export default defineConfig({
   clean: true,
   external: [
     "ws",
-    /^@opentelemetry\//,
   ],
-  noExternal: [/@bob\/telemetry/],
+  noExternal: [/@gmacko\/core/],
 });

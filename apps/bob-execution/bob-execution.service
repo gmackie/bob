@@ -1,0 +1,31 @@
+[Unit]
+Description=Bob Execution Daemon (agent launcher via WS gateway)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bob
+Group=bob
+WorkingDirectory=/opt/bob/execution-daemon
+ExecStart=/usr/bin/node dist/daemon/index.js
+Restart=always
+RestartSec=10
+EnvironmentFile=/opt/bob/execution-daemon/.env
+Environment=PATH=/home/bob/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=false
+ReadWritePaths=/opt/bob/execution-daemon /home/bob /tmp
+PrivateTmp=true
+
+LimitNOFILE=65536
+MemoryMax=2G
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bob-execution
+
+[Install]
+WantedBy=multi-user.target

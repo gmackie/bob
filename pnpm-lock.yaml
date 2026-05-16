@@ -956,6 +956,9 @@ importers:
       superjson:
         specifier: 'catalog:'
         version: 2.2.3
+      ws:
+        specifier: ^8.18.0
+        version: 8.20.0
       zod:
         specifier: 'catalog:'
         version: 4.3.6
@@ -966,6 +969,9 @@ importers:
       '@types/node':
         specifier: 25.6.0
         version: 25.6.0
+      '@types/ws':
+        specifier: ^8.5.13
+        version: 8.18.1
       tsx:
         specifier: 'catalog:'
         version: 4.21.0
@@ -20109,7 +20115,7 @@ snapshots:
       obug: 2.1.1
       std-env: 4.1.0
       tinyrainbow: 3.1.0
-      vitest: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.5)(jsdom@26.1.0)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
+      vitest: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.17)(@vitest/coverage-v8@4.1.5)(jsdom@26.1.0)(vite@8.0.8(@types/node@22.19.17)(esbuild@0.27.7)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
 
   '@vitest/expect@3.2.4':
     dependencies:

@@ -11,8 +11,29 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import WebSocket from "ws";
-import { initTelemetry, traceAgentExecution, setAgentResult, type AgentExecutionResult } from "@bob/telemetry";
 import { computeCostUsd, type TokenCounts } from "@gmacko/core/agent/model-pricing";
+
+interface AgentExecutionResult {
+  exitCode: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
+function initTelemetry(_config: { serviceName: string; serviceVersion?: string }): void {
+  // Telemetry is optional — OTel bundling doesn't work in standalone ESM builds.
+}
+
+async function traceAgentExecution(
+  _ctx: Record<string, unknown>,
+  fn: (span: null) => Promise<void>,
+): Promise<void> {
+  await fn(null);
+}
+
+function setAgentResult(_span: unknown, _result: AgentExecutionResult): void {
+  // no-op
+}
 
 // ---------------------------------------------------------------------------
 // Config
@@ -581,7 +602,7 @@ function getPersonaConfig(session: ServerSessionAvailable): PersonaConfig {
 function getAgentCommand(agentType: string, prompt: string, persona?: PersonaConfig): { command: string; args: string[] } {
   switch (agentType) {
     case "claude": {
-      const args = ["--output-format", "stream-json", "--dangerously-skip-permissions"];
+      const args = ["--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"];
       if (persona?.model) args.push("--model", persona.model);
       if (persona?.allowedTools?.length) args.push("--allowedTools", persona.allowedTools.join(","));
       if (persona?.systemPrompt) args.push("--append-system-prompt", persona.systemPrompt);
@@ -593,7 +614,7 @@ function getAgentCommand(agentType: string, prompt: string, persona?: PersonaCon
     case "opencode":
       return { command: "opencode", args: ["run", prompt] };
     default: {
-      const defaultArgs = ["--output-format", "stream-json", "--dangerously-skip-permissions"];
+      const defaultArgs = ["--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"];
       if (persona?.model) defaultArgs.push("--model", persona.model);
       if (persona?.allowedTools?.length) defaultArgs.push("--allowedTools", persona.allowedTools.join(","));
       if (persona?.systemPrompt) defaultArgs.push("--append-system-prompt", persona.systemPrompt);

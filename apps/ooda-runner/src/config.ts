@@ -9,6 +9,11 @@ export const RunnerConfigSchema = z.object({
   runnerToken: z.string().optional(),
   runnerName: z.string().default(`runner-${hostname()}`),
   port: z.coerce.number().default(3001),
+  bobGatewayUrl: z.string().optional(),
+  bobApiKey: z.string().optional(),
+  bobWorkspaceId: z.string().optional(),
+  bobDevDir: z.string().default(join(homedir(), "dev")),
+  bobMaxConcurrent: z.coerce.number().default(2),
 });
 
 export type RunnerConfig = z.infer<typeof RunnerConfigSchema>;
@@ -20,5 +25,10 @@ export function loadConfig(): RunnerConfig {
     runnerToken: process.env.OODA_RUNNER_TOKEN,
     runnerName: process.env.OODA_RUNNER_NAME,
     port: process.env.OODA_RUNNER_PORT,
+    bobGatewayUrl: process.env.BOB_GATEWAY_URL,
+    bobApiKey: process.env.BOB_API_KEY,
+    bobWorkspaceId: process.env.BOB_WORKSPACE_ID,
+    bobDevDir: process.env.BOB_DEV_DIR,
+    bobMaxConcurrent: process.env.BOB_MAX_CONCURRENT,
   });
 }

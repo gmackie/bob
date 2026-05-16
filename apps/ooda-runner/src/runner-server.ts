@@ -16,6 +16,7 @@ import {
   createRunnerTRPCClient,
   type RunnerTRPCClient,
 } from "./trpc-client";
+import { BobGatewayConnector } from "./bob-gateway";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const POLL_INTERVAL_MS = 2_000;
@@ -85,6 +86,7 @@ export class RunnerServer {
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private activeSessions = new Set<string>();
   private activePromotions = new Set<string>();
+  private bobGateway: BobGatewayConnector | null = null;
 
   constructor(private config: RunnerConfig) {
     this.sessions = new SessionManager();
@@ -96,6 +98,20 @@ export class RunnerServer {
     const claude = new ClaudeAdapter();
     if (codex.isAvailable()) this.adapters.set("codex", codex);
     if (claude.isAvailable()) this.adapters.set("claude", claude);
+
+    // Bob gateway connector (optional — only starts if BOB_GATEWAY_URL is set)
+    if (config.bobGatewayUrl && config.bobApiKey && config.bobWorkspaceId) {
+      this.bobGateway = new BobGatewayConnector(
+        {
+          gatewayUrl: config.bobGatewayUrl,
+          apiKey: config.bobApiKey,
+          workspaceId: config.bobWorkspaceId,
+          devDir: config.bobDevDir,
+          maxConcurrent: config.bobMaxConcurrent,
+        },
+        this.adapters,
+      );
+    }
   }
 
   getAdapter(id: string): AgentAdapter | undefined {
@@ -137,6 +153,12 @@ export class RunnerServer {
     this.pollTimer = setInterval(() => {
       void this.pollForSessions();
     }, POLL_INTERVAL_MS);
+
+    // Start Bob gateway connector if configured
+    if (this.bobGateway) {
+      this.bobGateway.start();
+      console.log("[runner] Bob gateway connector started");
+    }
 
     console.log("[runner] healthy");
   }
@@ -456,6 +478,9 @@ export class RunnerServer {
     if (this.pollTimer) {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
+    }
+    if (this.bobGateway) {
+      this.bobGateway.stop();
     }
   }
 }
