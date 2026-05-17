@@ -20,6 +20,7 @@
     }
   ],
   "vars": {
+    "FG_APP": "bob",
     "REQUIRE_AUTH": "true",
     "FRONTEND_URL": "https://bob.blder.bot",
     "GATEWAY_PUBLIC_URL": "https://ws.blder.bot",

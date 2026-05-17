@@ -10,6 +10,7 @@ import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } fr
 import type { ImageConfig } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
 import { runWithDb } from "../src/lib/db-client-lazy";
+import { wrapFetch } from "./lib/otel";
 
 interface Env {
   ASSETS: Fetcher;
@@ -38,7 +39,7 @@ interface ExecutionContext {
 // const imageConfig: ImageConfig = { dangerouslyAllowSVG: true };
 
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  fetch: wrapFetch(async (request: Request, env: Env, ctx: ExecutionContext): Promise<Response> => {
     const url = new URL(request.url);
 
     // WebSocket proxy to gateway — forward upgrade to origin
@@ -72,5 +73,5 @@ export default {
     // Hyperdrive's per-request TCP limit and cross-request I/O errors).
     const dbUrl = env.HYPERDRIVE.connectionString;
     return runWithDb(dbUrl, true, () => handler.fetch(request, env, ctx));
-  },
+  }),
 };
