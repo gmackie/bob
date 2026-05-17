@@ -188,11 +188,12 @@ export class BobGatewayConnector {
 
     const prompt = this.buildPrompt(session);
     const adapterId = session.agentType || "claude";
-    const adapter = this.adapters.get(adapterId);
+    const adapter = adapterId !== "codex" ? this.adapters.get(adapterId) : undefined;
 
     this.send({ type: "session_status", sessionId: session.sessionId, status: "running" });
     this.sendEvent(session.sessionId, "state", "system", { status: "running" });
 
+    const startTime = Date.now();
     try {
       if (adapter) {
         await this.runWithAdapter(session, adapter, workDir, prompt);
@@ -202,11 +203,13 @@ export class BobGatewayConnector {
       this.send({ type: "session_status", sessionId: session.sessionId, status: "completed" });
       this.sendEvent(session.sessionId, "state", "system", { status: "completed" });
       console.log(`[bob-gw] Session ${session.sessionId} completed`);
+      void this.reportToBizPulse(session, "completed", Date.now() - startTime);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       console.error(`[bob-gw] Session ${session.sessionId} failed: ${errMsg}`);
       this.send({ type: "session_status", sessionId: session.sessionId, status: "error" });
       this.sendEvent(session.sessionId, "error", "system", { code: "AGENT_ERROR", message: errMsg });
+      void this.reportToBizPulse(session, "failed", Date.now() - startTime);
     } finally {
       this.activeSessions.delete(session.sessionId);
     }
@@ -293,10 +296,21 @@ export class BobGatewayConnector {
         args.push(prompt);
         return { command: "claude", args };
       }
-      case "codex":
-        return { command: "codex", args: ["--quiet", "--full-auto", prompt] };
-      case "cursor":
-        return { command: "cursor", args: ["--acp", "--prompt", prompt] };
+      case "codex": {
+        const codexPrompt = persona?.systemPrompt
+          ? `${persona.systemPrompt}\n\n---\n\n${prompt}`
+          : prompt;
+        return { command: "codex", args: ["exec", "--full-auto", codexPrompt] };
+      }
+      case "cursor": {
+        const cursorArgs = ["--print", "--yolo", "--trust"];
+        if (persona?.model) cursorArgs.push("--model", persona.model);
+        const cursorPrompt = persona?.systemPrompt
+          ? `${persona.systemPrompt}\n\n---\n\n${prompt}`
+          : prompt;
+        cursorArgs.push(cursorPrompt);
+        return { command: "agent", args: cursorArgs };
+      }
       default: {
         const args = ["--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"];
         if (persona?.model) args.push("--model", persona.model);
@@ -327,6 +341,13 @@ export class BobGatewayConnector {
     if (session.description) parts.push(`\nDescription:\n${session.description}`);
     if (session.branch) parts.push(`\nWork on branch: ${session.branch}`);
 
+    const bizpulse = session.personaConfig?.metadata?.bizpulse as
+      | { startupSlug?: string }
+      | undefined;
+    if (bizpulse?.startupSlug) {
+      parts.push(`\nYou are operating on startup: ${bizpulse.startupSlug}`);
+    }
+
     if (session.planningContext?.launchContext) {
       const lc = session.planningContext.launchContext;
       parts.push(`\nPlanning intent: ${lc.intent}`);
@@ -353,6 +374,38 @@ export class BobGatewayConnector {
 
   private sendEvent(sessionId: string, eventType: string, direction: string, payload: Record<string, unknown>): void {
     this.send({ type: "session_event", sessionId, eventType, direction, payload });
+  }
+
+  private async reportToBizPulse(
+    session: ServerSessionAvailable,
+    status: "completed" | "failed",
+    durationMs: number,
+  ): Promise<void> {
+    const bizpulse = session.personaConfig?.metadata?.bizpulse as
+      | { apiUrl?: string; agentSlug?: string; startupSlug?: string }
+      | undefined;
+    if (!bizpulse?.apiUrl || !bizpulse?.agentSlug) return;
+
+    try {
+      await fetch(`${bizpulse.apiUrl}/api/agent/report-session`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.PULSE_API_KEY ?? ""}`,
+        },
+        body: JSON.stringify({
+          agentSlug: bizpulse.agentSlug,
+          externalSessionId: session.sessionId,
+          startupSlug: bizpulse.startupSlug ?? null,
+          title: session.title ?? null,
+          status,
+          durationMs,
+        }),
+      });
+      console.log(`[bob-gw] BizPulse report sent for session ${session.sessionId}`);
+    } catch (err) {
+      console.warn(`[bob-gw] BizPulse report failed:`, err instanceof Error ? err.message : err);
+    }
   }
 
   private gitCheckoutBranch(workDir: string, branch: string): Promise<void> {
