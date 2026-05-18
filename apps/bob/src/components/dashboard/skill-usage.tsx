@@ -29,28 +29,32 @@ function formatRate(success: number, total: number): string {
 export function SkillUsage() {
   const trpc = useTRPC();
 
-  // Fetch all recent skill executions (we need at least sessionId or workItemId,
-  // but for the dashboard we want all — so we fetch skills list and then recent executions)
-  const { data: skills } = useQuery({
-    ...trpc.skill.list.queryOptions({}),
+  const { data: statsData } = useQuery({
+    ...trpc.skill.stats.queryOptions(),
+    staleTime: 30_000,
   });
 
-  // We use a dummy sessionId query that returns empty if no filter,
-  // but skill.listExecutions requires at least one filter.
-  // Instead, aggregate from the skills list data we have.
-  // For now, build stats from skill metadata + a general query.
+  const { data: skills } = useQuery({
+    ...trpc.skill.list.queryOptions({}),
+    staleTime: 60_000,
+  });
 
-  // Since listExecutions requires a filter, we'll use the skill list
-  // and show counts based on that. In production this would have a
-  // dedicated aggregation endpoint.
+  const statsMap = new Map(
+    (statsData ?? []).map((s: any) => [s.slug, s]),
+  );
 
-  const stats: SkillStat[] = (skills ?? []).map((skill) => ({
-    name: skill.name,
-    slug: skill.slug,
-    count: 0,
-    successCount: 0,
-    totalDurationMs: 0,
-  }));
+  const stats: SkillStat[] = (skills ?? []).map((skill) => {
+    const s = statsMap.get(skill.slug);
+    return {
+      name: skill.name,
+      slug: skill.slug,
+      count: s?.count ?? 0,
+      successCount: s?.successCount ?? 0,
+      totalDurationMs: s?.totalDurationMs ?? 0,
+    };
+  });
+
+  stats.sort((a, b) => b.count - a.count);
 
   const maxCount = Math.max(1, ...stats.map((s) => s.count));
 

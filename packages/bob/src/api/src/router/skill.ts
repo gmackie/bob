@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 import { protectedProcedure } from "../trpc";
 import {
   skillList,
+  skillStats,
   skillSeed,
   skillGetExecution,
   skillListExecutions,
@@ -34,6 +35,11 @@ export const skillRouter = {
     )
     .query(({ ctx, input }) =>
       skillList({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
+
+  stats: protectedProcedure
+    .query(({ ctx }) =>
+      skillStats({ db: ctx.db, userId: ctx.session.user.id }),
     ),
 
   seed: protectedProcedure.mutation(({ ctx }) =>

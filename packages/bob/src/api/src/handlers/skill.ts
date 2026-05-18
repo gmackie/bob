@@ -5,7 +5,7 @@
  * Phase 7B-4D-beta Task 3.
  */
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq } from "@bob/db";
+import { and, count, desc, eq, sql } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
   chatConversations,
@@ -202,6 +202,38 @@ export async function skillList(
     .where(conditions.length > 0 ? and(...conditions) : undefined);
 
   return rows;
+}
+
+export async function skillStats(_ctx: HandlerContext) {
+  const execStats = await db
+    .select({
+      skillSlug: skillExecutions.skillSlug,
+      count: count(),
+      successCount:
+        sql<number>`count(*) filter (where ${skillExecutions.status} = 'completed')`.as(
+          "success_count",
+        ),
+      totalDurationMs:
+        sql<number>`coalesce(sum(${skillExecutions.durationMs}) filter (where ${skillExecutions.durationMs} is not null), 0)`.as(
+          "total_duration_ms",
+        ),
+    })
+    .from(skillExecutions)
+    .groupBy(skillExecutions.skillSlug);
+
+  const allSkills = await db
+    .select({ slug: skills.slug, name: skills.name })
+    .from(skills);
+
+  const nameMap = new Map(allSkills.map((s) => [s.slug, s.name]));
+
+  return execStats.map((s) => ({
+    slug: s.skillSlug,
+    name: nameMap.get(s.skillSlug) ?? s.skillSlug,
+    count: Number(s.count),
+    successCount: Number(s.successCount),
+    totalDurationMs: Number(s.totalDurationMs),
+  }));
 }
 
 export async function skillSeed(_ctx: HandlerContext) {

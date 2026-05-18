@@ -10,6 +10,7 @@ import type { HandlerContext } from "../handlers/context.js";
 import { wrapHandler } from "../handlers/bridge.js";
 import {
   skillList,
+  skillStats,
   skillSeed,
   skillGetExecution,
   skillListExecutions,
@@ -23,6 +24,14 @@ export const makeSkillRpcHandlers = (ctx: HandlerContext) => ({
   }: {
     payload?: { category?: string; source?: string };
   }) => wrapHandler(skillList, ctx, payload, "skill"),
+
+  "skill.stats": () =>
+    wrapHandler(
+      (ctx: HandlerContext) => skillStats(ctx),
+      ctx,
+      undefined as unknown as void,
+      "skill",
+    ),
 
   "skill.seed": ({ payload }: { payload: void }) =>
     wrapHandler(
