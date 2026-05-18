@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { cn } from "@gmacko/core/ui";
 
@@ -24,6 +24,12 @@ const KANBAN_COLUMNS = [
 
 const KNOWN_STATUSES = new Set<string>(KANBAN_COLUMNS.map((c) => c.key));
 
+const STATUS_ALIAS: Record<string, string> = {
+  ready: "todo",
+  draft: "backlog",
+  canceled: "cancelled",
+};
+
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -39,6 +45,7 @@ interface KanbanBoardProps {
 
 export function KanbanBoard({ workspaceId, projectId }: KanbanBoardProps) {
   const trpc = useTRPC();
+  const queryClient = useQueryClient();
 
   const { data: workItems, isLoading } = useQuery(
     trpc.workItem.list.queryOptions(
@@ -50,6 +57,30 @@ export function KanbanBoard({ workspaceId, projectId }: KanbanBoardProps) {
     ),
   );
 
+  const dispatchMutation = useMutation(
+    trpc.workItem.dispatch.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: trpc.workItem.list.queryKey() });
+      },
+    }),
+  );
+
+  const handleDispatch = (id: string) => {
+    dispatchMutation.mutate({ workItemId: id });
+  };
+
+  const updateMutation = useMutation(
+    trpc.workItems.update.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: trpc.workItem.list.queryKey() });
+      },
+    }),
+  );
+
+  const handleStatusChange = (id: string, status: string) => {
+    updateMutation.mutate({ id, status });
+  };
+
   // Group items by status into columns
   const columns = useMemo(() => {
     const items = (workItems ?? []) as KanbanCardItem[];
@@ -58,10 +89,11 @@ export function KanbanBoard({ workspaceId, projectId }: KanbanBoardProps) {
     const otherItems: KanbanCardItem[] = [];
 
     for (const item of items) {
-      if (KNOWN_STATUSES.has(item.status)) {
-        const existing = grouped.get(item.status) ?? [];
+      const mapped = STATUS_ALIAS[item.status] ?? item.status;
+      if (KNOWN_STATUSES.has(mapped)) {
+        const existing = grouped.get(mapped) ?? [];
         existing.push(item);
-        grouped.set(item.status, existing);
+        grouped.set(mapped, existing);
       } else {
         otherItems.push(item);
       }
@@ -174,7 +206,7 @@ export function KanbanBoard({ workspaceId, projectId }: KanbanBoardProps) {
           <div className="max-h-[calc(100vh-280px)] space-y-2.5 overflow-y-auto pr-0.5">
             {col.items.length > 0 ? (
               col.items.map((item) => (
-                <KanbanCard key={item.id} item={item} />
+                <KanbanCard key={item.id} item={item} onDispatch={handleDispatch} onStatusChange={handleStatusChange} />
               ))
             ) : (
               <div className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">

@@ -6,6 +6,7 @@
  * For apps without image optimization, you can use vinext/server/app-router-entry
  * directly in wrangler.jsonc: "main": "vinext/server/app-router-entry"
  */
+import * as Sentry from "@sentry/cloudflare";
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import type { ImageConfig } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
@@ -38,40 +39,43 @@ interface ExecutionContext {
 // dangerouslyAllowSVG: true in next.config.js and uncomment below:
 // const imageConfig: ImageConfig = { dangerouslyAllowSVG: true };
 
-export default {
-  fetch: wrapFetch(async (request: Request, env: Env, ctx: ExecutionContext): Promise<Response> => {
-    const url = new URL(request.url);
-
-    // WebSocket proxy to gateway — forward upgrade to origin
-    if (url.pathname === "/ws/sessions" && request.headers.get("Upgrade") === "websocket") {
-      const gatewayOrigin = env.GATEWAY_URL || "https://ws.blder.bot";
-      const target = `${gatewayOrigin}/sessions${url.search}`;
-      return fetch(target, request);
-    }
-
-    // Image optimization via Cloudflare Images binding.
-    // The parseImageParams validation inside handleImageOptimization
-    // normalizes backslashes and validates the origin hasn't changed.
-    if (url.pathname === "/_vinext/image") {
-      const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
-      return handleImageOptimization(request, {
-        fetchAsset: (path) => env.ASSETS.fetch(new Request(new URL(path, request.url))),
-        transformImage: async (body, { width, format, quality }) => {
-          const result = await env.IMAGES.input(body).transform(width > 0 ? { width } : {}).output({ format, quality });
-          return result.response();
-        },
-      }, allowedWidths);
-    }
-
-    // Expose secrets to server-side code via globalThis.
-    if (env.NUDGE_SHARED_SECRET) {
-      (globalThis as any).NUDGE_SHARED_SECRET = env.NUDGE_SHARED_SECRET;
-    }
-
-    // Run vinext with a request-scoped DB client. This ensures all queries
-    // within this request share one postgres connection (avoids exhausting
-    // Hyperdrive's per-request TCP limit and cross-request I/O errors).
-    const dbUrl = env.HYPERDRIVE.connectionString;
-    return runWithDb(dbUrl, true, () => handler.fetch(request, env, ctx));
+export default Sentry.withSentry(
+  (env: Record<string, unknown>) => ({
+    dsn: env.SENTRY_DSN as string,
+    environment: (env.FG_STAGE as string) ?? "production",
+    tracesSampleRate: 0.1,
   }),
-};
+  {
+    fetch: wrapFetch(async (request: Request, env: Env, ctx: ExecutionContext): Promise<Response> => {
+      const url = new URL(request.url);
+
+      // WebSocket proxy to gateway — forward upgrade to origin
+      if (url.pathname === "/ws/sessions" && request.headers.get("Upgrade") === "websocket") {
+        const gatewayOrigin = env.GATEWAY_URL || "https://ws.blder.bot";
+        const target = `${gatewayOrigin}/sessions${url.search}`;
+        return fetch(target, request);
+      }
+
+      // Image optimization via Cloudflare Images binding.
+      if (url.pathname === "/_vinext/image") {
+        const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
+        return handleImageOptimization(request, {
+          fetchAsset: (path) => env.ASSETS.fetch(new Request(new URL(path, request.url))),
+          transformImage: async (body, { width, format, quality }) => {
+            const result = await env.IMAGES.input(body).transform(width > 0 ? { width } : {}).output({ format, quality });
+            return result.response();
+          },
+        }, allowedWidths);
+      }
+
+      // Expose secrets to server-side code via globalThis.
+      if (env.NUDGE_SHARED_SECRET) {
+        (globalThis as any).NUDGE_SHARED_SECRET = env.NUDGE_SHARED_SECRET;
+      }
+
+      // Run vinext with a request-scoped DB client.
+      const dbUrl = env.HYPERDRIVE.connectionString;
+      return runWithDb(dbUrl, true, () => handler.fetch(request, env, ctx));
+    }),
+  },
+);

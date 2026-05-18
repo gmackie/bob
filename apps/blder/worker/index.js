@@ -3,6 +3,8 @@
  *
  * Wraps vinext's app-router-entry, binds Hyperdrive to DATABASE_URL.
  */
+import * as Sentry from "@sentry/cloudflare";
+
 let appRouterEntryPromise = null;
 const getAppRouterEntry = async () => {
   if (!appRouterEntryPromise) {
@@ -44,33 +46,40 @@ function bindWorkerEnvToNodeEnv(env) {
   return envEntries.DATABASE_URL;
 }
 
-export default {
-  async fetch(request, env) {
-    const databaseUrl = bindWorkerEnvToNodeEnv(env);
-    const handler = await getAppRouterEntry();
-    const url = new URL(request.url);
+export default Sentry.withSentry(
+  (env) => ({
+    dsn: env.SENTRY_DSN,
+    environment: env.FG_STAGE ?? "production",
+    tracesSampleRate: 0.1,
+  }),
+  {
+    async fetch(request, env) {
+      const databaseUrl = bindWorkerEnvToNodeEnv(env);
+      const handler = await getAppRouterEntry();
+      const url = new URL(request.url);
 
-    if (!databaseUrl && url.pathname.startsWith("/api")) {
-      return Response.json(
-        { error: { code: "DATABASE_URL_MISSING", message: "Database not configured." } },
-        { status: 503, headers: { "Cache-Control": "no-store" } },
-      );
-    }
+      if (!databaseUrl && url.pathname.startsWith("/api")) {
+        return Response.json(
+          { error: { code: "DATABASE_URL_MISSING", message: "Database not configured." } },
+          { status: 503, headers: { "Cache-Control": "no-store" } },
+        );
+      }
 
-    try {
-      const response = await handler.default.fetch(request);
-      return response;
-    } catch (error) {
-      console.error("Worker handler error:", {
-        url: url.pathname,
-        name: error?.name,
-        message: error?.message,
-        stack: error?.stack?.split('\n').slice(0, 5).join('\n'),
-      });
-      return Response.json(
-        { error: error?.message || "Internal error" },
-        { status: 500 },
-      );
-    }
+      try {
+        const response = await handler.default.fetch(request);
+        return response;
+      } catch (error) {
+        console.error("Worker handler error:", {
+          url: url.pathname,
+          name: error?.name,
+          message: error?.message,
+          stack: error?.stack?.split('\n').slice(0, 5).join('\n'),
+        });
+        return Response.json(
+          { error: error?.message || "Internal error" },
+          { status: 500 },
+        );
+      }
+    },
   },
-};
+);

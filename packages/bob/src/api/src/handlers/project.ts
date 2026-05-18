@@ -81,8 +81,12 @@ export async function projectList(
     where: eq(workItems.workspaceId, input.workspaceId),
   });
 
-  return projectRows.map((project: any) => {
+  const result = projectRows.map((project: any) => {
     const projectItems = items.filter((item: any) => item.projectId === project.id);
+    const latestItemDate = projectItems.reduce((latest: string | null, item: any) => {
+      const d = item.updatedAt ?? item.createdAt;
+      return d && (!latest || d > latest) ? d : latest;
+    }, null);
 
     return {
       project,
@@ -95,8 +99,16 @@ export async function projectList(
             item.status === "in_progress" || item.status === "in_review",
         ).length,
       },
+      _latestActivity: latestItemDate ?? project.updatedAt ?? project.createdAt,
     };
   });
+
+  result.sort((a, b) => {
+    if (a._latestActivity && b._latestActivity) return b._latestActivity > a._latestActivity ? 1 : -1;
+    return a._latestActivity ? -1 : 1;
+  });
+
+  return result;
 }
 
 export async function projectGet(

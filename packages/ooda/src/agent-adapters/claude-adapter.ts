@@ -22,10 +22,14 @@ export class ClaudeAdapter implements AgentAdapter {
     workspaceRoot: string;
     systemPrompt?: string;
   }): AdapterCommand {
-    const args: string[] = ["--print", "--output-format", "text"];
+    const args: string[] = [
+      "--output-format", "stream-json",
+      "--verbose",
+      "--dangerously-skip-permissions",
+    ];
 
     if (opts.systemPrompt) {
-      args.push("--system-prompt", opts.systemPrompt);
+      args.push("--append-system-prompt", opts.systemPrompt);
     }
 
     args.push(opts.prompt);

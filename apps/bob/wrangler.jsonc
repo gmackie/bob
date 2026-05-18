@@ -1,6 +1,6 @@
 {
   "name": "blder-bot",
-  "main": "./worker/index.js",
+  "main": "./worker/index.ts",
   "compatibility_date": "2025-12-01",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,

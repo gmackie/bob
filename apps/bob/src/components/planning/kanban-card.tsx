@@ -1,9 +1,18 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { cn } from "@gmacko/core/ui";
 import { Badge } from "@gmacko/core/ui/badge";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@gmacko/core/ui/context-menu";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -18,6 +27,11 @@ export interface KanbanCardItem {
   priority?: string;
   externalProvider?: string | null;
   createdAt?: string;
+  agentStatus?: {
+    sessionId: string;
+    status: string;
+    agentType: string;
+  } | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -64,20 +78,33 @@ function formatRelativeTime(dateString: string): string {
 // Component
 // ---------------------------------------------------------------------------
 
-export function KanbanCard({ item }: { item: KanbanCardItem }) {
+export function KanbanCard({
+  item,
+  onDispatch,
+  onStatusChange,
+}: {
+  item: KanbanCardItem;
+  onDispatch?: (id: string) => void;
+  onStatusChange?: (id: string, status: string) => void;
+}) {
+  const router = useRouter();
   const kindVariant = KIND_VARIANT[item.kind] ?? "default";
   const priorityBorder = item.priority ? PRIORITY_BORDER[item.priority] : undefined;
+  const isStale = item.status === "in_progress" && !item.agentStatus;
+  const hasAgent = !!item.agentStatus;
 
-  return (
-    <Link
-      href={`/work-items/${item.id}`}
+  const cardContent = (
+    <div
       className={cn(
-        "block rounded-lg border border-border bg-card px-3 py-2.5 transition",
+        "block rounded-lg border bg-card px-3 py-2.5 transition cursor-pointer",
         "hover:border-muted-foreground/30 hover:shadow-sm",
         priorityBorder && `border-l-2 ${priorityBorder}`,
+        isStale ? "border-amber-500/50 bg-amber-950/10" : "border-border",
+        hasAgent && "border-emerald-500/40",
       )}
+      onClick={() => router.push(`/work-items/${item.id}`)}
     >
-      {/* Top row: identifier + kind badge */}
+      {/* Top row: identifier + badges */}
       <div className="flex items-center justify-between gap-2">
         {item.identifier && (
           <span className="font-mono text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
@@ -85,6 +112,16 @@ export function KanbanCard({ item }: { item: KanbanCardItem }) {
           </span>
         )}
         <div className="ml-auto flex items-center gap-1.5">
+          {hasAgent && (
+            <Badge variant="emerald" className="text-[10px] px-1.5 py-0">
+              {item.agentStatus!.agentType}
+            </Badge>
+          )}
+          {isStale && (
+            <Badge variant="amber" className="text-[10px] px-1.5 py-0">
+              stale
+            </Badge>
+          )}
           {item.externalProvider === "linear" && (
             <Badge variant="purple" className="text-[10px] px-1.5 py-0">
               Linear
@@ -101,15 +138,65 @@ export function KanbanCard({ item }: { item: KanbanCardItem }) {
         {item.title}
       </p>
 
-      {/* Bottom row: priority + relative time */}
+      {/* Bottom row: agent status / dispatch / time */}
       <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
         {item.priority && item.priority !== "no_priority" && (
           <span className="capitalize">{item.priority}</span>
+        )}
+        {onDispatch && !hasAgent && (
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDispatch(item.id); }}
+            className="rounded bg-primary/20 px-1.5 py-0.5 text-[10px] font-medium text-primary hover:bg-primary/30 transition"
+          >
+            Dispatch
+          </button>
         )}
         {item.createdAt && (
           <span className="ml-auto">{formatRelativeTime(item.createdAt)}</span>
         )}
       </div>
-    </Link>
+    </div>
+  );
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        {cardContent}
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuLabel>{item.identifier ?? item.id.slice(0, 8)}</ContextMenuLabel>
+        <ContextMenuSeparator />
+        <ContextMenuItem onClick={() => router.push(`/work-items/${item.id}`)}>
+          View details
+        </ContextMenuItem>
+        {item.identifier && (
+          <ContextMenuItem onClick={() => navigator.clipboard.writeText(item.identifier!)}>
+            Copy identifier
+          </ContextMenuItem>
+        )}
+        {onDispatch && !hasAgent && (
+          <ContextMenuItem onClick={() => onDispatch(item.id)}>
+            Dispatch to agent
+          </ContextMenuItem>
+        )}
+        {hasAgent && (
+          <ContextMenuItem onClick={() => router.push(`/runs/${item.agentStatus!.sessionId}`)}>
+            View agent run
+          </ContextMenuItem>
+        )}
+        <ContextMenuSeparator />
+        <ContextMenuLabel>Set status</ContextMenuLabel>
+        {["backlog", "todo", "in_progress", "in_review", "done"].map((s) => (
+          <ContextMenuItem
+            key={s}
+            disabled={item.status === s || !onStatusChange}
+            onClick={() => onStatusChange?.(item.id, s)}
+          >
+            {s.replace(/_/g, " ")}
+          </ContextMenuItem>
+        ))}
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }

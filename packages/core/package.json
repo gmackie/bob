@@ -81,6 +81,7 @@
     "./ui/button": "./src/ui/button.tsx",
     "./ui/card": "./src/ui/card.tsx",
     "./ui/dialog": "./src/ui/dialog.tsx",
+    "./ui/context-menu": "./src/ui/context-menu.tsx",
     "./ui/dropdown-menu": "./src/ui/dropdown-menu.tsx",
     "./ui/error-boundary": "./src/ui/error-boundary.tsx",
     "./ui/field": "./src/ui/field.tsx",

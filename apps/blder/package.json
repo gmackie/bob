@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@gmacko/core": "workspace:*",
+    "@sentry/cloudflare": "^10.53.1",
     "better-auth": "catalog:",
     "drizzle-orm": "^0.44.0",
     "postgres": "^3.4.8",
