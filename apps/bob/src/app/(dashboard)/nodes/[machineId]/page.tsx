@@ -374,7 +374,9 @@ export default function NodeDetailPage({
               </Card>
             ) : (
               <div className="mt-4 flex flex-col gap-2">
-                {(runs as any[]).map((run: any) => (
+                {(runs as any[]).map((run: any) => {
+                  const title = run.session?.title ?? run.workItemId ?? "Untitled";
+                  return (
                   <Link key={run.id} href={`/runs/${run.id}`}>
                     <Card className="hover:border-primary/30 flex items-center gap-3 p-3 transition-colors">
                       <Badge className={cn("shrink-0 text-[10px] font-medium", STATUS_COLORS[run.status] ?? STATUS_COLORS.queued)}>
@@ -382,7 +384,7 @@ export default function NodeDetailPage({
                       </Badge>
                       <div className="min-w-0 flex-1">
                         <span className="text-sm font-medium truncate block">
-                          {run.workItemId}
+                          {title}
                         </span>
                         <span className="text-xs text-muted-foreground">
                           via {run.agentType} · {formatRelative(run.createdAt)}
@@ -395,7 +397,8 @@ export default function NodeDetailPage({
                       )}
                     </Card>
                   </Link>
-                ))}
+                  );
+                })}
               </div>
             )}
           </section>
