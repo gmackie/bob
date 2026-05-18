@@ -25,6 +25,7 @@ import {
   workItemsGet,
   workItemsUpdate,
   workItemsPromoteToTask,
+  workItemsDispatch,
   workItemsListComments,
   workItemsCreateComment,
   workItemsCreateArtifact,
@@ -198,6 +199,19 @@ export const workItemRouter = {
   list: listWorkItemsProcedure,
   get: getWorkItemProcedure,
   promoteToTask: promoteToTaskProcedure,
+  dispatch: protectedProcedure
+    .input(
+      z.object({
+        workItemId: z.string().uuid(),
+        agentType: z.string().default("claude"),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      workItemsDispatch(
+        { db: ctx.db, userId: ctx.session.user.id },
+        input,
+      ),
+    ),
 };
 
 export const commentRouter = {

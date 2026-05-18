@@ -78,9 +78,11 @@ export class BobGatewayConnector {
     this.stopped = true;
     this.cleanup();
     for (const [sessionId, child] of this.activeSessions) {
-      console.log(`[bob-gw] Killing agent for session ${sessionId}`);
+      console.log(`[bob-gw] Interrupting session ${sessionId} (graceful shutdown)`);
+      this.send({ type: "session_status", sessionId, status: "failed", summary: { reason: "interrupted", retryable: true } });
       child.kill("SIGTERM");
     }
+    this.activeSessions.clear();
     if (this.ws) {
       this.ws.close();
       this.ws = null;

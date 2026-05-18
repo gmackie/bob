@@ -13,6 +13,7 @@ import {
   workItemsGet,
   workItemsUpdate,
   workItemsPromoteToTask,
+  workItemsDispatch,
   workItemsListComments,
   workItemsCreateComment,
   workItemsCreateArtifact,
@@ -65,6 +66,12 @@ export const makeWorkItemsRpcHandlers = (ctx: HandlerContext) => ({
   }: {
     payload: { id: string };
   }) => wrapHandler(workItemsPromoteToTask, ctx, payload, "workItem"),
+
+  "workItems.dispatch": ({
+    payload,
+  }: {
+    payload: { workItemId: string; agentType?: string };
+  }) => wrapHandler(workItemsDispatch, ctx, payload, "workItem"),
 
   "workItems.listComments": ({
     payload,

@@ -80,13 +80,15 @@ export const agentRunStatusEnum = pgEnum("agent_run_status", [
   "running",
   "completed",
   "failed",
+  "interrupted",
 ]);
 
 export const agentRuns = pgTable(
   "agent_runs",
   (t) => ({
     id: t.uuid().notNull().primaryKey().defaultRandom(),
-    workItemId: t.text("work_item_id").notNull(),
+    sessionId: t.uuid("session_id").references(() => chatConversations.id, { onDelete: "set null" }),
+    workItemId: t.text("work_item_id"),
     workspaceId: t
       .uuid("workspace_id")
       .notNull()
@@ -107,6 +109,7 @@ export const agentRuns = pgTable(
     index("agent_runs_workspace_idx").on(table.workspaceId),
     index("agent_runs_tenant_idx").on(table.tenantId),
     index("agent_runs_work_item_idx").on(table.workItemId),
+    index("agent_runs_session_idx").on(table.sessionId),
   ],
 );
 
@@ -474,6 +477,10 @@ export const agentInstancesRelations = relations(agentInstances, ({ one }) => ({
 }));
 
 export const agentRunsRelations = relations(agentRuns, ({ one, many }) => ({
+  session: one(chatConversations, {
+    fields: [agentRuns.sessionId],
+    references: [chatConversations.id],
+  }),
   workspace: one(workspaces, {
     fields: [agentRuns.workspaceId],
     references: [workspaces.id],

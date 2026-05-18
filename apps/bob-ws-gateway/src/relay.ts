@@ -1,7 +1,7 @@
 import type { WebSocket } from "ws";
-import { eq, and, gt, asc, desc, sql } from "@bob/db";
+import { eq, and, gt, lt, inArray, asc, desc, sql } from "@bob/db";
 import { db } from "@bob/db/client";
-import { chatConversations, repositories, sessionEvents, taskRuns, workItems } from "@bob/db/schema";
+import { chatConversations, repositories, sessionEvents, taskRuns, workItems, agentRuns, activities, workspaces } from "@bob/db/schema";
 
 import {
   parseClientMessage,
@@ -81,8 +81,46 @@ export class Relay {
   private readonly subscribers = new Map<string, Set<Connection>>();
   private nextConnId = 0;
 
+  private timeoutSweepTimer: NodeJS.Timeout | null = null;
+
   constructor(cfg: RelayConfig) {
     this.cfg = cfg;
+    this.timeoutSweepTimer = setInterval(() => this.sweepTimedOutSessions(), 60_000);
+  }
+
+  private async sweepTimedOutSessions(): Promise<void> {
+    const cutoff = new Date(Date.now() - 35 * 60 * 1000).toISOString();
+    const stale = await db.query.chatConversations.findMany({
+      where: and(
+        inArray(chatConversations.status, ["running", "starting"]),
+        lt(chatConversations.createdAt, cutoff),
+      ),
+      columns: { id: true, userId: true, workItemId: true, agentType: true },
+    });
+
+    for (const session of stale) {
+      console.log(`[Relay] Timeout sweep: marking session ${session.id} as failed (>35min)`);
+      await db
+        .update(chatConversations)
+        .set({ status: "failed" })
+        .where(eq(chatConversations.id, session.id));
+
+      await db
+        .update(agentRuns)
+        .set({ status: "failed", completedAt: sql`now()`, summary: { reason: "timeout" } })
+        .where(eq(agentRuns.sessionId, session.id));
+
+      if (session.workItemId) {
+        await db.insert(activities).values({
+          workItemId: session.workItemId,
+          userId: session.userId,
+          type: "status_changed",
+          fromValue: "running",
+          toValue: "failed",
+          metadata: { sessionId: session.id, reason: "timeout" },
+        });
+      }
+    }
   }
 
   handleConnection(ws: WebSocket): void {
@@ -326,6 +364,12 @@ export class Relay {
         console.log(`[Relay] Daemon registered: ${conn.id} (clientId=${hello.clientId}) for workspace ${hello.workspaceId}`);
       }
       this.daemonByWorkspace.set(hello.workspaceId, conn);
+
+      // Update workspace heartbeat so the UI shows the node as online
+      await db
+        .update(workspaces)
+        .set({ lastHeartbeat: sql`now()` })
+        .where(eq(workspaces.id, hello.workspaceId));
     } else {
       // Browser (or other client types default to browser auth)
       const userId = await this.cfg.validateBrowserToken(hello.token);
@@ -606,6 +650,32 @@ export class Relay {
           .where(eq(workItems.id, taskRun.workItemId));
       }
     }
+
+    // Bridge: create agent_runs row for dashboard visibility
+    if (conn.workspaceId) {
+      const session = await db.query.chatConversations.findFirst({
+        where: eq(chatConversations.id, claim.sessionId),
+        columns: { id: true, title: true, agentType: true, workItemId: true, personaMetadata: true },
+      });
+      if (session) {
+        const workspace = await db.query.workspaces.findFirst({
+          where: eq(workspaces.id, conn.workspaceId),
+          columns: { tenantId: true },
+        });
+        if (workspace?.tenantId) {
+          await db.insert(agentRuns).values({
+            sessionId: session.id,
+            workItemId: session.workItemId ?? session.title ?? session.id,
+            workspaceId: conn.workspaceId,
+            tenantId: workspace.tenantId,
+            agentType: session.agentType ?? "claude",
+            agentConfig: (session as any).personaMetadata ?? undefined,
+            status: "running",
+            startedAt: sql`now()`,
+          });
+        }
+      }
+    }
   }
 
   // ── Daemon session_event → persist + fan out ───────────────────────
@@ -677,7 +747,7 @@ export class Relay {
       .where(eq(chatConversations.id, msg.sessionId));
 
     // Sync task_run and work_item status on terminal states
-    if (msg.status === "completed" || msg.status === "failed") {
+    if (msg.status === "completed" || msg.status === "failed" || msg.status === "interrupted") {
       const taskRun = await db.query.taskRuns.findFirst({
         where: eq(taskRuns.sessionId, msg.sessionId),
         columns: { id: true, workItemId: true },
@@ -692,13 +762,33 @@ export class Relay {
           .where(eq(taskRuns.id, taskRun.id));
 
         if (taskRun.workItemId) {
-          // completed → in_review (agent done, needs human check)
-          // failed → revert to ready so user can retry
           await db
             .update(workItems)
             .set({ status: msg.status === "completed" ? "in_review" : "ready" })
             .where(eq(workItems.id, taskRun.workItemId));
         }
+      }
+
+      // Bridge: update agent_runs for dashboard
+      await db
+        .update(agentRuns)
+        .set({
+          status: msg.status,
+          completedAt: sql`now()`,
+          summary: (msg as any).summary ?? { status: msg.status },
+        })
+        .where(eq(agentRuns.sessionId, msg.sessionId));
+
+      // Bridge: write activity for work-item-linked sessions
+      if (session.workItemId) {
+        await db.insert(activities).values({
+          workItemId: session.workItemId,
+          userId: session.userId,
+          type: "status_changed",
+          fromValue: "running",
+          toValue: msg.status,
+          metadata: { sessionId: msg.sessionId, agentType: session.agentType },
+        });
       }
     }
 

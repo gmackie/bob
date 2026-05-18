@@ -636,13 +636,16 @@ function gracefulShutdown(): void {
   cleanup();
 
   for (const [sessionId, child] of activeSessions) {
-    console.log(`[executor] Killing agent for session ${sessionId}`);
+    console.log(`[executor] Interrupting session ${sessionId}`);
+    send({ type: "session_status", sessionId, status: "interrupted" });
     child.kill("SIGTERM");
   }
 
   if (ws) {
-    ws.close();
-    ws = null;
+    setTimeout(() => {
+      ws?.close();
+      ws = null;
+    }, 500);
   }
 
   setTimeout(() => process.exit(0), 3000);

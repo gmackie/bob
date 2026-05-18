@@ -5,7 +5,7 @@
  * Phase 7B-4D-beta Task 2.
  */
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq } from "@bob/db";
+import { and, desc, eq, inArray } from "@bob/db";
 import { agentRuns, workItems, workspaceMembers } from "@bob/db/schema";
 
 import type { HandlerContext } from "./context.js";
@@ -60,7 +60,7 @@ export async function agentRunGet(
 ) {
   const run = await ctx.db.query.agentRuns.findFirst({
     where: eq(agentRuns.id, input.runId),
-    with: { artifacts: true },
+    with: { artifacts: true, session: { columns: { id: true, title: true, status: true } } },
   });
 
   if (!run?.workspaceId) {
@@ -79,7 +79,31 @@ export async function agentRunList(
 
   return ctx.db.query.agentRuns.findMany({
     where: eq(agentRuns.workspaceId, input.workspaceId),
-    with: { artifacts: true },
+    with: { artifacts: true, session: { columns: { title: true } } },
+    orderBy: [desc(agentRuns.createdAt)],
+    limit: input.limit,
+  });
+}
+
+export async function agentRunListAll(
+  ctx: HandlerContext,
+  input: { limit: number },
+) {
+  const memberships = await ctx.db.query.workspaceMembers.findMany({
+    where: eq(workspaceMembers.userId, ctx.userId),
+    columns: { workspaceId: true },
+  });
+
+  const wsIds = memberships.map((m) => m.workspaceId);
+  if (wsIds.length === 0) return [];
+
+  return ctx.db.query.agentRuns.findMany({
+    where: inArray(agentRuns.workspaceId, wsIds),
+    with: {
+      artifacts: true,
+      session: { columns: { title: true } },
+      workspace: { columns: { id: true, name: true } },
+    },
     orderBy: [desc(agentRuns.createdAt)],
     limit: input.limit,
   });

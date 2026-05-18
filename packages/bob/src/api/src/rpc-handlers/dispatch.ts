@@ -17,6 +17,7 @@ import {
   dispatchCheckProgress,
   dispatchListBatches,
   dispatchResetPipelineState,
+  dispatchExecutionBatch,
 } from "../handlers/dispatch.js";
 
 export const makeDispatchRpcHandlers = (ctx: HandlerContext) => ({
@@ -75,4 +76,19 @@ export const makeDispatchRpcHandlers = (ctx: HandlerContext) => ({
   }: {
     payload: { itemId: string };
   }) => wrapHandler(dispatchResetPipelineState, ctx, payload, "dispatch"),
+
+  "dispatch.executionBatch": ({
+    payload,
+  }: {
+    payload: {
+      workspaceId: string;
+      agentType: string;
+      concurrency: number;
+      items: Array<{
+        workItemId?: string;
+        title?: string;
+        description?: string;
+      }>;
+    };
+  }) => wrapHandler(dispatchExecutionBatch, ctx, payload, "dispatch"),
 });

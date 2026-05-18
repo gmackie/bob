@@ -11,6 +11,7 @@ import {
   dispatchCheckProgress,
   dispatchListBatches,
   dispatchResetPipelineState,
+  dispatchExecutionBatch,
 } from "../handlers/dispatch";
 
 export const dispatchRouter = {
@@ -98,5 +99,27 @@ export const dispatchRouter = {
     .input(z.object({ itemId: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       dispatchResetPipelineState({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
+  /**
+   * Dispatch work items directly as execution sessions — no plan drafts needed.
+   * Takes existing work item IDs or inline task descriptions.
+   */
+  executionBatch: protectedProcedure
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+        agentType: z.string().min(1).max(50).default("claude"),
+        concurrency: z.number().int().min(1).max(10).default(2),
+        items: z.array(
+          z.object({
+            workItemId: z.string().uuid().optional(),
+            title: z.string().max(256).optional(),
+            description: z.string().optional(),
+          }),
+        ).min(1).max(50),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      dispatchExecutionBatch({ db: ctx.db, userId: ctx.session.user.id }, input),
     ),
 } satisfies TRPCRouterRecord;

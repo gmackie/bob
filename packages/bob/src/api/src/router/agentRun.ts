@@ -4,6 +4,7 @@ import { protectedProcedure } from "../trpc";
 import {
   agentRunGet,
   agentRunList,
+  agentRunListAll,
   agentRunListByWorkItem,
 } from "../handlers/agentRun";
 
@@ -27,6 +28,16 @@ export const agentRunRouter = {
     )
     .query(({ ctx, input }) =>
       agentRunList({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
+
+  listAll: protectedProcedure
+    .input(
+      z.object({
+        limit: z.number().min(1).max(100).default(20),
+      }),
+    )
+    .query(({ ctx, input }) =>
+      agentRunListAll({ db: ctx.db, userId: ctx.session.user.id }, input),
     ),
 
   listByWorkItem: protectedProcedure

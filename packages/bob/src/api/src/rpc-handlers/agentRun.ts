@@ -11,6 +11,7 @@ import { wrapHandler } from "../handlers/bridge.js";
 import {
   agentRunGet,
   agentRunList,
+  agentRunListAll,
   agentRunListByWorkItem,
 } from "../handlers/agentRun.js";
 
@@ -26,6 +27,12 @@ export const makeAgentRunRpcHandlers = (ctx: HandlerContext) => ({
   }: {
     payload: { workspaceId: string; limit: number };
   }) => wrapHandler(agentRunList, ctx, payload, "agentRun"),
+
+  "agentRun.listAll": ({
+    payload,
+  }: {
+    payload: { limit: number };
+  }) => wrapHandler(agentRunListAll, ctx, payload, "agentRun"),
 
   "agentRun.listByWorkItem": ({
     payload,

@@ -89,6 +89,8 @@ export const chatConversations = pgTable(
     planningProjectId: t.uuid("planning_project_id"),
     planningProjectName: t.text("planning_project_name"),
     planningLaunchContext: t.json("planning_launch_context"),
+    retryCount: t.integer().notNull().default(0),
+    interruptedAt: t.timestamp({ mode: "string", withTimezone: true }),
     createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
     updatedAt: t.timestamp({ mode: "string", withTimezone: true }),
   }),

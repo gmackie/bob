@@ -13,10 +13,12 @@ import {
   notifications,
   planDraftDependencies,
   planDrafts,
+  projects,
   pullRequests,
   taskRuns,
   workItemArtifacts,
   workItems,
+  workspaceMembers,
 } from "@bob/db/schema";
 
 import { suggestAgent } from "../services/dispatch/agentHeuristics";
@@ -885,4 +887,149 @@ export async function dispatchResetPipelineState(
     .where(eq(dispatchItems.id, input.itemId));
 
   return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Execution batch — dispatch work items directly (no plan drafts needed)
+// ---------------------------------------------------------------------------
+
+function formatWorkItemIdentifier(opts: {
+  projectKey: string | null;
+  sequenceNumber: number;
+  id: string;
+}): string {
+  if (opts.projectKey) return `${opts.projectKey}-${opts.sequenceNumber}`;
+  return opts.id.slice(0, 8);
+}
+
+async function getNextSequenceNumber(db: any, workspaceId: string): Promise<number> {
+  const [row] = await db
+    .select({ max: sql<number>`coalesce(max(${workItems.sequenceNumber}), 0)` })
+    .from(workItems)
+    .where(eq(workItems.workspaceId, workspaceId));
+  return (row?.max ?? 0) + 1;
+}
+
+export async function dispatchExecutionBatch(
+  ctx: HandlerContext,
+  input: {
+    workspaceId: string;
+    agentType: string;
+    concurrency: number;
+    items: Array<{
+      workItemId?: string;
+      title?: string;
+      description?: string;
+    }>;
+  },
+) {
+  const membership = await ctx.db.query.workspaceMembers.findFirst({
+    where: and(
+      eq(workspaceMembers.workspaceId, input.workspaceId),
+      eq(workspaceMembers.userId, ctx.userId),
+    ),
+    columns: { id: true },
+  });
+  if (!membership) throw new TRPCError({ code: "NOT_FOUND" });
+
+  const gatewayUrl = process.env.GATEWAY_URL;
+  const nudgeSecret = process.env.NUDGE_SHARED_SECRET;
+
+  const results: Array<{
+    sessionId: string;
+    workItemId: string;
+    identifier: string;
+    status: string;
+  }> = [];
+
+  let nextSeq = await getNextSequenceNumber(ctx.db, input.workspaceId);
+
+  for (const item of input.items) {
+    let wiId = item.workItemId;
+    let wiTitle = item.title ?? "";
+    let wiDescription = item.description;
+    let identifier = "";
+
+    if (wiId) {
+      const existing = await ctx.db.query.workItems.findFirst({
+        where: eq(workItems.id, wiId),
+        with: { project: { columns: { key: true } } },
+      });
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: `Work item ${wiId} not found` });
+      wiTitle = existing.title;
+      wiDescription = wiDescription ?? existing.description;
+      identifier = formatWorkItemIdentifier({
+        projectKey: (existing as any).project?.key ?? null,
+        sequenceNumber: existing.sequenceNumber,
+        id: existing.id,
+      });
+    } else {
+      if (!wiTitle) throw new TRPCError({ code: "BAD_REQUEST", message: "Either workItemId or title is required" });
+
+      const [newWi] = await ctx.db
+        .insert(workItems)
+        .values({
+          ownerUserId: ctx.userId,
+          workspaceId: input.workspaceId,
+          kind: "task",
+          title: wiTitle,
+          description: wiDescription ?? null,
+          status: "in_progress",
+          sequenceNumber: nextSeq++,
+        })
+        .returning();
+      wiId = newWi!.id;
+      identifier = newWi!.id.slice(0, 8);
+    }
+
+    const [session] = await ctx.db
+      .insert(chatConversations)
+      .values({
+        userId: ctx.userId,
+        workingDirectory: "/home/bob/dev/gmacko-bob",
+        agentType: input.agentType,
+        sessionType: "execution",
+        status: "pending",
+        title: `${identifier}: ${wiTitle}`,
+        workItemId: wiId,
+        workItemIdentifierSnapshot: identifier,
+      })
+      .returning();
+
+    if (gatewayUrl && nudgeSecret) {
+      try {
+        await fetch(`${gatewayUrl}/internal/nudge`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${nudgeSecret}`,
+          },
+          body: JSON.stringify({
+            sessionId: session!.id,
+            workspaceId: input.workspaceId,
+            workingDirectory: "/home/bob/dev/gmacko-bob",
+            agentType: input.agentType,
+            title: session!.title,
+            sessionType: "execution",
+            description: wiDescription ?? undefined,
+            identifier,
+          }),
+        });
+      } catch (err) {
+        console.warn("[dispatch.executionBatch] nudge failed:", err);
+      }
+    }
+
+    results.push({
+      sessionId: session!.id,
+      workItemId: wiId!,
+      identifier,
+      status: "pending",
+    });
+  }
+
+  return {
+    total: results.length,
+    items: results,
+  };
 }

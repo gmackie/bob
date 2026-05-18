@@ -6,8 +6,11 @@
  */
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, isNull, or } from "@bob/db";
+import { inArray } from "@bob/db";
 import {
   activities,
+  agentRuns,
+  chatConversations,
   comments,
   notifications,
   projects,
@@ -126,17 +129,37 @@ export async function workItemsList(
     projectRows.map((project: any) => [project.id, project]),
   );
 
+  const itemIds = items.map((i: any) => i.id);
+  const activeSessions: any[] = itemIds.length > 0
+    ? await ctx.db.query.chatConversations.findMany({
+        where: and(
+          inArray(chatConversations.workItemId, itemIds),
+          inArray(chatConversations.status, ["running", "starting", "pending"]),
+        ),
+        columns: { id: true, workItemId: true, status: true, agentType: true },
+      })
+    : [];
+  const sessionByWorkItem = new Map<string, any>(
+    activeSessions.map((s: any) => [s.workItemId, s]),
+  );
+
   return items.map((item: any) => {
     const project = item.projectId ? projectById.get(item.projectId) ?? null : null;
+    const activeSession = sessionByWorkItem.get(item.id);
 
     return {
       ...item,
-      identifier: formatWorkItemIdentifier({
-        projectKey: project?.key ?? null,
-        sequenceNumber: item.sequenceNumber,
-        id: item.id,
-      }),
+      identifier: item.externalId
+        ? item.externalId
+        : formatWorkItemIdentifier({
+            projectKey: project?.key ?? null,
+            sequenceNumber: item.sequenceNumber,
+            id: item.id,
+          }),
       project,
+      agentStatus: activeSession
+        ? { sessionId: activeSession.id, status: activeSession.status, agentType: activeSession.agentType }
+        : null,
     };
   });
 }
@@ -684,6 +707,79 @@ export async function workItemsTaskRunExecute(
   return result;
 }
 
+export async function workItemsDispatch(
+  ctx: HandlerContext,
+  input: { workItemId: string; agentType?: string },
+) {
+  const workItem = await loadAccessibleWorkItem(
+    ctx.db,
+    ctx.userId,
+    input.workItemId,
+  );
+
+  const project = workItem.projectId
+    ? await ctx.db.query.projects.findFirst({
+        where: eq(projects.id, workItem.projectId),
+      })
+    : null;
+
+  const identifier = workItem.externalId
+    ? workItem.externalId
+    : formatWorkItemIdentifier({
+        projectKey: project?.key ?? null,
+        sequenceNumber: workItem.sequenceNumber,
+        id: workItem.id,
+      });
+
+  const agentType = input.agentType ?? "claude";
+
+  const [session] = await ctx.db
+    .insert(chatConversations)
+    .values({
+      userId: ctx.userId,
+      workingDirectory: "/home/bob/dev/gmacko-bob",
+      agentType,
+      sessionType: "execution",
+      status: "pending",
+      title: `${identifier}: ${workItem.title}`,
+      workItemId: workItem.id,
+      workItemIdentifierSnapshot: identifier,
+    })
+    .returning();
+
+  const gatewayUrl = process.env.GATEWAY_URL;
+  const nudgeSecret = process.env.NUDGE_SHARED_SECRET;
+  if (gatewayUrl && nudgeSecret) {
+    try {
+      await fetch(`${gatewayUrl}/internal/nudge`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${nudgeSecret}`,
+        },
+        body: JSON.stringify({
+          sessionId: session.id,
+          workspaceId: workItem.workspaceId,
+          workingDirectory: "/home/bob/dev/gmacko-bob",
+          agentType,
+          title: session.title,
+          sessionType: "execution",
+          description: workItem.description ?? undefined,
+          identifier,
+        }),
+      });
+    } catch (err) {
+      console.warn("[workItems.dispatch] nudge failed:", err);
+    }
+  }
+
+  return {
+    sessionId: session.id,
+    identifier,
+    status: "pending",
+  };
+}
+
 export async function workItemsTaskRunListLifecycleEvents(
   ctx: HandlerContext,
   input: { workItemId: string; limit?: number },
@@ -711,9 +807,11 @@ export async function workItemsListRecentActivities(
   ctx: HandlerContext,
   input: { limit?: number },
 ) {
+  const limit = input.limit ?? 50;
+
   const recentActivities = await ctx.db.query.activities.findMany({
     orderBy: desc(activities.createdAt),
-    limit: input.limit ?? 50,
+    limit,
     with: {
       workItem: {
         columns: {
@@ -735,7 +833,7 @@ export async function workItemsListRecentActivities(
     },
   });
 
-  return recentActivities.map((activity: any) => ({
+  const mappedActivities = recentActivities.map((activity: any) => ({
     ...activity,
     workItemTitle: activity.workItem?.title ?? null,
     workItemIdentifier: activity.workItem
@@ -746,4 +844,62 @@ export async function workItemsListRecentActivities(
         })
       : null,
   }));
+
+  if (mappedActivities.length >= limit) return mappedActivities;
+
+  try {
+    const recentRuns = await ctx.db.query.agentRuns.findMany({
+      where: inArray(agentRuns.status, ["completed", "failed"]),
+      orderBy: desc(agentRuns.completedAt),
+      limit: limit - mappedActivities.length,
+    });
+
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const runWorkItemIds = recentRuns
+      .map((r: any) => r.workItemId)
+      .filter((id: unknown): id is string => typeof id === "string" && uuidRe.test(id));
+    const runWorkItems: Map<string, any> = new Map();
+    if (runWorkItemIds.length > 0) {
+      const wiRows = await ctx.db.query.workItems.findMany({
+        where: inArray(workItems.id, runWorkItemIds),
+        columns: { id: true, title: true, projectId: true, sequenceNumber: true },
+        with: { project: { columns: { id: true, key: true, name: true } } },
+      });
+      for (const wi of wiRows) runWorkItems.set(wi.id, wi);
+    }
+
+    const runActivities = recentRuns.map((run: any) => {
+      const isUuid = run.workItemId && uuidRe.test(run.workItemId);
+      const wi = isUuid ? runWorkItems.get(run.workItemId) : null;
+      return {
+        id: `run-${run.id}`,
+        workItemId: isUuid ? (run.workItemId ?? null) : null,
+        userId: null,
+        type: run.status === "completed" ? "agent_completed" : "agent_failed",
+        fromValue: "running",
+        toValue: run.status,
+        metadata: { agentType: run.agentType, sessionId: run.sessionId },
+        createdAt: run.completedAt ?? run.createdAt,
+        workItemTitle: wi?.title ?? (isUuid ? null : run.workItemId) ?? null,
+        workItemIdentifier: wi
+          ? formatWorkItemIdentifier({
+              projectKey: (wi as any).project?.key ?? null,
+              sequenceNumber: wi.sequenceNumber,
+              id: wi.id,
+            })
+          : null,
+      };
+    });
+
+    const combined = [...mappedActivities, ...runActivities];
+    combined.sort((a, b) => {
+      const ta = new Date(a.createdAt).getTime();
+      const tb = new Date(b.createdAt).getTime();
+      return tb - ta;
+    });
+
+    return combined.slice(0, limit);
+  } catch {
+    return mappedActivities;
+  }
 }
