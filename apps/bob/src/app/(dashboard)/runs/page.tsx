@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 
@@ -17,6 +17,7 @@ const STATUS_COLORS: Record<string, string> = {
   running: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
   completed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
   failed: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+  interrupted: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
 };
 
 function formatDuration(ms: number): string {
@@ -40,6 +41,7 @@ function isNodeOnline(lastHeartbeat: string | null): boolean {
 
 export default function RunsPage() {
   const trpc = useTRPC();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const workspaceId = searchParams?.get("workspace") ?? "";
   const [fleetExpanded, setFleetExpanded] = useState(false);
@@ -50,13 +52,17 @@ export default function RunsPage() {
   const workspaces = (workspaceMemberships ?? [])
     .map((m: any) => m.workspace)
     .filter(Boolean);
-  const activeWorkspaceId = workspaceId || workspaces?.[0]?.id || "";
 
   const { data: runs, isLoading } = useQuery(
-    trpc.agentRun.list.queryOptions(
-      { workspaceId: activeWorkspaceId, limit: 50 },
-      { enabled: !!activeWorkspaceId, refetchInterval: 10_000 },
-    ),
+    workspaceId
+      ? trpc.agentRun.list.queryOptions(
+          { workspaceId, limit: 50 },
+          { refetchInterval: 10_000 },
+        )
+      : trpc.agentRun.listAll.queryOptions(
+          { limit: 50 },
+          { refetchInterval: 10_000 },
+        ),
   );
 
   const { data: instances } = useQuery(
@@ -84,6 +90,37 @@ export default function RunsPage() {
           What your agents did, whether it worked, and what changed.
         </p>
       </div>
+
+      {/* Workspace filter */}
+      {workspaces.length > 1 && (
+        <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1">
+          <button
+            onClick={() => router.push("/runs")}
+            className={cn(
+              "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+              !workspaceId
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+            )}
+          >
+            All
+          </button>
+          {workspaces.map((ws: any) => (
+            <button
+              key={ws.id}
+              onClick={() => router.push(`/runs?workspace=${ws.id}`)}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                ws.id === workspaceId
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+              )}
+            >
+              {ws.name || ws.machineId || ws.id.slice(0, 8)}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Fleet Status Bar */}
       <button
@@ -219,7 +256,9 @@ export default function RunsPage() {
         </Card>
       ) : (
         <div className="flex flex-col gap-2">
-          {runs.map((run: any) => (
+          {runs.map((run: any) => {
+            const title = run.session?.title ?? run.workItemId ?? "Untitled";
+            return (
             <Link key={run.id} href={`/runs/${run.id}`}>
               <Card className="hover:border-primary/30 flex items-center gap-4 p-4 transition-colors">
                 <Badge className={cn("shrink-0 text-xs font-medium", STATUS_COLORS[run.status] ?? STATUS_COLORS.queued)}>
@@ -227,11 +266,11 @@ export default function RunsPage() {
                 </Badge>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-medium text-neutral-500">
-                      {run.workItemId}
+                    <span className="truncate text-sm font-medium">
+                      {title}
                     </span>
                     <span className="text-muted-foreground text-xs">via</span>
-                    <span className="text-sm font-medium">{run.agentType}</span>
+                    <span className="text-xs font-medium text-muted-foreground">{run.agentType}</span>
                   </div>
                   {run.summary && (
                     <div className="text-muted-foreground mt-0.5 flex gap-3 text-xs">
@@ -253,7 +292,8 @@ export default function RunsPage() {
                 </span>
               </Card>
             </Link>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

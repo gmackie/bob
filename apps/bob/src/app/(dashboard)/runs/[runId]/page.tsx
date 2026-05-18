@@ -24,6 +24,7 @@ const STATUS_COLORS: Record<string, string> = {
   running: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
   completed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
   failed: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+  interrupted: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
 };
 
 const STATUS_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -97,13 +98,14 @@ export default function RunDetailPage({
   const duration = getSummary(run, "duration_ms") as number | null;
   const filesChanged = (getSummary(run, "files_changed") as number) ?? 0;
   const exitCode = getSummary(run, "exit_code") as number | null;
+  const runTitle = (run as any).session?.title ?? run.workItemId ?? "Untitled";
 
   return (
     <div className="flex flex-col gap-6 p-6">
       <Breadcrumbs
         items={[
           { label: "Runs", href: "/runs" },
-          { label: run.workItemId },
+          { label: runTitle },
         ]}
       />
 
@@ -120,9 +122,13 @@ export default function RunDetailPage({
               )}
             />
             <h1 className="font-display text-2xl font-bold tracking-tight">
-              <Link href={`/work-items/${run.workItemId}`} className="hover:text-primary">
-                {run.workItemId}
-              </Link>
+              {run.workItemId ? (
+                <Link href={`/work-items/${run.workItemId}`} className="hover:text-primary">
+                  {runTitle}
+                </Link>
+              ) : (
+                runTitle
+              )}
             </h1>
             <Badge className={cn("text-xs font-medium", STATUS_COLORS[run.status])}>
               {run.status}
@@ -174,6 +180,12 @@ export default function RunDetailPage({
 function SummaryTab({ run, duration, filesChanged, exitCode }: {
   run: any; duration: number | null; filesChanged: number; exitCode: number | null;
 }) {
+  const computedDuration = duration ?? (
+    run.startedAt && run.completedAt
+      ? new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime()
+      : null
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -183,7 +195,7 @@ function SummaryTab({ run, duration, filesChanged, exitCode }: {
         </Card>
         <Card className="p-4">
           <p className="text-muted-foreground text-xs font-medium uppercase tracking-wider">Duration</p>
-          <p className="mt-1 text-lg font-semibold">{duration ? formatDuration(duration) : "—"}</p>
+          <p className="mt-1 text-lg font-semibold">{computedDuration ? formatDuration(computedDuration) : "—"}</p>
         </Card>
         <Card className="p-4">
           <p className="text-muted-foreground text-xs font-medium uppercase tracking-wider">Files Changed</p>
@@ -196,6 +208,16 @@ function SummaryTab({ run, duration, filesChanged, exitCode }: {
           </p>
         </Card>
       </div>
+
+      {run.summary?.reason && (
+        <Card className="border-amber-500/30 bg-amber-500/5 p-4">
+          <p className="text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">
+            Failure Reason
+          </p>
+          <p className="mt-1 text-sm text-foreground">{run.summary.reason}</p>
+        </Card>
+      )}
+
       <Card className="p-4">
         <h3 className="text-muted-foreground mb-3 text-xs font-medium uppercase tracking-wider">Run Details</h3>
         <div className="grid grid-cols-2 gap-y-2 text-sm">
@@ -203,7 +225,18 @@ function SummaryTab({ run, duration, filesChanged, exitCode }: {
           <div><span className="text-muted-foreground">Agent:</span> {run.agentType}</div>
           <div><span className="text-muted-foreground">Started:</span> {run.startedAt ? new Date(run.startedAt).toLocaleString() : "—"}</div>
           <div><span className="text-muted-foreground">Completed:</span> {run.completedAt ? new Date(run.completedAt).toLocaleString() : "—"}</div>
-          <div><span className="text-muted-foreground">Work Item:</span> <Link href={`/work-items/${run.workItemId}`} className="text-primary hover:underline">{run.workItemId}</Link></div>
+          <div>
+            <span className="text-muted-foreground">Work Item:</span>{" "}
+            {run.workItemId ? (
+              <Link href={`/work-items/${run.workItemId}`} className="text-primary hover:underline">{run.workItemId}</Link>
+            ) : "—"}
+          </div>
+          {run.sessionId && (
+            <div>
+              <span className="text-muted-foreground">Session:</span>{" "}
+              <span className="font-mono text-xs">{run.sessionId.slice(0, 8)}</span>
+            </div>
+          )}
           <div><span className="text-muted-foreground">Workspace:</span> <span className="font-mono text-xs">{run.workspaceId}</span></div>
         </div>
       </Card>
@@ -214,9 +247,21 @@ function SummaryTab({ run, duration, filesChanged, exitCode }: {
 // ── Chat Tab ──────────────────────────────────────────────────────────
 
 function ChatTab({ run }: { run: any }) {
-  const logArtifact = run.artifacts?.find((a: any) => a.type === "log");
+  const trpc = useTRPC();
 
-  if (!logArtifact) {
+  const { data: events } = useQuery({
+    ...trpc.session.getEvents.queryOptions(
+      { sessionId: run.sessionId, limit: 200 },
+    ),
+    enabled: !!run.sessionId,
+  });
+
+  const logArtifact = run.artifacts?.find((a: any) => a.type === "log");
+  const outputEvents = (events ?? []).filter(
+    (e: any) => e.eventType === "output_chunk" || e.eventType === "assistant",
+  );
+
+  if (!run.sessionId && !logArtifact) {
     return (
       <Card className="p-8 text-center">
         <p className="text-muted-foreground text-sm">
@@ -227,12 +272,61 @@ function ChatTab({ run }: { run: any }) {
   }
 
   return (
-    <Card className="p-4">
-      <h3 className="mb-3 text-sm font-medium">Agent Output</h3>
-      <pre className="overflow-x-auto rounded bg-muted p-4 font-mono text-xs leading-relaxed max-h-[600px] overflow-y-auto">
-        {logArtifact.metadata?.content || `${logArtifact.metadata?.lines ?? 0} lines captured`}
-      </pre>
-    </Card>
+    <div className="flex flex-col gap-4">
+      {outputEvents.length > 0 && (
+        <Card className="p-4">
+          <h3 className="mb-3 text-sm font-medium">Session Output</h3>
+          <div className="max-h-[600px] overflow-y-auto space-y-2">
+            {outputEvents.map((evt: any) => {
+              const text = typeof evt.payload === "string"
+                ? evt.payload
+                : evt.payload?.text ?? evt.payload?.content ?? JSON.stringify(evt.payload);
+              return (
+                <div key={evt.id} className="rounded bg-muted/50 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap">
+                  {text}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {outputEvents.length === 0 && run.sessionId && (
+        <Card className="p-4">
+          <h3 className="mb-3 text-sm font-medium">Session Events</h3>
+          {(events ?? []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">No events recorded for this session.</p>
+          ) : (
+            <div className="max-h-[600px] overflow-y-auto space-y-1">
+              {(events as any[]).map((evt: any) => (
+                <div key={evt.id} className="flex items-center gap-3 py-1.5 text-xs">
+                  <span className="text-muted-foreground shrink-0 font-mono w-16">
+                    #{evt.seq}
+                  </span>
+                  <Badge variant="slate" className="text-[9px] shrink-0">
+                    {evt.eventType}
+                  </Badge>
+                  <span className="text-muted-foreground truncate">
+                    {typeof evt.payload === "string"
+                      ? evt.payload.slice(0, 120)
+                      : JSON.stringify(evt.payload).slice(0, 120)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {logArtifact && (
+        <Card className="p-4">
+          <h3 className="mb-3 text-sm font-medium">Log Artifact</h3>
+          <pre className="overflow-x-auto rounded bg-muted p-4 font-mono text-xs leading-relaxed max-h-[600px] overflow-y-auto">
+            {logArtifact.metadata?.content || `${logArtifact.metadata?.lines ?? 0} lines captured`}
+          </pre>
+        </Card>
+      )}
+    </div>
   );
 }
 

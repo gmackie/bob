@@ -16,20 +16,19 @@ function formatUptime(createdAt: Date | string): string {
   return `${diffDays}d ${diffHr % 24}h`;
 }
 
-type StatusColor = "running" | "starting" | "stopped" | "error";
-
-const statusDot: Record<StatusColor, string> = {
-  running: "bg-blue-500 animate-pulse",
-  starting: "bg-blue-400 animate-pulse",
-  stopped: "bg-slate-400",
-  error: "bg-rose-500",
-};
-
 export function AgentStatusBar() {
   const trpc = useTRPC();
-  const { data: instances, isLoading } = useQuery(
+
+  const { data: instances, isLoading: instancesLoading } = useQuery(
     trpc.instance.list.queryOptions(),
   );
+
+  const { data: allRuns, isLoading: runsLoading } = useQuery({
+    ...trpc.agentRun.listAll.queryOptions({ limit: 100 }),
+    refetchInterval: 10_000,
+  });
+
+  const isLoading = instancesLoading && runsLoading;
 
   if (isLoading) {
     return (
@@ -37,25 +36,28 @@ export function AgentStatusBar() {
     );
   }
 
-  const active = instances?.filter(
+  const runs = (allRuns ?? []) as any[];
+  const runningCount = runs.filter((r) => r.status === "running").length;
+  const completedCount = runs.filter((r) => r.status === "completed").length;
+  const failedCount = runs.filter((r) => r.status === "failed" || r.status === "interrupted").length;
+  const queuedCount = runs.filter((r) => r.status === "queued").length;
+
+  const activeInstances = instances?.filter(
     (i) => i.status === "running" || i.status === "starting",
   ) ?? [];
-  const idle = instances?.filter((i) => i.status === "stopped") ?? [];
-  const errored = instances?.filter((i) => i.status === "error") ?? [];
 
-  const hasError = errored.length > 0;
-  const hasIdle = idle.length > 0;
-  const allRunning = active.length > 0 && !hasError && !hasIdle;
+  const hasFailures = failedCount > 0;
+  const hasRunning = runningCount > 0 || activeInstances.length > 0;
 
-  const barColor = hasError
+  const barColor = hasFailures
     ? "border-rose-500/20 bg-rose-50 dark:bg-rose-950/20"
-    : hasIdle
-      ? "border-amber-500/20 bg-amber-50 dark:bg-amber-950/20"
-      : allRunning
-        ? "border-blue-500/20 bg-blue-50 dark:bg-blue-950/20"
+    : hasRunning
+      ? "border-blue-500/20 bg-blue-50 dark:bg-blue-950/20"
+      : runs.length > 0
+        ? "border-green-500/20 bg-green-50 dark:bg-green-950/20"
         : "border-border bg-card";
 
-  const isEmpty = !instances || instances.length === 0;
+  const totalSessions = runs.length;
 
   return (
     <div
@@ -64,62 +66,67 @@ export function AgentStatusBar() {
         barColor,
       )}
     >
-      {isEmpty ? (
+      {totalSessions === 0 && activeInstances.length === 0 ? (
         <span className="font-body text-sm text-muted-foreground">
-          No active agents
+          No sessions tracked
         </span>
       ) : (
         <>
-          {/* Summary counts */}
           <div className="flex items-center gap-3 font-body text-sm text-muted-foreground">
-            {active.length > 0 && (
-              <span>
+            {runningCount > 0 && (
+              <span className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-amber-500 animate-pulse" />
                 <span className="font-semibold text-foreground">
-                  {active.length}
+                  {runningCount}
                 </span>{" "}
-                agent{active.length !== 1 ? "s" : ""} running
+                running
               </span>
             )}
-            {idle.length > 0 && (
+            {queuedCount > 0 && (
               <>
                 <span className="text-border">·</span>
                 <span>
                   <span className="font-semibold text-foreground">
-                    {idle.length}
+                    {queuedCount}
                   </span>{" "}
-                  idle
+                  queued
                 </span>
               </>
             )}
-            {errored.length > 0 && (
+            {completedCount > 0 && (
               <>
                 <span className="text-border">·</span>
-                <span>
-                  <span className="font-semibold text-rose-600 dark:text-rose-400">
-                    {errored.length}
+                <span className="flex items-center gap-1.5">
+                  <span className="size-2 rounded-full bg-green-500" />
+                  <span className="font-semibold text-foreground">
+                    {completedCount}
                   </span>{" "}
-                  errored
+                  completed
+                </span>
+              </>
+            )}
+            {failedCount > 0 && (
+              <>
+                <span className="text-border">·</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="size-2 rounded-full bg-rose-500" />
+                  <span className="font-semibold text-rose-600 dark:text-rose-400">
+                    {failedCount}
+                  </span>{" "}
+                  failed
                 </span>
               </>
             )}
           </div>
 
-          {/* Agent pills */}
-          <div className="ml-auto flex items-center gap-2">
-            {instances
-              ?.filter((i) => i.status !== "stopped")
-              .map((instance) => (
+          {activeInstances.length > 0 && (
+            <div className="ml-auto flex items-center gap-2">
+              {activeInstances.map((instance) => (
                 <div
                   key={instance.id}
                   className="flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1"
                 >
-                  <span
-                    className={cn(
-                      "h-2 w-2 rounded-full",
-                      statusDot[instance.status as StatusColor] ??
-                        statusDot.stopped,
-                    )}
-                  />
+                  <span className="size-2 rounded-full bg-blue-500 animate-pulse" />
                   <span className="font-mono text-xs text-foreground">
                     {instance.agentType}
                   </span>
@@ -128,7 +135,8 @@ export function AgentStatusBar() {
                   </span>
                 </div>
               ))}
-          </div>
+            </div>
+          )}
         </>
       )}
     </div>

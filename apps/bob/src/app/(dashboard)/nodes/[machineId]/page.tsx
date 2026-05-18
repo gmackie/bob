@@ -5,10 +5,19 @@ import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { cn } from "@gmacko/core/ui";
+import { Badge } from "@gmacko/core/ui/badge";
 import { Card } from "@gmacko/core/ui/card";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { useTRPC } from "~/trpc/react";
+
+const STATUS_COLORS: Record<string, string> = {
+  queued: "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-300",
+  running: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+  completed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+  failed: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+  interrupted: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
+};
 
 function isNodeOnline(lastHeartbeat: string | null): boolean {
   if (!lastHeartbeat) return false;
@@ -85,12 +94,23 @@ export default function NodeDetailPage({
     ? allRepos.filter((r) => r.workspaceId === workspace.id)
     : [];
 
+  const { data: runs } = useQuery(
+    trpc.agentRun.list.queryOptions(
+      { workspaceId: workspace?.id ?? "", limit: 30 },
+      { enabled: !!workspace?.id, refetchInterval: 10_000 },
+    ),
+  );
+
   const agents: Array<{ name: string; config: any }> = workspace?.agentConfigs
     ? Object.entries(workspace.agentConfigs).map(([name, config]) => ({
         name,
         config,
       }))
     : [];
+
+  const activeRuns = (runs ?? []).filter((r: any) => r.status === "running");
+  const completedRuns = (runs ?? []).filter((r: any) => r.status === "completed");
+  const failedRuns = (runs ?? []).filter((r: any) => r.status === "failed");
 
   const online = workspace ? isNodeOnline(workspace.lastHeartbeat) : false;
 
@@ -236,19 +256,35 @@ export default function NodeDetailPage({
             {/* Quick stats */}
             <div className="grid grid-cols-2 gap-3">
               <Card className="p-4 text-center">
+                <div className={cn("text-2xl font-semibold", activeRuns.length > 0 ? "text-amber-500" : "text-foreground")}>
+                  {activeRuns.length}
+                </div>
+                <div className="mt-1 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                  Running
+                </div>
+              </Card>
+              <Card className="p-4 text-center">
+                <div className="text-2xl font-semibold text-emerald-500">
+                  {completedRuns.length}
+                </div>
+                <div className="mt-1 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                  Completed
+                </div>
+              </Card>
+              <Card className="p-4 text-center">
+                <div className={cn("text-2xl font-semibold", failedRuns.length > 0 ? "text-red-500" : "text-foreground")}>
+                  {failedRuns.length}
+                </div>
+                <div className="mt-1 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                  Failed
+                </div>
+              </Card>
+              <Card className="p-4 text-center">
                 <div className="text-2xl font-semibold text-foreground">
                   {agents.length}
                 </div>
                 <div className="mt-1 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
                   Agents
-                </div>
-              </Card>
-              <Card className="p-4 text-center">
-                <div className="text-2xl font-semibold text-foreground">
-                  {nodeRepos.length}
-                </div>
-                <div className="mt-1 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
-                  Repos
                 </div>
               </Card>
             </div>
@@ -316,6 +352,49 @@ export default function NodeDetailPage({
                         : "default config"}
                     </div>
                   </Card>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Recent Sessions */}
+          <section>
+            <h2 className="font-display text-lg font-semibold text-foreground">
+              Recent Sessions
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Agent sessions running on this node.
+            </p>
+
+            {!runs?.length ? (
+              <Card className="mt-4 p-6 text-center">
+                <p className="text-sm text-muted-foreground">
+                  No sessions recorded yet. Sessions will appear here when agents run on this node.
+                </p>
+              </Card>
+            ) : (
+              <div className="mt-4 flex flex-col gap-2">
+                {(runs as any[]).map((run: any) => (
+                  <Link key={run.id} href={`/runs/${run.id}`}>
+                    <Card className="hover:border-primary/30 flex items-center gap-3 p-3 transition-colors">
+                      <Badge className={cn("shrink-0 text-[10px] font-medium", STATUS_COLORS[run.status] ?? STATUS_COLORS.queued)}>
+                        {run.status}
+                      </Badge>
+                      <div className="min-w-0 flex-1">
+                        <span className="text-sm font-medium truncate block">
+                          {run.workItemId}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          via {run.agentType} · {formatRelative(run.createdAt)}
+                        </span>
+                      </div>
+                      {run.completedAt && run.startedAt && (
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {Math.round((new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime()) / 1000)}s
+                        </span>
+                      )}
+                    </Card>
+                  </Link>
                 ))}
               </div>
             )}

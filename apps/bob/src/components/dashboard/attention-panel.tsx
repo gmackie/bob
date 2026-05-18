@@ -25,16 +25,36 @@ const categoryConfig: Record<
 export function AttentionPanel() {
   const trpc = useTRPC();
 
-  // Fetch open PRs — candidates for review/approve attention
   const { data: openPrs } = useQuery({
     ...trpc.pullRequest.list.queryOptions({ status: "open", limit: 20 }),
     staleTime: 30_000,
   });
 
-  // Build attention items from the fetched data
+  const { data: allRuns } = useQuery({
+    ...trpc.agentRun.listAll.queryOptions({ limit: 50 }),
+    staleTime: 15_000,
+  });
+
   const items: AttentionItem[] = [];
 
-  // PRs awaiting review (open PRs are attention-worthy)
+  if (allRuns) {
+    const failedRuns = (allRuns as any[]).filter(
+      (r) => r.status === "failed" || r.status === "interrupted",
+    );
+    for (const run of failedRuns) {
+      const title = run.session?.title ?? run.workItemId ?? "Untitled run";
+      items.push({
+        id: `run-${run.id}`,
+        category: "failed",
+        title: typeof title === "string" && title.length > 60
+          ? title.slice(0, 60) + "..."
+          : title,
+        description: `${run.agentType} · ${run.status}`,
+        href: `/runs/${run.id}`,
+      });
+    }
+  }
+
   if (openPrs) {
     for (const pr of openPrs) {
       items.push({

@@ -15,9 +15,11 @@ function dotColor(type: string): string {
       return "bg-blue-500";
     case "build_passed":
     case "deploy_completed":
+    case "agent_completed":
       return "bg-emerald-500";
     case "build_failed":
     case "deploy_failed":
+    case "agent_failed":
       return "bg-rose-500";
     case "pr_created":
     case "pr_merged":
@@ -56,6 +58,10 @@ function eventDescription(activity: {
       return "Build passed";
     case "build_failed":
       return "Build failed";
+    case "agent_completed":
+      return "Agent run completed";
+    case "agent_failed":
+      return "Agent run failed";
     case "deploy_completed":
       return "Deploy completed";
     case "deploy_failed":
