@@ -1,39 +1,188 @@
+type EmailProvider = "resend" | "sendgrid" | "none";
+type RealtimeProvider = "pusher" | "ably" | "none";
+type StorageProvider = "uploadthing" | "none";
+
+function readEnv(...values: Array<string | undefined>): string | undefined {
+  return values.find((value) => value !== undefined && value !== "");
+}
+
+function readBooleanEnv(
+  name: string,
+  values: Array<string | undefined>,
+  defaultValue = false,
+): boolean {
+  const value = readEnv(...values);
+
+  if (value === undefined) {
+    return defaultValue;
+  }
+
+  if (value === "true" || value === "1") {
+    return true;
+  }
+
+  if (value === "false" || value === "0") {
+    return false;
+  }
+
+  throw new Error(
+    `Invalid ${name}: expected "true", "false", "1", or "0".`,
+  );
+}
+
+function readProviderEnv<TProvider extends string>(
+  name: string,
+  values: Array<string | undefined>,
+  providers: readonly TProvider[],
+  defaultValue: TProvider,
+): TProvider {
+  const value = readEnv(...values);
+
+  if (value === undefined) {
+    return defaultValue;
+  }
+
+  if (providers.includes(value as TProvider)) {
+    return value as TProvider;
+  }
+
+  const providersList = providers
+    .map((provider) => `"${provider}"`)
+    .join(", ");
+
+  throw new Error(
+    `Invalid ${name}: expected one of ${providersList}.`,
+  );
+}
+
+function assertProviderConfigured(
+  integrationName: string,
+  enabled: boolean,
+  provider: string,
+): void {
+  if (enabled && provider === "none") {
+    throw new Error(
+      `${integrationName} integration is enabled but provider is "none".`,
+    );
+  }
+}
+
+const emailProvider = readProviderEnv<EmailProvider>(
+  "BOB_EMAIL_PROVIDER",
+  [
+    process.env.BOB_EMAIL_PROVIDER,
+    process.env.NEXT_PUBLIC_BOB_EMAIL_PROVIDER,
+    process.env.EXPO_PUBLIC_BOB_EMAIL_PROVIDER,
+  ],
+  ["resend", "sendgrid", "none"],
+  "none",
+);
+const emailEnabled = readBooleanEnv("BOB_EMAIL_ENABLED", [
+  process.env.BOB_EMAIL_ENABLED,
+  process.env.NEXT_PUBLIC_BOB_EMAIL_ENABLED,
+  process.env.EXPO_PUBLIC_BOB_EMAIL_ENABLED,
+]);
+
+const realtimeProvider = readProviderEnv<RealtimeProvider>(
+  "BOB_REALTIME_PROVIDER",
+  [
+    process.env.BOB_REALTIME_PROVIDER,
+    process.env.NEXT_PUBLIC_BOB_REALTIME_PROVIDER,
+    process.env.EXPO_PUBLIC_BOB_REALTIME_PROVIDER,
+  ],
+  ["pusher", "ably", "none"],
+  "none",
+);
+const realtimeEnabled = readBooleanEnv("BOB_REALTIME_ENABLED", [
+  process.env.BOB_REALTIME_ENABLED,
+  process.env.NEXT_PUBLIC_BOB_REALTIME_ENABLED,
+  process.env.EXPO_PUBLIC_BOB_REALTIME_ENABLED,
+]);
+
+const storageProvider = readProviderEnv<StorageProvider>(
+  "BOB_STORAGE_PROVIDER",
+  [
+    process.env.BOB_STORAGE_PROVIDER,
+    process.env.NEXT_PUBLIC_BOB_STORAGE_PROVIDER,
+    process.env.EXPO_PUBLIC_BOB_STORAGE_PROVIDER,
+  ],
+  ["uploadthing", "none"],
+  "none",
+);
+const storageEnabled = readBooleanEnv("BOB_STORAGE_ENABLED", [
+  process.env.BOB_STORAGE_ENABLED,
+  process.env.NEXT_PUBLIC_BOB_STORAGE_ENABLED,
+  process.env.EXPO_PUBLIC_BOB_STORAGE_ENABLED,
+]);
+
+assertProviderConfigured("Email", emailEnabled, emailProvider);
+assertProviderConfigured("Realtime", realtimeEnabled, realtimeProvider);
+assertProviderConfigured("Storage", storageEnabled, storageProvider);
+
 export const integrations = {
-  sentry: false,
-  posthog: false,
+  sentry: readBooleanEnv("BOB_SENTRY_ENABLED", [
+    process.env.BOB_SENTRY_ENABLED,
+    process.env.NEXT_PUBLIC_BOB_SENTRY_ENABLED,
+    process.env.EXPO_PUBLIC_BOB_SENTRY_ENABLED,
+  ]),
+  posthog: readBooleanEnv("BOB_POSTHOG_ENABLED", [
+    process.env.BOB_POSTHOG_ENABLED,
+    process.env.NEXT_PUBLIC_BOB_POSTHOG_ENABLED,
+    process.env.EXPO_PUBLIC_BOB_POSTHOG_ENABLED,
+  ]),
 
   // Payments - Web (default OFF)
-  stripe: false,
+  stripe: readBooleanEnv("BOB_STRIPE_ENABLED", [
+    process.env.BOB_STRIPE_ENABLED,
+    process.env.NEXT_PUBLIC_BOB_STRIPE_ENABLED,
+    process.env.EXPO_PUBLIC_BOB_STRIPE_ENABLED,
+  ]),
 
   // Payments - Mobile (default OFF)
-  revenuecat: false,
+  revenuecat: readBooleanEnv("BOB_REVENUECAT_ENABLED", [
+    process.env.BOB_REVENUECAT_ENABLED,
+    process.env.NEXT_PUBLIC_BOB_REVENUECAT_ENABLED,
+    process.env.EXPO_PUBLIC_BOB_REVENUECAT_ENABLED,
+  ]),
 
   // Push Notifications (default OFF)
-  notifications: false,
+  notifications: readBooleanEnv("BOB_NOTIFICATIONS_ENABLED", [
+    process.env.BOB_NOTIFICATIONS_ENABLED,
+    process.env.NEXT_PUBLIC_BOB_NOTIFICATIONS_ENABLED,
+    process.env.EXPO_PUBLIC_BOB_NOTIFICATIONS_ENABLED,
+  ]),
 
   // Communication (default OFF)
   email: {
-    enabled: false,
-    provider: "none" as "resend" | "sendgrid" | "none",
+    enabled: emailEnabled,
+    provider: emailProvider,
   },
 
   // Realtime (default OFF)
   realtime: {
-    enabled: false,
-    provider: "none" as "pusher" | "ably" | "none",
+    enabled: realtimeEnabled,
+    provider: realtimeProvider,
   },
 
   // Storage (default OFF)
   storage: {
-    enabled: false,
-    provider: "none" as "uploadthing" | "none",
+    enabled: storageEnabled,
+    provider: storageProvider,
   },
 
   // Internationalization (default OFF)
-  i18n: false,
+  i18n: readBooleanEnv("BOB_I18N_ENABLED", [
+    process.env.BOB_I18N_ENABLED,
+    process.env.NEXT_PUBLIC_BOB_I18N_ENABLED,
+    process.env.EXPO_PUBLIC_BOB_I18N_ENABLED,
+  ]),
 
   // OpenAPI documentation (default OFF)
-  openapi: false,
+  openapi: readBooleanEnv("BOB_OPENAPI_ENABLED", [
+    process.env.BOB_OPENAPI_ENABLED,
+    process.env.NEXT_PUBLIC_BOB_OPENAPI_ENABLED,
+    process.env.EXPO_PUBLIC_BOB_OPENAPI_ENABLED,
+  ]),
 } as const;
 
 export type Integrations = typeof integrations;
