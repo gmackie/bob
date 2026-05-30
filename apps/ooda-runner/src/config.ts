@@ -10,6 +10,8 @@ export const RunnerConfigSchema = z.object({
   runnerName: z.string().default(`runner-${hostname()}`),
   port: z.coerce.number().default(3001),
   bobGatewayUrl: z.string().optional(),
+  /** Bob HTTP base URL for the public run API (e.g. https://bob.blder.bot). */
+  bobApiUrl: z.string().optional(),
   bobApiKey: z.string().optional(),
   bobWorkspaceId: z.string().optional(),
   bobDevDir: z.string().default(join(homedir(), "dev")),
@@ -26,6 +28,7 @@ export function loadConfig(): RunnerConfig {
     runnerName: process.env.OODA_RUNNER_NAME,
     port: process.env.OODA_RUNNER_PORT,
     bobGatewayUrl: process.env.BOB_GATEWAY_URL,
+    bobApiUrl: process.env.BOB_API_URL,
     bobApiKey: process.env.BOB_API_KEY,
     bobWorkspaceId: process.env.BOB_WORKSPACE_ID,
     bobDevDir: process.env.BOB_DEV_DIR,

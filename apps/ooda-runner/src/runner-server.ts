@@ -17,6 +17,7 @@ import {
   type RunnerTRPCClient,
 } from "./trpc-client";
 import { BobGatewayConnector } from "./bob-gateway";
+import { BobRunReporter } from "./bob-run-reporter";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const POLL_INTERVAL_MS = 2_000;
@@ -87,10 +88,19 @@ export class RunnerServer {
   private activeSessions = new Set<string>();
   private activePromotions = new Set<string>();
   private bobGateway: BobGatewayConnector | null = null;
+  private bobReporter: BobRunReporter;
 
   constructor(private config: RunnerConfig) {
     this.sessions = new SessionManager();
     this.trpc = createRunnerTRPCClient(config.serverUrl);
+
+    // Report run status + output to Bob's public API so OODA-originated work is
+    // monitorable/reviewable in the Bob dashboard. No-ops unless bob* env is set.
+    this.bobReporter = new BobRunReporter({
+      baseUrl: config.bobApiUrl,
+      apiKey: config.bobApiKey,
+      workspaceId: config.bobWorkspaceId,
+    });
 
     // Register available adapters
     this.adapters = new Map();
@@ -314,6 +324,11 @@ export class RunnerServer {
   }): Promise<void> {
     console.log(`[runner] executing session ${session.id}`);
 
+    // Bob run reporting state (best-effort; never breaks execution).
+    let bobRunId: string | null = null;
+    let bobLog = "";
+    let bobFlush: ReturnType<typeof setInterval> | null = null;
+
     try {
       // Get the prompt from session events
       const events = await this.trpc.runner.getSessionEvents.query({
@@ -332,6 +347,19 @@ export class RunnerServer {
         throw new Error(`Thread not found: ${session.threadId}`);
       }
 
+      // Open a Bob run so this work is visible in the Bob dashboard, and flush
+      // accumulated output periodically so progress is reviewable mid-run.
+      bobRunId = await this.bobReporter.startRun({
+        workItemId: thread.slug ?? session.id,
+        agentType: session.adapterId,
+        title: thread.title,
+      });
+      if (bobRunId) {
+        bobFlush = setInterval(() => {
+          void this.bobReporter.pushLog(bobRunId, bobLog);
+        }, 10_000);
+      }
+
       // Status already set to "running" by claimSession
       // Create executor and run
       const executor = this.createExecutor(session.adapterId);
@@ -344,6 +372,7 @@ export class RunnerServer {
         toolProfileId: session.toolProfileId,
         onEvent: (event) => {
           if (event.type === "stdout") {
+            bobLog += event.data;
             void this.trpc.runner.pushSessionEvent.mutate({
               sessionId: session.id,
               type: "stdout_chunk",
@@ -351,6 +380,7 @@ export class RunnerServer {
             });
           }
           if (event.type === "stderr") {
+            bobLog += event.data;
             void this.trpc.runner.pushSessionEvent.mutate({
               sessionId: session.id,
               type: "stderr_chunk",
@@ -376,6 +406,7 @@ export class RunnerServer {
 
       // Push the parsed agent response as a final stdout event
       if (result.agentResponse) {
+        bobLog += `\n${result.agentResponse}`;
         await this.trpc.runner.pushSessionEvent.mutate({
           sessionId: session.id,
           type: "stdout",
@@ -389,6 +420,15 @@ export class RunnerServer {
         status: result.exitCode === 0 ? "completed" : "failed",
         exitCode: result.exitCode,
       });
+
+      // Bob: final output + terminal status.
+      if (bobFlush) clearInterval(bobFlush);
+      await this.bobReporter.pushLog(bobRunId, bobLog);
+      await this.bobReporter.finishRun(
+        bobRunId,
+        result.exitCode === 0 ? "completed" : "failed",
+        { exitCode: result.exitCode },
+      );
 
       console.log(
         `[runner] session ${session.id} completed (exit ${result.exitCode})`,
@@ -409,7 +449,13 @@ export class RunnerServer {
           status: "failed",
         })
         .catch(() => {});
+
+      // Bob: report failure with whatever output we captured.
+      if (bobFlush) clearInterval(bobFlush);
+      await this.bobReporter.pushLog(bobRunId, bobLog);
+      await this.bobReporter.finishRun(bobRunId, "failed", { error: message });
     } finally {
+      if (bobFlush) clearInterval(bobFlush);
       this.activeSessions.delete(session.id);
     }
   }
