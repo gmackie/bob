@@ -632,6 +632,9 @@ importers:
       '@bob/execution-lib':
         specifier: workspace:*
         version: link:../execution
+      '@bob/payments':
+        specifier: workspace:*
+        version: link:../payments
       '@bob/validators':
         specifier: workspace:*
         version: link:../validators

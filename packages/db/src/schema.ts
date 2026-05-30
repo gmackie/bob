@@ -85,15 +85,29 @@ export const tenantMemberRoleEnum = pgEnum("tenant_member_role", [
   "member",
 ]);
 
-export const tenants = pgTable("tenants", (t) => ({
-  id: t.uuid().notNull().primaryKey().defaultRandom(),
-  name: t.varchar({ length: 128 }).notNull(),
-  slug: t.varchar({ length: 64 }).notNull().unique(),
-  plan: tenantPlanEnum("plan").notNull().default("free"),
-  forgeGraphProjectId: t.text("forge_graph_project_id"),
-  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-  updatedAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-}));
+export const tenants = pgTable(
+  "tenants",
+  (t) => ({
+    id: t.uuid().notNull().primaryKey().defaultRandom(),
+    name: t.varchar({ length: 128 }).notNull(),
+    slug: t.varchar({ length: 64 }).notNull().unique(),
+    plan: tenantPlanEnum("plan").notNull().default("free"),
+    stripeCustomerId: t.text("stripe_customer_id"),
+    stripeSubscriptionId: t.text("stripe_subscription_id"),
+    stripeSubscriptionStatus: t.text("stripe_subscription_status"),
+    forgeGraphProjectId: t.text("forge_graph_project_id"),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
+    updatedAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
+  }),
+  (table) => [
+    uniqueIndex("tenants_stripe_customer_id_idx")
+      .on(table.stripeCustomerId)
+      .where(sql`${table.stripeCustomerId} is not null`),
+    uniqueIndex("tenants_stripe_subscription_id_idx")
+      .on(table.stripeSubscriptionId)
+      .where(sql`${table.stripeSubscriptionId} is not null`),
+  ],
+);
 
 export const tenantMembers = pgTable(
   "tenant_members",

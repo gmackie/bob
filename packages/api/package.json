@@ -67,6 +67,10 @@
       "types": "./dist/api/src/services/forgegraph/eventReporter.d.ts",
       "default": "./src/services/forgegraph/eventReporter.ts"
     },
+    "./services/billing/stripeBilling": {
+      "types": "./dist/api/src/services/billing/stripeBilling.d.ts",
+      "default": "./src/services/billing/stripeBilling.ts"
+    },
     "./services/crypto/cookieVault": {
       "types": "./dist/api/src/services/crypto/cookieVault.d.ts",
       "default": "./src/services/crypto/cookieVault.ts"
@@ -90,6 +94,7 @@
     "@bob/db": "workspace:*",
     "@bob/execution": "workspace:*",
     "@bob/execution-lib": "workspace:*",
+    "@bob/payments": "workspace:*",
     "@bob/work-items": "workspace:*",
     "@bob/validators": "workspace:*",
     "@elevenlabs/client": "^0.13.0",

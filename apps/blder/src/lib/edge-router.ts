@@ -13,6 +13,7 @@ import type { TRPCRouterRecord } from "@trpc/server";
 
 import { agentRunRouter } from "@bob/api/router/agentRun";
 import { authRouter } from "@bob/api/router/auth";
+import { billingRouter } from "@bob/api/router/billing";
 import { cookiesRouter } from "@bob/api/router/cookies";
 import { checkpointRouter } from "@bob/api/router/checkpoint";
 import { chatRouter } from "@bob/api/router/chat";
@@ -57,6 +58,7 @@ const edgeRouterRecord = {
   agentRun: agentRunRouter,
   artifact: artifactRouter,
   auth: authRouter,
+  billing: billingRouter,
   chat: chatRouter,
   checkpoint: checkpointRouter,
   comment: commentRouter,
