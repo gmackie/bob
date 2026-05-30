@@ -2,31 +2,37 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { z, ZodError } from "zod/v4";
 
-import {
-  type ApiKeyAuth,
-  type ApiKeyPermission,
-  type Auth,
-  resolveRequestAuthContext,
-} from "@bob/auth";
+import type { ApiKeyAuth, ApiKeyPermission, Auth } from "@bob/auth";
+import { resolveRequestAuthContext } from "@bob/auth";
 import { eq } from "@bob/db";
 import { db } from "@bob/db/client";
 import { user } from "@bob/db/schema";
 
 const DEFAULT_USER_ID = "default-user";
 
+function shouldRequireAuth() {
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.REQUIRE_AUTH !== "true"
+  ) {
+    throw new Error("REQUIRE_AUTH=true must be set in production");
+  }
+
+  return process.env.REQUIRE_AUTH === "true";
+}
+
 export const createTRPCContext = async (opts: {
   headers: Headers;
   auth: Auth;
 }) => {
   const authApi = opts.auth.api;
-  let defaultUser:
-    | {
-        session: null;
-        user: typeof user.$inferSelect;
-      }
-    | null = null;
+  const requireAuth = shouldRequireAuth();
+  let defaultUser: {
+    session: null;
+    user: typeof user.$inferSelect;
+  } | null = null;
 
-  if (process.env.REQUIRE_AUTH !== "true") {
+  if (!requireAuth) {
     const [userRecord] = await db
       .select()
       .from(user)
