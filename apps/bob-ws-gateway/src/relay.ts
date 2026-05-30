@@ -1,7 +1,7 @@
 import type { WebSocket } from "ws";
 import { eq, and, gt, lt, inArray, asc, desc, sql } from "@bob/db";
 import { db } from "@bob/db/client";
-import { chatConversations, repositories, sessionEvents, taskRuns, workItems, agentRuns, activities, workspaces } from "@bob/db/schema";
+import { chatConversations, repositories, sessionEvents, taskRuns, workItems, agentRuns, activities, workspaces, tenants, tenantMembers } from "@bob/db/schema";
 
 import {
   parseClientMessage,
@@ -658,24 +658,97 @@ export class Relay {
         columns: { id: true, title: true, agentType: true, workItemId: true, personaMetadata: true },
       });
       if (session) {
-        const workspace = await db.query.workspaces.findFirst({
-          where: eq(workspaces.id, conn.workspaceId),
-          columns: { tenantId: true },
-        });
-        if (workspace?.tenantId) {
+        // agent_runs.tenant_id is NOT NULL. Resolve (and self-heal) the
+        // workspace's tenant instead of silently skipping the insert — a
+        // tenant-less workspace used to drop every run from the dashboard.
+        const tenantId = await this.resolveWorkspaceTenantId(conn.workspaceId);
+        if (tenantId) {
           await db.insert(agentRuns).values({
             sessionId: session.id,
             workItemId: session.workItemId ?? session.title ?? session.id,
             workspaceId: conn.workspaceId,
-            tenantId: workspace.tenantId,
+            tenantId,
             agentType: session.agentType ?? "claude",
             agentConfig: (session as any).personaMetadata ?? undefined,
             status: "running",
             startedAt: sql`now()`,
           });
+        } else {
+          console.warn(
+            `[Relay] Could not resolve a tenant for workspace ${conn.workspaceId}; ` +
+              `agent run for session ${session.id} will NOT appear on the dashboard. ` +
+              `Backfill workspaces.tenant_id for this workspace.`,
+          );
         }
       }
     }
+  }
+
+  /**
+   * Return the tenant id for a workspace, healing tenant-less workspaces.
+   *
+   * Older workspaces created through the UI had no tenant (workspace.create
+   * didn't assign one), which meant agent_runs — gated on a NOT NULL tenant_id —
+   * were never recorded. When we hit one, resolve the owner's tenant (or create
+   * a personal tenant for them) and backfill workspaces.tenant_id so this only
+   * happens once per workspace.
+   */
+  private async resolveWorkspaceTenantId(workspaceId: string): Promise<string | null> {
+    const workspace = await db.query.workspaces.findFirst({
+      where: eq(workspaces.id, workspaceId),
+      columns: { tenantId: true, ownerUserId: true },
+    });
+    if (!workspace) return null;
+    if (workspace.tenantId) return workspace.tenantId;
+
+    const ownerUserId = workspace.ownerUserId;
+    if (!ownerUserId) return null;
+
+    // Prefer an existing tenant the owner already belongs to.
+    let tenantId: string | null = null;
+    const existing = await db.query.tenantMembers.findFirst({
+      where: eq(tenantMembers.userId, ownerUserId),
+      columns: { tenantId: true },
+    });
+    tenantId = existing?.tenantId ?? null;
+
+    // Otherwise create a personal tenant for the owner.
+    if (!tenantId) {
+      const slug = ownerUserId.replace(/[^a-z0-9-]/g, "-").slice(0, 64);
+      try {
+        const [tenant] = await db
+          .insert(tenants)
+          .values({ name: slug, slug, plan: "free" })
+          .onConflictDoNothing()
+          .returning({ id: tenants.id });
+        if (tenant) {
+          tenantId = tenant.id;
+          await db
+            .insert(tenantMembers)
+            .values({ tenantId: tenant.id, userId: ownerUserId, role: "owner" })
+            .onConflictDoNothing();
+        }
+      } catch (err) {
+        console.warn(`[Relay] Tenant creation failed for workspace ${workspaceId}:`, err);
+      }
+      if (!tenantId) {
+        const after = await db.query.tenantMembers.findFirst({
+          where: eq(tenantMembers.userId, ownerUserId),
+          columns: { tenantId: true },
+        });
+        tenantId = after?.tenantId ?? null;
+      }
+    }
+
+    if (tenantId) {
+      // Backfill so future claims skip all of the above.
+      await db
+        .update(workspaces)
+        .set({ tenantId })
+        .where(eq(workspaces.id, workspaceId));
+    }
+
+    return tenantId;
   }
 
   // ── Daemon session_event → persist + fan out ───────────────────────

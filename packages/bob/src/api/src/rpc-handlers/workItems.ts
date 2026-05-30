@@ -184,6 +184,6 @@ export const makeWorkItemsRpcHandlers = (ctx: HandlerContext) => ({
   "workItems.listRecentActivities": ({
     payload,
   }: {
-    payload: { limit?: number };
+    payload: { limit?: number; workspaceId?: string };
   }) => wrapHandler(workItemsListRecentActivities, ctx, payload, "activity"),
 });

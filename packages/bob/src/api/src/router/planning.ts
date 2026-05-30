@@ -28,6 +28,7 @@ import {
 import {
   listLinearProjects,
   connectLinearProject,
+  syncLinearProjects,
 } from "../handlers/linearSetup";
 
 const taskStatusEnum = [
@@ -298,5 +299,16 @@ export const planningRouter = {
     )
     .mutation(({ ctx, input }) =>
       connectLinearProject({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
+
+  syncLinearProjects: protectedProcedure
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+        importIssues: z.boolean().optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      syncLinearProjects({ db: ctx.db, userId: ctx.session.user.id }, input),
     ),
 } satisfies TRPCRouterRecord;

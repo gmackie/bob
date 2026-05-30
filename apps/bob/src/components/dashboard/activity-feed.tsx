@@ -83,7 +83,7 @@ function fmt(value: string): string {
 
 export function ActivityFeed({ workspaceId }: { workspaceId?: string }) {
   const { workspaceActivities: activities, isLoading } = useLiveActivity({
-    workspaceId: workspaceId ?? "default",
+    workspaceId,
     limit: 50,
   });
 

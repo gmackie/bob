@@ -135,7 +135,11 @@ export default function PlanningLayout({ children }: { children: React.ReactNode
             {TABS.map((tab) => (
               <Link
                 key={tab.href}
-                href={tab.href}
+                href={
+                  currentWorkspace
+                    ? `${tab.href}?workspace=${currentWorkspace.id}`
+                    : tab.href
+                }
                 className={cn(
                   "rounded-lg px-4 py-2 text-sm font-medium transition-colors",
                   activeTab === tab.href

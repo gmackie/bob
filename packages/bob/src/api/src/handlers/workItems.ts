@@ -805,11 +805,28 @@ export async function workItemsTaskRunListLifecycleEvents(
 
 export async function workItemsListRecentActivities(
   ctx: HandlerContext,
-  input: { limit?: number },
+  input: { limit?: number; workspaceId?: string },
 ) {
   const limit = input.limit ?? 50;
 
+  // When a workspace is given, scope the feed to that workspace's work items.
+  // Activities have no workspaceId column, so resolve the workspace's work-item
+  // ids first and filter on them. An empty workspace yields an empty feed
+  // (instead of leaking other workspaces' activity).
+  let workItemFilter: ReturnType<typeof inArray> | undefined;
+  if (input.workspaceId) {
+    await assertWorkspaceAccess(ctx.db, ctx.userId, input.workspaceId);
+    const wsItems = await ctx.db.query.workItems.findMany({
+      where: eq(workItems.workspaceId, input.workspaceId),
+      columns: { id: true },
+    });
+    const ids = wsItems.map((w: any) => w.id);
+    if (ids.length === 0) return [];
+    workItemFilter = inArray(activities.workItemId, ids);
+  }
+
   const recentActivities = await ctx.db.query.activities.findMany({
+    where: workItemFilter,
     orderBy: desc(activities.createdAt),
     limit,
     with: {
@@ -849,7 +866,12 @@ export async function workItemsListRecentActivities(
 
   try {
     const recentRuns = await ctx.db.query.agentRuns.findMany({
-      where: inArray(agentRuns.status, ["completed", "failed"]),
+      where: input.workspaceId
+        ? and(
+            eq(agentRuns.workspaceId, input.workspaceId),
+            inArray(agentRuns.status, ["completed", "failed"]),
+          )
+        : inArray(agentRuns.status, ["completed", "failed"]),
       orderBy: desc(agentRuns.completedAt),
       limit: limit - mappedActivities.length,
     });

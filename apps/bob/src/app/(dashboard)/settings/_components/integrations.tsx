@@ -97,6 +97,31 @@ function LinearIntegration({ workspaceId }: { workspaceId: string }) {
     trpc.integration.delete.mutationOptions({ onSuccess: invalidate }),
   );
 
+  const [syncResult, setSyncResult] = useState<string | null>(null);
+  const syncMutation = useMutation(
+    trpc.planning.syncLinearProjects.mutationOptions({
+      onSuccess: (r: {
+        projectsCreated: number;
+        projectsExisting: number;
+        issuesImported: number;
+        projectsTruncated?: boolean;
+        issuesTruncated?: boolean;
+      }) => {
+        const parts = [
+          `${r.projectsCreated} project${r.projectsCreated === 1 ? "" : "s"} created`,
+          `${r.projectsExisting} existing`,
+          `${r.issuesImported} issue${r.issuesImported === 1 ? "" : "s"} imported`,
+        ];
+        if (r.projectsTruncated || r.issuesTruncated) {
+          parts.push("(first page only — run again for more)");
+        }
+        setSyncResult(parts.join(" · "));
+      },
+      onError: (e: unknown) =>
+        setSyncResult(e instanceof Error ? e.message : "Sync failed"),
+    }),
+  );
+
   const resetForm = () => {
     setApiKey("");
     setTeamId("");
@@ -161,7 +186,17 @@ function LinearIntegration({ workspaceId }: { workspaceId: string }) {
               </p>
             </div>
           </div>
-          <div className="flex gap-2 pt-2">
+          <div className="flex flex-wrap gap-2 pt-2">
+            <Button
+              size="sm"
+              onClick={() => {
+                setSyncResult(null);
+                syncMutation.mutate({ workspaceId });
+              }}
+              disabled={syncMutation.isPending}
+            >
+              {syncMutation.isPending ? "Syncing..." : "Sync projects"}
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
               Reconnect
             </Button>
@@ -175,6 +210,14 @@ function LinearIntegration({ workspaceId }: { workspaceId: string }) {
               {deleteMutation.isPending ? "Removing..." : "Remove"}
             </Button>
           </div>
+          <p className="text-[11px] text-muted-foreground">
+            Creates a Bob project for every Linear project and imports open
+            issues. Synced projects don&apos;t auto-dispatch — enable that
+            per-project on the Board.
+          </p>
+          {syncResult && (
+            <p className="text-xs text-foreground">{syncResult}</p>
+          )}
         </div>
       ) : (
         <div className="space-y-3">

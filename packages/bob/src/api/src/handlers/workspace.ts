@@ -7,12 +7,64 @@
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq } from "@bob/db";
 import {
+  tenants,
+  tenantMembers,
   workspaceMembers,
   workspaces,
   workspaceMemberRole,
 } from "@bob/db/schema";
 
 import type { HandlerContext } from "./context.js";
+
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Ensure the user belongs to a tenant, creating a personal one if needed.
+ *
+ * Every workspace MUST have a tenant: agent_runs.tenant_id is NOT NULL, and the
+ * ws-gateway only records a run when the workspace has a tenant. A tenant-less
+ * workspace silently drops every agent run (see relay.ts handleSessionClaimed).
+ * Mirrors the ensureTenant logic in publicApi.ts.
+ *
+ * Returns the tenant id, or null if it genuinely couldn't be resolved.
+ */
+export async function ensureTenantForUser(
+  db: any,
+  userId: string,
+): Promise<string | null> {
+  const existing = await db.query.tenantMembers.findFirst({
+    where: eq(tenantMembers.userId, userId),
+    columns: { tenantId: true },
+  });
+  if (existing?.tenantId) return existing.tenantId;
+
+  const slug = userId.replace(/[^a-z0-9-]/g, "-").slice(0, 64);
+  try {
+    const [tenant] = await db
+      .insert(tenants)
+      .values({ name: slug, slug, plan: "free" })
+      .onConflictDoNothing()
+      .returning();
+
+    if (tenant) {
+      await db
+        .insert(tenantMembers)
+        .values({ tenantId: tenant.id, userId, role: "owner" })
+        .onConflictDoNothing();
+      return tenant.id;
+    }
+  } catch {
+    // Concurrent request already created the tenant — fall through to re-query.
+  }
+
+  const after = await db.query.tenantMembers.findFirst({
+    where: eq(tenantMembers.userId, userId),
+    columns: { tenantId: true },
+  });
+  return after?.tenantId ?? null;
+}
 
 // ---------------------------------------------------------------------------
 // Handler functions
@@ -32,6 +84,11 @@ export async function workspaceCreate(
   ctx: HandlerContext,
   input: { name: string; slug: string; description?: string },
 ) {
+  // Attach the workspace to the user's tenant so daemon-executed agent runs are
+  // recorded (agent_runs.tenant_id is NOT NULL). Without this every run on the
+  // workspace is silently dropped by the ws-gateway.
+  const tenantId = await ensureTenantForUser(ctx.db, ctx.userId);
+
   const [workspace] = await ctx.db
     .insert(workspaces)
     .values({
@@ -39,6 +96,7 @@ export async function workspaceCreate(
       name: input.name,
       slug: input.slug,
       description: input.description ?? null,
+      tenantId: tenantId ?? null,
     })
     .returning();
 

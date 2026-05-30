@@ -14,6 +14,7 @@ import {
   markDeliveryProcessed,
   type WebhookProvider,
 } from "./processWebhook";
+import { ensureLinearProject } from "../linear/ensureLinearProject";
 import { traceWebhook } from "@bob/telemetry";
 
 const LINEAR_BOB_ACTOR = "bob-automation";
@@ -82,13 +83,21 @@ function mapLinearStatusToBob(stateType: string): string {
   }
 }
 
-async function findProjectByLinearTeamAndProject(
-  teamId: string,
-  linearProjectId: string | null,
+/**
+ * Resolve the Bob project for a Linear issue, creating it if the Linear project
+ * hasn't been onboarded yet. This means a new Linear project self-onboards the
+ * first time one of its issues hits the webhook — no manual "connect project"
+ * step. Issues with no Linear project land in a stable per-team project.
+ *
+ * Returns null only when no Linear integration exists for the issue's team.
+ */
+async function resolveOrCreateProjectForIssue(
+  payload: LinearIssuePayload,
 ): Promise<{
   project: typeof projects.$inferSelect;
   integration: typeof workspaceIntegrations.$inferSelect;
 } | null> {
+  const teamId = payload.data.team.id;
   const integrations = await db
     .select()
     .from(workspaceIntegrations)
@@ -102,26 +111,22 @@ async function findProjectByLinearTeamAndProject(
 
   if (integrations.length === 0) return null;
 
-  for (const integration of integrations) {
-    const conditions = [
-      eq(projects.workspaceId, integration.workspaceId),
-      eq(projects.planningProvider, "linear"),
-    ];
+  const integration = integrations[0]!;
 
-    if (linearProjectId) {
-      conditions.push(eq(projects.linearProjectId, linearProjectId));
-    }
+  // Use the Linear project when present; otherwise a synthetic per-team id so
+  // project-less issues land in one stable "team" project instead of scattering.
+  const linearProjectId = payload.data.project?.id ?? `team:${teamId}`;
+  const name =
+    payload.data.project?.name ?? `${payload.data.team.key} (Linear)`;
 
-    const project = await db.query.projects.findFirst({
-      where: and(...conditions),
-    });
+  const { project } = await ensureLinearProject(db, {
+    workspaceId: integration.workspaceId,
+    linearProjectId,
+    name,
+    autoDispatch: false,
+  });
 
-    if (project) {
-      return { project, integration };
-    }
-  }
-
-  return null;
+  return { project, integration };
 }
 
 async function findOrCreateWorkItem(
@@ -165,29 +170,16 @@ async function handleIssueCreate(payload: LinearIssuePayload): Promise<void> {
     return;
   }
 
-  const match = await findProjectByLinearTeamAndProject(
-    payload.data.team.id,
-    payload.data.project?.id ?? null,
-  );
+  const match = await resolveOrCreateProjectForIssue(payload);
 
   if (!match) {
     console.log(
-      `[linear-webhook] No matching project for team ${payload.data.team.key}, skipping`,
+      `[linear-webhook] No Linear integration for team ${payload.data.team.key}, skipping`,
     );
     return;
   }
 
-  const { project, integration } = match;
-
-  const automationSettings = (project.automationSettings ?? {}) as {
-    autoDispatch?: boolean;
-  };
-  if (!automationSettings.autoDispatch) {
-    console.log(
-      `[linear-webhook] autoDispatch disabled for project ${project.key}, skipping`,
-    );
-    return;
-  }
+  const { project } = match;
 
   const owner = await db.query.workspaceMembers.findFirst({
     where: eq(workspaceMembers.workspaceId, project.workspaceId),
@@ -200,12 +192,26 @@ async function handleIssueCreate(payload: LinearIssuePayload): Promise<void> {
     return;
   }
 
+  // Always track the issue as a work item so it shows on the Board — this is
+  // decoupled from autoDispatch, which only controls whether we ALSO run an
+  // agent. (Previously autoDispatch=off skipped creation entirely, so synced
+  // projects looked empty.)
   const workItem = await findOrCreateWorkItem(
     payload,
     project.id,
     project.workspaceId,
     owner.userId,
   );
+
+  const automationSettings = (project.automationSettings ?? {}) as {
+    autoDispatch?: boolean;
+  };
+  if (!automationSettings.autoDispatch) {
+    console.log(
+      `[linear-webhook] ${payload.data.identifier} tracked for project ${project.key} (autoDispatch off — not dispatched)`,
+    );
+    return;
+  }
 
   const [batch] = await db
     .insert(dispatchBatches)
@@ -291,7 +297,26 @@ async function handleIssueUpdate(payload: LinearIssuePayload): Promise<void> {
     ),
   });
 
-  if (!existing) return;
+  // Onboard issues that were updated before their project was synced: create
+  // the project (if needed) and the work item so it appears on the Board.
+  if (!existing) {
+    if (isBobOriginated(payload)) return;
+    const match = await resolveOrCreateProjectForIssue(payload);
+    if (!match) return;
+    const owner = await db.query.workspaceMembers.findFirst({
+      where: eq(workspaceMembers.workspaceId, match.project.workspaceId),
+      columns: { userId: true },
+      orderBy: (m: any, { asc }: any) => [asc(m.joinedAt)],
+    });
+    if (!owner) return;
+    await findOrCreateWorkItem(
+      payload,
+      match.project.id,
+      match.project.workspaceId,
+      owner.userId,
+    );
+    return;
+  }
 
   const updates: Record<string, unknown> = {};
 

@@ -143,7 +143,12 @@ export const WorkItemActivityListRpc = Rpc.make("workItem.activity.list", {
 export const WorkItemActivityListRecentRpc = Rpc.make(
   "workItem.activity.listRecent",
   {
-    payload: Schema.Struct({ limit: Schema.optional(Schema.Number) }),
+    payload: Schema.Struct({
+      limit: Schema.optional(Schema.Number),
+      // Scope the feed to a single workspace. Optional for back-compat: when
+      // omitted the feed spans all of the caller's activity.
+      workspaceId: Schema.optional(Schema.String),
+    }),
     success: Schema.Array(ActivityRecordSchema),
     error: BobNotFoundError,
   },

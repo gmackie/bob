@@ -6,6 +6,7 @@ import { AgentStatusBar } from "./agent-status-bar";
 import { AttentionPanel } from "./attention-panel";
 import { ProjectProgress } from "./project-progress";
 import { RecentRuns } from "./recent-runs";
+import { RunnerQueue } from "./runner-queue";
 import { SkillUsage } from "./skill-usage";
 
 interface MissionControlProps {
@@ -29,6 +30,7 @@ export function MissionControl({ workspaceId }: MissionControlProps) {
         {/* Right column — Dispatches + Recent runs + Attention + Skill usage */}
         <div className="flex flex-col gap-5">
           <ActiveDispatches />
+          {workspaceId ? <RunnerQueue workspaceId={workspaceId} /> : null}
           <RecentRuns workspaceId={workspaceId ?? ""} />
           <AttentionPanel />
           <SkillUsage />

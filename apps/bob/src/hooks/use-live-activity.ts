@@ -45,9 +45,10 @@ export function useLiveActivity({
   const useWorkspace = Boolean(workspaceId);
   const useWorkItem = Boolean(workItemId) && !useWorkspace;
 
-  // Workspace-level query (listRecent)
+  // Workspace-level query (listRecent) — scoped to the workspace so the feed
+  // doesn't mix activity across workspaces.
   const workspaceQuery = useQuery({
-    ...trpc.activity.listRecent.queryOptions({ limit }),
+    ...trpc.activity.listRecent.queryOptions({ limit, workspaceId }),
     enabled: useWorkspace,
     refetchInterval: useWorkspace ? interval : false,
   });
