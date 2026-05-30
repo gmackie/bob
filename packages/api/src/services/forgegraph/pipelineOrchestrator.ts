@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "@bob/db";
+import { and, desc, eq, inArray, sql } from "@bob/db";
 import type { Db } from "@bob/db/client";
 import {
   dispatchItems,
@@ -26,6 +26,7 @@ import { emitWebhookEvent } from "../webhooks/webhookDeliveryService";
  */
 
 const TERMINAL_STATES = ["complete", "build_failed", "deploy_failed", "review_failed"];
+const ACTIVE_DEPLOYMENT_STATUSES = ["pending_approval", "deploying"] as const;
 
 interface PipelineItem {
   id: string;
@@ -286,13 +287,11 @@ async function handleGatesPassed(
   });
   if (!revision) return;
 
-  // Create dev deployment
-  await db.insert(forgeDeployments).values({
+  await createDeploymentIfNoActiveRequest(db, {
     revisionId,
     buildId,
     repoId: revision.repoId,
-    environment: "dev",
-    status: "deploying",
+    targetLane: "dev",
   });
 
   await setPipelineState(db, item.id, "deploying_dev");
@@ -348,13 +347,11 @@ async function handleDevHealthy(
   });
   if (!revision) return;
 
-  // Create staging deployment
-  await db.insert(forgeDeployments).values({
+  await createDeploymentIfNoActiveRequest(db, {
     revisionId,
     buildId,
     repoId: revision.repoId,
-    environment: "staging",
-    status: "deploying",
+    targetLane: "staging",
   });
 
   await setPipelineState(db, item.id, "deploying_staging");
@@ -420,6 +417,34 @@ async function getRevisionAndBuild(
   });
   if (!build) return { revisionId: null, buildId: null };
   return { revisionId: build.revisionId, buildId: build.id };
+}
+
+async function createDeploymentIfNoActiveRequest(
+  db: Db,
+  input: {
+    revisionId: string;
+    buildId: string;
+    repoId: string;
+    targetLane: string;
+  },
+): Promise<void> {
+  const existingActiveRequest = await db.query.forgeDeployments.findFirst({
+    where: and(
+      eq(forgeDeployments.revisionId, input.revisionId),
+      eq(forgeDeployments.environment, input.targetLane),
+      inArray(forgeDeployments.status, ACTIVE_DEPLOYMENT_STATUSES),
+    ),
+  });
+
+  if (existingActiveRequest) return;
+
+  await db.insert(forgeDeployments).values({
+    revisionId: input.revisionId,
+    buildId: input.buildId,
+    repoId: input.repoId,
+    environment: input.targetLane,
+    status: "deploying",
+  });
 }
 
 // ---------------------------------------------------------------------------

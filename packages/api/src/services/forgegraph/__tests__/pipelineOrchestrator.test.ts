@@ -262,6 +262,66 @@ describe("advancePipeline", () => {
       // Should transition to "deploying_dev"
       expect(dbUpdateSetMock).toHaveBeenCalledWith({ pipelineState: "deploying_dev" });
     });
+
+    it("does not create a duplicate dev deployment when one is already active", async () => {
+      const item = makeItem({ pipelineState: "gates_passed" });
+
+      // forgeBuilds.findFirst (via getRevisionAndBuild)
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: BUILD_ID,
+        revisionId: REVISION_ID,
+      });
+
+      // forgeRevisions.findFirst (to get repoId)
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: REVISION_ID,
+        repoId: REPO_ID,
+      });
+
+      // forgeDeployments.findFirst (active request guard)
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: "deployment-001",
+        revisionId: REVISION_ID,
+        environment: "dev",
+        status: "deploying",
+      });
+
+      await advancePipeline(db as any, item, makeBatch());
+
+      expect(dbInsertMock).not.toHaveBeenCalled();
+      expect(dbUpdateSetMock).toHaveBeenCalledWith({ pipelineState: "deploying_dev" });
+    });
+  });
+
+  describe("dev_healthy state", () => {
+    it("does not create a duplicate staging deployment when one is already active", async () => {
+      const item = makeItem({ pipelineState: "dev_healthy" });
+
+      // forgeBuilds.findFirst (via getRevisionAndBuild)
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: BUILD_ID,
+        revisionId: REVISION_ID,
+      });
+
+      // forgeRevisions.findFirst (to get repoId)
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: REVISION_ID,
+        repoId: REPO_ID,
+      });
+
+      // forgeDeployments.findFirst (active request guard)
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: "deployment-002",
+        revisionId: REVISION_ID,
+        environment: "staging",
+        status: "pending_approval",
+      });
+
+      await advancePipeline(db as any, item, makeBatch());
+
+      expect(dbInsertMock).not.toHaveBeenCalled();
+      expect(dbUpdateSetMock).toHaveBeenCalledWith({ pipelineState: "deploying_staging" });
+    });
   });
 
   describe("terminal states", () => {
