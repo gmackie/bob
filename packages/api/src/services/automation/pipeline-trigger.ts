@@ -1,6 +1,8 @@
 import { db } from "@bob/db/client";
 import { activities, forgeRevisions } from "@bob/db/schema";
 
+import { ensureAttestations } from "../../pipeline/attestation-engine";
+
 /**
  * Called when a PR is created or updated.
  * Creates a forge revision linked to the PR's head commit and records
@@ -17,6 +19,9 @@ export async function onPullRequestCreated(params: {
   headSha: string;
   taskId?: string;
   taskRunId?: string;
+  executionPolicy?: {
+    requiredAttestations?: string[] | null;
+  } | null;
 }): Promise<{ revisionId?: string }> {
   // Create a forge revision linked to this PR's head commit
   const [revision] = await db
@@ -49,6 +54,15 @@ export async function onPullRequestCreated(params: {
       },
     })
     .returning();
+
+  if (revision) {
+    await ensureAttestations(db, {
+      revisionId: revision.id,
+      repoId: revision.repoId,
+      taskId: revision.taskId,
+      executionPolicy: params.executionPolicy,
+    });
+  }
 
   // Log activity on the linked task
   if (params.taskId) {

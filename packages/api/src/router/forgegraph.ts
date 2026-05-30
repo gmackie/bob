@@ -13,6 +13,11 @@ import {
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure } from "../trpc";
 import { getForgeGraphClient } from "../services/forgegraph/config";
+import { ensureAttestations } from "../pipeline/attestation-engine";
+
+const executionPolicySchema = z.object({
+  requiredAttestations: z.array(z.string()).optional().nullable(),
+});
 
 export const forgegraphRouter = {
   listRevisions: protectedProcedure
@@ -61,6 +66,7 @@ export const forgegraphRouter = {
         taskId: z.string().uuid().optional(),
         taskRunId: z.string().uuid().optional(),
         branch: z.string().optional(),
+        executionPolicy: executionPolicySchema.optional().nullable(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -82,7 +88,14 @@ export const forgegraphRouter = {
           },
         })
         .returning();
-      return revision!;
+      const createdRevision = revision!;
+      await ensureAttestations(ctx.db, {
+        revisionId: createdRevision.id,
+        repoId: createdRevision.repoId,
+        taskId: createdRevision.taskId,
+        executionPolicy: input.executionPolicy,
+      });
+      return createdRevision;
     }),
 
   triggerBuild: protectedProcedure

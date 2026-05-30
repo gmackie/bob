@@ -2414,6 +2414,7 @@ export const webhookDeliveriesRelations = relations(
 // =============================================================================
 
 export const forgeRevisionStatusEnum = ["open", "merged", "abandoned"] as const;
+export const forgeAttestationStatusEnum = ["pending", "passed", "failed"] as const;
 
 export const forgeRevisions = pgTable(
   "forge_revisions",
@@ -2437,6 +2438,26 @@ export const forgeRevisions = pgTable(
 );
 
 export const forgeBuildStatusEnum = ["queued", "running", "passed", "failed", "canceled", "superseded"] as const;
+
+export const forgeRevisionAttestations = pgTable(
+  "forge_revision_attestations",
+  (t) => ({
+    id: t.uuid().notNull().primaryKey().defaultRandom(),
+    revisionId: t.uuid().notNull().references(() => forgeRevisions.id, { onDelete: "cascade" }),
+    repoId: t.uuid().notNull().references(() => repositories.id, { onDelete: "cascade" }),
+    taskId: t.uuid().references(() => workItems.id, { onDelete: "set null" }),
+    kind: t.text().notNull(),
+    status: t.varchar({ length: 20 }).notNull().default("pending"),
+    metadata: t.jsonb().$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
+    updatedAt: t.timestamp({ mode: "string", withTimezone: true }).$onUpdateFn(() => sql`now()`),
+  }),
+  (table) => [
+    { name: "forge_revision_attestations_revision_idx", columns: [table.revisionId] },
+    { name: "forge_revision_attestations_repo_idx", columns: [table.repoId] },
+    { name: "forge_revision_attestations_revision_kind_idx", columns: [table.revisionId, table.kind], unique: true },
+  ],
+);
 
 export const forgeBuilds = pgTable(
   "forge_builds",
@@ -2527,6 +2548,25 @@ export const forgeRevisionsRelations = relations(
     builds: many(forgeBuilds),
     deployments: many(forgeDeployments),
     runEvents: many(forgeRunEvents),
+    attestations: many(forgeRevisionAttestations),
+  }),
+);
+
+export const forgeRevisionAttestationsRelations = relations(
+  forgeRevisionAttestations,
+  ({ one }) => ({
+    revision: one(forgeRevisions, {
+      fields: [forgeRevisionAttestations.revisionId],
+      references: [forgeRevisions.id],
+    }),
+    repository: one(repositories, {
+      fields: [forgeRevisionAttestations.repoId],
+      references: [repositories.id],
+    }),
+    task: one(workItems, {
+      fields: [forgeRevisionAttestations.taskId],
+      references: [workItems.id],
+    }),
   }),
 );
 
