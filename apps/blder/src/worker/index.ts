@@ -5,16 +5,24 @@
  * For apps without image optimization, you can use vinext/server/app-router-entry
  * directly in wrangler.jsonc: "main": "vinext/server/app-router-entry"
  */
-import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import type { ImageConfig } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
+import {
+  DEFAULT_DEVICE_SIZES,
+  DEFAULT_IMAGE_SIZES,
+  handleImageOptimization,
+} from "vinext/server/image-optimization";
 
 interface Env {
   ASSETS: Fetcher;
+  AUTH_RATE_LIMITER: RateLimit;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
-        output(options: { format: string; quality: number }): Promise<{ response(): Response }>;
+        output(options: {
+          format: string;
+          quality: number;
+        }): Promise<{ response(): Response }>;
       };
     };
   };
@@ -25,6 +33,35 @@ interface ExecutionContext {
   passThroughOnException(): void;
 }
 
+function getClientIp(request: Request): string {
+  const cfIp = request.headers.get("cf-connecting-ip")?.trim();
+  if (cfIp) return cfIp;
+
+  const forwardedFor = request.headers
+    .get("x-forwarded-for")
+    ?.split(",")[0]
+    ?.trim();
+  return forwardedFor || "unknown";
+}
+
+function rateLimitExceededResponse(): Response {
+  return Response.json(
+    {
+      error: {
+        code: "RATE_LIMITED",
+        message: "Too many authentication requests.",
+      },
+    },
+    {
+      status: 429,
+      headers: {
+        "Cache-Control": "no-store",
+        "Retry-After": "60",
+      },
+    },
+  );
+}
+
 // Image security config. SVG sources with .svg extension auto-skip the
 // optimization endpoint on the client side (served directly, no proxy).
 // To route SVGs through the optimizer (with security headers), set
@@ -32,7 +69,11 @@ interface ExecutionContext {
 // const imageConfig: ImageConfig = { dangerouslyAllowSVG: true };
 
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(
+    request: Request,
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<Response> {
     const url = new URL(request.url);
 
     // Image optimization via Cloudflare Images binding.
@@ -40,13 +81,42 @@ export default {
     // normalizes backslashes and validates the origin hasn't changed.
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
-      return handleImageOptimization(request, {
-        fetchAsset: (path) => env.ASSETS.fetch(new Request(new URL(path, request.url))),
-        transformImage: async (body, { width, format, quality }) => {
-          const result = await env.IMAGES.input(body).transform(width > 0 ? { width } : {}).output({ format, quality });
-          return result.response();
+      return handleImageOptimization(
+        request,
+        {
+          fetchAsset: (path) =>
+            env.ASSETS.fetch(new Request(new URL(path, request.url))),
+          transformImage: async (body, { width, format, quality }) => {
+            const result = await env.IMAGES.input(body)
+              .transform(width > 0 ? { width } : {})
+              .output({ format, quality });
+            return result.response();
+          },
         },
-      }, allowedWidths);
+        allowedWidths,
+      );
+    }
+
+    if (url.pathname === "/api/auth" || url.pathname.startsWith("/api/auth/")) {
+      if (!env.AUTH_RATE_LIMITER) {
+        return Response.json(
+          {
+            error: {
+              code: "RATE_LIMITER_MISSING",
+              message: "Authentication rate limiter is not configured.",
+            },
+          },
+          { status: 503, headers: { "Cache-Control": "no-store" } },
+        );
+      }
+
+      const { success } = await env.AUTH_RATE_LIMITER.limit({
+        key: `auth:${getClientIp(request)}`,
+      });
+
+      if (!success) {
+        return rateLimitExceededResponse();
+      }
     }
 
     // Delegate everything else to vinext, forwarding ctx so that

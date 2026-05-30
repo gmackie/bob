@@ -2,16 +2,24 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "src",
   "compatibility_date": "2026-03-31",
-  "compatibility_flags": [
-    "nodejs_compat"
-  ],
+  "compatibility_flags": ["nodejs_compat"],
   "main": "./worker/index.ts",
   "assets": {
     "directory": "dist/client",
     "not_found_handling": "none",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
   },
   "images": {
-    "binding": "IMAGES"
-  }
+    "binding": "IMAGES",
+  },
+  "ratelimits": [
+    {
+      "name": "AUTH_RATE_LIMITER",
+      "namespace_id": "232",
+      "simple": {
+        "limit": 10,
+        "period": 60,
+      },
+    },
+  ],
 }
