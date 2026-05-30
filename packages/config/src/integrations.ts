@@ -1,6 +1,11 @@
 export const integrations = {
   sentry: false,
+  sentryFirstSync: false,
   posthog: false,
+  forgegraph: false,
+  cloudflare: false,
+  twenty: false,
+  quickbooks: false,
 
   // Payments - Web (default OFF)
   stripe: false,
@@ -39,7 +44,12 @@ export const integrations = {
 export type Integrations = typeof integrations;
 
 export const isSentryEnabled = () => integrations.sentry;
+export const isSentryFirstSyncComplete = () => integrations.sentryFirstSync;
 export const isPostHogEnabled = () => integrations.posthog;
+export const isForgeGraphEnabled = () => integrations.forgegraph;
+export const isCloudflareEnabled = () => integrations.cloudflare;
+export const isTwentyEnabled = () => integrations.twenty;
+export const isQuickBooksEnabled = () => integrations.quickbooks;
 export const isStripeEnabled = () => integrations.stripe;
 export const isRevenueCatEnabled = () => integrations.revenuecat;
 export const isNotificationsEnabled = () => integrations.notifications;

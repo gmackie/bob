@@ -138,7 +138,12 @@ function updateIntegrationsConfig(
 
   const content = `export const integrations = {
   sentry: ${integrations.sentry},
+  sentryFirstSync: ${integrations.sentryFirstSync},
   posthog: ${integrations.posthog},
+  forgegraph: ${integrations.forgegraph},
+  cloudflare: ${integrations.cloudflare},
+  twenty: ${integrations.twenty},
+  quickbooks: ${integrations.quickbooks},
   stripe: ${integrations.stripe},
   revenuecat: ${integrations.revenuecat},
   notifications: ${integrations.notifications},
@@ -161,7 +166,12 @@ function updateIntegrationsConfig(
 export type Integrations = typeof integrations;
 
 export const isSentryEnabled = () => integrations.sentry;
+export const isSentryFirstSyncComplete = () => integrations.sentryFirstSync;
 export const isPostHogEnabled = () => integrations.posthog;
+export const isForgeGraphEnabled = () => integrations.forgegraph;
+export const isCloudflareEnabled = () => integrations.cloudflare;
+export const isTwentyEnabled = () => integrations.twenty;
+export const isQuickBooksEnabled = () => integrations.quickbooks;
 export const isStripeEnabled = () => integrations.stripe;
 export const isRevenueCatEnabled = () => integrations.revenuecat;
 export const isNotificationsEnabled = () => integrations.notifications;

@@ -1,6 +1,11 @@
 export interface IntegrationConfig {
   sentry: boolean;
+  sentryFirstSync: boolean;
   posthog: boolean;
+  forgegraph: boolean;
+  cloudflare: boolean;
+  twenty: boolean;
+  quickbooks: boolean;
   stripe: boolean;
   revenuecat: boolean;
   notifications: boolean;
@@ -36,7 +41,12 @@ export type IntegrationPreset =
 
 export const DEFAULT_INTEGRATIONS: IntegrationConfig = {
   sentry: true,
+  sentryFirstSync: false,
   posthog: true,
+  forgegraph: false,
+  cloudflare: false,
+  twenty: false,
+  quickbooks: false,
   stripe: false,
   revenuecat: false,
   notifications: false,
@@ -47,7 +57,12 @@ export const DEFAULT_INTEGRATIONS: IntegrationConfig = {
 
 export const CORE_INTEGRATIONS: IntegrationConfig = {
   sentry: false,
+  sentryFirstSync: false,
   posthog: false,
+  forgegraph: false,
+  cloudflare: false,
+  twenty: false,
+  quickbooks: false,
   stripe: false,
   revenuecat: false,
   notifications: false,
@@ -58,11 +73,25 @@ export const CORE_INTEGRATIONS: IntegrationConfig = {
 
 export const EVERYTHING_INTEGRATIONS: IntegrationConfig = {
   sentry: true,
+  sentryFirstSync: true,
   posthog: true,
+  forgegraph: true,
+  cloudflare: true,
+  twenty: true,
+  quickbooks: true,
   stripe: true,
   revenuecat: true,
   notifications: true,
   email: { enabled: true, provider: "resend" },
   realtime: { enabled: true, provider: "pusher" },
   storage: { enabled: true, provider: "uploadthing" },
+};
+
+export const BIZPULSE_INTEGRATIONS: IntegrationConfig = {
+  ...DEFAULT_INTEGRATIONS,
+  sentryFirstSync: true,
+  forgegraph: true,
+  cloudflare: true,
+  twenty: true,
+  quickbooks: true,
 };

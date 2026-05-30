@@ -5,7 +5,6 @@ import validateNpmPackageName from "validate-npm-package-name";
 import type { CliOptions, IntegrationConfig } from "./types.js";
 import { getDefaultOptions, runPrompts } from "./prompts.js";
 import { scaffold } from "./scaffold.js";
-import { DEFAULT_INTEGRATIONS } from "./types.js";
 
 const program = new Command();
 
@@ -28,7 +27,7 @@ program
   .option("--no-tanstack-start", "Exclude TanStack Start app (default)")
   .option(
     "--integrations <list>",
-    "Comma-separated list of integrations (sentry,posthog,stripe,revenuecat,notifications,email,realtime,storage)",
+    "Comma-separated list of integrations (sentry,sentry-first-sync,posthog,forgegraph,cloudflare,twenty,quickbooks,stripe,revenuecat,notifications,email,realtime,storage)",
   )
   .option("--email-provider <provider>", "Email provider (resend, sendgrid)")
   .option("--realtime-provider <provider>", "Realtime provider (pusher, ably)")
@@ -88,10 +87,17 @@ function parseIntegrations(
 ): IntegrationConfig {
   const items = list.split(",").map((s) => s.trim().toLowerCase());
   const set = new Set(items);
+  const sentryFirstSync =
+    set.has("sentry-first-sync") || set.has("sentryfirstsync");
 
   return {
-    sentry: set.has("sentry"),
+    sentry: set.has("sentry") || sentryFirstSync,
+    sentryFirstSync,
     posthog: set.has("posthog"),
+    forgegraph: set.has("forgegraph"),
+    cloudflare: set.has("cloudflare"),
+    twenty: set.has("twenty"),
+    quickbooks: set.has("quickbooks"),
     stripe: set.has("stripe"),
     revenuecat: set.has("revenuecat"),
     notifications: set.has("notifications"),

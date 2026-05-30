@@ -8,6 +8,7 @@ import type {
   PlatformConfig,
 } from "./types.js";
 import {
+  BIZPULSE_INTEGRATIONS,
   CORE_INTEGRATIONS,
   DEFAULT_INTEGRATIONS,
   EVERYTHING_INTEGRATIONS,
@@ -190,7 +191,12 @@ async function promptCustomIntegrations(): Promise<IntegrationConfig> {
     message: "Enable integrations",
     options: [
       { value: "sentry", label: "Sentry (monitoring)", hint: "recommended" },
+      { value: "sentryFirstSync", label: "Sentry first sync complete" },
       { value: "posthog", label: "PostHog (analytics)", hint: "recommended" },
+      { value: "forgegraph", label: "ForgeGraph" },
+      { value: "cloudflare", label: "Cloudflare" },
+      { value: "twenty", label: "Twenty" },
+      { value: "quickbooks", label: "QuickBooks" },
       { value: "stripe", label: "Stripe (payments)", hint: "web" },
       { value: "revenuecat", label: "RevenueCat (mobile IAP)", hint: "mobile" },
       { value: "notifications", label: "Push Notifications", hint: "mobile" },
@@ -208,6 +214,7 @@ async function promptCustomIntegrations(): Promise<IntegrationConfig> {
   }
 
   const selectedSet = new Set(selected as string[]);
+  const sentryFirstSync = selectedSet.has("sentryFirstSync");
 
   let emailProvider: "resend" | "sendgrid" | "none" = "none";
   if (selectedSet.has("email")) {
@@ -249,8 +256,13 @@ async function promptCustomIntegrations(): Promise<IntegrationConfig> {
   }
 
   return {
-    sentry: selectedSet.has("sentry"),
+    sentry: selectedSet.has("sentry") || sentryFirstSync,
+    sentryFirstSync,
     posthog: selectedSet.has("posthog"),
+    forgegraph: selectedSet.has("forgegraph"),
+    cloudflare: selectedSet.has("cloudflare"),
+    twenty: selectedSet.has("twenty"),
+    quickbooks: selectedSet.has("quickbooks"),
     stripe: selectedSet.has("stripe"),
     revenuecat: selectedSet.has("revenuecat"),
     notifications: selectedSet.has("notifications"),
@@ -264,6 +276,8 @@ async function promptCustomIntegrations(): Promise<IntegrationConfig> {
 }
 
 export function getDefaultOptions(appName: string): CliOptions {
+  const normalizedAppName = appName.toLowerCase().replace(/[^a-z0-9]/g, "");
+
   return {
     appName,
     displayName: toTitleCase(appName),
@@ -273,7 +287,10 @@ export function getDefaultOptions(appName: string): CliOptions {
       mobile: true,
       tanstackStart: false,
     },
-    integrations: DEFAULT_INTEGRATIONS,
+    integrations:
+      normalizedAppName === "bizpulse"
+        ? BIZPULSE_INTEGRATIONS
+        : DEFAULT_INTEGRATIONS,
     includeAi: true,
     includeProvision: true,
     prune: false,
