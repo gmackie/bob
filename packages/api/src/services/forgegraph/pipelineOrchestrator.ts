@@ -574,4 +574,9 @@ export async function handleDeliveryEvidence(
       ...(metadata ?? {}),
     },
   });
+
+  const { tryAutoDispatch } = await import("../../pipeline/auto-dispatch");
+  await tryAutoDispatch(db, { workItemId }).catch((err) => {
+    console.error("[delivery-feedback] Auto-dispatch failed:", err);
+  });
 }

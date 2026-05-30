@@ -358,7 +358,7 @@ export const publicApiRouter = {
     .mutation(async ({ ctx, input }) => {
       const run = await ctx.db.query.agentRuns.findFirst({
         where: eq(agentRuns.id, input.runId),
-        columns: { tenantId: true },
+        columns: { tenantId: true, workItemId: true },
       });
       if (!run?.tenantId) {
         throw new TRPCError({ code: "NOT_FOUND" });
@@ -374,6 +374,13 @@ export const publicApiRouter = {
           metadata: input.metadata ?? {},
         })
         .returning();
+
+      const { tryAutoDispatch } = await import("../pipeline/auto-dispatch");
+      await tryAutoDispatch(ctx.db, { workItemId: run.workItemId }).catch(
+        (err) => {
+          console.error("[public-api] Auto-dispatch failed:", err);
+        },
+      );
 
       return artifact;
     }),
