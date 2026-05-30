@@ -1,0 +1,14 @@
+{
+  "name": "@bob/task-runner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Polls Linear for unstarted issues and dispatches codex to work on them, reporting runs to Bob.",
+  "type": "commonjs",
+  "bin": {
+    "bob-task-runner": "./task-runner.js"
+  },
+  "scripts": {
+    "start": "node task-runner.js",
+    "check": "node --check task-runner.js"
+  }
+}
