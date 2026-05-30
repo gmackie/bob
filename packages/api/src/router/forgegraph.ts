@@ -1,5 +1,5 @@
 import { z } from "zod/v4";
-import { and, desc, eq } from "@bob/db";
+import { and, desc, eq, isNull } from "@bob/db";
 import {
   activities,
   dispatchItems,
@@ -7,12 +7,51 @@ import {
   forgeBuilds,
   forgeDeployments,
   forgeRunEvents,
+  gitProviderConnections,
   projects,
   repositories,
 } from "@bob/db/schema";
 import { TRPCError } from "@trpc/server";
-import { protectedProcedure } from "../trpc";
+import { protectedProcedure, type createTRPCContext } from "../trpc";
 import { getForgeGraphClient } from "../services/forgegraph/config";
+import { ForgeGraphClient } from "../services/forgegraph/forgeGraphClient";
+import { decryptToken } from "../services/crypto/tokenVault";
+
+const DEFAULT_FORGEGRAPH_URL = "https://forgegraph.com";
+type ProtectedContext = Awaited<ReturnType<typeof createTRPCContext>> & {
+  session: { user: { id: string } };
+};
+
+async function getForgeGraphClientForUser(ctx: ProtectedContext) {
+  const connection = await ctx.db.query.gitProviderConnections.findFirst({
+    where: and(
+      eq(gitProviderConnections.userId, ctx.session.user.id),
+      eq(gitProviderConnections.provider, "forgegraph"),
+      isNull(gitProviderConnections.revokedAt),
+    ),
+  });
+
+  if (!connection) {
+    return getForgeGraphClient();
+  }
+
+  return new ForgeGraphClient({
+    baseUrl:
+      connection.instanceUrl ??
+      process.env.FORGEGRAPH_URL ??
+      process.env.FG_API_URL ??
+      DEFAULT_FORGEGRAPH_URL,
+    apiToken: decryptToken(
+      {
+        ciphertext: connection.accessTokenCiphertext,
+        iv: connection.accessTokenIv,
+        tag: connection.accessTokenTag,
+      },
+      connection.id,
+    ),
+    timeoutMs: parseInt(process.env.FG_TIMEOUT_MS ?? "15000", 10),
+  });
+}
 
 export const forgegraphRouter = {
   listRevisions: protectedProcedure
@@ -364,8 +403,8 @@ export const forgegraphRouter = {
 
   // ── ForgeGraph App Management ──────────────────────────────────────
 
-  listApps: protectedProcedure.query(async () => {
-    const fg = getForgeGraphClient();
+  listApps: protectedProcedure.query(async ({ ctx }) => {
+    const fg = await getForgeGraphClientForUser(ctx);
     if (!fg) {
       return [];
     }
@@ -379,7 +418,7 @@ export const forgegraphRouter = {
   listUnlinkedApps: protectedProcedure
     .input(z.object({ workspaceId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      const fg = getForgeGraphClient();
+      const fg = await getForgeGraphClientForUser(ctx);
       if (!fg) return [];
 
       const [allApps, linkedProjects] = await Promise.all([
@@ -406,7 +445,7 @@ export const forgegraphRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const fg = getForgeGraphClient();
+      const fg = await getForgeGraphClientForUser(ctx);
       if (!fg) {
         throw new TRPCError({
           code: "PRECONDITION_FAILED",

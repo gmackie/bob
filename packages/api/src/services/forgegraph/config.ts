@@ -15,7 +15,10 @@ export function getForgeGraphConfig(): ForgeGraphConfig | null {
   if (!apiToken) return null;
 
   return {
-    baseUrl: process.env.FG_API_URL ?? "https://forgegraf.com",
+    baseUrl:
+      process.env.FORGEGRAPH_URL ??
+      process.env.FG_API_URL ??
+      "https://forgegraph.com",
     apiToken,
     timeoutMs: parseInt(process.env.FG_TIMEOUT_MS ?? "15000", 10),
   };

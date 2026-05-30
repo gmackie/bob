@@ -409,7 +409,7 @@ export const settingsRouter = {
   connectForgeGraph: protectedProcedure
     .input(
       z.object({
-        apiToken: z.string().min(1),
+        apiToken: z.string().trim().min(1),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -422,7 +422,7 @@ export const settingsRouter = {
       const fgServer =
         process.env.FORGEGRAPH_URL ??
         process.env.FG_API_URL ??
-        "https://forgegraf.com";
+        "https://forgegraph.com";
       const resp = await fetch(`${fgServer}/api/fg/apps`, {
         headers: { Authorization: `Bearer ${input.apiToken}` },
       });

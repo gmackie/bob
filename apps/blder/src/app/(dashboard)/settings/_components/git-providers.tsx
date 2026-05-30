@@ -141,8 +141,8 @@ function ForgeGraphConnection() {
           )}
           <Button
             size="sm"
-            onClick={() => connectMutation.mutate({ apiToken: token })}
-            disabled={!token || connectMutation.isPending}
+            onClick={() => connectMutation.mutate({ apiToken: token.trim() })}
+            disabled={!token.trim() || connectMutation.isPending}
           >
             {connectMutation.isPending ? "Connecting..." : "Connect"}
           </Button>

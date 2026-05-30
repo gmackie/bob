@@ -17,7 +17,6 @@ import {
 
 import {
   encryptToken,
-  decryptToken,
   isEncryptionConfigured,
 } from "../services/crypto/tokenVault";
 import { protectedProcedure } from "../trpc";
@@ -180,16 +179,21 @@ export const settingsEdgeRouter: TRPCRouterRecord = {
   connectForgeGraph: protectedProcedure
     .input(
       z.object({
-        apiToken: z.string().min(1),
+        apiToken: z.string().trim().min(1),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       if (!isEncryptionConfigured()) {
-        throw new Error("Token encryption not configured (GIT_TOKEN_ENCRYPTION_KEY)");
+        throw new Error(
+          "Token encryption not configured (GIT_TOKEN_ENCRYPTION_KEY)",
+        );
       }
 
       // Validate token by calling ForgeGraph API
-      const fgServer = process.env.FORGEGRAPH_URL ?? process.env.FG_API_URL ?? "https://forgegraf.com";
+      const fgServer =
+        process.env.FORGEGRAPH_URL ??
+        process.env.FG_API_URL ??
+        "https://forgegraph.com";
       const resp = await fetch(`${fgServer}/api/fg/apps`, {
         headers: { Authorization: `Bearer ${input.apiToken}` },
       });
