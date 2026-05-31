@@ -24,6 +24,7 @@ import {
   workItemsList,
   workItemsGet,
   workItemsUpdate,
+  workItemsReorderQueue,
   workItemsPromoteToTask,
   workItemsDispatch,
   workItemsListComments,
@@ -40,7 +41,6 @@ import {
   workItemsTaskRunExecute,
   workItemsTaskRunListLifecycleEvents,
   workItemsListRecentActivities,
-  formatWorkItemIdentifier,
 } from "../handlers/workItems";
 
 /**
@@ -51,8 +51,7 @@ import {
  */
 type WorkItemProcedureBuilder =
   | typeof protectedProcedure
-  | typeof apiKeyReadProcedure
-  | typeof apiKeyWriteProcedure;
+  | typeof apiKeyReadProcedure;
 
 const buildListWorkItemsProcedure = <T extends WorkItemProcedureBuilder>(
   procedure: T,
@@ -101,6 +100,17 @@ const buildUpdateWorkItemProcedure = <T extends WorkItemProcedureBuilder>(
 ) =>
   procedure.input(updateWorkItemInputSchema).mutation(({ ctx, input }) =>
     workItemsUpdate({ db: ctx.db, userId: ctx.session.user.id }, input),
+  );
+
+const reorderQueueProcedure = protectedProcedure
+  .input(
+    z.object({
+      workspaceId: z.string().uuid(),
+      workItemIds: z.array(z.string().uuid()).min(1).max(100),
+    }),
+  )
+  .mutation(({ ctx, input }) =>
+    workItemsReorderQueue({ db: ctx.db, userId: ctx.session.user.id }, input),
   );
 
 const buildListActivitiesProcedure = <T extends WorkItemProcedureBuilder>(
@@ -312,6 +322,7 @@ export const workItemsRouter = {
   list: listWorkItemsProcedure,
   get: getWorkItemProcedure,
   update: updateWorkItemProcedure,
+  reorderQueue: reorderQueueProcedure,
   promoteToTask: promoteToTaskProcedure,
   listComments: listCommentsProcedure,
   createComment: createCommentProcedure,

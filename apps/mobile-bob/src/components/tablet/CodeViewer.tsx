@@ -20,7 +20,7 @@ export function CodeViewer({ content, filePath, startLine = 1 }: CodeViewerProps
         className="flex-row items-center px-3 py-2"
         style={{ borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.card }}
       >
-        <Text className="text-xs font-mono" style={{ color: colors.accent }} numberOfLines={1}>
+        <Text className="text-xs font-mono text-accent" numberOfLines={1}>
           {filePath}
         </Text>
       </View>
@@ -49,11 +49,11 @@ export function CodeViewer({ content, filePath, startLine = 1 }: CodeViewerProps
               return (
                 <View key={i} className="flex-row">
                   <View className="items-end pr-2" style={{ width: 48 }}>
-                    <Text className="text-xs font-mono" style={{ color: colors.muted2 }}>
+                    <Text className="text-xs font-mono text-muted2">
                       {lineNum}
                     </Text>
                   </View>
-                  <Text className="flex-1 text-xs font-mono leading-5" style={{ color: colors.foreground }}>
+                  <Text className="flex-1 text-xs font-mono leading-5 text-foreground">
                     {lineContent || " "}
                   </Text>
                 </View>

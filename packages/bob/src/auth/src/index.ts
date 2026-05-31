@@ -10,6 +10,7 @@
 // --- Context -----------------------------------------------------------------
 export {
   resolveAuthContext,
+  resolveAuthBypassUserId,
   resolveWorkspaceSelection,
   DEFAULT_USER_ID,
   type RequestAuthContext,

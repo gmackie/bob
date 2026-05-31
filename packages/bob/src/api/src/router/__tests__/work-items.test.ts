@@ -155,6 +155,28 @@ describe("workItems router", () => {
     });
   });
 
+  it("persists workspace queue order for work items", async () => {
+    const workspaceId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const firstWorkItemId = "11111111-1111-4111-8111-111111111111";
+    const secondWorkItemId = "22222222-2222-4222-8222-222222222222";
+
+    findFirstMocks.workspaceMembers.mockResolvedValueOnce({
+      id: "membership-1",
+    });
+
+    const caller = createCaller() as any;
+
+    await expect(
+      caller.workItems.reorderQueue({
+        workspaceId,
+        workItemIds: [secondWorkItemId, firstWorkItemId],
+      }),
+    ).resolves.toEqual({ success: true });
+
+    expect(updateSetMock).toHaveBeenNthCalledWith(1, { queueSortOrder: 0 });
+    expect(updateSetMock).toHaveBeenNthCalledWith(2, { queueSortOrder: 1 });
+  });
+
   it("rejects comment creation when the caller is not a member of the work item's workspace", async () => {
     findFirstMocks.workItems.mockResolvedValueOnce({
       id: workItemId,

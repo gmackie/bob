@@ -1,3 +1,5 @@
+import { extractPayloadText } from "./session-event-text";
+
 export type ChatMode = "bob" | "ooda";
 export type ChatRole = "user" | "assistant" | "system";
 
@@ -28,11 +30,7 @@ export interface OodaSessionEvent {
 }
 
 function payloadText(payload: Record<string, unknown>): string {
-  for (const key of ["content", "text", "data", "chunk", "message"]) {
-    const value = payload[key];
-    if (typeof value === "string") return value;
-  }
-  return JSON.stringify(payload);
+  return extractPayloadText(payload);
 }
 
 export function collapseBobEventsToMessages(events: BobChatEvent[]): ChatMessage[] {

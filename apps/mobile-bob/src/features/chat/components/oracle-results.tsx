@@ -34,23 +34,22 @@ export function OracleResults({
     <View className="border-border bg-card-elevated max-h-72 rounded-2xl border">
       <View className="border-border flex-row items-center justify-between border-b px-4 py-2.5">
         <View className="flex-1">
-          <Text className="text-xs font-semibold" style={{ color: colors.foreground }}>
+          <Text className="text-xs font-semibold text-foreground">
             {isSearching
               ? "Searching..."
               : `${results.length} results${latencyMs != null ? ` (${latencyMs}ms)` : ""}`}
           </Text>
           {query ? (
             <Text
-              className="text-[10px]"
+              className="text-[10px] text-muted"
               numberOfLines={1}
-              style={{ color: colors.muted }}
             >
               {query}
             </Text>
           ) : null}
         </View>
         <Pressable onPress={onClose} className="active:opacity-70 pl-3">
-          <Text className="text-xs font-semibold" style={{ color: colors.muted }}>
+          <Text className="text-xs font-semibold text-muted">
             Close
           </Text>
         </Pressable>
@@ -58,7 +57,7 @@ export function OracleResults({
 
       {error ? (
         <View className="px-4 py-3">
-          <Text className="text-xs" style={{ color: colors.danger }}>
+          <Text className="text-xs text-danger">
             {error}
           </Text>
         </View>
@@ -74,36 +73,31 @@ export function OracleResults({
                 <View className="flex-1 pr-2">
                   {chunk.sourceTitle ? (
                     <Text
-                      className="text-xs font-semibold"
+                      className="text-xs font-semibold text-foreground"
                       numberOfLines={1}
-                      style={{ color: colors.foreground }}
                     >
                       {chunk.sourceTitle}
                     </Text>
                   ) : null}
                   {chunk.headingContext ? (
                     <Text
-                      className="text-[10px]"
+                      className="text-[10px] text-muted"
                       numberOfLines={1}
-                      style={{ color: colors.muted }}
                     >
                       {chunk.headingContext}
                     </Text>
                   ) : null}
                 </View>
                 <View className="flex-row items-center gap-1.5">
-                  <Text className="text-[10px]" style={{ color: colors.muted2 }}>
+                  <Text className="text-[10px] text-muted2">
                     {chunk.sourceKind}
                   </Text>
-                  <Text className="text-[10px] font-semibold" style={{ color: colors.accent }}>
+                  <Text className="text-[10px] font-semibold text-accent">
                     {formatScore(chunk.score)}
                   </Text>
                 </View>
               </View>
-              <Text
-                className="mt-1 text-xs leading-4"
-                style={{ color: colors.secondaryForeground }}
-              >
+              <Text className="mt-1 text-xs leading-4 text-secondary-foreground">
                 {truncate(chunk.content, 200)}
               </Text>
             </View>

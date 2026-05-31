@@ -14,41 +14,41 @@
  * inline React Native styles, so inline `style={{ color: "..." }}`
  * gets overridden by the broken CSS.
  *
- * Fix: Define explicit @utility overrides with hard-coded hex values.
- * These @utility rules are in the utilities layer and override the
- * auto-generated var()-based ones. Browser preflight and universal selectors
- * are intentionally omitted because react-native-css cannot deserialize them
- * for native bundles, and React Native does not need browser reset styles.
+ * Fix: Define explicit @utility overrides with hard-coded hex values
+ * derived from Bob's dark theme (tooling/bob-tailwind/theme.css).
  *
  * TODO: Remove when upgrading to stable NativeWind v5 / react-native-css.
  */
 
 @utility text-foreground {
-  color: #e6edf3;
+  color: #eeedea;
 }
 @utility text-muted {
-  color: #8b949e;
+  color: #6e6b63;
+}
+@utility text-muted-foreground {
+  color: #6e6b63;
 }
 @utility text-muted2 {
-  color: #667085;
+  color: #565349;
 }
 @utility text-white {
   color: #ffffff;
 }
 @utility text-primary-foreground {
-  color: #ffffff;
+  color: #141310;
 }
 @utility text-secondary-foreground {
-  color: #e6edf3;
+  color: #a8a59d;
 }
 @utility text-card-foreground {
-  color: #e6edf3;
+  color: #eeedea;
 }
 @utility text-accent-foreground {
-  color: #0b0f14;
+  color: #141310;
 }
 @utility text-accent {
-  color: #22d3ee;
+  color: #e7a505;
 }
 @utility text-success {
   color: #22c55e;
@@ -57,30 +57,31 @@
   color: #f59e0b;
 }
 @utility text-danger {
-  color: #ef4444;
+  color: #ef5350;
 }
 @utility text-primary {
-  color: #7c3aed;
+  color: #e7a505;
 }
 
 @theme {
-  --color-background: #0b0f14;
-  --color-foreground: #e6edf3;
-  --color-card: #111827;
-  --color-card-elevated: #162033;
-  --color-card-foreground: #e6edf3;
-  --color-primary: #7c3aed;
-  --color-primary-foreground: #ffffff;
-  --color-secondary: #162033;
-  --color-secondary-foreground: #e6edf3;
-  --color-muted: #8b949e;
-  --color-muted2: #667085;
-  --color-accent: #22d3ee;
-  --color-accent-foreground: #0b0f14;
-  --color-border: #233047;
-  --color-input: #111827;
-  --color-ring: #7c3aed;
+  --color-background: #141310;
+  --color-foreground: #eeedea;
+  --color-card: #1c1b18;
+  --color-card-elevated: #232220;
+  --color-card-foreground: #eeedea;
+  --color-primary: #e7a505;
+  --color-primary-foreground: #141310;
+  --color-secondary: #232220;
+  --color-secondary-foreground: #a8a59d;
+  --color-muted: #6e6b63;
+  --color-muted-foreground: #6e6b63;
+  --color-muted2: #565349;
+  --color-accent: #232220;
+  --color-accent-foreground: #e7a505;
+  --color-border: #2e2d2a;
+  --color-input: #232220;
+  --color-ring: #e7a505;
   --color-success: #22c55e;
   --color-warning: #f59e0b;
-  --color-danger: #ef4444;
+  --color-danger: #ef5350;
 }

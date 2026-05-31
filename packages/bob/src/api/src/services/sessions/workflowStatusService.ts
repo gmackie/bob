@@ -31,8 +31,24 @@ const VALID_TRANSITIONS: Record<WorkflowStatus, WorkflowStatus[]> = {
   completed: [],
 };
 
+function readExecuteRows<T>(result: unknown): T[] {
+  if (Array.isArray(result)) {
+    return result as T[];
+  }
+
+  if (
+    result &&
+    typeof result === "object" &&
+    Array.isArray((result as { rows?: unknown }).rows)
+  ) {
+    return (result as { rows: T[] }).rows;
+  }
+
+  return [];
+}
+
 function isValidTransition(from: WorkflowStatus, to: WorkflowStatus): boolean {
-  return VALID_TRANSITIONS[from]?.includes(to) ?? false;
+  return VALID_TRANSITIONS[from].includes(to);
 }
 
 async function getOwnedSession(userId: string, sessionId: string) {
@@ -462,12 +478,12 @@ export async function completeTask(
 }
 
 export async function findExpiredAwaitingInputSessions(): Promise<
-  Array<{
+  {
     id: string;
     userId: string;
     awaitingInputDefault: string;
     planningTaskId: string | null;
-  }>
+  }[]
 > {
   const result = await db.execute(sql`
     SELECT id, user_id, awaiting_input_default,
@@ -478,14 +494,12 @@ export async function findExpiredAwaitingInputSessions(): Promise<
       AND awaiting_input_resolved_at IS NULL
   `);
 
-  return (
-    result.rows as Array<{
-      id: string;
-      user_id: string;
-      awaiting_input_default: string;
-      planning_task_id: string | null;
-    }>
-  ).map((row) => ({
+  return readExecuteRows<{
+    id: string;
+    user_id: string;
+    awaiting_input_default: string | null;
+    planning_task_id: string | null;
+  }>(result).map((row) => ({
     id: row.id,
     userId: row.user_id,
     awaitingInputDefault: row.awaiting_input_default ?? "proceed with default",
@@ -503,41 +517,39 @@ export async function getSessionWorkflowState(
     question: string;
     options: string[] | null;
     defaultAction: string;
-    expiresAt: Date;
+    expiresAt: Date | string;
   } | null;
 } | null> {
-  const result = await db.execute(sql`
-    SELECT workflow_status, status_message,
-           awaiting_input_question, awaiting_input_options,
-           awaiting_input_default, awaiting_input_expires_at
-    FROM chat_conversations
-    WHERE id = ${sessionId} AND user_id = ${userId}
-  `);
+  const row = await db.query.chatConversations.findFirst({
+    columns: {
+      workflowStatus: true,
+      statusMessage: true,
+      awaitingInputQuestion: true,
+      awaitingInputOptions: true,
+      awaitingInputDefault: true,
+      awaitingInputExpiresAt: true,
+    },
+    where: and(
+      eq(chatConversations.id, sessionId),
+      eq(chatConversations.userId, userId),
+    ),
+  });
 
-  if (result.rows.length === 0) return null;
-
-  const row = result.rows[0] as {
-    workflow_status: WorkflowStatus;
-    status_message: string | null;
-    awaiting_input_question: string | null;
-    awaiting_input_options: string[] | null;
-    awaiting_input_default: string | null;
-    awaiting_input_expires_at: Date | null;
-  };
+  if (!row) return null;
 
   const awaitingInput =
-    row.workflow_status === "awaiting_input" && row.awaiting_input_question
+    row.workflowStatus === "awaiting_input" && row.awaitingInputQuestion
       ? {
-          question: row.awaiting_input_question,
-          options: row.awaiting_input_options,
-          defaultAction: row.awaiting_input_default ?? "",
-          expiresAt: row.awaiting_input_expires_at ?? new Date(),
+          question: row.awaitingInputQuestion,
+          options: row.awaitingInputOptions,
+          defaultAction: row.awaitingInputDefault ?? "",
+          expiresAt: row.awaitingInputExpiresAt ?? new Date(),
         }
       : null;
 
   return {
-    workflowStatus: row.workflow_status,
-    statusMessage: row.status_message,
+    workflowStatus: row.workflowStatus as WorkflowStatus,
+    statusMessage: row.statusMessage,
     awaitingInput,
   };
 }

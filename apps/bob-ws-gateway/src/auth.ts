@@ -6,6 +6,9 @@ const SESSION_COOKIE_NAMES = new Set([
   "__Secure-better-auth.session_token",
 ]);
 
+const AUTH_BYPASS_TOKEN_PREFIX = "bob-auth-bypass:";
+const DEFAULT_BYPASS_USER_ID = "default-user";
+
 /**
  * Validate a browser Better Auth credential and return the userId.
  *
@@ -18,6 +21,10 @@ const SESSION_COOKIE_NAMES = new Set([
  */
 export async function validateBrowserToken(token: string): Promise<string | null> {
   if (!token) return null;
+
+  const devUserId = resolveDevAuthBypassToken(token);
+  if (devUserId) return devUserId;
+  if (token.startsWith(AUTH_BYPASS_TOKEN_PREFIX)) return null;
 
   const sessionToken = extractBrowserSessionToken(token);
   if (!sessionToken) return null;
@@ -32,6 +39,24 @@ export async function validateBrowserToken(token: string): Promise<string | null
   if (expiresAt.getTime() <= Date.now()) return null;
 
   return row.userId;
+}
+
+function resolveDevAuthBypassToken(credential: string): string | null {
+  if (process.env.BOB_AUTH_BYPASS !== "true") {
+    return null;
+  }
+
+  if (!credential.startsWith(AUTH_BYPASS_TOKEN_PREFIX)) return null;
+
+  const token = credential.slice(AUTH_BYPASS_TOKEN_PREFIX.length).trim();
+  if (token.length === 0) return null;
+
+  const configuredToken = process.env.BOB_AUTH_BYPASS_TOKEN?.trim();
+  if (!configuredToken || token !== configuredToken) return null;
+
+  const configuredUserId =
+    process.env.BOB_AUTH_BYPASS_USER_ID?.trim() || DEFAULT_BYPASS_USER_ID;
+  return configuredUserId;
 }
 
 function extractBrowserSessionToken(credential: string): string | null {

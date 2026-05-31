@@ -105,17 +105,17 @@ export function VoiceInputBar({ onSend, disabled = false }: VoiceInputBarProps) 
     <View className="border-border bg-card-elevated rounded-2xl border p-3">
       {snapshot.phase !== "idle" ? (
         <View className="mb-3 rounded-xl bg-background px-3 py-2">
-          <Text className="text-sm" style={{ color: colors.foreground }}>
+          <Text className="text-sm text-foreground">
             {visibleTranscript}
           </Text>
-          <Text className="mt-1 text-xs" style={{ color: colors.muted }}>
+          <Text className="mt-1 text-xs text-muted">
             {snapshot.phase === "locked"
               ? "Locked. Tap send or cancel."
               : "Slide up to lock, left to cancel."}
           </Text>
         </View>
       ) : speech.error ? (
-        <Text className="mb-3 text-xs" style={{ color: colors.warning }}>
+        <Text className="mb-3 text-xs text-warning">
           {speech.error}
         </Text>
       ) : null}
@@ -130,10 +130,7 @@ export function VoiceInputBar({ onSend, disabled = false }: VoiceInputBarProps) 
             snapshot.phase === "idle" ? "bg-primary" : "bg-danger"
           }`}
         >
-          <Text
-            className="text-center text-base font-semibold"
-            style={{ color: colors.primaryForeground }}
-          >
+          <Text className="text-center text-base font-semibold text-primary-foreground">
             {snapshot.phase === "idle" ? "Hold to talk" : "Recording"}
           </Text>
         </Pressable>
@@ -144,7 +141,7 @@ export function VoiceInputBar({ onSend, disabled = false }: VoiceInputBarProps) 
               onPress={cancel}
               className="border-border rounded-2xl border px-4 py-4 active:opacity-80"
             >
-              <Text className="font-semibold" style={{ color: colors.danger }}>
+              <Text className="font-semibold text-danger">
                 Cancel
               </Text>
             </Pressable>
@@ -152,10 +149,7 @@ export function VoiceInputBar({ onSend, disabled = false }: VoiceInputBarProps) 
               onPress={finish}
               className="bg-primary rounded-2xl px-4 py-4 active:opacity-80"
             >
-              <Text
-                className="font-semibold"
-                style={{ color: colors.primaryForeground }}
-              >
+              <Text className="font-semibold text-primary-foreground">
                 Send
               </Text>
             </Pressable>
@@ -166,7 +160,7 @@ export function VoiceInputBar({ onSend, disabled = false }: VoiceInputBarProps) 
             disabled={disabled}
             className="border-border rounded-2xl border px-4 py-4 active:opacity-80 disabled:opacity-50"
           >
-            <Text className="font-semibold" style={{ color: colors.muted }}>
+            <Text className="font-semibold text-muted">
               Keyboard
             </Text>
           </Pressable>

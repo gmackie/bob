@@ -30,11 +30,17 @@ export const authBundle: AuthRuntimeBundle = createAuthRuntime({
   githubClientId: process.env.AUTH_GITHUB_ID ?? "",
   githubClientSecret: process.env.AUTH_GITHUB_SECRET ?? "",
   githubScopes: ["user:email", "repo", "read:user"],
+  googleClientId: process.env.AUTH_GOOGLE_ID,
+  googleClientSecret: process.env.AUTH_GOOGLE_SECRET,
+  appleClientId: process.env.AUTH_APPLE_ID,
+  appleClientSecret: process.env.AUTH_APPLE_SECRET,
+  appBundleIdentifier: "com.gmacko.bob",
   cookieDomain: ".blder.bot",
   trustedOrigins: [
     "https://blder.bot",
     "https://bob.blder.bot",
     "https://ooda.blder.bot",
+    "bob://",
     ...(process.env.TRUSTED_ORIGINS?.split(",").map((o) => o.trim()) ?? []),
   ],
 });

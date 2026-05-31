@@ -79,11 +79,11 @@ export function ChatScreen() {
     <Screen className="pt-4">
       <View className="mb-4 flex-row items-center justify-between">
         <Pressable onPress={() => router.back()} className="active:opacity-70">
-          <Text className="text-base font-semibold" style={{ color: colors.muted }}>
+          <Text className="text-base font-semibold text-muted">
             Back
           </Text>
         </Pressable>
-        <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>
+        <Text className="text-lg font-semibold text-foreground">
           Agent Chat
         </Text>
         <ModeToggle mode={mode} onChange={setMode} />
@@ -106,14 +106,13 @@ export function ChatScreen() {
                   : "bg-warning"
             }`}
           />
-          <Text className="text-xs font-semibold" style={{ color: colors.muted }}>
+          <Text className="text-xs font-semibold text-muted">
             {activeChat.status}
           </Text>
         </View>
         <Text
-          className="ml-3 flex-1 text-right text-xs"
+          className="ml-3 flex-1 text-right text-xs text-muted2"
           numberOfLines={1}
-          style={{ color: colors.muted2 }}
         >
           {activeChat.statusText}
         </Text>
@@ -123,11 +122,11 @@ export function ChatScreen() {
               onPress={() => setVaultVisible(true)}
               className="active:opacity-70"
             >
-              <Text className="text-xs" style={{ color: colors.accent }}>
+              <Text className="text-xs text-accent">
                 Vault
               </Text>
             </Pressable>
-            <Text className="text-xs" style={{ color: colors.accent }}>
+            <Text className="text-xs text-accent">
               Threads
             </Text>
           </View>

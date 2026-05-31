@@ -1,7 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { db } from "@bob/db/client";
 import type { WorkflowStatus } from "../workflowStatusService";
-import { workflowStatusValues } from "../workflowStatusService";
+import {
+  getSessionWorkflowState,
+  workflowStatusValues,
+} from "../workflowStatusService";
+
+type MockConversationRow = Awaited<
+  ReturnType<typeof db.query.chatConversations.findFirst>
+>;
 
 vi.mock("@bob/db/client", () => ({
   db: {
@@ -33,6 +41,11 @@ vi.mock("@bob/db", () => ({
 }));
 
 describe("workflowStatusService", () => {
+  beforeEach(() => {
+    vi.mocked(db.execute).mockReset();
+    vi.mocked(db.query.chatConversations.findFirst).mockReset();
+  });
+
   describe("workflowStatusValues", () => {
     it("should contain all valid workflow status values", () => {
       expect(workflowStatusValues).toContain("started");
@@ -91,6 +104,55 @@ describe("workflowStatusService", () => {
     it("should ensure WorkflowStatus type matches workflowStatusValues", () => {
       const testStatus: WorkflowStatus = "working";
       expect(workflowStatusValues).toContain(testStatus);
+    });
+  });
+
+  describe("getSessionWorkflowState", () => {
+    it("reads workflow state from the owned conversation row", async () => {
+      vi.mocked(db.query.chatConversations.findFirst).mockResolvedValueOnce({
+        workflowStatus: "started",
+        statusMessage: "Queued for execution",
+        awaitingInputQuestion: null,
+        awaitingInputOptions: null,
+        awaitingInputDefault: null,
+        awaitingInputExpiresAt: null,
+      } as MockConversationRow);
+
+      await expect(
+        getSessionWorkflowState("user-1", "session-1"),
+      ).resolves.toEqual({
+        workflowStatus: "started",
+        statusMessage: "Queued for execution",
+        awaitingInput: null,
+      });
+      expect(db.execute).not.toHaveBeenCalled();
+    });
+
+    it("does not fail through the raw execute path in production", async () => {
+      vi.mocked(db.execute).mockRejectedValueOnce(
+        new TypeError("Cannot read properties of undefined (reading 'length')"),
+      );
+      vi.mocked(db.query.chatConversations.findFirst).mockResolvedValueOnce({
+        workflowStatus: "awaiting_input",
+        statusMessage: "Need a decision",
+        awaitingInputQuestion: "Proceed?",
+        awaitingInputOptions: ["yes", "no"],
+        awaitingInputDefault: "yes",
+        awaitingInputExpiresAt: "2026-05-30T12:00:00.000Z",
+      } as MockConversationRow);
+
+      await expect(
+        getSessionWorkflowState("user-1", "session-1"),
+      ).resolves.toEqual({
+        workflowStatus: "awaiting_input",
+        statusMessage: "Need a decision",
+        awaitingInput: {
+          question: "Proceed?",
+          options: ["yes", "no"],
+          defaultAction: "yes",
+          expiresAt: "2026-05-30T12:00:00.000Z",
+        },
+      });
     });
   });
 });

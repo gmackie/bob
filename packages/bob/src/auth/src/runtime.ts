@@ -62,6 +62,16 @@ export interface AuthRuntimeOptions {
   readonly githubClientSecret: string;
   /** Override GitHub OAuth scopes. Default `["user:email", "read:user"]`. */
   readonly githubScopes?: readonly string[];
+  /** Google OAuth client ID. */
+  readonly googleClientId?: string;
+  /** Google OAuth client secret. */
+  readonly googleClientSecret?: string;
+  /** Apple Sign In Services ID. */
+  readonly appleClientId?: string;
+  /** Apple Sign In client secret (JWT). */
+  readonly appleClientSecret?: string;
+  /** iOS app bundle identifier for native Apple Sign In. */
+  readonly appBundleIdentifier?: string;
   /** Additional trusted origins. */
   readonly trustedOrigins?: readonly string[];
   /**
@@ -150,6 +160,11 @@ export function createAuthRuntime(opts: AuthRuntimeOptions): AuthRuntimeBundle {
     githubClientId: opts.githubClientId,
     githubClientSecret: opts.githubClientSecret,
     githubScopes: opts.githubScopes,
+    googleClientId: opts.googleClientId,
+    googleClientSecret: opts.googleClientSecret,
+    appleClientId: opts.appleClientId,
+    appleClientSecret: opts.appleClientSecret,
+    appBundleIdentifier: opts.appBundleIdentifier,
     trustedOrigins: opts.trustedOrigins,
     emailAndPassword: opts.emailAndPassword,
     bootstrapTenancy: opts.bootstrapTenancy,

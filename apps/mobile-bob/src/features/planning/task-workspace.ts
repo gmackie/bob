@@ -1,3 +1,5 @@
+import { extractSessionEventText } from "~/features/chat/session-event-text";
+
 interface TaskWorkspaceWorkItem {
   id: string;
   identifier: string;
@@ -51,14 +53,7 @@ export const DEFAULT_EXECUTION_WORKSPACE_TITLE = "Execution workspace";
 export function summarizeSessionEvents(events: TaskWorkspaceEvent[]) {
   return events
     .map((event) => {
-      const body =
-        typeof event.payload.content === "string"
-          ? event.payload.content
-          : typeof event.payload.data === "string"
-            ? event.payload.data
-            : typeof event.payload.message === "string"
-              ? event.payload.message
-              : null;
+      const body = extractSessionEventText(event.eventType, event.payload).trim();
 
       if (!body) {
         return null;
@@ -112,6 +107,12 @@ function readArtifactResult(
   return null;
 }
 
+function nonEmptyOrFallback(value: string | null | undefined, fallback: string) {
+  const text = value?.trim();
+  if (text && text.length > 0) return text;
+  return fallback;
+}
+
 export function deriveTaskWorkspaceValidationState(
   artifacts: TaskWorkspaceArtifact[],
 ) {
@@ -127,9 +128,10 @@ export function deriveTaskWorkspaceValidationState(
     if (result === "passed") {
       return {
         label: "Validation passed",
-        detail:
-          verificationArtifact.summary?.trim() ||
+        detail: nonEmptyOrFallback(
+          verificationArtifact.summary,
           "The latest verification run passed.",
+        ),
         tone: "positive" as const,
       };
     }
@@ -137,18 +139,20 @@ export function deriveTaskWorkspaceValidationState(
     if (result === "failed") {
       return {
         label: "Validation failed",
-        detail:
-          verificationArtifact.summary?.trim() ||
+        detail: nonEmptyOrFallback(
+          verificationArtifact.summary,
           "The latest verification run failed.",
+        ),
         tone: "critical" as const,
       };
     }
 
     return {
       label: "Validation in progress",
-      detail:
-        verificationArtifact.summary?.trim() ||
+      detail: nonEmptyOrFallback(
+        verificationArtifact.summary,
         "A verification artifact is attached, but it does not report a final result yet.",
+      ),
       tone: "warning" as const,
     };
   }
@@ -177,7 +181,7 @@ export function summarizeTaskRuns(runs: TaskWorkspaceRun[]) {
   return runs.map((run) => ({
     id: run.id,
     label: run.status.replace(/_/g, " "),
-    branch: run.branch?.trim() || "No branch recorded",
+    branch: nonEmptyOrFallback(run.branch, "No branch recorded"),
     hasSession: run.sessionId != null,
     sessionId: run.sessionId,
   }));

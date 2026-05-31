@@ -10,6 +10,7 @@ interface ObservabilityConfig {
 
 interface EnvironmentConfig {
   apiUrl: string;
+  authUrl: string;
   oodaApiUrl: string;
   environment: AppEnvironment;
   isDevelopment: boolean;
@@ -82,10 +83,7 @@ function getApiUrl(): string {
       );
     case "development":
     default:
-      if (resolvedHost) {
-        return `http://${resolvedHost}:3000`;
-      }
-      return "http://localhost:3000";
+      return "https://bob.blder.bot";
   }
 }
 
@@ -101,6 +99,15 @@ function getOodaApiUrl(): string {
   if (environment === "production") return "https://ooda.blder.bot";
   if (environment === "staging") return "https://ooda.blder.bot";
   return "http://localhost:3001";
+}
+
+function getAuthUrl(): string {
+  return (
+    getExpoExtraString("AUTH_URL") ??
+    getProcessEnvString("AUTH_URL") ??
+    getProcessEnvString("EXPO_PUBLIC_AUTH_URL") ??
+    getApiUrl()
+  );
 }
 
 function getObservabilityConfig(): ObservabilityConfig {
@@ -177,6 +184,7 @@ export function getEnvConfig(): EnvironmentConfig {
 
   return {
     apiUrl: getApiUrl(),
+    authUrl: getAuthUrl(),
     oodaApiUrl: getOodaApiUrl(),
     environment,
     isDevelopment: environment === "development",
@@ -191,4 +199,8 @@ export const env = getEnvConfig();
 
 export function getBaseUrl(): string {
   return env.apiUrl;
+}
+
+export function getAuthBaseUrl(): string {
+  return env.authUrl;
 }

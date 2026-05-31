@@ -6,8 +6,8 @@ import {
   View,
 } from "react-native";
 
-import { colors } from "~/lib/colors";
 
+import { colors } from "~/lib/colors";
 import type { VaultBrowserHook, VaultKind } from "../hooks/use-vault-browser";
 
 interface VaultBrowserProps {
@@ -72,14 +72,13 @@ function NoteDetail({
     <View className="flex-1">
       <View className="mb-4 flex-row items-center gap-3">
         <Pressable onPress={onBack} className="active:opacity-70">
-          <Text className="text-base font-semibold" style={{ color: colors.accent }}>
+          <Text className="text-base font-semibold text-accent">
             Back
           </Text>
         </Pressable>
         <Text
-          className="flex-1 text-base font-semibold"
+          className="flex-1 text-base font-semibold text-foreground"
           numberOfLines={1}
-          style={{ color: colors.foreground }}
         >
           {file.name}
         </Text>
@@ -89,10 +88,10 @@ function NoteDetail({
         <View className="border-border mb-3 rounded-xl border bg-card px-3 py-2">
           {Object.entries(file.frontmatter).map(([key, value]) => (
             <View key={key} className="flex-row gap-2 py-0.5">
-              <Text className="text-xs font-semibold" style={{ color: colors.muted }}>
+              <Text className="text-xs font-semibold text-muted">
                 {key}:
               </Text>
-              <Text className="flex-1 text-xs" style={{ color: colors.secondaryForeground }}>
+              <Text className="flex-1 text-xs text-secondary-foreground">
                 {String(value)}
               </Text>
             </View>
@@ -101,10 +100,7 @@ function NoteDetail({
       ) : null}
 
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-        <Text
-          className="text-sm leading-6"
-          style={{ color: colors.secondaryForeground }}
-        >
+        <Text className="text-sm leading-6 text-secondary-foreground">
           {file.content}
         </Text>
       </ScrollView>
@@ -124,16 +120,13 @@ export function VaultBrowser({ vault, visible, onClose }: VaultBrowserProps) {
     >
       <View className="flex-1 bg-background pt-6 px-5">
         <View className="mb-5 flex-row items-center justify-between">
-          <Text
-            className="text-xl font-semibold"
-            style={{ color: colors.foreground }}
-          >
+          <Text className="text-xl font-semibold text-foreground">
             Vault
           </Text>
           <View className="flex-row items-center gap-3">
             <VaultKindToggle kind={vault.vaultKind} onChange={vault.setVaultKind} />
             <Pressable onPress={onClose} className="active:opacity-70">
-              <Text className="text-base font-semibold" style={{ color: colors.muted }}>
+              <Text className="text-base font-semibold text-muted">
                 Done
               </Text>
             </Pressable>
@@ -142,7 +135,7 @@ export function VaultBrowser({ vault, visible, onClose }: VaultBrowserProps) {
 
         {vault.error ? (
           <View className="border-border mb-3 rounded-xl border bg-card px-4 py-3">
-            <Text className="text-xs" style={{ color: colors.danger }}>
+            <Text className="text-xs text-danger">
               {vault.error}
             </Text>
           </View>
@@ -153,20 +146,17 @@ export function VaultBrowser({ vault, visible, onClose }: VaultBrowserProps) {
         ) : (
           <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
             {vault.isLoadingFiles ? (
-              <Text className="text-center text-sm" style={{ color: colors.muted }}>
+              <Text className="text-center text-sm text-muted">
                 Loading vault...
               </Text>
             ) : vault.files.length === 0 ? (
-              <Text className="text-center text-sm" style={{ color: colors.muted }}>
+              <Text className="text-center text-sm text-muted">
                 No notes in {vault.vaultKind} vault.
               </Text>
             ) : (
               Array.from(grouped.entries()).map(([thread, files]) => (
                 <View key={thread} className="mb-5">
-                  <Text
-                    className="mb-2 text-xs font-semibold uppercase tracking-wider"
-                    style={{ color: colors.muted }}
-                  >
+                  <Text className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
                     {thread}
                   </Text>
                   {files.map((file) => (
@@ -176,16 +166,14 @@ export function VaultBrowser({ vault, visible, onClose }: VaultBrowserProps) {
                       className="border-border mb-1.5 rounded-xl border bg-card px-4 py-3 active:opacity-80"
                     >
                       <Text
-                        className="text-sm font-semibold"
+                        className="text-sm font-semibold text-foreground"
                         numberOfLines={1}
-                        style={{ color: colors.foreground }}
                       >
                         {noteName(file)}
                       </Text>
                       <Text
-                        className="mt-0.5 text-xs"
+                        className="mt-0.5 text-xs text-muted2"
                         numberOfLines={1}
-                        style={{ color: colors.muted2 }}
                       >
                         {file}
                       </Text>

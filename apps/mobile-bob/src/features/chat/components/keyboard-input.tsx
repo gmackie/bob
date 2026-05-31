@@ -43,7 +43,7 @@ export function KeyboardInput({
           onPress={onClose}
           className="border-border flex-1 rounded-xl border py-3 active:opacity-80"
         >
-          <Text className="text-center font-semibold" style={{ color: colors.muted }}>
+          <Text className="text-center font-semibold text-muted">
             Voice
           </Text>
         </Pressable>
@@ -52,10 +52,7 @@ export function KeyboardInput({
           disabled={disabled || !value.trim()}
           className="bg-primary flex-1 rounded-xl py-3 active:opacity-80 disabled:opacity-50"
         >
-          <Text
-            className="text-center font-semibold"
-            style={{ color: colors.primaryForeground }}
-          >
+          <Text className="text-center font-semibold text-primary-foreground">
             Send
           </Text>
         </Pressable>

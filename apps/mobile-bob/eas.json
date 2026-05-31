@@ -5,6 +5,8 @@
   },
   "build": {
     "base": {
+      "node": "24.14.0",
+      "pnpm": "10.12.1",
       "ios": {
         "resourceClass": "m-medium"
       },
@@ -21,18 +23,19 @@
       "env": {
         "APP_ENV": "development",
         "API_URL": "http://localhost:3000",
+        "AUTH_URL": "http://localhost:3000",
         "SENTRY_DSN": "${EXPO_PUBLIC_SENTRY_DSN_DEV}",
         "POSTHOG_KEY": "${EXPO_PUBLIC_POSTHOG_KEY_DEV}",
         "POSTHOG_HOST": "${EXPO_PUBLIC_POSTHOG_HOST}"
       },
       "ios": {
-        "simulator": false
+        "simulator": false,
+        "buildConfiguration": "Debug"
       },
       "android": {
         "buildType": "apk",
         "gradleCommand": ":app:assembleDebug"
-      },
-      "channel": "development"
+      }
     },
     "development:simulator": {
       "extends": "development",
@@ -46,6 +49,7 @@
       "env": {
         "APP_ENV": "staging",
         "API_URL": "${STAGING_API_URL}",
+        "AUTH_URL": "${STAGING_API_URL}",
         "SENTRY_DSN": "${EXPO_PUBLIC_SENTRY_DSN_STAGING}",
         "POSTHOG_KEY": "${EXPO_PUBLIC_POSTHOG_KEY_STAGING}",
         "POSTHOG_HOST": "${EXPO_PUBLIC_POSTHOG_HOST}"
@@ -62,7 +66,9 @@
       "extends": "beta",
       "env": {
         "APP_ENV": "staging",
-        "API_URL": "${PRODUCTION_API_URL}",
+        "API_URL": "https://bob.blder.bot",
+        "AUTH_URL": "https://bob.blder.bot",
+        "GATEWAY_PUBLIC_URL": "wss://ws.blder.bot",
         "SENTRY_DSN": "${EXPO_PUBLIC_SENTRY_DSN_STAGING}",
         "POSTHOG_KEY": "${EXPO_PUBLIC_POSTHOG_KEY_STAGING}",
         "POSTHOG_HOST": "${EXPO_PUBLIC_POSTHOG_HOST}"
@@ -75,6 +81,7 @@
       "env": {
         "APP_ENV": "production",
         "API_URL": "${PRODUCTION_API_URL}",
+        "AUTH_URL": "${PRODUCTION_API_URL}",
         "SENTRY_DSN": "${EXPO_PUBLIC_SENTRY_DSN_PROD}",
         "POSTHOG_KEY": "${EXPO_PUBLIC_POSTHOG_KEY_PROD}",
         "POSTHOG_HOST": "${EXPO_PUBLIC_POSTHOG_HOST}"

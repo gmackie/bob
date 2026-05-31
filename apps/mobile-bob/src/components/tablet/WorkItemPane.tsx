@@ -3,6 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 
 import { trpc } from "~/utils/api";
 import { colors } from "~/lib/colors";
+import {
+  formatStatusLabel,
+  unwrapWorkItemDetail,
+} from "~/features/tablet/queue";
 
 const STATUS_COLORS: Record<string, string> = {
   in_progress: colors.success,
@@ -34,20 +38,11 @@ export function WorkItemPane({ workItemId, onOpenInspector, onOpenSession }: Wor
     );
   }
 
-  const item = workItemQuery.data as {
-    id: string;
-    identifier: string;
-    title: string;
-    description: string | null;
-    kind: string;
-    status: string;
-    currentArtifacts?: Array<{ id: string; title: string | null; artifactRole: string; artifactType: string; url: string | null }>;
-    sessions?: Array<{ id: string; status: string; planningSessionType: string | null }>;
-  } | undefined;
+  const item = unwrapWorkItemDetail(workItemQuery.data);
   if (!item) {
     return (
       <View className="flex-1 items-center justify-center" style={{ backgroundColor: colors.background }}>
-        <Text className="text-sm" style={{ color: colors.muted }}>Work item not found</Text>
+        <Text className="text-sm text-muted">Work item not found</Text>
       </View>
     );
   }
@@ -60,11 +55,11 @@ export function WorkItemPane({ workItemId, onOpenInspector, onOpenSession }: Wor
         style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}
       >
         <View className="flex-1 mr-3">
-          <Text className="text-base font-semibold" style={{ color: colors.foreground }} numberOfLines={1}>
+          <Text className="text-base font-semibold text-foreground" numberOfLines={1}>
             {item.title}
           </Text>
           <View className="mt-1 flex-row items-center">
-            <Text className="text-xs" style={{ color: colors.muted }}>
+            <Text className="text-xs text-muted">
               {item.identifier}
             </Text>
             <View
@@ -72,10 +67,10 @@ export function WorkItemPane({ workItemId, onOpenInspector, onOpenSession }: Wor
               style={{ backgroundColor: (STATUS_COLORS[item.status] ?? colors.muted) + "20" }}
             >
               <Text className="text-xs font-medium" style={{ color: STATUS_COLORS[item.status] ?? colors.muted }}>
-                {item.status.replace(/_/g, " ")}
+                {formatStatusLabel(item.status)}
               </Text>
             </View>
-            <Text className="text-xs" style={{ color: colors.muted2 }}>
+            <Text className="text-xs text-muted2">
               {item.kind}
             </Text>
           </View>
@@ -86,7 +81,7 @@ export function WorkItemPane({ workItemId, onOpenInspector, onOpenSession }: Wor
             className="rounded-md px-3 py-1.5 active:opacity-70"
             style={{ backgroundColor: colors.secondary, minHeight: 44, justifyContent: "center" }}
           >
-            <Text className="text-xs font-medium" style={{ color: colors.foreground }}>
+            <Text className="text-xs font-medium text-foreground">
               Inspect
             </Text>
           </Pressable>
@@ -98,10 +93,10 @@ export function WorkItemPane({ workItemId, onOpenInspector, onOpenSession }: Wor
         {/* Description */}
         {item.description ? (
           <View className="mb-6">
-            <Text className="mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: colors.muted }}>
+            <Text className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
               Description
             </Text>
-            <Text className="text-sm leading-5" style={{ color: colors.foreground }}>
+            <Text className="text-sm leading-5 text-foreground">
               {item.description}
             </Text>
           </View>
@@ -110,7 +105,7 @@ export function WorkItemPane({ workItemId, onOpenInspector, onOpenSession }: Wor
         {/* Artifacts */}
         {item.currentArtifacts && item.currentArtifacts.length > 0 && (
           <View className="mb-6">
-            <Text className="mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: colors.muted }}>
+            <Text className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
               Artifacts
             </Text>
             {item.currentArtifacts.map((artifact) => (
@@ -119,10 +114,10 @@ export function WorkItemPane({ workItemId, onOpenInspector, onOpenSession }: Wor
                 className="mb-2 rounded-lg px-3 py-2"
                 style={{ backgroundColor: colors.card }}
               >
-                <Text className="text-sm font-medium" style={{ color: colors.foreground }}>
+                <Text className="text-sm font-medium text-foreground">
                   {artifact.title ?? artifact.artifactRole}
                 </Text>
-                <Text className="text-xs" style={{ color: colors.muted }}>
+                <Text className="text-xs text-muted">
                   {artifact.artifactType}
                 </Text>
               </View>
@@ -133,7 +128,7 @@ export function WorkItemPane({ workItemId, onOpenInspector, onOpenSession }: Wor
         {/* Planning sessions */}
         {item.sessions && item.sessions.length > 0 && (
           <View className="mb-6">
-            <Text className="mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: colors.muted }}>
+            <Text className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
               Planning Sessions
             </Text>
             {item.sessions.map((session) => (
@@ -144,14 +139,14 @@ export function WorkItemPane({ workItemId, onOpenInspector, onOpenSession }: Wor
                 style={{ backgroundColor: colors.card, minHeight: 44 }}
               >
                 <View>
-                  <Text className="text-sm font-medium" style={{ color: colors.foreground }}>
+                  <Text className="text-sm font-medium text-foreground">
                     {session.planningSessionType ?? "Session"}
                   </Text>
-                  <Text className="text-xs" style={{ color: colors.muted }}>
+                  <Text className="text-xs text-muted">
                     {session.status}
                   </Text>
                 </View>
-                <Text className="text-xs font-medium" style={{ color: colors.primary }}>
+                <Text className="text-xs font-medium text-primary">
                   {session.status === "running" || session.status === "idle" ? "Resume" : "View"}
                 </Text>
               </Pressable>

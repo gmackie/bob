@@ -13,6 +13,9 @@ Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
 Environment=GATEWAY_PORT=3002
+Environment=BOB_AUTH_BYPASS=true
+Environment=BOB_AUTH_BYPASS_USER_ID=default-user
+# BOB_AUTH_BYPASS_TOKEN is loaded from /opt/bob/ws-gateway/.env.
 EnvironmentFile=/opt/bob/ws-gateway/.env
 
 # Security hardening

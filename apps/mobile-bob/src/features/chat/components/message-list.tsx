@@ -28,10 +28,10 @@ export function MessageList({
   if (messages.length === 0) {
     return (
       <View className="flex-1 items-center justify-center px-6">
-        <Text className="text-center text-base font-semibold" style={{ color: colors.foreground }}>
+        <Text className="text-center text-base font-semibold text-foreground">
           Agent chat
         </Text>
-        <Text className="mt-2 text-center text-sm leading-5" style={{ color: colors.muted }}>
+        <Text className="mt-2 text-center text-sm leading-5 text-muted">
           {statusText}
         </Text>
       </View>
@@ -55,7 +55,7 @@ export function MessageList({
       {isStreaming ? (
         <View className="mb-3 items-start">
           <View className="border-border bg-card rounded-2xl border px-4 py-3">
-            <Text className="text-xs font-semibold" style={{ color: colors.muted }}>
+            <Text className="text-xs font-semibold text-muted">
               Listening for agent output...
             </Text>
           </View>

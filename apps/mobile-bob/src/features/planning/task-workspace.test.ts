@@ -97,6 +97,30 @@ describe("task workspace view model", () => {
     ]);
   });
 
+  it("summarizes JSONL agent output as readable text", () => {
+    expect(
+      summarizeSessionEvents([
+        {
+          seq: 11,
+          direction: "agent",
+          eventType: "output_chunk",
+          payload: {
+            data: JSON.stringify({
+              type: "content_block_delta",
+              delta: { type: "text_delta", text: "Updating the dashboard." },
+            }),
+          },
+        },
+      ]),
+    ).toEqual([
+      {
+        id: "11",
+        actor: "Bob",
+        body: "Updating the dashboard.",
+      },
+    ]);
+  });
+
   it("derives validation state from the latest verification artifact", () => {
     expect(
       deriveTaskWorkspaceValidationState([

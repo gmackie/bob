@@ -32,12 +32,67 @@ export interface RequestAuthContext {
 }
 
 const DEFAULT_USER_ID = "default-user";
+const AUTH_BYPASS_TOKEN_PREFIX = "bob-auth-bypass:";
 
 function readHeader(headers: Headers, key: string): string | null {
   const value = headers.get(key);
   if (!value) return null;
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : null;
+}
+
+function getConfiguredAuthBypassUserId(): string {
+  const configured = process.env.BOB_AUTH_BYPASS_USER_ID?.trim();
+  return configured && configured.length > 0 ? configured : DEFAULT_USER_ID;
+}
+
+function getConfiguredAuthBypassToken(): string | null {
+  const configured = process.env.BOB_AUTH_BYPASS_TOKEN?.trim();
+  return configured && configured.length > 0 ? configured : null;
+}
+
+function extractAuthBypassToken(value: string | null): string | null {
+  if (!value) return null;
+
+  for (const part of value.split(";")) {
+    const trimmed = part.trim();
+    const candidates = [trimmed];
+
+    const equalsIndex = trimmed.indexOf("=");
+    if (equalsIndex >= 0) {
+      candidates.push(trimmed.slice(equalsIndex + 1).trim());
+    }
+
+    for (const candidate of candidates) {
+      if (!candidate.startsWith(AUTH_BYPASS_TOKEN_PREFIX)) continue;
+
+      const token = candidate.slice(AUTH_BYPASS_TOKEN_PREFIX.length).trim();
+      return token.length > 0 ? token : null;
+    }
+  }
+
+  return null;
+}
+
+export function resolveAuthBypassUserId(headers: Headers): string | null {
+  if (process.env.BOB_AUTH_BYPASS !== "true") {
+    return null;
+  }
+
+  const configuredToken = getConfiguredAuthBypassToken();
+  if (!configuredToken) return null;
+
+  const authHeader = readHeader(headers, "authorization");
+  const bearerToken = authHeader?.startsWith("Bearer ")
+    ? authHeader.slice(7)
+    : null;
+  const requestedToken =
+    extractAuthBypassToken(bearerToken) ??
+    extractAuthBypassToken(readHeader(headers, "cookie"));
+
+  if (!requestedToken || requestedToken !== configuredToken) return null;
+
+  return getConfiguredAuthBypassUserId();
 }
 
 export function resolveWorkspaceSelection(headers: Headers): WorkspaceSelection {
@@ -91,7 +146,24 @@ export async function resolveAuthContext(opts: {
     }
   }
 
-  // 2. Cookie/header session — better-auth handles both cookie-based and
+  // 2. Explicit auth bypass for production-targeted internal mobile builds.
+  // The token is only accepted for the configured single user and still
+  // requires the caller to provide that user's loaded record as defaultUser.
+  const authBypassUserId = resolveAuthBypassUserId(opts.headers);
+  if (
+    authBypassUserId &&
+    opts.defaultUser &&
+    opts.defaultUser.user.id === authBypassUserId
+  ) {
+    return {
+      apiKeyAuth: null,
+      authMethod: "default_user",
+      session: opts.defaultUser,
+      workspace: resolveWorkspaceSelection(opts.headers),
+    };
+  }
+
+  // 3. Cookie/header session — better-auth handles both cookie-based and
   //    Authorization-header-based session resolution internally.
   const session = await opts.authBundle.authInstance.api.getSession({
     headers: opts.headers,
@@ -106,7 +178,7 @@ export async function resolveAuthContext(opts: {
     };
   }
 
-  // 3. Default user fallback.
+  // 4. Default user fallback.
   if (process.env.REQUIRE_AUTH !== "true") {
     return {
       apiKeyAuth: null,
@@ -116,7 +188,7 @@ export async function resolveAuthContext(opts: {
     };
   }
 
-  // 4. No auth.
+  // 5. No auth.
   return {
     apiKeyAuth: null,
     authMethod: "none",

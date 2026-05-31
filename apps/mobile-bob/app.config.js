@@ -6,7 +6,11 @@ const API_URL =
   process.env.API_URL ??
   process.env.EXPO_PUBLIC_API_URL ??
   process.env.EXPO_PUBLIC_PRODUCTION_API_URL ??
-  (isHostedEnv ? "https://bob.blder.bot" : "http://localhost:3000");
+  "https://bob.blder.bot";
+const AUTH_URL =
+  process.env.AUTH_URL ??
+  process.env.EXPO_PUBLIC_AUTH_URL ??
+  API_URL;
 const OODA_API_URL =
   process.env.OODA_API_URL ??
   process.env.EXPO_PUBLIC_OODA_API_URL ??
@@ -15,6 +19,12 @@ const GATEWAY_PUBLIC_URL =
   process.env.GATEWAY_PUBLIC_URL ??
   process.env.EXPO_PUBLIC_GATEWAY_URL ??
   (isHostedEnv ? "wss://ws.blder.bot" : undefined);
+const updatesConfig = isHostedEnv
+  ? {
+      fallbackToCacheTimeout: 0,
+      url: "https://u.expo.dev/e1dd0ab0-4dc1-40f8-b066-7cb91fde1759",
+    }
+  : { enabled: false };
 
 const SENTRY_DSN = process.env.SENTRY_DSN;
 const POSTHOG_KEY = process.env.POSTHOG_KEY;
@@ -96,10 +106,7 @@ module.exports = ({ config }) => {
     orientation: "default",
     icon: "./assets/icon.png",
     userInterfaceStyle: "automatic",
-    updates: {
-      fallbackToCacheTimeout: 0,
-      url: "https://u.expo.dev/e1dd0ab0-4dc1-40f8-b066-7cb91fde1759",
-    },
+    updates: updatesConfig,
     runtimeVersion: "1.0.0",
     newArchEnabled: true,
     assetBundlePatterns: ["**/*"],
@@ -123,6 +130,7 @@ module.exports = ({ config }) => {
     extra: {
       APP_ENV,
       API_URL,
+      AUTH_URL,
       OODA_API_URL,
       GATEWAY_PUBLIC_URL,
       SENTRY_DSN,

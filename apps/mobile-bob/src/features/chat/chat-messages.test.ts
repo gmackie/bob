@@ -55,6 +55,37 @@ describe("chat message mapping", () => {
     ]);
   });
 
+  it("shows agent text instead of raw JSONL stdout envelopes", () => {
+    const messages = collapseBobEventsToMessages([
+      {
+        sessionId: "bob-session",
+        seq: 1,
+        eventType: "output_chunk",
+        direction: "agent",
+        payload: {
+          data: JSON.stringify({
+            type: "assistant",
+            message: {
+              content: [{ type: "text", text: "Starting implementation." }],
+            },
+          }),
+        },
+        createdAt: "2026-05-13T12:00:01.000Z",
+      },
+    ]);
+
+    expect(messages).toEqual([
+      {
+        id: "bob:bob-session:1",
+        mode: "bob",
+        role: "assistant",
+        content: "Starting implementation.",
+        timestamp: "2026-05-13T12:00:01.000Z",
+        sourceId: "bob-session",
+      },
+    ]);
+  });
+
   it("collapses OODA prompt and stdout events into shared messages", () => {
     const messages = collapseOodaEventsToMessages("ooda-session", [
       {

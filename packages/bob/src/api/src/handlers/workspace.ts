@@ -66,6 +66,78 @@ export async function ensureTenantForUser(
   return after?.tenantId ?? null;
 }
 
+async function ensureTenantMembership(
+  db: any,
+  userId: string,
+  tenantId: string,
+): Promise<void> {
+  const existing = await db.query.tenantMembers.findFirst({
+    where: and(
+      eq(tenantMembers.tenantId, tenantId),
+      eq(tenantMembers.userId, userId),
+    ),
+    columns: { id: true },
+  });
+  if (existing) return;
+
+  await db.insert(tenantMembers).values({
+    tenantId,
+    userId,
+    role: "member",
+  });
+}
+
+async function ensureWorkspaceMembership(
+  db: any,
+  userId: string,
+  workspaceId: string,
+): Promise<void> {
+  const existing = await db.query.workspaceMembers.findFirst({
+    where: and(
+      eq(workspaceMembers.workspaceId, workspaceId),
+      eq(workspaceMembers.userId, userId),
+    ),
+    columns: { id: true },
+  });
+  if (existing) return;
+
+  await db.insert(workspaceMembers).values({
+    workspaceId,
+    userId,
+    role: "owner" satisfies (typeof workspaceMemberRole)[number],
+  });
+}
+
+export async function ensureUserMembershipForOwnedWorkspaces(
+  db: any,
+  userId: string,
+): Promise<void> {
+  const ownedWorkspaces = await db.query.workspaces.findMany({
+    where: eq(workspaces.ownerUserId, userId),
+    columns: {
+      id: true,
+      tenantId: true,
+    },
+  });
+
+  for (const workspace of ownedWorkspaces) {
+    const tenantId = workspace.tenantId ?? (await ensureTenantForUser(db, userId));
+
+    if (tenantId) {
+      await ensureTenantMembership(db, userId, tenantId);
+    }
+
+    if (!workspace.tenantId && tenantId) {
+      await db
+        .update(workspaces)
+        .set({ tenantId })
+        .where(eq(workspaces.id, workspace.id));
+    }
+
+    await ensureWorkspaceMembership(db, userId, workspace.id);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Handler functions
 // ---------------------------------------------------------------------------

@@ -1,6 +1,5 @@
 import { Pressable, Text, View } from "react-native";
 
-import { colors } from "~/lib/colors";
 
 import type { AgentMode } from "../agent-mode";
 
@@ -21,10 +20,7 @@ export function ModeToggle({ mode, onChange }: ModeToggleProps) {
             className={`rounded-lg px-4 py-2 ${selected ? "bg-primary" : "bg-transparent"}`}
           >
             <Text
-              className="text-sm font-semibold"
-              style={{
-                color: selected ? colors.primaryForeground : colors.muted,
-              }}
+              className={`text-sm font-semibold ${selected ? "text-primary-foreground" : "text-muted"}`}
             >
               {item === "bob" ? "Bob" : "OODA"}
             </Text>

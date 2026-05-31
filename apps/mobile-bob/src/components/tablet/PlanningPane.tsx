@@ -11,6 +11,7 @@ import {
 } from "react-native";
 
 import type { ServerEvent } from "@bob/ws";
+import { extractPayloadText, extractSessionEventText } from "~/features/chat/session-event-text";
 import { colors } from "~/lib/colors";
 
 // ---------------------------------------------------------------------------
@@ -20,11 +21,8 @@ import { colors } from "~/lib/colors";
 function toDisplayText(value: unknown): string {
   if (typeof value === "string") return value;
   if (value === null || value === undefined) return "";
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return "";
-  }
+  if (typeof value === "object") return extractPayloadText(value as Record<string, unknown>);
+  return "";
 }
 
 /**
@@ -59,27 +57,32 @@ function eventsToChatMessages(events: ServerEvent[]): ChatMessage[] {
     lastSeq = event.seq;
 
     if (event.eventType === "output_chunk" && event.direction === "agent") {
-      currentAgentChunks.push(toDisplayText(event.payload.data));
+      const text = extractSessionEventText(event.eventType, event.payload);
+      if (text) currentAgentChunks.push(text);
       continue;
     }
 
     if (event.eventType === "message_final" && event.direction === "agent") {
       // message_final replaces accumulated chunks
       currentAgentChunks = [];
+      const content = extractSessionEventText(event.eventType, event.payload);
+      if (!content) continue;
       messages.push({
         id: `msg-${event.seq}`,
         role: "agent",
-        content: toDisplayText(event.payload.content),
+        content,
       });
       continue;
     }
 
     if (event.eventType === "input" && event.direction === "client") {
       flushAgent();
+      const content = extractSessionEventText(event.eventType, event.payload);
+      if (!content) continue;
       messages.push({
         id: `input-${event.seq}`,
         role: "user",
-        content: toDisplayText(event.payload.data),
+        content,
       });
       continue;
     }
@@ -116,7 +119,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   if (message.isToolCall) {
     return (
       <View className="mx-4 my-1 flex-row items-center rounded-md px-3 py-2" style={{ backgroundColor: colors.secondary }}>
-        <Text className="text-xs font-mono" style={{ color: colors.accent }}>
+        <Text className="text-xs font-mono text-accent">
           {message.toolName}
         </Text>
       </View>
@@ -150,11 +153,11 @@ function extractArtifactContent(events: ServerEvent[]): string | null {
   for (const event of events) {
     if (event.direction !== "agent") continue;
     if (event.eventType === "output_chunk") {
-      const text = toDisplayText(event.payload.data);
+      const text = extractSessionEventText(event.eventType, event.payload);
       if (text) parts.push(text);
     }
     if (event.eventType === "message_final") {
-      const text = toDisplayText(event.payload.content);
+      const text = extractSessionEventText(event.eventType, event.payload);
       if (text) parts.push(text);
     }
   }
@@ -219,7 +222,7 @@ export function PlanningPane({
         style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}
       >
         <View className="flex-1 mr-3">
-          <Text className="text-sm font-medium" style={{ color: colors.foreground }} numberOfLines={1}>
+          <Text className="text-sm font-medium text-foreground" numberOfLines={1}>
             {sessionType ?? "Planning"} — {workItemTitle}
           </Text>
           <View className="mt-0.5 flex-row items-center">
@@ -233,7 +236,7 @@ export function PlanningPane({
                   : colors.muted2,
               }}
             />
-            <Text className="text-xs" style={{ color: colors.muted }}>
+            <Text className="text-xs text-muted">
               {sessionStatus}
             </Text>
           </View>
@@ -245,7 +248,7 @@ export function PlanningPane({
               className="mr-2 rounded-md px-3 py-1.5 active:opacity-70"
               style={{ backgroundColor: colors.accent + "20", minHeight: 44, justifyContent: "center" }}
             >
-              <Text className="text-xs font-medium" style={{ color: colors.accent }}>Artifact</Text>
+              <Text className="text-xs font-medium text-accent">Artifact</Text>
             </Pressable>
           )}
           {isActive && (
@@ -254,7 +257,7 @@ export function PlanningPane({
               className="rounded-md px-3 py-1.5 active:opacity-70"
               style={{ backgroundColor: colors.danger + "20", minHeight: 44, justifyContent: "center" }}
             >
-              <Text className="text-xs font-medium" style={{ color: colors.danger }}>End</Text>
+              <Text className="text-xs font-medium text-danger">End</Text>
             </Pressable>
           )}
         </View>
@@ -265,7 +268,7 @@ export function PlanningPane({
         {isStarting && messages.length === 0 && (
           <View className="items-center justify-center py-12">
             <ActivityIndicator color={colors.muted} />
-            <Text className="mt-3 text-sm" style={{ color: colors.muted }}>Starting session...</Text>
+            <Text className="mt-3 text-sm text-muted">Starting session...</Text>
           </View>
         )}
         {messages.map((msg) => (
@@ -294,7 +297,7 @@ export function PlanningPane({
             className="rounded-md px-4 py-2 active:opacity-70"
             style={{ backgroundColor: colors.primary, minHeight: 44, justifyContent: "center" }}
           >
-            <Text className="text-sm font-medium" style={{ color: colors.primaryForeground }}>Send</Text>
+            <Text className="text-sm font-medium text-primary-foreground">Send</Text>
           </Pressable>
         </View>
       )}

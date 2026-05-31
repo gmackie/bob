@@ -1,7 +1,5 @@
 import { Pressable, Text, View } from "react-native";
 
-import { colors } from "~/lib/colors";
-
 interface ButtonProps {
   children: React.ReactNode;
   onPress: () => void;
@@ -12,10 +10,10 @@ interface ButtonProps {
   className?: string;
 }
 
-const textColors = {
-  primary: colors.primaryForeground,
-  secondary: colors.foreground,
-  ghost: colors.muted,
+const variantTextClasses = {
+  primary: "font-semibold text-primary-foreground",
+  secondary: "font-semibold text-foreground",
+  ghost: "font-medium text-muted",
 } as const;
 
 export function Button({
@@ -36,12 +34,6 @@ export function Button({
     ghost: "bg-transparent",
   };
 
-  const textWeights = {
-    primary: "font-semibold",
-    secondary: "font-semibold",
-    ghost: "font-medium",
-  };
-
   return (
     <Pressable
       onPress={onPress}
@@ -49,7 +41,7 @@ export function Button({
       className={`${baseClasses} ${sizeClasses} ${variantClasses[variant]} ${className} ${disabled ? "opacity-50" : "active:opacity-90"}`}
     >
       {icon && <View className="mr-2">{icon}</View>}
-      <Text className={textWeights[variant]} style={{ color: textColors[variant] }}>
+      <Text className={variantTextClasses[variant]}>
         {children}
       </Text>
     </Pressable>

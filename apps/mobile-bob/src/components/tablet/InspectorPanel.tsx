@@ -74,8 +74,8 @@ function FilesView({
   if (files.length === 0) {
     return (
       <View className="flex-1 items-center justify-center px-4">
-        <Text className="text-sm" style={{ color: colors.muted }}>No files referenced</Text>
-        <Text className="mt-1 text-center text-xs" style={{ color: colors.muted2 }}>
+        <Text className="text-sm text-muted">No files referenced</Text>
+        <Text className="mt-1 text-center text-xs text-muted2">
           File references from agent tool calls will appear here
         </Text>
       </View>
@@ -104,11 +104,11 @@ function FilesView({
               {file.action}
             </Text>
           </View>
-          <Text className="flex-1 text-xs font-mono" style={{ color: colors.foreground }} numberOfLines={1}>
+          <Text className="flex-1 text-xs font-mono text-foreground" numberOfLines={1}>
             {file.shortPath}
           </Text>
           {file.content && (
-            <Text className="text-[10px]" style={{ color: colors.muted2 }}>
+            <Text className="text-[10px] text-muted2">
               {file.content.split("\n").length}L
             </Text>
           )}
@@ -122,13 +122,13 @@ function ArtifactView({ content }: { content: string | null }) {
   if (!content) {
     return (
       <View className="flex-1 items-center justify-center px-4">
-        <Text className="text-sm" style={{ color: colors.muted }}>No artifact content yet</Text>
+        <Text className="text-sm text-muted">No artifact content yet</Text>
       </View>
     );
   }
   return (
     <ScrollView className="flex-1 px-4 py-3">
-      <Text className="text-sm leading-5 font-mono" style={{ color: colors.foreground }}>{content}</Text>
+      <Text className="text-sm leading-5 font-mono text-foreground">{content}</Text>
     </ScrollView>
   );
 }
@@ -137,7 +137,7 @@ function DetailsView({ details }: { details: InspectorPanelProps["workItemDetail
   if (!details) {
     return (
       <View className="flex-1 items-center justify-center px-4">
-        <Text className="text-sm" style={{ color: colors.muted }}>No work item selected</Text>
+        <Text className="text-sm text-muted">No work item selected</Text>
       </View>
     );
   }
@@ -149,14 +149,14 @@ function DetailsView({ details }: { details: InspectorPanelProps["workItemDetail
         { label: "Status", value: details.status.replace(/_/g, " ") },
       ].map(({ label, value }) => (
         <View key={label} className="mb-4">
-          <Text className="mb-1 text-xs font-semibold uppercase tracking-wider" style={{ color: colors.muted }}>{label}</Text>
-          <Text className="text-sm" style={{ color: colors.foreground }}>{value}</Text>
+          <Text className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted">{label}</Text>
+          <Text className="text-sm text-foreground">{value}</Text>
         </View>
       ))}
       {details.description && (
         <View className="mb-4">
-          <Text className="mb-1 text-xs font-semibold uppercase tracking-wider" style={{ color: colors.muted }}>Description</Text>
-          <Text className="text-sm leading-5" style={{ color: colors.foreground }}>{details.description}</Text>
+          <Text className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted">Description</Text>
+          <Text className="text-sm leading-5 text-foreground">{details.description}</Text>
         </View>
       )}
     </ScrollView>
@@ -196,9 +196,9 @@ export function InspectorPanel({
     >
       {/* Header */}
       <View className="flex-row items-center justify-between px-3 py-2" style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}>
-        <Text className="text-sm font-semibold" style={{ color: colors.foreground }}>Inspector</Text>
+        <Text className="text-sm font-semibold text-foreground">Inspector</Text>
         <Pressable onPress={onClose} className="rounded-md px-2 py-1 active:opacity-70" style={{ minHeight: 44, justifyContent: "center" }}>
-          <Text className="text-xs" style={{ color: colors.muted }}>Close</Text>
+          <Text className="text-xs text-muted">Close</Text>
         </Pressable>
       </View>
 
@@ -222,7 +222,7 @@ export function InspectorPanel({
           </ScrollView>
         ) : (
           <View className="flex-1 items-center justify-center px-4">
-            <Text className="text-sm" style={{ color: colors.muted }}>Select a work item to see subtasks</Text>
+            <Text className="text-sm text-muted">Select a work item to see subtasks</Text>
           </View>
         )
       ) : (

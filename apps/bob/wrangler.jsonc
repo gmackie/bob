@@ -22,6 +22,8 @@
   "vars": {
     "FG_APP": "bob",
     "REQUIRE_AUTH": "true",
+    "BOB_AUTH_BYPASS": "true",
+    "BOB_AUTH_BYPASS_USER_ID": "default-user",
     "FRONTEND_URL": "https://bob.blder.bot",
     "GATEWAY_PUBLIC_URL": "https://ws.blder.bot",
     "GATEWAY_URL": "https://ws.blder.bot",

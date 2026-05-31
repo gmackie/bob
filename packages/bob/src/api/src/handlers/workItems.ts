@@ -20,6 +20,7 @@ import {
   workItems,
   workspaceMembers,
 } from "@bob/db/schema";
+import type { WorkItemKind } from "@bob/work-items/schema";
 
 import type { HandlerContext } from "./context.js";
 
@@ -92,7 +93,7 @@ export async function workItemsList(
     workspaceId: string;
     projectId?: string;
     parentId?: string | null;
-    kind?: string;
+    kind?: WorkItemKind;
     status?: string;
     limit?: number;
   },
@@ -111,7 +112,7 @@ export async function workItemsList(
       input.kind ? eq(workItems.kind, input.kind) : undefined,
       input.status ? eq(workItems.status, input.status) : undefined,
     ),
-    orderBy: desc(workItems.updatedAt),
+    orderBy: [workItems.queueSortOrder, desc(workItems.updatedAt)],
     limit: input.limit,
   });
 
@@ -238,7 +239,7 @@ export async function workItemsUpdate(
   input: {
     id: string;
     title?: string;
-    description?: string;
+    description?: string | null;
     status?: string;
   },
 ) {
@@ -307,6 +308,30 @@ export async function workItemsUpdate(
   }
 
   return nextWorkItem;
+}
+
+export async function workItemsReorderQueue(
+  ctx: HandlerContext,
+  input: {
+    workspaceId: string;
+    workItemIds: string[];
+  },
+) {
+  await assertWorkspaceAccess(ctx.db, ctx.userId, input.workspaceId);
+
+  for (const [index, workItemId] of input.workItemIds.entries()) {
+    await ctx.db
+      .update(workItems)
+      .set({ queueSortOrder: index })
+      .where(
+        and(
+          eq(workItems.id, workItemId),
+          eq(workItems.workspaceId, input.workspaceId),
+        ),
+      );
+  }
+
+  return { success: true };
 }
 
 export async function workItemsPromoteToTask(

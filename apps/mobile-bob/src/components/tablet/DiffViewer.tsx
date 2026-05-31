@@ -35,7 +35,7 @@ export function DiffViewer({ diff, filePath }: DiffViewerProps) {
           className="flex-row items-center px-3 py-2"
           style={{ borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.card }}
         >
-          <Text className="text-xs font-mono" style={{ color: colors.accent }} numberOfLines={1}>
+          <Text className="text-xs font-mono text-accent" numberOfLines={1}>
             {filePath}
           </Text>
         </View>
@@ -52,10 +52,10 @@ export function DiffViewer({ diff, filePath }: DiffViewerProps) {
                 <View key={i} className="flex-row" style={{ backgroundColor: bg }}>
                   <View className="items-center justify-center" style={{ width: 20 }}>
                     {type === "add" && (
-                      <Text className="text-xs font-mono font-bold" style={{ color: colors.success }}>+</Text>
+                      <Text className="text-xs font-mono font-bold text-success">+</Text>
                     )}
                     {type === "remove" && (
-                      <Text className="text-xs font-mono font-bold" style={{ color: colors.danger }}>-</Text>
+                      <Text className="text-xs font-mono font-bold text-danger">-</Text>
                     )}
                   </View>
                   <Text className="flex-1 text-xs font-mono leading-5" style={{ color: fg }}>

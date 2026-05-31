@@ -41,10 +41,16 @@ describe("resolveAuthContext", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
+    delete process.env.BOB_AUTH_BYPASS;
+    delete process.env.BOB_AUTH_BYPASS_TOKEN;
+    delete process.env.BOB_AUTH_BYPASS_USER_ID;
     delete process.env.REQUIRE_AUTH;
   });
 
   afterEach(() => {
+    delete process.env.BOB_AUTH_BYPASS;
+    delete process.env.BOB_AUTH_BYPASS_TOKEN;
+    delete process.env.BOB_AUTH_BYPASS_USER_ID;
     delete process.env.REQUIRE_AUTH;
   });
 
@@ -100,6 +106,67 @@ describe("resolveAuthContext", () => {
       defaultUser: null,
       headers: new Headers({
         authorization: "Bearer bad-token",
+      }),
+    });
+
+    expect(result.authMethod).toBe("none");
+    expect(result.session).toBeNull();
+  });
+
+  it("accepts the configured auth bypass user even when normal auth is required", async () => {
+    process.env.BOB_AUTH_BYPASS = "true";
+    process.env.BOB_AUTH_BYPASS_TOKEN = "prod-secret";
+    process.env.BOB_AUTH_BYPASS_USER_ID = "default-user";
+    process.env.REQUIRE_AUTH = "true";
+    isApiKeyMock.mockReturnValueOnce(false);
+
+    const { resolveAuthContext } = await import("../context");
+    const result = await resolveAuthContext({
+      authBundle: mockAuthBundle as any,
+      defaultUser,
+      headers: new Headers({
+        cookie: "bob-auth-bypass:prod-secret",
+      }),
+    });
+
+    expect(result.authMethod).toBe("default_user");
+    expect(result.session).toEqual(defaultUser);
+    expect(getSessionMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects auth bypass tokens that do not match the configured secret", async () => {
+    process.env.BOB_AUTH_BYPASS = "true";
+    process.env.BOB_AUTH_BYPASS_TOKEN = "prod-secret";
+    process.env.BOB_AUTH_BYPASS_USER_ID = "default-user";
+    process.env.REQUIRE_AUTH = "true";
+    getSessionMock.mockResolvedValueOnce(null);
+    isApiKeyMock.mockReturnValueOnce(false);
+
+    const { resolveAuthContext } = await import("../context");
+    const result = await resolveAuthContext({
+      authBundle: mockAuthBundle as any,
+      defaultUser,
+      headers: new Headers({
+        cookie: "bob-auth-bypass:wrong-secret",
+      }),
+    });
+
+    expect(result.authMethod).toBe("none");
+    expect(result.session).toBeNull();
+  });
+
+  it("rejects auth bypass tokens when no backend secret is configured", async () => {
+    process.env.BOB_AUTH_BYPASS = "true";
+    process.env.REQUIRE_AUTH = "true";
+    getSessionMock.mockResolvedValueOnce(null);
+    isApiKeyMock.mockReturnValueOnce(false);
+
+    const { resolveAuthContext } = await import("../context");
+    const result = await resolveAuthContext({
+      authBundle: mockAuthBundle as any,
+      defaultUser,
+      headers: new Headers({
+        cookie: "bob-auth-bypass:prod-secret",
       }),
     });
 

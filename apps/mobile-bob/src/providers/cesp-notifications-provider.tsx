@@ -232,9 +232,11 @@ async function hasNotificationPermission(): Promise<boolean> {
 }
 
 export function CESPNotificationsProvider({ children }: ProvidersProps) {
-  const { data: preferences } = useQuery(
-    trpc.settings.getPreferences.queryOptions(undefined),
-  );
+  const { data: session } = authClient.useSession();
+  const { data: preferences } = useQuery({
+    ...trpc.settings.getPreferences.queryOptions(undefined),
+    enabled: !!session,
+  });
 
   const enabled = preferences?.pushNotifications ?? false;
   const seenIdsRef = useRef(new Map<string, number>());

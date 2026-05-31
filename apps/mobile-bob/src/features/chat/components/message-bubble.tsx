@@ -64,7 +64,7 @@ export function MessageBubble({ message, onPromote }: MessageBubbleProps) {
             onPress={() => onPromote(message)}
             className="border-border bg-background mt-3 self-start rounded-lg border px-3 py-1.5 active:opacity-80"
           >
-            <Text className="text-xs font-semibold" style={{ color: colors.accent }}>
+            <Text className="text-xs font-semibold text-accent">
               Promote
             </Text>
           </Pressable>

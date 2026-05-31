@@ -5,14 +5,15 @@ import { z, ZodError } from "zod/v4";
 import {
   type ApiKeyAuth,
   type ApiKeyPermission,
+  DEFAULT_USER_ID,
+  resolveAuthBypassUserId,
   resolveAuthContext,
 } from "@bob/auth";
 import type { AuthRuntimeBundle } from "@bob/auth/runtime";
 import { eq } from "@bob/db";
 import { db } from "@bob/db/client";
 import { user } from "@bob/db/schema";
-
-const DEFAULT_USER_ID = "default-user";
+import { ensureUserMembershipForOwnedWorkspaces } from "./handlers/workspace";
 
 /**
  * Create the tRPC context using the Effect auth runtime bridge.
@@ -35,12 +36,14 @@ export const createTRPCContext = async (opts: {
         user: typeof user.$inferSelect;
       }
     | null = null;
+  const authBypassUserId = resolveAuthBypassUserId(opts.headers);
+  const defaultUserId = authBypassUserId ?? DEFAULT_USER_ID;
 
-  if (process.env.REQUIRE_AUTH !== "true") {
+  if (process.env.REQUIRE_AUTH !== "true" || authBypassUserId) {
     const [userRecord] = await db
       .select()
       .from(user)
-      .where(eq(user.id, DEFAULT_USER_ID))
+      .where(eq(user.id, defaultUserId))
       .limit(1);
 
     if (userRecord) {
@@ -48,6 +51,10 @@ export const createTRPCContext = async (opts: {
         user: userRecord,
         session: null,
       };
+
+      if (authBypassUserId) {
+        await ensureUserMembershipForOwnedWorkspaces(db, authBypassUserId);
+      }
     }
   }
 

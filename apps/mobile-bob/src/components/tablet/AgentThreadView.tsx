@@ -2,6 +2,7 @@ import { useRef, useEffect, useMemo, useState } from "react";
 import { Text, View, ScrollView, Pressable, TextInput, KeyboardAvoidingView, Platform } from "react-native";
 
 import type { ServerEvent } from "@bob/ws";
+import { extractSessionEventText } from "~/features/chat/session-event-text";
 import { colors } from "~/lib/colors";
 import { hapticMedium, hapticSuccess } from "~/lib/haptics";
 
@@ -20,34 +21,26 @@ function formatEventType(eventType: string): string {
 
 function EventRow({ event }: { event: ServerEvent }) {
   const payload = event.payload;
-  let content = "";
+  let content = extractSessionEventText(event.eventType, payload);
 
   switch (event.eventType) {
     case "output_chunk":
-      content = (payload.data as string) ?? "";
       break;
     case "message_final":
-      content = (payload.content as string) ?? "";
       break;
     case "tool_call":
-      content = `${payload.name as string}(${((payload.arguments as string) ?? "").slice(0, 80)})`;
       break;
-    case "tool_result": {
-      const result = (payload.result as string) ?? "";
-      content = payload.isError ? `Error: ${result}` : result.slice(0, 200);
+    case "tool_result":
+      content = content.slice(0, 200);
       break;
-    }
     case "state":
-      content = `Status: ${payload.status as string}${payload.reason ? ` — ${payload.reason}` : ""}`;
       break;
     case "error":
-      content = `${payload.code as string}: ${payload.message as string}`;
       break;
     case "input":
-      content = (payload.data as string) ?? "";
       break;
     default:
-      content = JSON.stringify(payload).slice(0, 100);
+      content = content.slice(0, 100);
   }
 
   const isAgent = event.direction === "agent";
@@ -75,18 +68,17 @@ function EventRow({ event }: { event: ServerEvent }) {
           >
             {formatEventType(event.eventType)}
           </Text>
-          <Text className="ml-2 text-xs" style={{ color: colors.muted2 }}>
+          <Text className="ml-2 text-xs text-muted2">
             #{event.seq}
           </Text>
         </View>
-        <Text className="text-xs" style={{ color: colors.muted2 }}>
+        <Text className="text-xs text-muted2">
           {event.direction}
         </Text>
       </View>
       {content ? (
         <Text
-          className="text-sm"
-          style={{ color: colors.foreground }}
+          className="text-sm text-foreground"
           numberOfLines={5}
         >
           {content}
@@ -150,7 +142,7 @@ function usePendingToolCall(events: ServerEvent[]): ServerEvent | null {
 
     // Return the most recent pending tool call
     const pending = Array.from(toolCalls.values());
-    return pending.length > 0 ? pending[pending.length - 1]! : null;
+    return pending.at(-1) ?? null;
   }, [events]);
 }
 
@@ -181,10 +173,10 @@ export function AgentThreadView({
         className="flex-1 items-center justify-center"
         style={{ backgroundColor: colors.background }}
       >
-        <Text className="text-lg" style={{ color: colors.muted }}>
+        <Text className="text-lg text-muted">
           Select an agent session
         </Text>
-        <Text className="mt-1 text-sm" style={{ color: colors.muted2 }}>
+        <Text className="mt-1 text-sm text-muted2">
           Tap a session in the sidebar to view its event stream
         </Text>
       </View>
@@ -205,7 +197,7 @@ export function AgentThreadView({
           borderBottomColor: colors.border,
         }}
       >
-        <Text className="text-sm font-medium" style={{ color: colors.foreground }}>
+        <Text className="text-sm font-medium text-foreground">
           {sessionId.slice(0, 8)}...
         </Text>
         <ActionButton label="Stop" color={colors.danger} onPress={() => onStopSession(sessionId)} />
@@ -215,7 +207,7 @@ export function AgentThreadView({
       <ScrollView ref={scrollRef} className="flex-1">
         {events.length === 0 ? (
           <View className="items-center justify-center py-12">
-            <Text className="text-sm" style={{ color: colors.muted }}>
+            <Text className="text-sm text-muted">
               Waiting for events...
             </Text>
           </View>
@@ -234,7 +226,7 @@ export function AgentThreadView({
             backgroundColor: colors.card,
           }}
         >
-          <Text className="mb-2 text-xs" style={{ color: colors.muted }}>
+          <Text className="mb-2 text-xs text-muted">
             Awaiting approval: {pendingToolCall.payload.name as string}
           </Text>
           <View className="flex-row">
@@ -299,7 +291,7 @@ export function AgentThreadView({
             justifyContent: "center",
           }}
         >
-          <Text className="text-sm font-medium" style={{ color: colors.primaryForeground }}>
+          <Text className="text-sm font-medium text-primary-foreground">
             Send
           </Text>
         </Pressable>

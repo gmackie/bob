@@ -1,4 +1,3 @@
-import { Redirect, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -8,21 +7,85 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { Redirect, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Badge, Button, Card, ListRow, Screen } from "~/components/ui";
 import { buildHeadlessSessionDestination } from "~/features/planning/execution-links";
+import { getExecutionLaunchState } from "~/features/planning/mobile-actions";
 import {
-  DEFAULT_EXECUTION_WORKSPACE_TITLE,
   buildTaskWorkspaceViewModel,
+  DEFAULT_EXECUTION_WORKSPACE_TITLE,
   deriveTaskWorkspaceValidationState,
   summarizeSessionEvents,
   summarizeTaskRuns,
 } from "~/features/planning/task-workspace";
-import { authClient } from "~/utils/auth";
 import { trpc } from "~/utils/api";
+import { authClient } from "~/utils/auth";
 import { getBaseUrl } from "~/utils/base-url";
-import { colors } from "~/lib/colors";
+
+interface WorkspaceTaskRun {
+  id: string;
+  status: string;
+  branch: string | null;
+  sessionId: string | null;
+}
+
+interface WorkspaceSession {
+  id: string;
+  title: string | null;
+  status: string;
+  workItemId: string | null;
+}
+
+interface WorkspaceArtifact {
+  id: string;
+  artifactRole: string;
+  artifactType: string;
+  title: string | null;
+  summary?: string | null;
+  url: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+interface WorkspaceEvent {
+  seq: number;
+  direction: string;
+  eventType: string;
+  payload: Record<string, unknown>;
+}
+
+interface WorkspaceData {
+  workItem: {
+    id: string;
+    identifier: string;
+    title: string;
+  };
+  currentArtifacts: WorkspaceArtifact[];
+}
+
+interface WorkspaceWorkflowState {
+  workflowStatus: string;
+  statusMessage: string | null;
+  awaitingInput: {
+    question: string;
+    defaultAction: string;
+    expiresAt: Date | string;
+  } | null;
+}
+
+function getDispatchSessionId(value: unknown): string {
+  if (
+    value &&
+    typeof value === "object" &&
+    "sessionId" in value &&
+    typeof value.sessionId === "string"
+  ) {
+    return value.sessionId;
+  }
+
+  throw new Error("Work dispatch did not return a session id");
+}
 
 export default function TaskWorkspaceScreen() {
   const { data: session, isPending } = authClient.useSession();
@@ -31,6 +94,12 @@ export default function TaskWorkspaceScreen() {
     typeof params.workItemId === "string" ? params.workItemId : "";
   const queryClient = useQueryClient();
   const [messageDraft, setMessageDraft] = useState("");
+  const [startedExecutionSessionId, setStartedExecutionSessionId] = useState<
+    string | null
+  >(null);
+  const [executionLaunchError, setExecutionLaunchError] = useState<
+    string | null
+  >(null);
 
   const workItemQuery = useQuery(
     trpc.workItem.get.queryOptions(
@@ -46,12 +115,54 @@ export default function TaskWorkspaceScreen() {
     ),
   );
 
-  const activeTaskRun = useMemo(
-    () => taskRunsQuery.data?.find((run) => run.sessionId != null) ?? null,
-    [taskRunsQuery.data],
+  const sessionListInput = useMemo(() => ({ limit: 50 }), []);
+  const sessionsQuery = useQuery(
+    trpc.session.list.queryOptions(sessionListInput, {
+      enabled: Boolean(session && workItemId),
+    }),
   );
 
-  const linkedSession = activeTaskRun?.sessionId ?? null;
+  const taskRuns = useMemo(() => {
+    const data: unknown = taskRunsQuery.data;
+    return Array.isArray(data) ? (data as WorkspaceTaskRun[]) : [];
+  }, [taskRunsQuery.data]);
+
+  const executionSessions = useMemo(() => {
+    const data = sessionsQuery.data as { items?: unknown } | undefined;
+    return Array.isArray(data?.items) ? (data.items as WorkspaceSession[]) : [];
+  }, [sessionsQuery.data]);
+
+  const workspaceData = useMemo(
+    () => (workItemQuery.data as WorkspaceData | null | undefined) ?? null,
+    [workItemQuery.data],
+  );
+
+  const currentArtifacts = useMemo(
+    () => workspaceData?.currentArtifacts ?? [],
+    [workspaceData?.currentArtifacts],
+  );
+
+  const activeTaskRun = useMemo(
+    () => taskRuns.find((run) => run.sessionId != null) ?? null,
+    [taskRuns],
+  );
+
+  const activeExecutionSession = useMemo(
+    () =>
+      executionSessions.find(
+        (item) =>
+          item.workItemId === workItemId &&
+          item.status !== "stopped" &&
+          item.status !== "error",
+      ) ?? null,
+    [executionSessions, workItemId],
+  );
+
+  const linkedSession =
+    startedExecutionSessionId ??
+    activeExecutionSession?.id ??
+    activeTaskRun?.sessionId ??
+    null;
 
   const workflowStateQuery = useQuery(
     trpc.session.getWorkflowState.queryOptions(
@@ -66,6 +177,15 @@ export default function TaskWorkspaceScreen() {
       { enabled: Boolean(linkedSession) },
     ),
   );
+
+  const sessionEvents = useMemo(() => {
+    const data = eventsQuery.data as { events?: unknown } | undefined;
+    return Array.isArray(data?.events) ? (data.events as WorkspaceEvent[]) : [];
+  }, [eventsQuery.data]);
+
+  const workflowStateData =
+    (workflowStateQuery.data as WorkspaceWorkflowState | null | undefined) ??
+    null;
 
   const sendInputMutation = useMutation(
     trpc.session.sendHeadlessInput.mutationOptions({
@@ -89,6 +209,34 @@ export default function TaskWorkspaceScreen() {
     }),
   );
 
+  const dispatchWorkMutation = useMutation(
+    trpc.workItem.dispatch.mutationOptions({
+      onMutate: () => {
+        setExecutionLaunchError(null);
+      },
+      onSuccess: async (result: unknown) => {
+        const sessionId = getDispatchSessionId(result);
+        setStartedExecutionSessionId(sessionId);
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: trpc.session.list.queryKey(sessionListInput),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: trpc.taskRun.listByWorkItem.queryKey({ workItemId }),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: trpc.workItem.get.queryKey({ id: workItemId }),
+          }),
+        ]);
+      },
+      onError: (error: unknown) => {
+        setExecutionLaunchError(
+          error instanceof Error ? error.message : "Failed to start work",
+        );
+      },
+    }),
+  );
+
   const resolveAwaitingInputMutation = useMutation(
     trpc.session.resolveAwaitingInput.mutationOptions({
       onSuccess: async () => {
@@ -103,77 +251,86 @@ export default function TaskWorkspaceScreen() {
   );
 
   const workspaceModel = useMemo(() => {
-    if (!workItemQuery.data) {
+    if (!workspaceData) {
       return null;
     }
 
     return buildTaskWorkspaceViewModel({
       workItem: {
-        id: workItemQuery.data.workItem.id,
-        identifier: workItemQuery.data.workItem.identifier,
-        title: workItemQuery.data.workItem.title,
+        id: workspaceData.workItem.id,
+        identifier: workspaceData.workItem.identifier,
+        title: workspaceData.workItem.title,
       },
       session: linkedSession
         ? {
             id: linkedSession,
-            title: `${workItemQuery.data.workItem.identifier} execution`,
-            status: activeTaskRun?.status ?? "running",
+            title:
+              activeExecutionSession?.title ??
+              `${workspaceData.workItem.identifier} execution`,
+            status:
+              activeExecutionSession?.status ??
+              activeTaskRun?.status ??
+              "running",
           }
         : null,
-      workflowState: workflowStateQuery.data
+      workflowState: workflowStateData
         ? {
-            workflowStatus: workflowStateQuery.data.workflowStatus,
-            statusMessage: workflowStateQuery.data.statusMessage ?? null,
-            awaitingInput: workflowStateQuery.data.awaitingInput
+            workflowStatus: workflowStateData.workflowStatus,
+            statusMessage: workflowStateData.statusMessage ?? null,
+            awaitingInput: workflowStateData.awaitingInput
               ? {
-                  question: workflowStateQuery.data.awaitingInput.question,
-                  defaultAction:
-                    workflowStateQuery.data.awaitingInput.defaultAction,
+                  question: workflowStateData.awaitingInput.question,
+                  defaultAction: workflowStateData.awaitingInput.defaultAction,
                   expiresAt:
-                    workflowStateQuery.data.awaitingInput.expiresAt.toISOString(),
+                    workflowStateData.awaitingInput.expiresAt instanceof Date
+                      ? workflowStateData.awaitingInput.expiresAt.toISOString()
+                      : workflowStateData.awaitingInput.expiresAt,
                 }
               : null,
           }
         : null,
-      currentArtifacts: workItemQuery.data.currentArtifacts.map((artifact) => ({
+      currentArtifacts: currentArtifacts.map((artifact) => ({
         id: artifact.id,
         artifactRole: artifact.artifactRole,
         artifactType: artifact.artifactType,
         title: artifact.title,
         url: artifact.url,
       })),
-      events: (eventsQuery.data?.events ?? []).map((event) => ({
+      events: sessionEvents.map((event) => ({
         seq: event.seq,
         direction: event.direction,
         eventType: event.eventType,
-        payload: event.payload as Record<string, unknown>,
+        payload: event.payload,
       })),
     });
   }, [
     activeTaskRun?.status,
-    eventsQuery.data?.events,
+    activeExecutionSession?.status,
+    activeExecutionSession?.title,
+    currentArtifacts,
     linkedSession,
-    workItemQuery.data,
-    workflowStateQuery.data,
+    sessionEvents,
+    workspaceData,
+    workflowStateData,
   ]);
 
   const eventRows = useMemo(
     () =>
       summarizeSessionEvents(
-        (eventsQuery.data?.events ?? []).map((event) => ({
+        sessionEvents.map((event) => ({
           seq: event.seq,
           direction: event.direction,
           eventType: event.eventType,
-          payload: event.payload as Record<string, unknown>,
+          payload: event.payload,
         })),
       ),
-    [eventsQuery.data?.events],
+    [sessionEvents],
   );
 
   const validationState = useMemo(
     () =>
       deriveTaskWorkspaceValidationState(
-        (workItemQuery.data?.currentArtifacts ?? []).map((artifact) => ({
+        currentArtifacts.map((artifact) => ({
           id: artifact.id,
           artifactRole: artifact.artifactRole,
           artifactType: artifact.artifactType,
@@ -183,20 +340,20 @@ export default function TaskWorkspaceScreen() {
           metadata: artifact.metadata ?? null,
         })),
       ),
-    [workItemQuery.data?.currentArtifacts],
+    [currentArtifacts],
   );
 
   const runRows = useMemo(
     () =>
       summarizeTaskRuns(
-        (taskRunsQuery.data ?? []).map((run) => ({
+        taskRuns.map((run) => ({
           id: run.id,
           status: run.status,
           branch: run.branch,
           sessionId: run.sessionId,
         })),
       ),
-    [taskRunsQuery.data],
+    [taskRuns],
   );
 
   if (isPending) {
@@ -219,11 +376,11 @@ export default function TaskWorkspaceScreen() {
     );
   }
 
-  if (!workItemQuery.data) {
+  if (!workspaceData) {
     return (
       <Screen className="justify-center">
         <Card className="items-center">
-          <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>
+          <Text className="text-foreground text-lg font-semibold">
             Task not found
           </Text>
         </Card>
@@ -231,46 +388,70 @@ export default function TaskWorkspaceScreen() {
     );
   }
 
-  const workItemData = workItemQuery.data;
+  const workItemData = workspaceData;
   const awaitingInputModel = workspaceModel?.awaitingInput ?? null;
   const baseUrl = getBaseUrl();
+  const executionLaunchState = getExecutionLaunchState({
+    linkedSessionId: linkedSession,
+    isPending: dispatchWorkMutation.isPending,
+  });
 
   return (
     <Screen className="pt-6">
       <ScrollView showsVerticalScrollIndicator={false}>
         <View className="mb-5">
-          <Text className="text-sm uppercase tracking-[0.18em]" style={{ color: colors.muted }}>
+          <Text className="text-muted text-sm tracking-[0.18em] uppercase">
             {workItemData.workItem.identifier}
           </Text>
-          <Text className="mt-1 text-3xl font-semibold tracking-tight" style={{ color: colors.foreground }}>
+          <Text className="text-foreground mt-1 text-3xl font-semibold tracking-tight">
             {workItemData.workItem.title}
           </Text>
         </View>
 
         <Card variant="elevated" className="mb-5">
-          <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>
+          <Text className="text-foreground text-lg font-semibold">
             {workspaceModel?.title ?? DEFAULT_EXECUTION_WORKSPACE_TITLE}
           </Text>
           <View className="mt-4 flex-row flex-wrap gap-2">
             <Badge variant="accent">
-              {workspaceModel?.sessionStatus.replace(/_/g, " ") ?? "not started"}
+              {workspaceModel?.sessionStatus.replace(/_/g, " ") ??
+                "not started"}
             </Badge>
             <Badge>
-              {workspaceModel?.workflowStatus.replace(/_/g, " ") ?? "not started"}
+              {workspaceModel?.workflowStatus.replace(/_/g, " ") ??
+                "not started"}
             </Badge>
             <Badge variant="success">
               {workspaceModel?.artifactCount ?? 0} artifacts
             </Badge>
           </View>
           {workspaceModel?.statusMessage ? (
-            <Text className="mt-4 text-sm" style={{ color: colors.muted }}>
+            <Text className="text-muted mt-4 text-sm">
               {workspaceModel.statusMessage}
             </Text>
+          ) : null}
+          {!linkedSession ? (
+            <>
+              <Button
+                className="mt-4"
+                onPress={() => {
+                  dispatchWorkMutation.mutate({ workItemId });
+                }}
+                disabled={executionLaunchState.disabled}
+              >
+                {executionLaunchState.label}
+              </Button>
+              {executionLaunchError ? (
+                <Text className="text-danger mt-3 text-sm">
+                  {executionLaunchError}
+                </Text>
+              ) : null}
+            </>
           ) : null}
         </Card>
 
         <Card className="mb-5">
-          <Text className="text-base font-semibold" style={{ color: colors.foreground }}>
+          <Text className="text-foreground text-base font-semibold">
             Validation state
           </Text>
           <View className="mt-4 flex-row flex-wrap gap-2">
@@ -289,23 +470,23 @@ export default function TaskWorkspaceScreen() {
             </Badge>
             <Badge>{workspaceModel?.artifactCount ?? 0} artifacts</Badge>
           </View>
-          <Text className="mt-3 text-sm leading-6" style={{ color: colors.muted }}>
+          <Text className="text-muted mt-3 text-sm leading-6">
             {validationState.detail}
           </Text>
         </Card>
 
         {awaitingInputModel ? (
           <Card className="mb-5">
-            <Text className="text-base font-semibold" style={{ color: colors.foreground }}>
+            <Text className="text-foreground text-base font-semibold">
               Awaiting input
             </Text>
-            <Text className="mt-3 text-sm leading-6" style={{ color: colors.muted }}>
+            <Text className="text-muted mt-3 text-sm leading-6">
               {awaitingInputModel.question}
             </Text>
-            <Text className="mt-3 text-xs uppercase tracking-[0.16em]" style={{ color: colors.muted2 }}>
+            <Text className="text-muted2 mt-3 text-xs tracking-[0.16em] uppercase">
               Default: {awaitingInputModel.defaultAction}
             </Text>
-            <Text className="mt-1 text-xs uppercase tracking-[0.16em]" style={{ color: colors.muted2 }}>
+            <Text className="text-muted2 mt-1 text-xs tracking-[0.16em] uppercase">
               Expires: {new Date(awaitingInputModel.expiresAt).toLocaleString()}
             </Text>
             <Button
@@ -323,7 +504,9 @@ export default function TaskWorkspaceScreen() {
                   },
                 });
               }}
-              disabled={!linkedSession || resolveAwaitingInputMutation.isPending}
+              disabled={
+                !linkedSession || resolveAwaitingInputMutation.isPending
+              }
             >
               Accept default action
             </Button>
@@ -331,7 +514,9 @@ export default function TaskWorkspaceScreen() {
         ) : null}
 
         <View className="mb-3 flex-row items-center justify-between">
-          <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>Conversation</Text>
+          <Text className="text-foreground text-lg font-semibold">
+            Conversation
+          </Text>
         </View>
         <Card className="mb-5">
           {eventRows.length > 0 ? (
@@ -343,7 +528,7 @@ export default function TaskWorkspaceScreen() {
               />
             ))
           ) : (
-            <Text className="text-sm" style={{ color: colors.muted }}>
+            <Text className="text-muted text-sm">
               {linkedSession
                 ? "No visible messages yet."
                 : "No linked execution session yet for this task."}
@@ -352,7 +537,7 @@ export default function TaskWorkspaceScreen() {
         </Card>
 
         <Card className="mb-5">
-          <Text className="text-base font-semibold" style={{ color: colors.foreground }}>
+          <Text className="text-foreground text-base font-semibold">
             Send message
           </Text>
           <TextInput
@@ -366,8 +551,7 @@ export default function TaskWorkspaceScreen() {
                 : "Execution chat will unlock when this task has a linked session"
             }
             placeholderTextColor="#7B8794"
-            className="border-border mt-3 min-h-24 rounded-2xl border px-4 py-3"
-            style={{ color: colors.foreground }}
+            className="border-border text-foreground mt-3 min-h-24 rounded-2xl border px-4 py-3"
           />
           <Button
             className="mt-4"
@@ -379,7 +563,9 @@ export default function TaskWorkspaceScreen() {
               })
             }
             disabled={
-              !linkedSession || !messageDraft.trim() || sendInputMutation.isPending
+              !linkedSession ||
+              !messageDraft.trim() ||
+              sendInputMutation.isPending
             }
           >
             Send to Bob
@@ -387,7 +573,9 @@ export default function TaskWorkspaceScreen() {
         </Card>
 
         <View className="mb-3 flex-row items-center justify-between">
-          <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>Run history</Text>
+          <Text className="text-foreground text-lg font-semibold">
+            Run history
+          </Text>
         </View>
         <Card className="mb-5">
           {runRows.length > 0 ? (
@@ -409,7 +597,7 @@ export default function TaskWorkspaceScreen() {
                       : undefined
                   }
                   right={
-                    <Text className="text-sm" style={{ color: colors.muted }}>
+                    <Text className="text-muted text-sm">
                       {run.hasSession ? "Open run" : "Recorded"}
                     </Text>
                   }
@@ -418,30 +606,40 @@ export default function TaskWorkspaceScreen() {
               );
             })
           ) : (
-            <Text className="text-sm" style={{ color: colors.muted }}>
+            <Text className="text-muted text-sm">
               No runs have been recorded for this task yet.
             </Text>
           )}
         </Card>
 
         <View className="mb-3 flex-row items-center justify-between">
-          <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>Artifacts</Text>
+          <Text className="text-foreground text-lg font-semibold">
+            Artifacts
+          </Text>
         </View>
         <Card className="mb-8">
-          {workItemData.currentArtifacts.length > 0 ? (
-            workItemData.currentArtifacts.map((artifact, index) => (
-              <ListRow
-                key={artifact.id}
-                title={artifact.title ?? artifact.artifactRole}
-                subtitle={artifact.url ?? undefined}
-                onPress={artifact.url ? () => {
-                  void Linking.openURL(artifact.url!);
-                } : undefined}
-                showDivider={index < workItemData.currentArtifacts.length - 1}
-              />
-            ))
+          {currentArtifacts.length > 0 ? (
+            currentArtifacts.map((artifact, index) => {
+              const artifactUrl = artifact.url;
+
+              return (
+                <ListRow
+                  key={artifact.id}
+                  title={artifact.title ?? artifact.artifactRole}
+                  subtitle={artifactUrl ?? undefined}
+                  onPress={
+                    artifactUrl
+                      ? () => {
+                          void Linking.openURL(artifactUrl);
+                        }
+                      : undefined
+                  }
+                  showDivider={index < currentArtifacts.length - 1}
+                />
+              );
+            })
           ) : (
-            <Text className="text-sm" style={{ color: colors.muted }}>
+            <Text className="text-muted text-sm">
               Verification and deliverable links will appear here.
             </Text>
           )}

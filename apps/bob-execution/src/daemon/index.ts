@@ -47,6 +47,9 @@ const CLIENT_ID = `executor-${process.pid}`;
 const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT ?? "2", 10);
 const RECONNECT_DELAY_MS = 5_000;
 const HEARTBEAT_INTERVAL_MS = 25_000;
+const DEFAULT_AGENT_TYPE = process.env.DEFAULT_AGENT_TYPE ?? "claude";
+const CODEX_MODEL = process.env.CODEX_MODEL ?? "gpt-5.5";
+const CODEX_SANDBOX = process.env.CODEX_SANDBOX ?? "read-only";
 
 if (!BOB_API_KEY || !BOB_WORKSPACE_ID) {
   console.error("[executor] FATAL: BOB_API_KEY and BOB_WORKSPACE_ID required");
@@ -235,7 +238,7 @@ async function handleSessionAvailable(session: ServerSessionAvailable): Promise<
   const prompt = buildPrompt(session);
 
   // Spawn the agent
-  const agentType = session.agentType || "claude";
+  const agentType = session.agentType || DEFAULT_AGENT_TYPE;
   console.log(`[executor] Starting ${agentType} for ${session.identifier ?? session.sessionId}`);
 
   send({ type: "session_status", sessionId: session.sessionId, status: "running" });
@@ -379,7 +382,7 @@ function gitCheckoutBranch(workDir: string, branch: string): Promise<void> {
 function runAgent(session: ServerSessionAvailable, workDir: string, prompt: string, persona?: PersonaConfig): Promise<AgentExecutionResult> {
   return new Promise((resolve, reject) => {
     const sessionId = session.sessionId;
-    const agentType = session.agentType || "claude";
+    const agentType = session.agentType || DEFAULT_AGENT_TYPE;
     const { command, args } = getAgentCommand(agentType, prompt, persona);
     console.log(`[executor] Spawning: ${command} ${args.join(" ").slice(0, 80)}...`);
 
@@ -609,8 +612,17 @@ function getAgentCommand(agentType: string, prompt: string, persona?: PersonaCon
       args.push(prompt);
       return { command: "claude", args };
     }
-    case "codex":
-      return { command: "codex", args: ["--quiet", "--full-auto", prompt] };
+    case "codex": {
+      const codexArgs = ["exec"];
+      if (CODEX_SANDBOX === "bypass") {
+        codexArgs.push("--dangerously-bypass-approvals-and-sandbox");
+      } else {
+        codexArgs.push("-s", CODEX_SANDBOX);
+      }
+      codexArgs.push("-m", persona?.model ?? CODEX_MODEL);
+      codexArgs.push(prompt);
+      return { command: "codex", args: codexArgs };
+    }
     case "opencode":
       return { command: "opencode", args: ["run", prompt] };
     default: {

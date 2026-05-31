@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Text, View, Pressable, ScrollView, RefreshControl, ActivityIndicator } from "react-native";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { GatewaySession } from "~/hooks/use-gateway";
 import type { ConnectionState } from "@bob/ws";
@@ -8,12 +8,22 @@ import { authClient } from "~/utils/auth";
 import { trpc } from "~/utils/api";
 import { colors } from "~/lib/colors";
 import { hapticLight, hapticSelection } from "~/lib/haptics";
+import {
+  buildExecutionQueue,
+  buildQueueLanes,
+  formatStatusLabel,
+  moveQueueItem,
+} from "~/features/tablet/queue";
+import type {
+  QueueMoveDirection,
+  TabletQueueItem,
+} from "~/features/tablet/queue";
 
 // ---------------------------------------------------------------------------
 // Shared
 // ---------------------------------------------------------------------------
 
-type SidebarTab = "agents" | "items";
+type SidebarTab = "agents" | "queue";
 
 function TabBar({ tab, onTabChange }: { tab: SidebarTab; onTabChange: (t: SidebarTab) => void }) {
   return (
@@ -21,7 +31,7 @@ function TabBar({ tab, onTabChange }: { tab: SidebarTab; onTabChange: (t: Sideba
       className="flex-row"
       style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}
     >
-      {(["agents", "items"] as const).map((t) => (
+      {(["agents", "queue"] as const).map((t) => (
         <Pressable
           key={t}
           onPress={() => { hapticSelection(); onTabChange(t); }}
@@ -35,7 +45,7 @@ function TabBar({ tab, onTabChange }: { tab: SidebarTab; onTabChange: (t: Sideba
             className="text-sm font-medium"
             style={{ color: tab === t ? colors.foreground : colors.muted }}
           >
-            {t === "agents" ? "Agents" : "Items"}
+            {t === "agents" ? "Active Agents" : "Work Queue"}
           </Text>
         </Pressable>
       ))}
@@ -107,13 +117,12 @@ function SessionRow({
       />
       <View className="flex-1">
         <Text
-          className="text-sm font-medium"
-          style={{ color: colors.foreground }}
+          className="text-sm font-medium text-foreground"
           numberOfLines={1}
         >
           {session.title ?? session.agentType}
         </Text>
-        <Text className="text-xs" style={{ color: colors.muted }}>
+        <Text className="text-xs text-muted">
           {session.status}
         </Text>
       </View>
@@ -189,7 +198,7 @@ function AgentsTab({
       >
         {filtered.length === 0 ? (
           <View className="items-center justify-center px-4 py-12">
-            <Text className="text-sm" style={{ color: colors.muted }}>
+            <Text className="text-sm text-muted">
               {connectionState === "connected" ? "No agent sessions" : "Connecting..."}
             </Text>
           </View>
@@ -197,7 +206,7 @@ function AgentsTab({
           <>
             {active.length > 0 && (
               <View>
-                <Text className="px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wider" style={{ color: colors.muted }}>Active</Text>
+                <Text className="px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wider text-muted">Running Now</Text>
                 {active.map((s) => (
                   <SessionRow key={s.sessionId} session={s} isSelected={s.sessionId === selectedSessionId} onPress={() => onSelectSession(s.sessionId)} />
                 ))}
@@ -205,7 +214,7 @@ function AgentsTab({
             )}
             {inactive.length > 0 && (
               <View>
-                <Text className="px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wider" style={{ color: colors.muted }}>Recent</Text>
+                <Text className="px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wider text-muted">History</Text>
                 {inactive.map((s) => (
                   <SessionRow key={s.sessionId} session={s} isSelected={s.sessionId === selectedSessionId} onPress={() => onSelectSession(s.sessionId)} />
                 ))}
@@ -231,70 +240,213 @@ const KIND_ICONS: Record<string, string> = {
 
 function WorkItemRow({
   item,
+  index,
+  total,
   isSelected,
   onPress,
+  onMove,
+  onRun,
+  onOpenSession,
+  isReordering,
+  isDispatching,
 }: {
-  item: { id: string; identifier: string; title: string; kind: string; status: string };
+  item: TabletQueueItem;
+  index: number;
+  total: number;
   isSelected: boolean;
   onPress: () => void;
+  onMove: (itemId: string, direction: QueueMoveDirection) => void;
+  onRun: (itemId: string) => void;
+  onOpenSession?: (sessionId: string) => void;
+  isReordering: boolean;
+  isDispatching: boolean;
 }) {
+  const activeSession = item.agentStatus;
+
   return (
-    <Pressable
-      onPress={() => { hapticLight(); onPress(); }}
-      accessibilityRole="button"
-      accessibilityLabel={`${item.identifier} ${item.title}, ${item.status}`}
-      accessibilityState={{ selected: isSelected }}
-      className="flex-row items-center px-4 py-3 active:opacity-70"
+    <View
       style={{
-        minHeight: 44,
         backgroundColor: isSelected ? colors.cardElevated : "transparent",
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
       }}
     >
-      <View
-        className="mr-3 items-center justify-center rounded"
-        style={{
-          width: 24,
-          height: 24,
-          backgroundColor: colors.primary + "25",
-        }}
+      <Pressable
+        onPress={() => { hapticLight(); onPress(); }}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.identifier} ${item.title}, ${item.status}`}
+        accessibilityState={{ selected: isSelected }}
+        className="px-4 py-3 active:opacity-70"
+        style={{ minHeight: 44 }}
       >
-        <Text className="text-xs font-bold" style={{ color: colors.primary }}>
-          {KIND_ICONS[item.kind] ?? item.kind[0]?.toUpperCase()}
-        </Text>
-      </View>
-      <View className="flex-1">
-        <Text
-          className="text-sm font-medium"
-          style={{ color: colors.foreground }}
-          numberOfLines={1}
+        <View className="flex-row items-start">
+          <View
+            className="mr-3 items-center justify-center rounded"
+            style={{
+              width: 24,
+              height: 24,
+              backgroundColor: colors.primary + "25",
+            }}
+          >
+            <Text className="text-xs font-bold text-primary">
+              {KIND_ICONS[item.kind] ?? item.kind[0]?.toUpperCase()}
+            </Text>
+          </View>
+          <View className="flex-1" style={{ minWidth: 0 }}>
+            <Text
+              className="text-sm font-medium text-foreground"
+              numberOfLines={2}
+            >
+              {item.title}
+            </Text>
+            <Text className="mt-0.5 text-xs text-muted">
+              {item.identifier} · {formatStatusLabel(item.status)}
+              {activeSession ? ` · ${activeSession.status}` : ""}
+            </Text>
+          </View>
+        </View>
+      </Pressable>
+
+      <View className="flex-row items-center px-4 pb-3 pl-11">
+        <Pressable
+          onPress={() => onMove(item.id, "up")}
+          disabled={index === 0 || isReordering}
+          accessibilityRole="button"
+          accessibilityLabel={`Move ${item.identifier} up`}
+          className="mr-2 rounded-md px-2.5 py-1.5 active:opacity-70"
+          style={{
+            backgroundColor: colors.secondary,
+            opacity: index === 0 || isReordering ? 0.45 : 1,
+            minHeight: 32,
+            justifyContent: "center",
+          }}
         >
-          {item.title}
-        </Text>
-        <Text className="text-xs" style={{ color: colors.muted }}>
-          {item.identifier} · {item.status.replace(/_/g, " ")}
-        </Text>
+          <Text className="text-xs font-medium text-foreground">Up</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => onMove(item.id, "down")}
+          disabled={index === total - 1 || isReordering}
+          accessibilityRole="button"
+          accessibilityLabel={`Move ${item.identifier} down`}
+          className="mr-2 rounded-md px-2.5 py-1.5 active:opacity-70"
+          style={{
+            backgroundColor: colors.secondary,
+            opacity: index === total - 1 || isReordering ? 0.45 : 1,
+            minHeight: 32,
+            justifyContent: "center",
+          }}
+        >
+          <Text className="text-xs font-medium text-foreground">Down</Text>
+        </Pressable>
+
+        <View className="flex-1" />
+
+        {activeSession ? (
+          <Pressable
+            onPress={() => onOpenSession?.(activeSession.sessionId)}
+            accessibilityRole="button"
+            accessibilityLabel={`Open live session for ${item.identifier}`}
+            className="rounded-md px-3 py-1.5 active:opacity-70"
+            style={{
+              backgroundColor: colors.primary + "25",
+              minHeight: 32,
+              justifyContent: "center",
+            }}
+          >
+            <Text className="text-xs font-semibold text-primary">Live</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={() => onRun(item.id)}
+            disabled={isDispatching}
+            accessibilityRole="button"
+            accessibilityLabel={`Run ${item.identifier}`}
+            className="rounded-md px-3 py-1.5 active:opacity-70"
+            style={{
+              backgroundColor: colors.primary,
+              opacity: isDispatching ? 0.65 : 1,
+              minHeight: 32,
+              justifyContent: "center",
+            }}
+          >
+            <Text className="text-xs font-semibold text-background">
+              {isDispatching ? "Starting" : "Run"}
+            </Text>
+          </Pressable>
+        )}
       </View>
-    </Pressable>
+    </View>
   );
 }
 
 function ItemsTab({
   selectedWorkItemId,
   onSelectWorkItem,
+  onOpenSession,
+  onRefresh,
 }: {
   selectedWorkItemId: string | null;
   onSelectWorkItem: (id: string) => void;
+  onOpenSession?: (id: string) => void;
+  onRefresh?: () => void;
 }) {
   const { data: session } = authClient.useSession();
+  const queryClient = useQueryClient();
   const workspacesQuery = useQuery(trpc.workspace.list.queryOptions(undefined, { enabled: Boolean(session) }));
-  const primaryWorkspace = (workspacesQuery.data as Array<{ workspace: { id: string; name: string } }> | undefined)?.[0]?.workspace ?? null;
+  const primaryWorkspace = (workspacesQuery.data as { workspace: { id: string; name: string } }[] | undefined)?.[0]?.workspace ?? null;
+  const listInput = { workspaceId: primaryWorkspace?.id ?? "", limit: 30 };
 
   const workItemsQuery = useQuery(trpc.workItem.list.queryOptions(
-    { workspaceId: primaryWorkspace?.id ?? "", limit: 30 },
+    listInput,
     { enabled: Boolean(primaryWorkspace?.id) },
   ));
 
-  const items = (workItemsQuery.data ?? []) as Array<{ id: string; identifier: string; title: string; kind: string; status: string }>;
+  const reorderMutation = useMutation(
+    trpc.workItems.reorderQueue.mutationOptions({
+      onSuccess: async () => {
+        await queryClient.invalidateQueries({
+          queryKey: trpc.workItem.list.queryKey(listInput),
+        });
+        onRefresh?.();
+      },
+    }),
+  );
+
+  const dispatchMutation = useMutation(
+    trpc.workItem.dispatch.mutationOptions({
+      onSuccess: async (result) => {
+        await queryClient.invalidateQueries({
+          queryKey: trpc.workItem.list.queryKey(listInput),
+        });
+        onRefresh?.();
+        if (typeof result.sessionId === "string") {
+          onOpenSession?.(result.sessionId);
+        }
+      },
+    }),
+  );
+
+  const items = buildExecutionQueue((workItemsQuery.data ?? []) as TabletQueueItem[]);
+  const lanes = buildQueueLanes(items);
+
+  const handleMove = (itemId: string, direction: QueueMoveDirection) => {
+    if (!primaryWorkspace?.id) return;
+
+    const workItemIds = moveQueueItem(
+      items.map((item) => item.id),
+      itemId,
+      direction,
+    );
+
+    if (workItemIds.join("|") === items.map((item) => item.id).join("|")) {
+      return;
+    }
+
+    reorderMutation.mutate({
+      workspaceId: primaryWorkspace.id,
+      workItemIds,
+    });
+  };
 
   if (workItemsQuery.isLoading) {
     return (
@@ -304,21 +456,60 @@ function ItemsTab({
     );
   }
 
+  const renderRows = (laneItems: TabletQueueItem[]) =>
+    laneItems.map((item) => {
+      const queueIndex = items.findIndex((candidate) => candidate.id === item.id);
+
+      return (
+        <WorkItemRow
+          key={item.id}
+          item={item}
+          index={queueIndex}
+          total={items.length}
+          isSelected={item.id === selectedWorkItemId}
+          onPress={() => onSelectWorkItem(item.id)}
+          onMove={handleMove}
+          onRun={(workItemId) => dispatchMutation.mutate({ workItemId })}
+          onOpenSession={onOpenSession}
+          isReordering={reorderMutation.isPending}
+          isDispatching={dispatchMutation.isPending}
+        />
+      );
+    });
+
   return (
     <ScrollView className="flex-1">
       {items.length === 0 ? (
         <View className="items-center justify-center px-4 py-12">
-          <Text className="text-sm" style={{ color: colors.muted }}>No work items</Text>
+          <Text className="text-sm text-muted">No queued work items</Text>
         </View>
       ) : (
-        items.map((item) => (
-          <WorkItemRow
-            key={item.id}
-            item={item}
-            isSelected={item.id === selectedWorkItemId}
-            onPress={() => onSelectWorkItem(item.id)}
-          />
-        ))
+        <>
+          {lanes.active.length > 0 ? (
+            <View>
+              <Text className="px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wider text-muted">Moved to Active Agents</Text>
+              {renderRows(lanes.active)}
+            </View>
+          ) : null}
+          {lanes.queued.length > 0 ? (
+            <View>
+              <Text className="px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wider text-muted">Ready to Start</Text>
+              {renderRows(lanes.queued)}
+            </View>
+          ) : null}
+          {lanes.review.length > 0 ? (
+            <View>
+              <Text className="px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wider text-muted">Review & Blockers</Text>
+              {renderRows(lanes.review)}
+            </View>
+          ) : null}
+          {lanes.done.length > 0 ? (
+            <View>
+              <Text className="px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wider text-muted">Done</Text>
+              {renderRows(lanes.done)}
+            </View>
+          ) : null}
+        </>
       )}
     </ScrollView>
   );
@@ -335,6 +526,8 @@ export interface TabletSidebarProps {
   selectedWorkItemId: string | null;
   onSelectSession: (id: string) => void;
   onSelectWorkItem: (id: string) => void;
+  onOpenSession?: (id: string) => void;
+  onOpenDashboard: () => void;
   onRefresh?: () => void;
 }
 
@@ -345,33 +538,59 @@ export function TabletSidebar({
   selectedWorkItemId,
   onSelectSession,
   onSelectWorkItem,
+  onOpenSession,
+  onOpenDashboard,
   onRefresh,
 }: TabletSidebarProps) {
   const [tab, setTab] = useState<SidebarTab>("agents");
+  const handleOpenSession = (id: string) => {
+    setTab("agents");
+    onOpenSession?.(id);
+  };
 
   return (
     <View className="flex-1" style={{ backgroundColor: colors.background }}>
       {/* Header */}
       <View className="px-4 py-3" style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}>
-        <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>
-          Mission Control
-        </Text>
-        <View className="mt-1 flex-row items-center">
-          <View
+        <View className="flex-row items-start justify-between">
+          <View className="flex-1" style={{ minWidth: 0 }}>
+            <Text className="text-lg font-semibold text-foreground" numberOfLines={1}>
+              Mission Control
+            </Text>
+            <View className="mt-1 flex-row items-center">
+              <View
+                style={{
+                  width: 6, height: 6, borderRadius: 3,
+                  backgroundColor:
+                    connectionState === "connected" ? colors.success
+                    : connectionState === "reconnecting" || connectionState === "connecting" ? colors.warning
+                    : colors.danger,
+                  marginRight: 6,
+                }}
+              />
+              <Text className="text-xs text-muted" numberOfLines={1}>
+                {connectionState === "connected"
+                  ? `${sessions.length} session${sessions.length !== 1 ? "s" : ""}`
+                  : connectionState}
+              </Text>
+            </View>
+          </View>
+
+          <Pressable
+            onPress={() => { hapticSelection(); onOpenDashboard(); }}
+            accessibilityRole="button"
+            accessibilityLabel="Back to dashboard"
+            className="ml-3 rounded-md px-3 py-1.5 active:opacity-70"
             style={{
-              width: 6, height: 6, borderRadius: 3,
-              backgroundColor:
-                connectionState === "connected" ? colors.success
-                : connectionState === "reconnecting" || connectionState === "connecting" ? colors.warning
-                : colors.danger,
-              marginRight: 6,
+              backgroundColor: colors.primary + "25",
+              minHeight: 36,
+              justifyContent: "center",
             }}
-          />
-          <Text className="text-xs" style={{ color: colors.muted }}>
-            {connectionState === "connected"
-              ? `${sessions.length} session${sessions.length !== 1 ? "s" : ""}`
-              : connectionState}
-          </Text>
+          >
+            <Text className="text-xs font-semibold text-primary">
+              Dashboard
+            </Text>
+          </Pressable>
         </View>
       </View>
 
@@ -389,6 +608,8 @@ export function TabletSidebar({
         <ItemsTab
           selectedWorkItemId={selectedWorkItemId}
           onSelectWorkItem={onSelectWorkItem}
+          onOpenSession={handleOpenSession}
+          onRefresh={onRefresh}
         />
       )}
     </View>

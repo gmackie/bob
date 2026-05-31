@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // Mock the db module BEFORE importing auth
 vi.mock("@bob/db/client", () => ({
@@ -23,6 +23,68 @@ import { validateBrowserToken, validateDaemonAuth } from "./auth.js";
 describe("validateBrowserToken", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.BOB_AUTH_BYPASS;
+    delete process.env.BOB_AUTH_BYPASS_TOKEN;
+    delete process.env.BOB_AUTH_BYPASS_USER_ID;
+    delete process.env.REQUIRE_AUTH;
+  });
+
+  afterEach(() => {
+    delete process.env.BOB_AUTH_BYPASS;
+    delete process.env.BOB_AUTH_BYPASS_TOKEN;
+    delete process.env.BOB_AUTH_BYPASS_USER_ID;
+    delete process.env.REQUIRE_AUTH;
+  });
+
+  it("accepts the default auth bypass user only when auth bypass and token are configured", async () => {
+    process.env.BOB_AUTH_BYPASS = "true";
+    process.env.BOB_AUTH_BYPASS_TOKEN = "prod-secret";
+
+    const result = await validateBrowserToken("bob-auth-bypass:prod-secret");
+
+    expect(result).toBe("default-user");
+    expect(db.query.session.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("maps a valid auth bypass token to a configured user", async () => {
+    process.env.BOB_AUTH_BYPASS = "true";
+    process.env.BOB_AUTH_BYPASS_TOKEN = "prod-secret";
+    process.env.BOB_AUTH_BYPASS_USER_ID = "user-123";
+
+    const result = await validateBrowserToken("bob-auth-bypass:prod-secret");
+
+    expect(result).toBe("user-123");
+    expect(db.query.session.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("rejects auth bypass tokens that do not match the configured secret", async () => {
+    process.env.BOB_AUTH_BYPASS = "true";
+    process.env.BOB_AUTH_BYPASS_TOKEN = "prod-secret";
+    process.env.BOB_AUTH_BYPASS_USER_ID = "user-123";
+
+    const result = await validateBrowserToken("bob-auth-bypass:wrong-secret");
+
+    expect(result).toBeNull();
+    expect(db.query.session.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("rejects auth bypass tokens when no backend secret is configured", async () => {
+    process.env.BOB_AUTH_BYPASS = "true";
+
+    const result = await validateBrowserToken("bob-auth-bypass:prod-secret");
+
+    expect(result).toBeNull();
+    expect(db.query.session.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("accepts the auth bypass token when normal auth is required", async () => {
+    process.env.BOB_AUTH_BYPASS = "true";
+    process.env.BOB_AUTH_BYPASS_TOKEN = "prod-secret";
+    process.env.REQUIRE_AUTH = "true";
+
+    const result = await validateBrowserToken("bob-auth-bypass:prod-secret");
+
+    expect(result).toBe("default-user");
   });
 
   it("returns userId when the Better Auth cookie header contains a signed session token", async () => {

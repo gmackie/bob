@@ -1,6 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
-import { v4 as uuidv4 } from "uuid";
+function uuidv4() {
+  const hex = "0123456789abcdef";
+  let id = "";
+  for (let i = 0; i < 32; i++) id += hex[Math.floor(Math.random() * 16)];
+  return `${id.slice(0, 8)}-${id.slice(8, 12)}-${id.slice(12, 16)}-${id.slice(16, 20)}-${id.slice(20)}`;
+}
 
 const QUEUE_STORAGE_KEY = "@bob/offline_queue";
 const MAX_RETRIES = 5;

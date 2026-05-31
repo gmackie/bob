@@ -1,7 +1,12 @@
 import Constants from "expo-constants";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
-import { v4 as uuid } from "uuid";
+function randomId() {
+  const hex = "0123456789abcdef";
+  let id = "";
+  for (let i = 0; i < 32; i++) id += hex[Math.floor(Math.random() * 16)];
+  return `${id.slice(0, 8)}-${id.slice(8, 12)}-${id.slice(12, 16)}-${id.slice(16, 20)}-${id.slice(20)}`;
+}
 
 import type {
   ConnectionState,
@@ -83,7 +88,7 @@ export interface UseGatewayResult {
 
 export function useGateway(): UseGatewayResult {
   const clientRef = useRef<BobWsClient | null>(null);
-  const clientIdRef = useRef(uuid());
+  const clientIdRef = useRef(randomId());
   const { data: session } = useSession();
 
   const [connectionState, setConnectionState] = useState<ConnectionState>("disconnected");

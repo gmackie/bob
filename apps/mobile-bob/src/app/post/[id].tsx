@@ -1,4 +1,5 @@
-import { SafeAreaView, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useGlobalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 
@@ -37,15 +38,17 @@ export default function Post() {
   const post = data as PostByIdOutput;
   if (!post) return null;
 
+  const insets = useSafeAreaInsets();
+
   return (
-    <SafeAreaView className="bg-background">
+    <View className="bg-background flex-1" style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}>
       <Stack.Screen options={{ title: post.title }} />
       <View className="h-full w-full p-4">
-        <Text className="py-2 text-3xl font-bold" style={{ color: colors.primary }}>
+        <Text className="py-2 text-3xl font-bold text-primary">
           {post.title}
         </Text>
-        <Text className="py-4" style={{ color: colors.foreground }}>{post.content}</Text>
+        <Text className="py-4 text-foreground">{post.content}</Text>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }

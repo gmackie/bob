@@ -1,4 +1,5 @@
 import { Redirect, router, useLocalSearchParams } from "expo-router";
+import { colors } from "~/lib/colors";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -15,7 +16,6 @@ import { getTaskWorkspaceHref } from "~/features/planning/navigation";
 import { authClient } from "~/utils/auth";
 import { trpc } from "~/utils/api";
 import { getBaseUrl } from "~/utils/base-url";
-import { colors } from "~/lib/colors";
 
 const PIPELINE_STAGES = [
   { key: "idea", label: "Idea" },
@@ -133,7 +133,7 @@ export default function WorkItemDetailScreen() {
     return (
       <Screen className="justify-center">
         <Card className="items-center">
-          <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>
+          <Text className="text-lg font-semibold text-foreground">
             Work item not found
           </Text>
         </Card>
@@ -151,10 +151,10 @@ export default function WorkItemDetailScreen() {
     <Screen className="pt-6">
       <ScrollView showsVerticalScrollIndicator={false}>
         <View className="mb-5">
-          <Text className="text-sm uppercase tracking-[0.18em]" style={{ color: colors.muted }}>
+          <Text className="text-sm uppercase tracking-[0.18em] text-muted">
             {workItem.identifier}
           </Text>
-          <Text className="mt-1 text-3xl font-semibold tracking-tight" style={{ color: colors.foreground }}>
+          <Text className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
             {workItem.title}
           </Text>
           <View className="mt-4 flex-row flex-wrap gap-2">
@@ -201,10 +201,10 @@ export default function WorkItemDetailScreen() {
 
         {workItem.description ? (
           <Card className="mb-5">
-            <Text className="text-base font-semibold" style={{ color: colors.foreground }}>
+            <Text className="text-base font-semibold text-foreground">
               Description
             </Text>
-            <Text className="mt-3 text-sm leading-6" style={{ color: colors.muted }}>
+            <Text className="mt-3 text-sm leading-6 text-muted">
               {workItem.description}
             </Text>
           </Card>
@@ -214,7 +214,7 @@ export default function WorkItemDetailScreen() {
         {childItemsQuery.data && childItemsQuery.data.length > 0 ? (
           <View className="mb-5">
             <View className="mb-3 flex-row items-center justify-between">
-              <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>
+              <Text className="text-lg font-semibold text-foreground">
                 Tasks ({childItemsQuery.data.filter((c: any) => c.status === "done").length}/{childItemsQuery.data.length})
               </Text>
               {pipelineDetection?.stage === "plan" ? (
@@ -285,16 +285,16 @@ export default function WorkItemDetailScreen() {
         ) : null}
 
         <Card variant="elevated" className="mb-5">
-          <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>
+          <Text className="text-lg font-semibold text-foreground">
             Planning context
           </Text>
-          <Text className="mt-3 text-sm" style={{ color: colors.muted }}>
+          <Text className="mt-3 text-sm text-muted">
             {childCount} child items · {currentArtifacts.length} current artifacts
           </Text>
-          <Text className="mt-4 text-sm font-semibold" style={{ color: colors.foreground }}>
+          <Text className="mt-4 text-sm font-semibold text-foreground">
             {detailPresentation.semanticSummary}
           </Text>
-          <Text className="mt-2 text-sm leading-6" style={{ color: colors.muted }}>
+          <Text className="mt-2 text-sm leading-6 text-muted">
             {detailPresentation.semanticHint}
           </Text>
           <Button
@@ -317,7 +317,7 @@ export default function WorkItemDetailScreen() {
         </Card>
 
         <View className="mb-3 flex-row items-center justify-between">
-          <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>Artifacts</Text>
+          <Text className="text-lg font-semibold text-foreground">Artifacts</Text>
         </View>
         <Card className="mb-5">
           {currentArtifacts.length > 0 ? (
@@ -330,12 +330,12 @@ export default function WorkItemDetailScreen() {
               />
             ))
           ) : (
-            <Text className="text-sm" style={{ color: colors.muted }}>No artifacts attached yet.</Text>
+            <Text className="text-sm text-muted">No artifacts attached yet.</Text>
           )}
         </Card>
 
         <View className="mb-3 flex-row items-center justify-between">
-          <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>Comments</Text>
+          <Text className="text-lg font-semibold text-foreground">Comments</Text>
         </View>
         <Card className="mb-4">
           {commentsQuery.data?.length ? (
@@ -348,12 +348,12 @@ export default function WorkItemDetailScreen() {
               />
             ))
           ) : (
-            <Text className="text-sm" style={{ color: colors.muted }}>No comments yet.</Text>
+            <Text className="text-sm text-muted">No comments yet.</Text>
           )}
         </Card>
 
         <Card className="mb-8">
-          <Text className="text-base font-semibold" style={{ color: colors.foreground }}>
+          <Text className="text-base font-semibold text-foreground">
             Add comment
           </Text>
           <TextInput
@@ -362,8 +362,7 @@ export default function WorkItemDetailScreen() {
             multiline
             placeholder="Leave planning context or review guidance"
             placeholderTextColor="#7B8794"
-            className="border-border mt-3 min-h-24 rounded-2xl border px-4 py-3"
-            style={{ color: colors.foreground }}
+            className="border-border mt-3 min-h-24 rounded-2xl border px-4 py-3 text-foreground"
           />
           <Button
             className="mt-4"

@@ -53,7 +53,7 @@ export default function NotificationsScreen() {
 
   return (
     <Screen className="pt-6">
-      <Text className="mb-4 text-3xl font-semibold tracking-tight" style={{ color: colors.foreground }}>
+      <Text className="mb-4 text-3xl font-semibold tracking-tight text-foreground">
         Inbox
       </Text>
       <Card>
@@ -67,7 +67,7 @@ export default function NotificationsScreen() {
                 type: item.type,
               })}
               right={
-                <Text className="text-sm" style={{ color: colors.muted }}>
+                <Text className="text-sm text-muted">
                   {item.read ? "Read" : "Mark read"}
                 </Text>
               }
@@ -87,7 +87,7 @@ export default function NotificationsScreen() {
             />
           ))
         ) : (
-          <Text className="text-sm" style={{ color: colors.muted }}>No notifications yet.</Text>
+          <Text className="text-sm text-muted">No notifications yet.</Text>
         )}
       </Card>
     </Screen>

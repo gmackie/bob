@@ -1,8 +1,9 @@
 import { useState, useCallback, useMemo } from "react";
-import { Platform, View } from "react-native";
-import { Stack } from "expo-router";
+import { Platform, View, useWindowDimensions } from "react-native";
+import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { queryClient } from "~/utils/api";
 import { Providers } from "../providers";
@@ -14,29 +15,17 @@ import { InspectorPanel } from "~/components/tablet/InspectorPanel";
 import { useGateway } from "~/hooks/use-gateway";
 import { useTabletShortcuts } from "~/hooks/use-keyboard-shortcuts";
 import { extractFileReferences } from "~/lib/file-references";
+import { getTabletShellPadding, getTabletSidebarWidth } from "~/lib/tablet-layout";
+import { getTabletDashboardHref } from "~/features/tablet/navigation";
+import { colors } from "~/lib/colors";
 
 import "../styles.css";
-
-/**
- * Conditionally import SplitView — only available on iOS and only
- * meaningful on iPad. On iPhone or non-iOS platforms we fall back to Stack.
- */
-let SplitView: typeof import("expo-router/build/split-view").SplitView | null = null;
-if (Platform.OS === "ios") {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require("expo-router/build/split-view");
-    SplitView = mod.SplitView;
-  } catch {
-    // SplitView not available — fall back to Stack
-  }
-}
 
 const isTablet = Platform.OS === "ios" && Platform.isPad;
 
 const stackScreenOptions = {
   headerShown: false,
-  contentStyle: { backgroundColor: "#0B0F14" },
+  contentStyle: { backgroundColor: "#141310" },
   animation: "fade" as const,
 };
 
@@ -94,13 +83,21 @@ function MainPane({
 
 function TabletLayout() {
   const gateway = useGateway();
+  const router = useRouter();
+  const { width } = useWindowDimensions();
+  const safeAreaInsets = useSafeAreaInsets();
   const [inspectorVisible, setInspectorVisible] = useState(false);
   const [inspectorArtifact, setInspectorArtifact] = useState<string | null>(null);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
+  const sidebarWidth = getTabletSidebarWidth(width);
 
   const fileReferences = useMemo(
     () => extractFileReferences(gateway.selectedSessionEvents),
     [gateway.selectedSessionEvents],
+  );
+  const shellPadding = useMemo(
+    () => getTabletShellPadding(safeAreaInsets),
+    [safeAreaInsets],
   );
 
   const handleShowArtifact = useCallback((content: string) => {
@@ -116,48 +113,74 @@ function TabletLayout() {
     setSelectedFilePath((prev) => (prev === path ? null : path));
   }, []);
 
+  const handleOpenDashboard = useCallback(() => {
+    gateway.selectSession(null);
+    gateway.selectWorkItem(null);
+    setInspectorVisible(false);
+    setInspectorArtifact(null);
+    setSelectedFilePath(null);
+    router.replace(getTabletDashboardHref() as never);
+  }, [gateway, router]);
+
   useTabletShortcuts({
     onFocusSidebar: () => { /* TODO: focus sidebar search when added */ },
     onFocusMain: () => { /* TODO: focus main pane input */ },
     onToggleInspector: () => setInspectorVisible((v) => !v),
   });
 
-  if (!SplitView) {
-    return <PhoneLayout />;
-  }
-
   return (
-    <SplitView>
-      <SplitView.Column>
-        <TabletSidebar
-          sessions={gateway.sessions}
-          connectionState={gateway.connectionState}
-          selectedSessionId={gateway.selectedSessionId}
-          selectedWorkItemId={gateway.selectedWorkItemId}
-          onSelectSession={gateway.selectSession}
-          onSelectWorkItem={gateway.selectWorkItem}
-          onRefresh={gateway.refresh}
-        />
-      </SplitView.Column>
-      <SplitView.Column>
-        <View className="flex-1">
-          <MainPane
-            gateway={gateway}
-            onShowArtifact={handleShowArtifact}
-            onOpenInspector={handleOpenInspector}
-          />
-          <InspectorPanel
-            visible={inspectorVisible}
-            onClose={() => setInspectorVisible(false)}
-            artifactContent={inspectorArtifact}
-            fileReferences={fileReferences}
-            selectedFilePath={selectedFilePath}
-            onSelectFile={handleSelectFile}
-            workItemId={gateway.selectedWorkItemId}
+    <View
+      testID="tablet-shell"
+      className="flex-1"
+      style={{
+        backgroundColor: colors.background,
+        paddingTop: shellPadding.top,
+        paddingRight: shellPadding.right,
+        paddingBottom: shellPadding.bottom,
+        paddingLeft: shellPadding.left,
+      }}
+    >
+      <View className="flex-1 flex-row">
+        <View
+          testID="tablet-sidebar"
+          style={{
+            width: sidebarWidth,
+            borderRightWidth: 1,
+            borderRightColor: colors.border,
+          }}
+        >
+          <TabletSidebar
+            sessions={gateway.sessions}
+            connectionState={gateway.connectionState}
+            selectedSessionId={gateway.selectedSessionId}
+            selectedWorkItemId={gateway.selectedWorkItemId}
+            onSelectSession={gateway.selectSession}
+            onSelectWorkItem={gateway.selectWorkItem}
+            onOpenSession={gateway.selectSession}
+            onOpenDashboard={handleOpenDashboard}
+            onRefresh={gateway.refresh}
           />
         </View>
-      </SplitView.Column>
-    </SplitView>
+        <View testID="tablet-main" className="flex-1" style={{ minWidth: 0 }}>
+          <View className="flex-1" style={{ minWidth: 0 }}>
+            <MainPane
+              gateway={gateway}
+              onShowArtifact={handleShowArtifact}
+              onOpenInspector={handleOpenInspector}
+            />
+            <InspectorPanel
+              visible={inspectorVisible}
+              onClose={() => setInspectorVisible(false)}
+              artifactContent={inspectorArtifact}
+              fileReferences={fileReferences}
+              selectedFilePath={selectedFilePath}
+              onSelectFile={handleSelectFile}
+              workItemId={gateway.selectedWorkItemId}
+            />
+          </View>
+        </View>
+      </View>
+    </View>
   );
 }
 

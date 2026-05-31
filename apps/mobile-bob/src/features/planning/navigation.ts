@@ -29,6 +29,34 @@ export interface PlanningNotificationSummary {
   read: boolean;
 }
 
+type DashboardItemSource = "notification" | "workItem" | "project";
+type DashboardItemTone =
+  | "accent"
+  | "danger"
+  | "warning"
+  | "default"
+  | "success";
+
+export interface PlanningDashboardAction {
+  id: string;
+  source: DashboardItemSource;
+  title: string;
+  subtitle: string | null;
+  ctaLabel: string;
+  href: string;
+  tone: DashboardItemTone;
+}
+
+export interface PlanningAttentionItem {
+  id: string;
+  source: Exclude<DashboardItemSource, "project">;
+  title: string;
+  subtitle: string | null;
+  badge: string;
+  href: string;
+  tone: DashboardItemTone;
+}
+
 export function getPlanningHref(): string {
   return "/planning";
 }
@@ -69,17 +97,156 @@ export function groupActiveTaskStatuses(workItems: PlanningWorkItemSummary[]): {
   );
 }
 
+function formatStatusLabel(status: string): string {
+  return status
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function getWorkItemTone(status: string): DashboardItemTone {
+  if (status === "blocked") return "danger";
+  if (status === "in_review") return "warning";
+  if (status === "done" || status === "completed") return "success";
+  return "default";
+}
+
+function getWorkItemPriority(status: string): number {
+  if (status === "blocked") return 0;
+  if (status === "in_review") return 1;
+  if (status === "in_progress") return 2;
+  return 3;
+}
+
+function getWorkItemActionHref(item: PlanningWorkItemSummary): string {
+  return item.kind === "task"
+    ? getTaskWorkspaceHref(item.id)
+    : getWorkItemHref(item.id);
+}
+
+export function groupPlanningWorkItems(workItems: PlanningWorkItemSummary[]) {
+  return {
+    queued: workItems.filter((item) =>
+      ["ready", "todo", "backlog", "draft"].includes(item.status),
+    ),
+    active: workItems.filter((item) =>
+      ["in_progress", "running"].includes(item.status),
+    ),
+    review: workItems.filter((item) =>
+      ["blocked", "in_review", "review"].includes(item.status),
+    ),
+    done: workItems.filter((item) =>
+      ["done", "completed", "cancelled", "canceled"].includes(item.status),
+    ),
+  };
+}
+
+function buildWorkItemSubtitle(item: PlanningWorkItemSummary): string {
+  return `${item.identifier} · ${item.status.replace(/_/g, " ")}`;
+}
+
+function buildAttentionItems(input: {
+  workItems: PlanningWorkItemSummary[];
+  notifications: PlanningNotificationSummary[];
+}): PlanningAttentionItem[] {
+  const unreadNotifications = input.notifications
+    .filter((item) => !item.read)
+    .slice(0, 3)
+    .map((item) => ({
+      id: item.id,
+      source: "notification" as const,
+      title: item.title,
+      subtitle: item.body,
+      badge: "Unread",
+      href: getNotificationsHref(),
+      tone: "accent" as const,
+    }));
+
+  const activeWorkItems = input.workItems
+    .filter((item) =>
+      ["blocked", "in_review", "in_progress"].includes(item.status),
+    )
+    .sort(
+      (a, b) => getWorkItemPriority(a.status) - getWorkItemPriority(b.status),
+    )
+    .map((item) => ({
+      id: item.id,
+      source: "workItem" as const,
+      title: item.title,
+      subtitle: buildWorkItemSubtitle(item),
+      badge: formatStatusLabel(item.status),
+      href: getWorkItemActionHref(item),
+      tone: getWorkItemTone(item.status),
+    }));
+
+  return [...unreadNotifications, ...activeWorkItems].slice(0, 5);
+}
+
+function buildPrimaryAction(input: {
+  attentionItems: PlanningAttentionItem[];
+  projects: PlanningProjectSummary[];
+}): PlanningDashboardAction | null {
+  const firstAttentionItem = input.attentionItems[0];
+  if (firstAttentionItem) {
+    return {
+      id: firstAttentionItem.id,
+      source: firstAttentionItem.source,
+      title: firstAttentionItem.title,
+      subtitle: firstAttentionItem.subtitle,
+      ctaLabel:
+        firstAttentionItem.source === "notification"
+          ? "Open inbox"
+          : firstAttentionItem.href.includes("/workspace")
+            ? "Open workspace"
+            : "Open item",
+      href: firstAttentionItem.href,
+      tone: firstAttentionItem.tone,
+    };
+  }
+
+  const firstProject = input.projects[0];
+  if (!firstProject) return null;
+
+  return {
+    id: firstProject.id,
+    source: "project",
+    title: firstProject.name,
+    subtitle: `${firstProject.taskCount} tasks · ${firstProject.issueCount} issues · ${firstProject.activeCount} active`,
+    ctaLabel: "Open project",
+    href: getProjectHref(firstProject.id),
+    tone: "default",
+  };
+}
+
 export function buildPlanningSections(input: {
   workspaces: PlanningWorkspaceSummary[];
   projects: PlanningProjectSummary[];
   workItems: PlanningWorkItemSummary[];
   notifications: PlanningNotificationSummary[];
 }) {
+  const attentionItems = buildAttentionItems(input);
+
   return {
     heroWorkspace: input.workspaces[0] ?? null,
     featuredProjects: input.projects.slice(0, 4),
+    workPipeline: groupPlanningWorkItems(input.workItems),
     recentWorkItems: input.workItems.slice(0, 8),
-    unreadNotifications: input.notifications.filter((item) => !item.read).slice(0, 5),
+    unreadNotifications: input.notifications
+      .filter((item) => !item.read)
+      .slice(0, 5),
+    primaryAction: buildPrimaryAction({
+      attentionItems,
+      projects: input.projects,
+    }),
+    attentionItems,
+    projectTotals: input.projects.reduce(
+      (acc, project) => ({
+        total: acc.total + 1,
+        active: acc.active + (project.activeCount > 0 ? 1 : 0),
+        tasks: acc.tasks + project.taskCount,
+        issues: acc.issues + project.issueCount,
+      }),
+      { total: 0, active: 0, tasks: 0, issues: 0 },
+    ),
     executionSummary: groupActiveTaskStatuses(input.workItems),
   };
 }

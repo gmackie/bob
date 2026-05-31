@@ -52,7 +52,7 @@ function TaskTreeNode({ item, workspaceId, depth }: TaskTreeNodeProps) {
       >
         {/* Expand/collapse indicator */}
         {hasChildren ? (
-          <Text className="mr-2 text-xs" style={{ color: colors.muted, width: 16 }}>
+          <Text className="mr-2 text-xs text-muted" style={{ width: 16 }}>
             {expanded ? "▾" : "▸"}
           </Text>
         ) : (
@@ -69,10 +69,10 @@ function TaskTreeNode({ item, workspaceId, depth }: TaskTreeNodeProps) {
 
         {/* Content */}
         <View className="flex-1">
-          <Text className="text-sm" style={{ color: colors.foreground }} numberOfLines={1}>
+          <Text className="text-sm text-foreground" numberOfLines={1}>
             {item.title}
           </Text>
-          <Text className="text-xs" style={{ color: colors.muted }}>
+          <Text className="text-xs text-muted">
             {item.identifier} · {item.status.replace(/_/g, " ")}
           </Text>
         </View>
@@ -132,7 +132,7 @@ export function TaskTree({ workItemId, workspaceId: providedWsId }: TaskTreeProp
   if (children.length === 0) {
     return (
       <View className="items-center justify-center px-4 py-8">
-        <Text className="text-sm" style={{ color: colors.muted }}>No subtasks</Text>
+        <Text className="text-sm text-muted">No subtasks</Text>
       </View>
     );
   }

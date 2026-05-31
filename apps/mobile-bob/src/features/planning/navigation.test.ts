@@ -9,6 +9,7 @@ import {
   getTaskWorkspaceHref,
   getWorkItemHref,
   groupActiveTaskStatuses,
+  groupPlanningWorkItems,
 } from "./navigation";
 
 describe("planning navigation", () => {
@@ -84,6 +85,13 @@ describe("planning navigation", () => {
             kind: "task",
             status: "in_progress",
           },
+          {
+            id: "task-2",
+            identifier: "MOB-13",
+            title: "Fix iPad landscape",
+            kind: "task",
+            status: "blocked",
+          },
         ],
         notifications: [
           {
@@ -117,6 +125,28 @@ describe("planning navigation", () => {
           taskCount: 3,
         },
       ],
+      workPipeline: {
+        active: [
+          {
+            id: "task-1",
+            identifier: "MOB-12",
+            title: "Ship mobile planning shell",
+            kind: "task",
+            status: "in_progress",
+          },
+        ],
+        queued: [],
+        review: [
+          {
+            id: "task-2",
+            identifier: "MOB-13",
+            title: "Fix iPad landscape",
+            kind: "task",
+            status: "blocked",
+          },
+        ],
+        done: [],
+      },
       recentWorkItems: [
         {
           id: "task-1",
@@ -124,6 +154,13 @@ describe("planning navigation", () => {
           title: "Ship mobile planning shell",
           kind: "task",
           status: "in_progress",
+        },
+        {
+          id: "task-2",
+          identifier: "MOB-13",
+          title: "Fix iPad landscape",
+          kind: "task",
+          status: "blocked",
         },
       ],
       unreadNotifications: [
@@ -134,11 +171,127 @@ describe("planning navigation", () => {
           read: false,
         },
       ],
+      primaryAction: {
+        id: "notification-1",
+        source: "notification",
+        title: "Review ready",
+        subtitle: "Task is ready for review",
+        ctaLabel: "Open inbox",
+        href: "/notifications",
+        tone: "accent",
+      },
+      attentionItems: [
+        {
+          id: "notification-1",
+          source: "notification",
+          title: "Review ready",
+          subtitle: "Task is ready for review",
+          badge: "Unread",
+          href: "/notifications",
+          tone: "accent",
+        },
+        {
+          id: "task-2",
+          source: "workItem",
+          title: "Fix iPad landscape",
+          subtitle: "MOB-13 · blocked",
+          badge: "Blocked",
+          href: "/work-items/task-2/workspace",
+          tone: "danger",
+        },
+        {
+          id: "task-1",
+          source: "workItem",
+          title: "Ship mobile planning shell",
+          subtitle: "MOB-12 · in progress",
+          badge: "In Progress",
+          href: "/work-items/task-1/workspace",
+          tone: "default",
+        },
+      ],
+      projectTotals: {
+        total: 1,
+        active: 1,
+        tasks: 3,
+        issues: 4,
+      },
       executionSummary: {
         inProgress: 1,
         inReview: 0,
-        blocked: 0,
+        blocked: 1,
       },
+    });
+  });
+
+  it("groups mobile work into explicit pipeline lanes", () => {
+    expect(
+      groupPlanningWorkItems([
+        {
+          id: "ready",
+          identifier: "BOB-1",
+          title: "Ready task",
+          kind: "task",
+          status: "ready",
+        },
+        {
+          id: "active",
+          identifier: "BOB-2",
+          title: "Active task",
+          kind: "task",
+          status: "in_progress",
+        },
+        {
+          id: "review",
+          identifier: "BOB-3",
+          title: "Review task",
+          kind: "task",
+          status: "in_review",
+        },
+        {
+          id: "done",
+          identifier: "BOB-4",
+          title: "Done task",
+          kind: "task",
+          status: "done",
+        },
+      ]),
+    ).toEqual({
+      queued: [
+        {
+          id: "ready",
+          identifier: "BOB-1",
+          title: "Ready task",
+          kind: "task",
+          status: "ready",
+        },
+      ],
+      active: [
+        {
+          id: "active",
+          identifier: "BOB-2",
+          title: "Active task",
+          kind: "task",
+          status: "in_progress",
+        },
+      ],
+      review: [
+        {
+          id: "review",
+          identifier: "BOB-3",
+          title: "Review task",
+          kind: "task",
+          status: "in_review",
+        },
+      ],
+      done: [
+        {
+          id: "done",
+          identifier: "BOB-4",
+          title: "Done task",
+          kind: "task",
+          status: "done",
+        },
+      ],
     });
   });
 });

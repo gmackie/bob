@@ -60,6 +60,16 @@ export interface InitAuthOptions {
   readonly githubClientSecret: string;
   /** Override GitHub OAuth scopes. Default `["user:email", "read:user"]`. */
   readonly githubScopes?: readonly string[];
+  /** Google OAuth client ID. When set (along with secret), enables Google sign-in. */
+  readonly googleClientId?: string;
+  /** Google OAuth client secret. */
+  readonly googleClientSecret?: string;
+  /** Apple Sign In Services ID (e.g. `com.gmacko.bob.signin`). */
+  readonly appleClientId?: string;
+  /** Apple Sign In client secret (generated JWT from Apple private key). */
+  readonly appleClientSecret?: string;
+  /** The iOS app bundle identifier for native Apple Sign In (e.g. `com.gmacko.bob`). */
+  readonly appBundleIdentifier?: string;
   /** Additional origins (beyond the built-in defaults) trusted for CORS/redirects. */
   readonly trustedOrigins?: readonly string[];
   /**
@@ -186,6 +196,27 @@ export function initAuth(opts: InitAuthOptions): AuthInstance {
           ? Array.from(opts.githubScopes)
           : ["user:email", "read:user"],
       },
+      ...(opts.googleClientId && opts.googleClientSecret
+        ? {
+            google: {
+              clientId: opts.googleClientId,
+              clientSecret: opts.googleClientSecret,
+              redirectURI: `${opts.productionUrl}/api/auth/callback/google`,
+            },
+          }
+        : {}),
+      ...(opts.appleClientId && opts.appleClientSecret
+        ? {
+            apple: {
+              clientId: opts.appleClientId,
+              clientSecret: opts.appleClientSecret,
+              ...(opts.appBundleIdentifier
+                ? { appBundleIdentifier: opts.appBundleIdentifier }
+                : {}),
+              redirectURI: `${opts.productionUrl}/api/auth/callback/apple`,
+            },
+          }
+        : {}),
     },
     trustedOrigins: Array.from(
       new Set(
