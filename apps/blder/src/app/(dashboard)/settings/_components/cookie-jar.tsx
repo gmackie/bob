@@ -10,7 +10,7 @@ function SetupGuide() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-border/50 bg-muted/30 p-5">
+      <div className="border-border/50 bg-muted/30 rounded-lg border p-5">
         <h3 className="mb-2 text-sm font-semibold">What is the Cookie Jar?</h3>
         <p className="text-muted-foreground text-sm leading-relaxed">
           The Cookie Jar lets your agent sessions browse authenticated websites
@@ -22,7 +22,7 @@ function SetupGuide() {
 
       <div>
         <h3 className="mb-3 text-sm font-semibold">How to import cookies</h3>
-        <div className="mb-3 flex gap-1 rounded-lg border border-border/50 bg-muted/20 p-1">
+        <div className="border-border/50 bg-muted/20 mb-3 flex gap-1 rounded-lg border p-1">
           <button
             onClick={() => setActiveTab("extension")}
             className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
@@ -48,7 +48,7 @@ function SetupGuide() {
         {activeTab === "extension" && (
           <div className="space-y-4 rounded-lg border p-4">
             <p className="text-muted-foreground text-sm">
-              Best for remote Bob instances. Works with Chrome and Firefox.
+              Best for remote BizPulse instances. Works with Chrome and Firefox.
             </p>
             <ol className="text-muted-foreground list-inside list-decimal space-y-3 text-sm">
               <li>
@@ -56,9 +56,19 @@ function SetupGuide() {
                   Install the extension
                 </span>
                 <p className="mt-1 pl-5 text-xs">
-                  Load <code className="rounded bg-muted px-1.5 py-0.5">extensions/chrome/</code> as
-                  an unpacked extension in Chrome (<code className="rounded bg-muted px-1.5 py-0.5">chrome://extensions</code> {"\u2192"} Developer
-                  mode {"\u2192"} Load unpacked), or <code className="rounded bg-muted px-1.5 py-0.5">extensions/firefox/</code> in Firefox.
+                  Load{" "}
+                  <code className="bg-muted rounded px-1.5 py-0.5">
+                    extensions/chrome/
+                  </code>{" "}
+                  as an unpacked extension in Chrome (
+                  <code className="bg-muted rounded px-1.5 py-0.5">
+                    chrome://extensions
+                  </code>{" "}
+                  {"\u2192"} Developer mode {"\u2192"} Load unpacked), or{" "}
+                  <code className="bg-muted rounded px-1.5 py-0.5">
+                    extensions/firefox/
+                  </code>{" "}
+                  in Firefox.
                 </p>
               </li>
               <li>
@@ -66,9 +76,10 @@ function SetupGuide() {
                   Configure the extension
                 </span>
                 <p className="mt-1 pl-5 text-xs">
-                  Right-click the extension icon {"\u2192"} Options. Enter your Bob URL and
-                  an API key with <code className="rounded bg-muted px-1.5 py-0.5">write</code> permission
-                  (create one in the API Keys section above).
+                  Right-click the extension icon {"\u2192"} Options. Enter your
+                  BizPulse URL and an API key with{" "}
+                  <code className="bg-muted rounded px-1.5 py-0.5">write</code>{" "}
+                  permission (create one in the API Keys section above).
                 </p>
               </li>
               <li>
@@ -77,8 +88,8 @@ function SetupGuide() {
                 </span>
                 <p className="mt-1 pl-5 text-xs">
                   Navigate to any site you want agents to access (e.g. GitHub).
-                  Click the extension icon and hit &quot;Send cookies&quot;. Use the
-                  Advanced toggle to pick multiple domains at once.
+                  Click the extension icon and hit &quot;Send cookies&quot;. Use
+                  the Advanced toggle to pick multiple domains at once.
                 </p>
               </li>
             </ol>
@@ -88,44 +99,49 @@ function SetupGuide() {
         {activeTab === "cli" && (
           <div className="space-y-4 rounded-lg border p-4">
             <p className="text-muted-foreground text-sm">
-              Best when Bob runs on the same machine as your browser. Reads
-              cookies directly from Chromium&apos;s SQLite database (Chrome, Arc,
-              Brave, Edge).
+              Best when BizPulse runs on the same machine as your browser. Reads
+              cookies directly from Chromium&apos;s SQLite database (Chrome,
+              Arc, Brave, Edge).
             </p>
             <div className="space-y-2">
               <div>
                 <p className="mb-1 text-xs font-medium">Set up auth:</p>
-                <pre className="overflow-x-auto rounded-md bg-muted/50 p-3 font-mono text-xs">
-{`export BOB_URL="https://bob.example.com"
+                <pre className="bg-muted/50 overflow-x-auto rounded-md p-3 font-mono text-xs">
+                  {`export BOB_URL="https://bob.example.com"
 export BOB_API_KEY="gmk_..."  # API key with write permission`}
                 </pre>
               </div>
               <div>
-                <p className="mb-1 text-xs font-medium">Import cookies for a domain:</p>
-                <pre className="overflow-x-auto rounded-md bg-muted/50 p-3 font-mono text-xs">
-{`bob cookies import --domain github.com
+                <p className="mb-1 text-xs font-medium">
+                  Import cookies for a domain:
+                </p>
+                <pre className="bg-muted/50 overflow-x-auto rounded-md p-3 font-mono text-xs">
+                  {`bob cookies import --domain github.com
 bob cookies import --domain github.com --domain linear.app
 bob cookies import --domain github.com --browser chrome`}
                 </pre>
               </div>
               <div>
                 <p className="mb-1 text-xs font-medium">Manage the jar:</p>
-                <pre className="overflow-x-auto rounded-md bg-muted/50 p-3 font-mono text-xs">
-{`bob cookies list          # show imported domains
+                <pre className="bg-muted/50 overflow-x-auto rounded-md p-3 font-mono text-xs">
+                  {`bob cookies list          # show imported domains
 bob cookies remove --domain github.com`}
                 </pre>
               </div>
             </div>
             <p className="text-muted-foreground text-xs">
-              On macOS, you&apos;ll be prompted to allow Keychain access the first time.
-              Click &quot;Allow&quot; when the system dialog appears.
+              On macOS, you&apos;ll be prompted to allow Keychain access the
+              first time. Click &quot;Allow&quot; when the system dialog
+              appears.
             </p>
           </div>
         )}
       </div>
 
-      <div className="rounded-lg border border-border/50 bg-muted/30 p-5">
-        <h3 className="mb-2 text-sm font-semibold">Using cookies in agent sessions</h3>
+      <div className="border-border/50 bg-muted/30 rounded-lg border p-5">
+        <h3 className="mb-2 text-sm font-semibold">
+          Using cookies in agent sessions
+        </h3>
         <p className="text-muted-foreground mb-3 text-sm leading-relaxed">
           Once cookies are imported, grant access when starting an agent session
           by specifying which domains the agent can use.
@@ -134,26 +150,41 @@ bob cookies remove --domain github.com`}
           <li className="flex gap-2">
             <span className="text-foreground/70 shrink-0">{"\u2022"}</span>
             <span>
-              <span className="text-foreground font-medium">Session creation</span> — pass{" "}
-              <code className="rounded bg-muted px-1.5 py-0.5 text-xs">cookieDomains</code> when
-              starting a session to grant access to specific domains.
+              <span className="text-foreground font-medium">
+                Session creation
+              </span>{" "}
+              — pass{" "}
+              <code className="bg-muted rounded px-1.5 py-0.5 text-xs">
+                cookieDomains
+              </code>{" "}
+              when starting a session to grant access to specific domains.
             </span>
           </li>
           <li className="flex gap-2">
             <span className="text-foreground/70 shrink-0">{"\u2022"}</span>
             <span>
-              <span className="text-foreground font-medium">Playwright</span> — the
-              agent calls <code className="rounded bg-muted px-1.5 py-0.5 text-xs">get_cookies</code> to
-              inject cookies into browser contexts for authenticated browsing.
+              <span className="text-foreground font-medium">Playwright</span> —
+              the agent calls{" "}
+              <code className="bg-muted rounded px-1.5 py-0.5 text-xs">
+                get_cookies
+              </code>{" "}
+              to inject cookies into browser contexts for authenticated
+              browsing.
             </span>
           </li>
           <li className="flex gap-2">
             <span className="text-foreground/70 shrink-0">{"\u2022"}</span>
             <span>
-              <span className="text-foreground font-medium">HTTP requests</span> — the
-              cookie jar skill formats cookies into headers for{" "}
-              <code className="rounded bg-muted px-1.5 py-0.5 text-xs">fetch</code> and{" "}
-              <code className="rounded bg-muted px-1.5 py-0.5 text-xs">curl</code> calls.
+              <span className="text-foreground font-medium">HTTP requests</span>{" "}
+              — the cookie jar skill formats cookies into headers for{" "}
+              <code className="bg-muted rounded px-1.5 py-0.5 text-xs">
+                fetch
+              </code>{" "}
+              and{" "}
+              <code className="bg-muted rounded px-1.5 py-0.5 text-xs">
+                curl
+              </code>{" "}
+              calls.
             </span>
           </li>
         </ul>
@@ -198,7 +229,7 @@ function CookieTable({
   return (
     <table className="w-full text-sm">
       <thead>
-        <tr className="text-muted-foreground border-b border-border text-xs">
+        <tr className="text-muted-foreground border-border border-b text-xs">
           <th className="py-2 text-left">Domain</th>
           <th className="py-2 text-left">Cookies</th>
           <th className="py-2 text-left">Source</th>
@@ -210,11 +241,11 @@ function CookieTable({
         {cookies.map((entry) => (
           <tr
             key={`${entry.domain}-${entry.source}`}
-            className="border-b border-border/50"
+            className="border-border/50 border-b"
           >
             <td className="py-2 font-mono text-xs">{entry.domain}</td>
             <td className="py-2">{entry.count}</td>
-            <td className="py-2 text-muted-foreground">{entry.source}</td>
+            <td className="text-muted-foreground py-2">{entry.source}</td>
             <td className="text-muted-foreground py-2 text-xs">
               {entry.lastUpdated
                 ? new Date(entry.lastUpdated).toLocaleDateString()
@@ -222,9 +253,7 @@ function CookieTable({
             </td>
             <td className="py-2 text-right">
               <button
-                onClick={() =>
-                  removeMutation.mutate({ domain: entry.domain })
-                }
+                onClick={() => removeMutation.mutate({ domain: entry.domain })}
                 disabled={removeMutation.isPending}
                 className="text-destructive hover:text-destructive/80 text-xs"
               >

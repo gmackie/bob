@@ -1,5 +1,5 @@
-import { z } from "zod/v4";
 import type { OpenAPIV3_1 } from "openapi-types";
+import { z } from "zod/v4";
 
 import { integrations } from "@bob/config";
 
@@ -13,9 +13,9 @@ export interface OpenApiConfig {
 }
 
 const defaultConfig: OpenApiConfig = {
-  title: "Bob API",
+  title: "BizPulse API",
   version: "1.0.0",
-  description: "Generated OpenAPI contract for Bob REST adapters",
+  description: "Generated OpenAPI contract for BizPulse REST adapters",
   baseUrl: "http://localhost:3000",
 };
 

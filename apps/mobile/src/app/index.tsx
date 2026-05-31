@@ -1,11 +1,11 @@
-import { Redirect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import { Redirect } from "expo-router";
 
 import { Badge, Button, Card, Screen } from "~/components/ui";
-import { colors } from "~/lib/colors";
 import { getPlanningHref } from "~/features/planning/navigation";
 import { ONBOARDING_SLIDES } from "~/features/planning/onboarding-copy";
+import { colors } from "~/lib/colors";
 import { hasSeenOnboarding, setOnboardingComplete } from "~/lib/storage";
 import { authClient } from "~/utils/auth";
 
@@ -34,7 +34,9 @@ function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
       <View className="flex-row justify-end">
         {currentSlide < ONBOARDING_SLIDES.length - 1 ? (
           <Pressable onPress={handleSkip} className="active:opacity-70">
-            <Text className="text-base" style={{ color: colors.muted }}>Skip</Text>
+            <Text className="text-base" style={{ color: colors.muted }}>
+              Skip
+            </Text>
           </Pressable>
         ) : null}
       </View>
@@ -55,7 +57,10 @@ function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
           {slide?.bullets.map((bullet) => (
             <View key={bullet} className="flex-row items-start">
               <View className="bg-primary mt-2 mr-3 h-1.5 w-1.5 rounded-full" />
-              <Text className="flex-1 text-base" style={{ color: colors.muted }}>
+              <Text
+                className="flex-1 text-base"
+                style={{ color: colors.muted }}
+              >
                 {bullet}
               </Text>
             </View>
@@ -102,9 +107,12 @@ function SignInScreen() {
           className="text-4xl font-semibold tracking-tight"
           style={{ color: colors.foreground }}
         >
-          Welcome to Bob
+          Welcome to BizPulse
         </Text>
-        <Text className="mt-2 text-base leading-6" style={{ color: colors.muted }}>
+        <Text
+          className="mt-2 text-base leading-6"
+          style={{ color: colors.muted }}
+        >
           Planning stays primary. Task execution stays one tap away.
         </Text>
 
@@ -131,8 +139,11 @@ function SignInScreen() {
                 <Text className="text-lg">🤖</Text>
               </View>
               <View className="flex-1">
-                <Text className="text-base font-semibold" style={{ color: colors.foreground }}>
-                  Task-scoped Bob execution
+                <Text
+                  className="text-base font-semibold"
+                  style={{ color: colors.foreground }}
+                >
+                  Task-scoped BizPulse execution
                 </Text>
                 <Text className="text-sm" style={{ color: colors.muted }}>
                   Chat, status, and artifacts focused on one task
@@ -147,7 +158,10 @@ function SignInScreen() {
                 <Text className="text-lg">🔔</Text>
               </View>
               <View className="flex-1">
-                <Text className="text-base font-semibold" style={{ color: colors.foreground }}>
+                <Text
+                  className="text-base font-semibold"
+                  style={{ color: colors.foreground }}
+                >
                   Single inbox
                 </Text>
                 <Text className="text-sm" style={{ color: colors.muted }}>
@@ -163,8 +177,12 @@ function SignInScreen() {
         <Button onPress={handleSignIn} variant="primary">
           Continue with GitHub
         </Button>
-        <Text className="mt-3 text-center text-xs" style={{ color: colors.muted2 }}>
-          Workspace access uses the same shared Bob identity on web and mobile
+        <Text
+          className="mt-3 text-center text-xs"
+          style={{ color: colors.muted2 }}
+        >
+          Workspace access uses the same shared BizPulse identity on web and
+          mobile
         </Text>
       </View>
     </Screen>
@@ -178,8 +196,11 @@ function SessionBootstrapScreen() {
         <View className="bg-primary/20 mb-4 h-16 w-16 items-center justify-center rounded-2xl">
           <Text className="text-3xl">🏗️</Text>
         </View>
-        <Text className="text-2xl font-semibold tracking-tight" style={{ color: colors.foreground }}>
-          Bob Builder
+        <Text
+          className="text-2xl font-semibold tracking-tight"
+          style={{ color: colors.foreground }}
+        >
+          BizPulse
         </Text>
         <Text className="mt-1 text-sm" style={{ color: colors.muted }}>
           Loading planning workspace…

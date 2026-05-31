@@ -59,7 +59,7 @@ describe("planning navigation", () => {
         workspaces: [
           {
             id: "workspace-1",
-            name: "Bob Builder",
+            name: "BizPulse",
             projectCount: 2,
             activeTaskCount: 3,
           },
@@ -101,7 +101,7 @@ describe("planning navigation", () => {
     ).toEqual({
       heroWorkspace: {
         id: "workspace-1",
-        name: "Bob Builder",
+        name: "BizPulse",
         projectCount: 2,
         activeTaskCount: 3,
       },

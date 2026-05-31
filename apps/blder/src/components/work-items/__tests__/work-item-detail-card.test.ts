@@ -2,11 +2,12 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../promote-to-task-button", () => ({
-  PromoteToTaskButton: () => React.createElement("button", null, "Promote to task"),
-}));
-
 import { WorkItemDetailCard } from "../work-item-detail-card";
+
+vi.mock("../promote-to-task-button", () => ({
+  PromoteToTaskButton: () =>
+    React.createElement("button", null, "Promote to task"),
+}));
 
 function renderCard(kind: "issue" | "epic" | "task"): string {
   return renderToStaticMarkup(
@@ -37,7 +38,7 @@ describe("WorkItemDetailCard", () => {
 
     expect(html).toContain("/work-items/task-123/workspace");
     expect(html).toContain("Open execution workspace");
-    expect(html).toContain("Tasks are the executable unit for Bob Builder.");
+    expect(html).toContain("Tasks are the executable unit for BizPulse.");
   });
 
   it("does not show the execution workspace CTA for non-task work items", () => {

@@ -12,7 +12,7 @@ export function getWorkItemDetailPresentation(
     return {
       primaryActionLabel: "Open execution workspace",
       executionHref: getTaskWorkspaceHref(input.id),
-      semanticSummary: "Tasks are the executable unit for Bob Builder.",
+      semanticSummary: "Tasks are the executable unit for BizPulse.",
       semanticHint:
         "Open the execution workspace to chat, review status, and inspect artifacts.",
     };

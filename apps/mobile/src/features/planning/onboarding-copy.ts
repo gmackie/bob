@@ -7,7 +7,7 @@ export const ONBOARDING_SLIDES = [
     ],
   },
   {
-    title: "Open the task.\nWork with Bob.",
+    title: "Open the task.\nWork with BizPulse.",
     bullets: [
       "Jump directly into the execution workspace from mobile",
       "Track blocked, review-ready, and verification states",

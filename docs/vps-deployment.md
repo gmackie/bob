@@ -1,6 +1,6 @@
 # VPS Deployment Guide
 
-This guide explains how to deploy Bob to a VPS at `claude.gmac.io` using Docker.
+This guide explains how to deploy BizPulse to a VPS at `claude.gmac.io` using Docker.
 
 ## Prerequisites
 
@@ -23,6 +23,7 @@ sudo ./setup-vps.sh admin@youremail.com
 ```
 
 This script will:
+
 - Install Docker and Docker Compose
 - Install and configure Nginx
 - Obtain SSL certificates via Let's Encrypt
@@ -81,24 +82,24 @@ curl https://claude.gmac.io/api/health
 ## Architecture
 
 ```
-Internet → Nginx (SSL) → Docker (Bob) → AI Agents
+Internet → Nginx (SSL) → Docker (BizPulse) → AI Agents
                 ↓
          Let's Encrypt
 ```
 
 - **Nginx**: Handles SSL termination, proxies to Docker
-- **Docker**: Runs Bob application on port 3001
-- **Bob**: Manages AI agent instances and terminals
+- **Docker**: Runs the BizPulse application on port 3001
+- **BizPulse**: Manages AI agent instances and terminals
 
 ## File Locations
 
-| Path | Description |
-|------|-------------|
-| `/opt/bob` | Application code |
-| `/opt/bob/.env` | Environment configuration |
-| `/var/log/nginx/bob_*.log` | Nginx access/error logs |
-| `/etc/nginx/sites-available/bob` | Nginx configuration |
-| `/etc/letsencrypt/live/claude.gmac.io/` | SSL certificates |
+| Path                                    | Description               |
+| --------------------------------------- | ------------------------- |
+| `/opt/bob`                              | Application code          |
+| `/opt/bob/.env`                         | Environment configuration |
+| `/var/log/nginx/bob_*.log`              | Nginx access/error logs   |
+| `/etc/nginx/sites-available/bob`        | Nginx configuration       |
+| `/etc/letsencrypt/live/claude.gmac.io/` | SSL certificates          |
 
 ## Commands
 
@@ -196,7 +197,7 @@ docker compose up -d
 
 1. Go to GitHub Settings → Developer settings → OAuth Apps
 2. Create new OAuth App:
-   - **Application name**: Bob
+   - **Application name**: BizPulse
    - **Homepage URL**: `https://claude.gmac.io`
    - **Authorization callback URL**: `https://claude.gmac.io/api/auth/github/callback`
 3. Copy Client ID and Client Secret to `.env`
@@ -249,6 +250,7 @@ WebSocket connections for terminal sessions require proper proxy configuration. 
 ### Persistent Data
 
 All data is stored in Docker volumes:
+
 - `bob-data`: Database and application state
 - Mounted repos: Your git repositories
 

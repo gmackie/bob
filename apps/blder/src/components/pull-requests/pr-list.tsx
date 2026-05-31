@@ -28,7 +28,7 @@ export function PrList({ statusFilter }: PrListProps) {
         {Array.from({ length: 4 }).map((_, i) => (
           <div
             key={i}
-            className="h-[76px] animate-pulse rounded-xl border border-border bg-card"
+            className="border-border bg-card h-[76px] animate-pulse rounded-xl border"
           />
         ))}
       </div>
@@ -37,13 +37,13 @@ export function PrList({ statusFilter }: PrListProps) {
 
   if (!prs || prs.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-border px-6 py-12 text-center">
-        <div className="text-sm text-muted-foreground">
+      <div className="border-border rounded-2xl border border-dashed px-6 py-12 text-center">
+        <div className="text-muted-foreground text-sm">
           No pull requests found
         </div>
-        <div className="mt-1 text-xs text-muted-foreground">
-          Pull requests created through blder.bot or synced via webhooks will appear
-          here.
+        <div className="text-muted-foreground mt-1 text-xs">
+          Pull requests created through BizPulse or synced via webhooks will
+          appear here.
         </div>
       </div>
     );

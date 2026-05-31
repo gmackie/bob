@@ -1,8 +1,4 @@
-export type ManagedAgentKind =
-  | "builder"
-  | "reviewer"
-  | "writer"
-  | "researcher";
+export type ManagedAgentKind = "builder" | "reviewer" | "writer" | "researcher";
 
 export interface ManagedAgentDescriptor {
   id: string;
@@ -13,5 +9,5 @@ export interface ManagedAgentDescriptor {
 export const DEFAULT_AGENT: ManagedAgentDescriptor = {
   id: "bob-builder",
   kind: "builder",
-  label: "Bob Builder",
+  label: "BizPulse",
 };

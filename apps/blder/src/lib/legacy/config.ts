@@ -19,7 +19,7 @@ export async function getAppConfig(): Promise<AppConfig> {
   } catch (error) {
     console.error("Failed to load app config, using defaults:", error);
     cachedConfig = {
-      appName: "Bob",
+      appName: "BizPulse",
       enableGithubAuth: false,
       jeffMode: false,
       allowedAgents: [],

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Bob Cookie Bridge",
+  "name": "BizPulse Cookie Bridge",
   "version": "1.0.0",
-  "description": "Send browser cookies to Bob for authenticated agent sessions",
+  "description": "Send browser cookies to BizPulse for authenticated agent sessions",
   "permissions": ["cookies", "activeTab", "storage"],
   "action": {
     "default_popup": "popup.html",

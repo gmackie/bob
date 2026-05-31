@@ -11,19 +11,17 @@ import { Providers } from "./providers";
 import "~/app/styles.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(
-    process.env.FRONTEND_URL ?? "https://blder.bot",
-  ),
-  title: "blder.bot - AI Agent Manager",
-  description: "Manage AI agents, plan work, and ship code with blder.bot",
+  metadataBase: new URL(process.env.FRONTEND_URL ?? "https://blder.bot"),
+  title: "BizPulse - AI Agent Manager",
+  description: "Manage AI agents, plan work, and ship code with BizPulse",
   icons: {
     icon: "/favicon.svg",
   },
   openGraph: {
-    title: "blder.bot - AI Agent Manager",
-    description: "Manage AI agents, plan work, and ship code with blder.bot",
+    title: "BizPulse - AI Agent Manager",
+    description: "Manage AI agents, plan work, and ship code with BizPulse",
     url: "https://blder.bot",
-    siteName: "blder.bot",
+    siteName: "BizPulse",
   },
 };
 
@@ -38,10 +36,26 @@ export const viewport: Viewport = {
 
 const satoshi = localFont({
   src: [
-    { path: "../../public/fonts/satoshi/satoshi-400.woff2", weight: "400", style: "normal" },
-    { path: "../../public/fonts/satoshi/satoshi-500.woff2", weight: "500", style: "normal" },
-    { path: "../../public/fonts/satoshi/satoshi-700.woff2", weight: "700", style: "normal" },
-    { path: "../../public/fonts/satoshi/satoshi-900.woff2", weight: "900", style: "normal" },
+    {
+      path: "../../public/fonts/satoshi/satoshi-400.woff2",
+      weight: "400",
+      style: "normal",
+    },
+    {
+      path: "../../public/fonts/satoshi/satoshi-500.woff2",
+      weight: "500",
+      style: "normal",
+    },
+    {
+      path: "../../public/fonts/satoshi/satoshi-700.woff2",
+      weight: "700",
+      style: "normal",
+    },
+    {
+      path: "../../public/fonts/satoshi/satoshi-900.woff2",
+      weight: "900",
+      style: "normal",
+    },
   ],
   variable: "--font-satoshi",
   display: "swap",
@@ -49,8 +63,16 @@ const satoshi = localFont({
 
 const dmSans = localFont({
   src: [
-    { path: "../../public/fonts/dm-sans/dm-sans-latin-variable.woff2", weight: "100 900", style: "normal" },
-    { path: "../../public/fonts/dm-sans/dm-sans-latin-italic-variable.woff2", weight: "400", style: "italic" },
+    {
+      path: "../../public/fonts/dm-sans/dm-sans-latin-variable.woff2",
+      weight: "100 900",
+      style: "normal",
+    },
+    {
+      path: "../../public/fonts/dm-sans/dm-sans-latin-italic-variable.woff2",
+      weight: "400",
+      style: "italic",
+    },
   ],
   variable: "--font-dm-sans",
   display: "swap",
@@ -58,14 +80,21 @@ const dmSans = localFont({
 
 const jetBrainsMono = localFont({
   src: [
-    { path: "../../public/fonts/jetbrains-mono/jetbrains-mono-latin-variable.woff2", weight: "100 800", style: "normal" },
+    {
+      path: "../../public/fonts/jetbrains-mono/jetbrains-mono-latin-variable.woff2",
+      weight: "100 800",
+      style: "normal",
+    },
   ],
   variable: "--font-jetbrains-mono",
   display: "swap",
   preload: false,
 });
 
-export default function RootLayout(props: { children: React.ReactNode; params: Promise<any> }) {
+export default function RootLayout(props: {
+  children: React.ReactNode;
+  params: Promise<any>;
+}) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body
@@ -79,7 +108,7 @@ export default function RootLayout(props: { children: React.ReactNode; params: P
         <ThemeProvider>
           <a
             href="#main-content"
-            className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
+            className="focus:bg-primary focus:text-primary-foreground sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:rounded-md focus:px-4 focus:py-2 focus:text-sm focus:font-medium"
           >
             Skip to content
           </a>

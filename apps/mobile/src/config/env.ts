@@ -38,11 +38,11 @@ function getApiUrl(): string {
 
     try {
       const parsed = new URL(envApiUrl);
-      if (
-        parsed.hostname === "localhost" ||
-        parsed.hostname === "127.0.0.1"
-      ) {
-        return `${parsed.protocol}//${resolvedHost}${parsed.port ? `:${parsed.port}` : ""}${parsed.pathname}`.replace(/\/$/, "");
+      if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") {
+        return `${parsed.protocol}//${resolvedHost}${parsed.port ? `:${parsed.port}` : ""}${parsed.pathname}`.replace(
+          /\/$/,
+          "",
+        );
       }
     } catch {
       return envApiUrl;
@@ -56,12 +56,12 @@ function getApiUrl(): string {
   switch (environment) {
     case "production":
       return (
-        process.env.EXPO_PUBLIC_PRODUCTION_API_URL ?? "https://api.yourapp.com"
+        process.env.EXPO_PUBLIC_PRODUCTION_API_URL ?? "https://blder.bot/api"
       );
     case "staging":
       return (
         process.env.EXPO_PUBLIC_STAGING_API_URL ??
-        "https://staging-api.yourapp.com"
+        "https://staging.blder.bot/api"
       );
     case "development":
     default:

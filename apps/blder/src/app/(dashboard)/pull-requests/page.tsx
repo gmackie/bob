@@ -16,10 +16,7 @@ export default function PullRequestsPage() {
 
   // Fetch all to get counts for the header pills
   const { data: allPrs } = useQuery(
-    trpc.pullRequest.list.queryOptions(
-      { limit: 100 },
-      { staleTime: 15_000 },
-    ),
+    trpc.pullRequest.list.queryOptions({ limit: 100 }, { staleTime: 15_000 }),
   );
 
   const allCount = allPrs?.length ?? 0;
@@ -35,11 +32,12 @@ export default function PullRequestsPage() {
 
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-3xl font-semibold text-foreground">
+          <h1 className="font-display text-foreground text-3xl font-semibold">
             Pull Requests
           </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Track pull requests created by blder.bot and synced from your repositories.
+          <p className="text-muted-foreground mt-2 text-sm">
+            Track pull requests created by BizPulse and synced from your
+            repositories.
           </p>
         </div>
       </div>
@@ -52,9 +50,7 @@ export default function PullRequestsPage() {
           activeFilter={statusFilter}
           onFilterChange={setStatusFilter}
         />
-        <span className="text-xs text-muted-foreground">
-          {allCount} total
-        </span>
+        <span className="text-muted-foreground text-xs">{allCount} total</span>
       </div>
 
       <div className="mt-4">

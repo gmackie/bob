@@ -19,7 +19,9 @@ async function checkConnection() {
     return false;
   }
   try {
-    const res = await fetch(`${bobUrl}/api/health`, { signal: AbortSignal.timeout(3000) });
+    const res = await fetch(`${bobUrl}/api/health`, {
+      signal: AbortSignal.timeout(3000),
+    });
     statusEl.className = res.ok ? "status ok" : "status err";
     document.getElementById("not-configured").style.display = "none";
     document.getElementById("main").style.display = "block";
@@ -37,7 +39,9 @@ async function getCurrentDomain() {
     try {
       const url = new URL(tab.url);
       return url.hostname;
-    } catch { return ""; }
+    } catch {
+      return "";
+    }
   }
   return "";
 }
@@ -55,7 +59,12 @@ function formatCookie(c) {
     expires: c.expirationDate ? Math.floor(c.expirationDate) : null,
     secure: c.secure,
     httpOnly: c.httpOnly,
-    sameSite: c.sameSite === "strict" ? "Strict" : c.sameSite === "lax" ? "Lax" : "None",
+    sameSite:
+      c.sameSite === "strict"
+        ? "Strict"
+        : c.sameSite === "lax"
+          ? "Lax"
+          : "None",
   };
 }
 
@@ -130,7 +139,8 @@ function renderDomainList(domains, filter) {
   await checkConnection();
 
   currentDomain = await getCurrentDomain();
-  document.getElementById("domain-label").textContent = currentDomain || "this site";
+  document.getElementById("domain-label").textContent =
+    currentDomain || "this site";
 
   // Send current domain
   document.getElementById("send-btn").addEventListener("click", async () => {
@@ -145,20 +155,22 @@ function renderDomainList(domains, filter) {
       showResult(e.message, true);
     } finally {
       btn.disabled = false;
-      btn.innerHTML = `Send cookies for <strong>${currentDomain}</strong> to Bob`;
+      btn.innerHTML = `Send cookies for <strong>${currentDomain}</strong> to BizPulse`;
     }
   });
 
   // Advanced toggle
   let allDomains = [];
-  document.getElementById("advanced-toggle").addEventListener("click", async () => {
-    const picker = document.getElementById("domain-picker");
-    const isOpen = picker.classList.toggle("open");
-    if (isOpen && allDomains.length === 0) {
-      allDomains = await loadAllDomains();
-      renderDomainList(allDomains, "");
-    }
-  });
+  document
+    .getElementById("advanced-toggle")
+    .addEventListener("click", async () => {
+      const picker = document.getElementById("domain-picker");
+      const isOpen = picker.classList.toggle("open");
+      if (isOpen && allDomains.length === 0) {
+        allDomains = await loadAllDomains();
+        renderDomainList(allDomains, "");
+      }
+    });
 
   // Search filter
   document.getElementById("domain-search").addEventListener("input", (e) => {
@@ -166,24 +178,29 @@ function renderDomainList(domains, filter) {
   });
 
   // Send selected
-  document.getElementById("send-selected-btn").addEventListener("click", async () => {
-    const checked = [...document.querySelectorAll("#domain-list input:checked")].map(
-      (el) => el.value,
-    );
-    if (checked.length === 0) return;
-    const btn = document.getElementById("send-selected-btn");
-    btn.disabled = true;
-    btn.textContent = "Sending...";
-    try {
-      const result = await sendCookies(checked);
-      showResult(`Sent ${result.imported} cookies for ${checked.length} domain(s)`, false);
-    } catch (e) {
-      showResult(e.message, true);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = "Send selected domains";
-    }
-  });
+  document
+    .getElementById("send-selected-btn")
+    .addEventListener("click", async () => {
+      const checked = [
+        ...document.querySelectorAll("#domain-list input:checked"),
+      ].map((el) => el.value);
+      if (checked.length === 0) return;
+      const btn = document.getElementById("send-selected-btn");
+      btn.disabled = true;
+      btn.textContent = "Sending...";
+      try {
+        const result = await sendCookies(checked);
+        showResult(
+          `Sent ${result.imported} cookies for ${checked.length} domain(s)`,
+          false,
+        );
+      } catch (e) {
+        showResult(e.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Send selected domains";
+      }
+    });
 
   // Open options
   document.getElementById("open-options").addEventListener("click", (e) => {

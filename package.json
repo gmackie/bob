@@ -2,8 +2,8 @@
   "name": "bob",
   "version": "0.0.4",
   "private": true,
-  "description": "Bob Builder monorepo for planning, task execution, web, mobile, and execution services",
-  "author": "Bob Team <sean@reedster.llc>",
+  "description": "BizPulse monorepo for planning, task execution, web, mobile, and execution services",
+  "author": "BizPulse Team <sean@reedster.llc>",
   "license": "GPL-3.0",
   "homepage": "https://github.com/your-org/bob",
   "engines": {

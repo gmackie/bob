@@ -1,10 +1,8 @@
-Your full app description goes here.
-
-Describe what your app does, its key features, and why users should download it.
+BizPulse helps developer teams plan work, coordinate AI agent execution, and review progress from mobile.
 
 Key Features:
-- Feature 1
-- Feature 2
-- Feature 3
+- Track workspaces, projects, and work items
+- Review task status, comments, and artifacts
+- Keep planning and execution connected across web and mobile
 
-Download now and get started!
+Sign in with GitHub and keep delivery work moving.

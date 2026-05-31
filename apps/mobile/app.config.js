@@ -10,11 +10,11 @@ const POSTHOG_HOST = process.env.POSTHOG_HOST ?? "https://us.i.posthog.com";
 const getAppName = () => {
   switch (APP_ENV) {
     case "production":
-      return "Bob";
+      return "BizPulse";
     case "staging":
-      return "Bob (Beta)";
+      return "BizPulse (Beta)";
     default:
-      return "Bob (Dev)";
+      return "BizPulse (Dev)";
   }
 };
 
@@ -69,7 +69,7 @@ module.exports = ({ config }) => {
   return {
     ...config,
     name: getAppName(),
-    slug: "bob",
+    slug: "bizpulse",
     scheme: "bob",
     version: "0.1.0",
     orientation: "default",

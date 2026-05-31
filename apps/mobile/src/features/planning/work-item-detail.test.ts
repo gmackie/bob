@@ -26,8 +26,9 @@ describe("mobile work-item detail presentation", () => {
     ).toEqual({
       primaryActionLabel: "Open execution workspace",
       executionHref: "/work-items/task-123/workspace",
-      semanticSummary: "Tasks are the executable unit for Bob Builder.",
-      semanticHint: "Open the execution workspace to chat, review status, and inspect artifacts.",
+      semanticSummary: "Tasks are the executable unit for BizPulse.",
+      semanticHint:
+        "Open the execution workspace to chat, review status, and inspect artifacts.",
     });
   });
 });

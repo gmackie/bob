@@ -55,7 +55,10 @@ function collapseEventsToMessages(events: SessionEvent[]): ChatMessage[] {
         seq: event.seq,
         time: event.createdAt,
       });
-    } else if (event.eventType === "output_chunk" && event.direction === "agent") {
+    } else if (
+      event.eventType === "output_chunk" &&
+      event.direction === "agent"
+    ) {
       if (pendingChunks.length === 0) {
         pendingSeq = event.seq;
         pendingTime = event.createdAt;
@@ -69,7 +72,10 @@ function collapseEventsToMessages(events: SessionEvent[]): ChatMessage[] {
               ? event.payload.chunk
               : "";
       if (chunk) pendingChunks.push(chunk);
-    } else if (event.eventType === "message_final" && event.direction === "agent") {
+    } else if (
+      event.eventType === "message_final" &&
+      event.direction === "agent"
+    ) {
       flushChunks();
       const content =
         typeof event.payload.content === "string"
@@ -89,8 +95,7 @@ function collapseEventsToMessages(events: SessionEvent[]): ChatMessage[] {
       flushChunks();
       const name =
         typeof event.payload.name === "string" ? event.payload.name : "tool";
-      const id =
-        typeof event.payload.id === "string" ? event.payload.id : "";
+      const id = typeof event.payload.id === "string" ? event.payload.id : "";
       messages.push({
         role: "assistant",
         content: "",
@@ -138,9 +143,9 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
         {msg.toolCalls.map((tc) => (
           <div
             key={tc.id || tc.name}
-            className="flex items-center gap-2 rounded-md bg-accent/50 px-3 py-1.5 text-xs text-muted-foreground"
+            className="bg-accent/50 text-muted-foreground flex items-center gap-2 rounded-md px-3 py-1.5 text-xs"
           >
-            <span className="size-1.5 rounded-full bg-primary/60" />
+            <span className="bg-primary/60 size-1.5 rounded-full" />
             <span className="font-mono">{tc.name}</span>
           </div>
         ))}
@@ -151,16 +156,16 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
   return (
     <div className={cn("px-4 py-3", !isUser && "bg-accent/30")}>
       <div className="mb-1 flex items-center gap-2">
-        <span className="text-xs font-medium text-foreground">
-          {isUser ? "You" : "blder.bot"}
+        <span className="text-foreground text-xs font-medium">
+          {isUser ? "You" : "BizPulse"}
         </span>
         {msg.time && (
-          <span className="text-[10px] text-muted-foreground">
+          <span className="text-muted-foreground text-[10px]">
             {formatTime(msg.time)}
           </span>
         )}
       </div>
-      <div className="whitespace-pre-wrap text-sm leading-relaxed text-secondary-foreground">
+      <div className="text-secondary-foreground text-sm leading-relaxed whitespace-pre-wrap">
         {msg.content}
       </div>
     </div>
@@ -182,11 +187,11 @@ export function MessageStream({
   if (messages.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           {isConnected ? "Waiting for messages..." : "Connecting..."}
         </p>
         {isConnected && (
-          <p className="text-xs text-muted-foreground/60">
+          <p className="text-muted-foreground/60 text-xs">
             Send a message to start the conversation.
           </p>
         )}
