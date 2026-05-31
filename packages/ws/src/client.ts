@@ -6,6 +6,7 @@ import type {
   ServerEvent,
   ServerMessage,
   ServerSessionStatusChanged,
+  ServerWorkspaceEvent,
   SessionStatus,
   WorkspaceSessionInfo,
 } from "./protocol.js";
@@ -33,7 +34,11 @@ export interface IWebSocketConstructor {
 // Public types
 // ---------------------------------------------------------------------------
 
-export type ConnectionState = "connecting" | "connected" | "reconnecting" | "disconnected";
+export type ConnectionState =
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "disconnected";
 
 export interface BobWsClientOptions {
   url: string;
@@ -44,6 +49,7 @@ export interface BobWsClientOptions {
   onSessionStatus: (sessionId: string, status: SessionStatus) => void;
   onWorkspaceSnapshot?: (sessions: WorkspaceSessionInfo[]) => void;
   onSessionStatusChanged?: (info: ServerSessionStatusChanged) => void;
+  onWorkspaceEvent?: (event: ServerWorkspaceEvent) => void;
   onError: (error: ServerError) => void;
   onConnectionStateChange: (state: ConnectionState) => void;
   /** Override WebSocket constructor for React Native or testing. */
@@ -119,7 +125,12 @@ export class BobWsClient {
 
   subscribe(sessionId: string, lastAckSeq = 0, observe = false): void {
     this.sessionSubs.set(sessionId, { sessionId, lastAckSeq, observe });
-    this.send({ type: "subscribe", sessionId, lastAckSeq, observe: observe || undefined });
+    this.send({
+      type: "subscribe",
+      sessionId,
+      lastAckSeq,
+      observe: observe || undefined,
+    });
   }
 
   unsubscribe(sessionId: string): void {
@@ -156,7 +167,9 @@ export class BobWsClient {
   private doConnect(): void {
     this.setState(this.reconnectAttempt === 0 ? "connecting" : "reconnecting");
 
-    const WS = this.opts.WebSocketImpl ?? (globalThis.WebSocket as unknown as IWebSocketConstructor);
+    const WS =
+      this.opts.WebSocketImpl ??
+      (globalThis.WebSocket as unknown as IWebSocketConstructor);
     const ws = new WS(this.opts.url);
     this.ws = ws;
 
@@ -172,7 +185,9 @@ export class BobWsClient {
     };
 
     ws.onmessage = (ev: { data: unknown }) => {
-      const msg = parseServerMessage(typeof ev.data === "string" ? ev.data : String(ev.data));
+      const msg = parseServerMessage(
+        typeof ev.data === "string" ? ev.data : String(ev.data),
+      );
       if (!msg) return;
       this.handleMessage(msg);
     };
@@ -192,7 +207,8 @@ export class BobWsClient {
   private handleMessage(msg: ServerMessage): void {
     switch (msg.type) {
       case "hello_ok":
-        this.heartbeatIntervalMs = msg.heartbeatIntervalMs || DEFAULT_HEARTBEAT_MS;
+        this.heartbeatIntervalMs =
+          msg.heartbeatIntervalMs || DEFAULT_HEARTBEAT_MS;
         this.setState("connected");
         this.startHeartbeat();
         this.resubscribeAll();
@@ -233,6 +249,10 @@ export class BobWsClient {
 
       case "session_status_changed":
         this.opts.onSessionStatusChanged?.(msg);
+        break;
+
+      case "workspace_event":
+        this.opts.onWorkspaceEvent?.(msg);
         break;
 
       case "input_ack":
@@ -282,10 +302,18 @@ export class BobWsClient {
 
   private resubscribeAll(): void {
     for (const sub of this.sessionSubs.values()) {
-      this.send({ type: "subscribe", sessionId: sub.sessionId, lastAckSeq: sub.lastAckSeq, observe: sub.observe || undefined });
+      this.send({
+        type: "subscribe",
+        sessionId: sub.sessionId,
+        lastAckSeq: sub.lastAckSeq,
+        observe: sub.observe || undefined,
+      });
     }
     if (this.workspaceSub) {
-      this.send({ type: "subscribe_workspace", statusFilter: this.workspaceSub.statusFilter });
+      this.send({
+        type: "subscribe_workspace",
+        statusFilter: this.workspaceSub.statusFilter,
+      });
     }
   }
 

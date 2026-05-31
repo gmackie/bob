@@ -210,7 +210,7 @@ export function useChatSession({ sessionId, enabled = true }: UseChatSessionOpti
     reconnect,
   } = useSessionSocket({
     gatewayUrl: gatewayInfo?.url ?? "",
-    token: gatewayInfo?.userId ?? "session-token",
+    token: gatewayInfo?.token ?? "",
     onEvent: handleEvent,
     onStatusChange: handleStatusChange,
     enabled: hasSession,

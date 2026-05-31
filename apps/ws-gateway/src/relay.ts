@@ -1,30 +1,41 @@
 import type { WebSocket } from "ws";
-import { eq, and, gt, asc, desc, sql } from "@bob/db";
-import { db } from "@bob/db/client";
-import { chatConversations, repositories, sessionEvents, taskRuns, workItems } from "@bob/db/schema";
 
+import { and, asc, desc, eq, gt, sql } from "@bob/db";
+import { db } from "@bob/db/client";
 import {
-  parseClientMessage,
-  encodeServerMessage,
-  createError,
-  type ClientMessage,
-  type ClientHello,
-  type ClientSubscribe,
-  type ClientUnsubscribe,
-  type ClientInput,
-  type ClientSessionEvent,
-  type ClientSessionStatus,
-  type ClientSessionClaimed,
-  type ClientSubscribeWorkspace,
-  type ServerMessage,
-  type SessionStatus,
-} from "./protocol.js";
+  chatConversations,
+  repositories,
+  sessionEvents,
+  taskRuns,
+  workItems,
+} from "@bob/db/schema";
+
 import type { SessionEventRecord } from "./persistence.js";
+import type {
+  ClientHello,
+  ClientInput,
+  ClientMessage,
+  ClientSessionClaimed,
+  ClientSessionEvent,
+  ClientSessionStatus,
+  ClientSubscribe,
+  ClientSubscribeWorkspace,
+  ClientUnsubscribe,
+  ServerMessage,
+  SessionStatus,
+} from "./protocol.js";
+import {
+  createError,
+  encodeServerMessage,
+  parseClientMessage,
+} from "./protocol.js";
 
 const REPLAY_LIMIT = 500;
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const isUuid = (s: unknown): s is string => typeof s === "string" && UUID_RE.test(s);
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isUuid = (s: unknown): s is string =>
+  typeof s === "string" && UUID_RE.test(s);
 
 interface Connection {
   id: string;
@@ -62,7 +73,10 @@ export interface RelayConfig {
   heartbeatIntervalMs: number;
   persistEvent: (event: SessionEventRecord) => Promise<void> | void;
   validateBrowserToken: (token: string) => Promise<string | null>;
-  validateDaemonAuth: (token: string, workspaceId: string) => Promise<string | null>;
+  validateDaemonAuth: (
+    token: string,
+    workspaceId: string,
+  ) => Promise<string | null>;
 }
 
 export class Relay {
@@ -103,7 +117,10 @@ export class Relay {
       const raw = typeof data === "string" ? data : data.toString();
       const msg = parseClientMessage(raw);
       if (!msg) {
-        this.send(conn, createError("INVALID_MESSAGE", "Failed to parse message"));
+        this.send(
+          conn,
+          createError("INVALID_MESSAGE", "Failed to parse message"),
+        );
         return;
       }
       try {
@@ -151,14 +168,21 @@ export class Relay {
    * Used by the Worker for resumeBlockedTask and forwardIssueContextUpdate.
    * Returns true if the message was delivered, false if no daemon was found.
    */
-  async sendToSession(sessionId: string, userId: string, message: string): Promise<boolean> {
+  async sendToSession(
+    sessionId: string,
+    userId: string,
+    message: string,
+  ): Promise<boolean> {
     const rows = await db
       .select({
         sessionUserId: chatConversations.userId,
         workspaceId: repositories.workspaceId,
       })
       .from(chatConversations)
-      .leftJoin(repositories, eq(repositories.id, chatConversations.repositoryId))
+      .leftJoin(
+        repositories,
+        eq(repositories.id, chatConversations.repositoryId),
+      )
       .where(eq(chatConversations.id, sessionId))
       .limit(1);
 
@@ -166,7 +190,7 @@ export class Relay {
     if (!row || row.sessionUserId !== userId) return false;
 
     const daemon = row.workspaceId
-      ? this.daemonByWorkspace.get(row.workspaceId) ?? null
+      ? (this.daemonByWorkspace.get(row.workspaceId) ?? null)
       : this.findDaemonForUser(userId);
 
     if (!daemon) return false;
@@ -187,7 +211,9 @@ export class Relay {
   getStats() {
     return {
       connections: this.connections.size,
-      browserCount: Array.from(this.connections.values()).filter((c) => c.kind === "browser").length,
+      browserCount: Array.from(this.connections.values()).filter(
+        (c) => c.kind === "browser",
+      ).length,
       daemonCount: this.daemonByWorkspace.size,
       sessionSubscriptions: this.subscribers.size,
     };
@@ -195,7 +221,10 @@ export class Relay {
 
   // ── Message dispatch ───────────────────────────────────────────────
 
-  private async handleMessage(conn: Connection, msg: ClientMessage): Promise<void> {
+  private async handleMessage(
+    conn: Connection,
+    msg: ClientMessage,
+  ): Promise<void> {
     switch (msg.type) {
       case "hello":
         await this.handleHello(conn, msg);
@@ -206,7 +235,10 @@ export class Relay {
     }
 
     if (conn.kind === "unauth") {
-      this.send(conn, createError("NOT_AUTHENTICATED", "Must send hello first"));
+      this.send(
+        conn,
+        createError("NOT_AUTHENTICATED", "Must send hello first"),
+      );
       return;
     }
 
@@ -217,7 +249,11 @@ export class Relay {
       if (isUuid(sessionId)) return true;
       this.send(
         conn,
-        createError("INVALID_SESSION_ID", "sessionId must be a UUID", String(sessionId)),
+        createError(
+          "INVALID_SESSION_ID",
+          "sessionId must be a UUID",
+          String(sessionId),
+        ),
       );
       return false;
     };
@@ -225,7 +261,10 @@ export class Relay {
     switch (msg.type) {
       case "subscribe":
         if (conn.kind !== "browser") {
-          this.send(conn, createError("INVALID_FOR_DEVICE", "Subscribe is for browsers"));
+          this.send(
+            conn,
+            createError("INVALID_FOR_DEVICE", "Subscribe is for browsers"),
+          );
           return;
         }
         if (!requireUuid(msg.sessionId)) return;
@@ -237,7 +276,10 @@ export class Relay {
         return;
       case "input":
         if (conn.kind !== "browser") {
-          this.send(conn, createError("INVALID_FOR_DEVICE", "Input is for browsers"));
+          this.send(
+            conn,
+            createError("INVALID_FOR_DEVICE", "Input is for browsers"),
+          );
           return;
         }
         if (!requireUuid(msg.sessionId)) return;
@@ -249,7 +291,10 @@ export class Relay {
         return;
       case "session_claimed":
         if (conn.kind !== "daemon") {
-          this.send(conn, createError("INVALID_FOR_DEVICE", "session_claimed is for daemons"));
+          this.send(
+            conn,
+            createError("INVALID_FOR_DEVICE", "session_claimed is for daemons"),
+          );
           return;
         }
         if (!requireUuid(msg.sessionId)) return;
@@ -257,7 +302,10 @@ export class Relay {
         return;
       case "session_event":
         if (conn.kind !== "daemon") {
-          this.send(conn, createError("INVALID_FOR_DEVICE", "session_event is for daemons"));
+          this.send(
+            conn,
+            createError("INVALID_FOR_DEVICE", "session_event is for daemons"),
+          );
           return;
         }
         if (!requireUuid(msg.sessionId)) return;
@@ -265,7 +313,10 @@ export class Relay {
         return;
       case "session_status":
         if (conn.kind !== "daemon") {
-          this.send(conn, createError("INVALID_FOR_DEVICE", "session_status is for daemons"));
+          this.send(
+            conn,
+            createError("INVALID_FOR_DEVICE", "session_status is for daemons"),
+          );
           return;
         }
         if (!requireUuid(msg.sessionId)) return;
@@ -273,10 +324,19 @@ export class Relay {
         return;
       case "subscribe_workspace":
         if (conn.kind !== "browser") {
-          this.send(conn, createError("INVALID_FOR_DEVICE", "subscribe_workspace is for browsers"));
+          this.send(
+            conn,
+            createError(
+              "INVALID_FOR_DEVICE",
+              "subscribe_workspace is for browsers",
+            ),
+          );
           return;
         }
-        await this.handleSubscribeWorkspace(conn, msg as ClientSubscribeWorkspace);
+        await this.handleSubscribeWorkspace(
+          conn,
+          msg as ClientSubscribeWorkspace,
+        );
         return;
       case "unsubscribe_workspace":
         conn.workspaceSubscribed = false;
@@ -287,18 +347,40 @@ export class Relay {
 
   // ── Hello / auth ───────────────────────────────────────────────────
 
-  private async handleHello(conn: Connection, hello: ClientHello): Promise<void> {
+  private async handleHello(
+    conn: Connection,
+    hello: ClientHello,
+  ): Promise<void> {
     conn.clientId = hello.clientId;
 
     if (hello.deviceType === "daemon") {
       if (!hello.workspaceId) {
-        this.send(conn, createError("AUTH_FAILED", "Daemon hello missing workspaceId", undefined, false));
+        this.send(
+          conn,
+          createError(
+            "AUTH_FAILED",
+            "Daemon hello missing workspaceId",
+            undefined,
+            false,
+          ),
+        );
         conn.ws.close();
         return;
       }
-      const userId = await this.cfg.validateDaemonAuth(hello.token, hello.workspaceId);
+      const userId = await this.cfg.validateDaemonAuth(
+        hello.token,
+        hello.workspaceId,
+      );
       if (!userId) {
-        this.send(conn, createError("AUTH_FAILED", "Invalid daemon credentials", undefined, false));
+        this.send(
+          conn,
+          createError(
+            "AUTH_FAILED",
+            "Invalid daemon credentials",
+            undefined,
+            false,
+          ),
+        );
         conn.ws.close();
         return;
       }
@@ -309,7 +391,15 @@ export class Relay {
       // If another daemon was registered for this workspace, boot it.
       const existing = this.daemonByWorkspace.get(hello.workspaceId);
       if (existing && existing !== conn) {
-        this.send(existing, createError("SUPERSEDED", "Another daemon connected for this workspace", undefined, false));
+        this.send(
+          existing,
+          createError(
+            "SUPERSEDED",
+            "Another daemon connected for this workspace",
+            undefined,
+            false,
+          ),
+        );
         existing.ws.close();
       }
       this.daemonByWorkspace.set(hello.workspaceId, conn);
@@ -317,7 +407,15 @@ export class Relay {
       // Browser (or other client types default to browser auth)
       const userId = await this.cfg.validateBrowserToken(hello.token);
       if (!userId) {
-        this.send(conn, createError("AUTH_FAILED", "Invalid or expired token", undefined, true));
+        this.send(
+          conn,
+          createError(
+            "AUTH_FAILED",
+            "Invalid or expired token",
+            undefined,
+            true,
+          ),
+        );
         conn.ws.close();
         return;
       }
@@ -334,7 +432,9 @@ export class Relay {
 
     conn.heartbeatTimer = setInterval(() => {
       if (!conn.alive) {
-        console.log(`[Relay] Dead connection detected: ${conn.id} (${conn.kind})`);
+        console.log(
+          `[Relay] Dead connection detected: ${conn.id} (${conn.kind})`,
+        );
         conn.ws.terminate();
         return;
       }
@@ -393,7 +493,8 @@ export class Relay {
                   workspaceId: (session as any).planningWorkspaceId,
                   projectId: (session as any).planningProjectId,
                   projectName: (session as any).planningProjectName ?? "",
-                  launchContext: (session as any).planningLaunchContext ?? undefined,
+                  launchContext:
+                    (session as any).planningLaunchContext ?? undefined,
                 } as any)
               : undefined,
           description,
@@ -406,18 +507,35 @@ export class Relay {
 
   // ── Browser subscribe ──────────────────────────────────────────────
 
-  private async handleSubscribe(conn: Connection, sub: ClientSubscribe): Promise<void> {
+  private async handleSubscribe(
+    conn: Connection,
+    sub: ClientSubscribe,
+  ): Promise<void> {
     const session = await db.query.chatConversations.findFirst({
       where: eq(chatConversations.id, sub.sessionId),
     });
 
     if (!session) {
-      this.send(conn, createError("SESSION_NOT_FOUND", `Session ${sub.sessionId} not found`, sub.sessionId));
+      this.send(
+        conn,
+        createError(
+          "SESSION_NOT_FOUND",
+          `Session ${sub.sessionId} not found`,
+          sub.sessionId,
+        ),
+      );
       return;
     }
 
     if (session.userId !== conn.userId) {
-      this.send(conn, createError("ACCESS_DENIED", "Not authorized for this session", sub.sessionId));
+      this.send(
+        conn,
+        createError(
+          "ACCESS_DENIED",
+          "Not authorized for this session",
+          sub.sessionId,
+        ),
+      );
       return;
     }
 
@@ -469,7 +587,8 @@ export class Relay {
         this.send(conn, {
           type: "replay_truncated",
           sessionId: sub.sessionId,
-          oldestAvailableSeq: toReplay[toReplay.length - 1]?.seq ?? sub.lastAckSeq,
+          oldestAvailableSeq:
+            toReplay[toReplay.length - 1]?.seq ?? sub.lastAckSeq,
         });
       }
     }
@@ -487,7 +606,10 @@ export class Relay {
 
   // ── Browser input → daemon ─────────────────────────────────────────
 
-  private async handleInput(conn: Connection, input: ClientInput): Promise<void> {
+  private async handleInput(
+    conn: Connection,
+    input: ClientInput,
+  ): Promise<void> {
     // Load session + its workspace via repository join.
     // (worktrees doesn't carry workspaceId directly — the workspace lives on
     // the repository row, and chatConversations has repositoryId, so we join
@@ -498,13 +620,19 @@ export class Relay {
         workspaceId: repositories.workspaceId,
       })
       .from(chatConversations)
-      .leftJoin(repositories, eq(repositories.id, chatConversations.repositoryId))
+      .leftJoin(
+        repositories,
+        eq(repositories.id, chatConversations.repositoryId),
+      )
       .where(eq(chatConversations.id, input.sessionId))
       .limit(1);
 
     const row = rows[0];
     if (!row || row.sessionUserId !== conn.userId) {
-      this.send(conn, createError("SESSION_NOT_FOUND", "Session not found", input.sessionId));
+      this.send(
+        conn,
+        createError("SESSION_NOT_FOUND", "Session not found", input.sessionId),
+      );
       return;
     }
 
@@ -513,13 +641,18 @@ export class Relay {
     //   Planning sessions often don't have a repository attached yet. When we add an explicit
     //   workspaceId column on chat_conversations this can be tightened.
     const daemon = row.workspaceId
-      ? this.daemonByWorkspace.get(row.workspaceId) ?? null
+      ? (this.daemonByWorkspace.get(row.workspaceId) ?? null)
       : this.findDaemonForUser(conn.userId!);
 
     if (!daemon) {
       this.send(
         conn,
-        createError("DAEMON_OFFLINE", "No daemon online for this session", input.sessionId, true),
+        createError(
+          "DAEMON_OFFLINE",
+          "No daemon online for this session",
+          input.sessionId,
+          true,
+        ),
       );
       return;
     }
@@ -552,7 +685,10 @@ export class Relay {
 
   // ── Daemon session_claimed ─────────────────────────────────────────
 
-  private async handleSessionClaimed(conn: Connection, claim: ClientSessionClaimed): Promise<void> {
+  private async handleSessionClaimed(
+    conn: Connection,
+    claim: ClientSessionClaimed,
+  ): Promise<void> {
     // Update DB: mark session as claimed by this daemon's workspace.
     // For v1 we just update the status from "pending" to "starting".
     await db
@@ -587,7 +723,10 @@ export class Relay {
 
   // ── Daemon session_event → persist + fan out ───────────────────────
 
-  private async handleSessionEvent(conn: Connection, event: ClientSessionEvent): Promise<void> {
+  private async handleSessionEvent(
+    conn: Connection,
+    event: ClientSessionEvent,
+  ): Promise<void> {
     // Atomic increment with RETURNING — fuses the auth check into the WHERE clause
     // and avoids the read-then-write race that caused duplicate seq values under burst.
     const updated = await db
@@ -604,7 +743,11 @@ export class Relay {
     if (updated.length === 0) {
       this.send(
         conn,
-        createError("ACCESS_DENIED", "Cannot emit events for this session", event.sessionId),
+        createError(
+          "ACCESS_DENIED",
+          "Cannot emit events for this session",
+          event.sessionId,
+        ),
       );
       return;
     }
@@ -638,11 +781,34 @@ export class Relay {
         this.send(sub, forwarded);
       }
     }
+
+    if (conn.userId) {
+      const userConns = this.clientsByUser.get(conn.userId);
+      if (userConns) {
+        const forwarded: ServerMessage = {
+          type: "workspace_event",
+          sessionId: event.sessionId,
+          seq,
+          eventType: event.eventType,
+          direction: event.direction,
+          payload: event.payload,
+          createdAt: new Date().toISOString(),
+        };
+        for (const c of userConns) {
+          if (c.workspaceSubscribed) {
+            this.send(c, forwarded);
+          }
+        }
+      }
+    }
   }
 
   // ── Daemon session_status → update DB + notify subscribers ─────────
 
-  private async handleSessionStatus(conn: Connection, msg: ClientSessionStatus): Promise<void> {
+  private async handleSessionStatus(
+    conn: Connection,
+    msg: ClientSessionStatus,
+  ): Promise<void> {
     const session = await db.query.chatConversations.findFirst({
       where: eq(chatConversations.id, msg.sessionId),
     });
@@ -696,7 +862,11 @@ export class Relay {
       if (userConns) {
         for (const c of userConns) {
           if (!c.workspaceSubscribed) continue;
-          if (c.workspaceStatusFilter?.length && !c.workspaceStatusFilter.includes(msg.status)) continue;
+          if (
+            c.workspaceStatusFilter?.length &&
+            !c.workspaceStatusFilter.includes(msg.status)
+          )
+            continue;
           this.send(c, {
             type: "session_status_changed",
             sessionId: msg.sessionId,
@@ -709,7 +879,10 @@ export class Relay {
 
   // ── Workspace subscription ────────────────────────────────────────
 
-  private async handleSubscribeWorkspace(conn: Connection, msg: ClientSubscribeWorkspace): Promise<void> {
+  private async handleSubscribeWorkspace(
+    conn: Connection,
+    msg: ClientSubscribeWorkspace,
+  ): Promise<void> {
     conn.workspaceSubscribed = true;
     conn.workspaceStatusFilter = msg.statusFilter;
 

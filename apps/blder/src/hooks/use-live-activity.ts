@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { useSessionSocket } from "~/hooks/use-session-socket";
 import { useTRPC } from "~/trpc/react";
 
 interface UseLiveActivityOptions {
@@ -21,7 +22,8 @@ function countNewSince(
   since: Date,
 ): number {
   return items.filter((a) => {
-    const ts = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt);
+    const ts =
+      a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt);
     return ts > since;
   }).length;
 }
@@ -39,6 +41,7 @@ export function useLiveActivity({
   interval = 5_000,
 }: UseLiveActivityOptions) {
   const trpc = useTRPC();
+  const queryClient = useQueryClient();
 
   const lastSeenRef = useRef<Date>(new Date());
 
@@ -61,6 +64,42 @@ export function useLiveActivity({
     enabled: useWorkItem,
     refetchInterval: useWorkItem ? interval : false,
   });
+
+  const { data: gatewayInfo } = useQuery(
+    trpc.session.getGatewayWebSocketUrl.queryOptions(undefined, {
+      enabled: useWorkspace,
+      staleTime: 60_000,
+    }),
+  );
+
+  const handleWorkspaceEvent = useCallback(() => {
+    void queryClient.invalidateQueries({
+      queryKey: trpc.activity.listRecent.queryKey({ limit }),
+    });
+    void queryClient.invalidateQueries({
+      queryKey: trpc.notification.list.queryKey(),
+    });
+  }, [limit, queryClient, trpc.activity.listRecent, trpc.notification.list]);
+
+  const { connectionState, subscribeWorkspace, unsubscribeWorkspace } =
+    useSessionSocket({
+      gatewayUrl: gatewayInfo?.url ?? "",
+      token: gatewayInfo?.token ?? "",
+      onWorkspaceEvent: handleWorkspaceEvent,
+      onStatusChange: handleWorkspaceEvent,
+      enabled: useWorkspace && Boolean(gatewayInfo?.token),
+    });
+
+  useEffect(() => {
+    if (!useWorkspace || connectionState.status !== "connected") return;
+    subscribeWorkspace();
+    return () => unsubscribeWorkspace();
+  }, [
+    connectionState.status,
+    subscribeWorkspace,
+    unsubscribeWorkspace,
+    useWorkspace,
+  ]);
 
   const markSeen = () => {
     lastSeenRef.current = new Date();

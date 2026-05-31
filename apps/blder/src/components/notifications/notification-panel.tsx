@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { useSessionSocket } from "~/hooks/use-session-socket";
 import { useTRPC } from "~/trpc/react";
-
 import { NotificationItem } from "./notification-item";
 
 interface NotificationPanelProps {
@@ -63,22 +63,22 @@ export function NotificationPanel({ open, onClose }: NotificationPanelProps) {
   return (
     <div
       ref={panelRef}
-      className="absolute bottom-12 left-2 z-50 w-80 rounded-xl border border-border bg-popover shadow-2xl"
+      className="border-border bg-popover absolute bottom-12 left-2 z-50 w-80 rounded-xl border shadow-2xl"
     >
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <h3 className="text-sm font-semibold text-foreground">Notifications</h3>
-        <span className="text-xs text-muted-foreground">
+      <div className="border-border flex items-center justify-between border-b px-4 py-3">
+        <h3 className="text-foreground text-sm font-semibold">Notifications</h3>
+        <span className="text-muted-foreground text-xs">
           {items.filter((n: any) => !n.read).length} unread
         </span>
       </div>
 
       <div className="max-h-96 overflow-y-auto p-1">
         {isFetching && items.length === 0 ? (
-          <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+          <div className="text-muted-foreground px-3 py-6 text-center text-sm">
             Loading...
           </div>
         ) : items.length === 0 ? (
-          <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+          <div className="text-muted-foreground px-3 py-6 text-center text-sm">
             No notifications yet.
           </div>
         ) : (
@@ -104,11 +104,40 @@ export function NotificationPanel({ open, onClose }: NotificationPanelProps) {
 /** Hook to get unread notification count for sidebar badge */
 export function useUnreadCount() {
   const trpc = useTRPC();
+  const queryClient = useQueryClient();
   const { data } = useQuery(
     trpc.notification.list.queryOptions(
       { unreadOnly: true, limit: 50 },
       { refetchInterval: 30_000 },
     ),
   );
+
+  const { data: gatewayInfo } = useQuery(
+    trpc.session.getGatewayWebSocketUrl.queryOptions(undefined, {
+      staleTime: 60_000,
+    }),
+  );
+
+  const handleWorkspaceEvent = useCallback(() => {
+    void queryClient.invalidateQueries({
+      queryKey: trpc.notification.list.queryKey(),
+    });
+  }, [queryClient, trpc.notification.list]);
+
+  const { connectionState, subscribeWorkspace, unsubscribeWorkspace } =
+    useSessionSocket({
+      gatewayUrl: gatewayInfo?.url ?? "",
+      token: gatewayInfo?.token ?? "",
+      onWorkspaceEvent: handleWorkspaceEvent,
+      onStatusChange: handleWorkspaceEvent,
+      enabled: Boolean(gatewayInfo?.token),
+    });
+
+  useEffect(() => {
+    if (connectionState.status !== "connected") return;
+    subscribeWorkspace();
+    return () => unsubscribeWorkspace();
+  }, [connectionState.status, subscribeWorkspace, unsubscribeWorkspace]);
+
   return data?.items?.length ?? 0;
 }

@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { BobWsClient, type BobWsClientOptions, type ConnectionState, type IWebSocketConstructor } from "../client.js";
+
+import type {
+  BobWsClientOptions,
+  ConnectionState,
+  IWebSocketConstructor,
+} from "../client.js";
 import type { ServerMessage } from "../protocol.js";
+import { BobWsClient } from "../client.js";
 
 // ---------------------------------------------------------------------------
 // Mock WebSocket
@@ -63,7 +69,9 @@ class MockWebSocket {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeOptions(overrides?: Partial<BobWsClientOptions>): BobWsClientOptions {
+function makeOptions(
+  overrides?: Partial<BobWsClientOptions>,
+): BobWsClientOptions {
   return {
     url: "ws://localhost:3002",
     token: "test-token",
@@ -278,7 +286,11 @@ describe("BobWsClient", () => {
         expect.objectContaining({ type: "subscribe", sessionId: "session-1" }),
       );
       expect(subs).toContainEqual(
-        expect.objectContaining({ type: "subscribe", sessionId: "session-2", lastAckSeq: 5 }),
+        expect.objectContaining({
+          type: "subscribe",
+          sessionId: "session-2",
+          lastAckSeq: 5,
+        }),
       );
     });
 
@@ -324,7 +336,9 @@ describe("BobWsClient", () => {
         userId: "user-1",
       });
 
-      const wsSubs = ws2.sentParsed().filter((m) => m.type === "subscribe_workspace");
+      const wsSubs = ws2
+        .sentParsed()
+        .filter((m) => m.type === "subscribe_workspace");
       expect(wsSubs).toHaveLength(1);
       expect(wsSubs[0]).toMatchObject({
         type: "subscribe_workspace",
@@ -484,6 +498,26 @@ describe("BobWsClient", () => {
 
       expect(onSessionStatusChanged).toHaveBeenCalledWith(msg);
     });
+
+    it("routes workspace_event to callback", () => {
+      const onWorkspaceEvent = vi.fn();
+      const opts = makeOptions({ onWorkspaceEvent });
+      const client = new BobWsClient(opts);
+      const ws = connectAndAuth(client);
+
+      const msg: ServerMessage = {
+        type: "workspace_event",
+        sessionId: "s-1",
+        seq: 4,
+        eventType: "file_change",
+        direction: "agent",
+        payload: { path: "/repo/app.tsx", action: "modified" },
+        createdAt: new Date().toISOString(),
+      };
+      ws.simulateMessage(msg);
+
+      expect(onWorkspaceEvent).toHaveBeenCalledWith(msg);
+    });
   });
 
   // -- heartbeat -----------------------------------------------------------
@@ -573,7 +607,9 @@ describe("BobWsClient", () => {
         title: "Test Session",
       });
 
-      const creates = ws.sentParsed().filter((m) => m.type === "create_session");
+      const creates = ws
+        .sentParsed()
+        .filter((m) => m.type === "create_session");
       expect(creates).toHaveLength(1);
       expect(creates[0]).toMatchObject({
         type: "create_session",
@@ -592,7 +628,10 @@ describe("BobWsClient", () => {
 
       const stops = ws.sentParsed().filter((m) => m.type === "stop_session");
       expect(stops).toHaveLength(1);
-      expect(stops[0]).toMatchObject({ type: "stop_session", sessionId: "s-1" });
+      expect(stops[0]).toMatchObject({
+        type: "stop_session",
+        sessionId: "s-1",
+      });
     });
   });
 });

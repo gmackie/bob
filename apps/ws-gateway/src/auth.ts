@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+
 import { db } from "@bob/db/client";
 
 /**
@@ -8,8 +9,14 @@ import { db } from "@bob/db/client";
  * The session table is owned by better-auth but we query it directly —
  * we share the same Postgres and don't need to call better-auth's HTTP API.
  */
-export async function validateBrowserToken(token: string): Promise<string | null> {
+export async function validateBrowserToken(
+  token: string,
+): Promise<string | null> {
   if (!token) return null;
+
+  if (process.env.REQUIRE_AUTH !== "true" && token === "default-user") {
+    return "default-user";
+  }
 
   const row = await db.query.session.findFirst({
     where: (session, { eq }) => eq(session.token, token),
@@ -17,7 +24,8 @@ export async function validateBrowserToken(token: string): Promise<string | null
 
   if (!row) return null;
 
-  const expiresAt = row.expiresAt instanceof Date ? row.expiresAt : new Date(row.expiresAt);
+  const expiresAt =
+    row.expiresAt instanceof Date ? row.expiresAt : new Date(row.expiresAt);
   if (expiresAt.getTime() <= Date.now()) return null;
 
   return row.userId;

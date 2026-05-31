@@ -1,16 +1,35 @@
 // Shared WebSocket protocol types for client and server.
 // This is the single source of truth — both gateway and clients import from here.
 
-export type SessionStatus = "provisioning" | "starting" | "running" | "idle" | "stopping" | "stopped" | "completed" | "failed" | "error";
-export type DeviceType = "web" | "ios" | "android" | "desktop" | "daemon" | "other";
+export type SessionStatus =
+  | "provisioning"
+  | "starting"
+  | "running"
+  | "idle"
+  | "stopping"
+  | "stopped"
+  | "completed"
+  | "failed"
+  | "error";
+export type DeviceType =
+  | "web"
+  | "ios"
+  | "android"
+  | "desktop"
+  | "daemon"
+  | "other";
 export type EventDirection = "client" | "agent" | "system";
 export type SessionEventType =
   | "output_chunk"
   | "message_final"
+  | "transcript"
   | "input"
   | "tool_call"
   | "tool_result"
   | "state"
+  | "file_change"
+  | "build_status"
+  | "deploy_status"
   | "error"
   | "heartbeat";
 
@@ -191,6 +210,16 @@ export interface ServerSessionStatusChanged {
   agentType?: string;
 }
 
+export interface ServerWorkspaceEvent {
+  type: "workspace_event";
+  sessionId: string;
+  seq: number;
+  eventType: SessionEventType;
+  direction: EventDirection;
+  payload: Record<string, unknown>;
+  createdAt: string;
+}
+
 export interface PlanningLaunchContext {
   intent: "shape" | "breakdown";
   notes: string;
@@ -273,6 +302,7 @@ export type ServerMessage =
   | ServerSessionStopped
   | ServerWorkspaceSnapshot
   | ServerSessionStatusChanged
+  | ServerWorkspaceEvent
   | ServerSessionAvailable
   | ServerReplayTruncated;
 
@@ -283,10 +313,14 @@ export type ServerMessage =
 export interface SessionEventPayload {
   outputChunk: { data: string; stream: "stdout" | "stderr" };
   messageFinal: { content: string; role: string };
+  transcript: { content: string; role?: string };
   input: { data: string; clientInputId: string };
   toolCall: { toolCallId: string; name: string; arguments: string };
   toolResult: { toolCallId: string; result: string; isError: boolean };
   state: { status: SessionStatus; reason?: string };
+  fileChange: { path: string; action: "created" | "modified" | "deleted" };
+  buildStatus: { status: string; buildId?: string; revisionId?: string };
+  deployStatus: { status: string; deploymentId?: string; revisionId?: string };
   error: { code: string; message: string };
   heartbeat: { ts: string };
 }

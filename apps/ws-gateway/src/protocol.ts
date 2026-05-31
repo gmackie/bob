@@ -33,6 +33,7 @@ export {
   type ServerError,
   type ServerSessionAvailable,
   type ServerSessionStatusChanged,
+  type ServerWorkspaceEvent,
   type ServerReplayTruncated,
   type ServerWorkspaceSnapshot,
   type WorkspaceSessionInfo,

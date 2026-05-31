@@ -1,16 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { ErrorBoundary } from "@bob/ui/error-boundary";
-import { FileTree } from "~/components/workspace/file-tree";
+
+import type { SessionEvent } from "~/hooks/use-session-socket";
 import { TerminalComponent } from "~/components/dashboard/Terminal";
 import { CapturePanel } from "~/components/workspace/capture-panel";
-import { RevisionGraph } from "~/components/workspace/revision-graph";
 import { ChangesetActions } from "~/components/workspace/changeset-actions";
+import { FileTree } from "~/components/workspace/file-tree";
+import { RevisionGraph } from "~/components/workspace/revision-graph";
 import { useFileChangeEvents } from "~/hooks/use-file-change-events";
 import { useSessionEvents } from "~/hooks/use-session-events";
+import { useSessionSocket } from "~/hooks/use-session-socket";
+import { useTRPC } from "~/trpc/react";
 
 type CenterTab = "content" | "capture" | "revisions";
 
@@ -31,6 +36,7 @@ export function WorkspaceLayout({
   activeSessionId,
   children,
 }: WorkspaceLayoutProps) {
+  const trpc = useTRPC();
   const [fileTreeOpen, setFileTreeOpen] = useState(true);
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [centerTab, setCenterTab] = useState<CenterTab>("content");
@@ -63,8 +69,42 @@ export function WorkspaceLayout({
     eventTypes: ["build_status", "deploy_status"],
   });
 
+  const { data: gatewayInfo } = useQuery(
+    trpc.session.getGatewayWebSocketUrl.queryOptions(undefined, {
+      enabled: Boolean(activeSessionId),
+      staleTime: 60_000,
+    }),
+  );
+
+  const handleBuildSocketEvent = useCallback((event: SessionEvent) => {
+    if (
+      (event.eventType === "build_status" ||
+        event.eventType === "deploy_status") &&
+      centerTabRef.current !== "revisions"
+    ) {
+      setRevisionsHasUpdates(true);
+    }
+  }, []);
+
+  const { connectionState, subscribe, unsubscribe } = useSessionSocket({
+    gatewayUrl: gatewayInfo?.url ?? "",
+    token: gatewayInfo?.token ?? "",
+    onEvent: handleBuildSocketEvent,
+    enabled: Boolean(activeSessionId && gatewayInfo?.token),
+  });
+
   useEffect(() => {
-    if (buildEvents && buildEvents.length > 0 && centerTabRef.current !== "revisions") {
+    if (!activeSessionId || connectionState.status !== "connected") return;
+    subscribe(activeSessionId);
+    return () => unsubscribe(activeSessionId);
+  }, [activeSessionId, connectionState.status, subscribe, unsubscribe]);
+
+  useEffect(() => {
+    if (
+      buildEvents &&
+      buildEvents.length > 0 &&
+      centerTabRef.current !== "revisions"
+    ) {
       setRevisionsHasUpdates(true);
     }
   }, [buildEvents]);
@@ -82,14 +122,14 @@ export function WorkspaceLayout({
     <div className="flex h-[calc(100vh-64px)] overflow-hidden">
       {/* Left panel — File Tree */}
       {fileTreeOpen && rootPath && (
-        <aside className="flex w-[240px] shrink-0 flex-col border-r border-border bg-card">
-          <div className="flex items-center justify-between border-b border-border px-3 py-2">
+        <aside className="border-border bg-card flex w-[240px] shrink-0 flex-col border-r">
+          <div className="border-border flex items-center justify-between border-b px-3 py-2">
             <div className="min-w-0">
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              <div className="text-muted-foreground text-xs font-semibold tracking-[0.18em] uppercase">
                 Files
               </div>
               {branchName && (
-                <div className="mt-0.5 truncate text-xs text-muted-foreground/70">
+                <div className="text-muted-foreground/70 mt-0.5 truncate text-xs">
                   {branchName}
                 </div>
               )}
@@ -97,15 +137,21 @@ export function WorkspaceLayout({
             <button
               type="button"
               onClick={toggleFileTree}
-              className="rounded p-1 text-muted-foreground transition hover:bg-accent hover:text-foreground"
+              className="text-muted-foreground hover:bg-accent hover:text-foreground rounded p-1 transition"
               title="Hide file tree"
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M10 4L6 8L10 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                <path
+                  d="M10 4L6 8L10 12"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto overflow-x-hidden">
+          <div className="flex-1 overflow-x-hidden overflow-y-auto">
             <ErrorBoundary section="File Tree">
               <FileTree rootPath={rootPath} sessionId={activeSessionId} />
             </ErrorBoundary>
@@ -119,11 +165,17 @@ export function WorkspaceLayout({
           type="button"
           onClick={toggleFileTree}
           disabled={!rootPath}
-          className="flex w-8 shrink-0 items-center justify-center border-r border-border bg-card text-muted-foreground transition hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          className="border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground flex w-8 shrink-0 items-center justify-center border-r transition disabled:cursor-not-allowed disabled:opacity-50"
           title={rootPath ? "Show file tree" : "No workspace path available"}
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M6 4L10 8L6 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path
+              d="M6 4L10 8L6 12"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
         </button>
       )}
@@ -131,19 +183,22 @@ export function WorkspaceLayout({
       {/* Right side — main content + terminal */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Center panel tabs */}
-        <div className="flex shrink-0 items-center gap-1 border-b border-border bg-card px-4">
+        <div className="border-border bg-card flex shrink-0 items-center gap-1 border-b px-4">
           <button
             type="button"
             onClick={() => handleTabChange("content")}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition ${
               centerTab === "content"
-                ? "border-b-2 border-primary text-foreground"
+                ? "border-primary text-foreground border-b-2"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
             Content
             {contentHasUpdates && (
-              <span className="size-1.5 rounded-full bg-primary" aria-label="New updates" />
+              <span
+                className="bg-primary size-1.5 rounded-full"
+                aria-label="New updates"
+              />
             )}
           </button>
           <button
@@ -151,7 +206,7 @@ export function WorkspaceLayout({
             onClick={() => handleTabChange("capture")}
             className={`px-3 py-1.5 text-xs font-medium transition ${
               centerTab === "capture"
-                ? "border-b-2 border-primary text-foreground"
+                ? "border-primary text-foreground border-b-2"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
@@ -163,13 +218,16 @@ export function WorkspaceLayout({
               onClick={() => handleTabChange("revisions")}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition ${
                 centerTab === "revisions"
-                  ? "border-b-2 border-primary text-foreground"
+                  ? "border-primary text-foreground border-b-2"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
               Revisions
               {revisionsHasUpdates && (
-                <span className="size-1.5 rounded-full bg-primary" aria-label="New updates" />
+                <span
+                  className="bg-primary size-1.5 rounded-full"
+                  aria-label="New updates"
+                />
               )}
             </button>
           )}
@@ -194,15 +252,26 @@ export function WorkspaceLayout({
         </div>
 
         {/* Terminal panel (bottom) */}
-        <div className="shrink-0 border-t border-border">
+        <div className="border-border shrink-0 border-t">
           <button
             type="button"
             onClick={toggleTerminal}
-            className="flex w-full items-center gap-2 bg-card px-4 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground"
+            className="bg-card text-muted-foreground hover:bg-accent hover:text-foreground flex w-full items-center gap-2 px-4 py-1.5 text-xs font-medium transition"
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-              <path d="M2 4L6 8L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M8 12H14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              <path
+                d="M2 4L6 8L2 12"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M8 12H14"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
             </svg>
             Terminal
             <span className="ml-auto">
@@ -219,7 +288,7 @@ export function WorkspaceLayout({
                     onClose={toggleTerminal}
                   />
                 ) : (
-                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                  <div className="text-muted-foreground flex h-full items-center justify-center text-sm">
                     No active session — start one to see the terminal
                   </div>
                 )}

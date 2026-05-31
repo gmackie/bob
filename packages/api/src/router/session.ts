@@ -13,6 +13,8 @@ import {
 
 import type { WorkflowStatus } from "../services/sessions/workflowStatusService";
 import type { ElevenLabsSessionService } from "../services/voice/elevenlabsSession";
+import { buildPlanningWorkItemUrl } from "../services/integrations/planningRemoteConfig";
+import { createOpenCodeClient } from "../services/opencode/opencodeClient";
 import {
   completeTask,
   getSessionWorkflowState,
@@ -26,13 +28,16 @@ import {
   workflowStatusValues,
 } from "../services/sessions/workflowStatusService";
 import { createElevenLabsSessionService } from "../services/voice/elevenlabsSession";
-import { createOpenCodeClient } from "../services/opencode/opencodeClient";
-import { buildPlanningWorkItemUrl } from "../services/integrations/planningRemoteConfig";
 import { protectedProcedure } from "../trpc";
 
-function getGatewayUrl() { return process.env.GATEWAY_URL ?? "http://localhost:3002"; }
-function getGatewayPublicUrl() { return process.env.GATEWAY_PUBLIC_URL ?? getGatewayUrl(); }
-const getGatewaySocketUrl = (): string => `${getGatewayPublicUrl().replace(/^http/, "ws")}/sessions`;
+function getGatewayUrl() {
+  return process.env.GATEWAY_URL ?? "http://localhost:3002";
+}
+function getGatewayPublicUrl() {
+  return process.env.GATEWAY_PUBLIC_URL ?? getGatewayUrl();
+}
+const getGatewaySocketUrl = (): string =>
+  `${getGatewayPublicUrl().replace(/^http/, "ws")}/sessions`;
 
 // Initialize ElevenLabs session service (singleton)
 let elevenlabsService: ElevenLabsSessionService | null = null;
@@ -110,7 +115,8 @@ export const sessionRouter = {
           createdAt: chatConversations.createdAt,
           updatedAt: chatConversations.updatedAt,
           workItemId: chatConversations.workItemId,
-          workItemIdentifierSnapshot: chatConversations.workItemIdentifierSnapshot,
+          workItemIdentifierSnapshot:
+            chatConversations.workItemIdentifierSnapshot,
           planningTaskId: chatConversations.planningTaskId,
         })
         .from(chatConversations)
@@ -247,8 +253,8 @@ export const sessionRouter = {
           : null,
         issueManaged: Boolean(
           session.workItemId ??
-            latestTaskRun?.workItemId ??
-            session.planningTaskId,
+          latestTaskRun?.workItemId ??
+          session.planningTaskId,
         ),
         planningTaskId: session.planningTaskId,
       };
@@ -509,9 +515,12 @@ export const sessionRouter = {
         });
         opencodeSessionId = created.id;
 
-        await ctx.db.update(chatConversations).set({
-          opencodeSessionId,
-        }).where(eq(chatConversations.id, input.sessionId));
+        await ctx.db
+          .update(chatConversations)
+          .set({
+            opencodeSessionId,
+          })
+          .where(eq(chatConversations.id, input.sessionId));
       }
 
       const [updatedSession] = await ctx.db
@@ -661,7 +670,8 @@ export const sessionRouter = {
       const canClaim =
         !session.claimedByGatewayId ||
         session.claimedByGatewayId === input.gatewayId ||
-        (session.leaseExpiresAt && new Date(session.leaseExpiresAt) < new Date());
+        (session.leaseExpiresAt &&
+          new Date(session.leaseExpiresAt) < new Date());
 
       if (!canClaim) {
         throw new TRPCError({
@@ -812,10 +822,10 @@ export const sessionRouter = {
   getGatewayWebSocketUrl: protectedProcedure.query(async ({ ctx }) => {
     return {
       url: getGatewaySocketUrl(),
+      token: ctx.session.session?.token ?? ctx.session.user.id,
       userId: ctx.session.user.id,
     };
   }),
-
 
   reportWorkflowStatus: protectedProcedure
     .input(

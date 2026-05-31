@@ -1,15 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  BobWsClient,
-  type ConnectionState as WsConnectionState,
-  type ServerEvent,
-  type ServerError,
-  type SessionStatus,
-  type EventDirection,
-  type SessionEventType,
+
+import type {
+  EventDirection,
+  ServerError,
+  ServerEvent,
+  ServerWorkspaceEvent,
+  SessionEventType,
+  SessionStatus,
+  ConnectionState as WsConnectionState,
 } from "@bob/ws";
+import { BobWsClient } from "@bob/ws";
 
 // Re-export types that consumers depend on
 export type { SessionStatus, EventDirection };
@@ -54,6 +56,7 @@ interface UseSessionSocketOptions {
   gatewayUrl: string;
   token: string;
   onEvent?: (event: SessionEvent) => void;
+  onWorkspaceEvent?: (event: ServerWorkspaceEvent) => void;
   onStatusChange?: (sessionId: string, status: SessionStatus) => void;
   onConnectionChange?: (state: ConnectionState) => void;
   enabled?: boolean;
@@ -63,6 +66,7 @@ export function useSessionSocket({
   gatewayUrl,
   token,
   onEvent,
+  onWorkspaceEvent,
   onStatusChange,
   onConnectionChange,
   enabled = true,
@@ -81,9 +85,11 @@ export function useSessionSocket({
 
   // Stable refs for callbacks to avoid stale closures
   const onEventRef = useRef(onEvent);
+  const onWorkspaceEventRef = useRef(onWorkspaceEvent);
   const onStatusChangeRef = useRef(onStatusChange);
   const onConnectionChangeRef = useRef(onConnectionChange);
   onEventRef.current = onEvent;
+  onWorkspaceEventRef.current = onWorkspaceEvent;
   onStatusChangeRef.current = onStatusChange;
   onConnectionChangeRef.current = onConnectionChange;
 
@@ -120,6 +126,12 @@ export function useSessionSocket({
       onSessionStatus: (sessionId: string, status: SessionStatus) => {
         onStatusChangeRef.current?.(sessionId, status);
       },
+      onSessionStatusChanged: (info) => {
+        onStatusChangeRef.current?.(info.sessionId, info.status);
+      },
+      onWorkspaceEvent: (event) => {
+        onWorkspaceEventRef.current?.(event);
+      },
       onError: (error: ServerError) => {
         console.error("[SessionSocket] Error:", error.code, error.message);
         if (error.code === "AUTH_FAILED") {
@@ -137,15 +149,20 @@ export function useSessionSocket({
     };
   }, [enabled, gatewayUrl, token]);
 
-  const subscribe = useCallback(
-    (sessionId: string, lastAckSeq = 0) => {
-      clientRef.current?.subscribe(sessionId, lastAckSeq);
-    },
-    [],
-  );
+  const subscribe = useCallback((sessionId: string, lastAckSeq = 0) => {
+    clientRef.current?.subscribe(sessionId, lastAckSeq);
+  }, []);
 
   const unsubscribe = useCallback((sessionId: string) => {
     clientRef.current?.unsubscribe(sessionId);
+  }, []);
+
+  const subscribeWorkspace = useCallback(() => {
+    clientRef.current?.subscribeWorkspace();
+  }, []);
+
+  const unsubscribeWorkspace = useCallback(() => {
+    clientRef.current?.unsubscribeWorkspace();
   }, []);
 
   const sendInput = useCallback((sessionId: string, data: string) => {
@@ -180,6 +197,8 @@ export function useSessionSocket({
     userId,
     subscribe,
     unsubscribe,
+    subscribeWorkspace,
+    unsubscribeWorkspace,
     sendInput,
     createSession,
     stopSession,
