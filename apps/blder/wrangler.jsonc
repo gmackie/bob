@@ -1,5 +1,7 @@
 {
   "name": "blder-bot",
+  // Production launches on Cloudflare Workers at blder.bot.
+  // Node/VPS hosting artifacts were removed from deploy/ to avoid split targets.
   "main": "./worker/index.js",
   "compatibility_date": "2025-12-01",
   "compatibility_flags": ["nodejs_compat"],
