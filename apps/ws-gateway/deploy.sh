@@ -15,7 +15,7 @@ HOST="${1:-hetzner-master}"
 USER="${2:-root}"
 SSH_TARGET="${USER}@${HOST}"
 REMOTE_DIR="/opt/bob/ws-gateway"
-PORT="${WS_GATEWAY_PORT:-3003}"
+PORT="${WS_GATEWAY_PORT:-3002}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
@@ -36,6 +36,7 @@ rm -rf "${DEPLOY_STAGE}"
 pnpm --filter @bob/ws-gateway deploy --legacy --prod "${DEPLOY_STAGE}"
 
 echo "==> Deploying to ${SSH_TARGET}:${REMOTE_DIR}..."
+ssh "${SSH_TARGET}" "mkdir -p '${REMOTE_DIR}.previous' && rsync -a --delete --exclude='.env' '${REMOTE_DIR}/' '${REMOTE_DIR}.previous/'"
 rsync -avz --delete \
   --exclude='.env' \
   --exclude='*.test.ts' \
@@ -43,6 +44,7 @@ rsync -avz --delete \
   "${DEPLOY_STAGE}/dist" \
   "${DEPLOY_STAGE}/node_modules" \
   "${DEPLOY_STAGE}/package.json" \
+  "${SCRIPT_DIR}/health-recover.sh" \
   "${SSH_TARGET}:${REMOTE_DIR}/"
 
 echo "==> Restarting service..."

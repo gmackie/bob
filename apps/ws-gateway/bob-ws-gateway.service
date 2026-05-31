@@ -9,6 +9,7 @@ User=bob
 Group=bob
 WorkingDirectory=/opt/bob/ws-gateway
 ExecStart=/usr/bin/node dist/index.js
+ExecStartPost=+/bin/bash /opt/bob/ws-gateway/health-recover.sh
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
