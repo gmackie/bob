@@ -5,25 +5,11 @@ import {
   randomBytes,
 } from "node:crypto";
 
+import { getEncryptionKeys, getPrimaryEncryptionKey } from "./keyring";
+
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
 const KEY_LENGTH = 32;
-
-function getMasterKey(): Buffer {
-  // Reuse the same master key as token vault — cookies are equally sensitive
-  const key = process.env.GIT_TOKEN_ENCRYPTION_KEY;
-  if (!key) {
-    throw new Error(
-      "GIT_TOKEN_ENCRYPTION_KEY environment variable is required for cookie encryption",
-    );
-  }
-  if (key.length < KEY_LENGTH) {
-    throw new Error(
-      `GIT_TOKEN_ENCRYPTION_KEY must be at least ${KEY_LENGTH} characters`,
-    );
-  }
-  return Buffer.from(key.slice(0, KEY_LENGTH), "utf8");
-}
 
 function deriveCookieKey(masterKey: Buffer, cookieId: string): Buffer {
   return createHmac("sha256", masterKey)
@@ -42,7 +28,7 @@ export function encryptCookieValue(
   plaintext: string,
   cookieId: string,
 ): EncryptedCookieValue {
-  const masterKey = getMasterKey();
+  const masterKey = getPrimaryEncryptionKey();
   const rowKey = deriveCookieKey(masterKey, cookieId);
   const iv = randomBytes(IV_LENGTH);
 
@@ -64,20 +50,26 @@ export function decryptCookieValue(
   encrypted: EncryptedCookieValue,
   cookieId: string,
 ): string {
-  const masterKey = getMasterKey();
-  const rowKey = deriveCookieKey(masterKey, cookieId);
-
   const iv = Buffer.from(encrypted.iv, "base64");
   const tag = Buffer.from(encrypted.tag, "base64");
   const ciphertext = Buffer.from(encrypted.ciphertext, "base64");
 
-  const decipher = createDecipheriv(ALGORITHM, rowKey, iv);
-  decipher.setAuthTag(tag);
+  for (const masterKey of getEncryptionKeys()) {
+    try {
+      const rowKey = deriveCookieKey(masterKey, cookieId);
+      const decipher = createDecipheriv(ALGORITHM, rowKey, iv);
+      decipher.setAuthTag(tag);
 
-  const decrypted = Buffer.concat([
-    decipher.update(ciphertext),
-    decipher.final(),
-  ]);
+      const decrypted = Buffer.concat([
+        decipher.update(ciphertext),
+        decipher.final(),
+      ]);
 
-  return decrypted.toString("utf8");
+      return decrypted.toString("utf8");
+    } catch {
+      // Try retired keys configured after the primary key.
+    }
+  }
+
+  throw new Error("Unable to decrypt cookie with configured keyring");
 }

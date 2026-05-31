@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import {
   decryptSessionSecretValue,
@@ -12,6 +12,11 @@ beforeAll(() => {
 });
 
 describe("sessionSecretVault", () => {
+  afterEach(() => {
+    delete process.env.GIT_TOKEN_ENCRYPTION_KEYS;
+    process.env.GIT_TOKEN_ENCRYPTION_KEY = TEST_KEY;
+  });
+
   it("encrypts and decrypts a session secret value", () => {
     const secretId = "session-secret-1";
     const plaintext = "ghp_abc123";
@@ -40,5 +45,19 @@ describe("sessionSecretVault", () => {
     encrypted.ciphertext = buf.toString("base64");
 
     expect(() => decryptSessionSecretValue(encrypted, "secret-A")).toThrow();
+  });
+
+  it("decrypts with retired keys during key rotation", () => {
+    const oldKey = "old-session-secret-key-material-32";
+    const newKey = "new-session-secret-key-material-32";
+
+    process.env.GIT_TOKEN_ENCRYPTION_KEY = oldKey;
+    const encrypted = encryptSessionSecretValue("super-secret", "secret-A");
+
+    process.env.GIT_TOKEN_ENCRYPTION_KEYS = `${newKey},${oldKey}`;
+
+    expect(decryptSessionSecretValue(encrypted, "secret-A")).toBe(
+      "super-secret",
+    );
   });
 });

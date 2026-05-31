@@ -10,10 +10,19 @@ export function authEnv() {
       AUTH_GITLAB_SECRET: z.string().min(1).optional(),
       AUTH_SECRET:
         process.env.NODE_ENV === "production"
-          ? z.string().min(1)
+          ? z.string().min(32)
           : z.string().min(1).optional(),
       NODE_ENV: z.enum(["development", "production"]).optional(),
-      GIT_TOKEN_ENCRYPTION_KEY: z.string().min(32).optional(),
+      GIT_TOKEN_ENCRYPTION_KEY:
+        process.env.NODE_ENV === "production" &&
+        !process.env.GIT_TOKEN_ENCRYPTION_KEYS
+          ? z.string().min(32)
+          : z.string().min(32).optional(),
+      GIT_TOKEN_ENCRYPTION_KEYS:
+        process.env.NODE_ENV === "production" &&
+        !process.env.GIT_TOKEN_ENCRYPTION_KEY
+          ? z.string().min(32)
+          : z.string().min(32).optional(),
     },
     runtimeEnv: process.env,
     skipValidation:

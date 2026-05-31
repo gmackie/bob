@@ -4,13 +4,18 @@ import {
   createHmac,
   randomBytes,
 } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
-import { isEncryptionConfigured } from "../tokenVault.js";
+import {
+  decryptToken as decryptVaultToken,
+  encryptToken as encryptVaultToken,
+  isEncryptionConfigured,
+} from "../tokenVault.js";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
 const KEY_LENGTH = 32;
+const ORIGINAL_KEY = process.env.GIT_TOKEN_ENCRYPTION_KEY;
 
 function getMasterKey(key: string): Buffer {
   return Buffer.from(key.slice(0, KEY_LENGTH), "utf8");
@@ -74,10 +79,52 @@ function decryptToken(
 }
 
 describe("tokenVault", () => {
+  afterEach(() => {
+    delete process.env.GIT_TOKEN_ENCRYPTION_KEYS;
+    if (ORIGINAL_KEY) {
+      process.env.GIT_TOKEN_ENCRYPTION_KEY = ORIGINAL_KEY;
+    } else {
+      delete process.env.GIT_TOKEN_ENCRYPTION_KEY;
+    }
+  });
+
   describe("isEncryptionConfigured", () => {
     it("should return boolean based on env var", () => {
       const result = isEncryptionConfigured();
       expect(typeof result).toBe("boolean");
+    });
+
+    it("returns false for an empty keyring", () => {
+      delete process.env.GIT_TOKEN_ENCRYPTION_KEY;
+      process.env.GIT_TOKEN_ENCRYPTION_KEYS = "";
+
+      expect(isEncryptionConfigured()).toBe(false);
+    });
+  });
+
+  describe("key rotation", () => {
+    it("encrypts with the primary key and decrypts with retired keys", () => {
+      const oldKey = "old-token-vault-key-material-32ch";
+      const newKey = "new-token-vault-key-material-32ch";
+      const connectionId = "conn-rotation";
+
+      process.env.GIT_TOKEN_ENCRYPTION_KEY = oldKey;
+      const encryptedWithOldKey = encryptVaultToken("ghp_old", connectionId);
+
+      process.env.GIT_TOKEN_ENCRYPTION_KEYS = `${newKey},${oldKey}`;
+      const encryptedWithNewKey = encryptVaultToken("ghp_new", connectionId);
+
+      expect(decryptVaultToken(encryptedWithOldKey, connectionId)).toBe(
+        "ghp_old",
+      );
+      expect(decryptVaultToken(encryptedWithNewKey, connectionId)).toBe(
+        "ghp_new",
+      );
+
+      process.env.GIT_TOKEN_ENCRYPTION_KEYS = oldKey;
+      expect(() =>
+        decryptVaultToken(encryptedWithNewKey, connectionId),
+      ).toThrow();
     });
   });
 

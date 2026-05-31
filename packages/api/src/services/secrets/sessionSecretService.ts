@@ -7,11 +7,14 @@ import {
   sessionSecretUsages,
 } from "@bob/db/schema";
 
+import type {
+  DeployEnvironment,
+  ForgeGraphSecretAdapter,
+} from "./forgegraphSecretAdapter";
 import {
   decryptSessionSecretValue,
   encryptSessionSecretValue,
 } from "../crypto/sessionSecretVault";
-import type { DeployEnvironment, ForgeGraphSecretAdapter } from "./forgegraphSecretAdapter";
 
 interface DatabaseLike {
   query: {
@@ -102,7 +105,10 @@ export class SessionSecretService {
     transport: string;
     policy: SessionSecretPolicy;
   }) {
-    const session = await this.requireOwnedSession(input.sessionId, input.userId);
+    const session = await this.requireOwnedSession(
+      input.sessionId,
+      input.userId,
+    );
     const id = crypto.randomUUID();
     const encrypted = encryptSessionSecretValue(input.value, id);
 
@@ -127,16 +133,18 @@ export class SessionSecretService {
       })
       .returning();
 
-    return this.toPublicSecret(created ?? {
-      id,
-      sessionId: input.sessionId,
-      label: input.label,
-      handle: input.handle,
-      transport: input.transport,
-      status: "active",
-      provider: "bob",
-      policy: input.policy,
-    });
+    return this.toPublicSecret(
+      created ?? {
+        id,
+        sessionId: input.sessionId,
+        label: input.label,
+        handle: input.handle,
+        transport: input.transport,
+        status: "active",
+        provider: "bob",
+        policy: input.policy,
+      },
+    );
   }
 
   async listSessionSecrets(input: { sessionId: string; userId: string }) {
@@ -188,12 +196,14 @@ export class SessionSecretService {
       })
       .returning();
 
-    return usage ?? {
-      secretId: input.secretId,
-      sessionId: input.sessionId,
-      executor: input.executor,
-      templateId: input.templateId,
-    };
+    return (
+      usage ?? {
+        secretId: input.secretId,
+        sessionId: input.sessionId,
+        executor: input.executor,
+        templateId: input.templateId,
+      }
+    );
   }
 
   async getSecretForExecution(input: { secretId: string; userId: string }) {
@@ -210,18 +220,25 @@ export class SessionSecretService {
         where: eq(sessionSecretUsages.secretId, row.id),
       })
     )?.length;
+    const value = decryptSessionSecretValue(
+      {
+        ciphertext: row.valueCiphertext,
+        iv: row.valueIv,
+        tag: row.valueTag,
+      },
+      row.id,
+    );
+
+    await this.auditSecretAccess({
+      secretId: row.id,
+      sessionId: row.sessionId,
+      executor: "user",
+    });
 
     return {
       ...this.toPublicSecret(row),
       usageCount: usageCount ?? 0,
-      value: decryptSessionSecretValue(
-        {
-          ciphertext: row.valueCiphertext,
-          iv: row.valueIv,
-          tag: row.valueTag,
-        },
-        row.id,
-      ),
+      value,
     };
   }
 
@@ -248,18 +265,25 @@ export class SessionSecretService {
         where: eq(sessionSecretUsages.secretId, row.id),
       })
     )?.length;
+    const value = decryptSessionSecretValue(
+      {
+        ciphertext: row.valueCiphertext,
+        iv: row.valueIv,
+        tag: row.valueTag,
+      },
+      row.id,
+    );
+
+    await this.auditSecretAccess({
+      secretId: row.id,
+      sessionId: row.sessionId,
+      executor: "gateway",
+    });
 
     return {
       ...this.toPublicSecret(row),
       usageCount: usageCount ?? 0,
-      value: decryptSessionSecretValue(
-        {
-          ciphertext: row.valueCiphertext,
-          iv: row.valueIv,
-          tag: row.valueTag,
-        },
-        row.id,
-      ),
+      value,
     };
   }
 
@@ -274,10 +298,36 @@ export class SessionSecretService {
   }) {
     await this.requireOwnedProject(input.projectId);
 
-    const [binding] = await this.db
-      .insert(projectDeploySecretBindings)
-      .values({
-        id: crypto.randomUUID(),
+    const [binding] =
+      (await this.db
+        .insert(projectDeploySecretBindings)
+        .values({
+          id: crypto.randomUUID(),
+          projectId: input.projectId,
+          environment: input.environment,
+          label: input.label,
+          forgegraphKey: input.forgegraphKey,
+          externalRef: input.externalRef,
+          transport: input.transport,
+          templateId: input.templateId,
+        })
+        .onConflictDoUpdate?.({
+          target: [
+            projectDeploySecretBindings.projectId,
+            projectDeploySecretBindings.environment,
+            projectDeploySecretBindings.forgegraphKey,
+          ],
+          set: {
+            label: input.label,
+            externalRef: input.externalRef,
+            transport: input.transport,
+            templateId: input.templateId,
+          },
+        })
+        .returning()) ?? [];
+
+    return (
+      binding ?? {
         projectId: input.projectId,
         environment: input.environment,
         label: input.label,
@@ -285,31 +335,8 @@ export class SessionSecretService {
         externalRef: input.externalRef,
         transport: input.transport,
         templateId: input.templateId,
-      })
-      .onConflictDoUpdate?.({
-        target: [
-          projectDeploySecretBindings.projectId,
-          projectDeploySecretBindings.environment,
-          projectDeploySecretBindings.forgegraphKey,
-        ],
-        set: {
-          label: input.label,
-          externalRef: input.externalRef,
-          transport: input.transport,
-          templateId: input.templateId,
-        },
-      })
-      .returning() ?? [];
-
-    return binding ?? {
-      projectId: input.projectId,
-      environment: input.environment,
-      label: input.label,
-      forgegraphKey: input.forgegraphKey,
-      externalRef: input.externalRef,
-      transport: input.transport,
-      templateId: input.templateId,
-    };
+      }
+    );
   }
 
   async promoteSessionSecret(input: {
@@ -353,13 +380,15 @@ export class SessionSecretService {
       transport: secret.transport,
     });
 
-    return this.toPublicSecret(updated ?? {
-      ...secret,
-      provider: "forgegraph",
-      status: "promoted",
-      externalRef: promoted.ref,
-      projectId: input.projectId,
-    });
+    return this.toPublicSecret(
+      updated ?? {
+        ...secret,
+        provider: "forgegraph",
+        status: "promoted",
+        externalRef: promoted.ref,
+        projectId: input.projectId,
+      },
+    );
   }
 
   private toPublicSecret(row: any) {
@@ -373,5 +402,25 @@ export class SessionSecretService {
     } = row;
 
     return publicRow;
+  }
+
+  private async auditSecretAccess(input: {
+    secretId: string;
+    sessionId: string;
+    executor: string;
+  }) {
+    await this.db.insert(sessionSecretUsages).values({
+      id: crypto.randomUUID(),
+      secretId: input.secretId,
+      sessionId: input.sessionId,
+      executor: input.executor,
+      templateId: "plaintext-access",
+    });
+
+    await this.db
+      .update(sessionSecrets)
+      .set({ lastUsedAt: new Date().toISOString() })
+      .where(eq(sessionSecrets.id, input.secretId))
+      .returning();
   }
 }

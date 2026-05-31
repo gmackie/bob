@@ -2,9 +2,10 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   projectDeploySecretBindings,
-  sessionSecretUsages,
   sessionSecrets,
+  sessionSecretUsages,
 } from "@bob/db/schema";
+
 import { encryptSessionSecretValue } from "../../services/crypto/sessionSecretVault.js";
 
 const { forgeGraphSecretClient } = vi.hoisted(() => ({
@@ -257,6 +258,13 @@ describe("session secret schema and router", () => {
     expect(result.handle).toBe("github-token");
     expect(result.value).toBe("ghp_secret");
     expect(result.valueCiphertext).toBeUndefined();
+    expect(usageRows).toHaveLength(1);
+    expect(usageRows[0]).toMatchObject({
+      secretId: "secret-1",
+      sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      executor: "gateway",
+      templateId: "plaintext-access",
+    });
   });
 
   it("returns a metadata-only manifest for gateway and MCP consumers", async () => {
@@ -404,5 +412,11 @@ describe("session secret schema and router", () => {
     expect(secretRows[0]?.provider).toBe("forgegraph");
     expect(secretRows[0]?.status).toBe("promoted");
     expect(bindingRows).toHaveLength(1);
+    expect(usageRows).toHaveLength(1);
+    expect(usageRows[0]).toMatchObject({
+      secretId: "secret-1",
+      executor: "user",
+      templateId: "plaintext-access",
+    });
   });
 });

@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { decryptCookieValue, encryptCookieValue } from "../cookieVault.js";
 
@@ -9,6 +9,11 @@ beforeAll(() => {
 });
 
 describe("cookieVault", () => {
+  afterEach(() => {
+    delete process.env.GIT_TOKEN_ENCRYPTION_KEYS;
+    process.env.GIT_TOKEN_ENCRYPTION_KEY = TEST_KEY;
+  });
+
   describe("encrypt / decrypt round-trip", () => {
     it("should encrypt and decrypt a cookie value", () => {
       const cookieId = "cookie-uuid-1";
@@ -63,6 +68,20 @@ describe("cookieVault", () => {
       const encrypted = encryptCookieValue(plaintext, "cookie-A");
 
       expect(() => decryptCookieValue(encrypted, "cookie-B")).toThrow();
+    });
+  });
+
+  describe("key rotation", () => {
+    it("decrypts with retired keys during rotation", () => {
+      const oldKey = "old-cookie-vault-key-material-32";
+      const newKey = "new-cookie-vault-key-material-32";
+
+      process.env.GIT_TOKEN_ENCRYPTION_KEY = oldKey;
+      const encrypted = encryptCookieValue("session-value", "cookie-A");
+
+      process.env.GIT_TOKEN_ENCRYPTION_KEYS = `${newKey},${oldKey}`;
+
+      expect(decryptCookieValue(encrypted, "cookie-A")).toBe("session-value");
     });
   });
 

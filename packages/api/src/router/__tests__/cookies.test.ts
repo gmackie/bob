@@ -1,9 +1,10 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  decryptCookieValue,
-  type EncryptedCookieValue,
-} from "../../services/crypto/cookieVault.js";
+  browserCookies,
+  sessionCookieScopes,
+  sessionEvents,
+} from "@bob/db/schema";
 
 const TEST_KEY = "test-cookie-encryption-key-32chs";
 
@@ -14,9 +15,19 @@ let appRouter: typeof import("../../root").appRouter;
 /** In-memory store that the mock DB operates on */
 let cookieRows: any[];
 let scopeRows: any[];
+let eventRows: any[];
 
 const makeDbMock = () => ({
   query: {
+    chatConversations: {
+      findFirst: vi.fn(() =>
+        Promise.resolve({
+          id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          userId: "user-1",
+          nextSeq: 1,
+        }),
+      ),
+    },
     browserCookies: {
       findMany: vi.fn(({ where }: any) => {
         // Return all cookies for simplicity — caller filters in router
@@ -34,10 +45,12 @@ const makeDbMock = () => ({
     values: vi.fn((vals: any) => {
       const rows = Array.isArray(vals) ? vals : [vals];
       // Store rows depending on which table
-      if (rows[0] && "valueCiphertext" in rows[0]) {
+      if (table === browserCookies) {
         cookieRows.push(...rows);
-      } else if (rows[0] && "sessionId" in rows[0]) {
+      } else if (table === sessionCookieScopes) {
         scopeRows.push(...rows);
+      } else if (table === sessionEvents) {
+        eventRows.push(...rows);
       }
       return {
         onConflictDoUpdate: vi.fn(() => Promise.resolve()),
@@ -45,6 +58,11 @@ const makeDbMock = () => ({
         returning: vi.fn(() => Promise.resolve(rows)),
       };
     }),
+  })),
+  update: vi.fn((table: any) => ({
+    set: vi.fn((patch: any) => ({
+      where: vi.fn(() => Promise.resolve({ table, patch })),
+    })),
   })),
   select: vi.fn(() => ({
     from: vi.fn(() => ({
@@ -90,7 +108,12 @@ const createApiKeyCaller = () =>
   appRouter.createCaller({
     session: fakeSession,
     authApi: { getSession: vi.fn() } as any,
-    apiKeyAuth: { keyId: "test-key", permissions: ["admin"] as const, user: fakeSession.user, userId: fakeSession.user.id },
+    apiKeyAuth: {
+      keyId: "test-key",
+      permissions: ["admin"] as const,
+      user: fakeSession.user,
+      userId: fakeSession.user.id,
+    },
     db: makeDbMock() as any,
   });
 
@@ -114,6 +137,7 @@ beforeAll(async () => {
 beforeEach(() => {
   cookieRows = [];
   scopeRows = [];
+  eventRows = [];
 });
 
 // ── Tests ──────────────────────────────────────────────────────────
@@ -139,7 +163,7 @@ describe("cookies router", () => {
       });
 
       expect(result.imported).toBe(1);
-      expect(result.domains).toEqual([".github.com"]);
+      expect(result.domains).toEqual(["github.com"]);
     });
 
     it("should accept up to 500 cookies", async () => {
@@ -226,9 +250,8 @@ describe("cookies router", () => {
       });
 
       // Encrypt a value and add to cookie store
-      const { encryptCookieValue } = await import(
-        "../../services/crypto/cookieVault.js"
-      );
+      const { encryptCookieValue } =
+        await import("../../services/crypto/cookieVault.js");
       const encrypted = encryptCookieValue("session-token-xyz", cookieId);
 
       cookieRows.push({
@@ -255,6 +278,13 @@ describe("cookies router", () => {
       expect(result.cookies[0]!.name).toBe("session");
       expect(result.cookies[0]!.value).toBe("session-token-xyz");
       expect(result.cookies[0]!.domain).toBe(".github.com");
+      expect(eventRows).toHaveLength(1);
+      expect(eventRows[0]!.eventType).toBe("cookie_access");
+      expect(eventRows[0]!.payload).toEqual({
+        domain: "github.com",
+        count: 1,
+        keyId: "test-key",
+      });
     });
 
     it("should filter out expired cookies", async () => {
@@ -266,9 +296,8 @@ describe("cookies router", () => {
         domain: ".github.com",
       });
 
-      const { encryptCookieValue } = await import(
-        "../../services/crypto/cookieVault.js"
-      );
+      const { encryptCookieValue } =
+        await import("../../services/crypto/cookieVault.js");
       const encrypted = encryptCookieValue("expired-val", cookieId);
 
       cookieRows.push({

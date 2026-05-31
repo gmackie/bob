@@ -2,11 +2,16 @@ import type { TRPCRouterRecord } from "@trpc/server";
 import { z } from "zod/v4";
 
 import { and, count, eq, sql } from "@bob/db";
-import { browserCookies, chatConversations, sessionCookieScopes } from "@bob/db/schema";
+import {
+  browserCookies,
+  chatConversations,
+  sessionCookieScopes,
+  sessionEvents,
+} from "@bob/db/schema";
 
 import {
-  encryptCookieValue,
   decryptCookieValue,
+  encryptCookieValue,
 } from "../services/crypto/cookieVault";
 import { apiKeyWriteProcedure, protectedProcedure } from "../trpc";
 
@@ -152,6 +157,18 @@ export const cookiesRouter = {
         };
       }
 
+      const session = await ctx.db.query.chatConversations.findFirst({
+        where: and(
+          eq(chatConversations.id, input.sessionId),
+          eq(chatConversations.userId, ctx.session.user.id),
+        ),
+        columns: { id: true, nextSeq: true },
+      });
+
+      if (!session) {
+        throw new Error("Session not found or not owned by this user");
+      }
+
       // Get cookies, filtering expired
       const cookies = await ctx.db.query.browserCookies.findMany({
         where: and(
@@ -175,11 +192,31 @@ export const cookiesRouter = {
           ),
           domain: c.domain,
           path: c.path,
-          expires: c.expires ? Math.floor(new Date(c.expires).getTime() / 1000) : -1,
+          expires: c.expires
+            ? Math.floor(new Date(c.expires).getTime() / 1000)
+            : -1,
           secure: c.secure,
           httpOnly: c.httpOnly,
           sameSite: c.sameSite as "Strict" | "Lax" | "None",
         }));
+
+      await ctx.db.insert(sessionEvents).values({
+        id: crypto.randomUUID(),
+        sessionId: input.sessionId,
+        seq: session.nextSeq,
+        direction: "system",
+        eventType: "cookie_access",
+        payload: {
+          domain,
+          count: decrypted.length,
+          keyId: ctx.apiKeyAuth?.keyId ?? null,
+        },
+      });
+
+      await ctx.db
+        .update(chatConversations)
+        .set({ nextSeq: session.nextSeq + 1 })
+        .where(eq(chatConversations.id, input.sessionId));
 
       return { cookies: decrypted };
     }),
