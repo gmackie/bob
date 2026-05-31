@@ -32,3 +32,7 @@ pnpm build
 - `tasks` are the executable work items Bob works on
 - Bob sessions, task runs, worktrees, transcripts, and artifacts power planning and execution
 - web and mobile both use the same product-facing tRPC router
+
+## Related Product Docs
+
+- [ForgeGraph market positioning](docs/forgegraph-market-positioning.md)
