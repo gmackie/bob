@@ -170,6 +170,8 @@ workspaces (updated)
 
 Solo developers already using coding agents, with team support designed into the schema from day one. Team features (multi-seat, shared workspaces) ship in a later phase.
 
+For the ForgeGraph DevOps product ICP, segment hypotheses, first accounts, and first-value path, see [ForgeGraph ICP Playbook](../gtm/forgegraph-icp-playbook.md).
+
 ## Business Model
 
 - **Free tier:** BYOK (bring your own API keys), full workflow pipeline, single workspace
