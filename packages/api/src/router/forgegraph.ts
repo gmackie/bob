@@ -1,5 +1,5 @@
 import { z } from "zod/v4";
-import { and, desc, eq } from "@bob/db";
+import { and, desc, eq, inArray } from "@bob/db";
 import {
   activities,
   dispatchItems,
@@ -264,16 +264,30 @@ export const forgegraphRouter = {
         revisionId: z.string().uuid().optional(),
         repoId: z.string().uuid().optional(),
         environment: z.string().optional(),
+        status: z.string().optional(),
       }),
     )
     .query(async ({ ctx, input }) => {
+      const accessibleRepos = await ctx.db.query.repositories.findMany({
+        where: eq(repositories.userId, ctx.session.user.id),
+        columns: { id: true },
+      });
+      const accessibleRepoIds = accessibleRepos.map((repo) => repo.id);
+
+      if (accessibleRepoIds.length === 0) {
+        return [];
+      }
+
       const conditions = [];
+      conditions.push(inArray(forgeDeployments.repoId, accessibleRepoIds));
       if (input.revisionId)
         conditions.push(eq(forgeDeployments.revisionId, input.revisionId));
       if (input.repoId)
         conditions.push(eq(forgeDeployments.repoId, input.repoId));
       if (input.environment)
         conditions.push(eq(forgeDeployments.environment, input.environment));
+      if (input.status)
+        conditions.push(eq(forgeDeployments.status, input.status));
 
       return ctx.db.query.forgeDeployments.findMany({
         where: conditions.length > 0 ? and(...conditions) : undefined,

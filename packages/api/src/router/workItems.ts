@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod/v4";
-import { and, desc, eq, isNull, or } from "@bob/db";
+import { and, desc, eq, inArray, isNull, or } from "@bob/db";
 
 import {
   activities,
@@ -776,6 +776,74 @@ export const taskRunRouter = {
       }));
     }),
 
+  listAttention: protectedProcedure
+    .input(
+      z.object({
+        workspaceId: z.string().uuid().optional(),
+        limit: z.number().min(1).max(50).default(10),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      if (input.workspaceId) {
+        await assertWorkspaceAccess(
+          ctx.db,
+          ctx.session.user.id,
+          input.workspaceId,
+        );
+      }
+
+      const rows = await ctx.db
+        .select({
+          id: taskRuns.id,
+          status: taskRuns.status,
+          blockedReason: taskRuns.blockedReason,
+          branch: taskRuns.branch,
+          createdAt: taskRuns.createdAt,
+          planningItemIdentifier: taskRuns.planningItemIdentifier,
+          workItemId: taskRuns.workItemId,
+          workItemIdentifierSnapshot: taskRuns.workItemIdentifierSnapshot,
+          workItemTitle: workItems.title,
+          workItemSequenceNumber: workItems.sequenceNumber,
+          projectKey: projects.key,
+        })
+        .from(taskRuns)
+        .leftJoin(workItems, eq(taskRuns.workItemId, workItems.id))
+        .leftJoin(projects, eq(workItems.projectId, projects.id))
+        .where(
+          and(
+            eq(taskRuns.userId, ctx.session.user.id),
+            or(eq(taskRuns.status, "failed"), eq(taskRuns.status, "blocked")),
+            input.workspaceId
+              ? or(
+                  eq(taskRuns.planningWorkspaceId, input.workspaceId),
+                  eq(workItems.workspaceId, input.workspaceId),
+                )
+              : undefined,
+          ),
+        )
+        .orderBy(desc(taskRuns.createdAt))
+        .limit(input.limit);
+
+      return rows.map((run) => ({
+        id: run.id,
+        status: run.status,
+        blockedReason: run.blockedReason,
+        branch: run.branch,
+        createdAt: run.createdAt,
+        workItemId: run.workItemId,
+        workItemTitle: run.workItemTitle,
+        workItemIdentifier:
+          run.workItemIdentifierSnapshot ??
+          (run.workItemId
+            ? formatWorkItemIdentifier({
+                projectKey: run.projectKey,
+                sequenceNumber: run.workItemSequenceNumber,
+                id: run.workItemId,
+              })
+            : run.planningItemIdentifier),
+      }));
+    }),
+
   execute: protectedProcedure
     .input(
       z.object({
@@ -858,44 +926,68 @@ export const taskRunRouter = {
 const listRecentActivitiesProcedure = protectedProcedure
   .input(
     z.object({
+      workspaceId: z.string().uuid().optional(),
       limit: z.number().min(1).max(100).default(50),
     }),
   )
   .query(async ({ ctx, input }) => {
-    const recentActivities = await ctx.db.query.activities.findMany({
-      orderBy: desc(activities.createdAt),
-      limit: input.limit,
-      with: {
-        workItem: {
-          columns: {
-            id: true,
-            title: true,
-            projectId: true,
-            sequenceNumber: true,
-          },
-          with: {
-            project: {
-              columns: {
-                id: true,
-                key: true,
-                name: true,
-              },
-            },
-          },
-        },
-      },
-    });
+    const workspaceIds = input.workspaceId
+      ? [input.workspaceId]
+      : (
+          await ctx.db.query.workspaceMembers.findMany({
+            where: eq(workspaceMembers.userId, ctx.session.user.id),
+            columns: { workspaceId: true },
+          })
+        ).map((membership) => membership.workspaceId);
+
+    if (input.workspaceId) {
+      await assertWorkspaceAccess(
+        ctx.db,
+        ctx.session.user.id,
+        input.workspaceId,
+      );
+    }
+
+    if (workspaceIds.length === 0) {
+      return [];
+    }
+
+    const recentActivities = await ctx.db
+      .select({
+        id: activities.id,
+        workItemId: activities.workItemId,
+        userId: activities.userId,
+        type: activities.type,
+        fromValue: activities.fromValue,
+        toValue: activities.toValue,
+        metadata: activities.metadata,
+        createdAt: activities.createdAt,
+        workItemTitle: workItems.title,
+        workItemSequenceNumber: workItems.sequenceNumber,
+        projectKey: projects.key,
+      })
+      .from(activities)
+      .innerJoin(workItems, eq(activities.workItemId, workItems.id))
+      .leftJoin(projects, eq(workItems.projectId, projects.id))
+      .where(inArray(workItems.workspaceId, workspaceIds))
+      .orderBy(desc(activities.createdAt))
+      .limit(input.limit);
 
     return recentActivities.map((activity) => ({
-      ...activity,
-      workItemTitle: activity.workItem?.title ?? null,
-      workItemIdentifier: activity.workItem
-        ? formatWorkItemIdentifier({
-            projectKey: activity.workItem.project?.key ?? null,
-            sequenceNumber: activity.workItem.sequenceNumber,
-            id: activity.workItem.id,
-          })
-        : null,
+      id: activity.id,
+      workItemId: activity.workItemId,
+      userId: activity.userId,
+      type: activity.type,
+      fromValue: activity.fromValue,
+      toValue: activity.toValue,
+      metadata: activity.metadata,
+      createdAt: activity.createdAt,
+      workItemTitle: activity.workItemTitle,
+      workItemIdentifier: formatWorkItemIdentifier({
+        projectKey: activity.projectKey,
+        sequenceNumber: activity.workItemSequenceNumber,
+        id: activity.workItemId,
+      }),
     }));
   });
 

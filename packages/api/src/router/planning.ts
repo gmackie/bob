@@ -268,6 +268,10 @@ export const planningRouter = {
             completedCount: projectItems.filter(
               (item) => item.status === "done",
             ).length,
+            activeCount: projectItems.filter(
+              (item) =>
+                item.status === "in_progress" || item.status === "in_review",
+            ).length,
           };
         });
       }
@@ -283,6 +287,7 @@ export const planningRouter = {
           };
           issueCount: number;
           completedCount: number;
+          activeCount?: number;
         }>
       >("project.list", input);
     }),

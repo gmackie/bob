@@ -47,7 +47,7 @@ export function useLiveActivity({
 
   // Workspace-level query (listRecent)
   const workspaceQuery = useQuery({
-    ...trpc.activity.listRecent.queryOptions({ limit }),
+    ...trpc.activity.listRecent.queryOptions({ workspaceId, limit }),
     enabled: useWorkspace,
     refetchInterval: useWorkspace ? interval : false,
   });

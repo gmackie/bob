@@ -11,6 +11,7 @@ interface AttentionItem {
   title: string;
   description: string;
   href: string;
+  external?: boolean;
 }
 
 const categoryConfig: Record<
@@ -22,8 +23,17 @@ const categoryConfig: Record<
   approve: { label: "Approve", dotClass: "bg-blue-500", icon: ">" },
 };
 
-export function AttentionPanel() {
+export function AttentionPanel({ workspaceId }: { workspaceId?: string }) {
   const trpc = useTRPC();
+
+  const { data: failedRuns } = useQuery({
+    ...trpc.taskRun.listAttention.queryOptions({
+      workspaceId,
+      limit: 10,
+    }),
+    enabled: !!workspaceId,
+    staleTime: 15_000,
+  });
 
   // Fetch open PRs — candidates for review/approve attention
   const { data: openPrs } = useQuery({
@@ -31,8 +41,34 @@ export function AttentionPanel() {
     staleTime: 30_000,
   });
 
+  const { data: deployments } = useQuery({
+    ...trpc.forgegraph.listDeployments.queryOptions({
+      status: "pending_approval",
+    }),
+    staleTime: 30_000,
+  });
+
   // Build attention items from the fetched data
   const items: AttentionItem[] = [];
+
+  if (failedRuns) {
+    for (const run of failedRuns) {
+      items.push({
+        id: `run-${run.id}`,
+        category: "failed",
+        title:
+          run.workItemTitle ??
+          run.workItemIdentifier ??
+          `${run.status === "blocked" ? "Blocked" : "Failed"} task run`,
+        description:
+          run.blockedReason ??
+          `${run.workItemIdentifier ?? "Task run"} is ${run.status}`,
+        href: run.workItemId
+          ? `/work-items/${run.workItemId}`
+          : `/runs/${run.id}`,
+      });
+    }
+  }
 
   // PRs awaiting review (open PRs are attention-worthy)
   if (openPrs) {
@@ -43,6 +79,19 @@ export function AttentionPanel() {
         title: pr.title,
         description: `${pr.remoteOwner}/${pr.remoteName} #${pr.number}`,
         href: pr.url,
+        external: true,
+      });
+    }
+  }
+
+  if (deployments) {
+    for (const deployment of deployments.slice(0, 10)) {
+      items.push({
+        id: `deploy-${deployment.id}`,
+        category: "approve",
+        title: `${deployment.environment} deployment`,
+        description: "Awaiting approval",
+        href: "/runs",
       });
     }
   }
@@ -81,8 +130,8 @@ export function AttentionPanel() {
               <a
                 key={item.id}
                 href={item.href}
-                target="_blank"
-                rel="noopener noreferrer"
+                target={item.external ? "_blank" : undefined}
+                rel={item.external ? "noopener noreferrer" : undefined}
                 className="flex items-start gap-2.5 rounded-lg p-2 transition hover:bg-muted/40"
               >
                 {/* Category dot */}

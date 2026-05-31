@@ -23,12 +23,12 @@ export function MissionControl({ workspaceId }: MissionControlProps) {
         <ProjectProgress workspaceId={workspaceId ?? ""} />
 
         {/* Center column — Activity feed */}
-        <ActivityFeed />
+        <ActivityFeed workspaceId={workspaceId} />
 
         {/* Right column — Recent runs + Attention + Skill usage */}
         <div className="flex flex-col gap-5">
           <RecentRuns workspaceId={workspaceId ?? ""} />
-          <AttentionPanel />
+          <AttentionPanel workspaceId={workspaceId} />
           <SkillUsage />
         </div>
       </div>

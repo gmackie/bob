@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PlusIcon } from "@radix-ui/react-icons";
@@ -77,14 +77,44 @@ export default function PlanningPage() {
   const isLoading = wsLoading || projLoading;
 
   // Check for active agents to determine default view
-  const { data: instances } = useQuery(
+  const { data: instances, isLoading: instancesLoading } = useQuery(
     trpc.instance.list.queryOptions(undefined, { staleTime: 10_000 }),
   );
   const hasActiveAgents = (instances ?? []).some(
     (i: any) => i.status === "running" || i.status === "starting",
   );
 
-  const [view, setView] = useState<PlanningView>(hasActiveAgents ? "dashboard" : "projects");
+  const { data: recentActivities, isLoading: activitiesLoading } = useQuery(
+    trpc.activity.listRecent.queryOptions(
+      { workspaceId: currentWorkspace?.id, limit: 1 },
+      {
+        enabled: !!currentWorkspace,
+        staleTime: 10_000,
+      },
+    ),
+  );
+  const hasRecentActivity = (recentActivities ?? []).length > 0;
+  const shouldShowDashboard = hasActiveAgents || hasRecentActivity;
+
+  const [view, setView] = useState<PlanningView | null>(null);
+  const activeView = view ?? (shouldShowDashboard ? "dashboard" : "projects");
+
+  useEffect(() => {
+    if (
+      view === null &&
+      currentWorkspace &&
+      !instancesLoading &&
+      !activitiesLoading
+    ) {
+      setView(shouldShowDashboard ? "dashboard" : "projects");
+    }
+  }, [
+    activitiesLoading,
+    currentWorkspace,
+    instancesLoading,
+    shouldShowDashboard,
+    view,
+  ]);
 
   // Create workspace mutation
   const queryClient = useQueryClient();
@@ -176,7 +206,7 @@ export default function PlanningPage() {
                 onClick={() => setView(v)}
                 className={cn(
                   "rounded-lg px-4 py-2 text-sm font-medium transition-colors",
-                  view === v
+                  activeView === v
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:text-foreground",
                 )}
@@ -186,15 +216,15 @@ export default function PlanningPage() {
             ))}
           </div>
           <h1 className="font-display text-4xl font-bold tracking-tight leading-[1.15] text-foreground">
-            {view === "dashboard" ? "Mission Control" : "Projects"}
+            {activeView === "dashboard" ? "Mission Control" : "Projects"}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {view === "dashboard"
+            {activeView === "dashboard"
               ? "Live overview of your agents and projects"
               : "Your workspaces and projects"}
           </p>
         </div>
-        {view === "projects" && (
+        {activeView === "projects" && (
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setImportOpen(true)}>
               Import from GitHub
@@ -208,14 +238,14 @@ export default function PlanningPage() {
       </div>
 
       {/* Dashboard view */}
-      {view === "dashboard" && (
+      {activeView === "dashboard" && (
         <section className="mt-8">
           <MissionControl workspaceId={currentWorkspace?.id} />
         </section>
       )}
 
       {/* Workspace selector (projects view only) */}
-      {view === "projects" && workspaces && workspaces.length > 1 && (
+      {activeView === "projects" && workspaces && workspaces.length > 1 && (
         <div className="mt-6">
           <WorkspaceSelector
             workspaces={workspaces.map((w) => ({
@@ -229,7 +259,7 @@ export default function PlanningPage() {
       )}
 
       {/* Projects grid (projects view only) */}
-      {view === "projects" && <section className="mt-8">
+      {activeView === "projects" && <section className="mt-8">
         <div className="mb-4 flex items-center justify-between">
           <span className="text-sm text-muted-foreground">
             {isLoading ? "" : `${projectCards.length} project${projectCards.length !== 1 ? "s" : ""}`}

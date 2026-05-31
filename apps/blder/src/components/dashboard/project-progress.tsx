@@ -94,6 +94,7 @@ export function ProjectProgress({ workspaceId }: ProjectProgressProps) {
         <div className="mt-3 space-y-3">
           {projectData.map((entry) => {
             const { project, issueCount, completedCount } = entry;
+            const activeCount = "activeCount" in entry ? entry.activeCount ?? 0 : 0;
 
             return (
               <button
@@ -113,6 +114,7 @@ export function ProjectProgress({ workspaceId }: ProjectProgressProps) {
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {completedCount}/{issueCount} done
+                    {activeCount > 0 ? ` · ${activeCount} active` : ""}
                   </p>
                 </div>
               </button>
