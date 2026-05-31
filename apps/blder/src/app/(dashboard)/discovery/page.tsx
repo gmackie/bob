@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { cn } from "@bob/ui";
 import { Badge } from "@bob/ui/badge";
 import { Button } from "@bob/ui/button";
 import { Card } from "@bob/ui/card";
@@ -13,14 +12,15 @@ import { toast } from "@bob/ui/toast";
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { useTRPC } from "~/trpc/react";
 
+function shellQuote(value: string) {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
 export default function DiscoveryPage() {
   const trpc = useTRPC();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [forgeBannerDismissed, setForgeBannerDismissed] = useState(false);
-  const [registeringPaths, setRegisteringPaths] = useState<Set<string>>(
-    new Set(),
-  );
 
   // Fetch workspaces
   const { data: workspaceMemberships, isLoading: wsLoading } = useQuery(
@@ -73,36 +73,6 @@ export default function DiscoveryPage() {
     }),
   );
 
-  // Forge register handler
-  async function handleForgeRegister(path: string) {
-    setRegisteringPaths((prev) => new Set(prev).add(path));
-    try {
-      const res = await fetch("/api/v1/forge/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path }),
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `Registration failed (${res.status})`);
-      }
-      toast("Registered with ForgeGraph");
-      void queryClient.invalidateQueries({
-        queryKey: trpc.project.discovery.queryKey({
-          workspaceId: currentWorkspace?.id ?? "",
-        }),
-      });
-    } catch (err: any) {
-      toast(err.message ?? "Registration failed");
-    } finally {
-      setRegisteringPaths((prev) => {
-        const next = new Set(prev);
-        next.delete(path);
-        return next;
-      });
-    }
-  }
-
   const isLoading = wsLoading || discoveryLoading;
 
   // No workspace
@@ -111,10 +81,10 @@ export default function DiscoveryPage() {
       <main className="mx-auto max-w-5xl px-6 py-12">
         <Breadcrumbs items={[{ label: "Discovery" }]} className="mb-4" />
         <Card className="px-8 py-12 text-center">
-          <h1 className="font-display text-2xl font-bold text-foreground">
+          <h1 className="font-display text-foreground text-2xl font-bold">
             No workspace found
           </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
+          <p className="text-muted-foreground mt-2 text-sm">
             Create a workspace first to discover repositories.
           </p>
         </Card>
@@ -128,18 +98,21 @@ export default function DiscoveryPage() {
 
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-3xl font-semibold text-foreground">
+          <h1 className="font-display text-foreground text-3xl font-semibold">
             Discovery
           </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
+          <p className="text-muted-foreground mt-2 text-sm">
             Repositories and directories found on the daemon machine.
           </p>
         </div>
         {!isLoading && discovery && (
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          <div className="text-muted-foreground flex items-center gap-3 text-sm">
             <span>{discovery.linked.length} active</span>
             <span className="text-border">|</span>
-            <span>{discovery.gitOnly.length + discovery.forgeReady.length} discovered</span>
+            <span>
+              {discovery.gitOnly.length + discovery.forgeReady.length}{" "}
+              discovered
+            </span>
             <span className="text-border">|</span>
             <span>{discovery.nonGit.length} non-git</span>
           </div>
@@ -148,13 +121,21 @@ export default function DiscoveryPage() {
 
       {/* Forge unavailable banner */}
       {discovery && !discovery.forgeAvailable && !forgeBannerDismissed && (
-        <div className="mt-6 flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-          <p className="text-sm text-amber-300">
-            ForgeGraph CLI not detected on daemon. Some features unavailable.
-          </p>
+        <div className="mt-6 flex items-start justify-between gap-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+          <div>
+            <p className="text-sm font-medium text-amber-200">
+              ForgeGraph is not ready on the daemon machine.
+            </p>
+            <p className="mt-1 text-sm text-amber-300">
+              Install or authenticate the ForgeGraph CLI, then restart the bob
+              daemon. Run{" "}
+              <code className="font-mono text-xs">fg auth login</code> if the
+              CLI is already installed.
+            </p>
+          </div>
           <button
             onClick={() => setForgeBannerDismissed(true)}
-            className="ml-4 text-xs text-amber-400 hover:text-amber-200 transition-colors"
+            className="shrink-0 text-xs text-amber-400 transition-colors hover:text-amber-200"
           >
             Dismiss
           </button>
@@ -167,11 +148,11 @@ export default function DiscoveryPage() {
           {[0, 1, 2].map((i) => (
             <div
               key={i}
-              className="animate-pulse rounded-2xl border border-border bg-card p-5"
+              className="border-border bg-card animate-pulse rounded-2xl border p-5"
             >
-              <div className="h-3 w-24 rounded bg-muted" />
-              <div className="mt-3 h-5 w-2/3 rounded bg-muted" />
-              <div className="mt-4 h-3 w-1/2 rounded bg-muted" />
+              <div className="bg-muted h-3 w-24 rounded" />
+              <div className="bg-muted mt-3 h-5 w-2/3 rounded" />
+              <div className="bg-muted mt-4 h-3 w-1/2 rounded" />
             </div>
           ))}
         </div>
@@ -180,7 +161,7 @@ export default function DiscoveryPage() {
       {/* Error state */}
       {isError && (
         <Card className="mt-8 px-8 py-12 text-center">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-muted-foreground text-sm">
             Failed to load discovery data. Check that the gateway is running.
           </p>
         </Card>
@@ -194,10 +175,10 @@ export default function DiscoveryPage() {
             <section className="mt-8">
               <div className="mb-3 flex items-center gap-2">
                 <span className="size-2 rounded-full bg-emerald-500" />
-                <h2 className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                <h2 className="text-muted-foreground text-[10px] font-medium tracking-widest uppercase">
                   Active Projects
                 </h2>
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-muted-foreground text-[10px]">
                   ({discovery.linked.length})
                 </span>
               </div>
@@ -207,18 +188,18 @@ export default function DiscoveryPage() {
                     <div className="flex items-start justify-between">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <h3 className="truncate text-sm font-medium text-foreground">
+                          <h3 className="text-foreground truncate text-sm font-medium">
                             {repo.project?.name ?? repo.name}
                           </h3>
                           <Badge variant="emerald">linked</Badge>
                         </div>
-                        <p className="mt-1 truncate text-xs font-mono text-muted-foreground">
+                        <p className="text-muted-foreground mt-1 truncate font-mono text-xs">
                           {repo.path}
                         </p>
                       </div>
                     </div>
-                    <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                      <span className="rounded border border-border px-1.5 py-0.5 font-mono">
+                    <div className="text-muted-foreground mt-3 flex items-center gap-2 text-xs">
+                      <span className="border-border rounded border px-1.5 py-0.5 font-mono">
                         {repo.branch}
                       </span>
                       {repo.remoteUrl && (
@@ -244,10 +225,10 @@ export default function DiscoveryPage() {
             <section className="mt-8">
               <div className="mb-3 flex items-center gap-2">
                 <span className="size-2 rounded-full bg-amber-500" />
-                <h2 className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                <h2 className="text-muted-foreground text-[10px] font-medium tracking-widest uppercase">
                   Discovered Repos
                 </h2>
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-muted-foreground text-[10px]">
                   ({discovery.gitOnly.length + discovery.forgeReady.length})
                 </span>
               </div>
@@ -257,7 +238,7 @@ export default function DiscoveryPage() {
                     <Card key={repo.id} className="p-4">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <h3 className="truncate text-sm font-medium text-foreground">
+                          <h3 className="text-foreground truncate text-sm font-medium">
                             {repo.remoteOwner && repo.remoteName
                               ? `${repo.remoteOwner}/${repo.remoteName}`
                               : repo.name}
@@ -266,32 +247,39 @@ export default function DiscoveryPage() {
                             <Badge variant="blue">{repo.buildSystem}</Badge>
                           )}
                         </div>
-                        <p className="mt-1 truncate text-xs font-mono text-muted-foreground">
+                        <p className="text-muted-foreground mt-1 truncate font-mono text-xs">
                           {repo.path}
                         </p>
                         {repo.remoteUrl && (
-                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                          <p className="text-muted-foreground mt-0.5 truncate text-xs">
                             {repo.remoteUrl}
                           </p>
                         )}
                       </div>
                       <div className="mt-3 flex items-center gap-2">
-                        <span className="rounded border border-border px-1.5 py-0.5 text-xs font-mono text-muted-foreground">
+                        <span className="border-border text-muted-foreground rounded border px-1.5 py-0.5 font-mono text-xs">
                           {repo.branch}
                         </span>
                         <div className="flex-1" />
-                        {discovery.forgeAvailable && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={registeringPaths.has(repo.path)}
-                            onClick={() => handleForgeRegister(repo.path)}
-                          >
-                            {registeringPaths.has(repo.path)
-                              ? "Registering..."
-                              : "Register"}
-                          </Button>
-                        )}
+                        <Badge
+                          variant={
+                            discovery.forgeAvailable ? "blue" : "default"
+                          }
+                        >
+                          {discovery.forgeAvailable
+                            ? "CLI ready"
+                            : "CLI unavailable"}
+                        </Badge>
+                      </div>
+                      <div className="border-border bg-muted/30 mt-3 rounded-md border p-3">
+                        <p className="text-muted-foreground text-xs">
+                          {discovery.forgeAvailable
+                            ? "Register this repo from the daemon machine. Bob links it after the next heartbeat."
+                            : "Recover ForgeGraph on the daemon, then register this repo from that machine."}
+                        </p>
+                        <code className="text-foreground mt-2 block font-mono text-xs break-all">
+                          fg app create --path {shellQuote(repo.path)}
+                        </code>
                       </div>
                     </Card>
                   ),
@@ -305,10 +293,10 @@ export default function DiscoveryPage() {
             <section className="mt-8">
               <div className="mb-3 flex items-center gap-2">
                 <span className="size-2 rounded-full bg-neutral-500" />
-                <h2 className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                <h2 className="text-muted-foreground text-[10px] font-medium tracking-widest uppercase">
                   Non-Git Directories
                 </h2>
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-muted-foreground text-[10px]">
                   ({discovery.nonGit.length})
                 </span>
               </div>
@@ -316,13 +304,13 @@ export default function DiscoveryPage() {
                 {discovery.nonGit.map((dir: any) => (
                   <div
                     key={dir.id}
-                    className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3"
+                    className="border-border bg-card flex items-center justify-between rounded-lg border px-4 py-3"
                   >
                     <div className="min-w-0">
-                      <span className="text-sm text-foreground">
+                      <span className="text-foreground text-sm">
                         {dir.name}
                       </span>
-                      <span className="ml-2 truncate text-xs font-mono text-muted-foreground">
+                      <span className="text-muted-foreground ml-2 truncate font-mono text-xs">
                         {dir.path}
                       </span>
                     </div>
@@ -331,7 +319,7 @@ export default function DiscoveryPage() {
                       size="sm"
                       disabled={dismissDir.isPending}
                       onClick={() => dismissDir.mutate({ dirId: dir.id })}
-                      className="shrink-0 text-muted-foreground hover:text-foreground"
+                      className="text-muted-foreground hover:text-foreground shrink-0"
                     >
                       Dismiss
                     </Button>
@@ -347,10 +335,10 @@ export default function DiscoveryPage() {
             discovery.forgeReady.length === 0 &&
             discovery.nonGit.length === 0 && (
               <Card className="mt-8 px-8 py-12 text-center">
-                <h2 className="font-display text-lg font-semibold text-foreground">
+                <h2 className="font-display text-foreground text-lg font-semibold">
                   No repositories discovered
                 </h2>
-                <p className="mt-2 text-sm text-muted-foreground">
+                <p className="text-muted-foreground mt-2 text-sm">
                   The daemon hasn't found any repositories yet. Make sure the
                   gateway is running and scanning your development directories.
                 </p>

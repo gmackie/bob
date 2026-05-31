@@ -33,6 +33,12 @@ const createMockDb = () => {
       workspaces: {
         findFirst: vi.fn(),
       },
+      repositories: {
+        findFirst: vi.fn(),
+      },
+      projects: {
+        findFirst: vi.fn(),
+      },
       agentRuns: {
         findFirst: vi.fn(),
         findMany: vi.fn(),
@@ -187,11 +193,10 @@ describe("publicApi router tenant isolation", () => {
 
   it("registerWorkspace adds the caller as an owner workspace member", async () => {
     const db = createMockDb();
-    db.query.tenantMembers.findFirst
-      .mockResolvedValueOnce({
-        tenantId: "tenant-1",
-        tenant: { id: "tenant-1" },
-      });
+    db.query.tenantMembers.findFirst.mockResolvedValueOnce({
+      tenantId: "tenant-1",
+      tenant: { id: "tenant-1" },
+    });
     db.__mock.insertReturning
       .mockResolvedValueOnce([
         {
@@ -216,6 +221,51 @@ describe("publicApi router tenant isolation", () => {
       workspaceId: "55555555-5555-4555-8555-555555555555",
       userId: "user-1",
       role: "owner",
+    });
+  });
+
+  it("heartbeat links repos to existing ForgeGraph projects", async () => {
+    const db = createMockDb();
+    db.query.workspaces.findFirst.mockResolvedValueOnce({
+      id: "66666666-6666-4666-8666-666666666666",
+      tenantId: "tenant-1",
+    });
+    db.query.tenantMembers.findMany.mockResolvedValueOnce([
+      { tenantId: "tenant-1" },
+    ]);
+    db.query.repositories.findFirst.mockResolvedValueOnce({
+      id: "repo-1",
+      remoteUrl: "https://git.example.com/acme/app.git",
+      branch: "main",
+      buildSystem: "node",
+    });
+    db.query.projects.findFirst.mockResolvedValueOnce({
+      id: "project-1",
+      forgeGraphAppId: "fg-app-1",
+      workspaceId: "66666666-6666-4666-8666-666666666666",
+    });
+
+    const caller = createCaller(db) as any;
+
+    await expect(
+      caller.publicApi.heartbeat({
+        workspaceId: "66666666-6666-4666-8666-666666666666",
+        forgeAvailable: true,
+        repos: [
+          {
+            name: "app",
+            path: "/srv/app",
+            isGit: true,
+            remoteUrl: "https://git.example.com/acme/app.git",
+            branch: "main",
+            forgeAppId: "fg-app-1",
+          },
+        ],
+      }),
+    ).resolves.toEqual({ ok: true });
+
+    expect(db.__mock.updateSet).toHaveBeenCalledWith({
+      planningProjectId: "project-1",
     });
   });
 });

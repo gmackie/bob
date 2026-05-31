@@ -1,7 +1,6 @@
-import { randomBytes, createHash } from "node:crypto";
-
-import { z } from "zod/v4";
+import { createHash, randomBytes } from "node:crypto";
 import { TRPCError } from "@trpc/server";
+import { z } from "zod/v4";
 
 import { and, desc, eq, inArray } from "@bob/db";
 import {
@@ -11,16 +10,16 @@ import {
   projects,
   repositories,
   runArtifacts,
-  tenants,
-  workspaces,
   tenantMembers,
+  tenants,
   workspaceMembers,
+  workspaces,
 } from "@bob/db/schema";
 
 import {
-  protectedProcedure,
   apiKeyReadProcedure,
   apiKeyWriteProcedure,
+  protectedProcedure,
 } from "../trpc";
 
 // Auto-create tenant for new users on first authenticated request.
@@ -64,10 +63,16 @@ async function listAuthorizedTenantIds(db: any, userId: string) {
     columns: { tenantId: true },
   });
 
-  return memberships.map((membership: { tenantId: string }) => membership.tenantId);
+  return memberships.map(
+    (membership: { tenantId: string }) => membership.tenantId,
+  );
 }
 
-async function assertTenantAccess(db: any, userId: string, tenantId: string | null | undefined) {
+async function assertTenantAccess(
+  db: any,
+  userId: string,
+  tenantId: string | null | undefined,
+) {
   if (!tenantId) {
     throw new TRPCError({ code: "NOT_FOUND" });
   }
@@ -145,18 +150,19 @@ async function processDiscoveredRepos(
       });
     }
 
-    // Auto-create project for ForgeGraph-linked repos
+    // Auto-create or link project for ForgeGraph-linked repos.
     if (repo.forgeAppId) {
-      const existingProject = await db.query.projects.findFirst({
+      let project = await db.query.projects.findFirst({
         where: eq(projects.forgeGraphAppId, repo.forgeAppId),
       });
 
-      if (!existingProject) {
+      if (!project) {
         // Generate a key from the repo name (uppercase, alphanumeric, max 16)
-        const baseKey = repo.name
-          .toUpperCase()
-          .replace(/[^A-Z0-9]/g, "")
-          .slice(0, 14) || "PROJ";
+        const baseKey =
+          repo.name
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, "")
+            .slice(0, 14) || "PROJ";
 
         // Find a unique key, appending a numeric suffix on collision
         let key = baseKey;
@@ -183,18 +189,21 @@ async function processDiscoveredRepos(
           })
           .returning();
 
-        // Link the repository to the project
-        if (newProject) {
-          await db
-            .update(repositories)
-            .set({ planningProjectId: newProject.id })
-            .where(
-              and(
-                eq(repositories.workspaceId, workspaceId),
-                eq(repositories.path, repo.path),
-              ),
-            );
-        }
+        project = newProject;
+      }
+
+      // The daemon/CLI registration path completes when a heartbeat reports
+      // forgeAppId. Link both newly-created and pre-existing ForgeGraph projects.
+      if (project) {
+        await db
+          .update(repositories)
+          .set({ planningProjectId: project.id })
+          .where(
+            and(
+              eq(repositories.workspaceId, workspaceId),
+              eq(repositories.path, repo.path),
+            ),
+          );
       }
     }
   }
@@ -326,7 +335,11 @@ export const publicApiRouter = {
       if (!existingRun?.tenantId) {
         throw new TRPCError({ code: "NOT_FOUND" });
       }
-      await assertTenantAccess(ctx.db, ctx.session.user.id, existingRun.tenantId);
+      await assertTenantAccess(
+        ctx.db,
+        ctx.session.user.id,
+        existingRun.tenantId,
+      );
 
       const now = new Date();
       const updates: Record<string, unknown> = { status: input.status };
@@ -428,7 +441,10 @@ export const publicApiRouter = {
       }),
     )
     .query(async ({ ctx, input }) => {
-      const tenantIds = await listAuthorizedTenantIds(ctx.db, ctx.session.user.id);
+      const tenantIds = await listAuthorizedTenantIds(
+        ctx.db,
+        ctx.session.user.id,
+      );
       if (tenantIds.length === 0) {
         return [];
       }
@@ -446,21 +462,27 @@ export const publicApiRouter = {
 
   // POST /workspaces/:id/heartbeat
   heartbeat: apiKeyWriteProcedure
-    .input(z.object({
-      workspaceId: z.string().uuid(),
-      agentTypes: z.array(z.string()).optional(),
-      forgeAvailable: z.boolean().optional(),
-      repos: z.array(z.object({
-        name: z.string(),
-        path: z.string(),
-        isGit: z.boolean(),
-        remoteUrl: z.string().optional(),
-        branch: z.string().optional(),
-        dirty: z.boolean().optional(),
-        buildSystem: z.string().optional(),
-        forgeAppId: z.string().optional(),
-      })).optional(),
-    }))
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+        agentTypes: z.array(z.string()).optional(),
+        forgeAvailable: z.boolean().optional(),
+        repos: z
+          .array(
+            z.object({
+              name: z.string(),
+              path: z.string(),
+              isGit: z.boolean(),
+              remoteUrl: z.string().optional(),
+              branch: z.string().optional(),
+              dirty: z.boolean().optional(),
+              buildSystem: z.string().optional(),
+              forgeAppId: z.string().optional(),
+            }),
+          )
+          .optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const workspace = await ctx.db.query.workspaces.findFirst({
         where: eq(workspaces.id, input.workspaceId),
@@ -498,7 +520,13 @@ export const publicApiRouter = {
 
       // Process discovered repos
       if (input.repos && input.repos.length > 0) {
-        await processDiscoveredRepos(ctx.db, ctx.session.user.id, input.workspaceId, workspace.tenantId, input.repos);
+        await processDiscoveredRepos(
+          ctx.db,
+          ctx.session.user.id,
+          input.workspaceId,
+          workspace.tenantId,
+          input.repos,
+        );
       }
 
       return { ok: true };

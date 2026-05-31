@@ -7,7 +7,15 @@ import { NextResponse } from "next/server";
  */
 export async function POST() {
   return NextResponse.json(
-    { error: "Forge registration via gateway is no longer available. Use ForgeGraph CLI." },
+    {
+      error: "ForgeGraph registration is handled by the daemon/CLI path.",
+      recovery: {
+        unavailable:
+          "Install or authenticate the ForgeGraph CLI on the daemon machine, then restart the bob daemon.",
+        register:
+          "Run `fg app create --path <repo-path>` on the daemon machine. Bob will link the repo after the next heartbeat reports forgeAppId.",
+      },
+    },
     { status: 410 },
   );
 }
