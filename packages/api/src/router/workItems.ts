@@ -1,7 +1,8 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod/v4";
-import { and, desc, eq, isNull, or } from "@bob/db";
 
+import { and, desc, eq, isNull, or } from "@bob/db";
+import { assertWorkspaceQuota, QuotaExceededError } from "@bob/db/quotas";
 import {
   activities,
   comments,
@@ -13,7 +14,6 @@ import {
   workItems,
   workspaceMembers,
 } from "@bob/db/schema";
-
 import {
   createArtifactInputSchema,
   createCommentInputSchema,
@@ -29,15 +29,37 @@ import {
   promoteToTaskInputSchema,
   updateWorkItemInputSchema,
 } from "@bob/work-items/schema";
-import { isForgeGraphEnabled, requireForgeGraphClient } from "../services/forgegraph/config";
-import { resolveForgeGraphId, cacheMapping } from "../services/forgegraph/idResolver";
-import type { FgWorkItem, FgArtifact, FgActivity } from "../services/forgegraph/forgeGraphClient";
+
+import type {
+  FgActivity,
+  FgArtifact,
+  FgWorkItem,
+} from "../services/forgegraph/forgeGraphClient";
+import {
+  isForgeGraphEnabled,
+  requireForgeGraphClient,
+} from "../services/forgegraph/config";
+import {
+  cacheMapping,
+  resolveForgeGraphId,
+} from "../services/forgegraph/idResolver";
 import { toBobStatus } from "../services/forgegraph/statusMap";
 import {
   apiKeyReadProcedure,
   apiKeyWriteProcedure,
   protectedProcedure,
 } from "../trpc";
+
+function quotaError(error: unknown) {
+  if (error instanceof QuotaExceededError) {
+    return new TRPCError({
+      code: "FORBIDDEN",
+      message: error.message,
+    });
+  }
+
+  return error;
+}
 
 /**
  * Union of the procedure builders that the factories below accept. Keeping
@@ -50,7 +72,11 @@ type WorkItemProcedureBuilder =
   | typeof apiKeyReadProcedure
   | typeof apiKeyWriteProcedure;
 
-async function assertWorkspaceAccess(db: any, userId: string, workspaceId: string) {
+async function assertWorkspaceAccess(
+  db: any,
+  userId: string,
+  workspaceId: string,
+) {
   const membership = await db.query.workspaceMembers.findFirst({
     where: and(
       eq(workspaceMembers.workspaceId, workspaceId),
@@ -64,7 +90,11 @@ async function assertWorkspaceAccess(db: any, userId: string, workspaceId: strin
   }
 }
 
-async function assertWorkItemAccess(db: any, userId: string, workItem: { workspaceId: string | null | undefined }) {
+async function assertWorkItemAccess(
+  db: any,
+  userId: string,
+  workItem: { workspaceId: string | null | undefined },
+) {
   if (!workItem.workspaceId) {
     throw new TRPCError({ code: "NOT_FOUND" });
   }
@@ -72,7 +102,11 @@ async function assertWorkItemAccess(db: any, userId: string, workItem: { workspa
   await assertWorkspaceAccess(db, userId, workItem.workspaceId);
 }
 
-async function loadAccessibleWorkItem(db: any, userId: string, workItemId: string) {
+async function loadAccessibleWorkItem(
+  db: any,
+  userId: string,
+  workItemId: string,
+) {
   const workItem = await db.query.workItems.findFirst({
     where: eq(workItems.id, workItemId),
   });
@@ -90,11 +124,15 @@ function mapFgWorkItemToLocal(
   fg: FgWorkItem,
   project?: { id: string; key: string; name: string } | null,
 ) {
-  const meta = fg.metadata as { projectKey?: string; sequenceNumber?: number } | null;
+  const meta = fg.metadata as {
+    projectKey?: string;
+    sequenceNumber?: number;
+  } | null;
   const identifier =
     meta?.projectKey && meta?.sequenceNumber
       ? `${meta.projectKey}-${meta.sequenceNumber}`
-      : fg.externalId?.slice(0, 8).toUpperCase() ?? fg.id.slice(0, 8).toUpperCase();
+      : (fg.externalId?.slice(0, 8).toUpperCase() ??
+        fg.id.slice(0, 8).toUpperCase());
 
   return {
     id: fg.externalId ?? fg.id,
@@ -198,7 +236,9 @@ const buildListWorkItemsProcedure = <T extends WorkItemProcedureBuilder>(
     );
 
     return items.map((item: any) => {
-      const project = item.projectId ? projectById.get(item.projectId) ?? null : null;
+      const project = item.projectId
+        ? (projectById.get(item.projectId) ?? null)
+        : null;
 
       return {
         ...item,
@@ -213,10 +253,15 @@ const buildListWorkItemsProcedure = <T extends WorkItemProcedureBuilder>(
   });
 
 /** Parse a short identifier like "BOB-27" into { projectKey, sequenceNumber }. */
-function parseIdentifier(id: string): { projectKey: string; sequenceNumber: number } | null {
+function parseIdentifier(
+  id: string,
+): { projectKey: string; sequenceNumber: number } | null {
   const match = id.match(/^([A-Za-z][A-Za-z0-9]*)-(\d+)$/);
   if (!match) return null;
-  return { projectKey: match[1]!.toUpperCase(), sequenceNumber: parseInt(match[2]!, 10) };
+  return {
+    projectKey: match[1]!.toUpperCase(),
+    sequenceNumber: parseInt(match[2]!, 10),
+  };
 }
 
 const buildGetWorkItemProcedure = <T extends WorkItemProcedureBuilder>(
@@ -225,7 +270,10 @@ const buildGetWorkItemProcedure = <T extends WorkItemProcedureBuilder>(
   procedure.input(getWorkItemInputSchema).query(async ({ ctx, input }) => {
     // ── Local DB path ─────────────────────────────────────────────────
     // Try UUID lookup first
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.id);
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        input.id,
+      );
 
     let workItem;
     if (isUuid) {
@@ -334,71 +382,84 @@ const buildCreateCommentProcedure = <T extends WorkItemProcedureBuilder>(
 const buildCreateArtifactProcedure = <T extends WorkItemProcedureBuilder>(
   procedure: T,
 ) =>
-  procedure.input(createArtifactInputSchema).mutation(async ({ ctx, input }) => {
-    await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
+  procedure
+    .input(createArtifactInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const workItem = await loadAccessibleWorkItem(
+        ctx.db,
+        ctx.session.user.id,
+        input.workItemId,
+      );
 
-    const existingArtifacts: any[] = await ctx.db.query.workItemArtifacts.findMany({
-      where: eq(workItemArtifacts.workItemId, input.workItemId),
-    });
+      const existingArtifacts: any[] =
+        await ctx.db.query.workItemArtifacts.findMany({
+          where: eq(workItemArtifacts.workItemId, input.workItemId),
+        });
 
-    const duplicateArtifact =
-      input.producerId == null
-        ? null
-        : existingArtifacts.find(
-            (artifact: any) =>
-              artifact.producerType === input.producerType &&
-              artifact.producerId === input.producerId,
-          );
+      const duplicateArtifact =
+        input.producerId == null
+          ? null
+          : existingArtifacts.find(
+              (artifact: any) =>
+                artifact.producerType === input.producerType &&
+                artifact.producerId === input.producerId,
+            );
 
-    if (duplicateArtifact) {
-      return duplicateArtifact;
-    }
+      if (duplicateArtifact) {
+        return duplicateArtifact;
+      }
 
-    const currentArtifactsForRole = existingArtifacts.filter(
-      (artifact: any) =>
-        artifact.artifactRole === input.artifactRole && artifact.isCurrent,
-    );
+      try {
+        await assertWorkspaceQuota(ctx.db, workItem.workspaceId, "artifacts");
+      } catch (error) {
+        throw quotaError(error);
+      }
 
-    if (currentArtifactsForRole.length > 0) {
-      await ctx.db
-        .update(workItemArtifacts)
-        .set({ isCurrent: false })
-        .where(
-          and(
-            eq(workItemArtifacts.workItemId, input.workItemId),
-            eq(workItemArtifacts.artifactRole, input.artifactRole),
-            eq(workItemArtifacts.isCurrent, true),
-          ),
-        )
+      const currentArtifactsForRole = existingArtifacts.filter(
+        (artifact: any) =>
+          artifact.artifactRole === input.artifactRole && artifact.isCurrent,
+      );
+
+      if (currentArtifactsForRole.length > 0) {
+        await ctx.db
+          .update(workItemArtifacts)
+          .set({ isCurrent: false })
+          .where(
+            and(
+              eq(workItemArtifacts.workItemId, input.workItemId),
+              eq(workItemArtifacts.artifactRole, input.artifactRole),
+              eq(workItemArtifacts.isCurrent, true),
+            ),
+          )
+          .returning();
+      }
+
+      // The zod schema in @bob/work-items and the DB enum in @bob/db diverge on
+      // producerType values ("session"/"task_run"/"integration"/"manual" vs
+      // "bob"/"forgegraph"/"human"/"system"). That mismatch predates this change;
+      // cast through `any` to preserve the previous runtime behavior until the
+      // schemas are reconciled.
+      const [artifact] = await ctx.db
+        .insert(workItemArtifacts)
+        .values({
+          workItemId: input.workItemId,
+          taskRunId: input.taskRunId ?? null,
+          sessionId: input.sessionId ?? null,
+          producerType: input.producerType as any,
+          producerId: input.producerId ?? null,
+          artifactType: input.artifactType,
+          artifactRole: input.artifactRole,
+          url: input.url ?? null,
+          title: input.title ?? null,
+          summary: input.summary ?? null,
+          content: input.content ?? null,
+          metadata: input.metadata ?? null,
+          isCurrent: true,
+        })
         .returning();
-    }
 
-    // The zod schema in @bob/work-items and the DB enum in @bob/db diverge on
-    // producerType values ("session"/"task_run"/"integration"/"manual" vs
-    // "bob"/"forgegraph"/"human"/"system"). That mismatch predates this change;
-    // cast through `any` to preserve the previous runtime behavior until the
-    // schemas are reconciled.
-    const [artifact] = await ctx.db
-      .insert(workItemArtifacts)
-      .values({
-        workItemId: input.workItemId,
-        taskRunId: input.taskRunId ?? null,
-        sessionId: input.sessionId ?? null,
-        producerType: input.producerType as any,
-        producerId: input.producerId ?? null,
-        artifactType: input.artifactType,
-        artifactRole: input.artifactRole,
-        url: input.url ?? null,
-        title: input.title ?? null,
-        summary: input.summary ?? null,
-        content: input.content ?? null,
-        metadata: input.metadata ?? null,
-        isCurrent: true,
-      })
-      .returning();
-
-    return artifact;
-  });
+      return artifact;
+    });
 
 const buildPromoteToTaskProcedure = <T extends WorkItemProcedureBuilder>(
   procedure: T,
@@ -447,73 +508,78 @@ const buildPromoteToTaskProcedure = <T extends WorkItemProcedureBuilder>(
 const buildUpdateWorkItemProcedure = <T extends WorkItemProcedureBuilder>(
   procedure: T,
 ) =>
-  procedure.input(updateWorkItemInputSchema).mutation(async ({ ctx, input }) => {
-    const existing = await loadAccessibleWorkItem(
-      ctx.db,
-      ctx.session.user.id,
-      input.id,
-    );
-
-    const updates = Object.fromEntries(
-      Object.entries({
-        title: input.title,
-        description: input.description,
-        status: input.status,
-      }).filter(([, value]) => value !== undefined),
-    );
-
-    if (Object.keys(updates).length === 0) {
-      return existing;
-    }
-
-    const [workItem] = await ctx.db
-      .update(workItems)
-      .set(updates)
-      .where(eq(workItems.id, input.id))
-      .returning();
-
-    const nextWorkItem = workItem ?? existing;
-
-    const changedFields = ([
-      {
-        field: "title" as const,
-        previousValue: existing.title ?? null,
-        nextValue: input.title ?? null,
-      },
-      {
-        field: "description" as const,
-        previousValue: existing.description ?? null,
-        nextValue: input.description ?? null,
-      },
-      {
-        field: "status" as const,
-        previousValue: existing.status ?? null,
-        nextValue: input.status ?? null,
-      },
-    ] satisfies Array<{
-      field: "title" | "description" | "status";
-      previousValue: string | null;
-      nextValue: string | null;
-    }>).filter(
-      (change) =>
-        change.nextValue !== null && change.previousValue !== change.nextValue,
-    );
-
-    if (changedFields.length > 0) {
-      await ctx.db.insert(activities).values(
-        changedFields.map((change) => ({
-          workItemId: input.id,
-          userId: ctx.session.user.id,
-          type: "status_changed" as const,
-          fromValue: change.previousValue,
-          toValue: change.nextValue,
-          metadata: { field: change.field },
-        })),
+  procedure
+    .input(updateWorkItemInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const existing = await loadAccessibleWorkItem(
+        ctx.db,
+        ctx.session.user.id,
+        input.id,
       );
-    }
 
-    return nextWorkItem;
-  });
+      const updates = Object.fromEntries(
+        Object.entries({
+          title: input.title,
+          description: input.description,
+          status: input.status,
+        }).filter(([, value]) => value !== undefined),
+      );
+
+      if (Object.keys(updates).length === 0) {
+        return existing;
+      }
+
+      const [workItem] = await ctx.db
+        .update(workItems)
+        .set(updates)
+        .where(eq(workItems.id, input.id))
+        .returning();
+
+      const nextWorkItem = workItem ?? existing;
+
+      const changedFields = (
+        [
+          {
+            field: "title" as const,
+            previousValue: existing.title ?? null,
+            nextValue: input.title ?? null,
+          },
+          {
+            field: "description" as const,
+            previousValue: existing.description ?? null,
+            nextValue: input.description ?? null,
+          },
+          {
+            field: "status" as const,
+            previousValue: existing.status ?? null,
+            nextValue: input.status ?? null,
+          },
+        ] satisfies Array<{
+          field: "title" | "description" | "status";
+          previousValue: string | null;
+          nextValue: string | null;
+        }>
+      ).filter(
+        (change) =>
+          change.nextValue !== null &&
+          change.previousValue !== change.nextValue,
+      );
+
+      if (changedFields.length > 0) {
+        await ctx.db.insert(activities).values(
+          changedFields.map((change) => ({
+            workItemId: input.id,
+            userId: ctx.session.user.id,
+            type: "status_changed" as const,
+            fromValue: change.previousValue,
+            toValue: change.nextValue,
+            metadata: { field: change.field },
+          })),
+        );
+      }
+
+      return nextWorkItem;
+    });
 
 const buildListActivitiesProcedure = <T extends WorkItemProcedureBuilder>(
   procedure: T,
@@ -535,17 +601,21 @@ const buildListCurrentArtifactsProcedure = <T extends WorkItemProcedureBuilder>(
   procedure
     .input(listCurrentArtifactsInputSchema)
     .query(async ({ ctx, input }) => {
-    await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
+      await loadAccessibleWorkItem(
+        ctx.db,
+        ctx.session.user.id,
+        input.workItemId,
+      );
 
-    // ── Local DB path ─────────────────────────────────────────────────
+      // ── Local DB path ─────────────────────────────────────────────────
       return ctx.db.query.workItemArtifacts.findMany({
-      where: and(
-        eq(workItemArtifacts.workItemId, input.workItemId),
-        eq(workItemArtifacts.isCurrent, true),
-      ),
-      orderBy: desc(workItemArtifacts.createdAt),
+        where: and(
+          eq(workItemArtifacts.workItemId, input.workItemId),
+          eq(workItemArtifacts.isCurrent, true),
+        ),
+        orderBy: desc(workItemArtifacts.createdAt),
+      });
     });
-  });
 
 const buildListChildArtifactGroupsProcedure = <
   T extends WorkItemProcedureBuilder,
@@ -555,34 +625,34 @@ const buildListChildArtifactGroupsProcedure = <
   procedure
     .input(listChildArtifactGroupsInputSchema)
     .query(async ({ ctx, input }) => {
-    await loadAccessibleWorkItem(
-      ctx.db,
-      ctx.session.user.id,
-      input.parentWorkItemId,
-    );
+      await loadAccessibleWorkItem(
+        ctx.db,
+        ctx.session.user.id,
+        input.parentWorkItemId,
+      );
 
-    // ── Local DB path ─────────────────────────────────────────────────
-    const children: any[] = await ctx.db.query.workItems.findMany({
-      where: eq(workItems.parentId, input.parentWorkItemId),
-      orderBy: desc(workItems.updatedAt),
-    });
+      // ── Local DB path ─────────────────────────────────────────────────
+      const children: any[] = await ctx.db.query.workItems.findMany({
+        where: eq(workItems.parentId, input.parentWorkItemId),
+        orderBy: desc(workItems.updatedAt),
+      });
 
-    const groups = await Promise.all(
-      children.map(async (child: any) => {
-        const artifacts = await ctx.db.query.workItemArtifacts.findMany({
-          where: and(
-            eq(workItemArtifacts.workItemId, child.id),
-            eq(workItemArtifacts.isCurrent, true),
-          ),
-          orderBy: desc(workItemArtifacts.createdAt),
-        });
+      const groups = await Promise.all(
+        children.map(async (child: any) => {
+          const artifacts = await ctx.db.query.workItemArtifacts.findMany({
+            where: and(
+              eq(workItemArtifacts.workItemId, child.id),
+              eq(workItemArtifacts.isCurrent, true),
+            ),
+            orderBy: desc(workItemArtifacts.createdAt),
+          });
 
-        return {
-          workItem: child,
-          artifacts,
-        };
-      }),
-    );
+          return {
+            workItem: child,
+            artifacts,
+          };
+        }),
+      );
 
       return groups.filter((group: any) => group.artifacts.length > 0);
     });
@@ -593,20 +663,20 @@ const buildListNotificationsProcedure = <T extends WorkItemProcedureBuilder>(
   procedure
     .input(listNotificationsInputSchema)
     .query(async ({ ctx, input }) => {
-    const filters = [
-      eq(notifications.userId, ctx.session.user.id),
-      isNull(notifications.archivedAt),
-    ];
+      const filters = [
+        eq(notifications.userId, ctx.session.user.id),
+        isNull(notifications.archivedAt),
+      ];
 
-    if (input.unreadOnly) {
-      filters.push(eq(notifications.read, false));
-    }
+      if (input.unreadOnly) {
+        filters.push(eq(notifications.read, false));
+      }
 
-    const items = await ctx.db.query.notifications.findMany({
-      where: and(...filters),
-      orderBy: desc(notifications.createdAt),
-      limit: input.limit,
-    });
+      const items = await ctx.db.query.notifications.findMany({
+        where: and(...filters),
+        orderBy: desc(notifications.createdAt),
+        limit: input.limit,
+      });
 
       return { items };
     });
@@ -617,18 +687,18 @@ const buildCreateNotificationProcedure = <T extends WorkItemProcedureBuilder>(
   procedure
     .input(createNotificationInputSchema)
     .mutation(async ({ ctx, input }) => {
-    const [notification] = await ctx.db
-      .insert(notifications)
-      .values({
-        userId: input.userId,
-        workItemId: input.workItemId ?? null,
-        actorId: input.actorId ?? null,
-        type: input.type,
-        title: input.title,
-        body: input.body ?? null,
-        url: input.url ?? null,
-      })
-      .returning();
+      const [notification] = await ctx.db
+        .insert(notifications)
+        .values({
+          userId: input.userId,
+          workItemId: input.workItemId ?? null,
+          actorId: input.actorId ?? null,
+          type: input.type,
+          title: input.title,
+          body: input.body ?? null,
+          url: input.url ?? null,
+        })
+        .returning();
 
       return notification;
     });
@@ -641,31 +711,34 @@ const buildMarkNotificationAsReadProcedure = <
   procedure
     .input(markNotificationAsReadInputSchema)
     .mutation(async ({ ctx, input }) => {
-    const [notification] = await ctx.db
-      .update(notifications)
-      .set({
-        read: true,
-        readAt: new Date().toISOString(),
-      })
-      .where(
-        and(
-          eq(notifications.id, input.id),
-          eq(notifications.userId, ctx.session.user.id),
-        ),
-      )
-      .returning();
+      const [notification] = await ctx.db
+        .update(notifications)
+        .set({
+          read: true,
+          readAt: new Date().toISOString(),
+        })
+        .where(
+          and(
+            eq(notifications.id, input.id),
+            eq(notifications.userId, ctx.session.user.id),
+          ),
+        )
+        .returning();
 
       return notification;
     });
 
 const listWorkItemsProcedure = buildListWorkItemsProcedure(protectedProcedure);
 const getWorkItemProcedure = buildGetWorkItemProcedure(protectedProcedure);
-const updateWorkItemProcedure = buildUpdateWorkItemProcedure(protectedProcedure);
+const updateWorkItemProcedure =
+  buildUpdateWorkItemProcedure(protectedProcedure);
 const listCommentsProcedure = buildListCommentsProcedure(protectedProcedure);
 const createCommentProcedure = buildCreateCommentProcedure(protectedProcedure);
-const createArtifactProcedure = buildCreateArtifactProcedure(protectedProcedure);
+const createArtifactProcedure =
+  buildCreateArtifactProcedure(protectedProcedure);
 const promoteToTaskProcedure = buildPromoteToTaskProcedure(protectedProcedure);
-const listActivitiesProcedure = buildListActivitiesProcedure(protectedProcedure);
+const listActivitiesProcedure =
+  buildListActivitiesProcedure(protectedProcedure);
 const listCurrentArtifactsProcedure =
   buildListCurrentArtifactsProcedure(protectedProcedure);
 const listChildArtifactGroupsProcedure =
@@ -735,9 +808,8 @@ export const notificationRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const { registerPushToken } = await import(
-        "../services/push/pushService"
-      );
+      const { registerPushToken } =
+        await import("../services/push/pushService");
       return registerPushToken({
         userId: ctx.session.user.id,
         expoPushToken: input.token,
@@ -755,7 +827,11 @@ export const taskRunRouter = {
       }),
     )
     .query(async ({ ctx, input }) => {
-      await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
+      await loadAccessibleWorkItem(
+        ctx.db,
+        ctx.session.user.id,
+        input.workItemId,
+      );
 
       const runs = await ctx.db.query.taskRuns.findMany({
         where: and(
@@ -802,9 +878,8 @@ export const taskRunRouter = {
         id: workItem.id,
       });
 
-      const { executeTask } = await import(
-        "@bob/execution/runtime/taskExecutor"
-      );
+      const { executeTask } =
+        await import("@bob/execution/runtime/taskExecutor");
 
       const result = await executeTask(
         ctx.session.user.id,
@@ -835,7 +910,11 @@ export const taskRunRouter = {
       }),
     )
     .query(async ({ ctx, input }) => {
-      await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
+      await loadAccessibleWorkItem(
+        ctx.db,
+        ctx.session.user.id,
+        input.workItemId,
+      );
 
       const events = await ctx.db
         .select({

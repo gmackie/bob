@@ -3,9 +3,11 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { TRPCRouterRecord } from "@trpc/server";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod/v4";
 
 import { and, eq, isNull, sql } from "@bob/db";
+import { assertUserQuota, QuotaExceededError } from "@bob/db/quotas";
 import {
   apiKeys,
   gitProviderConnections,
@@ -18,6 +20,17 @@ import {
   isEncryptionConfigured,
 } from "../services/crypto/tokenVault";
 import { protectedProcedure } from "../trpc";
+
+function quotaError(error: unknown) {
+  if (error instanceof QuotaExceededError) {
+    return new TRPCError({
+      code: "FORBIDDEN",
+      message: error.message,
+    });
+  }
+
+  return error;
+}
 
 const CONFIG_ROOT_IDS = [
   "opencode_xdg",
@@ -165,12 +178,20 @@ export const settingsRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      try {
+        await assertUserQuota(ctx.db, ctx.session.user.id, "apiKeys");
+      } catch (error) {
+        throw quotaError(error);
+      }
+
       const key = generateApiKey();
       const keyHash = hashApiKey(key);
       const keyPrefix = getKeyPrefix(key);
 
       const expiresAt = input.expiresInDays
-        ? new Date(Date.now() + input.expiresInDays * 24 * 60 * 60 * 1000).toISOString()
+        ? new Date(
+            Date.now() + input.expiresInDays * 24 * 60 * 60 * 1000,
+          ).toISOString()
         : null;
 
       const [created] = await ctx.db
@@ -217,13 +238,41 @@ export const settingsRouter = {
 
   listConfigRoots: protectedProcedure.query(async () => {
     const roots: Array<{ id: ConfigRootId; label: string; dir: string }> = [
-      { id: "opencode_xdg", label: "OpenCode (XDG config)", dir: getConfigRootDir("opencode_xdg") },
-      { id: "opencode_dot", label: "OpenCode (.opencode)", dir: getConfigRootDir("opencode_dot") },
-      { id: "claude_dot", label: "Claude (.claude)", dir: getConfigRootDir("claude_dot") },
-      { id: "codex_dot", label: "Codex (.codex)", dir: getConfigRootDir("codex_dot") },
-      { id: "gemini_dot", label: "Gemini (.gemini)", dir: getConfigRootDir("gemini_dot") },
-      { id: "kiro_dot", label: "Kiro (.kiro)", dir: getConfigRootDir("kiro_dot") },
-      { id: "cursor_agent_dot", label: "Cursor Agent (.cursor-agent)", dir: getConfigRootDir("cursor_agent_dot") },
+      {
+        id: "opencode_xdg",
+        label: "OpenCode (XDG config)",
+        dir: getConfigRootDir("opencode_xdg"),
+      },
+      {
+        id: "opencode_dot",
+        label: "OpenCode (.opencode)",
+        dir: getConfigRootDir("opencode_dot"),
+      },
+      {
+        id: "claude_dot",
+        label: "Claude (.claude)",
+        dir: getConfigRootDir("claude_dot"),
+      },
+      {
+        id: "codex_dot",
+        label: "Codex (.codex)",
+        dir: getConfigRootDir("codex_dot"),
+      },
+      {
+        id: "gemini_dot",
+        label: "Gemini (.gemini)",
+        dir: getConfigRootDir("gemini_dot"),
+      },
+      {
+        id: "kiro_dot",
+        label: "Kiro (.kiro)",
+        dir: getConfigRootDir("kiro_dot"),
+      },
+      {
+        id: "cursor_agent_dot",
+        label: "Cursor Agent (.cursor-agent)",
+        dir: getConfigRootDir("cursor_agent_dot"),
+      },
     ];
 
     // Best-effort existence check.

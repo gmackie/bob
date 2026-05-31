@@ -5,9 +5,11 @@
  */
 import { createHash, randomBytes } from "crypto";
 import type { TRPCRouterRecord } from "@trpc/server";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod/v4";
 
 import { and, eq, isNull, sql } from "@bob/db";
+import { assertUserQuota, QuotaExceededError } from "@bob/db/quotas";
 import {
   apiKeys,
   gitProviderConnections,
@@ -16,8 +18,8 @@ import {
 } from "@bob/db/schema";
 
 import {
-  encryptToken,
   decryptToken,
+  encryptToken,
   isEncryptionConfigured,
 } from "../services/crypto/tokenVault";
 import { protectedProcedure } from "../trpc";
@@ -34,6 +36,17 @@ function hashApiKey(key: string): string {
 
 function getKeyPrefix(key: string): string {
   return key.substring(0, 12);
+}
+
+function quotaError(error: unknown) {
+  if (error instanceof QuotaExceededError) {
+    return new TRPCError({
+      code: "FORBIDDEN",
+      message: error.message,
+    });
+  }
+
+  return error;
 }
 
 export const settingsEdgeRouter: TRPCRouterRecord = {
@@ -109,12 +122,20 @@ export const settingsEdgeRouter: TRPCRouterRecord = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      try {
+        await assertUserQuota(ctx.db, ctx.session.user.id, "apiKeys");
+      } catch (error) {
+        throw quotaError(error);
+      }
+
       const key = generateApiKey();
       const keyHash = hashApiKey(key);
       const keyPrefix = getKeyPrefix(key);
 
       const expiresAt = input.expiresInDays
-        ? new Date(Date.now() + input.expiresInDays * 24 * 60 * 60 * 1000).toISOString()
+        ? new Date(
+            Date.now() + input.expiresInDays * 24 * 60 * 60 * 1000,
+          ).toISOString()
         : null;
 
       const [created] = await ctx.db
@@ -185,11 +206,16 @@ export const settingsEdgeRouter: TRPCRouterRecord = {
     )
     .mutation(async ({ ctx, input }) => {
       if (!isEncryptionConfigured()) {
-        throw new Error("Token encryption not configured (GIT_TOKEN_ENCRYPTION_KEY)");
+        throw new Error(
+          "Token encryption not configured (GIT_TOKEN_ENCRYPTION_KEY)",
+        );
       }
 
       // Validate token by calling ForgeGraph API
-      const fgServer = process.env.FORGEGRAPH_URL ?? process.env.FG_API_URL ?? "https://forgegraf.com";
+      const fgServer =
+        process.env.FORGEGRAPH_URL ??
+        process.env.FG_API_URL ??
+        "https://forgegraf.com";
       const resp = await fetch(`${fgServer}/api/fg/apps`, {
         headers: { Authorization: `Bearer ${input.apiToken}` },
       });

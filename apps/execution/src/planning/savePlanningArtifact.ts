@@ -1,8 +1,9 @@
+import { createHash } from "node:crypto";
+
 import { and, eq } from "@bob/db";
 import { db } from "@bob/db/client";
-import { workItemArtifacts } from "@bob/db/schema";
-
-import { createHash } from "node:crypto";
+import { assertWorkspaceQuota } from "@bob/db/quotas";
+import { workItemArtifacts, workItems } from "@bob/db/schema";
 
 export interface SavePlanningArtifactInput {
   /** The planning chat session that produced this artifact. */
@@ -66,6 +67,15 @@ export async function savePlanningArtifact(
 
     return { id: existing.id, created: false };
   }
+
+  const workItem = db.query.workItems?.findFirst
+    ? await db.query.workItems.findFirst({
+        where: eq(workItems.id, input.workItemId),
+        columns: { workspaceId: true },
+      })
+    : null;
+
+  await assertWorkspaceQuota(db, workItem?.workspaceId, "artifacts");
 
   // Mark any prior planning_doc artifacts for this work item as non-current
   await db

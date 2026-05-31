@@ -1,8 +1,11 @@
-import { NextResponse } from "next/server";
 import { createHash, randomBytes } from "node:crypto";
+import { NextResponse } from "next/server";
+
+import { and, eq } from "@bob/db";
 import { db } from "@bob/db/client";
-import { eq, and } from "@bob/db";
+import { assertUserQuota, QuotaExceededError } from "@bob/db/quotas";
 import { apiKeys, deviceCodes } from "@bob/db/schema";
+
 import { getSession } from "~/auth/server";
 
 export async function POST(request: Request) {
@@ -16,10 +19,7 @@ export async function POST(request: Request) {
     const { userCode } = body;
 
     if (!userCode || typeof userCode !== "string") {
-      return NextResponse.json(
-        { error: "Missing userCode" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "Missing userCode" }, { status: 400 });
     }
 
     // Atomic check-and-set: only approve if still pending.
@@ -54,6 +54,21 @@ export async function POST(request: Request) {
         .set({ status: "expired" })
         .where(eq(deviceCodes.id, updated.id));
       return NextResponse.json({ error: "Code expired" }, { status: 410 });
+    }
+
+    try {
+      await assertUserQuota(db, session.user.id, "apiKeys");
+    } catch (error) {
+      await db
+        .update(deviceCodes)
+        .set({ status: "pending" })
+        .where(eq(deviceCodes.id, updated.id));
+
+      if (error instanceof QuotaExceededError) {
+        return NextResponse.json({ error: error.message }, { status: 403 });
+      }
+
+      throw error;
     }
 
     // Generate API key

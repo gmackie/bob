@@ -1,6 +1,8 @@
 import { createHmac, randomUUID } from "node:crypto";
+
 import { and, eq } from "@bob/db";
 import { db } from "@bob/db/client";
+import { assertWorkspaceQuota } from "@bob/db/quotas";
 import { webhookConfigs, webhookDeliveries } from "@bob/db/schema";
 
 const MAX_RETRIES = 3;
@@ -12,7 +14,9 @@ const DELIVERY_TIMEOUT_MS = 10_000;
  * Returns the signature in "sha256=<hex>" format (GitHub-style).
  */
 function signPayload(payload: string, secret: string): string {
-  const hmac = createHmac("sha256", secret).update(payload, "utf8").digest("hex");
+  const hmac = createHmac("sha256", secret)
+    .update(payload, "utf8")
+    .digest("hex");
   return `sha256=${hmac}`;
 }
 
@@ -53,7 +57,13 @@ export async function emitWebhookEvent(
   return results.map((r) =>
     r.status === "fulfilled"
       ? r.value
-      : { deliveryId: "", configId: "", statusCode: null, success: false, error: String(r.reason) },
+      : {
+          deliveryId: "",
+          configId: "",
+          statusCode: null,
+          success: false,
+          error: String(r.reason),
+        },
   );
 }
 
@@ -81,10 +91,21 @@ async function getMatchingConfigs(
 }
 
 async function deliverToConfig(
-  config: { id: string; url: string; secret: string },
+  config: {
+    id: string;
+    url: string;
+    secret: string;
+    workspaceId?: string | null;
+  },
   eventType: string,
   envelope: Record<string, unknown>,
 ): Promise<DeliveryResult> {
+  await assertWorkspaceQuota(
+    db,
+    config.workspaceId,
+    "monthlyWebhookDeliveries",
+  );
+
   const deliveryUuid = randomUUID();
   const body = JSON.stringify(envelope);
   const signature = signPayload(body, config.secret);

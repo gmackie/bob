@@ -1,5 +1,6 @@
 import { and, desc, eq } from "@bob/db";
 import { db } from "@bob/db/client";
+import { assertWorkspaceQuota } from "@bob/db/quotas";
 import {
   chatConversations,
   chatMessages,
@@ -135,7 +136,8 @@ export async function findRepositoryForTask(
 
   if (task.repository?.id) {
     const exactMatch = repos.find(
-      (repo: typeof repositories.$inferSelect) => repo.id === task.repository?.id,
+      (repo: typeof repositories.$inferSelect) =>
+        repo.id === task.repository?.id,
     );
     if (exactMatch) {
       return {
@@ -187,13 +189,17 @@ export async function findRepositoryForTask(
 
   for (const label of task.labels) {
     const normalizedLabel = label.toLowerCase().replace(/[^a-z0-9]/g, "");
-    const matchingRepo = repos.find((repo: typeof repositories.$inferSelect) => {
-      const normalizedName = repo.name.toLowerCase().replace(/[^a-z0-9]/g, "");
-      return (
-        normalizedName.includes(normalizedLabel) ||
-        normalizedLabel.includes(normalizedName)
-      );
-    });
+    const matchingRepo = repos.find(
+      (repo: typeof repositories.$inferSelect) => {
+        const normalizedName = repo.name
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "");
+        return (
+          normalizedName.includes(normalizedLabel) ||
+          normalizedLabel.includes(normalizedName)
+        );
+      },
+    );
     if (matchingRepo) {
       return {
         repositoryId: matchingRepo.id,
@@ -223,6 +229,9 @@ export async function executeTask(
     agentType?: string;
   },
 ): Promise<TaskExecutionResult> {
+  await assertWorkspaceQuota(db, task.workspaceId, "monthlyTaskRuns");
+  await assertWorkspaceQuota(db, task.workspaceId, "activeAgents");
+
   const repoInfo = await findRepositoryForTask(userId, task);
 
   if (!repoInfo) {
@@ -331,20 +340,26 @@ export async function executeTask(
   }
 
   // Fire-and-forget: write run_started lifecycle event
-  void db.insert(runLifecycleEvents).values({
-    taskRunId: insertedTaskRun.id,
-    workItemId: task.id,
-    sessionId: insertedSession.id,
-    eventType: "run_started",
-    phase: "execute",
-    metadata: {
-      agentType: selectedAgent,
-      branch,
-      taskIdentifier: task.identifier,
-    },
-  }).catch((err: unknown) =>
-    console.warn("[taskExecutor] Failed to write run_started lifecycle event:", err),
-  );
+  void db
+    .insert(runLifecycleEvents)
+    .values({
+      taskRunId: insertedTaskRun.id,
+      workItemId: task.id,
+      sessionId: insertedSession.id,
+      eventType: "run_started",
+      phase: "execute",
+      metadata: {
+        agentType: selectedAgent,
+        branch,
+        taskIdentifier: task.identifier,
+      },
+    })
+    .catch((err: unknown) =>
+      console.warn(
+        "[taskExecutor] Failed to write run_started lifecycle event:",
+        err,
+      ),
+    );
 
   // Report to ForgeGraph (fire and forget)
   void reportForgeGraphCreated(db, {
@@ -605,6 +620,9 @@ async function reportForgeGraphCreated(
 
     console.log(`[forgegraph] Reported 'created' for task run ${taskRun.id}`);
   } catch (err) {
-    console.error(`[forgegraph] Failed to report 'created' for ${taskRun.id}:`, err);
+    console.error(
+      `[forgegraph] Failed to report 'created' for ${taskRun.id}:`,
+      err,
+    );
   }
 }

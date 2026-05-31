@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod/v4";
 
 import { and, desc, eq, inArray, ne, sql } from "@bob/db";
+import { assertWorkspaceQuota, QuotaExceededError } from "@bob/db/quotas";
 import {
   chatConversations,
   planDraftDependencies,
@@ -17,14 +18,32 @@ import {
 } from "@bob/db/schema";
 
 import {
+  isForgeGraphEnabled,
+  requireForgeGraphClient,
+} from "../services/forgegraph/config";
+import { cacheMapping } from "../services/forgegraph/idResolver";
+import {
   getPlanningApiKey,
   getPlanningBaseUrl,
 } from "../services/integrations/planningRemoteConfig";
-import { isForgeGraphEnabled, requireForgeGraphClient } from "../services/forgegraph/config";
-import { cacheMapping } from "../services/forgegraph/idResolver";
 import { protectedProcedure } from "../trpc";
 
-async function assertWorkspaceAccess(db: any, userId: string, workspaceId: string) {
+function quotaError(error: unknown) {
+  if (error instanceof QuotaExceededError) {
+    return new TRPCError({
+      code: "FORBIDDEN",
+      message: error.message,
+    });
+  }
+
+  return error;
+}
+
+async function assertWorkspaceAccess(
+  db: any,
+  userId: string,
+  workspaceId: string,
+) {
   const membership = await db.query.workspaceMembers.findFirst({
     where: and(
       eq(workspaceMembers.workspaceId, workspaceId),
@@ -38,7 +57,11 @@ async function assertWorkspaceAccess(db: any, userId: string, workspaceId: strin
   }
 }
 
-async function loadAccessibleWorkItem(db: any, userId: string, workItemId: string) {
+async function loadAccessibleWorkItem(
+  db: any,
+  userId: string,
+  workItemId: string,
+) {
   const workItem = await db.query.workItems.findFirst({
     where: eq(workItems.id, workItemId),
   });
@@ -51,7 +74,11 @@ async function loadAccessibleWorkItem(db: any, userId: string, workItemId: strin
   return workItem;
 }
 
-async function loadOwnedPlanningSession(db: any, userId: string, sessionId: string) {
+async function loadOwnedPlanningSession(
+  db: any,
+  userId: string,
+  sessionId: string,
+) {
   const session = await db.query.chatConversations.findFirst({
     where: and(
       eq(chatConversations.id, sessionId),
@@ -152,7 +179,9 @@ export const planSessionRouter = {
         });
         if (repo?.path) {
           workingDirectory = repo.path;
-          console.log(`[planSession] Resolved working directory from repo: ${repo.path}`);
+          console.log(
+            `[planSession] Resolved working directory from repo: ${repo.path}`,
+          );
         }
       }
 
@@ -186,7 +215,11 @@ export const planSessionRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      await loadOwnedPlanningSession(ctx.db, ctx.session.user.id, input.sessionId);
+      await loadOwnedPlanningSession(
+        ctx.db,
+        ctx.session.user.id,
+        input.sessionId,
+      );
 
       // Write planning execution context to chat_conversations and mark
       // the session pending so the ws-gateway daemon loop picks it up.
@@ -349,7 +382,16 @@ export const planSessionRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
+      const workItem = await loadAccessibleWorkItem(
+        ctx.db,
+        ctx.session.user.id,
+        input.workItemId,
+      );
+      try {
+        await assertWorkspaceQuota(ctx.db, workItem.workspaceId, "artifacts");
+      } catch (error) {
+        throw quotaError(error);
+      }
 
       const [artifact] = await ctx.db
         .insert(workItemArtifacts)
@@ -378,7 +420,11 @@ export const planSessionRouter = {
       }),
     )
     .query(async ({ ctx, input }) => {
-      await loadAccessibleWorkItem(ctx.db, ctx.session.user.id, input.workItemId);
+      await loadAccessibleWorkItem(
+        ctx.db,
+        ctx.session.user.id,
+        input.workItemId,
+      );
 
       const conditions = [
         eq(workItemArtifacts.workItemId, input.workItemId),
@@ -447,7 +493,11 @@ export const planSessionRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      await loadOwnedPlanningSession(ctx.db, ctx.session.user.id, input.sessionId);
+      await loadOwnedPlanningSession(
+        ctx.db,
+        ctx.session.user.id,
+        input.sessionId,
+      );
 
       const [draft] = await ctx.db
         .insert(planDrafts)
@@ -547,10 +597,7 @@ export const planSessionRouter = {
         .where(
           and(
             eq(planDraftDependencies.draftId, input.draftId),
-            eq(
-              planDraftDependencies.dependsOnDraftId,
-              input.dependsOnDraftId,
-            ),
+            eq(planDraftDependencies.dependsOnDraftId, input.dependsOnDraftId),
           ),
         );
       return { ok: true };
@@ -560,7 +607,11 @@ export const planSessionRouter = {
   commitPlan: protectedProcedure
     .input(z.object({ sessionId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      await loadOwnedPlanningSession(ctx.db, ctx.session.user.id, input.sessionId);
+      await loadOwnedPlanningSession(
+        ctx.db,
+        ctx.session.user.id,
+        input.sessionId,
+      );
 
       const drafts = await ctx.db.query.planDrafts.findMany({
         where: and(
