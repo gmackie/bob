@@ -18,6 +18,7 @@ on:
 
 permissions:
   contents: write  # Required for creating releases and uploading assets
+  id-token: write  # Required for cosign keyless signing
   actions: read
   checks: read
 
@@ -127,6 +128,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
       - name: Upload Linux assets
         run: |
           TAG="${{ needs.prepare-release.outputs.tag_name }}"
@@ -139,15 +143,21 @@ jobs:
 
           # Find and upload assets with proper names
           for appimage in ./dist-electron/*.AppImage; do
-            [ -f "$appimage" ] && gh release upload "${TAG}" "$appimage" --clobber
+            [ -f "$appimage" ] || continue
+            cosign sign-blob --yes --bundle "${appimage}.bundle" "$appimage"
+            gh release upload "${TAG}" "$appimage" "${appimage}.bundle" --clobber
           done
 
           for deb in ./dist-electron/*.deb; do
-            [ -f "$deb" ] && gh release upload "${TAG}" "$deb" --clobber
+            [ -f "$deb" ] || continue
+            cosign sign-blob --yes --bundle "${deb}.bundle" "$deb"
+            gh release upload "${TAG}" "$deb" "${deb}.bundle" --clobber
           done
 
           for rpm in ./dist-electron/*.rpm; do
-            [ -f "$rpm" ] && gh release upload "${TAG}" "$rpm" --clobber
+            [ -f "$rpm" ] || continue
+            cosign sign-blob --yes --bundle "${rpm}.bundle" "$rpm"
+            gh release upload "${TAG}" "$rpm" "${rpm}.bundle" --clobber
           done
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -182,6 +192,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
       - name: Upload Windows assets
         shell: bash
         run: |
@@ -195,7 +208,9 @@ jobs:
 
           # Find and upload Windows assets
           for exe in ./dist-electron/*.exe; do
-            [ -f "$exe" ] && gh release upload "${TAG}" "$exe" --clobber
+            [ -f "$exe" ] || continue
+            cosign sign-blob --yes --bundle "${exe}.bundle" "$exe"
+            gh release upload "${TAG}" "$exe" "${exe}.bundle" --clobber
           done
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -227,6 +242,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
       - name: Upload macOS assets
         run: |
           TAG="${{ needs.prepare-release.outputs.tag_name }}"
@@ -239,11 +257,15 @@ jobs:
 
           # Find and upload macOS assets
           for dmg in ./dist-electron/*.dmg; do
-            [ -f "$dmg" ] && gh release upload "${TAG}" "$dmg" --clobber
+            [ -f "$dmg" ] || continue
+            cosign sign-blob --yes --bundle "${dmg}.bundle" "$dmg"
+            gh release upload "${TAG}" "$dmg" "${dmg}.bundle" --clobber
           done
 
           for zip in ./dist-electron/*.zip; do
-            [ -f "$zip" ] && gh release upload "${TAG}" "$zip" --clobber
+            [ -f "$zip" ] || continue
+            cosign sign-blob --yes --bundle "${zip}.bundle" "$zip"
+            gh release upload "${TAG}" "$zip" "${zip}.bundle" --clobber
           done
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -284,6 +306,16 @@ jobs:
           - \`Bob-${VERSION}.AppImage\` - AppImage
           - \`bob_${VERSION}_amd64.deb\` - Debian Package
           - \`bob-${VERSION}.x86_64.rpm\` - RPM Package
+
+          ### 🔐 Artifact Signatures
+          Release artifacts are signed with cosign keyless signing. Download the matching \`.bundle\` file for an artifact and verify it with:
+
+          \`\`\`bash
+          cosign verify-blob <artifact> \\
+            --bundle <artifact>.bundle \\
+            --certificate-identity-regexp 'https://github.com/.*/.github/workflows/release.yml@refs/tags/v.*' \\
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com
+          \`\`\`
 
           ### 🔧 Requirements
           - Claude Code CLI installed and configured
