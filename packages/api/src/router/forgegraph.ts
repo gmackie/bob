@@ -1,18 +1,21 @@
+import { TRPCError } from "@trpc/server";
 import { z } from "zod/v4";
+
 import { and, desc, eq } from "@bob/db";
 import {
   activities,
   dispatchItems,
-  forgeRevisions,
   forgeBuilds,
   forgeDeployments,
+  forgeRevisions,
   forgeRunEvents,
   projects,
   repositories,
+  runLifecycleEvents,
 } from "@bob/db/schema";
-import { TRPCError } from "@trpc/server";
-import { protectedProcedure } from "../trpc";
+
 import { getForgeGraphClient } from "../services/forgegraph/config";
+import { protectedProcedure } from "../trpc";
 
 export const forgegraphRouter = {
   listRevisions: protectedProcedure
@@ -359,6 +362,39 @@ export const forgegraphRouter = {
         .set({ pipelineState: "deploying_prod" })
         .where(eq(dispatchItems.id, item.id));
 
+      if (revision.taskId) {
+        await ctx.db.insert(activities).values({
+          workItemId: revision.taskId,
+          userId: ctx.session.user.id,
+          type: "deploy_status_changed",
+          fromValue: "awaiting_prod_approval",
+          toValue: "deploying_prod",
+          metadata: {
+            deploymentId: deployment!.id,
+            dispatchItemId: item.id,
+            environment: "prod",
+            revisionId: revision.id,
+            approvedByUserId: ctx.session.user.id,
+          },
+        });
+      }
+
+      if (revision.taskRunId) {
+        await ctx.db.insert(runLifecycleEvents).values({
+          taskRunId: revision.taskRunId,
+          workItemId: revision.taskId,
+          eventType: "prod_deploy_approved",
+          phase: "deploy",
+          metadata: {
+            deploymentId: deployment!.id,
+            dispatchItemId: item.id,
+            environment: "prod",
+            revisionId: revision.id,
+            approvedByUserId: ctx.session.user.id,
+          },
+        });
+      }
+
       return deployment!;
     }),
 
@@ -434,7 +470,10 @@ export const forgegraphRouter = {
         const gitMatch = app.flakeRef.match(/git\+?(https?:\/\/[^?#]+)/);
         if (gitMatch) {
           remoteUrl = gitMatch[1]!;
-          const pathParts = new URL(remoteUrl).pathname.replace(/\.git$/, "").split("/").filter(Boolean);
+          const pathParts = new URL(remoteUrl).pathname
+            .replace(/\.git$/, "")
+            .split("/")
+            .filter(Boolean);
           if (pathParts.length >= 2) {
             remoteOwner = pathParts[0]!;
             remoteName = pathParts[1]!;
@@ -458,18 +497,21 @@ export const forgegraphRouter = {
 
       // Create a repository record so executeTask can find it
       if (remoteUrl && project) {
-        await ctx.db.insert(repositories).values({
-          userId: ctx.session.user.id,
-          planningProjectId: project.id,
-          name: remoteName ?? app.name,
-          path: `/repos/${app.slug}`,
-          branch: mainBranch,
-          mainBranch,
-          remoteUrl,
-          remoteProvider: "gitea",
-          remoteOwner,
-          remoteName,
-        }).onConflictDoNothing();
+        await ctx.db
+          .insert(repositories)
+          .values({
+            userId: ctx.session.user.id,
+            planningProjectId: project.id,
+            name: remoteName ?? app.name,
+            path: `/repos/${app.slug}`,
+            branch: mainBranch,
+            mainBranch,
+            remoteUrl,
+            remoteProvider: "gitea",
+            remoteOwner,
+            remoteName,
+          })
+          .onConflictDoNothing();
       }
 
       return project;

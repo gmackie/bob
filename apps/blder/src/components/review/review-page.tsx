@@ -2,17 +2,30 @@
 "use client";
 
 import { useState } from "react";
-import { PipelineRail, type PipelineNode } from "./pipeline-rail";
-import { TaskSelector, type TaskTab } from "./task-selector";
-import { CodeReviewCard, type CodeReviewData } from "./code-review-card";
-import { GateRow, type Gate } from "./gate-row";
-import { BuildDetailCard, type BuildData } from "./build-detail-card";
-import { TestReportViewer, type TestReportData } from "./test-report-viewer";
-import { ArtifactPanel, type ArtifactItem } from "./artifact-panel";
-import { EnvironmentLanes } from "./environment-lanes";
-import { ApprovalGateCard } from "./approval-gate-card";
-import { ErrorDetailCard } from "./error-detail-card";
+import { useRouter } from "next/navigation";
+import { useMutation } from "@tanstack/react-query";
+
+import { toast } from "@bob/ui/toast";
+
+import type { ArtifactItem } from "./artifact-panel";
+import type { BuildData } from "./build-detail-card";
+import type { CodeReviewData } from "./code-review-card";
+import type { Gate } from "./gate-row";
+import type { PipelineNode } from "./pipeline-rail";
+import type { TaskTab } from "./task-selector";
+import type { TestReportData } from "./test-report-viewer";
 import { formatLabel } from "~/lib/design/colors";
+import { useTRPC } from "~/trpc/react";
+import { ApprovalGateCard } from "./approval-gate-card";
+import { ArtifactPanel } from "./artifact-panel";
+import { BuildDetailCard } from "./build-detail-card";
+import { CodeReviewCard } from "./code-review-card";
+import { EnvironmentLanes } from "./environment-lanes";
+import { ErrorDetailCard } from "./error-detail-card";
+import { GateRow } from "./gate-row";
+import { PipelineRail } from "./pipeline-rail";
+import { TaskSelector } from "./task-selector";
+import { TestReportViewer } from "./test-report-viewer";
 
 // ---------- prop types ----------
 interface DispatchItemData {
@@ -53,31 +66,62 @@ export interface ReviewPageProps {
 // ---------- helpers ----------
 const PIPELINE_STAGES = [
   { name: "Agent", statePrefix: null, anchorId: "section-agent" },
-  { name: "Review", statePrefix: "awaiting_review", anchorId: "section-review" },
+  {
+    name: "Review",
+    statePrefix: "awaiting_review",
+    anchorId: "section-review",
+  },
   { name: "Build", statePrefix: "building", anchorId: "section-build" },
   { name: "Gates", statePrefix: "gates_passed", anchorId: "section-gates" },
   { name: "Dev", statePrefix: "deploying_dev", anchorId: "section-dev" },
-  { name: "Staging", statePrefix: "deploying_staging", anchorId: "section-staging" },
-  { name: "Approve", statePrefix: "awaiting_prod_approval", anchorId: "section-approve" },
+  {
+    name: "Staging",
+    statePrefix: "deploying_staging",
+    anchorId: "section-staging",
+  },
+  {
+    name: "Approve",
+    statePrefix: "awaiting_prod_approval",
+    anchorId: "section-approve",
+  },
   { name: "Prod", statePrefix: "deploying_prod", anchorId: "section-prod" },
   { name: "Complete", statePrefix: "complete", anchorId: "section-complete" },
 ] as const;
 
 const STATE_ORDER = [
-  "agent_complete", "awaiting_review", "building", "gates_passed",
-  "deploying_dev", "dev_healthy", "deploying_staging", "staging_healthy",
-  "awaiting_prod_approval", "deploying_prod", "prod_healthy", "complete",
+  "agent_complete",
+  "awaiting_review",
+  "building",
+  "gates_passed",
+  "deploying_dev",
+  "dev_healthy",
+  "deploying_staging",
+  "staging_healthy",
+  "awaiting_prod_approval",
+  "deploying_prod",
+  "prod_healthy",
+  "complete",
 ];
 
 const FAILED_STATES = ["build_failed", "deploy_failed", "review_failed"];
-const ACTIVE_STATES = ["building", "deploying_dev", "deploying_staging", "deploying_prod"];
+const ACTIVE_STATES = [
+  "building",
+  "deploying_dev",
+  "deploying_staging",
+  "deploying_prod",
+];
 
-function deriveNodeStatus(stageIndex: number, currentIndex: number, pipelineState: string | null): "done" | "active" | "failed" | "pending" | "approval" {
+function deriveNodeStatus(
+  stageIndex: number,
+  currentIndex: number,
+  pipelineState: string | null,
+): "done" | "active" | "failed" | "pending" | "approval" {
   if (!pipelineState) return stageIndex === 0 ? "active" : "pending";
   if (FAILED_STATES.includes(pipelineState)) {
     // Failed state — find which stage it maps to
     if (pipelineState === "build_failed" && stageIndex === 2) return "failed";
-    if (pipelineState === "deploy_failed" && stageIndex >= 4 && stageIndex <= 7) return "failed";
+    if (pipelineState === "deploy_failed" && stageIndex >= 4 && stageIndex <= 7)
+      return "failed";
     if (pipelineState === "review_failed" && stageIndex === 1) return "failed";
     if (stageIndex < currentIndex) return "done";
     return "pending";
@@ -121,8 +165,23 @@ function buildPipelineNodes(pipelineState: string | null): PipelineNode[] {
 
 // ---------- component ----------
 export function ReviewPage(props: ReviewPageProps) {
+  const router = useRouter();
+  const trpc = useTRPC();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(
     props.items.length === 1 ? props.items[0]!.id : null,
+  );
+  const approveProd = useMutation(
+    trpc.forgegraph.approveProdDeploy.mutationOptions({
+      onSuccess: () => {
+        toast("Production deploy approved");
+        router.refresh();
+      },
+      onError: (err) => {
+        toast(err.message, {
+          style: { background: "#1a0000", borderColor: "#f43f5e40" },
+        });
+      },
+    }),
   );
 
   // Determine which items to show
@@ -140,11 +199,16 @@ export function ReviewPage(props: ReviewPageProps) {
       }, props.items[0]);
 
   const pipelineNodes = buildPipelineNodes(primaryItem?.pipelineState ?? null);
+  const approvePrimaryItem = () => {
+    if (!primaryItem) return;
+    approveProd.mutate({ dispatchItemId: primaryItem.id });
+  };
 
   // Task tabs
   const taskTabs: TaskTab[] = props.items.map((item) => ({
     id: item.id,
-    label: item.title.length > 30 ? item.title.slice(0, 30) + "..." : item.title,
+    label:
+      item.title.length > 30 ? item.title.slice(0, 30) + "..." : item.title,
     status: item.status as TaskTab["status"],
   }));
 
@@ -154,7 +218,11 @@ export function ReviewPage(props: ReviewPageProps) {
       <PipelineRail nodes={pipelineNodes} />
 
       {/* Task selector */}
-      <TaskSelector tasks={taskTabs} selectedTaskId={selectedTaskId} onSelect={setSelectedTaskId} />
+      <TaskSelector
+        tasks={taskTabs}
+        selectedTaskId={selectedTaskId}
+        onSelect={setSelectedTaskId}
+      />
 
       {/* Main content + sidebar */}
       <div className="mx-auto flex w-full max-w-7xl flex-1 gap-6 px-6 py-8">
@@ -162,14 +230,19 @@ export function ReviewPage(props: ReviewPageProps) {
         <div className="flex-1 space-y-6">
           {/* Header */}
           <div>
-            <h1 className="font-display text-xl font-semibold text-foreground">
+            <h1 className="font-display text-foreground text-xl font-semibold">
               Execution Review
             </h1>
-            <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-              <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{props.workItemIdentifier}</span>
+            <div className="text-muted-foreground mt-1 flex items-center gap-2 text-sm">
+              <span className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
+                {props.workItemIdentifier}
+              </span>
               <span>{props.workItemTitle}</span>
               <span className="text-border">·</span>
-              <span>{props.items.filter(i => i.status === "completed").length}/{props.items.length} tasks done</span>
+              <span>
+                {props.items.filter((i) => i.status === "completed").length}/
+                {props.items.length} tasks done
+              </span>
             </div>
           </div>
 
@@ -249,21 +322,34 @@ export function ReviewPage(props: ReviewPageProps) {
               commitSha={Object.values(props.revisions)[0]?.revId ?? "unknown"}
               evidence={[
                 { label: "Tests pass", passed: true },
-                { label: "Code review approved", passed: Object.values(props.codeReviews).some(r => r.decision === "approve") },
-                { label: "Staging healthy", passed: props.deployments.some(d => d.environment === "staging" && d.status === "healthy") },
+                {
+                  label: "Code review approved",
+                  passed: Object.values(props.codeReviews).some(
+                    (r) => r.decision === "approve",
+                  ),
+                },
+                {
+                  label: "Staging healthy",
+                  passed: props.deployments.some(
+                    (d) =>
+                      d.environment === "staging" && d.status === "healthy",
+                  ),
+                },
               ]}
-              onApprove={() => {/* TODO: wire trpc.forgegraph.approveProdDeploy */}}
-              isApproving={false}
+              onApprove={approvePrimaryItem}
+              isApproving={approveProd.isPending}
             />
           )}
 
           {/* Phase 2: Environment lanes */}
           {props.deployments.length > 0 && (
             <EnvironmentLanes
-              deployments={props.deployments.map(d => ({
+              deployments={props.deployments.map((d) => ({
                 ...d,
                 commitSha: Object.values(props.revisions)[0]?.revId,
               }))}
+              onApprove={primaryItem ? approvePrimaryItem : undefined}
+              isApproving={approveProd.isPending}
             />
           )}
         </div>
@@ -271,24 +357,29 @@ export function ReviewPage(props: ReviewPageProps) {
         {/* Sidebar */}
         <aside className="hidden w-80 shrink-0 space-y-6 lg:block">
           {/* Batch summary */}
-          <div className="rounded-2xl border border-border bg-card px-4 py-4">
-            <h3 className="font-display text-sm font-semibold text-foreground">Dispatch Batch</h3>
+          <div className="border-border bg-card rounded-2xl border px-4 py-4">
+            <h3 className="font-display text-foreground text-sm font-semibold">
+              Dispatch Batch
+            </h3>
             <div className="mt-3 space-y-2">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Status</span>
-                <span className="font-medium text-foreground capitalize">{formatLabel(props.batchStatus)}</span>
+                <span className="text-foreground font-medium capitalize">
+                  {formatLabel(props.batchStatus)}
+                </span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Completed</span>
-                <span className="font-mono text-foreground">
-                  {props.items.filter(i => i.status === "completed").length}/{props.items.length}
+                <span className="text-foreground font-mono">
+                  {props.items.filter((i) => i.status === "completed").length}/
+                  {props.items.length}
                 </span>
               </div>
-              {props.items.some(i => i.status === "failed") && (
+              {props.items.some((i) => i.status === "failed") && (
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Failed</span>
                   <span className="font-mono text-rose-600 dark:text-rose-400">
-                    {props.items.filter(i => i.status === "failed").length}
+                    {props.items.filter((i) => i.status === "failed").length}
                   </span>
                 </div>
               )}
