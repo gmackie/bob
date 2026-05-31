@@ -266,6 +266,9 @@ importers:
       '@bob/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@bob/monitoring':
+        specifier: workspace:*
+        version: link:../../packages/monitoring
       commander:
         specifier: ^12.1.0
         version: 12.1.0
@@ -313,6 +316,9 @@ importers:
       '@bob/legacy':
         specifier: workspace:*
         version: link:../../packages/legacy
+      '@bob/monitoring':
+        specifier: workspace:*
+        version: link:../../packages/monitoring
     devDependencies:
       '@bob/eslint-config':
         specifier: workspace:*
@@ -513,6 +519,9 @@ importers:
       '@bob/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@bob/monitoring':
+        specifier: workspace:*
+        version: link:../../packages/monitoring
       '@bob/ws':
         specifier: workspace:*
         version: link:../../packages/ws
@@ -632,6 +641,9 @@ importers:
       '@bob/execution-lib':
         specifier: workspace:*
         version: link:../execution
+      '@bob/monitoring':
+        specifier: workspace:*
+        version: link:../monitoring
       '@bob/validators':
         specifier: workspace:*
         version: link:../validators

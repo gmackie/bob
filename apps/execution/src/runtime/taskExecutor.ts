@@ -1,6 +1,11 @@
 import { and, desc, eq } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
+  captureException,
+  initObservability,
+  trackEvent,
+} from "@bob/monitoring/server";
+import {
   chatConversations,
   chatMessages,
   forgeRevisions,
@@ -9,6 +14,8 @@ import {
   runLifecycleEvents,
   taskRuns,
 } from "@bob/db/schema";
+
+void initObservability({ serviceName: "execution" });
 
 function getGatewayUrl() {
   return process.env.GATEWAY_URL ?? "http://localhost:3002";
@@ -88,6 +95,19 @@ export async function gatewayRequest(
 
     if (!response.ok) {
       const error = await response.text();
+      void captureException(new Error(`Gateway session-send error: ${error}`), {
+        serviceName: "execution",
+        operation: "gateway_request",
+        route: endpoint,
+        userId,
+        sessionId:
+          typeof body.sessionId === "string" ? body.sessionId : undefined,
+      });
+      void trackEvent("execution_gateway_request_failed", {
+        userId,
+        endpoint,
+        status: response.status,
+      });
       throw new Error(`Gateway session-send error: ${error}`);
     }
 
@@ -103,6 +123,17 @@ export async function gatewayRequest(
 
   if (!response.ok) {
     const error = await response.text();
+    void captureException(new Error(`Gateway error: ${error}`), {
+      serviceName: "execution",
+      operation: "gateway_request",
+      route: endpoint,
+      userId,
+    });
+    void trackEvent("execution_gateway_request_failed", {
+      userId,
+      endpoint,
+      status: response.status,
+    });
     throw new Error(`Gateway error: ${error}`);
   }
 
@@ -327,6 +358,13 @@ export async function executeTask(
       });
     } catch (err) {
       console.warn("[taskExecutor] nudge failed:", err);
+      void captureException(err, {
+        serviceName: "execution",
+        operation: "task_nudge",
+        userId,
+        workspaceId: task.workspaceId,
+        taskId: task.id,
+      });
     }
   }
 
@@ -606,5 +644,12 @@ async function reportForgeGraphCreated(
     console.log(`[forgegraph] Reported 'created' for task run ${taskRun.id}`);
   } catch (err) {
     console.error(`[forgegraph] Failed to report 'created' for ${taskRun.id}:`, err);
+    void captureException(err, {
+      serviceName: "execution",
+      operation: "forgegraph_created_event",
+      taskRunId: taskRun.id,
+      repositoryId: taskRun.repositoryId,
+      workItemId: taskRun.workItemId ?? null,
+    });
   }
 }

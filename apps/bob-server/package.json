@@ -16,6 +16,7 @@
   "dependencies": {
     "@bob/blder": "workspace:*",
     "@bob/db": "workspace:*",
+    "@bob/monitoring": "workspace:*",
     "commander": "^12.1.0"
   },
   "devDependencies": {

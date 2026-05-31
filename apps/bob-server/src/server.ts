@@ -11,11 +11,14 @@ import {
 import { createServer as createNetServer, type AddressInfo } from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { captureException, initObservability } from "@bob/monitoring/server";
 import { createHttpServer } from "./http.js";
 import type { CliArgs } from "./cli.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+void initObservability({ serviceName: "bob-server" });
 
 // apps/bob-server/dist/server.js → ../../blder → apps/blder
 const BLDER_DIR = path.resolve(__dirname, "../../blder");
@@ -72,6 +75,10 @@ export async function startServer(
   child.on("exit", (code, signal) => {
     if (code !== null && code !== 0) {
       console.error(`[bob-server] blder child exited with code ${code}`);
+      void captureException(new Error(`blder child exited with code ${code}`), {
+        serviceName: "bob-server",
+        operation: "blder-child",
+      });
     } else if (signal) {
       console.error(`[bob-server] blder child exited via signal ${signal}`);
     }
@@ -80,6 +87,10 @@ export async function startServer(
   try {
     await waitForPort("127.0.0.1", internalPort, 30_000);
   } catch (err) {
+    void captureException(err, {
+      serviceName: "bob-server",
+      operation: "blder-startup",
+    });
     child.kill("SIGTERM");
     throw err;
   }
@@ -220,6 +231,11 @@ function proxyToInternal(
     );
     upstream.on("error", (err) => {
       console.error("[bob-server] proxy error:", err);
+      void captureException(err, {
+        serviceName: "bob-server",
+        operation: "proxy",
+        route: req.url ?? "unknown",
+      });
       if (!res.headersSent) {
         res.statusCode = 502;
         res.setHeader("content-type", "text/plain; charset=utf-8");

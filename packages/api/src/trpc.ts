@@ -6,18 +6,33 @@ import {
   type ApiKeyAuth,
   type ApiKeyPermission,
   type Auth,
+  type RequestAuthContext,
   resolveRequestAuthContext,
 } from "@bob/auth";
 import { eq } from "@bob/db";
 import { db } from "@bob/db/client";
-import { user } from "@bob/db/schema";
+import { user, workspaces } from "@bob/db/schema";
+import {
+  captureException,
+  identifyUserTenant,
+  setObservabilityContext,
+} from "@bob/monitoring/server";
+import type { ObservabilityContext } from "@bob/monitoring/server";
 
 const DEFAULT_USER_ID = "default-user";
+
+type TRPCContext = {
+  authApi: Auth["api"];
+  session: RequestAuthContext["session"];
+  apiKeyAuth: ApiKeyAuth | null;
+  db: typeof db;
+  observability?: ObservabilityContext;
+};
 
 export const createTRPCContext = async (opts: {
   headers: Headers;
   auth: Auth;
-}) => {
+}): Promise<TRPCContext> => {
   const authApi = opts.auth.api;
   let defaultUser:
     | {
@@ -46,12 +61,31 @@ export const createTRPCContext = async (opts: {
     defaultUser,
     headers: opts.headers,
   });
+  const workspaceId = authContext.workspace.workspaceId;
+  const [workspace] = workspaceId
+    ? await db
+        .select({ tenantId: workspaces.tenantId })
+        .from(workspaces)
+        .where(eq(workspaces.id, workspaceId))
+        .limit(1)
+    : [];
+  const observability = {
+    userId: authContext.session?.user.id ?? null,
+    userEmail: authContext.session?.user.email ?? null,
+    tenantId: workspace?.tenantId ?? null,
+    workspaceId,
+    projectId: authContext.workspace.projectId,
+  };
+
+  void setObservabilityContext(observability);
+  void identifyUserTenant(observability);
 
   return {
     authApi,
     session: authContext.session,
     apiKeyAuth: authContext.apiKeyAuth as ApiKeyAuth | null,
     db,
+    observability,
   };
 };
 /**
@@ -93,7 +127,7 @@ export const createTRPCRouter = t.router;
  * You can remove this if you don't like it, but it can help catch unwanted waterfalls by simulating
  * network latency that would occur in production but not in local development.
  */
-const timingMiddleware = t.middleware(async ({ next, path }) => {
+const timingMiddleware = t.middleware(async ({ ctx, next, path }) => {
   const start = Date.now();
 
   if (t._config.isDev) {
@@ -106,6 +140,18 @@ const timingMiddleware = t.middleware(async ({ next, path }) => {
 
   const end = Date.now();
   console.log(`[TRPC] ${path} took ${end - start}ms to execute`);
+  if (!result.ok) {
+    void captureException(result.error, {
+      userId: ctx.observability?.userId ?? ctx.session?.user.id ?? null,
+      userEmail:
+        ctx.observability?.userEmail ?? ctx.session?.user.email ?? null,
+      tenantId: ctx.observability?.tenantId ?? null,
+      workspaceId: ctx.observability?.workspaceId ?? null,
+      projectId: ctx.observability?.projectId ?? null,
+      operation: "trpc",
+      route: path,
+    });
+  }
 
   return result;
 });

@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@bob/db": "workspace:*",
+    "@bob/monitoring": "workspace:*",
     "@bob/ws": "workspace:*",
     "@neondatabase/serverless": "^0.10.4",
     "drizzle-orm": "^0.44.7",

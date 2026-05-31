@@ -2,6 +2,12 @@ import { createServer } from "node:http";
 import { WebSocketServer } from "ws";
 import { db } from "@bob/db/client";
 import { sessionEvents } from "@bob/db/schema";
+import {
+  captureException,
+  captureMessage,
+  initObservability,
+  trackEvent,
+} from "@bob/monitoring/server";
 
 import { PersistenceWriter, type SessionEventRecord } from "./persistence.js";
 import { Relay } from "./relay.js";
@@ -12,8 +18,14 @@ const PORT = parseInt(process.env.GATEWAY_PORT ?? "3002", 10);
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const NUDGE_SHARED_SECRET = process.env.NUDGE_SHARED_SECRET ?? "";
 
+void initObservability({ serviceName: "ws-gateway" });
+
 if (!NUDGE_SHARED_SECRET && process.env.NODE_ENV !== "test") {
   console.error("[ws-gateway] FATAL: NUDGE_SHARED_SECRET env var is required");
+  void captureMessage("ws-gateway missing NUDGE_SHARED_SECRET", {
+    serviceName: "ws-gateway",
+    operation: "startup",
+  });
   process.exit(1);
 }
 
@@ -34,6 +46,14 @@ const writer = new PersistenceWriter({
   },
   onError: (err, events) => {
     console.error(`[ws-gateway] Failed to persist ${events.length} events:`, err);
+    void captureException(err, {
+      serviceName: "ws-gateway",
+      operation: "persist_session_events",
+      eventCount: events.length,
+    });
+    void trackEvent("gateway_persistence_failed", {
+      eventCount: events.length,
+    });
   },
 });
 writer.start();
@@ -45,6 +65,13 @@ const relay = new Relay({
   },
   validateBrowserToken,
   validateDaemonAuth,
+  onError: (err, context) => {
+    void captureException(err, {
+      serviceName: "ws-gateway",
+      operation: "relay",
+      ...context,
+    });
+  },
 });
 
 const nudgeHandler = createNudgeHandler({
@@ -76,7 +103,15 @@ const server = createServer(async (req, res) => {
   }
 
   if (req.method === "POST" && req.url === "/internal/nudge") {
-    await nudgeHandler(req, res);
+    try {
+      await nudgeHandler(req, res);
+    } catch (err) {
+      void captureException(err, {
+        serviceName: "ws-gateway",
+        operation: "internal_nudge",
+      });
+      throw err;
+    }
     return;
   }
 
@@ -94,6 +129,12 @@ const server = createServer(async (req, res) => {
       return;
     }
     const delivered = await relay.sendToSession(body.sessionId, body.userId, body.message);
+    if (!delivered) {
+      void trackEvent("gateway_session_send_missed", {
+        userId: body.userId,
+        sessionId: body.sessionId,
+      });
+    }
     res.writeHead(delivered ? 200 : 404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ ok: delivered }));
     return;

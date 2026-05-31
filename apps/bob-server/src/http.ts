@@ -4,6 +4,7 @@ import {
   type Server,
   type ServerResponse,
 } from "node:http";
+import { captureException } from "@bob/monitoring/server";
 
 export type HttpHandler = (
   req: IncomingMessage,
@@ -49,6 +50,11 @@ export function createHttpServer(opts: HttpServerOptions): Server {
       await opts.handler(req, res);
     } catch (err) {
       console.error("[bob-server] handler error:", err);
+      void captureException(err, {
+        serviceName: "bob-server",
+        operation: "http-handler",
+        route: req.url ?? "unknown",
+      });
       if (!res.headersSent) {
         res.statusCode = 500;
         res.setHeader("content-type", "text/plain; charset=utf-8");

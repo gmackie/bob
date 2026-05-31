@@ -18,7 +18,8 @@
   },
   "dependencies": {
     "@bob/db": "workspace:*",
-    "@bob/legacy": "workspace:*"
+    "@bob/legacy": "workspace:*",
+    "@bob/monitoring": "workspace:*"
   },
   "devDependencies": {
     "@bob/eslint-config": "workspace:*",

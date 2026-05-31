@@ -63,6 +63,7 @@ export interface RelayConfig {
   persistEvent: (event: SessionEventRecord) => Promise<void> | void;
   validateBrowserToken: (token: string) => Promise<string | null>;
   validateDaemonAuth: (token: string, workspaceId: string) => Promise<string | null>;
+  onError?: (error: Error, context: Record<string, unknown>) => void;
 }
 
 export class Relay {
@@ -110,6 +111,12 @@ export class Relay {
         await this.handleMessage(conn, msg);
       } catch (err) {
         console.error(`[Relay] Error handling ${msg.type} from ${id}:`, err);
+        this.cfg.onError?.(err as Error, {
+          connectionId: id,
+          messageType: msg.type,
+          userId: conn.userId,
+          workspaceId: conn.workspaceId,
+        });
         this.send(conn, createError("INTERNAL_ERROR", "Internal error"));
       }
     });
@@ -120,6 +127,12 @@ export class Relay {
 
     ws.on("error", (err: Error) => {
       console.error(`[Relay] WebSocket error on ${id}:`, err.message);
+      this.cfg.onError?.(err, {
+        connectionId: id,
+        operation: "websocket",
+        userId: conn.userId,
+        workspaceId: conn.workspaceId,
+      });
     });
   }
 

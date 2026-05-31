@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { TRPCError } from "@trpc/server";
 import { createTRPCContext } from "@bob/api";
+import { captureException, initObservability } from "@bob/monitoring/server";
 import { edgeRouter } from "~/lib/edge-router";
 import { auth } from "~/auth/server";
+
+void initObservability({ serviceName: "blder-api" });
 
 const STATUS_MAP: Record<string, number> = {
   UNAUTHORIZED: 401,
@@ -40,6 +43,10 @@ export function errorResponse(error: unknown) {
         depth++;
       }
       console.error("[rest-api] TRPCError 500", { code: error.code, chain });
+      void captureException(error, {
+        serviceName: "blder-api",
+        operation: "rest-api",
+      });
     }
     return NextResponse.json({ error: error.message }, { status });
   }
@@ -52,6 +59,10 @@ export function errorResponse(error: unknown) {
       ? { name: error.cause.name, message: error.cause.message }
       : undefined,
     stack: error instanceof Error ? error.stack?.split("\n").slice(0, 5).join("\n") : undefined,
+  });
+  void captureException(error, {
+    serviceName: "blder-api",
+    operation: "rest-api",
   });
   return NextResponse.json({ error: message }, { status: 500 });
 }

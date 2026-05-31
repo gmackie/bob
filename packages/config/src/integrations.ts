@@ -1,6 +1,6 @@
 export const integrations = {
-  sentry: false,
-  posthog: false,
+  sentry: true,
+  posthog: true,
 
   // Payments - Web (default OFF)
   stripe: false,
