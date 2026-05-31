@@ -30,10 +30,10 @@ token is generated and printed in the ready line.
 
 ## Build-time caveats
 
-1. **blder must be built first.** `pnpm --filter @bob/server start` spawns
-   `pnpm --filter @bob/blder start` which runs `vinext start` against
-   `apps/blder/dist/`. Run `pnpm --filter @bob/blder build` (with
-   `BOB_BUILD_TARGET=node`) before starting bob-server for the first time.
+1. **blder must be built first.** `pnpm --filter @bob/server start` runs
+   blder's bundled `vinext start` CLI with Node against `apps/blder/dist/`.
+   Run `pnpm --filter @bob/blder build` (with `BOB_BUILD_TARGET=node`) before
+   starting bob-server for the first time.
 2. **wrangler.jsonc workaround (Phase 1).** To build blder with
    `BOB_BUILD_TARGET=node`, `apps/blder/wrangler.jsonc` must be temporarily
    renamed during build. This is a build-time workaround — bob-server itself
@@ -42,16 +42,16 @@ token is generated and printed in the ready line.
    at `packages/db/drizzle/` so PGlite bootstrap resolves migrations even when
    spawned from a different cwd. Computed at runtime from the compiled
    `server.js` location.
-4. **pnpm at runtime.** Task 6 spawns via the `pnpm` binary. This is fine for
-   dev and CI but will not survive Electron packaging (no `pnpm` in a DMG).
-   Phase 4 replaces with a direct `node dist/server/entry.js` invocation.
+4. **Self-contained production start.** The production child process is launched
+   with Node and the vinext CLI resolved from blder's installed dependencies, so
+   packaged desktop builds do not need `pnpm` at runtime.
 
 ## Architecture
 
 ```
   external:auth-gated HTTP  ←→  internal:random port (vinext/blder)
                │                             │
-       createHttpServer()              spawn("pnpm",["--filter","@bob/blder","start"])
+       createHttpServer()              spawn(process.execPath,[".../vinext/dist/cli.js","start"])
 ```
 
 Auth presents as either `Authorization: Bearer <token>` or `?t=<token>` query
@@ -61,4 +61,4 @@ can be attached by the page.
 ## Dev mode
 
 When `BOB_DESKTOP_DEV=1`, bob-server will spawn `pnpm --filter @bob/blder dev`
-instead of `start` so that vinext HMR works. (Task 13 — not yet enabled.)
+instead of the production start command so that vinext HMR works.

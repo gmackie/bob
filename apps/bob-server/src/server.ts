@@ -2,12 +2,14 @@ import {
   spawn,
   type ChildProcess,
 } from "node:child_process";
+import fs from "node:fs";
 import {
   request as httpRequest,
   type IncomingHttpHeaders,
   type IncomingMessage,
   type ServerResponse,
 } from "node:http";
+import { createRequire } from "node:module";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,6 +26,12 @@ const DB_MIGRATIONS_DIR = path.resolve(
   __dirname,
   "../../../packages/db/drizzle",
 );
+const blderRequire = createRequire(path.join(BLDER_DIR, "package.json"));
+
+export type BlderChildCommand = {
+  command: string;
+  args: string[];
+};
 
 export type StartServerArgs = CliArgs & { authToken: string };
 
@@ -31,6 +39,30 @@ export type StartServerResult = {
   url: string;
   stop: () => Promise<void>;
 };
+
+export function resolveBlderChildCommand(useDev: boolean): BlderChildCommand {
+  if (useDev) {
+    return {
+      command: "pnpm",
+      args: ["--filter", "@bob/blder", "dev"],
+    };
+  }
+
+  const vinextCliPath = resolveVinextCliPath();
+
+  return {
+    command: process.execPath,
+    args: [vinextCliPath, "start"],
+  };
+}
+
+function resolveVinextCliPath(): string {
+  for (const modulesDir of blderRequire.resolve.paths("vinext") ?? []) {
+    const candidate = path.join(modulesDir, "vinext", "dist", "cli.js");
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  throw new Error("Unable to resolve vinext CLI from @bob/blder dependencies");
+}
 
 /**
  * Start bob-server: spawn blder as a child process on a random internal
@@ -43,13 +75,11 @@ export async function startServer(
   const pgliteDir = path.join(args.baseDir, "userdata", "db");
 
   const useDev = process.env.BOB_DESKTOP_DEV === "1";
-  // Task 13 switches to "dev" when BOB_DESKTOP_DEV=1; for Task 6 we stay on
-  // the prod "start" path so blder's built dist/server/entry.js is used.
-  const blderScript = useDev ? "dev" : "start";
+  const blderCommand = resolveBlderChildCommand(useDev);
 
   const child: ChildProcess = spawn(
-    "pnpm",
-    ["--filter", "@bob/blder", blderScript],
+    blderCommand.command,
+    blderCommand.args,
     {
       cwd: BLDER_DIR,
       env: {
@@ -63,8 +93,7 @@ export async function startServer(
       },
       stdio: ["ignore", "inherit", "inherit"],
       // Put the child in its own process group so we can signal the whole
-      // tree (pnpm → vinext → etc.) on stop. Without this, pnpm exits but
-      // its grandchildren survive as orphans.
+      // tree on stop. Without this, descendants can survive as orphans.
       detached: process.platform !== "win32",
     },
   );
