@@ -1946,6 +1946,26 @@ export const CreateWebhookDeliverySchema = createInsertSchema(
   processedAt: true,
 });
 
+export const processedEvents = pgTable(
+  "processed_events",
+  (t) => ({
+    id: t.uuid().notNull().primaryKey().defaultRandom(),
+    provider: t.varchar({ length: 20 }).notNull(),
+    eventId: t.text("event_id").notNull(),
+    processedAt: t
+      .timestamp("processed_at", { mode: "string", withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  }),
+  (table) => [
+    uniqueIndex("processed_events_provider_event_id_idx").on(
+      table.provider,
+      table.eventId,
+    ),
+    index("processed_events_provider_idx").on(table.provider),
+  ],
+);
+
 // 1.5 Task Runs (planning execution tracking)
 export const taskRuns = pgTable("task_runs", (t) => ({
   id: t.uuid().notNull().primaryKey().defaultRandom(),

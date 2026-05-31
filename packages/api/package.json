@@ -31,6 +31,10 @@
       "types": "./dist/api/src/services/webhooks/processWebhook.d.ts",
       "default": "./src/services/webhooks/processWebhook.ts"
     },
+    "./services/webhooks/stripeIdempotency": {
+      "types": "./dist/api/src/services/webhooks/stripeIdempotency.d.ts",
+      "default": "./src/services/webhooks/stripeIdempotency.ts"
+    },
     "./services/forgegraph/pipelineOrchestrator": {
       "types": "./dist/api/src/services/forgegraph/pipelineOrchestrator.d.ts",
       "default": "./src/services/forgegraph/pipelineOrchestrator.ts"
