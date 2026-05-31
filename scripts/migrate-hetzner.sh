@@ -6,9 +6,13 @@
 # pnpm -F @bob/db migrate. Idempotent — safe to run from any deploy
 # script as a pre-step.
 #
+# For production schema drift where the SQL migration files are missing from
+# this checkout, pass --push to run drizzle-kit push through the same tunnel.
+#
 # Usage:
 #   ./scripts/migrate-hetzner.sh                 # apply
-#   ./scripts/migrate-hetzner.sh --dry-run       # preview only
+#   ./scripts/migrate-hetzner.sh --dry-run       # preview pending SQL files
+#   ./scripts/migrate-hetzner.sh --push          # reconcile schema drift
 #   HOST=... USER=... ./scripts/migrate-hetzner.sh
 
 set -euo pipefail
@@ -45,10 +49,22 @@ if [ -z "${REMOTE_DB_URL}" ]; then
 fi
 LOCAL_DB_URL=$(echo "${REMOTE_DB_URL}" | sed -E "s#@[^/]+#@localhost:${TUNNEL_PORT}#")
 
-if [ "${MODE}" = "--dry-run" ]; then
-  echo "==> Running migrate:dry..."
-  DATABASE_URL="${LOCAL_DB_URL}" pnpm --dir "${REPO_ROOT}" -F @bob/db migrate:dry
-else
-  echo "==> Running migrate..."
-  DATABASE_URL="${LOCAL_DB_URL}" pnpm --dir "${REPO_ROOT}" -F @bob/db migrate
-fi
+case "${MODE}" in
+  "")
+    echo "==> Running migrate..."
+    DATABASE_URL="${LOCAL_DB_URL}" pnpm --dir "${REPO_ROOT}" -F @bob/db migrate
+    ;;
+  "--dry-run")
+    echo "==> Running migrate:dry..."
+    DATABASE_URL="${LOCAL_DB_URL}" pnpm --dir "${REPO_ROOT}" -F @bob/db migrate:dry
+    ;;
+  "--push")
+    echo "==> Running drizzle-kit push..."
+    DATABASE_URL="${LOCAL_DB_URL}" pnpm --dir "${REPO_ROOT}" -F @bob/db exec drizzle-kit push --force
+    ;;
+  *)
+    echo "ERROR: unknown mode: ${MODE}"
+    echo "Usage: $0 [--dry-run|--push]"
+    exit 1
+    ;;
+esac
