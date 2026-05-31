@@ -1,18 +1,22 @@
+import { TRPCError } from "@trpc/server";
 import { z } from "zod/v4";
+
 import { and, desc, eq } from "@bob/db";
 import {
   activities,
   dispatchItems,
-  forgeRevisions,
   forgeBuilds,
   forgeDeployments,
+  forgeRevisions,
   forgeRunEvents,
   projects,
   repositories,
+  workspaces,
 } from "@bob/db/schema";
-import { TRPCError } from "@trpc/server";
-import { protectedProcedure } from "../trpc";
+
+import { assertPlanLimitAvailable } from "../middleware/plan-limits";
 import { getForgeGraphClient } from "../services/forgegraph/config";
+import { protectedProcedure } from "../trpc";
 
 export const forgegraphRouter = {
   listRevisions: protectedProcedure
@@ -425,6 +429,19 @@ export const forgegraphRouter = {
         });
       }
 
+      const workspace = await ctx.db.query.workspaces.findFirst({
+        where: eq(workspaces.id, input.workspaceId),
+        columns: { tenantId: true },
+      });
+      if (!workspace?.tenantId) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      await assertPlanLimitAvailable(ctx.db, {
+        tenantId: workspace.tenantId,
+        resource: "apps",
+      });
+
       // Extract git URL from flakeRef (format: git+https://host/owner/repo.git?ref=main&rev=...)
       let remoteUrl: string | null = null;
       let remoteOwner: string | null = null;
@@ -434,7 +451,10 @@ export const forgegraphRouter = {
         const gitMatch = app.flakeRef.match(/git\+?(https?:\/\/[^?#]+)/);
         if (gitMatch) {
           remoteUrl = gitMatch[1]!;
-          const pathParts = new URL(remoteUrl).pathname.replace(/\.git$/, "").split("/").filter(Boolean);
+          const pathParts = new URL(remoteUrl).pathname
+            .replace(/\.git$/, "")
+            .split("/")
+            .filter(Boolean);
           if (pathParts.length >= 2) {
             remoteOwner = pathParts[0]!;
             remoteName = pathParts[1]!;
@@ -458,18 +478,21 @@ export const forgegraphRouter = {
 
       // Create a repository record so executeTask can find it
       if (remoteUrl && project) {
-        await ctx.db.insert(repositories).values({
-          userId: ctx.session.user.id,
-          planningProjectId: project.id,
-          name: remoteName ?? app.name,
-          path: `/repos/${app.slug}`,
-          branch: mainBranch,
-          mainBranch,
-          remoteUrl,
-          remoteProvider: "gitea",
-          remoteOwner,
-          remoteName,
-        }).onConflictDoNothing();
+        await ctx.db
+          .insert(repositories)
+          .values({
+            userId: ctx.session.user.id,
+            planningProjectId: project.id,
+            name: remoteName ?? app.name,
+            path: `/repos/${app.slug}`,
+            branch: mainBranch,
+            mainBranch,
+            remoteUrl,
+            remoteProvider: "gitea",
+            remoteOwner,
+            remoteName,
+          })
+          .onConflictDoNothing();
       }
 
       return project;

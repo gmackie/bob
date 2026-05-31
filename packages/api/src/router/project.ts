@@ -1,5 +1,5 @@
-import { z } from "zod/v4";
 import { TRPCError } from "@trpc/server";
+import { z } from "zod/v4";
 
 import { and, desc, eq } from "@bob/db";
 import {
@@ -11,10 +11,15 @@ import {
   workspaces,
 } from "@bob/db/schema";
 
+import { assertPlanLimitAvailable } from "../middleware/plan-limits";
 import { detectProjectCapabilities } from "../services/projects/projectCapabilities";
 import { protectedProcedure } from "../trpc";
 
-async function assertWorkspaceAccess(db: any, userId: string, workspaceId: string) {
+async function assertWorkspaceAccess(
+  db: any,
+  userId: string,
+  workspaceId: string,
+) {
   const membership = await db.query.workspaceMembers.findFirst({
     where: and(
       eq(workspaceMembers.workspaceId, workspaceId),
@@ -40,7 +45,24 @@ export const projectRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      await assertWorkspaceAccess(ctx.db, ctx.session.user.id, input.workspaceId);
+      await assertWorkspaceAccess(
+        ctx.db,
+        ctx.session.user.id,
+        input.workspaceId,
+      );
+      const workspace = await ctx.db.query.workspaces.findFirst({
+        where: eq(workspaces.id, input.workspaceId),
+        columns: { tenantId: true },
+      });
+
+      if (!workspace?.tenantId) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      await assertPlanLimitAvailable(ctx.db, {
+        tenantId: workspace.tenantId,
+        resource: "apps",
+      });
 
       const [project] = await ctx.db
         .insert(projects)
@@ -62,7 +84,11 @@ export const projectRouter = {
       }),
     )
     .query(async ({ ctx, input }) => {
-      await assertWorkspaceAccess(ctx.db, ctx.session.user.id, input.workspaceId);
+      await assertWorkspaceAccess(
+        ctx.db,
+        ctx.session.user.id,
+        input.workspaceId,
+      );
 
       const projectRows = await ctx.db.query.projects.findMany({
         where: eq(projects.workspaceId, input.workspaceId),
@@ -74,7 +100,9 @@ export const projectRouter = {
       });
 
       return projectRows.map((project) => {
-        const projectItems = items.filter((item) => item.projectId === project.id);
+        const projectItems = items.filter(
+          (item) => item.projectId === project.id,
+        );
 
         return {
           project,
@@ -106,7 +134,11 @@ export const projectRouter = {
         return null;
       }
 
-      await assertWorkspaceAccess(ctx.db, ctx.session.user.id, project.workspaceId);
+      await assertWorkspaceAccess(
+        ctx.db,
+        ctx.session.user.id,
+        project.workspaceId,
+      );
 
       const linkedRepository = await ctx.db.query.repositories.findFirst({
         where: and(
@@ -184,7 +216,11 @@ export const projectRouter = {
         throw new Error("Project not found");
       }
 
-      await assertWorkspaceAccess(ctx.db, ctx.session.user.id, existing.workspaceId);
+      await assertWorkspaceAccess(
+        ctx.db,
+        ctx.session.user.id,
+        existing.workspaceId,
+      );
 
       const merged = {
         ...(existing.automationSettings ?? {}),
@@ -207,7 +243,11 @@ export const projectRouter = {
       }),
     )
     .query(async ({ ctx, input }) => {
-      await assertWorkspaceAccess(ctx.db, ctx.session.user.id, input.workspaceId);
+      await assertWorkspaceAccess(
+        ctx.db,
+        ctx.session.user.id,
+        input.workspaceId,
+      );
 
       // Get all non-stale repos for this workspace
       const allRepos = await ctx.db.query.repositories.findMany({

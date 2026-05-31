@@ -187,11 +187,10 @@ describe("publicApi router tenant isolation", () => {
 
   it("registerWorkspace adds the caller as an owner workspace member", async () => {
     const db = createMockDb();
-    db.query.tenantMembers.findFirst
-      .mockResolvedValueOnce({
-        tenantId: "tenant-1",
-        tenant: { id: "tenant-1" },
-      });
+    db.query.tenantMembers.findFirst.mockResolvedValueOnce({
+      tenantId: "tenant-1",
+      tenant: { id: "tenant-1", plan: "pro" },
+    });
     db.__mock.insertReturning
       .mockResolvedValueOnce([
         {
