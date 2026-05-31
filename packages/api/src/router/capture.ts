@@ -1,9 +1,12 @@
-import type { TRPCRouterRecord } from "@trpc/server";
-import { z } from "zod/v4";
 import { execSync } from "child_process";
-import { writeFile, mkdir } from "fs/promises";
-import { join } from "path";
 import { randomUUID } from "crypto";
+import { mkdir } from "fs/promises";
+import { join } from "path";
+import type { TRPCRouterRecord } from "@trpc/server";
+import { TRPCError } from "@trpc/server";
+import { z } from "zod/v4";
+
+import { captureUrl as captureBrowserUrl } from "@bob/execution-lib/capture/playwright-capture";
 
 import { protectedProcedure } from "../trpc";
 
@@ -50,12 +53,20 @@ export const captureRouter = {
       await mkdir(CAPTURE_DIR, { recursive: true });
       const filename = `capture-${randomUUID()}.png`;
       const filepath = join(CAPTURE_DIR, filename);
+      let width = 1280;
+      let height = 720;
 
-      if (targetType === "browser" && url) {
-        // Generate a placeholder SVG for browser captures
-        // In production this would use Playwright
-        const placeholderSvg = generatePlaceholderCapture(url, 1280, 720);
-        await writeFile(filepath.replace(".png", ".svg"), placeholderSvg);
+      if (targetType === "browser") {
+        if (!url) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Browser captures require a URL",
+          });
+        }
+
+        const captured = await captureBrowserUrl(url, { outputPath: filepath });
+        width = captured.width;
+        height = captured.height;
       } else if (targetType === "window" && targetId) {
         try {
           execSync(`screencapture -l ${targetId} "${filepath}"`, {
@@ -72,22 +83,9 @@ export const captureRouter = {
       return {
         url: captureUrl,
         filename,
-        width: 1280,
-        height: 720,
+        width,
+        height,
         capturedAt: new Date().toISOString(),
       };
     }),
 } satisfies TRPCRouterRecord;
-
-function generatePlaceholderCapture(
-  url: string,
-  width: number,
-  height: number,
-): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-    <rect width="100%" height="100%" fill="#1C1B18"/>
-    <text x="50%" y="50%" text-anchor="middle" fill="#8A877E" font-family="monospace" font-size="14">
-      Capture: ${url}
-    </text>
-  </svg>`;
-}
