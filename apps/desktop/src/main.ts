@@ -1,14 +1,17 @@
-import { app, BrowserWindow } from "electron";
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
+import type { ChildProcess } from "node:child_process";
+import { app, BrowserWindow } from "electron";
+
 import { RotatingFileSink } from "./rotatingFileSink.js";
 
 // apps/desktop/dist-electron/main.js → ../../.. lands at the monorepo root.
 const APP_ROOT = path.resolve(__dirname, "../../..");
+const IS_PACKAGED = app.isPackaged;
 
 const USERDATA_DIR = path.join(os.homedir(), ".bob", "userdata");
 const LOG_DIR = path.join(USERDATA_DIR, "logs");
@@ -44,15 +47,14 @@ function pipeChildLogs(source: string, child: ChildProcess): void {
   }
 }
 const BOB_SERVER_BIN = path.join(
-  APP_ROOT,
-  "apps",
-  "bob-server",
-  "dist",
-  "bin.js",
+  IS_PACKAGED ? process.resourcesPath : APP_ROOT,
+  ...(IS_PACKAGED
+    ? ["bob-server", "bin.js"]
+    : ["apps", "bob-server", "dist", "bin.js"]),
 );
-// Go daemon binary bundled under apps/desktop/resources/bin/.
-// dist-electron/main.js → ../resources/bin.
-const DAEMON_BIN_DIR = path.resolve(__dirname, "..", "resources", "bin");
+const DAEMON_BIN_DIR = IS_PACKAGED
+  ? path.join(process.resourcesPath, "bin")
+  : path.resolve(__dirname, "..", "resources", "bin");
 
 let serverChild: ChildProcess | null = null;
 let daemonChild: ChildProcess | null = null;
@@ -62,8 +64,9 @@ type ServerReady = { url: string; token: string };
 
 async function spawnBobServer(): Promise<ServerReady> {
   const token = crypto.randomBytes(32).toString("hex");
+  const command = IS_PACKAGED ? process.execPath : "node";
   const child = spawn(
-    "node",
+    command,
     [
       BOB_SERVER_BIN,
       "--port",
@@ -75,9 +78,14 @@ async function spawnBobServer(): Promise<ServerReady> {
       "--no-browser",
     ],
     {
-      cwd: APP_ROOT,
+      cwd: IS_PACKAGED ? process.resourcesPath : APP_ROOT,
       stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env },
+      env: {
+        ...process.env,
+        BOB_PACKAGED: IS_PACKAGED ? "1" : "0",
+        BOB_RESOURCES_DIR: IS_PACKAGED ? process.resourcesPath : "",
+        ...(IS_PACKAGED ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
+      },
     },
   );
   serverChild = child;
@@ -137,11 +145,23 @@ async function spawnBobServer(): Promise<ServerReady> {
 }
 
 function resolveDaemonBinaryPath(): string | null {
-  if (process.platform !== "darwin") {
+  const platform = process.platform;
+  const arch = os.arch();
+  const platformPart =
+    platform === "win32"
+      ? "windows"
+      : platform === "darwin"
+        ? "darwin"
+        : platform;
+  const archPart = arch === "x64" ? "amd64" : arch === "arm64" ? "arm64" : null;
+  if (!archPart) {
     return null;
   }
-  const arch = os.arch() === "arm64" ? "arm64" : "amd64";
-  const binPath = path.join(DAEMON_BIN_DIR, `bob-darwin-${arch}`);
+  const extension = platform === "win32" ? ".exe" : "";
+  const binPath = path.join(
+    DAEMON_BIN_DIR,
+    `bob-${platformPart}-${archPart}${extension}`,
+  );
   if (!fs.existsSync(binPath)) {
     return null;
   }

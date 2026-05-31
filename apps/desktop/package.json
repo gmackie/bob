@@ -2,17 +2,19 @@
   "name": "@bob/desktop",
   "version": "0.0.1",
   "private": true,
+  "description": "Bob desktop app",
   "main": "dist-electron/main.js",
   "productName": "Bob",
-  "build": {
-    "appId": "bot.blder.desktop",
-    "productName": "Bob"
-  },
+  "author": "Bob Team <sean@reedster.llc>",
   "scripts": {
     "dev": "pnpm run --parallel dev:bundle dev:electron",
     "dev:bundle": "tsdown --watch",
     "dev:electron": "node scripts/dev-electron.mjs",
     "build": "tsdown",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux",
+    "dist:win": "electron-builder --win",
     "start": "node scripts/start-electron.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"
@@ -23,6 +25,7 @@
   "devDependencies": {
     "@bob/tsconfig": "workspace:*",
     "@types/node": "catalog:",
+    "electron-builder": "^26.8.1",
     "tsdown": "^0.20.3",
     "typescript": "catalog:",
     "vitest": "^4.0.0"

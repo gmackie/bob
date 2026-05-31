@@ -1,0 +1,66 @@
+appId: bot.blder.desktop
+productName: Bob
+copyright: "Copyright © 2026 Bob"
+
+directories:
+  output: dist-installer
+  buildResources: resources
+
+files:
+  - dist-electron/**/*
+  - package.json
+
+extraResources:
+  - from: ../bob-server/dist
+    to: bob-server
+  - from: ../blder/dist
+    to: blder/dist
+  - from: ../blder/package.json
+    to: blder/package.json
+  - from: ../../node_modules
+    to: node_modules
+    filter:
+      - "**/*"
+      - "!electron"
+      - "!electron/**"
+      - "!electron-builder"
+      - "!electron-builder/**"
+      - "!@electron"
+      - "!@electron/**"
+  - from: ../../packages/db/drizzle
+    to: db-migrations
+  - from: resources/bin
+    to: bin
+
+mac:
+  category: public.app-category.developer-tools
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.plist
+  notarize: true
+  target:
+    - target: dmg
+      arch:
+        - universal
+    - target: zip
+      arch:
+        - universal
+
+dmg:
+  sign: true
+
+win:
+  target:
+    - nsis
+  signAndEditExecutable: true
+
+linux:
+  category: Development
+  target:
+    - AppImage
+    - deb
+    - rpm
+
+publish:
+  provider: github

@@ -1,21 +1,23 @@
-import {
-  spawn,
-  type ChildProcess,
-} from "node:child_process";
-import {
-  request as httpRequest,
-  type IncomingHttpHeaders,
-  type IncomingMessage,
-  type ServerResponse,
-} from "node:http";
-import { createServer as createNetServer, type AddressInfo } from "node:net";
+import { spawn } from "node:child_process";
+import { request as httpRequest } from "node:http";
+import { createRequire } from "node:module";
+import { createServer as createNetServer } from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createHttpServer } from "./http.js";
+import type { ChildProcess } from "node:child_process";
+import type {
+  IncomingHttpHeaders,
+  IncomingMessage,
+  ServerResponse,
+} from "node:http";
+import type { AddressInfo } from "node:net";
+
 import type { CliArgs } from "./cli.js";
+import { createHttpServer } from "./http.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
 
 // apps/bob-server/dist/server.js → ../../blder → apps/blder
 const BLDER_DIR = path.resolve(__dirname, "../../blder");
@@ -32,6 +34,45 @@ export type StartServerResult = {
   stop: () => Promise<void>;
 };
 
+type BlderSpawnConfig = {
+  command: string;
+  args: string[];
+  cwd: string;
+};
+
+function resolveBlderSpawnConfig(script: "dev" | "start"): BlderSpawnConfig {
+  const packaged = process.env.BOB_PACKAGED === "1";
+
+  if (packaged) {
+    const resourcesDir = process.env.BOB_RESOURCES_DIR;
+    if (!resourcesDir) {
+      throw new Error("BOB_RESOURCES_DIR is required when BOB_PACKAGED=1");
+    }
+
+    const blderDir = path.join(resourcesDir, "blder");
+    return {
+      command: process.env.BOB_NODE_BINARY ?? process.execPath,
+      args: [
+        path.join(resourcesDir, "node_modules", "vinext", "dist", "cli.js"),
+        script,
+      ],
+      cwd: blderDir,
+    };
+  }
+
+  return {
+    command: process.env.BOB_NODE_BINARY ?? process.execPath,
+    args: [
+      path.join(
+        path.dirname(require.resolve("vinext", { paths: [BLDER_DIR] })),
+        "cli.js",
+      ),
+      script,
+    ],
+    cwd: BLDER_DIR,
+  };
+}
+
 /**
  * Start bob-server: spawn blder as a child process on a random internal
  * port, then bind an auth-gated reverse proxy on the external port.
@@ -46,28 +87,25 @@ export async function startServer(
   // Task 13 switches to "dev" when BOB_DESKTOP_DEV=1; for Task 6 we stay on
   // the prod "start" path so blder's built dist/server/entry.js is used.
   const blderScript = useDev ? "dev" : "start";
+  const blderSpawn = resolveBlderSpawnConfig(blderScript);
 
-  const child: ChildProcess = spawn(
-    "pnpm",
-    ["--filter", "@bob/blder", blderScript],
-    {
-      cwd: BLDER_DIR,
-      env: {
-        ...process.env,
-        PORT: String(internalPort),
-        HOST: "127.0.0.1",
-        BOB_DB_DRIVER: "pglite",
-        BOB_DB_PGLITE_DIR: pgliteDir,
-        BOB_DB_MIGRATIONS_DIR: DB_MIGRATIONS_DIR,
-        BOB_BUILD_TARGET: "node",
-      },
-      stdio: ["ignore", "inherit", "inherit"],
-      // Put the child in its own process group so we can signal the whole
-      // tree (pnpm → vinext → etc.) on stop. Without this, pnpm exits but
-      // its grandchildren survive as orphans.
-      detached: process.platform !== "win32",
+  const child: ChildProcess = spawn(blderSpawn.command, blderSpawn.args, {
+    cwd: blderSpawn.cwd,
+    env: {
+      ...process.env,
+      PORT: String(internalPort),
+      HOST: "127.0.0.1",
+      BOB_DB_DRIVER: "pglite",
+      BOB_DB_PGLITE_DIR: pgliteDir,
+      BOB_DB_MIGRATIONS_DIR: DB_MIGRATIONS_DIR,
+      BOB_BUILD_TARGET: "node",
     },
-  );
+    stdio: ["ignore", "inherit", "inherit"],
+    // Put the child in its own process group so we can signal the whole
+    // tree (vinext → etc.) on stop. Without this, grandchildren can
+    // survive as orphans.
+    detached: process.platform !== "win32",
+  });
 
   child.on("exit", (code, signal) => {
     if (code !== null && code !== 0) {
