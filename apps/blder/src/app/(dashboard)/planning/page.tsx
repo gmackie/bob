@@ -1,20 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PlusIcon } from "@radix-ui/react-icons";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { cn } from "@bob/ui";
 import { Button } from "@bob/ui/button";
 import { toast } from "@bob/ui/toast";
 
-import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { MissionControl } from "~/components/dashboard/mission-control";
+import { Breadcrumbs } from "~/components/layout/breadcrumbs";
+import { CustomerOnboardingChecklist } from "~/components/onboarding/customer-onboarding-checklist";
+import { WorkspaceSelector } from "~/components/planning/workspace-selector";
 import { CreateProjectDialog } from "~/components/projects/create-project-dialog";
 import { ImportGitHubDialog } from "~/components/projects/import-github-dialog";
 import { ProjectCard } from "~/components/projects/project-card";
-import { WorkspaceSelector } from "~/components/planning/workspace-selector";
 import { useTRPC } from "~/trpc/react";
 
 type PlanningView = "dashboard" | "projects";
@@ -26,10 +27,7 @@ export default function PlanningPage() {
   const [importOpen, setImportOpen] = useState(false);
 
   // Fetch workspaces (local DB, not remote planning API)
-  const {
-    data: workspaceMemberships,
-    isLoading: wsLoading,
-  } = useQuery(
+  const { data: workspaceMemberships, isLoading: wsLoading } = useQuery(
     trpc.workspace.list.queryOptions(undefined, {
       staleTime: 60_000,
     }),
@@ -39,7 +37,12 @@ export default function PlanningPage() {
   const workspaces = (workspaceMemberships ?? [])
     .map((m: any) => m.workspace)
     .filter(Boolean)
-    .map((w: any) => ({ id: w.id as string, name: w.name as string, slug: w.slug as string }));
+    .map((w: any) => ({
+      id: w.id as string,
+      name: w.name as string,
+      slug: w.slug as string,
+      lastHeartbeat: (w.lastHeartbeat ?? null) as string | null,
+    }));
 
   // Read workspace from URL param (set by WorkspaceSelector), default to first
   const workspaceParam = searchParams?.get("workspace") ?? null;
@@ -50,10 +53,7 @@ export default function PlanningPage() {
       : workspaces?.[0]) ?? null;
 
   // Fetch projects for the current workspace (local DB)
-  const {
-    data: projectsData,
-    isLoading: projLoading,
-  } = useQuery(
+  const { data: projectsData, isLoading: projLoading } = useQuery(
     trpc.project.list.queryOptions(
       { workspaceId: currentWorkspace?.id ?? "" },
       {
@@ -84,14 +84,18 @@ export default function PlanningPage() {
     (i: any) => i.status === "running" || i.status === "starting",
   );
 
-  const [view, setView] = useState<PlanningView>(hasActiveAgents ? "dashboard" : "projects");
+  const [view, setView] = useState<PlanningView>(
+    hasActiveAgents ? "dashboard" : "projects",
+  );
 
   // Create workspace mutation
   const queryClient = useQueryClient();
   const createWorkspace = useMutation(
     trpc.workspace.create.mutationOptions({
       onSuccess: () => {
-        void queryClient.invalidateQueries({ queryKey: trpc.workspace.list.queryKey() });
+        void queryClient.invalidateQueries({
+          queryKey: trpc.workspace.list.queryKey(),
+        });
         toast("Workspace created!");
       },
       onError: (err) => toast(err.message),
@@ -105,11 +109,19 @@ export default function PlanningPage() {
     return (
       <main className="mx-auto max-w-6xl px-6 py-12">
         <Breadcrumbs items={[{ label: "Projects" }]} className="mb-4" />
-        <div className="rounded-2xl border border-border bg-secondary px-8 py-12 text-center">
+        <CustomerOnboardingChecklist
+          currentWorkspace={null}
+          workspaceCount={0}
+          projectCount={0}
+          onCreateWorkspace={() => {
+            document.getElementById("workspace-name")?.focus();
+          }}
+        />
+        <div className="border-border bg-secondary mt-8 rounded-lg border px-8 py-12 text-center">
           <div className="text-4xl">
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              className="mx-auto h-12 w-12 text-muted-foreground"
+              className="text-muted-foreground mx-auto h-12 w-12"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -122,33 +134,42 @@ export default function PlanningPage() {
               />
             </svg>
           </div>
-          <h1 className="mt-4 font-display text-4xl font-bold tracking-tight leading-[1.15] text-foreground">
+          <h1 className="font-display text-foreground mt-4 text-4xl leading-[1.15] font-bold tracking-tight">
             No workspace yet
           </h1>
-          <p className="mt-3 text-sm text-muted-foreground">
+          <p className="text-muted-foreground mt-3 text-sm">
             Create your first workspace to start planning.
           </p>
           <div className="mx-auto mt-6 flex max-w-sm items-center gap-2">
             <input
+              id="workspace-name"
               value={wsName}
               onChange={(e) => setWsName(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && wsName.trim()) {
                   createWorkspace.mutate({
                     name: wsName.trim(),
-                    slug: wsName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+                    slug: wsName
+                      .trim()
+                      .toLowerCase()
+                      .replace(/[^a-z0-9]+/g, "-")
+                      .replace(/^-|-$/g, ""),
                   });
                 }
               }}
               placeholder="Workspace name"
-              className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              className="border-border bg-background focus:ring-primary/50 flex-1 rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
             />
             <Button
               onClick={() => {
                 if (wsName.trim()) {
                   createWorkspace.mutate({
                     name: wsName.trim(),
-                    slug: wsName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+                    slug: wsName
+                      .trim()
+                      .toLowerCase()
+                      .replace(/[^a-z0-9]+/g, "-")
+                      .replace(/^-|-$/g, ""),
                   });
                 }
               }}
@@ -169,7 +190,7 @@ export default function PlanningPage() {
       {/* View toggle + header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="flex items-center gap-1 mb-2">
+          <div className="mb-2 flex items-center gap-1">
             {(["dashboard", "projects"] as const).map((v) => (
               <button
                 key={v}
@@ -185,10 +206,10 @@ export default function PlanningPage() {
               </button>
             ))}
           </div>
-          <h1 className="font-display text-4xl font-bold tracking-tight leading-[1.15] text-foreground">
+          <h1 className="font-display text-foreground text-4xl leading-[1.15] font-bold tracking-tight">
             {view === "dashboard" ? "Mission Control" : "Projects"}
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="text-muted-foreground mt-1 text-sm">
             {view === "dashboard"
               ? "Live overview of your agents and projects"
               : "Your workspaces and projects"}
@@ -205,6 +226,15 @@ export default function PlanningPage() {
             </Button>
           </div>
         )}
+      </div>
+
+      <div className="mt-8">
+        <CustomerOnboardingChecklist
+          currentWorkspace={currentWorkspace}
+          workspaceCount={workspaces?.length ?? 0}
+          projectCount={projectCards.length}
+          onImportRepositories={() => setImportOpen(true)}
+        />
       </div>
 
       {/* Dashboard view */}
@@ -229,78 +259,82 @@ export default function PlanningPage() {
       )}
 
       {/* Projects grid (projects view only) */}
-      {view === "projects" && <section className="mt-8">
-        <div className="mb-4 flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">
-            {isLoading ? "" : `${projectCards.length} project${projectCards.length !== 1 ? "s" : ""}`}
-          </span>
-        </div>
+      {view === "projects" && (
+        <section className="mt-8">
+          <div className="mb-4 flex items-center justify-between">
+            <span className="text-muted-foreground text-sm">
+              {isLoading
+                ? ""
+                : `${projectCards.length} project${projectCards.length !== 1 ? "s" : ""}`}
+            </span>
+          </div>
 
-        {isLoading ? (
-          /* Loading skeleton */
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {[0, 1, 2].map((i) => (
-              <div
-                key={i}
-                className="animate-pulse rounded-2xl border border-border bg-card p-5"
+          {isLoading ? (
+            /* Loading skeleton */
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="border-border bg-card animate-pulse rounded-2xl border p-5"
+                >
+                  <div className="bg-muted h-3 w-16 rounded" />
+                  <div className="bg-muted mt-3 h-5 w-3/4 rounded" />
+                  <div className="bg-muted mt-6 h-4 w-1/2 rounded" />
+                  <div className="bg-muted mt-3 h-3 w-2/3 rounded" />
+                </div>
+              ))}
+            </div>
+          ) : projectCards.length === 0 ? (
+            /* Empty state */
+            <div className="border-border rounded-2xl border border-dashed px-8 py-12 text-center">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="text-muted-foreground mx-auto h-10 w-10"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.5}
               >
-                <div className="h-3 w-16 rounded bg-muted" />
-                <div className="mt-3 h-5 w-3/4 rounded bg-muted" />
-                <div className="mt-6 h-4 w-1/2 rounded bg-muted" />
-                <div className="mt-3 h-3 w-2/3 rounded bg-muted" />
-              </div>
-            ))}
-          </div>
-        ) : projectCards.length === 0 ? (
-          /* Empty state */
-          <div className="rounded-2xl border border-dashed border-border px-8 py-12 text-center">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="mx-auto h-10 w-10 text-muted-foreground"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.5}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"
-              />
-            </svg>
-            <h2 className="mt-4 font-display text-lg font-semibold text-foreground">
-              No projects yet
-            </h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Create your first project to start organizing work.
-            </p>
-            <Button
-              className="mt-5"
-              onClick={() => setCreateOpen(true)}
-            >
-              <PlusIcon className="mr-1.5 h-4 w-4" />
-              Create your first project
-            </Button>
-          </div>
-        ) : (
-          /* Projects grid */
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {projectCards.map((project) => (
-              <ProjectCard key={project.id} {...project} />
-            ))}
-          </div>
-        )}
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"
+                />
+              </svg>
+              <h2 className="font-display text-foreground mt-4 text-lg font-semibold">
+                No projects yet
+              </h2>
+              <p className="text-muted-foreground mt-2 text-sm">
+                Create your first project to start organizing work.
+              </p>
+              <Button className="mt-5" onClick={() => setCreateOpen(true)}>
+                <PlusIcon className="mr-1.5 h-4 w-4" />
+                Create your first project
+              </Button>
+            </div>
+          ) : (
+            /* Projects grid */
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {projectCards.map((project) => (
+                <ProjectCard key={project.id} {...project} />
+              ))}
+            </div>
+          )}
 
-        {/* Getting started hint when few projects */}
-        {!isLoading && projectCards.length > 0 && projectCards.length < 3 && (
-          <div className="mt-8 rounded-2xl border border-dashed border-border px-8 py-6 text-center">
-            <h3 className="font-display text-lg font-semibold text-foreground">Get started with blder.bot</h3>
-            <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
-              Import your GitHub repositories as projects, then use &ldquo;New Idea&rdquo; to start planning with Claude.
-            </p>
-          </div>
-        )}
-      </section>}
+          {/* Getting started hint when few projects */}
+          {!isLoading && projectCards.length > 0 && projectCards.length < 3 && (
+            <div className="border-border mt-8 rounded-2xl border border-dashed px-8 py-6 text-center">
+              <h3 className="font-display text-foreground text-lg font-semibold">
+                Get started with blder.bot
+              </h3>
+              <p className="text-muted-foreground mx-auto mt-2 max-w-md text-sm">
+                Import your GitHub repositories as projects, then use &ldquo;New
+                Idea&rdquo; to start planning with Claude.
+              </p>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Create project dialog */}
       {currentWorkspace && (
