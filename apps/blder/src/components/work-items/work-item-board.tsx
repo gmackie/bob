@@ -1,13 +1,13 @@
-import Link from "next/link";
 import React from "react";
+import Link from "next/link";
 
 import { cn } from "@bob/ui";
 import { Badge } from "@bob/ui/badge";
 
+import type { PlanningWorkItem } from "./planning-utils";
 import { KIND_COLOR, PRIORITY_COLOR } from "~/lib/design/colors";
-
 import {
-  type PlanningWorkItem,
+  dedupeWorkItemsByBoardIdentity,
   groupWorkItemsByStatus,
 } from "./planning-utils";
 
@@ -47,7 +47,7 @@ const PRIORITY_BORDER: Record<string, string> = {
 };
 
 export function WorkItemBoard({ items }: WorkItemBoardProps) {
-  const grouped = groupWorkItemsByStatus(items);
+  const grouped = groupWorkItemsByStatus(dedupeWorkItemsByBoardIdentity(items));
 
   return (
     <div className="grid gap-4 xl:grid-cols-5">
@@ -57,11 +57,13 @@ export function WorkItemBoard({ items }: WorkItemBoardProps) {
         return (
           <section
             key={column.key}
-            className="rounded-2xl border border-border bg-secondary p-4"
+            className="border-border bg-secondary rounded-2xl border p-4"
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-foreground">{column.title}</h3>
-              <span className="rounded-full bg-accent px-2 py-0.5 text-xs text-muted-foreground">
+              <h3 className="text-foreground text-sm font-semibold">
+                {column.title}
+              </h3>
+              <span className="bg-accent text-muted-foreground rounded-full px-2 py-0.5 text-xs">
                 {columnItems.length}
               </span>
             </div>
@@ -71,31 +73,30 @@ export function WorkItemBoard({ items }: WorkItemBoardProps) {
               ) : (
                 columnItems.map((item) => {
                   const boardItem = item as WorkItemBoardItem;
-                  const priorityBorder =
-                    boardItem.priority
-                      ? PRIORITY_BORDER[boardItem.priority]
-                      : undefined;
+                  const priorityBorder = boardItem.priority
+                    ? PRIORITY_BORDER[boardItem.priority]
+                    : undefined;
 
                   return (
                     <Link
                       key={item.id}
                       href={`/work-items/${item.id}`}
-                      className={`block rounded-xl border border-border bg-card px-3 py-3 transition hover:border-muted-foreground/30 hover:shadow-sm ${
+                      className={`border-border bg-card hover:border-muted-foreground/30 block rounded-xl border px-3 py-3 transition hover:shadow-sm ${
                         priorityBorder ? `border-l-2 ${priorityBorder}` : ""
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                        <span className="text-muted-foreground font-mono text-[11px] tracking-[0.18em] uppercase">
                           {boardItem.identifier}
                         </span>
                         <Badge
                           variant={KIND_COLOR[boardItem.kind] ?? "default"}
-                          className="text-[10px] px-1.5 py-0"
+                          className="px-1.5 py-0 text-[10px]"
                         >
                           {boardItem.kind}
                         </Badge>
                       </div>
-                      <div className="mt-2 text-sm font-medium text-foreground">
+                      <div className="text-foreground mt-2 text-sm font-medium">
                         {item.title}
                       </div>
                       {boardItem.dispatchStatus && (
@@ -109,7 +110,7 @@ export function WorkItemBoard({ items }: WorkItemBoardProps) {
                             title={`Dispatch: ${boardItem.dispatchStatus}`}
                           />
                           {boardItem.dispatchAgent && (
-                            <span className="text-[10px] text-muted-foreground">
+                            <span className="text-muted-foreground text-[10px]">
                               {boardItem.dispatchAgent}
                             </span>
                           )}

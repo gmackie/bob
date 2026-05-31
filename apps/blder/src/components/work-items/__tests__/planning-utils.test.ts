@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  dedupeWorkItemsByBoardIdentity,
   groupWorkItemsByStatus,
   summarizeProjects,
 } from "../planning-utils";
@@ -49,5 +50,20 @@ describe("planning utils", () => {
         activeLabel: "2 active",
       }),
     ]);
+  });
+
+  it("dedupes board items by identifier while preserving the first result", () => {
+    const items = dedupeWorkItemsByBoardIdentity([
+      { id: "newest", identifier: "BOB-100", status: "todo", title: "Keep" },
+      { id: "older", identifier: "BOB-100", status: "todo", title: "Drop" },
+      {
+        id: "unique",
+        identifier: "BOB-101",
+        status: "todo",
+        title: "Keep too",
+      },
+    ]);
+
+    expect(items.map((item) => item.id)).toEqual(["newest", "unique"]);
   });
 });
