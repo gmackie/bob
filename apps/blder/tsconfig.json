@@ -8,7 +8,8 @@
       "@bob/api": ["../../packages/api/src/index.ts"],
       "@bob/api/*": ["../../packages/api/src/*"],
       "@bob/db": ["../../packages/db/src/index.ts"],
-      "@bob/db/*": ["../../packages/db/src/*"]
+      "@bob/db/*": ["../../packages/db/src/*"],
+      "@bob/payments": ["../../packages/payments/src/index.ts"]
     }
   },
   "include": ["."],

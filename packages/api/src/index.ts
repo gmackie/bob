@@ -23,5 +23,9 @@ export {
   workItemsRestOperationByPath,
   workItemsRestOperations,
 } from "./contracts/work-items-rest";
+export {
+  applyStripeEntitlementEvent,
+  stripeEntitlementEventTypes,
+} from "./services/billing/stripeEntitlements";
 export { createTRPCContext } from "./trpc";
 export type { RouterInputs, RouterOutputs };

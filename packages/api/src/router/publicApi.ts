@@ -22,6 +22,7 @@ import {
   apiKeyReadProcedure,
   apiKeyWriteProcedure,
 } from "../trpc";
+import { requirePaidTenantPlan } from "../services/billing/entitlements";
 
 // Auto-create tenant for new users on first authenticated request.
 // Handles concurrent requests by catching unique constraint violations.
@@ -288,11 +289,13 @@ export const publicApiRouter = {
 
       const workspace = await ctx.db.query.workspaces.findFirst({
         where: eq(workspaces.id, input.workspaceId),
+        with: { tenant: true },
       });
       if (!workspace?.tenantId) {
         throw new TRPCError({ code: "NOT_FOUND" });
       }
       await assertTenantAccess(ctx.db, ctx.session.user.id, workspace.tenantId);
+      requirePaidTenantPlan(workspace.tenant?.plan);
 
       const [run] = await ctx.db
         .insert(agentRuns)

@@ -92,6 +92,9 @@ const makeDbMock = () => ({
     forgeDeployments: {
       findFirst: (...args: unknown[]) => dbQueryFindFirstMock("forgeDeployments", ...args),
     },
+    workspaces: {
+      findFirst: (...args: unknown[]) => dbQueryFindFirstMock("workspaces", ...args),
+    },
   },
 });
 
@@ -444,6 +447,12 @@ describe("dispatch router", () => {
       // findFirst: batch
       dbQueryFindFirstMock
         .mockResolvedValueOnce(batch)
+        // entitlement workspace lookup
+        .mockResolvedValueOnce({
+          id: WORKSPACE_ID,
+          tenantId: "tenant-1",
+          tenant: { id: "tenant-1", plan: "pro" },
+        })
         // final batch re-fetch
         .mockResolvedValueOnce({ ...batch, completedTasks: 1, status: "completed" });
 
@@ -537,6 +546,11 @@ describe("dispatch router", () => {
 
       dbQueryFindFirstMock
         .mockResolvedValueOnce(batch) // batch
+        .mockResolvedValueOnce({
+          id: WORKSPACE_ID,
+          tenantId: "tenant-1",
+          tenant: { id: "tenant-1", plan: "pro" },
+        }) // entitlement workspace lookup
         .mockResolvedValueOnce({ ...batch, status: "running" }); // final batch re-fetch
 
       dbQueryFindManyMock

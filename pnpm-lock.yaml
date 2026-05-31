@@ -139,6 +139,9 @@ importers:
       '@bob/monitoring':
         specifier: workspace:*
         version: link:../../packages/monitoring
+      '@bob/payments':
+        specifier: workspace:*
+        version: link:../../packages/payments
       '@bob/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -632,6 +635,9 @@ importers:
       '@bob/execution-lib':
         specifier: workspace:*
         version: link:../execution
+      '@bob/payments':
+        specifier: workspace:*
+        version: link:../payments
       '@bob/validators':
         specifier: workspace:*
         version: link:../validators

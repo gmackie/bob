@@ -21,6 +21,7 @@ import {
   getPlanningBaseUrl,
 } from "../services/integrations/planningRemoteConfig";
 import { suggestAgent } from "../services/dispatch/agentHeuristics";
+import { requirePaidTenantByWorkspace } from "../services/billing/entitlements";
 import { protectedProcedure } from "../trpc";
 
 async function loadOwnedSession(db: any, userId: string, sessionId: string) {
@@ -472,6 +473,7 @@ export const dispatchRouter = {
     .input(z.object({ batchId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const batch = await loadOwnedBatch(ctx.db, ctx.session.user.id, input.batchId);
+      await requirePaidTenantByWorkspace(ctx.db, batch.workspaceId);
 
       // Set batch to dispatching
       await ctx.db
@@ -559,6 +561,7 @@ export const dispatchRouter = {
     .input(z.object({ batchId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const batch = await loadOwnedBatch(ctx.db, ctx.session.user.id, input.batchId);
+      await requirePaidTenantByWorkspace(ctx.db, batch.workspaceId);
 
       const items = await ctx.db.query.dispatchItems.findMany({
         where: eq(dispatchItems.batchId, input.batchId),

@@ -22,6 +22,7 @@ import {
 } from "../services/integrations/planningRemoteConfig";
 import { isForgeGraphEnabled, requireForgeGraphClient } from "../services/forgegraph/config";
 import { cacheMapping } from "../services/forgegraph/idResolver";
+import { requirePaidTenantByWorkspace } from "../services/billing/entitlements";
 import { protectedProcedure } from "../trpc";
 
 async function assertWorkspaceAccess(db: any, userId: string, workspaceId: string) {
@@ -187,6 +188,8 @@ export const planSessionRouter = {
     )
     .mutation(async ({ ctx, input }) => {
       await loadOwnedPlanningSession(ctx.db, ctx.session.user.id, input.sessionId);
+      await assertWorkspaceAccess(ctx.db, ctx.session.user.id, input.workspaceId);
+      await requirePaidTenantByWorkspace(ctx.db, input.workspaceId);
 
       // Write planning execution context to chat_conversations and mark
       // the session pending so the ws-gateway daemon loop picks it up.

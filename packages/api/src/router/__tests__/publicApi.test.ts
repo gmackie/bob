@@ -185,6 +185,66 @@ describe("publicApi router tenant isolation", () => {
     });
   });
 
+  it("rejects createRun for free tenants", async () => {
+    const db = createMockDb();
+    db.query.tenantMembers.findMany.mockResolvedValueOnce([
+      { tenantId: "tenant-1" },
+    ]);
+    db.query.workspaces.findFirst.mockResolvedValueOnce({
+      id: "33333333-3333-4333-8333-333333333333",
+      tenantId: "tenant-1",
+      tenant: { id: "tenant-1", plan: "free" },
+    });
+
+    const caller = createCaller(db) as any;
+
+    await expect(
+      caller.publicApi.createRun({
+        workItemId: "BOB-42",
+        workspaceId: "33333333-3333-4333-8333-333333333333",
+        agentType: "claude",
+      }),
+    ).rejects.toMatchObject({
+      code: "PAYMENT_REQUIRED",
+    });
+
+    expect(db.insert).not.toHaveBeenCalled();
+  });
+
+  it("creates runs for paid tenants", async () => {
+    const db = createMockDb();
+    db.query.tenantMembers.findMany.mockResolvedValueOnce([
+      { tenantId: "tenant-1" },
+    ]);
+    db.query.workspaces.findFirst.mockResolvedValueOnce({
+      id: "33333333-3333-4333-8333-333333333333",
+      tenantId: "tenant-1",
+      tenant: { id: "tenant-1", plan: "pro" },
+    });
+    db.__mock.insertReturning.mockResolvedValueOnce([
+      {
+        id: "44444444-4444-4444-8444-444444444444",
+        tenantId: "tenant-1",
+        workspaceId: "33333333-3333-4333-8333-333333333333",
+        workItemId: "BOB-42",
+        status: "queued",
+      },
+    ]);
+
+    const caller = createCaller(db) as any;
+
+    await expect(
+      caller.publicApi.createRun({
+        workItemId: "BOB-42",
+        workspaceId: "33333333-3333-4333-8333-333333333333",
+        agentType: "claude",
+      }),
+    ).resolves.toMatchObject({
+      tenantId: "tenant-1",
+      status: "queued",
+    });
+  });
+
   it("registerWorkspace adds the caller as an owner workspace member", async () => {
     const db = createMockDb();
     db.query.tenantMembers.findFirst

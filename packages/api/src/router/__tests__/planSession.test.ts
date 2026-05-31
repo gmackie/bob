@@ -104,6 +104,9 @@ const makeDbMock = () => ({
     workspaceMembers: {
       findFirst: (...args: unknown[]) => dbQueryFindFirstMock("workspaceMembers", ...args),
     },
+    workspaces: {
+      findFirst: (...args: unknown[]) => dbQueryFindFirstMock("workspaces", ...args),
+    },
   },
 });
 
@@ -304,11 +307,18 @@ describe("planSession router", () => {
 
   describe("start", () => {
     it("passes the project's React frontend capability into execution planning startup", async () => {
-      dbQueryFindFirstMock.mockResolvedValueOnce({
-        id: SESSION_ID,
-        userId: "user-1",
-        sessionType: "planning",
-      });
+      dbQueryFindFirstMock
+        .mockResolvedValueOnce({
+          id: SESSION_ID,
+          userId: "user-1",
+          sessionType: "planning",
+        })
+        .mockResolvedValueOnce({ id: "membership-1" })
+        .mockResolvedValueOnce({
+          id: WORKSPACE_ID,
+          tenantId: "tenant-1",
+          tenant: { id: "tenant-1", plan: "pro" },
+        });
       const caller = createCaller({ id: "user-1" });
 
       const result = await caller.planSession.start({
@@ -331,11 +341,18 @@ describe("planSession router", () => {
     });
 
     it("forwards workflow launch context into execution planning startup", async () => {
-      dbQueryFindFirstMock.mockResolvedValueOnce({
-        id: SESSION_ID,
-        userId: "user-1",
-        sessionType: "planning",
-      });
+      dbQueryFindFirstMock
+        .mockResolvedValueOnce({
+          id: SESSION_ID,
+          userId: "user-1",
+          sessionType: "planning",
+        })
+        .mockResolvedValueOnce({ id: "membership-1" })
+        .mockResolvedValueOnce({
+          id: WORKSPACE_ID,
+          tenantId: "tenant-1",
+          tenant: { id: "tenant-1", plan: "pro" },
+        });
       process.env.GATEWAY_URL = "http://gw.local";
       process.env.NUDGE_SHARED_SECRET = "shh";
 

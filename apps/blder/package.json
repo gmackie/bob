@@ -18,6 +18,7 @@
     "@bob/execution": "workspace:*",
     "@bob/legacy": "workspace:*",
     "@bob/monitoring": "workspace:*",
+    "@bob/payments": "workspace:*",
     "@bob/ui": "workspace:*",
     "@bob/validators": "workspace:*",
     "@bob/ws": "workspace:*",

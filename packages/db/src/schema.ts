@@ -91,6 +91,10 @@ export const tenants = pgTable("tenants", (t) => ({
   slug: t.varchar({ length: 64 }).notNull().unique(),
   plan: tenantPlanEnum("plan").notNull().default("free"),
   forgeGraphProjectId: t.text("forge_graph_project_id"),
+  stripeCustomerId: t.text("stripe_customer_id"),
+  stripeSubscriptionId: t.text("stripe_subscription_id"),
+  stripePriceId: t.text("stripe_price_id"),
+  stripeProductId: t.text("stripe_product_id"),
   createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
 }));
