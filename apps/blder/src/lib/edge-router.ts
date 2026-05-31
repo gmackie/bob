@@ -36,6 +36,7 @@ import { repositoryRouter } from "@bob/api/router/repository";
 import { sessionRouter } from "@bob/api/router/session";
 import { skillRouter } from "@bob/api/router/skill";
 import { snapshotRouter } from "@bob/api/router/snapshot";
+import { supportRouter } from "@bob/api/router/support";
 import {
   activityRouter,
   artifactRouter,
@@ -84,6 +85,7 @@ const edgeRouterRecord = {
   settings: settingsEdgeRouter,
   skill: skillRouter,
   snapshot: snapshotRouter,
+  support: supportRouter,
   taskRun: taskRunRouter,
   notification: notificationRouter,
   workItem: workItemRouter,

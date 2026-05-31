@@ -29,6 +29,7 @@ import { sessionRouter } from "./router/session";
 import { skillRouter } from "./router/skill";
 import { snapshotRouter } from "./router/snapshot";
 import { settingsRouter } from "./router/settings";
+import { supportRouter } from "./router/support";
 import { systemRouter } from "./router/system";
 import { terminalRouter } from "./router/terminal";
 import {
@@ -77,6 +78,7 @@ const appRouterRecord = {
   skill: skillRouter,
   snapshot: snapshotRouter,
   settings: settingsRouter,
+  support: supportRouter,
   system: systemRouter,
   taskRun: taskRunRouter,
   terminal: terminalRouter,

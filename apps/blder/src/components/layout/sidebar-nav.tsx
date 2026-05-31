@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { DashboardIcon, GearIcon, BellIcon } from "@radix-ui/react-icons";
+import { DashboardIcon, GearIcon, BellIcon, QuestionMarkCircledIcon } from "@radix-ui/react-icons";
 import { cn } from "@bob/ui";
 
 export interface NavItem {
@@ -49,6 +49,7 @@ const NAV_ITEMS: NavItem[] = [
     label: "Nodes",
     href: "/nodes",
   },
+  { icon: QuestionMarkCircledIcon, label: "Support", href: "/support" },
   { icon: GearIcon, label: "Settings", href: "/settings" },
 ];
 
