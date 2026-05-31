@@ -1,43 +1,37 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
+import Link from "next/link";
 
 import { Badge } from "@bob/ui/badge";
 
-import { StageBadge } from "~/components/workflow/stage-badge";
+import type {
+  ProjectWorkItem,
+  RequirementTarget,
+} from "./project-detail-utils";
+import type { WorkItemBoardItem } from "~/components/work-items/work-item-board";
 import type { StageDetectionInput } from "~/lib/workflow/stage";
-
+import { RepositoryPanel } from "~/components/dashboard";
+import { AutomationSettings } from "~/components/projects/automation-settings";
+import { FilterableBoard } from "~/components/work-items/board-filter-bar";
+import { RequirementsChecklist } from "~/components/work-items/requirements-checklist";
+import { StageBadge } from "~/components/workflow/stage-badge";
 import {
+  formatLabel,
   KIND_COLOR,
   PRIORITY_COLOR,
   STATUS_COLOR,
-  formatLabel,
 } from "~/lib/design/colors";
+import { getRequirementTargets } from "./project-detail-utils";
 
-import { WorkItemBoard } from "~/components/work-items/work-item-board";
-import type { WorkItemBoardItem } from "~/components/work-items/work-item-board";
-import { RequirementsChecklist } from "~/components/work-items/requirements-checklist";
-import { AutomationSettings } from "~/components/projects/automation-settings";
-import { RepositoryPanel } from "~/components/dashboard";
+export type { ProjectWorkItem } from "./project-detail-utils";
 
 type TabKey = "board" | "list" | "requirements" | "settings";
 
-export interface ProjectWorkItem {
-  id: string;
-  identifier: string;
-  title: string;
-  status: string;
-  kind: string;
-  priority: string;
-  updatedAt: string | null;
-}
-
 interface ProjectDetailTabsProps {
   items: ProjectWorkItem[];
-  /** The top-level epic work item ID for the requirements tab, if any */
-  epicWorkItemId?: string;
-  epicWorkItemKind?: string;
+  /** Preferred requirements owner, usually the first top-level epic. */
+  defaultRequirementsWorkItemId?: string;
   /** Project ID for the settings tab */
   projectId: string;
   /** Current automation settings from the project */
@@ -82,12 +76,12 @@ function sortForList(items: ProjectWorkItem[]): ProjectWorkItem[] {
 
 export function ProjectDetailTabs({
   items,
-  epicWorkItemId,
-  epicWorkItemKind,
+  defaultRequirementsWorkItemId,
   projectId,
   automationSettings,
 }: ProjectDetailTabsProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("board");
+  const requirementTargets = getRequirementTargets(items);
 
   const tabs: { key: TabKey; label: string }[] = [
     { key: "board", label: "Board" },
@@ -114,7 +108,7 @@ export function ProjectDetailTabs({
             {tab.label}
           </button>
         ))}
-        <span className="ml-auto text-sm text-muted-foreground">
+        <span className="text-muted-foreground ml-auto text-sm">
           {items.length} items
         </span>
       </div>
@@ -125,8 +119,8 @@ export function ProjectDetailTabs({
         {activeTab === "list" && <ListTab items={items} />}
         {activeTab === "requirements" && (
           <RequirementsTab
-            epicWorkItemId={epicWorkItemId}
-            epicWorkItemKind={epicWorkItemKind}
+            targets={requirementTargets}
+            defaultWorkItemId={defaultRequirementsWorkItemId}
           />
         )}
         {activeTab === "settings" && (
@@ -151,9 +145,10 @@ function BoardTab({ items }: { items: ProjectWorkItem[] }) {
     status: item.status,
     kind: item.kind,
     priority: item.priority,
+    parentId: item.parentId,
   }));
 
-  return <WorkItemBoard items={boardItems} />;
+  return <FilterableBoard items={boardItems} />;
 }
 
 function ListTab({ items }: { items: ProjectWorkItem[] }) {
@@ -161,17 +156,17 @@ function ListTab({ items }: { items: ProjectWorkItem[] }) {
 
   if (sorted.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
+      <div className="border-border text-muted-foreground rounded-2xl border border-dashed px-4 py-10 text-center text-sm">
         No work items yet.
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto rounded-2xl border border-border">
+    <div className="border-border overflow-x-auto rounded-2xl border">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-border bg-secondary text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <tr className="border-border bg-secondary text-muted-foreground border-b text-left text-xs font-semibold tracking-wide uppercase">
             <th className="px-4 py-3">Identifier</th>
             <th className="px-4 py-3">Title</th>
             <th className="px-4 py-3">Status</th>
@@ -185,12 +180,12 @@ function ListTab({ items }: { items: ProjectWorkItem[] }) {
           {sorted.map((item) => (
             <tr
               key={item.id}
-              className="border-b border-border transition last:border-b-0 hover:bg-accent/50"
+              className="border-border hover:bg-accent/50 border-b transition last:border-b-0"
             >
               <td className="px-4 py-3">
                 <Link
                   href={`/work-items/${item.id}`}
-                  className="font-mono text-xs text-primary hover:underline"
+                  className="text-primary font-mono text-xs hover:underline"
                 >
                   {item.identifier}
                 </Link>
@@ -198,15 +193,20 @@ function ListTab({ items }: { items: ProjectWorkItem[] }) {
               <td className="px-4 py-3">
                 <Link
                   href={`/work-items/${item.id}`}
-                  className="font-medium text-primary hover:underline"
+                  className="text-primary font-medium hover:underline"
                 >
                   {item.title}
                 </Link>
+                {item.description ? (
+                  <div className="text-muted-foreground mt-1 max-w-xl truncate text-xs">
+                    {item.description}
+                  </div>
+                ) : null}
               </td>
               <td className="px-4 py-3">
                 <Badge
                   variant={STATUS_COLOR[item.status] ?? "default"}
-                  className="text-[10px] px-1.5 py-0"
+                  className="px-1.5 py-0 text-[10px]"
                 >
                   {formatLabel(item.status)}
                 </Badge>
@@ -214,7 +214,7 @@ function ListTab({ items }: { items: ProjectWorkItem[] }) {
               <td className="px-4 py-3">
                 <Badge
                   variant={PRIORITY_COLOR[item.priority] ?? "default"}
-                  className="text-[10px] px-1.5 py-0"
+                  className="px-1.5 py-0 text-[10px]"
                 >
                   {formatLabel(item.priority)}
                 </Badge>
@@ -222,26 +222,28 @@ function ListTab({ items }: { items: ProjectWorkItem[] }) {
               <td className="px-4 py-3">
                 <Badge
                   variant={KIND_COLOR[item.kind] ?? "default"}
-                  className="text-[10px] px-1.5 py-0"
+                  className="px-1.5 py-0 text-[10px]"
                 >
                   {item.kind}
                 </Badge>
               </td>
               <td className="px-4 py-3">
                 <StageBadge
-                  stageInput={{
-                    workItem: { kind: item.kind, status: item.status },
-                    requirementCount: 0,
-                    childTaskCount: 0,
-                    dispatchedTaskCount: 0,
-                    completedTaskCount: 0,
-                    openPRCount: 0,
-                    mergedFeaturePR: false,
-                    healthyDeployment: false,
-                  } satisfies StageDetectionInput}
+                  stageInput={
+                    {
+                      workItem: { kind: item.kind, status: item.status },
+                      requirementCount: 0,
+                      childTaskCount: 0,
+                      dispatchedTaskCount: 0,
+                      completedTaskCount: 0,
+                      openPRCount: 0,
+                      mergedFeaturePR: false,
+                      healthyDeployment: false,
+                    } satisfies StageDetectionInput
+                  }
                 />
               </td>
-              <td className="px-4 py-3 text-xs text-muted-foreground">
+              <td className="text-muted-foreground px-4 py-3 text-xs">
                 {item.updatedAt
                   ? new Date(item.updatedAt).toLocaleDateString()
                   : "—"}
@@ -255,25 +257,55 @@ function ListTab({ items }: { items: ProjectWorkItem[] }) {
 }
 
 function RequirementsTab({
-  epicWorkItemId,
-  epicWorkItemKind,
+  targets,
+  defaultWorkItemId,
 }: {
-  epicWorkItemId?: string;
-  epicWorkItemKind?: string;
+  targets: RequirementTarget[];
+  defaultWorkItemId?: string;
 }) {
-  if (!epicWorkItemId || !epicWorkItemKind) {
+  const [selectedId, setSelectedId] = useState<string | null>(
+    defaultWorkItemId ?? targets[0]?.id ?? null,
+  );
+
+  const selected =
+    targets.find((target) => target.id === selectedId) ?? targets[0];
+
+  if (!selected) {
     return (
-      <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
-        No top-level epic found for this project. Requirements are tracked on
-        epic or issue work items.
+      <div className="border-border text-muted-foreground rounded-2xl border border-dashed px-4 py-10 text-center text-sm">
+        Create an epic or issue to start tracking project requirements.
       </div>
     );
   }
 
   return (
-    <RequirementsChecklist
-      workItemId={epicWorkItemId}
-      workItemKind={epicWorkItemKind}
-    />
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        {targets.map((target) => (
+          <button
+            key={target.id}
+            type="button"
+            onClick={() => setSelectedId(target.id)}
+            className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
+              selected.id === target.id
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border bg-card text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <span className="block font-mono text-[11px] tracking-[0.18em] uppercase">
+              {target.identifier}
+            </span>
+            <span className="mt-1 block max-w-64 truncate font-medium">
+              {target.title}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <RequirementsChecklist
+        workItemId={selected.id}
+        workItemKind={selected.kind}
+      />
+    </div>
   );
 }

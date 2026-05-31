@@ -5,10 +5,10 @@ import { Badge } from "@bob/ui/badge";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { NewIdeaButton } from "~/components/planning/new-idea-button";
-import { CreateWorkItemButton } from "~/components/work-items/create-work-item-button";
 import { ProjectDetailTabs } from "~/components/projects/project-detail-tabs";
 import { ProjectTemplatePanel } from "~/components/projects/project-template-panel";
-import { STATUS_COLOR, formatLabel } from "~/lib/design/colors";
+import { CreateWorkItemButton } from "~/components/work-items/create-work-item-button";
+import { formatLabel, STATUS_COLOR } from "~/lib/design/colors";
 import { createPlanningCaller } from "~/lib/planning/server";
 
 interface ProjectPageProps {
@@ -49,14 +49,14 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
       />
 
       {/* Header */}
-      <section className="mt-4 rounded-[2rem] border border-border bg-gradient-to-br from-[#151f33] via-[#111827] to-[#101522] px-8 py-8">
+      <section className="border-border mt-4 rounded-[2rem] border bg-gradient-to-br from-[#151f33] via-[#111827] to-[#101522] px-8 py-8">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="font-display text-4xl font-bold tracking-tight leading-[1.15] text-white">
+              <h1 className="font-display text-4xl leading-[1.15] font-bold tracking-tight text-white">
                 {project.name}
               </h1>
-              <span className="rounded-full border border-border bg-accent px-2.5 py-0.5 font-mono text-xs font-medium text-muted-foreground">
+              <span className="border-border bg-accent text-muted-foreground rounded-full border px-2.5 py-0.5 font-mono text-xs font-medium">
                 {project.key}
               </span>
               {capabilities.template ? (
@@ -66,7 +66,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
               ) : null}
               <Badge
                 variant={STATUS_COLOR[project.status] ?? "default"}
-                className="text-[10px] px-1.5 py-0"
+                className="px-1.5 py-0 text-[10px]"
               >
                 {formatLabel(project.status)}
               </Badge>
@@ -88,7 +88,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           </div>
         </div>
 
-        <div className="mt-6 flex flex-wrap gap-3 text-sm text-muted-foreground">
+        <div className="text-muted-foreground mt-6 flex flex-wrap gap-3 text-sm">
           <span>{counts.issues} issues</span>
           <span>{counts.tasks} tasks</span>
           <span>{counts.epics} epics</span>
@@ -118,13 +118,14 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             id: item.id,
             identifier: item.identifier,
             title: item.title,
+            description: item.description ?? null,
             status: item.status,
             kind: item.kind,
             priority: item.priority ?? "no_priority",
+            parentId: item.parentId ?? null,
             updatedAt: item.updatedAt ?? null,
           }))}
-          epicWorkItemId={topEpic?.id}
-          epicWorkItemKind={topEpic?.kind}
+          defaultRequirementsWorkItemId={topEpic?.id}
           projectId={project.id}
           automationSettings={project.automationSettings ?? undefined}
         />
