@@ -49,7 +49,13 @@ export async function createCheckoutSession(
     console.log("[Stripe disabled] Cannot create checkout session");
     return null;
   }
-  return stripe.checkout.sessions.create(params);
+  return stripe.checkout.sessions.create({
+    ...params,
+    consent_collection: {
+      ...params.consent_collection,
+      terms_of_service: "required",
+    },
+  });
 }
 
 /**
