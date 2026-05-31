@@ -22,6 +22,14 @@ vi.mock("../session", () => ({
 }));
 
 describe("resolveRequestAuthContext", () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+  const restoreNodeEnv = () => {
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
+  };
   const defaultUser = {
     session: null,
     user: {
@@ -39,10 +47,12 @@ describe("resolveRequestAuthContext", () => {
     vi.clearAllMocks();
     vi.resetModules();
     delete process.env.REQUIRE_AUTH;
+    restoreNodeEnv();
   });
 
   afterEach(() => {
     delete process.env.REQUIRE_AUTH;
+    restoreNodeEnv();
   });
 
   it("prefers a better-auth session from the request headers", async () => {
@@ -100,6 +110,8 @@ describe("resolveRequestAuthContext", () => {
   });
 
   it("returns the default user when auth is optional", async () => {
+    process.env.NODE_ENV = "development";
+    process.env.REQUIRE_AUTH = "false";
     getSessionMock.mockResolvedValueOnce(null);
 
     const { resolveRequestAuthContext } = await import("../context");
@@ -141,6 +153,25 @@ describe("resolveRequestAuthContext", () => {
       headers: new Headers({
         authorization: "Bearer bad-token",
       }),
+    });
+
+    expect(result.authMethod).toBe("none");
+    expect(result.session).toBeNull();
+  });
+
+  it("does not use the default user in production when auth mode is unset", async () => {
+    process.env.NODE_ENV = "production";
+    getSessionMock.mockResolvedValueOnce(null);
+
+    const { resolveRequestAuthContext } = await import("../context");
+    const result = await resolveRequestAuthContext({
+      auth: {
+        api: {
+          getSession: getSessionMock,
+        },
+      } as any,
+      defaultUser,
+      headers: new Headers(),
     });
 
     expect(result.authMethod).toBe("none");

@@ -34,6 +34,12 @@ export interface RequestAuthContext {
 
 const DEFAULT_USER_ID = "default-user";
 
+function defaultUserFallbackEnabled(): boolean {
+  return (
+    process.env.NODE_ENV !== "production" && process.env.REQUIRE_AUTH === "false"
+  );
+}
+
 function readHeader(headers: Headers, key: string): string | null {
   const value = headers.get(key);
   if (!value) return null;
@@ -103,7 +109,7 @@ export async function resolveRequestAuthContext(opts: {
     }
   }
 
-  if (process.env.REQUIRE_AUTH !== "true") {
+  if (defaultUserFallbackEnabled()) {
     return {
       apiKeyAuth: null,
       authMethod: "default_user",
