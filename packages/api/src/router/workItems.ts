@@ -33,6 +33,7 @@ import { isForgeGraphEnabled, requireForgeGraphClient } from "../services/forgeg
 import { resolveForgeGraphId, cacheMapping } from "../services/forgegraph/idResolver";
 import type { FgWorkItem, FgArtifact, FgActivity } from "../services/forgegraph/forgeGraphClient";
 import { toBobStatus } from "../services/forgegraph/statusMap";
+import { onTaskStatusChange } from "../services/automation/task-trigger";
 import {
   apiKeyReadProcedure,
   apiKeyWriteProcedure,
@@ -509,6 +510,32 @@ const buildUpdateWorkItemProcedure = <T extends WorkItemProcedureBuilder>(
           toValue: change.nextValue,
           metadata: { field: change.field },
         })),
+      );
+    }
+
+    if (input.status && existing.status !== input.status) {
+      const project = existing.projectId
+        ? await ctx.db.query.projects.findFirst({
+            where: eq(projects.id, existing.projectId),
+            columns: { key: true },
+          })
+        : null;
+      const identifier = formatWorkItemIdentifier({
+        projectKey: project?.key ?? null,
+        sequenceNumber: existing.sequenceNumber,
+        id: existing.id,
+      });
+
+      onTaskStatusChange({
+        taskId: input.id,
+        projectId: existing.projectId ?? null,
+        oldStatus: existing.status,
+        newStatus: input.status,
+        userId: ctx.session.user.id,
+        identifier,
+        title: nextWorkItem.title,
+      }).catch((err) =>
+        console.error("[automation] task trigger failed:", err),
       );
     }
 

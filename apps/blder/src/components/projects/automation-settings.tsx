@@ -17,6 +17,7 @@ interface AutomationSettingsProps {
   initialSettings?: {
     autoDispatch?: boolean;
     autoBranch?: boolean;
+    autoPR?: boolean;
     autoFeaturePR?: boolean;
     ciTrigger?: boolean;
     reactFrontend?: boolean;
@@ -93,6 +94,11 @@ const TOGGLE_CONFIG = [
       "Create a git branch automatically when an agent session starts",
   },
   {
+    key: "autoPR" as const,
+    label: "Auto-PR",
+    description: "Create a pull request automatically when an agent run completes",
+  },
+  {
     key: "autoFeaturePR" as const,
     label: "Auto-feature PR",
     description:
@@ -156,12 +162,14 @@ export function AutomationSettings({
   const [settings, setSettings] = useState<{
     autoDispatch: boolean;
     autoBranch: boolean;
+    autoPR: boolean;
     autoFeaturePR: boolean;
     ciTrigger: boolean;
     reactFrontend: boolean;
   }>({
     autoDispatch: initialSettings?.autoDispatch ?? true,
     autoBranch: initialSettings?.autoBranch ?? true,
+    autoPR: initialSettings?.autoPR ?? true,
     autoFeaturePR: initialSettings?.autoFeaturePR ?? true,
     ciTrigger: initialSettings?.ciTrigger ?? true,
     reactFrontend: initialSettings?.reactFrontend ?? false,
@@ -185,6 +193,7 @@ export function AutomationSettings({
     key:
       | "autoDispatch"
       | "autoBranch"
+      | "autoPR"
       | "autoFeaturePR"
       | "ciTrigger"
       | "reactFrontend",

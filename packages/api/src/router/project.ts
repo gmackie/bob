@@ -156,6 +156,7 @@ export const projectRouter = {
         settings: z.object({
           autoDispatch: z.boolean().optional(),
           autoBranch: z.boolean().optional(),
+          autoPR: z.boolean().optional(),
           autoFeaturePR: z.boolean().optional(),
           ciTrigger: z.boolean().optional(),
           reactFrontend: z.boolean().optional(),

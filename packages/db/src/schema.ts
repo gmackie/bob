@@ -574,6 +574,7 @@ export const projects = pgTable("projects", (t) => ({
     .$type<{
       autoDispatch?: boolean;
       autoBranch?: boolean;
+      autoPR?: boolean;
       autoFeaturePR?: boolean;
       ciTrigger?: boolean;
       reactFrontend?: boolean;

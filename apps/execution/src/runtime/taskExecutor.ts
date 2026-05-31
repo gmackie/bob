@@ -5,6 +5,7 @@ import {
   chatMessages,
   forgeRevisions,
   forgeRunEvents,
+  projects,
   repositories,
   runLifecycleEvents,
   taskRuns,
@@ -121,6 +122,17 @@ function slugify(text: string): string {
 function generateBranchName(task: PlanningTask): string {
   const slug = slugify(task.title);
   return `bob/${task.identifier}/${slug}`;
+}
+
+async function shouldAutoBranch(task: PlanningTask): Promise<boolean> {
+  if (!task.projectId) return true;
+
+  const project = await db.query.projects.findFirst({
+    where: eq(projects.id, task.projectId),
+    columns: { automationSettings: true },
+  });
+
+  return project?.automationSettings?.autoBranch ?? true;
 }
 
 export async function findRepositoryForTask(
@@ -254,7 +266,9 @@ export async function executeTask(
     };
   }
 
-  const branch = generateBranchName(task);
+  const branch = (await shouldAutoBranch(task))
+    ? generateBranchName(task)
+    : repoInfo.mainBranch;
   const selectedAgent = options?.agentType ?? "opencode";
 
   // Create session and task run in DB. The daemon handles git ops

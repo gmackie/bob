@@ -14,6 +14,10 @@ import { db } from "@bob/db/client";
 import { repositories, taskRuns, workItems } from "@bob/db/schema";
 
 import { createDraftPr } from "../git/prService";
+import {
+  isRepositoryAutomationEnabled,
+  isWorkItemAutomationEnabled,
+} from "./settings";
 
 export interface SessionStartParams {
   sessionId: string;
@@ -39,7 +43,13 @@ export interface SessionCompleteParams {
  */
 export async function onSessionStart(
   params: SessionStartParams,
-): Promise<{ branch: string }> {
+): Promise<{ branch: string | null }> {
+  const enabled = await isWorkItemAutomationEnabled(
+    params.workItemId,
+    "autoBranch",
+  );
+  if (!enabled) return { branch: null };
+
   const branchName = `feature/${params.identifier.toLowerCase()}`;
   return { branch: branchName };
 }
@@ -61,6 +71,19 @@ export async function onSessionComplete(
       where: eq(repositories.id, params.repositoryId),
     });
     if (!repo) return { prId: undefined };
+    if (params.branch === repo.mainBranch) return { prId: undefined };
+
+    const workItemEnabled = await isWorkItemAutomationEnabled(
+      params.workItemId,
+      "autoPR",
+      repo.planningProjectId,
+    );
+    const repoEnabled = repo.planningProjectId
+      ? true
+      : await isRepositoryAutomationEnabled(params.repositoryId, "autoPR");
+    if (!workItemEnabled || !repoEnabled) {
+      return { prId: undefined };
+    }
 
     // Get work item title for PR title
     let title = `Bob: ${params.branch}`;
@@ -84,7 +107,7 @@ export async function onSessionComplete(
       planningTaskId: params.workItemId,
     });
 
-    return { prId: pr?.id };
+    return { prId: pr?.id, headSha: pr?.commits[0]?.sha };
   } catch (err) {
     console.error("[branch-automation] Failed to create PR:", err);
     return { prId: undefined };

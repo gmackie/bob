@@ -12,6 +12,7 @@ import { z } from "zod/v4";
 
 import { createDraftPr } from "../services/git/prService";
 import { checkFeatureReadiness } from "../services/automation/feature-assembly";
+import { onPullRequestCreated } from "../services/automation/pipeline-trigger";
 import { protectedProcedure } from "../trpc";
 
 const statusSchema = z.enum(["active", "ready", "merged", "abandoned"]);
@@ -232,6 +233,14 @@ export const featureBranchRouter = {
         .set({ featurePrId: pr.id })
         .where(eq(featureBranches.id, input.featureBranchId))
         .returning();
+
+      void onPullRequestCreated({
+        pullRequestId: pr.id,
+        repositoryId: input.repositoryId,
+        headBranch: branch.branchName,
+        headSha: pr.commits[0]?.sha ?? branch.branchName,
+        taskId: branch.workItemId,
+      }).catch(() => {});
 
       return { featureBranch: updated, pullRequest: pr };
     }),

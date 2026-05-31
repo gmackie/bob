@@ -1,6 +1,10 @@
 import { eq } from "@bob/db";
 import { db } from "@bob/db/client";
 import { dispatchBatches, dispatchItems, projects } from "@bob/db/schema";
+import { executeTask } from "@bob/execution/runtime/taskExecutor";
+
+import { suggestAgent } from "../dispatch/agentHeuristics";
+import { isAutomationEnabled } from "./settings";
 
 /**
  * Called when a task's status changes. Checks project automation settings
@@ -39,10 +43,9 @@ export async function onTaskStatusChange(params: {
 
   if (!project) return { dispatched: false };
 
-  // Future: check project-level automationSettings (Task 13.5).
-  // For now auto-dispatch is disabled by default so this service
-  // only fires when explicitly opted-in via an upstream caller.
-  // We leave the wiring in place so Task 13.5 can flip the switch.
+  if (!isAutomationEnabled(project.automationSettings, "autoDispatch")) {
+    return { dispatched: false };
+  }
 
   // Create a dispatch batch with this single task
   const [batch] = await db
@@ -51,7 +54,7 @@ export async function onTaskStatusChange(params: {
       userId: params.userId,
       workspaceId: project.workspaceId,
       projectId: params.projectId,
-      status: "dispatching",
+      status: "running",
       totalTasks: 1,
       completedTasks: 0,
       failedTasks: 0,
@@ -60,14 +63,70 @@ export async function onTaskStatusChange(params: {
 
   if (!batch) return { dispatched: false };
 
-  await db.insert(dispatchItems).values({
+  const agentType = suggestAgent({
+    kind: "task",
+    title: params.title ?? "",
+    description: null,
+  });
+
+  const [item] = await db.insert(dispatchItems).values({
     batchId: batch.id,
     planningTaskId: params.taskId,
     planningTaskIdentifier: params.identifier ?? "UNKNOWN",
     title: params.title ?? "Auto-dispatched task",
+    agentType,
     status: "queued",
     sortOrder: 0,
-  });
+  }).returning();
+
+  try {
+    const result = await executeTask(
+      params.userId,
+      {
+        id: params.taskId,
+        identifier: params.identifier ?? "UNKNOWN",
+        title: params.title ?? "Auto-dispatched task",
+        description: null,
+        workspaceId: project.workspaceId,
+        projectId: params.projectId,
+        assigneeId: null,
+        labels: [],
+        priority: 0,
+      },
+      { agentType },
+    );
+
+    if (item) {
+      await db
+        .update(dispatchItems)
+        .set({
+          status: result.status === "blocked" ? "failed" : "running",
+          taskRunId: result.taskRunId,
+        })
+        .where(eq(dispatchItems.id, item.id));
+    }
+
+    if (result.status === "blocked") {
+      await db
+        .update(dispatchBatches)
+        .set({ status: "failed", failedTasks: 1 })
+        .where(eq(dispatchBatches.id, batch.id));
+      return { dispatched: false, batchId: batch.id };
+    }
+  } catch (err) {
+    console.error("[automation] auto-dispatch failed:", err);
+    if (item) {
+      await db
+        .update(dispatchItems)
+        .set({ status: "failed" })
+        .where(eq(dispatchItems.id, item.id));
+    }
+    await db
+      .update(dispatchBatches)
+      .set({ status: "failed", failedTasks: 1 })
+      .where(eq(dispatchBatches.id, batch.id));
+    return { dispatched: false, batchId: batch.id };
+  }
 
   return { dispatched: true, batchId: batch.id };
 }

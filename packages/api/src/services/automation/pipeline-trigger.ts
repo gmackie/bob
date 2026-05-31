@@ -1,6 +1,11 @@
 import { db } from "@bob/db/client";
 import { activities, forgeRevisions } from "@bob/db/schema";
 
+import {
+  isRepositoryAutomationEnabled,
+  isWorkItemAutomationEnabled,
+} from "./settings";
+
 /**
  * Called when a PR is created or updated.
  * Creates a forge revision linked to the PR's head commit and records
@@ -18,6 +23,18 @@ export async function onPullRequestCreated(params: {
   taskId?: string;
   taskRunId?: string;
 }): Promise<{ revisionId?: string }> {
+  const repositoryCiEnabled = await isRepositoryAutomationEnabled(
+    params.repositoryId,
+    "ciTrigger",
+  );
+  const taskCiEnabled = params.taskId
+    ? await isWorkItemAutomationEnabled(params.taskId, "ciTrigger")
+    : true;
+
+  if (!repositoryCiEnabled || !taskCiEnabled) {
+    return { revisionId: undefined };
+  }
+
   // Create a forge revision linked to this PR's head commit
   const [revision] = await db
     .insert(forgeRevisions)

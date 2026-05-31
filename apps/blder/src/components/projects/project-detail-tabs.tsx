@@ -44,6 +44,7 @@ interface ProjectDetailTabsProps {
   automationSettings?: {
     autoDispatch?: boolean;
     autoBranch?: boolean;
+    autoPR?: boolean;
     autoFeaturePR?: boolean;
     ciTrigger?: boolean;
     reactFrontend?: boolean;

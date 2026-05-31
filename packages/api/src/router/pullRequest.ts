@@ -119,7 +119,7 @@ export const pullRequestRouter = {
             pullRequestId: pr.id,
             repositoryId: pr.repositoryId,
             headBranch: pr.headBranch,
-            headSha: pr.headBranch, // placeholder — real SHA comes from commit sync
+            headSha: pr.commits[0]?.sha ?? pr.headBranch,
             taskId: input.planningTaskId ?? undefined,
           }).catch(() => {
             // Intentionally swallowed — pipeline trigger is best-effort

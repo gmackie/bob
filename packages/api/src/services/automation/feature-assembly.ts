@@ -8,6 +8,8 @@ import {
 } from "@bob/db/schema";
 
 import { createDraftPr } from "../git/prService";
+import { onPullRequestCreated } from "./pipeline-trigger";
+import { isWorkItemAutomationEnabled } from "./settings";
 
 /**
  * Called when a task PR is merged into a feature branch.
@@ -67,6 +69,14 @@ export async function checkFeatureReadiness(params: {
     });
   }
 
+  const autoFeaturePrEnabled = await isWorkItemAutomationEnabled(
+    branch.workItemId,
+    "autoFeaturePR",
+  );
+  if (!autoFeaturePrEnabled) {
+    return { ready: true, featurePrCreated: false };
+  }
+
   // Auto-create feature PR now that all task PRs are merged
   try {
     // Look up the repository to get the userId for PR creation
@@ -88,7 +98,7 @@ export async function checkFeatureReadiness(params: {
       baseBranch: branch.baseBranch,
       title: `Feature: ${branch.branchName}`,
       body: `Auto-created feature PR for work item. All ${taskPRs.length} task PRs merged.`,
-      userId: repo.userId,
+      userId: params.userId,
     });
 
     if (pr) {
@@ -96,6 +106,14 @@ export async function checkFeatureReadiness(params: {
         .update(featureBranches)
         .set({ featurePrId: pr.id })
         .where(eq(featureBranches.id, params.featureBranchId));
+
+      void onPullRequestCreated({
+        pullRequestId: pr.id,
+        repositoryId: branch.repositoryId,
+        headBranch: branch.branchName,
+        headSha: pr.commits[0]?.sha ?? branch.branchName,
+        taskId: branch.workItemId,
+      }).catch(() => {});
     }
 
     console.log(
