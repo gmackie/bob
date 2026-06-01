@@ -108,7 +108,7 @@ describe("mapSessionUpdate", () => {
   });
 
   it("returns null for unknown update kinds", () => {
-    const event = mapSessionUpdate({ sessionUpdate: "plan", entries: [] });
+    const event = mapSessionUpdate({ sessionUpdate: "plan" });
     expect(event).toBeNull();
   });
 });

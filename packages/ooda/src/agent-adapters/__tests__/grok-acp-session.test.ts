@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { AcpClient } from "../acp-client";
 import { runGrokAcpSession } from "../grok-acp";
@@ -23,6 +23,9 @@ function scriptedClient(
       if (typeof msg.id === "number" && typeof msg.method === "string") {
         methods.push(msg.method);
         const result = responder(msg.method, msg.params);
+        // A responder returning `undefined` models an agent that never
+        // replies to that request (used to exercise timeouts).
+        if (result === undefined) return;
         queueMicrotask(() =>
           client.feed(
             JSON.stringify({ jsonrpc: "2.0", id: msg.id, result }) + "\n",
@@ -139,5 +142,37 @@ describe("runGrokAcpSession", () => {
     });
 
     expect(result.exitCode).toBe(1);
+  });
+
+  it("rejects when a request exceeds the timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      // Agent answers the handshake but never responds to session/prompt.
+      const { client } = scriptedClient((method) => {
+        switch (method) {
+          case "initialize":
+            return { protocolVersion: 1, authMethods: [] };
+          case "session/new":
+            return { sessionId: "s" };
+          // session/prompt: intentionally no response.
+          default:
+            return undefined;
+        }
+      });
+
+      const promise = runGrokAcpSession({
+        client,
+        prompt: "x",
+        cwd: "/tmp/ws",
+        apiKeyPresent: true,
+        timeoutMs: 1000,
+      });
+      const assertion = expect(promise).rejects.toThrow(/timed out/i);
+
+      await vi.advanceTimersByTimeAsync(1001);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

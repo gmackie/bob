@@ -112,6 +112,14 @@ export class GrokAdapter implements AgentAdapter {
         timestamp: new Date().toISOString(),
       });
       exitCode = 1;
+      // A timeout/protocol error means the agent is wedged — terminate it
+      // rather than leaking the process. SIGTERM, then SIGKILL as backstop.
+      if (!child.killed) {
+        child.kill("SIGTERM");
+        setTimeout(() => {
+          if (!child.killed) child.kill("SIGKILL");
+        }, 5000).unref();
+      }
     } finally {
       child.stdin.end();
     }

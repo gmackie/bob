@@ -115,6 +115,37 @@ const FAILURE_STOP_REASONS = new Set(["refusal", "cancelled", "canceled"]);
 /** The ACP protocol version this client implements. */
 const PROTOCOL_VERSION = 1;
 
+/** Default per-request timeout, matching the gateway's CLI-path budget. */
+const DEFAULT_REQUEST_TIMEOUT_MS = 30 * 60 * 1000;
+
+/**
+ * Race a single ACP request against a timeout so a wedged agent process
+ * can't block a session indefinitely. Rejects with a descriptive error
+ * the adapter surfaces (and acts on by killing the child).
+ */
+function requestWithTimeout(
+  client: AcpClient,
+  method: string,
+  params: unknown,
+  timeoutMs: number,
+): Promise<unknown> {
+  return new Promise<unknown>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`ACP request timed out after ${timeoutMs}ms: ${method}`));
+    }, timeoutMs);
+    client.request(method, params).then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: Error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 /**
  * Drive a single Grok ACP session to completion:
  * initialize -> (authenticate?) -> session/new -> session/prompt.
@@ -129,10 +160,14 @@ export async function runGrokAcpSession(opts: {
   cwd: string;
   apiKeyPresent: boolean;
   systemPrompt?: string;
+  timeoutMs?: number;
 }): Promise<{ exitCode: number; sessionId?: string }> {
   const { client, prompt, cwd, apiKeyPresent } = opts;
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+  const request = (method: string, params: unknown) =>
+    requestWithTimeout(client, method, params, timeoutMs);
 
-  const init = (await client.request("initialize", {
+  const init = (await request("initialize", {
     protocolVersion: PROTOCOL_VERSION,
     clientCapabilities: {
       fs: { readTextFile: true, writeTextFile: true },
@@ -143,10 +178,10 @@ export async function runGrokAcpSession(opts: {
   if (!apiKeyPresent && authMethods.length > 0) {
     const first = authMethods[0];
     const methodId = typeof first === "string" ? first : first?.id;
-    await client.request("authenticate", { methodId });
+    await request("authenticate", { methodId });
   }
 
-  const session = (await client.request("session/new", {
+  const session = (await request("session/new", {
     cwd,
     mcpServers: [],
   })) as NewSessionResult;
@@ -158,7 +193,7 @@ export async function runGrokAcpSession(opts: {
   }
   promptBlocks.push({ type: "text", text: prompt });
 
-  const result = (await client.request("session/prompt", {
+  const result = (await request("session/prompt", {
     sessionId,
     prompt: promptBlocks,
   })) as PromptResult;
