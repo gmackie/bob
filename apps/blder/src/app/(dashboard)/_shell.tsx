@@ -39,9 +39,9 @@ export default function BilderShell({ children }: { children: React.ReactNode })
 
   return (
     <ChatPanelProvider>
-    <div className="relative flex min-h-screen">
+    <div className="relative flex min-h-screen bg-fg-canvas">
       <aside
-        className="bg-background fixed inset-y-0 left-0 z-30 flex flex-col border-r border-border transition-all duration-200"
+        className="fixed inset-y-0 left-0 z-30 flex flex-col border-r border-border bg-fg-panel transition-all duration-200"
         style={{ width: sidebarWidth }}
       >
         <div className="flex h-14 items-center px-4">
@@ -94,7 +94,7 @@ export default function BilderShell({ children }: { children: React.ReactNode })
       <ChatPanel />
 
       {showNotif && (
-        <div className="fixed inset-y-0 right-0 z-40 w-80 border-l border-border bg-background p-4">
+        <div className="fixed inset-y-0 right-0 z-40 w-80 border-l border-border bg-fg-panel p-4">
           <button onClick={() => setShowNotif(false)} className="text-sm text-muted-foreground">Close</button>
           <p className="mt-4 text-sm text-muted-foreground">No notifications</p>
         </div>

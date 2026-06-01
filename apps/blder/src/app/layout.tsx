@@ -70,7 +70,7 @@ export default function RootLayout(props: { children: React.ReactNode; params: P
     <html lang="en" suppressHydrationWarning>
       <body
         className={cn(
-          "bg-background text-foreground min-h-screen font-sans antialiased",
+          "min-h-screen bg-fg-canvas font-sans text-foreground antialiased",
           satoshi.variable,
           dmSans.variable,
           jetBrainsMono.variable,
