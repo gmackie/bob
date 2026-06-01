@@ -4,7 +4,7 @@
   "private": true,
   "description": "Bob Builder monorepo for planning, task execution, web, mobile, and execution services",
   "author": "Bob Team <sean@reedster.llc>",
-  "license": "GPL-3.0",
+  "license": "MIT",
   "homepage": "https://github.com/your-org/bob",
   "engines": {
     "node": ">=22.0.0",

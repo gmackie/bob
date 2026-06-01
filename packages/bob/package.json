@@ -2,6 +2,7 @@
   "name": "bob",
   "version": "0.1.0",
   "description": "Create a new Bob app with Next.js, Expo, tRPC, and more",
+  "license": "MIT",
   "type": "module",
   "bin": {
     "bob": "./dist/index.js"

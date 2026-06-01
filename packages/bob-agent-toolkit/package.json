@@ -2,6 +2,7 @@
   "name": "@bob/agent-toolkit",
   "version": "0.1.0",
   "description": "Skills and configuration templates for AI agents working with Bob",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
