@@ -176,6 +176,8 @@ Solo developers already using coding agents, with team support designed into the
 - **Premium/Pro tiers:** unlock features (not usage), seat-based pricing for teams
 - blder.bot never touches LLM costs — users bring their own keys
 
+**Pricing strategy:** See [BizPulse Pricing & Packaging Strategy](./2026-06-01-bizpulse-pricing-packaging-strategy.md) for the GMA-18 buyer-model decision, tier hypotheses, competitive anchors, and pricing experiments.
+
 ## Auth Model
 
 - GitHub OAuth for web UI sign-in
