@@ -33,13 +33,16 @@ describe("GrokAdapter", () => {
     });
 
     expect(command.binary).toBe("grok");
+    // grok's CLI grammar: top-level opts -> `agent` -> agent opts -> `stdio`.
+    // `--cwd` is top-level; `--always-approve` is an `agent` option. The
+    // `agent stdio` subcommand itself takes no flags. (Verified against
+    // grok 0.2.16 on hetzner-bob.)
     expect(command.args).toEqual([
-      "agent",
-      "stdio",
       "--cwd",
       "/tmp/threads/api",
+      "agent",
       "--always-approve",
-      "--no-auto-update",
+      "stdio",
     ]);
     expect(command.cwd).toBe("/tmp/threads/api");
     // The prompt is sent over ACP (session/prompt), not as a CLI arg.

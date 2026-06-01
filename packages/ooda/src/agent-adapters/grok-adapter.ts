@@ -38,13 +38,16 @@ export class GrokAdapter implements AgentAdapter {
     workspaceRoot: string;
     systemPrompt?: string;
   }): AdapterCommand {
+    // grok CLI grammar: top-level opts -> `agent` -> agent opts -> `stdio`.
+    // `--cwd` is top-level; `--always-approve` is an `agent` option; the
+    // `agent stdio` subcommand takes no flags of its own. (Verified against
+    // grok 0.2.16 — see apps/ooda-runner/scripts/grok-acp-smoke.mjs.)
     const args = [
-      "agent",
-      "stdio",
       "--cwd",
       opts.workspaceRoot,
+      "agent",
       "--always-approve",
-      "--no-auto-update",
+      "stdio",
     ];
 
     const command: AdapterCommand = {
