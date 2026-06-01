@@ -60,6 +60,7 @@ const agentTypeEnum = [
   "kiro",
   "codex",
   "gemini",
+  "grok",
   "opencode",
   "smol-agent",
   "cursor-agent",

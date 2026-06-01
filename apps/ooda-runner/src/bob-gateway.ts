@@ -232,6 +232,15 @@ export class BobGatewayConnector {
           data: event.data,
           stream: event.type,
         });
+      } else if (event.type === "thought") {
+        this.sendEvent(session.sessionId, "thought", "agent", {
+          text: event.thought?.text ?? event.data,
+        });
+      } else if (event.type === "tool_call" || event.type === "tool_result") {
+        this.sendEvent(session.sessionId, "tool_call", "agent", {
+          phase: event.type === "tool_call" ? "start" : "end",
+          ...event.tool,
+        });
       }
     });
   }

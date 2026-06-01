@@ -8,6 +8,7 @@ import { SessionManager } from "./session/session-manager";
 import { SessionExecutor } from "./session/session-executor";
 import { CodexAdapter } from "@gmacko/ooda/agent-adapters";
 import { ClaudeAdapter } from "@gmacko/ooda/agent-adapters";
+import { GrokAdapter } from "@gmacko/ooda/agent-adapters";
 import type { AgentAdapter } from "@gmacko/ooda/agent-adapters";
 import { generateRunnerToken } from "./auth/auth";
 import { promoteNote } from "@gmacko/ooda/thread-workspace";
@@ -106,8 +107,10 @@ export class RunnerServer {
     this.adapters = new Map();
     const codex = new CodexAdapter();
     const claude = new ClaudeAdapter();
+    const grok = new GrokAdapter();
     if (codex.isAvailable()) this.adapters.set("codex", codex);
     if (claude.isAvailable()) this.adapters.set("claude", claude);
+    if (grok.isAvailable()) this.adapters.set("grok", grok);
 
     // Bob gateway connector (optional — only starts if BOB_GATEWAY_URL is set)
     if (config.bobGatewayUrl && config.bobApiKey && config.bobWorkspaceId) {
@@ -385,6 +388,23 @@ export class RunnerServer {
               sessionId: session.id,
               type: "stderr_chunk",
               content: event.data,
+            });
+          }
+          if (event.type === "thought") {
+            void this.trpc.runner.pushSessionEvent.mutate({
+              sessionId: session.id,
+              type: "thought",
+              content: event.thought?.text ?? event.data,
+            });
+          }
+          if (event.type === "tool_call" || event.type === "tool_result") {
+            void this.trpc.runner.pushSessionEvent.mutate({
+              sessionId: session.id,
+              type: "tool_call",
+              content: JSON.stringify({
+                phase: event.type === "tool_call" ? "start" : "end",
+                ...event.tool,
+              }),
             });
           }
           if (event.type === "error") {

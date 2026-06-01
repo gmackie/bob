@@ -16,13 +16,40 @@ export interface AdapterCommand {
   args: string[];
   cwd: string;
   env?: Record<string, string>;
+  /**
+   * The user prompt, for ACP/stdio-RPC adapters that deliver the prompt
+   * over the protocol (e.g. `session/prompt`) rather than as a CLI arg.
+   * CLI-spawn adapters bake the prompt into `args` and leave this unset.
+   */
+  prompt?: string;
 }
 
 export interface AdapterEvent {
-  type: "stdout" | "stderr" | "exit" | "error";
+  type:
+    | "stdout"
+    | "stderr"
+    | "exit"
+    | "error"
+    // ACP-native structured event types (populated by adapters that speak
+    // a protocol with first-class reasoning + tool-call streams). Consumers
+    // that don't recognize them simply ignore them — they are additive.
+    | "thought"
+    | "tool_call"
+    | "tool_result";
+  /** Text for stdout/stderr/thought; a short JSON-ish summary otherwise. */
   data: string;
   timestamp: string;
   exitCode?: number;
+  /** Structured payload for `tool_call` / `tool_result` events. */
+  tool?: {
+    id: string;
+    name: string;
+    status: "started" | "completed" | "failed";
+    input?: unknown;
+    output?: string;
+  };
+  /** Structured payload for `thought` events. */
+  thought?: { text: string };
 }
 
 export interface AgentAdapter {

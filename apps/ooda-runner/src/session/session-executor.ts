@@ -72,6 +72,9 @@ export class SessionExecutor {
     let fullOutput = "";
 
     const wrappedOnEvent = (event: AdapterEvent) => {
+      // Capture assistant text (stdout) for the parsed agentResponse.
+      // Structured ACP events (thought / tool_call / tool_result) pass
+      // through to the caller untouched for richer session reporting.
       if (event.type === "stdout") {
         fullOutput += event.data;
       }
