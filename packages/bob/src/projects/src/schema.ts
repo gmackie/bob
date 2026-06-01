@@ -111,6 +111,9 @@ export const projects = pgTable("projects", (t) => ({
     .notNull()
     .default({}),
   planningProvider: t.varchar({ length: 20 }).notNull().default("internal"),
+  // Default agent for this project's work items; overrides the workspace
+  // default, overridden by a per-work-item agentTypeOverride. Nullable = unset.
+  defaultAgentType: t.varchar({ length: 50 }),
   linearProjectId: t.text(),
   createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t

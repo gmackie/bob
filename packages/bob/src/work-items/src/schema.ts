@@ -479,6 +479,9 @@ export const workItems = pgTable("work_items", (t) => ({
   title: t.varchar({ length: 256 }).notNull(),
   description: t.text(),
   status: t.varchar({ length: 40 }).notNull().default("draft"),
+  // Per-work-item agent override; top of the resolveAgentType hierarchy.
+  // Nullable = inherit from project / workspace default.
+  agentTypeOverride: t.varchar({ length: 50 }),
   externalId: t.text(),
   externalProvider: t.varchar({ length: 20 }),
   createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),

@@ -2,6 +2,12 @@
 import type { WorkItemKind } from "./schema";
 export type { WorkItemKind };
 
+export {
+  resolveAgentType,
+  DEFAULT_AGENT_TYPE,
+  type ResolveAgentTypeInput,
+} from "./resolve-agent-type";
+
 export interface WorkItemRef {
   id: string;
   kind: WorkItemKind;

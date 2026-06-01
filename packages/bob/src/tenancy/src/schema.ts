@@ -86,6 +86,10 @@ export const workspaces = pgTable("workspaces", (t) => ({
   machineId: t.text("machine_id"),
   lastHeartbeat: t.timestamp("last_heartbeat", { mode: "string" }),
   agentConfigs: t.json("agent_configs").$type<Record<string, unknown>>(),
+  // Default agent for this workspace's work (and for OODA sessions bound to
+  // this workspace). Bottom of the resolveAgentType hierarchy. Nullable =
+  // unset -> falls through to the hardcoded default.
+  defaultAgentType: t.varchar("default_agent_type", { length: 50 }),
   forgeAvailable: t.boolean("forge_available").default(false),
   forgeApiKey: t.text("forge_api_key"),
   devDir: t.text("dev_dir"),
