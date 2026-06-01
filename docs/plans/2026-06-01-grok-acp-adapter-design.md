@@ -248,9 +248,27 @@ schema; OODA inherits the Bob workspace default.
 
 ## 10. Phasing
 
-- **Phase 1 — Grok on hetzner.** ACP client + Grok adapter + extended `AdapterEvent` +
-  both-path wiring + enum/picker + tests + hetzner deploy. *(Unblocks the near-term goal.)*
-- **Phase 2 — Agent config.** Schema additions + `resolveAgentType` + work-item/project/
-  workspace mutations & UI.
-- **Phase 3 — Convergence.** Fold task-runner into the gateway path; OODA workspace default
-  via bound Bob workspace.
+- **Phase 1 — Grok on hetzner. ✅ DONE + DEPLOYED + VALIDATED.** ACP client + Grok adapter +
+  extended `AdapterEvent` + both-path wiring + enum/picker + tests + per-request timeout.
+  Deployed to `ooda-runner.service` on hetzner-bob (on branch `feat/grok-acp-adapter`);
+  `[runner] available adapters: codex, claude, grok`. Validated end-to-end against grok 0.2.16
+  via `apps/ooda-runner/scripts/grok-acp-smoke.mjs` (PASS).
+- **Phase 2 — Agent config. Backend ✅ DONE.** Schema columns + migration 0020 +
+  `resolveAgentType` (tested). **Remaining:** `workItem.setAgent` / `project.setDefaultAgent` /
+  `workspace.setDefaultAgent` mutations + the work-item-detail / project / workspace UI
+  selectors + calling `resolveAgentType` at the run-creation sites.
+- **Phase 3 — Convergence. TODO.** Fold task-runner into the gateway path; OODA workspace
+  default via bound Bob workspace.
+
+## 11. Validated ACP facts (grok 0.2.16, hetzner-bob)
+
+- Launch: `grok --cwd <ws> agent --always-approve stdio` (NOT `agent stdio --cwd`; no
+  `--no-auto-update` flag — auto-update is config-driven).
+- Auth: cached token in `~/.grok/auth.json` (ACP `authenticate` methodId `cached_token`); no
+  `XAI_API_KEY` required when running as the `bob` user.
+- Grok delegates fs to the client over ACP: `fs/write_text_file` + `fs/read_text_file` — so
+  `handleAgentRequest` is load-bearing, not just defensive.
+- `session/update` kinds match `mapSessionUpdate`: `agent_message_chunk` (text→stdout),
+  `agent_thought_chunk` (→thought), `tool_call` (`toolCallId`/`title`/`rawInput`),
+  `tool_call_update` (`status:"completed"`). `session/prompt` → `{stopReason}`;
+  `"end_turn"` = success (exit 0).
