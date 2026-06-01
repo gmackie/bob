@@ -1,10 +1,6 @@
-Your full app description goes here.
-
-Describe what your app does, its key features, and why users should download it.
+BizPulse helps teams keep business priorities, planning, and execution signals in one mobile workspace.
 
 Key Features:
-- Feature 1
-- Feature 2
-- Feature 3
-
-Download now and get started!
+- Track active work and planning context from mobile
+- Stay current with notifications and project updates
+- Move from planning to execution without losing context

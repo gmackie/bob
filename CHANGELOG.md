@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Changed
+- GMA-22: Locked BizPulse as the production mobile display and storefront name, and added rebrand rollout guidance for the Pulse Manager transition.
+
 ## [0.0.4] - 2026-03-17
 
 ### Added
