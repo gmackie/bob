@@ -348,7 +348,8 @@ export class BobGatewayConnector {
     const remote = (
       await this.git(worktree.repoPath, ["remote", "get-url", "origin"])
     ).trim();
-    return this.createForgejoPr(
+    return this.createPullRequest(
+      worktree.path,
       remote,
       worktree.branch,
       worktree.baseBranch,
@@ -357,41 +358,84 @@ export class BobGatewayConnector {
     );
   }
 
-  /** Open a PR on the Forgejo/Gitea host using the token embedded in the remote URL. */
-  private async createForgejoPr(
+  /**
+   * Open a PR for the pushed branch, host-aware:
+   * - github.com → `gh pr create` (the runner host is authenticated)
+   * - Forgejo/Gitea over HTTPS with a token in the remote URL → REST API
+   * - otherwise (e.g. SSH gitea without a token) → push-only, PR opened manually
+   */
+  private async createPullRequest(
+    worktreePath: string,
     remoteUrl: string,
     head: string,
     base: string,
     title: string,
     body: string,
   ): Promise<string | null> {
-    const m = remoteUrl.match(
-      /^https?:\/\/(?:([^:@/]+):([^@/]+)@)?([^/]+)\/([^/]+)\/(.+?)(?:\.git)?$/,
-    );
-    if (!m) {
-      console.warn(`[bob-gw] could not parse remote for PR: ${remoteUrl.replace(/:[^@/]+@/, ":***@")}`);
+    const parsed = this.parseRemote(remoteUrl);
+    if (!parsed) {
+      console.warn(`[bob-gw] could not parse remote for PR`);
       return null;
     }
-    const token = m[2];
-    const host = m[3];
-    const owner = m[4];
-    const repo = m[5];
-    if (!token) {
-      console.warn(`[bob-gw] no token in remote URL; cannot open PR`);
-      return null;
+    const { host, owner, repo, token } = parsed;
+    const prTitle = `[Bob] ${title}`;
+
+    if (host === "github.com") {
+      try {
+        const out = await this.run(
+          "gh",
+          ["pr", "create", "--repo", `${owner}/${repo}`, "--head", head, "--base", base, "--title", prTitle, "--body", body],
+          worktreePath,
+        );
+        return (out.match(/https?:\/\/\S+/) || [])[0] ?? null;
+      } catch (e) {
+        console.warn(`[bob-gw] gh pr create failed: ${e instanceof Error ? e.message : e}`);
+        return null;
+      }
     }
-    const res = await fetch(`https://${host}/api/v1/repos/${owner}/${repo}/pulls`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `token ${token}` },
-      body: JSON.stringify({ head, base, title: `[Bob] ${title}`, body }),
+
+    if (token) {
+      const res = await fetch(`https://${host}/api/v1/repos/${owner}/${repo}/pulls`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `token ${token}` },
+        body: JSON.stringify({ head, base, title: prTitle, body }),
+      });
+      if (!res.ok) {
+        console.warn(`[bob-gw] Gitea PR create ${res.status}: ${(await res.text().catch(() => "")).slice(0, 200)}`);
+        return null;
+      }
+      const pr = (await res.json()) as { html_url?: string; url?: string };
+      return pr.html_url ?? pr.url ?? null;
+    }
+
+    console.warn(`[bob-gw] no PR method for ${host}; pushed ${head} (open PR manually)`);
+    return null;
+  }
+
+  /** Parse a git remote (SSH or HTTPS) into host/owner/repo (+ token if embedded). */
+  private parseRemote(
+    remoteUrl: string,
+  ): { host: string; owner: string; repo: string; token?: string } | null {
+    let m = remoteUrl.match(/^[^@]+@([^:]+):([^/]+)\/(.+?)(?:\.git)?$/);
+    if (m) return { host: m[1]!, owner: m[2]!, repo: m[3]! };
+    m = remoteUrl.match(/^https?:\/\/(?:([^:@/]+):([^@/]+)@)?([^/]+)\/([^/]+)\/(.+?)(?:\.git)?$/);
+    if (m) return { host: m[3]!, owner: m[4]!, repo: m[5]!, token: m[2] };
+    return null;
+  }
+
+  /** Run a command in cwd, resolving stdout (rejects on non-zero exit). */
+  private run(cmd: string, args: string[], cwd: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const child = spawn(cmd, args, { cwd, stdio: ["ignore", "pipe", "pipe"], env: process.env });
+      let out = "";
+      let err = "";
+      child.stdout?.on("data", (d: Buffer) => (out += d.toString()));
+      child.stderr?.on("data", (d: Buffer) => (err += d.toString()));
+      child.on("close", (code) =>
+        code === 0 ? resolve(out) : reject(new Error(`${cmd}: ${err || out}`)),
+      );
+      child.on("error", reject);
     });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      console.warn(`[bob-gw] Forgejo PR create ${res.status}: ${text.slice(0, 200)}`);
-      return null;
-    }
-    const pr = (await res.json()) as { html_url?: string; url?: string };
-    return pr.html_url ?? pr.url ?? null;
   }
 
   private async removeWorktree(worktree: WorktreeContext): Promise<void> {
