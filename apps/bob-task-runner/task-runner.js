@@ -275,7 +275,8 @@ function agentCommand(agentType, prompt, logFile) {
       ]];
     case "grok":
       // Grok Build headless mode (writes to stdout; we capture it ourselves).
-      return ["grok", ["-p", prompt, "--output-format", "text"]];
+      // Valid --output-format values are plain | json | streaming-json.
+      return ["grok", ["-p", prompt, "--output-format", "plain"]];
     case "codex":
     default:
       return ["codex", [
