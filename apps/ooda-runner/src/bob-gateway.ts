@@ -5,6 +5,7 @@ import { basename, dirname, join } from "node:path";
 import WebSocket from "ws";
 
 import type { AgentAdapter, AdapterEvent } from "@gmacko/ooda/agent-adapters";
+import { bobRunReporterFromEnv, type BobRunReporter } from "./bob-run-reporter";
 
 const RECONNECT_DELAY_MS = 5_000;
 const HEARTBEAT_INTERVAL_MS = 25_000;
@@ -75,6 +76,9 @@ export class BobGatewayConnector {
   private activeSessions = new Map<string, ChildProcess>();
   private adapters: Map<string, AgentAdapter>;
   private stopped = false;
+  // Reports gateway-dispatched runs to Bob's public API as agentRuns so they
+  // appear in Recent Outcomes (the same surface the task-runner reports to).
+  private bobReporter: BobRunReporter = bobRunReporterFromEnv();
 
   constructor(
     private config: BobGatewayConfig,
@@ -235,12 +239,28 @@ export class BobGatewayConnector {
     this.send({ type: "session_status", sessionId: session.sessionId, status: "running" });
     this.sendEvent(session.sessionId, "state", "system", { status: "running" });
 
+    // Record an agentRun so this shows in Recent Outcomes (via <agent>), the
+    // same surface the task-runner reports to. workItemId uses the identifier
+    // (publicApiCreateRun matches it to the work item by externalId).
+    const bobRunId = await this.bobReporter
+      .startRun({
+        workItemId: session.identifier ?? session.sessionId,
+        agentType: adapterId,
+        title: session.title,
+      })
+      .catch(() => null);
+    let runOutput = "";
+    const collect = (s: string) => {
+      runOutput += s;
+      if (runOutput.length > 200_000) runOutput = runOutput.slice(-200_000);
+    };
+
     const startTime = Date.now();
     try {
       if (adapter) {
-        await this.runWithAdapter(session, adapter, workDir, prompt);
+        await this.runWithAdapter(session, adapter, workDir, prompt, collect);
       } else {
-        await this.runWithCli(session, workDir, prompt);
+        await this.runWithCli(session, workDir, prompt, collect);
       }
 
       // Worktree path: push the branch and open a PR if commits were produced.
@@ -269,12 +289,18 @@ export class BobGatewayConnector {
         pullRequestUrl: prUrl ?? undefined,
       });
       console.log(`[bob-gw] Session ${session.sessionId} completed${prUrl ? ` → ${prUrl}` : ""}`);
+      await this.bobReporter.pushLog(bobRunId, runOutput).catch(() => {});
+      await this.bobReporter
+        .finishRun(bobRunId, "completed", { pullRequestUrl: prUrl ?? undefined })
+        .catch(() => {});
       void this.reportToBizPulse(session, "completed", Date.now() - startTime);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       console.error(`[bob-gw] Session ${session.sessionId} failed: ${errMsg}`);
       this.send({ type: "session_status", sessionId: session.sessionId, status: "error" });
       this.sendEvent(session.sessionId, "error", "system", { code: "AGENT_ERROR", message: errMsg });
+      await this.bobReporter.pushLog(bobRunId, runOutput).catch(() => {});
+      await this.bobReporter.finishRun(bobRunId, "failed", { error: errMsg }).catch(() => {});
       void this.reportToBizPulse(session, "failed", Date.now() - startTime);
     } finally {
       if (worktree) await this.removeWorktree(worktree).catch(() => {});
@@ -467,12 +493,14 @@ export class BobGatewayConnector {
     adapter: AgentAdapter,
     workDir: string,
     prompt: string,
+    onChunk?: (s: string) => void,
   ): Promise<void> {
     const systemPrompt = this.buildSystemPrompt(session);
     const command = adapter.buildCommand({ prompt, workspaceRoot: workDir, systemPrompt });
 
     await adapter.execute(command, (event: AdapterEvent) => {
       if (event.type === "stdout" || event.type === "stderr") {
+        onChunk?.(event.data);
         this.sendEvent(session.sessionId, "output_chunk", "agent", {
           data: event.data,
           stream: event.type,
@@ -494,6 +522,7 @@ export class BobGatewayConnector {
     session: ServerSessionAvailable,
     workDir: string,
     prompt: string,
+    onChunk?: (s: string) => void,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       const { command, args } = this.getCliCommand(session.agentType || "claude", prompt, session);
@@ -508,6 +537,7 @@ export class BobGatewayConnector {
       this.activeSessions.set(session.sessionId, child);
 
       child.stdout?.on("data", (data: Buffer) => {
+        onChunk?.(data.toString());
         this.sendEvent(session.sessionId, "output_chunk", "agent", {
           data: data.toString(),
           stream: "stdout",
@@ -515,6 +545,7 @@ export class BobGatewayConnector {
       });
 
       child.stderr?.on("data", (data: Buffer) => {
+        onChunk?.(data.toString());
         this.sendEvent(session.sessionId, "output_chunk", "agent", {
           data: data.toString(),
           stream: "stderr",
