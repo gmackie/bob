@@ -14,6 +14,7 @@ import {
   comments,
   notifications,
   projects,
+  repositories,
   runLifecycleEvents,
   taskRuns,
   workItemDependencies,
@@ -938,11 +939,26 @@ export async function workItemsDispatch(
       workspaceDefault: workspace?.defaultAgentType ?? null,
     });
 
+  // Resolve the project's mapped repository so the agent runs in an isolated
+  // worktree off that repo (not the runner's own checkout) and can open a PR.
+  // Falls back to the legacy hardcoded dir when no repo is mapped.
+  const FALLBACK_DIR = "/home/bob/dev/gmacko-bob";
+  const repository = project?.id
+    ? await ctx.db.query.repositories.findFirst({
+        where: eq(repositories.planningProjectId, project.id),
+      })
+    : null;
+  const repoPath = repository?.path ?? FALLBACK_DIR;
+  // Stable, filesystem-safe feature branch per work item.
+  const branch = `bob/${identifier.toLowerCase().replace(/[^a-z0-9._/-]+/g, "-")}`;
+
   const [session] = await ctx.db
     .insert(chatConversations)
     .values({
       userId: ctx.userId,
-      workingDirectory: "/home/bob/dev/gmacko-bob",
+      repositoryId: repository?.id ?? null,
+      workingDirectory: repoPath,
+      gitBranch: branch,
       agentType,
       sessionType: "execution",
       status: "pending",
@@ -965,12 +981,16 @@ export async function workItemsDispatch(
         body: JSON.stringify({
           sessionId: session.id,
           workspaceId: workItem.workspaceId,
-          workingDirectory: "/home/bob/dev/gmacko-bob",
+          workingDirectory: repoPath,
           agentType,
           title: session.title,
           sessionType: "execution",
           description: workItem.description ?? undefined,
           identifier,
+          // The runner makes a worktree when `branch` is set (only when a repo
+          // is mapped). workingDirectory carries the repo path; baseBranch is
+          // detected on the runner. Both fields are forwarded by the gateway.
+          branch: repository ? branch : undefined,
         }),
       });
     } catch (err) {
