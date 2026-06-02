@@ -283,7 +283,18 @@ via `sudo -u postgres psql bob` on hetzner-master. `apps/bob` predeploy script
 `scripts/migrate-hetzner.sh` is missing, so deploy with `pnpm exec vinext deploy` after
 migrating manually.
 
-### Known issue — runner_device registration (diagnosed: NOT a code defect)
+### runner_device registration — ✅ FIXED (2026-06-02)
+**Root cause:** `ooda.blder.bot` is the CF Worker `ooda-blder-bot`; its `HYPERDRIVE` binding
+pointed at Hyperdrive config `b053c840…` which had been **deleted** (CF API: "config not
+found"), so every DB query failed. **Fix:** the `bob` database already contains the OODA tables
+(runner_device, runner_session, session_event, …), so OODA and Bob share one DB. Repointed the
+`ooda-blder-bot` worker's `HYPERDRIVE` binding to the existing `blder-bot-db` Hyperdrive
+(`c1f467…` → `pg-db.forgegraf.com/bob`) via a CF API settings PATCH (other 11 bindings
+preserved via `inherit`). No new Hyperdrive needed (account was at the 25 cap). The runner now
+registers: `registered as device …`, `heartbeat OK`, `runner_device` row online with
+capabilities `["codex","claude","grok"]`.
+
+### (Historical) original diagnosis — NOT a code defect
 The ooda-runner logs `registration failed … Failed query: select … from "runner_device"`.
 Diagnosis: the repo schema (`packages/ooda/src/db/schema/research.ts`) and the production DB
 (`ooda_production` @ 100.101.32.120) both have `runner_device` with all expected columns, and
