@@ -265,11 +265,23 @@ schema; OODA inherits the Bob workspace default.
   the runner — so the **OODA workspace default is covered** for gateway-routed execution
   (no cross-system lookup needed).
 
-### Deploy status
-- Phase 1: **deployed + validated** on hetzner-bob `ooda-runner.service`.
-- Phase 2/3: code-complete + pushed; deploys via the Bob web-app (`bob-nextjs`) release on
-  `master`. The new `task-runner.js` is **gated on that API deploy** (it omits `agentType`,
-  which the current production API would reject) — do not ship task-runner.js standalone.
+### Deploy status — ALL DEPLOYED (2026-06-02)
+- **Phase 1** — Grok adapter: deployed + validated on hetzner-bob `ooda-runner.service`
+  (`available adapters: codex, claude, grok`).
+- **Phase 2** — agent config: **deployed to production `bob.blder.bot`** (Cloudflare Worker
+  `blder-bot`, version 2cfc8357) via `vinext deploy`. Prod `bob` DB on `hetzner-master`
+  migrated (added `workspaces.default_agent_type`, `projects.default_agent_type`,
+  `work_items.agent_type_override`). Post-deploy health verified (302/307/401, no 500s).
+- **Phase 3** — task-runner: **deployed** to `/opt/bob/task-runner` on hetzner-bob (restarted,
+  running agent-aware code; `.bak` kept). The task-runner workspace
+  (`5503dac2-…`) `default_agent_type` set to `codex` so behavior is unchanged until a
+  project/work-item override (e.g. grok) is set.
+
+Deploy notes for next time: prod `bob` DB = `hetzner-master:5432/bob` (Hyperdrive
+`blder-bot-db`); forge secret `DATABASE_URL_LOCAL` password is **stale** (auth fails) — migrate
+via `sudo -u postgres psql bob` on hetzner-master. `apps/bob` predeploy script
+`scripts/migrate-hetzner.sh` is missing, so deploy with `pnpm exec vinext deploy` after
+migrating manually.
 
 ### Known issue — runner_device registration (diagnosed: NOT a code defect)
 The ooda-runner logs `registration failed … Failed query: select … from "runner_device"`.
@@ -277,9 +289,15 @@ Diagnosis: the repo schema (`packages/ooda/src/db/schema/research.ts`) and the p
 (`ooda_production` @ 100.101.32.120) both have `runner_device` with all expected columns, and
 the exact query **succeeds run directly** against that DB (the `runner-hetzner-bob` row exists).
 `https://ooda.blder.bot` returns HTTP 200 but its `register` query fails — so the fault is the
-**`ooda.blder.bot` deployment's DB binding** (a Cloudflare Worker), not this repo. The Bob
-gateway path (which Grok uses) is unaffected. Fix requires access to the ooda.blder.bot
-Worker's Hyperdrive/DATABASE config (outside this repo/environment).
+**`ooda.blder.bot` deployment's DB connection**, not this repo. Verified 2026-06-02 with DB
+superuser access on hetzner-master: `ooda_production` is the only OODA DB, its `runner_device`
+schema is correct, and the exact query succeeds directly — yet the `runner-hetzner-bob` row has
+not updated since **2026-05-19**, proving `ooda.blder.bot` writes to a *different/unreachable*
+DB. `apps/ooda` (`@gmacko/ooda-web`) is plain Next.js with **no deploy script, no wrangler/CF
+config, and no OODA Hyperdrive** — it is hosted externally by a pipeline not exposed in this
+environment, so it cannot be redeployed or reconfigured from here. The Bob gateway path (which
+Grok uses) is unaffected. **This is the one item not completable from this environment**: it
+requires access to the `ooda.blder.bot` host's DB config / its deploy pipeline.
 
 ## 11. Validated ACP facts (grok 0.2.16, hetzner-bob)
 
