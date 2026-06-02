@@ -37,6 +37,50 @@ async function assertWorkspaceAccess(db: any, userId: string, workspaceId: strin
   }
 }
 
+function mapLinkedRepository(repository: any) {
+  if (!repository) return null;
+
+  return {
+    id: repository.id,
+    name: repository.name,
+    path: repository.path,
+    branch: repository.branch,
+    mainBranch: repository.mainBranch,
+    remoteProvider: repository.remoteProvider,
+    remoteOwner: repository.remoteOwner,
+    remoteName: repository.remoteName,
+    remoteUrl: repository.remoteUrl,
+    buildSystem: repository.buildSystem,
+    dirty: repository.dirty,
+    stale: repository.stale,
+    discoveryStatus: repository.discoveryStatus,
+  };
+}
+
+async function notifyWorkspaceEvent(input: {
+  type: string;
+  workspaceId: string;
+  entityId?: string;
+  payload?: Record<string, unknown>;
+}) {
+  const gatewayUrl = process.env.GATEWAY_URL;
+  const nudgeSecret = process.env.NUDGE_SHARED_SECRET;
+  if (!gatewayUrl || !nudgeSecret) return;
+
+  try {
+    await fetch(`${gatewayUrl}/internal/workspace-event`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${nudgeSecret}`,
+      },
+      body: JSON.stringify(input),
+    });
+  } catch (err) {
+    console.warn("[project] workspace event notification failed:", err);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Handler functions
 // ---------------------------------------------------------------------------
@@ -63,6 +107,16 @@ export async function projectCreate(
       color: input.color ?? null,
     })
     .returning();
+
+  await notifyWorkspaceEvent({
+    type: "project_sync_changed",
+    workspaceId: input.workspaceId,
+    entityId: project!.id,
+    payload: {
+      changed: ["project"],
+    },
+  });
+
   return project!;
 }
 
@@ -80,9 +134,18 @@ export async function projectList(
   const items = await ctx.db.query.workItems.findMany({
     where: eq(workItems.workspaceId, input.workspaceId),
   });
+  const repositoryRows = await ctx.db.query.repositories.findMany({
+    where: and(
+      eq(repositories.workspaceId, input.workspaceId),
+      eq(repositories.userId, ctx.userId),
+    ),
+  });
 
   const result = projectRows.map((project: any) => {
     const projectItems = items.filter((item: any) => item.projectId === project.id);
+    const linkedRepository = repositoryRows.find(
+      (repo: any) => repo.planningProjectId === project.id,
+    );
     const latestItemDate = projectItems.reduce((latest: string | null, item: any) => {
       const d = item.updatedAt ?? item.createdAt;
       return d && (!latest || d > latest) ? d : latest;
@@ -99,6 +162,7 @@ export async function projectList(
             item.status === "in_progress" || item.status === "in_review",
         ).length,
       },
+      linkedRepository: mapLinkedRepository(linkedRepository),
       _latestActivity: latestItemDate ?? project.updatedAt ?? project.createdAt,
     };
   });
@@ -131,6 +195,14 @@ export async function projectGet(
       eq(repositories.userId, ctx.userId),
     ),
   });
+  const workspace = await ctx.db.query.workspaces.findFirst({
+    where: eq(workspaces.id, project.workspaceId),
+    columns: {
+      id: true,
+      name: true,
+      slug: true,
+    },
+  });
 
   const items = await ctx.db.query.workItems.findMany({
     where: eq(workItems.projectId, input.id),
@@ -142,17 +214,8 @@ export async function projectGet(
 
   return {
     project,
-    linkedRepository: linkedRepository
-      ? {
-          id: linkedRepository.id,
-          name: linkedRepository.name,
-          path: linkedRepository.path,
-          remoteProvider: linkedRepository.remoteProvider,
-          remoteOwner: linkedRepository.remoteOwner,
-          remoteName: linkedRepository.remoteName,
-          remoteUrl: linkedRepository.remoteUrl,
-        }
-      : null,
+    workspace,
+    linkedRepository: mapLinkedRepository(linkedRepository),
     capabilities,
     counts: {
       issues: items.filter((item: any) => item.kind === "issue").length,
@@ -202,6 +265,39 @@ export async function projectUpdateAutomationSettings(
   const [updated] = await ctx.db
     .update(projects)
     .set({ automationSettings: merged })
+    .where(eq(projects.id, input.projectId))
+    .returning();
+
+  await notifyWorkspaceEvent({
+    type: "project_sync_changed",
+    workspaceId: existing.workspaceId,
+    entityId: input.projectId,
+    payload: {
+      changed: ["automationSettings"],
+    },
+  });
+
+  return updated!;
+}
+
+export async function projectSetDefaultAgent(
+  ctx: HandlerContext,
+  input: { projectId: string; defaultAgentType: string | null },
+) {
+  const existing = await ctx.db.query.projects.findFirst({
+    where: eq(projects.id, input.projectId),
+    columns: { workspaceId: true },
+  });
+
+  if (!existing) {
+    throw new Error("Project not found");
+  }
+
+  await assertWorkspaceAccess(ctx.db, ctx.userId, existing.workspaceId);
+
+  const [updated] = await ctx.db
+    .update(projects)
+    .set({ defaultAgentType: input.defaultAgentType })
     .where(eq(projects.id, input.projectId))
     .returning();
 
@@ -291,5 +387,15 @@ export async function projectDismissDir(
     .update(discoveredDirs)
     .set({ dismissed: true })
     .where(eq(discoveredDirs.id, input.dirId));
+
+  await notifyWorkspaceEvent({
+    type: "project_sync_changed",
+    workspaceId: dir.workspaceId,
+    entityId: input.dirId,
+    payload: {
+      changed: ["discoveredDir"],
+    },
+  });
+
   return { ok: true };
 }

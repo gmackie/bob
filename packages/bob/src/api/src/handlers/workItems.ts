@@ -16,6 +16,7 @@ import {
   projects,
   runLifecycleEvents,
   taskRuns,
+  workItemDependencies,
   workItemArtifacts,
   workItems,
   workspaceMembers,
@@ -28,6 +29,16 @@ import type { HandlerContext } from "./context.js";
 // Shared helpers
 // ---------------------------------------------------------------------------
 
+const ACTIVE_LINKED_SESSION_STATUSES = [
+  "queued",
+  "running",
+  "starting",
+  "provisioning",
+  "pending",
+  "awaiting-input",
+  "awaiting_input",
+];
+
 async function assertWorkspaceAccess(db: any, userId: string, workspaceId: string) {
   const membership = await db.query.workspaceMembers.findFirst({
     where: and(
@@ -39,6 +50,30 @@ async function assertWorkspaceAccess(db: any, userId: string, workspaceId: strin
 
   if (!membership) {
     throw new TRPCError({ code: "NOT_FOUND" });
+  }
+}
+
+async function notifyWorkspaceEvent(input: {
+  type: string;
+  workspaceId: string;
+  entityId?: string;
+  payload?: Record<string, unknown>;
+}) {
+  const gatewayUrl = process.env.GATEWAY_URL;
+  const nudgeSecret = process.env.NUDGE_SHARED_SECRET;
+  if (!gatewayUrl || !nudgeSecret) return;
+
+  try {
+    await fetch(`${gatewayUrl}/internal/workspace-event`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${nudgeSecret}`,
+      },
+      body: JSON.stringify(input),
+    });
+  } catch (err) {
+    console.warn("[workItems] workspace event notification failed:", err);
   }
 }
 
@@ -135,7 +170,7 @@ export async function workItemsList(
     ? await ctx.db.query.chatConversations.findMany({
         where: and(
           inArray(chatConversations.workItemId, itemIds),
-          inArray(chatConversations.status, ["running", "starting", "pending"]),
+          inArray(chatConversations.status, ACTIVE_LINKED_SESSION_STATUSES),
         ),
         columns: { id: true, workItemId: true, status: true, agentType: true },
       })
@@ -201,7 +236,8 @@ export async function workItemsGet(
 
   await assertWorkItemAccess(ctx.db, ctx.userId, workItem);
 
-  const [project, currentArtifacts, children] = await Promise.all([
+  const dependencyQueries = ctx.db.query.workItemDependencies;
+  const [project, currentArtifacts, children, activeSession, dependencies, dependents] = await Promise.all([
     workItem.projectId
       ? ctx.db.query.projects.findFirst({
           where: eq(projects.id, workItem.projectId),
@@ -217,6 +253,47 @@ export async function workItemsGet(
     ctx.db.query.workItems.findMany({
       where: eq(workItems.parentId, workItem.id),
     }),
+    ctx.db.query.chatConversations.findFirst({
+      where: and(
+        eq(chatConversations.workItemId, workItem.id),
+        inArray(chatConversations.status, ACTIVE_LINKED_SESSION_STATUSES),
+      ),
+      columns: { id: true, workItemId: true, status: true, agentType: true },
+    }),
+    dependencyQueries
+      ? dependencyQueries.findMany({
+          where: eq(workItemDependencies.workItemId, workItem.id),
+          with: {
+            dependsOn: {
+              columns: {
+                id: true,
+                externalId: true,
+                sequenceNumber: true,
+                projectId: true,
+                title: true,
+                status: true,
+              },
+            },
+          },
+        })
+      : Promise.resolve([]),
+    dependencyQueries
+      ? dependencyQueries.findMany({
+          where: eq(workItemDependencies.dependsOnWorkItemId, workItem.id),
+          with: {
+            workItem: {
+              columns: {
+                id: true,
+                externalId: true,
+                sequenceNumber: true,
+                projectId: true,
+                title: true,
+                status: true,
+              },
+            },
+          },
+        })
+      : Promise.resolve([]),
   ]);
 
   return {
@@ -228,9 +305,52 @@ export async function workItemsGet(
         id: workItem.id,
       }),
       project,
+      agentStatus: activeSession
+        ? {
+            sessionId: activeSession.id,
+            status: activeSession.status,
+            agentType: activeSession.agentType,
+          }
+        : null,
+      dependencies: dependencies
+        .map((row: any) => row.dependsOn)
+        .filter(Boolean)
+        .map((item: any) => formatRelatedWorkItem(item, project)),
+      dependents: dependents
+        .map((row: any) => row.workItem)
+        .filter(Boolean)
+        .map((item: any) => formatRelatedWorkItem(item, project)),
     },
     currentArtifacts,
     childCount: children.length,
+  };
+}
+
+function formatRelatedWorkItem(
+  item: {
+    id: string;
+    externalId?: string | null;
+    sequenceNumber?: number | null;
+    projectId?: string | null;
+    title: string;
+    status: string;
+  },
+  currentProject: { id: string; key: string } | null,
+) {
+  const projectKey =
+    currentProject && item.projectId === currentProject.id ? currentProject.key : null;
+
+  return {
+    id: item.id,
+    identifier:
+      item.externalId ??
+      formatWorkItemIdentifier({
+        projectKey,
+        sequenceNumber: item.sequenceNumber,
+        id: item.id,
+      }),
+    title: item.title,
+    status: item.status,
   };
 }
 
@@ -241,6 +361,8 @@ export async function workItemsUpdate(
     title?: string;
     description?: string | null;
     status?: string;
+    priority?: string;
+    agentTypeOverride?: string | null;
   },
 ) {
   const existing = await loadAccessibleWorkItem(
@@ -254,6 +376,8 @@ export async function workItemsUpdate(
       title: input.title,
       description: input.description,
       status: input.status,
+      priority: input.priority,
+      agentTypeOverride: input.agentTypeOverride,
     }).filter(([, value]) => value !== undefined),
   );
 
@@ -285,8 +409,13 @@ export async function workItemsUpdate(
       previousValue: existing.status ?? null,
       nextValue: input.status ?? null,
     },
+    {
+      field: "priority" as const,
+      previousValue: existing.priority ?? null,
+      nextValue: input.priority ?? null,
+    },
   ] satisfies Array<{
-    field: "title" | "description" | "status";
+    field: "title" | "description" | "status" | "priority";
     previousValue: string | null;
     nextValue: string | null;
   }>).filter(
@@ -305,6 +434,32 @@ export async function workItemsUpdate(
         metadata: { field: change.field },
       })),
     );
+  }
+
+  const statusChange = changedFields.find((change) => change.field === "status");
+  if (statusChange && existing.workspaceId) {
+    await notifyWorkspaceEvent({
+      type: "task_status_changed",
+      workspaceId: existing.workspaceId,
+      entityId: input.id,
+      payload: {
+        previousStatus: statusChange.previousValue,
+        status: statusChange.nextValue,
+      },
+    });
+  }
+
+  const priorityChange = changedFields.find((change) => change.field === "priority");
+  if (priorityChange && existing.workspaceId) {
+    await notifyWorkspaceEvent({
+      type: "task_priority_changed",
+      workspaceId: existing.workspaceId,
+      entityId: input.id,
+      payload: {
+        previousPriority: priorityChange.previousValue,
+        priority: priorityChange.nextValue,
+      },
+    });
   }
 
   return nextWorkItem;
@@ -330,6 +485,13 @@ export async function workItemsReorderQueue(
         ),
       );
   }
+
+  await notifyWorkspaceEvent({
+    type: "queue_order_changed",
+    workspaceId: input.workspaceId,
+    entityId: input.workItemIds[0],
+    payload: { workItemIds: input.workItemIds },
+  });
 
   return { success: true };
 }

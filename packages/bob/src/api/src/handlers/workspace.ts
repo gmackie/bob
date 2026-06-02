@@ -210,6 +210,32 @@ export async function workspaceRename(
   return updated;
 }
 
+export async function workspaceSetDefaultAgent(
+  ctx: HandlerContext,
+  input: { id: string; defaultAgentType: string | null },
+) {
+  const membership = await ctx.db.query.workspaceMembers.findFirst({
+    where: and(
+      eq(workspaceMembers.workspaceId, input.id),
+      eq(workspaceMembers.userId, ctx.userId),
+    ),
+  });
+  if (!membership) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Not a member of this workspace",
+    });
+  }
+
+  const [updated] = await ctx.db
+    .update(workspaces)
+    .set({ defaultAgentType: input.defaultAgentType })
+    .where(eq(workspaces.id, input.id))
+    .returning();
+
+  return updated;
+}
+
 export async function workspaceDelete(
   ctx: HandlerContext,
   input: { id: string },

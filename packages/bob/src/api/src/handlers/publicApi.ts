@@ -16,12 +16,18 @@ import {
   repositories,
   runArtifacts,
   tenants,
+  workItems,
   workspaces,
   tenantMembers,
   workspaceMembers,
 } from "@bob/db/schema";
+import { resolveAgentType } from "@bob/work-items";
 
 import type { HandlerContext } from "./context.js";
+
+/** Matches a canonical UUID, used to decide if a workItemId is joinable. */
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -88,6 +94,53 @@ async function assertTenantAccess(
   return tenantIds;
 }
 
+async function notifyWorkspaceEvent(input: {
+  type: string;
+  workspaceId: string;
+  entityId?: string;
+  payload?: Record<string, unknown>;
+}) {
+  const gatewayUrl = process.env.GATEWAY_URL;
+  const nudgeSecret = process.env.NUDGE_SHARED_SECRET;
+  if (!gatewayUrl || !nudgeSecret) return;
+
+  try {
+    await fetch(`${gatewayUrl}/internal/workspace-event`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${nudgeSecret}`,
+      },
+      body: JSON.stringify(input),
+    });
+  } catch (err) {
+    console.warn("[publicApi] workspace event notification failed:", err);
+  }
+}
+
+async function notifyAgentRunChanged(input: {
+  workspaceId?: string | null;
+  runId?: string | null;
+  status?: string | null;
+  agentType?: string | null;
+  workItemId?: string | null;
+}) {
+  if (!input.workspaceId || !input.runId) return;
+
+  await notifyWorkspaceEvent({
+    type: "provider_capacity_changed",
+    workspaceId: input.workspaceId,
+    entityId: input.runId,
+    payload: {
+      changed: ["agentRun"],
+      runId: input.runId,
+      status: input.status ?? null,
+      agentType: input.agentType ?? null,
+      workItemId: input.workItemId ?? null,
+    },
+  });
+}
+
 async function processDiscoveredRepos(
   db: any,
   userId: string,
@@ -106,6 +159,7 @@ async function processDiscoveredRepos(
 ) {
   const gitRepos = repos.filter((r) => r.isGit);
   const nonGitDirs = repos.filter((r) => !r.isGit);
+  const changedRepositoryIds = new Set<string>();
 
   // Mark all existing repos for this workspace as stale, then un-stale the ones we see.
   // Only do this if we have repos to process — an empty array (scanner failure) should
@@ -137,20 +191,25 @@ async function processDiscoveredRepos(
           stale: false,
         })
         .where(eq(repositories.id, existing.id));
+      changedRepositoryIds.add(existing.id);
     } else {
-      await db.insert(repositories).values({
-        userId,
-        workspaceId,
-        name: repo.name,
-        path: repo.path,
-        branch: repo.branch ?? "main",
-        mainBranch: repo.branch ?? "main",
-        remoteUrl: repo.remoteUrl,
-        buildSystem: repo.buildSystem,
-        dirty: repo.dirty ?? false,
-        stale: false,
-        discoveryStatus: "discovered",
-      });
+      const [inserted] = await db
+        .insert(repositories)
+        .values({
+          userId,
+          workspaceId,
+          name: repo.name,
+          path: repo.path,
+          branch: repo.branch ?? "main",
+          mainBranch: repo.branch ?? "main",
+          remoteUrl: repo.remoteUrl,
+          buildSystem: repo.buildSystem,
+          dirty: repo.dirty ?? false,
+          stale: false,
+          discoveryStatus: "discovered",
+        })
+        .returning();
+      if (inserted?.id) changedRepositoryIds.add(inserted.id);
     }
 
     // Auto-create project for ForgeGraph-linked repos
@@ -223,6 +282,10 @@ async function processDiscoveredRepos(
         set: { lastSeen: new Date().toISOString() },
       });
   }
+
+  return {
+    repositoryIds: [...changedRepositoryIds],
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -283,7 +346,7 @@ export async function publicApiCreateRun(
   input: {
     workItemId: string;
     workspaceId: string;
-    agentType: string;
+    agentType?: string;
     agentConfig?: Record<string, unknown>;
   },
 ) {
@@ -299,17 +362,53 @@ export async function publicApiCreateRun(
   }
   await assertTenantAccess(ctx.db, ctx.userId, workspace.tenantId);
 
+  // Resolve the effective agent when the caller didn't pin one explicitly:
+  // work-item override -> project default -> workspace default -> fallback.
+  let agentType = input.agentType;
+  if (!agentType) {
+    let workItemOverride: string | null = null;
+    let projectDefault: string | null = null;
+    // workItemId is only joinable when it's a real work_items UUID.
+    if (UUID_RE.test(input.workItemId)) {
+      const wi = await ctx.db.query.workItems.findFirst({
+        where: eq(workItems.id, input.workItemId),
+        columns: { agentTypeOverride: true, projectId: true },
+      });
+      workItemOverride = wi?.agentTypeOverride ?? null;
+      if (wi?.projectId) {
+        const project = await ctx.db.query.projects.findFirst({
+          where: eq(projects.id, wi.projectId),
+          columns: { defaultAgentType: true },
+        });
+        projectDefault = project?.defaultAgentType ?? null;
+      }
+    }
+    agentType = resolveAgentType({
+      workItemOverride,
+      projectDefault,
+      workspaceDefault: workspace.defaultAgentType,
+    });
+  }
+
   const [run] = await ctx.db
     .insert(agentRuns)
     .values({
       workItemId: input.workItemId,
       workspaceId: input.workspaceId,
       tenantId: workspace.tenantId,
-      agentType: input.agentType,
+      agentType,
       agentConfig: input.agentConfig ?? {},
       status: "queued",
     })
     .returning();
+
+  await notifyAgentRunChanged({
+    workspaceId: run?.workspaceId ?? input.workspaceId,
+    runId: run?.id,
+    status: run?.status ?? "queued",
+    agentType: run?.agentType ?? agentType,
+    workItemId: run?.workItemId ?? input.workItemId,
+  });
 
   return run;
 }
@@ -324,7 +423,12 @@ export async function publicApiUpdateRun(
 ) {
   const existingRun = await ctx.db.query.agentRuns.findFirst({
     where: eq(agentRuns.id, input.runId),
-    columns: { tenantId: true },
+    columns: {
+      tenantId: true,
+      workspaceId: true,
+      workItemId: true,
+      agentType: true,
+    },
   });
   if (!existingRun?.tenantId) {
     throw new TRPCError({ code: "NOT_FOUND" });
@@ -345,6 +449,14 @@ export async function publicApiUpdateRun(
     .where(eq(agentRuns.id, input.runId))
     .returning();
 
+  await notifyAgentRunChanged({
+    workspaceId: updated?.workspaceId ?? existingRun.workspaceId,
+    runId: updated?.id ?? input.runId,
+    status: updated?.status ?? input.status,
+    agentType: updated?.agentType ?? existingRun.agentType,
+    workItemId: updated?.workItemId ?? existingRun.workItemId,
+  });
+
   return updated;
 }
 
@@ -359,7 +471,12 @@ export async function publicApiCreateArtifact(
 ) {
   const run = await ctx.db.query.agentRuns.findFirst({
     where: eq(agentRuns.id, input.runId),
-    columns: { tenantId: true },
+    columns: {
+      tenantId: true,
+      workspaceId: true,
+      workItemId: true,
+      sessionId: true,
+    },
   });
   if (!run?.tenantId) {
     throw new TRPCError({ code: "NOT_FOUND" });
@@ -375,6 +492,21 @@ export async function publicApiCreateArtifact(
       metadata: input.metadata ?? {},
     })
     .returning();
+
+  if (run.workspaceId) {
+    await notifyWorkspaceEvent({
+      type: "session_event_appended",
+      workspaceId: run.workspaceId,
+      entityId: run.sessionId ?? input.runId,
+      payload: {
+        changed: ["artifact"],
+        runId: input.runId,
+        artifactId: artifact?.id ?? null,
+        artifactType: artifact?.type ?? input.type,
+        workItemId: run.workItemId ?? null,
+      },
+    });
+  }
 
   return artifact;
 }
@@ -489,13 +621,25 @@ export async function publicApiHeartbeat(
 
   // Process discovered repos
   if (input.repos && input.repos.length > 0) {
-    await processDiscoveredRepos(
+    const discovery = await processDiscoveredRepos(
       ctx.db,
       ctx.userId,
       input.workspaceId,
       workspace.tenantId,
       input.repos,
     );
+
+    if (discovery.repositoryIds.length > 0) {
+      await notifyWorkspaceEvent({
+        type: "git_status_changed",
+        workspaceId: input.workspaceId,
+        entityId: discovery.repositoryIds[0],
+        payload: {
+          changed: ["repository", "gitStatus"],
+          repositoryIds: discovery.repositoryIds,
+        },
+      });
+    }
   }
 
   return { ok: true };
