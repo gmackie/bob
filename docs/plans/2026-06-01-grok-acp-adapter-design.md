@@ -253,12 +253,33 @@ schema; OODA inherits the Bob workspace default.
   Deployed to `ooda-runner.service` on hetzner-bob (on branch `feat/grok-acp-adapter`);
   `[runner] available adapters: codex, claude, grok`. Validated end-to-end against grok 0.2.16
   via `apps/ooda-runner/scripts/grok-acp-smoke.mjs` (PASS).
-- **Phase 2 — Agent config. Backend ✅ DONE.** Schema columns + migration 0020 +
-  `resolveAgentType` (tested). **Remaining:** `workItem.setAgent` / `project.setDefaultAgent` /
-  `workspace.setDefaultAgent` mutations + the work-item-detail / project / workspace UI
-  selectors + calling `resolveAgentType` at the run-creation sites.
-- **Phase 3 — Convergence. TODO.** Fold task-runner into the gateway path; OODA workspace
-  default via bound Bob workspace.
+- **Phase 2 — Agent config. ✅ DONE (code).** Schema columns + migration 0020 +
+  `resolveAgentType` (tested). Mutations: `workItems.update` (agentTypeOverride),
+  `project.setDefaultAgent`, `workspace.setDefaultAgent`. UI: shared `AgentSelect` on the
+  work-item detail header, project automation settings, and a Settings → "Workspace Agents"
+  section. `resolveAgentType` wired into `publicApiCreateRun` and `workItemsDispatch`.
+- **Phase 3 — Convergence. ✅ DONE (code).** `bob-task-runner` is agent-aware: `bobStartRun`
+  omits agentType (server resolves), runner spawns the resolved agent (codex/claude/grok).
+  Resolver also matches `work_items.externalId` for Linear-sourced ids. `workItemsDispatch`
+  resolves the hierarchy incl. workspace default, and that session flows through the gateway to
+  the runner — so the **OODA workspace default is covered** for gateway-routed execution
+  (no cross-system lookup needed).
+
+### Deploy status
+- Phase 1: **deployed + validated** on hetzner-bob `ooda-runner.service`.
+- Phase 2/3: code-complete + pushed; deploys via the Bob web-app (`bob-nextjs`) release on
+  `master`. The new `task-runner.js` is **gated on that API deploy** (it omits `agentType`,
+  which the current production API would reject) — do not ship task-runner.js standalone.
+
+### Known issue — runner_device registration (diagnosed: NOT a code defect)
+The ooda-runner logs `registration failed … Failed query: select … from "runner_device"`.
+Diagnosis: the repo schema (`packages/ooda/src/db/schema/research.ts`) and the production DB
+(`ooda_production` @ 100.101.32.120) both have `runner_device` with all expected columns, and
+the exact query **succeeds run directly** against that DB (the `runner-hetzner-bob` row exists).
+`https://ooda.blder.bot` returns HTTP 200 but its `register` query fails — so the fault is the
+**`ooda.blder.bot` deployment's DB binding** (a Cloudflare Worker), not this repo. The Bob
+gateway path (which Grok uses) is unaffected. Fix requires access to the ooda.blder.bot
+Worker's Hyperdrive/DATABASE config (outside this repo/environment).
 
 ## 11. Validated ACP facts (grok 0.2.16, hetzner-bob)
 
