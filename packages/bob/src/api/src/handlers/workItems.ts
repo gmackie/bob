@@ -20,7 +20,9 @@ import {
   workItemArtifacts,
   workItems,
   workspaceMembers,
+  workspaces,
 } from "@bob/db/schema";
+import { resolveAgentType } from "@bob/work-items";
 import type { WorkItemKind } from "@bob/work-items/schema";
 
 import type { HandlerContext } from "./context.js";
@@ -918,7 +920,23 @@ export async function workItemsDispatch(
         id: workItem.id,
       });
 
-  const agentType = input.agentType ?? "claude";
+  // An explicit agentType pins the choice; otherwise resolve the hierarchy:
+  // work-item override -> project default -> workspace default -> "claude".
+  // This session flows through the gateway to the runner, so the workspace
+  // default also covers OODA-bound execution for this workspace.
+  const workspace = workItem.workspaceId
+    ? await ctx.db.query.workspaces.findFirst({
+        where: eq(workspaces.id, workItem.workspaceId),
+        columns: { defaultAgentType: true },
+      })
+    : null;
+  const agentType =
+    input.agentType ??
+    resolveAgentType({
+      workItemOverride: workItem.agentTypeOverride,
+      projectDefault: project?.defaultAgentType ?? null,
+      workspaceDefault: workspace?.defaultAgentType ?? null,
+    });
 
   const [session] = await ctx.db
     .insert(chatConversations)

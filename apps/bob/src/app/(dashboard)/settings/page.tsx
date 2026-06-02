@@ -11,6 +11,7 @@ import { GitProvidersSection } from "./_components/git-providers";
 import { IntegrationsSection } from "./_components/integrations";
 import { PreferencesSection } from "./_components/preferences";
 import { WebhooksSection } from "./_components/webhooks";
+import { WorkspaceAgentsSection } from "./_components/workspace-agents";
 
 export default function SettingsPage() {
   const searchParams = useSearchParams();
@@ -34,6 +35,9 @@ export default function SettingsPage() {
       <div className="space-y-8">
         <CollapsibleSection title="Preferences" sectionId="preferences" defaultOpen>
           <PreferencesSection />
+        </CollapsibleSection>
+        <CollapsibleSection title="Workspace Agents" sectionId="workspace-agents" defaultOpen={false} forceOpen={openSection === "workspace-agents"}>
+          <WorkspaceAgentsSection />
         </CollapsibleSection>
         <CollapsibleSection title="Integrations" sectionId="integrations" defaultOpen forceOpen={openSection === "integrations"}>
           <IntegrationsSection />

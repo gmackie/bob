@@ -368,14 +368,17 @@ export async function publicApiCreateRun(
   if (!agentType) {
     let workItemOverride: string | null = null;
     let projectDefault: string | null = null;
-    // workItemId is only joinable when it's a real work_items UUID.
-    if (UUID_RE.test(input.workItemId)) {
-      const wi = await ctx.db.query.workItems.findFirst({
-        where: eq(workItems.id, input.workItemId),
-        columns: { agentTypeOverride: true, projectId: true },
-      });
-      workItemOverride = wi?.agentTypeOverride ?? null;
-      if (wi?.projectId) {
+    // Match by UUID when given one, else by externalId (Linear/ForgeGraph
+    // synced items pass an external identifier like "BOB-27").
+    const wi = await ctx.db.query.workItems.findFirst({
+      where: UUID_RE.test(input.workItemId)
+        ? eq(workItems.id, input.workItemId)
+        : eq(workItems.externalId, input.workItemId),
+      columns: { agentTypeOverride: true, projectId: true },
+    });
+    if (wi) {
+      workItemOverride = wi.agentTypeOverride ?? null;
+      if (wi.projectId) {
         const project = await ctx.db.query.projects.findFirst({
           where: eq(projects.id, wi.projectId),
           columns: { defaultAgentType: true },
