@@ -1,7 +1,9 @@
 /** @type {import('expo/config').ConfigContext} */
 
-const APP_ENV = process.env.APP_ENV ?? "development";
-const isHostedEnv = APP_ENV === "production" || APP_ENV === "staging";
+const APP_VARIANT =
+  process.env.APP_VARIANT ?? process.env.APP_ENV ?? "development";
+const isHostedEnv =
+  APP_VARIANT === "production" || APP_VARIANT === "preview";
 const API_URL =
   process.env.API_URL ??
   process.env.EXPO_PUBLIC_API_URL ??
@@ -31,31 +33,42 @@ const POSTHOG_KEY = process.env.POSTHOG_KEY;
 const POSTHOG_HOST = process.env.POSTHOG_HOST ?? "https://us.i.posthog.com";
 
 const getAppName = () => {
-  switch (APP_ENV) {
+  switch (APP_VARIANT) {
     case "production":
       return "Bob";
-    case "staging":
-      return "Bob (Beta)";
+    case "preview":
+      return "Bob (Preview)";
     default:
       return "Bob (Dev)";
   }
 };
 
 const getVariantIcon = () => {
-  if (APP_ENV === "development") return "./assets/icon-dev.png";
-  if (APP_ENV === "staging") return "./assets/icon-preview.png";
+  if (APP_VARIANT === "development") return "./assets/icon-dev.png";
+  if (APP_VARIANT === "preview") return "./assets/icon-preview.png";
   return "./assets/icon.png";
 };
 
 const getBundleId = () => {
   const base = "com.gmacko.bob";
-  switch (APP_ENV) {
+  switch (APP_VARIANT) {
     case "production":
       return base;
-    case "staging":
-      return `${base}.beta`;
+    case "preview":
+      return `${base}.preview`;
     default:
       return `${base}.dev`;
+  }
+};
+
+const getScheme = () => {
+  switch (APP_VARIANT) {
+    case "production":
+      return "bob";
+    case "preview":
+      return "bob-preview";
+    default:
+      return "bob-dev";
   }
 };
 
@@ -107,7 +120,7 @@ module.exports = ({ config }) => {
     ...config,
     name: getAppName(),
     slug: "bob",
-    scheme: "bob",
+    scheme: getScheme(),
     version: "0.1.0",
     orientation: "default",
     icon: getVariantIcon(),
@@ -119,7 +132,8 @@ module.exports = ({ config }) => {
     ios: {
       bundleIdentifier: getBundleId(),
       supportsTablet: true,
-      icon: APP_ENV === "production" ? "./assets/icon.png" : getVariantIcon(),
+      icon:
+        APP_VARIANT === "production" ? "./assets/icon.png" : getVariantIcon(),
       infoPlist: {
         CFBundleDisplayName: getAppName(),
         ITSAppUsesNonExemptEncryption: false,
@@ -140,7 +154,7 @@ module.exports = ({ config }) => {
       edgeToEdgeEnabled: true,
     },
     extra: {
-      APP_ENV,
+      APP_ENV: APP_VARIANT,
       API_URL,
       AUTH_URL,
       OODA_API_URL,
