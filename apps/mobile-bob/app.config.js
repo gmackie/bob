@@ -119,7 +119,7 @@ module.exports = ({ config }) => {
     ios: {
       bundleIdentifier: getBundleId(),
       supportsTablet: true,
-      icon: "./assets/icon.png",
+      icon: APP_ENV === "production" ? "./assets/icon.png" : getVariantIcon(),
       infoPlist: {
         CFBundleDisplayName: getAppName(),
         ITSAppUsesNonExemptEncryption: false,
