@@ -41,6 +41,12 @@ const getAppName = () => {
   }
 };
 
+const getVariantIcon = () => {
+  if (APP_ENV === "development") return "./assets/icon-dev.png";
+  if (APP_ENV === "staging") return "./assets/icon-preview.png";
+  return "./assets/icon.png";
+};
+
 const getBundleId = () => {
   const base = "com.gmacko.bob";
   switch (APP_ENV) {
@@ -104,7 +110,7 @@ module.exports = ({ config }) => {
     scheme: "bob",
     version: "0.1.0",
     orientation: "default",
-    icon: "./assets/icon.png",
+    icon: getVariantIcon(),
     userInterfaceStyle: "automatic",
     updates: updatesConfig,
     runtimeVersion: "1.0.0",
@@ -117,6 +123,12 @@ module.exports = ({ config }) => {
       infoPlist: {
         CFBundleDisplayName: getAppName(),
         ITSAppUsesNonExemptEncryption: false,
+        "UISupportedInterfaceOrientations~ipad": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationPortraitUpsideDown",
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight",
+        ],
       },
     },
     android: {
