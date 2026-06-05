@@ -2,7 +2,9 @@
   "name": "gmacko",
   "private": true,
   "packageManager": "pnpm@10.12.1",
-  "engines": { "node": ">=24.0.0" },
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo watch dev --continue",
@@ -23,7 +25,8 @@
       "@types/pg": "8.16.0",
       "node-gyp": "^10.0.0",
       "react": "19.2.5",
-      "react-dom": "19.2.5"
+      "react-dom": "19.2.5",
+      "lightningcss": "1.32.0"
     },
     "onlyBuiltDependencies": [
       "@swc/core",
