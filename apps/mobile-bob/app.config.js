@@ -148,8 +148,14 @@ module.exports = ({ config }) => {
     android: {
       package: getBundleId(),
       adaptiveIcon: {
-        foregroundImage: "./assets/icon.png",
-        backgroundColor: "#18181b",
+        foregroundImage:
+          APP_VARIANT === "production" ? "./assets/icon.png" : getVariantIcon(),
+        backgroundColor:
+          APP_VARIANT === "development"
+            ? "#4a6de5"
+            : APP_VARIANT === "preview"
+              ? "#eef2fb"
+              : "#18181b",
       },
       edgeToEdgeEnabled: true,
     },
