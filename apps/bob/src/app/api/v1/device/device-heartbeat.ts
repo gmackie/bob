@@ -15,6 +15,24 @@ export interface DeviceHeartbeatPayload {
   details: Record<string, unknown>;
 }
 
+export interface SessionRow {
+  id: string;
+  title: string | null;
+  agentType: string;
+  sessionType: string;
+  status: string;
+  updatedAt: string | null;
+  lastActivityAt: string | null;
+  createdAt: string;
+}
+
+export interface SessionOption {
+  id: string;
+  title: string;
+  subtitle: string;
+  updatedAt: string;
+}
+
 export function normalizeDeviceHeartbeatPayload(
   value: unknown,
 ): DeviceHeartbeatPayload {
@@ -45,6 +63,39 @@ export function isDeviceOnline(
   const lastSeen = new Date(lastSeenAt).getTime();
   if (Number.isNaN(lastSeen)) return false;
   return now.getTime() - lastSeen < ONLINE_WINDOW_MS;
+}
+
+export function formatSessionOption(session: SessionRow): SessionOption {
+  return {
+    id: session.id,
+    title: normalizeText(session.title, "Untitled session", 256),
+    subtitle: [session.agentType, session.sessionType, session.status].join(
+      " / ",
+    ),
+    updatedAt: session.updatedAt ?? session.lastActivityAt ?? session.createdAt,
+  };
+}
+
+export function readSelectedSessionId(
+  details: Record<string, unknown> | null | undefined,
+): string | null {
+  const selectedSessionId = details?.selectedSessionId;
+  return typeof selectedSessionId === "string" && selectedSessionId.length > 0
+    ? selectedSessionId
+    : null;
+}
+
+export function writeSelectedSessionId(
+  details: Record<string, unknown>,
+  selectedSessionId: string | null,
+): Record<string, unknown> {
+  const next = { ...details };
+  if (selectedSessionId) {
+    next.selectedSessionId = selectedSessionId;
+  } else {
+    delete next.selectedSessionId;
+  }
+  return next;
 }
 
 function normalizeText(
