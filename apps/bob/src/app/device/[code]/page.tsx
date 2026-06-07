@@ -56,5 +56,10 @@ export default async function DeviceApprovalPage({
     );
   }
 
-  return <DeviceApprovalClient userCode={code} />;
+  return (
+    <DeviceApprovalClient
+      userCode={code}
+      deviceName={record.deviceName ?? "Bob CLI"}
+    />
+  );
 }

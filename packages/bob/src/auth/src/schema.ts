@@ -52,6 +52,7 @@ export const deviceCodes = pgTable("device_codes", (t) => ({
   id: t.uuid().notNull().primaryKey().defaultRandom(),
   deviceCode: t.uuid("device_code").notNull().unique().defaultRandom(),
   userCode: t.varchar("user_code", { length: 16 }).notNull().unique(),
+  deviceName: t.varchar("device_name", { length: 100 }),
   apiKey: t.text("api_key"),
   userId: t
     .text("user_id")
