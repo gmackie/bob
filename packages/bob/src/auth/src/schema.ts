@@ -61,3 +61,28 @@ export const deviceCodes = pgTable("device_codes", (t) => ({
   expiresAt: t.timestamp("expires_at", { mode: "string" }).notNull(),
   createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
 }));
+
+export const deviceHeartbeats = pgTable("device_heartbeats", (t) => ({
+  apiKeyId: t
+    .uuid("api_key_id")
+    .notNull()
+    .primaryKey()
+    .references(() => apiKeys.id, { onDelete: "cascade" }),
+  userId: t
+    .text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  deviceName: t.varchar("device_name", { length: 100 }).notNull(),
+  state: t.varchar({ length: 64 }).notNull(),
+  message: t.text(),
+  wifi: t.text(),
+  batteryPercent: t.integer("battery_percent"),
+  details: t.json().$type<Record<string, unknown>>().notNull().default({}),
+  lastSeenAt: t
+    .timestamp("last_seen_at", { mode: "string", withTimezone: true })
+    .notNull(),
+  createdAt: t
+    .timestamp("created_at", { mode: "string", withTimezone: true })
+    .defaultNow()
+    .notNull(),
+}));
