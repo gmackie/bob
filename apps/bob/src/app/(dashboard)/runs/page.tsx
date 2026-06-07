@@ -11,6 +11,7 @@ import { Card } from "@gmacko/core/ui/card";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { useTRPC } from "~/trpc/react";
+import { DeviceHeartbeatsSection } from "../settings/_components/device-heartbeats";
 
 const STATUS_COLORS: Record<string, string> = {
   queued: "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-300",
@@ -211,6 +212,11 @@ export default function RunsPage() {
           )}
         </div>
       )}
+
+      <DeviceHeartbeatsSection
+        title="Handheld"
+        description="Choose the Bob session currently controlled by the Whisplay device."
+      />
 
       {/* Runs List */}
       {isLoading ? (

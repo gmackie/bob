@@ -27,7 +27,13 @@ interface DeviceHeartbeatResponse {
   sessions: SessionOption[];
 }
 
-export function DeviceHeartbeatsSection() {
+export function DeviceHeartbeatsSection({
+  title,
+  description,
+}: {
+  title?: string;
+  description?: string;
+} = {}) {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ["device-heartbeats"],
@@ -80,6 +86,16 @@ export function DeviceHeartbeatsSection() {
 
   return (
     <section className="rounded-lg border p-6">
+      {(title || description) && (
+        <div className="mb-4">
+          {title && <h2 className="text-sm font-semibold">{title}</h2>}
+          {description && (
+            <p className="text-muted-foreground mt-1 text-xs">
+              {description}
+            </p>
+          )}
+        </div>
+      )}
       {devices.length === 0 ? (
         <p className="text-muted-foreground text-sm">
           No handheld devices have checked in yet.
