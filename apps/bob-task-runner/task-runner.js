@@ -117,15 +117,18 @@ async function bobApi(method, path, body) {
 // Open the run as soon as the issue is claimed (before the slow Linear/git
 // phase) so it shows up immediately for monitoring.
 async function bobStartRun(issue, slug) {
+  // Omit agentType so the server resolves it via the work-item override ->
+  // project default -> workspace default -> "claude" hierarchy. The created
+  // run echoes back the resolved agentType, which we use to pick the CLI.
   const run = await bobApi("POST", "/api/v1/runs", {
     workItemId: issue.identifier,
     workspaceId: BOB_WORKSPACE_ID,
-    agentType: "codex",
     agentConfig: { title: issue.title, slug },
   });
   const id = run && run.id;
+  const agentType = (run && run.agentType) || "codex";
   if (id) await bobApi("PATCH", "/api/v1/runs/" + id, { status: "running" });
-  return id || null;
+  return { id: id || null, agentType };
 }
 
 async function bobPushLog(runId, output) {
@@ -260,15 +263,37 @@ function markDone(issueId, status) {
   saveClaimed(claimed);
 }
 
-async function runCodex(repoDir, prompt, logFile) {
+// Build the [command, args] for a given agent type. codex keeps its exact
+// prior invocation; claude and grok run headless against the working tree.
+function agentCommand(agentType, prompt, logFile) {
+  switch (agentType) {
+    case "claude":
+      return ["claude", [
+        "-p", prompt,
+        "--output-format", "text",
+        "--dangerously-skip-permissions",
+      ]];
+    case "grok":
+      // Grok Build headless mode (writes to stdout; we capture it ourselves).
+      // Valid --output-format values are plain | json | streaming-json.
+      return ["grok", ["-p", prompt, "--output-format", "plain"]];
+    case "codex":
+    default:
+      return ["codex", [
+        "exec",
+        "--dangerously-bypass-approvals-and-sandbox",
+        "-m", "gpt-5.5",
+        "-o", logFile,
+        prompt,
+      ]];
+  }
+}
+
+async function runAgent(agentType, repoDir, prompt, logFile) {
+  const [command, args] = agentCommand(agentType, prompt, logFile);
+  console.log(`[runner] Spawning ${command} (agent: ${agentType})`);
   return new Promise((resolve, reject) => {
-    const child = spawn("codex", [
-      "exec",
-      "--dangerously-bypass-approvals-and-sandbox",
-      "-m", "gpt-5.5",
-      "-o", logFile,
-      prompt,
-    ], {
+    const child = spawn(command, args, {
       cwd: repoDir,
       stdio: ["ignore", "pipe", "pipe"],
       env: {
@@ -283,7 +308,7 @@ async function runCodex(repoDir, prompt, logFile) {
     child.stderr?.on("data", d => { output += d.toString(); });
 
     const timeout = setTimeout(() => {
-      console.log(`[runner] Timeout, killing codex`);
+      console.log(`[runner] Timeout, killing ${command}`);
       child.kill("SIGTERM");
       setTimeout(() => { if (!child.killed) child.kill("SIGKILL"); }, 5000);
     }, MAX_RUNTIME_MS);
@@ -314,12 +339,12 @@ async function processIssue(issue, slug, repoDir) {
 
   // Open the Bob run at claim time so it's visible immediately (the Linear
   // update + git setup below can take minutes before codex starts).
-  const bobRunId = await bobStartRun(issue, slug);
+  const { id: bobRunId, agentType } = await bobStartRun(issue, slug);
 
   // Mark as in-progress in Linear
   try {
     await updateIssueState(issue.id, "started");
-    await addIssueComment(issue.id, `🤖 Bob agent claiming this issue.\n\nBranch: \`${branchName}\`\nRunner: codex/gpt-5.5\nRepo: ${repoDir}`);
+    await addIssueComment(issue.id, `🤖 Bob agent claiming this issue.\n\nBranch: \`${branchName}\`\nRunner: ${agentType}\nRepo: ${repoDir}`);
   } catch (e) {
     console.log(`[runner] Failed to update Linear: ${e.message}`);
   }
@@ -352,7 +377,7 @@ If you cannot fully resolve the issue, make as much progress as possible and doc
 Do NOT modify unrelated files. Stay focused on this specific issue.`;
 
   console.log(`[runner] Starting codex...`);
-  const result = await runCodex(repoDir, prompt, logFile);
+  const result = await runAgent(agentType, repoDir, prompt, logFile);
   console.log(`[runner] Codex exited with code ${result.exitCode}`);
   await bobPushLog(bobRunId, result.output);
 

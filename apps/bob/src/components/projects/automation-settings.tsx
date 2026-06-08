@@ -7,6 +7,7 @@ import { toast } from "@gmacko/core/ui/toast";
 import { useTRPC } from "~/trpc/react";
 import type { WorkflowStage } from "~/lib/workflow/stage";
 import { STAGES } from "~/lib/workflow/stage";
+import { AgentSelect } from "~/components/work-items/agent-select";
 
 interface StageSkillMapping {
   [stage: string]: { slug: string; label: string; enabled: boolean }[];
@@ -22,6 +23,8 @@ interface AutomationSettingsProps {
     reactFrontend?: boolean;
     stageSkills?: StageSkillMapping;
   };
+  /** Project default agent (null = inherit the workspace default). */
+  initialDefaultAgentType?: string | null;
 }
 
 interface ToggleRowProps {
@@ -150,8 +153,22 @@ function buildInitialStageSkills(
 export function AutomationSettings({
   projectId,
   initialSettings,
+  initialDefaultAgentType,
 }: AutomationSettingsProps) {
   const trpc = useTRPC();
+
+  const [defaultAgentType, setDefaultAgentType] = useState<string | null>(
+    initialDefaultAgentType ?? null,
+  );
+  const setProjectAgent = useMutation(
+    trpc.project.setDefaultAgent.mutationOptions({
+      onError: (err) => {
+        toast(err.message, {
+          style: { background: "#1a0000", borderColor: "#f43f5e40" },
+        });
+      },
+    }),
+  );
 
   const [settings, setSettings] = useState<{
     autoDispatch: boolean;
@@ -221,7 +238,7 @@ export function AutomationSettings({
   }
 
   return (
-    <div>
+    <div id="automation-settings" className="scroll-mt-24">
       <h3 className="font-display text-lg font-bold text-foreground">
         Automation
       </h3>
@@ -229,7 +246,26 @@ export function AutomationSettings({
         Control how Bob automates work in this project
       </p>
 
-      <div className="mt-6 space-y-3">
+      <div className="mt-6 flex items-center justify-between gap-4 rounded-xl border border-border bg-card px-5 py-4">
+        <div className="space-y-0.5">
+          <p className="font-medium text-foreground">Default agent</p>
+          <p className="text-sm text-muted-foreground">
+            Which agent runs this project&apos;s work items, unless a work item
+            overrides it. Falls back to the workspace default.
+          </p>
+        </div>
+        <AgentSelect
+          value={defaultAgentType}
+          disabled={setProjectAgent.isPending}
+          inheritLabel="Use workspace default"
+          onValueChange={(value) => {
+            setDefaultAgentType(value);
+            setProjectAgent.mutate({ projectId, defaultAgentType: value });
+          }}
+        />
+      </div>
+
+      <div className="mt-3 space-y-3">
         {TOGGLE_CONFIG.map((toggle) => (
           <ToggleRow
             key={toggle.key}

@@ -9,6 +9,15 @@ export {
 
 export { CodexAdapter } from "./codex-adapter";
 export { ClaudeAdapter } from "./claude-adapter";
+export { GrokAdapter } from "./grok-adapter";
+
+export { AcpClient, type AcpClientOptions } from "./acp-client";
+export {
+  mapSessionUpdate,
+  runGrokAcpSession,
+  handleAgentRequest,
+  type SessionUpdate,
+} from "./grok-acp";
 
 export {
   createBuddyToolDescriptors,

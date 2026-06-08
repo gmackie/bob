@@ -218,6 +218,7 @@ export const workItemRecordSchema = z
     kind: z.string(),
     status: z.string(),
     priority: z.string().optional(),
+    agentTypeOverride: z.string().nullable().optional(),
     queueSortOrder: z.number().int().optional(),
     sequenceNumber: z.number().int().nullable().optional(),
     projectId: z.string().nullable().optional(),
@@ -311,12 +312,17 @@ export const updateWorkItemInputSchema = z
     title: z.string().min(1).max(256).optional(),
     description: z.string().nullable().optional(),
     status: z.string().min(1).max(128).optional(),
+    priority: z.string().min(1).max(128).optional(),
+    // null clears the override (inherit project/workspace default).
+    agentTypeOverride: z.string().max(50).nullable().optional(),
   })
   .refine(
     (input) =>
       input.title !== undefined ||
       input.description !== undefined ||
-      input.status !== undefined,
+      input.status !== undefined ||
+      input.priority !== undefined ||
+      input.agentTypeOverride !== undefined,
     {
       message: "At least one editable field is required",
     },
@@ -479,6 +485,9 @@ export const workItems = pgTable("work_items", (t) => ({
   title: t.varchar({ length: 256 }).notNull(),
   description: t.text(),
   status: t.varchar({ length: 40 }).notNull().default("draft"),
+  // Per-work-item agent override; top of the resolveAgentType hierarchy.
+  // Nullable = inherit from project / workspace default.
+  agentTypeOverride: t.varchar({ length: 50 }),
   externalId: t.text(),
   externalProvider: t.varchar({ length: 20 }),
   createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),

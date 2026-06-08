@@ -213,7 +213,9 @@ export const workItemRouter = {
     .input(
       z.object({
         workItemId: z.string().uuid(),
-        agentType: z.string().default("claude"),
+        // Optional: when omitted, resolved from the work-item override ->
+        // project default -> workspace default -> "claude" hierarchy.
+        agentType: z.string().optional(),
       }),
     )
     .mutation(({ ctx, input }) =>

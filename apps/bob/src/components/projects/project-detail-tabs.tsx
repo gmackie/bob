@@ -20,8 +20,16 @@ import type { WorkItemBoardItem } from "~/components/work-items/work-item-board"
 import { RequirementsChecklist } from "~/components/work-items/requirements-checklist";
 import { AutomationSettings } from "~/components/projects/automation-settings";
 import { RepositoryPanel } from "~/components/dashboard";
-
-type TabKey = "board" | "list" | "requirements" | "settings";
+import {
+  buildProjectConfigurationManagementGroups,
+  type ProjectConfigurationManagementGroup,
+  type ProjectConfigurationSection,
+  type ProjectConfigurationSectionStatus,
+} from "~/components/projects/project-status-model";
+import {
+  getProjectWorkItemHref,
+  type ProjectDetailTabKey,
+} from "./project-detail-tabs-model";
 
 export interface ProjectWorkItem {
   id: string;
@@ -48,6 +56,11 @@ interface ProjectDetailTabsProps {
     ciTrigger?: boolean;
     reactFrontend?: boolean;
   };
+  /** Project default agent (null = inherit workspace default). */
+  defaultAgentType?: string | null;
+  configurationSections?: ProjectConfigurationSection[];
+  initialTab?: ProjectDetailTabKey;
+  workspaceId?: string | null;
 }
 
 const STATUS_ORDER: Record<string, number> = {
@@ -86,10 +99,14 @@ export function ProjectDetailTabs({
   epicWorkItemKind,
   projectId,
   automationSettings,
+  defaultAgentType,
+  configurationSections = [],
+  initialTab = "board",
+  workspaceId,
 }: ProjectDetailTabsProps) {
-  const [activeTab, setActiveTab] = useState<TabKey>("board");
+  const [activeTab, setActiveTab] = useState<ProjectDetailTabKey>(initialTab);
 
-  const tabs: { key: TabKey; label: string }[] = [
+  const tabs: { key: ProjectDetailTabKey; label: string }[] = [
     { key: "board", label: "Board" },
     { key: "list", label: "List" },
     { key: "requirements", label: "Requirements" },
@@ -121,8 +138,8 @@ export function ProjectDetailTabs({
 
       {/* Tab content */}
       <div className="mt-4">
-        {activeTab === "board" && <BoardTab items={items} />}
-        {activeTab === "list" && <ListTab items={items} />}
+        {activeTab === "board" && <BoardTab items={items} workspaceId={workspaceId} />}
+        {activeTab === "list" && <ListTab items={items} workspaceId={workspaceId} />}
         {activeTab === "requirements" && (
           <RequirementsTab
             epicWorkItemId={epicWorkItemId}
@@ -130,8 +147,10 @@ export function ProjectDetailTabs({
           />
         )}
         {activeTab === "settings" && (
-          <div className="space-y-8">
+          <div id="project-settings" className="space-y-8 scroll-mt-24">
+            <ProjectConfigurationManagement sections={configurationSections} />
             <AutomationSettings
+              initialDefaultAgentType={defaultAgentType}
               projectId={projectId}
               initialSettings={automationSettings}
             />
@@ -143,7 +162,123 @@ export function ProjectDetailTabs({
   );
 }
 
-function BoardTab({ items }: { items: ProjectWorkItem[] }) {
+const CONFIG_SECTION_STATUS_CLASS: Record<ProjectConfigurationSectionStatus, string> = {
+  ready: "border-emerald-500/25 bg-emerald-500/10 text-emerald-500",
+  warning: "border-amber-500/25 bg-amber-500/10 text-amber-500",
+  missing: "border-rose-500/25 bg-rose-500/10 text-rose-500",
+};
+
+function ProjectConfigurationManagement({
+  sections,
+}: {
+  sections: ProjectConfigurationSection[];
+}) {
+  const groups = buildProjectConfigurationManagementGroups(sections);
+
+  if (sections.length === 0) {
+    return (
+      <section className="rounded-2xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
+        Project configuration status is not available yet.
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-2xl border border-border bg-card p-5">
+      <div>
+        <h3 className="font-display text-lg font-bold text-foreground">
+          Bob Configuration
+        </h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Manage identity, repository mapping, integrations, planning defaults, execution settings, secrets, and validation state.
+        </p>
+      </div>
+
+      <div className="mt-5 space-y-5">
+        {groups.map((group) => (
+          <ProjectConfigurationGroup key={group.key} group={group} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ProjectConfigurationGroup({
+  group,
+}: {
+  group: ProjectConfigurationManagementGroup;
+}) {
+  if (group.sections.length === 0) return null;
+
+  return (
+    <div>
+      <div className="mb-3 flex items-start justify-between gap-4">
+        <div>
+          <h4 className="text-sm font-semibold text-foreground">
+            {group.title}
+          </h4>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {group.description}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          {group.actions.map((action) => (
+            <a
+              key={action.key}
+              href={`#${action.targetId}`}
+              className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+            >
+              {action.label}
+            </a>
+          ))}
+        </div>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {group.sections.map((section) => (
+          <div
+            key={section.key}
+            id={section.key === "validation" ? "project-validation" : undefined}
+            className="min-w-0 rounded-lg border border-border/70 bg-background/40 p-3"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <h5 className="truncate text-sm font-semibold text-foreground">
+                {section.title}
+              </h5>
+              <span
+                className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${CONFIG_SECTION_STATUS_CLASS[section.status]}`}
+              >
+                {section.status}
+              </span>
+            </div>
+            <div className="mt-3 space-y-2">
+              {section.items.map((item) => (
+                <div key={`${section.key}-${item.label}`} className="min-w-0">
+                  <div className="text-[10px] uppercase text-muted-foreground">
+                    {item.label}
+                  </div>
+                  <div
+                    className="mt-0.5 truncate text-xs font-medium text-foreground"
+                    title={item.value}
+                  >
+                    {item.value}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BoardTab({
+  items,
+  workspaceId,
+}: {
+  items: ProjectWorkItem[];
+  workspaceId?: string | null;
+}) {
   const boardItems: WorkItemBoardItem[] = items.map((item) => ({
     id: item.id,
     identifier: item.identifier,
@@ -151,12 +286,19 @@ function BoardTab({ items }: { items: ProjectWorkItem[] }) {
     status: item.status,
     kind: item.kind,
     priority: item.priority,
+    href: getProjectWorkItemHref(item, workspaceId),
   }));
 
   return <WorkItemBoard items={boardItems} />;
 }
 
-function ListTab({ items }: { items: ProjectWorkItem[] }) {
+function ListTab({
+  items,
+  workspaceId,
+}: {
+  items: ProjectWorkItem[];
+  workspaceId?: string | null;
+}) {
   const sorted = sortForList(items);
 
   if (sorted.length === 0) {
@@ -189,7 +331,7 @@ function ListTab({ items }: { items: ProjectWorkItem[] }) {
             >
               <td className="px-4 py-3">
                 <Link
-                  href={`/work-items/${item.id}`}
+                  href={getProjectWorkItemHref(item, workspaceId)}
                   className="font-mono text-xs text-primary hover:underline"
                 >
                   {item.identifier}
@@ -197,7 +339,7 @@ function ListTab({ items }: { items: ProjectWorkItem[] }) {
               </td>
               <td className="px-4 py-3">
                 <Link
-                  href={`/work-items/${item.id}`}
+                  href={getProjectWorkItemHref(item, workspaceId)}
                   className="font-medium text-primary hover:underline"
                 >
                   {item.title}

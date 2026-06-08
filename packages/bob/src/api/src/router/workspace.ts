@@ -5,6 +5,7 @@ import {
   workspaceList,
   workspaceCreate,
   workspaceRename,
+  workspaceSetDefaultAgent,
   workspaceDelete,
 } from "../handlers/workspace";
 
@@ -38,6 +39,17 @@ export const workspaceRouter = {
     )
     .mutation(({ ctx, input }) =>
       workspaceRename({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
+
+  setDefaultAgent: protectedProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        defaultAgentType: z.string().max(50).nullable(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      workspaceSetDefaultAgent({ db: ctx.db, userId: ctx.session.user.id }, input),
     ),
 
   delete: protectedProcedure

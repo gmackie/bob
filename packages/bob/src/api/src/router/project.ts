@@ -6,6 +6,7 @@ import {
   projectList,
   projectGet,
   projectUpdateAutomationSettings,
+  projectSetDefaultAgent,
   projectDiscovery,
   projectDismissDir,
 } from "../handlers/project";
@@ -72,6 +73,17 @@ export const projectRouter = {
     )
     .mutation(({ ctx, input }) =>
       projectUpdateAutomationSettings({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
+
+  setDefaultAgent: protectedProcedure
+    .input(
+      z.object({
+        projectId: z.string().uuid(),
+        defaultAgentType: z.string().max(50).nullable(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      projectSetDefaultAgent({ db: ctx.db, userId: ctx.session.user.id }, input),
     ),
 
   discovery: protectedProcedure

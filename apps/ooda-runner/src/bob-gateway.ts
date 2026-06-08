@@ -1,8 +1,11 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { homedir } from "node:os";
+import { basename, dirname, join } from "node:path";
 import WebSocket from "ws";
 
 import type { AgentAdapter, AdapterEvent } from "@gmacko/ooda/agent-adapters";
+import { bobRunReporterFromEnv, type BobRunReporter } from "./bob-run-reporter";
 
 const RECONNECT_DELAY_MS = 5_000;
 const HEARTBEAT_INTERVAL_MS = 25_000;
@@ -15,6 +18,13 @@ export interface BobGatewayConfig {
   maxConcurrent: number;
 }
 
+interface WorktreeContext {
+  path: string;
+  repoPath: string;
+  branch: string;
+  baseBranch: string;
+}
+
 interface ServerSessionAvailable {
   type: "session_available";
   sessionId: string;
@@ -24,6 +34,11 @@ interface ServerSessionAvailable {
   sessionType?: "execution" | "planning";
   description?: string;
   identifier?: string;
+  /**
+   * Feature branch set by the server only when the work item's project has a
+   * mapped repo. Its presence is the signal to run in an isolated worktree
+   * (off `workingDirectory`, which then carries the repo path) and open a PR.
+   */
   branch?: string;
   personaId?: string;
   personaConfig?: {
@@ -61,6 +76,9 @@ export class BobGatewayConnector {
   private activeSessions = new Map<string, ChildProcess>();
   private adapters: Map<string, AgentAdapter>;
   private stopped = false;
+  // Reports gateway-dispatched runs to Bob's public API as agentRuns so they
+  // appear in Recent Outcomes (the same surface the task-runner reports to).
+  private bobReporter: BobRunReporter = bobRunReporterFromEnv();
 
   constructor(
     private config: BobGatewayConfig,
@@ -177,15 +195,41 @@ export class BobGatewayConnector {
     this.send({ type: "session_claimed", sessionId: session.sessionId });
     this.send({ type: "session_status", sessionId: session.sessionId, status: "starting" });
 
-    const workDir = this.resolveWorkDir(session);
-    if (!existsSync(workDir)) {
-      console.error(`[bob-gw] Working directory not found: ${workDir}`);
-      this.send({ type: "session_status", sessionId: session.sessionId, status: "error" });
-      return;
-    }
-
-    if (session.branch) {
-      await this.gitCheckoutBranch(workDir, session.branch).catch(() => {});
+    // When the server mapped a repo + branch, run in an isolated git worktree
+    // off that repo so the agent never touches the runner's own checkout and so
+    // we can push the branch + open a PR. Otherwise fall back to the legacy dir.
+    let workDir: string;
+    let worktree: WorktreeContext | null = null;
+    if (
+      session.branch &&
+      existsSync(session.workingDirectory) &&
+      existsSync(join(session.workingDirectory, ".git"))
+    ) {
+      try {
+        const repoPath = session.workingDirectory;
+        const baseBranch = await this.detectBaseBranch(repoPath);
+        worktree = await this.setupWorktree(repoPath, session.branch, baseBranch);
+        workDir = worktree.path;
+        console.log(`[bob-gw] worktree ready: ${workDir} (branch ${worktree.branch})`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[bob-gw] worktree setup failed: ${msg}`);
+        this.send({ type: "session_status", sessionId: session.sessionId, status: "error" });
+        this.sendEvent(session.sessionId, "error", "system", { code: "WORKTREE_ERROR", message: msg });
+        this.activeSessions.delete(session.sessionId);
+        return;
+      }
+    } else {
+      workDir = this.resolveWorkDir(session);
+      if (!existsSync(workDir)) {
+        console.error(`[bob-gw] Working directory not found: ${workDir}`);
+        this.send({ type: "session_status", sessionId: session.sessionId, status: "error" });
+        this.activeSessions.delete(session.sessionId);
+        return;
+      }
+      if (session.branch) {
+        await this.gitCheckoutBranch(workDir, session.branch).catch(() => {});
+      }
     }
 
     const prompt = this.buildPrompt(session);
@@ -195,26 +239,253 @@ export class BobGatewayConnector {
     this.send({ type: "session_status", sessionId: session.sessionId, status: "running" });
     this.sendEvent(session.sessionId, "state", "system", { status: "running" });
 
+    // Record an agentRun so this shows in Recent Outcomes (via <agent>), the
+    // same surface the task-runner reports to. workItemId uses the identifier
+    // (publicApiCreateRun matches it to the work item by externalId).
+    const bobRunId = await this.bobReporter
+      .startRun({
+        workItemId: session.identifier ?? session.sessionId,
+        agentType: adapterId,
+        title: session.title,
+      })
+      .catch(() => null);
+    let runOutput = "";
+    const collect = (s: string) => {
+      runOutput += s;
+      if (runOutput.length > 200_000) runOutput = runOutput.slice(-200_000);
+    };
+
     const startTime = Date.now();
     try {
       if (adapter) {
-        await this.runWithAdapter(session, adapter, workDir, prompt);
+        await this.runWithAdapter(session, adapter, workDir, prompt, collect);
       } else {
-        await this.runWithCli(session, workDir, prompt);
+        await this.runWithCli(session, workDir, prompt, collect);
       }
-      this.send({ type: "session_status", sessionId: session.sessionId, status: "completed" });
-      this.sendEvent(session.sessionId, "state", "system", { status: "completed" });
-      console.log(`[bob-gw] Session ${session.sessionId} completed`);
+
+      // Worktree path: push the branch and open a PR if commits were produced.
+      let prUrl: string | null = null;
+      if (worktree) {
+        prUrl = await this.finalizeWorktreePr(session, worktree).catch((e) => {
+          console.warn(`[bob-gw] PR finalize failed: ${e instanceof Error ? e.message : e}`);
+          return null;
+        });
+        if (prUrl) {
+          this.sendEvent(session.sessionId, "pull_request", "agent", {
+            url: prUrl,
+            branch: worktree.branch,
+          });
+        }
+      }
+
+      this.send({
+        type: "session_status",
+        sessionId: session.sessionId,
+        status: "completed",
+        summary: prUrl ? { pullRequestUrl: prUrl } : undefined,
+      });
+      this.sendEvent(session.sessionId, "state", "system", {
+        status: "completed",
+        pullRequestUrl: prUrl ?? undefined,
+      });
+      console.log(`[bob-gw] Session ${session.sessionId} completed${prUrl ? ` → ${prUrl}` : ""}`);
+      await this.bobReporter.pushLog(bobRunId, runOutput).catch(() => {});
+      await this.bobReporter
+        .finishRun(bobRunId, "completed", { pullRequestUrl: prUrl ?? undefined })
+        .catch(() => {});
       void this.reportToBizPulse(session, "completed", Date.now() - startTime);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       console.error(`[bob-gw] Session ${session.sessionId} failed: ${errMsg}`);
       this.send({ type: "session_status", sessionId: session.sessionId, status: "error" });
       this.sendEvent(session.sessionId, "error", "system", { code: "AGENT_ERROR", message: errMsg });
+      await this.bobReporter.pushLog(bobRunId, runOutput).catch(() => {});
+      await this.bobReporter.finishRun(bobRunId, "failed", { error: errMsg }).catch(() => {});
       void this.reportToBizPulse(session, "failed", Date.now() - startTime);
     } finally {
+      if (worktree) await this.removeWorktree(worktree).catch(() => {});
       this.activeSessions.delete(session.sessionId);
     }
+  }
+
+  /** Detect the repo's default branch (origin/HEAD), falling back to main/master. */
+  private async detectBaseBranch(repoPath: string): Promise<string> {
+    const head = await this
+      .git(repoPath, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"])
+      .then((s) => s.trim().replace(/^origin\//, ""))
+      .catch(() => "");
+    if (head) return head;
+    for (const candidate of ["main", "master"]) {
+      const ok = await this
+        .git(repoPath, ["rev-parse", "--verify", `origin/${candidate}`])
+        .then(() => true)
+        .catch(() => false);
+      if (ok) return candidate;
+    }
+    return "main";
+  }
+
+  /** Create an isolated git worktree on a fresh feature branch off the base. */
+  private async setupWorktree(
+    repoPath: string,
+    branch: string,
+    baseBranch: string,
+  ): Promise<WorktreeContext> {
+    const repoName = basename(repoPath);
+    const safeBranch = branch.replace(/[^a-zA-Z0-9._-]+/g, "-");
+    const wtPath = join(homedir(), ".bob", "worktrees", repoName, safeBranch);
+
+    await this.git(repoPath, ["fetch", "origin", baseBranch]).catch(() => {});
+
+    if (existsSync(wtPath)) {
+      await this.git(repoPath, ["worktree", "remove", "--force", wtPath]).catch(() => {});
+      rmSync(wtPath, { recursive: true, force: true });
+    }
+    mkdirSync(dirname(wtPath), { recursive: true });
+
+    // Prefer forking from origin/<base>; fall back to the local base branch.
+    try {
+      await this.git(repoPath, ["worktree", "add", "-B", branch, wtPath, `origin/${baseBranch}`]);
+    } catch {
+      await this.git(repoPath, ["worktree", "add", "-B", branch, wtPath, baseBranch]);
+    }
+    return { path: wtPath, repoPath, branch, baseBranch };
+  }
+
+  /** Push the worktree branch and open a PR if the agent produced commits. */
+  private async finalizeWorktreePr(
+    session: ServerSessionAvailable,
+    worktree: WorktreeContext,
+  ): Promise<string | null> {
+    const ahead = (
+      await this.git(worktree.path, [
+        "rev-list",
+        "--count",
+        `origin/${worktree.baseBranch}..HEAD`,
+      ]).catch(() => "0")
+    ).trim();
+    if (!ahead || ahead === "0") {
+      console.log(`[bob-gw] No commits on ${worktree.branch}; skipping PR`);
+      return null;
+    }
+
+    await this.git(worktree.path, ["push", "-u", "origin", worktree.branch, "--force"]);
+
+    const remote = (
+      await this.git(worktree.repoPath, ["remote", "get-url", "origin"])
+    ).trim();
+    return this.createPullRequest(
+      worktree.path,
+      remote,
+      worktree.branch,
+      worktree.baseBranch,
+      session.title ?? worktree.branch,
+      session.description ?? "Automated by Bob agent.",
+    );
+  }
+
+  /**
+   * Open a PR for the pushed branch, host-aware:
+   * - github.com → `gh pr create` (the runner host is authenticated)
+   * - Forgejo/Gitea over HTTPS with a token in the remote URL → REST API
+   * - otherwise (e.g. SSH gitea without a token) → push-only, PR opened manually
+   */
+  private async createPullRequest(
+    worktreePath: string,
+    remoteUrl: string,
+    head: string,
+    base: string,
+    title: string,
+    body: string,
+  ): Promise<string | null> {
+    const parsed = this.parseRemote(remoteUrl);
+    if (!parsed) {
+      console.warn(`[bob-gw] could not parse remote for PR`);
+      return null;
+    }
+    const { host, owner, repo, token } = parsed;
+    const prTitle = `[Bob] ${title}`;
+
+    if (host === "github.com") {
+      try {
+        const out = await this.run(
+          "gh",
+          ["pr", "create", "--repo", `${owner}/${repo}`, "--head", head, "--base", base, "--title", prTitle, "--body", body],
+          worktreePath,
+        );
+        return (out.match(/https?:\/\/\S+/) || [])[0] ?? null;
+      } catch (e) {
+        console.warn(`[bob-gw] gh pr create failed: ${e instanceof Error ? e.message : e}`);
+        return null;
+      }
+    }
+
+    if (token) {
+      const res = await fetch(`https://${host}/api/v1/repos/${owner}/${repo}/pulls`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `token ${token}` },
+        body: JSON.stringify({ head, base, title: prTitle, body }),
+      });
+      if (!res.ok) {
+        console.warn(`[bob-gw] Gitea PR create ${res.status}: ${(await res.text().catch(() => "")).slice(0, 200)}`);
+        return null;
+      }
+      const pr = (await res.json()) as { html_url?: string; url?: string };
+      return pr.html_url ?? pr.url ?? null;
+    }
+
+    console.warn(`[bob-gw] no PR method for ${host}; pushed ${head} (open PR manually)`);
+    return null;
+  }
+
+  /** Parse a git remote (SSH or HTTPS) into host/owner/repo (+ token if embedded). */
+  private parseRemote(
+    remoteUrl: string,
+  ): { host: string; owner: string; repo: string; token?: string } | null {
+    let m = remoteUrl.match(/^[^@]+@([^:]+):([^/]+)\/(.+?)(?:\.git)?$/);
+    if (m) return { host: m[1]!, owner: m[2]!, repo: m[3]! };
+    m = remoteUrl.match(/^https?:\/\/(?:([^:@/]+):([^@/]+)@)?([^/]+)\/([^/]+)\/(.+?)(?:\.git)?$/);
+    if (m) return { host: m[3]!, owner: m[4]!, repo: m[5]!, token: m[2] };
+    return null;
+  }
+
+  /** Run a command in cwd, resolving stdout (rejects on non-zero exit). */
+  private run(cmd: string, args: string[], cwd: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const child = spawn(cmd, args, { cwd, stdio: ["ignore", "pipe", "pipe"], env: process.env });
+      let out = "";
+      let err = "";
+      child.stdout?.on("data", (d: Buffer) => (out += d.toString()));
+      child.stderr?.on("data", (d: Buffer) => (err += d.toString()));
+      child.on("close", (code) =>
+        code === 0 ? resolve(out) : reject(new Error(`${cmd}: ${err || out}`)),
+      );
+      child.on("error", reject);
+    });
+  }
+
+  private async removeWorktree(worktree: WorktreeContext): Promise<void> {
+    await this.git(worktree.repoPath, [
+      "worktree",
+      "remove",
+      "--force",
+      worktree.path,
+    ]).catch(() => {});
+  }
+
+  /** Run a git command in cwd, resolving stdout or rejecting with stderr. */
+  private git(cwd: string, args: string[]): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const child = spawn("git", args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+      let out = "";
+      let err = "";
+      child.stdout?.on("data", (d: Buffer) => (out += d.toString()));
+      child.stderr?.on("data", (d: Buffer) => (err += d.toString()));
+      child.on("close", (code) =>
+        code === 0 ? resolve(out) : reject(new Error(`git ${args.join(" ")}: ${err || out}`)),
+      );
+      child.on("error", reject);
+    });
   }
 
   private async runWithAdapter(
@@ -222,15 +493,26 @@ export class BobGatewayConnector {
     adapter: AgentAdapter,
     workDir: string,
     prompt: string,
+    onChunk?: (s: string) => void,
   ): Promise<void> {
     const systemPrompt = this.buildSystemPrompt(session);
     const command = adapter.buildCommand({ prompt, workspaceRoot: workDir, systemPrompt });
 
     await adapter.execute(command, (event: AdapterEvent) => {
       if (event.type === "stdout" || event.type === "stderr") {
+        onChunk?.(event.data);
         this.sendEvent(session.sessionId, "output_chunk", "agent", {
           data: event.data,
           stream: event.type,
+        });
+      } else if (event.type === "thought") {
+        this.sendEvent(session.sessionId, "thought", "agent", {
+          text: event.thought?.text ?? event.data,
+        });
+      } else if (event.type === "tool_call" || event.type === "tool_result") {
+        this.sendEvent(session.sessionId, "tool_call", "agent", {
+          phase: event.type === "tool_call" ? "start" : "end",
+          ...event.tool,
         });
       }
     });
@@ -240,6 +522,7 @@ export class BobGatewayConnector {
     session: ServerSessionAvailable,
     workDir: string,
     prompt: string,
+    onChunk?: (s: string) => void,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       const { command, args } = this.getCliCommand(session.agentType || "claude", prompt, session);
@@ -254,6 +537,7 @@ export class BobGatewayConnector {
       this.activeSessions.set(session.sessionId, child);
 
       child.stdout?.on("data", (data: Buffer) => {
+        onChunk?.(data.toString());
         this.sendEvent(session.sessionId, "output_chunk", "agent", {
           data: data.toString(),
           stream: "stdout",
@@ -261,6 +545,7 @@ export class BobGatewayConnector {
       });
 
       child.stderr?.on("data", (data: Buffer) => {
+        onChunk?.(data.toString());
         this.sendEvent(session.sessionId, "output_chunk", "agent", {
           data: data.toString(),
           stream: "stderr",

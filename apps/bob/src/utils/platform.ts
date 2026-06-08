@@ -36,6 +36,7 @@ export function getAvailableAgentTypes(): Array<{
     { value: "claude", label: "Claude", icon: "🤖" },
     { value: "codex", label: "Codex", icon: "📝" },
     { value: "gemini", label: "Gemini", icon: "✨" },
+    { value: "grok", label: "Grok Build", icon: "⚡" },
     { value: "kiro", label: "Kiro", icon: "🔮" },
     { value: "cursor-agent", label: "Cursor Agent", icon: "🖱️" },
   ];

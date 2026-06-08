@@ -44,7 +44,9 @@ export const publicApiRouter = {
       z.object({
         workItemId: z.string().min(1),
         workspaceId: z.string().uuid(),
-        agentType: z.string().min(1).max(64),
+        // Optional: when omitted, resolved from the work-item override ->
+        // project default -> workspace default -> "claude" hierarchy.
+        agentType: z.string().min(1).max(64).optional(),
         agentConfig: z.record(z.string(), z.unknown()).optional(),
       }),
     )

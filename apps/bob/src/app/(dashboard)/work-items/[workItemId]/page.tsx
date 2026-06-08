@@ -1,18 +1,24 @@
 import { notFound } from "next/navigation";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
-import { WorkItemDetailInteractive } from "~/components/work-items/work-item-detail-interactive";
 import { WorkflowPageClient } from "./workflow-page-client";
 import { createPlanningCaller } from "~/lib/planning/server";
+import {
+  buildWorkItemEntryContext,
+  getWorkItemEntryBreadcrumbs,
+  normalizeWorkItemEntryView,
+} from "~/components/work-items/work-item-entry-model";
 
 interface WorkItemPageProps {
   params: Promise<{ workItemId: string }>;
+  searchParams?: Promise<{ view?: string }>;
 }
 
 export const dynamic = "force-dynamic";
 
-export default async function WorkItemPage({ params }: WorkItemPageProps) {
+export default async function WorkItemPage({ params, searchParams }: WorkItemPageProps) {
   const { workItemId } = await params;
+  const query = await searchParams;
   const caller = (await createPlanningCaller()) as any;
   let detail;
   try {
@@ -135,6 +141,12 @@ export default async function WorkItemPage({ params }: WorkItemPageProps) {
     kind: detail.workItem.kind,
     status: detail.workItem.status,
     priority: detail.workItem.priority ?? "no_priority",
+    agentTypeOverride: detail.workItem.agentTypeOverride ?? null,
+    queueSortOrder: detail.workItem.queueSortOrder ?? null,
+    workspaceId: detail.workItem.workspaceId,
+    agentStatus: detail.workItem.agentStatus ?? null,
+    dependencies: detail.workItem.dependencies ?? [],
+    dependents: detail.workItem.dependents ?? [],
     project: detail.workItem.project
       ? {
           id: detail.workItem.project.id,
@@ -143,6 +155,22 @@ export default async function WorkItemPage({ params }: WorkItemPageProps) {
         }
       : null,
   };
+  const entryContext = buildWorkItemEntryContext({
+    view: normalizeWorkItemEntryView(query?.view ?? null),
+    workspaceId: detail.workItem.workspaceId,
+    workItem,
+  });
+  const breadcrumbs = getWorkItemEntryBreadcrumbs({
+    context: entryContext,
+    identifier: detail.workItem.identifier,
+    project: detail.workItem.project
+      ? {
+          id: detail.workItem.project.id,
+          key: detail.workItem.project.key,
+        }
+      : null,
+    workspaceId: detail.workItem.workspaceId,
+  });
 
   const commentsData = comments.map((comment: any) => ({
     id: comment.id,
@@ -154,25 +182,17 @@ export default async function WorkItemPage({ params }: WorkItemPageProps) {
   const artifactsData = detail.currentArtifacts.map((artifact: any) => ({
     id: artifact.id,
     artifactRole: artifact.artifactRole,
+    artifactType: artifact.artifactType ?? null,
     url: artifact.url,
     title: artifact.title ?? null,
+    summary: artifact.summary ?? null,
+    metadata: artifact.metadata ?? null,
   }));
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
       <Breadcrumbs
-        items={[
-          { label: "Planning", href: "/planning" },
-          ...(detail.workItem.project
-            ? [
-                {
-                  label: detail.workItem.project.key,
-                  href: `/projects/${detail.workItem.project.id}`,
-                },
-              ]
-            : []),
-          { label: detail.workItem.identifier },
-        ]}
+        items={breadcrumbs}
         className="mb-4"
       />
 
@@ -187,6 +207,7 @@ export default async function WorkItemPage({ params }: WorkItemPageProps) {
           childCount={detail.childCount}
           pullRequests={allPullRequests}
           deployments={allDeployments}
+          entryContext={entryContext}
         />
       </div>
     </main>
