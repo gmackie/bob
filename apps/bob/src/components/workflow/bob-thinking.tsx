@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { cn } from "@gmacko/core/ui";
 
 import { useTRPC } from "~/trpc/react";
+import { getBobThinkingSessionHref } from "./bob-thinking-model";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -21,6 +22,7 @@ type ThinkingState =
 interface BobThinkingProps {
   workItemId: string;
   sessionId?: string | null;
+  workspaceId?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -81,7 +83,11 @@ function AnimatedDots() {
 // Main component
 // ---------------------------------------------------------------------------
 
-export function BobThinking({ workItemId: _workItemId, sessionId }: BobThinkingProps) {
+export function BobThinking({
+  workItemId: _workItemId,
+  sessionId,
+  workspaceId,
+}: BobThinkingProps) {
   const trpc = useTRPC();
 
   const { data: session } = useQuery(
@@ -93,26 +99,34 @@ export function BobThinking({ workItemId: _workItemId, sessionId }: BobThinkingP
       },
     ),
   );
+  const sessionRecord = session as unknown as {
+    status?: string | null;
+    sessionType?: string | null;
+    workflowStatus?: string | null;
+    awaitingInputQuestion?: string | null;
+    workspaceId?: string | null;
+  } | null | undefined;
 
   // Derive thinking state
   const thinkingState: ThinkingState = !sessionId
     ? "idle"
-    : session
+    : sessionRecord
       ? deriveThinkingState({
-          status: session.status,
-          sessionType: (session as Record<string, unknown>).sessionType as string | null,
-          workflowStatus: (session as Record<string, unknown>).workflowStatus as string | null,
+          status: sessionRecord.status ?? null,
+          sessionType: sessionRecord.sessionType ?? null,
+          workflowStatus: sessionRecord.workflowStatus ?? null,
         })
       : "idle";
 
   // Awaiting input details
   const isAwaitingInput =
-    session &&
-    session.status === "running" &&
-    (session as Record<string, unknown>).workflowStatus === "awaiting_input";
+    sessionRecord &&
+    sessionRecord.status === "running" &&
+    sessionRecord.workflowStatus === "awaiting_input";
   const awaitingQuestion = isAwaitingInput
-    ? ((session as Record<string, unknown>).awaitingInputQuestion as string | null)
+    ? sessionRecord.awaitingInputQuestion ?? null
     : null;
+  const sessionWorkspaceId = workspaceId ?? sessionRecord?.workspaceId;
 
   // Don't render when idle
   if (thinkingState === "idle") return null;
@@ -140,7 +154,7 @@ export function BobThinking({ workItemId: _workItemId, sessionId }: BobThinkingP
       {/* Right: view session link */}
       {sessionId && (
         <a
-          href={`/sessions/${sessionId}`}
+          href={getBobThinkingSessionHref(sessionId, sessionWorkspaceId)}
           className="text-sm font-medium text-primary hover:text-primary/80 transition-colors whitespace-nowrap"
         >
           View session &rarr;

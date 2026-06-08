@@ -7,6 +7,7 @@
  * Phase 7B-4D-beta Task 9.
  */
 import type { HandlerContext } from "../handlers/context.js";
+import type { WorkItemKind } from "@bob/work-items/schema";
 import { wrapHandler } from "../handlers/bridge.js";
 import {
   workItemsList,
@@ -38,7 +39,7 @@ export const makeWorkItemsRpcHandlers = (ctx: HandlerContext) => ({
       workspaceId: string;
       projectId?: string;
       parentId?: string | null;
-      kind?: string;
+      kind?: WorkItemKind;
       status?: string;
       limit?: number;
     };
@@ -58,6 +59,7 @@ export const makeWorkItemsRpcHandlers = (ctx: HandlerContext) => ({
       title?: string;
       description?: string;
       status?: string;
+      priority?: string;
     };
   }) => wrapHandler(workItemsUpdate, ctx, payload, "workItem"),
 

@@ -1,12 +1,21 @@
 import { Text, View, ScrollView, Pressable, ActivityIndicator } from "react-native";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { trpc } from "~/utils/api";
 import { colors } from "~/lib/colors";
+import { LinkedExecutionRunsCard } from "./LinkedExecutionRunsCard";
+import { OutcomeReadableOutputCard } from "./OutcomeReadableOutputCard";
 import {
   formatStatusLabel,
   unwrapWorkItemDetail,
 } from "~/features/tablet/queue";
+import {
+  buildMobileWorkItemEntryContext,
+  getMobileWorkItemEntryAction,
+  getMobileWorkItemEntryValidationState,
+  type MobileWorkItemEntryValidationState,
+  type MobileWorkItemEntryView,
+} from "~/features/tablet/work-item-entry";
 
 const STATUS_COLORS: Record<string, string> = {
   in_progress: colors.success,
@@ -20,15 +29,34 @@ const STATUS_COLORS: Record<string, string> = {
 
 interface WorkItemPaneProps {
   workItemId: string;
+  entryView?: MobileWorkItemEntryView;
   onOpenInspector?: () => void;
   onOpenSession?: (sessionId: string) => void;
 }
 
-export function WorkItemPane({ workItemId, onOpenInspector, onOpenSession }: WorkItemPaneProps) {
+export function WorkItemPane({
+  workItemId,
+  entryView = "planning",
+  onOpenInspector,
+  onOpenSession,
+}: WorkItemPaneProps) {
+  const queryClient = useQueryClient();
   const workItemQuery = useQuery(trpc.workItem.get.queryOptions(
     { id: workItemId },
     { enabled: Boolean(workItemId) },
   ));
+  const dispatchMutation = useMutation(
+    trpc.workItem.dispatch.mutationOptions({
+      onSuccess: async (result) => {
+        await queryClient.invalidateQueries({
+          queryKey: trpc.workItem.get.queryKey({ id: workItemId }),
+        });
+        if (typeof result.sessionId === "string") {
+          onOpenSession?.(result.sessionId);
+        }
+      },
+    }),
+  );
 
   if (workItemQuery.isLoading) {
     return (
@@ -46,6 +74,17 @@ export function WorkItemPane({ workItemId, onOpenInspector, onOpenSession }: Wor
       </View>
     );
   }
+  const entryContext = buildMobileWorkItemEntryContext({ view: entryView, workItem: item });
+  const entryAction = getMobileWorkItemEntryAction({
+    view: entryView,
+    workspaceId: (item as { workspaceId?: string | null }).workspaceId ?? null,
+    workItem: item,
+  });
+  const validationState = getMobileWorkItemEntryValidationState(item.currentArtifacts ?? []);
+  const showValidationState = entryContext.sections.some(
+    (section) =>
+      section.key === "artifacts-validation" || section.key === "validation-review",
+  );
 
   return (
     <View className="flex-1" style={{ backgroundColor: colors.background }}>
@@ -90,6 +129,122 @@ export function WorkItemPane({ workItemId, onOpenInspector, onOpenSession }: Wor
 
       {/* Content */}
       <ScrollView className="flex-1 px-4 pt-4">
+        <View
+          className="mb-4 rounded-lg border p-3"
+          style={{ borderColor: colors.border, backgroundColor: colors.card }}
+        >
+          <Text className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+            {entryContext.sourceLabel}
+          </Text>
+          <Text className="mt-1 text-sm font-semibold text-foreground">
+            {entryContext.heading}
+          </Text>
+          <Text className="mt-1 text-xs leading-5 text-muted">
+            {entryContext.description}
+          </Text>
+          <View className="mt-3 flex-row flex-wrap gap-2">
+            {entryContext.facts.map((fact) => (
+              <View
+                key={fact.label}
+                className="rounded-md px-2 py-1"
+                style={{ backgroundColor: colors.secondary }}
+              >
+                <Text className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+                  {fact.label}
+                </Text>
+                <Text className="mt-0.5 text-xs font-semibold text-foreground">
+                  {fact.value}
+                </Text>
+              </View>
+            ))}
+          </View>
+          <View
+            className="mt-3 pt-3"
+            style={{ borderTopWidth: 1, borderTopColor: colors.border }}
+          >
+            <Text className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+              Detail sections
+            </Text>
+            <View className="mt-2 flex-row flex-wrap gap-2">
+              {entryContext.sections.map((section) => (
+                <View
+                  key={section.key}
+                  className="rounded-md border px-2 py-1"
+                  style={{ borderColor: colors.border, backgroundColor: colors.background }}
+                >
+                  <Text className="text-[10px] font-medium text-muted">
+                    {section.label}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+          {entryContext.dependencySummary ? (
+            <View
+              className="mt-3 pt-3"
+              style={{ borderTopWidth: 1, borderTopColor: colors.border }}
+            >
+              <RelatedWorkItemsList
+                title="Depends On"
+                empty="No dependencies"
+                items={entryContext.dependencySummary.dependencies}
+              />
+              <RelatedWorkItemsList
+                title="Blocking"
+                empty="No blocked tasks"
+                items={entryContext.dependencySummary.dependents}
+              />
+            </View>
+          ) : null}
+          {entryAction.kind === "dispatch" || entryAction.kind === "rerun" ? (
+            <Pressable
+              onPress={() => dispatchMutation.mutate({ workItemId: item.id })}
+              disabled={dispatchMutation.isPending}
+              accessibilityRole="button"
+              accessibilityLabel={`${entryAction.label} on ${item.identifier}`}
+              className="mt-3 rounded-md px-3 py-2 active:opacity-70"
+              style={{
+                backgroundColor: colors.primary,
+                opacity: dispatchMutation.isPending ? 0.65 : 1,
+              }}
+            >
+              <Text className="text-center text-xs font-semibold text-background">
+                {dispatchMutation.isPending ? "Starting..." : entryAction.label}
+              </Text>
+            </Pressable>
+          ) : entryAction.kind === "live-session" ? (
+            <Pressable
+              onPress={() => onOpenSession?.(entryAction.sessionId)}
+              accessibilityRole="button"
+              accessibilityLabel={`Open live session for ${item.identifier}`}
+              className="mt-3 rounded-md px-3 py-2 active:opacity-70"
+              style={{ backgroundColor: colors.primary }}
+            >
+              <Text className="text-center text-xs font-semibold text-background">
+                {entryAction.label}
+              </Text>
+            </Pressable>
+          ) : null}
+          {showValidationState ? (
+            <ValidationStateCard validationState={validationState} />
+          ) : null}
+        </View>
+
+        {entryView === "outcome" ? (
+          <OutcomeReadableOutputCard
+            workItemId={item.id}
+            onOpenSession={onOpenSession}
+          />
+        ) : null}
+
+        {entryView === "queue" ? (
+          <LinkedExecutionRunsCard
+            workItemId={item.id}
+            workspaceId={(item as { workspaceId?: string | null }).workspaceId ?? null}
+            onOpenSession={onOpenSession}
+          />
+        ) : null}
+
         {/* Description */}
         {item.description ? (
           <View className="mb-6">
@@ -154,6 +309,84 @@ export function WorkItemPane({ workItemId, onOpenInspector, onOpenSession }: Wor
           </View>
         )}
       </ScrollView>
+    </View>
+  );
+}
+
+function ValidationStateCard({
+  validationState,
+}: {
+  validationState: MobileWorkItemEntryValidationState;
+}) {
+  const toneColor =
+    validationState.tone === "positive"
+      ? colors.success
+      : validationState.tone === "critical"
+        ? colors.danger
+        : validationState.tone === "warning"
+          ? colors.warning
+          : colors.muted;
+
+  return (
+    <View
+      className="mt-3 rounded-md border px-3 py-3"
+      style={{
+        borderColor: `${toneColor}66`,
+        backgroundColor: `${toneColor}18`,
+      }}
+    >
+      <Text className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+        Validation state
+      </Text>
+      <Text className="mt-1 text-xs font-semibold text-foreground">
+        {validationState.label}
+      </Text>
+      <Text className="mt-1 text-xs leading-5" style={{ color: toneColor }}>
+        {validationState.detail}
+      </Text>
+    </View>
+  );
+}
+
+function RelatedWorkItemsList({
+  title,
+  empty,
+  items,
+}: {
+  title: string;
+  empty: string;
+  items: { id: string; identifier: string; title: string; statusLabel: string }[];
+}) {
+  return (
+    <View className="mb-3">
+      <Text className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted">
+        {title}
+      </Text>
+      {items.length === 0 ? (
+        <View
+          className="rounded-md border px-2 py-2"
+          style={{ borderColor: colors.border }}
+        >
+          <Text className="text-[10px] text-muted">{empty}</Text>
+        </View>
+      ) : (
+        <View className="gap-2">
+          {items.map((item) => (
+            <View
+              key={item.id}
+              className="rounded-md border px-2 py-2"
+              style={{ borderColor: colors.border, backgroundColor: colors.background }}
+            >
+              <Text className="text-xs font-semibold text-foreground" numberOfLines={1}>
+                {item.identifier} · {item.title}
+              </Text>
+              <Text className="mt-0.5 text-[10px] text-muted">
+                {item.statusLabel}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
     </View>
   );
 }

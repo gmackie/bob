@@ -22,6 +22,7 @@ import {
 } from "@bob/db/schema";
 
 import { suggestAgent } from "../services/dispatch/agentHeuristics";
+import { buildExecutionPlanningTask } from "../services/dispatch/executionPlanningTask";
 
 import type { HandlerContext } from "./context.js";
 
@@ -506,19 +507,16 @@ export async function dispatchDispatch(
 
   for (const item of toDispatch) {
     try {
+      const workItem = await ctx.db.query.workItems.findFirst({
+        where: eq(workItems.id, item.planningTaskId),
+        columns: {
+          externalId: true,
+          externalProvider: true,
+        },
+      });
       const result = await executeTask(
         ctx.userId,
-        {
-          id: item.planningTaskId,
-          identifier: item.planningTaskIdentifier,
-          title: item.title,
-          description: item.description,
-          workspaceId: batch.workspaceId,
-          projectId: batch.projectId,
-          assigneeId: null,
-          labels: [],
-          priority: 0,
-        },
+        buildExecutionPlanningTask({ batch, item, workItem }),
         { agentType: item.agentType },
       );
 
@@ -742,19 +740,16 @@ export async function dispatchCheckProgress(
 
       for (const item of toStart) {
         try {
+          const workItem = await ctx.db.query.workItems.findFirst({
+            where: eq(workItems.id, item.planningTaskId),
+            columns: {
+              externalId: true,
+              externalProvider: true,
+            },
+          });
           const result = await executeTask(
             ctx.userId,
-            {
-              id: item.planningTaskId,
-              identifier: item.planningTaskIdentifier,
-              title: item.title,
-              description: item.description,
-              workspaceId: batch.workspaceId,
-              projectId: batch.projectId,
-              assigneeId: null,
-              labels: [],
-              priority: 0,
-            },
+            buildExecutionPlanningTask({ batch, item, workItem }),
             { agentType: item.agentType },
           );
 

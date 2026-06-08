@@ -4,6 +4,8 @@ import { useState } from "react";
 
 import { cn } from "@gmacko/core/ui";
 
+import { getWorkItemReviewHref } from "~/components/work-items/work-item-entry-model";
+
 interface PullRequest {
   id: string;
   number: number;
@@ -22,6 +24,7 @@ interface StageReviewProps {
     kind: string;
     status: string;
     identifier: string;
+    workspaceId?: string | null;
   };
   isCurrentStage: boolean;
   isCompleted: boolean;
@@ -138,7 +141,7 @@ export function StageReview({
         <div className="mt-4 space-y-3">
           {/* Open Review Dashboard link */}
           <a
-            href={`/work-items/${workItemId}/review`}
+            href={getWorkItemReviewHref(workItemId, workItem.workspaceId)}
             className="mb-4 flex items-center justify-center gap-2 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
           >
             Open Review Dashboard →

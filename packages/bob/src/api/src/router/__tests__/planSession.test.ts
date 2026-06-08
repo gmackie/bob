@@ -37,6 +37,22 @@ const DRAFT_ID = "9a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
 const DRAFT_ID_2 = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
 const DEP_ID = "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e";
 
+function containsColumnName(value: unknown, columnName: string, seen = new Set<unknown>()): boolean {
+  if (!value || typeof value !== "object") return false;
+  if (seen.has(value)) return false;
+  seen.add(value);
+
+  if ((value as { name?: unknown }).name === columnName) return true;
+
+  return Object.entries(value as Record<string, unknown>).some(([key, entry]) => {
+    if (key === "table") return false;
+    if (Array.isArray(entry)) {
+      return entry.some((item) => containsColumnName(item, columnName, seen));
+    }
+    return containsColumnName(entry, columnName, seen);
+  });
+}
+
 const makeDbMock = () => ({
   insert: (table: unknown) => {
     dbInsertMock(table);
@@ -162,6 +178,8 @@ describe("planSession router", () => {
     dbQueryFindFirstMock.mockReset();
     dbQueryFindManyMock.mockReset();
     fetchMock.mockClear();
+    delete process.env.GATEWAY_URL;
+    delete process.env.NUDGE_SHARED_SECRET;
   });
 
   describe("create", () => {
@@ -277,6 +295,59 @@ describe("planSession router", () => {
         }),
       );
       expect(result).toMatchObject({ id: DRAFT_ID, title: "Implement login" });
+    });
+
+    it("publishes planning draft production for shell realtime updates", async () => {
+      process.env.GATEWAY_URL = "http://gw.local";
+      process.env.NUDGE_SHARED_SECRET = "shh";
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: SESSION_ID,
+        userId: "user-1",
+        sessionType: "planning",
+      });
+      dbInsertReturningMock.mockResolvedValueOnce([
+        {
+          id: DRAFT_ID,
+          sessionId: SESSION_ID,
+          workspaceId: WORKSPACE_ID,
+          projectId: PROJECT_ID,
+          title: "Implement login",
+          kind: "task",
+          priority: "high",
+          status: "draft",
+        },
+      ]);
+
+      const caller = createCaller({ id: "user-1" });
+
+      await caller.planSession.createDraft({
+        sessionId: SESSION_ID,
+        workspaceId: WORKSPACE_ID,
+        projectId: PROJECT_ID,
+        title: "Implement login",
+        kind: "task",
+        priority: "high",
+      });
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://gw.local/internal/workspace-event",
+        expect.objectContaining({
+          method: "POST",
+          headers: expect.objectContaining({
+            Authorization: "Bearer shh",
+          }),
+          body: JSON.stringify({
+            type: "planning_session_produced_drafts",
+            workspaceId: WORKSPACE_ID,
+            entityId: SESSION_ID,
+            payload: {
+              action: "created",
+              draftIds: [DRAFT_ID],
+              projectId: PROJECT_ID,
+            },
+          }),
+        }),
+      );
     });
 
     it("rejects draft creation when the planning session is not owned by the caller", async () => {
@@ -441,6 +512,48 @@ describe("planSession router", () => {
       expect(result).toEqual({ ok: true });
     });
 
+    it("publishes planning draft changes for shell realtime updates", async () => {
+      process.env.GATEWAY_URL = "http://gw.local";
+      process.env.NUDGE_SHARED_SECRET = "shh";
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: DRAFT_ID,
+        sessionId: SESSION_ID,
+        workspaceId: WORKSPACE_ID,
+        projectId: PROJECT_ID,
+      });
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: SESSION_ID,
+        userId: "user-1",
+        sessionType: "planning",
+      });
+
+      const caller = createCaller({ id: "user-1" });
+
+      await caller.planSession.removeDraft({
+        id: DRAFT_ID,
+      });
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://gw.local/internal/workspace-event",
+        expect.objectContaining({
+          method: "POST",
+          headers: expect.objectContaining({
+            Authorization: "Bearer shh",
+          }),
+          body: JSON.stringify({
+            type: "planning_session_produced_drafts",
+            workspaceId: WORKSPACE_ID,
+            entityId: SESSION_ID,
+            payload: {
+              action: "removed",
+              draftIds: [DRAFT_ID],
+              projectId: PROJECT_ID,
+            },
+          }),
+        }),
+      );
+    });
+
     it("rejects draft deletion when the draft's session is not owned by the caller", async () => {
       dbQueryFindFirstMock.mockResolvedValueOnce({
         id: DRAFT_ID,
@@ -516,7 +629,12 @@ describe("planSession router", () => {
         { id: SESSION_ID, userId: "user-1", sessionType: "planning" },
       ];
 
-      dbQueryFindManyMock.mockResolvedValueOnce(sessions);
+      dbQueryFindManyMock
+        .mockResolvedValueOnce(sessions)
+        .mockResolvedValueOnce([
+          { id: DRAFT_ID, sessionId: SESSION_ID, status: "draft" },
+          { id: DRAFT_ID_2, sessionId: SESSION_ID, status: "committed" },
+        ]);
 
       const caller = createCaller({ id: "user-1" });
 
@@ -526,7 +644,28 @@ describe("planSession router", () => {
         "chatConversations",
         expect.anything(),
       );
-      expect(result).toEqual(sessions);
+      expect(dbQueryFindManyMock).toHaveBeenCalledWith(
+        "planDrafts",
+        expect.anything(),
+      );
+      expect(result).toEqual([
+        {
+          ...sessions[0],
+          draftCount: 1,
+          producedTaskCount: 1,
+        },
+      ]);
+    });
+
+    it("scopes planning session lists to the requested workspace", async () => {
+      dbQueryFindManyMock.mockResolvedValueOnce([]);
+
+      const caller = createCaller({ id: "user-1" });
+
+      await caller.planSession.list({ workspaceId: WORKSPACE_ID });
+
+      const [, options] = dbQueryFindManyMock.mock.calls[0] ?? [];
+      expect(containsColumnName((options as any).where, "planning_workspace_id")).toBe(true);
     });
   });
 
@@ -568,6 +707,60 @@ describe("planSession router", () => {
       expect(result).toMatchObject({ id: DRAFT_ID, title: "Updated title" });
     });
 
+    it("publishes planning draft changes for shell realtime updates", async () => {
+      process.env.GATEWAY_URL = "http://gw.local";
+      process.env.NUDGE_SHARED_SECRET = "shh";
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: DRAFT_ID,
+        sessionId: SESSION_ID,
+        workspaceId: WORKSPACE_ID,
+        projectId: PROJECT_ID,
+      });
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: SESSION_ID,
+        userId: "user-1",
+        sessionType: "planning",
+      });
+      dbUpdateReturningMock.mockResolvedValueOnce([
+        {
+          id: DRAFT_ID,
+          sessionId: SESSION_ID,
+          workspaceId: WORKSPACE_ID,
+          projectId: PROJECT_ID,
+          title: "Updated title",
+          priority: "medium",
+        },
+      ]);
+
+      const caller = createCaller({ id: "user-1" });
+
+      await caller.planSession.updateDraft({
+        id: DRAFT_ID,
+        title: "Updated title",
+        priority: "medium",
+      });
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://gw.local/internal/workspace-event",
+        expect.objectContaining({
+          method: "POST",
+          headers: expect.objectContaining({
+            Authorization: "Bearer shh",
+          }),
+          body: JSON.stringify({
+            type: "planning_session_produced_drafts",
+            workspaceId: WORKSPACE_ID,
+            entityId: SESSION_ID,
+            payload: {
+              action: "updated",
+              draftIds: [DRAFT_ID],
+              projectId: PROJECT_ID,
+            },
+          }),
+        }),
+      );
+    });
+
     it("rejects draft updates when the draft's session is not owned by the caller", async () => {
       dbQueryFindFirstMock.mockResolvedValueOnce({
         id: DRAFT_ID,
@@ -601,6 +794,8 @@ describe("planSession router", () => {
       dbQueryFindFirstMock.mockResolvedValueOnce({
         id: DRAFT_ID_2,
         sessionId: SESSION_ID,
+        workspaceId: WORKSPACE_ID,
+        projectId: PROJECT_ID,
       });
       dbQueryFindFirstMock.mockResolvedValueOnce({
         id: SESSION_ID,
@@ -610,6 +805,8 @@ describe("planSession router", () => {
       dbQueryFindFirstMock.mockResolvedValueOnce({
         id: DRAFT_ID,
         sessionId: SESSION_ID,
+        workspaceId: WORKSPACE_ID,
+        projectId: PROJECT_ID,
       });
       dbQueryFindFirstMock.mockResolvedValueOnce({
         id: SESSION_ID,
@@ -643,6 +840,67 @@ describe("planSession router", () => {
         draftId: DRAFT_ID_2,
         dependsOnDraftId: DRAFT_ID,
       });
+    });
+
+    it("notifies the workspace when a draft dependency is added", async () => {
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: DRAFT_ID_2,
+        sessionId: SESSION_ID,
+        workspaceId: WORKSPACE_ID,
+        projectId: PROJECT_ID,
+      });
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: SESSION_ID,
+        userId: "user-1",
+        sessionType: "planning",
+      });
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: DRAFT_ID,
+        sessionId: SESSION_ID,
+        workspaceId: WORKSPACE_ID,
+        projectId: PROJECT_ID,
+      });
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: SESSION_ID,
+        userId: "user-1",
+        sessionType: "planning",
+      });
+      dbInsertReturningMock.mockResolvedValueOnce([
+        {
+          id: DEP_ID,
+          draftId: DRAFT_ID_2,
+          dependsOnDraftId: DRAFT_ID,
+        },
+      ]);
+      process.env.GATEWAY_URL = "http://gw.local";
+      process.env.NUDGE_SHARED_SECRET = "shh";
+
+      const caller = createCaller({ id: "user-1" });
+
+      await caller.planSession.setDependency({
+        draftId: DRAFT_ID_2,
+        dependsOnDraftId: DRAFT_ID,
+      });
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://gw.local/internal/workspace-event",
+        expect.objectContaining({
+          method: "POST",
+          headers: expect.objectContaining({
+            Authorization: "Bearer shh",
+          }),
+          body: JSON.stringify({
+            type: "planning_session_produced_drafts",
+            workspaceId: WORKSPACE_ID,
+            entityId: SESSION_ID,
+            payload: {
+              action: "dependency_added",
+              draftIds: [DRAFT_ID_2, DRAFT_ID],
+              projectId: PROJECT_ID,
+            },
+          }),
+        }),
+      );
     });
 
     it("rejects dependency creation when one of the drafts is not owned by the caller", async () => {
@@ -686,6 +944,8 @@ describe("planSession router", () => {
       dbQueryFindFirstMock.mockResolvedValueOnce({
         id: DRAFT_ID_2,
         sessionId: SESSION_ID,
+        workspaceId: WORKSPACE_ID,
+        projectId: PROJECT_ID,
       });
       dbQueryFindFirstMock.mockResolvedValueOnce({
         id: SESSION_ID,
@@ -695,6 +955,8 @@ describe("planSession router", () => {
       dbQueryFindFirstMock.mockResolvedValueOnce({
         id: DRAFT_ID,
         sessionId: SESSION_ID,
+        workspaceId: WORKSPACE_ID,
+        projectId: PROJECT_ID,
       });
       dbQueryFindFirstMock.mockResolvedValueOnce({
         id: SESSION_ID,
@@ -711,6 +973,60 @@ describe("planSession router", () => {
 
       expect(dbDeleteMock).toHaveBeenCalledWith(planDraftDependencies);
       expect(result).toEqual({ ok: true });
+    });
+
+    it("notifies the workspace when a draft dependency is removed", async () => {
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: DRAFT_ID_2,
+        sessionId: SESSION_ID,
+        workspaceId: WORKSPACE_ID,
+        projectId: PROJECT_ID,
+      });
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: SESSION_ID,
+        userId: "user-1",
+        sessionType: "planning",
+      });
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: DRAFT_ID,
+        sessionId: SESSION_ID,
+        workspaceId: WORKSPACE_ID,
+        projectId: PROJECT_ID,
+      });
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        id: SESSION_ID,
+        userId: "user-1",
+        sessionType: "planning",
+      });
+      process.env.GATEWAY_URL = "http://gw.local";
+      process.env.NUDGE_SHARED_SECRET = "shh";
+
+      const caller = createCaller({ id: "user-1" });
+
+      await caller.planSession.removeDependency({
+        draftId: DRAFT_ID_2,
+        dependsOnDraftId: DRAFT_ID,
+      });
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://gw.local/internal/workspace-event",
+        expect.objectContaining({
+          method: "POST",
+          headers: expect.objectContaining({
+            Authorization: "Bearer shh",
+          }),
+          body: JSON.stringify({
+            type: "planning_session_produced_drafts",
+            workspaceId: WORKSPACE_ID,
+            entityId: SESSION_ID,
+            payload: {
+              action: "dependency_removed",
+              draftIds: [DRAFT_ID_2, DRAFT_ID],
+              projectId: PROJECT_ID,
+            },
+          }),
+        }),
+      );
     });
 
     it("rejects dependency deletion when one of the drafts is not owned by the caller", async () => {
@@ -784,6 +1100,8 @@ describe("planSession router", () => {
           where: () => Promise.resolve(),
         }),
       });
+      process.env.GATEWAY_URL = "http://gw.local";
+      process.env.NUDGE_SHARED_SECRET = "shh";
 
       const caller = createCaller({ id: "user-1" });
 
@@ -798,6 +1116,25 @@ describe("planSession router", () => {
         taskId: "task-1",
         identifier: "task-1",
       });
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://gw.local/internal/workspace-event",
+        expect.objectContaining({
+          method: "POST",
+          headers: expect.objectContaining({
+            Authorization: "Bearer shh",
+          }),
+          body: JSON.stringify({
+            type: "planning_session_produced_tasks",
+            workspaceId: WORKSPACE_ID,
+            entityId: SESSION_ID,
+            payload: {
+              committed: 1,
+              taskIds: ["task-1"],
+              draftIds: [DRAFT_ID],
+            },
+          }),
+        }),
+      );
     });
 
     it("returns { committed: 0 } when no drafts exist", async () => {

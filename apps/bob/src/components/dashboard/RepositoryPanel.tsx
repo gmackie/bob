@@ -203,7 +203,10 @@ export function RepositoryPanel({ projectId }: RepositoryPanelProps) {
   };
 
   return (
-    <section className="rounded-[1.75rem] border border-border bg-popover p-6 text-foreground">
+    <section
+      id="repository-controls"
+      className="scroll-mt-24 rounded-[1.75rem] border border-border bg-popover p-6 text-foreground"
+    >
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <div className="text-xs uppercase tracking-[0.28em] text-muted-foreground">

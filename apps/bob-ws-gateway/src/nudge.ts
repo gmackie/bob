@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import type { ServerWorkspaceInvalidationType } from "./protocol.js";
 
 interface NudgeBody {
   sessionId: string;
@@ -25,6 +26,32 @@ export interface NudgeConfig {
   sharedSecret: string;
   onNudge: (body: NudgeBody) => void;
 }
+
+export interface WorkspaceEventBody {
+  type: ServerWorkspaceInvalidationType;
+  workspaceId: string;
+  entityId?: string;
+  payload?: Record<string, unknown>;
+}
+
+export interface WorkspaceEventConfig {
+  sharedSecret: string;
+  onEvent: (body: WorkspaceEventBody) => void;
+}
+
+const WORKSPACE_EVENT_TYPES = new Set<ServerWorkspaceInvalidationType>([
+  "git_status_changed",
+  "planning_session_produced_drafts",
+  "planning_session_produced_tasks",
+  "project_sync_changed",
+  "provider_capacity_changed",
+  "provider_limit_changed",
+  "queue_order_changed",
+  "session_event_appended",
+  "task_priority_changed",
+  "task_status_changed",
+  "work_item_dispatched",
+]);
 
 export function createNudgeHandler(cfg: NudgeConfig) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
@@ -53,6 +80,48 @@ export function createNudgeHandler(cfg: NudgeConfig) {
     }
 
     cfg.onNudge(nudge as NudgeBody);
+
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true }));
+  };
+}
+
+export function createWorkspaceEventHandler(cfg: WorkspaceEventConfig) {
+  return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+    const auth = req.headers.authorization;
+    if (!auth || auth !== `Bearer ${cfg.sharedSecret}`) {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Unauthorized" }));
+      return;
+    }
+
+    const body = await readJsonBody(req);
+    if (!body) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Invalid JSON body" }));
+      return;
+    }
+
+    const event = body as Partial<WorkspaceEventBody>;
+    if (
+      typeof event.type !== "string" ||
+      !WORKSPACE_EVENT_TYPES.has(event.type as ServerWorkspaceInvalidationType) ||
+      typeof event.workspaceId !== "string" ||
+      !event.workspaceId
+    ) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Missing required fields" }));
+      return;
+    }
+
+    cfg.onEvent({
+      type: event.type as ServerWorkspaceInvalidationType,
+      workspaceId: event.workspaceId,
+      entityId: typeof event.entityId === "string" ? event.entityId : undefined,
+      payload: event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
+        ? event.payload
+        : undefined,
+    });
 
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ ok: true }));

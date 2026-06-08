@@ -57,6 +57,7 @@ export const WorkItemUpdateRpc = Rpc.make("workItem.update", {
     title: Schema.optional(Schema.String),
     description: Schema.optional(Schema.NullOr(Schema.String)),
     status: Schema.optional(Schema.String),
+    priority: Schema.optional(Schema.String),
   }),
   success: Schema.NullOr(WorkItemRecordSchema),
   error: Schema.Union([BobNotFoundError, BobForbiddenError]),

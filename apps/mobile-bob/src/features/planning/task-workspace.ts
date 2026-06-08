@@ -1,4 +1,4 @@
-import { extractSessionEventText } from "~/features/chat/session-event-text";
+import { extractSessionEventText } from "../chat/session-event-text";
 
 interface TaskWorkspaceWorkItem {
   id: string;

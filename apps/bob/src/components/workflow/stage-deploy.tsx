@@ -4,6 +4,8 @@ import { useState } from "react";
 
 import { cn } from "@gmacko/core/ui";
 
+import { getWorkItemReviewHref } from "~/components/work-items/work-item-entry-model";
+
 interface Deployment {
   id: string;
   environment: string;
@@ -20,6 +22,7 @@ interface StageDeployProps {
     kind: string;
     status: string;
     identifier: string;
+    workspaceId?: string | null;
   };
   isCurrentStage: boolean;
   isCompleted: boolean;
@@ -129,7 +132,7 @@ export function StageDeploy({
       {!isCollapsed && (
         <div className="mt-4 space-y-3">
           <a
-            href={`/work-items/${workItemId}/review`}
+            href={getWorkItemReviewHref(workItemId, workItem.workspaceId)}
             className="flex items-center justify-center gap-2 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
           >
             View Deploy Status →

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { cn } from "@gmacko/core/ui";
 import { Badge } from "@gmacko/core/ui/badge";
 
+import { getProjectWorkItemHref } from "~/components/projects/project-detail-tabs-model";
 import { KIND_COLOR, STATUS_COLOR, formatLabel } from "~/lib/design/colors";
 
 import type { FlowGraphItem } from "./flow-graph";
@@ -99,7 +100,7 @@ export function PipelineTimeline({ items, className }: PipelineTimelineProps) {
                 stages[i]!.map((item) => (
                   <Link
                     key={item.id}
-                    href={`/work-items/${item.id}`}
+                    href={getProjectWorkItemHref(item)}
                     className="block rounded-lg border border-border bg-popover/80 px-2.5 py-2 transition hover:border-muted-foreground/30 hover:bg-popover"
                   >
                     <div className="flex items-center gap-1.5">

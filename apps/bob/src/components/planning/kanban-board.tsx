@@ -206,7 +206,13 @@ export function KanbanBoard({ workspaceId, projectId }: KanbanBoardProps) {
           <div className="max-h-[calc(100vh-280px)] space-y-2.5 overflow-y-auto pr-0.5">
             {col.items.length > 0 ? (
               col.items.map((item) => (
-                <KanbanCard key={item.id} item={item} onDispatch={handleDispatch} onStatusChange={handleStatusChange} />
+                <KanbanCard
+                  key={item.id}
+                  item={item}
+                  workspaceId={workspaceId}
+                  onDispatch={handleDispatch}
+                  onStatusChange={handleStatusChange}
+                />
               ))
             ) : (
               <div className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">

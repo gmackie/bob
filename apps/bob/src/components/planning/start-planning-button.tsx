@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 
 import { Button } from "@gmacko/core/ui/button";
 import {
@@ -15,22 +16,33 @@ import {
 import { Input } from "@gmacko/core/ui/input";
 import { Textarea } from "@gmacko/core/ui/textarea";
 import { toast } from "@gmacko/core/ui/toast";
+import { PlusIcon } from "@radix-ui/react-icons";
 
 import { useChatPanel } from "~/components/chat/chat-panel-provider";
 import { useTRPC } from "~/trpc/react";
+import { getPlanningSessionHref } from "./planning-shell-model";
 
 interface StartPlanningButtonProps {
   workspaceId: string;
   projectId: string;
   projectName?: string;
+  label?: string;
+  disabled?: boolean;
+  disabledReason?: string;
+  openTarget?: "panel" | "route";
 }
 
 export function StartPlanningButton({
   workspaceId,
   projectId,
   projectName,
+  label = "Plan with Bob",
+  disabled = false,
+  disabledReason = "Planning is not available yet.",
+  openTarget = "panel",
 }: StartPlanningButtonProps) {
   const trpc = useTRPC();
+  const router = useRouter();
   const { openPanel } = useChatPanel();
   const [open, setOpen] = useState(false);
   const [goal, setGoal] = useState("");
@@ -66,10 +78,14 @@ export function StartPlanningButton({
         workingDirectory,
       });
 
-      openPanel({
-        sessionId: session.id,
-        label: `Planning: ${goal.trim().slice(0, 40)}`,
-      });
+      if (openTarget === "route") {
+        router.push(getPlanningSessionHref(session.id, workspaceId));
+      } else {
+        openPanel({
+          sessionId: session.id,
+          label: `Planning: ${goal.trim().slice(0, 40)}`,
+        });
+      }
 
       setOpen(false);
       setGoal("");
@@ -85,8 +101,15 @@ export function StartPlanningButton({
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        Plan with Bob
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setOpen(true)}
+        disabled={disabled}
+        title={disabled ? disabledReason : undefined}
+      >
+        <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
+        {label}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-md">

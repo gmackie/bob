@@ -5,11 +5,14 @@ import {
   deriveTaskWorkspaceValidationState,
   getTaskWorkspaceHref,
   resolveTaskWorkspaceTarget,
-} from "~/lib/planning/task-workspace";
+} from "../../../lib/planning/task-workspace";
 
 describe("task workspace routing", () => {
   it("builds the dedicated planning route for a task workspace", () => {
     expect(getTaskWorkspaceHref("task-123")).toBe("/work-items/task-123/workspace");
+    expect(getTaskWorkspaceHref("task-123", "workspace-1")).toBe(
+      "/work-items/task-123/workspace?workspace=workspace-1",
+    );
   });
 
   it("marks executable tasks with a linked session as active", () => {

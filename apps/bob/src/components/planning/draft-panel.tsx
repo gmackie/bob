@@ -11,6 +11,7 @@ import { toast } from "@gmacko/core/ui/toast";
 import { KIND_COLOR, PRIORITY_COLOR, formatLabel } from "~/lib/design/colors";
 import { useTRPC } from "~/trpc/react";
 import { DependencyGraph } from "./dependency-graph";
+import { getPlanningDispatchHref } from "./planning-shell-model";
 
 interface DraftPanelProps {
   sessionId: string;
@@ -46,7 +47,7 @@ export function DraftPanel({ sessionId, expanded = false }: DraftPanelProps) {
   const createBatch = useMutation(
     trpc.dispatch.createBatch.mutationOptions({
       onSuccess: (result) => {
-        router.push(`/planning/dispatch/${result.batch.id}`);
+        router.push(getPlanningDispatchHref(result.batch.id, data?.session?.workspaceId));
       },
       onError: (err) => {
         toast(err.message, {

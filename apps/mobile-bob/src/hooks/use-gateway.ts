@@ -1,4 +1,5 @@
 import Constants from "expo-constants";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 function randomId() {
@@ -20,6 +21,9 @@ import { BobWsClient } from "@bob/ws";
 
 import { authClient } from "~/utils/auth";
 import { getBaseUrl } from "~/utils/base-url";
+import { mergeGatewaySessionStatusChange } from "./gateway-sessions";
+import { invalidateGatewayEventQueries } from "./gateway-query-invalidations";
+import { useSelectedWorkspace } from "./use-selected-workspace";
 import {
   trackAgentSelected,
   trackWorkItemSelected,
@@ -67,8 +71,13 @@ export interface GatewaySession {
   sessionId: string;
   status: SessionStatus;
   agentType: string;
+  sessionType?: string | null;
   title?: string;
   lastActivityAt: string;
+  workItemId?: string | null;
+  workItemIdentifier?: string | null;
+  draftCount?: number | null;
+  producedTaskCount?: number | null;
 }
 
 export interface UseGatewayResult {
@@ -89,7 +98,9 @@ export interface UseGatewayResult {
 export function useGateway(): UseGatewayResult {
   const clientRef = useRef<BobWsClient | null>(null);
   const clientIdRef = useRef(randomId());
+  const queryClient = useQueryClient();
   const { data: session } = useSession();
+  const { selectedWorkspaceId } = useSelectedWorkspace();
 
   const [connectionState, setConnectionState] = useState<ConnectionState>("disconnected");
   const [sessions, setSessions] = useState<GatewaySession[]>([]);
@@ -162,9 +173,13 @@ export function useGateway(): UseGatewayResult {
     const client = clientRef.current;
     if (client) {
       client.unsubscribeWorkspace();
-      client.subscribeWorkspace();
+      client.subscribeWorkspace(undefined, selectedWorkspaceId ?? undefined);
     }
-  }, []);
+  }, [selectedWorkspaceId]);
+
+  const invalidateLiveQueries = useCallback((messageType: string) => {
+    invalidateGatewayEventQueries(queryClient, messageType);
+  }, [queryClient]);
 
   useEffect(() => {
     const cookies = authClient.getCookie();
@@ -190,42 +205,29 @@ export function useGateway(): UseGatewayResult {
             sessionId: s.sessionId,
             status: s.status,
             agentType: s.agentType,
+            sessionType: s.sessionType,
             title: s.title,
             lastActivityAt: s.lastActivityAt,
+            workItemId: s.workItemId,
+            workItemIdentifier: s.workItemIdentifier,
+            draftCount: s.draftCount,
+            producedTaskCount: s.producedTaskCount,
           })),
         );
+        invalidateLiveQueries("workspace_snapshot");
       },
       onSessionStatusChanged: (info: ServerSessionStatusChanged) => {
-        setSessions((prev) => {
-          const idx = prev.findIndex((s) => s.sessionId === info.sessionId);
-          if (idx >= 0) {
-            // Merge — preserve existing title if the update doesn't include one
-            const existing = prev[idx];
-            if (!existing) return prev;
-            const next = [...prev];
-            next[idx] = {
-              ...existing,
-              status: info.status,
-              agentType: info.agentType ?? existing.agentType,
-              title: info.title ?? existing.title,
-              lastActivityAt: new Date().toISOString(),
-            };
-            return next;
-          }
-          // New session not yet in snapshot — add it
-          return [{
-            sessionId: info.sessionId,
-            status: info.status,
-            agentType: info.agentType ?? "unknown",
-            title: info.title,
-            lastActivityAt: new Date().toISOString(),
-          }, ...prev];
-        });
+        setSessions((prev) => mergeGatewaySessionStatusChange(prev, info));
+        invalidateLiveQueries("session_status_changed");
+      },
+      onWorkspaceEvent: (message) => {
+        invalidateLiveQueries(message.type);
       },
       onEvent: (_sessionId: string, event: ServerEvent) => {
         if (_sessionId === selectedRef.current) {
           setSelectedSessionEvents((prev) => [...prev, event]);
         }
+        invalidateLiveQueries("session_event_appended");
       },
       onSessionStatus: (_sessionId: string, _status: SessionStatus) => {
         // Individual session status — update in the sessions list
@@ -234,6 +236,7 @@ export function useGateway(): UseGatewayResult {
             s.sessionId === _sessionId ? { ...s, status: _status } : s,
           ),
         );
+        invalidateLiveQueries("session_status_changed");
       },
       onError: (error: ServerError) => {
         console.warn("[Gateway] Error:", error.code, error.message);
@@ -245,7 +248,7 @@ export function useGateway(): UseGatewayResult {
     // BobWsClient.send() is a no-op when not connected, but this sets
     // the internal workspaceSub so that resubscribeAll() on hello_ok
     // will send subscribe_workspace automatically.
-    client.subscribeWorkspace();
+    client.subscribeWorkspace(undefined, selectedWorkspaceId ?? undefined);
     client.connect();
 
     return () => {
@@ -254,7 +257,16 @@ export function useGateway(): UseGatewayResult {
       client.disconnect();
     };
     // Reconnect when user session changes (login/logout)
-  }, [session?.user.id]);
+  }, [session?.user.id, invalidateLiveQueries, selectedWorkspaceId]);
+
+  useEffect(() => {
+    const client = clientRef.current;
+    if (!client) return;
+
+    setSessions([]);
+    client.unsubscribeWorkspace();
+    client.subscribeWorkspace(undefined, selectedWorkspaceId ?? undefined);
+  }, [selectedWorkspaceId]);
 
   return {
     connectionState,

@@ -31,11 +31,13 @@ describe("work-items schema module", () => {
         id: "11111111-1111-4111-8111-111111111111",
         title: "Updated title",
         status: "in_progress",
+        priority: "high",
       }),
     ).toMatchObject({
       id: "11111111-1111-4111-8111-111111111111",
       title: "Updated title",
       status: "in_progress",
+      priority: "high",
     });
   });
 });

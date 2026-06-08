@@ -10,6 +10,9 @@ const queryMocks = {
   projectsFindMany: vi.fn(),
   workItemsFindMany: vi.fn(),
   repositoriesFindFirst: vi.fn(),
+  repositoriesFindMany: vi.fn(),
+  discoveredDirsFindFirst: vi.fn(),
+  workspacesFindFirst: vi.fn(),
   workspaceMembersFindFirst: vi.fn(),
   workspaceMembersFindMany: vi.fn(),
 };
@@ -63,6 +66,13 @@ const makeDbMock = () => ({
     },
     repositories: {
       findFirst: queryMocks.repositoriesFindFirst,
+      findMany: queryMocks.repositoriesFindMany,
+    },
+    discoveredDirs: {
+      findFirst: queryMocks.discoveredDirsFindFirst,
+    },
+    workspaces: {
+      findFirst: queryMocks.workspacesFindFirst,
     },
     workspaceMembers: {
       findFirst: queryMocks.workspaceMembersFindFirst,
@@ -110,6 +120,9 @@ describe("project router", () => {
   });
 
   beforeEach(() => {
+    delete process.env.GATEWAY_URL;
+    delete process.env.NUDGE_SHARED_SECRET;
+    vi.unstubAllGlobals();
     Object.values(queryMocks).forEach((mock) => mock.mockReset());
     insertReturningMock.mockReset();
     insertValuesMock.mockClear();
@@ -169,10 +182,21 @@ describe("project router", () => {
       id: "repo-1",
       name: "acme-app",
       path: repoPath,
+      branch: "feature/tablet-dashboard",
+      mainBranch: "main",
       remoteProvider: "github",
       remoteOwner: "acme",
       remoteName: "acme-app",
       remoteUrl: "git@github.com:acme/acme-app.git",
+      buildSystem: "pnpm",
+      dirty: true,
+      stale: false,
+      discoveryStatus: "discovered",
+    });
+    queryMocks.workspacesFindFirst.mockResolvedValueOnce({
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      name: "Acme Workspace",
+      slug: "acme",
     });
     queryMocks.workItemsFindMany.mockResolvedValueOnce([]);
 
@@ -183,9 +207,20 @@ describe("project router", () => {
       id: "repo-1",
       name: "acme-app",
       path: repoPath,
+      branch: "feature/tablet-dashboard",
+      mainBranch: "main",
       remoteProvider: "github",
       remoteOwner: "acme",
       remoteName: "acme-app",
+      buildSystem: "pnpm",
+      dirty: true,
+      stale: false,
+      discoveryStatus: "discovered",
+    });
+    expect(result?.workspace).toMatchObject({
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      name: "Acme Workspace",
+      slug: "acme",
     });
     expect(result?.capabilities.template).toMatchObject({
       slug: "create-gmacko-app",
@@ -244,6 +279,50 @@ describe("project router", () => {
     });
   });
 
+  it("publishes project sync changes when a project is created", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    process.env.GATEWAY_URL = "http://gw.local";
+    process.env.NUDGE_SHARED_SECRET = "shh";
+    queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce({
+      id: "membership-1",
+    });
+    insertReturningMock.mockResolvedValueOnce([
+      {
+        id: projectId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        name: "Acme App",
+        key: "ACME",
+      },
+    ]);
+
+    const caller = createCaller();
+
+    await caller.project.create({
+      workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      name: "Acme App",
+      key: "acme",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://gw.local/internal/workspace-event",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer shh",
+        }),
+        body: JSON.stringify({
+          type: "project_sync_changed",
+          workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          entityId: projectId,
+          payload: {
+            changed: ["project"],
+          },
+        }),
+      }),
+    );
+  });
+
   it("rejects list when the caller is not a member of the workspace", async () => {
     queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
     queryMocks.projectsFindMany.mockResolvedValueOnce([]);
@@ -257,6 +336,71 @@ describe("project router", () => {
       }),
     ).rejects.toMatchObject({
       code: "NOT_FOUND",
+    });
+  });
+
+  it("returns repository and planning context for the projects dashboard", async () => {
+    queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce({
+      id: "membership-1",
+    });
+    queryMocks.projectsFindMany.mockResolvedValueOnce([
+      {
+        id: projectId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        name: "Acme App",
+        key: "ACME",
+        status: "in_progress",
+        planningProvider: "linear",
+        linearProjectId: "linear-project-1",
+        automationSettings: { autoDispatch: true },
+        updatedAt: "2026-05-31T10:00:00.000Z",
+        createdAt: "2026-05-31T09:00:00.000Z",
+      },
+    ]);
+    queryMocks.workItemsFindMany.mockResolvedValueOnce([]);
+    queryMocks.repositoriesFindMany.mockResolvedValueOnce([
+      {
+        id: "repo-1",
+        planningProjectId: projectId,
+        name: "acme-app",
+        path: "/repos/acme-app",
+        branch: "feature/tablet-dashboard",
+        mainBranch: "main",
+        remoteProvider: "github",
+        remoteOwner: "acme",
+        remoteName: "acme-app",
+        remoteUrl: "git@github.com:acme/acme-app.git",
+        buildSystem: "pnpm",
+        dirty: true,
+        stale: false,
+        discoveryStatus: "discovered",
+      },
+    ]);
+
+    const caller = createCaller();
+    const result = await caller.project.list({
+      workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    });
+
+    expect(result[0]).toMatchObject({
+      project: {
+        id: projectId,
+        planningProvider: "linear",
+        linearProjectId: "linear-project-1",
+      },
+      linkedRepository: {
+        id: "repo-1",
+        path: "/repos/acme-app",
+        branch: "feature/tablet-dashboard",
+        mainBranch: "main",
+        remoteProvider: "github",
+        remoteOwner: "acme",
+        remoteName: "acme-app",
+        buildSystem: "pnpm",
+        dirty: true,
+        stale: false,
+        discoveryStatus: "discovered",
+      },
     });
   });
 
@@ -289,5 +433,97 @@ describe("project router", () => {
     ).rejects.toMatchObject({
       code: "NOT_FOUND",
     });
+  });
+
+  it("publishes project sync changes when automation settings are updated", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    process.env.GATEWAY_URL = "http://gw.local";
+    process.env.NUDGE_SHARED_SECRET = "shh";
+    queryMocks.projectsFindFirst.mockResolvedValueOnce({
+      id: projectId,
+      workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      automationSettings: {
+        autoDispatch: false,
+      },
+    });
+    queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce({
+      id: "membership-1",
+    });
+    updateReturningMock.mockResolvedValueOnce([
+      {
+        id: projectId,
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        automationSettings: {
+          autoDispatch: true,
+        },
+      },
+    ]);
+
+    const caller = createCaller();
+
+    await caller.project.updateAutomationSettings({
+      projectId,
+      settings: {
+        autoDispatch: true,
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://gw.local/internal/workspace-event",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer shh",
+        }),
+        body: JSON.stringify({
+          type: "project_sync_changed",
+          workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          entityId: projectId,
+          payload: {
+            changed: ["automationSettings"],
+          },
+        }),
+      }),
+    );
+  });
+
+  it("publishes project sync changes when a discovered directory is dismissed", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    process.env.GATEWAY_URL = "http://gw.local";
+    process.env.NUDGE_SHARED_SECRET = "shh";
+    queryMocks.discoveredDirsFindFirst.mockResolvedValueOnce({
+      id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      path: "/repos/not-git-yet",
+    });
+    queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce({
+      id: "membership-1",
+    });
+
+    const caller = createCaller();
+
+    await caller.project.dismissDir({
+      dirId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://gw.local/internal/workspace-event",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer shh",
+        }),
+        body: JSON.stringify({
+          type: "project_sync_changed",
+          workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          entityId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          payload: {
+            changed: ["discoveredDir"],
+          },
+        }),
+      }),
+    );
   });
 });

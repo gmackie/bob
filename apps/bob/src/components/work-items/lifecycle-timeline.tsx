@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { formatRelativeTime } from "~/lib/format/time";
 import { useTRPC } from "~/trpc/react";
+import { formatLifecycleMetadataDetails } from "./lifecycle-timeline-model";
 
 type Phase = "shape" | "plan" | "execute" | "review" | "ship";
 
@@ -99,7 +100,7 @@ export function LifecycleTimeline({ workItemId }: LifecycleTimelineProps) {
     new Set(),
   );
 
-  const { data: events, isLoading } = useQuery({
+  const { data: eventData, isLoading } = useQuery({
     ...trpc.taskRun.listLifecycleEvents.queryOptions({
       workItemId,
       limit: 50,
@@ -127,7 +128,9 @@ export function LifecycleTimeline({ workItemId }: LifecycleTimelineProps) {
     );
   }
 
-  if (!events || events.length === 0) {
+  const events = (Array.isArray(eventData) ? eventData : []) as LifecycleEvent[];
+
+  if (events.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-[#E3E1DC] px-4 py-6 text-center dark:border-[#2E2D2A]">
         <p className="font-[family-name:var(--font-dm-sans)] text-sm text-[#5C5A53] dark:text-[#A8A59E]">
@@ -152,6 +155,7 @@ export function LifecycleTimeline({ workItemId }: LifecycleTimelineProps) {
           const hasMetadata =
             event.metadata &&
             Object.keys(event.metadata).length > 0;
+          const metadataDetails = formatLifecycleMetadataDetails(event.metadata);
           const isMetadataExpanded = expandedMetadata.has(event.id);
 
           const isDelegation = isDelegationEvent(event.eventType);
@@ -221,10 +225,19 @@ export function LifecycleTimeline({ workItemId }: LifecycleTimelineProps) {
                   </button>
                 )}
 
-                {hasMetadata && isMetadataExpanded && (
-                  <pre className="mt-1.5 overflow-x-auto rounded-lg border border-[#E3E1DC] bg-[#F5F4F1] p-2 font-[family-name:var(--font-jetbrains-mono)] text-xs text-[#3D3B36] dark:border-[#2E2D2A] dark:bg-[#232220] dark:text-[#A8A59E]">
-                    {JSON.stringify(event.metadata, null, 2)}
-                  </pre>
+                {hasMetadata && isMetadataExpanded && metadataDetails.length > 0 && (
+                  <dl className="mt-1.5 grid gap-1.5 rounded-lg border border-[#E3E1DC] bg-[#F5F4F1] p-2 text-xs dark:border-[#2E2D2A] dark:bg-[#232220]">
+                    {metadataDetails.map((detail) => (
+                      <div key={detail.label} className="grid gap-1 sm:grid-cols-[7rem_1fr]">
+                        <dt className="font-[family-name:var(--font-dm-sans)] font-semibold text-[#5C5A53] dark:text-[#A8A59E]">
+                          {detail.label}
+                        </dt>
+                        <dd className="min-w-0 whitespace-pre-wrap break-words font-[family-name:var(--font-jetbrains-mono)] text-[#3D3B36] dark:text-[#EEEDEA]">
+                          {detail.value}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
                 )}
               </div>
             </li>

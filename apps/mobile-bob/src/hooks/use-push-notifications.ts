@@ -13,6 +13,7 @@ import Constants from "expo-constants";
 import type * as ExpoNotifications from "expo-notifications";
 import type * as ExpoDevice from "expo-device";
 
+import { getNotificationTargetHref } from "~/features/planning/navigation";
 import { getBaseUrl } from "~/utils/base-url";
 
 // Lazy-load expo-notifications to avoid crash if native module isn't available
@@ -116,14 +117,14 @@ function handleNotificationResponse(
 ): void {
   const data = response.notification.request.content.data as {
     workItemId?: string;
+    workspaceId?: string;
     url?: string;
     type?: string;
   };
 
-  if (data.workItemId) {
-    router.push(`/work-items/${data.workItemId}` as never);
-  } else if (data.url) {
-    router.push(data.url as never);
+  const targetHref = getNotificationTargetHref(data);
+  if (targetHref) {
+    router.push(targetHref as never);
   }
 }
 

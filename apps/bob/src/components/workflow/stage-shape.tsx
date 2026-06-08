@@ -16,6 +16,7 @@ interface StageShapeProps {
     kind: string;
     status: string;
     identifier: string;
+    workspaceId?: string | null;
   };
   isCurrentStage: boolean;
   isCompleted: boolean;
@@ -116,6 +117,7 @@ export function StageShape({
 
           <SessionHistory
             workItemId={workItemId}
+            workspaceId={workItem.workspaceId}
             sessionTypes={["office_hours"]}
             className="mt-4"
           />

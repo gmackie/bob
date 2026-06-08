@@ -1,7 +1,7 @@
 import type { WebSocket } from "ws";
 import { eq, and, gt, lt, inArray, asc, desc, sql } from "@bob/db";
 import { db } from "@bob/db/client";
-import { chatConversations, repositories, sessionEvents, taskRuns, workItems, agentRuns, activities, workspaces, tenants, tenantMembers } from "@bob/db/schema";
+import { chatConversations, repositories, sessionEvents, taskRuns, workItems, agentRuns, activities, workspaces, tenants, tenantMembers, planDrafts } from "@bob/db/schema";
 
 import {
   parseClientMessage,
@@ -17,6 +17,7 @@ import {
   type ClientSessionClaimed,
   type ClientSubscribeWorkspace,
   type ServerMessage,
+  type ServerWorkspaceInvalidationType,
   type SessionStatus,
 } from "./protocol.js";
 import type { SessionEventRecord } from "./persistence.js";
@@ -37,6 +38,7 @@ interface Connection {
   heartbeatTimer: NodeJS.Timeout | null;
   alive: boolean;
   workspaceSubscribed: boolean;
+  workspaceScopeId?: string;
   workspaceStatusFilter?: SessionStatus[];
 }
 
@@ -175,6 +177,12 @@ export class Relay {
    * from the DB on next connect.
    */
   nudgeSession(input: NudgeInput): void {
+    this.broadcastWorkspaceIdInvalidation(
+      input.workspaceId,
+      "work_item_dispatched",
+      input.sessionId,
+    );
+
     const daemon = this.daemonByWorkspace.get(input.workspaceId);
     if (!daemon) return;
 
@@ -239,6 +247,20 @@ export class Relay {
       daemonCount: this.daemonByWorkspace.size,
       sessionSubscriptions: this.subscribers.size,
     };
+  }
+
+  notifyWorkspaceEvent(input: {
+    type: ServerWorkspaceInvalidationType;
+    workspaceId: string;
+    entityId?: string;
+    payload?: Record<string, unknown>;
+  }): void {
+    this.broadcastWorkspaceIdInvalidation(
+      input.workspaceId,
+      input.type,
+      input.entityId,
+      input.payload,
+    );
   }
 
   // ── Message dispatch ───────────────────────────────────────────────
@@ -758,7 +780,10 @@ export class Relay {
     // and avoids the read-then-write race that caused duplicate seq values under burst.
     const updated = await db
       .update(chatConversations)
-      .set({ nextSeq: sql`${chatConversations.nextSeq} + 1` })
+      .set({
+        nextSeq: sql`${chatConversations.nextSeq} + 1`,
+        lastActivityAt: sql`now()`,
+      })
       .where(
         and(
           eq(chatConversations.id, event.sessionId),
@@ -804,6 +829,33 @@ export class Relay {
         this.send(sub, forwarded);
       }
     }
+
+    const session = await db.query.chatConversations.findFirst({
+      where: eq(chatConversations.id, event.sessionId),
+    });
+    if (!session || session.userId !== conn.userId) return;
+
+    const planningCounts = session.sessionType === "planning"
+      ? (await this.getPlanningDraftCounts([session.id])).get(session.id) ?? {
+          draftCount: 0,
+          producedTaskCount: 0,
+        }
+      : {
+          draftCount: undefined,
+          producedTaskCount: undefined,
+        };
+
+    await this.broadcastWorkspaceSessionStatusChanged(
+      conn.userId!,
+      session,
+      session.status as SessionStatus,
+      planningCounts,
+    );
+    await this.broadcastWorkspaceInvalidation(
+      conn.userId!,
+      session,
+      "session_event_appended",
+    );
   }
 
   // ── Daemon session_status → update DB + notify subscribers ─────────
@@ -864,6 +916,15 @@ export class Relay {
         });
       }
     }
+    const planningCounts = session.sessionType === "planning"
+      ? (await this.getPlanningDraftCounts([session.id])).get(session.id) ?? {
+          draftCount: 0,
+          producedTaskCount: 0,
+        }
+      : {
+          draftCount: undefined,
+          producedTaskCount: undefined,
+        };
 
     const subs = this.subscribers.get(msg.sessionId);
     if (subs) {
@@ -872,24 +933,102 @@ export class Relay {
           type: "session_status_changed",
           sessionId: msg.sessionId,
           status: msg.status,
+          title: session.title ?? undefined,
+          agentType: session.agentType,
+          sessionType: session.sessionType,
+          workItemId: session.workItemId ?? undefined,
+          workItemIdentifier: session.workItemIdentifierSnapshot ?? undefined,
+          draftCount: planningCounts.draftCount,
+          producedTaskCount: planningCounts.producedTaskCount,
         });
       }
     }
 
-    // Notify workspace subscribers for this user
-    if (conn.userId) {
-      const userConns = this.clientsByUser.get(conn.userId);
-      if (userConns) {
-        for (const c of userConns) {
-          if (!c.workspaceSubscribed) continue;
-          if (c.workspaceStatusFilter?.length && !c.workspaceStatusFilter.includes(msg.status)) continue;
-          this.send(c, {
-            type: "session_status_changed",
-            sessionId: msg.sessionId,
-            status: msg.status,
-          });
-        }
+    await this.broadcastWorkspaceSessionStatusChanged(
+      conn.userId!,
+      session,
+      msg.status,
+      planningCounts,
+    );
+  }
+
+  private async broadcastWorkspaceSessionStatusChanged(
+    userId: string,
+    session: any,
+    status: SessionStatus,
+    planningCounts: { draftCount?: number; producedTaskCount?: number },
+  ): Promise<void> {
+    const userConns = this.clientsByUser.get(userId);
+    if (!userConns) return;
+
+    for (const c of userConns) {
+      if (!c.workspaceSubscribed) continue;
+      if (c.workspaceStatusFilter?.length && !c.workspaceStatusFilter.includes(status)) continue;
+      if (c.workspaceScopeId) {
+        const [matchingSession] = await this.filterSessionsByWorkspace([session], c.workspaceScopeId);
+        if (!matchingSession) continue;
       }
+      this.send(c, {
+        type: "session_status_changed",
+        sessionId: session.id,
+        status,
+        title: session.title ?? undefined,
+        agentType: session.agentType,
+        sessionType: session.sessionType,
+        workItemId: session.workItemId ?? undefined,
+        workItemIdentifier: session.workItemIdentifierSnapshot ?? undefined,
+        draftCount: planningCounts.draftCount,
+        producedTaskCount: planningCounts.producedTaskCount,
+      });
+    }
+  }
+
+  private broadcastWorkspaceIdInvalidation(
+    workspaceId: string,
+    type: ServerWorkspaceInvalidationType,
+    entityId?: string,
+    payload?: Record<string, unknown>,
+  ): void {
+    for (const c of this.connections.values()) {
+      if (c.kind !== "browser") continue;
+      if (!c.workspaceSubscribed) continue;
+      if (c.workspaceScopeId && c.workspaceScopeId !== workspaceId) continue;
+      this.send(c, {
+        type,
+        workspaceId,
+        entityId,
+        createdAt: new Date().toISOString(),
+        payload,
+      });
+    }
+  }
+
+  private async broadcastWorkspaceInvalidation(
+    userId: string,
+    session: any,
+    type: ServerWorkspaceInvalidationType,
+  ): Promise<void> {
+    const userConns = this.clientsByUser.get(userId);
+    if (!userConns) return;
+
+    for (const c of userConns) {
+      if (!c.workspaceSubscribed) continue;
+      if (
+        c.workspaceStatusFilter?.length &&
+        !c.workspaceStatusFilter.includes(session.status as SessionStatus)
+      ) {
+        continue;
+      }
+      if (c.workspaceScopeId) {
+        const [matchingSession] = await this.filterSessionsByWorkspace([session], c.workspaceScopeId);
+        if (!matchingSession) continue;
+      }
+      this.send(c, {
+        type,
+        workspaceId: c.workspaceScopeId,
+        entityId: session.id,
+        createdAt: new Date().toISOString(),
+      });
     }
   }
 
@@ -897,20 +1036,31 @@ export class Relay {
 
   private async handleSubscribeWorkspace(conn: Connection, msg: ClientSubscribeWorkspace): Promise<void> {
     conn.workspaceSubscribed = true;
+    conn.workspaceScopeId = msg.workspaceId;
     conn.workspaceStatusFilter = msg.statusFilter;
 
-    const rows = await db.query.chatConversations.findMany({
+    let rows = await db.query.chatConversations.findMany({
       where: eq(chatConversations.userId, conn.userId!),
       orderBy: [desc(chatConversations.lastActivityAt)],
       limit: 200,
     });
+    rows = await this.filterSessionsByWorkspace(rows, msg.workspaceId);
+    const planningSessionIds = rows
+      .filter((row) => row.sessionType === "planning")
+      .map((row) => row.id);
+    const countsBySession = await this.getPlanningDraftCounts(planningSessionIds);
 
     let sessions = rows.map((row) => ({
       sessionId: row.id,
       status: row.status as SessionStatus,
       agentType: row.agentType,
+      sessionType: row.sessionType,
       title: row.title ?? undefined,
       lastActivityAt: row.lastActivityAt ?? new Date().toISOString(),
+      workItemId: row.workItemId ?? undefined,
+      workItemIdentifier: row.workItemIdentifierSnapshot ?? undefined,
+      draftCount: countsBySession.get(row.id)?.draftCount ?? 0,
+      producedTaskCount: countsBySession.get(row.id)?.producedTaskCount ?? 0,
     }));
 
     if (msg.statusFilter?.length) {
@@ -918,6 +1068,71 @@ export class Relay {
     }
 
     this.send(conn, { type: "workspace_snapshot", sessions });
+  }
+
+  private async getPlanningDraftCounts(
+    planningSessionIds: string[],
+  ): Promise<Map<string, { draftCount: number; producedTaskCount: number }>> {
+    const drafts = planningSessionIds.length > 0
+      ? await db.query.planDrafts.findMany({
+          where: inArray(planDrafts.sessionId, planningSessionIds),
+          columns: { id: true, sessionId: true, status: true },
+        })
+      : [];
+    const countsBySession = new Map<string, { draftCount: number; producedTaskCount: number }>();
+
+    for (const draft of drafts as Array<{ sessionId: string; status: string }>) {
+      const counts = countsBySession.get(draft.sessionId) ?? {
+        draftCount: 0,
+        producedTaskCount: 0,
+      };
+      if (draft.status === "committed") {
+        counts.producedTaskCount += 1;
+      } else if (draft.status === "draft") {
+        counts.draftCount += 1;
+      }
+      countsBySession.set(draft.sessionId, counts);
+    }
+
+    return countsBySession;
+  }
+
+  private async filterSessionsByWorkspace(rows: any[], workspaceId?: string): Promise<any[]> {
+    if (!workspaceId) return rows;
+
+    const repositoryIds = rows
+      .map((row) => row.repositoryId)
+      .filter((value): value is string => typeof value === "string");
+    const workItemIds = rows
+      .map((row) => row.workItemId)
+      .filter((value): value is string => typeof value === "string");
+
+    const repositoryRows = repositoryIds.length > 0
+      ? await db.query.repositories.findMany({
+          where: inArray(repositories.id, repositoryIds),
+          columns: { id: true, workspaceId: true },
+        })
+      : [];
+    const workItemRows = workItemIds.length > 0
+      ? await db.query.workItems.findMany({
+          where: inArray(workItems.id, workItemIds),
+          columns: { id: true, workspaceId: true },
+        })
+      : [];
+
+    const repositoryWorkspaces = new Map(
+      repositoryRows.map((row: any) => [row.id, row.workspaceId]),
+    );
+    const workItemWorkspaces = new Map(
+      workItemRows.map((row: any) => [row.id, row.workspaceId]),
+    );
+
+    return rows.filter((row) => {
+      if (row.planningWorkspaceId === workspaceId) return true;
+      if (row.repositoryId && repositoryWorkspaces.get(row.repositoryId) === workspaceId) return true;
+      if (row.workItemId && workItemWorkspaces.get(row.workItemId) === workspaceId) return true;
+      return false;
+    });
   }
 
   // ── Cleanup ────────────────────────────────────────────────────────

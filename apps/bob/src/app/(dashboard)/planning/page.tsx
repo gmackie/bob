@@ -4,8 +4,12 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
 import { cn } from "@gmacko/core/ui";
-import { MissionControl } from "~/components/dashboard/mission-control";
+import { PlanningDashboard } from "~/components/planning/planning-dashboard";
 import { useTRPC } from "~/trpc/react";
+
+type WorkspaceMembership = {
+  workspace?: { id: string; name?: string | null } | null;
+};
 
 export default function PlanningDashboardPage() {
   const trpc = useTRPC();
@@ -16,14 +20,13 @@ export default function PlanningDashboardPage() {
     trpc.workspace.list.queryOptions(undefined, { staleTime: 60_000 }),
   );
 
-  const workspaces = (workspaceMemberships ?? [])
-    .map((m: any) => m.workspace)
-    .filter(Boolean);
+  const memberships = (workspaceMemberships ?? []) as unknown as WorkspaceMembership[];
+  const workspaces = memberships.flatMap((m) => (m.workspace ? [m.workspace] : []));
 
   const workspaceParam = searchParams?.get("workspace") ?? null;
   const currentWorkspace =
     (workspaceParam
-      ? workspaces?.find((w: any) => w.id === workspaceParam)
+      ? workspaces.find((w) => w.id === workspaceParam)
       : workspaces?.[0]) ?? null;
 
   return (
@@ -46,7 +49,7 @@ export default function PlanningDashboardPage() {
           ))}
         </div>
       )}
-      <MissionControl workspaceId={currentWorkspace?.id} />
+      <PlanningDashboard workspaceId={currentWorkspace?.id} />
     </div>
   );
 }

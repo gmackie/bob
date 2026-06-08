@@ -1,17 +1,23 @@
 import { notFound, redirect } from "next/navigation";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
+import { getWorkItemEntryHref } from "~/components/work-items/work-item-entry-model";
 import { createPlanningCaller } from "~/lib/planning/server";
 import { PlanningSessionClient } from "./planning-session-client";
 
 interface PlanningSessionPageProps {
   params: Promise<{ workItemId: string; sessionId: string }>;
+  searchParams?: Promise<{ workspace?: string | string[] }>;
 }
 
 export const dynamic = "force-dynamic";
 
-export default async function PlanningSessionPage({ params }: PlanningSessionPageProps) {
+export default async function PlanningSessionPage({
+  params,
+  searchParams,
+}: PlanningSessionPageProps) {
   const { workItemId, sessionId } = await params;
+  const query = searchParams ? await searchParams : {};
   const caller = (await createPlanningCaller()) as any;
 
   // Fetch work item and session in parallel
@@ -27,12 +33,17 @@ export default async function PlanningSessionPage({ params }: PlanningSessionPag
 
   if (!sessionData?.session) {
     // Session not found — redirect to work item
-    redirect(`/work-items/${workItemId}`);
+    const selectedWorkspaceId = typeof query.workspace === "string" ? query.workspace : null;
+    redirect(getWorkItemEntryHref(workItemId, "planning", selectedWorkspaceId));
   }
 
   const workItem = workItemDetail.workItem;
   const session = sessionData.session;
   const isReadOnly = session.status === "stopped" || session.status === "completed";
+  const selectedWorkspaceId =
+    typeof query.workspace === "string"
+      ? query.workspace
+      : workItem.workspaceId;
 
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col">
@@ -40,11 +51,26 @@ export default async function PlanningSessionPage({ params }: PlanningSessionPag
       <div className="flex items-center gap-4 border-b border-border bg-background px-6 py-3">
         <Breadcrumbs
           items={[
-            { label: "Planning", href: "/planning" },
+            {
+              label: "Planning",
+              href: selectedWorkspaceId
+                ? `/planning?workspace=${encodeURIComponent(selectedWorkspaceId)}`
+                : "/planning",
+            },
             ...(workItem.project
-              ? [{ label: workItem.project.key, href: `/projects/${workItem.project.id}` }]
+              ? [
+                  {
+                    label: workItem.project.key,
+                    href: selectedWorkspaceId
+                      ? `/projects/${workItem.project.id}?workspace=${encodeURIComponent(selectedWorkspaceId)}`
+                      : `/projects/${workItem.project.id}`,
+                  },
+                ]
               : []),
-            { label: workItem.identifier, href: `/work-items/${workItemId}` },
+            {
+              label: workItem.identifier,
+              href: getWorkItemEntryHref(workItemId, "planning", selectedWorkspaceId),
+            },
             { label: session.planningSessionType
               ? formatSessionType(session.planningSessionType)
               : "Planning Session" },
@@ -75,6 +101,7 @@ export default async function PlanningSessionPage({ params }: PlanningSessionPag
           projectId: workItem.project?.id ?? null,
           projectName: workItem.project?.name ?? null,
           workspaceId: workItem.workspaceId,
+          selectedWorkspaceId,
         }}
         session={{
           id: session.id,

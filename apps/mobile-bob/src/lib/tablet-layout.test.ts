@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { getTabletShellPadding, getTabletSidebarWidth } from "./tablet-layout";
+import {
+  getTabletGlobalActionPosition,
+  getTabletShellPadding,
+  getTabletSidebarWidth,
+} from "./tablet-layout";
 
 describe("tablet layout", () => {
   it("keeps the sidebar wide enough for labels on compact iPads", () => {
@@ -30,6 +34,13 @@ describe("tablet layout", () => {
       right: 0,
       bottom: 0,
       left: 0,
+    });
+  });
+
+  it("positions global actions below the safe area in tablet landscape", () => {
+    expect(getTabletGlobalActionPosition({ top: 24, right: 8, bottom: 20, left: 0 })).toEqual({
+      top: 36,
+      right: 24,
     });
   });
 });

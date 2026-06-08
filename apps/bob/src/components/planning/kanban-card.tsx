@@ -13,6 +13,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@gmacko/core/ui/context-menu";
+import { getProjectWorkItemHref } from "~/components/projects/project-detail-tabs-model";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -82,16 +83,19 @@ export function KanbanCard({
   item,
   onDispatch,
   onStatusChange,
+  workspaceId,
 }: {
   item: KanbanCardItem;
   onDispatch?: (id: string) => void;
   onStatusChange?: (id: string, status: string) => void;
+  workspaceId?: string | null;
 }) {
   const router = useRouter();
   const kindVariant = KIND_VARIANT[item.kind] ?? "default";
   const priorityBorder = item.priority ? PRIORITY_BORDER[item.priority] : undefined;
   const isStale = item.status === "in_progress" && !item.agentStatus;
   const hasAgent = !!item.agentStatus;
+  const itemHref = getProjectWorkItemHref(item, workspaceId);
 
   const cardContent = (
     <div
@@ -102,7 +106,7 @@ export function KanbanCard({
         isStale ? "border-amber-500/50 bg-amber-950/10" : "border-border",
         hasAgent && "border-emerald-500/40",
       )}
-      onClick={() => router.push(`/work-items/${item.id}`)}
+      onClick={() => router.push(itemHref)}
     >
       {/* Top row: identifier + badges */}
       <div className="flex items-center justify-between gap-2">
@@ -167,7 +171,7 @@ export function KanbanCard({
       <ContextMenuContent>
         <ContextMenuLabel>{item.identifier ?? item.id.slice(0, 8)}</ContextMenuLabel>
         <ContextMenuSeparator />
-        <ContextMenuItem onClick={() => router.push(`/work-items/${item.id}`)}>
+        <ContextMenuItem onClick={() => router.push(itemHref)}>
           View details
         </ContextMenuItem>
         {item.identifier && (

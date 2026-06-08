@@ -53,6 +53,7 @@ describe("LinearPlanningProvider", () => {
       "lin_test_key",
       "team-1",
       "project-1",
+      "https://tasks.gmac.io",
     );
   });
 
@@ -120,7 +121,7 @@ describe("LinearPlanningProvider", () => {
         description: "A description",
         status: "Todo",
         priority: "high",
-        url: "https://linear.app/team/issue/ENG-42",
+        url: "https://tasks.gmac.io/team/issue/ENG-42",
         labels: ["bug"],
         assigneeId: "user-1",
       });
@@ -167,7 +168,7 @@ describe("LinearPlanningProvider", () => {
         description: null,
         status: "In Progress",
         priority: "medium",
-        url: "https://linear.app/team/issue/ENG-42",
+        url: "https://tasks.gmac.io/team/issue/ENG-42",
         labels: [],
         assigneeId: null,
       });

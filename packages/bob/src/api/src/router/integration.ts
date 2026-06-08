@@ -37,6 +37,7 @@ export const integrationRouter = {
         apiKey: z.string().optional(),
         webhookSigningSecret: z.string().optional(),
         linearTeamId: z.string().optional(),
+        linearWebBaseUrl: z.string().nullable().optional(),
         enabled: z.boolean().optional(),
       }),
     )
@@ -60,6 +61,7 @@ export const integrationRouter = {
         apiKey: z.string().min(1),
         teamId: z.string().min(1),
         webhookUrl: z.string().url(),
+        linearWebBaseUrl: z.string().nullable().optional(),
       }),
     )
     .mutation(({ ctx, input }) =>

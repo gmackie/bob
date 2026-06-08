@@ -139,6 +139,7 @@ export function WorkflowMobile({
     kind: workItem.kind,
     status: workItem.status,
     identifier: workItem.identifier,
+    workspaceId: workItem.workspaceId,
   };
 
   const dispatchStatus = dispatch ?? {

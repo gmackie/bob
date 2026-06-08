@@ -2,6 +2,7 @@
 
 import { formatRelativeTime } from "~/lib/format/time";
 import { useLiveActivity } from "~/hooks/use-live-activity";
+import { getWorkItemEntryHref } from "~/components/work-items/work-item-entry-model";
 
 /** Map activity type to a Tailwind dot color. */
 function dotColor(type: string): string {
@@ -132,7 +133,7 @@ export function ActivityFeed({ workspaceId }: { workspaceId?: string }) {
                   <div className="flex items-center gap-2">
                     {activity.workItemIdentifier && (
                       <a
-                        href={`/work-items/${activity.workItemId}`}
+                        href={getWorkItemEntryHref(activity.workItemId, "planning", workspaceId)}
                         className="font-mono text-xs text-primary hover:underline"
                       >
                         {activity.workItemIdentifier}

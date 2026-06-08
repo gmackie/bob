@@ -37,8 +37,17 @@ export interface TaskWorkspaceValidationState {
   tone: "default" | "positive" | "warning" | "critical";
 }
 
-export function getTaskWorkspaceHref(workItemId: string): string {
-  return `/work-items/${workItemId}/workspace`;
+function appendWorkspaceParam(path: string, workspaceId?: string | null): string {
+  if (!workspaceId) return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}workspace=${encodeURIComponent(workspaceId)}`;
+}
+
+export function getTaskWorkspaceHref(
+  workItemId: string,
+  workspaceId?: string | null,
+): string {
+  return appendWorkspaceParam(`/work-items/${workItemId}/workspace`, workspaceId);
 }
 
 export function buildChatWorkspaceHref(sessionId: string): string {

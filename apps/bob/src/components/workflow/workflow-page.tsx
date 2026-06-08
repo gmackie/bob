@@ -30,6 +30,8 @@ export interface WorkflowPageProps {
     kind: string;
     status: string;
     priority: string;
+    workspaceId?: string | null;
+    queueSortOrder?: number | null;
     project: {
       id: string;
       name: string;
@@ -80,6 +82,7 @@ export interface WorkflowPageProps {
   }>;
   /** Active session ID for this work item (if any) — drives the BobThinking indicator */
   sessionId?: string | null;
+  workspaceId?: string | null;
   onOpenPlanningSession: () => void;
   onBreakIntoTasks: () => void;
   onDispatchAgents: () => void;
@@ -99,6 +102,7 @@ export function WorkflowPage({
   comments,
   artifacts,
   sessionId,
+  workspaceId,
   onOpenPlanningSession,
   onBreakIntoTasks,
   onDispatchAgents,
@@ -166,6 +170,7 @@ export function WorkflowPage({
     kind: workItem.kind,
     status: workItem.status,
     identifier: workItem.identifier,
+    workspaceId: workItem.workspaceId,
   };
 
   // --- Compute dispatch status ---
@@ -218,7 +223,7 @@ export function WorkflowPage({
         </div>
 
         {/* Bob thinking indicator — shows when an agent session is active */}
-        <BobThinking workItemId={workItem.id} sessionId={sessionId} />
+        <BobThinking workItemId={workItem.id} sessionId={sessionId} workspaceId={workspaceId} />
 
         {/* Stage sections */}
         {stagesToRender.map((stageKey) => {

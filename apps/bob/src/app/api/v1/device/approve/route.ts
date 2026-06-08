@@ -4,6 +4,7 @@ import { db } from "@bob/db/client";
 import { eq, and } from "@bob/db";
 import { apiKeys, deviceCodes } from "@bob/db/schema";
 import { getSession } from "~/auth/server";
+import { formatDeviceApiKeyName } from "../device-label";
 
 export async function POST(request: Request) {
   try {
@@ -65,7 +66,7 @@ export async function POST(request: Request) {
       .insert(apiKeys)
       .values({
         userId: session.user.id,
-        name: `bob-cli-${Date.now()}`,
+        name: formatDeviceApiKeyName(updated.deviceName),
         keyHash,
         keyPrefix,
         permissions: ["read", "write"],

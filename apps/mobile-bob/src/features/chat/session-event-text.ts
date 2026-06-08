@@ -1,5 +1,7 @@
-const TEXT_KEYS = ["content", "text", "data", "chunk", "message", "line", "result"];
+const TEXT_KEYS = ["content", "text", "data", "chunk", "message", "line", "result", "delta"];
 const NESTED_KEYS = ["data", "event", "message", "response", "output", "delta"];
+const STREAM_KEYS = ["stdout", "stderr"];
+const TOOL_ARGUMENT_KEYS = ["command", "file_path", "path", "pattern", "query", "input"];
 
 function primitiveText(value: unknown): string {
   return typeof value === "string" ? value : "";
@@ -18,6 +20,45 @@ function contentArrayText(value: unknown): string {
     .join("");
 }
 
+function parseJsonRecord(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  if (typeof value !== "string") return null;
+
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function streamText(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  const record = value as Record<string, unknown>;
+
+  return STREAM_KEYS
+    .map((key) => primitiveText(record[key]).trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+function toolArgumentText(value: unknown): string {
+  const record = parseJsonRecord(value);
+  if (!record) return typeof value === "string" ? value : "";
+
+  for (const key of TOOL_ARGUMENT_KEYS) {
+    const text = primitiveText(record[key]).trim();
+    if (text) return text;
+  }
+
+  return "";
+}
+
 function extractParsedEventText(value: unknown): string {
   if (Array.isArray(value)) {
     return value.map(extractParsedEventText).filter(Boolean).join("");
@@ -26,6 +67,8 @@ function extractParsedEventText(value: unknown): string {
   if (!value || typeof value !== "object") return "";
 
   const record = value as Record<string, unknown>;
+  const streams = streamText(record);
+  if (streams) return streams;
 
   for (const key of TEXT_KEYS) {
     const text = primitiveText(record[key]);
@@ -124,8 +167,8 @@ export function extractSessionEventText(
 ): string {
   if (eventType === "tool_call") {
     const name = primitiveText(payload.name) || "tool";
-    const args = primitiveText(payload.arguments);
-    return args ? `${name}(${args.slice(0, 120)})` : name;
+    const args = toolArgumentText(payload.arguments);
+    return args ? `${name}: ${args.slice(0, 120)}` : name;
   }
 
   if (eventType === "tool_result") {

@@ -4,6 +4,7 @@ import React from "react";
 import { cn } from "@gmacko/core/ui";
 import { Badge } from "@gmacko/core/ui/badge";
 
+import { getProjectWorkItemHref } from "~/components/projects/project-detail-tabs-model";
 import { KIND_COLOR, PRIORITY_COLOR } from "~/lib/design/colors";
 
 import {
@@ -15,6 +16,8 @@ export interface WorkItemBoardItem extends PlanningWorkItem {
   identifier: string;
   kind: string;
   priority?: string;
+  workspaceId?: string | null;
+  href?: string;
   dispatchStatus?: string; // queued | blocked | running | completed | failed
   dispatchAgent?: string;
 }
@@ -79,7 +82,7 @@ export function WorkItemBoard({ items }: WorkItemBoardProps) {
                   return (
                     <Link
                       key={item.id}
-                      href={`/work-items/${item.id}`}
+                      href={boardItem.href ?? getProjectWorkItemHref(boardItem)}
                       className={`block rounded-xl border border-border bg-card px-3 py-3 transition hover:border-muted-foreground/30 hover:shadow-sm ${
                         priorityBorder ? `border-l-2 ${priorityBorder}` : ""
                       }`}

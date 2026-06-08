@@ -22,6 +22,17 @@ describe("session event text extraction", () => {
     expect(text).toBe("I found the failing endpoint. It is fixed now.");
   });
 
+  it("extracts readable text from response output delta events", () => {
+    const text = extractSessionEventText("output_chunk", {
+      data: JSON.stringify({
+        type: "response.output_text.delta",
+        delta: "Watching the active agent output.",
+      }),
+    });
+
+    expect(text).toBe("Watching the active agent output.");
+  });
+
   it("does not expose raw JSON when an agent event has no display text", () => {
     const text = extractSessionEventText("output_chunk", {
       data: JSON.stringify({
@@ -70,5 +81,28 @@ describe("session event text extraction", () => {
         message: "Agent exited with code 1",
       }),
     ).toBe("AGENT_ERROR: Agent exited with code 1");
+  });
+
+  it("summarizes tool call arguments without exposing raw JSON", () => {
+    const text = extractSessionEventText("tool_call", {
+      name: "Bash",
+      arguments: JSON.stringify({
+        command: "pnpm test -- --runInBand",
+        description: "Run focused tests",
+      }),
+    });
+
+    expect(text).toBe("Bash: pnpm test -- --runInBand");
+  });
+
+  it("extracts stdout and stderr from tool results", () => {
+    const text = extractSessionEventText("tool_result", {
+      result: JSON.stringify({
+        stdout: "2 tests passed",
+        stderr: "warning: deprecated flag",
+      }),
+    });
+
+    expect(text).toBe("2 tests passed\nwarning: deprecated flag");
   });
 });

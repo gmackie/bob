@@ -27,7 +27,7 @@
 		<dict>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>bob</string>
+				<string>bob-dev</string>
 				<string>com.gmacko.bob.dev</string>
 			</array>
 		</dict>

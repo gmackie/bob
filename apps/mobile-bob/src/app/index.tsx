@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
 
 import { Button, Card, Screen } from "~/components/ui";
-import { getPlanningHref } from "~/features/planning/navigation";
+import { getTabletDashboardHref } from "~/features/tablet/navigation";
 import { ONBOARDING_SLIDES } from "~/features/planning/onboarding-copy";
 import { hasSeenOnboarding, setOnboardingComplete } from "~/lib/storage";
 import { authClient } from "~/utils/auth";
@@ -223,13 +223,21 @@ export default function Index() {
 
   useEffect(() => {
     if (shouldSkipOnboardingForDevAuth()) {
-      setShowOnboarding(false);
       return;
     }
 
-    hasSeenOnboarding().then((seen) => {
-      setShowOnboarding(!seen);
-    });
+    let cancelled = false;
+    void hasSeenOnboarding()
+      .then((seen) => {
+        if (!cancelled) setShowOnboarding(!seen);
+      })
+      .catch(() => {
+        if (!cancelled) setShowOnboarding(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (isPending || showOnboarding === null) {
@@ -244,5 +252,5 @@ export default function Index() {
     return <SignInScreen />;
   }
 
-  return <Redirect href={getPlanningHref() as never} />;
+  return <Redirect href={getTabletDashboardHref() as never} />;
 }

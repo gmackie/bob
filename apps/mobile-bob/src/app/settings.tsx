@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -9,20 +9,239 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
-import { Stack } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Stack, router } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import {
+  buildMobileSettingsActions,
+  buildMobileSettingsDeviceSummary,
+  buildMobileSettingsProviderRows,
+  buildWorkspaceSettingRows,
+} from "~/features/settings/settings-model";
+import type {
+  MobileSettingsAction,
+  MobileSettingsSectionKey,
+  WorkspaceSettingMembership,
+} from "~/features/settings/settings-model";
+import { SELECTED_WORKSPACE_KEY } from "~/features/settings/workspace-selection";
 import { colors } from "~/lib/colors";
+import { authClient } from "~/utils/auth";
 import { trpc } from "~/utils/api";
 
 const PERMISSIONS = ["read", "write", "delete", "admin"] as const;
+
+interface PreferencesData {
+  theme: "light" | "dark" | "system";
+  emailNotifications: boolean;
+  pushNotifications: boolean;
+}
+
+interface ApiKeyData {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  permissions: string[];
+  lastUsedAt: string | Date | null;
+}
+
+interface CreatedApiKeyData {
+  key: string;
+}
+
+function SettingsActionGrid({
+  actions,
+  onActionPress,
+}: {
+  actions: MobileSettingsAction[];
+  onActionPress: (action: MobileSettingsAction) => void;
+}) {
+  return (
+    <View className="mb-4 flex-row flex-wrap gap-3">
+      {actions.map((action) => (
+        <Pressable
+          key={action.key}
+          onPress={() => onActionPress(action)}
+          accessibilityRole="button"
+          accessibilityLabel={action.label}
+          className="border-border rounded-lg border p-3 active:opacity-80"
+          style={{
+            backgroundColor: action.kind === "logout"
+              ? colors.danger + "12"
+              : colors.card,
+            flexBasis: "48%",
+            flexGrow: 1,
+            minWidth: 150,
+          }}
+        >
+          <Text
+            className="text-sm font-semibold"
+            style={{ color: action.kind === "logout" ? colors.danger : colors.foreground }}
+          >
+            {action.label}
+          </Text>
+          <Text className="mt-2 text-xs leading-5 text-muted">
+            {action.description}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+function AccountSection() {
+  const queryClient = useQueryClient();
+
+  const handleLogout = () => {
+    Alert.alert("Log out", "Sign out of Bob on this device?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Log out",
+        style: "destructive",
+        onPress: () => {
+          void AsyncStorage.removeItem(SELECTED_WORKSPACE_KEY)
+            .then(() => authClient.signOut())
+            .finally(() => {
+              queryClient.clear();
+              router.replace("/");
+            });
+        },
+      },
+    ]);
+  };
+
+  return (
+    <View className="border-border bg-card mt-4 rounded-lg border p-4">
+      <Text className="text-lg font-semibold text-foreground">Account</Text>
+      <Text className="mt-2 text-sm text-muted">
+        Manage the active session on this device.
+      </Text>
+      <Pressable
+        onPress={handleLogout}
+        className="border-danger/40 mt-4 self-start rounded-md border px-4 py-2"
+      >
+        <Text className="font-medium text-danger">Log out</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function WorkspacesSection() {
+  const queryClient = useQueryClient();
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
+  const { data: memberships, isLoading } = useQuery(
+    trpc.workspace.list.queryOptions(undefined, { staleTime: 60_000 }),
+  );
+
+  useEffect(() => {
+    void AsyncStorage.getItem(SELECTED_WORKSPACE_KEY)
+      .then(setSelectedWorkspaceId)
+      .catch(() => setSelectedWorkspaceId(null));
+  }, []);
+
+  const rows = useMemo(
+    () =>
+      buildWorkspaceSettingRows({
+        selectedWorkspaceId,
+        memberships: (memberships ?? []) as WorkspaceSettingMembership[],
+      }),
+    [memberships, selectedWorkspaceId],
+  );
+
+  const selectWorkspace = (workspaceId: string) => {
+    setSelectedWorkspaceId(workspaceId);
+    void AsyncStorage.setItem(SELECTED_WORKSPACE_KEY, workspaceId).then(() => {
+      void queryClient.invalidateQueries({ queryKey: trpc.workspace.list.queryKey() });
+      void queryClient.invalidateQueries({ queryKey: trpc.project.list.queryKey() });
+      void queryClient.invalidateQueries({ queryKey: trpc.workItem.list.queryKey() });
+    });
+  };
+
+  return (
+    <View className="border-border bg-card rounded-lg border p-4">
+      <Text className="text-lg font-semibold text-foreground">Workspace</Text>
+      <Text className="mt-2 text-sm text-muted">
+        Choose the workspace used by the dashboard, planning, and project views.
+      </Text>
+
+      {isLoading ? (
+        <Text className="mt-4 text-muted">Loading workspaces...</Text>
+      ) : rows.length === 0 ? (
+        <Text className="mt-4 text-muted">No workspaces available.</Text>
+      ) : (
+        <View className="mt-4 gap-2">
+          {rows.map((workspace) => (
+            <Pressable
+              key={workspace.id}
+              onPress={() => selectWorkspace(workspace.id)}
+              className="border-border flex-row items-center justify-between rounded-lg border p-3"
+              style={{
+                backgroundColor: workspace.isSelected
+                  ? colors.primary + "20"
+                  : colors.background,
+              }}
+            >
+              <View className="min-w-0 flex-1">
+                <Text className="font-medium text-foreground" numberOfLines={1}>
+                  {workspace.name}
+                </Text>
+                <Text className="mt-0.5 text-xs text-muted" numberOfLines={1}>
+                  {workspace.slug}
+                </Text>
+              </View>
+              <Text
+                className="ml-3 text-xs font-semibold"
+                style={{ color: workspace.isSelected ? colors.primary : colors.muted }}
+              >
+                {workspace.isSelected ? "Current" : "Use"}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function ProvidersSection() {
+  const rows = buildMobileSettingsProviderRows();
+
+  return (
+    <View className="border-border bg-card mt-4 rounded-lg border p-4">
+      <Text className="text-lg font-semibold text-foreground">Providers</Text>
+      <Text className="mt-2 text-sm text-muted">
+        Review Codex and Cursor capacity, limits, active sessions, and outcomes.
+      </Text>
+      <View className="mt-4 gap-2">
+        {rows.map((row) => (
+          <Pressable
+            key={row.key}
+            onPress={() => router.push(row.href as never)}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${row.label} provider settings`}
+            className="border-border rounded-lg border p-3 active:opacity-80"
+            style={{ backgroundColor: colors.background }}
+          >
+            <Text className="text-sm font-semibold text-foreground">
+              {row.label}
+            </Text>
+            <Text className="mt-1 text-xs leading-5 text-muted">
+              {row.description}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
 
 function PreferencesSection() {
   const queryClient = useQueryClient();
 
   const { data: preferences, isLoading } = useQuery(
-    trpc.settings.getPreferences.queryOptions(),
+    trpc.settings.getPreferences.queryOptions(undefined),
   );
+  const currentPreferences = preferences as PreferencesData | undefined;
 
   const { mutate: updatePreferences } = useMutation(
     trpc.settings.updatePreferences.mutationOptions({
@@ -39,14 +258,14 @@ function PreferencesSection() {
   };
 
   const toggleNotification = (type: "email" | "push") => {
-    if (!preferences) return;
+    if (!currentPreferences) return;
 
     if (type === "email") {
       updatePreferences({
-        emailNotifications: !preferences.emailNotifications,
+        emailNotifications: !currentPreferences.emailNotifications,
       });
     } else {
-      updatePreferences({ pushNotifications: !preferences.pushNotifications });
+      updatePreferences({ pushNotifications: !currentPreferences.pushNotifications });
     }
   };
 
@@ -74,7 +293,7 @@ function PreferencesSection() {
             key={theme}
             onPress={() => handleThemeChange(theme)}
             className={`rounded-md px-4 py-2 ${
-              preferences?.theme === theme
+              currentPreferences?.theme === theme
                 ? "bg-primary"
                 : "border-border bg-background border"
             }`}
@@ -82,7 +301,7 @@ function PreferencesSection() {
             <Text
               style={{
                 color:
-                  preferences?.theme === theme
+                  currentPreferences?.theme === theme
                     ? colors.primaryForeground
                     : colors.foreground,
               }}
@@ -103,7 +322,7 @@ function PreferencesSection() {
         >
           <View
             className={`h-5 w-5 rounded border ${
-              preferences?.emailNotifications
+              currentPreferences?.emailNotifications
                 ? "border-primary bg-primary"
                 : "border-border bg-background"
             }`}
@@ -116,7 +335,7 @@ function PreferencesSection() {
         >
           <View
             className={`h-5 w-5 rounded border ${
-              preferences?.pushNotifications
+              currentPreferences?.pushNotifications
                 ? "border-primary bg-primary"
                 : "border-border bg-background"
             }`}
@@ -124,6 +343,28 @@ function PreferencesSection() {
           <Text className="text-foreground">Push notifications</Text>
         </Pressable>
       </View>
+    </View>
+  );
+}
+
+function DeviceSection() {
+  const { data: apiKeys } = useQuery(
+    trpc.settings.listApiKeys.queryOptions(undefined, { staleTime: 60_000 }),
+  );
+  const apiKeyCount = Array.isArray(apiKeys) ? apiKeys.length : 0;
+  const summary = buildMobileSettingsDeviceSummary({ apiKeyCount });
+
+  return (
+    <View className="border-border bg-card mt-4 rounded-lg border p-4">
+      <Text className="text-lg font-semibold text-foreground">
+        {summary.title}
+      </Text>
+      <Text className="mt-3 text-sm text-foreground">
+        {summary.primaryLabel}
+      </Text>
+      <Text className="mt-1 text-sm text-muted">
+        {summary.detailLabel}
+      </Text>
     </View>
   );
 }
@@ -138,12 +379,13 @@ function ApiKeysSection() {
   const [newKey, setNewKey] = useState<string | null>(null);
 
   const { data: apiKeys, isLoading } = useQuery(
-    trpc.settings.listApiKeys.queryOptions(),
+    trpc.settings.listApiKeys.queryOptions(undefined),
   );
+  const apiKeyRows = (apiKeys ?? []) as ApiKeyData[];
 
   const { mutate: createKey, isPending: isCreating } = useMutation(
     trpc.settings.createApiKey.mutationOptions({
-      onSuccess: (data) => {
+      onSuccess: (data: CreatedApiKeyData) => {
         setNewKey(data.key);
         setNewKeyName("");
         setSelectedPermissions(["read"]);
@@ -304,11 +546,11 @@ function ApiKeysSection() {
 
       {isLoading ? (
         <Text className="text-muted">Loading...</Text>
-      ) : apiKeys?.length === 0 ? (
+      ) : apiKeyRows.length === 0 ? (
         <Text className="text-muted">No API keys created yet.</Text>
       ) : (
         <View className="gap-2">
-          {apiKeys?.map((key) => (
+          {apiKeyRows.map((key) => (
             <View
               key={key.id}
               className="border-border flex-row items-center justify-between rounded-lg border p-3"
@@ -317,7 +559,7 @@ function ApiKeysSection() {
                 <Text className="font-medium text-foreground">{key.name}</Text>
                 <Text className="text-xs text-muted">
                   {key.keyPrefix}... |{" "}
-                  {(key.permissions as string[]).join(", ")}
+                  {key.permissions.join(", ")}
                 </Text>
                 {key.lastUsedAt && (
                   <Text className="text-xs text-muted">
@@ -342,15 +584,93 @@ function ApiKeysSection() {
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
+  const scrollRef = useRef<ScrollView>(null);
+  const sectionOffsets = useRef<Record<MobileSettingsSectionKey, number>>({
+    workspace: 0,
+    account: 0,
+    providers: 0,
+    app: 0,
+    device: 0,
+  });
+  const actions = buildMobileSettingsActions();
+
+  const scrollToSection = (section: MobileSettingsSectionKey) => {
+    scrollRef.current?.scrollTo({
+      y: Math.max(0, sectionOffsets.current[section] - 16),
+      animated: true,
+    });
+  };
+
+  const handleLogout = () => {
+    Alert.alert("Log out", "Sign out of Bob on this device?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Log out",
+        style: "destructive",
+        onPress: () => {
+          void AsyncStorage.removeItem(SELECTED_WORKSPACE_KEY)
+            .then(() => authClient.signOut())
+            .finally(() => {
+              queryClient.clear();
+              router.replace("/");
+            });
+        },
+      },
+    ]);
+  };
+
+  const handleActionPress = (action: MobileSettingsAction) => {
+    if (action.kind === "logout") {
+      handleLogout();
+      return;
+    }
+    if (action.targetSection) scrollToSection(action.targetSection);
+  };
 
   return (
     <View className="bg-background flex-1" style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}>
       <Stack.Screen options={{ title: "Settings" }} />
-      <ScrollView className="flex-1 p-4">
+      <ScrollView ref={scrollRef} className="flex-1 p-4">
         <Text className="mb-4 text-2xl font-bold text-foreground">
           Settings
         </Text>
-        <PreferencesSection />
+        <SettingsActionGrid actions={actions} onActionPress={handleActionPress} />
+        <View
+          onLayout={(event) => {
+            sectionOffsets.current.workspace = event.nativeEvent.layout.y;
+          }}
+        >
+          <WorkspacesSection />
+        </View>
+        <View
+          onLayout={(event) => {
+            sectionOffsets.current.account = event.nativeEvent.layout.y;
+          }}
+        >
+          <AccountSection />
+        </View>
+        <View
+          onLayout={(event) => {
+            sectionOffsets.current.providers = event.nativeEvent.layout.y;
+          }}
+        >
+          <ProvidersSection />
+        </View>
+        <View
+          onLayout={(event) => {
+            sectionOffsets.current.app = event.nativeEvent.layout.y;
+          }}
+        >
+          <PreferencesSection />
+        </View>
+        <View
+          onLayout={(event) => {
+            sectionOffsets.current.device = event.nativeEvent.layout.y;
+          }}
+        >
+          <DeviceSection />
+        </View>
         <ApiKeysSection />
       </ScrollView>
     </View>

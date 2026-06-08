@@ -5,6 +5,11 @@ import Link from "next/link";
 
 import { cn } from "@gmacko/core/ui";
 
+import {
+  getWorkItemEntryHref,
+  getWorkItemReviewHref,
+} from "~/components/work-items/work-item-entry-model";
+
 interface DispatchStatus {
   total: number;
   completed: number;
@@ -30,6 +35,7 @@ interface StageExecuteProps {
     kind: string;
     status: string;
     identifier: string;
+    workspaceId?: string | null;
   };
   isCurrentStage: boolean;
   isCompleted: boolean;
@@ -194,7 +200,7 @@ export function StageExecute({
                     {/* View workspace link */}
                     {isRunning && (
                       <Link
-                        href={`/work-items/${task.id}`}
+                        href={getWorkItemEntryHref(task.id, "outcome", workItem.workspaceId)}
                         className="shrink-0 text-xs font-medium text-primary hover:underline"
                       >
                         View workspace
@@ -209,7 +215,7 @@ export function StageExecute({
           {/* View Execution Review link */}
           {dispatchStatus.completed > 0 && (
             <a
-              href={`/work-items/${workItemId}/review`}
+              href={getWorkItemReviewHref(workItemId, workItem.workspaceId)}
               className="mt-4 flex items-center justify-center gap-2 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
             >
               View Execution Review →

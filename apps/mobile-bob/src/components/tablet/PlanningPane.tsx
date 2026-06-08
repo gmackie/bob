@@ -11,6 +11,10 @@ import {
 } from "react-native";
 
 import type { ServerEvent } from "@bob/ws";
+import {
+  isPlanningPaneInteractiveStatus,
+  isPlanningPaneStartingStatus,
+} from "~/features/tablet/planning-pane";
 import { extractPayloadText, extractSessionEventText } from "~/features/chat/session-event-text";
 import { colors } from "~/lib/colors";
 
@@ -196,8 +200,8 @@ export function PlanningPane({
   const messages = useMemo(() => eventsToChatMessages(events), [events]);
   const artifactContent = useMemo(() => extractArtifactContent(events), [events]);
 
-  const isStarting = sessionStatus === "provisioning" || sessionStatus === "starting";
-  const isActive = sessionStatus === "running" || sessionStatus === "idle" || isStarting;
+  const isStarting = isPlanningPaneStartingStatus(sessionStatus);
+  const isActive = isPlanningPaneInteractiveStatus(sessionStatus);
 
   useEffect(() => {
     scrollRef.current?.scrollToEnd({ animated: true });

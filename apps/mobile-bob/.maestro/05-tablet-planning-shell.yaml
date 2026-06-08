@@ -5,21 +5,36 @@ appId: com.gmacko.bob.dev
 - launchApp:
     clearState: true
 - openLink: exp+bob://expo-development-client/?url=http%3A%2F%2F192.168.8.229%3A8081
+- tapOn:
+    text: "Bob \\(Dev\\)"
+    optional: true
 - extendedWaitUntil:
-    notVisible: "DEVELOPMENT SERVERS"
-    timeout: 30000
+    visible: "Continue"
+    timeout: 45000
 - tapOn:
     text: "Continue"
-    optional: true
 - tapOn:
     text: "Close"
     optional: true
 - extendedWaitUntil:
-    visible: "Mission Control"
+    visible: "Tasks"
     timeout: 30000
-- assertVisible: "Mission Control"
+- assertNotVisible: "Dashboard"
+- assertVisible: "Planning"
+- assertVisible: "Tasks"
 - assertVisible:
-    text: "Active Agents"
+    text: "Operations"
 - assertVisible:
-    text: "Work Queue"
+    text: "Recently Completed"
+- openLink: bob://planning
+- assertVisible:
+    id: "tablet-tab-recent-sessions"
+- assertVisible:
+    id: "tablet-tab-projects"
+- assertNotVisible: "Dashboard"
+- openLink: bob://tasks
+- assertVisible:
+    id: "tablet-tab-recent-outcomes"
+- assertVisible:
+    id: "tablet-tab-priority-queue"
 - takeScreenshot: screenshots/05-tablet-planning-shell

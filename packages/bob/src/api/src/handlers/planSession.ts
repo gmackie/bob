@@ -42,6 +42,30 @@ async function assertWorkspaceAccess(db: any, userId: string, workspaceId: strin
   }
 }
 
+async function notifyWorkspaceEvent(input: {
+  type: string;
+  workspaceId: string;
+  entityId?: string;
+  payload?: Record<string, unknown>;
+}) {
+  const gatewayUrl = process.env.GATEWAY_URL;
+  const nudgeSecret = process.env.NUDGE_SHARED_SECRET;
+  if (!gatewayUrl || !nudgeSecret) return;
+
+  try {
+    await fetch(`${gatewayUrl}/internal/workspace-event`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${nudgeSecret}`,
+      },
+      body: JSON.stringify(input),
+    });
+  } catch (err) {
+    console.warn("[planSession] workspace event notification failed:", err);
+  }
+}
+
 async function loadAccessibleWorkItem(db: any, userId: string, workItemId: string) {
   const workItem = await db.query.workItems.findFirst({
     where: eq(workItems.id, workItemId),
@@ -82,6 +106,27 @@ async function loadOwnedDraft(db: any, userId: string, draftId: string) {
 
   await loadOwnedPlanningSession(db, userId, draft.sessionId);
   return draft;
+}
+
+async function notifyPlanningDraftsChanged(input: {
+  action: "created" | "updated" | "removed" | "dependency_added" | "dependency_removed";
+  workspaceId?: string | null;
+  sessionId?: string | null;
+  projectId?: string | null;
+  draftIds: string[];
+}) {
+  if (!input.workspaceId || !input.sessionId) return;
+
+  await notifyWorkspaceEvent({
+    type: "planning_session_produced_drafts",
+    workspaceId: input.workspaceId,
+    entityId: input.sessionId,
+    payload: {
+      action: input.action,
+      draftIds: input.draftIds,
+      projectId: input.projectId ?? null,
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -284,16 +329,54 @@ export async function planSessionList(
     limit: number;
   },
 ) {
+  const conditions = [
+    eq(chatConversations.userId, ctx.userId),
+    eq(chatConversations.sessionType, "planning"),
+  ];
+
+  if (input.workspaceId) {
+    conditions.push(eq(chatConversations.planningWorkspaceId, input.workspaceId));
+  }
+
   const sessions = await ctx.db.query.chatConversations.findMany({
-    where: and(
-      eq(chatConversations.userId, ctx.userId),
-      eq(chatConversations.sessionType, "planning"),
-    ),
+    where: and(...conditions),
     orderBy: desc(chatConversations.createdAt),
     limit: input.limit,
   });
 
-  return sessions;
+  const sessionIds = sessions.map((session: any) => session.id).filter(Boolean);
+  if (sessionIds.length === 0) return sessions;
+
+  const drafts = await ctx.db.query.planDrafts.findMany({
+    where: inArray(planDrafts.sessionId, sessionIds),
+    columns: {
+      id: true,
+      sessionId: true,
+      status: true,
+    },
+  });
+  const countsBySession = new Map<string, { draftCount: number; producedTaskCount: number }>();
+
+  for (const draft of drafts as Array<{ sessionId: string; status: string }>) {
+    const counts = countsBySession.get(draft.sessionId) ?? {
+      draftCount: 0,
+      producedTaskCount: 0,
+    };
+
+    if (draft.status === "committed") {
+      counts.producedTaskCount += 1;
+    } else if (draft.status === "draft") {
+      counts.draftCount += 1;
+    }
+
+    countsBySession.set(draft.sessionId, counts);
+  }
+
+  return sessions.map((session: any) => ({
+    ...session,
+    draftCount: countsBySession.get(session.id)?.draftCount ?? 0,
+    producedTaskCount: countsBySession.get(session.id)?.producedTaskCount ?? 0,
+  }));
 }
 
 export async function planSessionListByWorkItem(
@@ -456,6 +539,14 @@ export async function planSessionCreateDraft(
     `[planning] Draft created: "${input.title}" (${input.kind}) in session ${input.sessionId}`,
   );
 
+  await notifyPlanningDraftsChanged({
+    action: "created",
+    workspaceId: input.workspaceId,
+    sessionId: input.sessionId,
+    projectId: input.projectId,
+    draftIds: [draft!.id],
+  });
+
   return draft!;
 }
 
@@ -471,13 +562,21 @@ export async function planSessionUpdateDraft(
   },
 ) {
   const { id, ...updates } = input;
-  await loadOwnedDraft(ctx.db, ctx.userId, id);
+  const existingDraft = await loadOwnedDraft(ctx.db, ctx.userId, id);
 
   const [draft] = await ctx.db
     .update(planDrafts)
     .set(updates)
     .where(eq(planDrafts.id, id))
     .returning();
+
+  await notifyPlanningDraftsChanged({
+    action: "updated",
+    workspaceId: draft?.workspaceId ?? existingDraft.workspaceId,
+    sessionId: draft?.sessionId ?? existingDraft.sessionId,
+    projectId: draft?.projectId ?? existingDraft.projectId,
+    draftIds: [id],
+  });
 
   return draft!;
 }
@@ -486,9 +585,17 @@ export async function planSessionRemoveDraft(
   ctx: HandlerContext,
   input: { id: string },
 ) {
-  await loadOwnedDraft(ctx.db, ctx.userId, input.id);
+  const draft = await loadOwnedDraft(ctx.db, ctx.userId, input.id);
 
   await ctx.db.delete(planDrafts).where(eq(planDrafts.id, input.id));
+  await notifyPlanningDraftsChanged({
+    action: "removed",
+    workspaceId: draft.workspaceId,
+    sessionId: draft.sessionId,
+    projectId: draft.projectId,
+    draftIds: [input.id],
+  });
+
   return { ok: true };
 }
 
@@ -499,7 +606,7 @@ export async function planSessionSetDependency(
     dependsOnDraftId: string;
   },
 ) {
-  await loadOwnedDraft(ctx.db, ctx.userId, input.draftId);
+  const draft = await loadOwnedDraft(ctx.db, ctx.userId, input.draftId);
   await loadOwnedDraft(ctx.db, ctx.userId, input.dependsOnDraftId);
 
   const [dep] = await ctx.db
@@ -514,6 +621,14 @@ export async function planSessionSetDependency(
     `[planning] Dependency set: ${input.draftId} depends on ${input.dependsOnDraftId}`,
   );
 
+  await notifyPlanningDraftsChanged({
+    action: "dependency_added",
+    workspaceId: draft.workspaceId,
+    sessionId: draft.sessionId,
+    projectId: draft.projectId,
+    draftIds: [input.draftId, input.dependsOnDraftId],
+  });
+
   return dep!;
 }
 
@@ -524,7 +639,7 @@ export async function planSessionRemoveDependency(
     dependsOnDraftId: string;
   },
 ) {
-  await loadOwnedDraft(ctx.db, ctx.userId, input.draftId);
+  const draft = await loadOwnedDraft(ctx.db, ctx.userId, input.draftId);
   await loadOwnedDraft(ctx.db, ctx.userId, input.dependsOnDraftId);
 
   await ctx.db
@@ -538,6 +653,14 @@ export async function planSessionRemoveDependency(
         ),
       ),
     );
+  await notifyPlanningDraftsChanged({
+    action: "dependency_removed",
+    workspaceId: draft.workspaceId,
+    sessionId: draft.sessionId,
+    projectId: draft.projectId,
+    draftIds: [input.draftId, input.dependsOnDraftId],
+  });
+
   return { ok: true };
 }
 
@@ -563,6 +686,7 @@ export async function planSessionCommitPlan(
     draftId: string;
     taskId: string;
     identifier: string;
+    workspaceId: string;
   }> = [];
 
   for (const draft of drafts) {
@@ -588,6 +712,7 @@ export async function planSessionCommitPlan(
         draftId: draft.id,
         taskId: result.externalId,
         identifier: result.identifier,
+        workspaceId: project.workspaceId,
       });
     } catch (err) {
       console.error(
@@ -603,9 +728,23 @@ export async function planSessionCommitPlan(
       .update(planDrafts)
       .set({ status: "committed" })
       .where(inArray(planDrafts.id, committedIds));
+
+    await notifyWorkspaceEvent({
+      type: "planning_session_produced_tasks",
+      workspaceId: createdTasks[0]!.workspaceId,
+      entityId: input.sessionId,
+      payload: {
+        committed: createdTasks.length,
+        taskIds: createdTasks.map((task) => task.taskId),
+        draftIds: committedIds,
+      },
+    });
   }
 
-  return { committed: createdTasks.length, tasks: createdTasks };
+  return {
+    committed: createdTasks.length,
+    tasks: createdTasks.map(({ workspaceId: _workspaceId, ...task }) => task),
+  };
 }
 
 export async function planSessionCommitPlanLocal(

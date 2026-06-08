@@ -6,6 +6,8 @@ dist/
 *.tsbuildinfo
 .env
 .env.local
+.env.production
+.env.*.local
 
 # Generated OpenAPI specs
 dist/openapi/

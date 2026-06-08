@@ -1,28 +1,24 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-import { KanbanBoard } from "~/components/planning/kanban-board";
-import { useTRPC } from "~/trpc/react";
+import { getLegacyPlanningBoardRedirectHref } from "~/components/planning/planning-shell-model";
 
 export default function PlanningBoardPage() {
-  const trpc = useTRPC();
+  const router = useRouter();
   const searchParams = useSearchParams();
+  const href = getLegacyPlanningBoardRedirectHref(searchParams?.toString() ?? "");
 
-  const { data: workspaceMemberships } = useQuery(
-    trpc.workspace.list.queryOptions(undefined, { staleTime: 60_000 }),
+  useEffect(() => {
+    router.replace(href);
+  }, [href, router]);
+
+  return (
+    <main className="mx-auto max-w-3xl px-6 py-12">
+      <p className="text-sm text-muted-foreground">
+        Redirecting to Priority Queue...
+      </p>
+    </main>
   );
-
-  const workspaces = (workspaceMemberships ?? [])
-    .map((m: any) => m.workspace)
-    .filter(Boolean);
-
-  const workspaceParam = searchParams?.get("workspace") ?? null;
-  const currentWorkspace =
-    (workspaceParam
-      ? workspaces?.find((w: any) => w.id === workspaceParam)
-      : workspaces?.[0]) ?? null;
-
-  return <KanbanBoard workspaceId={currentWorkspace?.id} />;
 }

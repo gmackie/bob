@@ -4,6 +4,7 @@ import { workspaceIntegrations, workspaceMembers } from "@bob/db/schema";
 import { LinearClient } from "@linear/sdk";
 
 import type { HandlerContext } from "./context.js";
+import { normalizeLinearWebBaseUrl } from "../services/integrations/linearUrls.js";
 
 async function assertWorkspaceAccess(db: any, userId: string, workspaceId: string) {
   const membership = await db.query.workspaceMembers.findFirst({
@@ -41,6 +42,7 @@ export async function integrationGet(
     hasApiKey: !!integration.apiKey,
     hasWebhookSecret: !!integration.webhookSigningSecret,
     linearTeamId: integration.linearTeamId,
+    linearWebBaseUrl: integration.linearWebBaseUrl,
     createdAt: integration.createdAt,
   };
 }
@@ -53,6 +55,7 @@ export async function integrationSave(
     apiKey?: string;
     webhookSigningSecret?: string;
     linearTeamId?: string;
+    linearWebBaseUrl?: string | null;
     enabled?: boolean;
   },
 ) {
@@ -69,6 +72,11 @@ export async function integrationSave(
   if (input.apiKey !== undefined) updates.apiKey = input.apiKey;
   if (input.webhookSigningSecret !== undefined) updates.webhookSigningSecret = input.webhookSigningSecret;
   if (input.linearTeamId !== undefined) updates.linearTeamId = input.linearTeamId;
+  if (input.linearWebBaseUrl !== undefined) {
+    updates.linearWebBaseUrl = input.linearWebBaseUrl
+      ? normalizeLinearWebBaseUrl(input.linearWebBaseUrl)
+      : null;
+  }
   if (input.enabled !== undefined) updates.enabled = input.enabled;
 
   if (existing) {
@@ -89,6 +97,9 @@ export async function integrationSave(
       apiKey: input.apiKey ?? null,
       webhookSigningSecret: input.webhookSigningSecret ?? null,
       linearTeamId: input.linearTeamId ?? null,
+      linearWebBaseUrl: input.linearWebBaseUrl
+        ? normalizeLinearWebBaseUrl(input.linearWebBaseUrl)
+        : null,
     })
     .returning({ id: workspaceIntegrations.id });
 
@@ -120,6 +131,7 @@ export async function integrationSetupLinear(
     apiKey: string;
     teamId: string;
     webhookUrl: string;
+    linearWebBaseUrl?: string | null;
   },
 ) {
   await assertWorkspaceAccess(ctx.db, ctx.userId, input.workspaceId);
@@ -165,6 +177,9 @@ export async function integrationSetupLinear(
   const values = {
     apiKey: input.apiKey,
     linearTeamId: input.teamId,
+    linearWebBaseUrl: input.linearWebBaseUrl
+      ? normalizeLinearWebBaseUrl(input.linearWebBaseUrl)
+      : null,
     webhookSigningSecret: (webhook as any).secret ?? null,
     enabled: true,
   };
@@ -223,6 +238,7 @@ export async function integrationList(
     hasApiKey: !!i.apiKey,
     hasWebhookSecret: !!i.webhookSigningSecret,
     linearTeamId: i.linearTeamId,
+    linearWebBaseUrl: i.linearWebBaseUrl,
     createdAt: i.createdAt,
   }));
 }

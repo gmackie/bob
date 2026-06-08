@@ -7,9 +7,11 @@ import {
   type ServerEvent,
   type ServerError,
   type ServerSessionStatusChanged,
+  type ServerWorkspaceInvalidation,
   type SessionStatus,
   type EventDirection,
   type SessionEventType,
+  type WorkspaceSessionInfo,
 } from "@bob/ws";
 
 // Re-export types that consumers depend on
@@ -56,7 +58,9 @@ interface UseSessionSocketOptions {
   token: string;
   onEvent?: (event: SessionEvent) => void;
   onStatusChange?: (sessionId: string, status: SessionStatus) => void;
+  onWorkspaceSnapshot?: (sessions: WorkspaceSessionInfo[]) => void;
   onWorkspaceStatusChanged?: (info: ServerSessionStatusChanged) => void;
+  onWorkspaceEvent?: (message: ServerWorkspaceInvalidation) => void;
   onConnectionChange?: (state: ConnectionState) => void;
   enabled?: boolean;
 }
@@ -66,7 +70,9 @@ export function useSessionSocket({
   token,
   onEvent,
   onStatusChange,
+  onWorkspaceSnapshot,
   onWorkspaceStatusChanged,
+  onWorkspaceEvent,
   onConnectionChange,
   enabled = true,
 }: UseSessionSocketOptions) {
@@ -85,11 +91,15 @@ export function useSessionSocket({
   // Stable refs for callbacks to avoid stale closures
   const onEventRef = useRef(onEvent);
   const onStatusChangeRef = useRef(onStatusChange);
+  const onWorkspaceSnapshotRef = useRef(onWorkspaceSnapshot);
   const onWorkspaceStatusChangedRef = useRef(onWorkspaceStatusChanged);
+  const onWorkspaceEventRef = useRef(onWorkspaceEvent);
   const onConnectionChangeRef = useRef(onConnectionChange);
   onEventRef.current = onEvent;
   onStatusChangeRef.current = onStatusChange;
+  onWorkspaceSnapshotRef.current = onWorkspaceSnapshot;
   onWorkspaceStatusChangedRef.current = onWorkspaceStatusChanged;
+  onWorkspaceEventRef.current = onWorkspaceEvent;
   onConnectionChangeRef.current = onConnectionChange;
 
   useEffect(() => {
@@ -127,6 +137,12 @@ export function useSessionSocket({
       },
       onSessionStatusChanged: (info: ServerSessionStatusChanged) => {
         onWorkspaceStatusChangedRef.current?.(info);
+      },
+      onWorkspaceSnapshot: (sessions: WorkspaceSessionInfo[]) => {
+        onWorkspaceSnapshotRef.current?.(sessions);
+      },
+      onWorkspaceEvent: (message: ServerWorkspaceInvalidation) => {
+        onWorkspaceEventRef.current?.(message);
       },
       onError: (error: ServerError) => {
         console.error("[SessionSocket] Error:", error.code, error.message);
@@ -179,8 +195,8 @@ export function useSessionSocket({
   }, []);
 
   const subscribeWorkspace = useCallback(
-    (statusFilter?: SessionStatus[]) => {
-      clientRef.current?.subscribeWorkspace(statusFilter);
+    (statusFilter?: SessionStatus[], workspaceId?: string) => {
+      clientRef.current?.subscribeWorkspace(statusFilter, workspaceId);
     },
     [],
   );

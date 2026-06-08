@@ -1,7 +1,17 @@
 // Shared WebSocket protocol types for client and server.
 // This is the single source of truth — both gateway and clients import from here.
 
-export type SessionStatus = "provisioning" | "starting" | "running" | "idle" | "stopping" | "stopped" | "completed" | "failed" | "error";
+export type SessionStatus =
+  | "provisioning"
+  | "starting"
+  | "running"
+  | "idle"
+  | "stopping"
+  | "stopped"
+  | "completed"
+  | "failed"
+  | "error"
+  | "interrupted";
 export type DeviceType = "web" | "ios" | "android" | "desktop" | "daemon" | "other";
 export type EventDirection = "client" | "agent" | "system";
 export type SessionEventType =
@@ -100,6 +110,7 @@ export interface ClientSessionStatus {
 export interface ClientSubscribeWorkspace {
   type: "subscribe_workspace";
   statusFilter?: SessionStatus[];
+  workspaceId?: string;
 }
 
 export interface ClientUnsubscribeWorkspace {
@@ -175,7 +186,12 @@ export interface WorkspaceSessionInfo {
   status: SessionStatus;
   title?: string;
   agentType: string;
+  sessionType?: string | null;
   lastActivityAt: string;
+  workItemId?: string | null;
+  workItemIdentifier?: string | null;
+  draftCount?: number | null;
+  producedTaskCount?: number | null;
 }
 
 export interface ServerWorkspaceSnapshot {
@@ -189,6 +205,32 @@ export interface ServerSessionStatusChanged {
   status: SessionStatus;
   title?: string;
   agentType?: string;
+  sessionType?: string | null;
+  workItemId?: string | null;
+  workItemIdentifier?: string | null;
+  draftCount?: number | null;
+  producedTaskCount?: number | null;
+}
+
+export type ServerWorkspaceInvalidationType =
+  | "git_status_changed"
+  | "planning_session_produced_drafts"
+  | "planning_session_produced_tasks"
+  | "project_sync_changed"
+  | "provider_capacity_changed"
+  | "provider_limit_changed"
+  | "queue_order_changed"
+  | "session_event_appended"
+  | "task_priority_changed"
+  | "task_status_changed"
+  | "work_item_dispatched";
+
+export interface ServerWorkspaceInvalidation {
+  type: ServerWorkspaceInvalidationType;
+  workspaceId?: string;
+  entityId?: string;
+  createdAt?: string;
+  payload?: Record<string, unknown>;
 }
 
 export interface PlanningLaunchContext {
@@ -282,6 +324,7 @@ export type ServerMessage =
   | ServerSessionStopped
   | ServerWorkspaceSnapshot
   | ServerSessionStatusChanged
+  | ServerWorkspaceInvalidation
   | ServerSessionAvailable
   | ServerReplayTruncated;
 

@@ -15,6 +15,16 @@ import { Badge } from "@gmacko/core/ui/badge";
 import { Card } from "@gmacko/core/ui/card";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
+import {
+  collapseSessionEventsToMessages,
+  formatSessionLogArtifactText,
+  formatSessionEventText,
+  normalizeSessionEventRecords,
+} from "~/components/runs/session-event-format";
+import {
+  getRunDetailBackHref,
+  getRunDetailWorkItemHref,
+} from "~/components/dashboard/provider-runs-model";
 import { useTRPC } from "~/trpc/react";
 
 // ── Constants ─────────────────────────────────────────────────────────
@@ -99,12 +109,16 @@ export default function RunDetailPage({
   const filesChanged = (getSummary(run, "files_changed") as number) ?? 0;
   const exitCode = getSummary(run, "exit_code") as number | null;
   const runTitle = (run as any).session?.title ?? run.workItemId ?? "Untitled";
+  const backHref = getRunDetailBackHref(run.workspaceId);
+  const workItemHref = run.workItemId
+    ? getRunDetailWorkItemHref(run.workItemId, run.workspaceId)
+    : null;
 
   return (
     <div className="flex flex-col gap-6 p-6">
       <Breadcrumbs
         items={[
-          { label: "Runs", href: "/runs" },
+          { label: "Runs", href: backHref },
           { label: runTitle },
         ]}
       />
@@ -122,8 +136,8 @@ export default function RunDetailPage({
               )}
             />
             <h1 className="font-display text-2xl font-bold tracking-tight">
-              {run.workItemId ? (
-                <Link href={`/work-items/${run.workItemId}`} className="hover:text-primary">
+              {workItemHref ? (
+                <Link href={workItemHref} className="hover:text-primary">
                   {runTitle}
                 </Link>
               ) : (
@@ -140,7 +154,7 @@ export default function RunDetailPage({
           </p>
         </div>
         <Link
-          href="/runs"
+          href={backHref}
           className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm"
         >
           <ArrowLeftIcon className="size-3.5" /> All runs
@@ -166,7 +180,15 @@ export default function RunDetailPage({
       </div>
 
       {/* Tab content */}
-      {activeTab === "summary" && <SummaryTab run={run} duration={duration} filesChanged={filesChanged} exitCode={exitCode} />}
+      {activeTab === "summary" && (
+        <SummaryTab
+          run={run}
+          duration={duration}
+          filesChanged={filesChanged}
+          exitCode={exitCode}
+          workItemHref={workItemHref}
+        />
+      )}
       {activeTab === "chat" && <ChatTab run={run} />}
       {activeTab === "files" && <FilesTab run={run} />}
       {activeTab === "diff" && <DiffTab run={run} />}
@@ -177,8 +199,12 @@ export default function RunDetailPage({
 
 // ── Summary Tab ───────────────────────────────────────────────────────
 
-function SummaryTab({ run, duration, filesChanged, exitCode }: {
-  run: any; duration: number | null; filesChanged: number; exitCode: number | null;
+function SummaryTab({ run, duration, filesChanged, exitCode, workItemHref }: {
+  run: any;
+  duration: number | null;
+  filesChanged: number;
+  exitCode: number | null;
+  workItemHref: string | null;
 }) {
   const computedDuration = duration ?? (
     run.startedAt && run.completedAt
@@ -227,8 +253,8 @@ function SummaryTab({ run, duration, filesChanged, exitCode }: {
           <div><span className="text-muted-foreground">Completed:</span> {run.completedAt ? new Date(run.completedAt).toLocaleString() : "—"}</div>
           <div>
             <span className="text-muted-foreground">Work Item:</span>{" "}
-            {run.workItemId ? (
-              <Link href={`/work-items/${run.workItemId}`} className="text-primary hover:underline">{run.workItemId}</Link>
+            {workItemHref ? (
+              <Link href={workItemHref} className="text-primary hover:underline">{run.workItemId}</Link>
             ) : "—"}
           </div>
           {run.sessionId && (
@@ -257,9 +283,8 @@ function ChatTab({ run }: { run: any }) {
   });
 
   const logArtifact = run.artifacts?.find((a: any) => a.type === "log");
-  const outputEvents = (events ?? []).filter(
-    (e: any) => e.eventType === "output_chunk" || e.eventType === "assistant",
-  );
+  const eventList = normalizeSessionEventRecords(events);
+  const messages = collapseSessionEventsToMessages(eventList);
 
   if (!run.sessionId && !logArtifact) {
     return (
@@ -273,46 +298,54 @@ function ChatTab({ run }: { run: any }) {
 
   return (
     <div className="flex flex-col gap-4">
-      {outputEvents.length > 0 && (
+      {messages.length > 0 && (
         <Card className="p-4">
           <h3 className="mb-3 text-sm font-medium">Session Output</h3>
           <div className="max-h-[600px] overflow-y-auto space-y-2">
-            {outputEvents.map((evt: any) => {
-              const text = typeof evt.payload === "string"
-                ? evt.payload
-                : evt.payload?.text ?? evt.payload?.content ?? JSON.stringify(evt.payload);
-              return (
-                <div key={evt.id} className="rounded bg-muted/50 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap">
-                  {text}
+            {messages.map((message) => (
+              <div key={`${message.seq}-${message.role}`} className="rounded bg-muted/50 p-3 text-sm leading-relaxed whitespace-pre-wrap">
+                <div className="mb-1 text-xs font-medium text-muted-foreground">
+                  {message.role === "user" ? "You" : "Agent"}
                 </div>
-              );
-            })}
+                {message.toolCalls?.length ? (
+                  <div className="font-mono text-xs">
+                    Tool: {message.toolCalls.map((tool) => tool.name).join(", ")}
+                  </div>
+                ) : (
+                  <div>
+                    {message.content}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </Card>
       )}
 
-      {outputEvents.length === 0 && run.sessionId && (
+      {messages.length === 0 && run.sessionId && (
         <Card className="p-4">
           <h3 className="mb-3 text-sm font-medium">Session Events</h3>
-          {(events ?? []).length === 0 ? (
+          {eventList.length === 0 ? (
             <p className="text-sm text-muted-foreground">No events recorded for this session.</p>
           ) : (
             <div className="max-h-[600px] overflow-y-auto space-y-1">
-              {(events as any[]).map((evt: any) => (
-                <div key={evt.id} className="flex items-center gap-3 py-1.5 text-xs">
-                  <span className="text-muted-foreground shrink-0 font-mono w-16">
-                    #{evt.seq}
-                  </span>
-                  <Badge variant="slate" className="text-[9px] shrink-0">
-                    {evt.eventType}
-                  </Badge>
-                  <span className="text-muted-foreground truncate">
-                    {typeof evt.payload === "string"
-                      ? evt.payload.slice(0, 120)
-                      : JSON.stringify(evt.payload).slice(0, 120)}
-                  </span>
-                </div>
-              ))}
+              {eventList.map((evt) => {
+                const text = formatSessionEventText(evt.eventType, evt.payload).slice(0, 120);
+
+                return (
+                  <div key={evt.id ?? `${evt.seq}-${evt.eventType}`} className="flex items-center gap-3 py-1.5 text-xs">
+                    <span className="text-muted-foreground shrink-0 font-mono w-16">
+                      #{evt.seq}
+                    </span>
+                    <Badge variant="slate" className="text-[9px] shrink-0">
+                      {evt.eventType}
+                    </Badge>
+                    <span className="text-muted-foreground truncate">
+                      {text || "No display output"}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </Card>
@@ -322,7 +355,10 @@ function ChatTab({ run }: { run: any }) {
         <Card className="p-4">
           <h3 className="mb-3 text-sm font-medium">Log Artifact</h3>
           <pre className="overflow-x-auto rounded bg-muted p-4 font-mono text-xs leading-relaxed max-h-[600px] overflow-y-auto">
-            {logArtifact.metadata?.content || `${logArtifact.metadata?.lines ?? 0} lines captured`}
+            {formatSessionLogArtifactText({
+              content: logArtifact.metadata?.content,
+              lines: logArtifact.metadata?.lines,
+            })}
           </pre>
         </Card>
       )}

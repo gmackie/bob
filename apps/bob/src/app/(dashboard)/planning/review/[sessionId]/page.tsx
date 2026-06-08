@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { createPlanningCaller } from "~/lib/planning/server";
 import { DraftPanel } from "~/components/planning/draft-panel";
+import { getPlanningDashboardHref } from "~/components/planning/planning-shell-model";
+import { getWorkItemEntryPlanSessionHref } from "~/components/work-items/work-item-entry-model";
 
 interface ReviewPageProps {
   params: Promise<{ sessionId: string }>;
@@ -20,14 +22,21 @@ export default async function PlanReviewPage({ params }: ReviewPageProps) {
 
   // Redirect to split-view if session is linked to a work item
   if (sessionData?.session?.workItemId) {
-    redirect(`/work-items/${sessionData.session.workItemId}/plan/${sessionId}`);
+    redirect(
+      getWorkItemEntryPlanSessionHref(
+        sessionData.session.workItemId,
+        sessionId,
+        sessionData.session.workspaceId,
+      ),
+    );
   }
+  const planningHref = getPlanningDashboardHref(sessionData?.session?.workspaceId);
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
       <Breadcrumbs
         items={[
-          { label: "Planning", href: "/planning" },
+          { label: "Planning", href: planningHref },
           { label: "Plan Review" },
         ]}
         className="mb-4"
@@ -48,7 +57,7 @@ export default async function PlanReviewPage({ params }: ReviewPageProps) {
             </p>
           </div>
           <Link
-            href="/planning"
+            href={planningHref}
             className="rounded-full border border-border px-4 py-2 text-sm text-secondary-foreground transition hover:border-muted-foreground/30 hover:text-foreground"
           >
             Back to Planning

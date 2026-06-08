@@ -65,16 +65,37 @@ export function getAgentChatHref(): string {
   return "/chat";
 }
 
-export function getProjectHref(projectId: string): string {
-  return `/projects/${projectId}`;
+export function getProjectHref(projectId: string, workspaceId?: string | null): string {
+  if (!workspaceId) return `/projects/${projectId}`;
+  const params = new URLSearchParams({ workspace: workspaceId });
+  return `/projects/${projectId}?${params.toString()}`;
 }
 
-export function getWorkItemHref(workItemId: string): string {
-  return `/work-items/${workItemId}`;
+function appendWorkspaceParam(path: string, workspaceId?: string | null): string {
+  if (!workspaceId) return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}workspace=${encodeURIComponent(workspaceId)}`;
 }
 
-export function getTaskWorkspaceHref(workItemId: string): string {
-  return `/work-items/${workItemId}/workspace`;
+export function getWorkItemHref(workItemId: string, workspaceId?: string | null): string {
+  return appendWorkspaceParam(`/work-items/${workItemId}`, workspaceId);
+}
+
+export function getTaskWorkspaceHref(workItemId: string, workspaceId?: string | null): string {
+  return appendWorkspaceParam(`/work-items/${workItemId}/workspace`, workspaceId);
+}
+
+export function getSessionHref(sessionId: string, workspaceId?: string | null): string {
+  return appendWorkspaceParam(`/sessions/${sessionId}`, workspaceId);
+}
+
+export function getNotificationTargetHref(data: {
+  workItemId?: string | null;
+  workspaceId?: string | null;
+  url?: string | null;
+}): string | null {
+  if (data.workItemId) return getWorkItemHref(data.workItemId, data.workspaceId);
+  return data.url ?? null;
 }
 
 export function getNotificationsHref(): string {
@@ -117,10 +138,13 @@ function getWorkItemPriority(status: string): number {
   return 3;
 }
 
-function getWorkItemActionHref(item: PlanningWorkItemSummary): string {
+function getWorkItemActionHref(
+  item: PlanningWorkItemSummary,
+  workspaceId?: string | null,
+): string {
   return item.kind === "task"
-    ? getTaskWorkspaceHref(item.id)
-    : getWorkItemHref(item.id);
+    ? getTaskWorkspaceHref(item.id, workspaceId)
+    : getWorkItemHref(item.id, workspaceId);
 }
 
 export function groupPlanningWorkItems(workItems: PlanningWorkItemSummary[]) {
@@ -147,6 +171,7 @@ function buildWorkItemSubtitle(item: PlanningWorkItemSummary): string {
 function buildAttentionItems(input: {
   workItems: PlanningWorkItemSummary[];
   notifications: PlanningNotificationSummary[];
+  workspaceId?: string | null;
 }): PlanningAttentionItem[] {
   const unreadNotifications = input.notifications
     .filter((item) => !item.read)
@@ -174,7 +199,7 @@ function buildAttentionItems(input: {
       title: item.title,
       subtitle: buildWorkItemSubtitle(item),
       badge: formatStatusLabel(item.status),
-      href: getWorkItemActionHref(item),
+      href: getWorkItemActionHref(item, input.workspaceId),
       tone: getWorkItemTone(item.status),
     }));
 
@@ -184,6 +209,7 @@ function buildAttentionItems(input: {
 function buildPrimaryAction(input: {
   attentionItems: PlanningAttentionItem[];
   projects: PlanningProjectSummary[];
+  workspaceId?: string | null;
 }): PlanningDashboardAction | null {
   const firstAttentionItem = input.attentionItems[0];
   if (firstAttentionItem) {
@@ -212,7 +238,7 @@ function buildPrimaryAction(input: {
     title: firstProject.name,
     subtitle: `${firstProject.taskCount} tasks · ${firstProject.issueCount} issues · ${firstProject.activeCount} active`,
     ctaLabel: "Open project",
-    href: getProjectHref(firstProject.id),
+    href: getProjectHref(firstProject.id, input.workspaceId),
     tone: "default",
   };
 }
@@ -223,7 +249,8 @@ export function buildPlanningSections(input: {
   workItems: PlanningWorkItemSummary[];
   notifications: PlanningNotificationSummary[];
 }) {
-  const attentionItems = buildAttentionItems(input);
+  const workspaceId = input.workspaces[0]?.id ?? null;
+  const attentionItems = buildAttentionItems({ ...input, workspaceId });
 
   return {
     heroWorkspace: input.workspaces[0] ?? null,
@@ -236,6 +263,7 @@ export function buildPlanningSections(input: {
     primaryAction: buildPrimaryAction({
       attentionItems,
       projects: input.projects,
+      workspaceId,
     }),
     attentionItems,
     projectTotals: input.projects.reduce(

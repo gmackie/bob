@@ -73,3 +73,12 @@ export function getExecutionLaunchState(input: {
 export function getMobilePlanningChatHref(): string {
   return getAgentChatHref();
 }
+
+export function getMobilePlanningSessionHref(
+  sessionId: string,
+  workspaceId?: string | null,
+): string {
+  if (!workspaceId) return `/planning/sessions/${sessionId}`;
+  const params = new URLSearchParams({ workspace: workspaceId });
+  return `/planning/sessions/${sessionId}?${params.toString()}`;
+}

@@ -4,6 +4,7 @@ import {
   buildMobilePlanningSessionRequest,
   getExecutionLaunchState,
   getMobilePlanningChatHref,
+  getMobilePlanningSessionHref,
 } from "./mobile-actions";
 
 describe("mobile planning actions", () => {
@@ -81,5 +82,12 @@ describe("mobile planning actions", () => {
 
   it("routes started planning sessions into the agent chat surface", () => {
     expect(getMobilePlanningChatHref()).toBe("/chat");
+  });
+
+  it("routes planning session rows into session-specific detail", () => {
+    expect(getMobilePlanningSessionHref("session-1")).toBe("/planning/sessions/session-1");
+    expect(getMobilePlanningSessionHref("session-1", "workspace-1")).toBe(
+      "/planning/sessions/session-1?workspace=workspace-1",
+    );
   });
 });

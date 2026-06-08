@@ -84,5 +84,21 @@ describe("protocol", () => {
       });
       expect(JSON.parse(encoded).type).toBe("session_available");
     });
+
+    it("encodes design-plan workspace invalidation messages", () => {
+      const encoded = encodeServerMessage({
+        type: "task_priority_changed",
+        workspaceId: "workspace-1",
+        entityId: "task-1",
+        createdAt: "2026-05-31T12:00:00.000Z",
+      });
+
+      expect(JSON.parse(encoded)).toEqual({
+        type: "task_priority_changed",
+        workspaceId: "workspace-1",
+        entityId: "task-1",
+        createdAt: "2026-05-31T12:00:00.000Z",
+      });
+    });
   });
 });

@@ -13,6 +13,7 @@ import { useChatSession } from "~/hooks/use-chat-session";
 import { DraftPanel } from "~/components/planning/draft-panel";
 
 import { useChatPanel } from "./chat-panel-provider";
+import { getChatPanelSessionHref } from "./chat-panel-model";
 
 const PANEL_WIDTH = 500;
 
@@ -33,9 +34,14 @@ export function ChatPanel() {
 
   if (!isOpen) return null;
 
+  const sessionRecord = sessionData as {
+    title?: string | null;
+    sessionType?: string | null;
+    workspaceId?: string | null;
+  } | null;
   const isAwaitingInput = workflowState?.workflowStatus === "awaiting_input";
-  const isPlanningSession = sessionData?.sessionType === "planning";
-  const title = sessionData?.title ?? (sessionId ? `Session ${sessionId.slice(0, 8)}` : "Chat");
+  const isPlanningSession = sessionRecord?.sessionType === "planning";
+  const title = sessionRecord?.title ?? (sessionId ? `Session ${sessionId.slice(0, 8)}` : "Chat");
 
   return (
     <aside
@@ -62,7 +68,7 @@ export function ChatPanel() {
         <div className="flex items-center gap-1">
           {sessionId && (
             <Link
-              href={`/chat?session=${sessionId}`}
+              href={getChatPanelSessionHref(sessionId, sessionRecord?.workspaceId)}
               className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               title="Open full page"
             >

@@ -14,9 +14,19 @@ import {
 import { WorkItemDetailInteractive } from "~/components/work-items/work-item-detail-interactive";
 import { AgentRunsPanel } from "~/components/work-items/agent-runs-panel";
 import { LifecycleTimelineSection } from "~/components/work-items/lifecycle-timeline-section";
+import {
+  getWorkItemEntryPlanSessionHref,
+  type WorkItemEntryContext,
+} from "~/components/work-items/work-item-entry-model";
 
 interface WorkflowPageClientProps {
-  workItem: WorkflowPageProps["workItem"];
+  workItem: WorkflowPageProps["workItem"] & {
+    agentStatus?: {
+      sessionId: string;
+      status: string;
+      agentType?: string | null;
+    } | null;
+  };
   workspaceId: string;
   requirements: WorkflowPageProps["requirements"];
   childTasks: WorkflowPageProps["childTasks"];
@@ -25,6 +35,7 @@ interface WorkflowPageClientProps {
   childCount: number;
   pullRequests: WorkflowPageProps["pullRequests"];
   deployments: WorkflowPageProps["deployments"];
+  entryContext: WorkItemEntryContext;
 }
 
 /**
@@ -41,6 +52,7 @@ export function WorkflowPageClient({
   childCount,
   pullRequests,
   deployments,
+  entryContext,
 }: WorkflowPageClientProps) {
   const router = useRouter();
   const trpc = useTRPC();
@@ -67,6 +79,7 @@ export function WorkflowPageClient({
           childCount={childCount}
           comments={comments}
           currentArtifacts={artifacts}
+          entryContext={entryContext}
         />
         <AgentRunsPanel workItemId={workItem.id} workspaceId={workspaceId} />
       </>
@@ -85,6 +98,7 @@ export function WorkflowPageClient({
         deployments={deployments}
         comments={comments}
         artifacts={artifacts}
+        workspaceId={workspaceId}
         onOpenPlanningSession={() => {
           setLaunchIntent("shape");
         }}
@@ -193,7 +207,7 @@ export function WorkflowPageClient({
             {
               onSuccess: (session) => {
                 setLaunchIntent(null);
-                router.push(`/work-items/${workItem.id}/plan/${session.id}`);
+                router.push(getWorkItemEntryPlanSessionHref(workItem.id, session.id, workspaceId));
               },
               onError: (err) => {
                 toast(err.message ?? "Failed to create planning session");

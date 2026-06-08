@@ -17,8 +17,8 @@ import { useTRPC } from "~/trpc/react";
 
 import { ResizableSplitView } from "~/components/planning/resizable-split-view";
 import { ArtifactPreviewPanel } from "~/components/planning/artifact-preview-panel";
-
-import type { SessionEvent } from "~/hooks/use-session-socket";
+import { extractPlanningArtifactContent } from "~/components/planning/planning-session-artifact";
+import { getWorkItemEntryHref } from "~/components/work-items/work-item-entry-model";
 
 interface PlanningSessionClientProps {
   workItem: {
@@ -29,6 +29,7 @@ interface PlanningSessionClientProps {
     projectId: string | null;
     projectName: string | null;
     workspaceId: string;
+    selectedWorkspaceId?: string | null;
   };
   session: {
     id: string;
@@ -42,51 +43,6 @@ interface PlanningSessionClientProps {
     createdAt: string;
   }>;
   isReadOnly: boolean;
-}
-
-/**
- * Extract artifact content from assistant messages.
- *
- * Looks for:
- * 1. Fenced ```markdown ... ``` blocks (returns inner content)
- * 2. Large structured content after a top-level "# " heading (>400 chars)
- *
- * Returns the *last* detected artifact so the preview always shows the latest.
- */
-function extractArtifactContent(events: SessionEvent[]): string | null {
-  // Accumulate all agent output as the artifact content
-  // This builds a running document of the planning conversation's outputs
-  const outputParts: string[] = [];
-
-  for (const event of events) {
-    if (event.direction !== "agent") continue;
-
-    if (event.eventType === "output_chunk") {
-      const text = toDisplayText(event.payload.data);
-      if (text) outputParts.push(text);
-    }
-
-    if (event.eventType === "message_final") {
-      const text = toDisplayText(event.payload.content);
-      if (text) {
-        // message_final replaces accumulated chunks for this message
-        outputParts.push(text);
-      }
-    }
-  }
-
-  const combined = outputParts.join("").trim();
-  return combined.length > 0 ? combined : null;
-}
-
-function toDisplayText(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (value === null || value === undefined) return "";
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return "";
-  }
 }
 
 export function PlanningSessionClient({
@@ -151,7 +107,7 @@ export function PlanningSessionClient({
 
   // Extract artifact content from events whenever they change
   useEffect(() => {
-    const extracted = extractArtifactContent(events);
+    const extracted = extractPlanningArtifactContent(events);
     if (extracted) {
       setArtifactContent(extracted);
     }
@@ -180,7 +136,7 @@ export function PlanningSessionClient({
     stopSession();
 
     // Navigate back to work item
-    router.push(`/work-items/${workItem.id}`);
+    router.push(getWorkItemEntryHref(workItem.id, "planning", workItem.selectedWorkspaceId));
   };
 
   const isAwaitingInput = workflowState?.workflowStatus === "awaiting_input";

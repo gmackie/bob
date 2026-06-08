@@ -8,12 +8,14 @@ import { Badge } from "@gmacko/core/ui/badge";
 import { Button } from "@gmacko/core/ui/button";
 
 import { OpenChatPanelButton } from "~/components/chat/open-chat-panel-button";
+import { getWorkItemEntryPlanSessionHref } from "~/components/work-items/work-item-entry-model";
 import { BUILD_COLOR, formatLabel } from "~/lib/design/colors";
 import { useTRPC } from "~/trpc/react";
 
 interface WorkspaceControlsProps {
   workItemId: string;
   workItemIdentifier: string;
+  workspaceId?: string | null;
   activeSessionId: string | null;
   canExecute: boolean;
   liveHref: string | null;
@@ -22,6 +24,7 @@ interface WorkspaceControlsProps {
 export function WorkspaceControls({
   workItemId,
   workItemIdentifier,
+  workspaceId,
   activeSessionId,
   canExecute,
   liveHref,
@@ -136,7 +139,7 @@ function StartAgentButton({ workItemId }: { workItemId: string }) {
           toast(result.blockedReason ?? "Agent blocked");
         } else if (result.sessionId) {
           toast(`Agent started on branch ${result.branch ?? "unknown"}`);
-          router.push(`/work-items/${workItemId}/plan/${result.sessionId}`);
+          router.push(getWorkItemEntryPlanSessionHref(workItemId, result.sessionId, workspaceId));
           return;
         } else {
           toast(`Agent started on branch ${result.branch ?? "unknown"}`);

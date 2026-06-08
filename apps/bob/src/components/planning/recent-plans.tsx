@@ -1,15 +1,32 @@
 "use client";
 
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 
 import { Badge } from "@gmacko/core/ui/badge";
 
-import { useChatPanel } from "~/components/chat/chat-panel-provider";
 import { useTRPC } from "~/trpc/react";
+import { getPlanningSessionHref } from "./planning-shell-model";
+import {
+  formatPlanningSessionOutputLabel,
+  formatPlanningSessionStatus,
+  type PlanningDashboardSession,
+} from "./planning-dashboard-model";
 
-function formatRelativeDate(date: Date): string {
+interface RecentPlansProps {
+  sessions?: PlanningDashboardSession[];
+  isLoading?: boolean;
+  workspaceId?: string | null;
+}
+
+function formatRelativeDate(value?: string | Date | null): string {
+  if (!value) return "No activity";
+  const date = value instanceof Date ? value : new Date(value);
+  const time = date.getTime();
+  if (Number.isNaN(time)) return "No activity";
+
   const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
+  const diffMs = now.getTime() - time;
   const diffMins = Math.floor(diffMs / 60_000);
   if (diffMins < 1) return "just now";
   if (diffMins < 60) return `${diffMins}m ago`;
@@ -28,13 +45,21 @@ const STATUS_VARIANT: Record<string, "default" | "slate" | "blue" | "amber" | "e
   failed: "rose",
 };
 
-export function RecentPlans() {
+export function RecentPlans({
+  sessions: providedSessions,
+  isLoading: providedLoading,
+  workspaceId,
+}: RecentPlansProps = {}) {
   const trpc = useTRPC();
-  const { openPanel } = useChatPanel();
 
-  const { data: sessions, isLoading } = useQuery(
-    trpc.planSession.list.queryOptions({ limit: 5 }),
+  const { data: queriedSessions, isLoading: queryLoading } = useQuery(
+    trpc.planSession.list.queryOptions(
+      { limit: 5 },
+      { enabled: providedSessions === undefined },
+    ),
   );
+  const sessions = providedSessions ?? ((queriedSessions ?? []) as unknown as PlanningDashboardSession[]);
+  const isLoading = providedLoading ?? queryLoading;
 
   if (isLoading) {
     return (
@@ -64,29 +89,28 @@ export function RecentPlans() {
     <ul className="space-y-1">
       {sessions.map((session) => (
         <li key={session.id}>
-          <button
-            type="button"
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-accent"
-            onClick={() =>
-              openPanel({
-                sessionId: session.id,
-                label: session.title ?? "Planning session",
-              })
-            }
+          <Link
+            href={getPlanningSessionHref(session.id, workspaceId)}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-accent"
           >
-            <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-              {session.title ?? "Untitled session"}
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium text-foreground">
+                {session.title ?? "Untitled session"}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                {formatPlanningSessionOutputLabel(session)}
+              </span>
             </span>
             <Badge
-              variant={STATUS_VARIANT[session.status] ?? "slate"}
+              variant={STATUS_VARIANT[session.status ?? ""] ?? "slate"}
               className="shrink-0 text-[10px]"
             >
-              {session.status}
+              {formatPlanningSessionStatus(session.status)}
             </Badge>
             <span className="shrink-0 text-xs text-muted-foreground">
-              {formatRelativeDate(new Date(session.createdAt))}
+              {formatRelativeDate(session.updatedAt ?? session.createdAt)}
             </span>
-          </button>
+          </Link>
         </li>
       ))}
     </ul>

@@ -7,6 +7,7 @@ import { PlusIcon } from "@radix-ui/react-icons";
 
 import { Button } from "@gmacko/core/ui/button";
 import { toast } from "@gmacko/core/ui/toast";
+import { getWorkItemEntryPlanSessionHref } from "~/components/work-items/work-item-entry-model";
 import { useTRPC } from "~/trpc/react";
 
 interface NewIdeaButtonProps {
@@ -52,7 +53,7 @@ export function NewIdeaButton({ workspaceId, projectId, className }: NewIdeaButt
       });
 
       // Navigate to split-view
-      router.push(`/work-items/${task.id}/plan/${session.id}`);
+      router.push(getWorkItemEntryPlanSessionHref(task.id, session.id, workspaceId));
     } catch (err: any) {
       toast(err.message ?? "Failed to create idea");
     }

@@ -65,3 +65,24 @@ describe("EAS build profiles", () => {
     expect(easConfig.build.production?.channel).toBe("production");
   });
 });
+
+describe("iPad tablet configuration", () => {
+  it("keeps EAS iPad builds tablet-enabled with explicit landscape support", () => {
+    const config = loadConfig({ APP_ENV: "production" }) as {
+      ios?: {
+        infoPlist?: Record<string, unknown>;
+        supportsTablet?: boolean;
+      };
+      orientation?: string;
+    };
+
+    expect(config.orientation).toBe("default");
+    expect(config.ios?.supportsTablet).toBe(true);
+    expect(config.ios?.infoPlist?.["UISupportedInterfaceOrientations~ipad"]).toEqual(
+      expect.arrayContaining([
+        "UIInterfaceOrientationLandscapeLeft",
+        "UIInterfaceOrientationLandscapeRight",
+      ]),
+    );
+  });
+});

@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { cn } from "@gmacko/core/ui";
+import { getWorkItemEntryPlanSessionHref } from "~/components/work-items/work-item-entry-model";
 import { useTRPC } from "~/trpc/react";
 
 const SESSION_TYPE_LABELS: Record<string, string> = {
@@ -15,6 +16,7 @@ const SESSION_TYPE_LABELS: Record<string, string> = {
 
 interface SessionHistoryProps {
   workItemId: string;
+  workspaceId?: string | null;
   /** Filter to only show sessions of certain types */
   sessionTypes?: string[];
   className?: string;
@@ -22,6 +24,7 @@ interface SessionHistoryProps {
 
 export function SessionHistory({
   workItemId,
+  workspaceId,
   sessionTypes,
   className,
 }: SessionHistoryProps) {
@@ -88,7 +91,7 @@ export function SessionHistory({
           {/* Actions */}
           <div className="flex items-center gap-2">
             <Link
-              href={`/work-items/${workItemId}/plan/${session.id}`}
+              href={getWorkItemEntryPlanSessionHref(workItemId, session.id, workspaceId)}
               className="text-xs text-primary hover:underline"
             >
               {session.status === "stopped" ? "Replay" : "Resume"}

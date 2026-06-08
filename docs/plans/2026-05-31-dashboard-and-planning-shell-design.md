@@ -75,14 +75,20 @@ Clicking a provider opens a provider detail page/table with specific agents/sess
 
 Center section:
 
-- summary cards for operational lanes such as:
+- Four compact summary boxes:
   - `Needs Attention`
-  - `Starting Soon`
-  - `Ready to Dispatch`
-  - `Review Waiting`
-  - `Blocked`
+  - `Ready`
+  - `Active`
+  - `Review`
 
-These cards show counts, urgency, and the top reason when useful. They do not list all tasks. Clicking a card opens a full table page for that lane.
+These boxes show only the title and count. `Needs Attention` uses red when non-zero. They do not list tasks or show subtitles. Clicking a box opens a full table page for that state.
+
+Under the four-box summary:
+
+- `Recently Completed`
+- Shows the latest completed, cancelled, or stopped work items.
+- Keeps historical/completed work out of the right rail while still making successful outcomes visible on the dashboard.
+- Clicking a row opens the completed work item/session detail in the main workspace.
 
 Right rail:
 

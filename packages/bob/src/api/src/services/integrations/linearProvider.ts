@@ -16,6 +16,7 @@ import type {
   UpdateTaskInput,
 } from "./planningProvider.js";
 import { PlanningProviderError } from "./planningProvider.js";
+import { rewriteLinearWebUrl } from "./linearUrls.js";
 
 export class LinearPlanningProvider implements PlanningProvider {
   private client: LinearClient;
@@ -25,6 +26,7 @@ export class LinearPlanningProvider implements PlanningProvider {
     apiKey: string,
     private teamId: string,
     private projectId: string,
+    private linearWebBaseUrl?: string | null,
   ) {
     this.client = new LinearClient({ apiKey });
   }
@@ -290,7 +292,7 @@ export class LinearPlanningProvider implements PlanningProvider {
       description: issue.description ?? null,
       status: issue.state?.name ?? "Unknown",
       priority: this.mapPriorityFromLinear(issue.priority),
-      url: issue.url ?? null,
+      url: rewriteLinearWebUrl(issue.url ?? null, this.linearWebBaseUrl),
       labels: issue.labels?.nodes?.map((l: any) => l.name) ?? [],
       assigneeId: issue.assignee?.id ?? null,
     };

@@ -3,7 +3,13 @@
 import { useState } from "react";
 import { Button } from "@gmacko/core/ui/button";
 
-export function DeviceApprovalClient({ userCode }: { userCode: string }) {
+export function DeviceApprovalClient({
+  userCode,
+  deviceName,
+}: {
+  userCode: string;
+  deviceName: string;
+}) {
   const [state, setState] = useState<"idle" | "loading" | "approved" | "error">(
     "idle",
   );
@@ -53,7 +59,7 @@ export function DeviceApprovalClient({ userCode }: { userCode: string }) {
             Approved
           </h1>
           <p className="text-sm text-muted-foreground">
-            Your CLI has been authorized. You can close this tab.
+            {deviceName} has been authorized. You can close this tab.
           </p>
         </div>
       </main>
@@ -65,10 +71,10 @@ export function DeviceApprovalClient({ userCode }: { userCode: string }) {
       <div className="w-full max-w-sm space-y-6">
         <div className="space-y-2 text-center">
           <h1 className="font-display text-2xl font-bold tracking-tight">
-            Authorize Bob CLI
+            Authorize Bob Device
           </h1>
           <p className="text-sm text-muted-foreground">
-            Confirm the code below matches what your terminal is showing.
+            Confirm the code below matches what {deviceName} is showing.
           </p>
         </div>
 

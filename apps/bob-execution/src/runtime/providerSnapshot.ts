@@ -13,6 +13,48 @@ import { projects, workspaceIntegrations } from "@bob/db/schema";
 
 import type { PlanningTask } from "./taskExecutor.js";
 
+const DEFAULT_LINEAR_WEB_BASE_URL = "https://linear.app";
+const LINEAR_WEB_HOSTS = new Set(["linear.app", "www.linear.app"]);
+
+function normalizeLinearWebBaseUrl(value?: string | null): string {
+  const trimmed = value?.trim();
+  if (!trimmed) return DEFAULT_LINEAR_WEB_BASE_URL;
+
+  const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+  const parsed = new URL(candidate);
+  parsed.pathname = parsed.pathname.replace(/\/+$/, "");
+  parsed.search = "";
+  parsed.hash = "";
+  return parsed.toString().replace(/\/$/, "");
+}
+
+function rewriteLinearWebUrl(
+  url: string | null | undefined,
+  baseUrl?: string | null,
+): string | undefined {
+  if (!url) return undefined;
+
+  const normalizedBaseUrl = normalizeLinearWebBaseUrl(baseUrl);
+  if (normalizedBaseUrl === DEFAULT_LINEAR_WEB_BASE_URL) return url;
+
+  try {
+    const parsedUrl = new URL(url);
+    if (!LINEAR_WEB_HOSTS.has(parsedUrl.hostname)) return url;
+
+    const parsedBase = new URL(normalizedBaseUrl);
+    parsedUrl.protocol = parsedBase.protocol;
+    parsedUrl.hostname = parsedBase.hostname;
+    parsedUrl.port = parsedBase.port;
+    parsedUrl.username = "";
+    parsedUrl.password = "";
+    return parsedUrl.toString();
+  } catch {
+    return url;
+  }
+}
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -22,6 +64,9 @@ export interface ProviderTaskSnapshot {
   description: string | null;
   identifier: string;
   url?: string;
+  externalId?: string | null;
+  externalProvider?: string | null;
+  linearWebBaseUrl?: string | null;
   labels: string[];
   priority: number;
   assigneeId: string | null;
@@ -120,6 +165,7 @@ async function snapshotFromLinear(task: PlanningTask): Promise<ProviderResolutio
       .select({
         apiKey: workspaceIntegrations.apiKey,
         linearTeamId: workspaceIntegrations.linearTeamId,
+        linearWebBaseUrl: workspaceIntegrations.linearWebBaseUrl,
       })
       .from(workspaceIntegrations)
       .where(
@@ -140,13 +186,14 @@ async function snapshotFromLinear(task: PlanningTask): Promise<ProviderResolutio
     }
 
     // Fetch the issue from Linear using their GraphQL API
-    const issue = await fetchLinearIssue(integration.apiKey, task.id);
+    const linearIssueId = task.externalId ?? task.id;
+    const issue = await fetchLinearIssue(integration.apiKey, linearIssueId);
 
     if (!issue) {
       return {
         provider: "linear",
         snapshot: null,
-        error: `Linear issue not found: ${task.id}`,
+        error: `Linear issue not found: ${linearIssueId}`,
       };
     }
 
@@ -156,7 +203,10 @@ async function snapshotFromLinear(task: PlanningTask): Promise<ProviderResolutio
         title: issue.title,
         description: issue.description ?? null,
         identifier: issue.identifier,
-        url: issue.url,
+        url: rewriteLinearWebUrl(issue.url, integration.linearWebBaseUrl),
+        externalId: issue.id,
+        externalProvider: "linear",
+        linearWebBaseUrl: normalizeLinearWebBaseUrl(integration.linearWebBaseUrl),
         labels: issue.labels?.nodes?.map((l: { name: string }) => l.name) ?? [],
         priority: issue.priority ?? 0,
         assigneeId: issue.assignee?.id ?? null,
@@ -178,6 +228,7 @@ async function snapshotFromLinear(task: PlanningTask): Promise<ProviderResolutio
 // =============================================================================
 
 interface LinearIssueResponse {
+  id: string;
   title: string;
   identifier: string;
   description: string | null;
@@ -257,5 +308,14 @@ export function applySnapshotToTask(
   task.assigneeId = snapshot.assigneeId;
   if (snapshot.url) {
     task.url = snapshot.url;
+  }
+  if (snapshot.externalId !== undefined) {
+    task.externalId = snapshot.externalId;
+  }
+  if (snapshot.externalProvider !== undefined) {
+    task.externalProvider = snapshot.externalProvider;
+  }
+  if (snapshot.linearWebBaseUrl !== undefined) {
+    task.linearWebBaseUrl = snapshot.linearWebBaseUrl;
   }
 }

@@ -4,118 +4,13 @@ import { useEffect, useRef } from "react";
 
 import { cn } from "@gmacko/core/ui";
 
+import { collapseSessionEventsToMessages } from "~/components/runs/session-event-format";
 import type { SessionEvent } from "~/hooks/use-session-socket";
 
 interface MessageStreamProps {
   sessionId: string;
   events: SessionEvent[];
   isConnected: boolean;
-}
-
-interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-  seq: number;
-  time: string;
-  toolCalls?: Array<{ name: string; id: string }>;
-}
-
-function collapseEventsToMessages(events: SessionEvent[]): ChatMessage[] {
-  const messages: ChatMessage[] = [];
-  let pendingChunks: string[] = [];
-  let pendingSeq = 0;
-  let pendingTime = "";
-
-  const flushChunks = () => {
-    if (pendingChunks.length > 0) {
-      messages.push({
-        role: "assistant",
-        content: pendingChunks.join(""),
-        seq: pendingSeq,
-        time: pendingTime,
-      });
-      pendingChunks = [];
-    }
-  };
-
-  for (const event of events) {
-    if (event.eventType === "input" && event.direction === "client") {
-      flushChunks();
-      const text =
-        typeof event.payload.content === "string"
-          ? event.payload.content
-          : typeof event.payload.text === "string"
-            ? event.payload.text
-            : typeof event.payload.data === "string"
-              ? event.payload.data
-              : JSON.stringify(event.payload);
-      messages.push({
-        role: "user",
-        content: text,
-        seq: event.seq,
-        time: event.createdAt,
-      });
-    } else if (event.eventType === "output_chunk" && event.direction === "agent") {
-      if (pendingChunks.length === 0) {
-        pendingSeq = event.seq;
-        pendingTime = event.createdAt;
-      }
-      const chunk =
-        typeof event.payload.content === "string"
-          ? event.payload.content
-          : typeof event.payload.text === "string"
-            ? event.payload.text
-            : typeof event.payload.chunk === "string"
-              ? event.payload.chunk
-              : "";
-      if (chunk) pendingChunks.push(chunk);
-    } else if (event.eventType === "message_final" && event.direction === "agent") {
-      flushChunks();
-      const content =
-        typeof event.payload.content === "string"
-          ? event.payload.content
-          : typeof event.payload.text === "string"
-            ? event.payload.text
-            : "";
-      if (content) {
-        messages.push({
-          role: "assistant",
-          content,
-          seq: event.seq,
-          time: event.createdAt,
-        });
-      }
-    } else if (event.eventType === "tool_call" && event.direction === "agent") {
-      flushChunks();
-      const name =
-        typeof event.payload.name === "string" ? event.payload.name : "tool";
-      const id =
-        typeof event.payload.id === "string" ? event.payload.id : "";
-      messages.push({
-        role: "assistant",
-        content: "",
-        seq: event.seq,
-        time: event.createdAt,
-        toolCalls: [{ name, id }],
-      });
-    } else if (event.eventType === "error") {
-      flushChunks();
-      const msg =
-        typeof event.payload.message === "string"
-          ? event.payload.message
-          : typeof event.payload.error === "string"
-            ? event.payload.error
-            : "An error occurred";
-      messages.push({
-        role: "assistant",
-        content: `⚠ ${msg}`,
-        seq: event.seq,
-        time: event.createdAt,
-      });
-    }
-  }
-  flushChunks();
-  return messages;
 }
 
 function formatTime(iso: string): string {
@@ -129,7 +24,7 @@ function formatTime(iso: string): string {
   }
 }
 
-function MessageBubble({ msg }: { msg: ChatMessage }) {
+function MessageBubble({ msg }: { msg: ReturnType<typeof collapseSessionEventsToMessages>[number] }) {
   const isUser = msg.role === "user";
 
   if (msg.toolCalls?.length) {
@@ -173,7 +68,7 @@ export function MessageStream({
   isConnected,
 }: MessageStreamProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
-  const messages = collapseEventsToMessages(events);
+  const messages = collapseSessionEventsToMessages(events);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

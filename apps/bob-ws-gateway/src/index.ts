@@ -5,7 +5,7 @@ import { sessionEvents } from "@bob/db/schema";
 
 import { PersistenceWriter, type SessionEventRecord } from "./persistence.js";
 import { Relay } from "./relay.js";
-import { createNudgeHandler, readJsonBody } from "./nudge.js";
+import { createNudgeHandler, createWorkspaceEventHandler, readJsonBody } from "./nudge.js";
 import { validateBrowserToken, validateDaemonAuth } from "./auth.js";
 
 const PORT = parseInt(process.env.GATEWAY_PORT ?? "3002", 10);
@@ -52,6 +52,10 @@ const nudgeHandler = createNudgeHandler({
   onNudge: (body) =>
     relay.nudgeSession(body as unknown as Parameters<typeof relay.nudgeSession>[0]),
 });
+const workspaceEventHandler = createWorkspaceEventHandler({
+  sharedSecret: NUDGE_SHARED_SECRET,
+  onEvent: (body) => relay.notifyWorkspaceEvent(body),
+});
 
 // HTTP server (handles /health and /internal/nudge)
 const server = createServer(async (req, res) => {
@@ -77,6 +81,11 @@ const server = createServer(async (req, res) => {
 
   if (req.method === "POST" && req.url === "/internal/nudge") {
     await nudgeHandler(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/internal/workspace-event") {
+    await workspaceEventHandler(req, res);
     return;
   }
 

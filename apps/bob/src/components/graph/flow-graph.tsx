@@ -34,6 +34,7 @@ export interface FlowGraphItem {
   dispatchStatus?: string;
   dispatchAgent?: string;
   pipelineState?: string;
+  workspaceId?: string | null;
 }
 
 interface FlowGraphProps {
@@ -80,6 +81,7 @@ export function FlowGraph({
         dispatchStatus: item.dispatchStatus,
         dispatchAgent: item.dispatchAgent,
         pipelineState: item.pipelineState,
+        workspaceId: item.workspaceId,
       } satisfies WorkItemNodeData,
     }));
 

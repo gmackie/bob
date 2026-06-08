@@ -332,6 +332,38 @@ describe("BobWsClient", () => {
       });
     });
 
+    it("preserves workspace scope when subscribing and reconnecting workspace snapshots", () => {
+      const opts = makeOptions();
+      const client = new BobWsClient(opts);
+      const ws1 = connectAndAuth(client);
+
+      client.subscribeWorkspace(["running"], "workspace-1");
+
+      expect(ws1.lastSentParsed()).toMatchObject({
+        type: "subscribe_workspace",
+        statusFilter: ["running"],
+        workspaceId: "workspace-1",
+      });
+
+      ws1.simulateClose();
+      vi.advanceTimersByTime(1_000);
+      const ws2 = latestWs();
+      ws2.simulateOpen();
+      ws2.simulateMessage({
+        type: "hello_ok",
+        gatewayTime: new Date().toISOString(),
+        heartbeatIntervalMs: 30_000,
+        userId: "user-1",
+      });
+
+      const [workspaceSub] = ws2.sentParsed().filter((m) => m.type === "subscribe_workspace");
+      expect(workspaceSub).toMatchObject({
+        type: "subscribe_workspace",
+        statusFilter: ["running"],
+        workspaceId: "workspace-1",
+      });
+    });
+
     it("tracks latest seq from events for resubscription", () => {
       const opts = makeOptions();
       const client = new BobWsClient(opts);
@@ -460,7 +492,10 @@ describe("BobWsClient", () => {
           sessionId: "s-1",
           status: "running" as const,
           agentType: "claude",
+          sessionType: "execution",
           lastActivityAt: new Date().toISOString(),
+          workItemId: "11111111-1111-4111-8111-111111111111",
+          workItemIdentifier: "P1-1008",
         },
       ];
       ws.simulateMessage({ type: "workspace_snapshot", sessions });
@@ -479,10 +514,29 @@ describe("BobWsClient", () => {
         sessionId: "s-1",
         status: "idle",
         agentType: "claude",
+        draftCount: 2,
+        producedTaskCount: 1,
       };
       ws.simulateMessage(msg);
 
       expect(onSessionStatusChanged).toHaveBeenCalledWith(msg);
+    });
+
+    it("routes design-plan workspace invalidation events to callback", () => {
+      const onWorkspaceEvent = vi.fn();
+      const opts = makeOptions({ onWorkspaceEvent } as Partial<BobWsClientOptions>);
+      const client = new BobWsClient(opts);
+      const ws = connectAndAuth(client);
+
+      const msg = {
+        type: "queue_order_changed",
+        workspaceId: "workspace-1",
+        entityId: "task-1",
+        createdAt: "2026-05-31T12:00:00.000Z",
+      } as ServerMessage;
+      ws.simulateMessage(msg);
+
+      expect(onWorkspaceEvent).toHaveBeenCalledWith(msg);
     });
   });
 

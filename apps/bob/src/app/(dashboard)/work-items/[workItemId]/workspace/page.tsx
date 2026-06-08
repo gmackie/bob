@@ -6,23 +6,26 @@ import { ActivityTimeline } from "~/components/work-items/activity-timeline";
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { WorkspaceControls } from "~/components/work-items/workspace-controls";
 import { WorkspaceLayout } from "~/components/workspace/workspace-layout";
+import { getWorkItemEntryHref } from "~/components/work-items/work-item-entry-model";
 import { createPlanningCaller } from "~/lib/planning/server";
 import {
   deriveTaskWorkspaceValidationState,
-  getTaskWorkspaceHref,
   resolveTaskWorkspaceTarget,
 } from "~/lib/planning/task-workspace";
 
 interface TaskWorkspacePageProps {
   params: Promise<{ workItemId: string }>;
+  searchParams?: Promise<{ workspace?: string | string[] }>;
 }
 
 export const dynamic = "force-dynamic";
 
 export default async function TaskWorkspacePage({
   params,
+  searchParams,
 }: TaskWorkspacePageProps) {
   const { workItemId } = await params;
+  const query = searchParams ? await searchParams : {};
   const caller = (await createPlanningCaller()) as any;
 
   const [detail, comments, taskRuns] = await Promise.all([
@@ -52,6 +55,11 @@ export default async function TaskWorkspacePage({
     : [null, null];
   const validationState = deriveTaskWorkspaceValidationState(detail.currentArtifacts);
   const handoffComments = comments.slice(0, 3);
+  const selectedWorkspaceId =
+    typeof query.workspace === "string"
+      ? query.workspace
+      : detail.workItem.workspaceId;
+  const workItemHref = getWorkItemEntryHref(detail.workItem.id, "planning", selectedWorkspaceId);
 
   const validationToneClass =
     validationState.tone === "positive"
@@ -79,13 +87,15 @@ export default async function TaskWorkspacePage({
             ? [
                 {
                   label: detail.workItem.project.key,
-                  href: `/projects/${detail.workItem.project.id}`,
+                  href: selectedWorkspaceId
+                    ? `/projects/${detail.workItem.project.id}?workspace=${encodeURIComponent(selectedWorkspaceId)}`
+                    : `/projects/${detail.workItem.project.id}`,
                 },
               ]
             : []),
           {
             label: detail.workItem.identifier,
-            href: getTaskWorkspaceHref(detail.workItem.id).replace("/workspace", ""),
+            href: workItemHref,
           },
           { label: "Workspace" },
         ]}
@@ -142,6 +152,7 @@ export default async function TaskWorkspacePage({
               <WorkspaceControls
                 workItemId={detail.workItem.id}
                 workItemIdentifier={detail.workItem.identifier}
+                workspaceId={selectedWorkspaceId}
                 activeSessionId={activeSessionId}
                 canExecute={target.canExecute}
                 liveHref={target.liveHref ?? null}
@@ -149,7 +160,7 @@ export default async function TaskWorkspacePage({
             </div>
             <div className="mt-3">
               <Link
-                href={getTaskWorkspaceHref(detail.workItem.id).replace("/workspace", "")}
+                href={workItemHref}
                 className="rounded-full border border-border px-4 py-2 text-sm text-secondary-foreground transition hover:border-muted-foreground/30 hover:text-foreground"
               >
                 Back to work item

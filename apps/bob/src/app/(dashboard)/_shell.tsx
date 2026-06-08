@@ -6,6 +6,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeftIcon, ChevronRightIcon, Cross2Icon } from "@radix-ui/react-icons";
 
 import { SidebarNav, NotificationButton } from "~/components/layout/sidebar-nav";
+import { ShellSettingsMenu } from "~/components/layout/shell-settings-menu";
+import { getShellRealtimeStatusModel } from "~/components/layout/shell-status-model";
 import { ChatPanelProvider } from "~/components/chat/chat-panel-provider";
 import { ChatPanel } from "~/components/chat/chat-panel";
 import { useWorkspaceEvents } from "~/hooks/use-workspace-events";
@@ -26,8 +28,17 @@ const SIDEBAR_EXPANDED_WIDTH = 240;
 const SIDEBAR_COLLAPSED_WIDTH = 56;
 const STORAGE_KEY = "bob:sidebar-collapsed";
 
+interface ShellNotification {
+  id: string;
+  title: string;
+  body?: string | null;
+  url?: string | null;
+  createdAt?: string | null;
+}
+
 export default function BilderShell({ children }: { children: React.ReactNode }) {
   const { connectionState } = useWorkspaceEvents();
+  const realtimeStatus = getShellRealtimeStatusModel(connectionState.status);
   const pathname = usePathname() ?? "";
   const router = useRouter();
   const trpc = useTRPC();
@@ -41,6 +52,9 @@ export default function BilderShell({ children }: { children: React.ReactNode })
       { refetchInterval: 30_000 },
     ),
   );
+  const notificationRows = Array.isArray(notifications)
+    ? (notifications as ShellNotification[])
+    : [];
 
   const markReadMutation = useMutation(
     trpc.notification.markAsRead.mutationOptions({
@@ -50,7 +64,7 @@ export default function BilderShell({ children }: { children: React.ReactNode })
     }),
   );
 
-  const unreadCount = (notifications ?? []).length;
+  const unreadCount = notificationRows.length;
 
   useEffect(() => {
     try {
@@ -85,14 +99,26 @@ export default function BilderShell({ children }: { children: React.ReactNode })
               blder.bot
               <span
                 className={`size-1.5 rounded-full ${
-                  connectionState.status === "connected"
+                  realtimeStatus.tone === "success"
                     ? "bg-emerald-500"
-                    : connectionState.status === "connecting"
+                    : realtimeStatus.tone === "warning"
                       ? "bg-amber-500 animate-pulse"
                       : "bg-muted-foreground/40"
                 }`}
-                title={`WebSocket: ${connectionState.status}`}
+                title={realtimeStatus.detail}
               />
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                  realtimeStatus.tone === "success"
+                    ? "bg-emerald-500/10 text-emerald-500"
+                    : realtimeStatus.tone === "warning"
+                      ? "bg-amber-500/10 text-amber-500"
+                      : "bg-muted text-muted-foreground"
+                }`}
+                title={realtimeStatus.detail}
+              >
+                {realtimeStatus.label}
+              </span>
             </span>
           )}
           {collapsed && (
@@ -133,6 +159,7 @@ export default function BilderShell({ children }: { children: React.ReactNode })
         className="min-h-screen flex-1 transition-all duration-200"
         style={{ marginLeft: sidebarWidth }}
       >
+        <ShellSettingsMenu />
         {children}
       </main>
 
@@ -147,11 +174,11 @@ export default function BilderShell({ children }: { children: React.ReactNode })
             </button>
           </div>
           <div className="flex-1 overflow-y-auto">
-            {(notifications ?? []).length === 0 ? (
+            {notificationRows.length === 0 ? (
               <p className="px-4 py-8 text-center text-sm text-muted-foreground">All caught up</p>
             ) : (
               <div className="divide-y divide-border">
-                {(notifications as any[]).map((n: any) => (
+                {notificationRows.map((n) => (
                   <button
                     key={n.id}
                     className="flex w-full flex-col gap-1 px-4 py-3 text-left transition-colors hover:bg-accent/50"

@@ -5,6 +5,7 @@ import type {
   ServerError,
   ServerEvent,
   ServerMessage,
+  ServerWorkspaceInvalidation,
   ServerSessionStatusChanged,
   SessionStatus,
   WorkspaceSessionInfo,
@@ -44,6 +45,7 @@ export interface BobWsClientOptions {
   onSessionStatus: (sessionId: string, status: SessionStatus) => void;
   onWorkspaceSnapshot?: (sessions: WorkspaceSessionInfo[]) => void;
   onSessionStatusChanged?: (info: ServerSessionStatusChanged) => void;
+  onWorkspaceEvent?: (message: ServerWorkspaceInvalidation) => void;
   onError: (error: ServerError) => void;
   onConnectionStateChange: (state: ConnectionState) => void;
   /** Override WebSocket constructor for React Native or testing. */
@@ -62,6 +64,7 @@ interface SessionSubscription {
 
 interface WorkspaceSubscription {
   statusFilter?: SessionStatus[];
+  workspaceId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -127,9 +130,9 @@ export class BobWsClient {
     this.send({ type: "unsubscribe", sessionId });
   }
 
-  subscribeWorkspace(statusFilter?: SessionStatus[]): void {
-    this.workspaceSub = { statusFilter };
-    this.send({ type: "subscribe_workspace", statusFilter });
+  subscribeWorkspace(statusFilter?: SessionStatus[], workspaceId?: string): void {
+    this.workspaceSub = { statusFilter, workspaceId };
+    this.send({ type: "subscribe_workspace", statusFilter, workspaceId });
   }
 
   unsubscribeWorkspace(): void {
@@ -235,6 +238,20 @@ export class BobWsClient {
         this.opts.onSessionStatusChanged?.(msg);
         break;
 
+      case "git_status_changed":
+      case "planning_session_produced_drafts":
+      case "planning_session_produced_tasks":
+      case "project_sync_changed":
+      case "provider_capacity_changed":
+      case "provider_limit_changed":
+      case "queue_order_changed":
+      case "session_event_appended":
+      case "task_priority_changed":
+      case "task_status_changed":
+      case "work_item_dispatched":
+        this.opts.onWorkspaceEvent?.(msg);
+        break;
+
       case "input_ack":
       case "unsubscribed":
       case "session_available":
@@ -285,7 +302,11 @@ export class BobWsClient {
       this.send({ type: "subscribe", sessionId: sub.sessionId, lastAckSeq: sub.lastAckSeq, observe: sub.observe || undefined });
     }
     if (this.workspaceSub) {
-      this.send({ type: "subscribe_workspace", statusFilter: this.workspaceSub.statusFilter });
+      this.send({
+        type: "subscribe_workspace",
+        statusFilter: this.workspaceSub.statusFilter,
+        workspaceId: this.workspaceSub.workspaceId,
+      });
     }
   }
 

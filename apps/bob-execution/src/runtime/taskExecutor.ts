@@ -9,7 +9,13 @@ import {
   runLifecycleEvents,
   taskRuns,
 } from "@bob/db/schema";
+import { buildBobExternalTaskMetadata } from "./externalTaskMetadata.js";
 import { applySnapshotToTask, snapshotTaskFromProvider } from "./providerSnapshot.js";
+import {
+  buildT3ThreadTurnStartCommand,
+  dispatchTaskToT3Code,
+  getT3DispatchRuntimeConfig,
+} from "./t3DispatchClient.js";
 
 function getGatewayUrl() {
   return (globalThis as any).GATEWAY_URL ?? process.env.GATEWAY_URL ?? "http://localhost:3002";
@@ -17,6 +23,12 @@ function getGatewayUrl() {
 
 function getNudgeSecret(): string | undefined {
   return (globalThis as any).NUDGE_SHARED_SECRET ?? process.env.NUDGE_SHARED_SECRET;
+}
+
+function getExecutionBackend(): "gateway" | "t3code" {
+  const backend =
+    (globalThis as any).BOB_EXECUTION_BACKEND ?? process.env.BOB_EXECUTION_BACKEND;
+  return backend === "t3code" ? "t3code" : "gateway";
 }
 
 export interface PlanningTask {
@@ -30,6 +42,9 @@ export interface PlanningTask {
   labels: string[];
   priority: number;
   url?: string;
+  externalId?: string | null;
+  externalProvider?: string | null;
+  linearWebBaseUrl?: string | null;
   repository?: {
     id?: string;
     fullName?: string;
@@ -277,6 +292,14 @@ export async function executeTask(
 
   const branch = generateBranchName(task);
   const selectedAgent = options?.agentType ?? "opencode";
+  const executionBackend = getExecutionBackend();
+  const t3RuntimeConfig =
+    executionBackend === "t3code" ? getT3DispatchRuntimeConfig() : null;
+  if (executionBackend === "t3code" && !t3RuntimeConfig) {
+    throw new Error(
+      "BOB_EXECUTION_BACKEND=t3code requires T3CODE_SERVER_URL, T3CODE_PROJECT_ID, T3CODE_MODEL_INSTANCE_ID, and T3CODE_MODEL",
+    );
+  }
 
   // Create session and task run in DB. The daemon handles git ops
   // (worktree creation, branch checkout, credential setup) when it
@@ -321,34 +344,68 @@ export async function executeTask(
     taskRun,
     "Failed to create starting task run",
   );
+  const externalTask = buildBobExternalTaskMetadata({
+    task,
+    planningProvider: resolvedProvider,
+    taskRunId: insertedTaskRun.id,
+  });
 
-  // Nudge ws-gateway so the daemon picks up the session immediately.
-  // Same pattern as planSession.start — best-effort, daemon will also
-  // discover pending sessions on reconnect.
-  const gatewayUrl = getGatewayUrl();
-  const nudgeSecret = getNudgeSecret();
-  if (nudgeSecret) {
+  if (executionBackend === "t3code" && t3RuntimeConfig) {
     try {
-      await fetch(`${gatewayUrl}/internal/nudge`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${nudgeSecret}`,
-        },
-        body: JSON.stringify({
-          sessionId: insertedSession.id,
-          workspaceId: task.workspaceId,
-          workingDirectory: repoInfo.path,
-          agentType: selectedAgent,
-          title: `${task.identifier}: ${task.title}`,
-          sessionType: "execution",
-          description: task.description ?? undefined,
-          identifier: task.identifier,
-          branch,
-        }),
+      const command = buildT3ThreadTurnStartCommand({
+        task,
+        taskRunId: insertedTaskRun.id,
+        branch,
+        workingDirectory: repoInfo.path,
+        baseBranch: repoInfo.mainBranch,
+        externalTask,
+        config: t3RuntimeConfig,
+      });
+      await dispatchTaskToT3Code({
+        serverUrl: t3RuntimeConfig.serverUrl,
+        authToken: t3RuntimeConfig.authToken,
+        command,
       });
     } catch (err) {
-      console.warn("[taskExecutor] nudge failed:", err);
+      await db
+        .update(taskRuns)
+        .set({
+          status: "failed",
+          blockedReason: err instanceof Error ? err.message : String(err),
+        })
+        .where(eq(taskRuns.id, insertedTaskRun.id));
+      throw err;
+    }
+  } else {
+    // Nudge ws-gateway so the daemon picks up the session immediately.
+    // Same pattern as planSession.start — best-effort, daemon will also
+    // discover pending sessions on reconnect.
+    const gatewayUrl = getGatewayUrl();
+    const nudgeSecret = getNudgeSecret();
+    if (nudgeSecret) {
+      try {
+        await fetch(`${gatewayUrl}/internal/nudge`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${nudgeSecret}`,
+          },
+          body: JSON.stringify({
+            sessionId: insertedSession.id,
+            workspaceId: task.workspaceId,
+            workingDirectory: repoInfo.path,
+            agentType: selectedAgent,
+            title: `${task.identifier}: ${task.title}`,
+            sessionType: "execution",
+            description: task.description ?? undefined,
+            identifier: task.identifier,
+            branch,
+            externalTask,
+          }),
+        });
+      } catch (err) {
+        console.warn("[taskExecutor] nudge failed:", err);
+      }
     }
   }
 
@@ -363,6 +420,7 @@ export async function executeTask(
       agentType: selectedAgent,
       branch,
       taskIdentifier: task.identifier,
+      externalTask,
     },
   }).catch((err: unknown) =>
     console.warn("[taskExecutor] Failed to write run_started lifecycle event:", err),

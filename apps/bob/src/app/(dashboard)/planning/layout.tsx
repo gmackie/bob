@@ -1,39 +1,38 @@
 "use client";
 
 import { usePathname, useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { PlusIcon } from "@radix-ui/react-icons";
 
-import { cn } from "@gmacko/core/ui";
 import { Button } from "@gmacko/core/ui/button";
 import { toast } from "@gmacko/core/ui/toast";
 
-import { Breadcrumbs } from "~/components/layout/breadcrumbs";
+import {
+  getPlanningShellActions,
+  getPlanningProjectQueryRefreshOptions,
+  getPlanningShellTitle,
+  matchPlanningShellRoute,
+} from "~/components/planning/planning-shell-model";
+import {
+  selectDefaultPlanningProject,
+  type PlanningProjectOption,
+} from "~/components/planning/planning-dashboard-model";
+import { StartPlanningButton } from "~/components/planning/start-planning-button";
 import { WorkspaceSelector } from "~/components/planning/workspace-selector";
 import { CreateProjectDialog } from "~/components/projects/create-project-dialog";
 import { ImportGitHubDialog } from "~/components/projects/import-github-dialog";
 import { useTRPC } from "~/trpc/react";
 
-const TABS = [
-  { href: "/planning", label: "Dashboard" },
-  { href: "/planning/projects", label: "Projects" },
-  { href: "/planning/board", label: "Board" },
-] as const;
-
-function matchTab(pathname: string) {
-  if (pathname === "/planning" || pathname === "/planning/") return "/planning";
-  if (pathname.startsWith("/planning/projects")) return "/planning/projects";
-  if (pathname.startsWith("/planning/board")) return "/planning/board";
-  return null;
-}
+type WorkspaceMembership = {
+  workspace?: { id: string; name: string; slug: string } | null;
+};
 
 export default function PlanningLayout({ children }: { children: React.ReactNode }) {
   const trpc = useTRPC();
   const pathname = usePathname() ?? "";
   const searchParams = useSearchParams();
-  const activeTab = matchTab(pathname);
+  const activeRoute = matchPlanningShellRoute(pathname);
   const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
 
@@ -44,10 +43,10 @@ export default function PlanningLayout({ children }: { children: React.ReactNode
     trpc.workspace.list.queryOptions(undefined, { staleTime: 60_000 }),
   );
 
-  const workspaces = (workspaceMemberships ?? [])
-    .map((m: any) => m.workspace)
-    .filter(Boolean)
-    .map((w: any) => ({ id: w.id as string, name: w.name as string, slug: w.slug as string }));
+  const memberships = (workspaceMemberships ?? []) as unknown as WorkspaceMembership[];
+  const workspaces = memberships
+    .flatMap((m) => (m.workspace ? [m.workspace] : []))
+    .map((w) => ({ id: w.id, name: w.name, slug: w.slug }));
 
   const workspaceParam = searchParams?.get("workspace") ?? null;
   const currentWorkspace =
@@ -56,6 +55,18 @@ export default function PlanningLayout({ children }: { children: React.ReactNode
       : workspaces?.[0]) ?? null;
 
   const queryClient = useQueryClient();
+  const {
+    data: planningProjects,
+    isLoading: planningProjectsLoading,
+  } = useQuery(
+    trpc.planning.listProjects.queryOptions(
+      { workspaceId: currentWorkspace?.id ?? "" },
+      {
+        enabled: Boolean(currentWorkspace?.id),
+        ...getPlanningProjectQueryRefreshOptions(),
+      },
+    ),
+  );
   const createWorkspace = useMutation(
     trpc.workspace.create.mutationOptions({
       onSuccess: () => {
@@ -67,11 +78,10 @@ export default function PlanningLayout({ children }: { children: React.ReactNode
   );
   const [wsName, setWsName] = useState("");
 
-  // Show setup screen when no workspace exists — only on the main planning routes
-  if (!wsLoading && (!workspaces || workspaces.length === 0) && activeTab !== null) {
+  // Show setup screen when no workspace exists on routes managed by this shell.
+  if (!wsLoading && (!workspaces || workspaces.length === 0) && activeRoute !== null) {
     return (
       <main className="mx-auto max-w-6xl px-6 py-12">
-        <Breadcrumbs items={[{ label: "Projects" }]} className="mb-4" />
         <div className="rounded-2xl border border-border bg-secondary px-8 py-12 text-center">
           <h1 className="mt-4 font-display text-4xl font-bold tracking-tight leading-[1.15] text-foreground">
             No workspace yet
@@ -113,63 +123,79 @@ export default function PlanningLayout({ children }: { children: React.ReactNode
     );
   }
 
-  const titles: Record<string, { heading: string; subtitle: string }> = {
-    "/planning": { heading: "Mission Control", subtitle: "Live overview of your agents and projects" },
-    "/planning/projects": { heading: "Projects", subtitle: "Your workspaces and projects" },
-    "/planning/board": { heading: "Board", subtitle: "Work items across all statuses" },
-  };
-  const { heading, subtitle } = titles[activeTab ?? ""] ?? titles["/planning"]!;
+  const { heading, subtitle } = getPlanningShellTitle(activeRoute ?? "/planning");
+  const shellActions = activeRoute ? getPlanningShellActions(activeRoute) : [];
+  const defaultProject = selectDefaultPlanningProject(
+    (planningProjects ?? []) as unknown as PlanningProjectOption[],
+  );
 
   // For dispatch/review sub-routes, just render children without tabs
-  if (activeTab === null) {
+  if (activeRoute === null) {
     return <>{children}</>;
   }
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-10">
-      <Breadcrumbs items={[{ label: "Projects" }]} className="mb-4" />
-
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="flex items-center gap-1 mb-2">
-            {TABS.map((tab) => (
-              <Link
-                key={tab.href}
-                href={
-                  currentWorkspace
-                    ? `${tab.href}?workspace=${currentWorkspace.id}`
-                    : tab.href
-                }
-                className={cn(
-                  "rounded-lg px-4 py-2 text-sm font-medium transition-colors",
-                  activeTab === tab.href
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {tab.label}
-              </Link>
-            ))}
-          </div>
           <h1 className="font-display text-4xl font-bold tracking-tight leading-[1.15] text-foreground">
             {heading}
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+          {subtitle ? (
+            <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+          ) : null}
         </div>
-        {activeTab === "/planning/projects" && (
+        {shellActions.length > 0 && (
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setImportOpen(true)}>
-              Import from GitHub
-            </Button>
-            <Button onClick={() => setCreateOpen(true)}>
-              <PlusIcon className="mr-1.5 h-4 w-4" />
-              Create Project
-            </Button>
+            {shellActions.map((action) => {
+              if (action.key === "start-planning-session") {
+                return currentWorkspace && defaultProject ? (
+                  <StartPlanningButton
+                    key={action.key}
+                    workspaceId={currentWorkspace.id}
+                    projectId={defaultProject.id}
+                    projectName={defaultProject.name}
+                    label={action.label}
+                    openTarget="route"
+                  />
+                ) : (
+                  <Button
+                    key={action.key}
+                    variant="outline"
+                    size="sm"
+                    disabled
+                    title={
+                      planningProjectsLoading
+                        ? "Loading projects..."
+                        : "Create or import a project before starting a planning session."
+                    }
+                  >
+                    <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
+                    {action.label}
+                  </Button>
+                );
+              }
+
+              if (action.key === "import-github-project") {
+                return (
+                  <Button key={action.key} variant="outline" onClick={() => setImportOpen(true)}>
+                    {action.label}
+                  </Button>
+                );
+              }
+
+              return (
+                <Button key={action.key} onClick={() => setCreateOpen(true)}>
+                  <PlusIcon className="mr-1.5 h-4 w-4" />
+                  {action.label}
+                </Button>
+              );
+            })}
           </div>
         )}
       </div>
 
-      {activeTab === "/planning/projects" && workspaces && workspaces.length > 1 && (
+      {activeRoute === "/planning/projects" && workspaces && workspaces.length > 1 && (
         <div className="mt-6">
           <WorkspaceSelector
             workspaces={workspaces.map((w) => ({ id: w.id, name: w.name, slug: w.slug }))}

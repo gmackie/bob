@@ -8,6 +8,10 @@ import { Card } from "@gmacko/core/ui/card";
 import { Badge } from "@gmacko/core/ui/badge";
 
 import { useTRPC } from "~/trpc/react";
+import {
+  buildWorkItemEntryRunRows,
+  type WorkItemOutcomeRun,
+} from "~/components/work-items/work-item-entry-model";
 
 const STATUS_COLORS: Record<string, string> = {
   queued:
@@ -39,43 +43,54 @@ export function AgentRunsPanel({
 
   if (!runs?.length) return null;
 
+  const runRows = buildWorkItemEntryRunRows(runs as WorkItemOutcomeRun[], workspaceId);
+  const allRunsHref = workspaceId
+    ? `/runs?workspace=${encodeURIComponent(workspaceId)}`
+    : "/runs";
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold">Agent Runs</h3>
         <Link
-          href="/runs"
+          href={allRunsHref}
           className="text-primary text-xs hover:underline"
         >
           View all
         </Link>
       </div>
       <div className="flex flex-col gap-2">
-        {runs.map((run: any) => (
-          <Link key={run.id} href={`/runs/${run.id}`}>
-            <Card className="hover:border-primary/30 flex items-center gap-3 p-3 transition-colors">
-              <Badge
-                className={cn(
-                  "shrink-0 text-xs",
-                  STATUS_COLORS[run.status] ?? STATUS_COLORS.queued,
-                )}
-              >
-                {run.status}
-              </Badge>
-              <span className="text-sm font-medium">{run.agentType}</span>
-              {run.summary?.duration_ms && (
-                <span className="text-muted-foreground text-xs">
-                  {run.summary.duration_ms < 1000
-                    ? `${run.summary.duration_ms}ms`
-                    : `${(run.summary.duration_ms / 1000).toFixed(1)}s`}
+        {(runs as any[]).map((run: any) => {
+          const row = runRows.find((candidate) => candidate.id === run.id);
+
+          return (
+            <Link key={run.id} href={row?.primaryHref ?? `/runs/${run.id}`}>
+              <Card className="hover:border-primary/30 flex items-center gap-3 p-3 transition-colors">
+                <Badge
+                  className={cn(
+                    "shrink-0 text-xs",
+                    STATUS_COLORS[run.status] ?? STATUS_COLORS.queued,
+                  )}
+                >
+                  {row?.statusLabel ?? run.status}
+                </Badge>
+                <span className="text-sm font-medium">
+                  {row?.label ?? `${run.agentType} run`}
                 </span>
-              )}
-              <span className="text-muted-foreground ml-auto text-xs">
-                {run.artifacts?.length ?? 0} artifacts
-              </span>
-            </Card>
-          </Link>
-        ))}
+                {run.summary?.duration_ms && (
+                  <span className="text-muted-foreground text-xs">
+                    {run.summary.duration_ms < 1000
+                      ? `${run.summary.duration_ms}ms`
+                      : `${(run.summary.duration_ms / 1000).toFixed(1)}s`}
+                  </span>
+                )}
+                <span className="text-muted-foreground ml-auto text-xs">
+                  {row?.primaryActionLabel ?? `${run.artifacts?.length ?? 0} artifacts`}
+                </span>
+              </Card>
+            </Link>
+          );
+        })}
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 
 import { db } from "@bob/db/client";
 import { deviceCodes } from "@bob/db/schema";
+import { parseDeviceCodeRequest } from "../device-label";
 
 const CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 8;
@@ -14,8 +15,9 @@ function generateUserCode(): string {
   return `${chars.slice(0, 4).join("")}-${chars.slice(4, 8).join("")}`;
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+  const { deviceName } = await parseDeviceCodeRequest(request);
 
   // Retry on user_code unique constraint collision
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
@@ -25,6 +27,7 @@ export async function POST() {
         .insert(deviceCodes)
         .values({
           userCode,
+          deviceName,
           status: "pending",
           expiresAt,
         })
@@ -35,7 +38,7 @@ export async function POST() {
       }
 
       const baseUrl =
-        process.env.NEXT_PUBLIC_SITE_URL ?? "https://blder.bot";
+        process.env.NEXT_PUBLIC_SITE_URL ?? new URL(request.url).origin;
 
       return NextResponse.json({
         deviceCode: record.deviceCode,

@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { cn } from "@gmacko/core/ui";
 
 import { useTRPC } from "~/trpc/react";
+import { getPlanningDispatchHref } from "./planning-shell-model";
 
 /**
  * Compact status bar shown on the planning page when a dispatch batch is
@@ -53,7 +54,7 @@ export function ActiveDispatchBar() {
         </span>
       </div>
       <Link
-        href={`/planning/dispatch/${batch.id}`}
+        href={getPlanningDispatchHref(batch.id, batch.workspaceId)}
         className="text-sm text-blue-400 transition hover:text-blue-300"
       >
         View dispatch plan

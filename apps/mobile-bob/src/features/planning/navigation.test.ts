@@ -4,8 +4,10 @@ import {
   buildPlanningSections,
   getAgentChatHref,
   getNotificationsHref,
+  getNotificationTargetHref,
   getPlanningHref,
   getProjectHref,
+  getSessionHref,
   getTaskWorkspaceHref,
   getWorkItemHref,
   groupActiveTaskStatuses,
@@ -17,11 +19,35 @@ describe("planning navigation", () => {
     expect(getPlanningHref()).toBe("/planning");
     expect(getAgentChatHref()).toBe("/chat");
     expect(getProjectHref("project-123")).toBe("/projects/project-123");
+    expect(getProjectHref("project-123", "workspace-1")).toBe(
+      "/projects/project-123?workspace=workspace-1",
+    );
     expect(getWorkItemHref("task-456")).toBe("/work-items/task-456");
+    expect(getWorkItemHref("task-456", "workspace-1")).toBe(
+      "/work-items/task-456?workspace=workspace-1",
+    );
     expect(getTaskWorkspaceHref("task-456")).toBe(
       "/work-items/task-456/workspace",
     );
+    expect(getTaskWorkspaceHref("task-456", "workspace-1")).toBe(
+      "/work-items/task-456/workspace?workspace=workspace-1",
+    );
+    expect(getSessionHref("session-1")).toBe("/sessions/session-1");
+    expect(getSessionHref("session-1", "workspace-1")).toBe(
+      "/sessions/session-1?workspace=workspace-1",
+    );
     expect(getNotificationsHref()).toBe("/notifications");
+  });
+
+  it("builds notification tap targets without dropping workspace context", () => {
+    expect(
+      getNotificationTargetHref({
+        workItemId: "task-456",
+        workspaceId: "workspace-1",
+      }),
+    ).toBe("/work-items/task-456?workspace=workspace-1");
+    expect(getNotificationTargetHref({ url: "/runs" })).toBe("/runs");
+    expect(getNotificationTargetHref({})).toBeNull();
   });
 
   it("summarizes active execution states for the mobile planning shell", () => {
@@ -196,7 +222,7 @@ describe("planning navigation", () => {
           title: "Fix iPad landscape",
           subtitle: "MOB-13 · blocked",
           badge: "Blocked",
-          href: "/work-items/task-2/workspace",
+          href: "/work-items/task-2/workspace?workspace=workspace-1",
           tone: "danger",
         },
         {
@@ -205,7 +231,7 @@ describe("planning navigation", () => {
           title: "Ship mobile planning shell",
           subtitle: "MOB-12 · in progress",
           badge: "In Progress",
-          href: "/work-items/task-1/workspace",
+          href: "/work-items/task-1/workspace?workspace=workspace-1",
           tone: "default",
         },
       ],

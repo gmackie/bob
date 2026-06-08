@@ -7,6 +7,7 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { cn } from "@gmacko/core/ui";
 import { Badge } from "@gmacko/core/ui/badge";
 
+import { getProjectWorkItemHref } from "~/components/projects/project-detail-tabs-model";
 import { KIND_COLOR, STATUS_COLOR, PRIORITY_COLOR, formatLabel } from "~/lib/design/colors";
 
 export interface WorkItemNodeData {
@@ -20,6 +21,7 @@ export interface WorkItemNodeData {
   dispatchStatus?: string;
   dispatchAgent?: string;
   pipelineState?: string;
+  workspaceId?: string | null;
 }
 
 const PIPELINE_BADGE: Record<string, { color: string; pulse?: boolean }> = {
@@ -65,7 +67,7 @@ function WorkItemNodeComponent({ data }: NodeProps) {
         className="!bg-muted-foreground !border-muted-foreground/60 !w-2 !h-2"
       />
 
-      <Link href={`/work-items/${d.id}`} className="block px-3.5 py-3">
+      <Link href={getProjectWorkItemHref(d)} className="block px-3.5 py-3">
         {/* Header: identifier + kind */}
         <div className="flex items-center justify-between gap-2">
           <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">

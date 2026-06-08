@@ -3,6 +3,7 @@ import { colors } from "~/lib/colors";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Pressable,
   ScrollView,
   Text,
   TextInput,
@@ -11,11 +12,27 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Badge, Button, Card, ListRow, Screen } from "~/components/ui";
-import { getWorkItemDetailPresentation } from "~/features/planning/work-item-detail";
-import { getTaskWorkspaceHref } from "~/features/planning/navigation";
+import { LinkedExecutionRunsCard } from "~/components/tablet/LinkedExecutionRunsCard";
+import { OutcomeReadableOutputCard } from "~/components/tablet/OutcomeReadableOutputCard";
+import {
+  buildMobileChildDispatchRequests,
+  formatMobileDispatchAgentLabel,
+  getMobileWorkItemDispatchAgentType,
+  getWorkItemDetailPresentation,
+} from "~/features/planning/work-item-detail";
+import { getTaskWorkspaceHref, getWorkItemHref } from "~/features/planning/navigation";
+import {
+  buildMobileWorkItemEntryItem,
+  buildMobileWorkItemEntryContext,
+  getMobileWorkItemEntryAction,
+  getMobileWorkItemEntryValidationState,
+  getMobileWorkItemDispatchSuccessHref,
+  normalizeMobileWorkItemEntryView,
+  type MobileWorkItemEntryValidationState,
+} from "~/features/tablet/work-item-entry";
+import { getMobileDetailBackAction } from "~/features/tablet/navigation";
 import { authClient } from "~/utils/auth";
 import { trpc } from "~/utils/api";
-import { getBaseUrl } from "~/utils/base-url";
 
 const PIPELINE_STAGES = [
   { key: "idea", label: "Idea" },
@@ -26,6 +43,30 @@ const PIPELINE_STAGES = [
   { key: "deploy", label: "Deploy" },
   { key: "live", label: "Live" },
 ] as const;
+
+interface MobileChildWorkItem {
+  id: string;
+  identifier?: string | null;
+  title: string;
+  kind: string;
+  status: string;
+}
+
+interface MobileArtifact {
+  id: string;
+  title?: string | null;
+  artifactRole: string;
+  artifactType?: string | null;
+  summary?: string | null;
+  url?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+interface MobileComment {
+  id: string;
+  body: string;
+  createdAt: string | Date;
+}
 
 function detectMobileStage(input: {
   childCount: number;
@@ -48,9 +89,10 @@ function detectMobileStage(input: {
 
 export default function WorkItemDetailScreen() {
   const { data: session, isPending } = authClient.useSession();
-  const params = useLocalSearchParams<{ workItemId: string }>();
+  const params = useLocalSearchParams<{ workItemId: string; view?: string }>();
   const workItemId =
     typeof params.workItemId === "string" ? params.workItemId : "";
+  const entryView = normalizeMobileWorkItemEntryView(params.view);
   const queryClient = useQueryClient();
   const [commentDraft, setCommentDraft] = useState("");
 
@@ -88,26 +130,69 @@ export default function WorkItemDetailScreen() {
       },
     }),
   );
+  const dispatchTaskMutation = useMutation(
+    trpc.workItem.dispatch.mutationOptions({
+      onSuccess: async (result) => {
+        await queryClient.invalidateQueries({
+          queryKey: trpc.workItem.get.queryKey({ id: workItemId }),
+        });
+        const workspaceId = workItemQuery.data?.workItem?.workspaceId ?? null;
+        router.push(
+          getMobileWorkItemDispatchSuccessHref({
+            workItemId,
+            workspaceId,
+            result,
+          }) as never,
+        );
+      },
+    }),
+  );
 
   const [dispatching, setDispatching] = useState(false);
 
   // Fetch child work items for epic/issue pipeline view
+  const childListInput = {
+    workspaceId: workItemQuery.data?.workItem?.workspaceId ?? "",
+    parentId: workItemId,
+    limit: 50,
+  };
   const childItemsQuery = useQuery(
     trpc.workItem.list.queryOptions(
-      { workspaceId: workItemQuery.data?.workItem?.workspaceId ?? "", parentId: workItemId, limit: 50 },
+      childListInput,
       { enabled: Boolean(session && workItemId && workItemQuery.data?.workItem?.kind !== "task") },
     ),
+  );
+  const dispatchChildTaskMutation = useMutation(
+    trpc.workItem.dispatch.mutationOptions({
+      onSuccess: async () => {
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: trpc.workItem.list.queryKey(childListInput),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: trpc.workItem.get.queryKey({ id: workItemId }),
+          }),
+        ]);
+      },
+    }),
+  );
+  const childItems = useMemo(
+    () => (Array.isArray(childItemsQuery.data) ? (childItemsQuery.data as MobileChildWorkItem[]) : []),
+    [childItemsQuery.data],
+  );
+  const comments = useMemo(
+    () => (Array.isArray(commentsQuery.data) ? (commentsQuery.data as MobileComment[]) : []),
+    [commentsQuery.data],
   );
 
   const pipelineDetection = useMemo(() => {
     if (!workItemQuery.data || workItemQuery.data.workItem.kind === "task") return null;
-    const children = childItemsQuery.data ?? [];
     return detectMobileStage({
-      childCount: children.length,
+      childCount: childItems.length,
       artifactCount: workItemQuery.data.currentArtifacts.length,
-      childStatuses: children.map((c: any) => c.status),
+      childStatuses: childItems.map((child) => child.status),
     });
-  }, [workItemQuery.data, childItemsQuery.data]);
+  }, [childItems, workItemQuery.data]);
 
   if (isPending) {
     return (
@@ -142,21 +227,64 @@ export default function WorkItemDetailScreen() {
   }
 
   const { workItem, currentArtifacts, childCount } = workItemQuery.data;
+  const artifacts = Array.isArray(currentArtifacts)
+    ? (currentArtifacts as MobileArtifact[])
+    : [];
+  const entryItem = buildMobileWorkItemEntryItem(workItem);
+  const entryContext = buildMobileWorkItemEntryContext({
+    view: entryView,
+    workItem: entryItem,
+  });
+  const backAction = getMobileDetailBackAction({
+    source: "work-item",
+    view: entryView,
+    workspaceId: workItem.workspaceId ?? null,
+  });
+  const entryAction = getMobileWorkItemEntryAction({
+    view: entryView,
+    workspaceId: workItem.workspaceId ?? null,
+    workItem: entryItem,
+  });
+  const validationState = getMobileWorkItemEntryValidationState(artifacts);
+  const showValidationState = entryContext.sections.some(
+    (section) =>
+      section.key === "artifacts-validation" || section.key === "validation-review",
+  );
   const detailPresentation = getWorkItemDetailPresentation({
     id: workItem.id,
     kind: workItem.kind,
+    workspaceId: workItem.workspaceId,
   });
+  const childDispatchAgentType = getMobileWorkItemDispatchAgentType(workItem.project);
+  const childDispatchRequests = buildMobileChildDispatchRequests(
+    childItems,
+    childDispatchAgentType,
+  );
+  const childDispatchAgentLabel = formatMobileDispatchAgentLabel(childDispatchAgentType);
 
   return (
     <Screen className="pt-6">
       <ScrollView showsVerticalScrollIndicator={false}>
+        <View className="mb-5 flex-row items-start justify-between gap-4">
+          <View className="min-w-0 flex-1">
+            <Text className="text-sm uppercase tracking-[0.18em] text-muted">
+              {workItem.identifier}
+            </Text>
+            <Text className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
+              {workItem.title}
+            </Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={backAction.accessibilityLabel}
+            onPress={() => router.replace(backAction.href as never)}
+            className="rounded-md px-3 py-2 active:opacity-70"
+            style={{ backgroundColor: colors.secondary }}
+          >
+            <Text className="text-sm font-semibold text-foreground">{backAction.label}</Text>
+          </Pressable>
+        </View>
         <View className="mb-5">
-          <Text className="text-sm uppercase tracking-[0.18em] text-muted">
-            {workItem.identifier}
-          </Text>
-          <Text className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
-            {workItem.title}
-          </Text>
           <View className="mt-4 flex-row flex-wrap gap-2">
             <Badge variant="accent">{workItem.kind}</Badge>
             <Badge>{workItem.status.replace(/_/g, " ")}</Badge>
@@ -165,6 +293,93 @@ export default function WorkItemDetailScreen() {
             ) : null}
           </View>
         </View>
+
+        <Card className="mb-5">
+          <Text className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">
+            {entryContext.sourceLabel}
+          </Text>
+          <Text className="mt-2 text-base font-semibold text-foreground">
+            {entryContext.heading}
+          </Text>
+          <Text className="mt-2 text-sm leading-6 text-muted">
+            {entryContext.description}
+          </Text>
+          <View className="mt-4 flex-row flex-wrap gap-2">
+            {entryContext.facts.map((fact) => (
+              <Badge key={fact.label}>
+                {fact.label}: {fact.value}
+              </Badge>
+            ))}
+          </View>
+          <View
+            className="mt-4 pt-4"
+            style={{ borderTopWidth: 1, borderTopColor: colors.border }}
+          >
+            <Text className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">
+              Detail sections
+            </Text>
+            <View className="mt-3 flex-row flex-wrap gap-2">
+              {entryContext.sections.map((section) => (
+                <Badge key={section.key}>{section.label}</Badge>
+              ))}
+            </View>
+          </View>
+          {entryContext.dependencySummary ? (
+            <View
+              className="mt-4 pt-4"
+              style={{ borderTopWidth: 1, borderTopColor: colors.border }}
+            >
+              <RelatedWorkItemsList
+                title="Depends On"
+                empty="No dependencies"
+                items={entryContext.dependencySummary.dependencies}
+              />
+              <RelatedWorkItemsList
+                title="Blocking"
+                empty="No blocked tasks"
+                items={entryContext.dependencySummary.dependents}
+              />
+            </View>
+          ) : null}
+          {entryAction.kind === "dispatch" || entryAction.kind === "rerun" ? (
+            <Button
+              className="mt-4"
+              onPress={() => dispatchTaskMutation.mutate({ workItemId })}
+              disabled={dispatchTaskMutation.isPending}
+            >
+              {dispatchTaskMutation.isPending ? "Starting..." : entryAction.label}
+            </Button>
+          ) : entryAction.kind === "live-session" ? (
+            <Button
+              className="mt-4"
+              onPress={() => router.push(entryAction.href as never)}
+            >
+              {entryAction.label}
+            </Button>
+          ) : null}
+          {showValidationState ? (
+            <ValidationStateCard validationState={validationState} />
+          ) : null}
+        </Card>
+
+        {entryView === "outcome" ? (
+          <OutcomeReadableOutputCard
+            workItemId={workItem.id}
+            onOpenSession={(sessionId) =>
+              router.push(getSessionHref(sessionId, workItem.workspaceId) as never)
+            }
+          />
+        ) : null}
+
+        {entryView === "queue" ? (
+          <LinkedExecutionRunsCard
+            workItemId={workItem.id}
+            workspaceId={workItem.workspaceId ?? null}
+            onOpenSession={(sessionId) =>
+              router.push(getSessionHref(sessionId, workItem.workspaceId) as never)
+            }
+          />
+        ) : null}
 
         {/* Pipeline stepper for epics/issues */}
         {pipelineDetection ? (
@@ -211,48 +426,37 @@ export default function WorkItemDetailScreen() {
         ) : null}
 
         {/* Child tasks (for epics/issues) */}
-        {childItemsQuery.data && childItemsQuery.data.length > 0 ? (
+        {childItems.length > 0 ? (
           <View className="mb-5">
             <View className="mb-3 flex-row items-center justify-between">
               <Text className="text-lg font-semibold text-foreground">
-                Tasks ({childItemsQuery.data.filter((c: any) => c.status === "done").length}/{childItemsQuery.data.length})
+                Tasks ({childItems.filter((child) => child.status === "done").length}/{childItems.length})
               </Text>
               {pipelineDetection?.stage === "plan" ? (
                 <Button
                   variant="primary"
                   size="sm"
-                  disabled={dispatching}
+                  disabled={dispatching || childDispatchRequests.length === 0}
                   onPress={async () => {
                     setDispatching(true);
-                    const tasks = (childItemsQuery.data ?? []).filter(
-                      (c: any) => c.status === "todo" || c.status === "draft",
-                    );
-                    const baseUrl = getBaseUrl();
-                    for (const task of tasks) {
-                      try {
-                        await fetch(`${baseUrl}/api/trpc/taskRun.execute`, {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ "0": { json: { workItemId: (task as any).id, agentType: "claude" } } }),
-                        });
-                      } catch {}
+                    try {
+                      for (const request of childDispatchRequests) {
+                        await dispatchChildTaskMutation.mutateAsync(request);
+                      }
+                    } finally {
+                      setDispatching(false);
                     }
-                    setDispatching(false);
                     await queryClient.invalidateQueries({
-                      queryKey: trpc.workItem.list.queryKey({
-                        workspaceId: workItem.workspaceId ?? "",
-                        parentId: workItemId,
-                        limit: 50,
-                      }),
+                      queryKey: trpc.workItem.list.queryKey(childListInput),
                     });
                   }}
                 >
-                  {dispatching ? "Dispatching..." : "Dispatch agents"}
+                  {dispatching ? "Dispatching..." : `Dispatch ${childDispatchAgentLabel}`}
                 </Button>
               ) : null}
             </View>
             <Card>
-              {childItemsQuery.data.map((child: any, index: number) => (
+              {childItems.map((child, index) => (
                 <ListRow
                   key={child.id}
                   title={`${child.identifier ?? ""} ${child.title}`}
@@ -273,11 +477,11 @@ export default function WorkItemDetailScreen() {
                   onPress={() =>
                     router.push(
                       (child.kind === "task"
-                        ? getTaskWorkspaceHref(child.id)
-                        : `/work-items/${child.id}`) as never,
+                        ? getTaskWorkspaceHref(child.id, workItem.workspaceId)
+                        : getWorkItemHref(child.id, workItem.workspaceId)) as never,
                     )
                   }
-                  showDivider={index < childItemsQuery.data.length - 1}
+                  showDivider={index < childItems.length - 1}
                 />
               ))}
             </Card>
@@ -289,7 +493,7 @@ export default function WorkItemDetailScreen() {
             Planning context
           </Text>
           <Text className="mt-3 text-sm text-muted">
-            {childCount} child items · {currentArtifacts.length} current artifacts
+            {childCount} child items · {artifacts.length} current artifacts
           </Text>
           <Text className="mt-4 text-sm font-semibold text-foreground">
             {detailPresentation.semanticSummary}
@@ -320,13 +524,13 @@ export default function WorkItemDetailScreen() {
           <Text className="text-lg font-semibold text-foreground">Artifacts</Text>
         </View>
         <Card className="mb-5">
-          {currentArtifacts.length > 0 ? (
-            currentArtifacts.map((artifact, index) => (
+          {artifacts.length > 0 ? (
+            artifacts.map((artifact, index) => (
               <ListRow
                 key={artifact.id}
                 title={artifact.title ?? artifact.artifactRole}
                 subtitle={artifact.url ?? undefined}
-                showDivider={index < currentArtifacts.length - 1}
+                showDivider={index < artifacts.length - 1}
               />
             ))
           ) : (
@@ -338,13 +542,13 @@ export default function WorkItemDetailScreen() {
           <Text className="text-lg font-semibold text-foreground">Comments</Text>
         </View>
         <Card className="mb-4">
-          {commentsQuery.data?.length ? (
-            commentsQuery.data.map((comment, index) => (
+          {comments.length ? (
+            comments.map((comment, index) => (
               <ListRow
                 key={comment.id}
                 title={comment.body}
                 subtitle={new Date(comment.createdAt).toLocaleString()}
-                showDivider={index < commentsQuery.data.length - 1}
+                showDivider={index < comments.length - 1}
               />
             ))
           ) : (
@@ -380,4 +584,88 @@ export default function WorkItemDetailScreen() {
       </ScrollView>
     </Screen>
   );
+}
+
+function ValidationStateCard({
+  validationState,
+}: {
+  validationState: MobileWorkItemEntryValidationState;
+}) {
+  const toneColor =
+    validationState.tone === "positive"
+      ? colors.success
+      : validationState.tone === "critical"
+        ? colors.danger
+        : validationState.tone === "warning"
+          ? colors.warning
+          : colors.muted;
+
+  return (
+    <View
+      className="mt-4 rounded-lg border p-3"
+      style={{
+        borderColor: `${toneColor}66`,
+        backgroundColor: `${toneColor}18`,
+      }}
+    >
+      <Text className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">
+        Validation state
+      </Text>
+      <Text className="mt-2 text-sm font-semibold text-foreground">
+        {validationState.label}
+      </Text>
+      <Text className="mt-2 text-sm leading-6" style={{ color: toneColor }}>
+        {validationState.detail}
+      </Text>
+    </View>
+  );
+}
+
+function RelatedWorkItemsList({
+  title,
+  empty,
+  items,
+}: {
+  title: string;
+  empty: string;
+  items: { id: string; identifier: string; title: string; statusLabel: string }[];
+}) {
+  return (
+    <View className="mb-4">
+      <Text className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted">
+        {title}
+      </Text>
+      {items.length === 0 ? (
+        <View
+          className="rounded-lg border p-3"
+          style={{ borderColor: colors.border }}
+        >
+          <Text className="text-xs text-muted">{empty}</Text>
+        </View>
+      ) : (
+        <View className="gap-2">
+          {items.map((item) => (
+            <View
+              key={item.id}
+              className="rounded-lg border p-3"
+              style={{ borderColor: colors.border, backgroundColor: colors.card }}
+            >
+              <Text className="text-sm font-semibold text-foreground">
+                {item.identifier} · {item.title}
+              </Text>
+              <Text className="mt-1 text-xs text-muted">
+                {item.statusLabel}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function getSessionHref(sessionId: string, workspaceId?: string | null): string {
+  if (!workspaceId) return `/sessions/${sessionId}`;
+  const params = new URLSearchParams({ workspace: workspaceId });
+  return `/sessions/${sessionId}?${params.toString()}`;
 }

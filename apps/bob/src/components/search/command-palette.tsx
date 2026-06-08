@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { Badge } from "@gmacko/core/ui/badge";
 
+import { getProjectWorkItemHref } from "~/components/projects/project-detail-tabs-model";
 import { KIND_COLOR } from "~/lib/design/colors";
 import { useTRPC } from "~/trpc/react";
 
@@ -104,7 +105,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
             (results as any[]).map((item) => (
               <Link
                 key={item.id}
-                href={`/work-items/${item.id}`}
+                href={getProjectWorkItemHref(item, workspaceId)}
                 onClick={handleSelect}
                 className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-accent"
               >

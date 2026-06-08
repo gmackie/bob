@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { cn } from "@gmacko/core/ui";
 
+import { getWorkItemEntryRelatedQueueHref } from "~/components/work-items/work-item-entry-model";
 import { SessionHistory } from "./session-history";
 
 interface ChildTask {
@@ -24,6 +25,7 @@ interface StagePlanProps {
     kind: string;
     status: string;
     identifier: string;
+    workspaceId?: string | null;
   };
   isCurrentStage: boolean;
   isCompleted: boolean;
@@ -137,7 +139,7 @@ export function StagePlan({
               {childTasks.map((task) => (
                 <Link
                   key={task.id}
-                  href={`/work-items/${task.id}`}
+                  href={getWorkItemEntryRelatedQueueHref(task.id, workItem.workspaceId)}
                   className="flex items-center gap-3 px-4 py-3 transition hover:bg-accent"
                 >
                   {/* Priority indicator */}
@@ -184,6 +186,7 @@ export function StagePlan({
 
           <SessionHistory
             workItemId={workItemId}
+            workspaceId={workItem.workspaceId}
             sessionTypes={["ceo_review", "eng_review", "design_review", "breakdown"]}
             className="mt-4"
           />

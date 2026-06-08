@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createNudgeHandler } from "./nudge.js";
+import { createNudgeHandler, createWorkspaceEventHandler } from "./nudge.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 function mockReq(body: any, headers: Record<string, string> = {}): IncomingMessage {
@@ -89,6 +89,41 @@ describe("nudge handler", () => {
       workingDirectory: "/tmp",
       agentType: "claude",
       title: "test",
+    });
+  });
+});
+
+describe("workspace event handler", () => {
+  it("rejects missing authorization header", async () => {
+    const notify = vi.fn();
+    const handler = createWorkspaceEventHandler({ sharedSecret: "s3cr3t", onEvent: notify });
+    const req = mockReq({ type: "queue_order_changed", workspaceId: "w1" });
+    const res = mockRes();
+    await handler(req, res);
+    expect(res._status).toBe(401);
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it("calls onEvent with a valid workspace event payload", async () => {
+    const notify = vi.fn();
+    const handler = createWorkspaceEventHandler({ sharedSecret: "s3cr3t", onEvent: notify });
+    const req = mockReq(
+      {
+        type: "queue_order_changed",
+        workspaceId: "w1",
+        entityId: "task-1",
+        payload: { order: ["task-1", "task-2"] },
+      },
+      { authorization: "Bearer s3cr3t" },
+    );
+    const res = mockRes();
+    await handler(req, res);
+    expect(res._status).toBe(200);
+    expect(notify).toHaveBeenCalledWith({
+      type: "queue_order_changed",
+      workspaceId: "w1",
+      entityId: "task-1",
+      payload: { order: ["task-1", "task-2"] },
     });
   });
 });
