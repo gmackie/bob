@@ -111,10 +111,12 @@ message and continues.
 2. Appends `--mcp-config <path>` to the claude args.
 3. Ensures `mcp__ooda__oracle_query` is in `--allowedTools` (merged with persona tools).
 
-**Opt-in mechanism:** a persona flag, not a hardcoded session type. Add `oracleAccess: true`
-to `planner.yaml`; the daemon reads it from `PersonaConfig` and only attaches the MCP
-server + tool when set. Keeps the bridge reusable for future personas and off general
-agent runs.
+**Opt-in mechanism:** tool-declaration presence, not a new protocol field. The persona's
+`allowed_tools` already flows to `session.personaConfig.allowedTools` and on to the daemon
+(`packages/bob/src/api/src/handlers/planSession.ts:235-239`). So the daemon attaches the
+MCP server **iff `persona.allowedTools` includes `mcp__ooda__oracle_query`**. One
+declaration in `planner.yaml` both signals opt-in and allowlists the tool — reusable for
+any future persona, off for general agent runs, and no PersonaConfig/protocol change.
 
 **Persona changes (`docs/personas/planner.yaml`):**
 - `allowed_tools`: add `mcp__ooda__oracle_query`
