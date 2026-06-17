@@ -19,8 +19,12 @@
     "@bob/db": "workspace:*",
     "@bob/telemetry": "workspace:*",
     "@gmacko/core": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@trpc/client": "catalog:",
     "node-pty": "^1.0.0",
-    "ws": "^8.18.0"
+    "superjson": "catalog:",
+    "ws": "^8.18.0",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@bob/eslint-config": "workspace:*",
