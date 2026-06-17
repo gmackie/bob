@@ -12,6 +12,8 @@ import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import WebSocket from "ws";
 import { computeCostUsd, type TokenCounts } from "@gmacko/core/agent/model-pricing";
+import { createOracleClient, fetchOracleSeed, buildSeedQuestion } from "../oracle-client";
+import { readOracleConfig } from "../oracle-config";
 
 interface AgentExecutionResult {
   exitCode: number;
@@ -50,6 +52,9 @@ const HEARTBEAT_INTERVAL_MS = 25_000;
 const DEFAULT_AGENT_TYPE = process.env.DEFAULT_AGENT_TYPE ?? "claude";
 const CODEX_MODEL = process.env.CODEX_MODEL ?? "gpt-5.5";
 const CODEX_SANDBOX = process.env.CODEX_SANDBOX ?? "read-only";
+
+const ORACLE = readOracleConfig();
+const oracleClient = ORACLE.enabled ? createOracleClient(ORACLE.apiUrl, ORACLE.token) : null;
 
 if (!BOB_API_KEY || !BOB_WORKSPACE_ID) {
   console.error("[executor] FATAL: BOB_API_KEY and BOB_WORKSPACE_ID required");
@@ -235,7 +240,17 @@ async function handleSessionAvailable(session: ServerSessionAvailable): Promise<
   }
 
   // Build the prompt from session metadata
-  const prompt = buildPrompt(session);
+  let prompt = buildPrompt(session);
+  if (oracleClient && session.sessionType === "planning") {
+    const lc = session.planningContext?.launchContext;
+    const question = buildSeedQuestion(lc?.intent, lc?.notes);
+    const section = await fetchOracleSeed(
+      oracleClient,
+      { question, repo: session.branch ?? undefined },
+      (m) => console.log(m),
+    );
+    if (section) prompt = `${prompt}\n\n${section}`;
+  }
 
   // Spawn the agent
   const agentType = session.agentType || DEFAULT_AGENT_TYPE;
