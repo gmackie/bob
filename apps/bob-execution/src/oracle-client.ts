@@ -68,3 +68,41 @@ export function formatOracleSection(result: OracleQueryResult): string {
     `_Use the oracle_query tool to dig deeper into any of these._`,
   ].join("\n");
 }
+
+const DEFAULT_TOPK = 6;
+const DEFAULT_TIMEOUT_MS = 3_000;
+
+export async function fetchOracleSeed(
+  client: OracleClient,
+  params: { question: string; repo?: string; topK?: number; timeoutMs?: number },
+  log: (msg: string) => void,
+): Promise<string> {
+  const question = params.question.trim();
+  if (!question) return "";
+  const timeoutMs = params.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+
+  try {
+    const result = await Promise.race([
+      client.oracle.query.query({
+        task: "bob planning",
+        repo: params.repo,
+        question,
+        topK: params.topK ?? DEFAULT_TOPK,
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`oracle timeout after ${timeoutMs}ms`)), timeoutMs),
+      ),
+    ]);
+    const section = formatOracleSection(result);
+    if (!section) {
+      log(`[oracle] seed query skipped: 0 chunks (queryId ${result.queryId})`);
+      return "";
+    }
+    log(`[oracle] seed: ${result.chunks.length} chunks, confidence ${result.confidence.toFixed(2)}, queryId ${result.queryId}, ${result.latencyMs}ms`);
+    return section;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log(`[oracle] seed query skipped: ${msg}`);
+    return "";
+  }
+}
