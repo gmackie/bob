@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildSeedQuestion, formatOracleSection, type OracleQueryResult } from "./oracle-client";
+import { fetchOracleSeed } from "./oracle-client";
 
 describe("buildSeedQuestion", () => {
   it("combines intent and notes", () => {
@@ -43,5 +44,36 @@ describe("formatOracleSection", () => {
         score: 0.5, sourceTitle: null, sourceUrl: null, sourceKind: "doc", contentAsOf: null }],
     };
     expect(formatOracleSection(result)).toContain("[untitled source] x");
+  });
+});
+
+describe("fetchOracleSeed", () => {
+  const logs: string[] = [];
+  const log = (m: string) => logs.push(m);
+  const okResult: OracleQueryResult = {
+    confidence: 0.7, queryId: "qid", latencyMs: 12,
+    chunks: [{ unitId: "u", sourceId: 1, content: "hi", tokenCount: 1, headingContext: null,
+      score: 0.7, sourceTitle: "S", sourceUrl: null, sourceKind: "doc", contentAsOf: null }],
+  };
+
+  it("returns a formatted section and logs queryId on success", async () => {
+    const client = { oracle: { query: { query: async () => okResult } } };
+    const section = await fetchOracleSeed(client, { question: "q", topK: 6 }, log);
+    expect(section).toContain("## Knowledge from OODA");
+    expect(logs.some((l) => l.includes("qid"))).toBe(true);
+  });
+
+  it("returns empty string and never throws when the client rejects", async () => {
+    const client = { oracle: { query: { query: async () => { throw new Error("boom"); } } } };
+    const section = await fetchOracleSeed(client, { question: "q" }, log);
+    expect(section).toBe("");
+  });
+
+  it("returns empty string when the question is blank", async () => {
+    let called = false;
+    const client = { oracle: { query: { query: async () => { called = true; return okResult; } } } };
+    const section = await fetchOracleSeed(client, { question: "   " }, log);
+    expect(section).toBe("");
+    expect(called).toBe(false);
   });
 });
