@@ -243,12 +243,15 @@ async function handleSessionAvailable(session: ServerSessionAvailable): Promise<
   let prompt = buildPrompt(session);
   if (oracleClient && session.sessionType === "planning") {
     const lc = session.planningContext?.launchContext;
-    const question = buildSeedQuestion(lc?.intent, lc?.notes);
-    const section = await fetchOracleSeed(
-      oracleClient,
-      { question, repo: session.branch ?? undefined },
-      (m) => console.log(m),
-    );
+    // Seed the oracle with the planning substance (work-item title + brief), not the
+    // intent enum ("shape"/"breakdown"). Fall back to the session title/description.
+    const question =
+      buildSeedQuestion(lc?.workItem?.title, lc?.notes) ||
+      buildSeedQuestion(session.title, session.description);
+    // Repo hint comes from the selected repo source, not the git branch (a branch name
+    // is not a repository identifier and would silently mis-filter oracle results).
+    const repo = lc?.selectedRepoSources?.[0]?.label ?? lc?.selectedRepoSources?.[0]?.path;
+    const section = await fetchOracleSeed(oracleClient, { question, repo }, (m) => console.log(m));
     if (section) prompt = `${prompt}\n\n${section}`;
   }
 
