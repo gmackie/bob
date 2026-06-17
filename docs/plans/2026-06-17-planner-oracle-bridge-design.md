@@ -77,9 +77,11 @@ _Use the oracle_query tool to dig deeper into any of these._
 
 The last line bridges A→B (tells the planner the live tool exists).
 
-**Resilience (mirrors `bob-run-reporter`):** 3s timeout via `AbortController`; try/catch →
-on error or empty results inject nothing, log `[oracle] seed query skipped: <reason>`,
-continue. Never blocks or fails plan generation.
+**Resilience (mirrors `bob-run-reporter`):** 3s timeout via `Promise.race` against a
+`setTimeout` (timer cleared in a `finally`); try/catch → on error or empty results inject
+nothing, log `[oracle] seed query skipped: <reason>`, continue. Never blocks or fails plan
+generation. Note: the timeout caps the wait but does not cancel the underlying HTTP
+request, which runs to completion in the background — harmless at one seed per session.
 
 **Logging:** on success `[oracle] seed: <N> chunks, confidence <X>, queryId <id>, <ms>ms`.
 `queryId` is logged but feedback is **not** auto-submitted (deferred hook).
