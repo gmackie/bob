@@ -21,6 +21,7 @@
     "@gmacko/core": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@trpc/client": "catalog:",
+    "@trpc/server": "catalog:",
     "node-pty": "^1.0.0",
     "superjson": "catalog:",
     "ws": "^8.18.0",
