@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildSeedQuestion, formatOracleSection, type OracleQueryResult } from "./oracle-client";
 import { fetchOracleSeed } from "./oracle-client";
 
@@ -75,5 +75,20 @@ describe("fetchOracleSeed", () => {
     const section = await fetchOracleSeed(client, { question: "   " }, log);
     expect(section).toBe("");
     expect(called).toBe(false);
+  });
+
+  describe("with fake timers", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("clears the timeout timer when the query resolves first (no dangling timer)", async () => {
+      vi.useFakeTimers();
+      const client = { oracle: { query: { query: async () => okResult } } };
+      // Query resolves on a microtask, winning the race before the (long) timeout fires.
+      await fetchOracleSeed(client, { question: "q", timeoutMs: 60_000 }, log);
+      // The finally block must have cleared the timer; nothing should remain pending.
+      expect(vi.getTimerCount()).toBe(0);
+    });
   });
 });
