@@ -81,6 +81,7 @@ export async function fetchOracleSeed(
   if (!question) return "";
   const timeoutMs = params.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const result = await Promise.race([
       client.oracle.query.query({
@@ -89,9 +90,9 @@ export async function fetchOracleSeed(
         question,
         topK: params.topK ?? DEFAULT_TOPK,
       }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`oracle timeout after ${timeoutMs}ms`)), timeoutMs),
-      ),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`oracle timeout after ${timeoutMs}ms`)), timeoutMs);
+      }),
     ]);
     const section = formatOracleSection(result);
     if (!section) {
@@ -104,5 +105,9 @@ export async function fetchOracleSeed(
     const msg = err instanceof Error ? err.message : String(err);
     log(`[oracle] seed query skipped: ${msg}`);
     return "";
+  } finally {
+    // Clear the timeout so a winning query doesn't leave a dangling timer that
+    // later rejects with no handler (unhandled rejection) in the long-lived daemon.
+    if (timer) clearTimeout(timer);
   }
 }
