@@ -8,12 +8,15 @@
  * Run: BOB_API_KEY=... BOB_WORKSPACE_ID=... GATEWAY_WS_URL=ws://... node daemon/index.js
  */
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
 import { computeCostUsd, type TokenCounts } from "@gmacko/core/agent/model-pricing";
 import { createOracleClient, fetchOracleSeed, buildSeedQuestion } from "../oracle-client";
 import { readOracleConfig } from "../oracle-config";
+import { claudeOracleArgs } from "./oracle-args";
 
 interface AgentExecutionResult {
   exitCode: number;
@@ -55,6 +58,26 @@ const CODEX_SANDBOX = process.env.CODEX_SANDBOX ?? "read-only";
 
 const ORACLE = readOracleConfig();
 const oracleClient = ORACLE.enabled ? createOracleClient(ORACLE.apiUrl, ORACLE.token) : null;
+
+function setupOracleMcpConfig(): string | null {
+  if (!ORACLE.enabled) return null;
+  const mcpServerPath = fileURLToPath(new URL("../ooda-oracle-mcp.ts", import.meta.url));
+  const configPath = join(tmpdir(), `ooda-oracle-mcp.${process.pid}.json`);
+  const config = {
+    mcpServers: {
+      ooda: {
+        command: "tsx",
+        args: [mcpServerPath],
+        env: { OODA_API_URL: ORACLE.apiUrl, OODA_ORACLE_TOKEN: ORACLE.token },
+      },
+    },
+  };
+  writeFileSync(configPath, JSON.stringify(config));
+  console.log(`[oracle] MCP config written to ${configPath} (server ${mcpServerPath})`);
+  return configPath;
+}
+
+const ORACLE_MCP_CONFIG_PATH = setupOracleMcpConfig();
 
 if (!BOB_API_KEY || !BOB_WORKSPACE_ID) {
   console.error("[executor] FATAL: BOB_API_KEY and BOB_WORKSPACE_ID required");
@@ -401,7 +424,7 @@ function runAgent(session: ServerSessionAvailable, workDir: string, prompt: stri
   return new Promise((resolve, reject) => {
     const sessionId = session.sessionId;
     const agentType = session.agentType || DEFAULT_AGENT_TYPE;
-    const { command, args } = getAgentCommand(agentType, prompt, persona);
+    const { command, args } = getAgentCommand(agentType, prompt, persona, ORACLE_MCP_CONFIG_PATH);
     console.log(`[executor] Spawning: ${command} ${args.join(" ").slice(0, 80)}...`);
 
     const startTime = Date.now();
@@ -620,13 +643,26 @@ function getPersonaConfig(session: ServerSessionAvailable): PersonaConfig {
   };
 }
 
-function getAgentCommand(agentType: string, prompt: string, persona?: PersonaConfig): { command: string; args: string[] } {
+function getAgentCommand(
+  agentType: string, prompt: string, persona?: PersonaConfig, mcpConfigPath?: string | null,
+): { command: string; args: string[] } {
   switch (agentType) {
     case "claude": {
       const args = ["--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"];
       if (persona?.model) args.push("--model", persona.model);
       if (persona?.allowedTools?.length) args.push("--allowedTools", persona.allowedTools.join(","));
       if (persona?.systemPrompt) args.push("--append-system-prompt", persona.systemPrompt);
+      const { mcpArgs, toolsToAdd } = claudeOracleArgs(persona, mcpConfigPath ?? null);
+      // ensure tools are present even if persona.allowedTools already pushed
+      if (toolsToAdd.length) {
+        const have = persona?.allowedTools ?? [];
+        const merged = Array.from(new Set([...have, ...toolsToAdd]));
+        // replace any earlier --allowedTools value
+        const idx = args.indexOf("--allowedTools");
+        if (idx >= 0) args[idx + 1] = merged.join(",");
+        else args.push("--allowedTools", merged.join(","));
+      }
+      args.push(...mcpArgs);
       args.push(prompt);
       return { command: "claude", args };
     }
@@ -648,6 +684,17 @@ function getAgentCommand(agentType: string, prompt: string, persona?: PersonaCon
       if (persona?.model) defaultArgs.push("--model", persona.model);
       if (persona?.allowedTools?.length) defaultArgs.push("--allowedTools", persona.allowedTools.join(","));
       if (persona?.systemPrompt) defaultArgs.push("--append-system-prompt", persona.systemPrompt);
+      const { mcpArgs, toolsToAdd } = claudeOracleArgs(persona, mcpConfigPath ?? null);
+      // ensure tools are present even if persona.allowedTools already pushed
+      if (toolsToAdd.length) {
+        const have = persona?.allowedTools ?? [];
+        const merged = Array.from(new Set([...have, ...toolsToAdd]));
+        // replace any earlier --allowedTools value
+        const idx = defaultArgs.indexOf("--allowedTools");
+        if (idx >= 0) defaultArgs[idx + 1] = merged.join(",");
+        else defaultArgs.push("--allowedTools", merged.join(","));
+      }
+      defaultArgs.push(...mcpArgs);
       defaultArgs.push(prompt);
       return { command: "claude", args: defaultArgs };
     }
