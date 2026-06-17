@@ -62,6 +62,13 @@ const oracleClient = ORACLE.enabled ? createOracleClient(ORACLE.apiUrl, ORACLE.t
 function setupOracleMcpConfig(): string | null {
   if (!ORACLE.enabled) return null;
   const mcpServerPath = fileURLToPath(new URL("../ooda-oracle-mcp.ts", import.meta.url));
+  // Resolved for the tsx (no-build) deploy. If the server file is missing (e.g. a
+  // bundled dist/ run that didn't emit it), degrade to "oracle disabled" rather than
+  // spawning a broken MCP child on every claude session.
+  if (!existsSync(mcpServerPath)) {
+    console.log(`[oracle] MCP server not found at ${mcpServerPath}; live tool disabled.`);
+    return null;
+  }
   const configPath = join(tmpdir(), `ooda-oracle-mcp.${process.pid}.json`);
   const config = {
     mcpServers: {
@@ -72,7 +79,8 @@ function setupOracleMcpConfig(): string | null {
       },
     },
   };
-  writeFileSync(configPath, JSON.stringify(config));
+  // 0o600: the config embeds OODA_ORACLE_TOKEN, so keep it owner-only in tmpdir.
+  writeFileSync(configPath, JSON.stringify(config), { mode: 0o600 });
   console.log(`[oracle] MCP config written to ${configPath} (server ${mcpServerPath})`);
   return configPath;
 }
