@@ -1,0 +1,34 @@
+[Unit]
+Description=OODA Runner (agent executor)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mackieg
+Group=users
+WorkingDirectory=/opt/ooda-runner/apps/ooda-runner
+ExecStart=/opt/ooda-runner/apps/ooda-runner/node_modules/.bin/tsx src/index.ts
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+EnvironmentFile=/opt/ooda-runner/.env
+Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=false
+ReadWritePaths=/opt/ooda-runner
+ReadWritePaths=/opt/ooda-runner/apps/ooda-runner
+ReadWritePaths=/home/mackieg/.ooda
+PrivateTmp=true
+
+LimitNOFILE=65536
+MemoryMax=1G
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ooda-runner
+
+[Install]
+WantedBy=multi-user.target

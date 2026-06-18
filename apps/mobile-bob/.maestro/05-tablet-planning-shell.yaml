@@ -1,0 +1,25 @@
+appId: com.gmacko.bob.dev
+---
+# Build/install with production endpoints, EXPO_PUBLIC_BOB_AUTH_BYPASS=true,
+# and EXPO_PUBLIC_BOB_AUTH_BYPASS_TOKEN set to the backend bypass secret.
+- launchApp:
+    clearState: true
+- openLink: exp+bob://expo-development-client/?url=http%3A%2F%2F192.168.8.229%3A8081
+- extendedWaitUntil:
+    notVisible: "DEVELOPMENT SERVERS"
+    timeout: 30000
+- tapOn:
+    text: "Continue"
+    optional: true
+- tapOn:
+    text: "Close"
+    optional: true
+- extendedWaitUntil:
+    visible: "Mission Control"
+    timeout: 30000
+- assertVisible: "Mission Control"
+- assertVisible:
+    text: "Active Agents"
+- assertVisible:
+    text: "Work Queue"
+- takeScreenshot: screenshots/05-tablet-planning-shell

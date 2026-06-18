@@ -1,0 +1,87 @@
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css";
+
+@import "nativewind/theme";
+
+/*
+ * Fix: NativeWind v5 preview + Tailwind v4 text color resolution.
+ *
+ * react-native-css 3.0.1 can't resolve CSS variables for the `color`
+ * property, so Tailwind v4's auto-generated `text-{color}` utilities
+ * (which use `color: var(--color-*)`) produce invisible text.
+ *
+ * Additionally, react-native-css applies CSS-derived styles AFTER
+ * inline React Native styles, so inline `style={{ color: "..." }}`
+ * gets overridden by the broken CSS.
+ *
+ * Fix: Define explicit @utility overrides with hard-coded hex values
+ * derived from Bob's dark theme (tooling/bob-tailwind/theme.css).
+ *
+ * TODO: Remove when upgrading to stable NativeWind v5 / react-native-css.
+ */
+
+@utility text-foreground {
+  color: #eeedea;
+}
+@utility text-muted {
+  color: #6e6b63;
+}
+@utility text-muted-foreground {
+  color: #6e6b63;
+}
+@utility text-muted2 {
+  color: #565349;
+}
+@utility text-white {
+  color: #ffffff;
+}
+@utility text-primary-foreground {
+  color: #141310;
+}
+@utility text-secondary-foreground {
+  color: #a8a59d;
+}
+@utility text-card-foreground {
+  color: #eeedea;
+}
+@utility text-accent-foreground {
+  color: #141310;
+}
+@utility text-accent {
+  color: #e7a505;
+}
+@utility text-success {
+  color: #22c55e;
+}
+@utility text-warning {
+  color: #f59e0b;
+}
+@utility text-danger {
+  color: #ef5350;
+}
+@utility text-primary {
+  color: #e7a505;
+}
+
+@theme {
+  --color-background: #141310;
+  --color-foreground: #eeedea;
+  --color-card: #1c1b18;
+  --color-card-elevated: #232220;
+  --color-card-foreground: #eeedea;
+  --color-primary: #e7a505;
+  --color-primary-foreground: #141310;
+  --color-secondary: #232220;
+  --color-secondary-foreground: #a8a59d;
+  --color-muted: #6e6b63;
+  --color-muted-foreground: #6e6b63;
+  --color-muted2: #565349;
+  --color-accent: #232220;
+  --color-accent-foreground: #e7a505;
+  --color-border: #2e2d2a;
+  --color-input: #232220;
+  --color-ring: #e7a505;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-danger: #ef5350;
+}

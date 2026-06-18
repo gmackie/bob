@@ -1,7 +1,5 @@
 {
-  "name": "@bob/tsconfig",
+  "name": "@gmacko/tsconfig",
   "private": true,
-  "files": [
-    "*.json"
-  ]
+  "version": "0.0.0"
 }

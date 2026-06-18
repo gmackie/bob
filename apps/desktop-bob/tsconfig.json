@@ -1,0 +1,19 @@
+{
+  "extends": "@bob/tsconfig/base.json",
+  "compilerOptions": {
+    "outDir": "dist-electron",
+    "rootDir": "src",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "node_modules",
+    "dist-electron",
+    "**/*.test.ts"
+  ]
+}

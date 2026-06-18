@@ -1,0 +1,24 @@
+{
+  "name": "@bob/tenancy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "clean": "git clean -xdf .cache .turbo dist node_modules"
+  },
+  "dependencies": {
+    "@bob/auth": "workspace:*",
+    "@bob/projects": "workspace:*",
+    "drizzle-orm": "^0.44.7"
+  },
+  "devDependencies": {
+    "@bob/tsconfig": "workspace:*",
+    "typescript": "catalog:"
+  }
+}

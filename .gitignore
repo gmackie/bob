@@ -1,93 +1,21 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
-node_modules
-.pnp
-.pnp.js
-
-# testing
-coverage
-apps/nextjs/playwright-report
-apps/nextjs/test-results
-playwright-report
-test-results
-
-# next.js
-.next/
-out/
-next-env.d.ts
-
-# nitro
-.nitro/
-.output/
-
-# expo
-.expo/
-expo-env.d.ts
-apps/expo/.gitignore
-apps/expo/ios
-apps/expo/android
-
-# production
-build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# local env files
-.env
-.env*.local
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# vercel
-.vercel
-
-# typescript
+node_modules/
 dist/
-.cache
+.next/
+.turbo/
+.cache/
+*.tsbuildinfo
+.env
+.env.local
 
-# turbo
-.turbo
+# Generated OpenAPI specs
+dist/openapi/
 
-# tanstack
-.tanstack
-
-# Database files (legacy)
-*.db
-*.sqlite
-*.sqlite3
-
-# Electron
-dist-electron/
-
-# IDE
-.vscode/
-.idea/
-
-# Logs
-*.log
-
-# Claude Code
-.claude/settings.local.json
-session-ses_*.md
-.creds
-
-# Deploy staging
-.deploy/
-
-# Superpowers / agents metadata
-.agents/
-.claude/skills/
-skills/
-skills-lock.json
+# Python
+__pycache__/
+*.egg-info/
+.pytest_cache/
+packages/research-backend/.venv/
+.ruff_cache/
 .gstack/
+.wrangler/
+.deploy/

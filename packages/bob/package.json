@@ -1,36 +1,24 @@
 {
-  "name": "bob",
-  "version": "0.1.0",
-  "description": "Create a new Bob app with Next.js, Expo, tRPC, and more",
+  "name": "@gmacko/bob",
+  "private": true,
+  "version": "0.0.0",
   "type": "module",
-  "bin": {
-    "bob": "./dist/index.js"
+  "exports": {
+    ".": "./src/index.ts",
+    "./contracts": "./src/contracts/index.ts"
   },
-  "files": [
-    "dist",
-    "template"
-  ],
   "scripts": {
-    "build": "tsup",
-    "dev": "tsup --watch",
-    "clean": "git clean -xdf .cache .turbo dist node_modules",
+    "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@clack/prompts": "^0.9.1",
-    "commander": "^13.1.0",
-    "fs-extra": "^11.3.0",
-    "picocolors": "^1.1.1",
-    "validate-npm-package-name": "^6.0.0"
+    "effect": "4.0.0-beta.43"
   },
   "devDependencies": {
-    "@types/fs-extra": "^11.0.4",
-    "@types/node": "catalog:",
-    "@types/validate-npm-package-name": "^4.0.2",
-    "tsup": "^8.5.0",
-    "typescript": "catalog:"
-  },
-  "publishConfig": {
-    "access": "public"
+    "@gmacko/tsconfig": "workspace:*",
+    "@effect/vitest": "4.0.0-beta.43",
+    "@types/node": "25.6.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.0.0"
   }
 }

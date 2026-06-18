@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { Button } from "@bob/ui/button";
+import { Button } from "@gmacko/core/ui/button";
 
 export function LoginForm() {
   const [loading, setLoading] = useState(false);
@@ -16,7 +16,7 @@ export function LoginForm() {
       const res = await fetch("/api/auth/sign-in/social", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: "github", callbackURL: "/settings" }),
+        body: JSON.stringify({ provider: "github", callbackURL: "/" }),
       });
 
       if (!res.ok) {
@@ -39,11 +39,11 @@ export function LoginForm() {
   return (
     <div className="relative w-full overflow-hidden rounded-[26px] border border-border bg-secondary p-7 shadow-[0_18px_60px_rgba(0,0,0,.55)] backdrop-blur-md">
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-200/70 to-transparent" />
-      <h2 className="font-display text-3xl font-semibold tracking-tight text-foreground">
+      <h2 className="text-3xl font-semibold tracking-tight text-foreground">
         Sign in
       </h2>
       <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-        Sign in with GitHub to access blder.bot.
+        Sign in with GitHub to access the blder.bot platform.
       </p>
 
       <div className="mt-6">

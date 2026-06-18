@@ -1,63 +1,41 @@
 {
-  "name": "bob",
-  "version": "0.0.4",
+  "name": "gmacko",
   "private": true,
-  "description": "Bob Builder monorepo for planning, task execution, web, mobile, and execution services",
-  "author": "Bob Team <sean@reedster.llc>",
-  "license": "GPL-3.0",
-  "homepage": "https://github.com/your-org/bob",
-  "engines": {
-    "node": ">=22.0.0",
-    "pnpm": "^10.19.0"
-  },
-  "packageManager": "pnpm@10.19.0",
+  "packageManager": "pnpm@10.12.1",
+  "engines": { "node": ">=24.0.0" },
   "scripts": {
     "build": "turbo run build",
-    "clean": "git clean -xdf node_modules",
-    "clean:workspaces": "turbo run clean",
-    "auth:generate": "pnpm -F @bob/auth generate",
-    "db:push": "turbo -F @bob/db push",
-    "db:studio": "turbo -F @bob/db studio",
     "dev": "turbo watch dev --continue",
-    "dev:web": "turbo watch dev -F @bob/blder...",
-    "dev:mobile": "turbo watch dev -F @bob/mobile...",
-    "format": "turbo run format --continue -- --cache --cache-location .cache/.prettiercache",
-    "format:fix": "turbo run format --continue -- --write --cache --cache-location .cache/.prettiercache",
-    "lint": "turbo run lint --continue -- --cache --cache-location .cache/.eslintcache",
-    "lint:fix": "turbo run lint --continue -- --fix --cache --cache-location .cache/.eslintcache",
-    "lint:ws": "pnpm dlx sherif@latest",
+    "dev:web": "turbo watch dev --filter=@gmacko/core-web",
+    "dev:mobile": "turbo watch dev --filter=@gmacko/core-mobile",
+    "test": "turbo run test",
+    "lint": "turbo run lint --continue",
     "typecheck": "turbo run typecheck",
-    "ui-add": "turbo run ui-add",
-    "android": "expo run:android",
-    "ios": "expo run:ios",
-    "dev:mobile:local": "./scripts/dev-mobile.sh",
-    "generate:work-item-rest": "pnpm exec tsx scripts/generate-work-item-rest-routes.ts"
-  },
-  "devDependencies": {
-    "@bob/prettier-config": "workspace:*",
-    "@turbo/gen": "^2.5.8",
-    "concurrently": "^8.2.2",
-    "dotenv-cli": "^10.0.0",
-    "prettier": "catalog:",
-    "turbo": "^2.5.8",
-    "typescript": "catalog:"
+    "dev:all": "bash scripts/dev.sh",
+    "dev:ooda": "turbo watch dev --filter=@gmacko/ooda-web",
+    "dev:ooda-runner": "turbo watch dev --filter=@gmacko/ooda-runner",
+    "dev:research": "cd packages/research-backend && uv run uvicorn research_backend.main:app --reload --port 8000",
+    "generate:openapi": "tsx scripts/generate-openapi.ts"
   },
   "pnpm": {
     "overrides": {
+      "@electric-sql/pglite": "0.3.16",
       "@types/pg": "8.16.0",
       "node-gyp": "^10.0.0",
       "react": "19.2.5",
       "react-dom": "19.2.5"
     },
     "onlyBuiltDependencies": [
+      "@swc/core",
+      "@tailwindcss/oxide",
       "electron",
+      "esbuild",
       "node-pty",
-      "@swc/core"
+      "sqlite3"
     ]
   },
-  "prettier": "@bob/prettier-config",
-  "dependencies": {
-    "@types/dagre": "^0.7.54",
-    "dagre": "^0.8.5"
+  "devDependencies": {
+    "turbo": "^2.8.0",
+    "typescript": "^5.9.0"
   }
 }

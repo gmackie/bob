@@ -1,0 +1,10 @@
+appId: io.gmac.gmacko
+productName: Gmacko
+mac:
+  category: public.app-category.productivity
+  target:
+    - dmg
+    - zip
+  darkModeSupport: true
+directories:
+  output: release

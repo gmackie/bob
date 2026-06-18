@@ -1,0 +1,32 @@
+{
+  "name": "blder-bot",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2025-12-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "routes": [{ "pattern": "bob.blder.bot", "custom_domain": true }],
+  "assets": {
+    "directory": "dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "none"
+  },
+  "images": {
+    "binding": "IMAGES"
+  },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "c1f467f772dc4ce99d99e572df74c121"
+    }
+  ],
+  "vars": {
+    "FG_APP": "bob",
+    "REQUIRE_AUTH": "true",
+    "BOB_AUTH_BYPASS": "true",
+    "BOB_AUTH_BYPASS_USER_ID": "default-user",
+    "FRONTEND_URL": "https://bob.blder.bot",
+    "GATEWAY_PUBLIC_URL": "https://ws.blder.bot",
+    "GATEWAY_URL": "https://ws.blder.bot",
+    "NODE_ENV": "production"
+  }
+}

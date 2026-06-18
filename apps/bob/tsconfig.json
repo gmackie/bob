@@ -1,0 +1,16 @@
+{
+  "extends": "@bob/tsconfig/base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "dom", "dom.iterable"],
+    "jsx": "preserve",
+    "paths": {
+      "~/*": ["./src/*"],
+      "@bob/api": ["../../packages/bob/src/api/src/index.ts"],
+      "@bob/api/*": ["../../packages/bob/src/api/src/*"],
+      "@bob/db": ["../../packages/bob/src/db/src/index.ts"],
+      "@bob/db/*": ["../../packages/bob/src/db/src/*"]
+    }
+  },
+  "include": ["."],
+  "exclude": ["node_modules", ".vinext", "dist"]
+}

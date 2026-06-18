@@ -1,4 +1,11 @@
-:root {
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant light (&:where(.light, .light *));
+@custom-variant auto (&:where(.auto, .auto *));
+
+/* === BOB THEME — Light === */
+[data-theme="bob"] {
   --background: oklch(0.9846 0.0031 108.25);
   --foreground: oklch(0.2221 0.0068 95.43);
   --card: oklch(1 0 0);
@@ -47,55 +54,112 @@
   --shadow-2xl: 0px 2px 10px 0px hsl(0 0% 0% / 0.13);
   --tracking-normal: 0rem;
   --spacing: 0.25rem;
+}
 
-  @variant dark {
-    --background: oklch(0.1867 0.0071 95.49);
-    --foreground: oklch(0.9460 0.0047 95.19);
-    --card: oklch(0.2221 0.0068 95.43);
-    --card-foreground: oklch(0.9460 0.0047 95.19);
-    --popover: oklch(0.2221 0.0068 95.43);
-    --popover-foreground: oklch(0.9460 0.0047 95.19);
-    --primary: oklch(0.7649 0.1579 79.35);
-    --primary-foreground: oklch(0.1867 0.0071 95.49);
-    --secondary: oklch(0.2523 0.0045 89.07);
-    --secondary-foreground: oklch(0.7224 0.0120 91.69);
-    --muted: oklch(0.2523 0.0045 89.07);
-    --muted-foreground: oklch(0.5283 0.0130 91.75);
-    --accent: oklch(0.2523 0.0045 89.07);
-    --accent-foreground: oklch(0.7649 0.1579 79.35);
-    --destructive: oklch(0.6539 0.1925 25.30);
-    --destructive-foreground: oklch(1 0 0);
-    --border: oklch(0.2971 0.0063 95.34);
-    --input: oklch(0.2523 0.0045 89.07);
-    --ring: oklch(0.7649 0.1579 79.35);
-    --chart-1: oklch(0.7649 0.1579 79.35);
-    --chart-2: oklch(0.6838 0.1639 74.52);
-    --chart-3: oklch(0.6137 0.1471 73.90);
-    --chart-4: oklch(0.5438 0.1300 73.00);
-    --chart-5: oklch(0.4738 0.1130 72.00);
-    --sidebar: oklch(0.2221 0.0068 95.43);
-    --sidebar-foreground: oklch(0.7224 0.0120 91.69);
-    --sidebar-primary: oklch(0.7649 0.1579 79.35);
-    --sidebar-primary-foreground: oklch(0.1867 0.0071 95.49);
-    --sidebar-accent: oklch(0.2523 0.0045 89.07);
-    --sidebar-accent-foreground: oklch(0.7649 0.1579 79.35);
-    --sidebar-border: oklch(0.2971 0.0063 95.34);
-    --sidebar-ring: oklch(0.7649 0.1579 79.35);
-    --radius: 0.75rem;
-    --shadow-2xs: 0px 2px 10px 0px hsl(0 0% 0% / 0.1);
-    --shadow-xs: 0px 2px 10px 0px hsl(0 0% 0% / 0.1);
-    --shadow-sm:
-      0px 2px 10px 0px hsl(0 0% 0% / 0.2), 0px 1px 2px -1px hsl(0 0% 0% / 0.2);
-    --shadow:
-      0px 2px 10px 0px hsl(0 0% 0% / 0.2), 0px 1px 2px -1px hsl(0 0% 0% / 0.2);
-    --shadow-md:
-      0px 2px 10px 0px hsl(0 0% 0% / 0.2), 0px 2px 4px -1px hsl(0 0% 0% / 0.2);
-    --shadow-lg:
-      0px 2px 10px 0px hsl(0 0% 0% / 0.2), 0px 4px 6px -1px hsl(0 0% 0% / 0.2);
-    --shadow-xl:
-      0px 2px 10px 0px hsl(0 0% 0% / 0.2), 0px 8px 10px -1px hsl(0 0% 0% / 0.2);
-    --shadow-2xl: 0px 2px 10px 0px hsl(0 0% 0% / 0.5);
-  }
+/* === BOB THEME — Dark === */
+[data-theme="bob"].dark {
+  --background: oklch(0.1867 0.0071 95.49);
+  --foreground: oklch(0.9460 0.0047 95.19);
+  --card: oklch(0.2221 0.0068 95.43);
+  --card-foreground: oklch(0.9460 0.0047 95.19);
+  --popover: oklch(0.2221 0.0068 95.43);
+  --popover-foreground: oklch(0.9460 0.0047 95.19);
+  --primary: oklch(0.7649 0.1579 79.35);
+  --primary-foreground: oklch(0.1867 0.0071 95.49);
+  --secondary: oklch(0.2523 0.0045 89.07);
+  --secondary-foreground: oklch(0.7224 0.0120 91.69);
+  --muted: oklch(0.2523 0.0045 89.07);
+  --muted-foreground: oklch(0.5283 0.0130 91.75);
+  --accent: oklch(0.2523 0.0045 89.07);
+  --accent-foreground: oklch(0.7649 0.1579 79.35);
+  --destructive: oklch(0.6539 0.1925 25.30);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.2971 0.0063 95.34);
+  --input: oklch(0.2523 0.0045 89.07);
+  --ring: oklch(0.7649 0.1579 79.35);
+  --chart-1: oklch(0.7649 0.1579 79.35);
+  --chart-2: oklch(0.6838 0.1639 74.52);
+  --chart-3: oklch(0.6137 0.1471 73.90);
+  --chart-4: oklch(0.5438 0.1300 73.00);
+  --chart-5: oklch(0.4738 0.1130 72.00);
+  --sidebar: oklch(0.2221 0.0068 95.43);
+  --sidebar-foreground: oklch(0.7224 0.0120 91.69);
+  --sidebar-primary: oklch(0.7649 0.1579 79.35);
+  --sidebar-primary-foreground: oklch(0.1867 0.0071 95.49);
+  --sidebar-accent: oklch(0.2523 0.0045 89.07);
+  --sidebar-accent-foreground: oklch(0.7649 0.1579 79.35);
+  --sidebar-border: oklch(0.2971 0.0063 95.34);
+  --sidebar-ring: oklch(0.7649 0.1579 79.35);
+  --radius: 0.75rem;
+  --shadow-2xs: 0px 2px 10px 0px hsl(0 0% 0% / 0.1);
+  --shadow-xs: 0px 2px 10px 0px hsl(0 0% 0% / 0.1);
+  --shadow-sm:
+    0px 2px 10px 0px hsl(0 0% 0% / 0.2), 0px 1px 2px -1px hsl(0 0% 0% / 0.2);
+  --shadow:
+    0px 2px 10px 0px hsl(0 0% 0% / 0.2), 0px 1px 2px -1px hsl(0 0% 0% / 0.2);
+  --shadow-md:
+    0px 2px 10px 0px hsl(0 0% 0% / 0.2), 0px 2px 4px -1px hsl(0 0% 0% / 0.2);
+  --shadow-lg:
+    0px 2px 10px 0px hsl(0 0% 0% / 0.2), 0px 4px 6px -1px hsl(0 0% 0% / 0.2);
+  --shadow-xl:
+    0px 2px 10px 0px hsl(0 0% 0% / 0.2), 0px 8px 10px -1px hsl(0 0% 0% / 0.2);
+  --shadow-2xl: 0px 2px 10px 0px hsl(0 0% 0% / 0.5);
+  --tracking-normal: 0rem;
+  --spacing: 0.25rem;
+}
+
+/* === OODA THEME ===
+   Dark+gold for both modes — OODA designs a proper light variant later. */
+[data-theme="ooda"],
+[data-theme="ooda"].dark {
+  --background: #111113;
+  --foreground: #e8e4df;
+  --primary: #d4a04a;
+  --primary-foreground: #111113;
+  --secondary: #222228;
+  --secondary-foreground: #a09c97;
+  --muted: #222228;
+  --muted-foreground: #6b6863;
+  --accent: #222228;
+  --accent-foreground: #d4a04a;
+  --destructive: #f87171;
+  --destructive-foreground: #fff;
+  --border: #2a2a2f;
+  --input: #222228;
+  --ring: #d4a04a;
+  --card: #1a1a1f;
+  --card-foreground: #e8e4df;
+  --popover: #1a1a1f;
+  --popover-foreground: #e8e4df;
+  --chart-1: #d4a04a;
+  --chart-2: #e0b060;
+  --chart-3: #a09c97;
+  --chart-4: #6b6863;
+  --chart-5: #4a4845;
+  --sidebar: #1a1a1f;
+  --sidebar-foreground: #a09c97;
+  --sidebar-primary: #d4a04a;
+  --sidebar-primary-foreground: #111113;
+  --sidebar-accent: #222228;
+  --sidebar-accent-foreground: #d4a04a;
+  --sidebar-border: #2a2a2f;
+  --sidebar-ring: #d4a04a;
+  --radius: 0.75rem;
+  --shadow-2xs: 0px 2px 10px 0px hsl(0 0% 0% / 0.1);
+  --shadow-xs: 0px 2px 10px 0px hsl(0 0% 0% / 0.1);
+  --shadow-sm:
+    0px 2px 10px 0px hsl(0 0% 0% / 0.2), 0px 1px 2px -1px hsl(0 0% 0% / 0.2);
+  --shadow:
+    0px 2px 10px 0px hsl(0 0% 0% / 0.2), 0px 1px 2px -1px hsl(0 0% 0% / 0.2);
+  --shadow-md:
+    0px 2px 10px 0px hsl(0 0% 0% / 0.2), 0px 2px 4px -1px hsl(0 0% 0% / 0.2);
+  --shadow-lg:
+    0px 2px 10px 0px hsl(0 0% 0% / 0.2), 0px 4px 6px -1px hsl(0 0% 0% / 0.2);
+  --shadow-xl:
+    0px 2px 10px 0px hsl(0 0% 0% / 0.2), 0px 8px 10px -1px hsl(0 0% 0% / 0.2);
+  --shadow-2xl: 0px 2px 10px 0px hsl(0 0% 0% / 0.5);
+  --tracking-normal: 0rem;
+  --spacing: 0.25rem;
 }
 
 @theme inline {
@@ -156,4 +220,23 @@
   --tracking-wide: calc(var(--tracking-normal) + 0.025em);
   --tracking-wider: calc(var(--tracking-normal) + 0.05em);
   --tracking-widest: calc(var(--tracking-normal) + 0.1em);
+}
+
+@theme {
+  --spacing-px: 1px;
+
+  /* Spacing scale (per Bob DESIGN.md, base 4px) */
+  --space-2xs: 2px;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  --space-3xl: 64px;
+
+  /* Fonts */
+  --font-display: "Satoshi", "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }

@@ -1,0 +1,42 @@
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
+@import "tailwindcss/utilities.css";
+
+@import "nativewind/theme";
+
+/* NativeWind v5 text color fix — same workaround as Bob */
+@utility text-foreground { color: #e8e4df; }
+@utility text-muted { color: #6b6863; }
+@utility text-muted2 { color: #a09c97; }
+@utility text-white { color: #ffffff; }
+@utility text-primary-foreground { color: #111113; }
+@utility text-accent { color: #d4a04a; }
+@utility text-success { color: #4ade80; }
+@utility text-warning { color: #fbbf24; }
+@utility text-error { color: #f87171; }
+@utility text-info { color: #60a5fa; }
+
+@theme {
+  --color-background: #111113;
+  --color-foreground: #e8e4df;
+  --color-card: #1a1a1f;
+  --color-card-elevated: #222228;
+  --color-card-foreground: #e8e4df;
+  --color-primary: #d4a04a;
+  --color-primary-foreground: #111113;
+  --color-secondary: #222228;
+  --color-secondary-foreground: #e8e4df;
+  --color-muted: #6b6863;
+  --color-muted2: #a09c97;
+  --color-accent: #d4a04a;
+  --color-accent-foreground: #111113;
+  --color-border: #2a2a2f;
+  --color-input: #1a1a1f;
+  --color-ring: #d4a04a;
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-error: #f87171;
+  --color-info: #60a5fa;
+}
+
+* { color: #e8e4df; }

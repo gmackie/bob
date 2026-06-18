@@ -1,0 +1,609 @@
+"use client";
+
+import { use, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
+import {
+  ArrowLeftIcon,
+  CheckCircledIcon,
+  CrossCircledIcon,
+  ClockIcon,
+} from "@radix-ui/react-icons";
+
+import { cn } from "@gmacko/core/ui";
+import { Badge } from "@gmacko/core/ui/badge";
+import { Card } from "@gmacko/core/ui/card";
+
+import { Breadcrumbs } from "~/components/layout/breadcrumbs";
+import { buildT3codeInteractionReport } from "~/lib/t3code/reporting";
+import { useTRPC } from "~/trpc/react";
+
+// ── Constants ─────────────────────────────────────────────────────────
+
+const STATUS_COLORS: Record<string, string> = {
+  queued: "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-300",
+  running: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+  completed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+  failed: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+  interrupted: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
+};
+
+const STATUS_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  completed: CheckCircledIcon,
+  failed: CrossCircledIcon,
+  running: ClockIcon,
+  queued: ClockIcon,
+};
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${(ms / 60000).toFixed(1)}m`;
+}
+
+function getSummary(run: any, key: string): unknown {
+  return run?.summary?.[key] ?? null;
+}
+
+// ── Tab types ─────────────────────────────────────────────────────────
+
+type Tab = "summary" | "t3code" | "chat" | "files" | "diff" | "artifacts";
+
+const TABS: { key: Tab; label: string }[] = [
+  { key: "summary", label: "Summary" },
+  { key: "t3code", label: "t3code" },
+  { key: "chat", label: "Chat" },
+  { key: "files", label: "Files" },
+  { key: "diff", label: "Diff" },
+  { key: "artifacts", label: "Artifacts" },
+];
+
+// ── Page ──────────────────────────────────────────────────────────────
+
+export default function RunDetailPage({
+  params,
+}: {
+  params: Promise<{ runId: string }>;
+}) {
+  const { runId } = use(params);
+  const trpc = useTRPC();
+  const [activeTab, setActiveTab] = useState<Tab>("summary");
+
+  const { data: runData, isLoading } = useQuery(
+    trpc.agentRun.get.queryOptions(
+      { runId },
+      {
+        refetchInterval: (query) =>
+          (query.state.data as any)?.status === "running" ? 3000 : false,
+      },
+    ),
+  );
+  const run = runData as any;
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-6 p-6">
+        <div className="bg-muted/50 h-8 w-48 animate-pulse rounded" />
+        <div className="bg-muted/50 h-40 animate-pulse rounded-lg" />
+      </div>
+    );
+  }
+
+  if (!run) {
+    return (
+      <div className="p-6">
+        <p className="text-muted-foreground">Run not found.</p>
+      </div>
+    );
+  }
+
+  const StatusIcon = STATUS_ICONS[run.status] ?? ClockIcon;
+  const duration = getSummary(run, "duration_ms") as number | null;
+  const filesChanged = (getSummary(run, "files_changed") as number) ?? 0;
+  const exitCode = getSummary(run, "exit_code") as number | null;
+  const runTitle = (run as any).session?.title ?? run.workItemId ?? "Untitled";
+
+  return (
+    <div className="flex flex-col gap-6 p-6">
+      <Breadcrumbs
+        items={[
+          { label: "Runs", href: "/runs" },
+          { label: runTitle },
+        ]}
+      />
+
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="flex items-center gap-3">
+            <StatusIcon
+              className={cn(
+                "size-5",
+                run.status === "completed" && "text-green-600",
+                run.status === "failed" && "text-red-600",
+                run.status === "running" && "text-amber-600",
+              )}
+            />
+            <h1 className="font-display text-2xl font-bold tracking-tight">
+              {run.workItemId ? (
+                <Link href={`/work-items/${run.workItemId}`} className="hover:text-primary">
+                  {runTitle}
+                </Link>
+              ) : (
+                runTitle
+              )}
+            </h1>
+            <Badge className={cn("text-xs font-medium", STATUS_COLORS[run.status])}>
+              {run.status}
+            </Badge>
+          </div>
+          <p className="text-muted-foreground mt-1 text-sm">
+            via <span className="font-medium">{run.agentType}</span>
+            {duration && <> in {formatDuration(duration)}</>}
+          </p>
+        </div>
+        <Link
+          href="/runs"
+          className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm"
+        >
+          <ArrowLeftIcon className="size-3.5" /> All runs
+        </Link>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-border">
+        {TABS.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={cn(
+              "px-4 py-2 text-sm font-medium transition-colors -mb-px border-b-2",
+              activeTab === tab.key
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      {activeTab === "summary" && <SummaryTab run={run} duration={duration} filesChanged={filesChanged} exitCode={exitCode} />}
+      {activeTab === "t3code" && <T3codeTab run={run} />}
+      {activeTab === "chat" && <ChatTab run={run} />}
+      {activeTab === "files" && <FilesTab run={run} />}
+      {activeTab === "diff" && <DiffTab run={run} />}
+      {activeTab === "artifacts" && <ArtifactsTab run={run} />}
+    </div>
+  );
+}
+
+function T3codeTab({ run }: { run: any }) {
+  const trpc = useTRPC();
+  const sessionId = typeof run.sessionId === "string" ? run.sessionId : "";
+  const hasSession = Boolean(sessionId);
+
+  const { data: workflowState } = useQuery({
+    ...trpc.session.getWorkflowState.queryOptions({ sessionId }),
+    enabled: hasSession,
+    refetchInterval: run.status === "running" ? 3000 : false,
+  });
+
+  const { data: eventResult } = useQuery({
+    ...trpc.session.getEvents.queryOptions({ sessionId, limit: 100 }),
+    enabled: hasSession,
+    refetchInterval: run.status === "running" ? 3000 : false,
+  });
+
+  const report = buildT3codeInteractionReport({
+    sessionId: sessionId || null,
+    taskRunId: run.id ?? null,
+    workflowState: workflowState
+      ? {
+          workflowStatus: workflowState.workflowStatus,
+          statusMessage: workflowState.statusMessage ?? null,
+        }
+      : null,
+    events: eventResult?.events ?? [],
+  });
+
+  if (!hasSession) {
+    return (
+      <Card className="p-8 text-center">
+        <p className="text-muted-foreground text-sm">
+          This run does not have a linked Bob session yet.
+        </p>
+      </Card>
+    );
+  }
+
+  if (!report) {
+    return (
+      <Card className="p-8 text-center">
+        <p className="text-muted-foreground text-sm">
+          No t3code server events have been mirrored into this Bob session yet.
+        </p>
+      </Card>
+    );
+  }
+
+  return <T3codeReportPanel report={report} />;
+}
+
+function T3codeReportPanel({ report }: { report: ReturnType<typeof buildT3codeInteractionReport> }) {
+  if (!report) return null;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card className="p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-muted-foreground text-xs font-medium uppercase tracking-wider">
+              Backend
+            </p>
+            <h3 className="mt-1 text-lg font-semibold">{report.backendLabel}</h3>
+            {report.message ? (
+              <p className="text-muted-foreground mt-2 text-sm">{report.message}</p>
+            ) : null}
+          </div>
+          <Badge variant="slate" className="capitalize">
+            {report.status.replace(/_/g, " ")}
+          </Badge>
+        </div>
+
+        <div className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
+          <T3codeKeyValue label="Thread" value={report.threadId} />
+          <T3codeKeyValue label="Task run" value={report.taskRunId} />
+          <T3codeKeyValue label="Session" value={report.sessionId} />
+          <T3codeKeyValue label="Linear domain" value={report.linear?.webBaseUrl ?? null} />
+        </div>
+
+        {report.linear?.url ? (
+          <a
+            href={report.linear.url}
+            target="_blank"
+            rel="noreferrer"
+            className="text-primary mt-5 inline-flex text-sm font-medium hover:underline"
+          >
+            {report.linear.identifier ?? "Open Linear issue"}
+            {report.linear.title ? ` · ${report.linear.title}` : ""}
+          </a>
+        ) : null}
+      </Card>
+
+      <Card className="p-5">
+        <h3 className="text-muted-foreground mb-3 text-xs font-medium uppercase tracking-wider">
+          Mirrored runtime events
+        </h3>
+        <div className="space-y-3">
+          {report.events.map((event) => (
+            <div key={event.id} className="rounded-lg border border-border bg-muted/30 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground font-mono text-xs">#{event.seq}</span>
+                  <Badge variant="slate" className="text-[10px] capitalize">
+                    {event.status.replace(/_/g, " ")}
+                  </Badge>
+                </div>
+                {event.createdAt ? (
+                  <span className="text-muted-foreground text-xs">
+                    {new Date(event.createdAt).toLocaleString()}
+                  </span>
+                ) : null}
+              </div>
+              {event.message ? (
+                <p className="text-muted-foreground mt-2 text-sm">{event.message}</p>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function T3codeKeyValue({ label, value }: { label: string; value: string | null }) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 p-3">
+      <p className="text-muted-foreground text-[10px] font-medium uppercase tracking-wider">
+        {label}
+      </p>
+      <p className="mt-1 break-all font-mono text-xs">{value ?? "—"}</p>
+    </div>
+  );
+}
+
+// ── Summary Tab ───────────────────────────────────────────────────────
+
+function SummaryTab({ run, duration, filesChanged, exitCode }: {
+  run: any; duration: number | null; filesChanged: number; exitCode: number | null;
+}) {
+  const computedDuration = duration ?? (
+    run.startedAt && run.completedAt
+      ? new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime()
+      : null
+  );
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <Card className="p-4">
+          <p className="text-muted-foreground text-xs font-medium uppercase tracking-wider">Status</p>
+          <p className="mt-1 text-lg font-semibold capitalize">{run.status}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-muted-foreground text-xs font-medium uppercase tracking-wider">Duration</p>
+          <p className="mt-1 text-lg font-semibold">{computedDuration ? formatDuration(computedDuration) : "—"}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-muted-foreground text-xs font-medium uppercase tracking-wider">Files Changed</p>
+          <p className="mt-1 text-lg font-semibold">{filesChanged}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-muted-foreground text-xs font-medium uppercase tracking-wider">Exit Code</p>
+          <p className={cn("mt-1 text-lg font-semibold", exitCode !== 0 && exitCode != null && "text-red-600")}>
+            {exitCode ?? "—"}
+          </p>
+        </Card>
+      </div>
+
+      {run.summary?.reason && (
+        <Card className="border-amber-500/30 bg-amber-500/5 p-4">
+          <p className="text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">
+            Failure Reason
+          </p>
+          <p className="mt-1 text-sm text-foreground">{run.summary.reason}</p>
+        </Card>
+      )}
+
+      <Card className="p-4">
+        <h3 className="text-muted-foreground mb-3 text-xs font-medium uppercase tracking-wider">Run Details</h3>
+        <div className="grid grid-cols-2 gap-y-2 text-sm">
+          <div><span className="text-muted-foreground">Run ID:</span> <span className="font-mono text-xs">{run.id}</span></div>
+          <div><span className="text-muted-foreground">Agent:</span> {run.agentType}</div>
+          <div><span className="text-muted-foreground">Started:</span> {run.startedAt ? new Date(run.startedAt).toLocaleString() : "—"}</div>
+          <div><span className="text-muted-foreground">Completed:</span> {run.completedAt ? new Date(run.completedAt).toLocaleString() : "—"}</div>
+          <div>
+            <span className="text-muted-foreground">Work Item:</span>{" "}
+            {run.workItemId ? (
+              <Link href={`/work-items/${run.workItemId}`} className="text-primary hover:underline">{run.workItemId}</Link>
+            ) : "—"}
+          </div>
+          {run.sessionId && (
+            <div>
+              <span className="text-muted-foreground">Session:</span>{" "}
+              <span className="font-mono text-xs">{run.sessionId.slice(0, 8)}</span>
+            </div>
+          )}
+          <div><span className="text-muted-foreground">Workspace:</span> <span className="font-mono text-xs">{run.workspaceId}</span></div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ── Chat Tab ──────────────────────────────────────────────────────────
+
+function ChatTab({ run }: { run: any }) {
+  const trpc = useTRPC();
+  const sessionId = typeof run.sessionId === "string" ? run.sessionId : "";
+  const hasSession = Boolean(sessionId);
+
+  const { data: eventResult } = useQuery({
+    ...trpc.session.getEvents.queryOptions(
+      { sessionId, limit: 200 },
+    ),
+    enabled: hasSession,
+  });
+
+  const logArtifact = run.artifacts?.find((a: any) => a.type === "log");
+  const events = eventResult?.events ?? [];
+  const outputEvents = events.filter(
+    (e: any) => e.eventType === "output_chunk" || e.eventType === "assistant",
+  );
+
+  if (!hasSession && !logArtifact) {
+    return (
+      <Card className="p-8 text-center">
+        <p className="text-muted-foreground text-sm">
+          No agent output captured for this run.
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {outputEvents.length > 0 && (
+        <Card className="p-4">
+          <h3 className="mb-3 text-sm font-medium">Session Output</h3>
+          <div className="max-h-[600px] overflow-y-auto space-y-2">
+            {outputEvents.map((evt: any) => {
+              const text = typeof evt.payload === "string"
+                ? evt.payload
+                : evt.payload?.text ?? evt.payload?.content ?? JSON.stringify(evt.payload);
+              return (
+                <div key={evt.id} className="rounded bg-muted/50 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap">
+                  {text}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {outputEvents.length === 0 && hasSession && (
+        <Card className="p-4">
+          <h3 className="mb-3 text-sm font-medium">Session Events</h3>
+          {events.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No events recorded for this session.</p>
+          ) : (
+            <div className="max-h-[600px] overflow-y-auto space-y-1">
+              {events.map((evt: any) => (
+                <div key={evt.id} className="flex items-center gap-3 py-1.5 text-xs">
+                  <span className="text-muted-foreground shrink-0 font-mono w-16">
+                    #{evt.seq}
+                  </span>
+                  <Badge variant="slate" className="text-[9px] shrink-0">
+                    {evt.eventType}
+                  </Badge>
+                  <span className="text-muted-foreground truncate">
+                    {typeof evt.payload === "string"
+                      ? evt.payload.slice(0, 120)
+                      : JSON.stringify(evt.payload).slice(0, 120)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {logArtifact && (
+        <Card className="p-4">
+          <h3 className="mb-3 text-sm font-medium">Log Artifact</h3>
+          <pre className="overflow-x-auto rounded bg-muted p-4 font-mono text-xs leading-relaxed max-h-[600px] overflow-y-auto">
+            {logArtifact.metadata?.content || `${logArtifact.metadata?.lines ?? 0} lines captured`}
+          </pre>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ── Files Tab ─────────────────────────────────────────────────────────
+
+function FilesTab({ run }: { run: any }) {
+  const diffArtifact = run.artifacts?.find((a: any) => a.type === "diff");
+
+  if (!diffArtifact?.metadata?.files) {
+    return (
+      <Card className="p-8 text-center">
+        <p className="text-muted-foreground text-sm">
+          No file change data for this run.
+        </p>
+      </Card>
+    );
+  }
+
+  const fileList = diffArtifact.metadata.files as Array<{ path: string; status: string; additions: number; deletions: number }>;
+  return <FileList files={fileList} />;
+}
+
+function FileList({ files }: { files: Array<{ path: string; status: string; additions: number; deletions: number }> }) {
+  const totalAdditions = files.reduce((s, f) => s + f.additions, 0);
+  const totalDeletions = files.reduce((s, f) => s + f.deletions, 0);
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center gap-3 text-sm text-muted-foreground">
+        <span>{files.length} files</span>
+        <span className="text-green-600">+{totalAdditions}</span>
+        <span className="text-red-600">-{totalDeletions}</span>
+      </div>
+      <div className="rounded-lg border border-border divide-y divide-border">
+        {files.map((file) => (
+          <div key={file.path} className="flex items-center gap-3 px-4 py-2.5">
+            <span className={cn(
+              "text-[10px] font-semibold uppercase w-16",
+              file.status === "added" && "text-green-600",
+              file.status === "modified" && "text-amber-600",
+              file.status === "deleted" && "text-red-600",
+            )}>
+              {file.status}
+            </span>
+            <span className="font-mono text-sm flex-1 truncate">{file.path}</span>
+            <span className="text-xs text-green-600">+{file.additions}</span>
+            <span className="text-xs text-red-600">-{file.deletions}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Diff Tab ──────────────────────────────────────────────────────────
+
+function DiffTab({ run }: { run: any }) {
+  const diffArtifact = run.artifacts?.find((a: any) => a.type === "diff");
+
+  if (!diffArtifact) {
+    return (
+      <Card className="p-8 text-center">
+        <p className="text-muted-foreground text-sm">
+          No diff data for this run.
+        </p>
+      </Card>
+    );
+  }
+
+  const rawDiff = diffArtifact?.metadata?.patch || `${diffArtifact?.metadata?.files_changed ?? 0} files changed, ${diffArtifact?.metadata?.insertions ?? 0} insertions(+), ${diffArtifact?.metadata?.deletions ?? 0} deletions(-)`;
+
+  return (
+    <div className="rounded-lg border border-border overflow-hidden">
+      <pre className="overflow-x-auto p-4 font-mono text-xs leading-relaxed max-h-[700px] overflow-y-auto bg-[#1C1B18] text-[#EEEDEA]">
+        {(rawDiff ?? "").split("\n").map((line: string, i: number) => (
+          <div
+            key={i}
+            className={cn(
+              "px-2 -mx-2",
+              line.startsWith("+") && !line.startsWith("+++") && "bg-green-900/20 text-green-300",
+              line.startsWith("-") && !line.startsWith("---") && "bg-red-900/20 text-red-300",
+              line.startsWith("@@") && "text-cyan-400",
+              line.startsWith("diff ") && "text-amber-400 font-semibold mt-4 first:mt-0",
+            )}
+          >
+            {line}
+          </div>
+        ))}
+      </pre>
+    </div>
+  );
+}
+
+// ── Artifacts Tab ─────────────────────────────────────────────────────
+
+function ArtifactsTab({ run }: { run: any }) {
+  if (!run.artifacts?.length) {
+    return (
+      <Card className="p-8 text-center">
+        <p className="text-muted-foreground text-sm">No artifacts collected.</p>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {run.artifacts.map((artifact: any) => (
+        <Card key={artifact.id} className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Badge variant="slate" className="text-[10px] capitalize">
+                {artifact.type}
+              </Badge>
+              <span className="font-mono text-xs text-muted-foreground">
+                {artifact.storageKey.split("/").pop()}
+              </span>
+            </div>
+            <span className="text-muted-foreground text-xs">
+              {new Date(artifact.createdAt).toLocaleTimeString()}
+            </span>
+          </div>
+          {artifact.metadata && Object.keys(artifact.metadata).length > 0 && (
+            <div className="mt-3 rounded bg-muted/50 p-3">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {Object.entries(artifact.metadata).map(([key, value]) => (
+                  <div key={key} className="text-xs">
+                    <span className="text-muted-foreground">{key.replace(/_/g, " ")}:</span>{" "}
+                    <span className="font-medium">{typeof value === "string" && value.length > 100 ? value.slice(0, 100) + "..." : String(value)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </Card>
+      ))}
+    </div>
+  );
+}

@@ -4,10 +4,16 @@
  * Uses postgres.js (not node-postgres) because it works natively in Workers.
  * Creates a fresh connection per request (max: 1) because Workers can't reuse
  * TCP sockets across requests. SSL disabled for Hyperdrive (internal connection).
+ *
+ * The platform app only needs auth tables (users, sessions, accounts,
+ * verifications, tenants, tenant_members) — imported from @gmacko/core.
  */
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import * as schema from "@bob/db/schema";
+import * as authSchema from "@gmacko/core/db/schema/auth";
+import * as tenancySchema from "@gmacko/core/db/schema/tenancy";
+
+const schema = { ...authSchema, ...tenancySchema };
 
 function getDatabase() {
   const databaseUrl =
@@ -27,7 +33,7 @@ function getDatabase() {
     max: 1,
     // Hyperdrive's pooled mode does not support session-level prepared statements.
     // Without this, postgres.js's prepared-statement cache causes intermittent
-    // "Failed query" errors on parameterized inserts (e.g. discovered_dirs upsert).
+    // "Failed query" errors on parameterized inserts.
     prepare: !isHyperdrive,
   });
 

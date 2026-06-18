@@ -1,0 +1,104 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@trpc/server", () => ({
+  TRPCError: class TRPCError extends Error {
+    code: string;
+    constructor(input: { code: string; message?: string }) {
+      super(input.message ?? input.code);
+      this.code = input.code;
+    }
+  },
+}));
+
+vi.mock("@bob/db", () => ({
+  and: vi.fn((...args: unknown[]) => args),
+  eq: vi.fn((left: unknown, right: unknown) => ({ left, right })),
+}));
+
+vi.mock("@bob/db/schema", () => ({
+  workspaceIntegrations: {
+    id: "workspaceIntegrations.id",
+    workspaceId: "workspaceIntegrations.workspaceId",
+    provider: "workspaceIntegrations.provider",
+  },
+  workspaceMembers: {
+    id: "workspaceMembers.id",
+    workspaceId: "workspaceMembers.workspaceId",
+    userId: "workspaceMembers.userId",
+  },
+}));
+
+vi.mock("@linear/sdk", () => ({
+  LinearClient: vi.fn(),
+}));
+
+import { integrationGet, integrationList, integrationSave } from "../integration.js";
+
+describe("integration handlers", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function createCtx(input: {
+    existingIntegration?: Record<string, unknown> | null;
+    integrations?: Record<string, unknown>[];
+  }) {
+    const query = {
+      workspaceMembers: {
+        findFirst: vi.fn().mockResolvedValue({ id: "member-1" }),
+      },
+      workspaceIntegrations: {
+        findFirst: vi.fn().mockResolvedValue(input.existingIntegration ?? null),
+        findMany: vi.fn().mockResolvedValue(input.integrations ?? []),
+      },
+    };
+    const db: any = {
+      query,
+      insert: vi.fn().mockReturnThis(),
+      values: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockResolvedValue([{ id: "integration-1" }]),
+      update: vi.fn().mockReturnThis(),
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      delete: vi.fn().mockReturnThis(),
+    };
+    return { db, userId: "user-1", session: { user: { id: "user-1" } } } as any;
+  }
+
+  it("saves linearWebBaseUrl for Linear integrations", async () => {
+    const ctx = createCtx({});
+
+    await integrationSave(ctx, {
+      workspaceId: "workspace-1",
+      provider: "linear",
+      linearWebBaseUrl: "https://tasks.gmac.io",
+    });
+
+    expect(ctx.db.values).toHaveBeenCalledWith(
+      expect.objectContaining({ linearWebBaseUrl: "https://tasks.gmac.io" }),
+    );
+  });
+
+  it("exposes linearWebBaseUrl from get and list responses", async () => {
+    const integration = {
+      id: "integration-1",
+      provider: "linear",
+      enabled: true,
+      apiKey: "lin_key",
+      webhookSigningSecret: null,
+      linearTeamId: "team-1",
+      linearWebBaseUrl: "https://tasks.gmac.io",
+      createdAt: "2026-06-04T00:00:00.000Z",
+    };
+
+    const getCtx = createCtx({ existingIntegration: integration });
+    await expect(
+      integrationGet(getCtx, { workspaceId: "workspace-1", provider: "linear" }),
+    ).resolves.toMatchObject({ linearWebBaseUrl: "https://tasks.gmac.io" });
+
+    const listCtx = createCtx({ integrations: [integration] });
+    await expect(integrationList(listCtx, { workspaceId: "workspace-1" })).resolves.toEqual([
+      expect.objectContaining({ linearWebBaseUrl: "https://tasks.gmac.io" }),
+    ]);
+  });
+});
