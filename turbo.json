@@ -21,12 +21,8 @@
       "persistent": true,
       "cache": false
     },
-    "test": {
-      "dependsOn": ["^build"]
-    },
+    "test": {},
     "lint": {},
-    "typecheck": {
-      "dependsOn": ["^build"]
-    }
+    "typecheck": {}
   }
 }

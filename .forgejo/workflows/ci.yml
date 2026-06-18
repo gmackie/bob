@@ -49,17 +49,30 @@ jobs:
           OWNER="${REPO_FULL%%/*}"
           REPO="${REPO_FULL##*/}"
           BRANCH="${{ github.head_ref || github.ref_name }}"
+          # On pull_request events github.sha is the test-merge commit, not the branch
+          # head. Report the head SHA so it matches the ForgeGraph changeset's git_sha.
+          SHA="${{ github.event.pull_request.head.sha || github.sha }}"
 
-          curl -sf -X POST "https://forgegraf.com/api/fg/ci/report" \
+          if [ -z "${FG_CI_TOKEN}" ]; then
+            echo "::warning::FG_CI_TOKEN is empty — CI result will NOT be reported to ForgeGraph (forge ci status will stay 'unknown')"
+          fi
+
+          # Capture the HTTP status so a failed/unauthenticated report is visible in
+          # the logs instead of being silently swallowed.
+          HTTP=$(curl -s -o /tmp/fg_report.out -w "%{http_code}" -X POST "https://forgegraf.com/api/fg/ci/report" \
             -H "Authorization: Bearer ${FG_CI_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "{
               \"owner\": \"${OWNER}\",
               \"repo\": \"${REPO}\",
-              \"sha\": \"${{ github.sha }}\",
+              \"sha\": \"${SHA}\",
               \"branch\": \"${BRANCH}\",
               \"status\": \"${STATUS}\",
               \"runId\": \"${{ github.run_id }}\",
               \"runUrl\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\",
               \"workflowName\": \"CI\"
-            }" || echo "::warning::Failed to report CI result to ForgeGraph"
+            }")
+          echo "ForgeGraph CI report: HTTP ${HTTP}"
+          if [ "${HTTP}" -lt 200 ] || [ "${HTTP}" -ge 300 ]; then
+            echo "::warning::ForgeGraph CI report failed (HTTP ${HTTP}): $(cat /tmp/fg_report.out 2>/dev/null)"
+          fi
