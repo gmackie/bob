@@ -20,11 +20,11 @@ export const MergeMethodEnum = Schema.Literals(["merge", "squash", "rebase"]);
 export type MergeMethod = Schema.Schema.Type<typeof MergeMethodEnum>;
 
 /** Review status for a PR review. */
-export const ReviewStatusEnum = Schema.Literal(
+export const ReviewStatusEnum = Schema.Literals([
   "approved",
   "changes_requested",
   "commented",
-);
+]);
 export type ReviewStatus = Schema.Schema.Type<typeof ReviewStatusEnum>;
 
 // --- Record schemas ---------------------------------------------------------

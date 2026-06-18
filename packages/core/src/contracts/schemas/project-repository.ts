@@ -16,21 +16,21 @@ import { Schema } from "effect";
 // --- Enums ------------------------------------------------------------------
 
 /** Plan lifecycle status (matches Bob's planStatusEnum). */
-export const PlanStatusEnum = Schema.Literal(
+export const PlanStatusEnum = Schema.Literals([
   "draft",
   "active",
   "completed",
   "archived",
-);
+]);
 export type PlanStatus = Schema.Schema.Type<typeof PlanStatusEnum>;
 
 /** Task status within a worktree plan. */
-export const PlanTaskStatusEnum = Schema.Literal(
+export const PlanTaskStatusEnum = Schema.Literals([
   "pending",
   "in_progress",
   "completed",
   "cancelled",
-);
+]);
 export type PlanTaskStatus = Schema.Schema.Type<typeof PlanTaskStatusEnum>;
 
 // --- Record schemas ---------------------------------------------------------

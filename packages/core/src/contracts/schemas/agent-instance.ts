@@ -14,7 +14,7 @@ import { Schema } from "effect";
 // --- Enums ------------------------------------------------------------------
 
 /** Agent type (matches Bob's agentTypeEnum). */
-export const AgentTypeEnum = Schema.Literal(
+export const AgentTypeEnum = Schema.Literals([
   "claude",
   "kiro",
   "codex",
@@ -23,16 +23,16 @@ export const AgentTypeEnum = Schema.Literal(
   "smol-agent",
   "cursor-agent",
   "elevenlabs",
-);
+]);
 export type AgentType = Schema.Schema.Type<typeof AgentTypeEnum>;
 
 /** Instance lifecycle status (matches Bob's instanceStatusEnum). */
-export const InstanceStatusEnum = Schema.Literal(
+export const InstanceStatusEnum = Schema.Literals([
   "running",
   "stopped",
   "starting",
   "error",
-);
+]);
 export type InstanceStatus = Schema.Schema.Type<typeof InstanceStatusEnum>;
 
 // --- Record schemas ---------------------------------------------------------

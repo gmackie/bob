@@ -16,7 +16,7 @@ import { Schema } from "effect";
 // --- Enums ------------------------------------------------------------------
 
 /** Session lifecycle status. */
-export const SessionStatusEnum = Schema.Literal(
+export const SessionStatusEnum = Schema.Literals([
   "provisioning",
   "starting",
   "running",
@@ -24,7 +24,7 @@ export const SessionStatusEnum = Schema.Literal(
   "stopping",
   "stopped",
   "error",
-);
+]);
 export type SessionStatus = Schema.Schema.Type<typeof SessionStatusEnum>;
 
 /** Direction of a session event relative to the session. */
@@ -32,7 +32,7 @@ export const EventDirectionEnum = Schema.Literals(["client", "agent", "system"])
 export type EventDirection = Schema.Schema.Type<typeof EventDirectionEnum>;
 
 /** Workflow status for agent work-item tracking. */
-export const WorkflowStatusEnum = Schema.Literal(
+export const WorkflowStatusEnum = Schema.Literals([
   "planning",
   "implementing",
   "testing",
@@ -41,11 +41,11 @@ export const WorkflowStatusEnum = Schema.Literal(
   "completed",
   "failed",
   "cancelled",
-);
+]);
 export type WorkflowStatus = Schema.Schema.Type<typeof WorkflowStatusEnum>;
 
 /** Type of artifact linked to a task run. */
-export const ArtifactTypeEnum = Schema.Literal(
+export const ArtifactTypeEnum = Schema.Literals([
   "pr",
   "verification",
   "build",
@@ -53,11 +53,11 @@ export const ArtifactTypeEnum = Schema.Literal(
   "doc",
   "deliverable",
   "other",
-);
+]);
 export type ArtifactType = Schema.Schema.Type<typeof ArtifactTypeEnum>;
 
 /** Role an artifact plays in a task run. */
-export const ArtifactRoleEnum = Schema.Literal(
+export const ArtifactRoleEnum = Schema.Literals([
   "primary",
   "review",
   "verification",
@@ -66,7 +66,7 @@ export const ArtifactRoleEnum = Schema.Literal(
   "build",
   "test_report",
   "other",
-);
+]);
 export type ArtifactRole = Schema.Schema.Type<typeof ArtifactRoleEnum>;
 
 // --- Record schemas ---------------------------------------------------------

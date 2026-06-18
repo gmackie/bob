@@ -17,13 +17,13 @@ export const AgentRunSchema = Schema.Struct({
   workspaceId: Schema.String, // UUID
   sessionId: Schema.NullOr(Schema.String), // UUID
   workItemId: Schema.NullOr(Schema.String),
-  status: Schema.Literal(
+  status: Schema.Literals([
     "pending",
     "running",
     "completed",
     "failed",
     "cancelled",
-  ),
+  ]),
   startedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
   completedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
   createdAt: Schema.DateTimeUtcFromString,
