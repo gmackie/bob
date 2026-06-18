@@ -12,7 +12,7 @@ import { Schema } from "effect";
 // --- Enums ------------------------------------------------------------------
 
 /** Supported git hosting providers. */
-export const GitProviderEnum = Schema.Literal("github", "gitlab", "gitea");
+export const GitProviderEnum = Schema.Literals(["github", "gitlab", "gitea"]);
 export type GitProvider = Schema.Schema.Type<typeof GitProviderEnum>;
 
 // --- Record schemas ---------------------------------------------------------

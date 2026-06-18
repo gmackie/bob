@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 
-export const PersonaSourceEnum = Schema.Literal("repo", "ui");
+export const PersonaSourceEnum = Schema.Literals(["repo", "ui"]);
 export type PersonaSource = Schema.Schema.Type<typeof PersonaSourceEnum>;
 
 export const AutonomyLevelEnum = Schema.Literal(

@@ -8,7 +8,7 @@
 // UUID fields use plain `Schema.String` on the wire (matching
 // auth/projects/agent-run convention).
 //
-// Enum types use `Schema.Literal("a", "b", "c")` which creates a union of
+// Enum types use `Schema.Literals(["a", "b", "c"])` which creates a union of
 // literals (verified in Effect 4.0.0-beta.43).
 
 import { Schema } from "effect";
@@ -28,7 +28,7 @@ export const SessionStatusEnum = Schema.Literal(
 export type SessionStatus = Schema.Schema.Type<typeof SessionStatusEnum>;
 
 /** Direction of a session event relative to the session. */
-export const EventDirectionEnum = Schema.Literal("client", "agent", "system");
+export const EventDirectionEnum = Schema.Literals(["client", "agent", "system"]);
 export type EventDirection = Schema.Schema.Type<typeof EventDirectionEnum>;
 
 /** Workflow status for agent work-item tracking. */

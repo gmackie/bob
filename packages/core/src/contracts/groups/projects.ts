@@ -398,7 +398,7 @@ export const ProjectsPullRequestUpdateRpc = Rpc.make(
       pullRequestId: Schema.String,
       title: Schema.optional(Schema.String),
       body: Schema.optional(Schema.String),
-      state: Schema.optional(Schema.Literal("open", "closed")),
+      state: Schema.optional(Schema.Literals(["open", "closed"])),
     }),
     success: PullRequestSchema,
     error: NotFoundError,

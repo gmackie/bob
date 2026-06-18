@@ -197,7 +197,7 @@ export const AgentCaptureListTargetsRpc = Rpc.make(
 
 export const AgentCaptureCaptureRpc = Rpc.make("agent.capture.capture", {
   payload: Schema.Struct({
-    targetType: Schema.Literal("browser", "window", "screen"),
+    targetType: Schema.Literals(["browser", "window", "screen"]),
     targetId: Schema.optional(Schema.String),
     url: Schema.optional(Schema.String),
   }),
@@ -517,7 +517,7 @@ export const AgentSessionRecordVerificationResultRpc = Rpc.make(
   {
     payload: Schema.Struct({
       sessionId: Schema.String,
-      result: Schema.Literal("passed", "failed"),
+      result: Schema.Literals(["passed", "failed"]),
       summary: Schema.String,
       artifactUrl: Schema.optional(Schema.String),
     }),
@@ -567,7 +567,7 @@ export const AgentSessionResolveAwaitingInputRpc = Rpc.make(
     payload: Schema.Struct({
       sessionId: Schema.String,
       resolution: Schema.Struct({
-        type: Schema.Literal("human", "timeout"),
+        type: Schema.Literals(["human", "timeout"]),
         value: Schema.String,
       }),
     }),
@@ -855,7 +855,7 @@ export const AgentFilesystemListRpc = Rpc.make("agent.filesystem.list", {
 export const AgentFilesystemReadRpc = Rpc.make("agent.filesystem.read", {
   payload: Schema.Struct({
     path: Schema.String,
-    encoding: Schema.optional(Schema.Literal("utf-8", "base64")),
+    encoding: Schema.optional(Schema.Literals(["utf-8", "base64"])),
   }),
   success: Schema.Struct({ content: Schema.String }),
 });

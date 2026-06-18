@@ -12,11 +12,11 @@ import { Schema } from "effect";
 // --- Enums ------------------------------------------------------------------
 
 /** Pull request lifecycle status. */
-export const PRStatusEnum = Schema.Literal("draft", "open", "merged", "closed");
+export const PRStatusEnum = Schema.Literals(["draft", "open", "merged", "closed"]);
 export type PRStatus = Schema.Schema.Type<typeof PRStatusEnum>;
 
 /** Merge method for pull requests. */
-export const MergeMethodEnum = Schema.Literal("merge", "squash", "rebase");
+export const MergeMethodEnum = Schema.Literals(["merge", "squash", "rebase"]);
 export type MergeMethod = Schema.Schema.Type<typeof MergeMethodEnum>;
 
 /** Review status for a PR review. */
