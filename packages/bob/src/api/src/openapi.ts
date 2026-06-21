@@ -3,24 +3,17 @@ import type { OpenAPIV3_1 } from "openapi-types";
 
 import { integrations } from "@bob/config";
 
-import {
-  WorkItemsRpc,
-  PlanningRpc,
-  ExternalRpc,
-} from "@gmacko/bob/contracts";
-import { AgentRpc } from "@gmacko/core/contracts/groups/agent";
-import { ProjectsRpc } from "@gmacko/core/contracts/groups/projects";
-import { SettingsRpc } from "@gmacko/core/contracts/groups/settings";
-import { SecretsRpc } from "@gmacko/core/contracts/groups/secrets";
-import { AuthRpc } from "@gmacko/core/contracts/groups/auth";
-
 import { workItemsRestOperations } from "./contracts/work-items-rest";
 import { generateOpenApiFromRouter } from "./contracts/router-openapi";
 import type { RouterOpenApiConfig } from "./contracts/router-openapi";
-import {
-  generateOpenApiFromRpcGroups,
-  type RpcGroupLike,
-} from "./contracts/rpc-openapi";
+
+// Effect-RPC OpenAPI generation lives in a light, contracts-only module so it
+// can be imported by a standalone build script. Re-exported here for callers
+// that already import from "@bob/api/openapi".
+export {
+  BOB_RPC_GROUPS,
+  generateBobRpcApiDocument,
+} from "./contracts/bob-rpc-groups.js";
 
 export interface OpenApiConfig {
   title: string;
@@ -163,43 +156,7 @@ export function generateFullBobApiDocument(
   } satisfies RouterOpenApiConfig);
 }
 
-// ---------------------------------------------------------------------------
-// Effect-RPC OpenAPI generation (source of truth: the Rpc contract groups)
-// ---------------------------------------------------------------------------
-//
-// Supersedes the tRPC-era `generateFullBobApiDocument` above. Bob's API moved
-// to Effect-RPC (`Rpc.make` + Schema, served at /api/rpc), so the OpenAPI doc
-// is derived directly from the contract groups rather than a tRPC router tree.
+// Effect-RPC OpenAPI generation (`generateBobRpcApiDocument`, `BOB_RPC_GROUPS`)
+// is defined in ./contracts/bob-rpc-groups.ts and re-exported at the top of
+// this file. It supersedes the tRPC-era `generateFullBobApiDocument` above.
 // See docs/plans/2026-06-21-bob-effect-rpc-openapi.md.
-
-/**
- * The 8 exported Effect-RPC contract groups served by Bob, in the same order
- * the server merges them (`apps/bob/src/server/rpc.ts`). The server-internal
- * `HealthRpc` probe is intentionally omitted — it is not a public REST surface.
- */
-export const BOB_RPC_GROUPS = [
-  WorkItemsRpc,
-  PlanningRpc,
-  ExternalRpc,
-  AgentRpc,
-  ProjectsRpc,
-  SettingsRpc,
-  SecretsRpc,
-  AuthRpc,
-] as unknown as readonly RpcGroupLike[];
-
-/**
- * Generate the complete OpenAPI 3.1 document for Bob from the Effect-RPC
- * contract groups. Every procedure becomes a `POST /api/v1/{tag}` operation.
- */
-export function generateBobRpcApiDocument(
-  config: Partial<OpenApiConfig> = {},
-): OpenAPIV3_1.Document {
-  const merged = { ...defaultConfig, ...config };
-  return generateOpenApiFromRpcGroups(BOB_RPC_GROUPS, {
-    title: merged.title,
-    version: merged.version,
-    description: merged.description,
-    baseUrl: merged.baseUrl,
-  });
-}

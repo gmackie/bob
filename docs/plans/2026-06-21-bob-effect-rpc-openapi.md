@@ -179,6 +179,33 @@ through the bridge with a stubbed handler layer; assert status + shape.
 **Verify:** `pnpm --filter @bob/api test -- rest-bridge` green; migration
 guardrail test still green (bridge is server-side, not in bob-client).
 
+**⚠️ BLOCKED — architectural gate (2026-06-21).** The live REST bridge is
+gated by the same constraint that already stubs `/api/rpc` at the edge:
+- `apps/bob` (the production deploy) builds for **CF Workers**, where
+  `~/server/rpc` is aliased to a **501 stub** (`apps/bob/src/lib/rpc-stub.ts`,
+  `apps/bob/vite.config.ts`) because `effect/unstable/rpc` + the contract
+  handlers (which pull `@bob/db`, `@bob/auth`, native deps) **cannot bundle for
+  Workers**. So `/api/rpc` only really runs in dev/Node today.
+- A REST bridge dispatching to those same Effect-RPC handlers would therefore
+  also be **501 at the edge** — serving no external consumer, which is the
+  bridge's whole purpose. The existing `/api/v1/*` routes work at the edge only
+  because they dispatch via **tRPC callers** (`createPublicApiCaller`), not
+  Effect-RPC.
+
+So before building Task 4, decide WHERE Bob's Effect-RPC actually runs in
+production (options for review):
+1. **Front Effect-RPC from the Node `apps/bob-server`** and mount the REST
+   bridge there (not the CF Worker). Bridge lives in Node, edge proxies to it.
+2. **Keep dispatching `/api/v1/*` via tRPC callers** for now (edge-safe); the
+   OpenAPI spec already describes the Effect-RPC surface as the contract, and
+   the bridge wiring waits until handlers are edge-bundleable.
+3. **Build the bridge Node-only now**, accept 501 at the edge (matches current
+   `/api/rpc` behavior), revisit when the runtime story is settled.
+
+Recommendation: **(1)** — it matches the real topology (the client already
+points at `/api/rpc`, which needs a Node host anyway) and unblocks both the RPC
+transport and the REST bridge together. Out of scope for this pass until chosen.
+
 ### Task 5 — Build-time spec emit
 
 **Files:**
@@ -231,13 +258,13 @@ for `@bob/api` + `@gmacko/bob-client` green.
 
 ## Summary
 
-| Task | Scope | Risk |
+| Task | Scope | Status |
 |------|-------|------|
-| 0 | Spike Schema→OpenAPI call | none (no commit) |
-| 1 | RpcGroup→OpenAPI generator | med (schema edge cases) |
-| 2 | Full 9-group document | low |
-| 3 | Serve `/api/openapi.json` | low |
-| 4 | REST bridge → handlers | high (auth, handler reuse) |
-| 5 | Build-time emit | low |
-| 6 | Type `createBobClient` | low |
-| 7 | Guardrails + docs | low |
+| 0 | Spike Schema→OpenAPI call | ✅ done |
+| 1 | RpcGroup→OpenAPI generator | ✅ done (TDD, 6 tests) |
+| 2 | Full 8-group document | ✅ done (314 ops, no throws) |
+| 3 | Serve `/api/openapi.json` | ✅ done (static import, default mode) |
+| 4 | REST bridge → handlers | ⛔ blocked — see Task 4 gate, needs topology decision |
+| 5 | Build-time emit | ✅ done (`generate:openapi:bob`) |
+| 6 | Type `createBobClient` | ✅ done (`schema.d.ts`, typed-client test) |
+| 7 | Guardrails + docs | ✅ guardrails pass on tracked files; docs note added |

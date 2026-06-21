@@ -17,7 +17,8 @@
     "dev:ooda": "turbo watch dev --filter=@gmacko/ooda-web",
     "dev:ooda-runner": "turbo watch dev --filter=@gmacko/ooda-runner",
     "dev:research": "cd packages/research-backend && uv run uvicorn research_backend.main:app --reload --port 8000",
-    "generate:openapi": "tsx scripts/generate-openapi.ts"
+    "generate:openapi": "tsx scripts/generate-openapi.ts",
+    "generate:openapi:bob": "tsx scripts/generate-bob-openapi.ts"
   },
   "pnpm": {
     "overrides": {
@@ -38,6 +39,7 @@
     ]
   },
   "devDependencies": {
+    "tsx": "catalog:",
     "turbo": "^2.8.0",
     "typescript": "^5.9.0"
   }
