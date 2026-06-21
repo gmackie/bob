@@ -31,6 +31,10 @@
       "types": "./dist/api/src/rest-bridge.d.ts",
       "default": "./src/rest-bridge.ts"
     },
+    "./runtime-layers": {
+      "types": "./dist/api/src/runtime-layers.d.ts",
+      "default": "./src/runtime-layers.ts"
+    },
     "./services/webhooks/verify": {
       "types": "./dist/api/src/services/webhooks/verify.d.ts",
       "default": "./src/services/webhooks/verify.ts"

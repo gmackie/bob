@@ -228,16 +228,32 @@ Concrete implementation (4 sub-steps; do as its own focused pass):
   app-local layers, so the CF stub-alias (`~/server/rpc` → 501) is unchanged.
   Verified: both packages typecheck; full `@bob/api` suite 549 passed / 0 failed
   (the earlier "11 failures" were flaky PGlite under parallel runs).
-- **4b — REST bridge dispatch.** In `@bob/api`, add a Node handler that maps a
-  REST `POST /api/v1/{tag}` to the RPC tag, decodes the body with
-  `rpc.payloadSchema`, dispatches through the SAME handler layer (in-process,
-  no HTTP round-trip), encodes the result with `rpc.successSchema`, and maps
-  errors per Task 1. Reuse `AuthMiddleware` for the bearer/cookie auth.
+- **4b — REST bridge dispatch. ✅ DONE (2026-06-21).** `@bob/api/rest-bridge`
+  `makeRestBridge(group, rpcHandler)` maps `POST /api/v1/{tag}` to an RPC tag and
+  dispatches in-process via an Effect `RpcClient` whose HTTP transport is a
+  custom `fetch` that calls `rpcHandler` directly — reusing the whole pipeline
+  (auth, ndjson serialization, per-request context, handlers) with no network
+  hop. `restPathToTag` reverses `tagToRestPath`; errors map by tag (404/403/409).
+  Verified end-to-end with a DB-free echo/add group: REST→RPC→REST round-trips
+  + 404/405/400 paths (7 tests). Forwards inbound cookie/bearer headers.
 - **4c — Mount in bob-server.** Add `@bob/api` + `effect` deps to `@bob/server`.
-  In `server.ts`'s `handler`, intercept `/api/rpc` (→ the real `rpcHandler`)
-  and `/api/v1/*` (→ the REST bridge) BEFORE `proxyToInternal`; everything else
-  still proxies to the blder child. bob-server runs in Node, so effect/contracts
-  bundle fine.
+  In `server.ts`'s `handler`, intercept `/api/rpc` (→ `makeRpcHandler(layers)`)
+  and `/api/v1/*` (→ `makeRestBridge(BobRpcGroup, rpcHandler)`) BEFORE
+  `proxyToInternal`; everything else proxies to the blder child.
+  ⚠️ **Blocker found:** `rpcHandler` needs `runtimeLayer`/`authMiddlewareLayer`,
+  built in `apps/bob/src/server/layers.ts` — which imports `~/auth/server`, and
+  that file imports `react` + `next/headers`. So bob-server (plain Node) can't
+  reuse it. Sub-steps:
+    1. Extract a **Next-free layers builder** — `makeBobRuntimeLayers({ db,
+       authInstance }) → { runtimeLayer, authMiddlewareLayer }` (the body of
+       `layers.ts` minus the `~/auth/server` import). Refactor `layers.ts` to
+       call it. `authBundle` itself (from `@bob/auth/runtime` + `@bob/db`) has NO
+       Next deps — only `getSession` does.
+    2. In bob-server, construct an `authBundle` (env: `AUTH_SECRET`,
+       `AUTH_GITHUB_*`, DB connection) + `db`, call the builder, build the
+       handlers, intercept. ⚠️ This gives bob-server real auth/DB responsibility
+       and needs its env wired — a deployment concern, best done with the live
+       environment.
 - **4d — Edge proxy.** Point the CF Worker's `/api/rpc` + `/api/v1/*` at the
   bob-server origin (or document that production RPC requires the Node host).
 
