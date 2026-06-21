@@ -27,6 +27,10 @@
       "types": "./dist/api/src/rpc-server.d.ts",
       "default": "./src/rpc-server.ts"
     },
+    "./rest-bridge": {
+      "types": "./dist/api/src/rest-bridge.d.ts",
+      "default": "./src/rest-bridge.ts"
+    },
     "./services/webhooks/verify": {
       "types": "./dist/api/src/services/webhooks/verify.d.ts",
       "default": "./src/services/webhooks/verify.ts"
