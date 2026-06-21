@@ -23,6 +23,10 @@
       "types": "./dist/api/src/openapi.d.ts",
       "default": "./src/openapi.ts"
     },
+    "./rpc-server": {
+      "types": "./dist/api/src/rpc-server.d.ts",
+      "default": "./src/rpc-server.ts"
+    },
     "./services/webhooks/verify": {
       "types": "./dist/api/src/services/webhooks/verify.d.ts",
       "default": "./src/services/webhooks/verify.ts"
