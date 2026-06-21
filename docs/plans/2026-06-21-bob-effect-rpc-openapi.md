@@ -206,6 +206,43 @@ Recommendation: **(1)** — it matches the real topology (the client already
 points at `/api/rpc`, which needs a Node host anyway) and unblocks both the RPC
 transport and the REST bridge together. Out of scope for this pass until chosen.
 
+**DECISION (2026-06-21): Option 1 — front Effect-RPC from the Node bob-server.**
+
+Topology reality found while scoping:
+- `apps/bob-server` (`@bob/server`) is today a thin **auth-gated reverse proxy**:
+  it spawns the `blder` web app as a child on an internal port and pipes all
+  requests to it (`server.ts` `handler → proxyToInternal`). It does NOT host an
+  API. Deps: `@bob/blder`, `@bob/db`, `commander`.
+- The Effect-RPC handler assembly lives in `apps/bob/src/server/rpc.ts` — buried
+  in the web app, NOT exported. `@bob/blder` has no package exports.
+- The vite stub-aliasing (`apps/bob/vite.config.ts`) only rewrites `~/server/rpc`
+  for the **blder CF build**; a Node import of the real module is unaffected.
+
+Concrete implementation (4 sub-steps; do as its own focused pass):
+
+- **4a — Extract the RPC server assembly into a shared module.** Move the
+  `BobRpcGroup` + handler layers + `rpcHandler` from `apps/bob/src/server/rpc.ts`
+  into `@bob/api` (e.g. `@bob/api/rpc-server`). Keep a thin
+  `apps/bob/src/server/rpc.ts` that re-exports it, so the existing blder route
+  AND the vite stub-alias (`~/server/rpc` → stub for CF) keep working unchanged.
+  ⚠️ Verify the CF blder build still stubs correctly (the alias matches the
+  re-export path, not the moved module). Risk: med — touches the edge build.
+- **4b — REST bridge dispatch.** In `@bob/api`, add a Node handler that maps a
+  REST `POST /api/v1/{tag}` to the RPC tag, decodes the body with
+  `rpc.payloadSchema`, dispatches through the SAME handler layer (in-process,
+  no HTTP round-trip), encodes the result with `rpc.successSchema`, and maps
+  errors per Task 1. Reuse `AuthMiddleware` for the bearer/cookie auth.
+- **4c — Mount in bob-server.** Add `@bob/api` + `effect` deps to `@bob/server`.
+  In `server.ts`'s `handler`, intercept `/api/rpc` (→ the real `rpcHandler`)
+  and `/api/v1/*` (→ the REST bridge) BEFORE `proxyToInternal`; everything else
+  still proxies to the blder child. bob-server runs in Node, so effect/contracts
+  bundle fine.
+- **4d — Edge proxy.** Point the CF Worker's `/api/rpc` + `/api/v1/*` at the
+  bob-server origin (or document that production RPC requires the Node host).
+
+Note: this gives Effect-RPC + the REST bridge for the **Node/desktop** path
+immediately. CF-production RPC stays stubbed until 4d routes it to the Node host.
+
 ### Task 5 — Build-time spec emit
 
 **Files:**
