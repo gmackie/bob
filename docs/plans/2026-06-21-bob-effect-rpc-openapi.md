@@ -220,13 +220,14 @@ Topology reality found while scoping:
 
 Concrete implementation (4 sub-steps; do as its own focused pass):
 
-- **4a — Extract the RPC server assembly into a shared module.** Move the
-  `BobRpcGroup` + handler layers + `rpcHandler` from `apps/bob/src/server/rpc.ts`
-  into `@bob/api` (e.g. `@bob/api/rpc-server`). Keep a thin
-  `apps/bob/src/server/rpc.ts` that re-exports it, so the existing blder route
-  AND the vite stub-alias (`~/server/rpc` → stub for CF) keep working unchanged.
-  ⚠️ Verify the CF blder build still stubs correctly (the alias matches the
-  re-export path, not the moved module). Risk: med — touches the edge build.
+- **4a — Extract the RPC server assembly into a shared module. ✅ DONE
+  (2026-06-21, branch `feat/bob-rpc-node-host`).** Moved `BobRpcGroup` + all
+  handler layers + the context bridge into `@bob/api/rpc-server`, exposing
+  `makeRpcHandler({ runtimeLayer, authMiddlewareLayer })`, `BobRpcGroup`, and
+  `allHandlers`. `apps/bob/src/server/rpc.ts` is now a thin wrapper supplying the
+  app-local layers, so the CF stub-alias (`~/server/rpc` → 501) is unchanged.
+  Verified: both packages typecheck; full `@bob/api` suite 549 passed / 0 failed
+  (the earlier "11 failures" were flaky PGlite under parallel runs).
 - **4b — REST bridge dispatch.** In `@bob/api`, add a Node handler that maps a
   REST `POST /api/v1/{tag}` to the RPC tag, decodes the body with
   `rpc.payloadSchema`, dispatches through the SAME handler layer (in-process,
