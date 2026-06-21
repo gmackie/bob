@@ -13,6 +13,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHttpServer } from "./http.js";
 import type { CliArgs } from "./cli.js";
+import { getRpcMount, isRpcHostEnabled } from "./rpc-mount.js";
+import {
+  nodeReqToWebRequest,
+  writeWebResponseToNode,
+} from "./web-adapter.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -84,9 +89,38 @@ export async function startServer(
     throw err;
   }
 
+  const hostRpc = isRpcHostEnabled();
   const server = createHttpServer({
     authToken: args.authToken,
     handler: async (req, res) => {
+      // When enabled (BOB_SERVER_HOST_RPC=true), the Node host serves Bob's
+      // Effect-RPC transport (/api/rpc) and REST bridge (/api/v1/*) directly —
+      // these are stubbed at the CF edge. Everything else proxies to blder.
+      if (hostRpc) {
+        const pathname = (req.url ?? "/").split("?")[0] ?? "/";
+        if (pathname === "/api/rpc" || pathname.startsWith("/api/v1/")) {
+          try {
+            const mount = getRpcMount();
+            const origin = `http://${req.headers.host ?? "127.0.0.1"}`;
+            const webReq = await nodeReqToWebRequest(req, origin);
+            const webRes =
+              pathname === "/api/rpc"
+                ? await mount.rpcHandler(webReq)
+                : await mount.restBridge(webReq);
+            await writeWebResponseToNode(webRes, res);
+          } catch (err) {
+            console.error("[bob-server] rpc host error:", err);
+            if (!res.headersSent) {
+              res.statusCode = 500;
+              res.setHeader("content-type", "text/plain; charset=utf-8");
+              res.end("rpc host error");
+            } else {
+              res.end();
+            }
+          }
+          return;
+        }
+      }
       await proxyToInternal(req, res, internalPort);
     },
   });
