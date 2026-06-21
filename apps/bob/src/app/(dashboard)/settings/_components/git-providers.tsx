@@ -8,7 +8,16 @@ import { Button } from "@gmacko/core/ui/button";
 import { Input } from "@gmacko/core/ui/input";
 import { Label } from "@gmacko/core/ui/label";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
+
+type GitProviderConnection = {
+  provider: string;
+};
+
+type ForgeGraphConnection = {
+  providerUsername?: string | null;
+  createdAt: Date | string;
+};
 
 export function GitProvidersSection() {
   return (
@@ -20,10 +29,12 @@ export function GitProvidersSection() {
 }
 
 function GitHubConnection() {
-  const trpc = useTRPC();
-  const { data: connections, isLoading } = useQuery(
-    trpc.gitProviders.listConnections.queryOptions(undefined),
-  );
+  const rpc = useBobRpcClient();
+  const { data: connections, isLoading } = useQuery({
+    queryKey: ["rpc", "projects.gitProvider.listConnections"],
+    queryFn: async () =>
+      (await rpc.projects.gitProvider.listConnections()) as GitProviderConnection[],
+  });
 
   const githubConnection = (connections ?? []).find(
     (c: any) => c.provider === "github",
@@ -52,39 +63,40 @@ function GitHubConnection() {
 }
 
 function ForgeGraphConnection() {
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
   const queryClient = useQueryClient();
   const [token, setToken] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const { data: connection, isLoading } = useQuery(
-    trpc.settings.getForgeGraphConnection.queryOptions(undefined),
-  );
+  const { data: connection, isLoading } = useQuery({
+    queryKey: ["rpc", "settings.getForgeGraphConnection"],
+    queryFn: async () =>
+      (await rpc.settings.getForgeGraphConnection()) as ForgeGraphConnection | null,
+  });
 
-  const connectMutation = useMutation(
-    trpc.settings.connectForgeGraph.mutationOptions({
-      onSuccess: () => {
-        setToken("");
-        setError(null);
-        void queryClient.invalidateQueries({
-          queryKey: trpc.settings.getForgeGraphConnection.queryKey(),
-        });
-      },
-      onError: (e: unknown) => {
-        setError(e instanceof Error ? e.message : "Failed to connect");
-      },
-    }),
-  );
+  const connectMutation = useMutation({
+    mutationFn: (input: { apiToken: string }) =>
+      rpc.settings.connectForgeGraph(input),
+    onSuccess: () => {
+      setToken("");
+      setError(null);
+      void queryClient.invalidateQueries({
+        queryKey: ["rpc", "settings.getForgeGraphConnection"],
+      });
+    },
+    onError: (e: unknown) => {
+      setError(e instanceof Error ? e.message : "Failed to connect");
+    },
+  });
 
-  const disconnectMutation = useMutation(
-    trpc.settings.disconnectForgeGraph.mutationOptions({
-      onSuccess: () => {
-        void queryClient.invalidateQueries({
-          queryKey: trpc.settings.getForgeGraphConnection.queryKey(),
-        });
-      },
-    }),
-  );
+  const disconnectMutation = useMutation({
+    mutationFn: () => rpc.settings.disconnectForgeGraph(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["rpc", "settings.getForgeGraphConnection"],
+      });
+    },
+  });
 
   return (
     <div className="rounded-lg border border-border p-4">
@@ -117,7 +129,7 @@ function ForgeGraphConnection() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => disconnectMutation.mutate(undefined)}
+            onClick={() => disconnectMutation.mutate()}
             disabled={disconnectMutation.isPending}
           >
             Disconnect

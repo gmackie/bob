@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { formatRelativeTime } from "~/lib/format/time";
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
 import { useLiveActivity } from "~/hooks/use-live-activity";
 
 /** Map activity type to a Tailwind color class for the dot. */
@@ -86,15 +86,20 @@ interface ActivityTimelineProps {
 }
 
 export function ActivityTimeline({ workItemId, live = false }: ActivityTimelineProps) {
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
   const [expanded, setExpanded] = useState(false);
 
   // Static query (default)
   const staticQuery = useQuery({
-    ...trpc.activity.listByWorkItem.queryOptions({
-      workItemId,
-      limit: 100,
-    }),
+    queryKey: [
+      "rpc",
+      "workItem.activity.list",
+      { workItemId, limit: 100 },
+    ],
+    queryFn: () =>
+      rpc.workItems.activity.list({ workItemId, limit: 100 }) as Promise<
+        any[]
+      >,
     staleTime: 30_000,
     enabled: !live,
   });
@@ -105,7 +110,9 @@ export function ActivityTimeline({ workItemId, live = false }: ActivityTimelineP
     limit: 100,
   });
 
-  const activities = live ? liveResult.workItemActivities : staticQuery.data;
+  const activities = (live
+    ? liveResult.workItemActivities
+    : staticQuery.data) as any[] | undefined;
   const isLoading = live ? liveResult.isLoading : staticQuery.isLoading;
   const newCount = live ? liveResult.newCount : 0;
   const markSeen = liveResult.markSeen;

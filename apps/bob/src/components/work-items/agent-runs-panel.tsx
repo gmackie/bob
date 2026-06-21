@@ -7,7 +7,7 @@ import { cn } from "@gmacko/core/ui";
 import { Card } from "@gmacko/core/ui/card";
 import { Badge } from "@gmacko/core/ui/badge";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
 import {
   buildWorkItemEntryRunRows,
   type WorkItemOutcomeRun,
@@ -32,14 +32,17 @@ export function AgentRunsPanel({
   workItemId,
   workspaceId,
 }: AgentRunsPanelProps) {
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
 
-  const { data: runs } = useQuery(
-    trpc.agentRun.listByWorkItem.queryOptions(
-      { workItemId, limit: 20 },
-      { enabled: !!workItemId, refetchInterval: 10_000 },
-    ),
-  );
+  const { data: runs } = useQuery({
+    queryKey: ["rpc", "agent.run.listByWorkItem", { workItemId, limit: 20 }],
+    queryFn: () =>
+      rpc.agent.run.listByWorkItem({ workItemId, limit: 20 }) as Promise<
+        WorkItemOutcomeRun[]
+      >,
+    enabled: !!workItemId,
+    refetchInterval: 10_000,
+  });
 
   if (!runs?.length) return null;
 

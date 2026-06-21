@@ -7,7 +7,7 @@ import { Button } from "@gmacko/core/ui/button";
 import { Input } from "@gmacko/core/ui/input";
 import { Label } from "@gmacko/core/ui/label";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
 
 const PERMISSIONS = ["read", "write", "delete", "admin"] as const;
 
@@ -30,34 +30,36 @@ export function ApiKeysSection() {
   const [newKey, setNewKey] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
 
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
   const queryClient = useQueryClient();
-  const { data: apiKeys, isLoading } = useQuery(
-    trpc.settings.listApiKeys.queryOptions(undefined),
-  );
+  const { data: apiKeys, isLoading } = useQuery({
+    queryKey: ["rpc", "settings.listApiKeys"],
+    queryFn: async () => (await rpc.settings.listApiKeys()) as ApiKeyData[],
+  });
 
-  const createKey = useMutation(
-    trpc.settings.createApiKey.mutationOptions({
-    onSuccess: (data: { key: string }) => {
+  const createKey = useMutation({
+    mutationFn: (input: {
+      name: string;
+      permissions: Array<"read" | "write" | "delete" | "admin">;
+    }) => rpc.settings.createApiKey(input) as Promise<{ key: string }>,
+    onSuccess: (data) => {
       setNewKey(data.key);
       setNewKeyName("");
       setSelectedPermissions(["read"]);
       void queryClient.invalidateQueries({
-        queryKey: trpc.settings.listApiKeys.queryKey(),
+        queryKey: ["rpc", "settings.listApiKeys"],
       });
     },
-    }),
-  );
+  });
 
-  const revokeKey = useMutation(
-    trpc.settings.revokeApiKey.mutationOptions({
+  const revokeKey = useMutation({
+    mutationFn: (input: { id: string }) => rpc.settings.revokeApiKey(input),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: trpc.settings.listApiKeys.queryKey(),
+        queryKey: ["rpc", "settings.listApiKeys"],
       });
     },
-    }),
-  );
+  });
 
   const handleCreateKey = () => {
     if (!newKeyName.trim() || selectedPermissions.length === 0) return;

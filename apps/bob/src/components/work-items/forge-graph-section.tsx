@@ -8,16 +8,22 @@ import { DeploymentStatus } from "~/components/forgegraph/deployment-status";
 import { GateDecisionCard } from "~/components/forgegraph/gate-decision-card";
 import { RevisionStatusBar } from "~/components/forgegraph/revision-status-bar";
 import { useLiveBuildStatus } from "~/hooks/use-live-build-status";
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
 
 export function ForgeGraphSection({ taskId }: { taskId: string }) {
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
 
   const { latestRevision, builds, deployments, isLoading } =
     useLiveBuildStatus({ taskId });
+  const buildRows = builds as any[];
+  const deploymentRows = deployments as any[];
 
   const { data: taskRuns } = useQuery({
-    ...trpc.taskRun.listByWorkItem.queryOptions({ workItemId: taskId }),
+    queryKey: ["rpc", "workItem.taskRun.listByWorkItem", { workItemId: taskId }],
+    queryFn: () =>
+      rpc.workItems.taskRun.listByWorkItem({
+        workItemId: taskId,
+      }) as Promise<Array<{ pullRequestId?: string | null }>>,
     staleTime: 30_000,
   });
 
@@ -88,19 +94,19 @@ export function ForgeGraphSection({ taskId }: { taskId: string }) {
           </Link>
         )}
 
-        {builds.length > 0 && (
+        {buildRows.length > 0 && (
           <div>
             <h3 className="mb-2 text-sm font-medium text-muted-foreground">Builds</h3>
-            <BuildHistory builds={builds} />
+            <BuildHistory builds={buildRows} />
           </div>
         )}
 
-        {deployments.length > 0 && (
+        {deploymentRows.length > 0 && (
           <div>
             <h3 className="mb-2 text-sm font-medium text-muted-foreground">
               Deployments
             </h3>
-            <DeploymentStatus deployments={deployments} />
+            <DeploymentStatus deployments={deploymentRows} />
           </div>
         )}
       </div>

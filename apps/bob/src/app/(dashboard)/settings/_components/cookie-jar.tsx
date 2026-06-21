@@ -3,7 +3,14 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
+
+type CookieDomain = {
+  domain: string;
+  count: number;
+  source: string | null;
+  lastUpdated: Date | string | null;
+};
 
 function SetupGuide() {
   const [activeTab, setActiveTab] = useState<"extension" | "cli">("extension");
@@ -182,18 +189,18 @@ function CookieTable({
     lastUpdated: Date | null;
   }>;
 }) {
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
   const queryClient = useQueryClient();
 
-  const removeMutation = useMutation(
-    trpc.cookies.remove.mutationOptions({
-      onSuccess: () => {
-        void queryClient.invalidateQueries({
-          queryKey: trpc.cookies.list.queryKey(),
-        });
-      },
-    }),
-  );
+  const removeMutation = useMutation({
+    mutationFn: (input: { domain: string }) =>
+      rpc.settings.cookies.remove(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["rpc", "settings.cookies.list"],
+      });
+    },
+  });
 
   return (
     <table className="w-full text-sm">
@@ -239,10 +246,14 @@ function CookieTable({
 }
 
 export function CookieJar() {
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
 
   const { data: cookies, isLoading } = useQuery(
-    trpc.cookies.list.queryOptions(undefined),
+    {
+      queryKey: ["rpc", "settings.cookies.list"],
+      queryFn: async () =>
+        (await rpc.settings.cookies.list(undefined)) as CookieDomain[],
+    },
   );
 
   if (isLoading) {
@@ -256,7 +267,21 @@ export function CookieJar() {
     );
   }
 
-  const hasCookies = cookies && cookies.length > 0;
+  const cookieRows =
+    cookies?.map((entry) => ({
+      domain: entry.domain,
+      count: entry.count,
+      source:
+        typeof entry.source === "string"
+          ? entry.source
+          : "unknown",
+      lastUpdated:
+        entry.lastUpdated == null
+          ? null
+          : new Date(entry.lastUpdated),
+    })) ?? [];
+
+  const hasCookies = cookieRows.length > 0;
 
   return (
     <section className="space-y-6">
@@ -266,7 +291,7 @@ export function CookieJar() {
             Imported cookies available to agent sessions. Values are encrypted
             and never displayed.
           </div>
-          <CookieTable cookies={cookies} />
+          <CookieTable cookies={cookieRows} />
         </div>
       )}
       <SetupGuide />

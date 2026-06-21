@@ -7,6 +7,7 @@ import { ThemeToggle } from "@gmacko/core/ui/theme-toggle";
 import { Toaster } from "@gmacko/core/ui/toast";
 
 import { TRPCReactProvider } from "~/trpc/react";
+import { BobRpcProvider } from "~/rpc/react";
 import { Providers } from "./providers";
 
 import "~/app/styles.css";
@@ -85,7 +86,9 @@ export default function RootLayout(props: { children: React.ReactNode; params: P
             Skip to content
           </a>
           <TRPCReactProvider>
-            <Providers>{props.children}</Providers>
+            <BobRpcProvider>
+              <Providers>{props.children}</Providers>
+            </BobRpcProvider>
           </TRPCReactProvider>
           <div className="fixed right-6 bottom-20 z-50">
             <ThemeToggle />

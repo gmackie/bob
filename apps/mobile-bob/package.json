@@ -19,6 +19,7 @@
     "@bob/config": "workspace:*",
     "@bob/notifications": "workspace:*",
     "@bob/ws": "workspace:*",
+    "@gmacko/bob-client": "workspace:*",
     "@expo/metro-runtime": "~55.0.9",
     "@legendapp/list": "^2.0.14",
     "@react-native-async-storage/async-storage": "^2.1.2",

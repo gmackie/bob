@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { formatRelativeTime } from "~/lib/format/time";
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
 import { formatLifecycleMetadataDetails } from "./lifecycle-timeline-model";
 
 type Phase = "shape" | "plan" | "execute" | "review" | "ship";
@@ -94,17 +94,23 @@ interface LifecycleTimelineProps {
 const COLLAPSED_LIMIT = 15;
 
 export function LifecycleTimeline({ workItemId }: LifecycleTimelineProps) {
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
   const [expanded, setExpanded] = useState(false);
   const [expandedMetadata, setExpandedMetadata] = useState<Set<string>>(
     new Set(),
   );
 
   const { data: eventData, isLoading } = useQuery({
-    ...trpc.taskRun.listLifecycleEvents.queryOptions({
-      workItemId,
-      limit: 50,
-    }),
+    queryKey: [
+      "rpc",
+      "workItem.taskRun.listLifecycleEvents",
+      { workItemId, limit: 50 },
+    ],
+    queryFn: () =>
+      rpc.workItems.taskRun.listLifecycleEvents({
+        workItemId,
+        limit: 50,
+      }) as Promise<LifecycleEvent[]>,
     staleTime: 15_000,
   });
 

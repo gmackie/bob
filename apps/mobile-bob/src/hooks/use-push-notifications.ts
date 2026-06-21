@@ -14,7 +14,7 @@ import type * as ExpoNotifications from "expo-notifications";
 import type * as ExpoDevice from "expo-device";
 
 import { getNotificationTargetHref } from "~/features/planning/navigation";
-import { getBaseUrl } from "~/utils/base-url";
+import { createMobileBobRpcClient } from "~/utils/api";
 
 // Lazy-load expo-notifications to avoid crash if native module isn't available
 let Notifications: typeof ExpoNotifications | null = null;
@@ -85,23 +85,14 @@ async function registerForPushNotifications(): Promise<string | null> {
 
 /**
  * Send the push token to the Bob server for storage.
- * Uses raw fetch since this runs outside the tRPC query context.
+ * Uses the Bob Effect-RPC client since this runs outside React Query.
  */
 async function registerTokenWithServer(token: string): Promise<void> {
-  const baseUrl = getBaseUrl();
   try {
-    await fetch(`${baseUrl}/api/trpc/notification.registerPushToken`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        "0": {
-          json: {
-            token,
-            platform: Platform.OS as "ios" | "android" | "web",
-            deviceName: Device!.deviceName ?? "Unknown",
-          },
-        },
-      }),
+    await createMobileBobRpcClient().workItems.notification.registerPushToken({
+      token,
+      platform: Platform.OS as "ios" | "android" | "web",
+      deviceName: Device!.deviceName ?? "Unknown",
     });
     console.log("[push] Token registered with server");
   } catch (error) {

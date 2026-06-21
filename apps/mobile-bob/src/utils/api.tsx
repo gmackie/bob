@@ -1,6 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 import { createTRPCClient, httpBatchLink, loggerLink } from "@trpc/client";
 import { createTRPCOptionsProxy } from "@trpc/tanstack-react-query";
+import { createBobRpcClient } from "@gmacko/bob-client";
 import superjson from "superjson";
 
 import type { AppRouter } from "@bob/api";
@@ -48,3 +49,14 @@ export const trpc = createTRPCOptionsProxy<AppRouter>({
 });
 
 export type { RouterInputs, RouterOutputs } from "@bob/api";
+
+export function createMobileBobRpcClient() {
+  const cookies = authClient.getCookie();
+  return createBobRpcClient({
+    baseURL: `${getBaseUrl()}/api/rpc`,
+    headers: {
+      "x-rpc-source": "expo-react",
+      ...(cookies ? { Cookie: cookies } : {}),
+    },
+  });
+}

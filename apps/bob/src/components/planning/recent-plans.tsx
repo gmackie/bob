@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { Badge } from "@gmacko/core/ui/badge";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
 import { getPlanningSessionHref } from "./planning-shell-model";
 import {
   formatPlanningSessionOutputLabel,
@@ -50,14 +50,16 @@ export function RecentPlans({
   isLoading: providedLoading,
   workspaceId,
 }: RecentPlansProps = {}) {
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
 
-  const { data: queriedSessions, isLoading: queryLoading } = useQuery(
-    trpc.planSession.list.queryOptions(
-      { limit: 5 },
-      { enabled: providedSessions === undefined },
-    ),
-  );
+  const { data: queriedSessions, isLoading: queryLoading } = useQuery({
+    queryKey: ["rpc", "planning.session.list", { limit: 5 }],
+    queryFn: () =>
+      rpc.planning.session.list({ limit: 5 }) as Promise<
+        PlanningDashboardSession[]
+      >,
+    enabled: providedSessions === undefined,
+  });
   const sessions = providedSessions ?? ((queriedSessions ?? []) as unknown as PlanningDashboardSession[]);
   const isLoading = providedLoading ?? queryLoading;
 
