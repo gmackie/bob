@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "@gmacko/core/ui/toast";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
 import { AgentSelect } from "~/components/work-items/agent-select";
 
 interface WorkspaceRow {
@@ -13,20 +13,24 @@ interface WorkspaceRow {
   defaultAgentType?: string | null;
 }
 
+interface WorkspaceMembership {
+  workspace?: WorkspaceRow | null;
+}
+
 function WorkspaceAgentRow({ workspace }: { workspace: WorkspaceRow }) {
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
   const [value, setValue] = useState<string | null>(
     workspace.defaultAgentType ?? null,
   );
-  const setAgent = useMutation(
-    trpc.workspace.setDefaultAgent.mutationOptions({
-      onError: (err) => {
-        toast(err.message, {
-          style: { background: "#1a0000", borderColor: "#f43f5e40" },
-        });
-      },
-    }),
-  );
+  const setAgent = useMutation({
+    mutationFn: (input: { id: string; defaultAgentType: string | null }) =>
+      rpc.projects.workspace.setDefaultAgent(input),
+    onError: (err) => {
+      toast(err.message, {
+        style: { background: "#1a0000", borderColor: "#f43f5e40" },
+      });
+    },
+  });
 
   return (
     <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-card px-5 py-4">
@@ -51,16 +55,20 @@ function WorkspaceAgentRow({ workspace }: { workspace: WorkspaceRow }) {
 }
 
 export function WorkspaceAgentsSection() {
-  const trpc = useTRPC();
-  const { data: workspaces, isLoading } = useQuery(
-    trpc.workspace.list.queryOptions(),
-  );
+  const rpc = useBobRpcClient();
+  const { data: workspaceMemberships, isLoading } = useQuery({
+    queryKey: ["rpc", "projects.workspace.list"],
+    queryFn: () =>
+      rpc.projects.workspace.list() as Promise<WorkspaceMembership[]>,
+  });
 
   if (isLoading) {
     return <p className="text-sm text-muted-foreground">Loading workspaces…</p>;
   }
 
-  const rows = (workspaces ?? []) as WorkspaceRow[];
+  const rows = (workspaceMemberships ?? [])
+    .map((membership) => membership.workspace)
+    .filter((workspace): workspace is WorkspaceRow => Boolean(workspace));
   if (rows.length === 0) {
     return <p className="text-sm text-muted-foreground">No workspaces yet.</p>;
   }

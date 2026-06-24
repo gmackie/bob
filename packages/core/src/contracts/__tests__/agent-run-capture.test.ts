@@ -9,6 +9,7 @@ import {
   AgentRunGetRpc,
   AgentRunListRpc,
   AgentRunListByWorkItemRpc,
+  AgentRunListAllRpc,
   AgentCaptureListTargetsRpc,
   AgentCaptureCaptureRpc,
 } from "../groups/agent.js";
@@ -24,6 +25,10 @@ describe("AgentRpc group — agent.run + agent.capture (7B-4B Task 1)", () => {
     expect(AgentRpc.requests.get("agent.run.list")).toBe(AgentRunListRpc);
     expect(AgentRpc.requests.get("agent.run.listByWorkItem")).toBe(
       AgentRunListByWorkItemRpc,
+    );
+    expect(AgentRpc.requests.has("agent.run.listAll")).toBe(true);
+    expect(AgentRpc.requests.get("agent.run.listAll")).toBe(
+      AgentRunListAllRpc,
     );
     expect(AgentRpc.requests.get("agent.capture.listTargets")).toBe(
       AgentCaptureListTargetsRpc,

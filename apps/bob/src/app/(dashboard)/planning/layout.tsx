@@ -22,14 +22,16 @@ import { StartPlanningButton } from "~/components/planning/start-planning-button
 import { WorkspaceSelector } from "~/components/planning/workspace-selector";
 import { CreateProjectDialog } from "~/components/projects/create-project-dialog";
 import { ImportGitHubDialog } from "~/components/projects/import-github-dialog";
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
 
-type WorkspaceMembership = {
-  workspace?: { id: string; name: string; slug: string } | null;
+type WorkspaceSummary = {
+  id: string;
+  name: string;
+  slug: string;
 };
 
 export default function PlanningLayout({ children }: { children: React.ReactNode }) {
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
   const pathname = usePathname() ?? "";
   const searchParams = useSearchParams();
   const activeRoute = matchPlanningShellRoute(pathname);
@@ -37,16 +39,14 @@ export default function PlanningLayout({ children }: { children: React.ReactNode
   const [importOpen, setImportOpen] = useState(false);
 
   const {
-    data: workspaceMemberships,
+    data: workspaceRows,
     isLoading: wsLoading,
-  } = useQuery(
-    trpc.workspace.list.queryOptions(undefined, { staleTime: 60_000 }),
-  );
-
-  const memberships = (workspaceMemberships ?? []) as unknown as WorkspaceMembership[];
-  const workspaces = memberships
-    .flatMap((m) => (m.workspace ? [m.workspace] : []))
-    .map((w) => ({ id: w.id, name: w.name, slug: w.slug }));
+  } = useQuery({
+    queryKey: ["rpc", "planning.listWorkspaces"],
+    queryFn: () => rpc.planning.listWorkspaces() as Promise<WorkspaceSummary[]>,
+    staleTime: 60_000,
+  });
+  const workspaces = (workspaceRows ?? []) as WorkspaceSummary[];
 
   const workspaceParam = searchParams?.get("workspace") ?? null;
   const currentWorkspace =
@@ -55,27 +55,36 @@ export default function PlanningLayout({ children }: { children: React.ReactNode
       : workspaces?.[0]) ?? null;
 
   const queryClient = useQueryClient();
+  const createWorkspaceRpc = rpc.projects.workspace.create as (input: {
+    name: string;
+    slug: string;
+  }) => Promise<unknown>;
   const {
     data: planningProjects,
     isLoading: planningProjectsLoading,
-  } = useQuery(
-    trpc.planning.listProjects.queryOptions(
+  } = useQuery({
+    queryKey: [
+      "rpc",
+      "planning.listProjects",
       { workspaceId: currentWorkspace?.id ?? "" },
-      {
-        enabled: Boolean(currentWorkspace?.id),
-        ...getPlanningProjectQueryRefreshOptions(),
-      },
-    ),
-  );
-  const createWorkspace = useMutation(
-    trpc.workspace.create.mutationOptions({
-      onSuccess: () => {
-        void queryClient.invalidateQueries({ queryKey: trpc.workspace.list.queryKey() });
-        toast("Workspace created!");
-      },
-      onError: (err) => toast(err.message),
-    }),
-  );
+    ],
+    queryFn: () =>
+      rpc.planning.listProjects({
+        workspaceId: currentWorkspace?.id ?? "",
+      }) as Promise<PlanningProjectOption[]>,
+    enabled: Boolean(currentWorkspace?.id),
+    ...getPlanningProjectQueryRefreshOptions(),
+  });
+  const createWorkspace = useMutation({
+    mutationFn: createWorkspaceRpc,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["rpc", "planning.listWorkspaces"],
+      });
+      toast("Workspace created!");
+    },
+    onError: (err: Error) => toast(err.message),
+  });
   const [wsName, setWsName] = useState("");
 
   // Show setup screen when no workspace exists on routes managed by this shell.

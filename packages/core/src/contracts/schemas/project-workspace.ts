@@ -20,6 +20,7 @@ export const WorkspaceSchema = Schema.Struct({
   name: Schema.String,
   slug: Schema.String,
   description: Schema.NullOr(Schema.String),
+  defaultAgentType: Schema.optional(Schema.NullOr(Schema.String)),
   forgeAvailable: Schema.optional(Schema.Boolean),
   createdAt: Schema.DateTimeUtcFromString,
   updatedAt: Schema.DateTimeUtcFromString,

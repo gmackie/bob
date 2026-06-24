@@ -6,9 +6,6 @@ import { cloudflare } from "@cloudflare/vite-plugin";
 const target = (process.env.BOB_BUILD_TARGET ?? "cloudflare") as
   | "cloudflare"
   | "node";
-const isDev = process.env.NODE_ENV !== "production" && !process.env.CF_PAGES;
-const useCloudflarePlugin = !isDev && target === "cloudflare";
-
 const rpcStubPath = path.resolve(__dirname, "src/lib/rpc-stub.ts");
 const rpcRealPath = path.resolve(__dirname, "src/server/rpc");
 
@@ -50,18 +47,14 @@ const cloudflareAliases: Record<string, string> = {
 
 export default defineConfig({
   plugins: [
-    ...(target === "cloudflare" ? [rpcStubPlugin()] : []),
+    rpcStubPlugin(),
     vinext(),
-    ...(useCloudflarePlugin
-      ? [
-          cloudflare({
-            viteEnvironment: {
-              name: "rsc",
-              childEnvironments: ["ssr"],
-            },
-          }),
-        ]
-      : []),
+    cloudflare({
+      viteEnvironment: {
+        name: "rsc",
+        childEnvironments: ["ssr"],
+      },
+    }),
   ],
   resolve: {
     alias: target === "node" ? nodeAliases : cloudflareAliases,

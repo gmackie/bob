@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
 import { getRunningNowScope } from "./work-pipeline-model";
 import {
   buildRunningNowRailRows,
@@ -26,25 +26,34 @@ const STATUS_BADGE_CLASS: Record<RunningNowRailStatusTone, string> = {
 };
 
 export function RunningNowRail({ workspaceId }: { workspaceId?: string | null }) {
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
   const scope = getRunningNowScope(workspaceId);
-  const { data: runs, isLoading } = useQuery(
-    scope.mode === "workspace"
-      ? trpc.agentRun.list.queryOptions(
-          { workspaceId: scope.workspaceId, limit: 100 },
-          { refetchInterval: 10_000 },
-        )
-      : trpc.agentRun.listAll.queryOptions(
-          { limit: 100 },
-          { refetchInterval: 10_000 },
-        ),
-  );
-  const { data: workItems, isLoading: workItemsLoading } = useQuery(
-    trpc.workItem.list.queryOptions(
-      { workspaceId: workspaceId ?? "", limit: 100 },
-      { enabled: Boolean(workspaceId), refetchInterval: 10_000 },
-    ),
-  );
+  const { data: runs, isLoading } = useQuery({
+    queryKey: [
+      "running-now",
+      "runs",
+      scope.mode,
+      scope.mode === "workspace" ? scope.workspaceId : "all",
+    ],
+    queryFn: () =>
+      scope.mode === "workspace"
+        ? (rpc.agent.listRuns({
+            workspaceId: scope.workspaceId,
+            limit: 100,
+          }) as Promise<unknown[]>)
+        : (rpc.agent.listAllRuns({ limit: 100 }) as Promise<unknown[]>),
+    refetchInterval: 10_000,
+  });
+  const { data: workItems, isLoading: workItemsLoading } = useQuery({
+    queryKey: ["running-now", "work-items", workspaceId ?? ""],
+    queryFn: () =>
+      rpc.workItems.list({
+        workspaceId: workspaceId ?? "",
+        limit: 100,
+      }) as Promise<unknown[]>,
+    enabled: Boolean(workspaceId),
+    refetchInterval: 10_000,
+  });
 
   const activeRuns = ((runs ?? []) as {
     id: string;

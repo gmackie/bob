@@ -40,7 +40,7 @@ import {
 describe("ProjectsRpc group — pullRequest + featureBranch (7B-4B Task 7)", () => {
   it("has 56 procedures total (24 existing + 12 PR + 7 FB + 13 Task 8)", () => {
     const tags = Array.from(ProjectsRpc.requests.keys());
-    expect(tags.length).toBe(56);
+    expect(tags.length).toBe(58);
   });
 
   it("includes the 12 pullRequest procedures by tag", () => {

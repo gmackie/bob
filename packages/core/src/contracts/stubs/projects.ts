@@ -282,6 +282,23 @@ export const stubProjectsHandlers = {
       }),
     );
   },
+  "projects.setDefaultAgent": ({
+    projectId,
+  }: {
+    projectId: string;
+    defaultAgentType: string | null;
+  }) => {
+    if (projectId === STUB_PROJECT_1.id)
+      return Effect.succeed(STUB_PROJECT_1);
+    if (projectId === STUB_PROJECT_2.id)
+      return Effect.succeed(STUB_PROJECT_2);
+    return Effect.fail(
+      new ProjectNotFoundError({
+        tenantId: STUB_TENANT_ID,
+        identifier: projectId,
+      }),
+    );
+  },
   "projects.dismissDir": ({ dirId }: { dirId: string }) => {
     if (dirId === "00000000-0000-0000-0000-000000000000") {
       return Effect.fail(
@@ -318,6 +335,19 @@ export const stubProjectsHandlers = {
   }) => {
     if (id === STUB_WORKSPACE_1.id) {
       return Effect.succeed({ ...STUB_WORKSPACE_1, name } satisfies WorkspaceWire);
+    }
+    return Effect.fail(
+      new NotFoundError({ entity: "Workspace", id }),
+    );
+  },
+  "projects.workspace.setDefaultAgent": ({
+    id,
+  }: {
+    id: string;
+    defaultAgentType: string | null;
+  }) => {
+    if (id === STUB_WORKSPACE_1.id) {
+      return Effect.succeed(STUB_WORKSPACE_1);
     }
     return Effect.fail(
       new NotFoundError({ entity: "Workspace", id }),

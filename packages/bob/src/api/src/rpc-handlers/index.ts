@@ -11,6 +11,7 @@ export { makeFilesystemRpcHandlers } from "./filesystem.js";
 export { makeForgeGraphRpcHandlers } from "./forgegraph.js";
 export { makeGitRpcHandlers } from "./git.js";
 export { makeGitProvidersRpcHandlers } from "./gitProviders.js";
+export { makeIntegrationRpcHandlers } from "./integration.js";
 export { makeInstanceRpcHandlers } from "./instance.js";
 export { makeLinkRpcHandlers } from "./link.js";
 export { makePlanRpcHandlers } from "./plan.js";

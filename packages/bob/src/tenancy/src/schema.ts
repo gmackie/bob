@@ -70,15 +70,15 @@ export const workspaceMemberRoleEnum = pgEnum(
 export const workspaces = pgTable("workspaces", (t) => ({
   id: t.uuid().notNull().primaryKey().defaultRandom(),
   ownerUserId: t
-    .text()
+    .text("owner_user_id")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
   name: t.varchar({ length: 128 }).notNull(),
   slug: t.varchar({ length: 64 }).notNull().unique(),
   description: t.text(),
-  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
+  createdAt: t.timestamp("created_at", { mode: "string" }).defaultNow().notNull(),
   updatedAt: t
-    .timestamp({ mode: "string", withTimezone: true })
+    .timestamp("updated_at", { mode: "string", withTimezone: true })
     .$onUpdateFn(() => sql`now()`),
   tenantId: t.uuid("tenant_id").references(() => tenants.id, {
     onDelete: "cascade",

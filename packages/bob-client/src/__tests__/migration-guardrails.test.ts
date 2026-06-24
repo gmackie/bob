@@ -69,12 +69,16 @@ describe("Bob Effect-RPC migration guardrails", () => {
 
   it("keeps the first migrated web slices off the tRPC React client", () => {
     const migratedSlices = [
+      "apps/bob/src/app/(dashboard)/planning/page.tsx",
+      "apps/bob/src/app/(dashboard)/planning/layout.tsx",
+      "apps/bob/src/app/(dashboard)/tasks/page.tsx",
       "apps/bob/src/components/notifications/notification-panel.tsx",
       "apps/bob/src/app/(dashboard)/_shell.tsx",
       "apps/bob/src/components/work-items/lifecycle-timeline.tsx",
       "apps/bob/src/components/work-items/activity-timeline.tsx",
       "apps/bob/src/components/work-items/agent-runs-panel.tsx",
       "apps/bob/src/components/work-items/forge-graph-section.tsx",
+      "apps/bob/src/hooks/use-live-build-status.ts",
       "apps/bob/src/components/planning/planning-dashboard.tsx",
       "apps/bob/src/components/planning/recent-plans.tsx",
       "apps/bob/src/components/planning/active-dispatch-bar.tsx",
@@ -83,6 +87,20 @@ describe("Bob Effect-RPC migration guardrails", () => {
       "apps/bob/src/app/(dashboard)/settings/_components/api-keys.tsx",
       "apps/bob/src/app/(dashboard)/settings/_components/git-providers.tsx",
       "apps/bob/src/app/(dashboard)/settings/_components/webhooks.tsx",
+      "apps/bob/src/app/(dashboard)/settings/_components/preferences.tsx",
+      "apps/bob/src/app/(dashboard)/settings/_components/integrations.tsx",
+      "apps/bob/src/app/(dashboard)/settings/_components/workspace-agents.tsx",
+      "apps/bob/src/app/(dashboard)/pull-requests/page.tsx",
+      "apps/bob/src/app/(dashboard)/pull-requests/[prId]/page.tsx",
+      "apps/bob/src/components/pull-requests/pr-list.tsx",
+      "apps/bob/src/components/pull-requests/pr-review-section.tsx",
+      "apps/bob/src/components/dashboard/work-pipeline.tsx",
+      "apps/bob/src/components/dashboard/work-lane-table.tsx",
+      "apps/bob/src/components/dashboard/project-progress.tsx",
+      "apps/bob/src/components/dashboard/recent-runs.tsx",
+      "apps/bob/src/components/dashboard/active-dispatches.tsx",
+      "apps/bob/src/components/dashboard/provider-capacity-cards.tsx",
+      "apps/bob/src/components/dashboard/running-now-rail.tsx",
     ];
 
     const violations = migratedSlices.filter((file) =>

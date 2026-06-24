@@ -68,9 +68,10 @@ export const makeAgentHandlers = (ctx: HandlerContext) => {
         new BobNotFoundError({ entity: "agent", id: "not-implemented" }),
       ),
 
-    // --- AgentRun (3) ---
+    // --- AgentRun (4) ---
     "agent.run.get": ar["agentRun.get"],
     "agent.run.list": ar["agentRun.list"],
+    "agent.run.listAll": ar["agentRun.listAll"],
     "agent.run.listByWorkItem": ar["agentRun.listByWorkItem"],
 
     // --- Capture (2) ---

@@ -1,6 +1,7 @@
 // ExternalRpc — wire contract for Bob external/ForgeGraph operations.
 // 7B-4C Task 8: 14 external.forgegraph.* procedures.
 // 7B-4C Task 9: +8 external.webhook.* + 9 external.publicApi.* procedures (31 total).
+// 2026-06-22 migration: +6 external.integration.* procedures (37 total).
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
@@ -23,6 +24,11 @@ import {
   HeartbeatRepoSchema,
   WorkspaceRegistrationResultSchema,
   ApiKeyResultSchema,
+  IntegrationRecordSchema,
+  IntegrationMutationResultSchema,
+  IntegrationSetupLinearResultSchema,
+  IntegrationDeleteResultSchema,
+  LinearTeamSchema,
 } from "../schemas/external.js";
 
 export const ExternalListRevisionsRpc = Rpc.make(
@@ -379,6 +385,71 @@ export const PublicApiGenerateApiKeyRpc = Rpc.make(
   },
 );
 
+// ---------------------------------------------------------------------------
+// Workspace integration RPCs
+// ---------------------------------------------------------------------------
+
+export const IntegrationListRpc = Rpc.make("external.integration.list", {
+  payload: Schema.Struct({ workspaceId: Schema.String }),
+  success: Schema.Array(IntegrationRecordSchema),
+  error: BobNotFoundError,
+});
+
+export const IntegrationGetRpc = Rpc.make("external.integration.get", {
+  payload: Schema.Struct({
+    workspaceId: Schema.String,
+    provider: Schema.String,
+  }),
+  success: Schema.NullOr(IntegrationRecordSchema),
+  error: BobNotFoundError,
+});
+
+export const IntegrationSaveRpc = Rpc.make("external.integration.save", {
+  payload: Schema.Struct({
+    workspaceId: Schema.String,
+    provider: Schema.String,
+    apiKey: Schema.optional(Schema.String),
+    webhookSigningSecret: Schema.optional(Schema.String),
+    linearTeamId: Schema.optional(Schema.String),
+    linearWebBaseUrl: Schema.optional(Schema.NullOr(Schema.String)),
+    enabled: Schema.optional(Schema.Boolean),
+  }),
+  success: IntegrationMutationResultSchema,
+  error: BobNotFoundError,
+});
+
+export const IntegrationFetchLinearTeamsRpc = Rpc.make(
+  "external.integration.fetchLinearTeams",
+  {
+    payload: Schema.Struct({ apiKey: Schema.String }),
+    success: Schema.Array(LinearTeamSchema),
+  },
+);
+
+export const IntegrationSetupLinearRpc = Rpc.make(
+  "external.integration.setupLinear",
+  {
+    payload: Schema.Struct({
+      workspaceId: Schema.String,
+      apiKey: Schema.String,
+      teamId: Schema.String,
+      webhookUrl: Schema.String,
+      linearWebBaseUrl: Schema.optional(Schema.NullOr(Schema.String)),
+    }),
+    success: IntegrationSetupLinearResultSchema,
+    error: BobNotFoundError,
+  },
+);
+
+export const IntegrationDeleteRpc = Rpc.make("external.integration.delete", {
+  payload: Schema.Struct({
+    workspaceId: Schema.String,
+    provider: Schema.String,
+  }),
+  success: IntegrationDeleteResultSchema,
+  error: BobNotFoundError,
+});
+
 export const ExternalRpc = RpcGroup.make(
   // ForgeGraph (14)
   ExternalListRevisionsRpc,
@@ -414,4 +485,11 @@ export const ExternalRpc = RpcGroup.make(
   PublicApiListRunsByWorkItemRpc,
   PublicApiHeartbeatRpc,
   PublicApiGenerateApiKeyRpc,
+  // Integration (6)
+  IntegrationListRpc,
+  IntegrationGetRpc,
+  IntegrationSaveRpc,
+  IntegrationFetchLinearTeamsRpc,
+  IntegrationSetupLinearRpc,
+  IntegrationDeleteRpc,
 );

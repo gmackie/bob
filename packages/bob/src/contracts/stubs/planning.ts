@@ -38,6 +38,14 @@ export const PlanningStubLayer = PlanningRpc.toLayer({
   "planning.searchTasks": () => Effect.succeed([]),
   "planning.listLabels": () => Effect.succeed([]),
   "planning.listCycles": () => Effect.succeed([]),
+  "planning.syncLinearProjects": () =>
+    Effect.succeed({
+      projectsCreated: 0,
+      projectsExisting: 0,
+      issuesImported: 0,
+      projectsTruncated: false,
+      issuesTruncated: false,
+    }),
   "planning.getCurrentUser": () =>
     Effect.succeed({
       id: "stub-user-1",

@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { cn } from "@gmacko/core/ui";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
 import {
   buildRecentlyCompletedItems,
   buildWorkLaneSummaries,
@@ -47,13 +47,14 @@ function laneHref(lane: string, workspaceId: string): string {
 }
 
 export function WorkPipeline({ workspaceId }: WorkPipelineProps) {
-  const trpc = useTRPC();
-  const { data: workItems, isLoading } = useQuery(
-    trpc.workItem.list.queryOptions(
-      { workspaceId, limit: 80 },
-      { enabled: Boolean(workspaceId), refetchInterval: 10_000 },
-    ),
-  );
+  const rpc = useBobRpcClient();
+  const input = { workspaceId, limit: 80 };
+  const { data: workItems, isLoading } = useQuery({
+    queryKey: ["rpc", "workItem.list", input],
+    queryFn: () => rpc.workItems.list(input),
+    enabled: Boolean(workspaceId),
+    refetchInterval: 10_000,
+  });
 
   const laneSummaries = buildWorkLaneSummaries((workItems ?? []) as WorkPipelineItem[]);
   const recentlyCompleted = buildRecentlyCompletedItems((workItems ?? []) as WorkPipelineItem[]);

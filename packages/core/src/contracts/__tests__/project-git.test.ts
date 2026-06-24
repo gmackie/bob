@@ -33,7 +33,7 @@ import {
 describe("ProjectsRpc group — gitProvider + git (7B-4B Task 8)", () => {
   it("has 56 procedures total (43 existing + 6 gitProvider + 7 git)", () => {
     const tags = Array.from(ProjectsRpc.requests.keys());
-    expect(tags.length).toBe(56);
+    expect(tags.length).toBe(58);
   });
 
   it("includes the 6 gitProvider procedures by tag", () => {

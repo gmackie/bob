@@ -12,6 +12,7 @@ import {
   workspaceList,
   workspaceCreate,
   workspaceRename,
+  workspaceSetDefaultAgent,
   workspaceDelete,
 } from "../handlers/workspace.js";
 
@@ -30,6 +31,12 @@ export const makeWorkspaceRpcHandlers = (ctx: HandlerContext) => ({
   }: {
     payload: { id: string; name: string };
   }) => wrapHandler(workspaceRename, ctx, payload, "workspace"),
+
+  "workspace.setDefaultAgent": ({
+    payload,
+  }: {
+    payload: { id: string; defaultAgentType: string | null };
+  }) => wrapHandler(workspaceSetDefaultAgent, ctx, payload, "workspace"),
 
   "workspace.delete": ({
     payload,

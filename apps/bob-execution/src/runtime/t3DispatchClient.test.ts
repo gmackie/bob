@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  buildT3ThreadCreateCommand,
   buildT3ThreadTurnStartCommand,
   dispatchTaskToT3Code,
   getT3DispatchRuntimeConfig,
@@ -35,6 +36,46 @@ describe("t3 dispatch client", () => {
     }
   });
 
+  it("builds a thread create command for the target project and repo path", () => {
+    const command = buildT3ThreadCreateCommand({
+      task: {
+        id: "work-item-1",
+        identifier: "ENG-42",
+        title: "Replace Bob runner",
+        description: "Use t3code server",
+        workspaceId: "workspace-1",
+        projectId: "project-1",
+        assigneeId: null,
+        labels: [],
+        priority: 0,
+      },
+      taskRunId: "task-run-1",
+      branch: "bob/ENG-42/replace-bob-runner",
+      workingDirectory: "/repo",
+      baseBranch: "main",
+      externalTask,
+      now: () => "2026-06-04T00:00:00.000Z",
+      makeId: (prefix) => `${prefix}-id`,
+      config: {
+        projectId: "t3-project-1",
+        modelInstanceId: "codex",
+        model: "gpt-5",
+        runtimeMode: "full-access",
+      },
+    });
+
+    expect(command).toMatchObject({
+      type: "thread.create",
+      commandId: "command-id",
+      threadId: "thread-id",
+      projectId: "t3-project-1",
+      title: "ENG-42: Replace Bob runner",
+      branch: "bob/ENG-42/replace-bob-runner",
+      worktreePath: "/repo",
+      externalTask,
+    });
+  });
+
   it("builds a thread turn start command that asks t3code to prepare the repo worktree", () => {
     const command = buildT3ThreadTurnStartCommand({
       task: {
@@ -48,6 +89,8 @@ describe("t3 dispatch client", () => {
         labels: [],
         priority: 0,
       },
+      taskRunId: "task-run-1",
+      threadId: "thread-id",
       branch: "bob/ENG-42/replace-bob-runner",
       workingDirectory: "/repo",
       baseBranch: "main",
@@ -80,19 +123,12 @@ describe("t3 dispatch client", () => {
         model: "gpt-5",
       },
       bootstrap: {
-        createThread: {
-          projectId: "t3-project-1",
-          title: "ENG-42: Replace Bob runner",
-          branch: "bob/ENG-42/replace-bob-runner",
-          worktreePath: "/repo",
-          externalTask,
-        },
         prepareWorktree: {
           projectCwd: "/repo",
           baseBranch: "main",
           branch: "bob/ENG-42/replace-bob-runner",
         },
-        runSetupScript: true,
+        runSetupScript: false,
       },
     });
   });
@@ -108,13 +144,20 @@ describe("t3 dispatch client", () => {
     await dispatchTaskToT3Code({
       serverUrl: "https://t3.example.com/",
       authToken: "token-1",
-      command: {
-        type: "thread.turn.start",
-        commandId: "command-1",
-      },
+      commands: [
+        {
+          type: "thread.create",
+          commandId: "command-1",
+        },
+        {
+          type: "thread.turn.start",
+          commandId: "command-2",
+        },
+      ],
     });
 
-    expect(fetchMock).toHaveBeenCalledWith(
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
       "https://t3.example.com/api/orchestration/dispatch",
       expect.objectContaining({
         method: "POST",
@@ -122,6 +165,25 @@ describe("t3 dispatch client", () => {
           "Content-Type": "application/json",
           Authorization: "Bearer token-1",
         },
+        body: JSON.stringify({
+          type: "thread.create",
+          commandId: "command-1",
+        }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://t3.example.com/api/orchestration/dispatch",
+      expect.objectContaining({
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer token-1",
+        },
+        body: JSON.stringify({
+          type: "thread.turn.start",
+          commandId: "command-2",
+        }),
       }),
     );
   });

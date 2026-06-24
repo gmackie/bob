@@ -8,21 +8,32 @@ import { Button } from "@gmacko/core/ui/button";
 import { Input } from "@gmacko/core/ui/input";
 import { Label } from "@gmacko/core/ui/label";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
+
+type Workspace = { id: string; name: string };
+type LinearTeam = { id: string; name: string; key: string };
+type LinearIntegrationRecord = {
+  enabled: boolean;
+  hasApiKey: boolean;
+  hasWebhookSecret: boolean;
+  linearTeamId: string | null;
+};
+type LinearSyncResult = {
+  projectsCreated: number;
+  projectsExisting: number;
+  issuesImported: number;
+  projectsTruncated?: boolean;
+  issuesTruncated?: boolean;
+};
 
 export function IntegrationsSection() {
-  const trpc = useTRPC();
-  const { data: workspaceMemberships, isLoading } = useQuery(
-    trpc.workspace.list.queryOptions(undefined),
-  );
+  const rpc = useBobRpcClient();
+  const { data: workspaces = [], isLoading } = useQuery({
+    queryKey: ["rpc", "planning.listWorkspaces"],
+    queryFn: () => rpc.planning.listWorkspaces() as Promise<Workspace[]>,
+  });
 
-  const workspaces = (workspaceMemberships ?? [])
-    .map((m: any) => m.workspace)
-    .filter(Boolean);
-
-  const currentWorkspace = workspaces[0] as
-    | { id: string; name: string }
-    | undefined;
+  const currentWorkspace = workspaces[0];
 
   if (isLoading) {
     return (
@@ -46,81 +57,86 @@ export function IntegrationsSection() {
 }
 
 function LinearIntegration({ workspaceId }: { workspaceId: string }) {
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
   const queryClient = useQueryClient();
 
   const [apiKey, setApiKey] = useState("");
   const [teamId, setTeamId] = useState("");
-  const [teams, setTeams] = useState<{ id: string; name: string; key: string }[]>([]);
+  const [teams, setTeams] = useState<LinearTeam[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
 
-  const { data: integration, isLoading } = useQuery(
-    trpc.integration.get.queryOptions(
-      { workspaceId, provider: "linear" },
-      { staleTime: 30_000 },
-    ),
-  );
+  const integrationInput = { workspaceId, provider: "linear" };
+  const integrationQueryKey = ["rpc", "external.integration.get", integrationInput] as const;
+
+  const { data: integration, isLoading } = useQuery({
+    queryKey: integrationQueryKey,
+    queryFn: () =>
+      rpc.external.integration.get(integrationInput) as Promise<
+        LinearIntegrationRecord | null
+      >,
+    staleTime: 30_000,
+  });
 
   const invalidate = () =>
     void queryClient.invalidateQueries({
-      queryKey: trpc.integration.get.queryKey({ workspaceId, provider: "linear" }),
+      queryKey: integrationQueryKey,
     });
 
-  const fetchTeamsMutation = useMutation(
-    trpc.integration.fetchLinearTeams.mutationOptions({
-      onSuccess: (data) => {
-        setTeams(data);
-        if (data.length === 1) setTeamId(data[0]!.id);
-        setError(null);
-      },
-      onError: (e: unknown) => {
-        setError(e instanceof Error ? e.message : "Invalid API key");
-        setTeams([]);
-      },
-    }),
-  );
+  const fetchTeamsMutation = useMutation({
+    mutationFn: (input: { apiKey: string }) =>
+      rpc.external.integration.fetchLinearTeams(input) as Promise<LinearTeam[]>,
+    onSuccess: (data) => {
+      setTeams(data);
+      if (data.length === 1) setTeamId(data[0]!.id);
+      setError(null);
+    },
+    onError: (e: unknown) => {
+      setError(e instanceof Error ? e.message : "Invalid API key");
+      setTeams([]);
+    },
+  });
 
-  const setupMutation = useMutation(
-    trpc.integration.setupLinear.mutationOptions({
-      onSuccess: () => {
-        resetForm();
-        invalidate();
-      },
-      onError: (e: unknown) => {
-        setError(e instanceof Error ? e.message : "Failed to connect");
-      },
-    }),
-  );
+  const setupMutation = useMutation({
+    mutationFn: (input: {
+      workspaceId: string;
+      apiKey: string;
+      teamId: string;
+      webhookUrl: string;
+    }) => rpc.external.integration.setupLinear(input),
+    onSuccess: () => {
+      resetForm();
+      invalidate();
+    },
+    onError: (e: unknown) => {
+      setError(e instanceof Error ? e.message : "Failed to connect");
+    },
+  });
 
-  const deleteMutation = useMutation(
-    trpc.integration.delete.mutationOptions({ onSuccess: invalidate }),
-  );
+  const deleteMutation = useMutation({
+    mutationFn: (input: { workspaceId: string; provider: string }) =>
+      rpc.external.integration.delete(input),
+    onSuccess: invalidate,
+  });
 
   const [syncResult, setSyncResult] = useState<string | null>(null);
-  const syncMutation = useMutation(
-    trpc.planning.syncLinearProjects.mutationOptions({
-      onSuccess: (r: {
-        projectsCreated: number;
-        projectsExisting: number;
-        issuesImported: number;
-        projectsTruncated?: boolean;
-        issuesTruncated?: boolean;
-      }) => {
-        const parts = [
-          `${r.projectsCreated} project${r.projectsCreated === 1 ? "" : "s"} created`,
-          `${r.projectsExisting} existing`,
-          `${r.issuesImported} issue${r.issuesImported === 1 ? "" : "s"} imported`,
-        ];
-        if (r.projectsTruncated || r.issuesTruncated) {
-          parts.push("(first page only — run again for more)");
-        }
-        setSyncResult(parts.join(" · "));
-      },
-      onError: (e: unknown) =>
-        setSyncResult(e instanceof Error ? e.message : "Sync failed"),
-    }),
-  );
+  const syncMutation = useMutation({
+    mutationFn: (input: { workspaceId: string }) =>
+      rpc.planning.syncLinearProjects(input) as Promise<LinearSyncResult>,
+    onSuccess: (r) => {
+      const parts = [
+        `${r.projectsCreated} project${r.projectsCreated === 1 ? "" : "s"} created`,
+        `${r.projectsExisting} existing`,
+        `${r.issuesImported} issue${r.issuesImported === 1 ? "" : "s"} imported`,
+      ];
+      if (r.projectsTruncated || r.issuesTruncated) {
+        parts.push("(first page only — run again for more)");
+      }
+      setSyncResult(parts.join(" · "));
+    },
+    onError: (e: unknown) =>
+      setSyncResult(e instanceof Error ? e.message : "Sync failed"),
+  });
 
   const resetForm = () => {
     setApiKey("");

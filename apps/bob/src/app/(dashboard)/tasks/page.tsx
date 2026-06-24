@@ -5,23 +5,23 @@ import { useSearchParams } from "next/navigation";
 
 import { MissionControl } from "~/components/dashboard/mission-control";
 import { getTaskDashboardHeaderModel } from "~/components/tasks/task-shell-model";
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
 
-type WorkspaceMembership = {
-  workspace?: { id: string; name?: string | null } | null;
+type WorkspaceSummary = {
+  id: string;
+  name?: string | null;
+  slug?: string | null;
 };
 
 export default function TasksDashboardPage() {
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
   const searchParams = useSearchParams();
-  const { data: workspaceMemberships } = useQuery(
-    trpc.workspace.list.queryOptions(undefined, { staleTime: 60_000 }),
-  );
-
-  const memberships = (workspaceMemberships ?? []) as unknown as WorkspaceMembership[];
-  const workspaces = memberships.flatMap((membership) =>
-    membership.workspace ? [membership.workspace] : [],
-  );
+  const { data: workspaceRows } = useQuery({
+    queryKey: ["rpc", "planning.listWorkspaces"],
+    queryFn: () => rpc.planning.listWorkspaces() as Promise<WorkspaceSummary[]>,
+    staleTime: 60_000,
+  });
+  const workspaces = (workspaceRows ?? []) as WorkspaceSummary[];
   const workspaceParam = searchParams?.get("workspace") ?? null;
   const currentWorkspace =
     (workspaceParam

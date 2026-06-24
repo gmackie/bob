@@ -180,3 +180,39 @@ export const ApiKeyResultSchema = Schema.Struct({
   key: Schema.String,
   prefix: Schema.String,
 });
+
+// ---------------------------------------------------------------------------
+// Workspace integration schemas
+// ---------------------------------------------------------------------------
+
+export const IntegrationRecordSchema = Schema.Struct({
+  id: Schema.String,
+  provider: Schema.String,
+  enabled: Schema.Boolean,
+  hasApiKey: Schema.Boolean,
+  hasWebhookSecret: Schema.Boolean,
+  linearTeamId: Schema.NullOr(Schema.String),
+  linearWebBaseUrl: Schema.NullOr(Schema.String),
+  createdAt: Schema.optional(Schema.Unknown),
+});
+
+export const IntegrationMutationResultSchema = Schema.Struct({
+  id: Schema.String,
+  created: Schema.Boolean,
+});
+
+export const IntegrationSetupLinearResultSchema = Schema.Struct({
+  id: Schema.String,
+  created: Schema.Boolean,
+  webhookId: Schema.String,
+});
+
+export const IntegrationDeleteResultSchema = Schema.Struct({
+  deleted: Schema.Boolean,
+});
+
+export const LinearTeamSchema = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  key: Schema.String,
+});

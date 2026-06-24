@@ -9,9 +9,41 @@ export interface ProjectsClient extends Record<string, unknown> {
   readonly get: RpcMethod;
   readonly getBySlug: RpcMethod;
   readonly delete: RpcMethod;
-  readonly workspace: Record<string, RpcMethod>;
+  readonly discovery: RpcMethod;
+  readonly updateAutomationSettings: RpcMethod;
+  readonly setDefaultAgent: RpcMethod;
+  readonly dismissDir: RpcMethod;
+  readonly workspace: {
+    readonly list: RpcMethod;
+    readonly create: RpcMethod;
+    readonly rename: RpcMethod;
+    readonly setDefaultAgent: RpcMethod;
+    readonly delete: RpcMethod;
+  };
   readonly repository: Record<string, RpcMethod>;
-  readonly pullRequest: Record<string, RpcMethod>;
+  readonly pullRequest: {
+    readonly list: RpcMethod;
+    readonly get: RpcMethod;
+    readonly listByRepository: RpcMethod;
+    readonly listBySession: RpcMethod;
+    readonly create: RpcMethod;
+    readonly update: RpcMethod;
+    readonly merge: RpcMethod;
+    readonly syncCommits: RpcMethod;
+    readonly linkToPlanningTask: RpcMethod;
+    readonly refresh: RpcMethod;
+    readonly listReviews: RpcMethod;
+    readonly addReview: RpcMethod;
+  };
+  readonly featureBranch: {
+    readonly create: RpcMethod;
+    readonly get: RpcMethod;
+    readonly list: RpcMethod;
+    readonly addTaskPR: RpcMethod;
+    readonly markTaskPRMerged: RpcMethod;
+    readonly createFeaturePR: RpcMethod;
+    readonly updateStatus: RpcMethod;
+  };
   readonly gitProvider: {
     readonly listConnections: () => Promise<unknown>;
     readonly connectPat: RpcMethod;
@@ -32,10 +64,18 @@ export const makeProjectsClient = (runtime: ClientRuntime): ProjectsClient => {
     get: (input) => invoke("projects.get", input),
     getBySlug: (input) => invoke("projects.getBySlug", input),
     delete: (input) => invoke("projects.delete", input),
+    discovery: (input) => invoke("projects.discovery", input),
+    updateAutomationSettings: (input) =>
+      invoke("projects.updateAutomationSettings", input),
+    setDefaultAgent: (input) =>
+      invoke("projects.setDefaultAgent", input),
+    dismissDir: (input) => invoke("projects.dismissDir", input),
     workspace: {
       list: (input) => invoke("projects.workspace.list", input),
       create: (input) => invoke("projects.workspace.create", input),
       rename: (input) => invoke("projects.workspace.rename", input),
+      setDefaultAgent: (input) =>
+        invoke("projects.workspace.setDefaultAgent", input),
       delete: (input) => invoke("projects.workspace.delete", input),
     },
     repository: {
@@ -79,6 +119,19 @@ export const makeProjectsClient = (runtime: ClientRuntime): ProjectsClient => {
         invoke("projects.pullRequest.listReviews", input),
       addReview: (input) =>
         invoke("projects.pullRequest.addReview", input),
+    },
+    featureBranch: {
+      create: (input) => invoke("projects.featureBranch.create", input),
+      get: (input) => invoke("projects.featureBranch.get", input),
+      list: (input) => invoke("projects.featureBranch.list", input),
+      addTaskPR: (input) =>
+        invoke("projects.featureBranch.addTaskPR", input),
+      markTaskPRMerged: (input) =>
+        invoke("projects.featureBranch.markTaskPRMerged", input),
+      createFeaturePR: (input) =>
+        invoke("projects.featureBranch.createFeaturePR", input),
+      updateStatus: (input) =>
+        invoke("projects.featureBranch.updateStatus", input),
     },
     gitProvider: {
       listConnections: () =>

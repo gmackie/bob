@@ -205,6 +205,9 @@ const handlers = AgentRpc.of({
   "agent.run.list": (_payload) =>
     Effect.succeed([]),
 
+  "agent.run.listAll": (_payload) =>
+    Effect.succeed([]),
+
   "agent.run.listByWorkItem": ({ workItemId }) => {
     if (workItemId !== "stub-work-item") {
       return Effect.fail(

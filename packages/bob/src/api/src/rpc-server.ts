@@ -31,6 +31,7 @@ import { makeCheckpointRpcHandlers } from "./rpc-handlers/checkpoint.js";
 import { makeForgeGraphRpcHandlers } from "./rpc-handlers/forgegraph.js";
 import { makeWebhookRpcHandlers } from "./rpc-handlers/webhook.js";
 import { makePublicApiRpcHandlers } from "./rpc-handlers/publicApi.js";
+import { makeIntegrationRpcHandlers } from "./rpc-handlers/integration.js";
 import { makeRequirementRpcHandlers } from "./rpc-handlers/requirement.js";
 import { makeLinkRpcHandlers } from "./rpc-handlers/link.js";
 
@@ -49,9 +50,7 @@ import { makeAuthHandlers } from "./rpc-layers/auth.js";
 // `authMiddlewareLayer` (which depend on the app's auth/db wiring) — are passed
 // in by the caller via `makeRpcHandler`.
 //
-// Serves 9 groups behind AuthMiddleware (315 total procedures incl. health):
-//   HealthRpc(1) WorkItemsRpc(31) PlanningRpc(67) ExternalRpc(31) AgentRpc(78)
-//   ProjectsRpc(56) SettingsRpc(20) SecretsRpc(14) AuthRpc(11)
+// Serves 9 groups behind AuthMiddleware.
 //
 // Handler context bridging: tRPC-era handler functions expect an eager
 // `HandlerContext { db, userId }`. `liftHandlers` wraps each factory so every
@@ -189,6 +188,7 @@ const planningHandlers = PlanningRpc.toLayer({
       "planning.searchTasks": pl["planning.searchTasks"],
       "planning.listLabels": pl["planning.listLabels"],
       "planning.listCycles": pl["planning.listCycles"],
+      "planning.syncLinearProjects": pl["planning.syncLinearProjects"],
       "planning.getCurrentUser": () =>
         Effect.succeed({
           id: ctx.userId,
@@ -252,12 +252,13 @@ const planningHandlers = PlanningRpc.toLayer({
   }),
 } as any);
 
-// ExternalRpc (31 procedures)
+// ExternalRpc (37 procedures)
 const externalHandlers = ExternalRpc.toLayer({
   ...liftHandlers((ctx) => {
     const fg = makeForgeGraphRpcHandlers(ctx);
     const wh = makeWebhookRpcHandlers(ctx);
     const pa = makePublicApiRpcHandlers(ctx);
+    const int = makeIntegrationRpcHandlers(ctx);
     return {
       "external.forgegraph.listRevisions": fg["forgegraph.listRevisions"],
       "external.forgegraph.getRevision": fg["forgegraph.getRevision"],
@@ -290,6 +291,12 @@ const externalHandlers = ExternalRpc.toLayer({
       "external.publicApi.listRunsByWorkItem": pa["publicApi.listRunsByWorkItem"],
       "external.publicApi.heartbeat": pa["publicApi.heartbeat"],
       "external.publicApi.generateApiKey": pa["publicApi.generateApiKey"],
+      "external.integration.list": int["integration.list"],
+      "external.integration.get": int["integration.get"],
+      "external.integration.save": int["integration.save"],
+      "external.integration.fetchLinearTeams": int["integration.fetchLinearTeams"],
+      "external.integration.setupLinear": int["integration.setupLinear"],
+      "external.integration.delete": int["integration.delete"],
     };
   }),
 } as any);

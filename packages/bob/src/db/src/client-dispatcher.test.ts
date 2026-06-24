@@ -60,4 +60,12 @@ describe("db client dispatcher (BOB_DB_DRIVER)", () => {
     );
     expect((result.rows[0] as { c: number }).c).toBe(0);
   });
+
+  it("PGlite path preserves snake_case mapping for relational queries", async () => {
+    process.env.BOB_DB_DRIVER = "pglite";
+    process.env.BOB_DB_PGLITE_DIR = ":memory:";
+    const mod = await import("./client.js");
+
+    await expect(mod.db.query.workspaces.findMany({ limit: 1 })).resolves.toEqual([]);
+  });
 });

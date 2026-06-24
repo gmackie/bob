@@ -23,6 +23,8 @@ const STUB_PREFERENCES: UserPreferencesWire = {
   defaultModel: "claude-opus-4-6",
   editorFontSize: 14,
   enableNotifications: true,
+  emailNotifications: true,
+  pushNotifications: true,
   timezone: "America/New_York",
   createdAt: STUB_CREATED_AT,
   updatedAt: STUB_CREATED_AT,
@@ -40,6 +42,8 @@ export const stubSettingsHandlers = {
     readonly defaultModel?: string | null;
     readonly editorFontSize?: number | null;
     readonly enableNotifications?: boolean;
+    readonly emailNotifications?: boolean;
+    readonly pushNotifications?: boolean;
     readonly timezone?: string | null;
   }) =>
     Effect.succeed({

@@ -4,23 +4,38 @@ import { useQuery } from "@tanstack/react-query";
 
 import { cn } from "@gmacko/core/ui";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
 import { PrListItem } from "./pr-list-item";
 
 type StatusFilter = "open" | "merged" | "closed" | "draft" | undefined;
+type PullRequestListItem = {
+  id: string;
+  number: number | null;
+  title: string;
+  status: "open" | "merged" | "closed" | "draft";
+  headBranch: string;
+  baseBranch: string;
+  remoteOwner: string | null;
+  remoteName: string | null;
+  additions: number | null;
+  deletions: number | null;
+  createdAt: Date | string;
+  mergedAt: Date | string | null;
+};
 
 interface PrListProps {
   statusFilter?: StatusFilter;
 }
 
 export function PrList({ statusFilter }: PrListProps) {
-  const trpc = useTRPC();
-  const { data: prs, isLoading } = useQuery(
-    trpc.pullRequest.list.queryOptions(
-      { status: statusFilter, limit: 50 },
-      { staleTime: 15_000 },
-    ),
-  );
+  const rpc = useBobRpcClient();
+  const input = { status: statusFilter, limit: 50 };
+  const { data: prs, isLoading } = useQuery({
+    queryKey: ["rpc", "projects.pullRequest.list", input],
+    queryFn: async () =>
+      (await rpc.projects.pullRequest.list(input)) as PullRequestListItem[],
+    staleTime: 15_000,
+  });
 
   if (isLoading) {
     return (
@@ -55,17 +70,25 @@ export function PrList({ statusFilter }: PrListProps) {
         <PrListItem
           key={pr.id}
           id={pr.id}
-          number={pr.number}
+          number={pr.number ?? 0}
           title={pr.title}
           status={pr.status}
           headBranch={pr.headBranch}
           baseBranch={pr.baseBranch}
-          remoteOwner={pr.remoteOwner}
-          remoteName={pr.remoteName}
+          remoteOwner={pr.remoteOwner ?? "unknown"}
+          remoteName={pr.remoteName ?? "unknown"}
           additions={pr.additions}
           deletions={pr.deletions}
-          createdAt={pr.createdAt}
-          mergedAt={pr.mergedAt}
+          createdAt={
+            pr.createdAt instanceof Date
+              ? pr.createdAt.toISOString()
+              : pr.createdAt
+          }
+          mergedAt={
+            pr.mergedAt instanceof Date
+              ? pr.mergedAt.toISOString()
+              : pr.mergedAt
+          }
         />
       ))}
     </div>

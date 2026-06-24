@@ -17,6 +17,7 @@ export interface PlanningClient {
   readonly searchTasks: RpcMethod;
   readonly listLabels: RpcMethod;
   readonly listCycles: RpcMethod;
+  readonly syncLinearProjects: RpcMethod;
   readonly getCurrentUser: () => Promise<unknown>;
   readonly dispatch: {
     readonly createBatch: RpcMethod;
@@ -96,6 +97,8 @@ export const makePlanningClient = (runtime: ClientRuntime): PlanningClient => {
     searchTasks: (input) => invoke("planning.searchTasks", input),
     listLabels: (input) => invoke("planning.listLabels", input),
     listCycles: (input) => invoke("planning.listCycles", input),
+    syncLinearProjects: (input) =>
+      invoke("planning.syncLinearProjects", input),
     getCurrentUser: () => invoke("planning.getCurrentUser"),
     dispatch: {
       createBatch: (input) => invoke("planning.dispatch.createBatch", input),

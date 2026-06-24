@@ -59,6 +59,7 @@ import { makeCheckpointRpcHandlers } from "../rpc-handlers/checkpoint.js";
 import { makeForgeGraphRpcHandlers } from "../rpc-handlers/forgegraph.js";
 import { makeWebhookRpcHandlers } from "../rpc-handlers/webhook.js";
 import { makePublicApiRpcHandlers } from "../rpc-handlers/publicApi.js";
+import { makeIntegrationRpcHandlers } from "../rpc-handlers/integration.js";
 
 const mockCtx = { db: {} as any, userId: "test-user" };
 
@@ -182,10 +183,10 @@ describe("RPC aggregate layers — Phase 7B-4D-delta verification", () => {
 // ---------------------------------------------------------------------------
 
 describe("RPC handler factory key counts", () => {
-  describe("WorkItems group (31 procedures)", () => {
-    it("workItems factory produces 18 keys", () => {
+  describe("WorkItems group (32 procedures)", () => {
+    it("workItems factory produces 19 keys", () => {
       const handlers = makeWorkItemsRpcHandlers(mockCtx);
-      expect(Object.keys(handlers)).toHaveLength(18);
+      expect(Object.keys(handlers)).toHaveLength(19);
     });
 
     it("requirement factory produces 5 keys", () => {
@@ -198,18 +199,18 @@ describe("RPC handler factory key counts", () => {
       expect(Object.keys(handlers)).toHaveLength(8);
     });
 
-    it("total handler keys sum to 31", () => {
+    it("total handler keys sum to 32", () => {
       const wi = Object.keys(makeWorkItemsRpcHandlers(mockCtx)).length;
       const req = Object.keys(makeRequirementRpcHandlers(mockCtx)).length;
       const lnk = Object.keys(makeLinkRpcHandlers(mockCtx)).length;
-      expect(wi + req + lnk).toBe(31);
+      expect(wi + req + lnk).toBe(32);
     });
   });
 
-  describe("Planning group (67 procedures)", () => {
-    it("planning factory produces 20 keys", () => {
+  describe("Planning group (70 procedures)", () => {
+    it("planning factory produces 21 keys", () => {
       const handlers = makePlanningRpcHandlers(mockCtx);
-      expect(Object.keys(handlers)).toHaveLength(20);
+      expect(Object.keys(handlers)).toHaveLength(21);
     });
 
     it("planSession factory produces 15 keys", () => {
@@ -222,14 +223,14 @@ describe("RPC handler factory key counts", () => {
       expect(Object.keys(handlers)).toHaveLength(11);
     });
 
-    it("dispatch factory produces 8 keys", () => {
+    it("dispatch factory produces 9 keys", () => {
       const handlers = makeDispatchRpcHandlers(mockCtx);
-      expect(Object.keys(handlers)).toHaveLength(8);
+      expect(Object.keys(handlers)).toHaveLength(9);
     });
 
-    it("skill factory produces 6 keys", () => {
+    it("skill factory produces 7 keys", () => {
       const handlers = makeSkillRpcHandlers(mockCtx);
-      expect(Object.keys(handlers)).toHaveLength(6);
+      expect(Object.keys(handlers)).toHaveLength(7);
     });
 
     it("snapshot factory produces 3 keys", () => {
@@ -242,7 +243,7 @@ describe("RPC handler factory key counts", () => {
       expect(Object.keys(handlers)).toHaveLength(3);
     });
 
-    it("total handler keys sum to 66 (+ 1 inline stub = 67)", () => {
+    it("total handler keys sum to 69 (+ 1 inline stub = 70)", () => {
       // planning.getCurrentUser is an inline stub in the layer, not from a factory
       const pl = Object.keys(makePlanningRpcHandlers(mockCtx)).length;
       const ps = Object.keys(makePlanSessionRpcHandlers(mockCtx)).length;
@@ -252,13 +253,13 @@ describe("RPC handler factory key counts", () => {
       const sn = Object.keys(makeSnapshotRpcHandlers(mockCtx)).length;
       const cp = Object.keys(makeCheckpointRpcHandlers(mockCtx)).length;
       const fromFactories = pl + ps + pn + di + sk + sn + cp;
-      // 66 from factories + 1 inline getCurrentUser = 67 total
-      expect(fromFactories).toBe(66);
-      expect(fromFactories + 1).toBe(67);
+      // 69 from factories + 1 inline getCurrentUser = 70 total
+      expect(fromFactories).toBe(69);
+      expect(fromFactories + 1).toBe(70);
     });
   });
 
-  describe("External group (31 procedures)", () => {
+  describe("External group (37 procedures)", () => {
     it("forgegraph factory produces 14 keys", () => {
       const handlers = makeForgeGraphRpcHandlers(mockCtx);
       expect(Object.keys(handlers)).toHaveLength(14);
@@ -274,27 +275,33 @@ describe("RPC handler factory key counts", () => {
       expect(Object.keys(handlers)).toHaveLength(9);
     });
 
-    it("total handler keys sum to 31", () => {
+    it("integration factory produces 6 keys", () => {
+      const handlers = makeIntegrationRpcHandlers(mockCtx);
+      expect(Object.keys(handlers)).toHaveLength(6);
+    });
+
+    it("total handler keys sum to 37", () => {
       const fg = Object.keys(makeForgeGraphRpcHandlers(mockCtx)).length;
       const wh = Object.keys(makeWebhookRpcHandlers(mockCtx)).length;
       const pa = Object.keys(makePublicApiRpcHandlers(mockCtx)).length;
-      expect(fg + wh + pa).toBe(31);
+      const int = Object.keys(makeIntegrationRpcHandlers(mockCtx)).length;
+      expect(fg + wh + pa + int).toBe(37);
     });
   });
 
   // --- Platform aggregate handler key counts (5 groups) ---
 
-  describe("Agent group (84 procedures — 79 from factories + 5 stubs)", () => {
-    it("makeAgentHandlers produces 84 keys", () => {
+  describe("Agent group (85 procedures — 80 from factories + 5 stubs)", () => {
+    it("makeAgentHandlers produces 85 keys", () => {
       const handlers = makeAgentHandlers(mockCtx);
-      expect(Object.keys(handlers)).toHaveLength(84);
+      expect(Object.keys(handlers)).toHaveLength(85);
     });
   });
 
-  describe("Projects group (56 procedures — 54 from factories + 2 stubs)", () => {
-    it("makeProjectsHandlers produces 56 keys", () => {
+  describe("Projects group (58 procedures — 56 from factories + 2 stubs)", () => {
+    it("makeProjectsHandlers produces 58 keys", () => {
       const handlers = makeProjectsHandlers(mockCtx);
-      expect(Object.keys(handlers)).toHaveLength(56);
+      expect(Object.keys(handlers)).toHaveLength(58);
     });
   });
 
@@ -322,13 +329,13 @@ describe("RPC handler factory key counts", () => {
   // --- Grand total: all 8 RpcGroups ---
 
   describe("Grand total — all 8 RpcGroups", () => {
-    it("314 contract procedures + 1 health = 315 total", () => {
-      // Domain groups (3): WorkItems 31 + Planning 67 + External 31 = 129
+    it("327 contract procedures + 1 health = 328 total", () => {
+      // Domain groups (3): WorkItems 32 + Planning 70 + External 37 = 139
       const workItemsKeys =
         Object.keys(makeWorkItemsRpcHandlers(mockCtx)).length +
         Object.keys(makeRequirementRpcHandlers(mockCtx)).length +
         Object.keys(makeLinkRpcHandlers(mockCtx)).length;
-      // Planning: 66 from factories + 1 inline getCurrentUser stub = 67
+      // Planning: 69 from factories + 1 inline getCurrentUser stub = 70
       const planningKeys =
         Object.keys(makePlanningRpcHandlers(mockCtx)).length +
         Object.keys(makePlanSessionRpcHandlers(mockCtx)).length +
@@ -341,9 +348,10 @@ describe("RPC handler factory key counts", () => {
       const externalKeys =
         Object.keys(makeForgeGraphRpcHandlers(mockCtx)).length +
         Object.keys(makeWebhookRpcHandlers(mockCtx)).length +
-        Object.keys(makePublicApiRpcHandlers(mockCtx)).length;
+        Object.keys(makePublicApiRpcHandlers(mockCtx)).length +
+        Object.keys(makeIntegrationRpcHandlers(mockCtx)).length;
 
-      // Platform groups (5): Agent 84 + Projects 56 + Settings 20 + Secrets 14 + Auth 11 = 185
+      // Platform groups (5): Agent 85 + Projects 58 + Settings 20 + Secrets 14 + Auth 11 = 188
       const agentKeys = Object.keys(makeAgentHandlers(mockCtx)).length;
       const projectsKeys = Object.keys(makeProjectsHandlers(mockCtx)).length;
       const settingsKeys = Object.keys(makeSettingsHandlers(mockCtx)).length;
@@ -356,10 +364,10 @@ describe("RPC handler factory key counts", () => {
       const contractTotal = domainTotal + platformTotal;
       const grandTotal = contractTotal + 1; // +1 for health endpoint
 
-      expect(domainTotal).toBe(129);
-      expect(platformTotal).toBe(185);
-      expect(contractTotal).toBe(314);
-      expect(grandTotal).toBe(315);
+      expect(domainTotal).toBe(139);
+      expect(platformTotal).toBe(188);
+      expect(contractTotal).toBe(327);
+      expect(grandTotal).toBe(328);
     });
   });
 });
@@ -405,6 +413,7 @@ describe("RPC handler values are all functions", () => {
       ...makeForgeGraphRpcHandlers(mockCtx),
       ...makeWebhookRpcHandlers(mockCtx),
       ...makePublicApiRpcHandlers(mockCtx),
+      ...makeIntegrationRpcHandlers(mockCtx),
     };
     for (const [key, value] of Object.entries(all)) {
       expect(typeof value, `handler "${key}" should be a function`).toBe(

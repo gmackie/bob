@@ -7,9 +7,12 @@ const queryMocks = {
   workspaceMembersFindFirst: vi.fn(),
   projectsFindMany: vi.fn(),
   projectsFindFirst: vi.fn(),
+  repositoriesFindMany: vi.fn(),
   workItemsFindMany: vi.fn(),
   workItemsFindFirst: vi.fn(),
   workItemArtifactsFindMany: vi.fn(),
+  chatConversationsFindMany: vi.fn(),
+  chatConversationsFindFirst: vi.fn(),
   commentsFindMany: vi.fn(),
 };
 
@@ -30,12 +33,19 @@ const makeDbMock = () => ({
       findMany: queryMocks.projectsFindMany,
       findFirst: queryMocks.projectsFindFirst,
     },
+    repositories: {
+      findMany: queryMocks.repositoriesFindMany,
+    },
     workItems: {
       findMany: queryMocks.workItemsFindMany,
       findFirst: queryMocks.workItemsFindFirst,
     },
     workItemArtifacts: {
       findMany: queryMocks.workItemArtifactsFindMany,
+    },
+    chatConversations: {
+      findMany: queryMocks.chatConversationsFindMany,
+      findFirst: queryMocks.chatConversationsFindFirst,
     },
     comments: {
       findMany: queryMocks.commentsFindMany,
@@ -152,6 +162,7 @@ describe("planning routers", () => {
       { id: "2", projectId, kind: "task", status: "in_progress" },
       { id: "3", projectId, kind: "epic", status: "draft" },
     ]);
+    queryMocks.repositoriesFindMany.mockResolvedValueOnce([]);
 
     const caller = createCaller() as any;
     const result = await caller.project.list({ workspaceId });
@@ -197,6 +208,7 @@ describe("planning routers", () => {
         color: "#2255cc",
       },
     ]);
+    queryMocks.chatConversationsFindMany.mockResolvedValueOnce([]);
 
     const caller = createCaller() as any;
     const result = await caller.workItems.list({ workspaceId, limit: 20 });
@@ -260,6 +272,7 @@ describe("planning routers", () => {
       { id: "child-1" },
       { id: "child-2" },
     ]);
+    queryMocks.chatConversationsFindFirst.mockResolvedValueOnce(null);
 
     const caller = createCaller() as any;
     const result = await caller.workItems.get({ id: taskId });

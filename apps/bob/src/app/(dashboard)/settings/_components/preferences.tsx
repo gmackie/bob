@@ -7,26 +7,36 @@ import { Button } from "@gmacko/core/ui/button";
 import { Label } from "@gmacko/core/ui/label";
 import { useTheme } from "@gmacko/core/ui/theme";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
+
+type UserPreferences = {
+  theme?: "light" | "dark" | "system";
+  emailNotifications?: boolean;
+  pushNotifications?: boolean;
+};
+
+const preferencesQueryKey = ["rpc", "settings.getPreferences"] as const;
 
 export function PreferencesSection() {
   const [isPending, startTransition] = useTransition();
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
   const queryClient = useQueryClient();
 
-  const { data: preferences, isLoading } = useQuery(
-    trpc.settings.getPreferences.queryOptions(undefined),
-  );
+  const { data: preferences, isLoading } = useQuery({
+    queryKey: preferencesQueryKey,
+    queryFn: () => rpc.settings.getPreferences() as Promise<UserPreferences>,
+  });
 
-  const updatePreferences = useMutation(
-    trpc.settings.updatePreferences.mutationOptions({
-      onSuccess: () => {
-        void queryClient.invalidateQueries({
-          queryKey: trpc.settings.getPreferences.queryKey(),
-        });
-      },
-    }),
-  );
+  const updatePreferences = useMutation({
+    mutationFn: (input: {
+      theme?: "light" | "dark" | "system";
+      emailNotifications?: boolean;
+      pushNotifications?: boolean;
+    }) => rpc.settings.updatePreferences(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: preferencesQueryKey });
+    },
+  });
 
   const { setMode } = useTheme();
 

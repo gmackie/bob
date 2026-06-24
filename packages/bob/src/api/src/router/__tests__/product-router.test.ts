@@ -7,9 +7,12 @@ const queryMocks = {
   workspaceMembersFindFirst: vi.fn(),
   projectsFindMany: vi.fn(),
   projectsFindFirst: vi.fn(),
+  repositoriesFindMany: vi.fn(),
   workItemsFindMany: vi.fn(),
   workItemsFindFirst: vi.fn(),
   workItemArtifactsFindMany: vi.fn(),
+  chatConversationsFindMany: vi.fn(),
+  chatConversationsFindFirst: vi.fn(),
   commentsFindMany: vi.fn(),
   notificationsFindMany: vi.fn(),
   taskRunsFindMany: vi.fn(),
@@ -28,12 +31,19 @@ const makeDbMock = () => ({
       findMany: queryMocks.projectsFindMany,
       findFirst: queryMocks.projectsFindFirst,
     },
+    repositories: {
+      findMany: queryMocks.repositoriesFindMany,
+    },
     workItems: {
       findMany: queryMocks.workItemsFindMany,
       findFirst: queryMocks.workItemsFindFirst,
     },
     workItemArtifacts: {
       findMany: queryMocks.workItemArtifactsFindMany,
+    },
+    chatConversations: {
+      findMany: queryMocks.chatConversationsFindMany,
+      findFirst: queryMocks.chatConversationsFindFirst,
     },
     comments: {
       findMany: queryMocks.commentsFindMany,
@@ -143,6 +153,8 @@ describe("product-facing app router", () => {
         updatedAt: new Date("2026-03-11T10:00:00.000Z"),
       },
     ]);
+    queryMocks.repositoriesFindMany.mockResolvedValue([]);
+    queryMocks.chatConversationsFindMany.mockResolvedValue([]);
     queryMocks.taskRunsFindMany.mockResolvedValue([
       {
         id: taskId,
@@ -182,6 +194,7 @@ describe("product-facing app router", () => {
         createdAt: new Date("2026-03-11T11:06:00.000Z"),
       },
     ]);
+    queryMocks.chatConversationsFindFirst.mockResolvedValueOnce(null);
     queryMocks.commentsFindMany.mockResolvedValueOnce([
       {
         id: "comment-1",

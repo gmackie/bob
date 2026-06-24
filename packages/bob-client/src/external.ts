@@ -7,6 +7,8 @@ export interface ExternalClient {
   readonly forgegraph: Record<string, RpcMethod> & {
     readonly listRevisions: RpcMethod;
     readonly getRevision: RpcMethod;
+    readonly listDeployments: RpcMethod;
+    readonly listBuilds: RpcMethod;
     readonly listApps: () => Promise<unknown>;
     readonly approveProdDeploy: RpcMethod;
   };
@@ -21,6 +23,14 @@ export interface ExternalClient {
     readonly testWebhook: RpcMethod;
   };
   readonly publicApi: Record<string, RpcMethod>;
+  readonly integration: Record<string, RpcMethod> & {
+    readonly list: RpcMethod;
+    readonly get: RpcMethod;
+    readonly save: RpcMethod;
+    readonly fetchLinearTeams: RpcMethod;
+    readonly setupLinear: RpcMethod;
+    readonly delete: RpcMethod;
+  };
 }
 
 export const makeExternalClient = (runtime: ClientRuntime): ExternalClient => {
@@ -81,6 +91,16 @@ export const makeExternalClient = (runtime: ClientRuntime): ExternalClient => {
       heartbeat: (input) => invoke("external.publicApi.heartbeat", input),
       generateApiKey: (input) =>
         invoke("external.publicApi.generateApiKey", input),
+    },
+    integration: {
+      list: (input) => invoke("external.integration.list", input),
+      get: (input) => invoke("external.integration.get", input),
+      save: (input) => invoke("external.integration.save", input),
+      fetchLinearTeams: (input) =>
+        invoke("external.integration.fetchLinearTeams", input),
+      setupLinear: (input) =>
+        invoke("external.integration.setupLinear", input),
+      delete: (input) => invoke("external.integration.delete", input),
     },
   };
 };

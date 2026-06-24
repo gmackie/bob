@@ -1,6 +1,6 @@
 // Phase 7B-4B Task 5 — Verify ProjectsRpc includes project core + workspace RPCs.
 //
-// After adding 8 new procedures the group should have 12 total (existing 4 + 8 new).
+// After adding project/workspace parity procedures the group should have 58 total.
 
 import { describe, expect, it } from "vitest";
 
@@ -9,26 +9,32 @@ import {
   ProjectsGetRpc,
   ProjectsDiscoveryRpc,
   ProjectsUpdateAutomationSettingsRpc,
+  ProjectsSetDefaultAgentRpc,
   ProjectsDismissDirRpc,
   ProjectsWorkspaceListRpc,
   ProjectsWorkspaceCreateRpc,
   ProjectsWorkspaceRenameRpc,
+  ProjectsWorkspaceSetDefaultAgentRpc,
   ProjectsWorkspaceDeleteRpc,
 } from "../groups/projects.js";
 
 describe("ProjectsRpc group — project core + workspace (7B-4B Task 5)", () => {
-  it("has 56 procedures total (4 existing + 8 Task 5 + 12 Task 6 + 19 Task 7 + 13 Task 8)", () => {
+  it("has 58 procedures total", () => {
     const tags = Array.from(ProjectsRpc.requests.keys());
-    expect(tags.length).toBe(56);
+    expect(tags.length).toBe(58);
   });
 
-  it("includes the 8 new procedures by tag", () => {
+  it("includes the project core and workspace procedures by tag", () => {
     expect(ProjectsRpc.requests.get("projects.get")).toBe(ProjectsGetRpc);
     expect(ProjectsRpc.requests.get("projects.discovery")).toBe(
       ProjectsDiscoveryRpc,
     );
     expect(ProjectsRpc.requests.get("projects.updateAutomationSettings")).toBe(
       ProjectsUpdateAutomationSettingsRpc,
+    );
+    expect(ProjectsRpc.requests.has("projects.setDefaultAgent")).toBe(true);
+    expect(ProjectsRpc.requests.get("projects.setDefaultAgent")).toBe(
+      ProjectsSetDefaultAgentRpc,
     );
     expect(ProjectsRpc.requests.get("projects.dismissDir")).toBe(
       ProjectsDismissDirRpc,
@@ -41,6 +47,12 @@ describe("ProjectsRpc group — project core + workspace (7B-4B Task 5)", () => 
     );
     expect(ProjectsRpc.requests.get("projects.workspace.rename")).toBe(
       ProjectsWorkspaceRenameRpc,
+    );
+    expect(ProjectsRpc.requests.has("projects.workspace.setDefaultAgent")).toBe(
+      true,
+    );
+    expect(ProjectsRpc.requests.get("projects.workspace.setDefaultAgent")).toBe(
+      ProjectsWorkspaceSetDefaultAgentRpc,
     );
     expect(ProjectsRpc.requests.get("projects.workspace.delete")).toBe(
       ProjectsWorkspaceDeleteRpc,

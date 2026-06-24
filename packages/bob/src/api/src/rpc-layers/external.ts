@@ -1,8 +1,9 @@
 /**
  * Aggregate layer that maps handler factory outputs to ExternalRpc contract
- * names (31 procedures).
+ * names (37 procedures).
  *
- * Imports the three handler factories (forgegraph, webhook, publicApi),
+ * Imports the four handler factories (forgegraph, webhook, publicApi,
+ * integration),
  * instantiates them with a HandlerContext, and wires each factory key to the
  * corresponding contract procedure name expected by ExternalRpc.toLayer().
  *
@@ -13,11 +14,13 @@ import { ExternalRpc } from "@gmacko/bob/contracts";
 import { makeForgeGraphRpcHandlers } from "../rpc-handlers/forgegraph.js";
 import { makeWebhookRpcHandlers } from "../rpc-handlers/webhook.js";
 import { makePublicApiRpcHandlers } from "../rpc-handlers/publicApi.js";
+import { makeIntegrationRpcHandlers } from "../rpc-handlers/integration.js";
 
 export const makeExternalLayer = (ctx: HandlerContext) => {
   const fg = makeForgeGraphRpcHandlers(ctx);
   const wh = makeWebhookRpcHandlers(ctx);
   const pa = makePublicApiRpcHandlers(ctx);
+  const int = makeIntegrationRpcHandlers(ctx);
 
   return ExternalRpc.toLayer({
     // --- ForgeGraph (14) ---
@@ -58,5 +61,13 @@ export const makeExternalLayer = (ctx: HandlerContext) => {
       pa["publicApi.listRunsByWorkItem"],
     "external.publicApi.heartbeat": pa["publicApi.heartbeat"],
     "external.publicApi.generateApiKey": pa["publicApi.generateApiKey"],
+
+    // --- Integration (6) ---
+    "external.integration.list": int["integration.list"],
+    "external.integration.get": int["integration.get"],
+    "external.integration.save": int["integration.save"],
+    "external.integration.fetchLinearTeams": int["integration.fetchLinearTeams"],
+    "external.integration.setupLinear": int["integration.setupLinear"],
+    "external.integration.delete": int["integration.delete"],
   });
 };

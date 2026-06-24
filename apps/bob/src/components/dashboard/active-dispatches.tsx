@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { Badge } from "@gmacko/core/ui/badge";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
 
 import type { badgeVariants } from "@gmacko/core/ui/badge";
 import type { VariantProps } from "class-variance-authority";
@@ -20,15 +20,26 @@ const STATUS_VARIANT: Record<string, BadgeVariant> = {
   failed: "rose",
 };
 
-export function ActiveDispatches() {
-  const trpc = useTRPC();
+interface DispatchBatchSummary {
+  id: string;
+  status: string;
+  completedTasks: number;
+  totalTasks: number;
+  failedTasks: number;
+}
 
-  const { data: batches, isLoading } = useQuery(
-    trpc.dispatch.listBatches.queryOptions(
-      { limit: 5 },
-      { refetchInterval: 10_000 },
-    ),
-  );
+export function ActiveDispatches() {
+  const rpc = useBobRpcClient();
+
+  const input = { limit: 5 };
+  const { data: batches, isLoading } = useQuery({
+    queryKey: ["rpc", "planning.dispatch.listBatches", input],
+    queryFn: () =>
+      rpc.planning.dispatch.listBatches(input) as Promise<
+        DispatchBatchSummary[]
+      >,
+    refetchInterval: 10_000,
+  });
 
   return (
     <div className="rounded-2xl border border-border bg-card p-5">
@@ -48,7 +59,7 @@ export function ActiveDispatches() {
         </p>
       ) : (
         <div className="mt-3 flex flex-col gap-1.5">
-          {(batches as any[]).map((batch) => (
+          {batches.map((batch) => (
             <Link
               key={batch.id}
               href={`/planning/dispatch/${batch.id}`}

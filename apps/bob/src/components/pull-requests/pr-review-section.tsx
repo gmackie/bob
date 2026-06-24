@@ -5,12 +5,23 @@ import { useState } from "react";
 
 import { cn } from "@gmacko/core/ui";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
 
 interface PrReviewSectionProps {
   pullRequestId: string;
   prStatus: string;
 }
+
+type ReviewStatus = "approved" | "changes_requested" | "commented";
+
+type PullRequestReview = {
+  id: string;
+  status: ReviewStatus;
+  body: string | null;
+  createdAt: Date | string;
+  userName: string | null;
+  userImage: string | null;
+};
 
 const statusLabel: Record<string, string> = {
   approved: "Approved",
@@ -48,46 +59,54 @@ export function PrReviewSection({
   pullRequestId,
   prStatus,
 }: PrReviewSectionProps) {
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
   const queryClient = useQueryClient();
+  const reviewsInput = { pullRequestId };
+  const reviewsQueryKey = [
+    "rpc",
+    "projects.pullRequest.listReviews",
+    reviewsInput,
+  ] as const;
 
-  const { data: reviews, isLoading } = useQuery(
-    trpc.pullRequest.listReviews.queryOptions(
-      { pullRequestId },
-      { staleTime: 10_000 },
-    ),
-  );
+  const { data: reviews, isLoading } = useQuery({
+    queryKey: reviewsQueryKey,
+    queryFn: async () =>
+      (await rpc.projects.pullRequest.listReviews(
+        reviewsInput,
+      )) as PullRequestReview[],
+    staleTime: 10_000,
+  });
 
-  const [selectedStatus, setSelectedStatus] = useState<
-    "approved" | "changes_requested" | "commented"
-  >("approved");
+  const [selectedStatus, setSelectedStatus] =
+    useState<ReviewStatus>("approved");
   const [body, setBody] = useState("");
 
-  const addReviewMutation = useMutation(
-    trpc.pullRequest.addReview.mutationOptions({
-      onSuccess: () => {
-        void queryClient.invalidateQueries({
-          queryKey: trpc.pullRequest.listReviews.queryKey({ pullRequestId }),
-        });
-        setBody("");
-      },
-    }),
-  );
+  const addReviewMutation = useMutation({
+    mutationFn: (input: {
+      pullRequestId: string;
+      status: ReviewStatus;
+      body?: string;
+    }) => rpc.projects.pullRequest.addReview(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: reviewsQueryKey });
+      setBody("");
+    },
+  });
 
-  const mergeMutation = useMutation(
-    trpc.pullRequest.merge.mutationOptions({
-      onSuccess: () => {
-        void queryClient.invalidateQueries({
-          queryKey: trpc.pullRequest.get.queryKey({
-            pullRequestId,
-          }),
-        });
-        void queryClient.invalidateQueries({
-          queryKey: trpc.pullRequest.list.queryKey(),
-        });
-      },
-    }),
-  );
+  const mergeMutation = useMutation({
+    mutationFn: (input: {
+      pullRequestId: string;
+      mergeMethod: "merge" | "squash";
+    }) => rpc.projects.pullRequest.merge(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["rpc", "projects.pullRequest.get", { pullRequestId }],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["rpc", "projects.pullRequest.list"],
+      });
+    },
+  });
 
   const isMerged = prStatus === "merged";
   const isClosed = prStatus === "closed";

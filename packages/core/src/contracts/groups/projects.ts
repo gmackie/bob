@@ -129,6 +129,18 @@ export const ProjectsUpdateAutomationSettingsRpc = Rpc.make(
   },
 );
 
+export const ProjectsSetDefaultAgentRpc = Rpc.make(
+  "projects.setDefaultAgent",
+  {
+    payload: Schema.Struct({
+      projectId: Schema.String,
+      defaultAgentType: Schema.NullOr(Schema.String),
+    }),
+    success: ProjectSchema,
+    error: ProjectNotFoundError,
+  },
+);
+
 export const ProjectsDismissDirRpc = Rpc.make("projects.dismissDir", {
   payload: Schema.Struct({ dirId: Schema.String }),
   success: Schema.Struct({ ok: Schema.Boolean }),
@@ -164,6 +176,18 @@ export const ProjectsWorkspaceRenameRpc = Rpc.make(
       name: Schema.String,
     }),
     success: WorkspaceSchema,
+  },
+);
+
+export const ProjectsWorkspaceSetDefaultAgentRpc = Rpc.make(
+  "projects.workspace.setDefaultAgent",
+  {
+    payload: Schema.Struct({
+      id: Schema.String,
+      defaultAgentType: Schema.NullOr(Schema.String),
+    }),
+    success: WorkspaceSchema,
+    error: NotFoundError,
   },
 );
 
@@ -700,11 +724,13 @@ export const ProjectsRpc = RpcGroup.make(
   ProjectsGetRpc,
   ProjectsDiscoveryRpc,
   ProjectsUpdateAutomationSettingsRpc,
+  ProjectsSetDefaultAgentRpc,
   ProjectsDismissDirRpc,
   // Workspace (7B-4B Task 5)
   ProjectsWorkspaceListRpc,
   ProjectsWorkspaceCreateRpc,
   ProjectsWorkspaceRenameRpc,
+  ProjectsWorkspaceSetDefaultAgentRpc,
   ProjectsWorkspaceDeleteRpc,
   // Repository (7B-4B Task 6)
   ProjectsRepositoryListRpc,

@@ -20,6 +20,7 @@ import {
   PlanningTaskMutationResultSchema,
   PlanningCommentRecordSchema,
   PlanningCommentCreateResultSchema,
+  PlanningLinearSyncResultSchema,
   PlanningSearchResultSchema,
   PlanningLabelRecordSchema,
   PlanningCycleRecordSchema,
@@ -193,6 +194,18 @@ export const PlanningListCyclesRpc = Rpc.make("planning.listCycles", {
   success: Schema.Array(PlanningCycleRecordSchema),
   error: Schema.Union([BobNotFoundError, BobForbiddenError]),
 });
+
+export const PlanningSyncLinearProjectsRpc = Rpc.make(
+  "planning.syncLinearProjects",
+  {
+    payload: Schema.Struct({
+      workspaceId: Schema.String,
+      importIssues: Schema.optional(Schema.Boolean),
+    }),
+    success: PlanningLinearSyncResultSchema,
+    error: Schema.Union([BobNotFoundError, BobForbiddenError]),
+  },
+);
 
 export const PlanningGetCurrentUserRpc = Rpc.make("planning.getCurrentUser", {
   payload: Schema.Void,
@@ -824,6 +837,7 @@ export const PlanningRpc = RpcGroup.make(
   PlanningSearchTasksRpc,
   PlanningListLabelsRpc,
   PlanningListCyclesRpc,
+  PlanningSyncLinearProjectsRpc,
   PlanningGetCurrentUserRpc,
   // Agent procedures (Task 4)
   PlanningAgentClaimTaskRpc,

@@ -12,6 +12,9 @@ const createMockDb = () => ({
     workItems: {
       findMany: vi.fn(),
     },
+    chatConversations: {
+      findMany: vi.fn(),
+    },
   },
 });
 
@@ -71,6 +74,7 @@ describe("publicWorkItems router", () => {
         updatedAt: new Date("2026-04-02T00:00:00.000Z"),
       },
     ]);
+    db.query.chatConversations.findMany.mockResolvedValueOnce([]);
 
     const caller = createCaller(db) as any;
 

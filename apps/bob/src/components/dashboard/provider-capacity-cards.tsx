@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { cn } from "@gmacko/core/ui";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
 import {
   buildProviderCapacitySummaries,
   extractProviderCapacitySnapshotsFromRuns,
@@ -21,6 +21,8 @@ import {
 interface ProviderCapacityCardsProps {
   workspaceId?: string;
 }
+
+type ProviderCapacityRun = ProviderCapacityRunSummary & ProviderSessionSummary;
 
 const TONE_CLASS: Record<DashboardTone, string> = {
   default: "bg-muted-foreground",
@@ -97,36 +99,46 @@ function ProviderCard({
 }
 
 export function ProviderCapacityCards({ workspaceId }: ProviderCapacityCardsProps) {
-  const trpc = useTRPC();
-  const { data: workItems } = useQuery(
-    trpc.workItem.list.queryOptions(
-      { workspaceId: workspaceId ?? "", limit: 80 },
-      { enabled: Boolean(workspaceId), refetchInterval: 10_000 },
-    ),
-  );
-  const { data: runs } = useQuery(
-    workspaceId
-      ? trpc.agentRun.list.queryOptions(
-          { workspaceId, limit: 100 },
-          { refetchInterval: 10_000 },
-        )
-      : trpc.agentRun.listAll.queryOptions(
-          { limit: 100 },
-          { refetchInterval: 10_000 },
-        ),
-  );
+  const rpc = useBobRpcClient();
+  const workItemsInput = { workspaceId: workspaceId ?? "", limit: 80 };
+  const runsInput = workspaceId
+    ? { workspaceId, limit: 100 }
+    : { limit: 100 };
+  const { data: workItems } = useQuery({
+    queryKey: ["rpc", "workItem.list", workItemsInput],
+    queryFn: () =>
+      rpc.workItems.list(workItemsInput) as Promise<WorkPipelineItem[]>,
+    enabled: Boolean(workspaceId),
+    refetchInterval: 10_000,
+  });
+  const { data: runs } = useQuery({
+    queryKey: [
+      "rpc",
+      workspaceId ? "agent.run.list" : "agent.run.listAll",
+      runsInput,
+    ],
+    queryFn: () =>
+      workspaceId
+        ? (rpc.agent.listRuns(runsInput) as Promise<
+            ProviderCapacityRun[]
+          >)
+        : (rpc.agent.listAllRuns(runsInput) as Promise<
+            ProviderCapacityRun[]
+          >),
+    refetchInterval: 10_000,
+  });
 
   const cards = buildProviderCapacitySummaries({
-    sessions: ((runs ?? []) as { id: string; status: string; agentType?: string | null }[]).map(
+    sessions: (runs ?? []).map(
       (run): ProviderSessionSummary => ({
         id: run.id,
         status: run.status,
         agentType: run.agentType ?? "codex",
       }),
     ),
-    workItems: (workItems ?? []) as WorkPipelineItem[],
+    workItems: workItems ?? [],
     capacitySnapshots: extractProviderCapacitySnapshotsFromRuns(
-      (runs ?? []) as ProviderCapacityRunSummary[],
+      runs ?? [],
     ),
   });
 

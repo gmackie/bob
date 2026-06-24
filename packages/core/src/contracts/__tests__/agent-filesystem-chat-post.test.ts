@@ -37,7 +37,7 @@ import {
 describe("AgentRpc group — agent.filesystem + chat + post (7B-4B Task 4)", () => {
   it("has 78 procedures total (5 original + 5 Task 1 + 28 Task 2 + 19 Task 3 + 21 Task 4)", () => {
     const tags = Array.from(AgentRpc.requests.keys());
-    expect(tags.length).toBe(78);
+    expect(tags.length).toBe(85);
   });
 
   it("includes all 9 agent.filesystem procedures by tag", () => {

@@ -5,22 +5,27 @@ import { useQuery } from "@tanstack/react-query";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { PrList, PrListHeader } from "~/components/pull-requests/pr-list";
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
 
 type StatusFilter = "open" | "merged" | "closed" | "draft" | undefined;
+type PullRequestStatus = Exclude<StatusFilter, undefined>;
+type PullRequestListItem = {
+  status: PullRequestStatus;
+};
 
 export default function PullRequestsPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(undefined);
 
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
+  const allPrsInput = { limit: 100 };
 
   // Fetch all to get counts for the header pills
-  const { data: allPrs } = useQuery(
-    trpc.pullRequest.list.queryOptions(
-      { limit: 100 },
-      { staleTime: 15_000 },
-    ),
-  );
+  const { data: allPrs } = useQuery({
+    queryKey: ["rpc", "projects.pullRequest.list", allPrsInput],
+    queryFn: async () =>
+      (await rpc.projects.pullRequest.list(allPrsInput)) as PullRequestListItem[],
+    staleTime: 15_000,
+  });
 
   const allCount = allPrs?.length ?? 0;
   const openCount =
