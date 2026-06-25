@@ -28,6 +28,7 @@
     "@bob/prettier-config": "workspace:*",
     "@bob/tsconfig": "workspace:*",
     "@types/node": "catalog:",
+    "@types/pg": "8.16.0",
     "@types/ws": "^8.5.13",
     "eslint": "catalog:",
     "prettier": "catalog:",

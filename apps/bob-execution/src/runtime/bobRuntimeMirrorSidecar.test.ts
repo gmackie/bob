@@ -5,6 +5,7 @@ import {
   mirrorRuntimeEventWithPostgres,
   type MirrorRuntimeEventInput,
   type SqlPoolLike,
+  type SqlClientLike,
 } from "./bobRuntimeMirrorSidecar.js";
 
 function buildRuntimeEvent(
@@ -67,7 +68,7 @@ describe("bob runtime mirror sidecar", () => {
   it("increments next_seq numerically even when pg returns bigint fields as strings", async () => {
     const queries: Array<{ text: string; values: unknown[] | undefined }> = [];
     const client = {
-      async query<T>(text: string, values?: unknown[]) {
+      async query(text: string, values?: unknown[]) {
         queries.push({ text, values });
         if (text.includes("select id, session_id from task_runs where id = $1")) {
           return {
@@ -77,7 +78,7 @@ describe("bob runtime mirror sidecar", () => {
                 session_id: "0485c6c6-cafb-468b-a878-4e7bdfc183ec",
               },
             ],
-          } satisfies { rows: T[] };
+          };
         }
         if (text.includes("select id, user_id, next_seq from chat_conversations")) {
           return {
@@ -88,16 +89,16 @@ describe("bob runtime mirror sidecar", () => {
                 next_seq: "41",
               },
             ],
-          } satisfies { rows: T[] };
+          };
         }
-        return { rows: [] } satisfies { rows: T[] };
+        return { rows: [] };
       },
       release() {},
     };
 
     const pool: SqlPoolLike = {
       async connect() {
-        return client;
+        return client as unknown as SqlClientLike;
       },
     };
 
