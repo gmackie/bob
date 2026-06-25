@@ -69,5 +69,5 @@ export const makeWorkItemsLayer = (ctx: HandlerContext) => {
     "workItem.link.delete": lnk["link.delete"],
     "workItem.link.linkToPlanningTask": lnk["link.linkToPlanningTask"],
     "workItem.link.linkToGitHubPR": lnk["link.linkToGitHubPR"],
-  });
+  } as any);
 };

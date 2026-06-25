@@ -69,5 +69,5 @@ export const makeExternalLayer = (ctx: HandlerContext) => {
     "external.integration.fetchLinearTeams": int["integration.fetchLinearTeams"],
     "external.integration.setupLinear": int["integration.setupLinear"],
     "external.integration.delete": int["integration.delete"],
-  });
+  } as any);
 };

@@ -120,5 +120,5 @@ export const makePlanningLayer = (ctx: HandlerContext) => {
     "planning.checkpoint.create": cp["checkpoint.create"],
     "planning.checkpoint.list": cp["checkpoint.list"],
     "planning.checkpoint.branchFrom": cp["checkpoint.branchFrom"],
-  });
+  } as any);
 };
