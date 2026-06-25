@@ -2,6 +2,7 @@
   "extends": ["@bob/tsconfig/base.json"],
   "compilerOptions": {
     "jsx": "react-native",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "checkJs": false,
     "moduleSuffixes": [".ios", ".android", ".native", ""],
     "paths": {
