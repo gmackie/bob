@@ -107,7 +107,14 @@ function liftHandlers<
       Effect.gen(function* () {
         const db = yield* GmackoDb.asEffect();
         const user = yield* CurrentUser.asEffect();
-        const ctx: HandlerContext = { db, userId: user.userId, tenantId: process.env.BOB_TENANT_ID };
+        const ctx: HandlerContext = {
+          // GmackoDb is typed against the core schema; Bob's handlers expect the
+          // Bob-schema-typed `Db`. The underlying runtime client carries both
+          // table sets — this is a Drizzle cross-instance schema variance only.
+          db: db as unknown as HandlerContext["db"],
+          userId: user.userId,
+          tenantId: process.env.BOB_TENANT_ID,
+        };
         const handlers = factory(ctx);
         return yield* handlers[key]!(input);
       });

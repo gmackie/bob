@@ -12,6 +12,20 @@ const EXAMPLE_TOPICS = [
   "Evaluate latest breakthroughs in battery technology",
 ];
 
+// Shape of `threads.list` rows. The procedure declares `.output(z.any())`
+// (required by trpc-to-openapi), which degenerates the client-inferred type,
+// so we re-attach the real `research_thread` row shape here.
+interface ResearchThread {
+  id: string;
+  title: string;
+  slug: string;
+  domainPackId: string | null;
+  ownerId: string | null;
+  status: "active" | "paused" | "archived" | "completed";
+  createdAt: Date;
+  updatedAt: Date | null;
+}
+
 export default function ThreadsPage() {
   return (
     <Suspense>
@@ -42,7 +56,7 @@ function ThreadsPageInner() {
   // We still render the modal for UI completeness — the mutation would
   // fail gracefully if called.
 
-  const threads = threadsQuery.data ?? [];
+  const threads = (threadsQuery.data as ResearchThread[] | undefined) ?? [];
 
   return (
     <div className="min-h-screen bg-[#111113] text-[#E8E4DF]">

@@ -132,7 +132,6 @@ async function getLatestTaskRunForIssue(planningItemId: string) {
     ),
     with: {
       repository: true,
-      session: true,
       worktree: true,
     },
     orderBy: desc(taskRuns.createdAt),
@@ -166,15 +165,46 @@ function emptyIssueSessionSnapshot(
   };
 }
 
-function buildIssueSessionSnapshot(
+/**
+ * Shape of the `chatConversations` row backing a task run's session.
+ *
+ * The `session` relation on `taskRuns` is intentionally commented out in the
+ * shared schema (`@bob/work-items/schema`, Phase 7B-2 Task 14), so the
+ * relational `with` clause cannot resolve it. We fetch the conversation
+ * directly by `sessionId` and narrow to just the fields the snapshot needs.
+ */
+interface TaskRunSession {
+  workflowStatus: string | null;
+  status: string | null;
+  statusMessage: string | null;
+  workingDirectory: string | null;
+}
+
+async function getSessionForTaskRun(
+  sessionId: string | null,
+): Promise<TaskRunSession | null> {
+  if (!sessionId) {
+    return null;
+  }
+
+  const session = await db.query.chatConversations.findFirst({
+    where: eq(chatConversations.id, sessionId),
+  });
+
+  return session ?? null;
+}
+
+async function buildIssueSessionSnapshot(
   taskRun:
     | Awaited<ReturnType<typeof getLatestTaskRunForIssue>>
     | null,
   fallback: Pick<GetIssueSessionInput, "issueId" | "issueIdentifier">,
-): IssueSessionSnapshot {
+): Promise<IssueSessionSnapshot> {
   if (!taskRun) {
     return emptyIssueSessionSnapshot(fallback);
   }
+
+  const session = await getSessionForTaskRun(taskRun.sessionId);
 
   return {
     issueId: taskRun.workItemId ?? taskRun.planningItemId,
@@ -187,13 +217,12 @@ function buildIssueSessionSnapshot(
     sessionId: taskRun.sessionId,
     sessionUrl: buildSessionUrl(taskRun.sessionId),
     workflowStatus:
-      (taskRun.session?.workflowStatus as WorkflowStatus | null | undefined) ??
-      null,
-    sessionStatus: taskRun.session?.status ?? null,
+      (session?.workflowStatus as WorkflowStatus | null | undefined) ?? null,
+    sessionStatus: session?.status ?? null,
     runStatus: (taskRunStatusEnum as readonly string[]).includes(taskRun.status)
       ? (taskRun.status as TaskRunStatus)
       : null,
-    latestSummary: taskRun.session?.statusMessage ?? taskRun.blockedReason,
+    latestSummary: session?.statusMessage ?? taskRun.blockedReason,
     repository: taskRun.repository
       ? {
           id: taskRun.repository.id,
@@ -206,7 +235,7 @@ function buildIssueSessionSnapshot(
       id: taskRun.worktree?.id ?? null,
       path:
         taskRun.worktree?.path ??
-        taskRun.session?.workingDirectory ??
+        session?.workingDirectory ??
         taskRun.repository?.path ??
         null,
       branch: taskRun.worktree?.branch ?? taskRun.branch ?? null,
@@ -218,7 +247,7 @@ export async function getIssueSessionSnapshot(
   input: GetIssueSessionInput,
 ): Promise<IssueSessionSnapshot> {
   const latestTaskRun = await getLatestTaskRunForIssue(input.issueId);
-  return buildIssueSessionSnapshot(latestTaskRun, input);
+  return await buildIssueSessionSnapshot(latestTaskRun, input);
 }
 
 export async function startIssueSession(
@@ -230,7 +259,7 @@ export async function startIssueSession(
     latestTaskRun &&
     (latestTaskRun.status === "starting" || latestTaskRun.status === "running")
   ) {
-    return buildIssueSessionSnapshot(latestTaskRun, input);
+    return await buildIssueSessionSnapshot(latestTaskRun, input);
   }
 
   const userId = await ensureControlUserId(input.actor);

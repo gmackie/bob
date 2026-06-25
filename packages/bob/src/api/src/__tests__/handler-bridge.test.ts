@@ -11,7 +11,10 @@ import { wrapHandler } from "../handlers/bridge";
 
 import type { HandlerContext } from "../handlers/context";
 
-const ctx: HandlerContext = { db: {}, userId: "test-user" };
+const ctx: HandlerContext = {
+  db: {} as HandlerContext["db"],
+  userId: "test-user",
+};
 
 describe("wrapHandler", () => {
   it("resolves successful handler results", async () => {

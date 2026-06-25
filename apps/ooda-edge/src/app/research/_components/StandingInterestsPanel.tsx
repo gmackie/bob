@@ -1,13 +1,28 @@
 "use client";
 
-import type { inferRouterOutputs } from "@trpc/server";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import type { EdgeRouter } from "@gmacko/ooda/api";
 import { useTRPC } from "~/trpc/react";
 
-type InterestListData = inferRouterOutputs<EdgeRouter>["research"]["interestList"];
-type StandingInterest = InterestListData["items"][number];
+// Shape of `research.interestList`. The procedure declares `.output(z.any())`
+// (required by trpc-to-openapi), which degenerates `inferRouterOutputs` to
+// `any`, so we re-attach the real `standing_interest` row shape here.
+interface StandingInterest {
+  id: string;
+  threadId: string | null;
+  label: string;
+  queryTerms: string[];
+  seedSourceIds: number[];
+  cadenceSeconds: number;
+  lastRunAt: Date | null;
+  lastCursor: string | null;
+  lastError: string | null;
+  enabled: boolean;
+  autoDisableSuggested: boolean;
+}
+interface InterestListData {
+  items: StandingInterest[];
+}
 
 function formatRelative(ts: Date | string | null): string {
   if (!ts) return "never";
@@ -74,7 +89,8 @@ export function StandingInterestsPanel() {
       <div className="text-xs text-red-400">Failed to load interests.</div>
     );
   }
-  const items: StandingInterest[] = listQuery.data?.items ?? [];
+  const items: StandingInterest[] =
+    (listQuery.data as InterestListData | undefined)?.items ?? [];
   if (items.length === 0) {
     return (
       <div className="text-xs text-[#5A5855]">

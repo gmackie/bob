@@ -73,4 +73,5 @@ export const makeAuthHandlers = (ctx: HandlerContext) => {
 };
 
 export const makeAuthLayer = (ctx: HandlerContext) =>
-  AuthRpc.toLayer(makeAuthHandlers(ctx));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbed handlers narrow the contract error channel (BobNotFoundError vs never); mirrors rpc-server.ts established pattern
+  AuthRpc.toLayer(makeAuthHandlers(ctx) as any);

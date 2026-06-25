@@ -44,7 +44,7 @@ export const makeInstanceRpcHandlers = (ctx: HandlerContext) => ({
   "instance.start": ({
     payload,
   }: {
-    payload: { worktreeId: string; agentType: string };
+    payload: Parameters<typeof instanceStart>[1];
   }) => wrapHandler(instanceStart, ctx, payload, "instance"),
 
   "instance.stop": ({
@@ -68,11 +68,6 @@ export const makeInstanceRpcHandlers = (ctx: HandlerContext) => ({
   "instance.updateStatus": ({
     payload,
   }: {
-    payload: {
-      id: string;
-      status: string;
-      pid?: number;
-      errorMessage?: string;
-    };
+    payload: Parameters<typeof instanceUpdateStatus>[1];
   }) => wrapHandler(instanceUpdateStatus, ctx, payload, "instance"),
 });

@@ -176,6 +176,7 @@ export const ProjectsWorkspaceRenameRpc = Rpc.make(
       name: Schema.String,
     }),
     success: WorkspaceSchema,
+    error: NotFoundError,
   },
 );
 

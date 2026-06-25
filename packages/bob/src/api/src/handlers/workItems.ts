@@ -24,7 +24,11 @@ import {
   workspaces,
 } from "@bob/db/schema";
 import { resolveAgentType } from "@bob/work-items";
-import type { WorkItemKind } from "@bob/work-items/schema";
+import type {
+  WorkItemKind,
+  WorkItemArtifactType,
+  WorkItemNotificationType,
+} from "@bob/work-items/schema";
 
 import type { HandlerContext } from "./context.js";
 
@@ -318,11 +322,11 @@ export async function workItemsGet(
       dependencies: dependencies
         .map((row: any) => row.dependsOn)
         .filter(Boolean)
-        .map((item: any) => formatRelatedWorkItem(item, project)),
+        .map((item: any) => formatRelatedWorkItem(item, project ?? null)),
       dependents: dependents
         .map((row: any) => row.workItem)
         .filter(Boolean)
-        .map((item: any) => formatRelatedWorkItem(item, project)),
+        .map((item: any) => formatRelatedWorkItem(item, project ?? null)),
     },
     currentArtifacts,
     childCount: children.length,
@@ -598,7 +602,7 @@ export async function workItemsCreateArtifact(
     sessionId?: string | null;
     producerType: string;
     producerId?: string | null;
-    artifactType: string;
+    artifactType: WorkItemArtifactType;
     artifactRole: string;
     url?: string | null;
     title?: string | null;
@@ -664,7 +668,8 @@ export async function workItemsCreateArtifact(
       title: input.title ?? null,
       summary: input.summary ?? null,
       content: input.content ?? null,
-      metadata: input.metadata ?? null,
+      metadata:
+        (input.metadata as Record<string, unknown> | null | undefined) ?? null,
       isCurrent: true,
     })
     .returning();
@@ -763,7 +768,7 @@ export async function workItemsCreateNotification(
     userId: string;
     workItemId?: string | null;
     actorId?: string | null;
-    type: string;
+    type: WorkItemNotificationType;
     title: string;
     body?: string | null;
     url?: string | null;
@@ -967,6 +972,13 @@ export async function workItemsDispatch(
       workItemIdentifierSnapshot: identifier,
     })
     .returning();
+
+  if (!session) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to create execution session",
+    });
+  }
 
   const gatewayUrl = process.env.GATEWAY_URL;
   const nudgeSecret = process.env.NUDGE_SHARED_SECRET;

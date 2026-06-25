@@ -22,7 +22,7 @@ export const makeSkillRpcHandlers = (ctx: HandlerContext) => ({
   "skill.list": ({
     payload,
   }: {
-    payload?: { category?: string; source?: string };
+    payload?: Parameters<typeof skillList>[1];
   }) => wrapHandler(skillList, ctx, payload, "skill"),
 
   "skill.stats": () =>

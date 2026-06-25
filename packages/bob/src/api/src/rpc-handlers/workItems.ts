@@ -95,20 +95,7 @@ export const makeWorkItemsRpcHandlers = (ctx: HandlerContext) => ({
   "workItems.createArtifact": ({
     payload,
   }: {
-    payload: {
-      workItemId: string;
-      taskRunId?: string | null;
-      sessionId?: string | null;
-      producerType: string;
-      producerId?: string | null;
-      artifactType: string;
-      artifactRole: string;
-      url?: string | null;
-      title?: string | null;
-      summary?: string | null;
-      content?: string | null;
-      metadata?: unknown;
-    };
+    payload: Parameters<typeof workItemsCreateArtifact>[1];
   }) => wrapHandler(workItemsCreateArtifact, ctx, payload, "artifact"),
 
   "workItems.listActivities": ({
@@ -138,15 +125,7 @@ export const makeWorkItemsRpcHandlers = (ctx: HandlerContext) => ({
   "workItems.createNotification": ({
     payload,
   }: {
-    payload: {
-      userId: string;
-      workItemId?: string | null;
-      actorId?: string | null;
-      type: string;
-      title: string;
-      body?: string | null;
-      url?: string | null;
-    };
+    payload: Parameters<typeof workItemsCreateNotification>[1];
   }) => wrapHandler(workItemsCreateNotification, ctx, payload, "notification"),
 
   "workItems.markNotificationAsRead": ({

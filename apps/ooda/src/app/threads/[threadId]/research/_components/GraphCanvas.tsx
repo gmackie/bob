@@ -46,6 +46,30 @@ interface ReagraphEdge {
   label?: string;
 }
 
+// `research.graphByThread` / `research.inboxByThread` are `.output(z.any())`
+// for OpenAPI, which degenerates the client query type; mirror the projected
+// shapes the resolvers return so the derivation below stays type-checked.
+interface ThreadGraphData {
+  nodes: {
+    sourceId: number;
+    title: string | null;
+    author: string | null;
+    year: number | null;
+    influenceScore: number | null;
+    s2PaperId: string | null;
+  }[];
+  edges: {
+    fromSourceId: number;
+    toSourceId: number;
+    kind: string;
+    weight: number | null;
+  }[];
+}
+
+interface ThreadInboxData {
+  items: { sourceId: number }[];
+}
+
 // influenceScore varies by orders of magnitude, so log-scale before clamping
 // to [4, 24] px — prevents one high-influence node from dwarfing the canvas.
 function sizeForInfluence(influence: number | null): number {
@@ -72,14 +96,15 @@ export function GraphCanvas({ threadId }: GraphCanvasProps) {
 
   const flaggedSourceIds = useMemo(() => {
     const set = new Set<number>();
-    for (const item of inboxQuery.data?.items ?? []) {
+    const inbox = inboxQuery.data as unknown as ThreadInboxData | undefined;
+    for (const item of inbox?.items ?? []) {
       set.add(item.sourceId);
     }
     return set;
   }, [inboxQuery.data]);
 
   const { nodes, edges } = useMemo(() => {
-    const raw = graphQuery.data;
+    const raw = graphQuery.data as unknown as ThreadGraphData | undefined;
     if (!raw) {
       return {
         nodes: [] as ReagraphNode[],

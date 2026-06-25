@@ -266,7 +266,7 @@ describe("stubProjectsHandlers — featureBranch (7B-4B Task 7)", () => {
       }),
     );
     expect(result.length).toBe(1);
-    expect(result[0].taskPRCount).toBe(1);
+    expect(result[0]?.taskPRCount).toBe(1);
   });
 
   it("featureBranch.updateStatus changes status", async () => {

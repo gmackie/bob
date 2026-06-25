@@ -114,7 +114,11 @@ export function InboxList({ threadId }: InboxListProps) {
       </div>
     );
   }
-  const items = inboxQuery.data?.items ?? [];
+  // `research.inboxByThread` is `.output(z.any())` for OpenAPI, which
+  // degenerates the client query type; cast to the inbox-row shape.
+  const items =
+    (inboxQuery.data as unknown as { items: InboxItem[] } | undefined)?.items ??
+    [];
   if (items.length === 0) {
     return (
       <div className="p-3 text-xs text-[#5A5855]">No pending findings.</div>

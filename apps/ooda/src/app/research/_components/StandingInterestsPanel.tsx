@@ -46,7 +46,7 @@ export function StandingInterestsPanel() {
         if (previous) {
           const nextEnabled = vars.enabled;
           queryClient.setQueryData<InterestListData>(queryKey, {
-            items: previous.items.map((item) =>
+            items: previous.items.map((item: StandingInterest) =>
               item.id === vars.id ? { ...item, enabled: nextEnabled } : item,
             ),
           });

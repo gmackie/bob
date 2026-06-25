@@ -13,6 +13,8 @@ import {
   skills,
   workItems,
   workspaceMembers,
+  type SkillCategory,
+  type SkillSource,
 } from "@bob/db/schema";
 
 import type { HandlerContext } from "./context.js";
@@ -186,7 +188,7 @@ const BUILTIN_SKILLS = [
 
 export async function skillList(
   _ctx: HandlerContext,
-  input?: { category?: string; source?: string },
+  input?: { category?: SkillCategory; source?: SkillSource },
 ) {
   const conditions = [];
   if (input?.category) {

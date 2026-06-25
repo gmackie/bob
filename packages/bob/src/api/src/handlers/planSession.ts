@@ -18,6 +18,7 @@ import {
   workItemDependencies,
   workItems,
   workspaceMembers,
+  type WorkItemKind,
 } from "@bob/db/schema";
 
 import { resolvePlanningProvider } from "../services/integrations/planningProvider.js";
@@ -514,7 +515,7 @@ export async function planSessionCreateDraft(
     projectId: string;
     title: string;
     description?: string;
-    kind: string;
+    kind: WorkItemKind;
     priority: string;
     sortOrder: number;
   },
@@ -556,7 +557,7 @@ export async function planSessionUpdateDraft(
     id: string;
     title?: string;
     description?: string;
-    kind?: string;
+    kind?: WorkItemKind;
     priority?: string;
     sortOrder?: number;
   },

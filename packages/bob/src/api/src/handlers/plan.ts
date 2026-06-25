@@ -96,11 +96,14 @@ export async function planCreate(
   ctx: HandlerContext,
   input: {
     worktreeId: string;
-    title: string;
+    // `filePath` is provided by the tRPC `CreateWorktreePlanSchema` path; the
+    // Effect-RPC `plan.create` contract does not carry it, so it is optional
+    // here and falls back to an empty string for the NOT NULL column.
+    filePath?: string;
+    title?: string;
     goal?: string;
     status?: string;
     planningTaskId?: string | null;
-    [key: string]: unknown;
   },
 ) {
   const wt = await ctx.db.query.worktrees.findFirst({
@@ -117,7 +120,12 @@ export async function planCreate(
   const [plan] = await ctx.db
     .insert(worktreePlans)
     .values({
-      ...input,
+      worktreeId: input.worktreeId,
+      filePath: input.filePath ?? "",
+      title: input.title,
+      goal: input.goal,
+      status: input.status,
+      planningTaskId: input.planningTaskId,
       userId: ctx.userId,
     })
     .returning();
@@ -203,7 +211,6 @@ export async function planAddTask(
     status?: string;
     priority?: string;
     sortOrder?: number;
-    [key: string]: unknown;
   },
 ) {
   const plan = await ctx.db.query.worktreePlans.findFirst({
@@ -217,9 +224,23 @@ export async function planAddTask(
     throw new TRPCError({ code: "NOT_FOUND", message: "Plan not found" });
   }
 
+  // `taskKey` is NOT NULL with no default; derive a stable per-plan key from
+  // the current task count (the RPC payload does not carry one).
+  const existingTasks = await ctx.db.query.planTaskItems.findMany({
+    where: eq(planTaskItems.planId, input.planId),
+  });
+  const taskKey = `T${existingTasks.length + 1}`;
+
   const [task] = await ctx.db
     .insert(planTaskItems)
-    .values(input)
+    .values({
+      planId: input.planId,
+      taskKey,
+      content: input.content,
+      status: input.status,
+      priority: input.priority,
+      sortOrder: input.sortOrder,
+    })
     .returning();
 
   return task;

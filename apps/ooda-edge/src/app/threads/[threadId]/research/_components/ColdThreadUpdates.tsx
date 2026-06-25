@@ -8,6 +8,16 @@ interface ColdThreadUpdatesProps {
   threadId: string;
 }
 
+// Shape of `research.coldThreadUpdatesByThread` items. The procedure declares
+// `.output(z.any())` (required by trpc-to-openapi), which degenerates the
+// client-inferred type, so we re-attach the real resolver shape here.
+interface ColdUpdateItem {
+  sourceId: number;
+  title: string;
+  foundAt: string;
+  reasonMd: string;
+}
+
 export function ColdThreadUpdates({ threadId }: ColdThreadUpdatesProps) {
   const trpc = useTRPC();
   const updatesQuery = useQuery(
@@ -29,7 +39,8 @@ export function ColdThreadUpdates({ threadId }: ColdThreadUpdatesProps) {
       </div>
     );
   }
-  const items = updatesQuery.data?.items ?? [];
+  const items =
+    (updatesQuery.data as { items: ColdUpdateItem[] } | undefined)?.items ?? [];
   if (items.length === 0) {
     return (
       <div className="p-3 text-xs text-[#5A5855]">

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { workItemsGet, workItemsList, workItemsReorderQueue, workItemsUpdate } from "../workItems";
+import type { HandlerContext } from "../context";
 
 const DASHBOARD_ACTIVE_SESSION_STATUSES = [
   "queued",
@@ -82,7 +83,7 @@ describe("work item handlers", () => {
     };
 
     await workItemsList(
-      { db, userId: "user-1" },
+      { db: db as unknown as HandlerContext["db"], userId: "user-1" },
       { workspaceId: workItem.workspaceId },
     );
 
@@ -129,7 +130,7 @@ describe("work item handlers", () => {
     };
 
     await workItemsGet(
-      { db, userId: "user-1" },
+      { db: db as unknown as HandlerContext["db"], userId: "user-1" },
       { id: workItem.id },
     );
 
@@ -181,7 +182,7 @@ describe("work item handlers", () => {
     };
 
     const result = await workItemsGet(
-      { db, userId: "user-1" },
+      { db: db as unknown as HandlerContext["db"], userId: "user-1" },
       { id: workItem.id },
     );
 
@@ -257,7 +258,7 @@ describe("work item handlers", () => {
     };
 
     const result = await workItemsGet(
-      { db, userId: "user-1" },
+      { db: db as unknown as HandlerContext["db"], userId: "user-1" },
       { id: workItem.id },
     );
 
@@ -299,7 +300,7 @@ describe("work item handlers", () => {
     };
 
     await workItemsReorderQueue(
-      { db, userId: "user-1" },
+      { db: db as unknown as HandlerContext["db"], userId: "user-1" },
       {
         workspaceId: "22222222-2222-4222-8222-222222222222",
         workItemIds: [
@@ -370,7 +371,7 @@ describe("work item handlers", () => {
     };
 
     await workItemsUpdate(
-      { db, userId: "user-1" },
+      { db: db as unknown as HandlerContext["db"], userId: "user-1" },
       {
         id: workItem.id,
         status: "in_progress",
@@ -437,7 +438,7 @@ describe("work item handlers", () => {
     };
 
     await workItemsUpdate(
-      { db, userId: "user-1" },
+      { db: db as unknown as HandlerContext["db"], userId: "user-1" },
       {
         id: workItem.id,
         priority: "high",

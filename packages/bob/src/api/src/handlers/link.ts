@@ -94,7 +94,7 @@ export async function linkCreate(
     externalId?: string;
     url?: string;
     title?: string;
-    metadata?: Record<string, unknown>;
+    metadata?: Record<string, unknown> | null;
   },
 ) {
   const wt = await ctx.db.query.worktrees.findFirst({

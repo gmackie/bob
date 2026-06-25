@@ -19,7 +19,7 @@
 //
 // Phase 7B-4B Task 8: Added stubs for 6 gitProvider + 7 git procedures
 // — 56 handlers total.
-import { Effect } from "effect";
+import { DateTime, Effect } from "effect";
 
 import { ProjectNotFoundError } from "@gmacko/core/projects/errors";
 import { NotFoundError } from "@gmacko/core/rpc/errors";
@@ -74,8 +74,8 @@ export const STUB_WORKSPACE_1: WorkspaceWire = {
   name: "Acme Workspace",
   slug: "acme-ws",
   description: null,
-  createdAt: "2026-04-21T12:00:00Z",
-  updatedAt: "2026-04-21T12:00:00Z",
+  createdAt: DateTime.makeUnsafe("2026-04-21T12:00:00Z"),
+  updatedAt: DateTime.makeUnsafe("2026-04-21T12:00:00Z"),
 };
 
 export const STUB_WORKSPACE_MEMBER_1: WorkspaceMemberWire = {
@@ -83,7 +83,7 @@ export const STUB_WORKSPACE_MEMBER_1: WorkspaceMemberWire = {
   workspaceId: STUB_WORKSPACE_1.id,
   userId: "00000000-0000-0000-0000-000000000099",
   role: "owner",
-  joinedAt: "2026-04-21T12:00:00Z",
+  joinedAt: DateTime.makeUnsafe("2026-04-21T12:00:00Z"),
   workspace: STUB_WORKSPACE_1,
 };
 
@@ -438,7 +438,7 @@ export const stubProjectsHandlers = {
       title?: string;
       goal?: string;
       planningTaskId?: string;
-      tasks?: Array<{ key: string; content: string; status?: string }>;
+      tasks?: ReadonlyArray<{ key: string; content: string; status?: string }>;
     };
   }) => {
     if (repositoryId !== STUB_REPOSITORY_1.id) {
@@ -485,7 +485,7 @@ export const stubProjectsHandlers = {
     goal?: string;
     status?: string;
     planningTaskId?: string | null;
-    tasks?: Array<{ key: string; content: string; status?: string }>;
+    tasks?: ReadonlyArray<{ key: string; content: string; status?: string }>;
   }) => {
     if (worktreeId !== STUB_WORKTREE_1.id) {
       return Effect.fail(

@@ -74,11 +74,11 @@ function makeDb(opts: { existingTenantId?: string | null } = {}) {
 describe("workspaceCreate", () => {
   it("creates a tenant and attaches it to the new workspace when the user has none", async () => {
     const db = makeDb({ existingTenantId: null });
-    const ctx: HandlerContext = { db, userId: "user-abc" } as HandlerContext;
+    const ctx: HandlerContext = { db, userId: "user-abc" } as unknown as HandlerContext;
 
     const ws = await workspaceCreate(ctx, { name: "Hetzner Bob", slug: "hetzner-bob" });
 
-    expect(ws.tenantId).toBe("tenant-new");
+    expect(ws!.tenantId).toBe("tenant-new");
 
     const wsInsert = (db.__inserts as Insert[]).find((i) => i.table === "workspaces");
     expect(wsInsert?.values.tenantId).toBe("tenant-new");
@@ -88,11 +88,11 @@ describe("workspaceCreate", () => {
 
   it("reuses the user's existing tenant", async () => {
     const db = makeDb({ existingTenantId: "tenant-existing" });
-    const ctx: HandlerContext = { db, userId: "user-abc" } as HandlerContext;
+    const ctx: HandlerContext = { db, userId: "user-abc" } as unknown as HandlerContext;
 
     const ws = await workspaceCreate(ctx, { name: "W", slug: "w" });
 
-    expect(ws.tenantId).toBe("tenant-existing");
+    expect(ws!.tenantId).toBe("tenant-existing");
     // No new tenant row should be inserted when one already exists.
     expect((db.__inserts as Insert[]).some((i) => i.table === "tenants")).toBe(false);
   });

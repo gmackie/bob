@@ -8,6 +8,17 @@ interface SynergyListProps {
   threadId: string;
 }
 
+// `research.linksByThread` is `.output(z.any())` for OpenAPI, which
+// degenerates the client query type; describe the projected link row shape.
+interface SynergyLink {
+  otherThreadId: string;
+  otherThreadTitle: string | null;
+  kind: string;
+  score: number | null;
+  reasonMd: string | null;
+  discoveredAt: Date | string | null;
+}
+
 const KIND_LABEL: Record<string, string> = {
   topic_overlap: "topic",
   citation_overlap: "cites",
@@ -29,7 +40,9 @@ export function SynergyList({ threadId }: SynergyListProps) {
       <div className="p-3 text-xs text-red-400">Failed to load synergies.</div>
     );
   }
-  const items = linksQuery.data?.items ?? [];
+  const items =
+    (linksQuery.data as unknown as { items: SynergyLink[] } | undefined)
+      ?.items ?? [];
   if (items.length === 0) {
     return (
       <div className="p-3 text-xs text-[#5A5855]">No cross-thread links.</div>

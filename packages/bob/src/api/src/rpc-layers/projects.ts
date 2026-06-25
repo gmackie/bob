@@ -132,4 +132,5 @@ export const makeProjectsHandlers = (ctx: HandlerContext) => {
 };
 
 export const makeProjectsLayer = (ctx: HandlerContext) =>
-  ProjectsRpc.toLayer(makeProjectsHandlers(ctx));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbed handlers narrow the contract error channel (BobNotFoundError vs never); mirrors rpc-server.ts established pattern
+  ProjectsRpc.toLayer(makeProjectsHandlers(ctx) as any);

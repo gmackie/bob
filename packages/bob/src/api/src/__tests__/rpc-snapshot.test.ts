@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import { BobNotFoundError } from "@gmacko/bob/contracts";
 
 import { makeSnapshotRpcHandlers } from "../rpc-handlers/snapshot";
+import type { HandlerContext } from "../handlers/context";
 
 // ---------------------------------------------------------------------------
 // Mock helpers — replicate the Drizzle query-builder chain shapes used by
@@ -65,7 +66,8 @@ function makeMockDb(overrides?: {
         returning: () => Promise.resolve(insertRows),
       }),
     }),
-  };
+    // The partial mock only implements the chains snapshot.ts exercises.
+  } as unknown as HandlerContext["db"];
 }
 
 // ---------------------------------------------------------------------------
@@ -86,7 +88,7 @@ describe("snapshot RPC handlers", () => {
     );
 
     expect(result).toBeDefined();
-    expect(result.id).toBe("snap-new");
+    expect(result!.id).toBe("snap-new");
   });
 
   it("planning.snapshot.list resolves to an array", async () => {
@@ -101,7 +103,7 @@ describe("snapshot RPC handlers", () => {
 
     expect(Array.isArray(result)).toBe(true);
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("snap-1");
+    expect(result[0]!.id).toBe("snap-1");
   });
 
   it("planning.snapshot.get resolves to the snapshot", async () => {

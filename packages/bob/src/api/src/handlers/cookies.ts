@@ -5,7 +5,22 @@
  * Phase 7B-4D-beta Task 3.
  */
 import { and, count, eq, sql } from "@bob/db";
-import { browserCookies, chatConversations, sessionCookieScopes } from "@bob/db/schema";
+import {
+  browserCookies as _browserCookies,
+  chatConversations,
+  sessionCookieScopes as _sessionCookieScopes,
+} from "@bob/db/schema";
+
+// drizzle-orm dual-instance shim: the cookie tables are defined in @bob/cookies,
+// which resolves a different drizzle-orm peer-hash copy of 0.44.7 (better-sqlite3@11)
+// than @bob/api / @bob/db (better-sqlite3@12). Because PgColumn.config is `protected`,
+// these tables are nominally incompatible with this package's drizzle query builder
+// (ctx.db), and they are dropped from ctx.db.query's relational map. Re-brand them to
+// `any` locally so the builder accepts them. chatConversations comes from @bob/chat,
+// which shares @bob/api's instance, so it needs no shim. Root fix is to dedupe
+// drizzle-orm in the lockfile (reported, not changed here). Runtime is unaffected.
+const browserCookies = _browserCookies as any;
+const sessionCookieScopes = _sessionCookieScopes as any;
 
 import {
   encryptCookieValue,
@@ -139,7 +154,8 @@ export async function cookiesGetForSession(
   const domain = normalizeDomain(input.domain);
 
   // Check domain is in scope for this session
-  const scope = await ctx.db.query.sessionCookieScopes.findFirst({
+  // ctx.db.query lacks the cookie tables — see dual-instance note at imports.
+  const scope = await (ctx.db.query as any).sessionCookieScopes.findFirst({
     where: and(
       eq(sessionCookieScopes.sessionId, input.sessionId),
       eq(sessionCookieScopes.domain, domain),
@@ -154,7 +170,8 @@ export async function cookiesGetForSession(
   }
 
   // Get cookies, filtering expired
-  const cookies = await ctx.db.query.browserCookies.findMany({
+  // ctx.db.query lacks the cookie tables — see dual-instance note at imports.
+  const cookies = await (ctx.db.query as any).browserCookies.findMany({
     where: and(
       eq(browserCookies.userId, ctx.userId),
       eq(browserCookies.domain, domain),

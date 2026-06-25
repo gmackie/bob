@@ -179,4 +179,5 @@ export const makeAgentHandlers = (ctx: HandlerContext) => {
 };
 
 export const makeAgentLayer = (ctx: HandlerContext) =>
-  AgentRpc.toLayer(makeAgentHandlers(ctx));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbed handlers narrow the contract error channel (BobNotFoundError vs never); mirrors rpc-server.ts established pattern
+  AgentRpc.toLayer(makeAgentHandlers(ctx) as any);

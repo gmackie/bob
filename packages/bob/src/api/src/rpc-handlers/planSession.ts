@@ -122,29 +122,13 @@ export const makePlanSessionRpcHandlers = (ctx: HandlerContext) => ({
   "planSession.createDraft": ({
     payload,
   }: {
-    payload: {
-      sessionId: string;
-      workspaceId: string;
-      projectId: string;
-      title: string;
-      description?: string;
-      kind: string;
-      priority: string;
-      sortOrder: number;
-    };
+    payload: Parameters<typeof planSessionCreateDraft>[1];
   }) => wrapHandler(planSessionCreateDraft, ctx, payload, "planDraft"),
 
   "planSession.updateDraft": ({
     payload,
   }: {
-    payload: {
-      id: string;
-      title?: string;
-      description?: string;
-      kind?: string;
-      priority?: string;
-      sortOrder?: number;
-    };
+    payload: Parameters<typeof planSessionUpdateDraft>[1];
   }) => wrapHandler(planSessionUpdateDraft, ctx, payload, "planDraft"),
 
   "planSession.removeDraft": ({

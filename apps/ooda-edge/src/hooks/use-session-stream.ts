@@ -11,6 +11,17 @@ interface SessionStreamState {
   error?: string;
 }
 
+// Shape of `runner.getSessionEvents` rows. The procedure declares
+// `.output(z.any())` (required by trpc-to-openapi), which degenerates the
+// client-inferred type, so we re-attach the real `session_event` row shape.
+interface SessionEvent {
+  id: string;
+  sessionId: string;
+  type: string;
+  content: string;
+  createdAt: Date;
+}
+
 /**
  * Streams session output via SSE (live) with tRPC query for content.
  *
@@ -47,13 +58,14 @@ export function useSessionStream(
 
   // Rebuild output from the full event list whenever the query returns.
   useEffect(() => {
-    if (!eventsQuery.data || eventsQuery.data.length === 0) return;
+    const events = eventsQuery.data as SessionEvent[] | undefined;
+    if (!events || events.length === 0) return;
 
     let accumulated = "";
     let ended = false;
     let errMsg: string | undefined;
 
-    for (const event of eventsQuery.data) {
+    for (const event of events) {
       if (event.type === "stdout_chunk") {
         accumulated += event.content;
       }
@@ -66,7 +78,7 @@ export function useSessionStream(
 
     // If no chunks yet, fall back to the legacy single stdout event.
     if (!accumulated) {
-      for (const event of eventsQuery.data) {
+      for (const event of events) {
         if (event.type === "stdout") {
           accumulated += event.content;
         }

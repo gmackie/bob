@@ -6,6 +6,17 @@ import { useQuery } from "@tanstack/react-query";
 import { useTRPC } from "~/trpc/react";
 import { ThreadShell } from "~/components/threads/thread-shell";
 
+// Shape of `threads.bySlug`. The procedure declares `.output(z.any())`
+// (required by trpc-to-openapi), which degenerates the client-inferred type,
+// so we re-attach the fields we consume here.
+interface ThreadDetail {
+  id: string;
+  title: string;
+  slug: string;
+  status: string;
+  domainPackId: string | null;
+}
+
 export default function ThreadDetailPage({
   params,
 }: {
@@ -40,7 +51,7 @@ function ThreadDetailInner({ slug }: { slug: string }) {
     );
   }
 
-  const thread = threadQuery.data;
+  const thread = threadQuery.data as ThreadDetail | undefined;
   if (!thread) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#111113] text-[#E8E4DF]">

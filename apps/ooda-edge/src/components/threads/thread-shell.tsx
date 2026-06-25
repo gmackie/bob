@@ -42,9 +42,11 @@ export function ThreadShell({ thread }: ThreadShellProps) {
 
   const trpc = useTRPC();
 
-  // Get available runners
+  // Get available runners. `runner.listDevices` declares `.output(z.any())`
+  // (required by trpc-to-openapi), which degenerates the client-inferred
+  // type, so we re-attach the fields we consume here.
   const runnersQuery = useQuery(trpc.runner.listDevices.queryOptions());
-  const firstRunner = runnersQuery.data?.[0];
+  const firstRunner = (runnersQuery.data as { id: string }[] | undefined)?.[0];
 
   // Get adapters for the first available runner
   const adaptersQuery = useQuery({
@@ -54,7 +56,8 @@ export function ThreadShell({ thread }: ThreadShellProps) {
     enabled: !!firstRunner?.id && showCompareBar,
   });
 
-  const adapters = adaptersQuery.data ?? [];
+  // `runner.listAdapters` returns the device's capability strings.
+  const adapters = (adaptersQuery.data as string[] | undefined) ?? [];
 
   const sendPromptMutation = useMutation(
     trpc.runner.sendPrompt.mutationOptions(),

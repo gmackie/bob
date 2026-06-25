@@ -6,6 +6,21 @@ import { useTRPC } from "~/trpc/react";
 
 type DiveStatus = "queued" | "running" | "done";
 
+// Shape of `research.divesRecent` items. The procedure declares
+// `.output(z.any())` (required by trpc-to-openapi), which degenerates the
+// client-inferred type, so we re-attach the real resolver shape here.
+interface DiveItem {
+  id: string;
+  threadId: string;
+  seed: string[];
+  status: string;
+  budgetPapers: number;
+  budgetSeconds: number | null;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  elapsedMs: number | null;
+}
+
 const STATUS_COLOR: Record<DiveStatus, string> = {
   queued: "#8A8580",
   running: "#D4A04A",
@@ -33,7 +48,8 @@ export function ActiveDives() {
   if (divesQuery.isError) {
     return <div className="text-xs text-red-400">Failed to load dives.</div>;
   }
-  const items = divesQuery.data?.items ?? [];
+  const items =
+    (divesQuery.data as { items: DiveItem[] } | undefined)?.items ?? [];
   if (items.length === 0) {
     return <div className="text-xs text-[#5A5855]">No recent dives.</div>;
   }

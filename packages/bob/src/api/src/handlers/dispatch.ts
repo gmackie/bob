@@ -952,7 +952,7 @@ export async function dispatchExecutionBatch(
       });
       if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: `Work item ${wiId} not found` });
       wiTitle = existing.title;
-      wiDescription = wiDescription ?? existing.description;
+      wiDescription = wiDescription ?? existing.description ?? undefined;
       identifier = formatWorkItemIdentifier({
         projectKey: (existing as any).project?.key ?? null,
         sequenceNumber: existing.sequenceNumber,

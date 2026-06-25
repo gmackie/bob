@@ -8,11 +8,26 @@
 import type { ToolHandler } from "../handler";
 
 export const inbox_list: ToolHandler<"inbox_list"> = async (args, ctx) => {
-  const r = await ctx.trpc.research.inboxByThread({
+  // `.output(z.any())` on the router → inferred `any`; restore the
+  // resolver's real item shape so the `.filter`/`.map` callbacks type.
+  const r = (await ctx.trpc.research.inboxByThread({
     threadId: ctx.threadId,
     triage: args.triage ?? "pending",
     limit: args.limit,
-  });
+  })) as {
+    items: {
+      id: string;
+      sourceId: number | null;
+      title: string | null;
+      author: string | null;
+      year: number | null;
+      reasonMd: string | null;
+      score: number | null;
+      foundAt: Date | string;
+      triage: string;
+      standingInterestLabel: string | null;
+    }[];
+  };
 
   // `since` isn't supported by the tRPC procedure yet — it filters in
   // memory here so the agent's surface stays consistent. The procedure

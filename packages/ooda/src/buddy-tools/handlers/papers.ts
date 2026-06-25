@@ -19,7 +19,9 @@ export const papers_search: ToolHandler<"papers_search"> = async (
   args,
   ctx,
 ) => {
-  const r = await ctx.trpc.research.papersSearchVault({
+  // `.output(z.any())` on the router → inferred `any`; restore the
+  // resolver's real paper shape so the `.map` callback below types.
+  const r = (await ctx.trpc.research.papersSearchVault({
     query: args.query,
     ...(args.year_from !== undefined ? { yearFrom: args.year_from } : {}),
     // `min_citations` on the tool schema is a count (0..∞); the vault
@@ -28,7 +30,17 @@ export const papers_search: ToolHandler<"papers_search"> = async (
     // lookup, so V1.5 ignores min_citations and leaves the schema field
     // for when citation_count gets persisted.
     limit: args.limit,
-  });
+  })) as {
+    papers: {
+      sourceId: number;
+      title: string;
+      author: string | null;
+      body: string | null;
+      year: number | null;
+      doi: string | null;
+      s2PaperId: string | null;
+    }[];
+  };
   return {
     papers: r.papers.map((p) => ({
       source_id: p.sourceId,
@@ -45,7 +57,9 @@ export const papers_search: ToolHandler<"papers_search"> = async (
 };
 
 export const paper_get: ToolHandler<"paper_get"> = async (args, ctx) => {
-  const r = await ctx.trpc.research.paperById({ id: args.id });
+  // The tool schema's `id` is `string | number`; the router input is a
+  // string (it may be a source id, DOI, or S2 id) — coerce to match.
+  const r = await ctx.trpc.research.paperById({ id: String(args.id) });
   if (!r.paper) {
     // Match other handlers' error surface — the dispatcher wraps
     // `ToolHandlerError` into a structured `{ok:false, error:{...}}`

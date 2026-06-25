@@ -57,9 +57,21 @@ export const interest_list: ToolHandler<"interest_list"> = async (
   args,
   ctx,
 ) => {
-  const r = await ctx.trpc.research.interestList({
+  // `.output(z.any())` on the router → inferred `any`; restore the
+  // `standing_interest` row shape so the `.map` callback below types.
+  const r = (await ctx.trpc.research.interestList({
     threadId: args.thread_id,
-  });
+  })) as {
+    items: {
+      id: string;
+      label: string;
+      queryTerms: string[];
+      cadenceSeconds: number;
+      lastRunAt: Date | null;
+      enabled: boolean;
+      threadId: string | null;
+    }[];
+  };
   return {
     interests: r.items.map((row) => ({
       id: row.id,
