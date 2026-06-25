@@ -112,7 +112,7 @@ export function WorkspaceControls({
           </>
         ) : canExecute ? (
           <>
-            <StartAgentButton workItemId={workItemId} />
+            <StartAgentButton workItemId={workItemId} workspaceId={workspaceId} />
             <OpenChatPanelButton
               workItemId={workItemId}
               label={workItemIdentifier}
@@ -128,7 +128,13 @@ export function WorkspaceControls({
   );
 }
 
-function StartAgentButton({ workItemId }: { workItemId: string }) {
+function StartAgentButton({
+  workItemId,
+  workspaceId,
+}: {
+  workItemId: string;
+  workspaceId?: string | null;
+}) {
   const router = useRouter();
   const trpc = useTRPC();
 

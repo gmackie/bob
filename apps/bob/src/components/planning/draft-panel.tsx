@@ -47,7 +47,10 @@ export function DraftPanel({ sessionId, expanded = false }: DraftPanelProps) {
   const createBatch = useMutation(
     trpc.dispatch.createBatch.mutationOptions({
       onSuccess: (result) => {
-        router.push(getPlanningDispatchHref(result.batch.id, data?.session?.workspaceId));
+        // planSession.get's session detail doesn't expose workspaceId here, so
+        // the dispatch href is unscoped — matches prior runtime behavior (the
+        // field was always undefined).
+        router.push(getPlanningDispatchHref(result.batch.id));
       },
       onError: (err) => {
         toast(err.message, {

@@ -35,6 +35,7 @@ export {
   type ServerSessionStatusChanged,
   type ServerReplayTruncated,
   type ServerWorkspaceSnapshot,
+  type ServerWorkspaceInvalidationType,
   type WorkspaceSessionInfo,
 
   // Codec
