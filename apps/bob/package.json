@@ -63,6 +63,7 @@
     "typescript": "catalog:",
     "vite": "8.0.8",
     "vitest": "^4.0.0",
-    "wrangler": "4.83.0"
+    "wrangler": "4.83.0",
+    "@types/dagre": "^0.7.52"
   }
 }

@@ -24,6 +24,8 @@
     "overrides": {
       "@electric-sql/pglite": "0.3.16",
       "@types/pg": "8.16.0",
+      "@types/react": "19.1.17",
+      "@types/react-dom": "19.1.0",
       "node-gyp": "^10.0.0",
       "react": "19.2.5",
       "react-dom": "19.2.5",
