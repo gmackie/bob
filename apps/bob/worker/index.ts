@@ -7,18 +7,26 @@
  * directly in wrangler.jsonc: "main": "vinext/server/app-router-entry"
  */
 import * as Sentry from "@sentry/cloudflare";
-import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
+import {
+  handleImageOptimization,
+  DEFAULT_DEVICE_SIZES,
+  DEFAULT_IMAGE_SIZES,
+} from "vinext/server/image-optimization";
 import type { ImageConfig } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
 import { runWithDb } from "../src/lib/db-client-lazy";
 import { wrapFetch } from "./lib/otel";
+import { getHyperdriveConnectionString, getSentryOptions } from "./runtime-env";
 
 interface Env {
   ASSETS: Fetcher;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
-        output(options: { format: string; quality: number }): Promise<{ response(): Response }>;
+        output(options: {
+          format: string;
+          quality: number;
+        }): Promise<{ response(): Response }>;
       };
     };
   };
@@ -40,42 +48,74 @@ interface ExecutionContext {
 // const imageConfig: ImageConfig = { dangerouslyAllowSVG: true };
 
 export default Sentry.withSentry(
-  (env: Record<string, unknown>) => ({
-    dsn: env.SENTRY_DSN as string,
-    environment: (env.FG_STAGE as string) ?? "production",
-    tracesSampleRate: 0.1,
-  }),
+  (env: Record<string, unknown> | undefined) => getSentryOptions(env),
   {
-    fetch: wrapFetch(async (request: Request, env: Env, ctx: ExecutionContext): Promise<Response> => {
-      const url = new URL(request.url);
+    fetch: wrapFetch(
+      async (
+        request: Request,
+        rawEnv: Record<string, unknown> | undefined,
+        ctx,
+      ): Promise<Response> => {
+        const url = new URL(request.url);
+        const runtimeEnv = (rawEnv ?? {}) as Env;
 
-      // WebSocket proxy to gateway — forward upgrade to origin
-      if (url.pathname === "/ws/sessions" && request.headers.get("Upgrade") === "websocket") {
-        const gatewayOrigin = env.GATEWAY_URL || "https://ws.blder.bot";
-        const target = `${gatewayOrigin}/sessions${url.search}`;
-        return fetch(target, request);
-      }
+        // WebSocket proxy to gateway — forward upgrade to origin
+        if (
+          url.pathname === "/ws/sessions" &&
+          request.headers.get("Upgrade") === "websocket"
+        ) {
+          const gatewayOrigin =
+            runtimeEnv.GATEWAY_URL ||
+            process.env.GATEWAY_URL ||
+            "https://ws.blder.bot";
+          const target = `${gatewayOrigin}/sessions${url.search}`;
+          return fetch(target, request);
+        }
 
-      // Image optimization via Cloudflare Images binding.
-      if (url.pathname === "/_vinext/image") {
-        const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
-        return handleImageOptimization(request, {
-          fetchAsset: (path) => env.ASSETS.fetch(new Request(new URL(path, request.url))),
-          transformImage: async (body, { width, format, quality }) => {
-            const result = await env.IMAGES.input(body).transform(width > 0 ? { width } : {}).output({ format, quality });
-            return result.response();
-          },
-        }, allowedWidths);
-      }
+        // Image optimization via Cloudflare Images binding.
+        if (url.pathname === "/_vinext/image") {
+          if (!runtimeEnv.ASSETS || !runtimeEnv.IMAGES) {
+            return new Response(
+              "Image optimization is unavailable in this runtime",
+              { status: 503 },
+            );
+          }
+          const allowedWidths = [
+            ...DEFAULT_DEVICE_SIZES,
+            ...DEFAULT_IMAGE_SIZES,
+          ];
+          return handleImageOptimization(
+            request,
+            {
+              fetchAsset: (path) =>
+                runtimeEnv.ASSETS.fetch(
+                  new Request(new URL(path, request.url)),
+                ),
+              transformImage: async (body, { width, format, quality }) => {
+                const result = await runtimeEnv.IMAGES.input(body)
+                  .transform(width > 0 ? { width } : {})
+                  .output({ format, quality });
+                return result.response();
+              },
+            },
+            allowedWidths,
+          );
+        }
 
-      // Expose secrets to server-side code via globalThis.
-      if (env.NUDGE_SHARED_SECRET) {
-        (globalThis as any).NUDGE_SHARED_SECRET = env.NUDGE_SHARED_SECRET;
-      }
+        // Expose secrets to server-side code via globalThis.
+        const nudgeSecret =
+          runtimeEnv.NUDGE_SHARED_SECRET ?? process.env.NUDGE_SHARED_SECRET;
+        if (nudgeSecret) {
+          (globalThis as any).NUDGE_SHARED_SECRET = nudgeSecret;
+        }
 
-      // Run vinext with a request-scoped DB client.
-      const dbUrl = env.HYPERDRIVE.connectionString;
-      return runWithDb(dbUrl, true, () => handler.fetch(request, env, ctx));
-    }),
+        // Run vinext with a request-scoped DB client.
+        const { connectionString, isHyperdrive } =
+          getHyperdriveConnectionString(runtimeEnv);
+        return runWithDb(connectionString, isHyperdrive, () =>
+          handler.fetch(request, runtimeEnv, ctx),
+        );
+      },
+    ),
   },
 );

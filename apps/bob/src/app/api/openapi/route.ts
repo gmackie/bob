@@ -13,12 +13,11 @@ import bobRpcSpec from "@gmacko/bob-client/openapi/bob.json";
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const mode = url.searchParams.get("mode");
+  const baseUrl = url.origin;
 
-  // ?mode=curated — hand-maintained workItems-only Zod spec (14 operations)
-  if (mode === "curated") {
-    return NextResponse.json(
-      generateApiDocument({ baseUrl: "https://blder.bot" }),
-    );
+  // Default / ?mode=curated — deployed workItems-only REST routes.
+  if (mode === null || mode === "curated") {
+    return NextResponse.json(generateApiDocument({ baseUrl }));
   }
 
   // ?mode=trpc — legacy auto-generated spec from the tRPC router tree.
@@ -27,12 +26,14 @@ export async function GET(request: Request) {
     return NextResponse.json(
       generateFullBobApiDocument(
         appRouter as unknown as Record<string, unknown>,
-        { baseUrl: "https://blder.bot" },
+        { baseUrl },
       ),
     );
   }
 
-  // Default — the Effect-RPC OpenAPI 3.1 spec (314 operations across 8 groups),
-  // the canonical source for typed clients.
-  return NextResponse.json(bobRpcSpec);
+  // ?mode=rpc — generated Effect-RPC OpenAPI 3.1 spec.
+  return NextResponse.json({
+    ...bobRpcSpec,
+    servers: [{ url: baseUrl, description: "API Server" }],
+  });
 }
