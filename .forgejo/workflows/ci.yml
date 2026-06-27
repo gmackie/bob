@@ -76,3 +76,37 @@ jobs:
           if [ "${HTTP}" -lt 200 ] || [ "${HTTP}" -ge 300 ]; then
             echo "::warning::ForgeGraph CI report failed (HTTP ${HTTP}): $(cat /tmp/fg_report.out 2>/dev/null)"
           fi
+
+  # Continuous deploy: ship the web app to bob.blder.bot after CI passes on master.
+  #
+  # Requires repo secrets:
+  #   CLOUDFLARE_API_TOKEN   - token with Workers Scripts:Edit + Hyperdrive read
+  #   CLOUDFLARE_ACCOUNT_ID  - c07a7e704db1808e1fff91bed2b1cd49
+  #
+  # NOTE: this is a CODE-ONLY deploy. The `predeploy` DB migration
+  # (scripts/migrate-hetzner.sh) reaches Postgres over Tailscale and cannot run
+  # on a cloud runner, so it's intentionally skipped here (we call `vinext deploy`
+  # directly, not `pnpm deploy`). When a deploy includes schema changes, run
+  # migrations first from a Tailscale-connected host:
+  #   DATABASE_URL=$(forge db url --app bob) pnpm -F @bob/db migrate
+  # (or use scripts/rotate-bob-db-password.sh's stable creds). To make this fully
+  # automated, move this job to a self-hosted runner on the Tailscale mesh.
+  deploy:
+    name: Deploy web to bob.blder.bot
+    needs: ci
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: https://github.com/pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Deploy CF Worker (vinext deploy, code-only)
+        working-directory: apps/bob
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm exec vinext deploy
