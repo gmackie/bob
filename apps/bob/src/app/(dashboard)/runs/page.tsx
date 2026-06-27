@@ -214,7 +214,10 @@ export default function RunsPage() {
       Boolean(workspace),
     );
 
-  const { data: runs, isLoading } = useQuery(
+  // agentRun.list and agentRun.listAll return differently-shaped rows
+  // (workspace-scoped vs. global), so their queryOptions types don't unify.
+  // Both run results are consumed as any[] below; cast to one branch's shape.
+  const runsQueryOptions = (
     workspaceId
       ? trpc.agentRun.list.queryOptions(
           { workspaceId, limit: 50 },
@@ -223,8 +226,10 @@ export default function RunsPage() {
       : trpc.agentRun.listAll.queryOptions(
           { limit: 50 },
           { refetchInterval: 10_000 },
-        ),
-  );
+        )
+  ) as ReturnType<typeof trpc.agentRun.listAll.queryOptions>;
+
+  const { data: runs, isLoading } = useQuery(runsQueryOptions);
 
   const { data: instances } = useQuery(
     trpc.instance.list.queryOptions(undefined, { staleTime: 30_000 }),

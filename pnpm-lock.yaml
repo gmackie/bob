@@ -199,6 +199,9 @@ importers:
       '@dnd-kit/utilities':
         specifier: ^3.2.2
         version: 3.2.2(react@19.2.5)
+      '@elevenlabs/client':
+        specifier: ^0.13.0
+        version: 0.13.1(@types/dom-mediacapture-record@1.0.22)
       '@gmacko/bob':
         specifier: workspace:*
         version: link:../../packages/bob
