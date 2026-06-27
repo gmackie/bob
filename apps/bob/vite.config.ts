@@ -6,32 +6,15 @@ import { cloudflare } from "@cloudflare/vite-plugin";
 const target = (process.env.BOB_BUILD_TARGET ?? "cloudflare") as
   | "cloudflare"
   | "node";
-const rpcStubPath = path.resolve(__dirname, "src/lib/rpc-stub.ts");
-const rpcRealPath = path.resolve(__dirname, "src/server/rpc");
 
-/**
- * Custom Vite plugin that redirects ~/server/rpc to the edge-safe stub
- * when building for Cloudflare Workers. This must be a plugin (not a simple
- * alias) because the `~` alias resolves first, turning `~/server/rpc` into
- * the absolute path before other aliases can match.
- */
-function rpcStubPlugin() {
-  return {
-    name: "bob-rpc-stub",
-    enforce: "pre" as const,
-    resolveId(source: string) {
-      // vinext resolves `~` before plugins run, so the import arrives as
-      // "/src/server/rpc" rather than "~/server/rpc". Match both forms.
-      if (
-        source === "~/server/rpc" ||
-        source === "/src/server/rpc" ||
-        source.startsWith(rpcRealPath)
-      ) {
-        return rpcStubPath;
-      }
-    },
-  };
-}
+// NOTE: the Effect-RPC handler (`~/server/rpc`) used to be aliased to a 501
+// stub for the Cloudflare Workers build because `effect/unstable/rpc` was
+// believed to be un-bundleable for Workers. That is no longer true — with
+// `nodejs_compat` + the node:fs/node:os/pg-native stubs below, the real handler
+// bundles and runs on workerd (verified end-to-end: ndjson dispatch + auth
+// middleware return structured responses). The stub has been removed so
+// `/api/rpc` is served natively at the edge. See
+// docs/plans/2026-06-21-bob-effect-rpc-openapi.md.
 
 const nodeAliases: Record<string, string> = {
   "~": path.resolve(__dirname, "src"),
@@ -47,7 +30,6 @@ const cloudflareAliases: Record<string, string> = {
 
 export default defineConfig({
   plugins: [
-    rpcStubPlugin(),
     vinext(),
     cloudflare({
       viteEnvironment: {
