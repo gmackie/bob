@@ -260,6 +260,34 @@ Concrete implementation (4 sub-steps; do as its own focused pass):
 Note: this gives Effect-RPC + the REST bridge for the **Node/desktop** path
 immediately. CF-production RPC stays stubbed until 4d routes it to the Node host.
 
+---
+
+## UPDATE 2026-06-27 — 4d is OBSOLETE: Effect-RPC runs natively at the edge
+
+The premise above ("effect/unstable/rpc cannot bundle for Workers", commit
+`a3e6d0cb`) is **no longer true**, verified end-to-end:
+
+- The real `~/server/rpc` handler **bundles** for Cloudflare Workers (clean
+  `vinext build`, no bundler errors) — thanks to `nodejs_compat` + the existing
+  `node:fs`/`node:os`/`pg-native` vite stubs + the fetch-based
+  `HttpRouter.toWebHandler`.
+- It **runs** on `workerd`: a real `RpcClient` (ndjson) `health` call round-tripped
+  and the server's `AuthMiddleware` returned a structured `UnauthorizedError` over
+  the wire. DB-backed RPCs use the same Hyperdrive client as tRPC (edge-proven).
+
+So there is **no need to stand up `bob-server` or proxy `/api/rpc`** (bob-server
+isn't even deployed). Production serves Effect-RPC **natively at the edge**:
+
+- Removed the `rpc-stub` vite plugin + `src/lib/rpc-stub.ts`.
+- Fixed routing: `app/api/rpc/[...rpc]` → `[[...rpc]]` (optional catch-all). The
+  `RpcClient` POSTs to `/api/rpc` exactly; the required catch-all never matched
+  it, so requests fell through to the SPA 404 — the real reason RPC-backed pages
+  were blank.
+
+Shipped 2026-06-27. Verified live: `/api/rpc` → 200; `/tasks` (was blank) renders.
+Follow-up: `/planning` + `/settings` are still blank from a SEPARATE synchronous
+render crash (RPC returns 200 there too) — needs per-page debugging.
+
 ### Task 5 — Build-time spec emit
 
 **Files:**
