@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
+import { getHTTPStatusCodeFromError } from "@trpc/server/http";
 
 import { createTRPCContext } from "@bob/api";
 
@@ -30,7 +31,12 @@ const handler = async (req: NextRequest) => {
         headers: req.headers,
       }),
     onError({ error, path }) {
-      console.error(`>>> tRPC Error on '${path}'`, error);
+      // Only surface genuine server faults (5xx). Expected client errors
+      // (UNAUTHORIZED, NOT_FOUND, BAD_REQUEST, ...) are normal traffic and
+      // would otherwise flood logs/Sentry and bury real failures.
+      if (getHTTPStatusCodeFromError(error) >= 500) {
+        console.error(`>>> tRPC Error on '${path}'`, error);
+      }
     },
   });
 
