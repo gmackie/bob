@@ -3,7 +3,7 @@
 const APP_VARIANT =
   process.env.APP_VARIANT ?? process.env.APP_ENV ?? "development";
 const isHostedEnv =
-  APP_VARIANT === "production" || APP_VARIANT === "preview";
+  APP_VARIANT === "production" || APP_VARIANT === "staging";
 const API_URL =
   process.env.API_URL ??
   process.env.EXPO_PUBLIC_API_URL ??
