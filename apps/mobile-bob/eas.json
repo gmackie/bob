@@ -29,7 +29,7 @@
         "POSTHOG_HOST": "${EXPO_PUBLIC_POSTHOG_HOST}"
       },
       "ios": {
-        "simulator": false,
+        "simulator": true,
         "buildConfiguration": "Debug"
       },
       "android": {
@@ -37,10 +37,10 @@
         "gradleCommand": ":app:assembleDebug"
       }
     },
-    "development:simulator": {
+    "development:device": {
       "extends": "development",
       "ios": {
-        "simulator": true
+        "simulator": false
       }
     },
     "beta": {
