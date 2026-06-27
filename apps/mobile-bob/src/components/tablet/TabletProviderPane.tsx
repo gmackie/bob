@@ -42,7 +42,10 @@ export function TabletProviderPane({
 }) {
   const { selectedWorkspaceId, workspace } = useSelectedWorkspace();
   const scope = getProviderRunsScope(selectedWorkspaceId);
-  const runsQuery = useQuery(
+  // agentRun.list and agentRun.listAll return differently-shaped rows
+  // (workspace-scoped vs. global), so their queryOptions types don't unify.
+  // Results are consumed as ProviderRun[] below; cast to one branch's shape.
+  const runsQueryOptions = (
     scope.mode === "workspace"
       ? trpc.agentRun.list.queryOptions(
           { workspaceId: scope.workspaceId, limit: 100 },
@@ -51,8 +54,9 @@ export function TabletProviderPane({
       : trpc.agentRun.listAll.queryOptions(
           { limit: 100 },
           { enabled: true, refetchInterval: 10_000 },
-        ),
-  );
+        )
+  ) as ReturnType<typeof trpc.agentRun.listAll.queryOptions>;
+  const runsQuery = useQuery(runsQueryOptions);
   const runs = useMemo(
     () => filterProviderRuns((runsQuery.data ?? []) as ProviderRun[], provider),
     [provider, runsQuery.data],

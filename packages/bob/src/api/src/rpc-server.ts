@@ -67,7 +67,12 @@ const HealthRpc = Rpc.make("health", {
 
 // -- Merged group -----------------------------------------------------------
 
-export const BobRpcGroup = RpcGroup.make(HealthRpc)
+// Module-local: this server-assembled group (middleware + handlers) is consumed
+// only by makeRpcHandler below, where its type is erased at the layer boundary.
+// Keeping it unexported avoids a non-portable declaration emit (TS2742) from the
+// merged Rpc types reaching into @gmacko/core's deep schema paths. The public
+// contract surface is BOB_RPC_GROUPS in ./contracts/bob-rpc-groups.
+const BobRpcGroup = RpcGroup.make(HealthRpc)
   .merge(
     WorkItemsRpc,
     PlanningRpc,

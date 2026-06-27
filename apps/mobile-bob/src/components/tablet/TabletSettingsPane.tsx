@@ -28,7 +28,7 @@ interface TabletSettingsPaneProps {
 export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) {
   const queryClient = useQueryClient();
   const pathname = usePathname() ?? "/settings";
-  const searchParams = useLocalSearchParams<Record<string, string | string[] | undefined>>();
+  const searchParams = useLocalSearchParams();
   const scrollRef = useRef<ScrollView>(null);
   const sectionOffsets = useRef<Record<MobileSettingsSectionKey, number>>({
     workspace: 0,
@@ -87,7 +87,12 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
       void queryClient.invalidateQueries({ queryKey: trpc.workspace.list.queryKey() });
       void queryClient.invalidateQueries({ queryKey: trpc.project.list.queryKey() });
       void queryClient.invalidateQueries({ queryKey: trpc.workItem.list.queryKey() });
-      router.replace(buildWorkspaceSelectionPath(currentPath(pathname, searchParams), workspaceId));
+      router.replace(
+        buildWorkspaceSelectionPath(
+          currentPath(pathname, searchParams),
+          workspaceId,
+        ) as Parameters<typeof router.replace>[0],
+      );
     });
   };
 
