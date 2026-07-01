@@ -1,3 +1,5 @@
+<!-- Bob healthcheck passed on 2026-07-01. This is an automated test to verify the Kanbanger -> Bob -> Claude pipeline is working end-to-end. -->
+
 # Bob Builder
 
 Bob Builder is the merged monorepo for:
