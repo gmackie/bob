@@ -11,15 +11,38 @@ import { Label } from "@bob/ui/label";
 import { useTRPC } from "~/trpc/react";
 
 export function GitProvidersSection() {
+  const trpc = useTRPC();
+  const { data: health } = useQuery(
+    trpc.gitProviders.checkHealth.queryOptions(undefined),
+  );
+
+  const healthByProvider = new Map<string, any>(
+    (health ?? []).map((h: any) => [h.provider, h]),
+  );
+
   return (
     <div className="space-y-6">
-      <GitHubConnection />
-      <ForgeGraphConnection />
+      <GitHubConnection health={healthByProvider.get("github")} />
+      <ForgeGraphConnection health={healthByProvider.get("forgegraph")} />
     </div>
   );
 }
 
-function GitHubConnection() {
+// Surfaces whether a connector's credentials are still valid. Unhealthy
+// connectors (expired/revoked tokens) prompt the user to reconnect.
+function ConnectionHealthBadge({ health }: { health?: any }) {
+  if (!health) return null;
+  if (health.status === "healthy") {
+    return <Badge variant="emerald">Healthy</Badge>;
+  }
+  return (
+    <Badge variant="rose">
+      {health.needsReauth ? "Reconnect needed" : "Unhealthy"}
+    </Badge>
+  );
+}
+
+function GitHubConnection({ health }: { health?: any }) {
   const trpc = useTRPC();
   const { data: connections, isLoading } = useQuery(
     trpc.gitProviders.listConnections.queryOptions(undefined),
@@ -43,15 +66,25 @@ function GitHubConnection() {
             </p>
           </div>
         </div>
-        <Badge variant={githubConnection ? "default" : "slate"}>
-          {isLoading ? "..." : githubConnection ? "Connected" : "Sign in to connect"}
-        </Badge>
+        <div className="flex items-center gap-2">
+          {githubConnection && <ConnectionHealthBadge health={health} />}
+          <Badge variant={githubConnection ? "default" : "slate"}>
+            {isLoading ? "..." : githubConnection ? "Connected" : "Sign in to connect"}
+          </Badge>
+        </div>
       </div>
+      {githubConnection && health?.status === "unhealthy" && (
+        <p className="mt-2 text-xs text-destructive">
+          {health.needsReauth
+            ? "GitHub authorization has expired. Sign in again to restore access."
+            : `Health check failed${health.error ? `: ${health.error}` : "."}`}
+        </p>
+      )}
     </div>
   );
 }
 
-function ForgeGraphConnection() {
+function ForgeGraphConnection({ health }: { health?: any }) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   const [token, setToken] = useState("");
@@ -69,6 +102,9 @@ function ForgeGraphConnection() {
         void queryClient.invalidateQueries({
           queryKey: trpc.settings.getForgeGraphConnection.queryKey(),
         });
+        void queryClient.invalidateQueries({
+          queryKey: trpc.gitProviders.checkHealth.queryKey(),
+        });
       },
       onError: (e: unknown) => {
         setError(e instanceof Error ? e.message : "Failed to connect");
@@ -82,9 +118,19 @@ function ForgeGraphConnection() {
         void queryClient.invalidateQueries({
           queryKey: trpc.settings.getForgeGraphConnection.queryKey(),
         });
+        void queryClient.invalidateQueries({
+          queryKey: trpc.gitProviders.checkHealth.queryKey(),
+        });
       },
     }),
   );
+
+  // An unhealthy token that needs re-auth can't be repaired by refreshing — the
+  // user must supply a fresh token, so surface the connect form even while a
+  // (stale) connection record exists.
+  const needsReauth =
+    health?.status === "unhealthy" && Boolean(health?.needsReauth);
+  const showTokenForm = !connection || needsReauth;
 
   return (
     <div className="rounded-lg border border-border p-4">
@@ -103,13 +149,24 @@ function ForgeGraphConnection() {
           </div>
         </div>
         {connection && (
-          <Badge variant="default">
-            Connected{connection.providerUsername ? ` as ${connection.providerUsername}` : ""}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <ConnectionHealthBadge health={health} />
+            <Badge variant="default">
+              Connected{connection.providerUsername ? ` as ${connection.providerUsername}` : ""}
+            </Badge>
+          </div>
         )}
       </div>
 
-      {connection ? (
+      {connection && health?.status === "unhealthy" && (
+        <p className="mb-3 text-xs text-destructive">
+          {health.needsReauth
+            ? "Your ForgeGraph API token is no longer valid. Reconnect with a new token below."
+            : `Health check failed${health.error ? `: ${health.error}` : "."}`}
+        </p>
+      )}
+
+      {connection && !showTokenForm ? (
         <div className="flex items-center justify-between">
           <p className="text-xs text-muted-foreground">
             Connected since {new Date(connection.createdAt).toLocaleDateString()}
@@ -144,7 +201,13 @@ function ForgeGraphConnection() {
             onClick={() => connectMutation.mutate({ apiToken: token })}
             disabled={!token || connectMutation.isPending}
           >
-            {connectMutation.isPending ? "Connecting..." : "Connect"}
+            {connectMutation.isPending
+              ? needsReauth
+                ? "Reconnecting..."
+                : "Connecting..."
+              : needsReauth
+                ? "Reconnect"
+                : "Connect"}
           </Button>
         </div>
       )}

@@ -7,6 +7,7 @@ import { repositories } from "@bob/db/schema";
 
 import type { GitProvider } from "../services/git/providers/types";
 import {
+  checkAllConnectionsHealth,
   createConnection,
   createProviderClient,
   getConnection,
@@ -21,6 +22,14 @@ export const gitProvidersRouter = {
   listConnections: protectedProcedure.query(async ({ ctx }) => {
     const connections = await listConnections(ctx.session.user.id);
     return connections;
+  }),
+
+  // Check the health of every connector for the current user: re-authenticates
+  // expired-but-refreshable tokens and verifies credentials against each
+  // provider's live API. Surfaces which connections are unhealthy and whether
+  // they need to be reconnected.
+  checkHealth: protectedProcedure.query(async ({ ctx }) => {
+    return checkAllConnectionsHealth(ctx.session.user.id);
   }),
 
   connectPat: protectedProcedure
