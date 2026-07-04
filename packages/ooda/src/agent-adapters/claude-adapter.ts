@@ -23,6 +23,7 @@ export class ClaudeAdapter implements AgentAdapter {
     systemPrompt?: string;
   }): AdapterCommand {
     const args: string[] = [
+      "--print",
       "--output-format", "stream-json",
       "--verbose",
       "--dangerously-skip-permissions",
