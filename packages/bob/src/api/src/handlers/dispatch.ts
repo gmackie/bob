@@ -70,7 +70,7 @@ async function loadOwnedDispatchItem(db: any, userId: string, itemId: string) {
     with: { batch: true },
   });
 
-  if (!item || item.batch.userId !== userId) {
+  if (item?.batch.userId !== userId) {
     throw new TRPCError({
       code: "NOT_FOUND",
       message: "Dispatch item not found",
@@ -235,11 +235,11 @@ export async function dispatchCreateBatch(
   input: {
     sessionId: string;
     concurrency: number;
-    tasks: Array<{
+    tasks: {
       draftId: string;
       taskId: string;
       identifier: string;
-    }>;
+    }[];
   },
 ) {
   await loadOwnedSession(ctx.db, ctx.userId, input.sessionId);
@@ -646,9 +646,9 @@ export async function dispatchCheckProgress(
             );
             void onPullRequestCreated({
               pullRequestId: prResult.prId,
-              repositoryId: run.repositoryId!,
-              headBranch: run.branch!,
-              headSha: prResult.headSha ?? run.branch!,
+              repositoryId: run.repositoryId,
+              headBranch: run.branch,
+              headSha: prResult.headSha ?? run.branch,
               taskId: run.workItemId ?? item.planningTaskId,
               taskRunId: run.id,
             }).catch(() => { /* best-effort */ });
@@ -707,7 +707,7 @@ export async function dispatchCheckProgress(
   );
 
   for (const item of blockedItems) {
-    const blockers = (item.blockedByItems as string[]) ?? [];
+    const blockers = (item.blockedByItems!) ?? [];
     const allDone = blockers.every((id) => completedItemIds.has(id));
     if (allDone) {
       await ctx.db
@@ -911,11 +911,11 @@ export async function dispatchExecutionBatch(
     workspaceId: string;
     agentType: string;
     concurrency: number;
-    items: Array<{
+    items: {
       workItemId?: string;
       title?: string;
       description?: string;
-    }>;
+    }[];
   },
 ) {
   const membership = await ctx.db.query.workspaceMembers.findFirst({
@@ -930,12 +930,12 @@ export async function dispatchExecutionBatch(
   const gatewayUrl = process.env.GATEWAY_URL;
   const nudgeSecret = process.env.NUDGE_SHARED_SECRET;
 
-  const results: Array<{
+  const results: {
     sessionId: string;
     workItemId: string;
     identifier: string;
     status: string;
-  }> = [];
+  }[] = [];
 
   let nextSeq = await getNextSequenceNumber(ctx.db, input.workspaceId);
 
@@ -1017,7 +1017,7 @@ export async function dispatchExecutionBatch(
 
     results.push({
       sessionId: session!.id,
-      workItemId: wiId!,
+      workItemId: wiId,
       identifier,
       status: "pending",
     });

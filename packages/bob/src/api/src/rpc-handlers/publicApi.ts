@@ -89,7 +89,7 @@ export const makePublicApiRpcHandlers = (ctx: HandlerContext) => ({
       workspaceId: string;
       agentTypes?: string[];
       forgeAvailable?: boolean;
-      repos?: Array<{
+      repos?: {
         name: string;
         path: string;
         isGit: boolean;
@@ -98,7 +98,7 @@ export const makePublicApiRpcHandlers = (ctx: HandlerContext) => ({
         dirty?: boolean;
         buildSystem?: string;
         forgeAppId?: string;
-      }>;
+      }[];
     };
   }) => wrapHandler(publicApiHeartbeat, ctx, payload, "publicApi"),
 

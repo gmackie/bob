@@ -235,7 +235,7 @@ export class LinearPlanningProvider implements PlanningProvider {
           .where(eq(taskRuns.id, taskRunId))
           .then((rows: any[]) => rows[0]);
 
-        const existing = (run?.syncFailures ?? []) as Array<{ method: string; error: string; timestamp: string }>;
+        const existing = (run?.syncFailures ?? []) as { method: string; error: string; timestamp: string }[];
         existing.push(failure);
 
         await this.db

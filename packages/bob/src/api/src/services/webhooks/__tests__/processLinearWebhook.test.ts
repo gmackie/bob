@@ -115,7 +115,7 @@ describe("processLinearWebhook", () => {
 
   it("marks non-Issue events as processed without handling", async () => {
     const payload = { action: "create", type: "Comment", data: {} };
-    await processLinearWebhook("Comment", payload as any, "delivery-1");
+    await processLinearWebhook("Comment", payload, "delivery-1");
 
     expect(mockMarkDeliveryProcessed).toHaveBeenCalledWith("delivery-1");
     expect(dbQueryMocks.workItemsFindFirst).not.toHaveBeenCalled();
@@ -129,7 +129,7 @@ describe("processLinearWebhook", () => {
       fn([{ webhookSigningSecret: null, linearTeamId: "team-linear-1" }]),
     );
 
-    await processLinearWebhook("Issue", payload as any, "delivery-2");
+    await processLinearWebhook("Issue", payload, "delivery-2");
 
     expect(mockMarkDeliveryProcessed).toHaveBeenCalledWith("delivery-2");
     expect(dbInsertMock).not.toHaveBeenCalled();
@@ -140,7 +140,7 @@ describe("processLinearWebhook", () => {
 
     dbSelectThenMock.mockImplementation((fn: Function) => fn([]));
 
-    await processLinearWebhook("Issue", payload as any, "delivery-3");
+    await processLinearWebhook("Issue", payload, "delivery-3");
 
     expect(mockMarkDeliveryProcessed).toHaveBeenCalledWith("delivery-3");
     expect(mockExecuteTask).not.toHaveBeenCalled();
@@ -159,7 +159,7 @@ describe("processLinearWebhook", () => {
       externalProvider: "linear",
     });
 
-    await processLinearWebhook("Issue", payload as any, "delivery-4");
+    await processLinearWebhook("Issue", payload, "delivery-4");
 
     expect(dbUpdateSetMock).toHaveBeenCalledWith(
       expect.objectContaining({ status: "in_progress" }),
@@ -176,7 +176,7 @@ describe("processLinearWebhook", () => {
       externalProvider: "linear",
     });
 
-    await processLinearWebhook("Issue", payload as any, "delivery-5");
+    await processLinearWebhook("Issue", payload, "delivery-5");
 
     expect(dbUpdateSetMock).toHaveBeenCalledWith(
       expect.objectContaining({ status: "cancelled" }),
@@ -192,7 +192,7 @@ describe("processLinearWebhook", () => {
 
     dbQueryMocks.workItemsFindFirst.mockResolvedValueOnce(null);
 
-    await processLinearWebhook("Issue", payload as any, "delivery-6");
+    await processLinearWebhook("Issue", payload, "delivery-6");
 
     expect(dbUpdateMock).not.toHaveBeenCalled();
     expect(mockMarkDeliveryProcessed).toHaveBeenCalledWith("delivery-6");

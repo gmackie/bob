@@ -87,7 +87,7 @@ export const makePersonaRpcHandlers = (ctx: HandlerContext) => ({
           new PersonaReadOnlyError({ personaId: payload.id }),
         );
       }
-      return (result as { found: true; readOnly: false; persona: any }).persona;
+      return (result).persona;
     }),
 
   "persona.delete": ({

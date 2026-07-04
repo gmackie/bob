@@ -38,7 +38,7 @@ const updateMock = vi.fn(() => ({
   set: updateSetMock,
 }));
 
-function createTempRepo(paths: Array<{ path: string; content?: string }>): string {
+function createTempRepo(paths: { path: string; content?: string }[]): string {
   const root = mkdtempSync(path.join(os.tmpdir(), "bob-project-router-"));
   tempDirs.push(root);
 
@@ -106,7 +106,7 @@ const createCaller = () =>
       },
     },
     authApi: { getSession: vi.fn() } as any,
-    apiKeyAuth: null as any,
+    apiKeyAuth: null,
     db: makeDbMock() as any,
   });
 

@@ -1,6 +1,7 @@
 import type { TaskLaneKey } from "./dashboard";
 import { buildRecentOutcomeWorkItems, getRecentOutcomeRowModel } from "./dashboard";
-import { buildPriorityQueueItems, type TabletQueueItem } from "./queue";
+import { buildPriorityQueueItems  } from "./queue";
+import type {TabletQueueItem} from "./queue";
 import type { MobileWorkItemEntryView } from "./work-item-entry";
 
 export type TabletShellMode = "tasks" | "planning";

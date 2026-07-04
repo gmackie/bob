@@ -102,11 +102,11 @@ export const makeForgeGraphRpcHandlers = (ctx: HandlerContext) => ({
       taskId?: string;
       agentId?: string;
       testStatus?: string;
-      artifactRefs?: Array<{
+      artifactRefs?: {
         type: string;
         url?: string;
         description?: string;
-      }>;
+      }[];
     };
   }) => wrapHandler(forgegraphIngestRunEvent, ctx, payload, "forgeRunEvent"),
 

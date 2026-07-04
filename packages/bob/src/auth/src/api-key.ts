@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 
 import { db } from "@bob/db/client";
-import { apiKeys, user } from "@bob/db/schema";
+import type { user } from "@bob/db/schema";
+import { apiKeys } from "@bob/db/schema";
 
 export const API_KEY_PREFIXES = ["gmk_", "bob_"] as const;
 

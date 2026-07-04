@@ -572,9 +572,9 @@ export function parseDiffStats(
   if (typeof input === "string") {
     // Parse git diff --stat output
     // e.g., "3 files changed, 42 insertions(+), 8 deletions(-)"
-    const filesMatch = input.match(/(\d+)\s+files?\s+changed/);
-    const insertionsMatch = input.match(/(\d+)\s+insertions?\(\+\)/);
-    const deletionsMatch = input.match(/(\d+)\s+deletions?\(-\)/);
+    const filesMatch = /(\d+)\s+files?\s+changed/.exec(input);
+    const insertionsMatch = /(\d+)\s+insertions?\(\+\)/.exec(input);
+    const deletionsMatch = /(\d+)\s+deletions?\(-\)/.exec(input);
 
     return {
       filesChanged: filesMatch ? parseInt(filesMatch[1]!, 10) : 0,

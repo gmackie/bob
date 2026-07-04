@@ -105,7 +105,7 @@ describe("publicApi router tenant isolation", () => {
       artifacts: [],
     });
 
-    const caller = createCaller(db) as any;
+    const caller = createCaller(db);
 
     await expect(
       caller.publicApi.getRun({
@@ -126,7 +126,7 @@ describe("publicApi router tenant isolation", () => {
       tenantId: "tenant-2",
     });
 
-    const caller = createCaller(db) as any;
+    const caller = createCaller(db);
 
     await expect(
       caller.publicApi.listRuns({
@@ -149,7 +149,7 @@ describe("publicApi router tenant isolation", () => {
       },
     ]);
 
-    const caller = createCaller(db) as any;
+    const caller = createCaller(db);
 
     await expect(
       caller.publicApi.listRunsByWorkItem({
@@ -178,7 +178,7 @@ describe("publicApi router tenant isolation", () => {
       },
     ]);
 
-    const caller = createCaller(db) as any;
+    const caller = createCaller(db);
 
     await expect(
       caller.publicApi.createRun({
@@ -215,7 +215,7 @@ describe("publicApi router tenant isolation", () => {
     process.env.GATEWAY_URL = "http://gw.local";
     process.env.NUDGE_SHARED_SECRET = "shh";
 
-    const caller = createCaller(db) as any;
+    const caller = createCaller(db);
 
     await caller.publicApi.createRun({
       workItemId: "BOB-42",
@@ -273,7 +273,7 @@ describe("publicApi router tenant isolation", () => {
     process.env.GATEWAY_URL = "http://gw.local";
     process.env.NUDGE_SHARED_SECRET = "shh";
 
-    const caller = createCaller(db) as any;
+    const caller = createCaller(db);
 
     await caller.publicApi.updateRun({
       runId: "88888888-8888-4888-8888-888888888888",
@@ -328,7 +328,7 @@ describe("publicApi router tenant isolation", () => {
     process.env.GATEWAY_URL = "http://gw.local";
     process.env.NUDGE_SHARED_SECRET = "shh";
 
-    const caller = createCaller(db) as any;
+    const caller = createCaller(db);
 
     await caller.publicApi.createArtifact({
       runId: "99999999-9999-4999-8999-999999999999",
@@ -377,7 +377,7 @@ describe("publicApi router tenant isolation", () => {
       ])
       .mockResolvedValueOnce([{ id: "member-1" }]);
 
-    const caller = createCaller(db) as any;
+    const caller = createCaller(db);
 
     await caller.publicApi.registerWorkspace({
       name: "Bob CLI",
@@ -413,7 +413,7 @@ describe("publicApi router tenant isolation", () => {
     process.env.GATEWAY_URL = "http://gw.local";
     process.env.NUDGE_SHARED_SECRET = "shh";
 
-    const caller = createCaller(db) as any;
+    const caller = createCaller(db);
 
     await caller.publicApi.heartbeat({
       workspaceId: "66666666-6666-4666-8666-666666666666",

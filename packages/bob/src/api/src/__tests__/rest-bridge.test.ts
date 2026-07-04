@@ -31,7 +31,7 @@ const serverLayer = RpcServer.layerHttp({
 }).pipe(
   Layer.provide(handlers),
   Layer.provide(RpcSerialization.layerNdjson),
-) as unknown as LayerType.Layer<never, never, HttpRouter.HttpRouter>;
+);
 
 const { handler: rpcHandler } = HttpRouter.toWebHandler(serverLayer);
 

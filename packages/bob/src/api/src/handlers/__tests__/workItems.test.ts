@@ -24,7 +24,7 @@ function extractSqlParamValues(value: unknown): unknown[] {
     seen.add(entry);
 
     if ("value" in entry && entry.constructor?.name === "Param") {
-      values.push((entry as { value: unknown }).value);
+      values.push((entry).value);
       return;
     }
 
@@ -442,7 +442,7 @@ describe("work item handlers", () => {
       {
         id: workItem.id,
         priority: "high",
-      } as any,
+      },
     );
 
     expect(fetchMock).toHaveBeenCalledWith(

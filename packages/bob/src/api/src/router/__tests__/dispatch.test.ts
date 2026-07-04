@@ -118,7 +118,7 @@ const createCaller = (session: { id: string }) =>
       },
     },
     authApi: { getSession: vi.fn() } as any,
-    apiKeyAuth: null as any,
+    apiKeyAuth: null,
     db: makeDbMock() as any,
   });
 

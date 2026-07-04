@@ -17,9 +17,10 @@ import {
   workItemArtifacts,
   workItemDependencies,
   workItems,
-  workspaceMembers,
-  type WorkItemKind,
+  workspaceMembers
+
 } from "@bob/db/schema";
+import type {WorkItemKind} from "@bob/db/schema";
 
 import { resolvePlanningProvider } from "../services/integrations/planningProvider.js";
 
@@ -204,17 +205,17 @@ export async function planSessionStart(
         title: string;
         kind: string;
       };
-      selectedRepoSources: Array<{
+      selectedRepoSources: {
         id: string;
         label: string;
         path: string;
         detail: string;
-      }>;
-      attachedFiles: Array<{
+      }[];
+      attachedFiles: {
         name: string;
         sizeLabel: string;
         content?: string;
-      }>;
+      }[];
     };
   },
 ) {
@@ -254,7 +255,7 @@ export async function planSessionStart(
       planningProjectName: input.projectName,
       planningLaunchContext: input.launchContext ?? null,
       ...(plannerPersona ? { personaId: plannerPersona.id, personaMetadata: personaConfig } : {}),
-    } as any)
+    })
     .where(eq(chatConversations.id, input.sessionId));
 
   const gatewayUrl = process.env.GATEWAY_URL;
@@ -358,7 +359,7 @@ export async function planSessionList(
   });
   const countsBySession = new Map<string, { draftCount: number; producedTaskCount: number }>();
 
-  for (const draft of drafts as Array<{ sessionId: string; status: string }>) {
+  for (const draft of drafts as { sessionId: string; status: string }[]) {
     const counts = countsBySession.get(draft.sessionId) ?? {
       draftCount: 0,
       producedTaskCount: 0,
@@ -475,13 +476,13 @@ export async function planSessionGetPriorContext(
 
   // Truncate content to fit within the total character budget
   let remainingChars = input.maxChars;
-  const result: Array<{
+  const result: {
     id: string;
     title: string | null;
     sessionId: string | null;
     content: string | null;
     createdAt: string;
-  }> = [];
+  }[] = [];
 
   for (const artifact of artifacts) {
     if (remainingChars <= 0) break;
@@ -683,12 +684,12 @@ export async function planSessionCommitPlan(
     return { committed: 0, tasks: [] };
   }
 
-  const createdTasks: Array<{
+  const createdTasks: {
     draftId: string;
     taskId: string;
     identifier: string;
     workspaceId: string;
-  }> = [];
+  }[] = [];
 
   for (const draft of drafts) {
     try {
@@ -852,11 +853,11 @@ export async function planSessionCommitPlanLocal(
 
     // Build draftId → workItemId map
     const draftToWorkItem = new Map<string, string>();
-    const created: Array<{
+    const created: {
       draftId: string;
       workItemId: string;
       title: string;
-    }> = [];
+    }[] = [];
 
     for (let i = 0; i < sorted.length; i++) {
       const draft = sorted[i]!;

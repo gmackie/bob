@@ -37,7 +37,7 @@ export interface QueueState {
 
 type ActionHandler = (action: QueuedAction) => Promise<void>;
 
-let handlers: Map<QueuedActionType, ActionHandler> = new Map();
+const handlers = new Map<QueuedActionType, ActionHandler>();
 let isProcessing = false;
 let networkUnsubscribe: (() => void) | null = null;
 
@@ -131,7 +131,7 @@ export async function retryFailedAction(actionId: string): Promise<boolean> {
   const queue = await loadQueue();
   const action = queue.find((a) => a.id === actionId);
 
-  if (!action || action.status !== "failed") {
+  if (action?.status !== "failed") {
     return false;
   }
 

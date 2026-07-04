@@ -153,7 +153,7 @@ const createCaller = (session: { id: string }) =>
       },
     },
     authApi: { getSession: vi.fn() } as any,
-    apiKeyAuth: null as any,
+    apiKeyAuth: null,
     db: makeDbMock() as any,
   });
 
@@ -665,7 +665,7 @@ describe("planSession router", () => {
       await caller.planSession.list({ workspaceId: WORKSPACE_ID });
 
       const [, options] = dbQueryFindManyMock.mock.calls[0] ?? [];
-      expect(containsColumnName((options as any).where, "planning_workspace_id")).toBe(true);
+      expect(containsColumnName((options).where, "planning_workspace_id")).toBe(true);
     });
   });
 

@@ -6,12 +6,13 @@
  */
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq } from "@bob/db";
+import type {
+  workspaceMemberRole} from "@bob/db/schema";
 import {
   tenants,
   tenantMembers,
   workspaceMembers,
-  workspaces,
-  workspaceMemberRole,
+  workspaces
 } from "@bob/db/schema";
 
 import type { HandlerContext } from "./context.js";
@@ -247,8 +248,7 @@ export async function workspaceDelete(
   });
 
   if (
-    !membership ||
-    membership.userId !== ctx.userId ||
+    membership?.userId !== ctx.userId ||
     membership.role !== "owner"
   ) {
     throw new Error("Not authorized to delete this workspace");

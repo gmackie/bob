@@ -10,12 +10,12 @@ const {
   taskRunsTable,
 } = vi.hoisted(() => ({
   executeMock: vi.fn(),
-  insertCalls: [] as Array<{ table: unknown; value: unknown }>,
-  updateCalls: [] as Array<{
+  insertCalls: [] as { table: unknown; value: unknown }[],
+  updateCalls: [] as {
     table: unknown;
     patch: unknown;
     predicate: unknown;
-  }>,
+  }[],
   chatConversationsTable: {
     id: { name: "id" },
     nextSeq: { name: "next_seq" },

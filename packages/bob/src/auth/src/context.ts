@@ -1,9 +1,10 @@
 import type { AuthRuntimeBundle } from "./runtime";
 import {
   isApiKey,
-  type ApiKeyAuth,
-  validateApiKey,
+
+  validateApiKey
 } from "./api-key";
+import type {ApiKeyAuth} from "./api-key";
 
 export interface WorkspaceSelection {
   projectId: string | null;
@@ -152,8 +153,7 @@ export async function resolveAuthContext(opts: {
   const authBypassUserId = resolveAuthBypassUserId(opts.headers);
   if (
     authBypassUserId &&
-    opts.defaultUser &&
-    opts.defaultUser.user.id === authBypassUserId
+    opts.defaultUser?.user.id === authBypassUserId
   ) {
     return {
       apiKeyAuth: null,

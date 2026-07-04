@@ -52,7 +52,7 @@ async function loadAccessibleWorkItem(db: any, userId: string, workItemId: strin
     where: eq(workItems.id, workItemId),
   });
 
-  if (!item || !item.workspaceId) {
+  if (!item?.workspaceId) {
     throw new TRPCError({
       code: "NOT_FOUND",
       message: "Task not found",
@@ -250,13 +250,13 @@ export async function planningListTasks(
       }),
       title: item.title,
       status: item.status,
-      priority: "no_priority" as string,
+      priority: "no_priority",
       kind: item.kind,
       project: project
         ? { id: project.id, name: project.name, key: project.key }
         : undefined,
       assignee: undefined,
-      labels: [] as Array<{ id: string; name: string; color: string }>,
+      labels: [] as { id: string; name: string; color: string }[],
       dueDate: undefined,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt ?? item.createdAt,
@@ -273,7 +273,7 @@ export async function planningGetTask(
     where: eq(workItems.id, input.id),
   });
 
-  if (item && item.workspaceId) {
+  if (item?.workspaceId) {
     await assertWorkspaceAccess(ctx.db, ctx.userId, item.workspaceId);
 
     const project = item.projectId
@@ -282,7 +282,7 @@ export async function planningGetTask(
         })
       : null;
 
-    if (project && project.planningProvider === "linear" && project.linearProjectId) {
+    if (project?.planningProvider === "linear" && project.linearProjectId) {
       const provider = await resolvePlanningProvider(ctx.db, project, project.workspaceId);
       const task = await provider.getTask(input.id);
       if (!task) {
@@ -318,7 +318,7 @@ export async function planningGetTask(
         ? { id: project.id, name: project.name, key: project.key }
         : undefined,
       assignee: undefined,
-      labels: [] as Array<{ id: string; name: string; color: string }>,
+      labels: [] as { id: string; name: string; color: string }[],
       dueDate: undefined,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt ?? item.createdAt,
@@ -338,7 +338,7 @@ export async function planningGetTaskByIdentifier(
   }
 
   // Parse identifier like "PROJ-123"
-  const match = input.identifier.match(/^([A-Z]+)-(\d+)$/);
+  const match = /^([A-Z]+)-(\d+)$/.exec(input.identifier);
   if (!match) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
   }
@@ -458,7 +458,7 @@ export async function planningUpdateTask(
     where: eq(workItems.id, input.id),
   });
 
-  if (!oldItem || !oldItem.workspaceId) {
+  if (!oldItem?.workspaceId) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
   }
 
@@ -470,7 +470,7 @@ export async function planningUpdateTask(
       })
     : null;
 
-  if (project && project.planningProvider === "linear" && project.linearProjectId) {
+  if (project?.planningProvider === "linear" && project.linearProjectId) {
     const provider = await resolvePlanningProvider(ctx.db, project, project.workspaceId);
     const result = await provider.updateTask(input.id, {
       title: input.title,
@@ -570,12 +570,12 @@ export async function planningListComments(
     body: c.body,
     user: undefined as { id: string; name: string } | undefined,
     createdAt: c.createdAt,
-    replies: [] as Array<{
+    replies: [] as {
       id: string;
       body: string;
       user?: { id: string; name: string };
       createdAt: string;
-    }>,
+    }[],
   }));
 }
 
@@ -624,7 +624,7 @@ export async function planningSearchTasks(
       }),
       title: item.title,
       status: item.status,
-      priority: "no_priority" as string,
+      priority: "no_priority",
       project: project
         ? { id: project.id, name: project.name }
         : undefined,
@@ -703,11 +703,11 @@ export async function planningAgentCompleteTask(
   input: {
     taskRunId: string;
     summary?: string;
-    artifacts?: Array<{
+    artifacts?: {
       type: "pr" | "commit" | "file" | "comment";
       url?: string;
       description?: string;
-    }>;
+    }[];
     markIssueDone?: boolean;
   },
 ) {

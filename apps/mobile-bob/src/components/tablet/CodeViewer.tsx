@@ -33,7 +33,7 @@ export function CodeViewer({ content, filePath, startLine = 1 }: CodeViewerProps
               let lineContent: string;
 
               if (isNumbered) {
-                const match = line.match(/^\s*(\d+)\t(.*)$/);
+                const match = /^\s*(\d+)\t(.*)$/.exec(line);
                 if (match) {
                   lineNum = parseInt(match[1]!, 10);
                   lineContent = match[2]!;

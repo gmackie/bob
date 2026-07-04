@@ -44,7 +44,7 @@ export function createGiteaClient(
       input: ListRepositoriesInput,
     ): Promise<GitRepository[]> {
       const repos = await request<
-        Array<{
+        {
           id: number;
           owner: { login: string };
           name: string;
@@ -53,7 +53,7 @@ export function createGiteaClient(
           private: boolean;
           clone_url: string;
           html_url: string;
-        }>
+        }[]
       >(`/user/repos?page=${input.page}&limit=${input.perPage}`);
 
       return repos.map((repository) => ({
@@ -112,11 +112,11 @@ export function createGiteaClient(
 
     async listBranches(owner: string, repo: string): Promise<GitBranch[]> {
       const branches = await request<
-        Array<{
+        {
           name: string;
           commit: { id: string };
           protected: boolean;
-        }>
+        }[]
       >(`/repos/${owner}/${repo}/branches`);
 
       return branches.map((b) => ({
@@ -133,14 +133,14 @@ export function createGiteaClient(
       limit = 30,
     ): Promise<GitCommit[]> {
       const commits = await request<
-        Array<{
+        {
           sha: string;
           commit: {
             message: string;
             author: { name: string; email: string; date: string };
           };
           html_url: string;
-        }>
+        }[]
       >(`/repos/${owner}/${repo}/commits?sha=${branch}&limit=${limit}`);
 
       return commits.map((c) => ({
@@ -229,14 +229,14 @@ export function createGiteaClient(
       number: number,
     ): Promise<GitCommit[]> {
       const commits = await request<
-        Array<{
+        {
           sha: string;
           commit: {
             message: string;
             author: { name: string; email: string; date: string };
           };
           html_url: string;
-        }>
+        }[]
       >(`/repos/${owner}/${repo}/pulls/${number}/commits`);
 
       return commits.map((c) => ({

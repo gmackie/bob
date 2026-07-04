@@ -45,7 +45,7 @@ function normalizeDomain(domain: string): string {
 export async function cookiesImport(
   ctx: HandlerContext,
   input: {
-    cookies: Array<{
+    cookies: {
       name: string;
       value: string;
       domain: string;
@@ -54,7 +54,7 @@ export async function cookiesImport(
       secure: boolean;
       httpOnly: boolean;
       sameSite: "Strict" | "Lax" | "None";
-    }>;
+    }[];
     source: "extension" | "cli";
   },
 ) {

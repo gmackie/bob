@@ -818,12 +818,12 @@ export async function sessionRecordEventBatch(
   ctx: HandlerContext,
   input: {
     sessionId: string;
-    events: Array<{
+    events: {
       seq: number;
       direction: "client" | "agent" | "system";
       eventType: string;
       payload: Record<string, unknown>;
-    }>;
+    }[];
   },
 ) {
   if (input.events.length === 0) return { count: 0 };

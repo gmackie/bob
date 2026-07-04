@@ -160,7 +160,7 @@ async function handleAwaitingReview(
   if (!review?.content) return; // No review yet — wait
 
   try {
-    const parsed = JSON.parse(review.content as string) as { decision: string };
+    const parsed = JSON.parse(review.content) as { decision: string };
 
     if (parsed.decision === "approve") {
       // Review passed — trigger build
@@ -176,7 +176,7 @@ async function handleAwaitingReview(
       const reviewContent = parsed as {
         decision: string;
         summary?: string;
-        comments?: Array<{ file: string; line: number; comment: string }>;
+        comments?: { file: string; line: number; comment: string }[];
       };
 
       const feedbackLines = [

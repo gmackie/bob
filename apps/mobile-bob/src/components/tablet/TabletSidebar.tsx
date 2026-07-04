@@ -38,9 +38,10 @@ import {
   matchesShellSessionStatusFilter,
 } from "~/features/tablet/shell";
 import {
-  buildMobileProjectRailRows,
-  type MobileProjectStatusEntry,
+  buildMobileProjectRailRows
+
 } from "~/features/planning/project-status";
+import type {MobileProjectStatusEntry} from "~/features/planning/project-status";
 import type {
   TabletLeftRailTabBadges,
   TabletRecentOutcomeRailRow,
@@ -774,7 +775,7 @@ function RecentOutcomeItemsTab({
     ),
   );
   const rows = buildRecentOutcomeRailRows({
-    workItems: (workItemsQuery.data ?? []) as unknown as TabletQueueItem[],
+    workItems: workItemsQuery.data ?? [],
     sessions,
   });
 
@@ -977,7 +978,7 @@ export function TabletSidebar({
     mode === "tasks" ? groupedSessions.recentOutcomes : groupedSessions.recentPlanning;
   const leftRailBadges = buildLeftRailTabBadges({
     sessions,
-    workItems: (workItemsQuery.data ?? []) as unknown as TabletQueueItem[],
+    workItems: workItemsQuery.data ?? [],
     projects: ((projectsQuery.data ?? []) as unknown as { project?: { id?: string } | null }[])
       .flatMap((entry) => entry.project?.id ? [{ id: entry.project.id }] : []),
   });

@@ -1,9 +1,10 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  decryptCookieValue,
-  type EncryptedCookieValue,
+  decryptCookieValue
+
 } from "../../services/crypto/cookieVault.js";
+import type {EncryptedCookieValue} from "../../services/crypto/cookieVault.js";
 
 const TEST_KEY = "test-cookie-encryption-key-32chs";
 
@@ -105,7 +106,7 @@ const createProtectedCaller = () =>
   appRouter.createCaller({
     session: fakeSession,
     authApi: { getSession: vi.fn() } as any,
-    apiKeyAuth: null as any,
+    apiKeyAuth: null,
     db: makeDbMock() as any,
   });
 
@@ -334,7 +335,7 @@ describe("cookies router", () => {
       const caller = appRouter.createCaller({
         session: fakeSession,
         authApi: { getSession: vi.fn() } as any,
-        apiKeyAuth: null as any,
+        apiKeyAuth: null,
         db: makeDbMock() as any,
       });
 
@@ -350,7 +351,7 @@ describe("cookies router", () => {
       const caller = appRouter.createCaller({
         session: fakeSession,
         authApi: { getSession: vi.fn() } as any,
-        apiKeyAuth: null as any,
+        apiKeyAuth: null,
         db: makeDbMock() as any,
       });
 

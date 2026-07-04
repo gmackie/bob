@@ -21,9 +21,10 @@ import {
   Sessions,
   ApiKeys,
   Tenancy,
-  DeviceCodes,
-  type InitAuthOptions,
+  DeviceCodes
+
 } from "@gmacko/core/auth";
+import type {InitAuthOptions} from "@gmacko/core/auth";
 import { layerGmackoDb } from "@gmacko/core/db";
 
 // ---------------------------------------------------------------------------

@@ -3,12 +3,13 @@ import superjson from "superjson";
 import { z, ZodError } from "zod/v4";
 
 import {
-  type ApiKeyAuth,
-  type ApiKeyPermission,
+
+
   DEFAULT_USER_ID,
   resolveAuthBypassUserId,
-  resolveAuthContext,
+  resolveAuthContext
 } from "@bob/auth";
+import type {ApiKeyAuth, ApiKeyPermission} from "@bob/auth";
 import type { AuthRuntimeBundle } from "@bob/auth/runtime";
 import { eq } from "@bob/db";
 import { db } from "@bob/db/client";
@@ -67,7 +68,7 @@ export const createTRPCContext = async (opts: {
   return {
     authApi,
     session: authContext.session,
-    apiKeyAuth: authContext.apiKeyAuth as ApiKeyAuth | null,
+    apiKeyAuth: authContext.apiKeyAuth,
     db,
   };
 };

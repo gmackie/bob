@@ -47,7 +47,7 @@ async function registerForPushNotifications(): Promise<string | null> {
     return null;
   }
 
-  if (!Device!.isDevice) {
+  if (!Device.isDevice) {
     console.log("[push] Must use physical device for push notifications");
     return null;
   }

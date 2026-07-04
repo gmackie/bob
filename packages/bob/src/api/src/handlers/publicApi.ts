@@ -34,7 +34,7 @@ const UUID_RE =
 // ---------------------------------------------------------------------------
 
 async function ensureTenant(db: any, userId: string) {
-  let membership = await db.query.tenantMembers.findFirst({
+  const membership = await db.query.tenantMembers.findFirst({
     where: eq(tenantMembers.userId, userId),
     with: { tenant: true },
   });
@@ -146,7 +146,7 @@ async function processDiscoveredRepos(
   userId: string,
   workspaceId: string,
   tenantId: string,
-  repos: Array<{
+  repos: {
     name: string;
     path: string;
     isGit: boolean;
@@ -155,7 +155,7 @@ async function processDiscoveredRepos(
     dirty?: boolean;
     buildSystem?: string;
     forgeAppId?: string;
-  }>,
+  }[],
 ) {
   const gitRepos = repos.filter((r) => r.isGit);
   const nonGitDirs = repos.filter((r) => !r.isGit);
@@ -576,7 +576,7 @@ export async function publicApiHeartbeat(
     workspaceId: string;
     agentTypes?: string[];
     forgeAvailable?: boolean;
-    repos?: Array<{
+    repos?: {
       name: string;
       path: string;
       isGit: boolean;
@@ -585,7 +585,7 @@ export async function publicApiHeartbeat(
       dirty?: boolean;
       buildSystem?: string;
       forgeAppId?: string;
-    }>;
+    }[];
   },
 ) {
   const workspace = await ctx.db.query.workspaces.findFirst({

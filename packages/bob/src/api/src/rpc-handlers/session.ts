@@ -154,12 +154,12 @@ export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
   }: {
     payload: {
       sessionId: string;
-      events: Array<{
+      events: {
         seq: number;
         direction: "client" | "agent" | "system";
         eventType: string;
         payload: Record<string, unknown>;
-      }>;
+      }[];
     };
   }) => wrapHandler(sessionRecordEventBatch, ctx, payload, "session"),
 

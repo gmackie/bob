@@ -145,11 +145,11 @@ export interface MobileProjectAutomationControl {
   enabled: boolean;
 }
 
-const MOBILE_PROJECT_AUTOMATION_CONTROL_DEFS: Array<{
+const MOBILE_PROJECT_AUTOMATION_CONTROL_DEFS: {
   key: MobileProjectAutomationKey;
   label: string;
   description: string;
-}> = [
+}[] = [
   {
     key: "autoDispatch",
     label: "Auto dispatch",

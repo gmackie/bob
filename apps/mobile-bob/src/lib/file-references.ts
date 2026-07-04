@@ -89,7 +89,7 @@ export function extractFileReferences(events: ServerEvent[]): FileReference[] {
       const command = args?.command;
       if (typeof command === "string") {
         // Extract obvious file paths from common patterns
-        const filePatterns = command.match(/(?:cat|head|tail|less|vi|vim|nano|code)\s+["']?([^\s"'|;]+)/);
+        const filePatterns = /(?:cat|head|tail|less|vi|vim|nano|code)\s+["']?([^\s"'|;]+)/.exec(command);
         if (filePatterns?.[1]) {
           refs.set(filePatterns[1], {
             path: filePatterns[1],

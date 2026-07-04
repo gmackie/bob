@@ -76,7 +76,7 @@ describe("publicWorkItems router", () => {
     ]);
     db.query.chatConversations.findMany.mockResolvedValueOnce([]);
 
-    const caller = createCaller(db) as any;
+    const caller = createCaller(db);
 
     await expect(
       caller.publicWorkItems.list({
@@ -88,7 +88,7 @@ describe("publicWorkItems router", () => {
 
   it("rejects listing work items without an API key", async () => {
     const db = createMockDb();
-    const caller = createCaller(db, false) as any;
+    const caller = createCaller(db, false);
 
     await expect(
       caller.publicWorkItems.list({

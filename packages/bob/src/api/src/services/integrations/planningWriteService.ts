@@ -3,9 +3,10 @@ import { db } from "@bob/db/client";
 import { chatConversations, projects, taskRuns } from "@bob/db/schema";
 
 import {
-  resolvePlanningProvider,
-  type PlanningProvider,
+  resolvePlanningProvider
+
 } from "./planningProvider.js";
+import type {PlanningProvider} from "./planningProvider.js";
 
 export type PlanningIssueStatus =
   | "todo"

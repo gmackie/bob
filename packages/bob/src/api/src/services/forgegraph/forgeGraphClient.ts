@@ -332,8 +332,8 @@ export class ForgeGraphClient {
     try {
       const response = await fetch(url, {
         ...options,
-        headers: headers as any,
-        signal: controller.signal as any,
+        headers: headers,
+        signal: controller.signal,
       });
 
       if (response.status >= 500 && response.status < 600) {
@@ -344,8 +344,8 @@ export class ForgeGraphClient {
         try {
           const retry = await fetch(url, {
             ...options,
-            headers: headers as any,
-            signal: retryController.signal as any,
+            headers: headers,
+            signal: retryController.signal,
           });
           if (!retry.ok) {
             const text = await retry.text().catch(() => "");

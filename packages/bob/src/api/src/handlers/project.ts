@@ -241,7 +241,7 @@ export async function projectUpdateAutomationSettings(
       reactFrontend?: boolean;
       stageSkills?: Record<
         string,
-        Array<{ slug: string; label: string; enabled: boolean }>
+        { slug: string; label: string; enabled: boolean }[]
       >;
     };
   },

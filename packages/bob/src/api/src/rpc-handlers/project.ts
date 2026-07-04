@@ -56,7 +56,7 @@ export const makeProjectRpcHandlers = (ctx: HandlerContext) => ({
         reactFrontend?: boolean;
         stageSkills?: Record<
           string,
-          Array<{ slug: string; label: string; enabled: boolean }>
+          { slug: string; label: string; enabled: boolean }[]
         >;
       };
     };

@@ -104,7 +104,7 @@ function liftHandlers<
   // just return object literals of closures that capture ctx). The closures
   // are never invoked.
   const sentinel: HandlerContext = { db: null as any, userId: "", tenantId: "" };
-  const keys = Object.keys(factory(sentinel)) as Array<keyof H & string>;
+  const keys = Object.keys(factory(sentinel)) as (keyof H & string)[];
 
   const lifted = {} as Record<string, (input: any) => Effect.Effect<any, any, any>>;
   for (const key of keys) {

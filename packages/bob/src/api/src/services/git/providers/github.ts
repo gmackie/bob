@@ -42,7 +42,7 @@ export function createGitHubClient(accessToken: string): GitProviderClient {
       input: ListRepositoriesInput,
     ): Promise<GitRepository[]> {
       const repos = await request<
-        Array<{
+        {
           id: number;
           owner: { login: string };
           name: string;
@@ -51,7 +51,7 @@ export function createGitHubClient(accessToken: string): GitProviderClient {
           private: boolean;
           clone_url: string;
           html_url: string;
-        }>
+        }[]
       >(
         `/user/repos?per_page=${input.perPage}&page=${input.page}&sort=updated`,
       );
@@ -112,11 +112,11 @@ export function createGitHubClient(accessToken: string): GitProviderClient {
 
     async listBranches(owner: string, repo: string): Promise<GitBranch[]> {
       const branches = await request<
-        Array<{
+        {
           name: string;
           commit: { sha: string };
           protected: boolean;
-        }>
+        }[]
       >(`/repos/${owner}/${repo}/branches`);
 
       return branches.map((b) => ({
@@ -133,14 +133,14 @@ export function createGitHubClient(accessToken: string): GitProviderClient {
       limit = 30,
     ): Promise<GitCommit[]> {
       const commits = await request<
-        Array<{
+        {
           sha: string;
           commit: {
             message: string;
             author: { name: string; email: string; date: string };
           };
           html_url: string;
-        }>
+        }[]
       >(`/repos/${owner}/${repo}/commits?sha=${branch}&per_page=${limit}`);
 
       return commits.map((c) => ({
@@ -234,14 +234,14 @@ export function createGitHubClient(accessToken: string): GitProviderClient {
       number: number,
     ): Promise<GitCommit[]> {
       const commits = await request<
-        Array<{
+        {
           sha: string;
           commit: {
             message: string;
             author: { name: string; email: string; date: string };
           };
           html_url: string;
-        }>
+        }[]
       >(`/repos/${owner}/${repo}/pulls/${number}/commits`);
 
       return commits.map((c) => ({

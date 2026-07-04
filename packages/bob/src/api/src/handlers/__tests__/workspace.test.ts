@@ -80,10 +80,10 @@ describe("workspaceCreate", () => {
 
     expect(ws!.tenantId).toBe("tenant-new");
 
-    const wsInsert = (db.__inserts as Insert[]).find((i) => i.table === "workspaces");
+    const wsInsert = (db.__inserts).find((i) => i.table === "workspaces");
     expect(wsInsert?.values.tenantId).toBe("tenant-new");
     // Tenant + membership were created.
-    expect((db.__inserts as Insert[]).some((i) => i.table === "tenants")).toBe(true);
+    expect((db.__inserts).some((i) => i.table === "tenants")).toBe(true);
   });
 
   it("reuses the user's existing tenant", async () => {
@@ -94,7 +94,7 @@ describe("workspaceCreate", () => {
 
     expect(ws!.tenantId).toBe("tenant-existing");
     // No new tenant row should be inserted when one already exists.
-    expect((db.__inserts as Insert[]).some((i) => i.table === "tenants")).toBe(false);
+    expect((db.__inserts).some((i) => i.table === "tenants")).toBe(false);
   });
 });
 

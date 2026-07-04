@@ -59,10 +59,10 @@ export class OpenCodeClient {
       }),
     });
 
-    type CreateSessionResponse = {
+    interface CreateSessionResponse {
       id?: string;
       time?: { created?: number | string };
-    };
+    }
 
     const json = (await response.json()) as CreateSessionResponse;
     if (!json.id) {
@@ -133,7 +133,7 @@ export class OpenCodeClient {
     };
 
     if (this.config.apiKey) {
-      headers["Authorization"] = `Bearer ${this.config.apiKey}`;
+      headers.Authorization = `Bearer ${this.config.apiKey}`;
     }
 
     const controller = new AbortController();
@@ -146,8 +146,8 @@ export class OpenCodeClient {
       // Use type assertion to work around Node.js vs browser type differences
       const fetchOptions: RequestInit = {
         ...options,
-        headers: headers as any,
-        signal: controller.signal as any,
+        headers: headers,
+        signal: controller.signal,
       };
 
       const response = await fetch(url, fetchOptions);

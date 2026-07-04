@@ -263,7 +263,7 @@ export async function planUpdateTask(
     with: { plan: true },
   });
 
-  if (!task || task.plan.userId !== ctx.userId) {
+  if (task?.plan.userId !== ctx.userId) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
   }
 
@@ -290,7 +290,7 @@ export async function planDeleteTask(
     with: { plan: true },
   });
 
-  if (!task || task.plan.userId !== ctx.userId) {
+  if (task?.plan.userId !== ctx.userId) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
   }
 

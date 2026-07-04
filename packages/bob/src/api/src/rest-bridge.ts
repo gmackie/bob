@@ -81,7 +81,7 @@ const jsonResponse = (body: unknown, status: number): Response =>
 const errorToResponse = (err: unknown): Response => {
   const tag =
     err && typeof err === "object" && "_tag" in err
-      ? String((err as { _tag: unknown })._tag)
+      ? String((err)._tag)
       : undefined;
   switch (tag) {
     case "BobNotFoundError":
@@ -143,7 +143,7 @@ const invokeInProcess = (
     }).pipe(
       Effect.scoped,
       Effect.provide(transport),
-    ) as Effect.Effect<unknown, unknown, never>,
+    ),
   );
 };
 

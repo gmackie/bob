@@ -114,7 +114,7 @@ export async function settingsEdgeCreateApiKey(
   ctx: HandlerContext,
   input: {
     name: string;
-    permissions: Array<"read" | "write" | "delete" | "admin">;
+    permissions: ("read" | "write" | "delete" | "admin")[];
     expiresInDays?: number;
   },
 ) {

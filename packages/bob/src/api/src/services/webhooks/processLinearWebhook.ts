@@ -1,9 +1,10 @@
 import { and, eq } from "@bob/db";
 import { db } from "@bob/db/client";
+import type {
+  projects} from "@bob/db/schema";
 import {
   dispatchBatches,
   dispatchItems,
-  projects,
   workItems,
   workspaceIntegrations,
   workspaceMembers,
@@ -11,9 +12,10 @@ import {
 
 import {
   markDeliveryFailed,
-  markDeliveryProcessed,
-  type WebhookProvider,
+  markDeliveryProcessed
+
 } from "./processWebhook";
+import type {WebhookProvider} from "./processWebhook";
 import { ensureLinearProject } from "../linear/ensureLinearProject";
 import { traceWebhook } from "@bob/telemetry";
 

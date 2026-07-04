@@ -205,7 +205,7 @@ export async function webhookRedeliver(
     .limit(1);
 
   const row = rows[0];
-  if (!row || row.userId !== ctx.userId) {
+  if (row?.userId !== ctx.userId) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Delivery not found" });
   }
   if (row.delivery.status !== "failed") {

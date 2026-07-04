@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { makePgliteDb, type PgliteDbHandle } from "./client-pglite.js";
+import { makePgliteDb  } from "./client-pglite.js";
+import type {PgliteDbHandle} from "./client-pglite.js";
 
 describe("client-pglite", () => {
   let handle: PgliteDbHandle;

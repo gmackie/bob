@@ -4,7 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
-import { drizzle, type PgliteDatabase } from "drizzle-orm/pglite";
+import { drizzle  } from "drizzle-orm/pglite";
+import type {PgliteDatabase} from "drizzle-orm/pglite";
 import {
   generateDrizzleJson,
   generateMigration,
@@ -12,7 +13,7 @@ import {
 import * as schema from "./schema.js";
 import { applyMigrations } from "./migrate.js";
 
-export type PgliteDbOptions = {
+export interface PgliteDbOptions {
   /** `:memory:` for tests, or an absolute directory path for persistence. */
   dataDir?: string;
   /**
@@ -24,13 +25,13 @@ export type PgliteDbOptions = {
    * exercises the migration runner against fixture SQL, not the real schema).
    */
   bootstrap?: boolean;
-};
+}
 
-export type PgliteDbHandle = {
+export interface PgliteDbHandle {
   db: PgliteDatabase<typeof schema>;
   client: PGlite;
   close: () => Promise<void>;
-};
+}
 
 const DEFAULT_DIR = path.join(os.homedir(), ".bob", "userdata", "db");
 
@@ -137,7 +138,7 @@ export async function bootstrapSchema(client: PGlite): Promise<void> {
   // we log and move on. The env-var override exists so properly-packaged hosts
   // (e.g. Phase 2's `apps/bob-server`) can still opt in to the optimization.
   const migrationsDir = resolveMigrationsDir();
-  let files: Array<{ filename: string; hash: string }> = [];
+  let files: { filename: string; hash: string }[] = [];
   try {
     files = fs
       .readdirSync(migrationsDir)
@@ -159,7 +160,7 @@ export async function bootstrapSchema(client: PGlite): Promise<void> {
       "code" in err &&
       (err as { code?: string }).code === "ENOENT";
     if (!isEnoent) throw err;
-    // eslint-disable-next-line no-console
+
     console.warn(
       `[@bob/db] migrations dir not found at ${migrationsDir}; ` +
         `skipping pre-mark step. Set BOB_DB_MIGRATIONS_DIR to opt in. ` +
@@ -320,7 +321,7 @@ export function makePgliteDbSync(
   // will reject with the underlying error, but if nothing ever calls the db
   // we still want the root cause visible in logs rather than silenced.
   ready.catch((err: unknown) => {
-    // eslint-disable-next-line no-console
+
     console.error("[@bob/db] PGlite bootstrap failed:", err);
   });
 
@@ -335,7 +336,7 @@ export function makePgliteDbSync(
     try {
       await client.close();
     } catch (err) {
-      // eslint-disable-next-line no-console
+
       console.error("[@bob/db] PGlite close failed:", err);
     }
   };

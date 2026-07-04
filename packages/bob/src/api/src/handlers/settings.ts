@@ -170,7 +170,7 @@ export async function settingsCreateApiKey(
   ctx: HandlerContext,
   input: {
     name: string;
-    permissions: Array<"read" | "write" | "delete" | "admin">;
+    permissions: ("read" | "write" | "delete" | "admin")[];
     expiresInDays?: number;
   },
 ) {
@@ -226,7 +226,7 @@ export async function settingsRevokeApiKey(
 }
 
 export async function settingsListConfigRoots() {
-  const roots: Array<{ id: ConfigRootId; label: string; dir: string }> = [
+  const roots: { id: ConfigRootId; label: string; dir: string }[] = [
     { id: "opencode_xdg", label: "OpenCode (XDG config)", dir: getConfigRootDir("opencode_xdg") },
     { id: "opencode_dot", label: "OpenCode (.opencode)", dir: getConfigRootDir("opencode_dot") },
     { id: "claude_dot", label: "Claude (.claude)", dir: getConfigRootDir("claude_dot") },

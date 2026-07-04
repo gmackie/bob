@@ -1,4 +1,5 @@
-import { type ReactNode, useCallback, useEffect, useRef } from "react";
+import {  useCallback, useEffect, useRef } from "react";
+import type {ReactNode} from "react";
 import { Linking, Platform } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 
@@ -46,9 +47,9 @@ interface CespAlertsResponse {
   generatedAt: string;
 }
 
-type ProvidersProps = {
+interface ProvidersProps {
   children: ReactNode;
-};
+}
 
 const CESP_POLL_INTERVAL_MS = 20_000;
 const CESP_POLL_LIMIT = 80;
@@ -69,12 +70,12 @@ function logCespDebug(message: string, payload?: Record<string, unknown>) {
   console.info(`[CESP][mobile] ${message}`);
 }
 
-type CESPDestPayload = {
+interface CESPDestPayload {
   destination?: string;
   destinationPath?: string;
   destinationTask?: string | null;
   destinationProject?: string | null;
-};
+}
 
 function getProjectFromAlert(alert: CespAlert): string | null {
   if (alert.repository?.planningProjectId) {

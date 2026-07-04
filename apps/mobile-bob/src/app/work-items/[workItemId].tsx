@@ -27,9 +27,10 @@ import {
   getMobileWorkItemEntryAction,
   getMobileWorkItemEntryValidationState,
   getMobileWorkItemDispatchSuccessHref,
-  normalizeMobileWorkItemEntryView,
-  type MobileWorkItemEntryValidationState,
+  normalizeMobileWorkItemEntryView
+
 } from "~/features/tablet/work-item-entry";
+import type {MobileWorkItemEntryValidationState} from "~/features/tablet/work-item-entry";
 import { getMobileDetailBackAction } from "~/features/tablet/navigation";
 import { authClient } from "~/utils/auth";
 import { trpc } from "~/utils/api";

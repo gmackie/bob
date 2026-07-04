@@ -2,9 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import {
-  buildMobileWorkItemEntryRunRows,
-  type MobileWorkItemOutcomeRun,
+  buildMobileWorkItemEntryRunRows
+
 } from "~/features/tablet/work-item-entry";
+import type {MobileWorkItemOutcomeRun} from "~/features/tablet/work-item-entry";
 import { colors } from "~/lib/colors";
 import { trpc } from "~/utils/api";
 

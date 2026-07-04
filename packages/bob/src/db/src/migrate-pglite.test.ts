@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { makePgliteDb, type PgliteDbHandle } from "./client-pglite.js";
+import { makePgliteDb  } from "./client-pglite.js";
+import type {PgliteDbHandle} from "./client-pglite.js";
 import { applyMigrations } from "./migrate.js";
 
 /**
@@ -20,7 +21,7 @@ import { applyMigrations } from "./migrate.js";
 let tmpDir: string;
 let handle: PgliteDbHandle;
 
-const FIXTURE_MIGRATIONS: Array<{ filename: string; sql: string }> = [
+const FIXTURE_MIGRATIONS: { filename: string; sql: string }[] = [
   {
     filename: "0001_initial.sql",
     sql: `

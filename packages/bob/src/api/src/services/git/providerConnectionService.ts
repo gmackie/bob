@@ -174,14 +174,14 @@ export async function getConnection(
 }
 
 export async function listConnections(userId: string): Promise<
-  Array<{
+  {
     id: string;
     provider: GitProvider;
     instanceUrl: string | null;
     providerAccountId: string;
     providerUsername: string | null;
     createdAt: string;
-  }>
+  }[]
 > {
   await ensureGitHubConnectionFromOAuth(userId);
 

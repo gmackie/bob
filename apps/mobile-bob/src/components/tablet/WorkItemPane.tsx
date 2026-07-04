@@ -12,10 +12,11 @@ import {
 import {
   buildMobileWorkItemEntryContext,
   getMobileWorkItemEntryAction,
-  getMobileWorkItemEntryValidationState,
-  type MobileWorkItemEntryValidationState,
-  type MobileWorkItemEntryView,
+  getMobileWorkItemEntryValidationState
+
+
 } from "~/features/tablet/work-item-entry";
+import type {MobileWorkItemEntryValidationState, MobileWorkItemEntryView} from "~/features/tablet/work-item-entry";
 
 const STATUS_COLORS: Record<string, string> = {
   in_progress: colors.success,

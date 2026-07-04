@@ -74,14 +74,14 @@ export interface PrWithCommits {
   updatedAt: string | null;
   mergedAt: string | null;
   closedAt: string | null;
-  commits: Array<{
+  commits: {
     sha: string;
     message: string;
     authorName: string | null;
     authorEmail: string | null;
     committedAt: string;
     isBobCommit: boolean;
-  }>;
+  }[];
 }
 
 async function getRepoWithConnection(
@@ -357,14 +357,14 @@ async function syncPrCommits(
   repositoryId: string,
   sessionId?: string | null,
 ): Promise<
-  Array<{
+  {
     sha: string;
     message: string;
     authorName: string | null;
     authorEmail: string | null;
     committedAt: string;
     isBobCommit: boolean;
-  }>
+  }[]
 > {
   const remoteCommits = await client.listPullRequestCommits(
     owner,
@@ -372,14 +372,14 @@ async function syncPrCommits(
     prNumber,
   );
 
-  const commitRecords: Array<{
+  const commitRecords: {
     sha: string;
     message: string;
     authorName: string | null;
     authorEmail: string | null;
     committedAt: string;
     isBobCommit: boolean;
-  }> = [];
+  }[] = [];
 
   for (const commit of remoteCommits) {
     const isBobCommit = detectBobCommit(commit);
@@ -418,14 +418,14 @@ async function syncPrCommits(
 
 export async function syncCommits(input: SyncCommitsInput): Promise<{
   synced: number;
-  commits: Array<{
+  commits: {
     sha: string;
     message: string;
     authorName: string | null;
     authorEmail: string | null;
     committedAt: string;
     isBobCommit: boolean;
-  }>;
+  }[];
 }> {
   const prRecord = await db.query.pullRequests.findFirst({
     where: and(
@@ -513,7 +513,7 @@ export async function listAllPrs(
     status?: "draft" | "open" | "merged" | "closed";
     limit?: number;
   },
-): Promise<Array<PrWithCommits>> {
+): Promise<PrWithCommits[]> {
   const conditions = [eq(pullRequests.userId, userId)];
 
   if (options?.status) {
@@ -537,7 +537,7 @@ export async function listPrsByRepository(
     limit?: number;
     includeCommits?: boolean;
   },
-): Promise<Array<PrWithCommits>> {
+): Promise<PrWithCommits[]> {
   const conditions = [
     eq(pullRequests.userId, userId),
     eq(pullRequests.repositoryId, repositoryId),
@@ -591,7 +591,7 @@ export async function listPrsByRepository(
 export async function listPrsBySession(
   userId: string,
   sessionId: string,
-): Promise<Array<PrWithCommits>> {
+): Promise<PrWithCommits[]> {
   const prs = await db.query.pullRequests.findMany({
     where: and(
       eq(pullRequests.userId, userId),

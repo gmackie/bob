@@ -1,9 +1,10 @@
 import { extractSessionEventText } from "../chat/session-event-text";
 import {
-  formatStatusLabel,
-  type TabletQueueAgentStatus,
-  type TabletQueueItem,
+  formatStatusLabel
+
+
 } from "./queue";
+import type {TabletQueueAgentStatus, TabletQueueItem} from "./queue";
 
 export type MobileWorkItemEntryView = "queue" | "outcome" | "planning";
 

@@ -67,7 +67,7 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
     () =>
       buildWorkspaceSettingRows({
         selectedWorkspaceId,
-        memberships: (memberships ?? []) as WorkspaceSettingMembership[],
+        memberships: (memberships ?? []),
       }),
     [memberships, selectedWorkspaceId],
   );

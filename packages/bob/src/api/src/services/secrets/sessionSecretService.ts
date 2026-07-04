@@ -153,7 +153,7 @@ export class SessionSecretService {
       where: eq(sessionSecrets.id, input.secretId),
     });
 
-    if (!existing || existing.userId !== input.userId) {
+    if (existing?.userId !== input.userId) {
       throw new Error("Session secret not found");
     }
 
@@ -201,7 +201,7 @@ export class SessionSecretService {
       where: eq(sessionSecrets.id, input.secretId),
     });
 
-    if (!row || row.userId !== input.userId) {
+    if (row?.userId !== input.userId) {
       throw new Error("Session secret not found");
     }
 
@@ -239,7 +239,7 @@ export class SessionSecretService {
       ),
     });
 
-    if (!row || row.userId !== input.userId) {
+    if (row?.userId !== input.userId) {
       throw new Error("Session secret not found");
     }
 

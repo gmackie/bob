@@ -26,7 +26,7 @@ const removed = (): never => {
 // ---------------------------------------------------------------------------
 
 export async function postAll(_ctx: PublicHandlerContext) {
-  return [] as Array<{ id: string; title: string; content: string }>;
+  return [] as { id: string; title: string; content: string }[];
 }
 
 export async function postById(

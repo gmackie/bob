@@ -43,7 +43,7 @@ async function trpcQuery(
   const headers: Record<string, string> = {
     "x-trpc-source": "mobile-bob",
   };
-  if (cookies) headers["Cookie"] = cookies;
+  if (cookies) headers.Cookie = cookies;
 
   const response = await fetch(url.toString(), { headers });
   if (!response.ok) {
@@ -76,12 +76,12 @@ const searchCommand: CommandHandler = {
       { task: "mobile knowledge search", question: args.trim(), topK: 5 },
       ctx.getCookies(),
     )) as {
-      chunks: Array<{
+      chunks: {
         sourceTitle: string | null;
         content: string;
         score: number;
         sourceKind: string;
-      }>;
+      }[];
       latencyMs: number;
     };
 
@@ -116,12 +116,12 @@ const papersCommand: CommandHandler = {
       { query: args.trim(), limit: 5 },
       ctx.getCookies(),
     )) as {
-      papers: Array<{
+      papers: {
         title: string;
         authors: string[];
         year: number | null;
         citationCount: number | null;
-      }>;
+      }[];
     };
 
     if (!result?.papers?.length) {
@@ -151,12 +151,12 @@ const memoryCommand: CommandHandler = {
       { query: args.trim(), scope: "all", limit: 5 },
       ctx.getCookies(),
     )) as {
-      threads: Array<{
+      threads: {
         title: string | null;
         rollingSummaryMd: string;
         topics: string[];
         score: number;
-      }>;
+      }[];
     };
 
     if (!result?.threads?.length) {
@@ -219,7 +219,7 @@ const COMMANDS: CommandHandler[] = [
 ];
 
 export function parseSlashCommand(text: string): { name: string; args: string } | null {
-  const match = text.match(/^\/(\w+)\s*(.*)/s);
+  const match = /^\/(\w+)\s*(.*)/s.exec(text);
   if (!match) return null;
   return { name: match[1]!, args: match[2]! };
 }

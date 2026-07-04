@@ -55,11 +55,11 @@ export interface SendResult {
   success: boolean;
   sent: number;
   failed: number;
-  errors: Array<{
+  errors: {
     token: string;
     error: string;
     shouldRemoveToken: boolean;
-  }>;
+  }[];
 }
 
 async function sendToExpo(
@@ -206,7 +206,7 @@ export async function notifyTaskBlocked(
     title: `Task ${taskIdentifier} Blocked`,
     body: reason.length > 100 ? `${reason.slice(0, 97)}...` : reason,
     data: {
-      type: "task.blocked" as NotificationType,
+      type: "task.blocked",
       taskIdentifier,
       sessionId,
       deepLink: sessionId ? `bob://session/${sessionId}` : undefined,
@@ -228,7 +228,7 @@ export async function notifyTaskCompleted(
       ? "Pull request is ready for review"
       : "Task has been completed",
     data: {
-      type: "task.completed" as NotificationType,
+      type: "task.completed",
       taskIdentifier,
       prUrl,
       deepLink: prUrl ? `bob://pr/${encodeURIComponent(prUrl)}` : undefined,
@@ -249,7 +249,7 @@ export async function notifyPRReady(
     title: "PR Ready for Review",
     body: `#${prNumber} ${prTitle} in ${repositoryName}`,
     data: {
-      type: "pr.ready" as NotificationType,
+      type: "pr.ready",
       prNumber,
       prUrl,
       repositoryName,
@@ -270,7 +270,7 @@ export async function notifyPRMerged(
     title: "PR Merged",
     body: `#${prNumber} ${prTitle} has been merged`,
     data: {
-      type: "pr.merged" as NotificationType,
+      type: "pr.merged",
       prNumber,
       repositoryName,
     },
@@ -289,7 +289,7 @@ export async function notifySessionError(
     title: "Session Error",
     body: `${sessionTitle}: ${errorMessage.slice(0, 80)}`,
     data: {
-      type: "session.error" as NotificationType,
+      type: "session.error",
       sessionId,
       deepLink: `bob://session/${sessionId}`,
     },
@@ -380,14 +380,14 @@ export async function disablePushToken(
 }
 
 export async function listUserTokens(userId: string): Promise<
-  Array<{
+  {
     id: string;
     deviceType: string;
     deviceName: string | null;
     enabled: boolean;
     lastSeenAt: string | null;
     createdAt: string;
-  }>
+  }[]
 > {
   const tokens = await db.query.devicePushTokens.findMany({
     where: eq(devicePushTokens.userId, userId),

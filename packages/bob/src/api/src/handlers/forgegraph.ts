@@ -242,11 +242,11 @@ export async function forgegraphIngestRunEvent(
     taskId?: string;
     agentId?: string;
     testStatus?: string;
-    artifactRefs?: Array<{
+    artifactRefs?: {
       type: string;
       url?: string;
       description?: string;
-    }>;
+    }[];
   },
 ) {
   const [event] = await ctx.db
@@ -437,7 +437,7 @@ export async function forgegraphImportApp(
   let remoteName: string | null = null;
   let mainBranch = "main";
   if (app.flakeRef) {
-    const gitMatch = app.flakeRef.match(/git\+?(https?:\/\/[^?#]+)/);
+    const gitMatch = /git\+?(https?:\/\/[^?#]+)/.exec(app.flakeRef);
     if (gitMatch) {
       remoteUrl = gitMatch[1]!;
       const pathParts = new URL(remoteUrl).pathname.replace(/\.git$/, "").split("/").filter(Boolean);
@@ -446,7 +446,7 @@ export async function forgegraphImportApp(
         remoteName = pathParts[1]!;
       }
     }
-    const refMatch = app.flakeRef.match(/[?&]ref=([^&#]+)/);
+    const refMatch = /[?&]ref=([^&#]+)/.exec(app.flakeRef);
     if (refMatch) mainBranch = refMatch[1]!;
   }
 
@@ -511,7 +511,7 @@ export async function forgegraphImportAllApps(
   const unlinked = allApps.filter((app: any) => !linkedIds.has(app.id));
   if (unlinked.length === 0) return { imported: 0, projects: [] };
 
-  const imported: Array<typeof projects.$inferSelect> = [];
+  const imported: typeof projects.$inferSelect[] = [];
 
   for (const app of unlinked) {
     let remoteUrl: string | null = null;
@@ -519,7 +519,7 @@ export async function forgegraphImportAllApps(
     let remoteName: string | null = null;
     let mainBranch = "main";
     if (app.flakeRef) {
-      const gitMatch = app.flakeRef.match(/git\+?(https?:\/\/[^?#]+)/);
+      const gitMatch = /git\+?(https?:\/\/[^?#]+)/.exec(app.flakeRef);
       if (gitMatch) {
         remoteUrl = gitMatch[1]!;
         const pathParts = new URL(remoteUrl).pathname
@@ -531,7 +531,7 @@ export async function forgegraphImportAllApps(
           remoteName = pathParts[1]!;
         }
       }
-      const refMatch = app.flakeRef.match(/[?&]ref=([^&#]+)/);
+      const refMatch = /[?&]ref=([^&#]+)/.exec(app.flakeRef);
       if (refMatch) mainBranch = refMatch[1]!;
     }
 

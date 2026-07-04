@@ -6,11 +6,12 @@
  */
 import { TRPCError } from "@trpc/server";
 import { desc, eq, and } from "@bob/db";
+import type {
+  agentTypeEnum,
+  instanceStatusEnum} from "@bob/db/schema";
 import {
   agentInstances,
-  worktrees,
-  agentTypeEnum,
-  instanceStatusEnum,
+  worktrees
 } from "@bob/db/schema";
 
 import type { HandlerContext } from "./context.js";

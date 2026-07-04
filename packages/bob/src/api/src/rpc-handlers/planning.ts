@@ -161,11 +161,11 @@ export const makePlanningRpcHandlers = (ctx: HandlerContext) => ({
     payload: {
       taskRunId: string;
       summary?: string;
-      artifacts?: Array<{
+      artifacts?: {
         type: "pr" | "commit" | "file" | "comment";
         url?: string;
         description?: string;
-      }>;
+      }[];
       markIssueDone?: boolean;
     };
   }) => wrapHandler(planningAgentCompleteTask, ctx, payload, "agent"),

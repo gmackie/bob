@@ -1,4 +1,4 @@
-import { z } from "zod/v4";
+import type { z } from "zod/v4";
 
 import {
   commentRecordSchema,
@@ -29,7 +29,7 @@ import {
   updateWorkItemOutputSchema,
 } from "@bob/work-items/schema";
 
-export type WorkItemsRestOperation = {
+export interface WorkItemsRestOperation {
   procedureName:
     | "list"
     | "get"
@@ -50,7 +50,7 @@ export type WorkItemsRestOperation = {
   auth: "session" | "apiKey";
   inputSchema: z.ZodTypeAny;
   outputSchema: z.ZodTypeAny;
-};
+}
 
 export const workItemsRestOperations: WorkItemsRestOperation[] = [
   {

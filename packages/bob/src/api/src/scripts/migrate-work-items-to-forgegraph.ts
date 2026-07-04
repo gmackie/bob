@@ -70,7 +70,7 @@ async function main() {
 
     try {
       const fgItem = await fg.createWorkItem({
-        kind: item.kind as "issue" | "epic" | "task",
+        kind: item.kind,
         title: item.title,
         description: item.description ?? undefined,
         status: fgStatus,

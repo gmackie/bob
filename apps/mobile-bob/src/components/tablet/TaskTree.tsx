@@ -31,9 +31,9 @@ function TaskTreeNode({ item, workspaceId, depth }: TaskTreeNodeProps) {
     { enabled: expanded && hasChildren },
   ));
 
-  const children = (childrenQuery.data ?? []) as Array<{
+  const children = (childrenQuery.data ?? []) as {
     id: string; identifier: string; title: string; kind: string; status: string; childCount?: number;
-  }>;
+  }[];
 
   return (
     <View>
@@ -117,9 +117,9 @@ export function TaskTree({ workItemId, workspaceId: providedWsId }: TaskTreeProp
     { enabled: Boolean(workItemId && workspaceId) },
   ));
 
-  const children = (childrenQuery.data ?? []) as Array<{
+  const children = (childrenQuery.data ?? []) as {
     id: string; identifier: string; title: string; kind: string; status: string; childCount?: number;
-  }>;
+  }[];
 
   if (childrenQuery.isLoading) {
     return (

@@ -12,10 +12,11 @@ import {
   skillExecutions,
   skills,
   workItems,
-  workspaceMembers,
-  type SkillCategory,
-  type SkillSource,
+  workspaceMembers
+
+
 } from "@bob/db/schema";
+import type {SkillCategory, SkillSource} from "@bob/db/schema";
 
 import type { HandlerContext } from "./context.js";
 

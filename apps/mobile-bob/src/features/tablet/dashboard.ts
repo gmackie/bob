@@ -47,7 +47,7 @@ export interface ProviderRunSectionModel<T extends ProviderDetailRun> {
   emptyLabel: string;
   count: number;
   runs: T[];
-  rows: Array<ProviderRunRowModel & { id: string; run: T }>;
+  rows: (ProviderRunRowModel & { id: string; run: T })[];
 }
 
 export interface TaskDashboardHeaderModel {
@@ -60,10 +60,10 @@ export type ProviderRunTarget =
   | { type: "execution-session"; sessionId: string }
   | { type: "none" };
 
-export type RunningNowWorkItemTarget = {
+export interface RunningNowWorkItemTarget {
   workItemId: string;
   view: "queue" | "outcome";
-};
+}
 
 export type RunningNowEntryTarget =
   | { type: "work-item"; workItemId: string; view: "outcome" }
@@ -302,14 +302,14 @@ export function buildProviderRunGroups<T extends ProviderDetailRun>(
 export function buildProviderRunSectionModels<T extends ProviderDetailRun>(
   runs: T[],
   options: { now?: Date; includeEmptyOther?: boolean } = {},
-): Array<ProviderRunSectionModel<T>> {
+): ProviderRunSectionModel<T>[] {
   const groups = buildProviderRunGroups(runs);
-  const sections: Array<{
+  const sections: {
     key: ProviderRunSectionKey;
     title: string;
     emptyLabel: string;
     runs: T[];
-  }> = [
+  }[] = [
     {
       key: "active",
       title: "Active Sessions",

@@ -119,7 +119,7 @@ export function generateApiDocument(
         description: "RPC-style REST adapters for work item procedures",
       },
     ],
-  } as OpenAPIV3_1.Document;
+  };
 }
 
 export function getOpenApiSpec(config?: Partial<OpenApiConfig>): string {

@@ -58,17 +58,17 @@ export const makePlanSessionRpcHandlers = (ctx: HandlerContext) => ({
           title: string;
           kind: string;
         };
-        selectedRepoSources: Array<{
+        selectedRepoSources: {
           id: string;
           label: string;
           path: string;
           detail: string;
-        }>;
-        attachedFiles: Array<{
+        }[];
+        attachedFiles: {
           name: string;
           sizeLabel: string;
           content?: string;
-        }>;
+        }[];
       };
     };
   }) => wrapHandler(planSessionStart, ctx, payload, "planSession"),

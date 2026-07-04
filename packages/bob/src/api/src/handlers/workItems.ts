@@ -107,7 +107,7 @@ async function loadAccessibleWorkItem(db: any, userId: string, workItemId: strin
 
 /** Parse a short identifier like "BOB-27" into { projectKey, sequenceNumber }. */
 function parseIdentifier(id: string): { projectKey: string; sequenceNumber: number } | null {
-  const match = id.match(/^([A-Za-z][A-Za-z0-9]*)-(\d+)$/);
+  const match = /^([A-Za-z][A-Za-z0-9]*)-(\d+)$/.exec(id);
   if (!match) return null;
   return { projectKey: match[1]!.toUpperCase(), sequenceNumber: parseInt(match[2]!, 10) };
 }
@@ -421,11 +421,11 @@ export async function workItemsUpdate(
       previousValue: existing.priority ?? null,
       nextValue: input.priority ?? null,
     },
-  ] satisfies Array<{
+  ] satisfies {
     field: "title" | "description" | "status" | "priority";
     previousValue: string | null;
     nextValue: string | null;
-  }>).filter(
+  }[]).filter(
     (change) =>
       change.nextValue !== null && change.previousValue !== change.nextValue,
   );
@@ -1117,7 +1117,7 @@ export async function workItemsListRecentActivities(
     const runWorkItemIds = recentRuns
       .map((r: any) => r.workItemId)
       .filter((id: unknown): id is string => typeof id === "string" && uuidRe.test(id));
-    const runWorkItems: Map<string, any> = new Map();
+    const runWorkItems = new Map<string, any>();
     if (runWorkItemIds.length > 0) {
       const wiRows = await ctx.db.query.workItems.findMany({
         where: inArray(workItems.id, runWorkItemIds),
@@ -1142,7 +1142,7 @@ export async function workItemsListRecentActivities(
         workItemTitle: wi?.title ?? (isUuid ? null : run.workItemId) ?? null,
         workItemIdentifier: wi
           ? formatWorkItemIdentifier({
-              projectKey: (wi as any).project?.key ?? null,
+              projectKey: (wi).project?.key ?? null,
               sequenceNumber: wi.sequenceNumber,
               id: wi.id,
             })

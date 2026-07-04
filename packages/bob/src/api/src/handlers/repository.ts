@@ -227,11 +227,11 @@ export async function repositoryCreateWorktree(
       title?: string;
       goal?: string;
       planningTaskId?: string;
-      tasks?: Array<{
+      tasks?: {
         key: string;
         content: string;
         status?: "pending" | "in_progress" | "completed" | "cancelled";
-      }>;
+      }[];
     };
   },
 ) {
@@ -326,11 +326,11 @@ export async function repositoryUpdateWorktreePlanning(
     goal?: string;
     status?: string;
     planningTaskId?: string | null;
-    tasks?: Array<{
+    tasks?: {
       key: string;
       content: string;
       status?: "pending" | "in_progress" | "completed" | "cancelled";
-    }>;
+    }[];
   },
 ) {
   const wt = await ctx.db.query.worktrees.findFirst({

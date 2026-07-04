@@ -48,7 +48,7 @@ export const makeSettingsRpcHandlers = (ctx: HandlerContext) => ({
   }: {
     payload: {
       name: string;
-      permissions: Array<"read" | "write" | "delete" | "admin">;
+      permissions: ("read" | "write" | "delete" | "admin")[];
       expiresInDays?: number;
     };
   }) => wrapHandler(settingsCreateApiKey, ctx, payload, "settings"),
