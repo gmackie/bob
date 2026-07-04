@@ -235,7 +235,7 @@ interface LinearIssueResponse {
   url: string;
   priority: number;
   assignee: { id: string } | null;
-  labels: { nodes: Array<{ name: string }> };
+  labels: { nodes: { name: string }[] };
 }
 
 async function fetchLinearIssue(
@@ -272,7 +272,7 @@ async function fetchLinearIssue(
 
   const json = (await response.json()) as {
     data?: { issue?: LinearIssueResponse };
-    errors?: Array<{ message: string }>;
+    errors?: { message: string }[];
   };
 
   if (json.errors?.length) {

@@ -1,5 +1,5 @@
 import { BaseAgentAdapter } from './base-adapter';
-import { AgentType } from '../types';
+import type { AgentType } from '../types';
 
 export class KiroAdapter extends BaseAgentAdapter {
   readonly type: AgentType = 'kiro';
@@ -94,7 +94,7 @@ export class KiroAdapter extends BaseAgentAdapter {
         }
 
         // Look for usage reporting
-        const usageMatch = line.match(/Usage:\s*(\d+)\s*input,?\s*(\d+)\s*output/i);
+        const usageMatch = /Usage:\s*(\d+)\s*input,?\s*(\d+)\s*output/i.exec(line);
         if (usageMatch) {
           const inputTokens = parseInt(usageMatch[1] ?? '0');
           const outputTokens = parseInt(usageMatch[2] ?? '0');

@@ -27,7 +27,7 @@ export class TerminalService {
         cols: 80,
         rows: 30,
         cwd,
-        env: process.env as { [key: string]: string },
+        env: process.env,
       },
     );
 
@@ -61,7 +61,7 @@ export class TerminalService {
         cols: 80,
         rows: 30,
         cwd: cwd || process.env.HOME || "/",
-        env: process.env as { [key: string]: string },
+        env: process.env,
       },
     );
 

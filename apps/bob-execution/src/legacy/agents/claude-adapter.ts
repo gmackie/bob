@@ -1,5 +1,5 @@
 import { BaseAgentAdapter } from './base-adapter';
-import { AgentType } from '../types';
+import type { AgentType } from '../types';
 
 export class ClaudeAdapter extends BaseAgentAdapter {
   readonly type: AgentType = 'claude';
@@ -60,7 +60,7 @@ export class ClaudeAdapter extends BaseAgentAdapter {
            fullOutput.length > 100;
   }
 
-  private calculateCost(inputTokens: number, outputTokens: number, cacheCreation: number = 0, cacheRead: number = 0): number {
+  private calculateCost(inputTokens: number, outputTokens: number, cacheCreation = 0, cacheRead = 0): number {
     // Sonnet pricing: $3 per 1M input tokens, $15 per 1M output tokens
     // Cache creation: $3.75 per 1M tokens, Cache read: $0.30 per 1M tokens
     const inputCost = (inputTokens / 1000000) * 3.00;

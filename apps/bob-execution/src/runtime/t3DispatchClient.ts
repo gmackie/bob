@@ -155,7 +155,7 @@ export function buildT3ThreadTurnStartCommand(
 export async function dispatchTaskToT3Code(input: {
   serverUrl: string;
   authToken?: string;
-  commands: Array<Record<string, unknown>>;
+  commands: Record<string, unknown>[];
 }): Promise<unknown> {
   const url = new URL(input.serverUrl);
   url.pathname = "/api/orchestration/dispatch";

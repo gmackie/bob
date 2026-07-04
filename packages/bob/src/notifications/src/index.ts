@@ -26,10 +26,10 @@ export interface WorkItemNotificationPayload extends NotificationPayload {
   projectId?: string;
 }
 
-type LocalNotificationScheduleOptions = {
+interface LocalNotificationScheduleOptions {
   trigger?: Notifications.NotificationTriggerInput;
   data?: NotificationPayload;
-};
+}
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({

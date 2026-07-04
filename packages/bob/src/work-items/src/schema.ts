@@ -58,7 +58,8 @@
 // =============================================================================
 
 import { relations, sql } from "drizzle-orm";
-import { type AnyPgColumn, index, pgEnum, pgTable } from "drizzle-orm/pg-core";
+import {  index, pgEnum, pgTable } from "drizzle-orm/pg-core";
+import type {AnyPgColumn} from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -716,7 +717,7 @@ export const taskRuns = pgTable("task_runs", (t) => ({
   runPhase: t.varchar({ length: 20 }).notNull().default("execute"),
   // runPhase values: "shape" | "plan" | "execute" | "review" | "ship"
   planningProvider: t.varchar({ length: 20 }).notNull().default("internal"),
-  syncFailures: t.jsonb().$type<Array<{ method: string; error: string; timestamp: string }>>(),
+  syncFailures: t.jsonb().$type<{ method: string; error: string; timestamp: string }[]>(),
   createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t
     .timestamp({ mode: "string", withTimezone: true })

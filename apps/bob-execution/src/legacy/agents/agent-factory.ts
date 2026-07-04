@@ -1,4 +1,4 @@
-import { AgentAdapter, AgentType, AgentInfo } from '../types';
+import type { AgentAdapter, AgentType, AgentInfo } from '../types';
 import { ClaudeAdapter } from './claude-adapter';
 import { CodexAdapter } from './codex-adapter';
 import { GeminiAdapter } from './gemini-adapter';
@@ -7,7 +7,7 @@ import { OpenCodeAdapter } from './opencode-adapter';
 import { CursorAgentAdapter } from './cursor-agent-adapter';
 
 export class AgentFactory {
-  private adapters: Map<AgentType, AgentAdapter> = new Map();
+  private adapters = new Map<AgentType, AgentAdapter>();
 
   constructor() {
     this.registerAdapters();
@@ -194,7 +194,7 @@ export class AgentFactory {
    */
   parseAgentOutput(type: AgentType, output: string): { inputTokens?: number; outputTokens?: number; cost?: number } | null {
     const adapter = this.getAdapter(type);
-    if (!adapter || !adapter.parseOutput) {
+    if (!adapter?.parseOutput) {
       return null;
     }
     return adapter.parseOutput(output);
@@ -205,7 +205,7 @@ export class AgentFactory {
    */
   async cleanupAgent(type: AgentType, process: any): Promise<void> {
     const adapter = this.getAdapter(type);
-    if (!adapter || !adapter.cleanup) {
+    if (!adapter?.cleanup) {
       // Default cleanup
       if (process && typeof process.kill === 'function') {
         process.kill();

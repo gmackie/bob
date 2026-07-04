@@ -462,7 +462,7 @@ export class GitService {
 
   async removeWorktree(
     worktreeId: string,
-    force: boolean = false,
+    force = false,
   ): Promise<void> {
     const worktree = this.worktrees.get(worktreeId);
     if (!worktree) {
@@ -639,7 +639,7 @@ export class GitService {
   // ----- Repository Dashboard helpers -----
   async getGitRemotes(
     repositoryId: string,
-  ): Promise<Array<{ name: string; url: string; type: "fetch" | "push" }>> {
+  ): Promise<{ name: string; url: string; type: "fetch" | "push" }[]> {
     const repository = this.repositories.get(repositoryId);
     if (!repository) {
       throw new Error(`Repository ${repositoryId} not found`);
@@ -649,14 +649,14 @@ export class GitService {
       cwd: repository.path,
     });
     const lines = stdout.trim().split("\n").filter(Boolean);
-    const remotes: Array<{
+    const remotes: {
       name: string;
       url: string;
       type: "fetch" | "push";
-    }> = [];
+    }[] = [];
 
     for (const line of lines) {
-      const match = line.match(/^(\S+)\s+(\S+)\s+\((fetch|push)\)$/);
+      const match = /^(\S+)\s+(\S+)\s+\((fetch|push)\)$/.exec(line);
       if (match) {
         const name = match[1];
         const url = match[2];
@@ -670,7 +670,7 @@ export class GitService {
   }
 
   async getGitBranches(repositoryId: string): Promise<
-    Array<{
+    {
       name: string;
       isLocal: boolean;
       isRemote: boolean;
@@ -681,7 +681,7 @@ export class GitService {
         author: string;
         date: string;
       };
-    }>
+    }[]
   > {
     const repository = this.repositories.get(repositoryId);
     if (!repository) {
@@ -753,7 +753,7 @@ export class GitService {
   }
 
   async getGitGraph(repositoryId: string): Promise<
-    Array<{
+    {
       hash: string;
       parents: string[];
       message: string;
@@ -762,7 +762,7 @@ export class GitService {
       branch?: string;
       x: number;
       y: number;
-    }>
+    }[]
   > {
     const repository = this.repositories.get(repositoryId);
     if (!repository) {

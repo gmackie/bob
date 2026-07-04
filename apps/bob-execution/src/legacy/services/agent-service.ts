@@ -394,20 +394,20 @@ export class AgentService {
     totalSessions: number;
     totalInputTokens: number;
     totalOutputTokens: number;
-    dailyUsage: Array<{
+    dailyUsage: {
       date: string;
       inputTokens: number;
       outputTokens: number;
       sessions: number;
-    }>;
-    instanceUsage: Array<{
+    }[];
+    instanceUsage: {
       instanceId: string;
       worktreeId: string;
       agentType: AgentType;
       inputTokens: number;
       outputTokens: number;
       lastActivity: Date;
-    }>;
+    }[];
     hasRealData?: boolean;
   } {
     const now = Date.now();
@@ -532,7 +532,7 @@ export class AgentService {
 
   private async collectInstanceUsage(instanceId: string): Promise<void> {
     const instance = this.instances.get(instanceId);
-    if (!instance || instance.status !== "running") {
+    if (instance?.status !== "running") {
       return;
     }
 

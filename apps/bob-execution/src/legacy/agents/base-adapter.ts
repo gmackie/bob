@@ -1,8 +1,9 @@
 import { spawn } from "child_process";
 import type { ChildProcess } from "child_process";
-import { IPty, spawn as spawnPty } from "node-pty";
+import type { IPty} from "node-pty";
+import { spawn as spawnPty } from "node-pty";
 
-import { AgentAdapter, AgentType } from "../types";
+import type { AgentAdapter, AgentType } from "../types";
 import { getAgentCommand } from "../utils/agentPaths";
 
 export abstract class BaseAgentAdapter implements AgentAdapter {
@@ -60,7 +61,7 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
         env: {
           ...process.env,
           ...env,
-        } as { [key: string]: string },
+        },
       });
 
       // Give the PTY a moment to fully initialize before the agent starts
@@ -154,13 +155,13 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
   // Helper methods for subclasses
   protected async runCommand(
     args: string[],
-    timeoutMs: number = 10000,
+    timeoutMs = 10000,
   ): Promise<{ stdout: string; stderr: string; code: number }> {
     const resolvedCommand = getAgentCommand(this.type);
     return new Promise((resolve, reject) => {
       const child: ChildProcess = spawn(resolvedCommand, args, {
         stdio: "pipe",
-        env: { ...process.env } as NodeJS.ProcessEnv,
+        env: { ...process.env },
         shell: true, // Use shell to properly resolve commands and handle shebangs
       });
       let stdout = "";

@@ -7,11 +7,13 @@
  *
  * Run: BOB_API_KEY=... BOB_WORKSPACE_ID=... GATEWAY_WS_URL=ws://... node daemon/index.js
  */
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn  } from "node:child_process";
+import type {ChildProcess} from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import WebSocket from "ws";
-import { computeCostUsd, type TokenCounts } from "@gmacko/core/agent/model-pricing";
+import { computeCostUsd  } from "@gmacko/core/agent/model-pricing";
+import type {TokenCounts} from "@gmacko/core/agent/model-pricing";
 
 interface AgentExecutionResult {
   exitCode: number;
@@ -86,8 +88,8 @@ interface ServerSessionAvailable {
       intent: "shape" | "breakdown";
       notes: string;
       workItem?: { id: string; identifier: string; title: string; kind: string };
-      selectedRepoSources: Array<{ id: string; label: string; path: string; detail: string }>;
-      attachedFiles: Array<{ name: string; sizeLabel: string; content?: string }>;
+      selectedRepoSources: { id: string; label: string; path: string; detail: string }[];
+      attachedFiles: { name: string; sizeLabel: string; content?: string }[];
     };
   };
 }

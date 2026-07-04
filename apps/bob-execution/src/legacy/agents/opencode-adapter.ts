@@ -1,5 +1,5 @@
 import { BaseAgentAdapter } from './base-adapter';
-import { AgentType } from '../types';
+import type { AgentType } from '../types';
 
 export class OpenCodeAdapter extends BaseAgentAdapter {
   readonly type: AgentType = 'opencode';

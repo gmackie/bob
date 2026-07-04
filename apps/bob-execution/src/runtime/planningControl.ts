@@ -6,10 +6,11 @@ import {
   user,
 } from "@bob/db/schema";
 import {
-  taskRunStatusEnum,
-  type TaskRunStatus,
-  type WorkflowStatus,
+  taskRunStatusEnum
+  
+  
 } from "@bob/db/schema";
+import type {TaskRunStatus, WorkflowStatus} from "@bob/db/schema";
 
 import {
   executeTask,

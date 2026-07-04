@@ -2,11 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   createBobRuntimeMirrorSidecar,
-  mirrorRuntimeEventWithPostgres,
-  type MirrorRuntimeEventInput,
-  type SqlPoolLike,
-  type SqlClientLike,
+  mirrorRuntimeEventWithPostgres
+  
+  
+  
 } from "./bobRuntimeMirrorSidecar.js";
+import type {MirrorRuntimeEventInput, SqlPoolLike, SqlClientLike} from "./bobRuntimeMirrorSidecar.js";
 
 function buildRuntimeEvent(
   overrides: Partial<MirrorRuntimeEventInput> = {},
@@ -66,7 +67,7 @@ describe("bob runtime mirror sidecar", () => {
   });
 
   it("increments next_seq numerically even when pg returns bigint fields as strings", async () => {
-    const queries: Array<{ text: string; values: unknown[] | undefined }> = [];
+    const queries: { text: string; values: unknown[] | undefined }[] = [];
     const client = {
       async query(text: string, values?: unknown[]) {
         queries.push({ text, values });

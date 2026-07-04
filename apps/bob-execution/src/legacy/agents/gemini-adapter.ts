@@ -1,5 +1,5 @@
 import { BaseAgentAdapter } from './base-adapter';
-import { AgentType } from '../types';
+import type { AgentType } from '../types';
 
 export class GeminiAdapter extends BaseAgentAdapter {
   readonly type: AgentType = 'gemini';
@@ -99,8 +99,8 @@ export class GeminiAdapter extends BaseAgentAdapter {
         }
 
         // Look for text-based usage reporting
-        const inputMatch = line.match(/input[:\s]+(\d+)/i);
-        const outputMatch = line.match(/output[:\s]+(\d+)/i);
+        const inputMatch = /input[:\s]+(\d+)/i.exec(line);
+        const outputMatch = /output[:\s]+(\d+)/i.exec(line);
         if (inputMatch && outputMatch) {
           const inputTokens = parseInt(inputMatch[1] ?? '0');
           const outputTokens = parseInt(outputMatch[1] ?? '0');
