@@ -11,6 +11,7 @@ const queryMocks = {
   workItemsFindMany: vi.fn(),
   workItemsFindFirst: vi.fn(),
   workItemArtifactsFindMany: vi.fn(),
+  workItemDependenciesFindMany: vi.fn(),
   chatConversationsFindMany: vi.fn(),
   chatConversationsFindFirst: vi.fn(),
   commentsFindMany: vi.fn(),
@@ -40,6 +41,9 @@ const makeDbMock = () => ({
     },
     workItemArtifacts: {
       findMany: queryMocks.workItemArtifactsFindMany,
+    },
+    workItemDependencies: {
+      findMany: queryMocks.workItemDependenciesFindMany,
     },
     chatConversations: {
       findMany: queryMocks.chatConversationsFindMany,
@@ -233,6 +237,9 @@ describe("product-facing app router", () => {
       { id: "child-1" },
       { id: "child-2" },
     ]);
+    queryMocks.workItemDependenciesFindMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
     const detail = await caller.workItem.get({ id: taskId });
     const comments = await caller.comment.listByWorkItem({ workItemId: taskId });
     const notifications = await caller.notification.list({ limit: 20 });

@@ -13,6 +13,12 @@ const DASHBOARD_ACTIVE_SESSION_STATUSES = [
   "awaiting_input",
 ];
 
+/** Minimal shape of a drizzle relational-query call's options arg, for
+ * inspecting the `where` clause built by handler code under test. */
+interface QueryCallArgs {
+  where?: unknown;
+}
+
 function extractSqlParamValues(value: unknown): unknown[] {
   const seen = new WeakSet<object>();
   const values: unknown[] = [];
@@ -23,8 +29,8 @@ function extractSqlParamValues(value: unknown): unknown[] {
     if (seen.has(entry)) return;
     seen.add(entry);
 
-    if ("value" in entry && entry.constructor?.name === "Param") {
-      values.push((entry).value);
+    if ("value" in entry && entry.constructor.name === "Param") {
+      values.push(entry.value);
       return;
     }
 
@@ -77,7 +83,7 @@ describe("work item handlers", () => {
           ]),
         },
         chatConversations: {
-          findMany: vi.fn().mockResolvedValue([]),
+          findMany: vi.fn<(args: QueryCallArgs) => Promise<unknown[]>>().mockResolvedValue([]),
         },
       },
     };
@@ -124,7 +130,10 @@ describe("work item handlers", () => {
           findMany: vi.fn().mockResolvedValue([]),
         },
         chatConversations: {
-          findFirst: vi.fn().mockResolvedValue(null),
+          findFirst: vi.fn<(args: QueryCallArgs) => Promise<unknown>>().mockResolvedValue(null),
+        },
+        workItemDependencies: {
+          findMany: vi.fn().mockResolvedValue([]),
         },
       },
     };
@@ -177,6 +186,9 @@ describe("work item handlers", () => {
             status: "running",
             agentType: "codex",
           }),
+        },
+        workItemDependencies: {
+          findMany: vi.fn().mockResolvedValue([]),
         },
       },
     };
@@ -281,7 +293,7 @@ describe("work item handlers", () => {
   });
 
   it("publishes queue order changes to workspace subscribers", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue({ ok: true } as Response);
     vi.stubGlobal("fetch", fetchMock);
     process.env.GATEWAY_URL = "http://gw.local";
     process.env.NUDGE_SHARED_SECRET = "shh";
@@ -314,9 +326,10 @@ describe("work item handlers", () => {
       "http://gw.local/internal/workspace-event",
       expect.objectContaining({
         method: "POST",
-        headers: expect.objectContaining({
+        headers: {
+          "Content-Type": "application/json",
           Authorization: "Bearer shh",
-        }),
+        },
         body: JSON.stringify({
           type: "queue_order_changed",
           workspaceId: "22222222-2222-4222-8222-222222222222",
@@ -333,7 +346,7 @@ describe("work item handlers", () => {
   });
 
   it("publishes task status changes to workspace subscribers", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue({ ok: true } as Response);
     vi.stubGlobal("fetch", fetchMock);
     process.env.GATEWAY_URL = "http://gw.local";
     process.env.NUDGE_SHARED_SECRET = "shh";
@@ -382,9 +395,10 @@ describe("work item handlers", () => {
       "http://gw.local/internal/workspace-event",
       expect.objectContaining({
         method: "POST",
-        headers: expect.objectContaining({
+        headers: {
+          "Content-Type": "application/json",
           Authorization: "Bearer shh",
-        }),
+        },
         body: JSON.stringify({
           type: "task_status_changed",
           workspaceId: workItem.workspaceId,
@@ -399,7 +413,7 @@ describe("work item handlers", () => {
   });
 
   it("publishes task priority changes to workspace subscribers", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue({ ok: true } as Response);
     vi.stubGlobal("fetch", fetchMock);
     process.env.GATEWAY_URL = "http://gw.local";
     process.env.NUDGE_SHARED_SECRET = "shh";
@@ -449,9 +463,10 @@ describe("work item handlers", () => {
       "http://gw.local/internal/workspace-event",
       expect.objectContaining({
         method: "POST",
-        headers: expect.objectContaining({
+        headers: {
+          "Content-Type": "application/json",
           Authorization: "Bearer shh",
-        }),
+        },
         body: JSON.stringify({
           type: "task_priority_changed",
           workspaceId: workItem.workspaceId,

@@ -7,6 +7,7 @@
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, isNull, or } from "@bob/db";
 import { inArray } from "@bob/db";
+import type { Db } from "@bob/db/client";
 import {
   activities,
   agentRuns,
@@ -27,6 +28,7 @@ import { resolveAgentType } from "@bob/work-items";
 import type {
   WorkItemKind,
   WorkItemArtifactType,
+  WorkItemArtifactProducerType as WorkItemArtifactProducerTypeDb,
   WorkItemNotificationType,
 } from "@bob/work-items/schema";
 
@@ -46,7 +48,21 @@ const ACTIVE_LINKED_SESSION_STATUSES = [
   "awaiting_input",
 ];
 
-async function assertWorkspaceAccess(db: any, userId: string, workspaceId: string) {
+/**
+ * Reads an optional string-typed field off a value whose shape isn't
+ * statically guaranteed to include it (e.g. a `workItems` row that some
+ * caller enriched with an extra ad hoc field not backed by a real column).
+ * Returns `null` unless the field is genuinely present and a string.
+ */
+function readOptionalStringField(value: unknown, field: string): string | null {
+  if (typeof value !== "object" || value === null || !(field in value)) {
+    return null;
+  }
+  const raw = (value as Record<string, unknown>)[field];
+  return typeof raw === "string" ? raw : null;
+}
+
+async function assertWorkspaceAccess(db: Db, userId: string, workspaceId: string) {
   const membership = await db.query.workspaceMembers.findFirst({
     where: and(
       eq(workspaceMembers.workspaceId, workspaceId),
@@ -84,7 +100,7 @@ async function notifyWorkspaceEvent(input: {
   }
 }
 
-async function assertWorkItemAccess(db: any, userId: string, workItem: { workspaceId: string | null | undefined }) {
+async function assertWorkItemAccess(db: Db, userId: string, workItem: { workspaceId: string | null | undefined }) {
   if (!workItem.workspaceId) {
     throw new TRPCError({ code: "NOT_FOUND" });
   }
@@ -92,7 +108,7 @@ async function assertWorkItemAccess(db: any, userId: string, workItem: { workspa
   await assertWorkspaceAccess(db, userId, workItem.workspaceId);
 }
 
-async function loadAccessibleWorkItem(db: any, userId: string, workItemId: string) {
+async function loadAccessibleWorkItem(db: Db, userId: string, workItemId: string) {
   const workItem = await db.query.workItems.findFirst({
     where: eq(workItems.id, workItemId),
   });
@@ -108,8 +124,10 @@ async function loadAccessibleWorkItem(db: any, userId: string, workItemId: strin
 /** Parse a short identifier like "BOB-27" into { projectKey, sequenceNumber }. */
 function parseIdentifier(id: string): { projectKey: string; sequenceNumber: number } | null {
   const match = /^([A-Za-z][A-Za-z0-9]*)-(\d+)$/.exec(id);
-  if (!match) return null;
-  return { projectKey: match[1]!.toUpperCase(), sequenceNumber: parseInt(match[2]!, 10) };
+  const projectKey = match?.[1];
+  const sequencePart = match?.[2];
+  if (!projectKey || !sequencePart) return null;
+  return { projectKey: projectKey.toUpperCase(), sequenceNumber: parseInt(sequencePart, 10) };
 }
 
 export function formatWorkItemIdentifier(input: {
@@ -159,46 +177,51 @@ export async function workItemsList(
   });
 
   const projectIds = Array.from(
-    new Set(items.map((item: any) => item.projectId).filter(Boolean)),
-  ) as string[];
-  const projectRows: any[] =
+    new Set(
+      items
+        .map((item) => item.projectId)
+        .filter((projectId): projectId is string => Boolean(projectId)),
+    ),
+  );
+  const projectRows =
     projectIds.length > 0
       ? await ctx.db.query.projects.findMany({
           where: eq(projects.workspaceId, input.workspaceId),
         })
       : [];
 
-  const projectById = new Map<string, any>(
-    projectRows.map((project: any) => [project.id, project]),
+  const projectById = new Map(projectRows.map((project) => [project.id, project]));
+
+  const itemIds = items.map((i) => i.id);
+  const activeSessions =
+    itemIds.length > 0
+      ? await ctx.db.query.chatConversations.findMany({
+          where: and(
+            inArray(chatConversations.workItemId, itemIds),
+            inArray(chatConversations.status, ACTIVE_LINKED_SESSION_STATUSES),
+          ),
+          columns: { id: true, workItemId: true, status: true, agentType: true },
+        })
+      : [];
+  const sessionByWorkItem = new Map(
+    activeSessions
+      .filter((s): s is typeof s & { workItemId: string } => s.workItemId !== null)
+      .map((s) => [s.workItemId, s]),
   );
 
-  const itemIds = items.map((i: any) => i.id);
-  const activeSessions: any[] = itemIds.length > 0
-    ? await ctx.db.query.chatConversations.findMany({
-        where: and(
-          inArray(chatConversations.workItemId, itemIds),
-          inArray(chatConversations.status, ACTIVE_LINKED_SESSION_STATUSES),
-        ),
-        columns: { id: true, workItemId: true, status: true, agentType: true },
-      })
-    : [];
-  const sessionByWorkItem = new Map<string, any>(
-    activeSessions.map((s: any) => [s.workItemId, s]),
-  );
-
-  return items.map((item: any) => {
-    const project = item.projectId ? projectById.get(item.projectId) ?? null : null;
+  return items.map((item) => {
+    const project = item.projectId ? (projectById.get(item.projectId) ?? null) : null;
     const activeSession = sessionByWorkItem.get(item.id);
 
     return {
       ...item,
-      identifier: item.externalId
-        ? item.externalId
-        : formatWorkItemIdentifier({
-            projectKey: project?.key ?? null,
-            sequenceNumber: item.sequenceNumber,
-            id: item.id,
-          }),
+      identifier:
+        item.externalId ??
+        formatWorkItemIdentifier({
+          projectKey: project?.key ?? null,
+          sequenceNumber: item.sequenceNumber,
+          id: item.id,
+        }),
       project,
       agentStatus: activeSession
         ? { sessionId: activeSession.id, status: activeSession.status, agentType: activeSession.agentType }
@@ -267,40 +290,36 @@ export async function workItemsGet(
       ),
       columns: { id: true, workItemId: true, status: true, agentType: true },
     }),
-    dependencyQueries
-      ? dependencyQueries.findMany({
-          where: eq(workItemDependencies.workItemId, workItem.id),
-          with: {
-            dependsOn: {
-              columns: {
-                id: true,
-                externalId: true,
-                sequenceNumber: true,
-                projectId: true,
-                title: true,
-                status: true,
-              },
-            },
+    dependencyQueries.findMany({
+      where: eq(workItemDependencies.workItemId, workItem.id),
+      with: {
+        dependsOn: {
+          columns: {
+            id: true,
+            externalId: true,
+            sequenceNumber: true,
+            projectId: true,
+            title: true,
+            status: true,
           },
-        })
-      : Promise.resolve([]),
-    dependencyQueries
-      ? dependencyQueries.findMany({
-          where: eq(workItemDependencies.dependsOnWorkItemId, workItem.id),
-          with: {
-            workItem: {
-              columns: {
-                id: true,
-                externalId: true,
-                sequenceNumber: true,
-                projectId: true,
-                title: true,
-                status: true,
-              },
-            },
+        },
+      },
+    }),
+    dependencyQueries.findMany({
+      where: eq(workItemDependencies.dependsOnWorkItemId, workItem.id),
+      with: {
+        workItem: {
+          columns: {
+            id: true,
+            externalId: true,
+            sequenceNumber: true,
+            projectId: true,
+            title: true,
+            status: true,
           },
-        })
-      : Promise.resolve([]),
+        },
+      },
+    }),
   ]);
 
   return {
@@ -320,13 +339,11 @@ export async function workItemsGet(
           }
         : null,
       dependencies: dependencies
-        .map((row: any) => row.dependsOn)
-        .filter(Boolean)
-        .map((item: any) => formatRelatedWorkItem(item, project ?? null)),
+        .map((row) => row.dependsOn)
+        .map((item) => formatRelatedWorkItem(item, project ?? null)),
       dependents: dependents
-        .map((row: any) => row.workItem)
-        .filter(Boolean)
-        .map((item: any) => formatRelatedWorkItem(item, project ?? null)),
+        .map((row) => row.workItem)
+        .map((item) => formatRelatedWorkItem(item, project ?? null)),
     },
     currentArtifacts,
     childCount: children.length,
@@ -368,6 +385,10 @@ export async function workItemsUpdate(
     title?: string;
     description?: string | null;
     status?: string;
+    // NOTE: `priority` has no backing column on `workItems` (it only exists
+    // on `planDrafts`/`planTaskItems`, an earlier pipeline stage) — see
+    // no-op discussion below. Accepted here for API-input-shape compat but
+    // deliberately excluded from the `.update(workItems)` payload.
     priority?: string;
     agentTypeOverride?: string | null;
   },
@@ -378,32 +399,45 @@ export async function workItemsUpdate(
     input.id,
   );
 
-  const updates = Object.fromEntries(
+  // `priority` is intentionally omitted: `workItems` has no `priority`
+  // column, so persisting it here would either throw (strict driver) or be
+  // silently ignored (this was previously masked by `db: any`). Preserved
+  // as a no-op for API-shape compatibility until/unless a real column is
+  // added — flagged rather than fixed as part of lint cleanup since it's a
+  // product/schema decision out of scope for type-safety-only changes.
+  const updates: Partial<typeof workItems.$inferInsert> = Object.fromEntries(
     Object.entries({
       title: input.title,
       description: input.description,
       status: input.status,
-      priority: input.priority,
       agentTypeOverride: input.agentTypeOverride,
     }).filter(([, value]) => value !== undefined),
   );
 
-  if (Object.keys(updates).length === 0) {
+  // `priority` has no backing column (see note above) but must still count
+  // as "something to update" so its change-notification fires below, even
+  // when it's the only field the caller passed.
+  if (Object.keys(updates).length === 0 && input.priority === undefined) {
     return existing;
   }
 
-  const [workItem] = await ctx.db
-    .update(workItems)
-    .set(updates)
-    .where(eq(workItems.id, input.id))
-    .returning();
+  const workItem =
+    Object.keys(updates).length > 0
+      ? (
+          await ctx.db
+            .update(workItems)
+            .set(updates)
+            .where(eq(workItems.id, input.id))
+            .returning()
+        )[0]
+      : undefined;
 
   const nextWorkItem = workItem ?? existing;
 
   const changedFields = ([
     {
       field: "title" as const,
-      previousValue: existing.title ?? null,
+      previousValue: existing.title,
       nextValue: input.title ?? null,
     },
     {
@@ -413,12 +447,18 @@ export async function workItemsUpdate(
     },
     {
       field: "status" as const,
-      previousValue: existing.status ?? null,
+      previousValue: existing.status,
       nextValue: input.status ?? null,
     },
     {
+      // `workItems` has no `priority` column (see note above), so a real DB
+      // row never carries this field — but some callers/tests attach one
+      // ad hoc, and prior (masked-by-`any`) behavior read it back when
+      // present. `existing`'s shape is genuinely not staticaly knowable
+      // here (it may be enriched beyond the `workItems` row), so narrow via
+      // `unknown` rather than widening the whole function back to `any`.
       field: "priority" as const,
-      previousValue: existing.priority ?? null,
+      previousValue: readOptionalStringField(existing, "priority"),
       nextValue: input.priority ?? null,
     },
   ] satisfies {
@@ -512,10 +552,6 @@ export async function workItemsPromoteToTask(
     ctx.userId,
     input.id,
   );
-
-  if (!existing) {
-    return null;
-  }
 
   if (existing.kind === "task") {
     return existing;
@@ -613,7 +649,7 @@ export async function workItemsCreateArtifact(
 ) {
   await loadAccessibleWorkItem(ctx.db, ctx.userId, input.workItemId);
 
-  const existingArtifacts: any[] = await ctx.db.query.workItemArtifacts.findMany({
+  const existingArtifacts = await ctx.db.query.workItemArtifacts.findMany({
     where: eq(workItemArtifacts.workItemId, input.workItemId),
   });
 
@@ -621,7 +657,7 @@ export async function workItemsCreateArtifact(
     input.producerId == null
       ? null
       : existingArtifacts.find(
-          (artifact: any) =>
+          (artifact) =>
             artifact.producerType === input.producerType &&
             artifact.producerId === input.producerId,
         );
@@ -631,7 +667,7 @@ export async function workItemsCreateArtifact(
   }
 
   const currentArtifactsForRole = existingArtifacts.filter(
-    (artifact: any) =>
+    (artifact) =>
       artifact.artifactRole === input.artifactRole && artifact.isCurrent,
   );
 
@@ -660,7 +696,7 @@ export async function workItemsCreateArtifact(
       workItemId: input.workItemId,
       taskRunId: input.taskRunId ?? null,
       sessionId: input.sessionId ?? null,
-      producerType: input.producerType as any,
+      producerType: input.producerType as unknown as WorkItemArtifactProducerTypeDb,
       producerId: input.producerId ?? null,
       artifactType: input.artifactType,
       artifactRole: input.artifactRole,
@@ -715,13 +751,13 @@ export async function workItemsListChildArtifactGroups(
     input.parentWorkItemId,
   );
 
-  const children: any[] = await ctx.db.query.workItems.findMany({
+  const children = await ctx.db.query.workItems.findMany({
     where: eq(workItems.parentId, input.parentWorkItemId),
     orderBy: desc(workItems.updatedAt),
   });
 
   const groups = await Promise.all(
-    children.map(async (child: any) => {
+    children.map(async (child) => {
       const artifacts = await ctx.db.query.workItemArtifacts.findMany({
         where: and(
           eq(workItemArtifacts.workItemId, child.id),
@@ -737,7 +773,7 @@ export async function workItemsListChildArtifactGroups(
     }),
   );
 
-  return groups.filter((group: any) => group.artifacts.length > 0);
+  return groups.filter((group) => group.artifacts.length > 0);
 }
 
 export async function workItemsListNotifications(
@@ -847,7 +883,7 @@ export async function workItemsTaskRunListByWorkItem(
     orderBy: desc(taskRuns.createdAt),
   });
 
-  return runs.map((run: any) => ({
+  return runs.map((run) => ({
     ...run,
     workItemId: run.workItemId ?? run.planningItemId,
     workItemIdentifier:
@@ -918,13 +954,13 @@ export async function workItemsDispatch(
       })
     : null;
 
-  const identifier = workItem.externalId
-    ? workItem.externalId
-    : formatWorkItemIdentifier({
-        projectKey: project?.key ?? null,
-        sequenceNumber: workItem.sequenceNumber,
-        id: workItem.id,
-      });
+  const identifier =
+    workItem.externalId ??
+    formatWorkItemIdentifier({
+      projectKey: project?.key ?? null,
+      sequenceNumber: workItem.sequenceNumber,
+      id: workItem.id,
+    });
 
   // An explicit agentType pins the choice; otherwise resolve the hierarchy:
   // work-item override -> project default -> workspace default -> "claude".
@@ -1057,7 +1093,7 @@ export async function workItemsListRecentActivities(
       where: eq(workItems.workspaceId, input.workspaceId),
       columns: { id: true },
     });
-    const ids = wsItems.map((w: any) => w.id);
+    const ids = wsItems.map((w) => w.id);
     if (ids.length === 0) return [];
     workItemFilter = inArray(activities.workItemId, ids);
   }
@@ -1087,16 +1123,14 @@ export async function workItemsListRecentActivities(
     },
   });
 
-  const mappedActivities = recentActivities.map((activity: any) => ({
+  const mappedActivities = recentActivities.map((activity) => ({
     ...activity,
-    workItemTitle: activity.workItem?.title ?? null,
-    workItemIdentifier: activity.workItem
-      ? formatWorkItemIdentifier({
-          projectKey: activity.workItem.project?.key ?? null,
-          sequenceNumber: activity.workItem.sequenceNumber,
-          id: activity.workItem.id,
-        })
-      : null,
+    workItemTitle: activity.workItem.title,
+    workItemIdentifier: formatWorkItemIdentifier({
+      projectKey: activity.workItem.project?.key ?? null,
+      sequenceNumber: activity.workItem.sequenceNumber,
+      id: activity.workItem.id,
+    }),
   }));
 
   if (mappedActivities.length >= limit) return mappedActivities;
@@ -1115,9 +1149,17 @@ export async function workItemsListRecentActivities(
 
     const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const runWorkItemIds = recentRuns
-      .map((r: any) => r.workItemId)
-      .filter((id: unknown): id is string => typeof id === "string" && uuidRe.test(id));
-    const runWorkItems = new Map<string, any>();
+      .map((r) => r.workItemId)
+      .filter((id): id is string => typeof id === "string" && uuidRe.test(id));
+
+    interface RunWorkItem {
+      id: string;
+      title: string;
+      projectId: string | null;
+      sequenceNumber: number;
+      project: { id: string; key: string; name: string } | null;
+    }
+    const runWorkItems = new Map<string, RunWorkItem>();
     if (runWorkItemIds.length > 0) {
       const wiRows = await ctx.db.query.workItems.findMany({
         where: inArray(workItems.id, runWorkItemIds),
@@ -1127,9 +1169,9 @@ export async function workItemsListRecentActivities(
       for (const wi of wiRows) runWorkItems.set(wi.id, wi);
     }
 
-    const runActivities = recentRuns.map((run: any) => {
-      const isUuid = run.workItemId && uuidRe.test(run.workItemId);
-      const wi = isUuid ? runWorkItems.get(run.workItemId) : null;
+    const runActivities = recentRuns.map((run) => {
+      const isUuid = Boolean(run.workItemId && uuidRe.test(run.workItemId));
+      const wi = isUuid && run.workItemId ? runWorkItems.get(run.workItemId) : undefined;
       return {
         id: `run-${run.id}`,
         workItemId: isUuid ? (run.workItemId ?? null) : null,
@@ -1142,7 +1184,7 @@ export async function workItemsListRecentActivities(
         workItemTitle: wi?.title ?? (isUuid ? null : run.workItemId) ?? null,
         workItemIdentifier: wi
           ? formatWorkItemIdentifier({
-              projectKey: (wi).project?.key ?? null,
+              projectKey: wi.project?.key ?? null,
               sequenceNumber: wi.sequenceNumber,
               id: wi.id,
             })

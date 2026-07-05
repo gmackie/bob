@@ -11,6 +11,7 @@ const queryMocks = {
   workItemsFindMany: vi.fn(),
   workItemsFindFirst: vi.fn(),
   workItemArtifactsFindMany: vi.fn(),
+  workItemDependenciesFindMany: vi.fn(),
   chatConversationsFindMany: vi.fn(),
   chatConversationsFindFirst: vi.fn(),
   commentsFindMany: vi.fn(),
@@ -42,6 +43,9 @@ const makeDbMock = () => ({
     },
     workItemArtifacts: {
       findMany: queryMocks.workItemArtifactsFindMany,
+    },
+    workItemDependencies: {
+      findMany: queryMocks.workItemDependenciesFindMany,
     },
     chatConversations: {
       findMany: queryMocks.chatConversationsFindMany,
@@ -273,6 +277,9 @@ describe("planning routers", () => {
       { id: "child-2" },
     ]);
     queryMocks.chatConversationsFindFirst.mockResolvedValueOnce(null);
+    queryMocks.workItemDependenciesFindMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
 
     const caller = createCaller() as any;
     const result = await caller.workItems.get({ id: taskId });

@@ -22,8 +22,8 @@ export interface HandlerContext {
  * don't require authentication pass `null`.
  */
 export interface PublicHandlerContext {
-  /** Database client — typed as `any` to avoid coupling to a specific Drizzle generic. */
-  readonly db: any;
+  /** Database client — the schema-typed Drizzle instance so `ctx.db.query.*` is typed. */
+  readonly db: Db;
   /** Session with user info, or `null` for unauthenticated requests. */
   readonly session: { user: { id: string } } | null;
 }
