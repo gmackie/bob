@@ -29,8 +29,11 @@ export function TabletProjectsDashboardPane({
 }) {
   const { workspace } = useSelectedWorkspace();
   const searchParams = useLocalSearchParams<{ filter?: string }>();
+  const rawFilterParam: unknown = searchParams.filter;
   const statusFilter = normalizeMobileProjectStatusFilter(
-    Array.isArray(searchParams.filter) ? searchParams.filter[0] : searchParams.filter,
+    Array.isArray(rawFilterParam)
+      ? (rawFilterParam[0] as string | undefined)
+      : (rawFilterParam as string | undefined),
   );
   const projectsQuery = useQuery(
     trpc.project.list.queryOptions(

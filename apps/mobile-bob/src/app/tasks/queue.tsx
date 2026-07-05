@@ -115,11 +115,6 @@ export default function PriorityQueueScreen() {
             <Text className="text-3xl font-semibold tracking-tight text-foreground">
               {header.title}
             </Text>
-            {header.subtitle ? (
-              <Text className="mt-1 text-sm text-muted" numberOfLines={1}>
-                {header.subtitle}
-              </Text>
-            ) : null}
           </View>
           <Pressable
             accessibilityRole="button"

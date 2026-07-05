@@ -7,7 +7,6 @@ import {
   View,
 } from "react-native";
 
-import { colors } from "~/lib/colors";
 
 import { KeyboardInput } from "./keyboard-input";
 import { useSpeechRecognition } from "../hooks/use-speech-recognition";

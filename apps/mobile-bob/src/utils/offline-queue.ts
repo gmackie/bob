@@ -96,7 +96,7 @@ export async function enqueueAction(
   queue.push(action);
   await saveQueue(queue);
 
-  processQueue();
+  runProcessQueue();
 
   return id;
 }
@@ -141,7 +141,7 @@ export async function retryFailedAction(actionId: string): Promise<boolean> {
   action.nextRetryAt = new Date().toISOString();
 
   await saveQueue(queue);
-  processQueue();
+  runProcessQueue();
 
   return true;
 }
@@ -162,10 +162,16 @@ export async function retryAllFailed(): Promise<number> {
 
   if (retried > 0) {
     await saveQueue(queue);
-    processQueue();
+    runProcessQueue();
   }
 
   return retried;
+}
+
+function runProcessQueue(): void {
+  processQueue().catch((error: unknown) => {
+    console.error("Failed to process offline queue:", error);
+  });
 }
 
 async function processQueue(): Promise<void> {
@@ -241,25 +247,28 @@ async function processQueue(): Promise<void> {
 
   if (hasPending) {
     const nextAction = remaining
-      .filter((a) => a.status === "pending" && a.nextRetryAt)
-      .sort((a, b) => a.nextRetryAt!.localeCompare(b.nextRetryAt!))[0];
+      .filter(
+        (a): a is QueuedAction & { nextRetryAt: string } =>
+          a.status === "pending" && a.nextRetryAt !== null,
+      )
+      .sort((a, b) => a.nextRetryAt.localeCompare(b.nextRetryAt))[0];
 
     if (nextAction?.nextRetryAt) {
       const delay = Math.max(
         0,
         new Date(nextAction.nextRetryAt).getTime() - Date.now(),
       );
-      setTimeout(() => processQueue(), delay);
+      setTimeout(runProcessQueue, delay);
     }
   }
 }
 
 export function startQueueProcessing(): void {
-  processQueue();
+  runProcessQueue();
 
   networkUnsubscribe = NetInfo.addEventListener((state) => {
     if (state.isConnected) {
-      processQueue();
+      runProcessQueue();
     }
   });
 }

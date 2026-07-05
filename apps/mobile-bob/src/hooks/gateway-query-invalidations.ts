@@ -52,7 +52,10 @@ const GATEWAY_REALTIME_INVALIDATION_MESSAGES = new Set([
 
 export function getGatewayEventQueryRoot(queryKey: readonly unknown[]): string {
   const first = queryKey[0];
-  const rawRoot = Array.isArray(first) ? first[0] : first;
+  // `Array.isArray` narrows to `any[]` in TS's lib types (a known limitation
+  // of its `value is any[]` signature), so re-assert the element type as
+  // `unknown` explicitly rather than letting the `any` leak through.
+  const rawRoot: unknown = Array.isArray(first) ? (first as unknown[])[0] : first;
   if (typeof rawRoot !== "string") return "";
 
   return rawRoot.split(".")[0] ?? "";

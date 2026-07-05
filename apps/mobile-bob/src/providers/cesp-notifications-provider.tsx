@@ -88,7 +88,7 @@ function getProjectFromAlert(alert: CespAlert): string | null {
 }
 
 function getTaskFromAlert(alert: CespAlert): string | null {
-  if (typeof alert.metadata?.issueId === "string") {
+  if (typeof alert.metadata.issueId === "string") {
     const candidate = alert.metadata.issueId.trim();
     if (candidate.length > 0) return candidate;
   }
@@ -132,8 +132,7 @@ function parsePlanningPathFromDestination(value: string): string | null {
   try {
     const parsed = new URL(trimmed);
     if (parsed.pathname !== PLANNING_PATH_PREFIX) return null;
-    const search = parsed.search ?? "";
-    return `${PLANNING_PATH_PREFIX}${search}`;
+    return `${PLANNING_PATH_PREFIX}${parsed.search}`;
   } catch {
     return null;
   }
@@ -181,7 +180,7 @@ function getNotificationTitle(alert: CespAlert): string {
 function getNotificationBody(alert: CespAlert): string {
   const body = alert.message.trim();
   const label = body.length > 0 ? body : alert.title;
-  const repoPath = alert.repository?.path?.trim();
+  const repoPath = alert.repository?.path.trim();
   if (!repoPath) return label;
   return `${label}\n${repoPath}`;
 }
@@ -224,12 +223,12 @@ async function hasNotificationPermission(): Promise<boolean> {
   if (!canUseNotificationsApi()) return false;
 
   const status = await Notifications.getPermissionsAsync();
-  if (status.status === "granted") {
+  if (status.status === Notifications.PermissionStatus.GRANTED) {
     return true;
   }
 
   const next = await Notifications.requestPermissionsAsync();
-  return next.status === "granted";
+  return next.status === Notifications.PermissionStatus.GRANTED;
 }
 
 export function CESPNotificationsProvider({ children }: ProvidersProps) {

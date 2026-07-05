@@ -157,7 +157,7 @@ export function normalizeTabletPlanningDashboardFilter(
 
 export function filterTabletPlanningDashboardSessions<TSession extends TabletShellSession>(
   sessions: TSession[],
-  filter: TabletPlanningDashboardFilter | string | null | undefined,
+  filter: string | null | undefined,
 ): TSession[] {
   const normalized = normalizeTabletPlanningDashboardFilter(filter ?? null);
   if (!normalized) return sessions;

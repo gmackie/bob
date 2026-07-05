@@ -28,7 +28,7 @@ function parseJsonRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "string") return null;
 
   try {
-    const parsed = JSON.parse(value);
+    const parsed: unknown = JSON.parse(value);
     return parsed && typeof parsed === "object" && !Array.isArray(parsed)
       ? (parsed as Record<string, unknown>)
       : null;

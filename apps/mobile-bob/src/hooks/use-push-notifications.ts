@@ -16,23 +16,41 @@ import type * as ExpoDevice from "expo-device";
 import { getNotificationTargetHref } from "~/features/planning/navigation";
 import { createMobileBobRpcClient } from "~/utils/api";
 
+// `PermissionStatus.GRANTED`'s runtime value, typed as the real enum via a
+// type-only cast. We deliberately don't take a value import of
+// `expo-notifications` (see the lazy `require()` load below), so we can't
+// reference `PermissionStatus.GRANTED` directly — this keeps the comparison
+// enum-typed instead of comparing against a bare string literal.
+const PERMISSION_STATUS_GRANTED = "granted" as ExpoNotifications.PermissionStatus;
+
 // Lazy-load expo-notifications to avoid crash if native module isn't available
 let Notifications: typeof ExpoNotifications | null = null;
 let Device: typeof ExpoDevice | null = null;
 
 try {
-  Notifications = require("expo-notifications");
-  Device = require("expo-device");
+  // This must stay a synchronous require() inside try/catch to defensively
+  // handle a native module that may not be linked (Expo Go, some dev-client
+  // builds). A static ESM import is hoisted and can't be try/caught, and
+  // Metro/Babel transpiles it to the same require() call anyway, so
+  // switching loses the crash guard this code exists for without buying any
+  // real ESM behavior.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- see above.
+  const loadedNotifications = require("expo-notifications") as typeof ExpoNotifications;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- see above.
+  const loadedDevice = require("expo-device") as typeof ExpoDevice;
+  Notifications = loadedNotifications;
+  Device = loadedDevice;
 
   // Configure how notifications appear when the app is in foreground
-  Notifications!.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
+  loadedNotifications.setNotificationHandler({
+    handleNotification: () =>
+      Promise.resolve({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
   });
 } catch {
   console.log("[push] expo-notifications not available (native module not linked)");
@@ -54,20 +72,28 @@ async function registerForPushNotifications(): Promise<string | null> {
 
   // Check/request permissions
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
+  let finalStatus: ExpoNotifications.PermissionStatus = existingStatus;
 
-  if (existingStatus !== "granted") {
+  if (existingStatus !== PERMISSION_STATUS_GRANTED) {
     const { status } = await Notifications.requestPermissionsAsync();
     finalStatus = status;
   }
 
-  if (finalStatus !== "granted") {
+  if (finalStatus !== PERMISSION_STATUS_GRANTED) {
     console.log("[push] Permission not granted");
     return null;
   }
 
-  // Get Expo push token
-  const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? (Constants as any).easConfig?.projectId;
+  // Get Expo push token.
+  // `expoConfig.extra` is a genuinely open bag (arbitrary app.json/app.config
+  // content), so `expo/config`'s types leave it as `any` all the way down —
+  // narrow it explicitly rather than propagating the `any`.
+  const extraEasProjectId: unknown = (
+    Constants.expoConfig?.extra as { eas?: { projectId?: unknown } } | undefined
+  )?.eas?.projectId;
+  const projectId =
+    (typeof extraEasProjectId === "string" ? extraEasProjectId : undefined) ??
+    Constants.easConfig?.projectId;
   if (!projectId) {
     console.log("[push] No EAS project ID found");
     return null;
@@ -88,11 +114,26 @@ async function registerForPushNotifications(): Promise<string | null> {
  * Uses the Bob Effect-RPC client since this runs outside React Query.
  */
 async function registerTokenWithServer(token: string): Promise<void> {
+  // `registerTokenWithServer` is only ever invoked with a real token, which
+  // `registerForPushNotifications` only returns after it has already
+  // confirmed `Device` is non-null (see its early `!Device` guard above).
+  // TS can't track that invariant across the async `.then()` boundary in a
+  // different function, so assert explicitly instead of using `Device!`.
+  // Matching this file's existing defensive style, log and bail instead of
+  // throwing — this fires from a `void`-called fire-and-forget callback.
+  if (!Device) {
+    console.error(
+      "[push] registerTokenWithServer called without Device being initialized",
+    );
+    return;
+  }
+  const device = Device;
+
   try {
     await createMobileBobRpcClient().workItems.notification.registerPushToken({
       token,
       platform: Platform.OS as "ios" | "android" | "web",
-      deviceName: Device!.deviceName ?? "Unknown",
+      deviceName: device.deviceName ?? "Unknown",
     });
     console.log("[push] Token registered with server");
   } catch (error) {
@@ -132,12 +173,16 @@ export function usePushNotifications() {
     if (!Notifications) return;
 
     // Register for push notifications
-    registerForPushNotifications().then((token) => {
-      if (token) {
-        setExpoPushToken(token);
-        void registerTokenWithServer(token);
-      }
-    });
+    registerForPushNotifications()
+      .then((token) => {
+        if (token) {
+          setExpoPushToken(token);
+          void registerTokenWithServer(token);
+        }
+      })
+      .catch((error: unknown) => {
+        console.error("[push] Failed to register for push notifications:", error);
+      });
 
     // Listen for incoming notifications (foreground)
     notificationListener.current = Notifications.addNotificationReceivedListener(

@@ -379,11 +379,6 @@ export function TasksDashboard({
           <Text className="text-3xl font-semibold tracking-tight text-foreground">
             {header.title}
           </Text>
-          {header.subtitle ? (
-            <Text className="mt-1 text-sm text-muted" numberOfLines={1}>
-              {header.subtitle}
-            </Text>
-          ) : null}
         </View>
         {onOpenTaskTab || globalActions.length > 0 ? (
           <View className="ml-4 flex-row gap-2">

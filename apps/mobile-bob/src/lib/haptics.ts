@@ -1,16 +1,21 @@
 import { Platform } from "react-native";
 
+import type * as ExpoHaptics from "expo-haptics";
+
 /**
  * Haptic feedback utilities for tablet interactions.
  * Lazy-loads expo-haptics to avoid crash if native module isn't available.
  */
 
-type HapticsModule = typeof import("expo-haptics");
+type HapticsModule = typeof ExpoHaptics;
 let Haptics: HapticsModule | null = null;
 
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  Haptics = require("expo-haptics");
+  // This must stay a synchronous require() inside try/catch to defensively
+  // handle a native module that may not be linked; see
+  // use-push-notifications.ts for the fuller rationale.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- see above.
+  Haptics = require("expo-haptics") as HapticsModule;
 } catch {
   // Native module not available
 }

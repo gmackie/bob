@@ -7,6 +7,7 @@ import {
 } from "react-native";
 
 
+import { assertDefined } from "~/lib/assert";
 import { colors } from "~/lib/colors";
 import type { VaultBrowserHook, VaultKind } from "../hooks/use-vault-browser";
 
@@ -20,7 +21,7 @@ function groupByThread(files: string[]): Map<string, string[]> {
   const groups = new Map<string, string[]>();
   for (const file of files) {
     const parts = file.split("/");
-    const thread = parts.length >= 3 ? parts[1]! : "(root)";
+    const thread = parts.length >= 3 ? assertDefined(parts[1]) : "(root)";
     const existing = groups.get(thread) ?? [];
     existing.push(file);
     groups.set(thread, existing);

@@ -157,10 +157,14 @@ export function useOodaChat(enabled: boolean): AgentChat & OodaChatExtensions {
     Promise.all([
       AsyncStorage.getItem(SESSION_STORAGE_KEY),
       AsyncStorage.getItem(THREAD_STORAGE_KEY),
-    ]).then(([storedSession, storedThread]) => {
-      if (storedSession) setActiveSessionId(storedSession);
-      if (storedThread) setSelectedThreadId(storedThread);
-    });
+    ])
+      .then(([storedSession, storedThread]) => {
+        if (storedSession) setActiveSessionId(storedSession);
+        if (storedThread) setSelectedThreadId(storedThread);
+      })
+      .catch((error: unknown) => {
+        console.error("[ooda-chat] Failed to restore stored session/thread:", error);
+      });
   }, [enabled]);
 
   const threadsQuery = useQuery({

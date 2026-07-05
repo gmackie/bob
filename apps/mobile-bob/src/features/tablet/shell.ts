@@ -332,6 +332,11 @@ export function getRightRailTitle(mode: TabletShellMode): string {
   return mode === "tasks" ? "Running Now" : "Active Sessions";
 }
 
+function normalizeWorkspaceName(value: string | null | undefined): string {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : "Workspace";
+}
+
 export function getShellGlobalActions(
   workspaceName?: string | null,
 ): TabletShellGlobalAction[] {
@@ -339,7 +344,7 @@ export function getShellGlobalActions(
     {
       key: "settings",
       label: "Settings",
-      detailLabel: workspaceName?.trim() || "Workspace",
+      detailLabel: normalizeWorkspaceName(workspaceName),
     },
   ];
 }
@@ -349,7 +354,7 @@ export function getShellHeaderStatusLabel(input: {
   connectionState: string;
   sessionCount: number;
 }): string {
-  const workspaceName = input.workspaceName?.trim() || "Workspace";
+  const workspaceName = normalizeWorkspaceName(input.workspaceName);
   const status =
     input.connectionState === "connected"
       ? `${input.sessionCount} session${input.sessionCount === 1 ? "" : "s"}`

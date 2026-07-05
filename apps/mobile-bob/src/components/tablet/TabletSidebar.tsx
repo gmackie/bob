@@ -358,7 +358,6 @@ const KIND_ICONS: Record<string, string> = {
 
 function WorkItemRow({
   item,
-  index,
   isSelected,
   onPress,
   onMove,
@@ -370,7 +369,6 @@ function WorkItemRow({
   isDispatching,
 }: {
   item: TabletQueueItem;
-  index: number;
   isSelected: boolean;
   onPress: () => void;
   onMove: (itemId: string, direction: QueueMoveDirection) => void;
@@ -604,13 +602,11 @@ function ItemsTab({
   }
 
   const renderRows = (rowItems: TabletQueueItem[]) =>
-    rowItems.map((item, queueIndex) => {
-
+    rowItems.map((item) => {
       return (
         <WorkItemRow
           key={item.id}
           item={item}
-          index={queueIndex}
           isSelected={item.id === selectedWorkItemId}
           onPress={() => onSelectWorkItem(item.id)}
           onMove={handleMove}
@@ -775,7 +771,7 @@ function RecentOutcomeItemsTab({
     ),
   );
   const rows = buildRecentOutcomeRailRows({
-    workItems: workItemsQuery.data ?? [],
+    workItems: (workItemsQuery.data ?? []) as TabletQueueItem[],
     sessions,
   });
 
@@ -978,7 +974,7 @@ export function TabletSidebar({
     mode === "tasks" ? groupedSessions.recentOutcomes : groupedSessions.recentPlanning;
   const leftRailBadges = buildLeftRailTabBadges({
     sessions,
-    workItems: workItemsQuery.data ?? [],
+    workItems: (workItemsQuery.data ?? []) as TabletQueueItem[],
     projects: ((projectsQuery.data ?? []) as unknown as { project?: { id?: string } | null }[])
       .flatMap((entry) => entry.project?.id ? [{ id: entry.project.id }] : []),
   });

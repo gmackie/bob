@@ -58,7 +58,7 @@ export function LinkedExecutionRunsCard({
         >
           {rows.map((row, index) => {
             const sessionId = row.sessionHref?.match(/^\/sessions\/([^?]+)/)?.[1] ?? null;
-            const isActionable = Boolean(sessionId || onOpenRun);
+            const isActionable = Boolean(sessionId ?? onOpenRun);
 
             return (
               <Pressable

@@ -885,7 +885,11 @@ export function buildRunningNowEntries(input: {
       return !session.workItemId || !activeWorkItemIds.has(session.workItemId);
     })
     .map((session) => {
-      const title = session.title?.trim() || session.agentType || session.sessionId;
+      const trimmedTitle = session.title?.trim();
+      const title =
+        trimmedTitle && trimmedTitle.length > 0
+          ? trimmedTitle
+          : session.agentType || session.sessionId;
       const statusLabel = formatStatusLabel(session.status);
       const lastUpdatedLabel = formatLastUpdatedLabel(session.lastActivityAt, now);
 

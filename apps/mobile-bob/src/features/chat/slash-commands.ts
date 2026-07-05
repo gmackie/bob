@@ -1,3 +1,4 @@
+import { assertDefined } from "~/lib/assert";
 import type { ChatMessage } from "./chat-messages";
 
 export interface SlashCommandResult {
@@ -51,17 +52,18 @@ async function trpcQuery(
   }
 
   const body = (await response.json()) as { result?: { data?: { json?: unknown } } };
-  return body?.result?.data?.json;
+  return body.result?.data?.json;
 }
 
 const helpCommand: CommandHandler = {
   name: "help",
   description: "Show available commands",
-  execute: async () => [
-    systemMessage(
-      COMMANDS.map((c) => `/${c.name} — ${c.description}`).join("\n"),
-    ),
-  ],
+  execute: () =>
+    Promise.resolve([
+      systemMessage(
+        COMMANDS.map((c) => `/${c.name} — ${c.description}`).join("\n"),
+      ),
+    ]),
 };
 
 const searchCommand: CommandHandler = {
@@ -85,7 +87,7 @@ const searchCommand: CommandHandler = {
       latencyMs: number;
     };
 
-    if (!result?.chunks?.length) {
+    if (!result.chunks.length) {
       return [systemMessage(`No results for "${args.trim()}"`)];
     }
 
@@ -124,7 +126,7 @@ const papersCommand: CommandHandler = {
       }[];
     };
 
-    if (!result?.papers?.length) {
+    if (!result.papers.length) {
       return [systemMessage(`No papers found for "${args.trim()}"`)];
     }
 
@@ -159,7 +161,7 @@ const memoryCommand: CommandHandler = {
       }[];
     };
 
-    if (!result?.threads?.length) {
+    if (!result.threads.length) {
       return [systemMessage(`No memories found for "${args.trim()}"`)];
     }
 
@@ -188,14 +190,17 @@ const vaultCommand: CommandHandler = {
       ctx.getCookies(),
     )) as string[];
 
-    if (!files?.length) {
+    if (!files.length) {
       return [systemMessage(`No notes in ${kind} vault.`)];
     }
 
     const grouped = new Map<string, string[]>();
     for (const f of files) {
       const parts = f.split("/");
-      const thread = parts.length >= 3 ? parts[1]! : "(root)";
+      // `parts.length >= 3` guarantees index 1 exists, but TS can't narrow
+      // array element types from a `.length` check under
+      // `noUncheckedIndexedAccess` — assert explicitly instead of `!`.
+      const thread = parts.length >= 3 ? assertDefined(parts[1]) : "(root)";
       const list = grouped.get(thread) ?? [];
       list.push(f);
       grouped.set(thread, list);
@@ -221,7 +226,11 @@ const COMMANDS: CommandHandler[] = [
 export function parseSlashCommand(text: string): { name: string; args: string } | null {
   const match = /^\/(\w+)\s*(.*)/s.exec(text);
   if (!match) return null;
-  return { name: match[1]!, args: match[2]! };
+  // Both groups are unconditional captures in the pattern above, so a
+  // successful match always populates match[1] and match[2] — asserted
+  // explicitly rather than with `!` because noUncheckedIndexedAccess can't
+  // encode "regex capture group always present" as a type-level fact.
+  return { name: assertDefined(match[1]), args: assertDefined(match[2]) };
 }
 
 export async function executeSlashCommand(

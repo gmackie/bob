@@ -47,8 +47,11 @@ export default function ProjectsListScreen() {
       }),
     [projects, workspace?.name],
   );
+  const rawFilterParam: unknown = searchParams.filter;
   const statusFilter = normalizeMobileProjectStatusFilter(
-    Array.isArray(searchParams.filter) ? searchParams.filter[0] : searchParams.filter,
+    Array.isArray(rawFilterParam)
+      ? (rawFilterParam[0] as string | undefined)
+      : (rawFilterParam as string | undefined),
   );
   const visibleProjectRows = useMemo(
     () => filterMobileProjectStatusRows(projectRows, statusFilter),

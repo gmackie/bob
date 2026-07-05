@@ -129,7 +129,7 @@ export function TaskTree({ workItemId, workspaceId: providedWsId }: TaskTreeProp
     );
   }
 
-  if (children.length === 0) {
+  if (children.length === 0 || !workspaceId) {
     return (
       <View className="items-center justify-center px-4 py-8">
         <Text className="text-sm text-muted">No subtasks</Text>
@@ -143,7 +143,7 @@ export function TaskTree({ workItemId, workspaceId: providedWsId }: TaskTreeProp
         <TaskTreeNode
           key={child.id}
           item={child}
-          workspaceId={workspaceId!}
+          workspaceId={workspaceId}
           depth={0}
         />
       ))}

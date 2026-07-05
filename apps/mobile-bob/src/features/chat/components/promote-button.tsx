@@ -1,6 +1,5 @@
 import { Pressable, Text } from "react-native";
 
-import { colors } from "~/lib/colors";
 
 interface PromoteButtonProps {
   onPress: () => void;

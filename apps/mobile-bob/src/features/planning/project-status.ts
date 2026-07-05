@@ -290,7 +290,7 @@ export function normalizeMobileProjectStatusFilter(
 
 export function filterMobileProjectStatusRows(
   rows: MobileProjectStatusRow[],
-  filter: MobileProjectStatusFilter | string | null | undefined,
+  filter: string | null | undefined,
 ): MobileProjectStatusRow[] {
   const normalized = normalizeMobileProjectStatusFilter(filter ?? null);
   if (!normalized) return rows;

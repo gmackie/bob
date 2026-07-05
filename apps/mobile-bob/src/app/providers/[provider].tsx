@@ -32,16 +32,6 @@ interface ProviderRun {
   } | null;
 }
 
-function formatDate(value: string | Date | null | undefined): string {
-  if (!value) return "No timestamp";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "No timestamp";
-  return date.toLocaleString();
-}
-
-function formatTitle(run: ProviderRun): string {
-  return buildProviderRunRowModel(run).title;
-}
 
 function MetricCell({
   label,

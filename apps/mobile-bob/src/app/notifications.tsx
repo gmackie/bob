@@ -9,7 +9,6 @@ import {
 } from "~/features/planning/notifications";
 import { authClient } from "~/utils/auth";
 import { trpc } from "~/utils/api";
-import { colors } from "~/lib/colors";
 
 export default function NotificationsScreen() {
   const { data: session, isPending } = authClient.useSession();

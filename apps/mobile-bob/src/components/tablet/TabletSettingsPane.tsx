@@ -8,10 +8,7 @@ import {
   buildMobileSettingsActions,
   buildWorkspaceSettingRows,
 } from "~/features/settings/settings-model";
-import type {
-  MobileSettingsSectionKey,
-  WorkspaceSettingMembership,
-} from "~/features/settings/settings-model";
+import type { MobileSettingsSectionKey } from "~/features/settings/settings-model";
 import {
   buildWorkspaceSelectionPath,
   SELECTED_WORKSPACE_KEY,
@@ -27,7 +24,7 @@ interface TabletSettingsPaneProps {
 
 export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) {
   const queryClient = useQueryClient();
-  const pathname = usePathname() ?? "/settings";
+  const pathname = usePathname();
   const searchParams = useLocalSearchParams();
   const scrollRef = useRef<ScrollView>(null);
   const sectionOffsets = useRef<Record<MobileSettingsSectionKey, number>>({
@@ -140,14 +137,16 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
       </View>
 
       <View className="mt-6 flex-row flex-wrap gap-3">
-        {actions.map((action) => (
+        {actions.map((action) => {
+          const targetSection = action.targetSection;
+          return (
           <Pressable
             key={action.key}
             onPress={
               action.kind === "logout"
                 ? handleLogout
-                : action.targetSection
-                  ? () => scrollToSection(action.targetSection!)
+                : targetSection
+                  ? () => scrollToSection(targetSection)
                   : undefined
             }
             accessibilityRole="button"
@@ -171,7 +170,8 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
               {action.description}
             </Text>
           </Pressable>
-        ))}
+          );
+        })}
       </View>
 
       <View

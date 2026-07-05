@@ -4,7 +4,6 @@ import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import { Screen } from "~/components/ui";
 import { env } from "~/config/env";
-import { colors } from "~/lib/colors";
 import { authClient } from "~/utils/auth";
 
 import type { ChatMessage } from "./chat-messages";
@@ -53,8 +52,9 @@ export function ChatScreen() {
     async (text: string) => {
       if (mode === "ooda" && parseSlashCommand(text)) {
         const result = await executeSlashCommand(text, commandContext);
-        if (result.handled && result.messages) {
-          setCommandMessages((prev) => [...prev, ...result.messages!]);
+        const resultMessages = result.messages;
+        if (result.handled && resultMessages) {
+          setCommandMessages((prev) => [...prev, ...resultMessages]);
         }
         return;
       }

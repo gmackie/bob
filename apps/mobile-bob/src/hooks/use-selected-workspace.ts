@@ -14,9 +14,10 @@ import { trpc } from "~/utils/api";
 export function useSelectedWorkspace() {
   const { data: session } = authClient.useSession();
   const params = useLocalSearchParams<{ workspace?: string }>();
-  const routeWorkspaceId = Array.isArray(params.workspace)
-    ? params.workspace[0]
-    : params.workspace;
+  const rawWorkspaceParam: unknown = params.workspace;
+  const routeWorkspaceId: string | undefined = Array.isArray(rawWorkspaceParam)
+    ? (rawWorkspaceParam[0] as string | undefined)
+    : (rawWorkspaceParam as string | undefined);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const workspacesQuery = useQuery(
     trpc.workspace.list.queryOptions(undefined, {

@@ -156,8 +156,11 @@ export function TabletPlanningDashboard({
     () => buildPlanningDashboardModel({ sessions, projects }),
     [projects, sessions],
   );
+  const rawFilterParam: unknown = searchParams.filter;
   const sessionFilter = normalizeTabletPlanningDashboardFilter(
-    Array.isArray(searchParams.filter) ? searchParams.filter[0] : searchParams.filter,
+    Array.isArray(rawFilterParam)
+      ? (rawFilterParam[0] as string | undefined)
+      : (rawFilterParam as string | undefined),
   );
   const visibleRecentSessions = useMemo(
     () =>
@@ -268,11 +271,6 @@ export function TabletPlanningDashboard({
               <Text className="text-3xl font-semibold tracking-tight text-foreground">
                 {header.title}
               </Text>
-              {header.subtitle ? (
-                <Text className="mt-1 text-sm text-muted" numberOfLines={1}>
-                  {header.subtitle}
-                </Text>
-              ) : null}
             </View>
             <View className="flex-row gap-2">
               {globalActions.map((action) => (

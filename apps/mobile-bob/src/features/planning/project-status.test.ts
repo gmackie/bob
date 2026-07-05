@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { assertDefined } from "~/lib/assert";
 import {
   buildMobileProjectAutomationControls,
   buildMobileProjectConfigurationManagementGroups,
@@ -318,9 +319,10 @@ describe("mobile project status model", () => {
       ],
     });
 
-    expect(row).toBeDefined();
+    const definedRow = assertDefined(row);
+    expect(definedRow).toBeDefined();
 
-    const sections = buildMobileProjectConfigurationSections(row!);
+    const sections = buildMobileProjectConfigurationSections(definedRow);
 
     expect(sections.map((section) => section.title)).toEqual([
       "Bob Project",
@@ -378,7 +380,7 @@ describe("mobile project status model", () => {
     });
 
     const groups = buildMobileProjectConfigurationManagementGroups(
-      buildMobileProjectConfigurationSections(row!),
+      buildMobileProjectConfigurationSections(assertDefined(row)),
     );
 
     expect(groups.map((group) => [group.key, group.actions.map((action) => action.label)])).toEqual([

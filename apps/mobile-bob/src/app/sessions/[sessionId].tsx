@@ -16,7 +16,10 @@ import { authClient } from "~/utils/auth";
 export default function ExecutionSessionScreen() {
   const { data: session, isPending } = authClient.useSession();
   const params = useLocalSearchParams<{ sessionId: string }>();
-  const sessionId = Array.isArray(params.sessionId) ? params.sessionId[0] : params.sessionId;
+  const rawSessionIdParam: unknown = params.sessionId;
+  const sessionId = Array.isArray(rawSessionIdParam)
+    ? (rawSessionIdParam[0] as string | undefined)
+    : (rawSessionIdParam as string | undefined);
   const gateway = useGateway();
   const { selectedWorkspaceId } = useSelectedWorkspace();
   const { selectSession, selectedSessionEvents, sendInput, stopSession } = gateway;

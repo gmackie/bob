@@ -22,7 +22,6 @@ import {
 import type {
   MobileSettingsAction,
   MobileSettingsSectionKey,
-  WorkspaceSettingMembership,
 } from "~/features/settings/settings-model";
 import { SELECTED_WORKSPACE_KEY } from "~/features/settings/workspace-selection";
 import { colors } from "~/lib/colors";
