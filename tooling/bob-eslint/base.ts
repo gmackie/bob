@@ -7,12 +7,25 @@ import { defineConfig } from "eslint/config";
 import tseslint from "typescript-eslint";
 
 /**
- * All packages that leverage t3-env should use this rule
+ * All packages that leverage t3-env should use this rule.
+ *
+ * Test files are exempt: tests legitimately need to mutate `process.env`
+ * directly (paired with `vi.resetModules()`) to exercise env-var-driven
+ * branches in isolation per-case — a validated env singleton is parsed once
+ * at import time and can't observe those per-test mutations. See
+ * `packages/bob/src/db/src/client-dispatcher.test.ts` for the established
+ * precedent of direct `process.env` mutation in tests.
  */
 export const restrictEnvAccess = defineConfig(
   { ignores: ["**/env.ts"] },
   {
     files: ["**/*.js", "**/*.ts", "**/*.tsx"],
+    ignores: [
+      "**/*.test.ts",
+      "**/*.test.tsx",
+      "**/*.spec.ts",
+      "**/*.spec.tsx",
+    ],
     rules: {
       "no-restricted-properties": [
         "error",

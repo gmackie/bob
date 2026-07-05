@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { AuthRuntimeBundle } from "../runtime";
+
 const {
   validateApiKeyMock,
   isApiKeyMock,
@@ -29,14 +31,20 @@ describe("resolveAuthContext", () => {
     },
   };
 
+  // The test only ever calls `authBundle.authInstance.api.getSession(...)` —
+  // `runtime` (an Effect `ManagedRuntime`) is never exercised by
+  // `resolveAuthContext`, so it's safe to stub. We go through `unknown` (not
+  // `any`) because the real `AuthRuntimeBundle` shape is fully known but
+  // impractical to construct in a unit test; the cast is scoped to this one
+  // fixture rather than sprinkled at each call site.
   const mockAuthBundle = {
     authInstance: {
       api: {
         getSession: getSessionMock,
       },
     },
-    runtime: {} as any,
-  };
+    runtime: {},
+  } as unknown as AuthRuntimeBundle;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -62,7 +70,7 @@ describe("resolveAuthContext", () => {
 
     const { resolveAuthContext } = await import("../context");
     const result = await resolveAuthContext({
-      authBundle: mockAuthBundle as any,
+      authBundle: mockAuthBundle,
       defaultUser,
       headers: new Headers(),
     });
@@ -79,7 +87,7 @@ describe("resolveAuthContext", () => {
 
     const { resolveAuthContext } = await import("../context");
     const result = await resolveAuthContext({
-      authBundle: mockAuthBundle as any,
+      authBundle: mockAuthBundle,
       defaultUser,
       headers: new Headers({
         "x-workspace-id": "workspace-1",
@@ -102,7 +110,7 @@ describe("resolveAuthContext", () => {
 
     const { resolveAuthContext } = await import("../context");
     const result = await resolveAuthContext({
-      authBundle: mockAuthBundle as any,
+      authBundle: mockAuthBundle,
       defaultUser: null,
       headers: new Headers({
         authorization: "Bearer bad-token",
@@ -122,7 +130,7 @@ describe("resolveAuthContext", () => {
 
     const { resolveAuthContext } = await import("../context");
     const result = await resolveAuthContext({
-      authBundle: mockAuthBundle as any,
+      authBundle: mockAuthBundle,
       defaultUser,
       headers: new Headers({
         cookie: "bob-auth-bypass:prod-secret",
@@ -144,7 +152,7 @@ describe("resolveAuthContext", () => {
 
     const { resolveAuthContext } = await import("../context");
     const result = await resolveAuthContext({
-      authBundle: mockAuthBundle as any,
+      authBundle: mockAuthBundle,
       defaultUser,
       headers: new Headers({
         cookie: "bob-auth-bypass:wrong-secret",
@@ -163,7 +171,7 @@ describe("resolveAuthContext", () => {
 
     const { resolveAuthContext } = await import("../context");
     const result = await resolveAuthContext({
-      authBundle: mockAuthBundle as any,
+      authBundle: mockAuthBundle,
       defaultUser,
       headers: new Headers({
         cookie: "bob-auth-bypass:prod-secret",

@@ -1,6 +1,11 @@
 import { expoClient } from "@better-auth/expo/client";
 import { createAuthClient } from "better-auth/react";
 
+export interface ExpoAuthStorage {
+  setItem: (key: string, value: string) => unknown;
+  getItem: (key: string) => string | null;
+}
+
 export function createBobAuthClient(options?: { baseURL?: string }) {
   return createAuthClient({
     baseURL: options?.baseURL,
@@ -10,7 +15,7 @@ export function createBobAuthClient(options?: { baseURL?: string }) {
 export function createBobExpoAuthClient(options: {
   baseURL: string;
   scheme: string;
-  storage: any;
+  storage: ExpoAuthStorage;
   storagePrefix: string;
 }) {
   return createAuthClient({

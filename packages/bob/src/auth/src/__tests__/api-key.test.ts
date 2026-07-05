@@ -18,6 +18,27 @@ vi.mock("@bob/db/client", () => ({
   },
 }));
 
+// Minimal structural stand-in for the slice of drizzle's relational
+// query-builder `where` callback that `validateApiKey` actually calls:
+// `(table, { and, eq, isNull }) => and(eq(table.keyHash, hash), isNull(table.revokedAt))`.
+// We don't import drizzle's real (deeply generic) callback type here since
+// this test only needs to observe which column refs + values the production
+// code passes through — the mock's job is to capture those calls, not to
+// re-implement drizzle's query builder.
+interface MockApiKeyTable {
+  keyHash: string;
+  revokedAt: string;
+}
+interface MockWhereOps {
+  and: (...clauses: unknown[]) => unknown[];
+  eq: (left: unknown, right: unknown) => { type: "eq"; left: unknown; right: unknown };
+  isNull: (value: unknown) => { type: "isNull"; value: unknown };
+}
+type MockWhereCallback = (
+  table: MockApiKeyTable,
+  ops: MockWhereOps,
+) => unknown;
+
 describe("validateApiKey", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -26,22 +47,31 @@ describe("validateApiKey", () => {
   it("includes revokedAt in the API key lookup guard", async () => {
     const { hashApiKey, validateApiKey } = await import("../api-key");
 
-    apiKeyFindFirstMock.mockImplementationOnce(({ where }) => {
-      const and = vi.fn((...clauses) => clauses);
-      const eq = vi.fn((left, right) => ({ type: "eq", left, right }));
-      const isNull = vi.fn((value) => ({ type: "isNull", value }));
-      const table = {
-        keyHash: "keyHashColumn",
-        revokedAt: "revokedAtColumn",
-      };
+    apiKeyFindFirstMock.mockImplementationOnce(
+      ({ where }: { where: MockWhereCallback }) => {
+        const and = vi.fn((...clauses: unknown[]) => clauses);
+        const eq = vi.fn((left: unknown, right: unknown) => ({
+          type: "eq" as const,
+          left,
+          right,
+        }));
+        const isNull = vi.fn((value: unknown) => ({
+          type: "isNull" as const,
+          value,
+        }));
+        const table: MockApiKeyTable = {
+          keyHash: "keyHashColumn",
+          revokedAt: "revokedAtColumn",
+        };
 
-      where(table, { and, eq, isNull });
+        where(table, { and, eq, isNull });
 
-      expect(eq).toHaveBeenCalledWith("keyHashColumn", hashApiKey("bob_live_key"));
-      expect(isNull).toHaveBeenCalledWith("revokedAtColumn");
+        expect(eq).toHaveBeenCalledWith("keyHashColumn", hashApiKey("bob_live_key"));
+        expect(isNull).toHaveBeenCalledWith("revokedAtColumn");
 
-      return Promise.resolve(null);
-    });
+        return Promise.resolve(null);
+      },
+    );
 
     await expect(validateApiKey("bob_live_key")).resolves.toBeNull();
     expect(userFindFirstMock).not.toHaveBeenCalled();

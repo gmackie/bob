@@ -1,10 +1,8 @@
-import type { AuthRuntimeBundle } from "./runtime";
-import {
-  isApiKey,
+import { env } from "./env";
 
-  validateApiKey
-} from "./api-key";
-import type {ApiKeyAuth} from "./api-key";
+import type { AuthRuntimeBundle } from "./runtime";
+import { isApiKey, validateApiKey } from "./api-key";
+import type { ApiKeyAuth } from "./api-key";
 
 export interface WorkspaceSelection {
   projectId: string | null;
@@ -43,13 +41,11 @@ function readHeader(headers: Headers, key: string): string | null {
 }
 
 function getConfiguredAuthBypassUserId(): string {
-  const configured = process.env.BOB_AUTH_BYPASS_USER_ID?.trim();
-  return configured && configured.length > 0 ? configured : DEFAULT_USER_ID;
+  return env.BOB_AUTH_BYPASS_USER_ID ?? DEFAULT_USER_ID;
 }
 
 function getConfiguredAuthBypassToken(): string | null {
-  const configured = process.env.BOB_AUTH_BYPASS_TOKEN?.trim();
-  return configured && configured.length > 0 ? configured : null;
+  return env.BOB_AUTH_BYPASS_TOKEN;
 }
 
 function extractAuthBypassToken(value: string | null): string | null {
@@ -76,7 +72,7 @@ function extractAuthBypassToken(value: string | null): string | null {
 }
 
 export function resolveAuthBypassUserId(headers: Headers): string | null {
-  if (process.env.BOB_AUTH_BYPASS !== "true") {
+  if (!env.BOB_AUTH_BYPASS) {
     return null;
   }
 
@@ -179,7 +175,7 @@ export async function resolveAuthContext(opts: {
   }
 
   // 4. Default user fallback.
-  if (process.env.REQUIRE_AUTH !== "true") {
+  if (!env.REQUIRE_AUTH) {
     return {
       apiKeyAuth: null,
       authMethod: "default_user",

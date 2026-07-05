@@ -13,7 +13,11 @@
     "DATABASE_URL",
     "BOB_DB_DRIVER",
     "BOB_DB_PGLITE_DIR",
-    "BOB_DB_MIGRATIONS_DIR"
+    "BOB_DB_MIGRATIONS_DIR",
+    "BOB_AUTH_BYPASS",
+    "BOB_AUTH_BYPASS_TOKEN",
+    "BOB_AUTH_BYPASS_USER_ID",
+    "REQUIRE_AUTH"
   ],
   "tasks": {
     "build": {
