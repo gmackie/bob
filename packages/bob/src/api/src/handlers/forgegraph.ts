@@ -98,7 +98,15 @@ export async function forgegraphCreateRevision(
       },
     })
     .returning();
-  return revision!;
+
+  if (!revision) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to create forge revision",
+    });
+  }
+
+  return revision;
 }
 
 export async function forgegraphTriggerBuild(
@@ -194,7 +202,15 @@ export async function forgegraphCreateDeployment(
       rollbackTargetId: input.rollbackTargetId,
     })
     .returning();
-  return deployment!;
+
+  if (!deployment) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to create forge deployment",
+    });
+  }
+
+  return deployment;
 }
 
 export async function forgegraphUpdateDeploymentStatus(
@@ -262,7 +278,15 @@ export async function forgegraphIngestRunEvent(
       artifactRefs: input.artifactRefs ?? [],
     })
     .returning();
-  return event!;
+
+  if (!event) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to create forge run event",
+    });
+  }
+
+  return event;
 }
 
 export async function forgegraphListDeployments(
@@ -359,13 +383,20 @@ export async function forgegraphApproveProdDeploy(
     })
     .returning();
 
+  if (!deployment) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to create prod deployment",
+    });
+  }
+
   // Set state to deploying_prod
   await ctx.db
     .update(dispatchItems)
     .set({ pipelineState: "deploying_prod" })
     .where(eq(dispatchItems.id, item.id));
 
-  return deployment!;
+  return deployment;
 }
 
 // ── ForgeGraph App Management ──────────────────────────────────────
@@ -398,10 +429,10 @@ export async function forgegraphListUnlinkedApps(
   ]);
 
   const linkedIds = new Set(
-    linkedProjects.map((p: any) => p.forgeGraphAppId).filter(Boolean),
+    linkedProjects.map((p) => p.forgeGraphAppId).filter(Boolean),
   );
 
-  return allApps.filter((app: any) => !linkedIds.has(app.id));
+  return allApps.filter((app) => !linkedIds.has(app.id));
 }
 
 export async function forgegraphImportApp(
@@ -423,7 +454,7 @@ export async function forgegraphImportApp(
   // ForgeGraph's /apps/:id endpoint uses slug, not id.
   // Look up from the full list instead to match by id.
   const allApps = await fg.listApps();
-  const app = allApps.find((a: any) => a.id === input.appId);
+  const app = allApps.find((a) => a.id === input.appId);
   if (!app) {
     throw new TRPCError({
       code: "NOT_FOUND",
@@ -438,16 +469,20 @@ export async function forgegraphImportApp(
   let mainBranch = "main";
   if (app.flakeRef) {
     const gitMatch = /git\+?(https?:\/\/[^?#]+)/.exec(app.flakeRef);
-    if (gitMatch) {
-      remoteUrl = gitMatch[1]!;
+    const matchedUrl = gitMatch?.[1];
+    if (matchedUrl) {
+      remoteUrl = matchedUrl;
       const pathParts = new URL(remoteUrl).pathname.replace(/\.git$/, "").split("/").filter(Boolean);
       if (pathParts.length >= 2) {
-        remoteOwner = pathParts[0]!;
-        remoteName = pathParts[1]!;
+        const [owner, name] = pathParts;
+        if (owner && name) {
+          remoteOwner = owner;
+          remoteName = name;
+        }
       }
     }
     const refMatch = /[?&]ref=([^&#]+)/.exec(app.flakeRef);
-    if (refMatch) mainBranch = refMatch[1]!;
+    if (refMatch?.[1]) mainBranch = refMatch[1];
   }
 
   const [project] = await ctx.db
@@ -502,13 +537,13 @@ export async function forgegraphImportAllApps(
   ]);
 
   const linkedIds = new Set(
-    linkedProjects.map((p: any) => p.forgeGraphAppId).filter(Boolean),
+    linkedProjects.map((p) => p.forgeGraphAppId).filter(Boolean),
   );
   const existingKeys = new Set(
-    linkedProjects.map((p: any) => p.key as string),
+    linkedProjects.map((p) => p.key),
   );
 
-  const unlinked = allApps.filter((app: any) => !linkedIds.has(app.id));
+  const unlinked = allApps.filter((app) => !linkedIds.has(app.id));
   if (unlinked.length === 0) return { imported: 0, projects: [] };
 
   const imported: typeof projects.$inferSelect[] = [];
@@ -520,19 +555,23 @@ export async function forgegraphImportAllApps(
     let mainBranch = "main";
     if (app.flakeRef) {
       const gitMatch = /git\+?(https?:\/\/[^?#]+)/.exec(app.flakeRef);
-      if (gitMatch) {
-        remoteUrl = gitMatch[1]!;
+      const matchedUrl = gitMatch?.[1];
+      if (matchedUrl) {
+        remoteUrl = matchedUrl;
         const pathParts = new URL(remoteUrl).pathname
           .replace(/\.git$/, "")
           .split("/")
           .filter(Boolean);
         if (pathParts.length >= 2) {
-          remoteOwner = pathParts[0]!;
-          remoteName = pathParts[1]!;
+          const [owner, name] = pathParts;
+          if (owner && name) {
+            remoteOwner = owner;
+            remoteName = name;
+          }
         }
       }
       const refMatch = /[?&]ref=([^&#]+)/.exec(app.flakeRef);
-      if (refMatch) mainBranch = refMatch[1]!;
+      if (refMatch?.[1]) mainBranch = refMatch[1];
     }
 
     let key = deriveKeyFromName(app.name);

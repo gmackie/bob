@@ -1,12 +1,13 @@
 import { TRPCError } from "@trpc/server";
 import { and, eq } from "@bob/db";
+import type { Db } from "@bob/db/client";
 import { workspaceIntegrations, workspaceMembers } from "@bob/db/schema";
 import { LinearClient } from "@linear/sdk";
 
 import type { HandlerContext } from "./context.js";
 import { normalizeLinearWebBaseUrl } from "../services/integrations/linearUrls.js";
 
-async function assertWorkspaceAccess(db: any, userId: string, workspaceId: string) {
+async function assertWorkspaceAccess(db: Db, userId: string, workspaceId: string) {
   const membership = await db.query.workspaceMembers.findFirst({
     where: and(
       eq(workspaceMembers.workspaceId, workspaceId),
@@ -103,7 +104,14 @@ export async function integrationSave(
     })
     .returning({ id: workspaceIntegrations.id });
 
-  return { id: created!.id, created: true };
+  if (!created) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to create workspace integration",
+    });
+  }
+
+  return { id: created.id, created: true };
 }
 
 export async function integrationDelete(
@@ -180,7 +188,7 @@ export async function integrationSetupLinear(
     linearWebBaseUrl: input.linearWebBaseUrl
       ? normalizeLinearWebBaseUrl(input.linearWebBaseUrl)
       : null,
-    webhookSigningSecret: (webhook as any).secret ?? null,
+    webhookSigningSecret: webhook.secret ?? null,
     enabled: true,
   };
 
@@ -201,7 +209,14 @@ export async function integrationSetupLinear(
     })
     .returning({ id: workspaceIntegrations.id });
 
-  return { id: created!.id, created: true, webhookId: webhook.id };
+  if (!created) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to create workspace integration",
+    });
+  }
+
+  return { id: created.id, created: true, webhookId: webhook.id };
 }
 
 
@@ -213,10 +228,10 @@ export async function integrationFetchLinearTeams(
     const client = new LinearClient({ apiKey: input.apiKey });
     const result = await client.teams();
     return result.nodes.map((t) => ({ id: t.id, name: t.name, key: t.key }));
-  } catch (e: any) {
+  } catch (e: unknown) {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: e?.message ?? "Invalid API key",
+      message: e instanceof Error ? e.message : "Invalid API key",
     });
   }
 }
@@ -231,7 +246,7 @@ export async function integrationList(
     where: eq(workspaceIntegrations.workspaceId, input.workspaceId),
   });
 
-  return integrations.map((i: any) => ({
+  return integrations.map((i) => ({
     id: i.id,
     provider: i.provider,
     enabled: i.enabled,
