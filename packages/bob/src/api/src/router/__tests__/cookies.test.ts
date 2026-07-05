@@ -1,35 +1,51 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  decryptCookieValue
-
-} from "../../services/crypto/cookieVault.js";
-import type {EncryptedCookieValue} from "../../services/crypto/cookieVault.js";
+import { sessionCookieScopes as mockSessionCookieScopes } from "@bob/db/schema";
+import type { createTRPCContext } from "../../trpc.js";
 
 const TEST_KEY = "test-cookie-encryption-key-32chs";
 
 let appRouter: typeof import("../../root").appRouter;
 
+// The real tRPC context type — test callers below construct a structurally
+// close-enough fake (mock db/authApi) and cast through `unknown` rather than
+// `any`, since the mocks intentionally don't implement the full Db/AuthApi
+// surface, only what these handlers actually call.
+type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
+
 // ── DB mock layer ──────────────────────────────────────────────────
 
+// Only `id` and `domain` are required — the `remove` test seeds a bare
+// { id, domain } row (delete only ever reads r.id back), while the
+// getForSession tests seed fully-populated rows.
+interface CookieRow {
+  id: string;
+  userId?: string;
+  domain: string;
+  name?: string;
+  valueCiphertext?: string;
+  valueIv?: string;
+  valueTag?: string;
+  path?: string;
+  expires?: Date | null;
+  secure?: boolean;
+  httpOnly?: boolean;
+  sameSite?: string;
+}
+
+interface ScopeRow {
+  sessionId: string;
+  domain: string;
+}
+
+type InsertValues = Record<string, unknown>;
+
 /** In-memory store that the mock DB operates on */
-let cookieRows: any[];
-let scopeRows: any[];
+let cookieRows: CookieRow[];
+let scopeRows: ScopeRow[];
 
 const makeDbMock = () => ({
   query: {
-    browserCookies: {
-      findMany: vi.fn(({ where }: any) => {
-        // Return all cookies for simplicity — caller filters in router
-        return Promise.resolve(cookieRows);
-      }),
-    },
-    sessionCookieScopes: {
-      findFirst: vi.fn(({ where }: any) => {
-        // Simplified: return first scope row if any exist
-        return Promise.resolve(scopeRows.length > 0 ? scopeRows[0] : null);
-      }),
-    },
     chatConversations: {
       // setSessionScopes verifies the user owns the session before writing
       // scopes; tests use a fake user-1 owner so we always return a row.
@@ -38,14 +54,14 @@ const makeDbMock = () => ({
       ),
     },
   },
-  insert: vi.fn((table: any) => ({
-    values: vi.fn((vals: any) => {
+  insert: vi.fn((_table: unknown) => ({
+    values: vi.fn((vals: InsertValues | InsertValues[]) => {
       const rows = Array.isArray(vals) ? vals : [vals];
       // Store rows depending on which table
       if (rows[0] && "valueCiphertext" in rows[0]) {
-        cookieRows.push(...rows);
+        cookieRows.push(...(rows as unknown as CookieRow[]));
       } else if (rows[0] && "sessionId" in rows[0]) {
-        scopeRows.push(...rows);
+        scopeRows.push(...(rows as unknown as ScopeRow[]));
       }
       return {
         onConflictDoUpdate: vi.fn(() => Promise.resolve()),
@@ -54,19 +70,41 @@ const makeDbMock = () => ({
       };
     }),
   })),
+  // select() covers three shapes used by the handlers:
+  //  - cookiesList: .select({...}).from(browserCookies).where(...).groupBy(...)
+  //  - getForSession scope check: .select().from(sessionCookieScopes).where(...).limit(1)
+  //  - getForSession cookie read: .select().from(browserCookies).where(...) (awaited directly)
+  // Tag behavior by which table object .from() receives — these are the real
+  // drizzle table objects (no @bob/db/schema mock; the handler's own module
+  // imports resolve normally), so identity comparison against the imported
+  // sessionCookieScopes table is reliable.
   select: vi.fn(() => ({
-    from: vi.fn(() => ({
-      where: vi.fn(() => ({
-        groupBy: vi.fn(() => Promise.resolve([])),
-      })),
-    })),
+    from: vi.fn((table: unknown) => {
+      if (table === mockSessionCookieScopes) {
+        const rows = scopeRows;
+        return {
+          where: vi.fn(() => ({
+            limit: vi.fn((n: number) => Promise.resolve(rows.slice(0, n))),
+          })),
+        };
+      }
+      // browserCookies (or any other table): return cookieRows, support
+      // both .groupBy() (cookiesList) and direct await (getForSession).
+      const rows = [...cookieRows];
+      return {
+        where: vi.fn(() => ({
+          groupBy: vi.fn(() => Promise.resolve([])),
+          then: (resolve: (rows: CookieRow[]) => void) => resolve(rows),
+        })),
+      };
+    }),
   })),
   delete: vi.fn(() => ({
     where: vi.fn(() => ({
       returning: vi.fn(() => {
         const deleted = [...cookieRows];
         cookieRows.length = 0;
-        return Promise.resolve(deleted.map((r) => ({ id: r.id ?? "x" })));
+        return Promise.resolve(deleted.map((r) => ({ id: r.id })));
       }),
     })),
   })),
@@ -97,18 +135,18 @@ const fakeSession = {
 const createApiKeyCaller = () =>
   appRouter.createCaller({
     session: fakeSession,
-    authApi: { getSession: vi.fn() } as any,
+    authApi: { getSession: vi.fn() },
     apiKeyAuth: { keyId: "test-key", permissions: ["admin"] as const, user: fakeSession.user, userId: fakeSession.user.id },
-    db: makeDbMock() as any,
-  });
+    db: makeDbMock(),
+  } as unknown as TRPCContext);
 
 const createProtectedCaller = () =>
   appRouter.createCaller({
     session: fakeSession,
-    authApi: { getSession: vi.fn() } as any,
+    authApi: { getSession: vi.fn() },
     apiKeyAuth: null,
-    db: makeDbMock() as any,
-  });
+    db: makeDbMock(),
+  } as unknown as TRPCContext);
 
 // ── Setup ──────────────────────────────────────────────────────────
 
@@ -263,9 +301,10 @@ describe("cookies router", () => {
       });
 
       expect(result.cookies).toHaveLength(1);
-      expect(result.cookies[0]!.name).toBe("session");
-      expect(result.cookies[0]!.value).toBe("session-token-xyz");
-      expect(result.cookies[0]!.domain).toBe(".github.com");
+      const [cookie] = result.cookies;
+      expect(cookie?.name).toBe("session");
+      expect(cookie?.value).toBe("session-token-xyz");
+      expect(cookie?.domain).toBe(".github.com");
     });
 
     it("should filter out expired cookies", async () => {
@@ -332,12 +371,7 @@ describe("cookies router", () => {
 
   describe("auth enforcement", () => {
     it("should reject import without API key auth", async () => {
-      const caller = appRouter.createCaller({
-        session: fakeSession,
-        authApi: { getSession: vi.fn() } as any,
-        apiKeyAuth: null,
-        db: makeDbMock() as any,
-      });
+      const caller = createProtectedCaller();
 
       await expect(
         caller.cookies.import({
@@ -348,12 +382,7 @@ describe("cookies router", () => {
     });
 
     it("should reject getForSession without API key auth", async () => {
-      const caller = appRouter.createCaller({
-        session: fakeSession,
-        authApi: { getSession: vi.fn() } as any,
-        apiKeyAuth: null,
-        db: makeDbMock() as any,
-      });
+      const caller = createProtectedCaller();
 
       await expect(
         caller.cookies.getForSession({

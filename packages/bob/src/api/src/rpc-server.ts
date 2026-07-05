@@ -96,19 +96,19 @@ const BobRpcGroup = RpcGroup.make(HealthRpc)
  * the captured `ctx.userId` is always the authenticated user for that request.
  */
 function liftHandlers<
-  H extends Record<string, (input: any) => Effect.Effect<any, any, any>>,
+  H extends Record<string, (input: never) => Effect.Effect<unknown, unknown, unknown>>,
 >(
   factory: (ctx: HandlerContext) => H,
-): { [K in keyof H]: (input: any) => Effect.Effect<any, any, any> } {
+): { [K in keyof H]: (input: never) => Effect.Effect<unknown, unknown, unknown> } {
   // Call once with a dummy ctx to discover keys (no side effects — factories
   // just return object literals of closures that capture ctx). The closures
   // are never invoked.
-  const sentinel: HandlerContext = { db: null as any, userId: "", tenantId: "" };
+  const sentinel: HandlerContext = { db: null as unknown as HandlerContext["db"], userId: "", tenantId: "" };
   const keys = Object.keys(factory(sentinel)) as (keyof H & string)[];
 
-  const lifted = {} as Record<string, (input: any) => Effect.Effect<any, any, any>>;
+  const lifted = {} as Record<string, (input: never) => Effect.Effect<unknown, unknown, unknown>>;
   for (const key of keys) {
-    lifted[key] = (input: any) =>
+    lifted[key] = (input: never) =>
       Effect.gen(function* () {
         const db = yield* GmackoDb.asEffect();
         const user = yield* CurrentUser.asEffect();
@@ -121,10 +121,18 @@ function liftHandlers<
           tenantId: process.env.BOB_TENANT_ID,
         };
         const handlers = factory(ctx);
-        return yield* handlers[key]!(input);
+        const handler = handlers[key];
+        if (!handler) {
+          // Every `key` was discovered from a call to this same `factory`
+          // above (see the sentinel call), so a per-request call to the
+          // same factory is guaranteed to produce the same key set — this
+          // is a real invariant check, not an expected runtime path.
+          throw new Error(`liftHandlers: handler "${key}" missing at request time`);
+        }
+        return yield* handler(input);
       });
   }
-  return lifted as any;
+  return lifted as { [K in keyof H]: (input: never) => Effect.Effect<unknown, unknown, unknown> };
 }
 
 // -- Handler layers ---------------------------------------------------------
@@ -174,7 +182,7 @@ const workItemsHandlers = WorkItemsRpc.toLayer({
       "workItem.link.linkToGitHubPR": lnk["link.linkToGitHubPR"],
     };
   }),
-} as any);
+} as unknown as Parameters<typeof WorkItemsRpc.toLayer>[0]);
 
 // PlanningRpc (67 procedures)
 const planningHandlers = PlanningRpc.toLayer({
@@ -262,7 +270,7 @@ const planningHandlers = PlanningRpc.toLayer({
       "planning.checkpoint.branchFrom": cp["checkpoint.branchFrom"],
     };
   }),
-} as any);
+} as unknown as Parameters<typeof PlanningRpc.toLayer>[0]);
 
 // ExternalRpc (37 procedures)
 const externalHandlers = ExternalRpc.toLayer({
@@ -311,32 +319,32 @@ const externalHandlers = ExternalRpc.toLayer({
       "external.integration.delete": int["integration.delete"],
     };
   }),
-} as any);
+} as unknown as Parameters<typeof ExternalRpc.toLayer>[0]);
 
 // AgentRpc (78 procedures)
 const agentHandlers = AgentRpc.toLayer({
   ...liftHandlers(makeAgentHandlers),
-} as any);
+} as unknown as Parameters<typeof AgentRpc.toLayer>[0]);
 
 // ProjectsRpc (56 procedures)
 const projectsHandlers = ProjectsRpc.toLayer({
   ...liftHandlers(makeProjectsHandlers),
-} as any);
+} as unknown as Parameters<typeof ProjectsRpc.toLayer>[0]);
 
 // SettingsRpc (20 procedures)
 const settingsHandlers = SettingsRpc.toLayer({
   ...liftHandlers(makeSettingsHandlers),
-} as any);
+} as unknown as Parameters<typeof SettingsRpc.toLayer>[0]);
 
 // SecretsRpc (14 procedures)
 const secretsHandlers = SecretsRpc.toLayer({
   ...liftHandlers(makeSecretsHandlers),
-} as any);
+} as unknown as Parameters<typeof SecretsRpc.toLayer>[0]);
 
 // AuthRpc (11 procedures)
 const authHandlers = AuthRpc.toLayer({
   ...liftHandlers(makeAuthHandlers),
-} as any);
+} as unknown as Parameters<typeof AuthRpc.toLayer>[0]);
 
 /**
  * The merged Layer of every group's handlers. Exported so the REST bridge
@@ -359,8 +367,8 @@ export const allHandlers = Layer.mergeAll(
  * they depend on the app's auth/db wiring (`apps/bob/src/server/layers.ts`).
  */
 export interface RpcServerLayers {
-  readonly runtimeLayer: LayerType.Layer<any, any, any>;
-  readonly authMiddlewareLayer: LayerType.Layer<any, any, any>;
+  readonly runtimeLayer: LayerType.Layer<unknown, unknown, unknown>;
+  readonly authMiddlewareLayer: LayerType.Layer<unknown, unknown, unknown>;
 }
 
 /**
