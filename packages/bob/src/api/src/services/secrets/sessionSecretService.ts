@@ -13,39 +13,73 @@ import {
 } from "../crypto/sessionSecretVault";
 import type { DeployEnvironment, ForgeGraphSecretAdapter } from "./forgegraphSecretAdapter";
 
+type ChatConversationRow = typeof chatConversations.$inferSelect;
+type ProjectRow = typeof projects.$inferSelect;
+type SessionSecretRow = typeof sessionSecrets.$inferSelect;
+type SessionSecretUsageRow = typeof sessionSecretUsages.$inferSelect;
+type ProjectDeploySecretBindingRow = typeof projectDeploySecretBindings.$inferSelect;
+
+/**
+ * Reads an optional string-typed field off a value whose shape isn't
+ * statically guaranteed to include it. chatConversations has no
+ * `workspaceId`/`projectId` columns (only `planningWorkspaceId`/
+ * `planningProjectId`) — this read has always resolved to `undefined` in
+ * practice (masked before by the `any`-typed DatabaseLike interface), so
+ * this narrow helper preserves that exact (dead-field) behavior rather
+ * than silently switching to the differently-named planning* columns,
+ * which would be a real behavior change out of scope for a lint-only pass.
+ */
+function readOptionalStringField(value: unknown, field: string): string | null {
+  if (typeof value !== "object" || value === null || !(field in value)) {
+    return null;
+  }
+  const raw = (value as Record<string, unknown>)[field];
+  return typeof raw === "string" ? raw : null;
+}
+
 interface DatabaseLike {
   query: {
     chatConversations?: {
-      findFirst: (args: unknown) => Promise<any>;
+      findFirst: (args: unknown) => Promise<ChatConversationRow | undefined>;
     };
     projects?: {
-      findFirst: (args: unknown) => Promise<any>;
+      findFirst: (args: unknown) => Promise<ProjectRow | undefined>;
     };
     sessionSecrets?: {
-      findFirst?: (args: unknown) => Promise<any>;
-      findMany: (args: unknown) => Promise<any[]>;
+      findFirst?: (args: unknown) => Promise<SessionSecretRow | undefined>;
+      findMany: (args: unknown) => Promise<SessionSecretRow[]>;
     };
     sessionSecretUsages?: {
-      findMany?: (args: unknown) => Promise<any[]>;
+      findMany?: (args: unknown) => Promise<SessionSecretUsageRow[]>;
     };
   };
-  insert: (table: unknown) => {
+  insert(table: typeof sessionSecrets): {
     values: (values: unknown) => {
-      returning: () => Promise<any[]>;
-      onConflictDoUpdate?: (args: unknown) => {
-        returning: () => Promise<any[]>;
+      returning: () => Promise<SessionSecretRow[]>;
+    };
+  };
+  insert(table: typeof sessionSecretUsages): {
+    values: (values: unknown) => {
+      returning: () => Promise<SessionSecretUsageRow[]>;
+    };
+  };
+  insert(table: typeof projectDeploySecretBindings): {
+    values: (values: unknown) => {
+      returning: () => Promise<ProjectDeploySecretBindingRow[]>;
+      onConflictDoUpdate: (args: unknown) => {
+        returning: () => Promise<ProjectDeploySecretBindingRow[]>;
       };
     };
   };
   delete: (table: unknown) => {
     where: (where: unknown) => {
-      returning: () => Promise<any[]>;
+      returning: () => Promise<SessionSecretRow[]>;
     };
   };
   update: (table: unknown) => {
     set: (values: unknown) => {
       where: (where: unknown) => {
-        returning: () => Promise<any[]>;
+        returning: () => Promise<SessionSecretRow[]>;
       };
     };
   };
@@ -112,8 +146,8 @@ export class SessionSecretService {
         id,
         userId: input.userId,
         sessionId: input.sessionId,
-        workspaceId: session.workspaceId ?? null,
-        projectId: session.projectId ?? null,
+        workspaceId: readOptionalStringField(session, "workspaceId"),
+        projectId: readOptionalStringField(session, "projectId"),
         label: input.label,
         handle: input.handle,
         transport: input.transport,
@@ -211,6 +245,10 @@ export class SessionSecretService {
       })
     )?.length;
 
+    if (!row.valueCiphertext || !row.valueIv || !row.valueTag) {
+      throw new Error("Session secret is missing its encrypted value");
+    }
+
     return {
       ...this.toPublicSecret(row),
       usageCount: usageCount ?? 0,
@@ -249,6 +287,10 @@ export class SessionSecretService {
       })
     )?.length;
 
+    if (!row.valueCiphertext || !row.valueIv || !row.valueTag) {
+      throw new Error("Session secret is missing its encrypted value");
+    }
+
     return {
       ...this.toPublicSecret(row),
       usageCount: usageCount ?? 0,
@@ -286,7 +328,7 @@ export class SessionSecretService {
         transport: input.transport,
         templateId: input.templateId,
       })
-      .onConflictDoUpdate?.({
+      .onConflictDoUpdate({
         target: [
           projectDeploySecretBindings.projectId,
           projectDeploySecretBindings.environment,
@@ -299,7 +341,7 @@ export class SessionSecretService {
           templateId: input.templateId,
         },
       })
-      .returning() ?? [];
+      .returning();
 
     return binding ?? {
       projectId: input.projectId,
@@ -362,9 +404,9 @@ export class SessionSecretService {
     });
   }
 
-  private toPublicSecret(row: any) {
-    if (!row) return row;
-
+  private toPublicSecret<T extends Record<string, unknown>>(
+    row: T,
+  ): Omit<T, "valueCiphertext" | "valueIv" | "valueTag"> {
     const {
       valueCiphertext: _valueCiphertext,
       valueIv: _valueIv,
