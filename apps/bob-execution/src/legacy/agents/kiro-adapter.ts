@@ -1,16 +1,17 @@
 import { BaseAgentAdapter } from './base-adapter';
 import type { AgentType } from '../types';
+import { extractUsageFields, isGenericUsagePayload } from './usage-parsing';
 
 export class KiroAdapter extends BaseAgentAdapter {
   readonly type: AgentType = 'kiro';
   readonly name = 'Kiro';
   readonly command = 'kiro-cli';
 
-  getSpawnArgs(options?: { interactive?: boolean; port?: number }): { command: string; args: string[]; env?: Record<string, string> } {
+  getSpawnArgs(_options?: { interactive?: boolean; port?: number }): { command: string; args: string[]; env?: Record<string, string> } {
     const args: string[] = ['chat'];
     const env: Record<string, string> = {};
 
-    // Kiro chat is primarily interactive
+    // Kiro chat is primarily interactive, regardless of the requested mode.
     // Add any additional configuration if needed
 
     return {
@@ -79,17 +80,18 @@ export class KiroAdapter extends BaseAgentAdapter {
 
         // Look for JSON usage data
         if (trimmed.startsWith('{') && (trimmed.includes('usage') || trimmed.includes('tokens'))) {
-          const json = JSON.parse(trimmed);
-          if (json.usage || json.tokens) {
-            const usage = json.usage || json.tokens;
-            return {
-              inputTokens: usage.input_tokens || usage.prompt_tokens || 0,
-              outputTokens: usage.output_tokens || usage.completion_tokens || 0,
-              cost: this.calculateCost(
-                usage.input_tokens || usage.prompt_tokens || 0,
-                usage.output_tokens || usage.completion_tokens || 0
-              )
-            };
+          const parsed: unknown = JSON.parse(trimmed);
+          if (isGenericUsagePayload(parsed)) {
+            const usage = extractUsageFields(parsed);
+            if (usage) {
+              const inputTokens = usage.input_tokens ?? usage.prompt_tokens ?? 0;
+              const outputTokens = usage.output_tokens ?? usage.completion_tokens ?? 0;
+              return {
+                inputTokens,
+                outputTokens,
+                cost: this.calculateCost(inputTokens, outputTokens)
+              };
+            }
           }
         }
 

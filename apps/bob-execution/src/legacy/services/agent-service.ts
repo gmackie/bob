@@ -19,12 +19,18 @@ export interface AgentStorageAdapter {
 }
 
 export class InMemoryAgentStorage implements AgentStorageAdapter {
-  async getAllInstances(): Promise<AgentInstance[]> {
-    return [];
+  getAllInstances(): Promise<AgentInstance[]> {
+    return Promise.resolve([]);
   }
-  async saveInstance(_instance: AgentInstance): Promise<void> {}
-  async deleteInstance(_instanceId: string): Promise<void> {}
-  async updateInstanceActivity(_instanceId: string): Promise<void> {}
+  saveInstance(_instance: AgentInstance): Promise<void> {
+    return Promise.resolve();
+  }
+  deleteInstance(_instanceId: string): Promise<void> {
+    return Promise.resolve();
+  }
+  updateInstanceActivity(_instanceId: string): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 export interface AgentFactoryInterface {
@@ -40,8 +46,8 @@ export interface AgentFactoryInterface {
     agentType: AgentType,
     worktreePath: string,
     port?: number,
-  ): Promise<IPty | unknown>;
-  cleanupAgent(agentType: AgentType, pty: IPty | unknown): Promise<void>;
+  ): Promise<IPty>;
+  cleanupAgent(agentType: AgentType, pty: IPty): Promise<void>;
   parseAgentOutput(
     agentType: AgentType,
     output: string,
@@ -118,19 +124,19 @@ export class AgentService {
     const agentInfo = await this.agentFactory.getAgentInfoById(agentType);
     if (!agentInfo?.isAvailable) {
       throw new Error(
-        `Agent '${agentType}' is not available: ${agentInfo?.statusMessage || "Unknown error"}`,
+        `Agent '${agentType}' is not available: ${agentInfo?.statusMessage ?? "Unknown error"}`,
       );
     }
 
     if (!agentInfo.isAuthenticated) {
       throw new Error(
-        `Agent '${agentType}' is not authenticated: ${agentInfo.statusMessage || "Authentication required"}`,
+        `Agent '${agentType}' is not authenticated: ${agentInfo.statusMessage ?? "Authentication required"}`,
       );
     }
 
     const instanceId = `${agentType}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const port = this.nextPort++;
-    const effectiveUserId = userId || worktree.userId || DEFAULT_USER_ID;
+    const effectiveUserId = userId ?? worktree.userId ?? DEFAULT_USER_ID;
 
     const instance: AgentInstance = {
       id: instanceId,
@@ -163,11 +169,11 @@ export class AgentService {
 
       return instance;
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       instance.status = "error";
-      instance.errorMessage =
-        error instanceof Error ? error.message : String(error);
+      instance.errorMessage = message;
       await this.storage.saveInstance(instance);
-      throw new Error(`Failed to start ${agentType} instance: ${error}`);
+      throw new Error(`Failed to start ${agentType} instance: ${message}`);
     }
   }
 
@@ -178,12 +184,11 @@ export class AgentService {
     console.log(
       `Starting ${instance.agentType} PTY in directory: ${worktree.path}`,
     );
-    const pty = await this.agentFactory.startAgent(
+    return this.agentFactory.startAgent(
       instance.agentType,
       worktree.path,
       instance.port,
     );
-    return pty as IPty;
   }
 
   private setupPtyHandlers(instance: AgentInstance, agentPty: IPty): void {
@@ -294,13 +299,13 @@ export class AgentService {
       console.log(`Successfully restarted instance ${instanceId}`);
       return instance;
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       instance.status = "error";
-      instance.errorMessage =
-        error instanceof Error ? error.message : String(error);
+      instance.errorMessage = message;
       await this.storage.saveInstance(instance);
       console.error(`Failed to restart instance ${instanceId}:`, error);
       throw new Error(
-        `Failed to restart ${instance.agentType} instance: ${error}`,
+        `Failed to restart ${instance.agentType} instance: ${message}`,
       );
     }
   }
@@ -448,7 +453,7 @@ export class AgentService {
         outputTokens = this.cumulativeTokens.output;
       } else {
         const dayActivity = instances.filter((instance) => {
-          const activityDate = new Date(instance.lastActivity || new Date());
+          const activityDate = new Date(instance.lastActivity ?? new Date());
           return activityDate.toDateString() === date.toDateString();
         }).length;
         const baseTokens = Math.max(100, dayActivity * 800 || 1200);
@@ -474,7 +479,7 @@ export class AgentService {
           agentType: instance.agentType,
           inputTokens: realUsage.input,
           outputTokens: realUsage.output,
-          lastActivity: instance.lastActivity || new Date(),
+          lastActivity: instance.lastActivity ?? new Date(),
         };
       } else {
         return {
@@ -483,7 +488,7 @@ export class AgentService {
           agentType: instance.agentType,
           inputTokens: 0,
           outputTokens: 0,
-          lastActivity: instance.lastActivity || new Date(),
+          lastActivity: instance.lastActivity ?? new Date(),
         };
       }
     });
@@ -510,13 +515,13 @@ export class AgentService {
     this.stopUsageCollection(instanceId);
 
     const interval = setInterval(() => {
-      this.collectInstanceUsage(instanceId);
+      void this.collectInstanceUsage(instanceId);
     }, 30000);
 
     this.usageCollectionIntervals.set(instanceId, interval);
 
     setTimeout(() => {
-      this.collectInstanceUsage(instanceId);
+      void this.collectInstanceUsage(instanceId);
     }, 5000);
   }
 
@@ -576,7 +581,7 @@ export class AgentService {
       );
 
       let output = "";
-      claude.stdout?.on("data", (data) => {
+      claude.stdout.on("data", (data: Buffer) => {
         const MAX_OUTPUT_LENGTH = 50000;
         output += data.toString();
         if (output.length > MAX_OUTPUT_LENGTH) {
@@ -584,13 +589,13 @@ export class AgentService {
         }
       });
 
-      claude.on("close", (code) => {
+      claude.on("close", (code: number | null) => {
         if (code === 0 && output.trim()) {
           this.parseAgentOutput(instanceId, "claude", output);
         }
       });
 
-      claude.on("error", (error) => {
+      claude.on("error", (error: Error) => {
         console.log(
           `Agent usage collection error for ${instanceId}:`,
           error.message,
@@ -617,7 +622,7 @@ export class AgentService {
 
       const { inputTokens = 0, outputTokens = 0, cost = 0 } = usage;
 
-      const existing = this.instanceTokenUsage.get(instanceId) || {
+      const existing = this.instanceTokenUsage.get(instanceId) ?? {
         input: 0,
         output: 0,
         cost: 0,

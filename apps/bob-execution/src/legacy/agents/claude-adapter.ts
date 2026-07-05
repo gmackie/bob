@@ -1,6 +1,25 @@
 import { BaseAgentAdapter } from './base-adapter';
 import type { AgentType } from '../types';
 
+interface ClaudeUsagePayload {
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
+}
+
+function isClaudeUsagePayload(value: unknown): value is ClaudeUsagePayload {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  if (!('usage' in value)) {
+    return true;
+  }
+  return typeof value.usage === 'object' && value.usage !== null;
+}
+
 export class ClaudeAdapter extends BaseAgentAdapter {
   readonly type: AgentType = 'claude';
   readonly name = 'Claude Code';
@@ -32,13 +51,17 @@ export class ClaudeAdapter extends BaseAgentAdapter {
       for (const line of lines) {
         const trimmed = line.trim();
         if (trimmed.startsWith('{') && trimmed.includes('usage')) {
-          const json = JSON.parse(trimmed);
+          const parsed: unknown = JSON.parse(trimmed);
+          if (!isClaudeUsagePayload(parsed) || !parsed.usage) {
+            continue;
+          }
 
-          if (json.usage && (json.usage.input_tokens || json.usage.output_tokens)) {
-            const inputTokens = json.usage.input_tokens || 0;
-            const outputTokens = json.usage.output_tokens || 0;
-            const cacheCreation = json.usage.cache_creation_input_tokens || 0;
-            const cacheRead = json.usage.cache_read_input_tokens || 0;
+          const { usage } = parsed;
+          if (usage.input_tokens ?? usage.output_tokens) {
+            const inputTokens = usage.input_tokens ?? 0;
+            const outputTokens = usage.output_tokens ?? 0;
+            const cacheCreation = usage.cache_creation_input_tokens ?? 0;
+            const cacheRead = usage.cache_read_input_tokens ?? 0;
 
             return {
               inputTokens,

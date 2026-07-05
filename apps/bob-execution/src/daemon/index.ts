@@ -9,8 +9,7 @@
  */
 import { spawn  } from "node:child_process";
 import type {ChildProcess} from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
 import WebSocket from "ws";
 import { computeCostUsd  } from "@gmacko/core/agent/model-pricing";
 import type {TokenCounts} from "@gmacko/core/agent/model-pricing";
@@ -80,6 +79,8 @@ interface ServerSessionAvailable {
     autonomyLevel?: string;
     metadata?: Record<string, unknown>;
   };
+  /** Legacy fallback persona shape sent by older gateway/API versions. */
+  personaMetadata?: Record<string, unknown> | null;
   planningContext?: {
     workspaceId?: string;
     projectId?: string;
@@ -94,12 +95,49 @@ interface ServerSessionAvailable {
   };
 }
 
-type ServerMessage =
+type KnownServerMessage =
   | { type: "hello_ok"; userId: string; heartbeatIntervalMs: number }
   | { type: "error"; code: string; message: string }
   | { type: "pong" }
-  | ServerSessionAvailable
-  | { type: string };
+  | ServerSessionAvailable;
+
+/** Any inbound gateway message: known variants, plus unrecognized ones we ignore. */
+type ServerMessage = KnownServerMessage | { type: string };
+
+/**
+ * Minimal runtime check for inbound gateway messages: only `type` is
+ * guaranteed to exist and be a string (the gateway's message protocol is
+ * internal/unpublished, so we don't have a shared schema to validate
+ * against). Downstream code in `handleMessage` further narrows per-variant
+ * fields via the `KnownServerMessage` discriminated union, falling back to
+ * the generic `{ type: string }` shape (handled by `default:`) for anything
+ * else the gateway might send.
+ */
+function isServerMessage(value: unknown): value is ServerMessage {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    typeof value.type === "string"
+  );
+}
+
+/**
+ * `msg.type` has already been checked against a specific literal by the
+ * caller's switch statement, but the `{ type: string }` catch-all member of
+ * `ServerMessage` prevents TypeScript's control-flow analysis from
+ * discriminating the union on that check alone. This narrows explicitly
+ * instead of falling back to `any`.
+ */
+function asKnownMessage<T extends KnownServerMessage["type"]>(
+  msg: ServerMessage,
+  type: T,
+): Extract<KnownServerMessage, { type: T }> {
+  if (msg.type !== type) {
+    throw new Error(`asKnownMessage: expected type "${type}", got "${msg.type}"`);
+  }
+  return msg as Extract<KnownServerMessage, { type: T }>;
+}
 
 // ---------------------------------------------------------------------------
 // State
@@ -131,15 +169,26 @@ function connect(): void {
     startHeartbeat();
   });
 
-  ws.on("message", (data) => {
-    const raw = data.toString();
-    let msg: ServerMessage;
+  ws.on("message", (data: WebSocket.RawData) => {
+    let raw: string;
+    if (Array.isArray(data)) {
+      raw = Buffer.concat(data).toString("utf8");
+    } else if (data instanceof ArrayBuffer) {
+      raw = Buffer.from(data).toString("utf8");
+    } else {
+      raw = data.toString("utf8");
+    }
+    let parsed: unknown;
     try {
-      msg = JSON.parse(raw);
+      parsed = JSON.parse(raw);
     } catch {
       return;
     }
-    handleMessage(msg);
+    if (!isServerMessage(parsed)) {
+      console.warn("[executor] Ignoring malformed gateway message:", raw);
+      return;
+    }
+    handleMessage(parsed);
   });
 
   ws.on("close", () => {
@@ -181,16 +230,20 @@ function cleanup(): void {
 
 function handleMessage(msg: ServerMessage): void {
   switch (msg.type) {
-    case "hello_ok":
-      console.log(`[executor] Authenticated as user ${(msg as any).userId}`);
+    case "hello_ok": {
+      const helloOk = asKnownMessage(msg, "hello_ok");
+      console.log(`[executor] Authenticated as user ${helloOk.userId}`);
       break;
+    }
 
-    case "error":
-      console.error(`[executor] Server error: ${(msg as any).code} - ${(msg as any).message}`);
+    case "error": {
+      const errorMsg = asKnownMessage(msg, "error");
+      console.error(`[executor] Server error: ${errorMsg.code} - ${errorMsg.message}`);
       break;
+    }
 
     case "session_available":
-      handleSessionAvailable(msg as ServerSessionAvailable);
+      void handleSessionAvailable(asKnownMessage(msg, "session_available"));
       break;
 
     case "pong":
@@ -232,7 +285,8 @@ async function handleSessionAvailable(session: ServerSessionAvailable): Promise<
     try {
       await gitCheckoutBranch(workDir, session.branch);
     } catch (err) {
-      console.warn(`[executor] Branch checkout failed: ${err}`);
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`[executor] Branch checkout failed: ${message}`);
     }
   }
 
@@ -311,13 +365,13 @@ function buildPrompt(session: ServerSessionAvailable): string {
       if (lc.workItem) {
         parts.push(`\nWork item: ${lc.workItem.identifier} - ${lc.workItem.title} (${lc.workItem.kind})`);
       }
-      if (lc.selectedRepoSources?.length) {
+      if (lc.selectedRepoSources.length) {
         parts.push(`\nRepo context:`);
         for (const src of lc.selectedRepoSources) {
           parts.push(`  - ${src.label} (${src.path}): ${src.detail}`);
         }
       }
-      if (lc.attachedFiles?.length) {
+      if (lc.attachedFiles.length) {
         parts.push(`\nAttached files:`);
         for (const f of lc.attachedFiles) {
           parts.push(`  - ${f.name} [${f.sizeLabel}]`);
@@ -368,8 +422,8 @@ function gitCheckoutBranch(workDir: string, branch: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn("git", ["checkout", "-B", branch], { cwd: workDir, stdio: "pipe" });
     let stderr = "";
-    child.stderr?.on("data", (d) => { stderr += d.toString(); });
-    child.on("close", (code) => {
+    child.stderr.on("data", (d: Buffer) => { stderr += d.toString(); });
+    child.on("close", (code: number | null) => {
       if (code === 0) resolve();
       else reject(new Error(`git checkout failed: ${stderr}`));
     });
@@ -406,7 +460,7 @@ function runAgent(session: ServerSessionAvailable, workDir: string, prompt: stri
 
     let output = "";
 
-    child.stdout?.on("data", (data: Buffer) => {
+    child.stdout.on("data", (data: Buffer) => {
       const chunk = data.toString();
       output += chunk;
       sendEvent(sessionId, "output_chunk", "agent", {
@@ -415,7 +469,7 @@ function runAgent(session: ServerSessionAvailable, workDir: string, prompt: stri
       });
     });
 
-    child.stderr?.on("data", (data: Buffer) => {
+    child.stderr.on("data", (data: Buffer) => {
       const chunk = data.toString();
       sendEvent(sessionId, "output_chunk", "agent", {
         data: chunk,
@@ -478,6 +532,32 @@ interface ParsedTokenUsage {
   model: string;
 }
 
+interface ClaudeResultUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+}
+
+interface ClaudeResultLine {
+  type: "result";
+  usage: ClaudeResultUsage;
+  total_cost_usd?: number;
+}
+
+function isClaudeResultLine(value: unknown): value is ClaudeResultLine {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  if (!("type" in value) || value.type !== "result") {
+    return false;
+  }
+  if (!("usage" in value) || typeof value.usage !== "object" || value.usage === null) {
+    return false;
+  }
+  return true;
+}
+
 function parseTokenUsage(output: string, personaModel?: string): ParsedTokenUsage {
   const defaults: ParsedTokenUsage = {
     inputTokens: 0,
@@ -491,26 +571,27 @@ function parseTokenUsage(output: string, personaModel?: string): ParsedTokenUsag
   try {
     const lines = output.split("\n");
     for (let i = lines.length - 1; i >= 0; i--) {
-      const trimmed = lines[i]!.trim();
-      if (!trimmed.startsWith("{")) continue;
-      const json = JSON.parse(trimmed);
-      if (json.type === "result" && json.usage) {
-        const tokens: TokenCounts = {
-          input: json.usage.input_tokens ?? 0,
-          output: json.usage.output_tokens ?? 0,
-          cacheRead: json.usage.cache_read_input_tokens ?? 0,
-          cacheCreation: json.usage.cache_creation_input_tokens ?? 0,
-        };
-        const model = personaModel ?? "claude-sonnet-4-6";
-        return {
-          inputTokens: tokens.input,
-          outputTokens: tokens.output,
-          cacheReadTokens: tokens.cacheRead,
-          cacheCreationTokens: tokens.cacheCreation,
-          costUsd: json.total_cost_usd ?? computeCostUsd(model, tokens),
-          model,
-        };
-      }
+      const trimmed = lines[i]?.trim();
+      if (!trimmed?.startsWith("{")) continue;
+      const parsed: unknown = JSON.parse(trimmed);
+      if (!isClaudeResultLine(parsed)) continue;
+
+      const { usage } = parsed;
+      const tokens: TokenCounts = {
+        input: usage.input_tokens ?? 0,
+        output: usage.output_tokens ?? 0,
+        cacheRead: usage.cache_read_input_tokens ?? 0,
+        cacheCreation: usage.cache_creation_input_tokens ?? 0,
+      };
+      const model = personaModel ?? "claude-sonnet-4-6";
+      return {
+        inputTokens: tokens.input,
+        outputTokens: tokens.output,
+        cacheReadTokens: tokens.cacheRead,
+        cacheCreationTokens: tokens.cacheCreation,
+        costUsd: parsed.total_cost_usd ?? computeCostUsd(model, tokens),
+        model,
+      };
     }
   } catch {
     // best-effort parsing
@@ -529,7 +610,7 @@ async function reportToBizPulse(
     | { apiUrl?: string; agentSlug?: string; startupSlug?: string }
     | undefined;
 
-  if (!bizpulse?.apiUrl || !bizpulse?.agentSlug) return;
+  if (!bizpulse?.apiUrl || !bizpulse.agentSlug) return;
 
   const costMicrocents = Math.round(tokenUsage.costUsd * 100_000_000);
 
@@ -585,7 +666,7 @@ function getPersonaConfig(session: ServerSessionAvailable): PersonaConfig {
     };
   }
 
-  const meta = (session as any).personaMetadata as Record<string, unknown> | null;
+  const meta = session.personaMetadata;
   if (!meta) return {};
 
   let systemPrompt = typeof meta.systemPrompt === "string" ? meta.systemPrompt : undefined;

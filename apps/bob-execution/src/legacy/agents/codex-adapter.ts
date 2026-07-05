@@ -1,5 +1,6 @@
 import { BaseAgentAdapter } from './base-adapter';
 import type { AgentType } from '../types';
+import { extractUsageFields, isGenericUsagePayload } from './usage-parsing';
 
 export class CodexAdapter extends BaseAgentAdapter {
   readonly type: AgentType = 'codex';
@@ -69,13 +70,18 @@ export class CodexAdapter extends BaseAgentAdapter {
 
         // Look for JSON usage data
         if (trimmed.startsWith('{') && trimmed.includes('usage')) {
-          const json = JSON.parse(trimmed);
-          if (json.usage && (json.usage.input_tokens || json.usage.output_tokens)) {
-            return {
-              inputTokens: json.usage.input_tokens || 0,
-              outputTokens: json.usage.output_tokens || 0,
-              cost: this.calculateCost(json.usage.input_tokens || 0, json.usage.output_tokens || 0)
-            };
+          const parsed: unknown = JSON.parse(trimmed);
+          if (isGenericUsagePayload(parsed)) {
+            const usage = extractUsageFields(parsed);
+            if (usage && (usage.input_tokens ?? usage.output_tokens)) {
+              const inputTokens = usage.input_tokens ?? 0;
+              const outputTokens = usage.output_tokens ?? 0;
+              return {
+                inputTokens,
+                outputTokens,
+                cost: this.calculateCost(inputTokens, outputTokens)
+              };
+            }
           }
         }
 

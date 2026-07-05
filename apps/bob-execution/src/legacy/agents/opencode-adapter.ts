@@ -1,5 +1,6 @@
 import { BaseAgentAdapter } from './base-adapter';
 import type { AgentType } from '../types';
+import { extractUsageFields, isGenericUsagePayload } from './usage-parsing';
 
 export class OpenCodeAdapter extends BaseAgentAdapter {
   readonly type: AgentType = 'opencode';
@@ -54,7 +55,7 @@ export class OpenCodeAdapter extends BaseAgentAdapter {
           statusMessage: 'OpenCode is available'
         };
       }
-    } catch (error) {
+    } catch {
       // If auth command fails, it might not require auth or we can't determine
       // Be lenient and allow it to run
       return {
@@ -74,14 +75,16 @@ export class OpenCodeAdapter extends BaseAgentAdapter {
 
         // Look for JSON usage data
         if (trimmed.startsWith('{') && (trimmed.includes('usage') || trimmed.includes('tokens'))) {
-          const json = JSON.parse(trimmed);
-          if (json.usage || json.tokens) {
-            const usage = json.usage || json.tokens;
-            return {
-              inputTokens: usage.input_tokens || usage.prompt_tokens || 0,
-              outputTokens: usage.output_tokens || usage.completion_tokens || 0,
-              cost: usage.cost || 0
-            };
+          const parsed: unknown = JSON.parse(trimmed);
+          if (isGenericUsagePayload(parsed)) {
+            const usage = extractUsageFields(parsed);
+            if (usage) {
+              return {
+                inputTokens: usage.input_tokens ?? usage.prompt_tokens ?? 0,
+                outputTokens: usage.output_tokens ?? usage.completion_tokens ?? 0,
+                cost: usage.cost ?? 0
+              };
+            }
           }
         }
       }
