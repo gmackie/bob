@@ -6,6 +6,7 @@
  */
 import { TRPCError } from "@trpc/server";
 import { eq, and } from "@bob/db";
+import type { Db } from "@bob/db/client";
 import {
   projects,
   workItems,
@@ -30,7 +31,7 @@ const ISSUE_PAGE = 100;
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-async function getLinearClient(db: any, workspaceId: string): Promise<LinearClient> {
+async function getLinearClient(db: Db, workspaceId: string): Promise<LinearClient> {
   const integration = await db
     .select()
     .from(workspaceIntegrations)
@@ -41,7 +42,7 @@ async function getLinearClient(db: any, workspaceId: string): Promise<LinearClie
         eq(workspaceIntegrations.enabled, true),
       ),
     )
-    .then((rows: any[]) => rows[0]);
+    .then((rows) => rows[0]);
 
   if (!integration?.apiKey) {
     throw new TRPCError({
@@ -53,7 +54,7 @@ async function getLinearClient(db: any, workspaceId: string): Promise<LinearClie
   return new LinearClient({ apiKey: integration.apiKey });
 }
 
-async function assertWorkspaceAccess(db: any, userId: string, workspaceId: string) {
+async function assertWorkspaceAccess(db: Db, userId: string, workspaceId: string) {
   const membership = await db.query.workspaceMembers.findFirst({
     where: and(
       eq(workspaceMembers.workspaceId, workspaceId),
@@ -79,10 +80,10 @@ export async function listLinearProjects(
   const client = await getLinearClient(ctx.db, input.workspaceId);
 
   const result = await client.projects({ first: 100 });
-  return result.nodes.map((project: any) => ({
+  return result.nodes.map((project) => ({
     id: project.id,
     name: project.name,
-    key: project.slugId ?? project.id.slice(0, 8),
+    key: project.slugId || project.id.slice(0, 8),
     state: project.state,
   }));
 }
@@ -119,7 +120,7 @@ export async function connectLinearProject(
           eq(workspaceIntegrations.provider, "linear"),
         ),
       )
-      .then((rows: any[]) => rows[0]);
+      .then((rows) => rows[0]);
 
     const result = await client.createProject({
       name: input.createName,
@@ -172,7 +173,7 @@ export async function syncLinearProjects(
   const owner = await ctx.db.query.workspaceMembers.findFirst({
     where: eq(workspaceMembers.workspaceId, input.workspaceId),
     columns: { userId: true },
-    orderBy: (m: any, { asc }: any) => [asc(m.joinedAt)],
+    orderBy: (m, { asc }) => [asc(m.joinedAt)],
   });
   if (!owner) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Workspace has no members" });
@@ -187,7 +188,7 @@ export async function syncLinearProjects(
 
   const projectResult = await client.projects({ first: PROJECT_PAGE });
   const linearProjects = projectResult.nodes;
-  const projectsTruncated = projectResult.pageInfo?.hasNextPage ?? false;
+  const projectsTruncated = projectResult.pageInfo.hasNextPage;
 
   for (const lp of linearProjects) {
     const { project, created } = await ensureLinearProject(ctx.db, {
@@ -203,7 +204,7 @@ export async function syncLinearProjects(
 
     try {
       const issuesConn = await lp.issues({ first: ISSUE_PAGE });
-      if (issuesConn.pageInfo?.hasNextPage) issuesTruncated = true;
+      if (issuesConn.pageInfo.hasNextPage) issuesTruncated = true;
 
       for (const issue of issuesConn.nodes) {
         const state = await issue.state;
@@ -224,7 +225,7 @@ export async function syncLinearProjects(
           workspaceId: input.workspaceId,
           projectId: project.id,
           kind: "task",
-          title: (issue.title ?? "Untitled").slice(0, 256),
+          title: (issue.title || "Untitled").slice(0, 256),
           description: issue.description ?? null,
           status: mapLinearStatusToBob(stateType),
           externalId: issue.id,
