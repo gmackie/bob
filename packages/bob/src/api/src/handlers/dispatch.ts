@@ -6,6 +6,7 @@
  */
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray, sql } from "@bob/db";
+import type { Db } from "@bob/db/client";
 import {
   chatConversations,
   dispatchBatches,
@@ -13,10 +14,8 @@ import {
   notifications,
   planDraftDependencies,
   planDrafts,
-  projects,
   pullRequests,
   taskRuns,
-  workItemArtifacts,
   workItems,
   workspaceMembers,
 } from "@bob/db/schema";
@@ -30,7 +29,7 @@ import type { HandlerContext } from "./context.js";
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-async function loadOwnedSession(db: any, userId: string, sessionId: string) {
+async function loadOwnedSession(db: Db, userId: string, sessionId: string) {
   const session = await db.query.chatConversations.findFirst({
     where: and(
       eq(chatConversations.id, sessionId),
@@ -46,7 +45,7 @@ async function loadOwnedSession(db: any, userId: string, sessionId: string) {
   return session;
 }
 
-async function loadOwnedBatch(db: any, userId: string, batchId: string) {
+async function loadOwnedBatch(db: Db, userId: string, batchId: string) {
   const batch = await db.query.dispatchBatches.findFirst({
     where: and(
       eq(dispatchBatches.id, batchId),
@@ -64,7 +63,7 @@ async function loadOwnedBatch(db: any, userId: string, batchId: string) {
   return batch;
 }
 
-async function loadOwnedDispatchItem(db: any, userId: string, itemId: string) {
+async function loadOwnedDispatchItem(db: Db, userId: string, itemId: string) {
   const item = await db.query.dispatchItems.findFirst({
     where: eq(dispatchItems.id, itemId),
     with: { batch: true },
@@ -81,7 +80,7 @@ async function loadOwnedDispatchItem(db: any, userId: string, itemId: string) {
 }
 
 async function updatePlanningTaskStatus(
-  database: any,
+  database: Db,
   taskId: string,
   status: string,
 ): Promise<void> {
@@ -91,8 +90,9 @@ async function updatePlanningTaskStatus(
       .set({ status })
       .where(eq(workItems.id, taskId));
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     console.error(
-      `[dispatch] Failed to update planning task ${taskId}: ${err}`,
+      `[dispatch] Failed to update planning task ${taskId}: ${message}`,
     );
   }
 }
@@ -102,7 +102,7 @@ async function updatePlanningTaskStatus(
  * dispatch item that has an associated pull request.
  */
 async function triggerCodeReview(
-  database: typeof import("@bob/db/client").db,
+  database: Db,
   item: {
     planningTaskId: string;
     planningTaskIdentifier: string;
@@ -285,7 +285,13 @@ export async function dispatchCreateBatch(
       : [];
 
   // Get workspaceId/projectId from first draft
-  const firstDraft = matchedDrafts[0]!;
+  const [firstDraft] = matchedDrafts;
+  if (!firstDraft) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "No task mappings match the committed drafts",
+    });
+  }
 
   // Create the dispatch batch
   const [batch] = await ctx.db
@@ -322,7 +328,15 @@ export async function dispatchCreateBatch(
 
   // Insert all items first (to get their IDs)
   const itemValues = matchedDrafts.map((draft, idx) => {
-    const task = taskMap.get(draft.id)!;
+    // matchedDrafts is filtered to draft.id in taskMap above, so this is
+    // always present — guard anyway rather than asserting.
+    const task = taskMap.get(draft.id);
+    if (!task) {
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: `No task mapping found for draft ${draft.id}`,
+      });
+    }
     return {
       batchId: batch.id,
       planningTaskId: task.taskId,
@@ -345,17 +359,29 @@ export async function dispatchCreateBatch(
     .values(itemValues)
     .returning();
 
+  // The insert is expected to return one row per input value, in order;
+  // this makes that assumption an explicit runtime check rather than
+  // paired `!` assertions on both arrays at every use below.
+  if (insertedItems.length !== matchedDrafts.length) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Dispatch item insert returned an unexpected row count",
+    });
+  }
+
   // Build draftId → dispatchItemId mapping
   for (let i = 0; i < matchedDrafts.length; i++) {
-    const draft = matchedDrafts[i]!;
-    const item = insertedItems[i]!;
+    const draft = matchedDrafts[i];
+    const item = insertedItems[i];
+    if (!draft || !item) continue;
     draftToItemId.set(draft.id, item.id);
   }
 
   // Update items that have dependencies
   for (let i = 0; i < matchedDrafts.length; i++) {
-    const draft = matchedDrafts[i]!;
-    const item = insertedItems[i]!;
+    const draft = matchedDrafts[i];
+    const item = insertedItems[i];
+    if (!draft || !item) continue;
     const draftDeps = depsMap.get(draft.id);
 
     if (draftDeps && draftDeps.size > 0) {
@@ -411,7 +437,7 @@ export async function dispatchGetBatch(
     },
   });
 
-  const items = rawItems.map(({ taskRun, ...item }: any) => ({
+  const items = rawItems.map(({ taskRun, ...item }) => ({
     ...item,
     sessionId: taskRun?.sessionId ?? null,
     branch: taskRun?.branch ?? null,
@@ -566,13 +592,12 @@ export async function dispatchCheckProgress(
 
   // Check running items for completion
   const runningItems = items.filter(
-    (i) => i.status === "running" && i.taskRunId,
+    (i): i is typeof i & { taskRunId: string } =>
+      i.status === "running" && Boolean(i.taskRunId),
   );
 
   if (runningItems.length > 0) {
-    const taskRunIds = runningItems
-      .map((i) => i.taskRunId!)
-      .filter(Boolean);
+    const taskRunIds = runningItems.map((i) => i.taskRunId);
 
     const runs =
       taskRunIds.length > 0
@@ -584,7 +609,7 @@ export async function dispatchCheckProgress(
     const runMap = new Map(runs.map((r) => [r.id, r]));
 
     for (const item of runningItems) {
-      const run = runMap.get(item.taskRunId!);
+      const run = runMap.get(item.taskRunId);
       if (!run) continue;
 
       if (run.status === "completed") {
@@ -707,7 +732,7 @@ export async function dispatchCheckProgress(
   );
 
   for (const item of blockedItems) {
-    const blockers = (item.blockedByItems!) ?? [];
+    const blockers = item.blockedByItems ?? [];
     const allDone = blockers.every((id) => completedItemIds.has(id));
     if (allDone) {
       await ctx.db
@@ -823,10 +848,15 @@ export async function dispatchCheckProgress(
     }
   }
 
-  // Return updated batch
-  const updatedBatch = await ctx.db.query.dispatchBatches.findFirst({
-    where: eq(dispatchBatches.id, input.batchId),
-  });
+  // Return updated batch. Falls back to the already-loaded `batch` (from
+  // loadOwnedBatch above) in the extremely unlikely case the batch row
+  // vanished between then and this re-read — the row is never deleted
+  // within this handler, so this is a defensive fallback, not the expected
+  // path, and avoids failing the whole progress check over a stale-read race.
+  const updatedBatch =
+    (await ctx.db.query.dispatchBatches.findFirst({
+      where: eq(dispatchBatches.id, input.batchId),
+    })) ?? batch;
 
   // Re-fetch items after pipeline advancement
   const pipelineItems = await ctx.db.query.dispatchItems.findMany({
@@ -834,7 +864,7 @@ export async function dispatchCheckProgress(
     orderBy: [dispatchItems.sortOrder],
   });
 
-  return { batch: updatedBatch!, items: pipelineItems };
+  return { batch: updatedBatch, items: pipelineItems };
 }
 
 export async function dispatchListBatches(
@@ -897,7 +927,7 @@ function formatWorkItemIdentifier(opts: {
   return opts.id.slice(0, 8);
 }
 
-async function getNextSequenceNumber(db: any, workspaceId: string): Promise<number> {
+async function getNextSequenceNumber(db: Db, workspaceId: string): Promise<number> {
   const [row] = await db
     .select({ max: sql<number>`coalesce(max(${workItems.sequenceNumber}), 0)` })
     .from(workItems)
@@ -954,7 +984,7 @@ export async function dispatchExecutionBatch(
       wiTitle = existing.title;
       wiDescription = wiDescription ?? existing.description ?? undefined;
       identifier = formatWorkItemIdentifier({
-        projectKey: (existing as any).project?.key ?? null,
+        projectKey: existing.project?.key ?? null,
         sequenceNumber: existing.sequenceNumber,
         id: existing.id,
       });
@@ -973,8 +1003,14 @@ export async function dispatchExecutionBatch(
           sequenceNumber: nextSeq++,
         })
         .returning();
-      wiId = newWi!.id;
-      identifier = newWi!.id.slice(0, 8);
+      if (!newWi) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to create work item",
+        });
+      }
+      wiId = newWi.id;
+      identifier = newWi.id.slice(0, 8);
     }
 
     const [session] = await ctx.db
@@ -991,6 +1027,13 @@ export async function dispatchExecutionBatch(
       })
       .returning();
 
+    if (!session) {
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Failed to create execution session",
+      });
+    }
+
     if (gatewayUrl && nudgeSecret) {
       try {
         await fetch(`${gatewayUrl}/internal/nudge`, {
@@ -1000,11 +1043,11 @@ export async function dispatchExecutionBatch(
             Authorization: `Bearer ${nudgeSecret}`,
           },
           body: JSON.stringify({
-            sessionId: session!.id,
+            sessionId: session.id,
             workspaceId: input.workspaceId,
             workingDirectory: "/home/bob/dev/gmacko-bob",
             agentType: input.agentType,
-            title: session!.title,
+            title: session.title,
             sessionType: "execution",
             description: wiDescription ?? undefined,
             identifier,
@@ -1016,7 +1059,7 @@ export async function dispatchExecutionBatch(
     }
 
     results.push({
-      sessionId: session!.id,
+      sessionId: session.id,
       workItemId: wiId,
       identifier,
       status: "pending",
