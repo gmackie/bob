@@ -37,7 +37,7 @@ function readOptionalStringField(value: unknown, field: string): string | null {
   return typeof raw === "string" ? raw : null;
 }
 
-interface DatabaseLike {
+export interface DatabaseLike {
   query: {
     chatConversations?: {
       findFirst: (args: unknown) => Promise<ChatConversationRow | undefined>;
