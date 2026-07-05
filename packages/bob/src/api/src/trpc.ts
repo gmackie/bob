@@ -9,7 +9,7 @@ import {
   resolveAuthBypassUserId,
   resolveAuthContext
 } from "@bob/auth";
-import type {ApiKeyAuth, ApiKeyPermission} from "@bob/auth";
+import type {ApiKeyPermission} from "@bob/auth";
 import type { AuthRuntimeBundle } from "@bob/auth/runtime";
 import { eq } from "@bob/db";
 import { db } from "@bob/db/client";
