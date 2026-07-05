@@ -6,6 +6,7 @@
  */
 import { TRPCError } from "@trpc/server";
 import { desc, eq, and } from "@bob/db";
+import type { Db } from "@bob/db/client";
 import {
   repositories,
   worktrees,
@@ -21,7 +22,7 @@ import type { HandlerContext } from "./context.js";
 // Shared helper
 // ---------------------------------------------------------------------------
 
-async function assertProjectAccess(db: any, userId: string, projectId: string) {
+async function assertProjectAccess(db: Db, userId: string, projectId: string) {
   const project = await db.query.projects.findFirst({
     where: eq(projects.id, projectId),
     columns: { id: true, workspaceId: true },

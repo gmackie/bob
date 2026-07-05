@@ -25,7 +25,11 @@ const removed = (): never => {
 // Handler functions
 // ---------------------------------------------------------------------------
 
+// Kept `async` on all four (no real await — the backing table is gone) since
+// rpc-handlers/post.ts wraps these via wrapHandler, which requires a
+// Promise-returning fn.
 export async function postAll(_ctx: PublicHandlerContext) {
+  await Promise.resolve();
   return [] as { id: string; title: string; content: string }[];
 }
 
@@ -33,6 +37,7 @@ export async function postById(
   _ctx: PublicHandlerContext,
   _input: { id: string },
 ) {
+  await Promise.resolve();
   return undefined as
     | { id: string; title: string; content: string }
     | undefined;
@@ -42,9 +47,11 @@ export async function postCreate(
   _ctx: HandlerContext,
   _input: { title: string; content: string },
 ) {
+  await Promise.resolve();
   return removed();
 }
 
 export async function postDelete(_ctx: HandlerContext, _input: string) {
+  await Promise.resolve();
   return removed();
 }

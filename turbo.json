@@ -32,6 +32,8 @@
     "CURSOR_API_KEY",
     "DEFAULT_AGENT_TYPE",
     "DOCKER_ENV",
+    "ELEVENLABS_AGENT_ID",
+    "ELEVENLABS_API_KEY",
     "FG_API_URL",
     "FORGEGRAPH_URL",
     "GATEWAY_URL",
@@ -41,7 +43,8 @@
     "MAX_CONCURRENT",
     "NUDGE_SHARED_SECRET",
     "PULSE_API_KEY",
-    "PULSE_API_URL"
+    "PULSE_API_URL",
+    "USER"
   ],
   "tasks": {
     "build": {

@@ -64,14 +64,17 @@ export async function terminalCreateDirectorySession(
   return {
     sessionId: crypto.randomUUID(),
     instanceId: input.instanceId,
-    path: instance.worktree?.path ?? "",
+    path: instance.worktree.path,
   };
 }
 
+// Kept `async` (no real await) since rpc-handlers/terminal.ts wraps this via
+// wrapHandler, which requires a Promise-returning fn.
 export async function terminalCreateSystemSession(
   _ctx: HandlerContext,
   input: { cwd?: string; initialCommand?: string },
 ) {
+  await Promise.resolve();
   return {
     sessionId: crypto.randomUUID(),
     cwd: input.cwd ?? process.env.HOME ?? "/",
@@ -97,9 +100,12 @@ export async function terminalListByInstance(
   return [];
 }
 
+// Kept `async` (no real await) since rpc-handlers/terminal.ts wraps this via
+// wrapHandler, which requires a Promise-returning fn.
 export async function terminalClose(
   _ctx: HandlerContext,
   _input: { sessionId: string },
 ) {
+  await Promise.resolve();
   return { success: true };
 }

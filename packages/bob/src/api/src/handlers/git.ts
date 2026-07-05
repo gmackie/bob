@@ -110,10 +110,14 @@ export async function gitPushAndCreatePr(
 
 // ── JJ (Jujutsu) handlers ────────────────────────────────────────────
 
+// JjClient's methods are all synchronous (they shell out and block), so
+// these handlers have no real await — kept `async` since rpc-handlers/git.ts
+// wraps them via wrapHandler, which requires a Promise-returning fn.
 export async function gitJjIsRepo(
   _ctx: HandlerContext,
   input: { path: string },
 ) {
+  await Promise.resolve();
   const jj = new JjClient(input.path);
   return jj.isJjRepo();
 }
@@ -122,6 +126,7 @@ export async function gitJjLog(
   _ctx: HandlerContext,
   input: { path: string; limit: number },
 ) {
+  await Promise.resolve();
   const jj = new JjClient(input.path);
   return jj.log(input.limit);
 }
@@ -130,6 +135,7 @@ export async function gitJjNew(
   _ctx: HandlerContext,
   input: { path: string; description?: string },
 ) {
+  await Promise.resolve();
   const jj = new JjClient(input.path);
   return jj.new(input.description);
 }
@@ -138,6 +144,7 @@ export async function gitJjDescribe(
   _ctx: HandlerContext,
   input: { path: string; description: string; revision?: string },
 ) {
+  await Promise.resolve();
   const jj = new JjClient(input.path);
   return jj.describe(input.description, input.revision);
 }
@@ -146,6 +153,7 @@ export async function gitJjSquash(
   _ctx: HandlerContext,
   input: { path: string },
 ) {
+  await Promise.resolve();
   const jj = new JjClient(input.path);
   return jj.squash();
 }
@@ -154,6 +162,7 @@ export async function gitJjDiff(
   _ctx: HandlerContext,
   input: { path: string; revision?: string },
 ) {
+  await Promise.resolve();
   const jj = new JjClient(input.path);
   return jj.diff(input.revision);
 }

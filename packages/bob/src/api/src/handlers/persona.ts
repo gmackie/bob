@@ -190,12 +190,21 @@ export async function personaSyncFromDirectory(
 
   for (const file of yamlFiles) {
     const content = await readFile(join(input.directory, file), "utf-8");
-    const parsed = yaml.load(content) as PersonaYaml;
-
-    if (!parsed?.slug || !parsed?.name || !parsed?.adapter) {
+    // yaml.load() returns unknown-shaped data (or undefined for an empty
+    // file) — this is untrusted external input, so it's narrowed with a
+    // real runtime check rather than cast straight to PersonaYaml.
+    const raw: unknown = yaml.load(content);
+    if (
+      typeof raw !== "object" ||
+      raw === null ||
+      typeof (raw as Record<string, unknown>).slug !== "string" ||
+      typeof (raw as Record<string, unknown>).name !== "string" ||
+      typeof (raw as Record<string, unknown>).adapter !== "string"
+    ) {
       console.warn(`[persona-sync] Skipping invalid YAML: ${file}`);
       continue;
     }
+    const parsed = raw as PersonaYaml;
 
     syncedSlugs.push(parsed.slug);
 
