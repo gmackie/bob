@@ -1,7 +1,7 @@
-import { Platform } from "react-native";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
+import { PermissionStatus } from "expo-notifications";
 
 import { integrations } from "@bob/config";
 
@@ -32,13 +32,14 @@ interface LocalNotificationScheduleOptions {
 }
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
+  handleNotification: () =>
+    Promise.resolve({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
 });
 
 export async function registerForPushNotifications(
@@ -56,20 +57,27 @@ export async function registerForPushNotifications(
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
 
-  if (existingStatus !== "granted") {
+  if (existingStatus !== PermissionStatus.GRANTED) {
     const { status } = await Notifications.requestPermissionsAsync();
     finalStatus = status;
   }
 
-  if (finalStatus !== "granted") {
+  if (finalStatus !== PermissionStatus.GRANTED) {
     console.warn("Push notification permission not granted");
     return null;
   }
 
+  const easExtra: unknown = Constants.expoConfig?.extra?.eas;
+  const extraProjectId =
+    typeof easExtra === "object" &&
+    easExtra !== null &&
+    "projectId" in easExtra &&
+    typeof easExtra.projectId === "string"
+      ? easExtra.projectId
+      : undefined;
+
   const projectId =
-    config?.projectId ??
-    Constants.expoConfig?.extra?.eas?.projectId ??
-    Constants.easConfig?.projectId;
+    config?.projectId ?? extraProjectId ?? Constants.easConfig?.projectId;
 
   if (!projectId) {
     console.error("No project ID found for push notifications");

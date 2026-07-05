@@ -1,15 +1,15 @@
 export const integrations = {
-  sentry: false,
-  posthog: false,
+  sentry: false as boolean,
+  posthog: false as boolean,
 
   // Payments - Web (default OFF)
-  stripe: false,
+  stripe: false as boolean,
 
   // Payments - Mobile (default OFF)
-  revenuecat: false,
+  revenuecat: false as boolean,
 
   // Push Notifications (default OFF)
-  notifications: false,
+  notifications: false as boolean,
 
   // Communication (default OFF)
   email: {
