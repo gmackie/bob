@@ -4,6 +4,7 @@
  *
  * Phase 7B-4D-beta Task 3.
  */
+import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import { and, count, eq, sql } from "@bob/db";
 import {
   browserCookies as _browserCookies,
@@ -15,12 +16,32 @@ import {
 // which resolves a different drizzle-orm peer-hash copy of 0.44.7 (better-sqlite3@11)
 // than @bob/api / @bob/db (better-sqlite3@12). Because PgColumn.config is `protected`,
 // these tables are nominally incompatible with this package's drizzle query builder
-// (ctx.db), and they are dropped from ctx.db.query's relational map. Re-brand them to
-// `any` locally so the builder accepts them. chatConversations comes from @bob/chat,
+// (ctx.db), and they are dropped from ctx.db.query's relational map. This is a
+// genuine nominal-typing gap between two structurally-identical module instances,
+// not an unknown shape, but there's no nameable "this instance's PgTable for a table
+// declared in the other instance" type to cast to directly — so table-position uses
+// (.insert/.from/.delete) go through the base PgTable type (via `unknown`), and
+// column-position uses (eq(), .groupBy(), etc.) go through these two small column-name
+// records built from the real schema in packages/bob/src/cookies/src/schema.ts, so
+// they stay type-checked instead of `any`. chatConversations comes from @bob/chat,
 // which shares @bob/api's instance, so it needs no shim. Root fix is to dedupe
-// drizzle-orm in the lockfile (reported, not changed here). Runtime is unaffected.
-const browserCookies = _browserCookies as any;
-const sessionCookieScopes = _sessionCookieScopes as any;
+// drizzle-orm in the lockfile (reported, not changed here). Runtime is unaffected —
+// same table, same columns, same SQL generated either way.
+interface BrowserCookiesColumns {
+  id: PgColumn;
+  userId: PgColumn;
+  domain: PgColumn;
+  name: PgColumn;
+  path: PgColumn;
+  source: PgColumn;
+  updatedAt: PgColumn;
+}
+interface SessionCookieScopesColumns {
+  sessionId: PgColumn;
+  domain: PgColumn;
+}
+const browserCookies = _browserCookies as unknown as PgTable & BrowserCookiesColumns;
+const sessionCookieScopes = _sessionCookieScopes as unknown as PgTable & SessionCookieScopesColumns;
 
 import {
   encryptCookieValue,
@@ -153,14 +174,23 @@ export async function cookiesGetForSession(
 ) {
   const domain = normalizeDomain(input.domain);
 
-  // Check domain is in scope for this session
-  // ctx.db.query lacks the cookie tables — see dual-instance note at imports.
-  const scope = await (ctx.db.query as any).sessionCookieScopes.findFirst({
-    where: and(
-      eq(sessionCookieScopes.sessionId, input.sessionId),
-      eq(sessionCookieScopes.domain, domain),
-    ),
-  });
+  // Check domain is in scope for this session. Uses the select() builder
+  // rather than ctx.db.query — the cookie tables are dropped from
+  // ctx.db.query's relational map (see dual-instance note at imports).
+  interface SessionCookieScopeRow {
+    sessionId: string;
+    domain: string;
+  }
+  const [scope] = (await ctx.db
+    .select()
+    .from(sessionCookieScopes)
+    .where(
+      and(
+        eq(sessionCookieScopes.sessionId, input.sessionId),
+        eq(sessionCookieScopes.domain, domain),
+      ),
+    )
+    .limit(1)) as unknown as SessionCookieScopeRow[];
 
   if (!scope) {
     return {
@@ -170,18 +200,33 @@ export async function cookiesGetForSession(
   }
 
   // Get cookies, filtering expired
-  // ctx.db.query lacks the cookie tables — see dual-instance note at imports.
-  const cookies = await (ctx.db.query as any).browserCookies.findMany({
-    where: and(
-      eq(browserCookies.userId, ctx.userId),
-      eq(browserCookies.domain, domain),
-    ),
-  });
+  interface BrowserCookieRow {
+    id: string;
+    name: string;
+    domain: string;
+    path: string;
+    expires: string | null;
+    secure: boolean;
+    httpOnly: boolean;
+    sameSite: "Strict" | "Lax" | "None";
+    valueCiphertext: string;
+    valueIv: string;
+    valueTag: string;
+  }
+  const cookies = (await ctx.db
+    .select()
+    .from(browserCookies)
+    .where(
+      and(
+        eq(browserCookies.userId, ctx.userId),
+        eq(browserCookies.domain, domain),
+      ),
+    )) as unknown as BrowserCookieRow[];
 
   const now = new Date();
   const decrypted = cookies
-    .filter((c: any) => !c.expires || new Date(c.expires) > now)
-    .map((c: any) => ({
+    .filter((c) => !c.expires || new Date(c.expires) > now)
+    .map((c) => ({
       name: c.name,
       value: decryptCookieValue(
         {
@@ -196,7 +241,7 @@ export async function cookiesGetForSession(
       expires: c.expires ? Math.floor(new Date(c.expires).getTime() / 1000) : -1,
       secure: c.secure,
       httpOnly: c.httpOnly,
-      sameSite: c.sameSite as "Strict" | "Lax" | "None",
+      sameSite: c.sameSite,
     }));
 
   return { cookies: decrypted };
