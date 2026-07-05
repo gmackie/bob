@@ -6,6 +6,7 @@
  */
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, sql } from "@bob/db";
+import type { Db } from "@bob/db/client";
 import { comments, projects, workItems, workspaceMembers } from "@bob/db/schema";
 
 import { resolvePlanningProvider } from "../services/integrations/planningProvider.js";
@@ -17,7 +18,7 @@ import type { HandlerContext } from "./context.js";
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-async function assertWorkspaceAccess(db: any, userId: string, workspaceId: string) {
+async function assertWorkspaceAccess(db: Db, userId: string, workspaceId: string) {
   const membership = await db.query.workspaceMembers.findFirst({
     where: and(
       eq(workspaceMembers.workspaceId, workspaceId),
@@ -31,7 +32,7 @@ async function assertWorkspaceAccess(db: any, userId: string, workspaceId: strin
   }
 }
 
-async function loadAccessibleProject(db: any, userId: string, projectId: string) {
+async function loadAccessibleProject(db: Db, userId: string, projectId: string) {
   const project = await db.query.projects.findFirst({
     where: eq(projects.id, projectId),
   });
@@ -47,7 +48,7 @@ async function loadAccessibleProject(db: any, userId: string, projectId: string)
   return project;
 }
 
-async function loadAccessibleWorkItem(db: any, userId: string, workItemId: string) {
+async function loadAccessibleWorkItem(db: Db, userId: string, workItemId: string) {
   const item = await db.query.workItems.findFirst({
     where: eq(workItems.id, workItemId),
   });
@@ -92,7 +93,7 @@ export async function planningListWorkspaces(
     },
     orderBy: desc(workspaceMembers.joinedAt),
   });
-  return rows.map((membership: any) => ({
+  return rows.map((membership) => ({
     id: membership.workspace.id,
     name: membership.workspace.name,
     slug: membership.workspace.slug,
@@ -114,11 +115,11 @@ export async function planningListProjects(
     where: eq(workItems.workspaceId, input.workspaceId),
   });
 
-  const result = projectRows.map((project: any) => {
+  const result = projectRows.map((project) => {
     const projectItems = items.filter(
-      (item: any) => item.projectId === project.id,
+      (item) => item.projectId === project.id,
     );
-    const latestItemDate = projectItems.reduce((latest: string | null, item: any) => {
+    const latestItemDate = projectItems.reduce<string | null>((latest, item) => {
       const d = item.updatedAt ?? item.createdAt;
       return d && (!latest || d > latest) ? d : latest;
     }, null);
@@ -132,7 +133,7 @@ export async function planningListProjects(
       },
       issueCount: projectItems.length,
       completedCount: projectItems.filter(
-        (item: any) => item.status === "done",
+        (item) => item.status === "done",
       ).length,
       _latestActivity: latestItemDate ?? project.updatedAt ?? project.createdAt,
     };
@@ -166,12 +167,12 @@ export async function planningGetProject(
       color: project.color ?? "#6366f1",
     },
     issueCount: items.length,
-    completedCount: items.filter((item: any) => item.status === "done").length,
+    completedCount: items.filter((item) => item.status === "done").length,
     inProgressCount: items.filter(
-      (item: any) =>
+      (item) =>
         item.status === "in_progress" || item.status === "in_review",
     ).length,
-    backlogCount: items.filter((item: any) => item.status === "backlog")
+    backlogCount: items.filter((item) => item.status === "backlog")
       .length,
   };
 }
@@ -219,27 +220,29 @@ export async function planningListTasks(
   });
 
   const filtered = search
-    ? items.filter((item: any) =>
+    ? items.filter((item) =>
         item.title.toLowerCase().includes(search.toLowerCase()),
       )
     : items;
 
   const projectIds = Array.from(
-    new Set(filtered.map((item: any) => item.projectId).filter(Boolean)),
-  ) as string[];
+    new Set(
+      filtered
+        .map((item) => item.projectId)
+        .filter((projectId): projectId is string => Boolean(projectId)),
+    ),
+  );
   const projectRows =
     projectIds.length > 0
       ? await ctx.db.query.projects.findMany({
           where: eq(projects.workspaceId, workspaceId),
         })
       : [];
-  const projectById = new Map(
-    projectRows.map((p: any) => [p.id, p]),
-  );
+  const projectById = new Map(projectRows.map((p) => [p.id, p]));
 
-  return filtered.map((item: any) => {
+  return filtered.map((item) => {
     const project = item.projectId
-      ? projectById.get(item.projectId) ?? null
+      ? (projectById.get(item.projectId) ?? null)
       : null;
     return {
       id: item.id,
@@ -339,15 +342,16 @@ export async function planningGetTaskByIdentifier(
 
   // Parse identifier like "PROJ-123"
   const match = /^([A-Z]+)-(\d+)$/.exec(input.identifier);
-  if (!match) {
+  const projectKey = match?.[1];
+  const seqStr = match?.[2];
+  if (!projectKey || !seqStr) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
   }
 
-  const [, projectKey, seqStr] = match;
-  const seqNum = parseInt(seqStr!, 10);
+  const seqNum = parseInt(seqStr, 10);
 
   const project = await ctx.db.query.projects.findFirst({
-    where: eq(projects.key, projectKey!),
+    where: eq(projects.key, projectKey),
   });
 
   if (!project) {
@@ -501,6 +505,10 @@ export async function planningUpdateTask(
     .where(eq(workItems.id, input.id))
     .returning();
 
+  if (!updated) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
+  }
+
   const identifier = formatWorkItemIdentifier({
     projectKey: project?.key ?? null,
     sequenceNumber: oldItem.sequenceNumber,
@@ -516,16 +524,16 @@ export async function planningUpdateTask(
       userId: ctx.userId,
       identifier,
       title: oldItem.title,
-    }).catch((err: any) =>
+    }).catch((err: unknown) =>
       console.error("[automation] task trigger failed:", err),
     );
   }
 
   return {
-    id: updated!.id,
+    id: updated.id,
     identifier,
-    title: updated!.title,
-    status: updated!.status,
+    title: updated.title,
+    status: updated.status,
     priority: "no_priority" as string,
   };
 }
@@ -547,10 +555,14 @@ export async function planningAddComment(
     })
     .returning();
 
+  if (!comment) {
+    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to create comment" });
+  }
+
   return {
-    id: comment!.id,
-    body: comment!.body,
-    createdAt: comment!.createdAt,
+    id: comment.id,
+    body: comment.body,
+    createdAt: comment.createdAt,
   };
 }
 
@@ -565,7 +577,7 @@ export async function planningListComments(
     orderBy: desc(comments.createdAt),
   });
 
-  return rows.map((c: any) => ({
+  return rows.map((c) => ({
     id: c.id,
     body: c.body,
     user: undefined as { id: string; name: string } | undefined,
@@ -599,21 +611,23 @@ export async function planningSearchTasks(
     .limit(input.limit ?? 20);
 
   const projectIds = Array.from(
-    new Set(items.map((item: any) => item.projectId).filter(Boolean)),
-  ) as string[];
+    new Set(
+      items
+        .map((item) => item.projectId)
+        .filter((projectId): projectId is string => Boolean(projectId)),
+    ),
+  );
   const projectRows =
     projectIds.length > 0
       ? await ctx.db.query.projects.findMany({
           where: eq(projects.workspaceId, input.workspaceId),
         })
       : [];
-  const projectById = new Map(
-    projectRows.map((p: any) => [p.id, p]),
-  );
+  const projectById = new Map(projectRows.map((p) => [p.id, p]));
 
-  return items.map((item: any) => {
+  return items.map((item) => {
     const project = item.projectId
-      ? projectById.get(item.projectId) ?? null
+      ? (projectById.get(item.projectId) ?? null)
       : null;
     return {
       id: item.id,
@@ -654,7 +668,7 @@ export async function planningListCycles(
  * rather than just `user.id`.
  */
 interface GetCurrentUserContext {
-  readonly db: any;
+  readonly db: Db;
   readonly userId: string;
   readonly session: {
     user: { id: string; email: string; name: string; image?: string | null };
@@ -665,6 +679,10 @@ export async function planningGetCurrentUser(
   ctx: GetCurrentUserContext,
   _input: void,
 ) {
+  // No DB/network access needed yet (session already carries the full user
+  // record) — kept `async` since callers (rpc-handlers/planning.ts) depend
+  // on a Promise-returning signature.
+  await Promise.resolve();
   const user = ctx.session.user;
   return {
     id: user.id,
@@ -692,6 +710,9 @@ export async function planningAgentReportProgress(
   _ctx: HandlerContext,
   input: { taskRunId: string; progress: string },
 ) {
+  // Stub (no persistence yet) — kept `async` for the caller's Promise-
+  // returning signature; see planningGetCurrentUser note above.
+  await Promise.resolve();
   return {
     id: input.taskRunId,
     status: "in_progress",
@@ -711,6 +732,7 @@ export async function planningAgentCompleteTask(
     markIssueDone?: boolean;
   },
 ) {
+  await Promise.resolve();
   return {
     id: input.taskRunId,
     status: "completed",
@@ -728,6 +750,7 @@ export async function planningAgentFailTask(
     returnToBacklog?: boolean;
   },
 ) {
+  await Promise.resolve();
   return {
     id: input.taskRunId,
     status: "failed",
@@ -758,6 +781,7 @@ export async function planningAgentEndSession(
   _ctx: HandlerContext,
   input: { sessionId: string },
 ) {
+  await Promise.resolve();
   return {
     id: input.sessionId,
     endedAt: new Date().toISOString(),
