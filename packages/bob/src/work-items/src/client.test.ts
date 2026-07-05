@@ -1,51 +1,45 @@
 import { describe, expect, it, vi } from "vitest";
 
-import * as workItemsModule from "./index";
+import { createWorkItemsClient } from "./index";
 
 const workspaceId = "11111111-1111-4111-8111-111111111111";
 
 describe("createWorkItemsClient", () => {
   it("exposes the full work-item REST method surface", () => {
-    const createWorkItemsClient = (workItemsModule as Record<string, unknown>)
-      .createWorkItemsClient;
-
-    expect(typeof createWorkItemsClient).toBe("function");
-
-    if (typeof createWorkItemsClient !== "function") {
-      return;
-    }
-
     const client = createWorkItemsClient({
       baseUrl: "https://bob.example.com",
       fetch: vi.fn(),
     });
 
-    expect(client).toMatchObject({
-      list: expect.any(Function),
-      get: expect.any(Function),
-      promoteToTask: expect.any(Function),
-      listComments: expect.any(Function),
-      createComment: expect.any(Function),
-      createArtifact: expect.any(Function),
-      listActivities: expect.any(Function),
-      listCurrentArtifacts: expect.any(Function),
-      listChildArtifactGroups: expect.any(Function),
-      listNotifications: expect.any(Function),
-      createNotification: expect.any(Function),
-      markNotificationAsRead: expect.any(Function),
-    });
+    // `expect.any(Function)` in a `toMatchObject` literal type-checks each
+    // property against `WorkItemsClient`'s real method signatures, but
+    // vitest's `expect.any()` helper is declared to return `any` (needed so
+    // it can partial-match arbitrary shapes) — every property assignment
+    // below would trip no-unsafe-assignment even though this is the
+    // standard, correct vitest idiom for "assert this is a function".
+    // Assert each method's typeof individually instead, which stays fully
+    // typed end to end.
+    const methodNames = [
+      "list",
+      "get",
+      "promoteToTask",
+      "listComments",
+      "createComment",
+      "createArtifact",
+      "listActivities",
+      "listCurrentArtifacts",
+      "listChildArtifactGroups",
+      "listNotifications",
+      "createNotification",
+      "markNotificationAsRead",
+    ] as const;
+
+    for (const methodName of methodNames) {
+      expect(typeof client[methodName]).toBe("function");
+    }
   });
 
   it("posts JSON to the list endpoint and merges caller headers", async () => {
-    const createWorkItemsClient = (workItemsModule as Record<string, unknown>)
-      .createWorkItemsClient;
-
-    expect(typeof createWorkItemsClient).toBe("function");
-
-    if (typeof createWorkItemsClient !== "function") {
-      return;
-    }
-
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify([
@@ -61,7 +55,7 @@ describe("createWorkItemsClient", () => {
     const client = createWorkItemsClient({
       baseUrl: "https://bob.example.com/",
       fetch: fetchMock,
-      getHeaders: async () => ({
+      getHeaders: () => ({
         cookie: "better-auth.session_token=session-token",
         "x-bob-client": "mobile",
       }),
@@ -97,15 +91,6 @@ describe("createWorkItemsClient", () => {
   });
 
   it("throws a structured error for non-2xx responses", async () => {
-    const createWorkItemsClient = (workItemsModule as Record<string, unknown>)
-      .createWorkItemsClient;
-
-    expect(typeof createWorkItemsClient).toBe("function");
-
-    if (typeof createWorkItemsClient !== "function") {
-      return;
-    }
-
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
@@ -124,6 +109,7 @@ describe("createWorkItemsClient", () => {
     await expect(
       client.list({
         workspaceId,
+        limit: 25,
       }),
     ).rejects.toMatchObject({
       name: "WorkItemsClientError",
