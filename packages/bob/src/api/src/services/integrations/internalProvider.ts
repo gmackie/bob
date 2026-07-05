@@ -1,4 +1,5 @@
 import { eq, and, desc } from "@bob/db";
+import type { Db } from "@bob/db/client";
 import { workItems, workItemArtifacts, taskRuns } from "@bob/db/schema";
 
 import type {
@@ -17,7 +18,7 @@ import type {
 import { PlanningProviderError } from "./planningProvider.js";
 
 export class InternalPlanningProvider implements PlanningProvider {
-  constructor(private db: any, private workspaceId: string, private userId?: string) {}
+  constructor(private db: Db, private workspaceId: string, private userId?: string) {}
 
   // ===========================================================================
   // CRUD (Tier 1)
@@ -49,7 +50,7 @@ export class InternalPlanningProvider implements PlanningProvider {
       .select()
       .from(workItems)
       .where(eq(workItems.id, externalId))
-      .then((rows: any[]) => rows[0]);
+      .then((rows) => rows[0]);
 
     if (!item) return null;
     return this.mapWorkItemToProviderTask(item);
@@ -60,7 +61,7 @@ export class InternalPlanningProvider implements PlanningProvider {
       .select()
       .from(workItems)
       .where(eq(workItems.id, identifier))
-      .then((rows: any[]) => rows[0]);
+      .then((rows) => rows[0]);
 
     if (!item) return null;
     return this.mapWorkItemToProviderTask(item);
@@ -88,7 +89,7 @@ export class InternalPlanningProvider implements PlanningProvider {
       .orderBy(desc(workItems.createdAt))
       .limit(filter.limit ?? 50);
 
-    return items.map((item: any) => this.mapWorkItemToProviderTask(item));
+    return items.map((item) => this.mapWorkItemToProviderTask(item));
   }
 
   async updateTask(externalId: string, updates: UpdateTaskInput): Promise<ProviderTask> {
@@ -109,7 +110,7 @@ export class InternalPlanningProvider implements PlanningProvider {
       .select()
       .from(workItems)
       .where(eq(workItems.id, externalId))
-      .then((rows: any[]) => rows[0]);
+      .then((rows) => rows[0]);
 
     if (!item) {
       throw new PlanningProviderError("Work item not found after update", "NOT_FOUND", false);
@@ -155,7 +156,7 @@ export class InternalPlanningProvider implements PlanningProvider {
 
     await this.db
       .update(workItems)
-      .set({ status: statusMap[status] ?? status })
+      .set({ status: statusMap[status] })
       .where(eq(workItems.id, externalId));
   }
 
@@ -165,7 +166,7 @@ export class InternalPlanningProvider implements PlanningProvider {
       taskRunId,
       producerType: "bob",
       producerId: taskRunId,
-      artifactType: artifact.type as any,
+      artifactType: artifact.type,
       artifactRole: artifact.role,
       url: artifact.url,
       title: artifact.title,
@@ -232,7 +233,7 @@ export class InternalPlanningProvider implements PlanningProvider {
       .select({ workItemId: taskRuns.workItemId })
       .from(taskRuns)
       .where(eq(taskRuns.id, taskRunId))
-      .then((rows: any[]) => rows[0]);
+      .then((rows) => rows[0]);
 
     if (!run?.workItemId) {
       throw new PlanningProviderError(
@@ -244,7 +245,7 @@ export class InternalPlanningProvider implements PlanningProvider {
     return run.workItemId;
   }
 
-  private mapWorkItemToProviderTask(item: any): ProviderTask {
+  private mapWorkItemToProviderTask(item: typeof workItems.$inferSelect): ProviderTask {
     return {
       externalId: item.id,
       identifier: item.id,
