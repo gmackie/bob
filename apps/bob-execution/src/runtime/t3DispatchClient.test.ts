@@ -31,7 +31,7 @@ describe("t3 dispatch client", () => {
       "T3CODE_MODEL",
       "T3CODE_RUNTIME_MODE",
     ]) {
-      delete (globalThis as any)[key];
+      delete (globalThis as Record<string, unknown>)[key];
       delete process.env[key];
     }
   });
@@ -105,6 +105,11 @@ describe("t3 dispatch client", () => {
       },
     });
 
+    // `message.text` is checked separately with a plain string assertion
+    // (rather than `expect.stringContaining(...)` inside this
+    // `toMatchObject`) -- vitest's asymmetric matchers are declared to
+    // return `any`, which trips no-unsafe-member-access when the object
+    // literal is checked against `command`'s real inferred type.
     expect(command).toMatchObject({
       type: "thread.turn.start",
       commandId: "command-id",
@@ -115,7 +120,6 @@ describe("t3 dispatch client", () => {
       message: {
         messageId: "message-id",
         role: "user",
-        text: expect.stringContaining("ENG-42: Replace Bob runner"),
         attachments: [],
       },
       modelSelection: {
@@ -131,13 +135,14 @@ describe("t3 dispatch client", () => {
         runSetupScript: false,
       },
     });
+    expect(command.message.text).toContain("ENG-42: Replace Bob runner");
   });
 
   it("posts commands to the t3code orchestration endpoint", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ sequence: 7 }),
-      text: async () => "ok",
+      json: () => Promise.resolve({ sequence: 7 }),
+      text: () => Promise.resolve("ok"),
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -191,12 +196,12 @@ describe("t3 dispatch client", () => {
   it("requires t3code server, project, and model config", () => {
     expect(getT3DispatchRuntimeConfig()).toBeNull();
 
-    (globalThis as any).T3CODE_SERVER_URL = "https://t3.example.com";
-    (globalThis as any).T3CODE_PROJECT_ID = "t3-project-1";
-    (globalThis as any).T3CODE_MODEL_INSTANCE_ID = "codex";
-    (globalThis as any).T3CODE_MODEL = "gpt-5";
-    (globalThis as any).T3CODE_AUTH_TOKEN = "token-1";
-    (globalThis as any).T3CODE_RUNTIME_MODE = "auto-accept-edits";
+    (globalThis as Record<string, unknown>).T3CODE_SERVER_URL = "https://t3.example.com";
+    (globalThis as Record<string, unknown>).T3CODE_PROJECT_ID = "t3-project-1";
+    (globalThis as Record<string, unknown>).T3CODE_MODEL_INSTANCE_ID = "codex";
+    (globalThis as Record<string, unknown>).T3CODE_MODEL = "gpt-5";
+    (globalThis as Record<string, unknown>).T3CODE_AUTH_TOKEN = "token-1";
+    (globalThis as Record<string, unknown>).T3CODE_RUNTIME_MODE = "auto-accept-edits";
 
     expect(getT3DispatchRuntimeConfig()).toEqual({
       serverUrl: "https://t3.example.com",

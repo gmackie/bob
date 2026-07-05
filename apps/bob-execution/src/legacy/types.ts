@@ -1,3 +1,5 @@
+import type { IPty } from "node-pty";
+
 export interface Repository {
   id: string;
   userId?: string;
@@ -78,7 +80,7 @@ export interface AgentAdapter {
   checkAuthentication(): Promise<{ isAuthenticated: boolean; authenticationStatus?: string; statusMessage?: string }>;
 
   // Start the agent process
-  startProcess(worktreePath: string, port?: number): Promise<any>; // ChildProcess or IPty
+  startProcess(worktreePath: string, port?: number): Promise<IPty>;
 
   // Get process spawn arguments
   getSpawnArgs(options?: { interactive?: boolean; port?: number }): { command: string; args: string[]; env?: Record<string, string> };
@@ -87,5 +89,5 @@ export interface AgentAdapter {
   parseOutput?(output: string): { inputTokens?: number; outputTokens?: number; cost?: number } | null;
 
   // Agent-specific cleanup
-  cleanup?(process: any): Promise<void>;
+  cleanup?(process: IPty): Promise<void>;
 }

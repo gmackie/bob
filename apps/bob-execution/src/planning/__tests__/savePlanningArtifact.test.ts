@@ -1,11 +1,23 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-const findFirstMock = vi.fn();
-const insertValuesMock = vi.fn();
-const insertReturningMock = vi.fn();
-const updateSetMock = vi.fn();
-const updateWhereMock = vi.fn();
-const updateReturningMock = vi.fn();
+// Local stand-in for the repo's mobile-app assertDefined() helper (not
+// available to this package): asserts a value is defined, used where a
+// mock's call has just been made unconditionally right before, but
+// noUncheckedIndexedAccess still types `.mock.calls[n]` as possibly
+// undefined.
+function assertDefined<T>(value: T | undefined): T {
+  if (value === undefined) {
+    throw new Error("Expected value to be defined");
+  }
+  return value;
+}
+
+const findFirstMock = vi.fn<(...args: unknown[]) => Promise<unknown>>();
+const insertValuesMock = vi.fn<(...args: unknown[]) => unknown>();
+const insertReturningMock = vi.fn<() => Promise<unknown[]>>();
+const updateSetMock = vi.fn<(...args: unknown[]) => unknown>();
+const updateWhereMock = vi.fn<(...args: unknown[]) => unknown>();
+const updateReturningMock = vi.fn<() => Promise<unknown[]>>();
 
 vi.mock("@bob/db/client", () => ({
   db: {
@@ -84,7 +96,7 @@ describe("savePlanningArtifact", () => {
     expect(findFirstMock).toHaveBeenCalledOnce();
     expect(insertValuesMock).toHaveBeenCalledOnce();
 
-    const insertedValues = insertValuesMock.mock.calls[0]![0];
+    const insertedValues = assertDefined(insertValuesMock.mock.calls[0])[0];
     expect(insertedValues).toMatchObject({
       workItemId: "wi-456",
       sessionId: "sess-123",
@@ -141,7 +153,7 @@ describe("savePlanningArtifact", () => {
     await savePlanningArtifact(baseInput);
 
     const firstProducerId =
-      (findFirstMock.mock.calls[0]![0] as Record<string, unknown>);
+      (assertDefined(findFirstMock.mock.calls[0])[0] as Record<string, unknown>);
 
     vi.clearAllMocks();
     findFirstMock.mockResolvedValue(null);
@@ -150,7 +162,7 @@ describe("savePlanningArtifact", () => {
     await savePlanningArtifact(baseInput);
 
     const secondProducerId =
-      (findFirstMock.mock.calls[0]![0] as Record<string, unknown>);
+      (assertDefined(findFirstMock.mock.calls[0])[0] as Record<string, unknown>);
 
     // The where clause should be identical for the same inputs
     expect(firstProducerId).toEqual(secondProducerId);

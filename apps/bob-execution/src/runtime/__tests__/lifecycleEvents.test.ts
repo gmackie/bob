@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildLifecycleEvent   } from "../lifecycleEvents";
-import type {LifecycleEventType, RunPhase} from "../lifecycleEvents";
+import { buildLifecycleEvent } from "../lifecycleEvents";
 
 describe("lifecycleEvents", () => {
   it("builds a valid event object", () => {

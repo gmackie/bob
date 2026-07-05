@@ -18,17 +18,22 @@ import {
   getT3DispatchRuntimeConfig,
 } from "./t3DispatchClient.js";
 
-function getGatewayUrl() {
-  return (globalThis as any).GATEWAY_URL ?? process.env.GATEWAY_URL ?? "http://localhost:3002";
+function readGlobalString(key: string): string | undefined {
+  const value = (globalThis as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function getGatewayUrl(): string {
+  return readGlobalString("GATEWAY_URL") ?? process.env.GATEWAY_URL ?? "http://localhost:3002";
 }
 
 function getNudgeSecret(): string | undefined {
-  return (globalThis as any).NUDGE_SHARED_SECRET ?? process.env.NUDGE_SHARED_SECRET;
+  return readGlobalString("NUDGE_SHARED_SECRET") ?? process.env.NUDGE_SHARED_SECRET;
 }
 
 function getExecutionBackend(): "gateway" | "t3code" {
   const backend =
-    (globalThis as any).BOB_EXECUTION_BACKEND ?? process.env.BOB_EXECUTION_BACKEND;
+    readGlobalString("BOB_EXECUTION_BACKEND") ?? process.env.BOB_EXECUTION_BACKEND;
   return backend === "t3code" ? "t3code" : "gateway";
 }
 

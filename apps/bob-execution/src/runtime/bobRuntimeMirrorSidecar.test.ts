@@ -69,20 +69,20 @@ describe("bob runtime mirror sidecar", () => {
   it("increments next_seq numerically even when pg returns bigint fields as strings", async () => {
     const queries: { text: string; values: unknown[] | undefined }[] = [];
     const client = {
-      async query(text: string, values?: unknown[]) {
+      query(text: string, values?: unknown[]) {
         queries.push({ text, values });
         if (text.includes("select id, session_id from task_runs where id = $1")) {
-          return {
+          return Promise.resolve({
             rows: [
               {
                 id: "56911254-58ba-487a-a86d-e431c41e65bb",
                 session_id: "0485c6c6-cafb-468b-a878-4e7bdfc183ec",
               },
             ],
-          };
+          });
         }
         if (text.includes("select id, user_id, next_seq from chat_conversations")) {
-          return {
+          return Promise.resolve({
             rows: [
               {
                 id: "0485c6c6-cafb-468b-a878-4e7bdfc183ec",
@@ -90,16 +90,18 @@ describe("bob runtime mirror sidecar", () => {
                 next_seq: "41",
               },
             ],
-          };
+          });
         }
-        return { rows: [] };
+        return Promise.resolve({ rows: [] });
       },
-      release() {},
+      release() {
+        // no-op: test double doesn't hold a real connection to release
+      },
     };
 
     const pool: SqlPoolLike = {
-      async connect() {
-        return client as unknown as SqlClientLike;
+      connect() {
+        return Promise.resolve(client as unknown as SqlClientLike);
       },
     };
 
@@ -133,14 +135,19 @@ describe("bob runtime mirror sidecar", () => {
       text: "update chat_conversations set next_seq = $2 where id = $1",
       values: ["0485c6c6-cafb-468b-a878-4e7bdfc183ec", 42],
     });
-    expect(queries).toContainEqual(
-      expect.objectContaining({
-        text: expect.stringContaining("insert into session_events"),
-        values: expect.arrayContaining([
-          "0485c6c6-cafb-468b-a878-4e7bdfc183ec",
-          41,
-        ]),
-      }),
+    // Asserted individually (rather than via
+    // `toContainEqual(expect.objectContaining({ ... expect.stringContaining
+    // ... }))`) because vitest's asymmetric matchers are declared to return
+    // `any`, which trips no-unsafe-assignment when matched against this
+    // query log's real `{ text: string; values: unknown[] | undefined }[]`
+    // element type.
+    const insertSessionEvent = queries.find((entry) =>
+      entry.text.includes("insert into session_events"),
     );
+    expect(insertSessionEvent).toBeDefined();
+    expect(insertSessionEvent?.values).toContain(
+      "0485c6c6-cafb-468b-a878-4e7bdfc183ec",
+    );
+    expect(insertSessionEvent?.values).toContain(41);
   });
 });

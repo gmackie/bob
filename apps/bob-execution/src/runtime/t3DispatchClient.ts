@@ -16,7 +16,7 @@ export interface T3DispatchRuntimeConfig extends T3DispatchConfig {
 }
 
 function readRuntimeValue(key: string): string | undefined {
-  const globalValue = (globalThis as any)[key];
+  const globalValue: unknown = (globalThis as Record<string, unknown>)[key];
   if (typeof globalValue === "string" && globalValue.trim()) {
     return globalValue.trim();
   }
@@ -77,10 +77,13 @@ function defaultMakeId(prefix: "command" | "thread" | "message") {
 }
 
 function buildInitialPrompt(task: PlanningTask): string {
+  const trimmedDescription = task.description?.trim();
   return [
     `${task.identifier}: ${task.title}`,
     "",
-    task.description?.trim() || "No description provided.",
+    trimmedDescription && trimmedDescription.length > 0
+      ? trimmedDescription
+      : "No description provided.",
   ].join("\n");
 }
 

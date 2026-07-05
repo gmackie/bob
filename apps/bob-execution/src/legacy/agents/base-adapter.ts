@@ -32,46 +32,50 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
     }
   }
 
-  async checkAuthentication(): Promise<{
+  checkAuthentication(): Promise<{
     isAuthenticated: boolean;
     authenticationStatus?: string;
     statusMessage?: string;
   }> {
     // Default implementation - override in specific adapters if they have auth
-    return {
+    return Promise.resolve({
       isAuthenticated: true,
       authenticationStatus: "Not required",
       statusMessage: "No authentication required",
-    };
+    });
   }
 
   async startProcess(worktreePath: string, port?: number): Promise<IPty> {
     const { args, env } = this.getSpawnArgs({ interactive: true, port });
     const resolvedCommand = getAgentCommand(this.type);
 
-    return new Promise(async (resolve, reject) => {
-      console.log(
-        `Starting ${this.name} PTY in directory: ${worktreePath} using ${resolvedCommand}`,
-      );
+    console.log(
+      `Starting ${this.name} PTY in directory: ${worktreePath} using ${resolvedCommand}`,
+    );
 
-      const ptyProcess = spawnPty(resolvedCommand, args, {
-        cwd: worktreePath,
-        cols: 120,
-        rows: 40,
-        env: {
-          ...process.env,
-          ...env,
-        },
-      });
+    const ptyProcess = spawnPty(resolvedCommand, args, {
+      cwd: worktreePath,
+      cols: 120,
+      rows: 40,
+      env: {
+        ...process.env,
+        ...env,
+      },
+    });
 
-      // Give the PTY a moment to fully initialize before the agent starts
-      // This prevents cursor position query errors during startup
-      await new Promise((r) => setTimeout(r, 500));
+    // Give the PTY a moment to fully initialize before the agent starts.
+    // This prevents cursor position query errors during startup. Awaited
+    // here (before the Promise executor below) rather than inside it -- an
+    // async Promise executor can swallow rejections from code that runs
+    // after the first `await`, since the executor's own returned promise is
+    // discarded by `new Promise(...)`.
+    await new Promise((r) => setTimeout(r, 500));
 
-      // Pre-warm the terminal by sending a cursor position response
-      // This helps tools like Codex that query terminal capabilities immediately
-      ptyProcess.write("\x1b[1;1R");
+    // Pre-warm the terminal by sending a cursor position response
+    // This helps tools like Codex that query terminal capabilities immediately
+    ptyProcess.write("\x1b[1;1R");
 
+    return new Promise((resolve, reject) => {
       let spawned = false;
       let output = "";
 
@@ -139,17 +143,16 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
   };
 
   parseOutput?(
-    output: string,
+    _output: string,
   ): { inputTokens?: number; outputTokens?: number; cost?: number } | null {
     // Default implementation - no output parsing
     return null;
   }
 
-  async cleanup?(process: any): Promise<void> {
+  cleanup?(process: IPty): Promise<void> {
     // Default implementation - just kill the process
-    if (process && typeof process.kill === "function") {
-      process.kill();
-    }
+    process.kill();
+    return Promise.resolve();
   }
 
   // Helper methods for subclasses
@@ -176,7 +179,7 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
       });
 
       child.on("close", (code: number | null) => {
-        resolve({ stdout, stderr, code: code || 0 });
+        resolve({ stdout, stderr, code: code ?? 0 });
       });
 
       child.on("error", (error: Error) => {
@@ -209,7 +212,7 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
     return output.split("\n")[0]?.trim();
   }
 
-  protected isReadyOutput(data: string, fullOutput: string): boolean {
+  protected isReadyOutput(data: string, _fullOutput: string): boolean {
     // Common patterns that indicate the agent is outputting something
     return (
       data.includes(this.name.toLowerCase()) ||

@@ -1,3 +1,5 @@
+import type { IPty } from 'node-pty';
+
 import type { AgentAdapter, AgentType, AgentInfo } from '../types';
 import { ClaudeAdapter } from './claude-adapter';
 import { CodexAdapter } from './codex-adapter';
@@ -32,7 +34,7 @@ export class AgentFactory {
    * Get an agent adapter by type
    */
   getAdapter(type: AgentType): AgentAdapter | null {
-    return this.adapters.get(type) || null;
+    return this.adapters.get(type) ?? null;
   }
 
   /**
@@ -168,7 +170,7 @@ export class AgentFactory {
   /**
    * Start an agent process for a specific worktree
    */
-  async startAgent(type: AgentType, worktreePath: string, port?: number): Promise<any> {
+  async startAgent(type: AgentType, worktreePath: string, port?: number): Promise<IPty> {
     const adapter = this.getAdapter(type);
     if (!adapter) {
       throw new Error(`Agent type '${type}' is not supported`);
@@ -203,13 +205,11 @@ export class AgentFactory {
   /**
    * Clean up an agent process
    */
-  async cleanupAgent(type: AgentType, process: any): Promise<void> {
+  async cleanupAgent(type: AgentType, process: IPty): Promise<void> {
     const adapter = this.getAdapter(type);
     if (!adapter?.cleanup) {
       // Default cleanup
-      if (process && typeof process.kill === 'function') {
-        process.kill();
-      }
+      process.kill();
       return;
     }
 

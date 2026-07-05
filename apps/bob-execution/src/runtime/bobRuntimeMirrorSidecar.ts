@@ -316,8 +316,10 @@ export async function startBobRuntimeMirrorSidecarFromEnv() {
   const bypassToken = process.env.BOB_AUTH_BYPASS_TOKEN?.trim();
   const bypassUserId = process.env.BOB_AUTH_BYPASS_USER_ID?.trim();
   const databaseUrl = process.env.DATABASE_URL?.trim();
-  const host = process.env.BOB_RUNTIME_MIRROR_HOST?.trim() || "127.0.0.1";
-  const port = Number(process.env.BOB_RUNTIME_MIRROR_PORT || "3301");
+  const trimmedHost = process.env.BOB_RUNTIME_MIRROR_HOST?.trim();
+  const host = trimmedHost && trimmedHost.length > 0 ? trimmedHost : "127.0.0.1";
+  const trimmedPort = process.env.BOB_RUNTIME_MIRROR_PORT?.trim();
+  const port = Number(trimmedPort && trimmedPort.length > 0 ? trimmedPort : "3301");
 
   if (!bypassToken) {
     throw new Error("BOB_AUTH_BYPASS_TOKEN is required");
@@ -346,9 +348,17 @@ export async function startBobRuntimeMirrorSidecarFromEnv() {
     },
   });
 
-  const server = createServer(async (req, res) => {
-    const response = await sidecar.handle(await toRequest(req));
-    await writeNodeResponse(res, response);
+  const server = createServer((req, res) => {
+    (async () => {
+      const response = await sidecar.handle(await toRequest(req));
+      await writeNodeResponse(res, response);
+    })().catch((error: unknown) => {
+      console.error("[bob-runtime-mirror-sidecar] request handler failed:", error);
+      if (!res.headersSent) {
+        res.statusCode = 500;
+      }
+      res.end();
+    });
   });
 
   await new Promise<void>((resolve) => {
@@ -363,7 +373,7 @@ export async function startBobRuntimeMirrorSidecarFromEnv() {
 
 async function toRequest(req: IncomingMessage) {
   const chunks: Buffer[] = [];
-  for await (const chunk of req) {
+  for await (const chunk of req as AsyncIterable<Buffer | string>) {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   }
 

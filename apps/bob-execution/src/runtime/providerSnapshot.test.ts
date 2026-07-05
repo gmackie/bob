@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const selectRows: unknown[][] = [];
-const fetchMock = vi.fn();
+const fetchMock = vi.fn<typeof fetch>();
 
 vi.mock("@bob/db", () => ({
   and: vi.fn((...args: unknown[]) => args),
@@ -61,21 +61,22 @@ describe("snapshotTaskFromProvider", () => {
 
     fetchMock.mockResolvedValue({
       ok: true,
-      json: async () => ({
-        data: {
-          issue: {
-            id: "issue-1",
-            title: "Fix dispatch",
-            identifier: "ENG-42",
-            description: "Description",
-            url: "https://linear.app/gmac/issue/ENG-42/fix-dispatch",
-            priority: 2,
-            assignee: { id: "user-1" },
-            labels: { nodes: [{ name: "bug" }] },
+      json: () =>
+        Promise.resolve({
+          data: {
+            issue: {
+              id: "issue-1",
+              title: "Fix dispatch",
+              identifier: "ENG-42",
+              description: "Description",
+              url: "https://linear.app/gmac/issue/ENG-42/fix-dispatch",
+              priority: 2,
+              assignee: { id: "user-1" },
+              labels: { nodes: [{ name: "bug" }] },
+            },
           },
-        },
-      }),
-    });
+        }),
+    } as unknown as Response);
 
     const result = await snapshotTaskFromProvider({
       id: "work-item-1",
@@ -95,7 +96,10 @@ describe("snapshotTaskFromProvider", () => {
       "https://api.linear.app/graphql",
       expect.any(Object),
     );
-    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string).variables).toEqual({
+    const requestBody: unknown = JSON.parse(
+      fetchMock.mock.calls[0]?.[1]?.body as string,
+    );
+    expect((requestBody as { variables: unknown }).variables).toEqual({
       id: "issue-1",
     });
     expect(result.snapshot?.url).toBe(
