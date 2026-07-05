@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import type { Db } from "@bob/db/client";
+
 import {
   ensureUserMembershipForOwnedWorkspaces,
   workspaceCreate,
@@ -15,22 +17,24 @@ import type { HandlerContext } from "../context";
  * UI-created workspaces (e.g. hetzner-bob).
  */
 
+type InsertValues = Record<string, unknown>;
+
 interface Insert {
   table: string;
-  values: any;
+  values: InsertValues;
 }
 
 /** Minimal chainable mock of the drizzle db used by workspaceCreate. */
 function makeDb(opts: { existingTenantId?: string | null } = {}) {
   const inserts: Insert[] = [];
 
-  const insert = (table: { _name?: string } | any) => {
+  const insert = (_table: unknown) => {
     // drizzle pgTable objects expose their SQL name on a symbol; tests can't
     // read that reliably, so infer the table by insert order + shape instead.
-    const record: Insert = { table: "", values: undefined };
+    const record: Insert = { table: "", values: {} };
     inserts.push(record);
     const chain = {
-      values(v: any) {
+      values(v: InsertValues) {
         record.values = v;
         // Tag table by the shape of the values for assertion convenience.
         if ("slug" in v && "plan" in v) record.table = "tenants";
@@ -44,11 +48,12 @@ function makeDb(opts: { existingTenantId?: string | null } = {}) {
       onConflictDoNothing() {
         return chain;
       },
-      async returning() {
-        if (record.table === "tenants") return [{ id: "tenant-new" }];
+      returning() {
+        if (record.table === "tenants")
+          return Promise.resolve([{ id: "tenant-new" }]);
         if (record.table === "workspaces")
-          return [{ id: "ws-1", ...record.values }];
-        return [{ id: `${record.table}-1`, ...record.values }];
+          return Promise.resolve([{ id: "ws-1", ...record.values }]);
+        return Promise.resolve([{ id: `${record.table}-1`, ...record.values }]);
       },
     };
     return chain;
@@ -57,10 +62,12 @@ function makeDb(opts: { existingTenantId?: string | null } = {}) {
   const db = {
     query: {
       tenantMembers: {
-        async findFirst() {
-          return opts.existingTenantId
-            ? { tenantId: opts.existingTenantId }
-            : undefined;
+        findFirst() {
+          return Promise.resolve(
+            opts.existingTenantId
+              ? { tenantId: opts.existingTenantId }
+              : undefined,
+          );
         },
       },
     },
@@ -78,12 +85,12 @@ describe("workspaceCreate", () => {
 
     const ws = await workspaceCreate(ctx, { name: "Hetzner Bob", slug: "hetzner-bob" });
 
-    expect(ws!.tenantId).toBe("tenant-new");
+    expect(ws.tenantId).toBe("tenant-new");
 
-    const wsInsert = (db.__inserts).find((i) => i.table === "workspaces");
+    const wsInsert = db.__inserts.find((i) => i.table === "workspaces");
     expect(wsInsert?.values.tenantId).toBe("tenant-new");
     // Tenant + membership were created.
-    expect((db.__inserts).some((i) => i.table === "tenants")).toBe(true);
+    expect(db.__inserts.some((i) => i.table === "tenants")).toBe(true);
   });
 
   it("reuses the user's existing tenant", async () => {
@@ -92,9 +99,9 @@ describe("workspaceCreate", () => {
 
     const ws = await workspaceCreate(ctx, { name: "W", slug: "w" });
 
-    expect(ws!.tenantId).toBe("tenant-existing");
+    expect(ws.tenantId).toBe("tenant-existing");
     // No new tenant row should be inserted when one already exists.
-    expect((db.__inserts).some((i) => i.table === "tenants")).toBe(false);
+    expect(db.__inserts.some((i) => i.table === "tenants")).toBe(false);
   });
 });
 
@@ -109,8 +116,8 @@ function makeBypassMembershipDb(opts: {
   const db = {
     query: {
       workspaces: {
-        async findMany() {
-          return [
+        findMany() {
+          return Promise.resolve([
             {
               id: "workspace-owned",
               ownerUserId: "default-user",
@@ -119,52 +126,55 @@ function makeBypassMembershipDb(opts: {
                   ? opts.workspaceTenantId
                   : "tenant-prod",
             },
-          ];
+          ]);
         },
       },
       tenantMembers: {
-        async findFirst() {
-          if (opts.workspaceTenantId === null) return { tenantId: "tenant-new" };
-          return opts.existingTenantMember ? { id: "tenant-member-1" } : null;
+        findFirst() {
+          if (opts.workspaceTenantId === null)
+            return Promise.resolve({ tenantId: "tenant-new" });
+          return Promise.resolve(
+            opts.existingTenantMember ? { id: "tenant-member-1" } : null,
+          );
         },
       },
       workspaceMembers: {
-        async findFirst() {
-          return opts.existingWorkspaceMember
-            ? { id: "workspace-member-1" }
-            : null;
+        findFirst() {
+          return Promise.resolve(
+            opts.existingWorkspaceMember ? { id: "workspace-member-1" } : null,
+          );
         },
       },
     },
-    insert(table: { _name?: string } | any) {
-      const record: Insert = { table: "", values: undefined };
+    insert(_table: unknown) {
+      const record: Insert = { table: "", values: {} };
       inserts.push(record);
       return {
-        values(v: any) {
+        values(v: InsertValues) {
           record.values = v;
           if ("tenantId" in v && "role" in v && !("workspaceId" in v))
             record.table = "tenantMembers";
           else if ("workspaceId" in v && "role" in v)
             record.table = "workspaceMembers";
           return {
-            async returning() {
-              return [{ id: `${record.table}-new`, ...v }];
+            returning() {
+              return Promise.resolve([{ id: `${record.table}-new`, ...v }]);
             },
           };
         },
       };
     },
-    update(table: { _name?: string } | any) {
-      const record: Insert = { table: "workspaces", values: undefined };
+    update(_table: unknown) {
+      const record: Insert = { table: "workspaces", values: {} };
       updates.push(record);
       return {
-        set(v: any) {
+        set(v: InsertValues) {
           record.values = v;
           return {
             where() {
               return {
-                async returning() {
-                  return [{ id: "workspace-owned", ...v }];
+                returning() {
+                  return Promise.resolve([{ id: "workspace-owned", ...v }]);
                 },
               };
             },
@@ -183,7 +193,7 @@ describe("ensureUserMembershipForOwnedWorkspaces", () => {
   it("adds tenant and workspace membership for the bypass user's owned workspace", async () => {
     const db = makeBypassMembershipDb({});
 
-    await ensureUserMembershipForOwnedWorkspaces(db, "default-user");
+    await ensureUserMembershipForOwnedWorkspaces(db as unknown as Db, "default-user");
 
     expect(db.__inserts).toEqual([
       {
@@ -211,7 +221,7 @@ describe("ensureUserMembershipForOwnedWorkspaces", () => {
       existingWorkspaceMember: true,
     });
 
-    await ensureUserMembershipForOwnedWorkspaces(db, "default-user");
+    await ensureUserMembershipForOwnedWorkspaces(db as unknown as Db, "default-user");
 
     expect(db.__inserts).toEqual([]);
   });
@@ -219,7 +229,7 @@ describe("ensureUserMembershipForOwnedWorkspaces", () => {
   it("attaches tenantless owned workspaces to the bypass user's tenant", async () => {
     const db = makeBypassMembershipDb({ workspaceTenantId: null });
 
-    await ensureUserMembershipForOwnedWorkspaces(db, "default-user");
+    await ensureUserMembershipForOwnedWorkspaces(db as unknown as Db, "default-user");
 
     expect(db.__updates).toEqual([
       {

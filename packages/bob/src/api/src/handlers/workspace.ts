@@ -6,6 +6,7 @@
  */
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq } from "@bob/db";
+import type { Db } from "@bob/db/client";
 import type {
   workspaceMemberRole} from "@bob/db/schema";
 import {
@@ -32,7 +33,7 @@ import type { HandlerContext } from "./context.js";
  * Returns the tenant id, or null if it genuinely couldn't be resolved.
  */
 export async function ensureTenantForUser(
-  db: any,
+  db: Db,
   userId: string,
 ): Promise<string | null> {
   const existing = await db.query.tenantMembers.findFirst({
@@ -68,7 +69,7 @@ export async function ensureTenantForUser(
 }
 
 async function ensureTenantMembership(
-  db: any,
+  db: Db,
   userId: string,
   tenantId: string,
 ): Promise<void> {
@@ -89,7 +90,7 @@ async function ensureTenantMembership(
 }
 
 async function ensureWorkspaceMembership(
-  db: any,
+  db: Db,
   userId: string,
   workspaceId: string,
 ): Promise<void> {
@@ -110,7 +111,7 @@ async function ensureWorkspaceMembership(
 }
 
 export async function ensureUserMembershipForOwnedWorkspaces(
-  db: any,
+  db: Db,
   userId: string,
 ): Promise<void> {
   const ownedWorkspaces = await db.query.workspaces.findMany({
@@ -173,10 +174,17 @@ export async function workspaceCreate(
     })
     .returning();
 
+  if (!workspace) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to create workspace",
+    });
+  }
+
   await ctx.db
     .insert(workspaceMembers)
     .values({
-      workspaceId: workspace!.id,
+      workspaceId: workspace.id,
       userId: ctx.userId,
       role: "owner" satisfies (typeof workspaceMemberRole)[number],
     })
