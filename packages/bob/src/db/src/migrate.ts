@@ -87,6 +87,14 @@ function loadMigrations(dir: string = MIGRATIONS_DIR): MigrationFile[] {
  * pg.Client does NOT have `exec`, but its `query(sql)` without params happily
  * runs multi-statement SQL, so we fall back to that when `exec` is absent.
  */
+/**
+ * No-op logger. Use as `log: noop` to silence {@link applyMigrations} output
+ * (e.g. in tests) without tripping `no-empty-function` on an inline arrow.
+ */
+export function noop(): void {
+  // Intentionally empty: named no-op silences the logger param.
+}
+
 export interface MigrationClient {
   query<R = unknown>(
     sql: string,

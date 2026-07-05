@@ -9,7 +9,11 @@
     "POSTHOG_HOST",
     "POSTHOG_KEY",
     "SENTRY_DSN",
-    "EXPO_PUBLIC_*"
+    "EXPO_PUBLIC_*",
+    "DATABASE_URL",
+    "BOB_DB_DRIVER",
+    "BOB_DB_PGLITE_DIR",
+    "BOB_DB_MIGRATIONS_DIR"
   ],
   "tasks": {
     "build": {
