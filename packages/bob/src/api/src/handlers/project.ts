@@ -6,6 +6,7 @@
  */
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq } from "@bob/db";
+import type { Db } from "@bob/db/client";
 import {
   discoveredDirs,
   projects,
@@ -23,7 +24,7 @@ import type { HandlerContext } from "./context.js";
 // Shared helper
 // ---------------------------------------------------------------------------
 
-async function assertWorkspaceAccess(db: any, userId: string, workspaceId: string) {
+async function assertWorkspaceAccess(db: Db, userId: string, workspaceId: string) {
   const membership = await db.query.workspaceMembers.findFirst({
     where: and(
       eq(workspaceMembers.workspaceId, workspaceId),
@@ -37,7 +38,7 @@ async function assertWorkspaceAccess(db: any, userId: string, workspaceId: strin
   }
 }
 
-function mapLinkedRepository(repository: any) {
+function mapLinkedRepository(repository: typeof repositories.$inferSelect | null | undefined) {
   if (!repository) return null;
 
   return {
@@ -108,16 +109,23 @@ export async function projectCreate(
     })
     .returning();
 
+  if (!project) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to create project",
+    });
+  }
+
   await notifyWorkspaceEvent({
     type: "project_sync_changed",
     workspaceId: input.workspaceId,
-    entityId: project!.id,
+    entityId: project.id,
     payload: {
       changed: ["project"],
     },
   });
 
-  return project!;
+  return project;
 }
 
 export async function projectList(
@@ -141,12 +149,12 @@ export async function projectList(
     ),
   });
 
-  const result = projectRows.map((project: any) => {
-    const projectItems = items.filter((item: any) => item.projectId === project.id);
+  const result = projectRows.map((project) => {
+    const projectItems = items.filter((item) => item.projectId === project.id);
     const linkedRepository = repositoryRows.find(
-      (repo: any) => repo.planningProjectId === project.id,
+      (repo) => repo.planningProjectId === project.id,
     );
-    const latestItemDate = projectItems.reduce((latest: string | null, item: any) => {
+    const latestItemDate = projectItems.reduce<string | null>((latest, item) => {
       const d = item.updatedAt ?? item.createdAt;
       return d && (!latest || d > latest) ? d : latest;
     }, null);
@@ -154,11 +162,11 @@ export async function projectList(
     return {
       project,
       counts: {
-        issues: projectItems.filter((item: any) => item.kind === "issue").length,
-        tasks: projectItems.filter((item: any) => item.kind === "task").length,
-        epics: projectItems.filter((item: any) => item.kind === "epic").length,
+        issues: projectItems.filter((item) => item.kind === "issue").length,
+        tasks: projectItems.filter((item) => item.kind === "task").length,
+        epics: projectItems.filter((item) => item.kind === "epic").length,
         active: projectItems.filter(
-          (item: any) =>
+          (item) =>
             item.status === "in_progress" || item.status === "in_review",
         ).length,
       },
@@ -218,11 +226,11 @@ export async function projectGet(
     linkedRepository: mapLinkedRepository(linkedRepository),
     capabilities,
     counts: {
-      issues: items.filter((item: any) => item.kind === "issue").length,
-      tasks: items.filter((item: any) => item.kind === "task").length,
-      epics: items.filter((item: any) => item.kind === "epic").length,
+      issues: items.filter((item) => item.kind === "issue").length,
+      tasks: items.filter((item) => item.kind === "task").length,
+      epics: items.filter((item) => item.kind === "epic").length,
       active: items.filter(
-        (item: any) =>
+        (item) =>
           item.status === "in_progress" || item.status === "in_review",
       ).length,
     },
@@ -258,7 +266,7 @@ export async function projectUpdateAutomationSettings(
   await assertWorkspaceAccess(ctx.db, ctx.userId, existing.workspaceId);
 
   const merged = {
-    ...(existing.automationSettings ?? {}),
+    ...existing.automationSettings,
     ...input.settings,
   };
 
@@ -267,6 +275,13 @@ export async function projectUpdateAutomationSettings(
     .set({ automationSettings: merged })
     .where(eq(projects.id, input.projectId))
     .returning();
+
+  if (!updated) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to update project automation settings",
+    });
+  }
 
   await notifyWorkspaceEvent({
     type: "project_sync_changed",
@@ -277,7 +292,7 @@ export async function projectUpdateAutomationSettings(
     },
   });
 
-  return updated!;
+  return updated;
 }
 
 export async function projectSetDefaultAgent(
@@ -301,7 +316,14 @@ export async function projectSetDefaultAgent(
     .where(eq(projects.id, input.projectId))
     .returning();
 
-  return updated!;
+  if (!updated) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to update project default agent",
+    });
+  }
+
+  return updated;
 }
 
 export async function projectDiscovery(
@@ -345,13 +367,11 @@ export async function projectDiscovery(
 
   for (const repo of allRepos) {
     const project = allProjects.find(
-      (p: any) =>
+      (p) =>
         p.id === repo.planningProjectId ||
         (p.forgeGraphAppId &&
           p.repoUrl &&
-          repo.remoteUrl &&
-          p.repoUrl.replace(/\.git$/, "") ===
-            repo.remoteUrl.replace(/\.git$/, "")),
+          p.repoUrl.replace(/\.git$/, "") === repo.remoteUrl?.replace(/\.git$/, "")),
     );
 
     if (project) {
@@ -363,9 +383,9 @@ export async function projectDiscovery(
 
   return {
     forgeAvailable: workspace?.forgeAvailable ?? false,
-    linked: linked.map((r: any) => ({
+    linked: linked.map((r) => ({
       ...r,
-      project: allProjects.find((p: any) => p.id === r.planningProjectId),
+      project: allProjects.find((p) => p.id === r.planningProjectId),
     })),
     forgeReady: [] as typeof allRepos,
     gitOnly,
