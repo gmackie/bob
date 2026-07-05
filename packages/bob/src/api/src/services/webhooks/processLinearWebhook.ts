@@ -12,10 +12,8 @@ import {
 
 import {
   markDeliveryFailed,
-  markDeliveryProcessed
-
+  markDeliveryProcessed,
 } from "./processWebhook";
-import type {WebhookProvider} from "./processWebhook";
 import { ensureLinearProject } from "../linear/ensureLinearProject";
 import { traceWebhook } from "@bob/telemetry";
 
@@ -49,7 +47,12 @@ interface LinearIssuePayload {
       name: string;
       email: string;
     } | null;
-    labels: { id: string; name: string }[];
+    // Optional: this interface describes an unchecked cast of the raw
+    // webhook JSON body (see `payload as unknown as LinearIssuePayload`
+    // below), so fields Linear's docs mark as always-present can still be
+    // missing on malformed/older deliveries — kept optional rather than
+    // asserted, with real `?? []` fallbacks at each read site.
+    labels?: { id: string; name: string }[];
     creatorId?: string;
   };
   url: string;
@@ -111,9 +114,8 @@ async function resolveOrCreateProjectForIssue(
       ),
     );
 
-  if (integrations.length === 0) return null;
-
-  const integration = integrations[0]!;
+  const [integration] = integrations;
+  if (!integration) return null;
 
   // Use the Linear project when present; otherwise a synthetic per-team id so
   // project-less issues land in one stable "team" project instead of scattering.
@@ -161,7 +163,11 @@ async function findOrCreateWorkItem(
     })
     .returning();
 
-  return created!;
+  if (!created) {
+    throw new Error("Failed to create work item for Linear issue");
+  }
+
+  return created;
 }
 
 async function handleIssueCreate(payload: LinearIssuePayload): Promise<void> {
@@ -186,7 +192,7 @@ async function handleIssueCreate(payload: LinearIssuePayload): Promise<void> {
   const owner = await db.query.workspaceMembers.findFirst({
     where: eq(workspaceMembers.workspaceId, project.workspaceId),
     columns: { userId: true },
-    orderBy: (m: any, { asc }: any) => [asc(m.joinedAt)],
+    orderBy: (m, { asc }) => [asc(m.joinedAt)],
   });
 
   if (!owner) {
@@ -205,10 +211,7 @@ async function handleIssueCreate(payload: LinearIssuePayload): Promise<void> {
     owner.userId,
   );
 
-  const automationSettings = (project.automationSettings ?? {}) as {
-    autoDispatch?: boolean;
-  };
-  if (!automationSettings.autoDispatch) {
+  if (!project.automationSettings.autoDispatch) {
     console.log(
       `[linear-webhook] ${payload.data.identifier} tracked for project ${project.key} (autoDispatch off — not dispatched)`,
     );
@@ -227,8 +230,12 @@ async function handleIssueCreate(payload: LinearIssuePayload): Promise<void> {
     })
     .returning();
 
+  if (!batch) {
+    throw new Error("Failed to create dispatch batch for Linear issue");
+  }
+
   await db.insert(dispatchItems).values({
-    batchId: batch!.id,
+    batchId: batch.id,
     planningTaskId: workItem.id,
     planningTaskIdentifier: payload.data.identifier,
     title: payload.data.title,
@@ -254,7 +261,7 @@ async function handleIssueCreate(payload: LinearIssuePayload): Promise<void> {
         workspaceId: project.workspaceId,
         projectId: project.id,
         assigneeId: null,
-        labels: payload.data.labels.map((l) => l.name),
+        labels: (payload.data.labels ?? []).map((l) => l.name),
         priority: payload.data.priority,
       },
       { agentType: "opencode" },
@@ -263,12 +270,12 @@ async function handleIssueCreate(payload: LinearIssuePayload): Promise<void> {
     await db
       .update(dispatchItems)
       .set({ status: "running", taskRunId: result.taskRunId })
-      .where(eq(dispatchItems.batchId, batch!.id));
+      .where(eq(dispatchItems.batchId, batch.id));
 
     await db
       .update(dispatchBatches)
       .set({ status: "running" })
-      .where(eq(dispatchBatches.id, batch!.id));
+      .where(eq(dispatchBatches.id, batch.id));
 
     console.log(
       `[linear-webhook] Dispatched ${payload.data.identifier} → taskRun ${result.taskRunId}`,
@@ -282,12 +289,12 @@ async function handleIssueCreate(payload: LinearIssuePayload): Promise<void> {
     await db
       .update(dispatchItems)
       .set({ status: "failed" })
-      .where(eq(dispatchItems.batchId, batch!.id));
+      .where(eq(dispatchItems.batchId, batch.id));
 
     await db
       .update(dispatchBatches)
       .set({ status: "failed", failedTasks: 1 })
-      .where(eq(dispatchBatches.id, batch!.id));
+      .where(eq(dispatchBatches.id, batch.id));
   }
 }
 
@@ -308,7 +315,7 @@ async function handleIssueUpdate(payload: LinearIssuePayload): Promise<void> {
     const owner = await db.query.workspaceMembers.findFirst({
       where: eq(workspaceMembers.workspaceId, match.project.workspaceId),
       columns: { userId: true },
-      orderBy: (m: any, { asc }: any) => [asc(m.joinedAt)],
+      orderBy: (m, { asc }) => [asc(m.joinedAt)],
     });
     if (!owner) return;
     await findOrCreateWorkItem(
@@ -363,12 +370,17 @@ export async function processLinearWebhook(
 ): Promise<void> {
   return traceWebhook("linear", eventType, async () => {
     try {
-      const linearPayload = payload as unknown as LinearIssuePayload;
-
-      if (linearPayload.type !== "Issue") {
+      // `payload` is genuinely untyped webhook JSON — check the discriminant
+      // field as `unknown` before committing to the full LinearIssuePayload
+      // shape, so this is a real runtime filter (non-Issue payloads exist,
+      // e.g. Comment/Project webhooks) rather than a statically-impossible
+      // comparison against a cast-in literal type.
+      if ((payload as { type?: unknown }).type !== "Issue") {
         await markDeliveryProcessed(deliveryId);
         return;
       }
+
+      const linearPayload = payload as unknown as LinearIssuePayload;
 
       switch (linearPayload.action) {
         case "create":
