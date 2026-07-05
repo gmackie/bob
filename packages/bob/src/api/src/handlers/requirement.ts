@@ -6,6 +6,7 @@
  */
 import { TRPCError } from "@trpc/server";
 import { and, asc, eq } from "@bob/db";
+import type { Db } from "@bob/db/client";
 import { requirements, workItems, workspaceMembers } from "@bob/db/schema";
 
 import type { HandlerContext } from "./context.js";
@@ -14,13 +15,13 @@ import type { HandlerContext } from "./context.js";
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-async function assertWorkItemAccess(db: any, userId: string, workItemId: string) {
+async function assertWorkItemAccess(db: Db, userId: string, workItemId: string) {
   const workItem = await db.query.workItems.findFirst({
     where: eq(workItems.id, workItemId),
     columns: { workspaceId: true },
   });
 
-  if (!workItem) {
+  if (!workItem?.workspaceId) {
     throw new TRPCError({ code: "NOT_FOUND" });
   }
 
@@ -38,7 +39,7 @@ async function assertWorkItemAccess(db: any, userId: string, workItemId: string)
 }
 
 async function assertRequirementAccess(
-  db: any,
+  db: Db,
   userId: string,
   requirementId: string,
 ) {
