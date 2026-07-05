@@ -8,6 +8,7 @@ import { randomBytes, createHash } from "node:crypto";
 
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray } from "@bob/db";
+import type { Db } from "@bob/db/client";
 import {
   agentRuns,
   apiKeys,
@@ -33,7 +34,7 @@ const UUID_RE =
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-async function ensureTenant(db: any, userId: string) {
+async function ensureTenant(db: Db, userId: string) {
   const membership = await db.query.tenantMembers.findFirst({
     where: eq(tenantMembers.userId, userId),
     with: { tenant: true },
@@ -66,7 +67,7 @@ async function ensureTenant(db: any, userId: string) {
   });
 }
 
-async function listAuthorizedTenantIds(db: any, userId: string) {
+async function listAuthorizedTenantIds(db: Db, userId: string) {
   const memberships = await db.query.tenantMembers.findMany({
     where: eq(tenantMembers.userId, userId),
     columns: { tenantId: true },
@@ -78,7 +79,7 @@ async function listAuthorizedTenantIds(db: any, userId: string) {
 }
 
 async function assertTenantAccess(
-  db: any,
+  db: Db,
   userId: string,
   tenantId: string | null | undefined,
 ) {
@@ -142,7 +143,7 @@ async function notifyAgentRunChanged(input: {
 }
 
 async function processDiscoveredRepos(
-  db: any,
+  db: Db,
   userId: string,
   workspaceId: string,
   tenantId: string,
