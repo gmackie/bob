@@ -1,5 +1,13 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { createTRPCContext } from "../../trpc.js";
+
+// The real tRPC context type — the mock db/authApi below are structurally
+// close-enough fakes that only implement the query/insert/update surface
+// these handlers actually call, cast through `unknown` (not `any`) at the
+// single construction site so every caller.* call below stays fully typed.
+type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
+
 // Mock the direct db import used by the featureBranch router
 const selectFromMock = vi.fn();
 const selectWhereMock = vi.fn();
@@ -87,10 +95,12 @@ const createCaller = () =>
         name: "Test User",
       },
     },
-    authApi: { getSession: vi.fn() } as any,
+    authApi: { getSession: vi.fn() },
     apiKeyAuth: null,
-    db: {} as any,
-  });
+    // The router reads the mocked db via the `@bob/db/client` module mock
+    // above, not through the tRPC context — this field is never consulted.
+    db: {},
+  } as unknown as TRPCContext);
 
 describe("featureBranch router", () => {
   const workItemId = "11111111-1111-4111-8111-111111111111";
@@ -121,7 +131,7 @@ describe("featureBranch router", () => {
       workspaceMembersFindFirstMock,
       featureBranchesFindFirstMock,
       createDraftPrMock,
-    ].forEach((mock) => mock?.mockReset());
+    ].forEach((mock) => mock.mockReset());
   });
 
   describe("create", () => {
@@ -145,7 +155,7 @@ describe("featureBranch router", () => {
       };
       insertReturningMock.mockResolvedValueOnce([created]);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
       const result = await caller.featureBranch.create({
         workItemId,
         repositoryId,
@@ -184,7 +194,7 @@ describe("featureBranch router", () => {
         },
       ]);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
       await caller.featureBranch.create({
         workItemId,
         repositoryId,
@@ -198,7 +208,7 @@ describe("featureBranch router", () => {
     });
 
     it("rejects empty branchName", async () => {
-      const caller = createCaller() as any;
+      const caller = createCaller();
       await expect(
         caller.featureBranch.create({
           workItemId,
@@ -254,7 +264,7 @@ describe("featureBranch router", () => {
         },
       ]);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
       const result = await caller.featureBranch.get({ id: featureBranchId });
 
       expect(result).toMatchObject({
@@ -267,7 +277,7 @@ describe("featureBranch router", () => {
     it("returns null when branch not found", async () => {
       featureBranchesFindFirstMock.mockResolvedValueOnce(null);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
       await expect(
         caller.featureBranch.get({ id: featureBranchId }),
       ).rejects.toMatchObject({
@@ -286,7 +296,7 @@ describe("featureBranch router", () => {
       });
       workspaceMembersFindFirstMock.mockResolvedValueOnce(null);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
 
       await expect(
         caller.featureBranch.get({ id: featureBranchId }),
@@ -319,7 +329,7 @@ describe("featureBranch router", () => {
         },
       ]);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
       const result = await caller.featureBranch.list({ workItemId });
 
       expect(result).toHaveLength(1);
@@ -336,7 +346,7 @@ describe("featureBranch router", () => {
       });
       workspaceMembersFindFirstMock.mockResolvedValueOnce(null);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
 
       await expect(
         caller.featureBranch.list({ workItemId }),
@@ -368,7 +378,7 @@ describe("featureBranch router", () => {
       };
       insertReturningMock.mockResolvedValueOnce([created]);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
       const result = await caller.featureBranch.addTaskPR({
         featureBranchId,
         pullRequestId,
@@ -409,7 +419,7 @@ describe("featureBranch router", () => {
         },
       ]);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
       const result = await caller.featureBranch.markTaskPRMerged({
         featureBranchId,
         pullRequestId,
@@ -419,6 +429,11 @@ describe("featureBranch router", () => {
       // (Drizzle stores timestamp columns as text), so we assert the ISO 8601
       // shape rather than a raw Date instance.
       expect(updateSetMock).toHaveBeenCalledWith({
+        // vitest's expect.stringMatching return type is unconditionally
+        // `any` per its own type declarations (see @vitest/expect), so
+        // assigning it as an object-literal property always trips
+        // no-unsafe-assignment here.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         mergedAt: expect.stringMatching(
           /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
         ),
@@ -453,7 +468,7 @@ describe("featureBranch router", () => {
         },
       ]);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
       const result = await caller.featureBranch.updateStatus({
         id: featureBranchId,
         status: "ready",
@@ -464,11 +479,14 @@ describe("featureBranch router", () => {
     });
 
     it("rejects invalid status", async () => {
-      const caller = createCaller() as any;
+      const caller = createCaller();
       await expect(
         caller.featureBranch.updateStatus({
           id: featureBranchId,
-          status: "invalid_status",
+          // Deliberately not a member of the real status enum — this test
+          // exercises the router's runtime (Zod) rejection of bad input, so
+          // the value must be widened past the enum's TS type on purpose.
+          status: "invalid_status" as unknown as "active",
         }),
       ).rejects.toThrow();
     });
@@ -503,7 +521,7 @@ describe("featureBranch router", () => {
         new Error("GitHub API rate limited"),
       );
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
       await expect(
         caller.featureBranch.createFeaturePR({
           featureBranchId,
@@ -516,7 +534,7 @@ describe("featureBranch router", () => {
     it("throws when feature branch not found", async () => {
       featureBranchesFindFirstMock.mockResolvedValueOnce(null);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
       await expect(
         caller.featureBranch.createFeaturePR({
           featureBranchId,
