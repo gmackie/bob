@@ -139,6 +139,39 @@ describe("syncVault", () => {
       }).toString(),
     );
 
+    // TEMP DIAGNOSTIC: isolate whether this is a simple-git bug vs a genuine
+    // git-level behavior difference under this environment's concurrency.
+    // clone3 is a byte-for-byte copy of clone2's current diverged state;
+    // run a RAW `git pull` on it (bypassing simple-git entirely) and compare
+    // against what pullVault (via simple-git) does on clone2 below.
+    const clone3 = mkdtempSync(join(tmpdir(), "ooda-c3-"));
+    tempDirs.push(clone3);
+    rmSync(clone3, { recursive: true, force: true });
+    execSync(`cp -R ${clone2} ${clone3}`, { stdio: "pipe" });
+    try {
+      const rawOut = execSync("git pull --no-rebase", {
+        cwd: clone3,
+        stdio: "pipe",
+      }).toString();
+      console.log("=== DIAG: raw execSync git pull (clone3) SUCCEEDED, stdout ===", rawOut);
+    } catch (e) {
+      const err = e as { stdout?: Buffer; stderr?: Buffer; message?: string };
+      console.log(
+        "=== DIAG: raw execSync git pull (clone3) THREW ===",
+        "stdout:", err.stdout?.toString(),
+        "stderr:", err.stderr?.toString(),
+        "message:", err.message,
+      );
+    }
+    console.log(
+      "=== DIAG: clone3 status (after raw pull) ===",
+      execSync("git status", { cwd: clone3 }).toString(),
+    );
+    console.log(
+      "=== DIAG: clone3 shared.md (after raw pull) ===",
+      execSync("cat shared.md", { cwd: clone3 }).toString(),
+    );
+
     // Pull in clone2 -- should detect conflict
     const result = await pullVault(clone2);
     console.log("=== DIAG: pullVault result ===", JSON.stringify(result));
