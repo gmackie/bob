@@ -34,10 +34,12 @@ vi.mock("@bob/db/client", () => {
         planDrafts: { findMany: vi.fn(() => Promise.resolve([])) },
         repositories: { findMany: vi.fn(() => Promise.resolve([])) },
         sessionEvents: { findMany: vi.fn() },
+        taskRuns: { findFirst: vi.fn(() => Promise.resolve(null)) },
         workItems: { findMany: vi.fn(() => Promise.resolve([])) },
       },
       update: vi.fn(() => makeUpdateChain()),
       select: vi.fn(() => makeSelectChain()),
+      insert: vi.fn(() => ({ values: vi.fn(() => Promise.resolve()) })),
     },
   };
 });
@@ -809,6 +811,160 @@ describe("Relay", () => {
 
       const errors = ws.sentOfType("error");
       expect(errors.some((e: any) => e.code === "INVALID_FOR_DEVICE")).toBe(true);
+    });
+  });
+
+  describe("stop session", () => {
+    const SESSION_ID = "22222222-2222-4222-8222-222222222222";
+
+    // Session lookup used by requestSessionStop: select().from().leftJoin().where().limit()
+    const mockSessionLookup = (rows: any[]) => {
+      (db.select as any).mockReturnValueOnce({
+        from: vi.fn(() => ({
+          leftJoin: vi.fn(() => ({
+            where: vi.fn(() => ({
+              limit: vi.fn(() => Promise.resolve(rows)),
+            })),
+          })),
+        })),
+      });
+    };
+
+    const connectDaemon = async () => {
+      const daemonWs = new FakeWs();
+      relay.handleConnection(daemonWs as any);
+      daemonWs.receive({
+        type: "hello",
+        clientId: "d1",
+        deviceType: "daemon",
+        token: "good-daemon",
+        workspaceId: "ws-1",
+      });
+      await new Promise((r) => setImmediate(r));
+      return daemonWs;
+    };
+
+    const connectBrowser = async () => {
+      const browserWs = new FakeWs();
+      relay.handleConnection(browserWs as any);
+      browserWs.receive({
+        type: "hello",
+        clientId: "c1",
+        deviceType: "web",
+        token: "good-browser",
+      });
+      await new Promise((r) => setImmediate(r));
+      return browserWs;
+    };
+
+    it("relays stop_session to the session's daemon and acks the browser", async () => {
+      const daemonWs = await connectDaemon();
+      const browserWs = await connectBrowser();
+
+      mockSessionLookup([{ sessionUserId: "user-1", workspaceId: "ws-1" }]);
+
+      browserWs.receive({ type: "stop_session", sessionId: SESSION_ID });
+      await new Promise((r) => setImmediate(r));
+
+      const daemonStops = daemonWs.sentOfType("session_stop");
+      expect(daemonStops).toHaveLength(1);
+      expect((daemonStops[0] as any).sessionId).toBe(SESSION_ID);
+
+      const acks = browserWs.sentOfType("session_stopped");
+      expect(acks).toHaveLength(1);
+      expect((acks[0] as any).sessionId).toBe(SESSION_ID);
+    });
+
+    it("finalizes the session as stopped when no daemon is online", async () => {
+      const browserWs = await connectBrowser();
+
+      mockSessionLookup([{ sessionUserId: "user-1", workspaceId: "ws-1" }]);
+
+      browserWs.receive({ type: "stop_session", sessionId: SESSION_ID });
+      await new Promise((r) => setImmediate(r));
+
+      // Still acked — nothing is running, session was marked stopped in DB
+      expect(browserWs.sentOfType("session_stopped")).toHaveLength(1);
+      expect(db.update).toHaveBeenCalled();
+    });
+
+    it("rejects stop_session for a session the user doesn't own", async () => {
+      const browserWs = await connectBrowser();
+
+      mockSessionLookup([{ sessionUserId: "someone-else", workspaceId: "ws-1" }]);
+
+      browserWs.receive({ type: "stop_session", sessionId: SESSION_ID });
+      await new Promise((r) => setImmediate(r));
+
+      const errors = browserWs.sentOfType("error");
+      expect(errors.some((e: any) => e.code === "SESSION_NOT_FOUND")).toBe(true);
+      expect(browserWs.sentOfType("session_stopped")).toHaveLength(0);
+    });
+
+    it("rejects stop_session from daemons", async () => {
+      const daemonWs = await connectDaemon();
+
+      daemonWs.receive({ type: "stop_session", sessionId: SESSION_ID });
+      await new Promise((r) => setImmediate(r));
+
+      const errors = daemonWs.sentOfType("error");
+      expect(errors.some((e: any) => e.code === "INVALID_FOR_DEVICE")).toBe(true);
+    });
+  });
+
+  describe("session error status", () => {
+    it("persists lastError and syncs task_run as failed on an error status", async () => {
+      const daemonWs = new FakeWs();
+      relay.handleConnection(daemonWs as any);
+      daemonWs.receive({
+        type: "hello",
+        clientId: "d1",
+        deviceType: "daemon",
+        token: "good-daemon",
+        workspaceId: "ws-1",
+      });
+      await new Promise((r) => setImmediate(r));
+
+      const SID = "33333333-3333-4333-8333-333333333333";
+      (db.query.chatConversations.findFirst as any).mockResolvedValueOnce({
+        id: SID,
+        userId: "user-1",
+        status: "running",
+        workItemId: "wi-1",
+        agentType: "claude",
+      });
+      (db.query.taskRuns.findFirst as any) = vi.fn(() =>
+        Promise.resolve({ id: "tr-1", workItemId: "wi-1" }),
+      );
+
+      // Capture every .set() payload across the status handler's DB writes.
+      const setPayloads: any[] = [];
+      (db.update as any).mockImplementation(() => ({
+        set: (payload: any) => {
+          setPayloads.push(payload);
+          return { where: () => Promise.resolve() };
+        },
+      }));
+
+      daemonWs.receive({
+        type: "session_status",
+        sessionId: SID,
+        status: "error",
+        summary: { code: "AGENT_ERROR", error: "boom: agent exited 1" },
+      } as any);
+      await new Promise((r) => setImmediate(r));
+
+      // chatConversations got status "error" + a structured lastError
+      const convUpdate = setPayloads.find((p) => p.lastError);
+      expect(convUpdate?.status).toBe("error");
+      expect(convUpdate?.lastError?.message).toBe("boom: agent exited 1");
+      expect(convUpdate?.lastError?.code).toBe("AGENT_ERROR");
+
+      // task_run got the enum-safe "failed" (not "error") + the reason
+      const taskUpdate = setPayloads.find(
+        (p) => p.status === "failed" && "blockedReason" in p,
+      );
+      expect(taskUpdate?.blockedReason).toBe("boom: agent exited 1");
     });
   });
 

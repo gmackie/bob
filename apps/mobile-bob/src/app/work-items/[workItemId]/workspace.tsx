@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Linking,
+  Pressable,
   ScrollView,
   Text,
   TextInput,
@@ -23,6 +24,13 @@ import {
 import { trpc } from "~/utils/api";
 import { authClient } from "~/utils/auth";
 import { getBaseUrl } from "~/utils/base-url";
+
+const AGENT_OPTIONS: { id: string; label: string }[] = [
+  { id: "claude", label: "Claude" },
+  { id: "codex", label: "Codex" },
+  { id: "grok", label: "Grok" },
+  { id: "cursor", label: "Cursor" },
+];
 
 interface WorkspaceTaskRun {
   id: string;
@@ -100,6 +108,7 @@ export default function TaskWorkspaceScreen() {
   const [executionLaunchError, setExecutionLaunchError] = useState<
     string | null
   >(null);
+  const [agentType, setAgentType] = useState<string>("claude");
 
   const workItemQuery = useQuery(
     trpc.workItem.get.queryOptions(
@@ -432,10 +441,36 @@ export default function TaskWorkspaceScreen() {
           ) : null}
           {!linkedSession ? (
             <>
+              <View className="mt-4 flex-row items-center flex-wrap gap-2">
+                <Text className="text-muted mr-1 text-xs">Agent:</Text>
+                {AGENT_OPTIONS.map((opt) => {
+                  const selected = opt.id === agentType;
+                  return (
+                    <Pressable
+                      key={opt.id}
+                      onPress={() => setAgentType(opt.id)}
+                      disabled={dispatchWorkMutation.isPending}
+                      className={`rounded-full border px-3 py-1 ${
+                        selected
+                          ? "border-primary bg-primary/15"
+                          : "border-border"
+                      }`}
+                    >
+                      <Text
+                        className={`text-xs font-medium ${
+                          selected ? "text-foreground" : "text-muted"
+                        }`}
+                      >
+                        {opt.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
               <Button
                 className="mt-4"
                 onPress={() => {
-                  dispatchWorkMutation.mutate({ workItemId });
+                  dispatchWorkMutation.mutate({ workItemId, agentType });
                 }}
                 disabled={executionLaunchState.disabled}
               >

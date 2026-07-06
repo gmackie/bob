@@ -24,6 +24,16 @@ export interface AdapterCommand {
   prompt?: string;
 }
 
+export interface BuildCommandOptions {
+  prompt: string;
+  workspaceRoot: string;
+  systemPrompt?: string;
+  /** Persona-selected model (e.g. a specific Claude model id). */
+  model?: string;
+  /** Persona-restricted tool allowlist passed to the agent CLI. */
+  allowedTools?: string[];
+}
+
 export interface AdapterEvent {
   type:
     | "stdout"
@@ -52,6 +62,24 @@ export interface AdapterEvent {
   thought?: { text: string };
 }
 
+/**
+ * Live control surface for a running agent, surfaced via
+ * `ExecuteOptions#onSpawn`. Lets the caller steer (queue follow-up user
+ * messages) and stop the agent mid-run. Adapters that can't support an
+ * operation return false from `write` / make `kill` a no-op.
+ */
+export interface AdapterProcessHandle {
+  /** Queue a follow-up user message for the running agent. False if unsupported or the input channel is closed. */
+  write(text: string): boolean;
+  /** Terminate the agent (SIGTERM, escalating to SIGKILL after a grace period). */
+  kill(): void;
+}
+
+export interface ExecuteOptions {
+  /** Called once the agent process is live, with its control handle. */
+  onSpawn?: (handle: AdapterProcessHandle) => void;
+}
+
 export interface AgentAdapter {
   id: string;
   name: string;
@@ -59,15 +87,12 @@ export interface AgentAdapter {
 
   isAvailable(): boolean;
 
-  buildCommand(opts: {
-    prompt: string;
-    workspaceRoot: string;
-    systemPrompt?: string;
-  }): AdapterCommand;
+  buildCommand(opts: BuildCommandOptions): AdapterCommand;
 
   execute(
     command: AdapterCommand,
     onEvent: (event: AdapterEvent) => void,
+    options?: ExecuteOptions,
   ): Promise<{ exitCode: number }>;
 
   /**

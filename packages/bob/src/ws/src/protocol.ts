@@ -181,6 +181,12 @@ export interface ServerSessionStopped {
   sessionId: string;
 }
 
+/** Gateway tells a daemon to terminate a running session (user-requested stop) */
+export interface ServerSessionStop {
+  type: "session_stop";
+  sessionId: string;
+}
+
 export interface WorkspaceSessionInfo {
   sessionId: string;
   status: SessionStatus;
@@ -322,6 +328,7 @@ export type ServerMessage =
   | ServerError
   | ServerSessionCreated
   | ServerSessionStopped
+  | ServerSessionStop
   | ServerWorkspaceSnapshot
   | ServerSessionStatusChanged
   | ServerWorkspaceInvalidation

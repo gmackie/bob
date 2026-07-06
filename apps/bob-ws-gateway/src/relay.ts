@@ -12,6 +12,7 @@ import {
   type ClientSubscribe,
   type ClientUnsubscribe,
   type ClientInput,
+  type ClientStopSession,
   type ClientSessionEvent,
   type ClientSessionStatus,
   type ClientSessionClaimed,
@@ -21,6 +22,7 @@ import {
   type SessionStatus,
 } from "./protocol.js";
 import type { SessionEventRecord } from "./persistence.js";
+import { pushToUser } from "./push.js";
 
 const REPLAY_LIMIT = 500;
 
@@ -87,21 +89,33 @@ export class Relay {
 
   constructor(cfg: RelayConfig) {
     this.cfg = cfg;
-    this.timeoutSweepTimer = setInterval(() => this.sweepTimedOutSessions(), 60_000);
+    this.timeoutSweepTimer = setInterval(() => {
+      this.sweepTimedOutSessions().catch((err) => {
+        console.error("[Relay] Timeout sweep failed (will retry next interval):", err);
+      });
+    }, 60_000);
   }
 
   private async sweepTimedOutSessions(): Promise<void> {
+    // Key off inactivity, not age: a healthy long run keeps emitting events
+    // (lastActivityAt is bumped on every session_event), while a run whose
+    // daemon died goes silent and should be failed after the window.
     const cutoff = new Date(Date.now() - 35 * 60 * 1000).toISOString();
     const stale = await db.query.chatConversations.findMany({
       where: and(
-        inArray(chatConversations.status, ["running", "starting"]),
-        lt(chatConversations.createdAt, cutoff),
+        // "stopping" included: if the daemon dies before confirming a stop,
+        // the session would otherwise stay "stopping" forever.
+        inArray(chatConversations.status, ["running", "starting", "stopping"]),
+        lt(
+          sql`coalesce(${chatConversations.lastActivityAt}, ${chatConversations.createdAt})`,
+          cutoff,
+        ),
       ),
       columns: { id: true, userId: true, workItemId: true, agentType: true },
     });
 
     for (const session of stale) {
-      console.log(`[Relay] Timeout sweep: marking session ${session.id} as failed (>35min)`);
+      console.log(`[Relay] Timeout sweep: marking session ${session.id} as failed (>35min inactive)`);
       await db
         .update(chatConversations)
         .set({ status: "failed" })
@@ -146,20 +160,27 @@ export class Relay {
       conn.alive = true;
     });
 
-    ws.on("message", async (data: Buffer | string) => {
+    // Process this connection's messages strictly in arrival order. Handlers
+    // are async and hit the DB; without serialization a slow earlier message
+    // (e.g. session_claimed's agent_runs bookkeeping) can finish after a later
+    // one (session_status "running") and clobber its writes.
+    let messageQueue: Promise<void> = Promise.resolve();
+    ws.on("message", (data: Buffer | string) => {
       conn.alive = true;
       const raw = typeof data === "string" ? data : data.toString();
-      const msg = parseClientMessage(raw);
-      if (!msg) {
-        this.send(conn, createError("INVALID_MESSAGE", "Failed to parse message"));
-        return;
-      }
-      try {
-        await this.handleMessage(conn, msg);
-      } catch (err) {
-        console.error(`[Relay] Error handling ${msg.type} from ${id}:`, err);
-        this.send(conn, createError("INTERNAL_ERROR", "Internal error"));
-      }
+      messageQueue = messageQueue.then(async () => {
+        const msg = parseClientMessage(raw);
+        if (!msg) {
+          this.send(conn, createError("INVALID_MESSAGE", "Failed to parse message"));
+          return;
+        }
+        try {
+          await this.handleMessage(conn, msg);
+        } catch (err) {
+          console.error(`[Relay] Error handling ${msg.type} from ${id}:`, err);
+          this.send(conn, createError("INTERNAL_ERROR", "Internal error"));
+        }
+      });
     });
 
     ws.on("close", () => {
@@ -272,6 +293,15 @@ export class Relay {
         return;
       case "ping":
         this.send(conn, { type: "pong", ts: new Date().toISOString() });
+        // Daemon pings double as liveness: keep lastHeartbeat fresh so
+        // "runner online" reflects the live connection, not connect time.
+        if (conn.kind === "daemon" && conn.workspaceId) {
+          await db
+            .update(workspaces)
+            .set({ lastHeartbeat: sql`now()` })
+            .where(eq(workspaces.id, conn.workspaceId))
+            .catch(() => {});
+        }
         return;
     }
 
@@ -312,6 +342,14 @@ export class Relay {
         }
         if (!requireUuid(msg.sessionId)) return;
         await this.handleInput(conn, msg);
+        return;
+      case "stop_session":
+        if (conn.kind !== "browser") {
+          this.send(conn, createError("INVALID_FOR_DEVICE", "stop_session is for browsers"));
+          return;
+        }
+        if (!requireUuid(msg.sessionId)) return;
+        await this.handleStopSession(conn, msg);
         return;
       case "ack":
         // No-op in slim gateway: we persist every event synchronously.
@@ -639,6 +677,75 @@ export class Relay {
     return null;
   }
 
+  // ── Stop a running session ─────────────────────────────────────────
+
+  private async handleStopSession(conn: Connection, msg: ClientStopSession): Promise<void> {
+    const result = await this.requestSessionStop(conn.userId!, msg.sessionId);
+    if (result === "not_found") {
+      this.send(conn, createError("SESSION_NOT_FOUND", "Session not found", msg.sessionId));
+      return;
+    }
+    // Ack that the stop was accepted; the daemon's terminal session_status
+    // report ("interrupted") is what finalizes state for all subscribers.
+    this.send(conn, { type: "session_stopped", sessionId: msg.sessionId });
+  }
+
+  /**
+   * Ask the daemon running this session to kill its agent process.
+   * Shared by the browser `stop_session` frame and POST /internal/session-stop
+   * (the tRPC session.stop path). When no daemon is reachable, the session is
+   * finalized as "stopped" directly — there is nothing left to kill.
+   */
+  async requestSessionStop(
+    userId: string,
+    sessionId: string,
+  ): Promise<"not_found" | { delivered: boolean }> {
+    const rows = await db
+      .select({
+        sessionUserId: chatConversations.userId,
+        workspaceId: repositories.workspaceId,
+      })
+      .from(chatConversations)
+      .leftJoin(repositories, eq(repositories.id, chatConversations.repositoryId))
+      .where(eq(chatConversations.id, sessionId))
+      .limit(1);
+
+    const row = rows[0];
+    if (!row || row.sessionUserId !== userId) return "not_found";
+
+    const activeStatuses = ["pending", "provisioning", "starting", "running", "idle"];
+    const daemon = row.workspaceId
+      ? this.daemonByWorkspace.get(row.workspaceId) ?? null
+      : this.findDaemonForUser(userId);
+
+    if (daemon) {
+      await db
+        .update(chatConversations)
+        .set({ status: "stopping" })
+        .where(
+          and(
+            eq(chatConversations.id, sessionId),
+            inArray(chatConversations.status, activeStatuses),
+          ),
+        );
+      this.send(daemon, { type: "session_stop", sessionId });
+      console.log(`[Relay] Stop relayed to daemon for session ${sessionId}`);
+      return { delivered: true };
+    }
+
+    await db
+      .update(chatConversations)
+      .set({ status: "stopped", claimedByGatewayId: null, leaseExpiresAt: null })
+      .where(
+        and(
+          eq(chatConversations.id, sessionId),
+          inArray(chatConversations.status, activeStatuses),
+        ),
+      );
+    console.log(`[Relay] Stop for session ${sessionId}: no daemon online, marked stopped`);
+    return { delivered: false };
+  }
+
   // ── Daemon session_claimed ─────────────────────────────────────────
 
   private async handleSessionClaimed(conn: Connection, claim: ClientSessionClaimed): Promise<void> {
@@ -866,13 +973,50 @@ export class Relay {
     });
     if (!session || session.userId !== conn.userId) return;
 
+    // Extract a human-readable failure reason from the daemon's summary so it
+    // can be surfaced in the UI (chatConversations.lastError) rather than being
+    // buried in an error session_event nobody renders.
+    const summary = (msg as any).summary as
+      | {
+          code?: string;
+          error?: string;
+          reason?: string;
+          message?: string;
+          pullRequestUrl?: string;
+        }
+      | undefined;
+    const errorMessage =
+      summary?.error ?? summary?.message ?? summary?.reason ?? undefined;
+    const isError = msg.status === "error" || msg.status === "failed";
+
     await db
       .update(chatConversations)
-      .set({ status: msg.status })
+      .set({
+        status: msg.status,
+        ...(isError && errorMessage
+          ? {
+              lastError: {
+                code: summary?.code ?? "AGENT_ERROR",
+                message: errorMessage,
+                timestamp: new Date().toISOString(),
+              },
+            }
+          : {}),
+      })
       .where(eq(chatConversations.id, msg.sessionId));
 
-    // Sync task_run and work_item status on terminal states
-    if (msg.status === "completed" || msg.status === "failed" || msg.status === "interrupted") {
+    // Sync task_run and work_item status on terminal states. "error" is
+    // terminal too (the runner emits it on an agent crash) — without it here,
+    // a crashed run stayed stuck showing "running" in the UI forever.
+    if (
+      msg.status === "completed" ||
+      msg.status === "failed" ||
+      msg.status === "error" ||
+      msg.status === "interrupted"
+    ) {
+      // task_runs / work_items don't have an "error" status in their enum —
+      // map it to "failed" so the downstream writes satisfy the constraint.
+      const runStatus = msg.status === "error" ? "failed" : msg.status;
       const taskRun = await db.query.taskRuns.findFirst({
         where: eq(taskRuns.sessionId, msg.sessionId),
         columns: { id: true, workItemId: true },
@@ -881,7 +1025,8 @@ export class Relay {
         await db
           .update(taskRuns)
           .set({
-            status: msg.status,
+            status: runStatus,
+            ...(isError && errorMessage ? { blockedReason: errorMessage } : {}),
             completedAt: sql`now()`,
           })
           .where(eq(taskRuns.id, taskRun.id));
@@ -898,9 +1043,9 @@ export class Relay {
       await db
         .update(agentRuns)
         .set({
-          status: msg.status,
+          status: runStatus,
           completedAt: sql`now()`,
-          summary: (msg as any).summary ?? { status: msg.status },
+          summary: summary ?? { status: msg.status },
         })
         .where(eq(agentRuns.sessionId, msg.sessionId));
 
@@ -912,9 +1057,17 @@ export class Relay {
           type: "status_changed",
           fromValue: "running",
           toValue: msg.status,
-          metadata: { sessionId: msg.sessionId, agentType: session.agentType },
+          metadata: {
+            sessionId: msg.sessionId,
+            agentType: session.agentType,
+            ...(errorMessage ? { error: errorMessage } : {}),
+          },
         });
       }
+
+      // Push: notify the user's mobile devices that the run finished. Fire and
+      // forget — a push failure must never affect status handling.
+      void this.notifyTerminalPush(session, msg.status, errorMessage, summary);
     }
     const planningCounts = session.sessionType === "planning"
       ? (await this.getPlanningDraftCounts([session.id])).get(session.id) ?? {
@@ -949,6 +1102,77 @@ export class Relay {
       session,
       msg.status,
       planningCounts,
+    );
+  }
+
+  /**
+   * Push a "run finished" notification to the session owner's mobile devices.
+   * Completed → success (PR link if any); error/failed → the failure reason;
+   * interrupted → a stopped note. Planning sessions are skipped (they're
+   * short and interactive). Best-effort — never throws into the caller.
+   */
+  private async notifyTerminalPush(
+    session: {
+      id: string;
+      userId: string;
+      title?: string | null;
+      sessionType?: string | null;
+      workItemId?: string | null;
+      workItemIdentifierSnapshot?: string | null;
+    },
+    status: SessionStatus,
+    errorMessage: string | undefined,
+    summary: { pullRequestUrl?: string } | undefined,
+  ): Promise<void> {
+    if (session.sessionType === "planning") return;
+
+    const label =
+      session.workItemIdentifierSnapshot ?? session.title ?? "Your agent task";
+
+    // Tap target: the mobile handler routes on workItemId (→ work item) and
+    // falls back to `url`. Include both so a tap always lands somewhere useful.
+    const routing = {
+      workItemId: session.workItemId ?? undefined,
+      sessionId: session.id,
+      url: session.workItemId ? undefined : `/chat?session=${session.id}`,
+    };
+
+    let notification: Parameters<typeof pushToUser>[1] | null = null;
+    if (status === "completed") {
+      notification = {
+        title: `${label} completed`,
+        body: summary?.pullRequestUrl
+          ? "Pull request is ready for review."
+          : "The agent finished the task.",
+        data: {
+          type: "task.completed",
+          pullRequestUrl: summary?.pullRequestUrl,
+          ...routing,
+        },
+        channelId: "tasks",
+        priority: "high",
+      };
+    } else if (status === "error" || status === "failed") {
+      notification = {
+        title: `${label} failed`,
+        body: errorMessage ? errorMessage.slice(0, 140) : "The agent run failed.",
+        data: { type: "session.error", ...routing },
+        channelId: "tasks",
+        priority: "high",
+      };
+    } else if (status === "interrupted") {
+      notification = {
+        title: `${label} stopped`,
+        body: "The agent run was interrupted.",
+        data: { type: "session.interrupted", ...routing },
+        channelId: "tasks",
+        priority: "default",
+      };
+    }
+
+    if (!notification) return;
+    await pushToUser(session.userId, notification).catch((err) =>
+      console.error("[push] notifyTerminalPush failed:", err),
     );
   }
 

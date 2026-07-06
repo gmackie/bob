@@ -110,6 +110,10 @@ module.exports = ({ config }) => {
         },
       },
     ],
+    // Enables native push: adds the iOS aps-environment entitlement and the
+    // Android notification channel/icon. APNs key + FCM credentials are
+    // configured on EAS (eas credentials), not here.
+    "expo-notifications",
   ];
 
   if (sentryPlugin) {
@@ -143,6 +147,15 @@ module.exports = ({ config }) => {
           "UIInterfaceOrientationLandscapeLeft",
           "UIInterfaceOrientationLandscapeRight",
         ],
+        // Wake the app for background/data pushes so the badge + delivery work
+        // even when the app isn't foregrounded.
+        UIBackgroundModes: ["remote-notification"],
+      },
+      entitlements: {
+        // "development" for dev/preview builds; EAS overrides to "production"
+        // for release/TestFlight automatically via the push credentials.
+        "aps-environment":
+          APP_VARIANT === "production" ? "production" : "development",
       },
     },
     android: {

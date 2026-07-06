@@ -108,6 +108,30 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === "POST" && req.url === "/internal/session-stop") {
+    const auth = req.headers.authorization;
+    if (!auth || auth !== `Bearer ${NUDGE_SHARED_SECRET}`) {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Unauthorized" }));
+      return;
+    }
+    const body = await readJsonBody(req) as { userId?: string; sessionId?: string } | null;
+    if (!body?.userId || !body?.sessionId) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Missing userId or sessionId" }));
+      return;
+    }
+    const result = await relay.requestSessionStop(body.userId, body.sessionId);
+    if (result === "not_found") {
+      res.writeHead(404, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Session not found" }));
+      return;
+    }
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true, delivered: result.delivered }));
+    return;
+  }
+
   res.writeHead(404);
   res.end();
 });
