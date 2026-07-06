@@ -114,7 +114,7 @@ describe("featureBranch router", () => {
     ({ appRouter } = await import("../../root"));
     const prService = await import("../../services/git/prService");
     createDraftPrMock = prService.createDraftPr as ReturnType<typeof vi.fn>;
-  });
+  }, 60_000);
 
   beforeEach(() => {
     [

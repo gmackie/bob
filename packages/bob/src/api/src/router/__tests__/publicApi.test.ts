@@ -94,7 +94,7 @@ beforeAll(async () => {
       },
       db,
     } as unknown as TRPCContext);
-});
+}, 60_000);
 
 describe("publicApi router tenant isolation", () => {
   beforeEach(() => {

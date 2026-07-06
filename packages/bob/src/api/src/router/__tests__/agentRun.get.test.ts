@@ -61,7 +61,7 @@ describe("agentRun router get", () => {
     process.env.DATABASE_URL ??=
       "postgres://postgres:postgres@localhost:5432/test";
     ({ appRouter } = await import("../../root"));
-  });
+  }, 60_000);
 
   beforeEach(() => {
     Object.values(queryMocks).forEach((mock) => mock.mockReset());
