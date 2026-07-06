@@ -11,7 +11,6 @@ import {
   gitCommits,
   prReviews,
   pullRequests,
-  repositories,
   sessionEvents,
   taskRuns,
   webhookDeliveries,
@@ -601,10 +600,9 @@ function truncateStatusMessage(value: string): string {
 function buildExternalCommentMessage(
   payload: NormalizedPlanningCommentPayload,
 ): string {
-  const author =
-    payload.comment.user.name ||
-    payload.comment.user.email ||
-    payload.comment.user.id;
+  const name = payload.comment.user.name.trim();
+  const email = payload.comment.user.email?.trim();
+  const author = name.length > 0 ? name : email && email.length > 0 ? email : payload.comment.user.id;
   return `Planning comment from ${author}:\n\n${payload.comment.body.trim()}`;
 }
 
@@ -612,9 +610,9 @@ function normalizePlanningCommentPayload(
   payload: PlanningCommentPayload,
 ): NormalizedPlanningCommentPayload | null {
   const issueId = payload.issue?.id ?? payload.issueId ?? null;
-  const body = payload.comment?.body?.trim();
+  const body = payload.comment.body.trim();
 
-  if (!issueId || !payload.comment?.id || !body || !payload.comment.user?.id) {
+  if (!issueId || !payload.comment.id || !body || !payload.comment.user.id) {
     return null;
   }
 
@@ -795,8 +793,9 @@ export async function handlePlanningComment(
     return;
   }
 
+  // At this point payload.bobRouting.reason can only be "mention": the
+  // "prompt_reply" branch above always returns before reaching here.
   if (
-    payload.bobRouting.reason === "mention" &&
     ["awaiting_review", "blocked", "working"].includes(session.workflow_status)
   ) {
     await insertExternalUserMessage(session.id, message);
@@ -933,7 +932,7 @@ async function handleGitHubPullRequestReview(
       where: eq(forgeRevisions.revId, headSha),
     });
 
-    if (revision?.taskId && revision?.taskRunId) {
+    if (revision?.taskId && revision.taskRunId) {
       const item = await db.query.dispatchItems.findFirst({
         where: eq(dispatchItems.taskRunId, revision.taskRunId),
       });

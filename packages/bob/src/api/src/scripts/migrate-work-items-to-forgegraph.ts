@@ -10,16 +10,10 @@
  */
 
 import { db } from "@bob/db/client";
-import {
-  activities,
-  projects,
-  workItemArtifacts,
-  workItemDependencies,
-  workItems,
-} from "@bob/db/schema";
-import { eq } from "@bob/db";
+import type { WorkItemArtifactProducerType } from "@bob/db/schema";
 
 import { ForgeGraphClient } from "../services/forgegraph/forgeGraphClient";
+import type { CreateArtifactInput } from "../services/forgegraph/forgeGraphClient";
 
 const FG_API_URL = process.env.FG_API_URL ?? "https://forgegraf.com";
 const FG_API_TOKEN = process.env.FG_API_TOKEN;
@@ -34,6 +28,16 @@ const fg = new ForgeGraphClient({
   apiToken: FG_API_TOKEN,
   timeoutMs: 30000,
 });
+
+// The DB producer-type enum ("bob" | "forgegraph" | "human" | "system")
+// diverges from the ForgeGraph API's CreateArtifactInput producer type
+// ("bob" | "forgegraph" | "user" | "system") — only the "human"/"user" label
+// differs. Map explicitly rather than casting across the two literal unions.
+function toFgProducerType(
+  producerType: WorkItemArtifactProducerType,
+): CreateArtifactInput["producerType"] {
+  return producerType === "human" ? "user" : producerType;
+}
 
 async function main() {
   console.log(`Migrating work items to ForgeGraph at ${FG_API_URL}`);
@@ -145,7 +149,7 @@ async function main() {
 
     try {
       await fg.createArtifact(fgId, {
-        producerType: (artifact.producerType as any) ?? "bob",
+        producerType: toFgProducerType(artifact.producerType),
         producerId: artifact.taskRunId ?? undefined,
         artifactType: artifact.artifactType,
         artifactRole: artifact.artifactRole,
@@ -160,7 +164,10 @@ async function main() {
       });
       artifactsCreated++;
     } catch (err) {
-      // Skip duplicates silently
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes("409") && !msg.includes("already exists")) {
+        console.error(`  Failed to migrate artifact ${artifact.id}: ${msg}`);
+      }
     }
   }
 
@@ -190,7 +197,10 @@ async function main() {
       });
       activitiesCreated++;
     } catch (err) {
-      // Skip duplicates silently
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes("409") && !msg.includes("already exists")) {
+        console.error(`  Failed to migrate activity ${activity.id}: ${msg}`);
+      }
     }
   }
 

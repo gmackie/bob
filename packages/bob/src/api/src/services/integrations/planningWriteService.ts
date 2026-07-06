@@ -153,8 +153,8 @@ async function getSessionTaskContext(
       taskRun?.workItemIdentifierSnapshot ??
       taskRun?.planningItemIdentifier ??
       null,
-    planningProvider: (taskRun as any)?.planningProvider ?? "internal",
-    workspaceId: (taskRun as any)?.planningWorkspaceId ?? null,
+    planningProvider: taskRun?.planningProvider ?? "internal",
+    workspaceId: taskRun?.planningWorkspaceId ?? null,
     projectId: null,
   };
 }
@@ -169,7 +169,7 @@ async function resolveProvider(context: SessionTaskContext): Promise<PlanningPro
     })
     .from(projects)
     .where(eq(projects.workspaceId, context.workspaceId))
-    .then((rows: any[]) => rows[0]);
+    .then((rows) => rows[0]);
 
   if (!project) return null;
 
