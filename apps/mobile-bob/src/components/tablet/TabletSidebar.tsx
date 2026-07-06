@@ -771,7 +771,7 @@ function RecentOutcomeItemsTab({
     ),
   );
   const rows = buildRecentOutcomeRailRows({
-    workItems: (workItemsQuery.data ?? []) as TabletQueueItem[],
+    workItems: workItemsQuery.data ?? [],
     sessions,
   });
 
@@ -974,7 +974,7 @@ export function TabletSidebar({
     mode === "tasks" ? groupedSessions.recentOutcomes : groupedSessions.recentPlanning;
   const leftRailBadges = buildLeftRailTabBadges({
     sessions,
-    workItems: (workItemsQuery.data ?? []) as TabletQueueItem[],
+    workItems: workItemsQuery.data ?? [],
     projects: ((projectsQuery.data ?? []) as unknown as { project?: { id?: string } | null }[])
       .flatMap((entry) => entry.project?.id ? [{ id: entry.project.id }] : []),
   });
