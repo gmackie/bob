@@ -1,5 +1,13 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { createTRPCContext } from "../../trpc.js";
+
+// The real tRPC context type — the mock db/authApi below are structurally
+// close-enough fakes that only implement the query/insert/update surface
+// these handlers actually call, cast through `unknown` (not `any`) at the
+// single construction site so every caller.* call below stays fully typed.
+type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
+
 // Mock the direct db import used by the requirement router
 const selectFromMock = vi.fn();
 const selectWhereMock = vi.fn();
@@ -76,10 +84,10 @@ const createCaller = () =>
         name: "Test User",
       },
     },
-    authApi: { getSession: vi.fn() } as any,
+    authApi: { getSession: vi.fn() },
     apiKeyAuth: null,
-    db: mockDb as any,
-  });
+    db: mockDb,
+  } as unknown as TRPCContext);
 
 describe("requirement router", () => {
   const workItemId = "11111111-1111-4111-8111-111111111111";
@@ -132,15 +140,15 @@ describe("requirement router", () => {
         },
       ]);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
       const result = await caller.requirement.list({ workItemId });
 
-      expect(result.api).toBeDefined();
+      if (!result.api) throw new Error("expected result.api to be defined");
       expect(result.api.total).toBe(2);
       expect(result.api.done).toBe(1);
       expect(result.api.items).toHaveLength(2);
 
-      expect(result.ui).toBeDefined();
+      if (!result.ui) throw new Error("expected result.ui to be defined");
       expect(result.ui.total).toBe(1);
       expect(result.ui.done).toBe(0);
     });
@@ -155,7 +163,7 @@ describe("requirement router", () => {
         id: "membership-1",
       });
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
       const result = await caller.requirement.list({ workItemId });
 
       expect(result).toEqual({});
@@ -169,7 +177,7 @@ describe("requirement router", () => {
       workspaceMembersFindFirstMock.mockResolvedValueOnce(null);
       selectOrderByMock.mockResolvedValueOnce([]);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
 
       await expect(caller.requirement.list({ workItemId })).rejects.toMatchObject({
         code: "NOT_FOUND",
@@ -196,7 +204,7 @@ describe("requirement router", () => {
       };
       insertReturningMock.mockResolvedValueOnce([created]);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
       const result = await caller.requirement.create({
         workItemId,
         category: "data",
@@ -215,18 +223,21 @@ describe("requirement router", () => {
     });
 
     it("rejects invalid category", async () => {
-      const caller = createCaller() as any;
+      const caller = createCaller();
       await expect(
         caller.requirement.create({
           workItemId,
-          category: "invalid_category",
+          // Deliberately not a member of the real category enum — this test
+          // exercises the router's runtime (Zod) rejection of bad input, so
+          // the value must be widened past the enum's TS type on purpose.
+          category: "invalid_category" as unknown as "api",
           description: "test",
         }),
       ).rejects.toThrow();
     });
 
     it("rejects empty description", async () => {
-      const caller = createCaller() as any;
+      const caller = createCaller();
       await expect(
         caller.requirement.create({
           workItemId,
@@ -253,7 +264,7 @@ describe("requirement router", () => {
         },
       ]);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
 
       await expect(
         caller.requirement.create({
@@ -290,7 +301,7 @@ describe("requirement router", () => {
       };
       updateReturningMock.mockResolvedValueOnce([updated]);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
       const result = await caller.requirement.update({
         id: requirementId,
         status: "done",
@@ -301,11 +312,14 @@ describe("requirement router", () => {
     });
 
     it("rejects invalid status value", async () => {
-      const caller = createCaller() as any;
+      const caller = createCaller();
       await expect(
         caller.requirement.update({
           id: requirementId,
-          status: "invalid_status",
+          // Deliberately not a member of the real status enum — this test
+          // exercises the router's runtime (Zod) rejection of bad input, so
+          // the value must be widened past the enum's TS type on purpose.
+          status: "invalid_status" as unknown as "done",
         }),
       ).rejects.toThrow();
     });
@@ -328,7 +342,7 @@ describe("requirement router", () => {
         },
       ]);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
 
       await expect(
         caller.requirement.update({
@@ -356,7 +370,7 @@ describe("requirement router", () => {
       });
       deleteWhereMock.mockResolvedValueOnce(undefined);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
       const result = await caller.requirement.delete({ id: requirementId });
 
       expect(mockDb.delete).toHaveBeenCalled();
@@ -364,7 +378,7 @@ describe("requirement router", () => {
     });
 
     it("rejects non-uuid id", async () => {
-      const caller = createCaller() as any;
+      const caller = createCaller();
       await expect(
         caller.requirement.delete({ id: "not-a-uuid" }),
       ).rejects.toThrow();
@@ -382,7 +396,7 @@ describe("requirement router", () => {
       workspaceMembersFindFirstMock.mockResolvedValueOnce(null);
       deleteWhereMock.mockResolvedValueOnce(undefined);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
 
       await expect(
         caller.requirement.delete({ id: requirementId }),
@@ -417,7 +431,7 @@ describe("requirement router", () => {
       updateReturningMock.mockReset();
       updateReturningMock.mockResolvedValueOnce([updated]);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
       const result = await caller.requirement.linkToTask({
         id: requirementId,
         taskId,
@@ -448,7 +462,7 @@ describe("requirement router", () => {
         },
       ]);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
 
       await expect(
         caller.requirement.linkToTask({
