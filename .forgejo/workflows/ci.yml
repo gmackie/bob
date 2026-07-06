@@ -81,8 +81,14 @@ jobs:
         run: pnpm exec drizzle-kit push --force
 
       - name: Test
-        env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/test
+        # DATABASE_URL is intentionally NOT set here (unlike the old Docker
+        # service-container CI). `turbo run test` runs every package's test
+        # script, and a step-level env var would leak into all of them --
+        # @gmacko/ooda's listen-broker.test.ts gates its Postgres LISTEN/
+        # NOTIFY suite on DATABASE_URL being set, and the emulator's
+        # PGlite-backed postgres doesn't support LISTEN/NOTIFY. @bob/db and
+        # @bob/api set DATABASE_URL themselves via their own vitest.config.ts
+        # `test.env`, scoping it to only the packages that need it.
         run: pnpm test
 
       - name: Report CI result to ForgeGraph
