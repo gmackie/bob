@@ -18,17 +18,15 @@ const ctx: HandlerContext = {
 
 describe("wrapHandler", () => {
   it("resolves successful handler results", async () => {
-    const handler = async (_ctx: HandlerContext, _input: unknown) => ({
-      id: "1",
-    });
+    const handler = (_ctx: HandlerContext, _input: unknown) =>
+      Promise.resolve({ id: "1" });
     const result = await Effect.runPromise(wrapHandler(handler, ctx, {}));
     expect(result).toEqual({ id: "1" });
   });
 
   it("maps TRPCError NOT_FOUND to BobNotFoundError", async () => {
-    const handler = async () => {
-      throw new TRPCError({ code: "NOT_FOUND" });
-    };
+    const handler = () =>
+      Promise.reject(new TRPCError({ code: "NOT_FOUND" }));
     const error = await Effect.runPromise(
       wrapHandler(handler, ctx, {}, "snapshot").pipe(Effect.flip),
     );
@@ -36,9 +34,8 @@ describe("wrapHandler", () => {
   });
 
   it("maps TRPCError FORBIDDEN to BobForbiddenError", async () => {
-    const handler = async () => {
-      throw new TRPCError({ code: "FORBIDDEN", message: "denied" });
-    };
+    const handler = () =>
+      Promise.reject(new TRPCError({ code: "FORBIDDEN", message: "denied" }));
     const error = await Effect.runPromise(
       wrapHandler(handler, ctx, {}).pipe(Effect.flip),
     );
@@ -46,9 +43,10 @@ describe("wrapHandler", () => {
   });
 
   it("maps TRPCError UNAUTHORIZED to BobForbiddenError", async () => {
-    const handler = async () => {
-      throw new TRPCError({ code: "UNAUTHORIZED", message: "no session" });
-    };
+    const handler = () =>
+      Promise.reject(
+        new TRPCError({ code: "UNAUTHORIZED", message: "no session" }),
+      );
     const error = await Effect.runPromise(
       wrapHandler(handler, ctx, {}).pipe(Effect.flip),
     );
@@ -56,9 +54,10 @@ describe("wrapHandler", () => {
   });
 
   it("maps TRPCError CONFLICT to BobConflictError", async () => {
-    const handler = async () => {
-      throw new TRPCError({ code: "CONFLICT", message: "version mismatch" });
-    };
+    const handler = () =>
+      Promise.reject(
+        new TRPCError({ code: "CONFLICT", message: "version mismatch" }),
+      );
     const error = await Effect.runPromise(
       wrapHandler(handler, ctx, {}).pipe(Effect.flip),
     );
@@ -66,9 +65,7 @@ describe("wrapHandler", () => {
   });
 
   it("maps unknown JS errors to BobConflictError", async () => {
-    const handler = async () => {
-      throw new Error("something broke");
-    };
+    const handler = () => Promise.reject(new Error("something broke"));
     const error = await Effect.runPromise(
       wrapHandler(handler, ctx, {}).pipe(Effect.flip),
     );
