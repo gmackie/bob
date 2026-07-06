@@ -94,9 +94,13 @@ export async function checkpointBranchFrom(
     })
     .returning();
 
+  if (!newSession) {
+    throw new Error("Failed to create branched session: insert returned no row");
+  }
+
   // Create an initial checkpoint in the new session referencing the branch point
   await db.insert(sessionCheckpoints).values({
-    sessionId: newSession!.id,
+    sessionId: newSession.id,
     turnNumber: 0,
     eventSeq: 0,
     label: `Branched from checkpoint ${checkpoint.id}`,

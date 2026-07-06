@@ -69,5 +69,8 @@ export const makeWorkItemsLayer = (ctx: HandlerContext) => {
     "workItem.link.delete": lnk["link.delete"],
     "workItem.link.linkToPlanningTask": lnk["link.linkToPlanningTask"],
     "workItem.link.linkToGitHubPR": lnk["link.linkToGitHubPR"],
-  } as any);
+    // Same destructured-envelope-vs-unwrapped-payload erasure documented in
+    // rpc-layers/external.ts — widened to WorkItemsRpc.toLayer's own
+    // parameter type rather than `any`.
+  } as unknown as Parameters<typeof WorkItemsRpc.toLayer>[0]);
 };

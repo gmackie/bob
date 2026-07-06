@@ -28,7 +28,13 @@ export const makeRepositoryRpcHandlers = (ctx: HandlerContext) => ({
     payload,
   }: {
     payload: Record<string, never>;
-  }) => wrapHandler(repositoryList, ctx, payload as any, "repository"),
+  }) =>
+    wrapHandler(
+      (c: HandlerContext, _input: Record<string, never>) => repositoryList(c),
+      ctx,
+      payload,
+      "repository",
+    ),
 
   "repository.byId": ({
     payload,

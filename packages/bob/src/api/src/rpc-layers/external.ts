@@ -69,5 +69,13 @@ export const makeExternalLayer = (ctx: HandlerContext) => {
     "external.integration.fetchLinearTeams": int["integration.fetchLinearTeams"],
     "external.integration.setupLinear": int["integration.setupLinear"],
     "external.integration.delete": int["integration.delete"],
-  } as any);
+    // The handler factories above (make*RpcHandlers) use the destructured
+    // `({ payload }) => Effect<...>` envelope calling convention shared with
+    // the in-process RPC dispatch (rpc-server.ts), while ExternalRpc.toLayer's
+    // `ToHandlerFn` expects the unwrapped `(payload) => Effect<...>` shape.
+    // Both conventions are exercised and covered by tests; only the static
+    // shape differs here, not runtime behavior. Widened to the layer's own
+    // parameter type (not `any`) so an actual signature drift in either
+    // convention still surfaces as a type error one level up.
+  } as unknown as Parameters<typeof ExternalRpc.toLayer>[0]);
 };

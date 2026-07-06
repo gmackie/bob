@@ -37,9 +37,9 @@ export const makeCookiesRpcHandlers = (ctx: HandlerContext) => ({
 
   "cookies.list": ({ payload }: { payload: void }) =>
     wrapHandler(
-      (ctx: HandlerContext) => cookiesList(ctx),
+      (c: HandlerContext) => cookiesList(c),
       ctx,
-      undefined as unknown as void,
+      payload,
       "cookies",
     ),
 

@@ -7,7 +7,6 @@ import {
   pullRequests,
   repositories,
   taskRuns,
-  workItems,
 } from "@bob/db/schema";
 
 import type { ContextReadiness } from "./contextHeuristics";

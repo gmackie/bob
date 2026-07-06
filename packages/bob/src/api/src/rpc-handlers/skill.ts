@@ -35,9 +35,9 @@ export const makeSkillRpcHandlers = (ctx: HandlerContext) => ({
 
   "skill.seed": ({ payload }: { payload: void }) =>
     wrapHandler(
-      (ctx: HandlerContext) => skillSeed(ctx),
+      (c: HandlerContext) => skillSeed(c),
       ctx,
-      undefined as unknown as void,
+      payload,
       "skill",
     ),
 

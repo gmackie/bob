@@ -91,12 +91,10 @@ export async function checkFeatureReadiness(params: {
       userId: repo.userId,
     });
 
-    if (pr) {
-      await db
-        .update(featureBranches)
-        .set({ featurePrId: pr.id })
-        .where(eq(featureBranches.id, params.featureBranchId));
-    }
+    await db
+      .update(featureBranches)
+      .set({ featurePrId: pr.id })
+      .where(eq(featureBranches.id, params.featureBranchId));
 
     console.log(
       `[feature-assembly] Auto-created feature PR for branch ${branch.branchName}`,

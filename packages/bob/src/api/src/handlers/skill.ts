@@ -270,9 +270,9 @@ export async function skillGetExecution(
     .where(eq(skillExecutions.id, input.id))
     .limit(1);
 
-  if (rows.length === 0) return null;
+  const row = rows[0];
+  if (!row) return null;
 
-  const row = rows[0]!;
   await assertExecutionAccess(ctx.userId, row.execution);
 
   // Fetch parent execution if exists

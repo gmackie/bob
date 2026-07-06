@@ -138,7 +138,10 @@ const invokeInProcess = (
       const fn = (client as unknown as Record<
         string,
         (p: unknown) => Effect.Effect<unknown, unknown, never>
-      >)[tag]!;
+      >)[tag];
+      if (!fn) {
+        return Effect.die(new Error(`No RPC method registered for tag "${tag}"`));
+      }
       return fn(payload);
     }).pipe(
       Effect.scoped,

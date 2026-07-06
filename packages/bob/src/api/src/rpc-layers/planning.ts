@@ -120,5 +120,8 @@ export const makePlanningLayer = (ctx: HandlerContext) => {
     "planning.checkpoint.create": cp["checkpoint.create"],
     "planning.checkpoint.list": cp["checkpoint.list"],
     "planning.checkpoint.branchFrom": cp["checkpoint.branchFrom"],
-  } as any);
+    // Same destructured-envelope-vs-unwrapped-payload erasure documented in
+    // rpc-layers/external.ts — widened to PlanningRpc.toLayer's own
+    // parameter type rather than `any`.
+  } as unknown as Parameters<typeof PlanningRpc.toLayer>[0]);
 };
