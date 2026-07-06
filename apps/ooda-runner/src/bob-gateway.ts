@@ -15,6 +15,40 @@ const RECONNECT_DELAY_MS = 5_000;
 const HEARTBEAT_INTERVAL_MS = 25_000;
 const HELLO_TIMEOUT_MS = 15_000;
 
+/**
+ * Extract a short, human-readable tail from an agent's captured output for use
+ * in an error message. Prefers the last non-empty lines; if the output is
+ * stream-json (claude/codex), pulls the message text out of the last few JSON
+ * objects rather than dumping raw JSON. Capped so a bad run can't bloat the
+ * surfaced error.
+ */
+export function outputTail(output: string, maxChars = 500): string {
+  const lines = output
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const readable: string[] = [];
+  for (const line of lines.slice(-12)) {
+    if (line.startsWith("{") && line.endsWith("}")) {
+      try {
+        const obj = JSON.parse(line) as {
+          message?: unknown;
+          error?: unknown;
+          result?: unknown;
+        };
+        const text = obj.error ?? obj.message ?? obj.result;
+        if (typeof text === "string" && text.trim()) readable.push(text.trim());
+        continue;
+      } catch {
+        // fall through to raw line
+      }
+    }
+    readable.push(line);
+  }
+  const tail = readable.slice(-6).join(" | ").trim();
+  return tail.length > maxChars ? `…${tail.slice(-maxChars)}` : tail;
+}
+
 export interface BobGatewayConfig {
   gatewayUrl: string;
   apiKey: string;
@@ -410,7 +444,14 @@ export class BobGatewayConnector {
         await this.reportInterrupted(session, bobRunId, runOutput, startTime);
         return;
       }
-      const errMsg = err instanceof Error ? err.message : String(err);
+      const baseMsg = err instanceof Error ? err.message : String(err);
+      // "Agent exited with code N" alone is useless for diagnosis. When the
+      // failure is a bare exit, append the tail of the agent's own output
+      // (usually its last error lines) so the surfaced error is actionable.
+      const tail = /exited with code/.test(baseMsg)
+        ? outputTail(runOutput)
+        : "";
+      const errMsg = tail ? `${baseMsg} — ${tail}` : baseMsg;
       console.error(`[bob-gw] Session ${session.sessionId} failed: ${errMsg}`);
       this.send({
         type: "session_status",
