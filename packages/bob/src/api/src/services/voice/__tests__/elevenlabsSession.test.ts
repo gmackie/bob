@@ -4,24 +4,39 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ElevenLabsSessionService } from "../elevenlabsSession.js";
-import type { OpenCodeClient } from "../../opencode/opencodeClient.js";
+import type { TranscriptEvent } from "../elevenlabsSession.js";
+import type {
+  OpenCodeClient,
+  OpenCodeResponse,
+  OpenCodeSession,
+} from "../../opencode/opencodeClient.js";
+
+// A structurally-typed fake of OpenCodeClient (not `any`) — only the four
+// methods ElevenLabsSessionService actually calls, each with the real
+// method's own signature via `vi.fn<Signature>()`.
+interface MockOpenCodeClient {
+  createSession: ReturnType<typeof vi.fn<OpenCodeClient["createSession"]>>;
+  sendMessage: ReturnType<typeof vi.fn<OpenCodeClient["sendMessage"]>>;
+  getSessionHistory: ReturnType<typeof vi.fn<OpenCodeClient["getSessionHistory"]>>;
+  closeSession: ReturnType<typeof vi.fn<OpenCodeClient["closeSession"]>>;
+}
 
 describe("ElevenLabsSessionService", () => {
-  let mockOpenCodeClient: OpenCodeClient;
+  let mockOpenCodeClient: MockOpenCodeClient;
   let service: ElevenLabsSessionService;
 
   beforeEach(() => {
     mockOpenCodeClient = {
-      createSession: vi.fn(),
-      sendMessage: vi.fn(),
-      getSessionHistory: vi.fn(),
-      closeSession: vi.fn(),
-    } as any;
+      createSession: vi.fn<OpenCodeClient["createSession"]>(),
+      sendMessage: vi.fn<OpenCodeClient["sendMessage"]>(),
+      getSessionHistory: vi.fn<OpenCodeClient["getSessionHistory"]>(),
+      closeSession: vi.fn<OpenCodeClient["closeSession"]>(),
+    };
 
     service = new ElevenLabsSessionService({
       apiKey: "test-api-key",
       agentId: "test-agent-id",
-      opencodeClient: mockOpenCodeClient,
+      opencodeClient: mockOpenCodeClient as unknown as OpenCodeClient,
     });
   });
 
@@ -45,22 +60,23 @@ describe("ElevenLabsSessionService", () => {
       await service.createVoiceSession("session-123");
 
       // Mock OpenCode responses
-      const mockOpenCodeSession = {
+      const mockOpenCodeSession: OpenCodeSession = {
         id: "opencode-session-123",
-        status: "active" as const,
+        status: "active",
         createdAt: new Date().toISOString(),
       };
 
-      const mockResponseStream = (async function* () {
+      const mockResponseStream: AsyncIterable<OpenCodeResponse> = (async function* () {
+        await Promise.resolve();
         yield { content: "Hello", usage: undefined };
         yield { content: " there!", usage: undefined };
       })();
 
-      (mockOpenCodeClient.createSession as any).mockResolvedValueOnce(mockOpenCodeSession);
-      (mockOpenCodeClient.sendMessage as any).mockResolvedValueOnce(mockResponseStream);
+      mockOpenCodeClient.createSession.mockResolvedValueOnce(mockOpenCodeSession);
+      mockOpenCodeClient.sendMessage.mockResolvedValueOnce(mockResponseStream);
 
       // Register transcript callback
-      const transcriptEvents: any[] = [];
+      const transcriptEvents: TranscriptEvent[] = [];
       service.onTranscript("session-123", (event) => {
         transcriptEvents.push(event);
       });
@@ -91,18 +107,19 @@ describe("ElevenLabsSessionService", () => {
     it("should reuse OpenCode session for context", async () => {
       await service.createVoiceSession("session-123");
 
-      const mockOpenCodeSession = {
+      const mockOpenCodeSession: OpenCodeSession = {
         id: "opencode-session-123",
-        status: "active" as const,
+        status: "active",
         createdAt: new Date().toISOString(),
       };
 
-      const mockResponseStream = (async function* () {
+      const mockResponseStream: AsyncIterable<OpenCodeResponse> = (async function* () {
+        await Promise.resolve();
         yield { content: "Response", usage: undefined };
       })();
 
-      (mockOpenCodeClient.createSession as any).mockResolvedValueOnce(mockOpenCodeSession);
-      (mockOpenCodeClient.sendMessage as any).mockResolvedValue(mockResponseStream);
+      mockOpenCodeClient.createSession.mockResolvedValueOnce(mockOpenCodeSession);
+      mockOpenCodeClient.sendMessage.mockResolvedValue(mockResponseStream);
 
       // First transcript creates session
       await service.handleUserTranscript("session-123", "First message");
