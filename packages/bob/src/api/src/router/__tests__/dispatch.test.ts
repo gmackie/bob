@@ -6,20 +6,32 @@ import {
   notifications,
 } from "@bob/db/schema";
 
+import type { createTRPCContext } from "../../trpc.js";
+
+// The real tRPC context type — the mock db/authApi below are structurally
+// close-enough fakes that only implement the query/insert/update surface
+// these handlers actually call, cast through `unknown` (not `any`) at the
+// single construction site so every caller.* call below stays fully typed.
+type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
+
 let appRouter: typeof import("../../root").appRouter;
 
 // Track all DB calls
 const dbInsertMock = vi.fn();
 const dbInsertValuesMock = vi.fn();
-const dbInsertReturningMock = vi.fn();
+const dbInsertReturningMock = vi.fn<() => Promise<Record<string, unknown>[]>>();
 
 const dbUpdateMock = vi.fn();
 const dbUpdateSetMock = vi.fn();
 const dbUpdateWhereMock = vi.fn();
-const dbUpdateReturningMock = vi.fn();
+const dbUpdateReturningMock = vi.fn<() => Promise<Record<string, unknown>[]>>();
 
-const dbQueryFindFirstMock = vi.fn();
-const dbQueryFindManyMock = vi.fn();
+const dbQueryFindFirstMock = vi.fn<
+  (table: string, ...args: unknown[]) => Promise<Record<string, unknown> | null | undefined>
+>();
+const dbQueryFindManyMock = vi.fn<
+  (table: string, ...args: unknown[]) => Promise<Record<string, unknown>[]>
+>();
 
 // Valid v4 UUIDs
 const BATCH_ID = "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d";
@@ -27,7 +39,6 @@ const SESSION_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 const WORKSPACE_ID = "f47ac10b-58cc-4372-a567-0d02b2c3d479";
 const PROJECT_ID = "6ba7b810-9dad-41d8-80b4-00c04fd430c8";
 const DRAFT_ID = "9a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
-const DRAFT_ID_2 = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
 const ITEM_ID = "3c4d5e6f-7a8b-4c9d-8e1f-2a3b4c5d6e7f";
 const ITEM_ID_2 = "4d5e6f7a-8b9c-4d0e-9f2a-3b4c5d6e7f8a";
 const TASK_RUN_ID = "5e6f7a8b-9c0d-4e1f-aa3b-4c5d6e7f8a9b";
@@ -117,10 +128,10 @@ const createCaller = (session: { id: string }) =>
         name: "Test User",
       },
     },
-    authApi: { getSession: vi.fn() } as any,
+    authApi: { getSession: vi.fn() },
     apiKeyAuth: null,
-    db: makeDbMock() as any,
-  });
+    db: makeDbMock(),
+  } as unknown as TRPCContext);
 
 describe("dispatch router", () => {
   beforeAll(async () => {
@@ -479,7 +490,7 @@ describe("dispatch router", () => {
 
       const caller = createCaller({ id: "user-1" });
 
-      const result = await caller.dispatch.checkProgress({
+      await caller.dispatch.checkProgress({
         batchId: BATCH_ID,
       });
 
@@ -567,7 +578,7 @@ describe("dispatch router", () => {
 
       const caller = createCaller({ id: "user-1" });
 
-      const result = await caller.dispatch.checkProgress({
+      await caller.dispatch.checkProgress({
         batchId: BATCH_ID,
       });
 
