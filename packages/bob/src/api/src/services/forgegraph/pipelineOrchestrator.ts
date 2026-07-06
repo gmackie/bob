@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "@bob/db";
+import { and, desc, eq } from "@bob/db";
 import type { Db } from "@bob/db/client";
 import {
   dispatchItems,
@@ -7,7 +7,6 @@ import {
   forgeDeployments,
   notifications,
   runLifecycleEvents,
-  taskRuns,
   workItems,
   workItemArtifacts,
 } from "@bob/db/schema";
@@ -117,14 +116,21 @@ export async function advancePipeline(
   if (stateAfter && stateAfter !== stateBefore) {
     const webhookEvent = STATE_WEBHOOK_EVENTS[stateAfter];
     if (webhookEvent) {
-      // Fire-and-forget — delivery failures must not block the pipeline
+      // Fire-and-forget — delivery failures must not block the pipeline,
+      // but they're still worth logging so a broken webhook target isn't
+      // silently invisible.
       emitWebhookEvent(webhookEvent, batch.userId, {
         dispatchItemId: item.id,
         taskIdentifier: item.planningTaskIdentifier,
         title: item.title,
         previousState: stateBefore,
         state: stateAfter,
-      }).catch(() => {});
+      }).catch((err: unknown) => {
+        console.warn(
+          `[pipelineOrchestrator] webhook delivery failed for ${webhookEvent}:`,
+          err,
+        );
+      });
     }
   }
 }
@@ -146,7 +152,7 @@ async function handleAgentComplete(
 async function handleAwaitingReview(
   db: Db,
   item: PipelineItem,
-  batch: PipelineBatch,
+  _batch: PipelineBatch,
 ): Promise<void> {
   // Check for a current code_review artifact for this task's work item
   const review = await db.query.workItemArtifacts.findFirst({

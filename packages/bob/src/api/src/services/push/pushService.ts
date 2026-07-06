@@ -1,6 +1,6 @@
-import { and, eq, inArray } from "@bob/db";
+import { and, eq } from "@bob/db";
 import { db } from "@bob/db/client";
-import { devicePushTokens, user } from "@bob/db/schema";
+import { devicePushTokens } from "@bob/db/schema";
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
@@ -151,9 +151,20 @@ export async function sendPushNotification(
   let sent = 0;
   let failed = 0;
 
+  if (tickets.length !== tokens.length) {
+    // The Expo push API is expected to return one ticket per submitted
+    // message, in order — but that's a contract with an external service,
+    // not something TypeScript can prove. Fail loudly instead of silently
+    // mis-pairing tickets with the wrong device token.
+    throw new Error(
+      `Expo push API returned ${tickets.length} tickets for ${tokens.length} messages`,
+    );
+  }
+
   for (let i = 0; i < tickets.length; i++) {
-    const ticket = tickets[i]!;
-    const token = tokens[i]!;
+    const ticket = tickets[i];
+    const token = tokens[i];
+    if (!ticket || !token) continue;
 
     if (ticket.status === "ok") {
       sent++;
@@ -341,7 +352,11 @@ export async function registerPushToken(
     })
     .returning();
 
-  return { id: newToken!.id, created: true };
+  if (!newToken) {
+    throw new Error("Failed to register push token: insert returned no row");
+  }
+
+  return { id: newToken.id, created: true };
 }
 
 export async function unregisterPushToken(

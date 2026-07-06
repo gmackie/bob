@@ -106,11 +106,13 @@ export class OpenCodeClient {
   /**
    * Get session history
    */
-  async getSessionHistory(
+  getSessionHistory(
     _sessionId: string,
     _limit?: number,
   ): Promise<OpenCodeMessage[]> {
-    throw new Error("OpenCode getSessionHistory not implemented");
+    return Promise.reject(
+      new Error("OpenCode getSessionHistory not implemented"),
+    );
   }
 
   async closeSession(sessionId: string): Promise<void> {
@@ -204,13 +206,15 @@ export class OpenCodeClient {
     if (!trimmed) return;
 
     try {
-      const data = JSON.parse(trimmed);
+      const data: unknown = JSON.parse(trimmed);
       const content = this.extractTextFromOpenCodeJson(data);
       if (content) {
         yield { content };
       }
       return;
-    } catch {}
+    } catch {
+      // Not a single JSON document — fall through to line-delimited parsing below.
+    }
 
     const lines = trimmed.split(/\r?\n/);
     for (const rawLine of lines) {
@@ -220,7 +224,7 @@ export class OpenCodeClient {
       const maybeJson = line.startsWith("data: ") ? line.slice(6) : line;
 
       try {
-        const data = JSON.parse(maybeJson);
+        const data: unknown = JSON.parse(maybeJson);
         const content = this.extractTextFromOpenCodeJson(data);
         if (content) {
           yield { content };
