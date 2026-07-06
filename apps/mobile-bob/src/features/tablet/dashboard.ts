@@ -337,7 +337,7 @@ export function buildProviderRunSectionModels<T extends ProviderDetailRun>(
   ];
 
   return sections
-    .filter((section) => section.key !== "other" || options.includeEmptyOther || section.runs.length > 0)
+    .filter((section) => section.key !== "other" || (options.includeEmptyOther ?? false) || section.runs.length > 0)
     .map((section) => ({
       key: section.key,
       title: section.title,
