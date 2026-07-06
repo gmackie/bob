@@ -32,16 +32,16 @@ vi.mock("@bob/db/client", () => ({
   db: {
     execute: executeMock,
     insert: vi.fn((table: unknown) => ({
-      values: vi.fn(async (value: unknown) => {
+      values: vi.fn((value: unknown) => {
         insertCalls.push({ table, value });
-        return [];
+        return Promise.resolve([]);
       }),
     })),
     update: vi.fn((table: unknown) => ({
       set: vi.fn((patch: unknown) => ({
-        where: vi.fn(async (predicate: unknown) => {
+        where: vi.fn((predicate: unknown) => {
           updateCalls.push({ table, patch, predicate });
-          return [];
+          return Promise.resolve([]);
         }),
       })),
     })),
@@ -79,9 +79,9 @@ describe("Planning webhook routing", () => {
     vi.restoreAllMocks();
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => ({
+      vi.fn(() => ({
         ok: true,
-        text: async () => "ok",
+        text: () => Promise.resolve("ok"),
       })),
     );
   });
@@ -162,8 +162,12 @@ describe("Planning webhook routing", () => {
     expect(insertCalls[1]?.value).toMatchObject({
       sessionId: "session-1",
       eventType: "state",
+      // vitest's expect.objectContaining always returns `any` per its own
+      // type declarations, regardless of generic argument.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       payload: expect.objectContaining({
         workflowStatus: "working",
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- same vitest any-return as above
         resolution: expect.objectContaining({
           commentId: "comment-1",
           source: "planning_comment",
@@ -222,6 +226,9 @@ describe("Planning webhook routing", () => {
     expect(insertCalls[0]?.value).toMatchObject({
       sessionId: "session-1",
       eventType: "external_reply",
+      // vitest's expect.objectContaining always returns `any` per its own
+      // type declarations, regardless of generic argument.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       payload: expect.objectContaining({
         type: "planning_comment_late",
         commentId: "comment-2",
@@ -279,6 +286,9 @@ describe("Planning webhook routing", () => {
     expect(insertCalls[1]?.value).toMatchObject({
       sessionId: "session-2",
       eventType: "state",
+      // vitest's expect.objectContaining always returns `any` per its own
+      // type declarations, regardless of generic argument.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       payload: expect.objectContaining({
         workflowStatus: "working",
         source: "planning_comment",
