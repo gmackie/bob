@@ -103,8 +103,47 @@ describe("syncVault", () => {
       stdio: "pipe",
     });
 
+    // TEMP DIAGNOSTICS: this test fails only in real CI (passes locally on
+    // macOS/git 2.51.1). Dump full git state before/after the pull so a CI
+    // run tells us exactly what diverges, instead of guessing blind.
+    console.log("=== DIAG: git --version ===", execSync("git --version").toString());
+    console.log(
+      "=== DIAG: bare log --oneline --all ===",
+      execSync("git log --oneline --all", { cwd: bare }).toString(),
+    );
+    console.log(
+      "=== DIAG: clone2 log --oneline --all (before pull) ===",
+      execSync("git log --oneline --all", { cwd: clone2 }).toString(),
+    );
+    console.log(
+      "=== DIAG: clone2 branch -vv (before pull) ===",
+      execSync("git branch -vv", { cwd: clone2 }).toString(),
+    );
+    console.log(
+      "=== DIAG: clone2 remote -v (before pull) ===",
+      execSync("git remote -v", { cwd: clone2 }).toString(),
+    );
+    console.log(
+      "=== DIAG: clone2 shared.md (before pull) ===",
+      execSync("cat shared.md", { cwd: clone2 }).toString(),
+    );
+
     // Pull in clone2 -- should detect conflict
     const result = await pullVault(clone2);
+    console.log("=== DIAG: pullVault result ===", JSON.stringify(result));
+    console.log(
+      "=== DIAG: clone2 log --oneline --all (after pull) ===",
+      execSync("git log --oneline --all", { cwd: clone2 }).toString(),
+    );
+    console.log(
+      "=== DIAG: clone2 status (after pull) ===",
+      execSync("git status", { cwd: clone2 }).toString(),
+    );
+    console.log(
+      "=== DIAG: clone2 shared.md (after pull) ===",
+      execSync("cat shared.md", { cwd: clone2 }).toString(),
+    );
+
     expect(result.conflicts).toBe(true);
 
     const conflicted = await hasConflicts(clone2);
