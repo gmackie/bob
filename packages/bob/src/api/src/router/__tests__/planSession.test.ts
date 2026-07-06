@@ -5,17 +5,26 @@ import {
   planDraftDependencies,
   planDrafts,
 } from "@bob/db/schema";
+import type { createTRPCContext } from "../../trpc.js";
 
 let appRouter: typeof import("../../root").appRouter;
 
+// The real tRPC context type — the mock db/authApi below are structurally
+// close-enough fakes that only implement the query/insert/update surface
+// these handlers actually call, cast through `unknown` (not `any`) at the
+// single construction site so every caller.* call below stays fully typed.
+type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
+
 // planSession.start now writes to chat_conversations + best-effort nudges
 // the ws-gateway over HTTP instead of delegating to @bob/execution.
-const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+const fetchMock = vi.fn<
+  (input: string, init?: { method?: string; headers?: unknown; body?: string }) => Promise<{ ok: boolean }>
+>().mockResolvedValue({ ok: true });
 vi.stubGlobal("fetch", fetchMock);
 
 const dbInsertMock = vi.fn();
 const dbInsertValuesMock = vi.fn();
-const dbInsertReturningMock = vi.fn();
+const dbInsertReturningMock = vi.fn<() => Promise<Record<string, unknown>[]>>();
 const dbInsertOnConflictMock = vi.fn();
 
 const dbDeleteMock = vi.fn();
@@ -24,10 +33,14 @@ const dbDeleteWhereMock = vi.fn();
 const dbUpdateMock = vi.fn();
 const dbUpdateSetMock = vi.fn();
 const dbUpdateWhereMock = vi.fn();
-const dbUpdateReturningMock = vi.fn();
+const dbUpdateReturningMock = vi.fn<() => Promise<Record<string, unknown>[]>>();
 
-const dbQueryFindFirstMock = vi.fn();
-const dbQueryFindManyMock = vi.fn();
+const dbQueryFindFirstMock = vi.fn<
+  (table: string, ...args: unknown[]) => Promise<Record<string, unknown> | null | undefined>
+>();
+const dbQueryFindManyMock = vi.fn<
+  (table: string, ...args: unknown[]) => Promise<Record<string, unknown>[]>
+>();
 
 // Valid v4 UUIDs for test inputs
 const WORKSPACE_ID = "f47ac10b-58cc-4372-a567-0d02b2c3d479";
@@ -152,10 +165,10 @@ const createCaller = (session: { id: string }) =>
         name: "Test User",
       },
     },
-    authApi: { getSession: vi.fn() } as any,
+    authApi: { getSession: vi.fn() },
     apiKeyAuth: null,
-    db: makeDbMock() as any,
-  });
+    db: makeDbMock(),
+  } as unknown as TRPCContext);
 
 describe("planSession router", () => {
   beforeAll(async () => {
@@ -193,7 +206,7 @@ describe("planSession router", () => {
           sessionType: "planning",
           title: "Planning session",
           status: "provisioning",
-        } as any,
+        },
       ]);
 
       const caller = createCaller({ id: "user-1" });
@@ -234,7 +247,7 @@ describe("planSession router", () => {
           userId: "user-1",
           sessionType: "planning",
           workItemId: "b8a0d12f-2d49-4f8c-94e8-7c4d1d9f6b10",
-        } as any,
+        },
       ]);
 
       const caller = createCaller({ id: "user-1" });
@@ -333,6 +346,9 @@ describe("planSession router", () => {
         "http://gw.local/internal/workspace-event",
         expect.objectContaining({
           method: "POST",
+          // vitest's nested expect.objectContaining always returns `any` per
+          // its own type declarations, regardless of generic argument.
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           headers: expect.objectContaining({
             Authorization: "Bearer shh",
           }),
@@ -458,12 +474,28 @@ describe("planSession router", () => {
         "http://gw.local/internal/nudge",
         expect.objectContaining({
           method: "POST",
+          // vitest's nested expect.objectContaining always returns `any` per
+          // its own type declarations, regardless of generic argument.
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           headers: expect.objectContaining({
             Authorization: "Bearer shh",
           }),
         }),
       );
-      const nudgeBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+      const nudgeCall = fetchMock.mock.calls[0];
+      const nudgeInit = nudgeCall?.[1];
+      if (!nudgeInit?.body) {
+        throw new Error("expected the nudge fetch call to include a body");
+      }
+      const nudgeBody = JSON.parse(nudgeInit.body) as {
+        sessionType: string;
+        planningContext: {
+          launchContext: {
+            intent: string;
+            workItem: { identifier: string };
+          };
+        };
+      };
       expect(nudgeBody.sessionType).toBe("planning");
       expect(nudgeBody.planningContext.launchContext.intent).toBe("shape");
       expect(nudgeBody.planningContext.launchContext.workItem.identifier).toBe(
@@ -537,6 +569,9 @@ describe("planSession router", () => {
         "http://gw.local/internal/workspace-event",
         expect.objectContaining({
           method: "POST",
+          // vitest's nested expect.objectContaining always returns `any` per
+          // its own type declarations, regardless of generic argument.
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           headers: expect.objectContaining({
             Authorization: "Bearer shh",
           }),
@@ -665,7 +700,8 @@ describe("planSession router", () => {
       await caller.planSession.list({ workspaceId: WORKSPACE_ID });
 
       const [, options] = dbQueryFindManyMock.mock.calls[0] ?? [];
-      expect(containsColumnName((options).where, "planning_workspace_id")).toBe(true);
+      const findManyOptions = options as { where?: unknown } | undefined;
+      expect(containsColumnName(findManyOptions?.where, "planning_workspace_id")).toBe(true);
     });
   });
 
@@ -744,6 +780,9 @@ describe("planSession router", () => {
         "http://gw.local/internal/workspace-event",
         expect.objectContaining({
           method: "POST",
+          // vitest's nested expect.objectContaining always returns `any` per
+          // its own type declarations, regardless of generic argument.
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           headers: expect.objectContaining({
             Authorization: "Bearer shh",
           }),
@@ -886,6 +925,9 @@ describe("planSession router", () => {
         "http://gw.local/internal/workspace-event",
         expect.objectContaining({
           method: "POST",
+          // vitest's nested expect.objectContaining always returns `any` per
+          // its own type declarations, regardless of generic argument.
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           headers: expect.objectContaining({
             Authorization: "Bearer shh",
           }),
@@ -1012,6 +1054,9 @@ describe("planSession router", () => {
         "http://gw.local/internal/workspace-event",
         expect.objectContaining({
           method: "POST",
+          // vitest's nested expect.objectContaining always returns `any` per
+          // its own type declarations, regardless of generic argument.
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           headers: expect.objectContaining({
             Authorization: "Bearer shh",
           }),
@@ -1120,6 +1165,9 @@ describe("planSession router", () => {
         "http://gw.local/internal/workspace-event",
         expect.objectContaining({
           method: "POST",
+          // vitest's nested expect.objectContaining always returns `any` per
+          // its own type declarations, regardless of generic argument.
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           headers: expect.objectContaining({
             Authorization: "Bearer shh",
           }),
