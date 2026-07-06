@@ -1,6 +1,14 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { createTRPCContext } from "../../trpc.js";
+
 let appRouter: typeof import("../../root").appRouter;
+
+// The real tRPC context type — the mock db/authApi below are structurally
+// close-enough fakes that only implement the query/insert/update surface
+// these handlers actually call, cast through `unknown` (not `any`) at the
+// single construction site so every caller.* call below stays fully typed.
+type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
 
 const queryMocks = {
   workspaceMembersFindMany: vi.fn(),
@@ -92,10 +100,10 @@ const createCaller = () =>
         name: "Test User",
       },
     },
-    authApi: { getSession: vi.fn() } as any,
+    authApi: { getSession: vi.fn() },
     apiKeyAuth: null,
-    db: makeDbMock() as any,
-  });
+    db: makeDbMock(),
+  } as unknown as TRPCContext);
 
 describe("planning routers", () => {
   const workspaceId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -133,12 +141,17 @@ describe("planning routers", () => {
       },
     ]);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
     const result = await caller.workspace.list();
 
     expect(result).toEqual([
       expect.objectContaining({
         role: "owner",
+        // vitest's `expect.objectContaining` return type is unconditionally
+        // `any` (see @vitest/expect's type declarations), so nesting one
+        // inside another object literal always trips no-unsafe-assignment
+        // here — the matcher itself, not this test's own typing, is the gap.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         workspace: expect.objectContaining({
           id: workspaceId,
           slug: "builder",
@@ -168,11 +181,14 @@ describe("planning routers", () => {
     ]);
     queryMocks.repositoriesFindMany.mockResolvedValueOnce([]);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
     const result = await caller.project.list({ workspaceId });
 
     expect(result).toEqual([
       expect.objectContaining({
+        // Nested expect.objectContaining always returns `any` per vitest's
+        // own type declarations — see the comment above in the previous test.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         project: expect.objectContaining({
           id: projectId,
           key: "MERGE",
@@ -214,7 +230,7 @@ describe("planning routers", () => {
     ]);
     queryMocks.chatConversationsFindMany.mockResolvedValueOnce([]);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
     const result = await caller.workItems.list({ workspaceId, limit: 20 });
 
     expect(result).toEqual([
@@ -222,6 +238,9 @@ describe("planning routers", () => {
         id: taskId,
         identifier: "MERGE-12",
         kind: "task",
+        // Nested expect.objectContaining always returns `any` per vitest's
+        // own type declarations — see the comment earlier in this file.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         project: expect.objectContaining({
           id: projectId,
           key: "MERGE",
@@ -234,7 +253,7 @@ describe("planning routers", () => {
     queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
     queryMocks.workItemsFindMany.mockResolvedValueOnce([]);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(
       caller.workItems.list({ workspaceId, limit: 20 }),
@@ -281,10 +300,13 @@ describe("planning routers", () => {
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([]);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
     const result = await caller.workItems.get({ id: taskId });
 
     expect(result).toMatchObject({
+      // expect.objectContaining's return type is unconditionally `any` per
+      // vitest's own type declarations — see the comment earlier in this file.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       workItem: expect.objectContaining({
         id: taskId,
         identifier: "MERGE-12",
@@ -311,7 +333,7 @@ describe("planning routers", () => {
     });
     queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(caller.workItems.get({ id: taskId })).rejects.toMatchObject({
       code: "NOT_FOUND",
@@ -330,7 +352,7 @@ describe("planning routers", () => {
         },
       ]);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
       const result = await caller.planning.listWorkspaces();
 
       expect(result).toEqual([
@@ -345,7 +367,7 @@ describe("planning routers", () => {
     it("rejects planning project listing when the caller is not a member of the workspace", async () => {
       queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
 
       await expect(
         caller.planning.listProjects({ workspaceId }),
@@ -365,7 +387,7 @@ describe("planning routers", () => {
       });
       queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
 
       await expect(
         caller.planning.getProject({ id: projectId }),
@@ -382,7 +404,7 @@ describe("planning routers", () => {
       });
       queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
 
       await expect(
         caller.planning.getTaskByIdentifier({ identifier: "MERGE-12" }),
@@ -399,7 +421,7 @@ describe("planning routers", () => {
       });
       queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
 
       await expect(
         caller.planning.createTask({
@@ -422,7 +444,7 @@ describe("planning routers", () => {
       });
       queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
 
       await expect(
         caller.planning.updateTask({
@@ -441,7 +463,7 @@ describe("planning routers", () => {
       });
       queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
 
       await expect(
         caller.planning.addComment({
@@ -460,7 +482,7 @@ describe("planning routers", () => {
       });
       queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
 
       await expect(
         caller.planning.listComments({
@@ -474,7 +496,7 @@ describe("planning routers", () => {
     it("rejects planning task search when the caller is not a member of the workspace", async () => {
       queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
 
       await expect(
         caller.planning.searchTasks({
@@ -489,7 +511,7 @@ describe("planning routers", () => {
     it("rejects planning label listing when the caller is not a member of the workspace", async () => {
       queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
 
       await expect(
         caller.planning.listLabels({
@@ -507,7 +529,7 @@ describe("planning routers", () => {
       });
       queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
 
       await expect(
         caller.planning.agentClaimTask({
@@ -522,7 +544,7 @@ describe("planning routers", () => {
     it("rejects agent session starts when the caller is not a member of the workspace", async () => {
       queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
 
-      const caller = createCaller() as any;
+      const caller = createCaller();
 
       await expect(
         caller.planning.agentStartSession({
