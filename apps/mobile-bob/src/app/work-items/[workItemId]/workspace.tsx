@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Linking,
@@ -24,6 +24,7 @@ import {
 import { trpc } from "~/utils/api";
 import { authClient } from "~/utils/auth";
 import { getBaseUrl } from "~/utils/base-url";
+import { useGateway } from "~/hooks/use-gateway";
 
 const AGENT_OPTIONS: { id: string; label: string }[] = [
   { id: "claude", label: "Claude" },
@@ -180,6 +181,8 @@ export default function TaskWorkspaceScreen() {
     ),
   );
 
+  // Historical backfill: one fetch of events that predate our live
+  // subscription. Live events stream in over the WS gateway below.
   const eventsQuery = useQuery(
     trpc.session.getEvents.queryOptions(
       { sessionId: linkedSession ?? "", limit: 30 },
@@ -187,10 +190,40 @@ export default function TaskWorkspaceScreen() {
     ),
   );
 
-  const sessionEvents = useMemo(() => {
+  // Live streaming over the WS gateway (same path the tablet + session screen
+  // use), replacing the phone's former poll-only refresh.
+  const {
+    selectSession,
+    selectedSessionEvents,
+    connectionState: gatewayConnectionState,
+  } = useGateway();
+
+  useEffect(() => {
+    if (!linkedSession) return;
+    selectSession(linkedSession);
+    return () => selectSession(null);
+  }, [linkedSession, selectSession]);
+
+  const historicalEvents = useMemo(() => {
     const data = eventsQuery.data as { events?: unknown } | undefined;
     return Array.isArray(data?.events) ? (data.events as WorkspaceEvent[]) : [];
   }, [eventsQuery.data]);
+
+  // Merge historical + live, deduped by seq, ordered by seq. Live events win
+  // on collision (they carry the freshest payload for the same seq).
+  const sessionEvents = useMemo<WorkspaceEvent[]>(() => {
+    const bySeq = new Map<number, WorkspaceEvent>();
+    for (const e of historicalEvents) bySeq.set(e.seq, e);
+    for (const e of selectedSessionEvents) {
+      bySeq.set(e.seq, {
+        seq: e.seq,
+        direction: e.direction,
+        eventType: e.eventType,
+        payload: e.payload,
+      });
+    }
+    return [...bySeq.values()].sort((a, b) => a.seq - b.seq);
+  }, [historicalEvents, selectedSessionEvents]);
 
   const workflowStateData =
     (workflowStateQuery.data as WorkspaceWorkflowState | null | undefined) ??
@@ -433,6 +466,19 @@ export default function TaskWorkspaceScreen() {
             <Badge variant="success">
               {workspaceModel?.artifactCount ?? 0} artifacts
             </Badge>
+            {linkedSession ? (
+              <Badge
+                variant={
+                  gatewayConnectionState === "connected" ? "success" : "accent"
+                }
+              >
+                {gatewayConnectionState === "connected"
+                  ? "● live"
+                  : gatewayConnectionState === "disconnected"
+                    ? "offline"
+                    : "reconnecting…"}
+              </Badge>
+            ) : null}
           </View>
           {workspaceModel?.statusMessage ? (
             <Text className="text-muted mt-4 text-sm">
