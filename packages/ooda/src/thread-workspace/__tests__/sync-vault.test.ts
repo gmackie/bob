@@ -128,6 +128,17 @@ describe("syncVault", () => {
       execSync("cat shared.md", { cwd: clone2 }).toString(),
     );
 
+    console.log(
+      "=== DIAG: git config --list --show-origin (clone2) ===",
+      execSync("git config --list --show-origin", { cwd: clone2 }).toString(),
+    );
+    console.log(
+      "=== DIAG: git config pull.ff / pull.rebase / merge.ff (global) ===",
+      execSync("git config --global --get pull.ff; git config --global --get pull.rebase; git config --global --get merge.ff; echo done", {
+        shell: "/bin/bash",
+      }).toString(),
+    );
+
     // Pull in clone2 -- should detect conflict
     const result = await pullVault(clone2);
     console.log("=== DIAG: pullVault result ===", JSON.stringify(result));
