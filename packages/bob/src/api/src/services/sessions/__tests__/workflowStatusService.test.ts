@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { db } from "@bob/db/client";
+import type { db } from "@bob/db/client";
 import type { WorkflowStatus } from "../workflowStatusService";
 import {
   getSessionWorkflowState,
@@ -11,11 +11,21 @@ type MockConversationRow = Awaited<
   ReturnType<typeof db.query.chatConversations.findFirst>
 >;
 
+// Held as standalone references (rather than accessed off `db.*` at call
+// sites) so vi.mocked()/assertions never read an unbound method off the
+// mock object — sidesteps @typescript-eslint/unbound-method entirely.
+// vi.hoisted() so these are safely initialized before the hoisted vi.mock
+// factory below references them.
+const { findFirstMock, executeMock } = vi.hoisted(() => ({
+  findFirstMock: vi.fn<() => Promise<MockConversationRow | undefined>>(),
+  executeMock: vi.fn(),
+}));
+
 vi.mock("@bob/db/client", () => ({
   db: {
     query: {
       chatConversations: {
-        findFirst: vi.fn(),
+        findFirst: findFirstMock,
       },
     },
     update: vi.fn(() => ({
@@ -30,20 +40,23 @@ vi.mock("@bob/db/client", () => ({
         returning: vi.fn(),
       })),
     })),
-    execute: vi.fn(),
+    execute: executeMock,
   },
 }));
 
 vi.mock("@bob/db", () => ({
-  and: vi.fn((...args) => args),
-  eq: vi.fn((a, b) => ({ field: a, value: b })),
-  sql: vi.fn((strings, ...values) => ({ strings, values })),
+  and: vi.fn((...args: unknown[]) => args),
+  eq: vi.fn((a: unknown, b: unknown) => ({ field: a, value: b })),
+  sql: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
+    strings,
+    values,
+  })),
 }));
 
 describe("workflowStatusService", () => {
   beforeEach(() => {
-    vi.mocked(db.execute).mockReset();
-    vi.mocked(db.query.chatConversations.findFirst).mockReset();
+    executeMock.mockReset();
+    findFirstMock.mockReset();
   });
 
   describe("workflowStatusValues", () => {
@@ -109,7 +122,7 @@ describe("workflowStatusService", () => {
 
   describe("getSessionWorkflowState", () => {
     it("reads workflow state from the owned conversation row", async () => {
-      vi.mocked(db.query.chatConversations.findFirst).mockResolvedValueOnce({
+      findFirstMock.mockResolvedValueOnce({
         workflowStatus: "started",
         statusMessage: "Queued for execution",
         awaitingInputQuestion: null,
@@ -125,14 +138,14 @@ describe("workflowStatusService", () => {
         statusMessage: "Queued for execution",
         awaitingInput: null,
       });
-      expect(db.execute).not.toHaveBeenCalled();
+      expect(executeMock).not.toHaveBeenCalled();
     });
 
     it("does not fail through the raw execute path in production", async () => {
-      vi.mocked(db.execute).mockRejectedValueOnce(
+      executeMock.mockRejectedValueOnce(
         new TypeError("Cannot read properties of undefined (reading 'length')"),
       );
-      vi.mocked(db.query.chatConversations.findFirst).mockResolvedValueOnce({
+      findFirstMock.mockResolvedValueOnce({
         workflowStatus: "awaiting_input",
         statusMessage: "Need a decision",
         awaitingInputQuestion: "Proceed?",
@@ -170,7 +183,9 @@ describe("workflowStatusService state machine validation", () => {
       awaiting_review: ["working", "completed"],
       completed: [],
     };
-    return validTransitions[from]?.includes(to) ?? false;
+    // validTransitions is a Record covering every WorkflowStatus key, so the
+    // lookup is always defined — no optional chain / fallback needed.
+    return validTransitions[from].includes(to);
   }
 
   describe("valid transitions", () => {
@@ -256,7 +271,11 @@ describe("awaiting input timeout calculation", () => {
   });
 
   it("should use default timeout when not specified", () => {
-    const optionalTimeout: number | undefined = undefined;
+    // Returned through a function typed `number | undefined` (rather than a
+    // literal `undefined`) so TS can't statically narrow the `??` fallback
+    // away — this actually exercises the runtime default-application path.
+    const readUnspecifiedTimeout = (): number | undefined => undefined;
+    const optionalTimeout = readUnspecifiedTimeout();
     const timeoutMinutes = optionalTimeout ?? 30;
     expect(timeoutMinutes).toBe(30);
   });
