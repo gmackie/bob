@@ -20,14 +20,17 @@ describe("agentRun router", () => {
     // The procedure should exist and have the expected input shape
     // This validates the router was created with protectedProcedure (session auth)
     // rather than apiKeyReadProcedure (API key auth)
-    const listDef = agentRunRouter.list as any;
+    // tRPC procedure builders carry an internal `_def` that isn't part of
+    // their public typed surface — narrowed to `unknown` here (not `any`)
+    // since we only assert its presence, not its shape.
+    const listDef: unknown = agentRunRouter.list;
     expect(listDef).toBeDefined();
-    expect(listDef._def).toBeDefined();
+    expect((listDef as { _def?: unknown })._def).toBeDefined();
   });
 
   it("listByWorkItem procedure accepts workItemId and limit", () => {
-    const listByWorkItemDef = agentRunRouter.listByWorkItem as any;
+    const listByWorkItemDef: unknown = agentRunRouter.listByWorkItem;
     expect(listByWorkItemDef).toBeDefined();
-    expect(listByWorkItemDef._def).toBeDefined();
+    expect((listByWorkItemDef as { _def?: unknown })._def).toBeDefined();
   });
 });
