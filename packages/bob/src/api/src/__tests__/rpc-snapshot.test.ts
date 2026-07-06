@@ -43,10 +43,10 @@ function makeMockDb(overrides?: {
     // Relation-style queries used by loadAccessibleWorkItem
     query: {
       workItems: {
-        findFirst: async () => workItem,
+        findFirst: () => Promise.resolve(workItem),
       },
       workspaceMembers: {
-        findFirst: async () => member,
+        findFirst: () => Promise.resolve(member),
       },
     },
 
@@ -88,7 +88,7 @@ describe("snapshot RPC handlers", () => {
     );
 
     expect(result).toBeDefined();
-    expect(result!.id).toBe("snap-new");
+    expect(result?.id).toBe("snap-new");
   });
 
   it("planning.snapshot.list resolves to an array", async () => {
@@ -103,7 +103,7 @@ describe("snapshot RPC handlers", () => {
 
     expect(Array.isArray(result)).toBe(true);
     expect(result).toHaveLength(1);
-    expect(result[0]!.id).toBe("snap-1");
+    expect(result[0]?.id).toBe("snap-1");
   });
 
   it("planning.snapshot.get resolves to the snapshot", async () => {
@@ -117,7 +117,7 @@ describe("snapshot RPC handlers", () => {
     );
 
     expect(result).toBeDefined();
-    expect(result!.id).toBe("snap-1");
+    expect(result?.id).toBe("snap-1");
   });
 
   it("planning.snapshot.get returns null when row missing", async () => {
