@@ -11,6 +11,25 @@ env:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    # `@bob/api` (~21 test files) and `@bob/db` (its own vitest suite) require
+    # a live Postgres at postgres://postgres:postgres@localhost:5432/test --
+    # see those packages' test files for the hardcoded connection string.
+    # Without this service container `pnpm test` fails at import time (no
+    # DATABASE_URL) or times out (PGlite dispatcher tests racing with no DB).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
 
@@ -29,7 +48,22 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Push @bob/db schema to CI Postgres
+        working-directory: packages/bob/src/db
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/test
+        # drizzle-kit push introspects schema.ts directly and generates a
+        # from-scratch schema -- this is the same mechanism client-pglite.ts
+        # uses to bootstrap an empty PGlite DB (see its `generateDrizzleJson`/
+        # `generateMigration` comments). The incremental SQL files under
+        # drizzle/*.sql do NOT compose into a from-scratch schema (they're
+        # patches on a pre-existing baseline -- see migrate.ts's docstring),
+        # so `pnpm migrate` is not viable here; `push --force` is.
+        run: pnpm exec drizzle-kit push --force
+
       - name: Test
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/test
         run: pnpm test
 
       - name: Report CI result to ForgeGraph
