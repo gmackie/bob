@@ -9,6 +9,7 @@ import {
   handleDeliveryEvidence,
   reopenPipeline,
 } from "../pipelineOrchestrator";
+import type { Db } from "@bob/db/client";
 
 // Mocks for DB operations
 const dbInsertMock = vi.fn();
@@ -19,7 +20,7 @@ const dbUpdateMock = vi.fn();
 const dbUpdateSetMock = vi.fn();
 const dbUpdateWhereMock = vi.fn();
 
-const dbQueryFindFirstMock = vi.fn();
+const dbQueryFindFirstMock = vi.fn<(table: string, ...args: unknown[]) => unknown>();
 
 const makeDbMock = () => ({
   insert: (table: unknown) => {
@@ -94,10 +95,10 @@ const makeBatch = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe("advancePipeline", () => {
-  let db: ReturnType<typeof makeDbMock>;
+  let db: Db;
 
   beforeEach(() => {
-    db = makeDbMock();
+    db = makeDbMock() as unknown as Db;
     dbInsertMock.mockReset();
     dbInsertValuesMock.mockReset();
     dbInsertOnConflictMock.mockReset();
@@ -111,7 +112,7 @@ describe("advancePipeline", () => {
     it("transitions to 'awaiting_review'", async () => {
       const item = makeItem({ pipelineState: "agent_complete" });
 
-      await advancePipeline(db as any, item, makeBatch());
+      await advancePipeline(db, item, makeBatch());
 
       // Should transition to "awaiting_review" (no build yet)
       expect(dbUpdateSetMock).toHaveBeenCalledWith({ pipelineState: "awaiting_review" });
@@ -121,7 +122,7 @@ describe("advancePipeline", () => {
     it("no-ops when taskRunId is null", async () => {
       const item = makeItem({ pipelineState: "agent_complete", taskRunId: null });
 
-      await advancePipeline(db as any, item, makeBatch());
+      await advancePipeline(db, item, makeBatch());
 
       expect(dbInsertMock).not.toHaveBeenCalled();
       expect(dbUpdateMock).not.toHaveBeenCalled();
@@ -147,7 +148,7 @@ describe("advancePipeline", () => {
         taskRunId: TASK_RUN_ID,
       });
 
-      await advancePipeline(db as any, item, makeBatch());
+      await advancePipeline(db, item, makeBatch());
 
       expect(dbUpdateSetMock).toHaveBeenCalledWith({ pipelineState: "building" });
     });
@@ -156,7 +157,7 @@ describe("advancePipeline", () => {
       const item = makeItem({ pipelineState: "awaiting_review" });
       dbQueryFindFirstMock.mockResolvedValueOnce(null);
 
-      await advancePipeline(db as any, item, makeBatch());
+      await advancePipeline(db, item, makeBatch());
 
       expect(dbUpdateSetMock).not.toHaveBeenCalled();
     });
@@ -171,7 +172,7 @@ describe("advancePipeline", () => {
         content: JSON.stringify({ decision: "request_changes" }),
       });
 
-      await advancePipeline(db as any, item, makeBatch());
+      await advancePipeline(db, item, makeBatch());
 
       // Marks the review artifact as stale (isCurrent: false) but does NOT
       // transition pipeline state — it stays in awaiting_review.
@@ -191,7 +192,7 @@ describe("advancePipeline", () => {
         idempotencyKey: ITEM_ID,
       });
 
-      await advancePipeline(db as any, item, makeBatch());
+      await advancePipeline(db, item, makeBatch());
 
       expect(dbUpdateSetMock).toHaveBeenCalledWith({ pipelineState: "gates_passed" });
     });
@@ -207,7 +208,7 @@ describe("advancePipeline", () => {
         idempotencyKey: ITEM_ID,
       });
 
-      await advancePipeline(db as any, item, makeBatch());
+      await advancePipeline(db, item, makeBatch());
 
       expect(dbUpdateSetMock).toHaveBeenCalledWith({ pipelineState: "build_failed" });
       // Should also insert a failure notification
@@ -229,7 +230,7 @@ describe("advancePipeline", () => {
         idempotencyKey: ITEM_ID,
       });
 
-      await advancePipeline(db as any, item, makeBatch());
+      await advancePipeline(db, item, makeBatch());
 
       expect(dbUpdateMock).not.toHaveBeenCalled();
     });
@@ -251,7 +252,7 @@ describe("advancePipeline", () => {
         repoId: REPO_ID,
       });
 
-      await advancePipeline(db as any, item, makeBatch());
+      await advancePipeline(db, item, makeBatch());
 
       // Should insert a deployment
       expect(dbInsertValuesMock).toHaveBeenCalledWith(
@@ -275,7 +276,7 @@ describe("advancePipeline", () => {
       async (state) => {
         const item = makeItem({ pipelineState: state });
 
-        await advancePipeline(db as any, item, makeBatch());
+        await advancePipeline(db, item, makeBatch());
 
         expect(dbInsertMock).not.toHaveBeenCalled();
         expect(dbUpdateMock).not.toHaveBeenCalled();
@@ -288,7 +289,7 @@ describe("advancePipeline", () => {
     it("no-ops for null pipeline state", async () => {
       const item = makeItem({ pipelineState: null });
 
-      await advancePipeline(db as any, item, makeBatch());
+      await advancePipeline(db, item, makeBatch());
 
       expect(dbInsertMock).not.toHaveBeenCalled();
       expect(dbUpdateMock).not.toHaveBeenCalled();
@@ -297,10 +298,10 @@ describe("advancePipeline", () => {
 });
 
 describe("reopenPipeline", () => {
-  let db: ReturnType<typeof makeDbMock>;
+  let db: Db;
 
   beforeEach(() => {
-    db = makeDbMock();
+    db = makeDbMock() as unknown as Db;
     dbInsertMock.mockReset();
     dbUpdateMock.mockReset();
     dbUpdateSetMock.mockReset();
@@ -314,7 +315,7 @@ describe("reopenPipeline", () => {
       pipelineState: "build_failed",
     });
 
-    const reopened = await reopenPipeline(db as any, ITEM_ID, "ci_failed");
+    const reopened = await reopenPipeline(db, ITEM_ID, "ci_failed");
 
     expect(reopened).toBe(true);
     expect(dbUpdateSetMock).toHaveBeenCalledWith({ pipelineState: "agent_complete" });
@@ -326,7 +327,7 @@ describe("reopenPipeline", () => {
       pipelineState: "building",
     });
 
-    const reopened = await reopenPipeline(db as any, ITEM_ID, "ci_failed");
+    const reopened = await reopenPipeline(db, ITEM_ID, "ci_failed");
 
     expect(reopened).toBe(true);
     expect(dbUpdateSetMock).toHaveBeenCalledWith({ pipelineState: "agent_complete" });
@@ -338,7 +339,7 @@ describe("reopenPipeline", () => {
       pipelineState: "agent_complete",
     });
 
-    const reopened = await reopenPipeline(db as any, ITEM_ID, "ci_failed");
+    const reopened = await reopenPipeline(db, ITEM_ID, "ci_failed");
 
     expect(reopened).toBe(false);
     expect(dbUpdateMock).not.toHaveBeenCalled();
@@ -350,7 +351,7 @@ describe("reopenPipeline", () => {
       pipelineState: null,
     });
 
-    const reopened = await reopenPipeline(db as any, ITEM_ID, "ci_failed");
+    const reopened = await reopenPipeline(db, ITEM_ID, "ci_failed");
 
     expect(reopened).toBe(false);
     expect(dbUpdateMock).not.toHaveBeenCalled();
@@ -359,36 +360,41 @@ describe("reopenPipeline", () => {
   it("returns false when item not found", async () => {
     dbQueryFindFirstMock.mockResolvedValueOnce(null);
 
-    const reopened = await reopenPipeline(db as any, "nonexistent", "ci_failed");
+    const reopened = await reopenPipeline(db, "nonexistent", "ci_failed");
 
     expect(reopened).toBe(false);
   });
 });
 
 describe("handleDeliveryEvidence", () => {
-  let db: ReturnType<typeof makeDbMock>;
-  const dbUpdateReturningMock = vi.fn();
+  let db: Db;
+  const dbUpdateReturningMock = vi.fn<() => Promise<Record<string, unknown>[]>>();
 
   beforeEach(() => {
-    db = makeDbMock();
-    // Extend the mock to support .returning() on update
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (db as any).update = (table: unknown) => {
-      dbUpdateMock(table);
-      return {
-        set: (values: unknown) => {
-          dbUpdateSetMock(values);
-          return {
-            where: (condition: unknown) => {
-              dbUpdateWhereMock(condition);
-              return {
-                returning: () => dbUpdateReturningMock(),
-              };
-            },
-          };
-        },
-      };
+    // Extend the base mock to support .returning() on update, built before
+    // the cast to `Db` so this stays a plain object assignment rather than
+    // mutating a value already typed with the strict Db interface.
+    const baseDb = makeDbMock();
+    const dbWithUpdateReturning = {
+      ...baseDb,
+      update: (table: unknown) => {
+        dbUpdateMock(table);
+        return {
+          set: (values: unknown) => {
+            dbUpdateSetMock(values);
+            return {
+              where: (condition: unknown) => {
+                dbUpdateWhereMock(condition);
+                return {
+                  returning: () => dbUpdateReturningMock(),
+                };
+              },
+            };
+          },
+        };
+      },
     };
+    db = dbWithUpdateReturning as unknown as Db;
     dbInsertMock.mockReset();
     dbInsertValuesMock.mockReset();
     dbUpdateMock.mockReset();
@@ -407,7 +413,7 @@ describe("handleDeliveryEvidence", () => {
     // update work item .returning()
     dbUpdateReturningMock.mockResolvedValueOnce([{ id: "task-1", status: "in_progress" }]);
 
-    await handleDeliveryEvidence(db as any, {
+    await handleDeliveryEvidence(db, {
       dispatchItemId: ITEM_ID,
       workItemId: "task-1",
       taskRunId: TASK_RUN_ID,
@@ -433,7 +439,7 @@ describe("handleDeliveryEvidence", () => {
     // update work item .returning()
     dbUpdateReturningMock.mockResolvedValueOnce([{ id: "task-1", status: "done" }]);
 
-    await handleDeliveryEvidence(db as any, {
+    await handleDeliveryEvidence(db, {
       dispatchItemId: ITEM_ID,
       workItemId: "task-1",
       taskRunId: TASK_RUN_ID,
@@ -452,7 +458,7 @@ describe("handleDeliveryEvidence", () => {
     });
     dbUpdateReturningMock.mockResolvedValueOnce([{ id: "task-1", status: "in_progress" }]);
 
-    await handleDeliveryEvidence(db as any, {
+    await handleDeliveryEvidence(db, {
       dispatchItemId: ITEM_ID,
       workItemId: "task-1",
       taskRunId: TASK_RUN_ID,
@@ -470,7 +476,7 @@ describe("handleDeliveryEvidence", () => {
     });
     dbUpdateReturningMock.mockResolvedValueOnce([{ id: "task-1", status: "in_progress" }]);
 
-    await handleDeliveryEvidence(db as any, {
+    await handleDeliveryEvidence(db, {
       dispatchItemId: ITEM_ID,
       workItemId: "task-1",
       taskRunId: TASK_RUN_ID,
@@ -482,7 +488,7 @@ describe("handleDeliveryEvidence", () => {
   });
 
   it("does not change work item status on ci_passed", async () => {
-    await handleDeliveryEvidence(db as any, {
+    await handleDeliveryEvidence(db, {
       dispatchItemId: ITEM_ID,
       workItemId: "task-1",
       taskRunId: TASK_RUN_ID,
@@ -490,6 +496,9 @@ describe("handleDeliveryEvidence", () => {
     });
 
     // Should NOT update work item status
+    // vitest's expect.any/objectContaining always return `any` per their own
+    // type declarations, regardless of generic argument.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     expect(dbUpdateSetMock).not.toHaveBeenCalledWith(expect.objectContaining({ status: expect.any(String) }));
     // Should still log audit event
     expect(dbInsertValuesMock).toHaveBeenCalledWith(
