@@ -434,6 +434,33 @@ export async function sessionStop(
     });
   }
 
+  // Ask the gateway to kill the running agent process. When a daemon holds
+  // the session, the gateway marks it "stopping" and the daemon's terminal
+  // "interrupted" report finalizes it; when no daemon is online the gateway
+  // finalizes it as "stopped" itself. Only fall back to a bare local status
+  // flip when the gateway is unreachable.
+  const gatewayUrl = process.env.GATEWAY_URL;
+  const nudgeSecret = process.env.NUDGE_SHARED_SECRET;
+  if (gatewayUrl && nudgeSecret) {
+    try {
+      const res = await fetch(`${gatewayUrl}/internal/session-stop`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${nudgeSecret}`,
+        },
+        body: JSON.stringify({ userId: ctx.userId, sessionId: input.id }),
+      });
+      if (res.ok) {
+        return await ctx.db.query.chatConversations.findFirst({
+          where: eq(chatConversations.id, input.id),
+        });
+      }
+    } catch {
+      // fall through to local finalize
+    }
+  }
+
   const [updated] = await ctx.db
     .update(chatConversations)
     .set({

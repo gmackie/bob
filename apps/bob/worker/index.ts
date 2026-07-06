@@ -50,6 +50,42 @@ interface ExecutionContext {
 export default Sentry.withSentry(
   (env: Record<string, unknown> | undefined) => getSentryOptions(env),
   {
+    // Autonomous backlog driver — runs on the Cron trigger in wrangler.jsonc.
+    // Dispatches ready work items up to the concurrency cap + a daily rate
+    // limit, rotating across agents. Gated on BOB_AUTO_DRAIN_ENABLED so it can
+    // be turned off with a var change, no redeploy.
+    scheduled: async (
+      _event: unknown,
+      rawEnv: Record<string, unknown> | undefined,
+      ctx: ExecutionContext,
+    ): Promise<void> => {
+      const runtimeEnv = (rawEnv ?? {}) as Env;
+      if (String(runtimeEnv.BOB_AUTO_DRAIN_ENABLED ?? "") !== "true") {
+        return;
+      }
+      const concurrency = Number(runtimeEnv.BOB_AUTO_DRAIN_CONCURRENCY ?? 4);
+      const dailyCap = Number(runtimeEnv.BOB_AUTO_DRAIN_DAILY_CAP ?? 20);
+      const nudgeSecret =
+        runtimeEnv.NUDGE_SHARED_SECRET ?? process.env.NUDGE_SHARED_SECRET;
+      if (nudgeSecret) {
+        (globalThis as any).NUDGE_SHARED_SECRET = nudgeSecret;
+      }
+      const { connectionString, isHyperdrive } =
+        getHyperdriveConnectionString(runtimeEnv);
+      const work = runWithDb(connectionString, isHyperdrive, async () => {
+        const { autoDrainBacklog } = await import("@bob/api/handlers/autoDrain");
+        const result = await autoDrainBacklog({ concurrency, dailyCap });
+        console.log(
+          `[auto-drain] dispatched=${result.dispatched} running=${result.running} today=${result.dispatchedToday}` +
+            (result.reason ? ` reason="${result.reason}"` : "") +
+            (result.items.length
+              ? ` items=${result.items.map((i) => `${i.identifier}:${i.agentType}`).join(",")}`
+              : ""),
+        );
+      });
+      ctx.waitUntil(work);
+      await work;
+    },
     fetch: wrapFetch(
       async (
         request: Request,

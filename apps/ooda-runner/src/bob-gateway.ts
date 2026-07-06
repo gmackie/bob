@@ -4,11 +4,16 @@ import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import WebSocket from "ws";
 
-import type { AgentAdapter, AdapterEvent } from "@gmacko/ooda/agent-adapters";
+import type {
+  AgentAdapter,
+  AdapterEvent,
+  AdapterProcessHandle,
+} from "@gmacko/ooda/agent-adapters";
 import { bobRunReporterFromEnv, type BobRunReporter } from "./bob-run-reporter";
 
 const RECONNECT_DELAY_MS = 5_000;
 const HEARTBEAT_INTERVAL_MS = 25_000;
+const HELLO_TIMEOUT_MS = 15_000;
 
 export interface BobGatewayConfig {
   gatewayUrl: string;
@@ -66,14 +71,28 @@ type ServerMessage =
   | { type: "hello_ok"; userId: string; heartbeatIntervalMs: number }
   | { type: "error"; code: string; message: string }
   | { type: "pong" }
+  | { type: "session_stop"; sessionId: string }
+  | {
+      type: "event";
+      sessionId: string;
+      eventType: string;
+      direction: string;
+      payload: Record<string, unknown>;
+    }
   | ServerSessionAvailable
   | { type: string };
 
 export class BobGatewayConnector {
   private ws: WebSocket | null = null;
   private heartbeatTimer: NodeJS.Timeout | null = null;
+  private helloTimer: NodeJS.Timeout | null = null;
+  private authenticated = false;
   private reconnectAttempt = 0;
   private activeSessions = new Map<string, ChildProcess>();
+  // Live control handles (kill/steer) for every in-flight run, adapter or CLI.
+  private sessionHandles = new Map<string, AdapterProcessHandle>();
+  // Sessions the user asked to stop — their exit is reported as interrupted, not error.
+  private stopRequested = new Set<string>();
   private adapters: Map<string, AgentAdapter>;
   private stopped = false;
   // Reports gateway-dispatched runs to Bob's public API as agentRuns so they
@@ -95,11 +114,12 @@ export class BobGatewayConnector {
   stop(): void {
     this.stopped = true;
     this.cleanup();
-    for (const [sessionId, child] of this.activeSessions) {
+    for (const [sessionId, handle] of this.sessionHandles) {
       console.log(`[bob-gw] Interrupting session ${sessionId} (graceful shutdown)`);
       this.send({ type: "session_status", sessionId, status: "failed", summary: { reason: "interrupted", retryable: true } });
-      child.kill("SIGTERM");
+      handle.kill();
     }
+    this.sessionHandles.clear();
     this.activeSessions.clear();
     if (this.ws) {
       this.ws.close();
@@ -114,6 +134,7 @@ export class BobGatewayConnector {
 
     this.ws.on("open", () => {
       this.reconnectAttempt = 0;
+      this.authenticated = false;
       console.log("[bob-gw] Connected, sending hello");
       this.send({
         type: "hello",
@@ -122,6 +143,15 @@ export class BobGatewayConnector {
         token: this.config.apiKey,
         workspaceId: this.config.workspaceId,
       });
+      // If hello_ok never arrives (e.g. the gateway hit a transient DB error
+      // handling hello), the socket is open but we're unregistered and will
+      // never receive sessions — force a reconnect instead of idling forever.
+      this.helloTimer = setTimeout(() => {
+        if (!this.authenticated) {
+          console.error("[bob-gw] No hello_ok within 15s, reconnecting");
+          this.ws?.terminate();
+        }
+      }, HELLO_TIMEOUT_MS);
       this.startHeartbeat();
     });
 
@@ -167,21 +197,90 @@ export class BobGatewayConnector {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
     }
+    if (this.helloTimer) {
+      clearTimeout(this.helloTimer);
+      this.helloTimer = null;
+    }
+    this.authenticated = false;
   }
 
   private handleMessage(msg: ServerMessage): void {
     switch (msg.type) {
       case "hello_ok":
+        this.authenticated = true;
+        if (this.helloTimer) {
+          clearTimeout(this.helloTimer);
+          this.helloTimer = null;
+        }
         console.log(`[bob-gw] Authenticated as user ${(msg as any).userId}`);
         break;
       case "error":
         console.error(`[bob-gw] Server error: ${(msg as any).code} - ${(msg as any).message}`);
+        // An error before hello_ok means our registration failed — the socket
+        // is useless. Reconnect (with backoff) rather than idling unregistered.
+        if (!this.authenticated) {
+          this.ws?.terminate();
+        }
         break;
       case "session_available":
         void this.handleSessionAvailable(msg as ServerSessionAvailable);
         break;
+      case "session_stop":
+        this.handleSessionStop((msg as { sessionId: string }).sessionId);
+        break;
+      case "event":
+        this.handleInboundEvent(
+          msg as { sessionId: string; eventType: string; payload: Record<string, unknown> },
+        );
+        break;
       case "pong":
         break;
+    }
+  }
+
+  /** User asked to stop a run: kill the agent process; the run's exit path
+   *  sees `stopRequested` and reports `interrupted` instead of error. */
+  private handleSessionStop(sessionId: string): void {
+    const handle = this.sessionHandles.get(sessionId);
+    if (!handle) {
+      console.log(`[bob-gw] Stop requested for unknown session ${sessionId} (already finished?)`);
+      return;
+    }
+    console.log(`[bob-gw] Stopping session ${sessionId} (user request)`);
+    this.stopRequested.add(sessionId);
+    this.sendEvent(sessionId, "state", "system", { status: "stopping", reason: "user_request" });
+    handle.kill();
+  }
+
+  /** Browser → daemon frames relayed by the gateway. Only `input` (steering
+   *  a running agent) is meaningful today. */
+  private handleInboundEvent(msg: {
+    sessionId: string;
+    eventType: string;
+    payload: Record<string, unknown>;
+  }): void {
+    if (msg.eventType !== "input") return;
+    const text = typeof msg.payload?.data === "string" ? msg.payload.data : "";
+    if (!text.trim()) return;
+
+    const handle = this.sessionHandles.get(msg.sessionId);
+    const accepted = handle?.write(text) ?? false;
+    if (accepted) {
+      console.log(`[bob-gw] Steering input accepted for session ${msg.sessionId}`);
+      // Persist the user's message into the session transcript (the gateway's
+      // relay of the original input frame is delivery-only, never persisted).
+      this.sendEvent(msg.sessionId, "input", "client", {
+        data: text,
+        clientInputId: msg.payload?.clientInputId,
+      });
+    } else {
+      console.log(`[bob-gw] Steering input rejected for session ${msg.sessionId} (no live agent or unsupported)`);
+      this.sendEvent(msg.sessionId, "error", "system", {
+        code: "STEER_UNAVAILABLE",
+        message: handle
+          ? "This agent type doesn't support follow-up input mid-run."
+          : "No running agent for this session — it may have already finished.",
+      });
     }
   }
 
@@ -214,7 +313,12 @@ export class BobGatewayConnector {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`[bob-gw] worktree setup failed: ${msg}`);
-        this.send({ type: "session_status", sessionId: session.sessionId, status: "error" });
+        this.send({
+          type: "session_status",
+          sessionId: session.sessionId,
+          status: "error",
+          summary: { code: "WORKTREE_ERROR", error: msg },
+        });
         this.sendEvent(session.sessionId, "error", "system", { code: "WORKTREE_ERROR", message: msg });
         this.activeSessions.delete(session.sessionId);
         return;
@@ -263,6 +367,11 @@ export class BobGatewayConnector {
         await this.runWithCli(session, workDir, prompt, collect);
       }
 
+      if (this.stopRequested.has(session.sessionId)) {
+        await this.reportInterrupted(session, bobRunId, runOutput, startTime);
+        return;
+      }
+
       // Worktree path: push the branch and open a PR if commits were produced.
       let prUrl: string | null = null;
       if (worktree) {
@@ -295,9 +404,20 @@ export class BobGatewayConnector {
         .catch(() => {});
       void this.reportToBizPulse(session, "completed", Date.now() - startTime);
     } catch (err) {
+      // A user-requested stop kills the process, which surfaces here as a
+      // non-zero exit — that's an interruption, not an agent failure.
+      if (this.stopRequested.has(session.sessionId)) {
+        await this.reportInterrupted(session, bobRunId, runOutput, startTime);
+        return;
+      }
       const errMsg = err instanceof Error ? err.message : String(err);
       console.error(`[bob-gw] Session ${session.sessionId} failed: ${errMsg}`);
-      this.send({ type: "session_status", sessionId: session.sessionId, status: "error" });
+      this.send({
+        type: "session_status",
+        sessionId: session.sessionId,
+        status: "error",
+        summary: { code: "AGENT_ERROR", error: errMsg },
+      });
       this.sendEvent(session.sessionId, "error", "system", { code: "AGENT_ERROR", message: errMsg });
       await this.bobReporter.pushLog(bobRunId, runOutput).catch(() => {});
       await this.bobReporter.finishRun(bobRunId, "failed", { error: errMsg }).catch(() => {});
@@ -305,7 +425,33 @@ export class BobGatewayConnector {
     } finally {
       if (worktree) await this.removeWorktree(worktree).catch(() => {});
       this.activeSessions.delete(session.sessionId);
+      this.sessionHandles.delete(session.sessionId);
+      this.stopRequested.delete(session.sessionId);
     }
+  }
+
+  private async reportInterrupted(
+    session: ServerSessionAvailable,
+    bobRunId: string | null,
+    runOutput: string,
+    startTime: number,
+  ): Promise<void> {
+    console.log(`[bob-gw] Session ${session.sessionId} interrupted by user`);
+    this.send({
+      type: "session_status",
+      sessionId: session.sessionId,
+      status: "interrupted",
+      summary: { reason: "stopped_by_user" },
+    });
+    this.sendEvent(session.sessionId, "state", "system", {
+      status: "interrupted",
+      reason: "stopped_by_user",
+    });
+    await this.bobReporter.pushLog(bobRunId, runOutput).catch(() => {});
+    await this.bobReporter
+      .finishRun(bobRunId, "failed", { reason: "stopped_by_user" })
+      .catch(() => {});
+    void this.reportToBizPulse(session, "failed", Date.now() - startTime);
   }
 
   /** Detect the repo's default branch (origin/HEAD), falling back to main/master. */
@@ -496,9 +642,16 @@ export class BobGatewayConnector {
     onChunk?: (s: string) => void,
   ): Promise<void> {
     const systemPrompt = this.buildSystemPrompt(session);
-    const command = adapter.buildCommand({ prompt, workspaceRoot: workDir, systemPrompt });
+    const persona = session.personaConfig;
+    const command = adapter.buildCommand({
+      prompt,
+      workspaceRoot: workDir,
+      systemPrompt,
+      model: persona?.model,
+      allowedTools: persona?.allowedTools,
+    });
 
-    await adapter.execute(command, (event: AdapterEvent) => {
+    const { exitCode } = await adapter.execute(command, (event: AdapterEvent) => {
       if (event.type === "stdout" || event.type === "stderr") {
         onChunk?.(event.data);
         this.sendEvent(session.sessionId, "output_chunk", "agent", {
@@ -515,7 +668,13 @@ export class BobGatewayConnector {
           ...event.tool,
         });
       }
+    }, {
+      onSpawn: (handle) => this.sessionHandles.set(session.sessionId, handle),
     });
+
+    if (exitCode !== 0 && !this.stopRequested.has(session.sessionId)) {
+      throw new Error(`Agent exited with code ${exitCode}`);
+    }
   }
 
   private runWithCli(
@@ -535,6 +694,20 @@ export class BobGatewayConnector {
       });
 
       this.activeSessions.set(session.sessionId, child);
+      // CLI-spawned agents (codex/cursor) run with stdin ignored: they can be
+      // stopped but not steered.
+      this.sessionHandles.set(session.sessionId, {
+        write: () => false,
+        kill: () => {
+          child.kill("SIGTERM");
+          const escalate = setTimeout(() => {
+            if (child.exitCode === null && child.signalCode === null) {
+              child.kill("SIGKILL");
+            }
+          }, 5000);
+          escalate.unref?.();
+        },
+      });
 
       child.stdout?.on("data", (data: Buffer) => {
         onChunk?.(data.toString());
@@ -587,7 +760,21 @@ export class BobGatewayConnector {
         const codexPrompt = persona?.systemPrompt
           ? `${persona.systemPrompt}\n\n---\n\n${prompt}`
           : prompt;
-        return { command: "codex", args: ["exec", "--full-auto", codexPrompt] };
+        // codex-cli 0.135 grammar: `--full-auto` is deprecated, and exec
+        // refuses to run outside a trusted git dir without --skip-git-repo-check
+        // (Bob's fallback workdir isn't always a repo). --dangerously-bypass-
+        // approvals-and-sandbox = non-interactive autonomy (the box IS the
+        // sandbox), matching claude's --dangerously-skip-permissions posture.
+        // --json emits JSONL events we stream as output.
+        const codexArgs = [
+          "exec",
+          "--json",
+          "--skip-git-repo-check",
+          "--dangerously-bypass-approvals-and-sandbox",
+        ];
+        if (persona?.model) codexArgs.push("-m", persona.model);
+        codexArgs.push(codexPrompt);
+        return { command: "codex", args: codexArgs };
       }
       case "cursor": {
         const cursorArgs = ["--print", "--yolo", "--trust"];

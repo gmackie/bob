@@ -1,6 +1,64 @@
 import { describe, expect, it } from "vitest";
 
 import { ClaudeAdapter } from "../claude-adapter";
+import type { AdapterEvent, AdapterProcessHandle } from "../types";
+
+// Fake claude CLI: for each stream-json user message on stdin, emits a
+// `result` line after a short delay; exits when stdin closes (mirroring
+// the real CLI's --input-format stream-json behavior).
+const FAKE_CLAUDE = `
+const rl = require('readline').createInterface({ input: process.stdin });
+let pending = 0;
+let closed = false;
+rl.on('line', (l) => {
+  pending++;
+  const msg = JSON.parse(l);
+  setTimeout(() => {
+    console.log(JSON.stringify({ type: 'result', result: 'echo:' + msg.message.content }));
+    pending--;
+    if (closed && pending === 0) process.exit(0);
+  }, 150);
+});
+rl.on('close', () => {
+  closed = true;
+  if (pending === 0) process.exit(0);
+});
+`;
+
+// Fake agent that produces no output and never exits on its own — for kill tests.
+const HANG_FOREVER = `setInterval(() => {}, 1000);`;
+
+// Fake claude that MERGES queued messages into the current turn: emits a
+// single result no matter how many user messages arrive (the behavior the
+// real CLI showed for mid-turn steering in production).
+const MERGING_CLAUDE = `
+let first = true;
+const rl = require('readline').createInterface({ input: process.stdin });
+rl.on('line', () => {
+  if (!first) return;
+  first = false;
+  setTimeout(() => console.log(JSON.stringify({ type: 'result', result: 'merged' })), 250);
+});
+rl.on('close', () => process.exit(0));
+`;
+
+process.env.CLAUDE_STDIN_IDLE_CLOSE_MS = "150";
+
+function fakeCommand(script: string, prompt?: string) {
+  return {
+    binary: process.execPath,
+    args: ["-e", script],
+    cwd: process.cwd(),
+    prompt,
+  };
+}
+
+function collectResults(events: AdapterEvent[]): string[] {
+  return events
+    .filter((e) => e.type === "stdout")
+    .flatMap((e) => e.data.split("\n"))
+    .filter((l) => l.includes('"type":"result"'));
+}
 
 describe("ClaudeAdapter", () => {
   it("returns correct metadata", () => {
@@ -33,7 +91,7 @@ describe("ClaudeAdapter", () => {
     }
   });
 
-  it("builds the correct CLI command for claude CLI", () => {
+  it("builds a stream-json command with the prompt carried out-of-argv", () => {
     const adapter = new ClaudeAdapter();
 
     const command = adapter.buildCommand({
@@ -43,8 +101,125 @@ describe("ClaudeAdapter", () => {
     });
 
     expect(command.binary).toBe("claude");
-    expect(command.args).toContain("--print");
-    expect(command.args).toContain("Research sleep optimization");
+    expect(command.args).toContain("-p");
+    expect(command.args).toContain("--input-format");
+    expect(command.args).toContain("stream-json");
+    // Prompt goes over stdin (so follow-up turns can too), not argv
+    expect(command.args).not.toContain("Research sleep optimization");
+    expect(command.prompt).toBe("Research sleep optimization");
     expect(command.cwd).toBe("/tmp/threads/sleep");
+  });
+
+  it("applies persona model and allowedTools to the CLI args", () => {
+    const adapter = new ClaudeAdapter();
+
+    const command = adapter.buildCommand({
+      prompt: "do the thing",
+      workspaceRoot: "/tmp/ws",
+      model: "claude-sonnet-5",
+      allowedTools: ["Read", "Bash"],
+    });
+
+    const modelIdx = command.args.indexOf("--model");
+    expect(modelIdx).toBeGreaterThan(-1);
+    expect(command.args[modelIdx + 1]).toBe("claude-sonnet-5");
+
+    const toolsIdx = command.args.indexOf("--allowedTools");
+    expect(toolsIdx).toBeGreaterThan(-1);
+    expect(command.args[toolsIdx + 1]).toBe("Read,Bash");
+  });
+
+  it("omits model/tools flags when the persona doesn't set them", () => {
+    const adapter = new ClaudeAdapter();
+    const command = adapter.buildCommand({
+      prompt: "x",
+      workspaceRoot: "/tmp/ws",
+    });
+    expect(command.args).not.toContain("--model");
+    expect(command.args).not.toContain("--allowedTools");
+  });
+
+  it("runs a single-prompt session to completion (stdin closed after the turn)", async () => {
+    const adapter = new ClaudeAdapter();
+    const events: AdapterEvent[] = [];
+
+    const { exitCode } = await adapter.execute(
+      fakeCommand(FAKE_CLAUDE, "hello"),
+      (e) => events.push(e),
+    );
+
+    expect(exitCode).toBe(0);
+    const results = collectResults(events);
+    expect(results).toHaveLength(1);
+    expect(results[0]).toContain("echo:hello");
+  });
+
+  it("processes a steering message written mid-run as a second turn", async () => {
+    const adapter = new ClaudeAdapter();
+    const events: AdapterEvent[] = [];
+    let handle: AdapterProcessHandle | undefined;
+
+    const done = adapter.execute(
+      fakeCommand(FAKE_CLAUDE, "first"),
+      (e) => events.push(e),
+      { onSpawn: (h) => (handle = h) },
+    );
+
+    // Steer while the first turn is still in flight (fake takes 150ms)
+    await new Promise((r) => setTimeout(r, 50));
+    expect(handle?.write("second")).toBe(true);
+
+    const { exitCode } = await done;
+    expect(exitCode).toBe(0);
+    const results = collectResults(events);
+    expect(results).toHaveLength(2);
+    expect(results[1]).toContain("echo:second");
+  });
+
+  it("exits after one result even when the CLI merges a steer into the current turn", async () => {
+    const adapter = new ClaudeAdapter();
+    const events: AdapterEvent[] = [];
+    let handle: AdapterProcessHandle | undefined;
+
+    const done = adapter.execute(
+      fakeCommand(MERGING_CLAUDE, "first"),
+      (e) => events.push(e),
+      { onSpawn: (h) => (handle = h) },
+    );
+
+    // Steer mid-turn; the fake merges it — only ONE result ever comes.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(handle?.write("second")).toBe(true);
+
+    // Regression: with turn-counting this would hang forever (2 writes, 1 result).
+    const { exitCode } = await done;
+    expect(exitCode).toBe(0);
+    expect(collectResults(events)).toHaveLength(1);
+  });
+
+  it("rejects writes after the session has wound down", async () => {
+    const adapter = new ClaudeAdapter();
+    let handle: AdapterProcessHandle | undefined;
+
+    await adapter.execute(fakeCommand(FAKE_CLAUDE, "only"), () => {}, {
+      onSpawn: (h) => (handle = h),
+    });
+
+    expect(handle?.write("too late")).toBe(false);
+  });
+
+  it("kill() terminates a hung agent and reports exit 130", async () => {
+    const adapter = new ClaudeAdapter();
+    let handle: AdapterProcessHandle | undefined;
+
+    const done = adapter.execute(fakeCommand(HANG_FOREVER, "hang"), () => {}, {
+      onSpawn: (h) => (handle = h),
+    });
+
+    await new Promise((r) => setTimeout(r, 50));
+    handle?.kill();
+
+    const { exitCode } = await done;
+    expect(exitCode).toBe(130);
   });
 });
