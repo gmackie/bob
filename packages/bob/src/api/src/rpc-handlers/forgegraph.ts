@@ -129,10 +129,17 @@ export const makeForgeGraphRpcHandlers = (ctx: HandlerContext) => ({
   }) => wrapHandler(forgegraphApproveProdDeploy, ctx, payload, "dispatchItem"),
 
   "forgegraph.listApps": ({
-    payload: _payload,
+    payload,
   }: {
     payload: Record<string, never>;
-  }) => wrapHandler((_ctx, _input) => forgegraphListApps(), ctx, {} as any, "forgeApp"),
+  }) =>
+    wrapHandler(
+      (_ctx: HandlerContext, _input: Record<string, never>) =>
+        forgegraphListApps(),
+      ctx,
+      payload,
+      "forgeApp",
+    ),
 
   "forgegraph.listUnlinkedApps": ({
     payload,
@@ -144,11 +151,5 @@ export const makeForgeGraphRpcHandlers = (ctx: HandlerContext) => ({
     payload,
   }: {
     payload: { workspaceId: string; appId: string; key: string };
-  }) =>
-    wrapHandler(
-      forgegraphImportApp as any,
-      ctx,
-      payload,
-      "forgeApp",
-    ),
+  }) => wrapHandler(forgegraphImportApp, ctx, payload, "forgeApp"),
 });

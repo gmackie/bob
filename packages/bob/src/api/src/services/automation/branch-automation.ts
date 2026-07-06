@@ -11,7 +11,7 @@
 
 import { eq } from "@bob/db";
 import { db } from "@bob/db/client";
-import { repositories, taskRuns, workItems } from "@bob/db/schema";
+import { repositories, workItems } from "@bob/db/schema";
 
 import { createDraftPr } from "../git/prService";
 
@@ -37,11 +37,11 @@ export interface SessionCompleteParams {
  * PR creation. The actual `git branch` command is executed by the
  * execution runtime — this just provides the naming convention.
  */
-export async function onSessionStart(
+export function onSessionStart(
   params: SessionStartParams,
 ): Promise<{ branch: string }> {
   const branchName = `feature/${params.identifier.toLowerCase()}`;
-  return { branch: branchName };
+  return Promise.resolve({ branch: branchName });
 }
 
 /**
@@ -84,7 +84,7 @@ export async function onSessionComplete(
       planningTaskId: params.workItemId,
     });
 
-    return { prId: pr?.id };
+    return { prId: pr.id };
   } catch (err) {
     console.error("[branch-automation] Failed to create PR:", err);
     return { prId: undefined };

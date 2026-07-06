@@ -10,10 +10,10 @@ import type { PublicHandlerContext } from "./context.js";
 // Handler functions
 // ---------------------------------------------------------------------------
 
-export async function authGetSession(ctx: PublicHandlerContext) {
-  return ctx.session;
+export function authGetSession(ctx: PublicHandlerContext): Promise<PublicHandlerContext["session"]> {
+  return Promise.resolve(ctx.session);
 }
 
-export async function authGetSecretMessage() {
-  return "you can see this secret message!";
+export function authGetSecretMessage(): Promise<string> {
+  return Promise.resolve("you can see this secret message!");
 }

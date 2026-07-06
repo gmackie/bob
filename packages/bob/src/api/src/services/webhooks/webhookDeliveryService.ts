@@ -109,7 +109,11 @@ async function deliverToConfig(
     })
     .returning({ id: webhookDeliveries.id });
 
-  const deliveryId = delivery!.id;
+  if (!delivery) {
+    throw new Error("Failed to create webhook delivery record: insert returned no row");
+  }
+
+  const deliveryId = delivery.id;
 
   // Attempt delivery with retries
   let lastError: string | null = null;
@@ -117,7 +121,8 @@ async function deliverToConfig(
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (attempt > 0) {
-      const delay = RETRY_DELAYS_MS[attempt - 1] ?? RETRY_DELAYS_MS.at(-1)!;
+      const lastConfiguredDelay = RETRY_DELAYS_MS.at(-1) ?? DELIVERY_TIMEOUT_MS;
+      const delay = RETRY_DELAYS_MS[attempt - 1] ?? lastConfiguredDelay;
       await sleep(delay);
     }
 

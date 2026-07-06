@@ -12,7 +12,7 @@ import { captureListTargets, captureCapture } from "../handlers/capture.js";
 
 export const makeCaptureRpcHandlers = (ctx: HandlerContext) => ({
   "capture.listTargets": ({ payload }: { payload: void }) =>
-    wrapHandler(captureListTargets, ctx, payload as any, "capture"),
+    wrapHandler(captureListTargets, ctx, payload, "capture"),
 
   "capture.capture": ({
     payload,

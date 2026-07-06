@@ -18,7 +18,7 @@ import {
 
 export const makeWorkspaceRpcHandlers = (ctx: HandlerContext) => ({
   "workspace.list": ({ payload }: { payload: void }) =>
-    wrapHandler(workspaceList, ctx, payload as any, "workspace"),
+    wrapHandler(workspaceList, ctx, payload, "workspace"),
 
   "workspace.create": ({
     payload,

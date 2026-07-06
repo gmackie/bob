@@ -29,7 +29,7 @@ export async function linkList(
     conditions.push(eq(worktreeLinks.worktreeId, input.worktreeId));
   }
   if (input.linkType) {
-    conditions.push(eq(worktreeLinks.linkType, input.linkType as any));
+    conditions.push(eq(worktreeLinks.linkType, input.linkType));
   }
 
   const links = await ctx.db.query.worktreeLinks.findMany({

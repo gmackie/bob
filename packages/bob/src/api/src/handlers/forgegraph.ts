@@ -21,14 +21,6 @@ import { getForgeGraphClient } from "../services/forgegraph/config";
 import type { HandlerContext } from "./context.js";
 
 // ---------------------------------------------------------------------------
-// Context with session (needed for importApp which accesses session.user.id)
-// ---------------------------------------------------------------------------
-
-interface HandlerContextWithSession extends HandlerContext {
-  readonly session: { user: { id: string } };
-}
-
-// ---------------------------------------------------------------------------
 // Handler functions
 // ---------------------------------------------------------------------------
 
@@ -436,7 +428,7 @@ export async function forgegraphListUnlinkedApps(
 }
 
 export async function forgegraphImportApp(
-  ctx: HandlerContextWithSession,
+  ctx: HandlerContext,
   input: {
     workspaceId: string;
     appId: string;
@@ -500,7 +492,7 @@ export async function forgegraphImportApp(
   // Create a repository record so executeTask can find it
   if (remoteUrl && project) {
     await ctx.db.insert(repositories).values({
-      userId: ctx.session.user.id,
+      userId: ctx.userId,
       planningProjectId: project.id,
       name: remoteName ?? app.name,
       path: `/repos/${app.slug}`,
@@ -517,7 +509,7 @@ export async function forgegraphImportApp(
 }
 
 export async function forgegraphImportAllApps(
-  ctx: HandlerContextWithSession,
+  ctx: HandlerContext,
   input: { workspaceId: string },
 ) {
   const fg = getForgeGraphClient();
@@ -598,7 +590,7 @@ export async function forgegraphImportAllApps(
         await ctx.db
           .insert(repositories)
           .values({
-            userId: ctx.session.user.id,
+            userId: ctx.userId,
             planningProjectId: project.id,
             name: remoteName ?? app.name,
             path: `/repos/${app.slug}`,

@@ -577,9 +577,9 @@ export function parseDiffStats(
     const deletionsMatch = /(\d+)\s+deletions?\(-\)/.exec(input);
 
     return {
-      filesChanged: filesMatch ? parseInt(filesMatch[1]!, 10) : 0,
-      additions: insertionsMatch ? parseInt(insertionsMatch[1]!, 10) : 0,
-      deletions: deletionsMatch ? parseInt(deletionsMatch[1]!, 10) : 0,
+      filesChanged: filesMatch?.[1] ? parseInt(filesMatch[1], 10) : 0,
+      additions: insertionsMatch?.[1] ? parseInt(insertionsMatch[1], 10) : 0,
+      deletions: deletionsMatch?.[1] ? parseInt(deletionsMatch[1], 10) : 0,
     };
   }
 

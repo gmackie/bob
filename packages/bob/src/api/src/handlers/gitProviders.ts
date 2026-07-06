@@ -42,12 +42,10 @@ function parseRemoteUrl(url: string): {
     }
 
     const pathParts = parsed.pathname.split("/").filter(Boolean);
-    if (pathParts.length < 2) {
+    const [owner, name] = pathParts;
+    if (pathParts.length < 2 || !owner || !name) {
       return { provider: null, instanceUrl: null, owner: null, name: null };
     }
-
-    const owner = pathParts[0]!;
-    const name = pathParts[1]!;
     const host = parsed.hostname.toLowerCase();
 
     let provider: GitProvider | null = null;
