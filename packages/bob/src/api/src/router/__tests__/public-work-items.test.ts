@@ -1,6 +1,14 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { createTRPCContext } from "../../trpc.js";
+
 process.env.DATABASE_URL ??= "postgres://postgres:postgres@localhost:5432/test";
+
+// The real tRPC context type — the mock db/authApi below are structurally
+// close-enough fakes that only implement the query surface these handlers
+// actually call, cast through `unknown` (not `any`) at the single
+// construction site so every caller.* call below stays fully typed.
+type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
 
 type MockDb = ReturnType<typeof createMockDb>;
 
@@ -18,7 +26,12 @@ const createMockDb = () => ({
   },
 });
 
-let createCaller: (db: MockDb, withApiKey?: boolean) => ReturnType<any>;
+let createCaller: (
+  db: MockDb,
+  withApiKey?: boolean,
+) => {
+  publicWorkItems: { list: (input: unknown) => Promise<unknown> };
+};
 
 beforeAll(async () => {
   const { createTRPCRouter } = await import("../../trpc");
@@ -49,7 +62,7 @@ beforeAll(async () => {
           }
         : null,
       db,
-    } as any);
+    } as unknown as TRPCContext) as unknown as ReturnType<typeof createCaller>;
 });
 
 describe("publicWorkItems router", () => {
