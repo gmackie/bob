@@ -1,7 +1,7 @@
 import type { WebSocket } from "ws";
 import { eq, and, gt, lt, inArray, asc, desc, sql } from "@bob/db";
 import { db } from "@bob/db/client";
-import { chatConversations, repositories, sessionEvents, taskRuns, workItems, agentRuns, activities, workspaces, tenants, tenantMembers, planDrafts } from "@bob/db/schema";
+import { chatConversations, repositories, sessionEvents, taskRuns, workItems, agentRuns, activities, workspaces, tenants, tenantMembers, planDrafts, pullRequests } from "@bob/db/schema";
 
 import {
   parseClientMessage,
@@ -23,6 +23,7 @@ import {
 } from "./protocol.js";
 import type { SessionEventRecord } from "./persistence.js";
 import { pushToUser } from "./push.js";
+import { parsePrUrl } from "./pr-url.js";
 
 const REPLAY_LIMIT = 500;
 
@@ -983,6 +984,8 @@ export class Relay {
           reason?: string;
           message?: string;
           pullRequestUrl?: string;
+          branch?: string;
+          baseBranch?: string;
         }
       | undefined;
     const errorMessage =
@@ -1022,11 +1025,29 @@ export class Relay {
         columns: { id: true, workItemId: true },
       });
       if (taskRun) {
+        // Record the PR (opened on the git host by the runner) in bob's own
+        // tracking so it's visible in the UI, and link it to the task run.
+        // Gateway-dispatched work (the autonomous driver + manual starts) goes
+        // through this path, which previously left pull_requests empty.
+        let pullRequestId: string | undefined;
+        if (msg.status === "completed" && summary?.pullRequestUrl) {
+          pullRequestId = await this.recordPullRequest(
+            session,
+            summary.pullRequestUrl,
+            summary.branch,
+            summary.baseBranch,
+          ).catch((err) => {
+            console.error("[Relay] Failed to record PR:", err);
+            return undefined;
+          });
+        }
+
         await db
           .update(taskRuns)
           .set({
             status: runStatus,
             ...(isError && errorMessage ? { blockedReason: errorMessage } : {}),
+            ...(pullRequestId ? { pullRequestId } : {}),
             completedAt: sql`now()`,
           })
           .where(eq(taskRuns.id, taskRun.id));
@@ -1103,6 +1124,56 @@ export class Relay {
       msg.status,
       planningCounts,
     );
+  }
+
+  /**
+   * Record a PR (already opened on the git host by the runner) in bob's
+   * pull_requests table and return its id, so gateway-dispatched work shows up
+   * in the UI. Idempotent on the PR url. Best-effort: returns undefined if the
+   * url can't be parsed or the row can't be written.
+   */
+  private async recordPullRequest(
+    session: {
+      id: string;
+      userId: string;
+      title?: string | null;
+      repositoryId?: string | null;
+      workItemIdentifierSnapshot?: string | null;
+    },
+    url: string,
+    branch?: string,
+    baseBranch?: string,
+  ): Promise<string | undefined> {
+    const parsed = parsePrUrl(url);
+    if (!parsed) return undefined;
+    const { host, owner, repo, number, provider } = parsed;
+
+    const existing = await db.query.pullRequests.findFirst({
+      where: eq(pullRequests.url, url),
+      columns: { id: true },
+    });
+    if (existing) return existing.id;
+
+    const [row] = await db
+      .insert(pullRequests)
+      .values({
+        userId: session.userId,
+        repositoryId: session.repositoryId ?? null,
+        provider,
+        instanceUrl: provider === "github" ? null : `https://${host}`,
+        remoteOwner: owner,
+        remoteName: repo,
+        number,
+        headBranch: branch ?? `pr-${number}`,
+        baseBranch: baseBranch ?? "main",
+        title: session.title ?? `PR #${number}`,
+        status: "open",
+        url,
+        sessionId: session.id,
+        planningTaskId: session.workItemIdentifierSnapshot ?? null,
+      })
+      .returning({ id: pullRequests.id });
+    return row?.id;
   }
 
   /**

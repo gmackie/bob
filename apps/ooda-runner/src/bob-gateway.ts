@@ -425,7 +425,16 @@ export class BobGatewayConnector {
         type: "session_status",
         sessionId: session.sessionId,
         status: "completed",
-        summary: prUrl ? { pullRequestUrl: prUrl } : undefined,
+        // Include branch + base so the gateway can record the PR in bob's
+        // pull_requests table (this path opens the PR on the git host but the
+        // gateway owns the DB tracking).
+        summary: prUrl
+          ? {
+              pullRequestUrl: prUrl,
+              branch: worktree?.branch,
+              baseBranch: worktree?.baseBranch,
+            }
+          : undefined,
       });
       this.sendEvent(session.sessionId, "state", "system", {
         status: "completed",
