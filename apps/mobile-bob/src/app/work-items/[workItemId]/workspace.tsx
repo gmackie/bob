@@ -25,7 +25,7 @@ import { trpc } from "~/utils/api";
 import { authClient } from "~/utils/auth";
 import { getBaseUrl } from "~/utils/base-url";
 
-const AGENT_OPTIONS: Array<{ id: string; label: string }> = [
+const AGENT_OPTIONS: { id: string; label: string }[] = [
   { id: "claude", label: "Claude" },
   { id: "codex", label: "Codex" },
   { id: "grok", label: "Grok" },

@@ -16,7 +16,7 @@ interface ProvidersProps {
  */
 function PushNotificationsRegistrar() {
   const { data: session } = authClient.useSession();
-  usePushNotifications(session?.user?.id ?? null);
+  usePushNotifications(session?.user.id ?? null);
   return null;
 }
 

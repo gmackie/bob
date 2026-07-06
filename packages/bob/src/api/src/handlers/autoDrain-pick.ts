@@ -11,14 +11,19 @@ export function pickAcrossProjects<T extends { projectId: string | null }>(
   const byProject = new Map<string, T[]>();
   for (const item of ready) {
     const key = item.projectId ?? "none";
-    (byProject.get(key) ?? byProject.set(key, []).get(key)!).push(item);
+    let bucket = byProject.get(key);
+    if (!bucket) {
+      bucket = [];
+      byProject.set(key, bucket);
+    }
+    bucket.push(item);
   }
   const queues = [...byProject.values()];
   const picked: T[] = [];
   let idx = 0;
   while (picked.length < n && queues.some((q) => q.length > 0)) {
-    const q = queues[idx % queues.length]!;
-    const next = q.shift();
+    const q = queues[idx % queues.length];
+    const next = q?.shift();
     if (next) picked.push(next);
     idx++;
   }

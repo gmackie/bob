@@ -12,7 +12,6 @@
 import { and, asc, eq, inArray, sql } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
-  autoDrainConfig,
   chatConversations,
   projects,
   taskRuns,
@@ -77,7 +76,7 @@ export interface AutoDrainResult {
   running: number;
   dispatchedToday: number;
   reason?: string;
-  items: Array<{ id: string; identifier: string; agentType: string }>;
+  items: { id: string; identifier: string; agentType: string }[];
 }
 
 export async function autoDrainBacklog(
@@ -156,7 +155,8 @@ export async function autoDrainBacklog(
       // Prefer a per-item agent override, else rotate.
       const agentType =
         wi.agentTypeOverride ??
-        agents[(today + dispatchedItems.length) % agents.length]!;
+        agents[(today + dispatchedItems.length) % agents.length] ??
+        "claude";
 
       await executeTask(
         wi.ownerUserId,
@@ -180,7 +180,7 @@ export async function autoDrainBacklog(
         .update(workItems)
         .set({ status: "ready" })
         .where(eq(workItems.id, wi.id))
-        .catch(() => {});
+        .catch(() => undefined);
       console.error(`[auto-drain] dispatch failed for ${wi.id}:`, err);
     }
   }

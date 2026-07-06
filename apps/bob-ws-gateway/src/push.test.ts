@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // Mock db: control the two lookups pushToUser makes (preference + tokens).
 const prefFindFirst = vi.fn();
 const tokensFindMany = vi.fn();
-const deleteWhere = vi.fn(() => Promise.resolve());
+const deleteWhere = vi.fn((..._a: unknown[]) => Promise.resolve());
 
 vi.mock("@bob/db/client", () => ({
   db: {
