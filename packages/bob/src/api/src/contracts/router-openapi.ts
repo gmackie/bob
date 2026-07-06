@@ -99,11 +99,12 @@ function extractInputSchema(inputs: unknown[]): z.ZodTypeAny | undefined {
     }
   }
 
-  if (zodSchemas.length === 0) return undefined;
-  if (zodSchemas.length === 1) return zodSchemas[0]!;
+  const [first, second] = zodSchemas;
+  if (zodSchemas.length === 0 || !first) return undefined;
+  if (zodSchemas.length === 1 || !second) return first;
 
   // Multiple inputs → intersection
-  return z.intersection(zodSchemas[0]!, zodSchemas[1]!);
+  return z.intersection(first, second);
 }
 
 /**
@@ -165,7 +166,7 @@ export function extractProcedures(
         path: currentPath,
         type: def.type as "query" | "mutation",
         tag: currentTag,
-        inputSchema: extractInputSchema(def.inputs ?? []),
+        inputSchema: extractInputSchema(def.inputs),
       });
     } else if (isRouter(value)) {
       // Wrapped router: recurse into _def.record
@@ -264,7 +265,7 @@ export function generateOpenApiFromRouter(
             string,
             OpenAPIV3_1.SchemaObject
           >;
-          const required = (jsonSchema.required!) ?? [];
+          const required = jsonSchema.required ?? [];
 
           operation.parameters = Object.entries(properties).map(
             ([name, schema]) =>

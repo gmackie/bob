@@ -1,6 +1,7 @@
 import { and, eq, isNull, sql } from "@bob/db";
 import { db } from "@bob/db/client";
 import { account, gitProviderConnections } from "@bob/db/schema";
+import { authEnv } from "@bob/auth/env";
 
 import type { EncryptedToken } from "../crypto/tokenVault";
 import type { GitProvider, GitProviderClient } from "./providers/types";
@@ -243,7 +244,11 @@ export async function createConnection(params: {
     })
     .returning({ id: gitProviderConnections.id });
 
-  return result!.id;
+  if (!result) {
+    throw new Error("Failed to create git provider connection: insert returned no row");
+  }
+
+  return result.id;
 }
 
 export async function revokeConnection(
@@ -306,8 +311,12 @@ export function createProviderClient(
         throw new Error("Gitea requires an instance URL");
       }
       return createGiteaClient(accessToken, instanceUrl);
-    default:
-      throw new Error(`Unsupported provider: ${provider}`);
+    default: {
+      // GitProvider is exhaustively handled above; this only guards against
+      // a value that slipped past validation at runtime (TS sees `never`).
+      const unexpected: string = provider;
+      throw new Error(`Unsupported provider: ${unexpected}`);
+    }
   }
 }
 
@@ -368,6 +377,13 @@ async function refreshAccessToken(
       throw new Error("GitHub OAuth tokens do not support refresh");
 
     case "gitlab": {
+      const { AUTH_GITLAB_ID, AUTH_GITLAB_SECRET } = authEnv();
+      if (!AUTH_GITLAB_ID || !AUTH_GITLAB_SECRET) {
+        throw new Error(
+          "GitLab OAuth is not configured (AUTH_GITLAB_ID/AUTH_GITLAB_SECRET missing)",
+        );
+      }
+
       const tokenUrl = instanceUrl
         ? `${instanceUrl}/oauth/token`
         : "https://gitlab.com/oauth/token";
@@ -378,8 +394,8 @@ async function refreshAccessToken(
         body: new URLSearchParams({
           grant_type: "refresh_token",
           refresh_token: refreshToken,
-          client_id: process.env.AUTH_GITLAB_ID!,
-          client_secret: process.env.AUTH_GITLAB_SECRET!,
+          client_id: AUTH_GITLAB_ID,
+          client_secret: AUTH_GITLAB_SECRET,
         }).toString(),
       });
 
@@ -407,7 +423,11 @@ async function refreshAccessToken(
     case "gitea":
       throw new Error("Gitea PAT tokens do not support refresh");
 
-    default:
-      throw new Error(`Unsupported provider for token refresh: ${provider}`);
+    default: {
+      // GitProvider is exhaustively handled above; this only guards against
+      // a value that slipped past validation at runtime (TS sees `never`).
+      const unexpected: string = provider;
+      throw new Error(`Unsupported provider for token refresh: ${unexpected}`);
+    }
   }
 }

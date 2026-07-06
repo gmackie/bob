@@ -27,8 +27,15 @@ export interface BobRuntimeLayersInput {
 }
 
 export interface BobRuntimeLayers {
-  readonly runtimeLayer: Layer.Layer<any, any, any>;
-  readonly authMiddlewareLayer: Layer.Layer<any, any, any>;
+  // Widened to `unknown` at this boundary to match `RpcServerLayers` in
+  // `./rpc-server.ts` (the sole consumer, via `makeRpcHandler`), which
+  // itself erases these generics for the same non-portable-declaration-emit
+  // reason documented next to `BobRpcGroup` in that file. `unknown` (not
+  // `any`) so callers can't be misled into thinking these are unsafely
+  // typed — Effect's `Layer.provide` will still reject an incompatible
+  // layer at the composition call site in `makeRpcHandler`.
+  readonly runtimeLayer: Layer.Layer<unknown, unknown, unknown>;
+  readonly authMiddlewareLayer: Layer.Layer<unknown, unknown, unknown>;
 }
 
 /**
@@ -65,5 +72,14 @@ export function makeBobRuntimeLayers(
     Layer.mergeAll(sessionsLayer, apiKeysLayer, tenancyLayer),
   );
 
-  return { runtimeLayer, authMiddlewareLayer };
+  // Widen to the erased `Layer<unknown, unknown, unknown>` boundary that
+  // `RpcServerLayers` (./rpc-server.ts) expects — the same erasure pattern
+  // `makeRpcHandler` itself applies via `as unknown as LayerType.Layer<...>`
+  // for identical non-portable-declaration-emit reasons. The concrete
+  // R/E/RIn generics computed above are what actually flow through
+  // `Layer.provide` at the call site, so this doesn't relax any real check.
+  return {
+    runtimeLayer: runtimeLayer as unknown as Layer.Layer<unknown, unknown, unknown>,
+    authMiddlewareLayer: authMiddlewareLayer as unknown as Layer.Layer<unknown, unknown, unknown>,
+  };
 }
