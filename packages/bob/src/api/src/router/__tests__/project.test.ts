@@ -3,6 +3,14 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import type { createTRPCContext } from "../../trpc.js";
+
+// The real tRPC context type — the mock db/authApi below are structurally
+// close-enough fakes that only implement the query/insert/update surface
+// these handlers actually call, cast through `unknown` (not `any`) at the
+// single construction site so every caller.* call below stays fully typed.
+type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
+
 let appRouter: typeof import("../../root").appRouter;
 
 const queryMocks = {
@@ -105,10 +113,10 @@ const createCaller = () =>
         name: "Test User",
       },
     },
-    authApi: { getSession: vi.fn() } as any,
+    authApi: { getSession: vi.fn() },
     apiKeyAuth: null,
-    db: makeDbMock() as any,
-  });
+    db: makeDbMock(),
+  } as unknown as TRPCContext);
 
 describe("project router", () => {
   const projectId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -308,6 +316,9 @@ describe("project router", () => {
       "http://gw.local/internal/workspace-event",
       expect.objectContaining({
         method: "POST",
+        // vitest's nested expect.objectContaining always returns `any` per
+        // its own type declarations, regardless of generic argument.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         headers: expect.objectContaining({
           Authorization: "Bearer shh",
         }),
@@ -473,6 +484,9 @@ describe("project router", () => {
       "http://gw.local/internal/workspace-event",
       expect.objectContaining({
         method: "POST",
+        // vitest's nested expect.objectContaining always returns `any` per
+        // its own type declarations, regardless of generic argument.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         headers: expect.objectContaining({
           Authorization: "Bearer shh",
         }),
@@ -512,6 +526,9 @@ describe("project router", () => {
       "http://gw.local/internal/workspace-event",
       expect.objectContaining({
         method: "POST",
+        // vitest's nested expect.objectContaining always returns `any` per
+        // its own type declarations, regardless of generic argument.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         headers: expect.objectContaining({
           Authorization: "Bearer shh",
         }),
