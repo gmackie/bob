@@ -23,7 +23,8 @@ function detectCycle(
   const queue = nodeIds.filter((id) => (inDegree.get(id) ?? 0) === 0);
   let visited = 0;
   while (queue.length > 0) {
-    const node = queue.shift()!;
+    const node = queue.shift();
+    if (node === undefined) break;
     visited++;
     for (const neighbor of adjList.get(node) ?? []) {
       const deg = (inDegree.get(neighbor) ?? 1) - 1;

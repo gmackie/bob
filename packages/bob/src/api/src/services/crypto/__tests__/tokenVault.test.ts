@@ -167,7 +167,7 @@ describe("tokenVault", () => {
       const encrypted = encryptToken(plaintext, connectionId, testKey);
 
       const tamperedCiphertext = Buffer.from(encrypted.ciphertext, "base64");
-      tamperedCiphertext[0] = (tamperedCiphertext[0]! + 1) % 256;
+      tamperedCiphertext[0] = ((tamperedCiphertext[0] ?? 0) + 1) % 256;
       encrypted.ciphertext = tamperedCiphertext.toString("base64");
 
       expect(() => decryptToken(encrypted, connectionId, testKey)).toThrow();
@@ -180,7 +180,7 @@ describe("tokenVault", () => {
       const encrypted = encryptToken(plaintext, connectionId, testKey);
 
       const tamperedIv = Buffer.from(encrypted.iv, "base64");
-      tamperedIv[0] = (tamperedIv[0]! + 1) % 256;
+      tamperedIv[0] = ((tamperedIv[0] ?? 0) + 1) % 256;
       encrypted.iv = tamperedIv.toString("base64");
 
       expect(() => decryptToken(encrypted, connectionId, testKey)).toThrow();
@@ -193,7 +193,7 @@ describe("tokenVault", () => {
       const encrypted = encryptToken(plaintext, connectionId, testKey);
 
       const tamperedTag = Buffer.from(encrypted.tag, "base64");
-      tamperedTag[0] = (tamperedTag[0]! + 1) % 256;
+      tamperedTag[0] = ((tamperedTag[0] ?? 0) + 1) % 256;
       encrypted.tag = tamperedTag.toString("base64");
 
       expect(() => decryptToken(encrypted, connectionId, testKey)).toThrow();

@@ -10,6 +10,8 @@
  */
 import { describe, expect, it, vi } from "vitest";
 
+import type { HandlerContext } from "../handlers/context.js";
+
 // Mock @bob/db/client to prevent top-level DB initialization (the `db`
 // export is evaluated at import time and throws without DATABASE_URL or
 // a PGlite driver). Our tests only exercise layer construction and
@@ -61,7 +63,7 @@ import { makeWebhookRpcHandlers } from "../rpc-handlers/webhook.js";
 import { makePublicApiRpcHandlers } from "../rpc-handlers/publicApi.js";
 import { makeIntegrationRpcHandlers } from "../rpc-handlers/integration.js";
 
-const mockCtx = { db: {} as any, userId: "test-user" };
+const mockCtx: HandlerContext = { db: {} as HandlerContext["db"], userId: "test-user" };
 
 // ---------------------------------------------------------------------------
 // Aggregate layer construction

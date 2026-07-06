@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type { Layer as LayerType } from "effect";
 import { Effect, Layer, Schema } from "effect";
 import { Rpc, RpcGroup, RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { HttpRouter } from "effect/unstable/http";
