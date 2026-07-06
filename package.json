@@ -41,6 +41,7 @@
     ]
   },
   "devDependencies": {
+    "@gmacko/emulate": "^0.5.3",
     "tsx": "catalog:",
     "turbo": "^2.8.0",
     "typescript": "^5.9.0"

@@ -1,0 +1,9 @@
+# Minimal seed for @gmacko/emulate in CI/tests: bob only needs the postgres
+# wire-protocol mock (backed by PGlite), not the github/stripe/etc. mocks —
+# @bob/db and @bob/api's test suites connect to a real Postgres wire protocol
+# at postgres://postgres:postgres@localhost:5432/test (see
+# test/emulate-setup.ts), they don't exercise any external provider mocks.
+postgres:
+  port: 5432
+  databases:
+    - name: test

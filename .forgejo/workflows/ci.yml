@@ -10,31 +10,21 @@ env:
 
 jobs:
   ci:
-    # Needs the forgegraf-docker label, not the generic ubuntu-latest one:
-    # the postgres service container below requires docker-in-docker
-    # capability that only hetzner-bob has narrowly enabled (valid_volumes +
-    # docker_host: automount) -- the other runners in this fleet reject
-    # service containers entirely and the job dies before any named step.
-    runs-on: forgegraf-docker
+    # No longer needs the forgegraf-docker label / docker-in-docker: postgres
+    # is now provided by @gmacko/emulate (a PGlite-backed wire-protocol mock
+    # spawned as a plain Node subprocess by test/emulate-setup.ts's vitest
+    # globalSetup, coordinated across @bob/db + @bob/api via a lock file --
+    # see that file for details). This removes both the fragile dependency on
+    # hetzner-bob's narrowly-scoped docker runner label and the "port is
+    # already allocated" failures two concurrent job runs used to hit when
+    # both tried to bind host port 5432 for their own postgres service
+    # container.
+    #
     # `@bob/api` (~21 test files) and `@bob/db` (its own vitest suite) require
     # a live Postgres at postgres://postgres:postgres@localhost:5432/test --
-    # see those packages' test files for the hardcoded connection string.
-    # Without this service container `pnpm test` fails at import time (no
-    # DATABASE_URL) or times out (PGlite dispatcher tests racing with no DB).
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+    # see those packages' test files for the hardcoded connection string, and
+    # test/emulate-setup.ts / emulate.config.yaml for how it's now served.
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -52,6 +42,30 @@ jobs:
 
       - name: Lint
         run: pnpm lint
+
+      - name: Start emulated Postgres (@gmacko/emulate)
+        # `drizzle-kit push` below runs as its own step, outside vitest's
+        # globalSetup (test/emulate-setup.ts) which only starts on-demand when
+        # a test file first imports it -- so start the emulator explicitly
+        # here and leave it running for both this step and `pnpm test` after
+        # it. See test/emulate-setup.ts for the lock/coordination logic that
+        # lets @bob/db and @bob/api's own vitest processes detect this
+        # already-running instance instead of racing to start a second one.
+        run: |
+          mkdir -p data/pglite
+          nohup npx @gmacko/emulate start -s postgres --seed emulate.config.yaml \
+            > /tmp/emulate.log 2>&1 &
+          echo "Waiting for emulated postgres wire protocol on :5432..."
+          for i in $(seq 1 90); do
+            if (echo > /dev/tcp/127.0.0.1/5432) >/dev/null 2>&1; then
+              echo "postgres ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Emulated postgres never came up on :5432"
+          cat /tmp/emulate.log
+          exit 1
 
       - name: Push @bob/db schema to CI Postgres
         working-directory: packages/bob/src/db
