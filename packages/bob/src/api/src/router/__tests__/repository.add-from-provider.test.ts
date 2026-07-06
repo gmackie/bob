@@ -1,5 +1,13 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { createTRPCContext } from "../../trpc.js";
+
+// The real tRPC context type — the mock db/authApi below are structurally
+// close-enough fakes that only implement the query/insert surface these
+// handlers actually call, cast through `unknown` (not `any`) at the single
+// construction site so every caller.* call below stays fully typed.
+type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
+
 let appRouter: typeof import("../../root").appRouter;
 
 const queryMocks = {
@@ -52,10 +60,10 @@ const createCaller = () =>
         name: "Test User",
       },
     },
-    authApi: { getSession: vi.fn() } as any,
+    authApi: { getSession: vi.fn() },
     apiKeyAuth: null,
-    db: makeDbMock() as any,
-  });
+    db: makeDbMock(),
+  } as unknown as TRPCContext);
 
 describe("repository.addFromProvider", () => {
   const projectId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -65,9 +73,9 @@ describe("repository.addFromProvider", () => {
       "postgres://postgres:postgres@localhost:5432/test";
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => ({
+      vi.fn(() => ({
         ok: true,
-        json: async () => ({}),
+        json: () => Promise.resolve({}),
       })),
     );
     ({ appRouter } = await import("../../root"));
@@ -83,9 +91,9 @@ describe("repository.addFromProvider", () => {
     insertReturningMock.mockReset();
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => ({
+      vi.fn(() => ({
         ok: true,
-        json: async () => ({}),
+        json: () => Promise.resolve({}),
       })),
     );
   });
@@ -97,7 +105,7 @@ describe("repository.addFromProvider", () => {
     });
     queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(
       caller.repository.addFromProvider({
@@ -128,7 +136,7 @@ describe("repository.addFromProvider", () => {
       },
     ]);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
     const result = await caller.repository.addFromProvider({
       fullName: "acme/demo",
       cloneUrl: "https://example.com/acme/demo.git",
