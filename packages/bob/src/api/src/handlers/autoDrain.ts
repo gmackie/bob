@@ -12,6 +12,7 @@
 import { and, asc, eq, inArray, sql } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
+  autoDrainConfig,
   chatConversations,
   projects,
   taskRuns,
@@ -36,12 +37,39 @@ const ACTIVE_SESSION_STATUSES = [
 const AGENT_ROTATION = ["claude", "codex", "grok", "cursor"];
 
 export interface AutoDrainOptions {
-  /** Max simultaneously-running sessions (match the runner's BOB_MAX_CONCURRENT). */
+  /** Fallback max simultaneously-running sessions when no DB config row exists. */
   concurrency: number;
-  /** Max task runs to start per calendar day. */
+  /** Fallback max task runs per calendar day when no DB config row exists. */
   dailyCap: number;
   /** Only rotate through these agents (defaults to the full rotation). */
   agents?: string[];
+}
+
+/**
+ * Resolve the live driver config: the single-row auto_drain_config table wins
+ * (so the cap/concurrency/on-off can change without a redeploy), falling back
+ * to the caller's env-var defaults when the row is absent.
+ */
+async function resolveConfig(
+  fallback: AutoDrainOptions,
+): Promise<{ enabled: boolean; concurrency: number; dailyCap: number }> {
+  try {
+    const row = await db.query.autoDrainConfig.findFirst();
+    if (row) {
+      return {
+        enabled: row.enabled,
+        concurrency: row.concurrency,
+        dailyCap: row.dailyCap,
+      };
+    }
+  } catch {
+    // table missing / query error → use env defaults
+  }
+  return {
+    enabled: true,
+    concurrency: fallback.concurrency,
+    dailyCap: fallback.dailyCap,
+  };
 }
 
 export interface AutoDrainResult {
@@ -56,6 +84,11 @@ export async function autoDrainBacklog(
   opts: AutoDrainOptions,
 ): Promise<AutoDrainResult> {
   const agents = opts.agents?.length ? opts.agents : AGENT_ROTATION;
+  const cfg = await resolveConfig(opts);
+
+  if (!cfg.enabled) {
+    return { dispatched: 0, running: 0, dispatchedToday: 0, items: [], reason: "disabled" };
+  }
 
   const runningRows = await db
     .select({ running: sql<number>`count(*)::int` })
@@ -69,8 +102,8 @@ export async function autoDrainBacklog(
     .where(sql`${taskRuns.createdAt} >= date_trunc('day', now())`);
   const today = todayRows[0]?.today ?? 0;
 
-  const freeSlots = Math.max(0, opts.concurrency - running);
-  const remainingToday = Math.max(0, opts.dailyCap - today);
+  const freeSlots = Math.max(0, cfg.concurrency - running);
+  const remainingToday = Math.max(0, cfg.dailyCap - today);
   const budget = Math.min(freeSlots, remainingToday);
 
   const base = { running, dispatchedToday: today, items: [] as AutoDrainResult["items"] };

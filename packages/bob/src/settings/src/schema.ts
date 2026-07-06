@@ -44,3 +44,17 @@ export const UpdateUserPreferencesSchema =
   CreateUserPreferencesSchema.partial().omit({
     userId: true,
   });
+
+// Single-row runtime config for the autonomous backlog driver. Lets the
+// concurrency + daily cap (and the on/off switch) be changed live without a
+// worker redeploy — the cron handler reads this each tick and falls back to
+// its env-var defaults when the row is absent.
+export const autoDrainConfig = pgTable("auto_drain_config", (t) => ({
+  id: t.integer().primaryKey().default(1),
+  enabled: t.boolean().notNull().default(true),
+  concurrency: t.integer().notNull().default(4),
+  dailyCap: t.integer().notNull().default(20),
+  updatedAt: t
+    .timestamp({ mode: "string", withTimezone: true })
+    .$onUpdateFn(() => sql`now()`),
+}));
