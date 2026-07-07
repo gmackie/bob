@@ -6,6 +6,10 @@ import {
   reopenPipeline,
 } from "../pipelineOrchestrator";
 
+vi.mock("../../webhooks/webhookDeliveryService", () => ({
+  emitWebhookEvent: vi.fn().mockResolvedValue([]),
+}));
+
 // Mocks for DB operations
 const dbInsertMock = vi.fn();
 const dbInsertValuesMock = vi.fn();
@@ -231,7 +235,7 @@ describe("advancePipeline", () => {
   });
 
   describe("gates_passed state", () => {
-    it("creates dev deployment and transitions to 'deploying_dev'", async () => {
+    it("creates dev and staging deployments, then transitions to 'deploying_staging'", async () => {
       const item = makeItem({ pipelineState: "gates_passed" });
 
       // forgeBuilds.findFirst (via getRevisionAndBuild)
@@ -248,7 +252,7 @@ describe("advancePipeline", () => {
 
       await advancePipeline(db as any, item, makeBatch());
 
-      // Should insert a deployment
+      // Should keep a dev deployment visible without making it a blocking gate.
       expect(dbInsertValuesMock).toHaveBeenCalledWith(
         expect.objectContaining({
           revisionId: REVISION_ID,
@@ -258,9 +262,18 @@ describe("advancePipeline", () => {
           status: "deploying",
         }),
       );
+      expect(dbInsertValuesMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          revisionId: REVISION_ID,
+          buildId: BUILD_ID,
+          repoId: REPO_ID,
+          environment: "staging",
+          status: "deploying",
+        }),
+      );
 
-      // Should transition to "deploying_dev"
-      expect(dbUpdateSetMock).toHaveBeenCalledWith({ pipelineState: "deploying_dev" });
+      // Should transition directly to watching staging health.
+      expect(dbUpdateSetMock).toHaveBeenCalledWith({ pipelineState: "deploying_staging" });
     });
   });
 

@@ -19,7 +19,7 @@ import { emitWebhookEvent } from "../webhooks/webhookDeliveryService";
  *
  * States:
  *   null → agent_complete → awaiting_review → building → gates_passed →
- *   deploying_dev → dev_healthy → deploying_staging → staging_healthy →
+ *   deploying_staging → staging_healthy →
  *   awaiting_prod_approval → deploying_prod → prod_healthy → complete
  *
  *   Any state → build_failed / deploy_failed / review_failed (terminal failure states)
@@ -286,7 +286,8 @@ async function handleGatesPassed(
   });
   if (!revision) return;
 
-  // Create dev deployment
+  // Start dev for visibility, but do not block staging on it. Portfolio deploys
+  // optimize for a short staging feedback loop before production approval.
   await db.insert(forgeDeployments).values({
     revisionId,
     buildId,
@@ -295,7 +296,15 @@ async function handleGatesPassed(
     status: "deploying",
   });
 
-  await setPipelineState(db, item.id, "deploying_dev");
+  await db.insert(forgeDeployments).values({
+    revisionId,
+    buildId,
+    repoId: revision.repoId,
+    environment: "staging",
+    status: "deploying",
+  });
+
+  await setPipelineState(db, item.id, "deploying_staging");
 }
 
 async function handleDeploying(
