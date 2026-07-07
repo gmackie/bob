@@ -2,7 +2,20 @@ import type { TRPCRouterRecord } from "@trpc/server";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod/v4";
 
-import { and, asc, count, desc, eq, gt, inArray, lt, sql } from "@bob/db";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  or,
+  sql,
+} from "@bob/db";
 import {
   chatConversations,
   sessionConnections,
@@ -644,40 +657,47 @@ export const sessionRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const session = await ctx.db.query.chatConversations.findFirst({
-        where: and(
-          eq(chatConversations.id, input.sessionId),
-          eq(chatConversations.userId, ctx.session.user.id),
-        ),
-      });
-
-      if (!session) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Session not found",
-        });
-      }
-
-      const canClaim =
-        !session.claimedByGatewayId ||
-        session.claimedByGatewayId === input.gatewayId ||
-        (session.leaseExpiresAt && new Date(session.leaseExpiresAt) < new Date());
-
-      if (!canClaim) {
-        throw new TRPCError({
-          code: "CONFLICT",
-          message: `Session claimed by gateway ${session.claimedByGatewayId}`,
-        });
-      }
+      const now = new Date();
 
       const [updated] = await ctx.db
         .update(chatConversations)
         .set({
           claimedByGatewayId: input.gatewayId,
-          leaseExpiresAt: new Date(Date.now() + input.leaseMs).toISOString(),
+          leaseExpiresAt: new Date(now.getTime() + input.leaseMs).toISOString(),
         })
-        .where(eq(chatConversations.id, input.sessionId))
+        .where(
+          and(
+            eq(chatConversations.id, input.sessionId),
+            eq(chatConversations.userId, ctx.session.user.id),
+            or(
+              isNull(chatConversations.claimedByGatewayId),
+              eq(chatConversations.claimedByGatewayId, input.gatewayId),
+              lte(chatConversations.leaseExpiresAt, now.toISOString()),
+            ),
+          ),
+        )
         .returning();
+
+      if (!updated) {
+        const session = await ctx.db.query.chatConversations.findFirst({
+          where: and(
+            eq(chatConversations.id, input.sessionId),
+            eq(chatConversations.userId, ctx.session.user.id),
+          ),
+        });
+
+        if (!session) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Session not found",
+          });
+        }
+
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `Session claimed by gateway ${session.claimedByGatewayId}`,
+        });
+      }
 
       return updated;
     }),

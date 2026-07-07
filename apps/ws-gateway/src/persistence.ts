@@ -55,12 +55,13 @@ export class PersistenceWriter {
       return false;
     }
 
-    if (this.queue.length >= this.maxQueueSize) {
-      console.warn(`[PersistenceWriter] Queue full, dropping event for session ${event.sessionId}`);
-      return false;
-    }
-
     this.queue.push(event);
+
+    if (this.queue.length === this.maxQueueSize) {
+      console.warn(
+        `[PersistenceWriter] Queue reached health threshold; continuing to buffer events`,
+      );
+    }
 
     if (this.queue.length >= this.batchSize) {
       this.triggerFlush();

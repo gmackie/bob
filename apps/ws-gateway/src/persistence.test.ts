@@ -57,7 +57,7 @@ describe("PersistenceWriter", () => {
     await writer.stop();
   });
 
-  it("drops events when queue is full", () => {
+  it("keeps buffering events when queue crosses the health threshold", () => {
     const writer = new PersistenceWriter({
       batchSize: 1000,
       flushIntervalMs: 1000,
@@ -68,7 +68,9 @@ describe("PersistenceWriter", () => {
 
     expect(writer.enqueue(makeEvent("s1", 1))).toBe(true);
     expect(writer.enqueue(makeEvent("s1", 2))).toBe(true);
-    expect(writer.enqueue(makeEvent("s1", 3))).toBe(false);
+    expect(writer.enqueue(makeEvent("s1", 3))).toBe(true);
+    expect(writer.getQueueSize()).toBe(3);
+    expect(writer.isHealthy()).toBe(false);
   });
 
   it("flushes remaining events on stop", async () => {
