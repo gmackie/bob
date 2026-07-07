@@ -1,1 +1,21 @@
 app: bob
+server: https://forgegraf.com
+stages:
+  - name: production
+    nodeId: hetzner-master
+    sortOrder: 20
+  - name: staging
+    nodeId: labnuc
+    sortOrder: 10
+
+# ForgeGraph operator notes:
+# deploy target: Cloudflare Workers (apps/bob/wrangler.jsonc, worker "blder-bot" at bob.blder.bot)
+# deploy trigger: .forgejo/workflows/ci.yml "Deploy web to bob.blder.bot" job on push to master
+#   (Forgejo runner, `pnpm exec vinext deploy`)
+# primary web service path: apps/bob
+# healthcheck path: / (302 -> /login when unauthenticated)
+# database strategy: colocated-postgres on hetzner-master via Cloudflare Hyperdrive
+# realtime gateway: bob-ws-gateway systemd service on hetzner-master (ws.blder.bot)
+# agent runner: ooda-runner systemd service on hetzner-bob (Bob gateway WS connector)
+# secrets: CLOUDFLARE_API_TOKEN must be set as a repo Actions secret on the Forgejo repo
+#   (git.forgegraf.com/gmackie/bob) for the deploy job -- same pattern as linear-clone.
