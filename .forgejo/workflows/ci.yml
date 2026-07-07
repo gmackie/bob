@@ -38,7 +38,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Typecheck
-        run: pnpm typecheck
+        # Run one tsc at a time. The default turbo concurrency runs many tscs
+        # in parallel, and the big Next.js app (@bob/blder) spikes enough memory
+        # that a concurrent run intermittently OOM-kills one (exit 137) under
+        # the runner's RAM+swap pressure. Serial typecheck can't collectively
+        # exhaust memory; same reasoning as the serialized test step below.
+        run: pnpm exec turbo run typecheck --concurrency=1
 
       - name: Lint
         run: pnpm lint
