@@ -10,6 +10,12 @@ import {
   taskRuns,
 } from "@bob/db/schema";
 
+import { buildKiroTaskExecutionProfile } from "./kiroAgentProfile";
+import {
+  buildSmolAgentLaunchEnv,
+  buildSmolAgentTaskExecutionProfile,
+} from "./smolAgentProfile";
+
 function getGatewayUrl() {
   return process.env.GATEWAY_URL ?? "http://localhost:3002";
 }
@@ -123,6 +129,100 @@ function generateBranchName(task: PlanningTask): string {
   return `bob/${task.identifier}/${slug}`;
 }
 
+interface TaskLaunchProfile {
+  initialPrompt: string;
+  env: Record<string, string>;
+}
+
+function withContextPreamble(
+  initialPrompt: string,
+  contextPreamble?: string,
+): string {
+  if (!contextPreamble?.trim()) {
+    return initialPrompt;
+  }
+
+  return [contextPreamble.trim(), "", initialPrompt].join("\n");
+}
+
+function buildDefaultTaskExecutionProfile(input: {
+  selectedAgent: string;
+  sessionId: string;
+  taskRunId: string;
+  task: PlanningTask;
+  branch: string;
+  workingDirectory: string;
+}): TaskLaunchProfile {
+  const descriptionSection = input.task.description?.trim()
+    ? `\nTask details:\n${input.task.description.trim()}\n`
+    : "";
+
+  return {
+    initialPrompt: [
+      "You are working in a Bob-managed task execution session.",
+      `Task: ${input.task.identifier} - ${input.task.title}`,
+      `Branch: ${input.branch}`,
+      `Working directory: ${input.workingDirectory}`,
+      descriptionSection.trimEnd(),
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    env: {
+      BOB_SESSION_ID: input.sessionId,
+      BOB_TASK_RUN_ID: input.taskRunId,
+      BOB_WORK_ITEM_ID: input.task.id,
+      BOB_WORK_ITEM_IDENTIFIER: input.task.identifier,
+      BOB_WORKTREE_PATH: input.workingDirectory,
+      BOB_AGENT_BACKEND: input.selectedAgent,
+    },
+  };
+}
+
+function buildTaskLaunchProfile(input: {
+  selectedAgent: string;
+  sessionId: string;
+  taskRunId: string;
+  task: PlanningTask;
+  branch: string;
+  workingDirectory: string;
+  contextPreamble?: string;
+}): TaskLaunchProfile {
+  if (input.selectedAgent === "smol-agent") {
+    const profile = buildSmolAgentTaskExecutionProfile({
+      sessionId: input.sessionId,
+      taskRunId: input.taskRunId,
+      workItemId: input.task.id,
+      workItemIdentifier: input.task.identifier,
+      title: input.task.title,
+      description: input.task.description,
+      branch: input.branch,
+      workingDirectory: input.workingDirectory,
+    });
+    const launchEnv = buildSmolAgentLaunchEnv(profile);
+
+    return {
+      initialPrompt: withContextPreamble(
+        profile.initialPrompt,
+        input.contextPreamble,
+      ),
+      env: launchEnv,
+    };
+  }
+
+  const profile =
+    input.selectedAgent === "kiro"
+      ? buildKiroTaskExecutionProfile(input)
+      : buildDefaultTaskExecutionProfile(input);
+
+  return {
+    initialPrompt: withContextPreamble(
+      profile.initialPrompt,
+      input.contextPreamble,
+    ),
+    env: profile.env,
+  };
+}
+
 export async function findRepositoryForTask(
   userId: string,
   task: PlanningTask,
@@ -135,7 +235,8 @@ export async function findRepositoryForTask(
 
   if (task.repository?.id) {
     const exactMatch = repos.find(
-      (repo: typeof repositories.$inferSelect) => repo.id === task.repository?.id,
+      (repo: typeof repositories.$inferSelect) =>
+        repo.id === task.repository?.id,
     );
     if (exactMatch) {
       return {
@@ -187,13 +288,17 @@ export async function findRepositoryForTask(
 
   for (const label of task.labels) {
     const normalizedLabel = label.toLowerCase().replace(/[^a-z0-9]/g, "");
-    const matchingRepo = repos.find((repo: typeof repositories.$inferSelect) => {
-      const normalizedName = repo.name.toLowerCase().replace(/[^a-z0-9]/g, "");
-      return (
-        normalizedName.includes(normalizedLabel) ||
-        normalizedLabel.includes(normalizedName)
-      );
-    });
+    const matchingRepo = repos.find(
+      (repo: typeof repositories.$inferSelect) => {
+        const normalizedName = repo.name
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "");
+        return (
+          normalizedName.includes(normalizedLabel) ||
+          normalizedLabel.includes(normalizedName)
+        );
+      },
+    );
     if (matchingRepo) {
       return {
         repositoryId: matchingRepo.id,
@@ -299,6 +404,15 @@ export async function executeTask(
     taskRun,
     "Failed to create starting task run",
   );
+  const launchProfile = buildTaskLaunchProfile({
+    selectedAgent,
+    sessionId: insertedSession.id,
+    taskRunId: insertedTaskRun.id,
+    task,
+    branch,
+    workingDirectory: repoInfo.path,
+    contextPreamble: options?.contextPreamble,
+  });
 
   // Nudge ws-gateway so the daemon picks up the session immediately.
   // Same pattern as planSession.start — best-effort, daemon will also
@@ -323,6 +437,8 @@ export async function executeTask(
           description: task.description ?? undefined,
           identifier: task.identifier,
           branch,
+          initialPrompt: launchProfile.initialPrompt,
+          env: launchProfile.env,
         }),
       });
     } catch (err) {
@@ -331,20 +447,26 @@ export async function executeTask(
   }
 
   // Fire-and-forget: write run_started lifecycle event
-  void db.insert(runLifecycleEvents).values({
-    taskRunId: insertedTaskRun.id,
-    workItemId: task.id,
-    sessionId: insertedSession.id,
-    eventType: "run_started",
-    phase: "execute",
-    metadata: {
-      agentType: selectedAgent,
-      branch,
-      taskIdentifier: task.identifier,
-    },
-  }).catch((err: unknown) =>
-    console.warn("[taskExecutor] Failed to write run_started lifecycle event:", err),
-  );
+  void db
+    .insert(runLifecycleEvents)
+    .values({
+      taskRunId: insertedTaskRun.id,
+      workItemId: task.id,
+      sessionId: insertedSession.id,
+      eventType: "run_started",
+      phase: "execute",
+      metadata: {
+        agentType: selectedAgent,
+        branch,
+        taskIdentifier: task.identifier,
+      },
+    })
+    .catch((err: unknown) =>
+      console.warn(
+        "[taskExecutor] Failed to write run_started lifecycle event:",
+        err,
+      ),
+    );
 
   // Report to ForgeGraph (fire and forget)
   void reportForgeGraphCreated(db, {
@@ -605,6 +727,9 @@ async function reportForgeGraphCreated(
 
     console.log(`[forgegraph] Reported 'created' for task run ${taskRun.id}`);
   } catch (err) {
-    console.error(`[forgegraph] Failed to report 'created' for ${taskRun.id}:`, err);
+    console.error(
+      `[forgegraph] Failed to report 'created' for ${taskRun.id}:`,
+      err,
+    );
   }
 }

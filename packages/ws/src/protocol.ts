@@ -233,6 +233,8 @@ export interface ServerSessionAvailable {
   description?: string;
   identifier?: string;
   branch?: string;
+  initialPrompt?: string;
+  env?: Record<string, string>;
 }
 
 /** Gateway tells the browser it exceeded the replay window */

@@ -9,6 +9,8 @@ interface NudgeBody {
   description?: string;
   identifier?: string;
   branch?: string;
+  initialPrompt?: string;
+  env?: Record<string, string>;
   sessionType?: "execution" | "planning";
   planningContext?: Record<string, unknown>;
 }

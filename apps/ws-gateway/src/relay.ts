@@ -56,6 +56,8 @@ interface NudgeInput {
   description?: string;
   identifier?: string;
   branch?: string;
+  initialPrompt?: string;
+  env?: Record<string, string>;
 }
 
 export interface RelayConfig {
@@ -143,6 +145,8 @@ export class Relay {
       description: input.description,
       identifier: input.identifier,
       branch: input.branch,
+      initialPrompt: input.initialPrompt,
+      env: input.env,
     });
   }
 

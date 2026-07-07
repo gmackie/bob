@@ -5,6 +5,8 @@
   "exports": {
     "./services": "./src/services.ts",
     "./runtime": "./src/runtime/index.ts",
+    "./runtime/kiroAgentProfile": "./src/runtime/kiroAgentProfile.ts",
+    "./runtime/smolAgentProfile": "./src/runtime/smolAgentProfile.ts",
     "./runtime/planningControl": "./src/runtime/planningControl.ts",
     "./runtime/taskExecutor": "./src/runtime/taskExecutor.ts",
     "./planning/planningAgentTools": "./src/planning/planningAgentTools.ts",

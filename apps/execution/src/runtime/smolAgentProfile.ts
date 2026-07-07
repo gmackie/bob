@@ -15,6 +15,18 @@ export interface SmolAgentTaskExecutionProfile {
   env: Record<string, string>;
 }
 
+export function buildSmolAgentLaunchEnv(
+  profile: SmolAgentTaskExecutionProfile,
+): Record<string, string> {
+  return {
+    ...profile.env,
+    BOB_API_URL: process.env.BOB_API_URL ?? "http://localhost:3000",
+    ...(process.env.BOB_API_KEY
+      ? { BOB_API_KEY: process.env.BOB_API_KEY }
+      : {}),
+  };
+}
+
 export function buildSmolAgentTaskExecutionProfile(
   input: SmolAgentTaskExecutionProfileInput,
 ): SmolAgentTaskExecutionProfile {

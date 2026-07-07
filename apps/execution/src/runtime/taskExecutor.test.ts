@@ -1,7 +1,11 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import {
+  buildIssueContextUpdateMessage,
+  forwardIssueContextUpdate,
+} from "./taskExecutor";
 
 const { findFirstMock, insertCalls, chatMessagesTable, taskRunsTable } =
   vi.hoisted(() => ({
@@ -38,11 +42,6 @@ vi.mock("@bob/db/schema", () => ({
   repositories: {},
   taskRuns: taskRunsTable,
 }));
-
-import {
-  buildIssueContextUpdateMessage,
-  forwardIssueContextUpdate,
-} from "./taskExecutor";
 
 describe("execution task runtime helpers", () => {
   beforeEach(() => {
@@ -130,5 +129,9 @@ describe("execution task runtime helpers", () => {
     expect(source).toContain('selectedAgent === "smol-agent"');
     expect(source).toContain("buildSmolAgentLaunchEnv");
     expect(source).toContain("env: launchEnv");
+    expect(source).toContain("buildKiroTaskExecutionProfile");
+    expect(source).toContain('selectedAgent === "kiro"');
+    expect(source).toContain("initialPrompt: launchProfile.initialPrompt");
+    expect(source).toContain("env: launchProfile.env");
   });
 });
