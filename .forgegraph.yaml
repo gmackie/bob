@@ -1,11 +1,13 @@
 app: bob
 server: https://forgegraf.com
 stages:
+  # `node:` (name, resolved to a node UUID on apply) — NOT `nodeId:`, which the
+  # server treats as an authoritative UUID and would reject a name.
   - name: production
-    nodeId: hetzner-master
+    node: hetzner-master
     sortOrder: 20
   - name: staging
-    nodeId: labnuc
+    node: labnuc
     sortOrder: 10
 
 # ForgeGraph operator notes:
