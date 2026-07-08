@@ -11,11 +11,7 @@ import { projects } from "@bob/projects/schema";
 
 // --- Tenants ---
 
-export const tenantPlanEnum = pgEnum("tenant_plan", [
-  "free",
-  "premium",
-  "pro",
-]);
+export const tenantPlanEnum = pgEnum("tenant_plan", ["free", "premium", "pro"]);
 
 export const tenantMemberRoleEnum = pgEnum("tenant_member_role", [
   "owner",
@@ -23,14 +19,61 @@ export const tenantMemberRoleEnum = pgEnum("tenant_member_role", [
   "member",
 ]);
 
+// Stripe subscription lifecycle statuses. Mirrors Stripe's `subscription.status`
+// so a webhook can persist the raw status without lossy mapping.
+export const subscriptionStatusEnum = pgEnum("subscription_status", [
+  "active",
+  "trialing",
+  "past_due",
+  "canceled",
+  "incomplete",
+  "incomplete_expired",
+  "unpaid",
+  "paused",
+]);
+
 export const tenants = pgTable("tenants", (t) => ({
   id: t.uuid().notNull().primaryKey().defaultRandom(),
   name: t.varchar({ length: 128 }).notNull(),
   slug: t.varchar({ length: 64 }).notNull().unique(),
   plan: tenantPlanEnum("plan").notNull().default("free"),
+  // Stripe customer this tenant is billed through. Set on first checkout and
+  // reused so a tenant never accumulates duplicate Stripe customers.
+  stripeCustomerId: t.text("stripe_customer_id").unique(),
   forgeGraphProjectId: t.text("forge_graph_project_id"),
   createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
+}));
+
+// --- Subscriptions ---
+//
+// One active subscription record per tenant, kept in sync from Stripe webhooks.
+// `tenants.plan` is the denormalized entitlement source of truth used for
+// gating; this table is the audit trail / reconciliation source that produced
+// it. Keeping both lets read-heavy entitlement checks avoid a join.
+export const tenantSubscriptions = pgTable("tenant_subscriptions", (t) => ({
+  id: t.uuid().notNull().primaryKey().defaultRandom(),
+  tenantId: t
+    .uuid("tenant_id")
+    .notNull()
+    .unique()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  stripeCustomerId: t.text("stripe_customer_id").notNull(),
+  stripeSubscriptionId: t.text("stripe_subscription_id").notNull().unique(),
+  stripePriceId: t.text("stripe_price_id").notNull(),
+  status: subscriptionStatusEnum("status").notNull(),
+  // Plan derived from the Stripe price at the time the webhook was processed.
+  plan: tenantPlanEnum("plan").notNull(),
+  cancelAtPeriodEnd: t.boolean("cancel_at_period_end").notNull().default(false),
+  currentPeriodEnd: t.timestamp("current_period_end", { mode: "string" }),
+  createdAt: t
+    .timestamp("created_at", { mode: "string" })
+    .defaultNow()
+    .notNull(),
+  updatedAt: t
+    .timestamp("updated_at", { mode: "string" })
+    .defaultNow()
+    .notNull(),
 }));
 
 export const tenantMembers = pgTable(
@@ -76,7 +119,10 @@ export const workspaces = pgTable("workspaces", (t) => ({
   name: t.varchar({ length: 128 }).notNull(),
   slug: t.varchar({ length: 64 }).notNull().unique(),
   description: t.text(),
-  createdAt: t.timestamp("created_at", { mode: "string" }).defaultNow().notNull(),
+  createdAt: t
+    .timestamp("created_at", { mode: "string" })
+    .defaultNow()
+    .notNull(),
   updatedAt: t
     .timestamp("updated_at", { mode: "string", withTimezone: true })
     .$onUpdateFn(() => sql`now()`),
@@ -111,9 +157,23 @@ export const workspaceMembers = pgTable("workspace_members", (t) => ({
 
 // --- Relations ---
 
-export const tenantsRelations = relations(tenants, ({ many }) => ({
+export const tenantsRelations = relations(tenants, ({ one, many }) => ({
   members: many(tenantMembers),
+  subscription: one(tenantSubscriptions, {
+    fields: [tenants.id],
+    references: [tenantSubscriptions.tenantId],
+  }),
 }));
+
+export const tenantSubscriptionsRelations = relations(
+  tenantSubscriptions,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [tenantSubscriptions.tenantId],
+      references: [tenants.id],
+    }),
+  }),
+);
 
 export const tenantMembersRelations = relations(tenantMembers, ({ one }) => ({
   tenant: one(tenants, {

@@ -2,19 +2,25 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { z, ZodError } from "zod/v4";
 
+import type { ApiKeyPermission } from "@bob/auth";
+import type { AuthRuntimeBundle } from "@bob/auth/runtime";
 import {
-
-
   DEFAULT_USER_ID,
   resolveAuthBypassUserId,
-  resolveAuthContext
+  resolveAuthContext,
 } from "@bob/auth";
-import type {ApiKeyPermission} from "@bob/auth";
-import type { AuthRuntimeBundle } from "@bob/auth/runtime";
+import { isStripeEnabled } from "@bob/config/integrations";
 import { eq } from "@bob/db";
 import { db } from "@bob/db/client";
 import { user } from "@bob/db/schema";
+
+import type { Feature } from "./services/billing/entitlements";
+import { resolveTenantPlan } from "./handlers/billing";
 import { ensureUserMembershipForOwnedWorkspaces } from "./handlers/workspace";
+import {
+  FEATURE_MIN_PLAN,
+  planHasFeature,
+} from "./services/billing/entitlements";
 
 /**
  * Create the tRPC context using the Effect auth runtime bridge.
@@ -31,12 +37,10 @@ export const createTRPCContext = async (opts: {
   authBundle: AuthRuntimeBundle;
 }) => {
   const authApi = opts.authBundle.authInstance.api;
-  let defaultUser:
-    | {
-        session: null;
-        user: typeof user.$inferSelect;
-      }
-    | null = null;
+  let defaultUser: {
+    session: null;
+    user: typeof user.$inferSelect;
+  } | null = null;
   const authBypassUserId = resolveAuthBypassUserId(opts.headers);
   const defaultUserId = authBypassUserId ?? DEFAULT_USER_ID;
 
@@ -194,3 +198,35 @@ export const apiKeyReadProcedure = createApiKeyProcedure("read");
 export const apiKeyWriteProcedure = createApiKeyProcedure("write");
 export const apiKeyDeleteProcedure = createApiKeyProcedure("delete");
 export const apiKeyAdminProcedure = createApiKeyProcedure("admin");
+
+/**
+ * Whether plan entitlements are actually enforced.
+ *
+ * Gates are inert until the Stripe integration is switched on (see
+ * `@bob/config/integrations`). This lets the entitlement wiring ship — and be
+ * applied to real paid procedures — without changing behavior for deployments
+ * that haven't enabled billing, and keeps the free-plan test suite green.
+ */
+export const isBillingEnforced = () => isStripeEnabled();
+
+/**
+ * Entitlement-gated procedure. Extends `protectedProcedure` with a check that
+ * the caller's tenant plan includes `feature`. When billing enforcement is off
+ * the check is skipped entirely.
+ *
+ * Usage:
+ *   requireFeature("integrations").input(...).mutation(...)
+ */
+export const requireFeature = (feature: Feature) =>
+  protectedProcedure.use(async ({ ctx, next }) => {
+    if (!isBillingEnforced()) return next();
+
+    const { plan } = await resolveTenantPlan(ctx.db, ctx.session.user.id);
+    if (!planHasFeature(plan, feature)) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: `The '${feature}' feature requires the '${FEATURE_MIN_PLAN[feature]}' plan or higher (current plan: '${plan}'). Upgrade to continue.`,
+      });
+    }
+    return next({ ctx: { entitlement: { plan } } });
+  });

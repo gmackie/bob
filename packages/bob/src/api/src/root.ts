@@ -2,35 +2,37 @@ import type { TRPCRouterRecord } from "@trpc/server";
 
 import { agentRunRouter } from "./router/agentRun";
 import { authRouter } from "./router/auth";
+import { billingRouter } from "./router/billing";
 import { captureRouter } from "./router/capture";
-import { cookiesRouter } from "./router/cookies";
-import { checkpointRouter } from "./router/checkpoint";
 import { chatRouter } from "./router/chat";
+import { checkpointRouter } from "./router/checkpoint";
+import { cookiesRouter } from "./router/cookies";
 import { dispatchRouter } from "./router/dispatch";
 import { eventRouter } from "./router/event";
 import { featureBranchRouter } from "./router/featureBranch";
-import { forgegraphRouter } from "./router/forgegraph";
 import { filesystemRouter } from "./router/filesystem";
+import { forgegraphRouter } from "./router/forgegraph";
 import { gitRouter } from "./router/git";
 import { gitProvidersRouter } from "./router/gitProviders";
 import { instanceRouter } from "./router/instance";
 import { integrationRouter } from "./router/integration";
-import { planningRouter } from "./router/planning";
-import { planSessionRouter } from "./router/planSession";
 import { linkRouter } from "./router/link";
 import { planRouter } from "./router/plan";
+import { planningRouter } from "./router/planning";
+import { planSessionRouter } from "./router/planSession";
 import { projectRouter } from "./router/project";
 import { publicApiRouter } from "./router/publicApi";
 import { pullRequestRouter } from "./router/pullRequest";
-import { requirementRouter } from "./router/requirement";
 import { repositoryRouter } from "./router/repository";
+import { requirementRouter } from "./router/requirement";
 import { secretsRouter } from "./router/secrets";
 import { sessionRouter } from "./router/session";
+import { settingsRouter } from "./router/settings";
 import { skillRouter } from "./router/skill";
 import { snapshotRouter } from "./router/snapshot";
-import { settingsRouter } from "./router/settings";
 import { systemRouter } from "./router/system";
 import { terminalRouter } from "./router/terminal";
+import { webhookRouter } from "./router/webhook";
 import {
   activityRouter,
   artifactRouter,
@@ -40,7 +42,6 @@ import {
   workItemRouter,
   workItemsRouter,
 } from "./router/workItems";
-import { webhookRouter } from "./router/webhook";
 import { workspaceRouter } from "./router/workspace";
 import { createTRPCRouter } from "./trpc";
 
@@ -49,6 +50,7 @@ const appRouterRecord = {
   agentRun: agentRunRouter,
   artifact: artifactRouter,
   auth: authRouter,
+  billing: billingRouter,
   capture: captureRouter,
   chat: chatRouter,
   checkpoint: checkpointRouter,

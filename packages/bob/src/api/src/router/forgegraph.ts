@@ -1,22 +1,23 @@
 import { z } from "zod/v4";
-import { protectedProcedure } from "../trpc";
+
 import {
-  forgegraphListRevisions,
-  forgegraphGetRevision,
+  forgegraphApproveProdDeploy,
+  forgegraphCreateDeployment,
   forgegraphCreateRevision,
+  forgegraphGetRevision,
+  forgegraphImportAllApps,
+  forgegraphImportApp,
+  forgegraphIngestRunEvent,
+  forgegraphListApps,
+  forgegraphListBuilds,
+  forgegraphListDeployments,
+  forgegraphListRevisions,
+  forgegraphListUnlinkedApps,
   forgegraphTriggerBuild,
   forgegraphUpdateBuildStatus,
-  forgegraphCreateDeployment,
   forgegraphUpdateDeploymentStatus,
-  forgegraphIngestRunEvent,
-  forgegraphListDeployments,
-  forgegraphListBuilds,
-  forgegraphApproveProdDeploy,
-  forgegraphListApps,
-  forgegraphListUnlinkedApps,
-  forgegraphImportApp,
-  forgegraphImportAllApps,
 } from "../handlers/forgegraph";
+import { protectedProcedure, requireFeature } from "../trpc";
 
 export const forgegraphRouter = {
   listRevisions: protectedProcedure
@@ -28,7 +29,10 @@ export const forgegraphRouter = {
       }),
     )
     .query(({ ctx, input }) =>
-      forgegraphListRevisions({ db: ctx.db, userId: ctx.session.user.id }, input),
+      forgegraphListRevisions(
+        { db: ctx.db, userId: ctx.session.user.id },
+        input,
+      ),
     ),
 
   getRevision: protectedProcedure
@@ -48,10 +52,14 @@ export const forgegraphRouter = {
       }),
     )
     .mutation(({ ctx, input }) =>
-      forgegraphCreateRevision({ db: ctx.db, userId: ctx.session.user.id }, input),
+      forgegraphCreateRevision(
+        { db: ctx.db, userId: ctx.session.user.id },
+        input,
+      ),
     ),
 
-  triggerBuild: protectedProcedure
+  // ForgeGraph pipeline orchestration is a Pro-tier feature.
+  triggerBuild: requireFeature("forgegraph")
     .input(
       z.object({
         revisionId: z.string().uuid(),
@@ -62,7 +70,10 @@ export const forgegraphRouter = {
       }),
     )
     .mutation(({ ctx, input }) =>
-      forgegraphTriggerBuild({ db: ctx.db, userId: ctx.session.user.id }, input),
+      forgegraphTriggerBuild(
+        { db: ctx.db, userId: ctx.session.user.id },
+        input,
+      ),
     ),
 
   updateBuildStatus: protectedProcedure
@@ -75,7 +86,10 @@ export const forgegraphRouter = {
       }),
     )
     .mutation(({ ctx, input }) =>
-      forgegraphUpdateBuildStatus({ db: ctx.db, userId: ctx.session.user.id }, input),
+      forgegraphUpdateBuildStatus(
+        { db: ctx.db, userId: ctx.session.user.id },
+        input,
+      ),
     ),
 
   createDeployment: protectedProcedure
@@ -89,7 +103,10 @@ export const forgegraphRouter = {
       }),
     )
     .mutation(({ ctx, input }) =>
-      forgegraphCreateDeployment({ db: ctx.db, userId: ctx.session.user.id }, input),
+      forgegraphCreateDeployment(
+        { db: ctx.db, userId: ctx.session.user.id },
+        input,
+      ),
     ),
 
   updateDeploymentStatus: protectedProcedure
@@ -100,7 +117,10 @@ export const forgegraphRouter = {
       }),
     )
     .mutation(({ ctx, input }) =>
-      forgegraphUpdateDeploymentStatus({ db: ctx.db, userId: ctx.session.user.id }, input),
+      forgegraphUpdateDeploymentStatus(
+        { db: ctx.db, userId: ctx.session.user.id },
+        input,
+      ),
     ),
 
   ingestRunEvent: protectedProcedure
@@ -125,7 +145,10 @@ export const forgegraphRouter = {
       }),
     )
     .mutation(({ ctx, input }) =>
-      forgegraphIngestRunEvent({ db: ctx.db, userId: ctx.session.user.id }, input),
+      forgegraphIngestRunEvent(
+        { db: ctx.db, userId: ctx.session.user.id },
+        input,
+      ),
     ),
 
   listDeployments: protectedProcedure
@@ -137,7 +160,10 @@ export const forgegraphRouter = {
       }),
     )
     .query(({ ctx, input }) =>
-      forgegraphListDeployments({ db: ctx.db, userId: ctx.session.user.id }, input),
+      forgegraphListDeployments(
+        { db: ctx.db, userId: ctx.session.user.id },
+        input,
+      ),
     ),
 
   listBuilds: protectedProcedure
@@ -153,7 +179,10 @@ export const forgegraphRouter = {
   approveProdDeploy: protectedProcedure
     .input(z.object({ dispatchItemId: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
-      forgegraphApproveProdDeploy({ db: ctx.db, userId: ctx.session.user.id }, input),
+      forgegraphApproveProdDeploy(
+        { db: ctx.db, userId: ctx.session.user.id },
+        input,
+      ),
     ),
 
   // ── ForgeGraph App Management ──────────────────────────────────────
@@ -163,7 +192,10 @@ export const forgegraphRouter = {
   listUnlinkedApps: protectedProcedure
     .input(z.object({ workspaceId: z.string().uuid() }))
     .query(({ ctx, input }) =>
-      forgegraphListUnlinkedApps({ db: ctx.db, userId: ctx.session.user.id }, input),
+      forgegraphListUnlinkedApps(
+        { db: ctx.db, userId: ctx.session.user.id },
+        input,
+      ),
     ),
 
   importApp: protectedProcedure
@@ -175,10 +207,7 @@ export const forgegraphRouter = {
       }),
     )
     .mutation(({ ctx, input }) =>
-      forgegraphImportApp(
-        { db: ctx.db, userId: ctx.session.user.id },
-        input,
-      ),
+      forgegraphImportApp({ db: ctx.db, userId: ctx.session.user.id }, input),
     ),
 
   importAllApps: protectedProcedure
