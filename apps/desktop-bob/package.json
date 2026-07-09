@@ -4,16 +4,17 @@
   "private": true,
   "main": "dist-electron/main.js",
   "productName": "Bob",
-  "build": {
-    "appId": "bot.blder.desktop",
-    "productName": "Bob"
-  },
   "scripts": {
     "dev": "pnpm run --parallel dev:bundle dev:electron",
     "dev:bundle": "tsdown --watch",
     "dev:electron": "node scripts/dev-electron.mjs",
     "build": "tsdown",
     "start": "node scripts/start-electron.mjs",
+    "stage": "node scripts/stage-packaging.mjs",
+    "prepackage": "node scripts/stage-packaging.mjs",
+    "package": "pnpm build && electron-builder --config electron-builder.yml",
+    "dist": "pnpm package",
+    "build:daemon": "node scripts/build-daemon.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"
   },
@@ -23,6 +24,7 @@
   "devDependencies": {
     "@bob/tsconfig": "workspace:*",
     "@types/node": "catalog:",
+    "electron-builder": "^25.1.8",
     "tsdown": "^0.20.3",
     "typescript": "catalog:",
     "vitest": "^4.0.0"

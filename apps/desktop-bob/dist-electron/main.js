@@ -29,15 +29,59 @@ let electron = require("electron");
 let node_child_process = require("node:child_process");
 let node_crypto = require("node:crypto");
 node_crypto = __toESM(node_crypto);
-let node_fs = require("node:fs");
-node_fs = __toESM(node_fs);
 let node_os = require("node:os");
 node_os = __toESM(node_os);
 let node_path = require("node:path");
 node_path = __toESM(node_path);
 let node_readline = require("node:readline");
 node_readline = __toESM(node_readline);
+let node_fs = require("node:fs");
+node_fs = __toESM(node_fs);
 
+//#region src/packaging.ts
+function resolveDesktopPaths(options) {
+	if (options.isPackaged) {
+		const resources = options.resourcesPath;
+		return {
+			appRoot: resources,
+			bobServerBin: node_path.default.join(resources, "bob-server", "dist", "bin.js"),
+			daemonBinDir: node_path.default.join(resources, "bin"),
+			serverCwd: node_path.default.join(resources, "bob-server")
+		};
+	}
+	const appRoot = node_path.default.resolve(options.electronDir, "../../..");
+	return {
+		appRoot,
+		bobServerBin: node_path.default.join(appRoot, "apps", "bob-server", "dist", "bin.js"),
+		daemonBinDir: node_path.default.resolve(options.electronDir, "..", "resources", "bin"),
+		serverCwd: appRoot
+	};
+}
+function daemonBinaryBasename(platform, arch) {
+	const normalizedArch = arch === "x64" ? "amd64" : arch;
+	if (platform === "darwin") return `bob-darwin-${normalizedArch}`;
+	if (platform === "linux") return `bob-linux-${normalizedArch}`;
+	if (platform === "win32") return `bob-windows-${normalizedArch}.exe`;
+	return null;
+}
+function resolveDaemonBinaryPath(options) {
+	const basename = daemonBinaryBasename(options.platform, options.arch);
+	if (!basename) return {
+		kind: "unsupported-platform",
+		platform: options.platform
+	};
+	const binPath = node_path.default.join(options.binDir, basename);
+	if (!node_fs.default.existsSync(binPath)) return {
+		kind: "missing",
+		expectedPath: binPath
+	};
+	return {
+		kind: "found",
+		path: binPath
+	};
+}
+
+//#endregion
 //#region src/rotatingFileSink.ts
 /**
 * Simple synchronous rotating log file writer. Modeled on t3code's
@@ -128,7 +172,11 @@ var RotatingFileSink = class {
 
 //#endregion
 //#region src/main.ts
-const APP_ROOT = node_path.default.resolve(__dirname, "../../..");
+const { appRoot: APP_ROOT, bobServerBin: BOB_SERVER_BIN, daemonBinDir: DAEMON_BIN_DIR, serverCwd: SERVER_CWD } = resolveDesktopPaths({
+	isPackaged: electron.app.isPackaged,
+	resourcesPath: process.resourcesPath,
+	electronDir: __dirname
+});
 const USERDATA_DIR = node_path.default.join(node_os.default.homedir(), ".bob", "userdata");
 const LOG_DIR = node_path.default.join(USERDATA_DIR, "logs");
 const LOG_PATH = node_path.default.join(LOG_DIR, "main.log");
@@ -151,14 +199,12 @@ function pipeChildLogs(source, child) {
 		process.stderr.write(`[${source}] ${line}\n`);
 	});
 }
-const BOB_SERVER_BIN = node_path.default.join(APP_ROOT, "apps", "bob-server", "dist", "bin.js");
-const DAEMON_BIN_DIR = node_path.default.resolve(__dirname, "..", "resources", "bin");
 let serverChild = null;
 let daemonChild = null;
 let win = null;
 async function spawnBobServer() {
 	const token = node_crypto.default.randomBytes(32).toString("hex");
-	const child = (0, node_child_process.spawn)("node", [
+	const child = (0, node_child_process.spawn)(process.execPath, [
 		BOB_SERVER_BIN,
 		"--port",
 		"0",
@@ -168,13 +214,18 @@ async function spawnBobServer() {
 		token,
 		"--no-browser"
 	], {
-		cwd: APP_ROOT,
+		cwd: SERVER_CWD,
 		stdio: [
 			"ignore",
 			"pipe",
 			"pipe"
 		],
-		env: { ...process.env }
+		env: {
+			...process.env,
+			ELECTRON_RUN_AS_NODE: "1",
+			BOB_BLDER_DIR: electron.app.isPackaged ? node_path.default.join(process.resourcesPath, "blder") : node_path.default.join(APP_ROOT, "apps", "bob"),
+			BOB_DB_MIGRATIONS_DIR: electron.app.isPackaged ? node_path.default.join(process.resourcesPath, "db-migrations") : node_path.default.join(APP_ROOT, "packages", "bob", "src", "db", "drizzle")
+		}
 	});
 	serverChild = child;
 	logLine("bob-server", `spawned pid=${child.pid ?? "?"}`);
@@ -214,19 +265,21 @@ async function spawnBobServer() {
 	});
 	return await readyPromise;
 }
-function resolveDaemonBinaryPath() {
-	if (process.platform !== "darwin") return null;
-	const arch = node_os.default.arch() === "arm64" ? "arm64" : "amd64";
-	const binPath = node_path.default.join(DAEMON_BIN_DIR, `bob-darwin-${arch}`);
-	if (!node_fs.default.existsSync(binPath)) return null;
-	return binPath;
-}
 function spawnDaemon(serverUrl, token) {
-	const binPath = resolveDaemonBinaryPath();
-	if (!binPath) {
-		console.warn(`[desktop] bob daemon binary not found under ${DAEMON_BIN_DIR} for arch ${node_os.default.arch()} — skipping daemon spawn`);
+	const resolution = resolveDaemonBinaryPath({
+		platform: process.platform,
+		arch: node_os.default.arch(),
+		binDir: DAEMON_BIN_DIR
+	});
+	if (resolution.kind === "unsupported-platform") {
+		console.warn(`[desktop] bob daemon is not supported on ${resolution.platform} — skipping daemon spawn`);
 		return;
 	}
+	if (resolution.kind === "missing") {
+		console.warn(`[desktop] bob daemon binary not found at ${resolution.expectedPath} — skipping daemon spawn`);
+		return;
+	}
+	const binPath = resolution.path;
 	const wsUrl = serverUrl.replace(/^http(s?):\/\//, "ws$1://") + "/sessions";
 	const child = (0, node_child_process.spawn)(binPath, ["daemon", "start"], {
 		cwd: APP_ROOT,

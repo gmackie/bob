@@ -42,16 +42,17 @@ token is generated and printed in the ready line.
    at `packages/db/drizzle/` so PGlite bootstrap resolves migrations even when
    spawned from a different cwd. Computed at runtime from the compiled
    `server.js` location.
-4. **pnpm at runtime.** Task 6 spawns via the `pnpm` binary. This is fine for
-   dev and CI but will not survive Electron packaging (no `pnpm` in a DMG).
-   Phase 4 replaces with a direct `node dist/server/entry.js` invocation.
+4. **Direct node spawn.** bob-server invokes blder's vinext CLI or production
+   `dist/server/{index,entry}.js` entrypoints via `node` — no `pnpm` at runtime.
+   The desktop shell spawns bob-server with `process.execPath` +
+   `ELECTRON_RUN_AS_NODE=1`.
 
 ## Architecture
 
 ```
   external:auth-gated HTTP  ←→  internal:random port (vinext/blder)
                │                             │
-       createHttpServer()              spawn("pnpm",["--filter","@bob/blder","start"])
+       createHttpServer()              spawn(node, [vinext cli | dist/server entry])
 ```
 
 Auth presents as either `Authorization: Bearer <token>` or `?t=<token>` query
@@ -60,5 +61,5 @@ can be attached by the page.
 
 ## Dev mode
 
-When `BOB_DESKTOP_DEV=1`, bob-server will spawn `pnpm --filter @bob/blder dev`
-instead of `start` so that vinext HMR works. (Task 13 — not yet enabled.)
+When `BOB_DESKTOP_DEV=1`, bob-server spawns vinext `dev` instead of the production
+server entry so HMR works.
