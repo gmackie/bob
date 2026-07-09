@@ -139,6 +139,7 @@ export default Sentry.withSentry(
           const { autoDrainBacklog } = await import(
             "@bob/api/handlers/autoDrain"
           );
+          try {
           const result = await autoDrainBacklog({ concurrency, dailyCap });
           console.log(
             `[auto-drain] dispatched=${result.dispatched} running=${result.running} today=${result.dispatchedToday}` +
@@ -147,6 +148,33 @@ export default Sentry.withSentry(
                 ? ` items=${result.items.map((i) => `${i.identifier}:${i.agentType}`).join(",")}`
                 : ""),
           );
+        } catch (error) {
+          const { buildFailurePayload, getFailureSentryTags } = await import(
+            "@bob/observability/failures"
+          );
+          const failure = {
+            surface: "job" as const,
+            operation: "auto_drain_backlog",
+            error,
+            alertId: "auto-drain-failure",
+            tenant: runtimeEnv.BOB_TENANT_ID
+              ? { tenantId: String(runtimeEnv.BOB_TENANT_ID) }
+              : undefined,
+          };
+          console.error(
+            "[auto-drain] failed",
+            buildFailurePayload(failure),
+          );
+          Sentry.withScope((scope) => {
+            scope.setLevel("error");
+            scope.setTags(getFailureSentryTags(failure));
+            scope.setContext("failure", buildFailurePayload(failure));
+            Sentry.captureException(
+              error instanceof Error ? error : new Error(String(error)),
+            );
+          });
+          throw error;
+        }
         }
         // 2. Review + auto-merge the PRs those tasks produced.
         if (autoMergeOn) {

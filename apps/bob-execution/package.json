@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@bob/db": "workspace:*",
+    "@bob/observability": "workspace:*",
     "@bob/telemetry": "workspace:*",
     "@gmacko/core": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",

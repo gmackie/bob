@@ -1,3 +1,8 @@
+import {
+  getSentryInitOptions,
+  resolveObservabilityConfig,
+} from "@bob/observability/config";
+
 interface HyperdriveBinding {
   connectionString: string;
 }
@@ -9,6 +14,9 @@ interface RuntimeEnv {
   FG_STAGE?: unknown;
   HYPERDRIVE?: HyperdriveBinding;
   SENTRY_DSN?: unknown;
+  POSTHOG_KEY?: unknown;
+  POSTHOG_HOST?: unknown;
+  BOB_TENANT_ID?: unknown;
 }
 
 function getEnvString(value: unknown): string | undefined {
@@ -29,13 +37,22 @@ export function applyRuntimeAuthEnv(
   }
 }
 
-export function getSentryOptions(env: RuntimeEnv | undefined) {
+function runtimeEnvToMap(env: RuntimeEnv | undefined): Record<string, string | undefined> {
   return {
-    dsn: getEnvString(env?.SENTRY_DSN) ?? process.env.SENTRY_DSN,
-    environment:
-      getEnvString(env?.FG_STAGE) ?? process.env.FG_STAGE ?? "production",
-    tracesSampleRate: 0.1,
+    SENTRY_DSN: getEnvString(env?.SENTRY_DSN) ?? process.env.SENTRY_DSN,
+    POSTHOG_KEY: getEnvString(env?.POSTHOG_KEY) ?? process.env.POSTHOG_KEY,
+    POSTHOG_HOST: getEnvString(env?.POSTHOG_HOST) ?? process.env.POSTHOG_HOST,
+    FG_STAGE: getEnvString(env?.FG_STAGE) ?? process.env.FG_STAGE,
+    BOB_TENANT_ID: getEnvString(env?.BOB_TENANT_ID) ?? process.env.BOB_TENANT_ID,
   };
+}
+
+export function getSentryOptions(env: RuntimeEnv | undefined) {
+  const config = resolveObservabilityConfig({
+    serviceName: "bob-worker",
+    env: runtimeEnvToMap(env),
+  });
+  return getSentryInitOptions(config);
 }
 
 export function getHyperdriveConnectionString(env: RuntimeEnv | undefined) {

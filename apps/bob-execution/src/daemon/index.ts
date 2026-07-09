@@ -17,6 +17,19 @@ import WebSocket from "ws";
 import { computeCostUsd } from "@gmacko/core/agent/model-pricing";
 import type { TokenCounts } from "@gmacko/core/agent/model-pricing";
 import {
+  captureCriticalFailure,
+  identifyTenant,
+  initNodeObservability,
+  resolveObservabilityConfig,
+  shutdownNodeObservability,
+} from "@bob/observability";
+import {
+  initTelemetry,
+  traceAgentExecution,
+  setAgentResult,
+  shutdownTelemetry,
+} from "@bob/telemetry";
+import {
   buildProviderCommand,
   buildProviderEnvironment,
   normalizeProviderId,
@@ -45,21 +58,6 @@ interface AgentExecutionResult {
       costUsd?: number;
     };
   };
-}
-
-function initTelemetry(_config: { serviceName: string; serviceVersion?: string }): void {
-  // Telemetry is optional — OTel bundling doesn't work in standalone ESM builds.
-}
-
-async function traceAgentExecution(
-  _ctx: Record<string, unknown>,
-  fn: (span: null) => Promise<void>,
-): Promise<void> {
-  await fn(null);
-}
-
-function setAgentResult(_span: unknown, _result: AgentExecutionResult): void {
-  // no-op
 }
 
 // ---------------------------------------------------------------------------
@@ -108,6 +106,21 @@ function setupOracleMcpConfig(): string | null {
 }
 
 const ORACLE_MCP_CONFIG_PATH = setupOracleMcpConfig();
+
+const observabilityConfig = resolveObservabilityConfig({
+  serviceName: "bob-execution",
+});
+initNodeObservability(observabilityConfig);
+initTelemetry({
+  serviceName: "bob-execution",
+  disabled: !process.env.OTEL_EXPORTER_OTLP_ENDPOINT && !process.env.SIGNOZ_ENDPOINT,
+});
+if (observabilityConfig.tenantId || BOB_WORKSPACE_ID) {
+  identifyTenant({
+    tenantId: observabilityConfig.tenantId ?? BOB_WORKSPACE_ID,
+    workspaceId: BOB_WORKSPACE_ID,
+  });
+}
 
 if (!BOB_API_KEY || !BOB_WORKSPACE_ID) {
   console.error("[executor] FATAL: BOB_API_KEY and BOB_WORKSPACE_ID required");
@@ -297,6 +310,16 @@ function connect(): void {
 
   ws.on("error", (err) => {
     console.error("[executor] WebSocket error:", err.message);
+    captureCriticalFailure({
+      surface: "job",
+      operation: "gateway_websocket",
+      error: err,
+      alertId: "job-gateway-disconnect",
+      tenant: {
+        tenantId: observabilityConfig.tenantId ?? BOB_WORKSPACE_ID,
+        workspaceId: BOB_WORKSPACE_ID,
+      },
+    });
   });
 }
 
@@ -443,6 +466,21 @@ async function handleSessionAvailable(session: ServerSessionAvailable): Promise<
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.error(`[executor] Session ${session.sessionId} failed: ${errMsg}`);
+    captureCriticalFailure({
+      surface: "job",
+      operation: "execute_session",
+      error: err,
+      alertId: "job-session-failure",
+      tenant: {
+        tenantId: observabilityConfig.tenantId ?? BOB_WORKSPACE_ID,
+        workspaceId: BOB_WORKSPACE_ID,
+      },
+      metadata: {
+        sessionId: session.sessionId,
+        agentType: session.agentType,
+        identifier: session.identifier,
+      },
+    });
     send({ type: "session_status", sessionId: session.sessionId, status: "error" });
     sendEvent(session.sessionId, "error", "system", { code: "AGENT_ERROR", message: errMsg });
   } finally {
@@ -931,7 +969,9 @@ function gracefulShutdown(): void {
     }, 500);
   }
 
-  setTimeout(() => process.exit(0), 3000);
+  void Promise.all([shutdownNodeObservability(), shutdownTelemetry()]).finally(() => {
+    setTimeout(() => process.exit(0), 3000);
+  });
 }
 
 // ---------------------------------------------------------------------------
