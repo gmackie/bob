@@ -15,6 +15,7 @@ import {
   forgeRunEvents,
   projects,
   repositories,
+  runLifecycleEvents,
 } from "@bob/db/schema";
 import { getForgeGraphClient } from "../services/forgegraph/config";
 
@@ -387,6 +388,43 @@ export async function forgegraphApproveProdDeploy(
     .update(dispatchItems)
     .set({ pipelineState: "deploying_prod" })
     .where(eq(dispatchItems.id, item.id));
+
+  const workItemId = revision.taskId ?? item.planningTaskId;
+
+  await ctx.db.insert(activities).values({
+    workItemId,
+    userId: ctx.userId,
+    type: "deploy_status_changed",
+    fromValue: "awaiting_prod_approval",
+    toValue: "deploying",
+    metadata: {
+      dispatchItemId: item.id,
+      deploymentId: deployment.id,
+      environment: "prod",
+      revisionId: revision.id,
+      approvedBy: ctx.userId,
+    },
+  });
+
+  if (item.taskRunId) {
+    void ctx.db
+      .insert(runLifecycleEvents)
+      .values({
+        taskRunId: item.taskRunId,
+        workItemId,
+        eventType: "prod_deploy_approved",
+        phase: "ship",
+        metadata: {
+          dispatchItemId: item.id,
+          deploymentId: deployment.id,
+          environment: "prod",
+          approvedBy: ctx.userId,
+        },
+      })
+      .catch((err: unknown) =>
+        console.error("[forgegraph] Failed to log prod deploy approval:", err),
+      );
+  }
 
   return deployment;
 }
