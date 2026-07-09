@@ -502,6 +502,113 @@ describe("project router", () => {
     );
   });
 
+  it("registers a discovered repository as a ForgeGraph-linked project", async () => {
+    const workspaceId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce({
+      id: "membership-1",
+    });
+    queryMocks.repositoriesFindFirst.mockResolvedValueOnce({
+      id: "repo-1",
+      workspaceId,
+      name: "acme-app",
+      path: "/repos/acme-app",
+      branch: "main",
+      mainBranch: "main",
+      remoteUrl: "https://github.com/acme/acme-app.git",
+      planningProjectId: null,
+    });
+    // No key collision.
+    queryMocks.projectsFindFirst.mockResolvedValueOnce(undefined);
+    insertReturningMock.mockResolvedValueOnce([
+      {
+        id: projectId,
+        workspaceId,
+        name: "acme-app",
+        key: "ACMEAPP",
+        status: "active",
+      },
+    ]);
+
+    const caller = createCaller();
+    const result = await caller.project.registerForge({
+      workspaceId,
+      path: "/repos/acme-app",
+    });
+
+    expect(result.status).toBe("registered");
+    expect(result.project).toMatchObject({ id: projectId, key: "ACMEAPP" });
+    // Project created and repository linked.
+    expect(insertMock).toHaveBeenCalled();
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        planningProjectId: projectId,
+        discoveryStatus: "linked",
+      }),
+    );
+  });
+
+  it("is idempotent when the repository is already linked to a project", async () => {
+    const workspaceId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce({
+      id: "membership-1",
+    });
+    queryMocks.repositoriesFindFirst.mockResolvedValueOnce({
+      id: "repo-1",
+      workspaceId,
+      name: "acme-app",
+      path: "/repos/acme-app",
+      remoteUrl: "https://github.com/acme/acme-app.git",
+      planningProjectId: projectId,
+    });
+    queryMocks.projectsFindFirst.mockResolvedValueOnce({
+      id: projectId,
+      workspaceId,
+      name: "acme-app",
+      key: "ACMEAPP",
+    });
+
+    const caller = createCaller();
+    const result = await caller.project.registerForge({
+      workspaceId,
+      path: "/repos/acme-app",
+    });
+
+    expect(result.status).toBe("already_registered");
+    expect(result.project).toMatchObject({ id: projectId });
+    // No new project inserted.
+    expect(insertMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects registration when the repository path is unknown", async () => {
+    const workspaceId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce({
+      id: "membership-1",
+    });
+    queryMocks.repositoriesFindFirst.mockResolvedValueOnce(undefined);
+
+    const caller = createCaller();
+
+    await expect(
+      caller.project.registerForge({
+        workspaceId,
+        path: "/repos/missing",
+      }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("rejects registration when the caller is not a member of the workspace", async () => {
+    queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
+
+    const caller = createCaller();
+
+    await expect(
+      caller.project.registerForge({
+        workspaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        path: "/repos/acme-app",
+      }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
   it("publishes project sync changes when a discovered directory is dismissed", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetchMock);
