@@ -17,6 +17,7 @@ import {
 } from "@bob/db/schema";
 
 import { detectProjectCapabilities } from "../services/projects/projectCapabilities";
+import { getForgeGraphClient } from "../services/forgegraph/config";
 
 import type { HandlerContext } from "./context.js";
 
@@ -390,6 +391,166 @@ export async function projectDiscovery(
     forgeReady: [] as typeof allRepos,
     gitOnly,
     nonGit: nonGitDirs,
+  };
+}
+
+/**
+ * Registers a discovered repository as a ForgeGraph-linked project.
+ *
+ * This is the real replacement for the removed `/forge/register` gateway
+ * proxy. The daemon/CLI reports discovered repositories via the heartbeat;
+ * the customer (or an automated CLI call) then registers a repo here, which:
+ *   1. Creates a project scoped to the workspace.
+ *   2. Links the repository to that project (`planningProjectId`).
+ *   3. When ForgeGraph is configured, matches the repo's remote to an existing
+ *      ForgeGraph app and records the 1:1 `forgeGraphAppId` binding.
+ *
+ * Idempotent: registering an already-linked repository returns the existing
+ * project rather than erroring, so the onboarding UI can safely retry.
+ */
+export async function projectRegisterForge(
+  ctx: HandlerContext,
+  input: { workspaceId: string; path: string; key?: string },
+) {
+  await assertWorkspaceAccess(ctx.db, ctx.userId, input.workspaceId);
+
+  const repo = await ctx.db.query.repositories.findFirst({
+    where: and(
+      eq(repositories.workspaceId, input.workspaceId),
+      eq(repositories.path, input.path),
+    ),
+  });
+
+  if (!repo) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message:
+        "Repository not found for this path. Wait for the daemon to rediscover it, then retry.",
+    });
+  }
+
+  // Idempotent: repo is already linked to a project.
+  if (repo.planningProjectId) {
+    const existing = await ctx.db.query.projects.findFirst({
+      where: eq(projects.id, repo.planningProjectId),
+    });
+    if (existing) {
+      return {
+        status: "already_registered" as const,
+        project: existing,
+        repository: mapLinkedRepository(repo),
+      };
+    }
+  }
+
+  // When ForgeGraph is configured, match the repo's remote to an existing
+  // ForgeGraph app so the project is bound 1:1. Falls back to a local-only
+  // project when ForgeGraph is unconfigured, unreachable, or has no match.
+  const normalizedRemote = repo.remoteUrl?.replace(/\.git$/, "") ?? null;
+  let forgeGraphAppId: string | null = null;
+  const fg = getForgeGraphClient();
+  if (fg && normalizedRemote) {
+    try {
+      const apps = await fg.listApps();
+      const match = apps.find((app) => {
+        if (!app.flakeRef) return false;
+        const gitMatch = /git\+?(https?:\/\/[^?#]+)/.exec(app.flakeRef);
+        return gitMatch?.[1]?.replace(/\.git$/, "") === normalizedRemote;
+      });
+      if (match) forgeGraphAppId = match.id;
+    } catch {
+      // ForgeGraph unreachable — proceed with a local-only registration.
+    }
+  }
+
+  // `forgeGraphAppId` is unique: if another project already claims this app,
+  // link the repo to that project instead of failing the insert.
+  if (forgeGraphAppId) {
+    const claimed = await ctx.db.query.projects.findFirst({
+      where: eq(projects.forgeGraphAppId, forgeGraphAppId),
+    });
+    if (claimed) {
+      await ctx.db
+        .update(repositories)
+        .set({ planningProjectId: claimed.id, discoveryStatus: "linked" })
+        .where(eq(repositories.id, repo.id));
+
+      await notifyWorkspaceEvent({
+        type: "project_sync_changed",
+        workspaceId: input.workspaceId,
+        entityId: claimed.id,
+        payload: { changed: ["project", "repository"] },
+      });
+
+      return {
+        status: "already_registered" as const,
+        project: claimed,
+        repository: mapLinkedRepository({
+          ...repo,
+          planningProjectId: claimed.id,
+        }),
+      };
+    }
+  }
+
+  // Derive a unique project key (uppercase alphanumeric, ≤16 chars).
+  const baseKey =
+    (input.key ?? repo.name)
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 14) || "PROJ";
+  let key = baseKey;
+  for (let suffix = 2; suffix <= 99; suffix++) {
+    const conflict = await ctx.db.query.projects.findFirst({
+      where: and(
+        eq(projects.workspaceId, input.workspaceId),
+        eq(projects.key, key),
+      ),
+      columns: { id: true },
+    });
+    if (!conflict) break;
+    key = `${baseKey}${suffix}`;
+  }
+
+  const [project] = await ctx.db
+    .insert(projects)
+    .values({
+      workspaceId: input.workspaceId,
+      forgeGraphAppId,
+      name: repo.name,
+      key,
+      repoUrl: repo.remoteUrl,
+      defaultBranch: repo.mainBranch ?? repo.branch,
+      status: "active",
+    })
+    .returning();
+
+  if (!project) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to create project",
+    });
+  }
+
+  await ctx.db
+    .update(repositories)
+    .set({ planningProjectId: project.id, discoveryStatus: "linked" })
+    .where(eq(repositories.id, repo.id));
+
+  await notifyWorkspaceEvent({
+    type: "project_sync_changed",
+    workspaceId: input.workspaceId,
+    entityId: project.id,
+    payload: { changed: ["project", "repository"] },
+  });
+
+  return {
+    status: "registered" as const,
+    project,
+    repository: mapLinkedRepository({
+      ...repo,
+      planningProjectId: project.id,
+    }),
   };
 }
 
