@@ -1,9 +1,9 @@
 /**
  * Aggregate layer that maps handler factory outputs to AgentRpc contract
- * names (78 procedures).
+ * names (81 procedures).
  *
- * Imports the nine handler factories (agentRun, capture, session, instance,
- * terminal, event, filesystem, chat, post), instantiates them with a
+ * Imports the handler factories (agentRun, capture, session, instance,
+ * terminal, event, filesystem, chat, persona), instantiates them with a
  * HandlerContext, and wires each factory key to the corresponding contract
  * procedure name expected by AgentRpc.toLayer().
  *
@@ -25,11 +25,10 @@ import { makeTerminalRpcHandlers } from "../rpc-handlers/terminal.js";
 import { makeEventRpcHandlers } from "../rpc-handlers/event.js";
 import { makeFilesystemRpcHandlers } from "../rpc-handlers/filesystem.js";
 import { makeChatRpcHandlers } from "../rpc-handlers/chat.js";
-import { makePostRpcHandlers } from "../rpc-handlers/post.js";
 import { makePersonaRpcHandlers } from "../rpc-handlers/persona.js";
 
 /**
- * Returns the raw handler mapping object for AgentRpc (78 entries).
+ * Returns the raw handler mapping object for AgentRpc (81 entries).
  * Can be used standalone with `liftHandlers` in the server, or called
  * by `makeAgentLayer` which wraps the result in `AgentRpc.toLayer()`.
  */
@@ -42,7 +41,6 @@ export const makeAgentHandlers = (ctx: HandlerContext) => {
   const ev = makeEventRpcHandlers(ctx);
   const fs = makeFilesystemRpcHandlers(ctx);
   const ch = makeChatRpcHandlers(ctx);
-  const po = makePostRpcHandlers(ctx);
   const per = makePersonaRpcHandlers(ctx);
 
   return {
@@ -161,12 +159,6 @@ export const makeAgentHandlers = (ctx: HandlerContext) => {
     "agent.chat.getMessages": ch["chat.getMessages"],
     "agent.chat.attachImage": ch["chat.attachImage"],
     "agent.chat.getAttachments": ch["chat.getAttachments"],
-
-    // --- Post (4) ---
-    "agent.post.all": po["post.all"],
-    "agent.post.byId": po["post.byId"],
-    "agent.post.create": po["post.create"],
-    "agent.post.delete": po["post.delete"],
 
     // --- Persona (6) ---
     "agent.persona.create": per["persona.create"],
