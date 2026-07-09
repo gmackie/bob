@@ -35,9 +35,9 @@ export interface SidebarTabItem {
 }
 
 export interface SidebarUtilityItem {
-  key: "pull-requests" | "nodes";
-  label: "Pull Requests" | "Nodes";
-  href: "/pull-requests" | "/nodes";
+  key: "onboarding" | "pull-requests" | "nodes";
+  label: "Onboarding" | "Pull Requests" | "Nodes";
+  href: "/onboarding" | "/pull-requests" | "/nodes";
 }
 
 export interface SidebarProjectSummary {
@@ -121,6 +121,7 @@ const PLANNING_TABS: SidebarTabItem[] = [
 ];
 
 const UTILITY_ITEMS: SidebarUtilityItem[] = [
+  { key: "onboarding", label: "Onboarding", href: "/onboarding" },
   { key: "pull-requests", label: "Pull Requests", href: "/pull-requests" },
   { key: "nodes", label: "Nodes", href: "/nodes" },
 ];
@@ -139,6 +140,7 @@ const WORK_ITEM_OUTCOME_STATUSES = new Set([
 ]);
 
 const WORKSPACE_SCOPED_NAV_PATHS = new Set([
+  "/onboarding",
   "/tasks",
   "/tasks/queue",
   "/runs",

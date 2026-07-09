@@ -49,6 +49,12 @@ const MODE_ICON: Record<SidebarShellMode, NavItem["icon"]> = {
 };
 
 const UTILITY_ICON: Record<SidebarUtilityItem["key"], NavItem["icon"]> = {
+  onboarding: () => (
+    <svg className="size-[15px]" viewBox="0 0 15 15" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+      <path d="M3 2.5A1.5 1.5 0 0 1 4.5 1h6A1.5 1.5 0 0 1 12 2.5v10a1.5 1.5 0 0 1-1.5 1.5h-6A1.5 1.5 0 0 1 3 12.5v-10ZM4.5 2a.5.5 0 0 0-.5.5v10a.5.5 0 0 0 .5.5h6a.5.5 0 0 0 .5-.5v-10a.5.5 0 0 0-.5-.5h-6Z" />
+      <path d="M5 4.25 6.1 5.35 8.5 3 9.2 3.7 6.1 6.75 4.3 4.95 5 4.25ZM5 8.25 6.1 9.35 8.5 7 9.2 7.7 6.1 10.75 4.3 8.95 5 8.25Z" />
+    </svg>
+  ),
   "pull-requests": () => (
     <svg className="size-[15px]" viewBox="0 0 15 15" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
       <circle cx="4.5" cy="3.5" r="1.5" />
@@ -321,7 +327,7 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
         return (
           <Link
             key={item.href}
-            href={item.href}
+            href={getSidebarScopedHref(item.href, workspaceId)}
             className={cn(
               "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
               isActive
