@@ -5,25 +5,14 @@ import {
   randomBytes,
 } from "node:crypto";
 
+import {
+  getCurrentMasterKey,
+  getDecryptMasterKeys,
+  KEY_LENGTH,
+} from "./masterKey";
+
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
-const KEY_LENGTH = 32;
-
-function getMasterKey(): Buffer {
-  // Reuse the same master key as token vault — cookies are equally sensitive
-  const key = process.env.GIT_TOKEN_ENCRYPTION_KEY;
-  if (!key) {
-    throw new Error(
-      "GIT_TOKEN_ENCRYPTION_KEY environment variable is required for cookie encryption",
-    );
-  }
-  if (key.length < KEY_LENGTH) {
-    throw new Error(
-      `GIT_TOKEN_ENCRYPTION_KEY must be at least ${KEY_LENGTH} characters`,
-    );
-  }
-  return Buffer.from(key.slice(0, KEY_LENGTH), "utf8");
-}
 
 function deriveCookieKey(masterKey: Buffer, cookieId: string): Buffer {
   return createHmac("sha256", masterKey)
@@ -42,7 +31,7 @@ export function encryptCookieValue(
   plaintext: string,
   cookieId: string,
 ): EncryptedCookieValue {
-  const masterKey = getMasterKey();
+  const masterKey = getCurrentMasterKey();
   const rowKey = deriveCookieKey(masterKey, cookieId);
   const iv = randomBytes(IV_LENGTH);
 
@@ -60,11 +49,11 @@ export function encryptCookieValue(
   };
 }
 
-export function decryptCookieValue(
+function tryDecryptWithKey(
   encrypted: EncryptedCookieValue,
   cookieId: string,
+  masterKey: Buffer,
 ): string {
-  const masterKey = getMasterKey();
   const rowKey = deriveCookieKey(masterKey, cookieId);
 
   const iv = Buffer.from(encrypted.iv, "base64");
@@ -80,4 +69,55 @@ export function decryptCookieValue(
   ]);
 
   return decrypted.toString("utf8");
+}
+
+/**
+ * Decrypt a cookie value. Tries current master key, then previous (rotation).
+ */
+export function decryptCookieValue(
+  encrypted: EncryptedCookieValue,
+  cookieId: string,
+): string {
+  const keys = getDecryptMasterKeys();
+  let lastError: unknown;
+  for (const key of keys) {
+    try {
+      return tryDecryptWithKey(encrypted, cookieId, key);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Failed to decrypt cookie with available master keys");
+}
+
+export function cookieNeedsReencryption(
+  encrypted: EncryptedCookieValue,
+  cookieId: string,
+): boolean {
+  const keys = getDecryptMasterKeys();
+  if (keys.length < 2) return false;
+
+  try {
+    tryDecryptWithKey(encrypted, cookieId, keys[0]!);
+    return false;
+  } catch {
+    // fall through
+  }
+
+  try {
+    tryDecryptWithKey(encrypted, cookieId, keys[1]!);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function reencryptCookieValue(
+  encrypted: EncryptedCookieValue,
+  cookieId: string,
+): EncryptedCookieValue {
+  const plaintext = decryptCookieValue(encrypted, cookieId);
+  return encryptCookieValue(plaintext, cookieId);
 }

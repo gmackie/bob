@@ -13,7 +13,14 @@ export function authEnv() {
           ? z.string().min(1)
           : z.string().min(1).optional(),
       NODE_ENV: z.enum(["development", "production"]).optional(),
-      GIT_TOKEN_ENCRYPTION_KEY: z.string().min(32).optional(),
+      // Required in production — vaults fail closed without a ≥32-char key.
+      // Optional in development so unit tests and local smoke runs can opt in.
+      GIT_TOKEN_ENCRYPTION_KEY:
+        process.env.NODE_ENV === "production"
+          ? z.string().min(32)
+          : z.string().min(32).optional(),
+      // Optional previous key for dual-key decrypt during rotation window.
+      GIT_TOKEN_ENCRYPTION_KEY_PREVIOUS: z.string().min(32).optional(),
     },
     runtimeEnv: process.env,
     skipValidation:

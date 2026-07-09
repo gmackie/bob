@@ -47,6 +47,7 @@ import {
   encryptCookieValue,
   decryptCookieValue,
 } from "../services/crypto/cookieVault";
+import { auditSecretAccess } from "../services/crypto/secretAccessAudit";
 
 import type { HandlerContext } from "./context.js";
 
@@ -224,9 +225,10 @@ export async function cookiesGetForSession(
     )) as unknown as BrowserCookieRow[];
 
   const now = new Date();
-  const decrypted = cookies
-    .filter((c) => !c.expires || new Date(c.expires) > now)
-    .map((c) => ({
+  const live = cookies.filter((c) => !c.expires || new Date(c.expires) > now);
+
+  try {
+    const decrypted = live.map((c) => ({
       name: c.name,
       value: decryptCookieValue(
         {
@@ -244,7 +246,30 @@ export async function cookiesGetForSession(
       sameSite: c.sameSite,
     }));
 
-  return { cookies: decrypted };
+    auditSecretAccess({
+      resource: "browser_cookie",
+      action: "decrypt_for_session",
+      userId: ctx.userId,
+      sessionId: input.sessionId,
+      domain,
+      count: decrypted.length,
+      success: true,
+    });
+
+    return { cookies: decrypted };
+  } catch (err) {
+    auditSecretAccess({
+      resource: "browser_cookie",
+      action: "decrypt_for_session",
+      userId: ctx.userId,
+      sessionId: input.sessionId,
+      domain,
+      count: live.length,
+      success: false,
+      detail: err instanceof Error ? err.message : "decrypt failed",
+    });
+    throw err;
+  }
 }
 
 export async function cookiesSetSessionScopes(
