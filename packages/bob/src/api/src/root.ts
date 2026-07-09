@@ -40,6 +40,7 @@ import {
   workItemRouter,
   workItemsRouter,
 } from "./router/workItems";
+import { usageRouter } from "./router/usage";
 import { webhookRouter } from "./router/webhook";
 import { workspaceRouter } from "./router/workspace";
 import { createTRPCRouter } from "./trpc";
@@ -81,6 +82,7 @@ const appRouterRecord = {
   taskRun: taskRunRouter,
   terminal: terminalRouter,
   notification: notificationRouter,
+  usage: usageRouter,
   workItem: workItemRouter,
   workItems: workItemsRouter,
   webhook: webhookRouter,

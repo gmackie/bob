@@ -363,6 +363,19 @@ export async function publicApiCreateRun(
   }
   await assertTenantAccess(ctx.db, ctx.userId, workspace.tenantId);
 
+  const { assertWithinQuotaOrThrow } = await import("../services/quotas/index.js");
+  // A new run counts against monthly task-run volume and concurrent active agents.
+  await assertWithinQuotaOrThrow({
+    db: ctx.db,
+    tenantId: workspace.tenantId,
+    metric: "taskRuns",
+  });
+  await assertWithinQuotaOrThrow({
+    db: ctx.db,
+    tenantId: workspace.tenantId,
+    metric: "activeAgents",
+  });
+
   // Resolve the effective agent when the caller didn't pin one explicitly:
   // work-item override -> project default -> workspace default -> fallback.
   let agentType = input.agentType;
@@ -486,6 +499,19 @@ export async function publicApiCreateArtifact(
     throw new TRPCError({ code: "NOT_FOUND" });
   }
   await assertTenantAccess(ctx.db, ctx.userId, run.tenantId);
+
+  const sizeBytes =
+    typeof input.metadata?.sizeBytes === "number" &&
+    Number.isFinite(input.metadata.sizeBytes)
+      ? Math.max(0, Math.floor(input.metadata.sizeBytes))
+      : 1024;
+  const { assertWithinQuotaOrThrow } = await import("../services/quotas/index.js");
+  await assertWithinQuotaOrThrow({
+    db: ctx.db,
+    tenantId: run.tenantId,
+    metric: "storageBytes",
+    delta: sizeBytes,
+  });
 
   const [artifact] = await ctx.db
     .insert(runArtifacts)
