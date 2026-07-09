@@ -1,6 +1,7 @@
 {
   "name": "@bob/mobile",
   "private": true,
+  "license": "MIT",
   "main": "index.ts",
   "scripts": {
     "clean": "git clean -xdf .cache .expo .turbo android ios node_modules",

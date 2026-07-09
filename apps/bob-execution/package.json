@@ -1,6 +1,7 @@
 {
   "name": "@bob/execution",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "exports": {
     "./services": "./src/services.ts",
