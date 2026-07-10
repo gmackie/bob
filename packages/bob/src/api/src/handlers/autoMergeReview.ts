@@ -13,7 +13,7 @@
 //    live); PRs on providers without review/status support are skipped.
 //  - Reuses prService.mergePr, so DB status sync + branch cleanup are unchanged.
 
-import { and, asc, eq } from "@bob/db";
+import { asc, eq } from "@bob/db";
 import { db } from "@bob/db/client";
 import { pullRequests } from "@bob/db/schema";
 
@@ -105,7 +105,7 @@ async function reviewWithClaude(
     data.content?.map((b) => (b.type === "text" ? b.text : "")).join("") ?? "";
 
   // Tolerate prose around the JSON; grab the first {...} block.
-  const match = text.match(/\{[\s\S]*\}/);
+  const match = /\{[\s\S]*\}/.exec(text);
   if (!match) {
     // Unparseable → fail safe (never auto-approve on ambiguity).
     return {
@@ -139,7 +139,7 @@ export async function autoReviewAndMerge(
   result.scanned = openPrs.length;
 
   // Cache the authenticated bot login per (userId, provider, instanceUrl).
-  const botLoginCache = new Map<string, string | null>();
+  const botLoginCache = new Map<string, string>();
 
   for (const pr of openPrs) {
     const label = `${pr.remoteOwner}/${pr.remoteName}#${pr.number}`;
@@ -214,7 +214,7 @@ export async function autoReviewAndMerge(
       const cacheKey = `${pr.userId}:${pr.provider}:${pr.instanceUrl ?? ""}`;
       let botLogin = botLoginCache.get(cacheKey);
       if (botLogin === undefined) {
-        botLogin = (await client.getAuthenticatedUser()).username ?? null;
+        botLogin = (await client.getAuthenticatedUser()).username;
         botLoginCache.set(cacheKey, botLogin);
       }
 
