@@ -33,6 +33,8 @@ const WORKSPACE_REALTIME_INVALIDATION_MESSAGES = new Set([
   "event",
   "planning_session_produced_drafts",
   "planning_session_produced_tasks",
+  "planning_artifact_updated",
+  "planning_collab_message",
   "git_status_changed",
   "project_sync_changed",
   "provider_capacity_changed",

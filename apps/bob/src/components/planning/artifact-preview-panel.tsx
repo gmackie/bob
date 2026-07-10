@@ -104,8 +104,8 @@ export function ArtifactPreviewPanel({
         )}
       </div>
 
-      {/* Footer — edit toggle (only after session completes) */}
-      {!isSessionActive && displayContent && activeTab === "live" && (
+      {/* Footer — shared artifact edit (during or after session; BOB-14 collab) */}
+      {displayContent && activeTab === "live" && onContentEdit && (
         <div className="border-t border-border px-4 py-2 flex items-center justify-end gap-2">
           {isEditing ? (
             <>
@@ -133,7 +133,7 @@ export function ArtifactPreviewPanel({
               }}
               className="text-sm text-muted-foreground hover:text-foreground"
             >
-              Edit artifact
+              {isSessionActive ? "Edit shared artifact" : "Edit artifact"}
             </button>
           )}
         </div>

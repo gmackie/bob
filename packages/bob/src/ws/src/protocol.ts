@@ -201,6 +201,29 @@ export interface ClientUnsubscribeWorkspace {
   type: "unsubscribe_workspace";
 }
 
+/** Browser reports presence/focus within a planning session (BOB-14). */
+export interface ClientPresenceUpdate {
+  type: "presence_update";
+  sessionId: string;
+  focus?: "chat" | "artifact" | "drafts" | "agent" | null;
+  artifactId?: string | null;
+  /** Optional caret offset when editing a shared artifact */
+  cursor?: number | null;
+  displayName?: string;
+  imageUrl?: string | null;
+}
+
+/** Browser sends human collab chat (persisted server-side when sent via tRPC;
+ *  this WS path is for low-latency fan-out after persist or optimistic send). */
+export interface ClientCollabChat {
+  type: "collab_chat";
+  sessionId: string;
+  clientMessageId: string;
+  body: string;
+  displayName?: string;
+  imageUrl?: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Server → Client messages
 // ---------------------------------------------------------------------------
@@ -306,6 +329,8 @@ export type ServerWorkspaceInvalidationType =
   | "git_status_changed"
   | "planning_session_produced_drafts"
   | "planning_session_produced_tasks"
+  | "planning_artifact_updated"
+  | "planning_collab_message"
   | "project_sync_changed"
   | "provider_capacity_changed"
   | "provider_limit_changed"
@@ -401,6 +426,61 @@ export interface ServerHostSnapshot {
   snapshot: HostSnapshotWire;
 }
 
+export interface SessionPresenceParticipant {
+  userId: string;
+  clientId: string;
+  displayName: string;
+  imageUrl?: string | null;
+  focus?: "chat" | "artifact" | "drafts" | "agent" | null;
+  artifactId?: string | null;
+  cursor?: number | null;
+  joinedAt: string;
+  lastSeenAt: string;
+}
+
+/** Full presence roster for a planning session after subscribe. */
+export interface ServerPresenceSnapshot {
+  type: "presence_snapshot";
+  sessionId: string;
+  participants: SessionPresenceParticipant[];
+}
+
+/** Incremental presence join/leave/update. */
+export interface ServerPresenceChanged {
+  type: "presence_changed";
+  sessionId: string;
+  change: "join" | "leave" | "update";
+  participant: SessionPresenceParticipant;
+}
+
+/** Fan-out of human collab chat (BOB-14). */
+export interface ServerCollabChatMessage {
+  type: "collab_chat_message";
+  sessionId: string;
+  message: {
+    id?: string;
+    clientMessageId?: string;
+    userId: string;
+    displayName: string;
+    imageUrl?: string | null;
+    body: string;
+    createdAt: string;
+  };
+}
+
+/** Fan-out when a shared planning artifact is created/updated. */
+export interface ServerArtifactUpdated {
+  type: "artifact_updated";
+  sessionId: string;
+  artifactId: string;
+  workItemId: string;
+  contentVersion: number;
+  lastEditedByUserId: string;
+  title?: string | null;
+  content?: string | null;
+  action: "created" | "updated";
+}
+
 // ---------------------------------------------------------------------------
 // Union types
 // ---------------------------------------------------------------------------
@@ -420,7 +500,9 @@ export type ClientMessage =
   | ClientSessionEvent
   | ClientSessionStatus
   | ClientSubscribeWorkspace
-  | ClientUnsubscribeWorkspace;
+  | ClientUnsubscribeWorkspace
+  | ClientPresenceUpdate
+  | ClientCollabChat;
 
 export type ServerMessage =
   | ServerHelloOk
@@ -439,7 +521,11 @@ export type ServerMessage =
   | ServerSessionAvailable
   | ServerReplayTruncated
   | ServerEventAck
-  | ServerHostSnapshot;
+  | ServerHostSnapshot
+  | ServerPresenceSnapshot
+  | ServerPresenceChanged
+  | ServerCollabChatMessage
+  | ServerArtifactUpdated;
 
 // ---------------------------------------------------------------------------
 // Helpers

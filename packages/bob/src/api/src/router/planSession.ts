@@ -10,6 +10,10 @@ import {
   planSessionListByWorkItem,
   planSessionGetActiveForWorkItem,
   planSessionSaveArtifact,
+  planSessionUpdateArtifact,
+  planSessionListArtifacts,
+  planSessionListMessages,
+  planSessionSendMessage,
   planSessionGetPriorContext,
   planSessionCreateDraft,
   planSessionUpdateDraft,
@@ -150,6 +154,52 @@ export const planSessionRouter = {
     )
     .mutation(({ ctx, input }) =>
       planSessionSaveArtifact({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
+
+  /** Collaborative edit of a planning artifact (optimistic concurrency via expectedVersion). */
+  updateArtifact: protectedProcedure
+    .input(
+      z.object({
+        artifactId: z.string().uuid(),
+        content: z.string(),
+        title: z.string().min(1).max(256).optional(),
+        expectedVersion: z.number().int().positive().optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      planSessionUpdateArtifact({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
+
+  /** List planning artifacts produced by a session. */
+  listArtifacts: protectedProcedure
+    .input(z.object({ sessionId: z.string().uuid() }))
+    .query(({ ctx, input }) =>
+      planSessionListArtifacts({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
+
+  /** List human collab chat messages for a planning session. */
+  listMessages: protectedProcedure
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        limit: z.number().int().min(1).max(200).optional(),
+      }),
+    )
+    .query(({ ctx, input }) =>
+      planSessionListMessages({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
+
+  /** Send a human collab chat message in a planning session. */
+  sendMessage: protectedProcedure
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        body: z.string().min(1).max(4000),
+        clientMessageId: z.string().max(128).optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      planSessionSendMessage({ db: ctx.db, userId: ctx.session.user.id }, input),
     ),
 
   /** Get prior planning context for a work item (for context chaining). */

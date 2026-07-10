@@ -6,11 +6,14 @@
 //   - chatConversations
 //   - chatMessages
 //   - chatAttachments
+// BOB-14:
+//   - planningSessionMessages (human collab chat on planning sessions)
 //
 // Relations:
 //   - chatConversationsRelations
 //   - chatMessagesRelations
 //   - chatAttachmentsRelations
+//   - planningSessionMessagesRelations
 //
 // Cross-area imports:
 //   - user from @bob/auth/schema
@@ -158,6 +161,32 @@ export const chatAttachments = pgTable("chat_attachments", (t) => ({
   index("chat_attachments_message_id_idx").on(table.messageId),
 ]);
 
+// --- Planning session collab chat (human ↔ human, BOB-14) ---
+
+export const planningSessionMessages = pgTable(
+  "planning_session_messages",
+  (t) => ({
+    id: t.uuid().notNull().primaryKey().defaultRandom(),
+    sessionId: t
+      .uuid()
+      .notNull()
+      .references(() => chatConversations.id, { onDelete: "cascade" }),
+    userId: t
+      .text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    clientMessageId: t.text(),
+    body: t.text().notNull(),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
+  }),
+  (table) => [
+    index("planning_session_messages_session_created_idx").on(
+      table.sessionId,
+      table.createdAt,
+    ),
+  ],
+);
+
 // =============================================================================
 // Relations
 // =============================================================================
@@ -186,6 +215,7 @@ export const chatConversationsRelations = relations(
       references: [workItems.id],
     }),
     messages: many(chatMessages),
+    planningCollabMessages: many(planningSessionMessages),
     events: many(sessionEvents),
     connections: many(sessionConnections),
     planDrafts: many(planDrafts),
@@ -209,6 +239,20 @@ export const chatAttachmentsRelations = relations(
     message: one(chatMessages, {
       fields: [chatAttachments.messageId],
       references: [chatMessages.id],
+    }),
+  }),
+);
+
+export const planningSessionMessagesRelations = relations(
+  planningSessionMessages,
+  ({ one }) => ({
+    session: one(chatConversations, {
+      fields: [planningSessionMessages.sessionId],
+      references: [chatConversations.id],
+    }),
+    user: one(user, {
+      fields: [planningSessionMessages.userId],
+      references: [user.id],
     }),
   }),
 );
