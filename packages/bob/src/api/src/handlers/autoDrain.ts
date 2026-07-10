@@ -32,6 +32,12 @@ const ACTIVE_SESSION_STATUSES = [
   "stopping",
 ];
 
+// Work-item statuses the driver will pick up and dispatch. "ready" is the
+// explicit/promoted queue; "todo" is planned work — included so the driver
+// stays fed without a separate todo→ready promoter (which doesn't exist).
+// "backlog" is intentionally excluded so it remains a manual staging gate.
+const DISPATCHABLE_STATUSES = ["ready", "todo"];
+
 // Rotate dispatches across providers to spread rate limits and throughput.
 const AGENT_ROTATION = ["claude", "codex", "grok", "cursor"];
 
@@ -114,14 +120,27 @@ export async function autoDrainBacklog(
     };
   }
 
-  // Oldest ready tasks first; over-fetch for project round-robin fairness.
+  // Dispatch both explicitly-readied and planned ("todo") tasks. Nothing in the
+  // system promotes todo→ready automatically, so gating on "ready" alone drained
+  // the queue to zero and idled Bob for a day once the hand-seeded ready items
+  // ran out. Treating "todo" as dispatchable keeps the driver self-sustaining as
+  // long as there's planned work; "ready" still sorts first so anything a human
+  // explicitly promoted jumps the queue. ("backlog" stays a manual gate.)
+  // Oldest first within each tier; over-fetch for project round-robin fairness.
   const ready = await db.query.workItems.findMany({
-    where: and(eq(workItems.status, "ready"), eq(workItems.kind, "task")),
-    orderBy: [asc(workItems.queueSortOrder), asc(workItems.createdAt)],
+    where: and(
+      inArray(workItems.status, DISPATCHABLE_STATUSES),
+      eq(workItems.kind, "task"),
+    ),
+    orderBy: [
+      sql`case when ${workItems.status} = 'ready' then 0 else 1 end`,
+      asc(workItems.queueSortOrder),
+      asc(workItems.createdAt),
+    ],
     limit: budget * 4,
   });
   if (ready.length === 0) {
-    return { ...base, dispatched: 0, reason: "no ready items" };
+    return { ...base, dispatched: 0, reason: "no dispatchable items" };
   }
 
   const picked = pickAcrossProjects(ready, budget);
@@ -130,11 +149,16 @@ export async function autoDrainBacklog(
   const dispatchedItems: AutoDrainResult["items"] = [];
   for (const wi of picked) {
     try {
-      // Guard against a concurrent dispatch: only proceed if still ready.
+      // Guard against a concurrent dispatch: only proceed if still dispatchable.
       const claimed = await db
         .update(workItems)
         .set({ status: "in_progress" })
-        .where(and(eq(workItems.id, wi.id), eq(workItems.status, "ready")))
+        .where(
+          and(
+            eq(workItems.id, wi.id),
+            inArray(workItems.status, DISPATCHABLE_STATUSES),
+          ),
+        )
         .returning({ id: workItems.id });
       if (claimed.length === 0) continue; // someone else took it
 
