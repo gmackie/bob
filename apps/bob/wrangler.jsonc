@@ -41,6 +41,8 @@
     "BOB_AUTO_MERGE_ENABLED": "true",
     "BOB_AUTO_MERGE_MAX_PER_RUN": "5",
     "BOB_AUTO_MERGE_MODEL": "claude-sonnet-5",
+    "BOB_AUTO_MERGE_INSTANCE_HINT": "gitea @ git.forgegraf.com",
+    "BOB_FORGEJO_INSTANCE_URL": "https://git.forgegraf.com",
     // Start in dry-run: review + post verdicts + log the merge decision, but do
     // NOT merge. Flip to "false" to enable live auto-merge once validated.
     "BOB_AUTO_MERGE_DRY_RUN": "true"

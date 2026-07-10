@@ -22,7 +22,6 @@ import {
   createProviderClient,
   getConnection,
 } from "../services/git/providerConnectionService";
-import { mergePr } from "../services/git/prService";
 
 export interface AutoMergeConfig {
   /** Max open PRs to process per run (caps review spend + merge/deploy fan-out). */
@@ -32,6 +31,14 @@ export interface AutoMergeConfig {
   anthropicApiKey: string;
   /** When true, review and post verdicts but never actually merge. */
   dryRun?: boolean;
+  /**
+   * Shared Forgejo/gitea token used to act on PRs that have no per-user OAuth
+   * connection. Bob's PRs are opened by the runner's embedded gmackie token,
+   * not a stored connection, so without this fallback every PR is skipped.
+   */
+  forgejoToken?: string;
+  /** Instance URL the forgejoToken is valid for (e.g. https://git.forgegraf.com). */
+  forgejoInstanceUrl?: string;
 }
 
 export interface AutoMergeResult {
@@ -149,7 +156,16 @@ export async function autoReviewAndMerge(
         pr.provider as GitProvider,
         pr.instanceUrl,
       );
-      if (!connection) {
+      let accessToken: string | undefined = connection?.accessToken;
+      if (
+        !accessToken &&
+        pr.provider === "gitea" &&
+        cfg.forgejoToken &&
+        pr.instanceUrl === cfg.forgejoInstanceUrl
+      ) {
+        accessToken = cfg.forgejoToken;
+      }
+      if (!accessToken) {
         result.skipped++;
         result.items.push({ pr: label, action: "skipped", reason: "no connection" });
         continue;
@@ -157,7 +173,7 @@ export async function autoReviewAndMerge(
 
       const client = createProviderClient(
         pr.provider as GitProvider,
-        connection.accessToken,
+        accessToken,
         pr.instanceUrl,
       );
 
@@ -287,11 +303,16 @@ export async function autoReviewAndMerge(
         continue;
       }
 
-      await mergePr({
-        userId: pr.userId,
-        pullRequestId: pr.id,
-        mergeMethod: "squash",
-      });
+      await client.mergePullRequest(
+        pr.remoteOwner,
+        pr.remoteName,
+        pr.number,
+        "squash",
+      );
+      await db
+        .update(pullRequests)
+        .set({ status: "merged", mergedAt: new Date().toISOString() })
+        .where(eq(pullRequests.id, pr.id));
       result.merged++;
       result.items.push({ pr: label, action: "merged" });
     } catch (err) {

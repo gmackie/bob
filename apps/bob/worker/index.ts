@@ -104,6 +104,10 @@ export default Sentry.withSentry(
               "claude-sonnet-5",
             anthropicApiKey: runtimeEnv.ANTHROPIC_API_KEY as string,
             dryRun: String(runtimeEnv.BOB_AUTO_MERGE_DRY_RUN ?? "") === "true",
+            forgejoToken: runtimeEnv.BOB_FORGEJO_TOKEN as string | undefined,
+            forgejoInstanceUrl:
+              (runtimeEnv.BOB_FORGEJO_INSTANCE_URL as string | undefined) ??
+              "https://git.forgegraf.com",
           });
           console.log(
             `[auto-merge] scanned=${r.scanned} reviewed=${r.reviewed} merged=${r.merged} skipped=${r.skipped}` +
