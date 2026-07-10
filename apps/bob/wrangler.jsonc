@@ -33,6 +33,16 @@
     "NODE_ENV": "production",
     "BOB_AUTO_DRAIN_ENABLED": "true",
     "BOB_AUTO_DRAIN_CONCURRENCY": "4",
-    "BOB_AUTO_DRAIN_DAILY_CAP": "20"
+    "BOB_AUTO_DRAIN_DAILY_CAP": "20",
+    // Autonomous PR reviewer + auto-merge (see worker/index.ts scheduled →
+    // handlers/autoMergeReview). Reviews open PRs with Claude and merges those
+    // that are CI-green + AI-approved + conflict-free. Needs the ANTHROPIC_API_KEY
+    // secret (set via `wrangler secret put`, NOT a plaintext var here).
+    "BOB_AUTO_MERGE_ENABLED": "true",
+    "BOB_AUTO_MERGE_MAX_PER_RUN": "5",
+    "BOB_AUTO_MERGE_MODEL": "claude-sonnet-5",
+    // Start in dry-run: review + post verdicts + log the merge decision, but do
+    // NOT merge. Flip to "false" to enable live auto-merge once validated.
+    "BOB_AUTO_MERGE_DRY_RUN": "true"
   }
 }

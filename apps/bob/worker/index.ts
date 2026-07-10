@@ -60,7 +60,12 @@ export default Sentry.withSentry(
       ctx: ExecutionContext,
     ): Promise<void> => {
       const runtimeEnv = (rawEnv ?? {}) as Env;
-      if (String(runtimeEnv.BOB_AUTO_DRAIN_ENABLED ?? "") !== "true") {
+      const autoDrainOn =
+        String(runtimeEnv.BOB_AUTO_DRAIN_ENABLED ?? "") === "true";
+      const autoMergeOn =
+        String(runtimeEnv.BOB_AUTO_MERGE_ENABLED ?? "") === "true" &&
+        !!runtimeEnv.ANTHROPIC_API_KEY;
+      if (!autoDrainOn && !autoMergeOn) {
         return;
       }
       const concurrency = Number(runtimeEnv.BOB_AUTO_DRAIN_CONCURRENCY ?? 4);
@@ -73,15 +78,40 @@ export default Sentry.withSentry(
       const { connectionString, isHyperdrive } =
         getHyperdriveConnectionString(runtimeEnv);
       const work = runWithDb(connectionString, isHyperdrive, async () => {
-        const { autoDrainBacklog } = await import("@bob/api/handlers/autoDrain");
-        const result = await autoDrainBacklog({ concurrency, dailyCap });
-        console.log(
-          `[auto-drain] dispatched=${result.dispatched} running=${result.running} today=${result.dispatchedToday}` +
-            (result.reason ? ` reason="${result.reason}"` : "") +
-            (result.items.length
-              ? ` items=${result.items.map((i) => `${i.identifier}:${i.agentType}`).join(",")}`
-              : ""),
-        );
+        // 1. Dispatch backlog work.
+        if (autoDrainOn) {
+          const { autoDrainBacklog } = await import(
+            "@bob/api/handlers/autoDrain"
+          );
+          const result = await autoDrainBacklog({ concurrency, dailyCap });
+          console.log(
+            `[auto-drain] dispatched=${result.dispatched} running=${result.running} today=${result.dispatchedToday}` +
+              (result.reason ? ` reason="${result.reason}"` : "") +
+              (result.items.length
+                ? ` items=${result.items.map((i) => `${i.identifier}:${i.agentType}`).join(",")}`
+                : ""),
+          );
+        }
+        // 2. Review + auto-merge the PRs those tasks produced.
+        if (autoMergeOn) {
+          const { autoReviewAndMerge } = await import(
+            "@bob/api/handlers/autoMergeReview"
+          );
+          const r = await autoReviewAndMerge({
+            maxPerRun: Number(runtimeEnv.BOB_AUTO_MERGE_MAX_PER_RUN ?? 5),
+            reviewModel:
+              (runtimeEnv.BOB_AUTO_MERGE_MODEL as string | undefined) ??
+              "claude-sonnet-5",
+            anthropicApiKey: runtimeEnv.ANTHROPIC_API_KEY as string,
+            dryRun: String(runtimeEnv.BOB_AUTO_MERGE_DRY_RUN ?? "") === "true",
+          });
+          console.log(
+            `[auto-merge] scanned=${r.scanned} reviewed=${r.reviewed} merged=${r.merged} skipped=${r.skipped}` +
+              (r.items.length
+                ? ` items=${r.items.map((i) => `${i.pr}:${i.action}${i.reason ? `(${i.reason})` : ""}`).join(", ")}`
+                : ""),
+          );
+        }
       });
       ctx.waitUntil(work);
       await work;
