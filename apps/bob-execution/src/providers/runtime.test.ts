@@ -6,7 +6,7 @@ describe("provider runtime", () => {
   it.each([
     ["claude", "claude", ["--output-format", "stream-json"]],
     ["codex", "codex", ["exec", "--json"]],
-    ["grok", "grok", ["--print", "--output-format", "streaming-json"]],
+    ["grok", "grok", ["--single", "--output-format", "streaming-json", "--permission-mode", "bypassPermissions"]],
     ["cursor-agent", "cursor-agent", ["--print", "--output-format", "stream-json"]],
   ] as const)("builds a structured command for %s", (provider, command, requiredArgs) => {
     const result = buildProviderCommand(provider, "Inspect the repository", { sandbox: "workspace-write" });

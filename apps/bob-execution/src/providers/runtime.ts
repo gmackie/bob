@@ -37,9 +37,9 @@ export function buildProviderCommand(
     return { command: "codex", args: [...args, prompt] };
   }
   if (provider === "grok") {
-    const args = ["--print", "--output-format", "streaming-json"];
+    const args = ["--single", prompt, "--output-format", "streaming-json", "--permission-mode", "bypassPermissions"];
     if (options.model) args.push("--model", options.model);
-    return { command: "grok", args: [...args, prompt] };
+    return { command: "grok", args };
   }
   const args = ["--print", "--output-format", "stream-json"];
   if (options.model) args.push("--model", options.model);
