@@ -7,7 +7,7 @@ describe("provider runtime", () => {
     ["claude", "claude", ["--output-format", "stream-json"]],
     ["codex", "codex", ["exec", "--json"]],
     ["grok", "grok", ["--single", "--output-format", "streaming-json", "--permission-mode", "bypassPermissions"]],
-    ["cursor-agent", "cursor-agent", ["--print", "--output-format", "stream-json"]],
+    ["cursor-agent", "cursor-agent", ["--print", "--output-format", "stream-json", "--trust", "--force"]],
   ] as const)("builds a structured command for %s", (provider, command, requiredArgs) => {
     const result = buildProviderCommand(provider, "Inspect the repository", { sandbox: "workspace-write" });
     expect(result.command).toBe(command);
@@ -24,6 +24,15 @@ describe("provider runtime", () => {
       nativeSessionId: "thread-1",
       usage: { source: "provider", inputTokens: 20, outputTokens: 5 },
     });
+  });
+
+  it("parses Cursor's camel-case usage fields", () => {
+    const parsed = parseProviderStream(
+      "cursor-agent",
+      JSON.stringify({ type: "result", session_id: "cursor-1", usage: { inputTokens: 12, outputTokens: 3 } }),
+    );
+
+    expect(parsed.usage).toMatchObject({ source: "provider", inputTokens: 12, outputTokens: 3 });
   });
 
   it("cancels only once", () => {

@@ -27,7 +27,7 @@ interface AgentExecutionResult {
     provider: string;
     collectedAt: string;
     allowance: { status: "unavailable"; source: "provider" };
-    observed: {
+    observed?: {
       source: "provider" | "bob_metered";
       inputTokens: number;
       outputTokens: number;
@@ -578,12 +578,16 @@ function runAgent(session: ServerSessionAvailable, workDir: string, prompt: stri
                 provider: providerId,
                 collectedAt: new Date().toISOString(),
                 allowance: { status: "unavailable" as const, source: "provider" as const },
-                observed: {
-                  source: providerUsage ? "provider" as const : "bob_metered" as const,
-                  inputTokens: tokenUsage.inputTokens,
-                  outputTokens: tokenUsage.outputTokens,
-                  ...(tokenUsage.costUsd > 0 ? { costUsd: tokenUsage.costUsd } : {}),
-                },
+                ...(tokenUsage.inputTokens > 0 || tokenUsage.outputTokens > 0
+                  ? {
+                      observed: {
+                        source: providerUsage ? "provider" as const : "bob_metered" as const,
+                        inputTokens: tokenUsage.inputTokens,
+                        outputTokens: tokenUsage.outputTokens,
+                        ...(tokenUsage.costUsd > 0 ? { costUsd: tokenUsage.costUsd } : {}),
+                      },
+                    }
+                  : {}),
               },
             }
           : {}),

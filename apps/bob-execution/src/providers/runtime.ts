@@ -41,7 +41,7 @@ export function buildProviderCommand(
     if (options.model) args.push("--model", options.model);
     return { command: "grok", args };
   }
-  const args = ["--print", "--output-format", "stream-json"];
+  const args = ["--print", "--output-format", "stream-json", "--trust", "--force"];
   if (options.model) args.push("--model", options.model);
   return { command: "cursor-agent", args: [...args, prompt] };
 }
@@ -67,8 +67,8 @@ export function parseProviderStream(
         const tokens = record.usage as Record<string, unknown>;
         usage = {
           source: "provider",
-          inputTokens: tokenNumber(tokens.input_tokens ?? tokens.prompt_tokens),
-          outputTokens: tokenNumber(tokens.output_tokens ?? tokens.completion_tokens),
+          inputTokens: tokenNumber(tokens.input_tokens ?? tokens.inputTokens ?? tokens.prompt_tokens),
+          outputTokens: tokenNumber(tokens.output_tokens ?? tokens.outputTokens ?? tokens.completion_tokens),
           costUsd: typeof tokens.cost === "number" ? tokens.cost : undefined,
         };
       }
