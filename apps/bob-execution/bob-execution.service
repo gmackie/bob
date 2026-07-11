@@ -12,7 +12,8 @@ ExecStart=/usr/bin/node dist/daemon/index.js
 Restart=always
 RestartSec=10
 EnvironmentFile=/opt/bob/execution-daemon/.env
-Environment=PATH=/home/bob/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/home/bob
+Environment=PATH=/home/bob/.local/bin:/home/bob/.npm-global/bin:/usr/local/bin:/usr/bin:/bin
 
 NoNewPrivileges=true
 ProtectSystem=strict
