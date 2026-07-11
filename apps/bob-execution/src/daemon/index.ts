@@ -269,6 +269,7 @@ function startHeartbeat(): void {
   heartbeatTimer = setInterval(() => {
     void collectHostSnapshot().then((hostSnapshot) => {
       send({ type: "ping", ts: new Date().toISOString(), hostSnapshot });
+      console.log(`[executor] Heartbeat sent (${hostSnapshot.queueDepth} in flight)`);
     });
   }, HEARTBEAT_INTERVAL_MS);
 }

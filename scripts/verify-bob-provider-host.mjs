@@ -45,7 +45,7 @@ function verifyRemote(host, user) {
   const serviceActive = remoteBoolean(target, "systemctl is-active --quiet bob-execution.service");
   const heartbeatAgeSeconds = remoteBoolean(
     target,
-    "journalctl -u bob-execution.service --since '-90 seconds' --no-pager -o cat | grep -Eq 'Authenticated|Connected'",
+    "journalctl -u bob-execution.service --since '-90 seconds' --no-pager -o cat | grep -Eq 'Heartbeat sent'",
   ) ? 0 : Number.POSITIVE_INFINITY;
   return buildHostVerification({ host, serviceActive, heartbeatAgeSeconds, providers });
 }
