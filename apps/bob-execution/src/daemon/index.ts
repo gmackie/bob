@@ -7,13 +7,15 @@
  *
  * Run: BOB_API_KEY=... BOB_WORKSPACE_ID=... GATEWAY_WS_URL=ws://... node daemon/index.js
  */
-import { spawn  } from "node:child_process";
+import { execFile, spawn  } from "node:child_process";
 import type {ChildProcess} from "node:child_process";
 import { existsSync } from "node:fs";
 import WebSocket from "ws";
 import { computeCostUsd  } from "@gmacko/core/agent/model-pricing";
 import type {TokenCounts} from "@gmacko/core/agent/model-pricing";
 import { buildProviderCommand, isProviderId, parseProviderStream } from "../providers/runtime.js";
+import { probeCliProvider } from "../providers/cli-provider.js";
+import { providerIds } from "../providers/contract.js";
 
 interface AgentExecutionResult {
   exitCode: number;
@@ -148,6 +150,41 @@ let ws: WebSocket | null = null;
 let heartbeatTimer: NodeJS.Timeout | null = null;
 let reconnectAttempt = 0;
 const activeSessions = new Map<string, ChildProcess>();
+let providerSnapshot: Awaited<ReturnType<typeof probeCliProvider>>[] = [];
+let lastProviderProbeAt = 0;
+
+async function collectHostSnapshot() {
+  if (Date.now() - lastProviderProbeAt > 5 * 60_000 || providerSnapshot.length === 0) {
+    providerSnapshot = await Promise.all(
+      providerIds.map((provider) =>
+        probeCliProvider(provider, (command, args) =>
+          new Promise((resolve, reject) => {
+            execFile(command, args, { timeout: 10_000 }, (error, stdout, stderr) => {
+              if (error && "code" in error && error.code === "ENOENT") {
+                reject(error instanceof Error ? error : new Error("command not found"));
+                return;
+              }
+              resolve({
+                code: typeof error?.code === "number" ? error.code : error ? 1 : 0,
+                stdout,
+                stderr,
+              });
+            });
+          }),
+        ),
+      ),
+    );
+    lastProviderProbeAt = Date.now();
+  }
+  return {
+    schemaVersion: 1 as const,
+    hostId: CLIENT_ID,
+    daemonVersion: "dev",
+    queueDepth: activeSessions.size,
+    checkedAt: new Date().toISOString(),
+    providers: providerSnapshot,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // WebSocket connection
@@ -160,12 +197,15 @@ function connect(): void {
   ws.on("open", () => {
     reconnectAttempt = 0;
     console.log("[executor] Connected, sending hello");
-    send({
-      type: "hello",
-      clientId: CLIENT_ID,
-      deviceType: "daemon",
-      token: BOB_API_KEY,
-      workspaceId: BOB_WORKSPACE_ID,
+    void collectHostSnapshot().then((hostSnapshot) => {
+      send({
+        type: "hello",
+        clientId: CLIENT_ID,
+        deviceType: "daemon",
+        token: BOB_API_KEY,
+        workspaceId: BOB_WORKSPACE_ID,
+        hostSnapshot,
+      });
     });
     startHeartbeat();
   });
@@ -214,7 +254,9 @@ function send(msg: Record<string, unknown>): void {
 function startHeartbeat(): void {
   if (heartbeatTimer) clearInterval(heartbeatTimer);
   heartbeatTimer = setInterval(() => {
-    send({ type: "ping", ts: new Date().toISOString() });
+    void collectHostSnapshot().then((hostSnapshot) => {
+      send({ type: "ping", ts: new Date().toISOString(), hostSnapshot });
+    });
   }, HEARTBEAT_INTERVAL_MS);
 }
 

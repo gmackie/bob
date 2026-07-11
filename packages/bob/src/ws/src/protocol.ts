@@ -24,6 +24,39 @@ export type SessionEventType =
   | "error"
   | "heartbeat";
 
+export interface ProviderCapabilityWire {
+  approval?: boolean;
+  followUp?: boolean;
+  resume?: boolean;
+  cancel?: boolean;
+  structuredUsage?: boolean;
+  providerAllowance?: boolean;
+  providerResetAt?: boolean;
+  directCost?: boolean;
+  modelIdentity?: boolean;
+}
+
+export interface ProviderHealthWire {
+  provider: "claude" | "codex" | "grok" | "cursor-agent";
+  command: string;
+  installed: boolean;
+  authenticated: boolean;
+  version?: string;
+  status: "ready" | "unavailable" | "unauthenticated" | "degraded";
+  capabilities: ProviderCapabilityWire;
+  checkedAt: string;
+  error?: string;
+}
+
+export interface HostSnapshotWire {
+  schemaVersion: 1;
+  hostId: string;
+  daemonVersion: string;
+  queueDepth: number;
+  checkedAt: string;
+  providers: ProviderHealthWire[];
+}
+
 // ---------------------------------------------------------------------------
 // Client → Server messages
 // ---------------------------------------------------------------------------
@@ -36,6 +69,7 @@ export interface ClientHello {
   lastGlobalSeenAt?: string;
   /** Required when deviceType === "daemon" */
   workspaceId?: string;
+  hostSnapshot?: HostSnapshotWire;
 }
 
 export interface ClientSubscribe {
@@ -67,6 +101,7 @@ export interface ClientAck {
 export interface ClientPing {
   type: "ping";
   ts: string;
+  hostSnapshot?: HostSnapshotWire;
 }
 
 export interface ClientCreateSession {
@@ -299,6 +334,12 @@ export interface ServerReplayTruncated {
   oldestAvailableSeq: number;
 }
 
+export interface ServerHostSnapshot {
+  type: "host_snapshot";
+  workspaceId: string;
+  snapshot: HostSnapshotWire;
+}
+
 // ---------------------------------------------------------------------------
 // Union types
 // ---------------------------------------------------------------------------
@@ -333,7 +374,8 @@ export type ServerMessage =
   | ServerSessionStatusChanged
   | ServerWorkspaceInvalidation
   | ServerSessionAvailable
-  | ServerReplayTruncated;
+  | ServerReplayTruncated
+  | ServerHostSnapshot;
 
 // ---------------------------------------------------------------------------
 // Helpers

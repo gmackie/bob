@@ -20,6 +20,7 @@ import {
   type ServerMessage,
   type ServerWorkspaceInvalidationType,
   type SessionStatus,
+  type HostSnapshotWire,
 } from "./protocol.js";
 import type { SessionEventRecord } from "./persistence.js";
 import { pushToUser } from "./push.js";
@@ -43,6 +44,7 @@ interface Connection {
   workspaceSubscribed: boolean;
   workspaceScopeId?: string;
   workspaceStatusFilter?: SessionStatus[];
+  hostSnapshot?: HostSnapshotWire;
 }
 
 interface NudgeInput {
@@ -297,6 +299,10 @@ export class Relay {
         // Daemon pings double as liveness: keep lastHeartbeat fresh so
         // "runner online" reflects the live connection, not connect time.
         if (conn.kind === "daemon" && conn.workspaceId) {
+          if (msg.hostSnapshot) {
+            conn.hostSnapshot = msg.hostSnapshot;
+            this.broadcastHostSnapshot(conn.workspaceId, msg.hostSnapshot);
+          }
           await db
             .update(workspaces)
             .set({ lastHeartbeat: sql`now()` })
@@ -414,6 +420,7 @@ export class Relay {
       conn.kind = "daemon";
       conn.userId = userId;
       conn.workspaceId = hello.workspaceId;
+      conn.hostSnapshot = hello.hostSnapshot;
 
       // If another daemon was registered for this workspace, boot it.
       const existing = this.daemonByWorkspace.get(hello.workspaceId);
@@ -1363,6 +1370,28 @@ export class Relay {
     }
 
     this.send(conn, { type: "workspace_snapshot", sessions });
+    if (msg.workspaceId) {
+      const daemon = this.daemonByWorkspace.get(msg.workspaceId);
+      if (daemon?.hostSnapshot) {
+        this.send(conn, {
+          type: "host_snapshot",
+          workspaceId: msg.workspaceId,
+          snapshot: daemon.hostSnapshot,
+        });
+      }
+    }
+  }
+
+  private broadcastHostSnapshot(workspaceId: string, snapshot: HostSnapshotWire): void {
+    for (const conn of this.connections.values()) {
+      if (
+        conn.kind === "browser" &&
+        conn.workspaceSubscribed &&
+        conn.workspaceScopeId === workspaceId
+      ) {
+        this.send(conn, { type: "host_snapshot", workspaceId, snapshot });
+      }
+    }
   }
 
   private async getPlanningDraftCounts(
