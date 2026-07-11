@@ -12,6 +12,11 @@ export function isProviderId(value: string): value is ProviderId {
   return providerIds.some((provider) => provider === value);
 }
 
+export function normalizeProviderId(value: string): ProviderId | null {
+  if (value === "cursor") return "cursor-agent";
+  return isProviderId(value) ? value : null;
+}
+
 export function buildProviderCommand(
   provider: ProviderId,
   prompt: string,

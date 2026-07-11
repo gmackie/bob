@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildProviderCommand, parseProviderStream, ProviderRunController } from "./runtime.js";
+import { buildProviderCommand, normalizeProviderId, parseProviderStream, ProviderRunController } from "./runtime.js";
 
 describe("provider runtime", () => {
   it.each([
@@ -32,5 +32,11 @@ describe("provider runtime", () => {
     expect(controller.cancel()).toBe(true);
     expect(controller.cancel()).toBe(false);
     expect(cancellations).toBe(1);
+  });
+
+  it("normalizes legacy Cursor rows instead of falling through to Claude", () => {
+    expect(normalizeProviderId("cursor")).toBe("cursor-agent");
+    expect(normalizeProviderId("cursor-agent")).toBe("cursor-agent");
+    expect(normalizeProviderId("unknown")).toBeNull();
   });
 });

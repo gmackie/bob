@@ -140,6 +140,7 @@ export interface ClientSessionStatus {
   type: "session_status";
   sessionId: string;
   status: SessionStatus;
+  summary?: Record<string, unknown>;
 }
 
 export interface ClientSubscribeWorkspace {

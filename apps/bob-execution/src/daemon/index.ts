@@ -13,15 +13,27 @@ import { existsSync } from "node:fs";
 import WebSocket from "ws";
 import { computeCostUsd  } from "@gmacko/core/agent/model-pricing";
 import type {TokenCounts} from "@gmacko/core/agent/model-pricing";
-import { buildProviderCommand, isProviderId, parseProviderStream } from "../providers/runtime.js";
+import { buildProviderCommand, normalizeProviderId, parseProviderStream } from "../providers/runtime.js";
 import { probeCliProvider } from "../providers/cli-provider.js";
 import { providerIds } from "../providers/contract.js";
+import { SessionAdmission } from "./session-admission.js";
 
 interface AgentExecutionResult {
   exitCode: number;
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
+  providerCapacity?: {
+    provider: string;
+    collectedAt: string;
+    allowance: { status: "unavailable"; source: "provider" };
+    observed: {
+      source: "provider" | "bob_metered";
+      inputTokens: number;
+      outputTokens: number;
+      costUsd?: number;
+    };
+  };
 }
 
 function initTelemetry(_config: { serviceName: string; serviceVersion?: string }): void {
@@ -150,6 +162,7 @@ let ws: WebSocket | null = null;
 let heartbeatTimer: NodeJS.Timeout | null = null;
 let reconnectAttempt = 0;
 const activeSessions = new Map<string, ChildProcess>();
+const sessionAdmission = new SessionAdmission(MAX_CONCURRENT);
 let providerSnapshot: Awaited<ReturnType<typeof probeCliProvider>>[] = [];
 let lastProviderProbeAt = 0;
 
@@ -180,7 +193,7 @@ async function collectHostSnapshot() {
     schemaVersion: 1 as const,
     hostId: CLIENT_ID,
     daemonVersion: "dev",
-    queueDepth: activeSessions.size,
+    queueDepth: sessionAdmission.size,
     checkedAt: new Date().toISOString(),
     providers: providerSnapshot,
   };
@@ -302,7 +315,7 @@ function handleMessage(msg: ServerMessage): void {
 // ---------------------------------------------------------------------------
 
 async function handleSessionAvailable(session: ServerSessionAvailable): Promise<void> {
-  if (activeSessions.size >= MAX_CONCURRENT) {
+  if (!sessionAdmission.reserve(session.sessionId)) {
     console.log(`[executor] At capacity (${MAX_CONCURRENT}), skipping ${session.sessionId}`);
     return;
   }
@@ -320,6 +333,7 @@ async function handleSessionAvailable(session: ServerSessionAvailable): Promise<
   if (!existsSync(workDir)) {
     console.error(`[executor] Working directory not found: ${workDir}`);
     send({ type: "session_status", sessionId: session.sessionId, status: "error" });
+    sessionAdmission.release(session.sessionId);
     return;
   }
 
@@ -344,6 +358,7 @@ async function handleSessionAvailable(session: ServerSessionAvailable): Promise<
   sendEvent(session.sessionId, "state", "system", { status: "running" });
 
   try {
+    let executionResult: AgentExecutionResult | undefined;
     await traceAgentExecution(
       {
         agentType,
@@ -355,11 +370,18 @@ async function handleSessionAvailable(session: ServerSessionAvailable): Promise<
       },
       async (span) => {
         const persona = getPersonaConfig(session);
-        const result = await runAgent(session, workDir, prompt, persona);
-        setAgentResult(span, result);
+        executionResult = await runAgent(session, workDir, prompt, persona);
+        setAgentResult(span, executionResult);
       },
     );
-    send({ type: "session_status", sessionId: session.sessionId, status: "completed" });
+    send({
+      type: "session_status",
+      sessionId: session.sessionId,
+      status: "completed",
+      summary: executionResult?.providerCapacity
+        ? { providerCapacity: executionResult.providerCapacity }
+        : undefined,
+    });
     sendEvent(session.sessionId, "state", "system", { status: "completed" });
     console.log(`[executor] Session ${session.sessionId} completed`);
   } catch (err) {
@@ -369,6 +391,7 @@ async function handleSessionAvailable(session: ServerSessionAvailable): Promise<
     sendEvent(session.sessionId, "error", "system", { code: "AGENT_ERROR", message: errMsg });
   } finally {
     activeSessions.delete(session.sessionId);
+    sessionAdmission.release(session.sessionId);
   }
 }
 
@@ -482,9 +505,10 @@ function runAgent(session: ServerSessionAvailable, workDir: string, prompt: stri
   return new Promise((resolve, reject) => {
     const sessionId = session.sessionId;
     const agentType = session.agentType || DEFAULT_AGENT_TYPE;
-    const { command, args } = isProviderId(agentType)
-      ? buildProviderCommand(agentType, prompt, {
-          model: persona?.model ?? (agentType === "codex" ? CODEX_MODEL : undefined),
+    const providerId = normalizeProviderId(agentType);
+    const { command, args } = providerId
+      ? buildProviderCommand(providerId, prompt, {
+          model: persona?.model ?? (providerId === "codex" ? CODEX_MODEL : undefined),
           sandbox: CODEX_SANDBOX,
           allowedTools: persona?.allowedTools,
           systemPrompt: persona?.systemPrompt,
@@ -529,8 +553,8 @@ function runAgent(session: ServerSessionAvailable, workDir: string, prompt: stri
 
     child.on("close", (code) => {
       const durationMs = Date.now() - startTime;
-      const providerUsage = isProviderId(agentType)
-        ? parseProviderStream(agentType, output).usage
+      const providerUsage = providerId
+        ? parseProviderStream(providerId, output).usage
         : undefined;
       const tokenUsage = providerUsage
         ? {
@@ -547,6 +571,21 @@ function runAgent(session: ServerSessionAvailable, workDir: string, prompt: stri
         inputTokens: tokenUsage.inputTokens,
         outputTokens: tokenUsage.outputTokens,
         costUsd: tokenUsage.costUsd,
+        ...(providerId
+          ? {
+              providerCapacity: {
+                provider: providerId,
+                collectedAt: new Date().toISOString(),
+                allowance: { status: "unavailable" as const, source: "provider" as const },
+                observed: {
+                  source: providerUsage ? "provider" as const : "bob_metered" as const,
+                  inputTokens: tokenUsage.inputTokens,
+                  outputTokens: tokenUsage.outputTokens,
+                  ...(tokenUsage.costUsd > 0 ? { costUsd: tokenUsage.costUsd } : {}),
+                },
+              },
+            }
+          : {}),
       };
 
       void reportToBizPulse(

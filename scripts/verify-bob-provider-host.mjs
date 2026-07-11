@@ -3,10 +3,10 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 export const providerProbeCommands = {
-  claude: "sudo -u bob -H sh -lc 'command -v claude >/dev/null && claude auth status >/dev/null 2>&1'",
-  codex: "sudo -u bob -H sh -lc 'command -v codex >/dev/null && codex login status >/dev/null 2>&1'",
-  grok: "sudo -u bob -H sh -lc 'command -v grok >/dev/null && grok models >/dev/null 2>&1'",
-  "cursor-agent": "sudo -u bob -H sh -lc 'command -v cursor-agent >/dev/null && cursor-agent status >/dev/null 2>&1'",
+  claude: "sudo -u bob -H sh -lc 'cd /home/bob && command -v claude >/dev/null && claude auth status >/dev/null 2>&1'",
+  codex: "sudo -u bob -H sh -lc 'cd /home/bob && command -v codex >/dev/null && codex login status >/dev/null 2>&1'",
+  grok: "sudo -u bob -H sh -lc 'cd /home/bob && command -v grok >/dev/null && grok models >/dev/null 2>&1'",
+  "cursor-agent": "sudo -u bob -H sh -lc 'cd /home/bob && command -v cursor-agent >/dev/null && cursor-agent status >/dev/null 2>&1'",
 };
 
 export function buildHostVerification(input) {
@@ -36,7 +36,7 @@ function verifyRemote(host, user) {
   const target = `${user}@${host}`;
   const providers = {};
   for (const [provider, probe] of Object.entries(providerProbeCommands)) {
-    const installed = remoteBoolean(target, `sudo -u bob -H sh -lc 'command -v ${provider} >/dev/null'`);
+    const installed = remoteBoolean(target, `sudo -u bob -H sh -lc 'cd /home/bob && command -v ${provider} >/dev/null'`);
     providers[provider] = {
       installed,
       authenticated: installed && remoteBoolean(target, probe),

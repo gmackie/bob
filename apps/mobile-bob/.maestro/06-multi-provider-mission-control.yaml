@@ -5,6 +5,9 @@ tags:
 ---
 - launchApp
 - openLink: bob://tasks
+- tapOn:
+    text: "Continue"
+    optional: true
 - extendedWaitUntil:
     visible: "Tasks"
     timeout: 30000
