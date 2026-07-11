@@ -1,0 +1,27 @@
+appId: com.gmacko.bob.dev
+tags:
+  - smoke
+  - mission-control
+---
+- launchApp
+- openLink: bob://tasks
+- extendedWaitUntil:
+    visible: "Tasks"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      text: "Claude"
+    direction: DOWN
+- assertVisible: "Claude"
+- assertVisible: "Codex"
+- assertVisible: "Grok"
+- assertVisible: "Cursor"
+- assertVisible: "Provider allowance"
+- assertVisible: "Bob observed usage"
+- tapOn:
+    text: "Grok"
+- extendedWaitUntil:
+    visible: "Grok"
+    timeout: 15000
+- assertVisible: "Provider"
+- takeScreenshot: screenshots/06-multi-provider-mission-control
