@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import type { HostSnapshotWire } from "@bob/ws";
 
 import { cn } from "@gmacko/core/ui";
 
@@ -17,6 +18,7 @@ import {
   type ProviderSessionSummary,
   type WorkPipelineItem,
 } from "./work-pipeline-model";
+import { buildHostMissionControl } from "./mission-control-model";
 
 interface ProviderCapacityCardsProps {
   workspaceId?: string;
@@ -127,6 +129,11 @@ export function ProviderCapacityCards({ workspaceId }: ProviderCapacityCardsProp
           >),
     refetchInterval: 10_000,
   });
+  const { data: hostSnapshot } = useQuery<HostSnapshotWire | null>({
+    queryKey: ["hostSnapshot", workspaceId ?? ""],
+    queryFn: () => Promise.resolve(null),
+    enabled: false,
+  });
 
   const cards = buildProviderCapacitySummaries({
     sessions: (runs ?? []).map(
@@ -142,11 +149,25 @@ export function ProviderCapacityCards({ workspaceId }: ProviderCapacityCardsProp
     ),
   });
 
+  const host = hostSnapshot ? buildHostMissionControl(hostSnapshot) : null;
+
   return (
-    <section className="grid gap-5 md:grid-cols-2">
-      {cards.map((card) => (
-        <ProviderCard key={card.provider} card={card} workspaceId={workspaceId} />
-      ))}
-    </section>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground" data-testid="host-status">
+        <span className="font-semibold text-foreground">{host?.hostId ?? "Execution host"}</span>
+        <span>{host?.statusLabel ?? "Waiting for heartbeat"}</span>
+        {host ? <span>{host.queueLabel}</span> : null}
+        {host?.providers.map((provider) => (
+          <span key={provider.provider} title={`Controls: ${provider.controls.join(", ") || "none"}`}>
+            {provider.label}: {provider.statusLabel}
+          </span>
+        ))}
+      </div>
+      <section className="grid gap-5 md:grid-cols-2">
+        {cards.map((card) => (
+          <ProviderCard key={card.provider} card={card} workspaceId={workspaceId} />
+        ))}
+      </section>
+    </div>
   );
 }

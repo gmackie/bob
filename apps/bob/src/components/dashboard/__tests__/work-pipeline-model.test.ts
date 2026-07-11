@@ -510,13 +510,15 @@ describe("work pipeline model", () => {
     ]);
   });
 
-  it("summarizes Codex and Cursor capacity from active sessions", () => {
+  it("summarizes Claude, Codex, Grok, and Cursor capacity from active sessions", () => {
     const cards = buildProviderCapacitySummaries({
       sessions: [
         { id: "codex-1", status: "running", agentType: "codex" },
         { id: "codex-2", status: "pending", agentType: "codex" },
         { id: "codex-3", status: "awaiting-input", agentType: "codex" },
         { id: "cursor-1", status: "failed", agentType: "cursor" },
+        { id: "claude-1", status: "running", agentType: "claude" },
+        { id: "grok-1", status: "pending", agentType: "grok" },
       ],
       workItems: [
         {
@@ -536,8 +538,13 @@ describe("work pipeline model", () => {
       ],
     });
 
-    expect(cards.map((card) => card.provider)).toEqual(["codex", "cursor"]);
-    expect(cards[0]).toMatchObject({
+    expect(cards.map((card) => card.provider)).toEqual([
+      "claude",
+      "codex",
+      "grok",
+      "cursor-agent",
+    ]);
+    expect(cards.find((card) => card.provider === "codex")).toMatchObject({
       label: "Codex",
       activeCount: 3,
       queuedOrStartingCount: 2,
@@ -547,7 +554,7 @@ describe("work pipeline model", () => {
         { label: "Weekly usage limit", remainingPercent: null },
       ],
     });
-    expect(cards[1]).toMatchObject({
+    expect(cards.find((card) => card.provider === "cursor-agent")).toMatchObject({
       label: "Cursor",
       activeCount: 0,
       queuedOrStartingCount: 0,
@@ -557,6 +564,36 @@ describe("work pipeline model", () => {
         { label: "Included usage", remainingPercent: null },
         { label: "On-demand spend", remainingPercent: null },
       ],
+    });
+  });
+
+  it("shows Bob-observed usage without inventing remaining allowance", () => {
+    const snapshots = extractProviderCapacitySnapshotsFromRuns([{
+      id: "grok-run",
+      agentType: "grok",
+      summary: {
+        providerCapacity: {
+          provider: "grok",
+          collectedAt: "2026-07-11T18:00:00.000Z",
+          allowance: { status: "unavailable", source: "provider" },
+          observed: { source: "bob_metered", inputTokens: 120, outputTokens: 30 },
+        },
+      },
+    }]);
+
+    const card = buildProviderCapacitySummaries({
+      sessions: [],
+      workItems: [],
+      capacitySnapshots: snapshots,
+    }).find((entry) => entry.provider === "grok");
+
+    expect(card).toMatchObject({
+      limitLabel: "Capacity connected",
+      usageLimits: [{
+        label: "Bob observed usage",
+        remainingPercent: null,
+        valueLabel: "150 tokens",
+      }],
     });
   });
 
@@ -635,7 +672,7 @@ describe("work pipeline model", () => {
       capacitySnapshots: snapshots,
     });
 
-    expect(cards.find((card) => card.provider === "cursor")).toMatchObject({
+    expect(cards.find((card) => card.provider === "cursor-agent")).toMatchObject({
       limitLabel: "Capacity connected",
       usageLimits: [
         {
@@ -658,7 +695,7 @@ describe("work pipeline model", () => {
   });
 
   it("formats provider capacity connection and health as a visible status line", () => {
-    const [card] = buildProviderCapacitySummaries({
+    const card = buildProviderCapacitySummaries({
       sessions: [{ id: "codex-1", status: "running", agentType: "codex" }],
       workItems: [],
       capacitySnapshots: [
@@ -673,7 +710,7 @@ describe("work pipeline model", () => {
           ],
         },
       ],
-    });
+    }).find((entry) => entry.provider === "codex");
 
     if (!card) throw new Error("Expected Codex capacity card");
     expect(getProviderCapacityStatusLine(card)).toBe("Capacity connected · Normal");
@@ -683,7 +720,7 @@ describe("work pipeline model", () => {
     expect(getProviderCapacityHref("codex", "workspace-1")).toBe(
       "/runs?provider=codex&workspace=workspace-1",
     );
-    expect(getProviderCapacityHref("cursor", null)).toBe("/runs?provider=cursor");
+    expect(getProviderCapacityHref("cursor-agent", null)).toBe("/runs?provider=cursor-agent");
     expect(getRunningNowScope("workspace-1")).toEqual({
       mode: "workspace",
       workspaceId: "workspace-1",

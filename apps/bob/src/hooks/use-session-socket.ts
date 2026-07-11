@@ -12,6 +12,7 @@ import {
   type EventDirection,
   type SessionEventType,
   type WorkspaceSessionInfo,
+  type HostSnapshotWire,
 } from "@bob/ws";
 
 // Re-export types that consumers depend on
@@ -59,6 +60,7 @@ interface UseSessionSocketOptions {
   onEvent?: (event: SessionEvent) => void;
   onStatusChange?: (sessionId: string, status: SessionStatus) => void;
   onWorkspaceSnapshot?: (sessions: WorkspaceSessionInfo[]) => void;
+  onHostSnapshot?: (workspaceId: string, snapshot: HostSnapshotWire) => void;
   onWorkspaceStatusChanged?: (info: ServerSessionStatusChanged) => void;
   onWorkspaceEvent?: (message: ServerWorkspaceInvalidation) => void;
   onConnectionChange?: (state: ConnectionState) => void;
@@ -71,6 +73,7 @@ export function useSessionSocket({
   onEvent,
   onStatusChange,
   onWorkspaceSnapshot,
+  onHostSnapshot,
   onWorkspaceStatusChanged,
   onWorkspaceEvent,
   onConnectionChange,
@@ -92,12 +95,14 @@ export function useSessionSocket({
   const onEventRef = useRef(onEvent);
   const onStatusChangeRef = useRef(onStatusChange);
   const onWorkspaceSnapshotRef = useRef(onWorkspaceSnapshot);
+  const onHostSnapshotRef = useRef(onHostSnapshot);
   const onWorkspaceStatusChangedRef = useRef(onWorkspaceStatusChanged);
   const onWorkspaceEventRef = useRef(onWorkspaceEvent);
   const onConnectionChangeRef = useRef(onConnectionChange);
   onEventRef.current = onEvent;
   onStatusChangeRef.current = onStatusChange;
   onWorkspaceSnapshotRef.current = onWorkspaceSnapshot;
+  onHostSnapshotRef.current = onHostSnapshot;
   onWorkspaceStatusChangedRef.current = onWorkspaceStatusChanged;
   onWorkspaceEventRef.current = onWorkspaceEvent;
   onConnectionChangeRef.current = onConnectionChange;
@@ -140,6 +145,9 @@ export function useSessionSocket({
       },
       onWorkspaceSnapshot: (sessions: WorkspaceSessionInfo[]) => {
         onWorkspaceSnapshotRef.current?.(sessions);
+      },
+      onHostSnapshot: (workspaceId: string, snapshot: HostSnapshotWire) => {
+        onHostSnapshotRef.current?.(workspaceId, snapshot);
       },
       onWorkspaceEvent: (message: ServerWorkspaceInvalidation) => {
         onWorkspaceEventRef.current?.(message);

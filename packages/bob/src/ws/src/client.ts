@@ -9,6 +9,7 @@ import type {
   ServerSessionStatusChanged,
   SessionStatus,
   WorkspaceSessionInfo,
+  HostSnapshotWire,
 } from "./protocol.js";
 import { encodeClientMessage, parseServerMessage } from "./protocol.js";
 
@@ -44,6 +45,7 @@ export interface BobWsClientOptions {
   onEvent: (sessionId: string, event: ServerEvent) => void;
   onSessionStatus: (sessionId: string, status: SessionStatus) => void;
   onWorkspaceSnapshot?: (sessions: WorkspaceSessionInfo[]) => void;
+  onHostSnapshot?: (workspaceId: string, snapshot: HostSnapshotWire) => void;
   onSessionStatusChanged?: (info: ServerSessionStatusChanged) => void;
   onWorkspaceEvent?: (message: ServerWorkspaceInvalidation) => void;
   onError: (error: ServerError) => void;
@@ -232,6 +234,10 @@ export class BobWsClient {
 
       case "workspace_snapshot":
         this.opts.onWorkspaceSnapshot?.(msg.sessions);
+        break;
+
+      case "host_snapshot":
+        this.opts.onHostSnapshot?.(msg.workspaceId, msg.snapshot);
         break;
 
       case "session_status_changed":

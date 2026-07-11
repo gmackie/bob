@@ -17,7 +17,7 @@ export interface WorkPipelineItem {
   agentStatus?: WorkPipelineAgentStatus | null;
 }
 
-export type ProviderKey = "codex" | "cursor";
+export type ProviderKey = "claude" | "codex" | "grok" | "cursor-agent";
 export type DashboardTone = "default" | "warning" | "danger" | "success";
 
 export interface ProviderSessionSummary {
@@ -440,8 +440,19 @@ function getRecentlyCompletedStatusTone(status: string): DashboardTone {
 }
 
 function getProvider(agentType: string): ProviderKey {
-  return agentType.toLowerCase().includes("cursor") ? "cursor" : "codex";
+  const normalized = agentType.toLowerCase();
+  if (normalized.includes("cursor")) return "cursor-agent";
+  if (normalized.includes("claude")) return "claude";
+  if (normalized.includes("grok")) return "grok";
+  return "codex";
 }
+
+const PROVIDER_LABELS: Record<ProviderKey, string> = {
+  claude: "Claude",
+  codex: "Codex",
+  grok: "Grok",
+  "cursor-agent": "Cursor",
+};
 
 function buildProviderCapacitySummary(
   provider: ProviderKey,
@@ -457,7 +468,7 @@ function buildProviderCapacitySummary(
 
   return {
     provider,
-    label: provider === "codex" ? "Codex" : "Cursor",
+    label: PROVIDER_LABELS[provider],
     activeCount,
     queuedOrStartingCount: startingCount + (provider === "codex" ? queuedCount : 0),
     limitLabel: snapshot ? "Capacity connected" : "Capacity not connected",
@@ -480,8 +491,10 @@ export function buildProviderCapacitySummaries(input: {
   );
 
   return [
+    buildProviderCapacitySummary("claude", input.sessions, queuedCount, snapshots.get("claude")),
     buildProviderCapacitySummary("codex", input.sessions, queuedCount, snapshots.get("codex")),
-    buildProviderCapacitySummary("cursor", input.sessions, queuedCount, snapshots.get("cursor")),
+    buildProviderCapacitySummary("grok", input.sessions, queuedCount, snapshots.get("grok")),
+    buildProviderCapacitySummary("cursor-agent", input.sessions, queuedCount, snapshots.get("cursor-agent")),
   ];
 }
 
@@ -511,6 +524,17 @@ function parseProviderUsageLimits(summary: unknown): ProviderUsageLimit[] {
   if (!summary || typeof summary !== "object") return [];
   const capacity = (summary as { providerCapacity?: unknown }).providerCapacity;
   if (!capacity || typeof capacity !== "object") return [];
+  const observed = (capacity as { observed?: unknown }).observed;
+  if (observed && typeof observed === "object") {
+    const usage = observed as { inputTokens?: unknown; outputTokens?: unknown };
+    const inputTokens = typeof usage.inputTokens === "number" ? usage.inputTokens : 0;
+    const outputTokens = typeof usage.outputTokens === "number" ? usage.outputTokens : 0;
+    return [buildProviderUsageLimit({
+      label: "Bob observed usage",
+      valueLabel: `${inputTokens + outputTokens} tokens`,
+      resetLabel: null,
+    })];
+  }
   const usageLimits = (capacity as { usageLimits?: unknown }).usageLimits;
   if (!Array.isArray(usageLimits)) return [];
 
@@ -584,7 +608,8 @@ function getDefaultProviderUsageLimits(provider: ProviderKey): ProviderUsageLimi
           resetLabel: null,
         }),
       ]
-    : [
+    : provider === "cursor-agent"
+      ? [
         buildProviderUsageLimit({
           label: "Included usage",
           remainingPercent: null,
@@ -595,7 +620,19 @@ function getDefaultProviderUsageLimits(provider: ProviderKey): ProviderUsageLimi
           remainingPercent: null,
           resetLabel: null,
         }),
-      ];
+      ]
+      : [
+          buildProviderUsageLimit({
+            label: "Provider allowance",
+            remainingPercent: null,
+            resetLabel: null,
+          }),
+          buildProviderUsageLimit({
+            label: "Bob observed usage",
+            remainingPercent: null,
+            resetLabel: null,
+          }),
+        ];
 }
 
 function clampPercent(value: number): number {
