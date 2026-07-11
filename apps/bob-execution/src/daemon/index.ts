@@ -13,6 +13,7 @@ import { existsSync } from "node:fs";
 import WebSocket from "ws";
 import { computeCostUsd  } from "@gmacko/core/agent/model-pricing";
 import type {TokenCounts} from "@gmacko/core/agent/model-pricing";
+import { buildProviderCommand, isProviderId, parseProviderStream } from "../providers/runtime.js";
 
 interface AgentExecutionResult {
   exitCode: number;
@@ -439,7 +440,14 @@ function runAgent(session: ServerSessionAvailable, workDir: string, prompt: stri
   return new Promise((resolve, reject) => {
     const sessionId = session.sessionId;
     const agentType = session.agentType || DEFAULT_AGENT_TYPE;
-    const { command, args } = getAgentCommand(agentType, prompt, persona);
+    const { command, args } = isProviderId(agentType)
+      ? buildProviderCommand(agentType, prompt, {
+          model: persona?.model ?? (agentType === "codex" ? CODEX_MODEL : undefined),
+          sandbox: CODEX_SANDBOX,
+          allowedTools: persona?.allowedTools,
+          systemPrompt: persona?.systemPrompt,
+        })
+      : getAgentCommand(agentType, prompt, persona);
     console.log(`[executor] Spawning: ${command} ${args.join(" ").slice(0, 80)}...`);
 
     const startTime = Date.now();
@@ -479,7 +487,19 @@ function runAgent(session: ServerSessionAvailable, workDir: string, prompt: stri
 
     child.on("close", (code) => {
       const durationMs = Date.now() - startTime;
-      const tokenUsage = parseTokenUsage(output, persona?.model);
+      const providerUsage = isProviderId(agentType)
+        ? parseProviderStream(agentType, output).usage
+        : undefined;
+      const tokenUsage = providerUsage
+        ? {
+            inputTokens: providerUsage.inputTokens,
+            outputTokens: providerUsage.outputTokens,
+            cacheReadTokens: 0,
+            cacheCreationTokens: 0,
+            costUsd: providerUsage.costUsd ?? 0,
+            model: persona?.model ?? agentType,
+          }
+        : parseTokenUsage(output, persona?.model);
       const result: AgentExecutionResult = {
         exitCode: code ?? 1,
         inputTokens: tokenUsage.inputTokens,
