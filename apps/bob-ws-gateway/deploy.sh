@@ -36,13 +36,20 @@ rm -rf "${DEPLOY_STAGE}"
 pnpm --filter @bob/ws-gateway deploy --legacy --prod "${DEPLOY_STAGE}"
 
 echo "==> Deploying to ${SSH_TARGET}:${REMOTE_DIR}..."
+# pnpm deploy's stage does NOT reliably contain dist/ (it stages package
+# sources + node_modules); an rsync that lists "${DEPLOY_STAGE}/dist" exits 23
+# and aborts the script BEFORE the restart, leaving the box on old code with a
+# half-updated node_modules (the 2026-07-06 deploy quirk). Ship dist from the
+# just-built package directory instead, as its own step.
 rsync -avz --delete \
   --exclude='.env' \
   --exclude='*.test.ts' \
   --exclude='.turbo' \
-  "${DEPLOY_STAGE}/dist" \
   "${DEPLOY_STAGE}/node_modules" \
   "${DEPLOY_STAGE}/package.json" \
+  "${SSH_TARGET}:${REMOTE_DIR}/"
+rsync -avz --delete \
+  "${SCRIPT_DIR}/dist" \
   "${SSH_TARGET}:${REMOTE_DIR}/"
 
 echo "==> Restarting service..."
