@@ -883,43 +883,134 @@ export class Relay {
 
   // ── Daemon session_event → persist + fan out ───────────────────────
 
+  /**
+   * Envelope-protocol ingest: transactionally persist a daemon frame keyed by
+   * its runner send-seq, then ack. The transaction makes persist-then-ack
+   * atomic — an ack is only ever sent for a committed row, so the runner can
+   * safely truncate its disk journal on ack. Redelivery (the runner replaying
+   * after a partition) is detected by the (sessionId, sendSeq) unique key and
+   * acked without a second row or a second fan-out.
+   */
+  private async persistEnvelopeEvent(
+    conn: Connection,
+    sessionId: string,
+    sendSeq: number,
+    eventType: string,
+    direction: string,
+    payload: Record<string, unknown>,
+  ): Promise<{ kind: "inserted"; seq: number } | { kind: "duplicate" } | { kind: "denied" }> {
+    return await db.transaction(async (tx) => {
+      // Duplicate check first so redelivery doesn't burn a gateway seq.
+      const existing = await tx
+        .select({ id: sessionEvents.id })
+        .from(sessionEvents)
+        .where(
+          and(
+            eq(sessionEvents.sessionId, sessionId),
+            eq(sessionEvents.sendSeq, sendSeq),
+          ),
+        )
+        .limit(1);
+      if (existing.length > 0) return { kind: "duplicate" as const };
+
+      const updated = await tx
+        .update(chatConversations)
+        .set({
+          nextSeq: sql`${chatConversations.nextSeq} + 1`,
+          lastActivityAt: sql`now()`,
+        })
+        .where(
+          and(
+            eq(chatConversations.id, sessionId),
+            eq(chatConversations.userId, conn.userId!),
+          ),
+        )
+        .returning({ newNextSeq: chatConversations.nextSeq });
+      if (updated.length === 0) return { kind: "denied" as const };
+
+      const seq = updated[0]!.newNextSeq - 1;
+      // The unique index still guards a concurrent race on the same sendSeq:
+      // the loser's insert aborts the transaction, the runner redelivers, and
+      // the redelivery hits the duplicate check above.
+      await tx.insert(sessionEvents).values({
+        sessionId,
+        seq,
+        sendSeq,
+        direction,
+        eventType,
+        payload,
+      });
+      return { kind: "inserted" as const, seq };
+    });
+  }
+
   private async handleSessionEvent(conn: Connection, event: ClientSessionEvent): Promise<void> {
-    // Atomic increment with RETURNING — fuses the auth check into the WHERE clause
-    // and avoids the read-then-write race that caused duplicate seq values under burst.
-    const updated = await db
-      .update(chatConversations)
-      .set({
-        nextSeq: sql`${chatConversations.nextSeq} + 1`,
-        lastActivityAt: sql`now()`,
-      })
-      .where(
-        and(
-          eq(chatConversations.id, event.sessionId),
-          eq(chatConversations.userId, conn.userId!),
-        ),
-      )
-      .returning({ newNextSeq: chatConversations.nextSeq });
+    let seq: number;
 
-    if (updated.length === 0) {
-      this.send(
+    if (typeof event.sendSeq === "number") {
+      // Envelope path: durable persist, then ack, then fan out.
+      const result = await this.persistEnvelopeEvent(
         conn,
-        createError("ACCESS_DENIED", "Cannot emit events for this session", event.sessionId),
+        event.sessionId,
+        event.sendSeq,
+        event.eventType,
+        event.direction,
+        event.payload,
       );
-      return;
+      if (result.kind === "denied") {
+        this.send(
+          conn,
+          createError("ACCESS_DENIED", "Cannot emit events for this session", event.sessionId),
+        );
+        return;
+      }
+      this.send(conn, {
+        type: "event_ack",
+        sessionId: event.sessionId,
+        sendSeq: event.sendSeq,
+      });
+      if (result.kind === "duplicate") return; // already persisted + fanned out
+      seq = result.seq;
+    } else {
+      // Legacy (no sendSeq) path: batched writer, fire-and-forget durability.
+      // Atomic increment with RETURNING — fuses the auth check into the WHERE
+      // clause and avoids the read-then-write race that caused duplicate seq
+      // values under burst.
+      const updated = await db
+        .update(chatConversations)
+        .set({
+          nextSeq: sql`${chatConversations.nextSeq} + 1`,
+          lastActivityAt: sql`now()`,
+        })
+        .where(
+          and(
+            eq(chatConversations.id, event.sessionId),
+            eq(chatConversations.userId, conn.userId!),
+          ),
+        )
+        .returning({ newNextSeq: chatConversations.nextSeq });
+
+      if (updated.length === 0) {
+        this.send(
+          conn,
+          createError("ACCESS_DENIED", "Cannot emit events for this session", event.sessionId),
+        );
+        return;
+      }
+
+      // The returned value is AFTER increment, so the seq we use is (new - 1)
+      seq = updated[0]!.newNextSeq - 1;
+
+      const record: SessionEventRecord = {
+        sessionId: event.sessionId,
+        seq,
+        direction: event.direction,
+        eventType: event.eventType,
+        payload: event.payload,
+      };
+
+      await this.cfg.persistEvent(record);
     }
-
-    // The returned value is AFTER increment, so the seq we use is (new - 1)
-    const seq = updated[0]!.newNextSeq - 1;
-
-    const record: SessionEventRecord = {
-      sessionId: event.sessionId,
-      seq,
-      direction: event.direction,
-      eventType: event.eventType,
-      payload: event.payload,
-    };
-
-    await this.cfg.persistEvent(record);
 
     // Fan out to all subscribers of this session
     const subs = this.subscribers.get(event.sessionId);
@@ -969,6 +1060,45 @@ export class Relay {
   // ── Daemon session_status → update DB + notify subscribers ─────────
 
   private async handleSessionStatus(conn: Connection, msg: ClientSessionStatus): Promise<void> {
+    if (typeof msg.sendSeq === "number") {
+      // Envelope path: the status transition itself becomes a durable
+      // status_change event row — completion can no longer be lost while
+      // output survives a partition. Side effects run only on first insert;
+      // a redelivered frame is acked and dropped.
+      const result = await this.persistEnvelopeEvent(
+        conn,
+        msg.sessionId,
+        msg.sendSeq,
+        "status_change",
+        "system",
+        { status: msg.status, ...(msg.summary ? { summary: msg.summary } : {}) },
+      );
+      if (result.kind === "denied") {
+        this.send(
+          conn,
+          createError("ACCESS_DENIED", "Cannot report status for this session", msg.sessionId),
+        );
+        return;
+      }
+      this.send(conn, {
+        type: "event_ack",
+        sessionId: msg.sessionId,
+        sendSeq: msg.sendSeq,
+      });
+      if (result.kind === "duplicate") return;
+    }
+    await this.applySessionStatus(conn, msg);
+  }
+
+  /**
+   * Side effects of a session status transition: status columns, task/work-item
+   * mapping, PR recording, activity rows, terminal pushes, subscriber fan-out.
+   * Runs exactly once per envelope occurrence (handleSessionStatus dedups).
+   */
+  private async applySessionStatus(
+    conn: Connection,
+    msg: { sessionId: string; status: SessionStatus; summary?: Record<string, unknown> },
+  ): Promise<void> {
     const session = await db.query.chatConversations.findFirst({
       where: eq(chatConversations.id, msg.sessionId),
     });

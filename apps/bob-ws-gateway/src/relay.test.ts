@@ -18,6 +18,7 @@ vi.mock("@bob/db/client", () => {
     }),
   });
   // Default select chain: .from().leftJoin().where().limit() → Promise<rows>
+  // and .from().where().limit() → Promise<rows> (the envelope dup check).
   const makeSelectChain = () => ({
     from: vi.fn(() => ({
       leftJoin: vi.fn(() => ({
@@ -25,23 +26,28 @@ vi.mock("@bob/db/client", () => {
           limit: vi.fn(() => Promise.resolve([])),
         })),
       })),
+      where: vi.fn(() => ({
+        limit: vi.fn(() => Promise.resolve([])),
+      })),
     })),
   });
-  return {
-    db: {
-      query: {
-        chatConversations: { findFirst: vi.fn(), findMany: vi.fn(() => Promise.resolve([])) },
-        planDrafts: { findMany: vi.fn(() => Promise.resolve([])) },
-        repositories: { findMany: vi.fn(() => Promise.resolve([])) },
-        sessionEvents: { findMany: vi.fn() },
-        taskRuns: { findFirst: vi.fn(() => Promise.resolve(null)) },
-        workItems: { findMany: vi.fn(() => Promise.resolve([])) },
-      },
-      update: vi.fn(() => makeUpdateChain()),
-      select: vi.fn(() => makeSelectChain()),
-      insert: vi.fn(() => ({ values: vi.fn(() => Promise.resolve()) })),
+  const dbObj: any = {
+    query: {
+      chatConversations: { findFirst: vi.fn(), findMany: vi.fn(() => Promise.resolve([])) },
+      planDrafts: { findMany: vi.fn(() => Promise.resolve([])) },
+      repositories: { findMany: vi.fn(() => Promise.resolve([])) },
+      sessionEvents: { findMany: vi.fn() },
+      taskRuns: { findFirst: vi.fn(() => Promise.resolve(null)) },
+      workItems: { findMany: vi.fn(() => Promise.resolve([])) },
     },
+    update: vi.fn(() => makeUpdateChain()),
+    select: vi.fn(() => makeSelectChain()),
+    insert: vi.fn(() => ({ values: vi.fn(() => Promise.resolve()) })),
   };
+  // Transactions run the callback against the same mock — tests configure
+  // db.select/update/insert as usual and the tx path picks them up.
+  dbObj.transaction = vi.fn(async (cb: (tx: any) => Promise<unknown>) => cb(dbObj));
+  return { db: dbObj };
 });
 
 import { db } from "@bob/db/client";
@@ -965,6 +971,205 @@ describe("Relay", () => {
         (p) => p.status === "failed" && "blockedReason" in p,
       );
       expect(taskUpdate?.blockedReason).toBe("boom: agent exited 1");
+    });
+  });
+
+  describe("envelope protocol (send-seq)", () => {
+    const SID = "44444444-4444-4444-8444-444444444444";
+
+    // vi.clearAllMocks() clears calls but NOT implementations installed by
+    // earlier tests via mockImplementation — restore the default chains this
+    // suite depends on so test order can't poison the tx path.
+    beforeEach(() => {
+      (db.select as any).mockImplementation(() => ({
+        from: () => ({
+          leftJoin: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
+          where: () => ({ limit: () => Promise.resolve([]) }),
+        }),
+      }));
+      (db.update as any).mockImplementation(() => ({
+        set: () => {
+          const whereResult: any = Promise.resolve();
+          whereResult.returning = vi.fn(() => Promise.resolve([{ newNextSeq: 2 }]));
+          return { where: () => whereResult };
+        },
+      }));
+      (db.insert as any).mockImplementation(() => ({
+        values: () => Promise.resolve(),
+      }));
+    });
+
+    async function connectDaemon(): Promise<FakeWs> {
+      const daemonWs = new FakeWs();
+      relay.handleConnection(daemonWs as any);
+      daemonWs.receive({
+        type: "hello",
+        clientId: "d1",
+        deviceType: "daemon",
+        token: "good-daemon",
+        workspaceId: "ws-1",
+      });
+      await new Promise((r) => setImmediate(r));
+      return daemonWs;
+    }
+
+    it("persists an enveloped event transactionally, then acks", async () => {
+      const daemonWs = await connectDaemon();
+      const inserted: any[] = [];
+      (db.insert as any).mockImplementation(() => ({
+        values: (v: any) => {
+          inserted.push(v);
+          return Promise.resolve();
+        },
+      }));
+      (db.query.chatConversations.findFirst as any).mockResolvedValue({
+        id: SID,
+        userId: "user-1",
+        status: "running",
+      });
+
+      daemonWs.receive({
+        type: "session_event",
+        sessionId: SID,
+        eventType: "output_chunk",
+        direction: "agent",
+        payload: { data: "hello" },
+        sendSeq: 7,
+      } as any);
+      await new Promise((r) => setImmediate(r));
+
+      // Persisted synchronously in the tx (NOT via the batched writer)…
+      expect(inserted).toHaveLength(1);
+      expect(inserted[0].sendSeq).toBe(7);
+      expect(persistedEvents).toHaveLength(0);
+      // …and acked after commit.
+      const acks = daemonWs.sentOfType("event_ack");
+      expect(acks).toHaveLength(1);
+      expect((acks[0] as any).sendSeq).toBe(7);
+      // The transaction wrapper was actually used.
+      expect((db as any).transaction).toHaveBeenCalled();
+    });
+
+    it("acks a redelivered send-seq without inserting a second row", async () => {
+      const daemonWs = await connectDaemon();
+      // Dup check finds an existing row for (sessionId, sendSeq).
+      (db.select as any).mockImplementation(() => ({
+        from: () => ({
+          where: () => ({ limit: () => Promise.resolve([{ id: "existing" }]) }),
+          leftJoin: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
+        }),
+      }));
+      const inserted: any[] = [];
+      (db.insert as any).mockImplementation(() => ({
+        values: (v: any) => {
+          inserted.push(v);
+          return Promise.resolve();
+        },
+      }));
+
+      daemonWs.receive({
+        type: "session_event",
+        sessionId: SID,
+        eventType: "output_chunk",
+        direction: "agent",
+        payload: { data: "again" },
+        sendSeq: 7,
+      } as any);
+      await new Promise((r) => setImmediate(r));
+
+      expect(inserted).toHaveLength(0);
+      const acks = daemonWs.sentOfType("event_ack");
+      expect(acks).toHaveLength(1);
+      expect((acks[0] as any).sendSeq).toBe(7);
+    });
+
+    it("persists session_status as a durable status_change event and applies side effects once", async () => {
+      const daemonWs = await connectDaemon();
+      const inserted: any[] = [];
+      (db.insert as any).mockImplementation(() => ({
+        values: (v: any) => {
+          inserted.push(v);
+          return Promise.resolve();
+        },
+      }));
+      (db.query.chatConversations.findFirst as any).mockResolvedValue({
+        id: SID,
+        userId: "user-1",
+        status: "running",
+        workItemId: null,
+        agentType: "claude",
+      });
+      const setPayloads: any[] = [];
+      (db.update as any).mockImplementation(() => ({
+        set: (payload: any) => {
+          setPayloads.push(payload);
+          const whereResult: any = Promise.resolve();
+          whereResult.returning = vi.fn(() => Promise.resolve([{ newNextSeq: 2 }]));
+          return { where: () => whereResult };
+        },
+      }));
+
+      daemonWs.receive({
+        type: "session_status",
+        sessionId: SID,
+        status: "completed",
+        sendSeq: 3,
+      } as any);
+      await new Promise((r) => setImmediate(r));
+
+      // The transition itself became a durable event row.
+      const statusRow = inserted.find((v) => v.eventType === "status_change");
+      expect(statusRow).toBeDefined();
+      expect(statusRow.sendSeq).toBe(3);
+      expect(statusRow.payload.status).toBe("completed");
+      // Acked.
+      expect(daemonWs.sentOfType("event_ack")).toHaveLength(1);
+      // Side effects ran (status column written).
+      expect(setPayloads.some((p) => p.status === "completed")).toBe(true);
+    });
+
+    it("does not re-apply side effects for a redelivered session_status", async () => {
+      const daemonWs = await connectDaemon();
+      (db.select as any).mockImplementation(() => ({
+        from: () => ({
+          where: () => ({ limit: () => Promise.resolve([{ id: "existing" }]) }),
+          leftJoin: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
+        }),
+      }));
+      (db.query.chatConversations.findFirst as any).mockClear();
+
+      daemonWs.receive({
+        type: "session_status",
+        sessionId: SID,
+        status: "completed",
+        sendSeq: 3,
+      } as any);
+      await new Promise((r) => setImmediate(r));
+
+      // Ack only — applySessionStatus never ran (no session lookup).
+      expect(daemonWs.sentOfType("event_ack")).toHaveLength(1);
+      expect(db.query.chatConversations.findFirst).not.toHaveBeenCalled();
+    });
+
+    it("legacy events without sendSeq keep the batched-writer path", async () => {
+      const daemonWs = await connectDaemon();
+      (db.query.chatConversations.findFirst as any).mockResolvedValue({
+        id: SID,
+        userId: "user-1",
+        status: "running",
+      });
+
+      daemonWs.receive({
+        type: "session_event",
+        sessionId: SID,
+        eventType: "output_chunk",
+        direction: "agent",
+        payload: { data: "legacy" },
+      });
+      await new Promise((r) => setImmediate(r));
+
+      expect(persistedEvents).toHaveLength(1);
+      expect(daemonWs.sentOfType("event_ack")).toHaveLength(0);
     });
   });
 

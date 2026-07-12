@@ -10,6 +10,7 @@ import type {
   AdapterProcessHandle,
 } from "@gmacko/ooda/agent-adapters";
 import { bobRunReporterFromEnv, type BobRunReporter } from "./bob-run-reporter";
+import { EventBuffer } from "./event-buffer";
 
 const RECONNECT_DELAY_MS = 5_000;
 const HEARTBEAT_INTERVAL_MS = 25_000;
@@ -106,6 +107,7 @@ type ServerMessage =
   | { type: "error"; code: string; message: string }
   | { type: "pong" }
   | { type: "session_stop"; sessionId: string }
+  | { type: "event_ack"; sessionId: string; sendSeq: number }
   | {
       type: "event";
       sessionId: string;
@@ -132,12 +134,20 @@ export class BobGatewayConnector {
   // Reports gateway-dispatched runs to Bob's public API as agentRuns so they
   // appear in Recent Outcomes (the same surface the task-runner reports to).
   private bobReporter: BobRunReporter = bobRunReporterFromEnv();
+  // Durable half of the envelope protocol: every mutation frame is journaled
+  // with a per-session send-seq before it is sent, replayed on reconnect, and
+  // truncated when the gateway acks it (event_ack).
+  private buffer: EventBuffer;
 
   constructor(
     private config: BobGatewayConfig,
     adapters: Map<string, AgentAdapter>,
   ) {
     this.adapters = adapters;
+    this.buffer = new EventBuffer(
+      process.env.BOB_RUNNER_BUFFER_DIR ??
+        join(homedir(), ".bob-runner", "event-buffer"),
+    );
   }
 
   start(): void {
@@ -150,7 +160,7 @@ export class BobGatewayConnector {
     this.cleanup();
     for (const [sessionId, handle] of this.sessionHandles) {
       console.log(`[bob-gw] Interrupting session ${sessionId} (graceful shutdown)`);
-      this.send({ type: "session_status", sessionId, status: "failed", summary: { reason: "interrupted", retryable: true } });
+      this.sendStatus(sessionId, "failed", { reason: "interrupted", retryable: true });
       handle.kill();
     }
     this.sessionHandles.clear();
@@ -219,6 +229,64 @@ export class BobGatewayConnector {
     }
   }
 
+  /**
+   * Journal-then-send for every session mutation (claim, status, event).
+   * The frame gets the session's next send-seq, hits disk first, and is
+   * retransmitted from the journal on reconnect until the gateway acks it.
+   * Never throws — a journaling failure degrades to fire-and-forget rather
+   * than blocking the run.
+   */
+  private sendDurable(sessionId: string, frame: Record<string, unknown>): void {
+    let sendSeq: number | undefined;
+    try {
+      sendSeq = this.buffer.assignSeq(sessionId);
+      frame.sendSeq = sendSeq;
+      this.buffer.append(sessionId, sendSeq, frame);
+    } catch (err) {
+      console.error(
+        `[bob-gw] Event buffer write failed for ${sessionId} (degrading to fire-and-forget):`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+    this.send(frame);
+  }
+
+  private sendStatus(
+    sessionId: string,
+    status: string,
+    summary?: Record<string, unknown>,
+  ): void {
+    this.sendDurable(sessionId, {
+      type: "session_status",
+      sessionId,
+      status,
+      ...(summary ? { summary } : {}),
+    });
+  }
+
+  /** Replay every unacked journaled frame (in send order) after (re)connect. */
+  private replayUnacked(): void {
+    for (const sessionId of this.buffer.sessionsWithUnacked()) {
+      const frames = this.buffer.unacked(sessionId);
+      if (frames.length === 0) continue;
+      console.log(
+        `[bob-gw] Replaying ${frames.length} unacked frame(s) for session ${sessionId}`,
+      );
+      for (const entry of frames) {
+        this.send(entry.frame);
+      }
+    }
+  }
+
+  private handleEventAck(sessionId: string, sendSeq: number): void {
+    this.buffer.ack(sessionId, sendSeq);
+    // A finished session whose journal is fully acked has nothing left to
+    // replay — free its files.
+    if (!this.activeSessions.has(sessionId) && this.buffer.fullyAcked(sessionId)) {
+      this.buffer.releaseSession(sessionId);
+    }
+  }
+
   private startHeartbeat(): void {
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     this.heartbeatTimer = setInterval(() => {
@@ -247,7 +315,18 @@ export class BobGatewayConnector {
           this.helloTimer = null;
         }
         console.log(`[bob-gw] Authenticated as user ${(msg as any).userId}`);
+        // Replay everything the gateway never acked — this runs BEFORE any
+        // reconciliation, so a completion journaled during the outage lands
+        // before anything could orphan-mark the run.
+        this.replayUnacked();
         break;
+      case "event_ack": {
+        const ack = msg as { type: "event_ack"; sessionId: string; sendSeq: number };
+        if (typeof ack.sessionId === "string" && typeof ack.sendSeq === "number") {
+          this.handleEventAck(ack.sessionId, ack.sendSeq);
+        }
+        break;
+      }
       case "error":
         console.error(`[bob-gw] Server error: ${(msg as any).code} - ${(msg as any).message}`);
         // An error before hello_ok means our registration failed — the socket
@@ -325,8 +404,11 @@ export class BobGatewayConnector {
     }
 
     console.log(`[bob-gw] Claiming session ${session.sessionId}: ${session.title}`);
-    this.send({ type: "session_claimed", sessionId: session.sessionId });
-    this.send({ type: "session_status", sessionId: session.sessionId, status: "starting" });
+    this.sendDurable(session.sessionId, {
+      type: "session_claimed",
+      sessionId: session.sessionId,
+    });
+    this.sendStatus(session.sessionId, "starting");
 
     // When the server mapped a repo + branch, run in an isolated git worktree
     // off that repo so the agent never touches the runner's own checkout and so
@@ -347,12 +429,7 @@ export class BobGatewayConnector {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`[bob-gw] worktree setup failed: ${msg}`);
-        this.send({
-          type: "session_status",
-          sessionId: session.sessionId,
-          status: "error",
-          summary: { code: "WORKTREE_ERROR", error: msg },
-        });
+        this.sendStatus(session.sessionId, "error", { code: "WORKTREE_ERROR", error: msg });
         this.sendEvent(session.sessionId, "error", "system", { code: "WORKTREE_ERROR", message: msg });
         this.activeSessions.delete(session.sessionId);
         return;
@@ -361,7 +438,7 @@ export class BobGatewayConnector {
       workDir = this.resolveWorkDir(session);
       if (!existsSync(workDir)) {
         console.error(`[bob-gw] Working directory not found: ${workDir}`);
-        this.send({ type: "session_status", sessionId: session.sessionId, status: "error" });
+        this.sendStatus(session.sessionId, "error");
         this.activeSessions.delete(session.sessionId);
         return;
       }
@@ -374,7 +451,7 @@ export class BobGatewayConnector {
     const adapterId = session.agentType || "claude";
     const adapter = adapterId !== "codex" ? this.adapters.get(adapterId) : undefined;
 
-    this.send({ type: "session_status", sessionId: session.sessionId, status: "running" });
+    this.sendStatus(session.sessionId, "running");
     this.sendEvent(session.sessionId, "state", "system", { status: "running" });
 
     // Record an agentRun so this shows in Recent Outcomes (via <agent>), the
@@ -421,21 +498,20 @@ export class BobGatewayConnector {
         }
       }
 
-      this.send({
-        type: "session_status",
-        sessionId: session.sessionId,
-        status: "completed",
-        // Include branch + base so the gateway can record the PR in bob's
-        // pull_requests table (this path opens the PR on the git host but the
-        // gateway owns the DB tracking).
-        summary: prUrl
+      // Include branch + base so the gateway can record the PR in bob's
+      // pull_requests table (this path opens the PR on the git host but the
+      // gateway owns the DB tracking).
+      this.sendStatus(
+        session.sessionId,
+        "completed",
+        prUrl
           ? {
               pullRequestUrl: prUrl,
               branch: worktree?.branch,
               baseBranch: worktree?.baseBranch,
             }
           : undefined,
-      });
+      );
       this.sendEvent(session.sessionId, "state", "system", {
         status: "completed",
         pullRequestUrl: prUrl ?? undefined,
@@ -462,12 +538,7 @@ export class BobGatewayConnector {
         : "";
       const errMsg = tail ? `${baseMsg} — ${tail}` : baseMsg;
       console.error(`[bob-gw] Session ${session.sessionId} failed: ${errMsg}`);
-      this.send({
-        type: "session_status",
-        sessionId: session.sessionId,
-        status: "error",
-        summary: { code: "AGENT_ERROR", error: errMsg },
-      });
+      this.sendStatus(session.sessionId, "error", { code: "AGENT_ERROR", error: errMsg });
       this.sendEvent(session.sessionId, "error", "system", { code: "AGENT_ERROR", message: errMsg });
       await this.bobReporter.pushLog(bobRunId, runOutput).catch(() => {});
       await this.bobReporter.finishRun(bobRunId, "failed", { error: errMsg }).catch(() => {});
@@ -487,12 +558,7 @@ export class BobGatewayConnector {
     startTime: number,
   ): Promise<void> {
     console.log(`[bob-gw] Session ${session.sessionId} interrupted by user`);
-    this.send({
-      type: "session_status",
-      sessionId: session.sessionId,
-      status: "interrupted",
-      summary: { reason: "stopped_by_user" },
-    });
+    this.sendStatus(session.sessionId, "interrupted", { reason: "stopped_by_user" });
     this.sendEvent(session.sessionId, "state", "system", {
       status: "interrupted",
       reason: "stopped_by_user",
@@ -897,7 +963,7 @@ export class BobGatewayConnector {
   }
 
   private sendEvent(sessionId: string, eventType: string, direction: string, payload: Record<string, unknown>): void {
-    this.send({ type: "session_event", sessionId, eventType, direction, payload });
+    this.sendDurable(sessionId, { type: "session_event", sessionId, eventType, direction, payload });
   }
 
   private async reportToBizPulse(

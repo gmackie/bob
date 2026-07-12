@@ -5,13 +5,17 @@ export type SessionStatus =
   | "provisioning"
   | "starting"
   | "running"
+  // Paused on a human decision (permission request / re-auth).
+  | "blocked"
   | "idle"
   | "stopping"
   | "stopped"
   | "completed"
   | "failed"
   | "error"
-  | "interrupted";
+  | "interrupted"
+  // Lease expired: contact lost, process fate unknown (never implies failure).
+  | "host_unknown";
 export type DeviceType = "web" | "ios" | "android" | "desktop" | "daemon" | "other";
 export type EventDirection = "client" | "agent" | "system";
 export type SessionEventType =
@@ -22,7 +26,13 @@ export type SessionEventType =
   | "tool_result"
   | "state"
   | "error"
-  | "heartbeat";
+  | "heartbeat"
+  // Lifecycle events (exempt from runner buffer eviction + DB retention):
+  | "permission_request"
+  | "permission_resolved"
+  | "status_change"
+  // Marks a span of output events evicted from the runner's partition buffer.
+  | "gap_marker";
 
 // ---------------------------------------------------------------------------
 // Client → Server messages
@@ -98,6 +108,13 @@ export interface ClientSessionEvent {
   eventType: SessionEventType;
   direction: EventDirection;
   payload: Record<string, unknown>;
+  /**
+   * Runner-assigned monotonic per-session send sequence (envelope protocol).
+   * When present, the gateway persists transactionally BEFORE acking with
+   * event_ack, and dedups redelivery on (sessionId, sendSeq). Absent on
+   * legacy daemons — those frames take the fire-and-forget path.
+   */
+  sendSeq?: number;
 }
 
 /** Daemon reports a session lifecycle change */
@@ -105,6 +122,10 @@ export interface ClientSessionStatus {
   type: "session_status";
   sessionId: string;
   status: SessionStatus;
+  /** Same envelope semantics as ClientSessionEvent.sendSeq. */
+  sendSeq?: number;
+  /** Structured context for the status (error details, PR url, reason). */
+  summary?: Record<string, unknown>;
 }
 
 export interface ClientSubscribeWorkspace {
@@ -299,6 +320,18 @@ export interface ServerReplayTruncated {
   oldestAvailableSeq: number;
 }
 
+/**
+ * Gateway acknowledges durable persistence of a daemon envelope frame.
+ * Acks are emitted in processing order (the relay serializes per-connection
+ * handling), so ack(n) implies every earlier send-seq was persisted too —
+ * the daemon truncates its disk journal through n.
+ */
+export interface ServerEventAck {
+  type: "event_ack";
+  sessionId: string;
+  sendSeq: number;
+}
+
 // ---------------------------------------------------------------------------
 // Union types
 // ---------------------------------------------------------------------------
@@ -333,7 +366,8 @@ export type ServerMessage =
   | ServerSessionStatusChanged
   | ServerWorkspaceInvalidation
   | ServerSessionAvailable
-  | ServerReplayTruncated;
+  | ServerReplayTruncated
+  | ServerEventAck;
 
 // ---------------------------------------------------------------------------
 // Helpers

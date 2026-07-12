@@ -36,6 +36,7 @@ export {
   type ServerSessionStop,
   type ServerSessionStatusChanged,
   type ServerReplayTruncated,
+  type ServerEventAck,
   type ServerWorkspaceSnapshot,
   type ServerWorkspaceInvalidationType,
   type WorkspaceSessionInfo,
