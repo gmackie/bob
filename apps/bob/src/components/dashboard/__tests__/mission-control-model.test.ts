@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { buildHostMissionControl, getMissionControlSections } from "../mission-control-model";
+import {
+  buildHostMissionControl,
+  buildHostMissionControlFromHeartbeat,
+  getMissionControlSections,
+} from "../mission-control-model";
 
 describe("mission control model", () => {
   it("keeps the Tasks dashboard centered on capacity, summary boxes, and live work", () => {
@@ -35,6 +39,18 @@ describe("mission control model", () => {
       statusLabel: "Online",
       queueLabel: "1 active",
       providers: [{ label: "Grok", statusLabel: "Ready", controls: ["approve", "cancel"] }],
+    });
+  });
+
+  it("falls back to the polled workspace heartbeat when no websocket snapshot is cached", () => {
+    expect(buildHostMissionControlFromHeartbeat({
+      hostId: "hetzner-bob",
+      lastHeartbeat: "2026-07-12T14:16:27.000Z",
+    }, new Date("2026-07-12T14:16:50.000Z"))).toMatchObject({
+      hostId: "hetzner-bob",
+      statusLabel: "Online",
+      queueLabel: "Activity unavailable",
+      providers: [],
     });
   });
 });

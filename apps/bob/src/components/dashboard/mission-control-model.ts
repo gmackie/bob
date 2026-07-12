@@ -49,4 +49,22 @@ export function buildHostMissionControl(snapshot: HostSnapshotWire, now = new Da
     })),
   };
 }
+
+export function buildHostMissionControlFromHeartbeat(
+  workspace: { hostId: string; lastHeartbeat?: Date | string | null },
+  now = new Date(),
+) {
+  const checkedAt = workspace.lastHeartbeat
+    ? new Date(workspace.lastHeartbeat).getTime()
+    : Number.NaN;
+  const online = Number.isFinite(checkedAt) && now.getTime() - checkedAt <= 90_000;
+
+  return {
+    hostId: workspace.hostId,
+    daemonVersion: undefined,
+    statusLabel: online ? "Online" : "Stale",
+    queueLabel: "Activity unavailable",
+    providers: [],
+  };
+}
 import type { HostSnapshotWire } from "@bob/ws";

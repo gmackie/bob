@@ -19,13 +19,25 @@ import {
   type ProviderSessionSummary,
   type WorkPipelineItem,
 } from "./work-pipeline-model";
-import { buildHostMissionControl } from "./mission-control-model";
+import {
+  buildHostMissionControl,
+  buildHostMissionControlFromHeartbeat,
+} from "./mission-control-model";
 
 interface ProviderCapacityCardsProps {
   workspaceId?: string;
 }
 
 type ProviderCapacityRun = ProviderCapacityRunSummary & ProviderSessionSummary;
+
+type WorkspaceHeartbeatRow = {
+  workspace?: {
+    id: string;
+    name?: string | null;
+    slug?: string | null;
+    lastHeartbeat?: Date | string | null;
+  } | null;
+};
 
 const TONE_CLASS: Record<DashboardTone, string> = {
   default: "bg-muted-foreground",
@@ -125,6 +137,12 @@ export function ProviderCapacityCards({ workspaceId }: ProviderCapacityCardsProp
   ) as ReturnType<typeof trpc.agentRun.listAll.queryOptions>;
   const { data: runRows } = useQuery(runsQueryOptions);
   const runs = (Array.isArray(runRows) ? runRows : []) as ProviderCapacityRun[];
+  const { data: workspaceRows } = useQuery(
+    trpc.workspace.list.queryOptions(undefined, {
+      staleTime: 30_000,
+      refetchInterval: 30_000,
+    }),
+  );
   const { data: hostSnapshot } = useQuery<HostSnapshotWire | null>({
     queryKey: ["hostSnapshot", workspaceId ?? ""],
     queryFn: () => Promise.resolve(null),
@@ -145,7 +163,20 @@ export function ProviderCapacityCards({ workspaceId }: ProviderCapacityCardsProp
     ),
   });
 
-  const host = hostSnapshot ? buildHostMissionControl(hostSnapshot) : null;
+  const heartbeatWorkspace = (
+    (Array.isArray(workspaceRows) ? workspaceRows : []) as WorkspaceHeartbeatRow[]
+  )
+    .map((row) => row.workspace)
+    .find((workspace) => workspace?.id === workspaceId);
+  const host = hostSnapshot
+    ? buildHostMissionControl(hostSnapshot)
+    : heartbeatWorkspace
+      ? buildHostMissionControlFromHeartbeat({
+          hostId:
+            heartbeatWorkspace.name ?? heartbeatWorkspace.slug ?? "Execution host",
+          lastHeartbeat: heartbeatWorkspace.lastHeartbeat,
+        })
+      : null;
 
   return (
     <div className="space-y-3">
