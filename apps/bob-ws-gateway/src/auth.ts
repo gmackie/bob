@@ -10,6 +10,69 @@ const AUTH_BYPASS_TOKEN_PREFIX = "bob-auth-bypass:";
 const DEFAULT_BYPASS_USER_ID = "default-user";
 
 /**
+ * Refuse-to-boot guard: the dev auth bypass must never be live in
+ * production. "Compiled out" is meaningless on a tsx/Node stack — a boot
+ * guard is observable and testable. Called from index.ts before anything
+ * listens; one stray env var in a systemd unit becomes a loud startup
+ * failure instead of a silently fake-authenticated control plane.
+ */
+export function assertNoAuthBypassInProduction(
+  env: Record<string, string | undefined> = process.env,
+): void {
+  const production = env.NODE_ENV === "production" || env.BOB_ENV === "production";
+  if (production && env.BOB_AUTH_BYPASS === "true") {
+    throw new Error(
+      "BOB_AUTH_BYPASS is set in a production environment — refusing to boot. " +
+        "Provision a real API key for every caller (see docs/ops/hetzner-bob-runtime-verify.md) " +
+        "and remove BOB_AUTH_BYPASS from the unit/env.",
+    );
+  }
+}
+
+/**
+ * Authorize an internal HTTP endpoint bearer (/internal/*).
+ *
+ * Primary: a hashed, revocable API key from the api_keys table — the same
+ * mechanism daemons use, minus the workspace pairing. Legacy: the static
+ * NUDGE_SHARED_SECRET env value, accepted only while
+ * BOB_ALLOW_LEGACY_NUDGE_SECRET is not "false" — a rotation ramp, not a
+ * permanent path; every legacy acceptance logs a deprecation warning.
+ */
+export async function validateInternalBearer(bearer: string): Promise<boolean> {
+  if (!bearer) return false;
+
+  try {
+    const keyHash = hashApiKey(bearer);
+    const keyRow = await db.query.apiKeys.findFirst({
+      where: (apiKeys, { eq }) => eq(apiKeys.keyHash, keyHash),
+    });
+    if (keyRow && !keyRow.revokedAt) {
+      if (!keyRow.expiresAt) return true;
+      const raw: unknown = keyRow.expiresAt;
+      const expiresAt = raw instanceof Date ? raw : new Date(raw as string);
+      if (expiresAt.getTime() > Date.now()) return true;
+      return false;
+    }
+  } catch (err) {
+    console.error("[auth] internal bearer key lookup failed:", err);
+    // fall through to the legacy check — DB trouble must not lock out ops
+  }
+
+  const legacy = process.env.NUDGE_SHARED_SECRET;
+  if (
+    legacy &&
+    bearer === legacy &&
+    process.env.BOB_ALLOW_LEGACY_NUDGE_SECRET !== "false"
+  ) {
+    console.warn(
+      "[auth] internal endpoint authorized via legacy NUDGE_SHARED_SECRET — rotate the caller to an API key and set BOB_ALLOW_LEGACY_NUDGE_SECRET=false",
+    );
+    return true;
+  }
+  return false;
+}
+
+/**
  * Validate a browser Better Auth credential and return the userId.
  *
  * Mobile and web clients send the full cookie header from better-auth's

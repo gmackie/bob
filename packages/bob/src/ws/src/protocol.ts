@@ -98,6 +98,15 @@ export interface ClientPing {
   ts: string;
 }
 
+/**
+ * Explicit foreground run-screen view. Audited as observe.run_view — the
+ * measurement instrument for the unattended-trust "not watching" proxy.
+ */
+export interface ClientRunView {
+  type: "run_view";
+  sessionId: string;
+}
+
 export interface ClientCreateSession {
   type: "create_session";
   sessionId?: string;
@@ -363,6 +372,7 @@ export type ClientMessage =
   | ClientAck
   | ClientApprove
   | ClientPing
+  | ClientRunView
   | ClientCreateSession
   | ClientStopSession
   | ClientSessionClaimed

@@ -23,7 +23,8 @@ interface NudgeBody {
 }
 
 export interface NudgeConfig {
-  sharedSecret: string;
+  /** Async bearer authorization (API key primary, legacy secret ramp). */
+  authorize: (bearer: string) => Promise<boolean>;
   onNudge: (body: NudgeBody) => void;
 }
 
@@ -35,8 +36,15 @@ export interface WorkspaceEventBody {
 }
 
 export interface WorkspaceEventConfig {
-  sharedSecret: string;
+  authorize: (bearer: string) => Promise<boolean>;
   onEvent: (body: WorkspaceEventBody) => void;
+}
+
+/** Extract the bearer token from an Authorization header, or null. */
+export function bearerFrom(header: string | undefined): string | null {
+  if (!header?.startsWith("Bearer ")) return null;
+  const token = header.slice("Bearer ".length).trim();
+  return token || null;
 }
 
 const WORKSPACE_EVENT_TYPES = new Set<ServerWorkspaceInvalidationType>([
@@ -56,8 +64,8 @@ const WORKSPACE_EVENT_TYPES = new Set<ServerWorkspaceInvalidationType>([
 export function createNudgeHandler(cfg: NudgeConfig) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     // Auth
-    const auth = req.headers.authorization;
-    if (!auth || auth !== `Bearer ${cfg.sharedSecret}`) {
+    const bearer = bearerFrom(req.headers.authorization);
+    if (!bearer || !(await cfg.authorize(bearer))) {
       res.writeHead(401, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Unauthorized" }));
       return;
@@ -88,8 +96,8 @@ export function createNudgeHandler(cfg: NudgeConfig) {
 
 export function createWorkspaceEventHandler(cfg: WorkspaceEventConfig) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-    const auth = req.headers.authorization;
-    if (!auth || auth !== `Bearer ${cfg.sharedSecret}`) {
+    const bearer = bearerFrom(req.headers.authorization);
+    if (!bearer || !(await cfg.authorize(bearer))) {
       res.writeHead(401, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Unauthorized" }));
       return;

@@ -18,7 +18,12 @@ vi.mock("@bob/db/client", () => ({
 }));
 
 import { db } from "@bob/db/client";
-import { validateBrowserToken, validateDaemonAuth } from "./auth.js";
+import {
+  assertNoAuthBypassInProduction,
+  validateBrowserToken,
+  validateDaemonAuth,
+  validateInternalBearer,
+} from "./auth.js";
 
 describe("validateBrowserToken", () => {
   beforeEach(() => {
@@ -227,5 +232,81 @@ describe("validateDaemonAuth", () => {
   it("returns null when api key is missing", async () => {
     expect(await validateDaemonAuth("", "ws-1")).toBeNull();
     expect(await validateDaemonAuth("bob_live_xyz", "")).toBeNull();
+  });
+});
+
+describe("assertNoAuthBypassInProduction (refuse-to-boot guard)", () => {
+  it("throws when BOB_AUTH_BYPASS is set under NODE_ENV=production", () => {
+    expect(() =>
+      assertNoAuthBypassInProduction({ NODE_ENV: "production", BOB_AUTH_BYPASS: "true" }),
+    ).toThrow(/refusing to boot/);
+  });
+
+  it("throws when BOB_AUTH_BYPASS is set under BOB_ENV=production", () => {
+    expect(() =>
+      assertNoAuthBypassInProduction({ BOB_ENV: "production", BOB_AUTH_BYPASS: "true" }),
+    ).toThrow(/refusing to boot/);
+  });
+
+  it("allows the bypass in non-production environments", () => {
+    expect(() =>
+      assertNoAuthBypassInProduction({ NODE_ENV: "development", BOB_AUTH_BYPASS: "true" }),
+    ).not.toThrow();
+  });
+
+  it("allows production without the bypass", () => {
+    expect(() =>
+      assertNoAuthBypassInProduction({ NODE_ENV: "production" }),
+    ).not.toThrow();
+  });
+});
+
+describe("validateInternalBearer", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.NUDGE_SHARED_SECRET;
+    delete process.env.BOB_ALLOW_LEGACY_NUDGE_SECRET;
+  });
+
+  afterEach(() => {
+    delete process.env.NUDGE_SHARED_SECRET;
+    delete process.env.BOB_ALLOW_LEGACY_NUDGE_SECRET;
+  });
+
+  it("accepts a valid, unrevoked, unexpired API key", async () => {
+    (db.query.apiKeys.findFirst as any).mockResolvedValue({
+      userId: "user-1",
+      revokedAt: null,
+      expiresAt: null,
+    });
+    expect(await validateInternalBearer("bob_live_key")).toBe(true);
+  });
+
+  it("rejects a revoked API key even when it hashes correctly", async () => {
+    (db.query.apiKeys.findFirst as any).mockResolvedValue({
+      userId: "user-1",
+      revokedAt: new Date().toISOString(),
+      expiresAt: null,
+    });
+    expect(await validateInternalBearer("bob_live_key")).toBe(false);
+  });
+
+  it("accepts the legacy shared secret only while the ramp is open", async () => {
+    (db.query.apiKeys.findFirst as any).mockResolvedValue(null);
+    process.env.NUDGE_SHARED_SECRET = "legacy-secret";
+    expect(await validateInternalBearer("legacy-secret")).toBe(true);
+  });
+
+  it("rejects the legacy secret once BOB_ALLOW_LEGACY_NUDGE_SECRET=false", async () => {
+    (db.query.apiKeys.findFirst as any).mockResolvedValue(null);
+    process.env.NUDGE_SHARED_SECRET = "legacy-secret";
+    process.env.BOB_ALLOW_LEGACY_NUDGE_SECRET = "false";
+    expect(await validateInternalBearer("legacy-secret")).toBe(false);
+  });
+
+  it("rejects everything else", async () => {
+    (db.query.apiKeys.findFirst as any).mockResolvedValue(null);
+    expect(await validateInternalBearer("nonsense")).toBe(false);
+    expect(await validateInternalBearer("")).toBe(false);
   });
 });

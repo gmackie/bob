@@ -6,15 +6,32 @@ import { sessionEvents } from "@bob/db/schema";
 import { PersistenceWriter, type SessionEventRecord } from "./persistence.js";
 import { OutboxWorker } from "./outbox.js";
 import { Relay } from "./relay.js";
-import { createNudgeHandler, createWorkspaceEventHandler, readJsonBody } from "./nudge.js";
-import { validateBrowserToken, validateDaemonAuth } from "./auth.js";
+import { createNudgeHandler, createWorkspaceEventHandler, readJsonBody, bearerFrom } from "./nudge.js";
+import {
+  assertNoAuthBypassInProduction,
+  validateBrowserToken,
+  validateDaemonAuth,
+  validateInternalBearer,
+} from "./auth.js";
+
+// Boot guard: a stray BOB_AUTH_BYPASS in a production unit must be a loud
+// startup failure, never a silently fake-authenticated control plane.
+try {
+  assertNoAuthBypassInProduction();
+} catch (err) {
+  console.error(`[ws-gateway] FATAL: ${err instanceof Error ? err.message : err}`);
+  process.exit(1);
+}
 
 const PORT = parseInt(process.env.GATEWAY_PORT ?? "3002", 10);
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const NUDGE_SHARED_SECRET = process.env.NUDGE_SHARED_SECRET ?? "";
 
-if (!NUDGE_SHARED_SECRET && process.env.NODE_ENV !== "test") {
-  console.error("[ws-gateway] FATAL: NUDGE_SHARED_SECRET env var is required");
+if (!NUDGE_SHARED_SECRET && process.env.BOB_ALLOW_LEGACY_NUDGE_SECRET !== "false" && process.env.NODE_ENV !== "test") {
+  console.error(
+    "[ws-gateway] FATAL: NUDGE_SHARED_SECRET env var is required " +
+      "(or set BOB_ALLOW_LEGACY_NUDGE_SECRET=false once every internal caller uses an API key)",
+  );
   process.exit(1);
 }
 
@@ -54,12 +71,12 @@ const outboxWorker = new OutboxWorker();
 outboxWorker.start();
 
 const nudgeHandler = createNudgeHandler({
-  sharedSecret: NUDGE_SHARED_SECRET,
+  authorize: validateInternalBearer,
   onNudge: (body) =>
     relay.nudgeSession(body as unknown as Parameters<typeof relay.nudgeSession>[0]),
 });
 const workspaceEventHandler = createWorkspaceEventHandler({
-  sharedSecret: NUDGE_SHARED_SECRET,
+  authorize: validateInternalBearer,
   onEvent: (body) => relay.notifyWorkspaceEvent(body),
 });
 
@@ -96,8 +113,8 @@ const server = createServer(async (req, res) => {
   }
 
   if (req.method === "POST" && req.url === "/internal/session-send") {
-    const auth = req.headers.authorization;
-    if (!auth || auth !== `Bearer ${NUDGE_SHARED_SECRET}`) {
+    const bearer = bearerFrom(req.headers.authorization);
+    if (!bearer || !(await validateInternalBearer(bearer))) {
       res.writeHead(401, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Unauthorized" }));
       return;
@@ -115,8 +132,8 @@ const server = createServer(async (req, res) => {
   }
 
   if (req.method === "POST" && req.url === "/internal/session-stop") {
-    const auth = req.headers.authorization;
-    if (!auth || auth !== `Bearer ${NUDGE_SHARED_SECRET}`) {
+    const bearer = bearerFrom(req.headers.authorization);
+    if (!bearer || !(await validateInternalBearer(bearer))) {
       res.writeHead(401, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Unauthorized" }));
       return;

@@ -1,7 +1,7 @@
 import type { WebSocket } from "ws";
 import { eq, and, gt, lt, inArray, asc, desc, sql } from "@bob/db";
 import { db } from "@bob/db/client";
-import { chatConversations, repositories, sessionEvents, taskRuns, workItems, agentRuns, activities, workspaces, tenants, tenantMembers, planDrafts, pullRequests, runnerLeases, gatewayConfig } from "@bob/db/schema";
+import { chatConversations, repositories, sessionEvents, taskRuns, workItems, agentRuns, activities, workspaces, tenants, tenantMembers, planDrafts, pullRequests, runnerLeases, gatewayConfig, eventLog } from "@bob/db/schema";
 
 import {
   parseClientMessage,
@@ -505,6 +505,16 @@ export class Relay {
         conn.workspaceSubscribed = false;
         conn.workspaceStatusFilter = undefined;
         return;
+      case "run_view": {
+        // Explicit foreground run-screen visibility — the honest instrument
+        // for the "not watching" acceptance proxy (WS subscribes don't
+        // count: background clients subscribe automatically).
+        const rv = msg as unknown as { sessionId?: string };
+        if (conn.kind === "browser" && isUuid(rv.sessionId)) {
+          this.audit(conn.userId!, "observe.run_view", { sessionId: rv.sessionId });
+        }
+        return;
+      }
     }
   }
 
@@ -801,6 +811,8 @@ export class Relay {
       createdAt: new Date().toISOString(),
     });
 
+    this.audit(conn.userId!, "control.input", { sessionId: input.sessionId });
+
     // Ack to the browser
     this.send(conn, {
       type: "input_ack",
@@ -808,6 +820,26 @@ export class Relay {
       clientInputId: input.clientInputId,
       acceptedSeq: 0,
     });
+  }
+
+  // ── Audit ──────────────────────────────────────────────────────────
+
+  /**
+   * Audit trail on the control plane: every control action (stop, approve,
+   * input) and every explicit run observation writes an event_log row —
+   * user, action, session, timestamp. Observation events double as the
+   * measurement instrument for the "not watching" acceptance proxy.
+   * Best-effort: an audit failure must never block the action itself.
+   */
+  private audit(
+    userId: string,
+    eventType: string,
+    payload: Record<string, unknown>,
+  ): void {
+    void db
+      .insert(eventLog)
+      .values({ userId, eventType, payload })
+      .catch((err) => console.error(`[Relay] audit write failed (${eventType}):`, err));
   }
 
   // ── Browser approve → daemon ───────────────────────────────────────
@@ -859,6 +891,11 @@ export class Relay {
         clientInputId: msg.clientInputId,
       },
       createdAt: new Date().toISOString(),
+    });
+    this.audit(conn.userId!, "control.approve", {
+      sessionId: msg.sessionId,
+      requestId: msg.requestId,
+      decision: msg.decision,
     });
 
     this.send(conn, {
@@ -919,6 +956,7 @@ export class Relay {
 
     if (daemon) {
       await this.deriveAndWriteState(sessionId, "stopping", undefined, activeStatuses);
+      this.audit(userId, "control.stop", { sessionId });
       this.send(daemon, { type: "session_stop", sessionId });
       console.log(`[Relay] Stop relayed to daemon for session ${sessionId}`);
       return { delivered: true };

@@ -36,7 +36,7 @@ function mockRes(): ServerResponse & { _status: number; _body: string } {
 describe("nudge handler", () => {
   it("rejects missing authorization header", async () => {
     const nudge = vi.fn();
-    const handler = createNudgeHandler({ sharedSecret: "s3cr3t", onNudge: nudge });
+    const handler = createNudgeHandler({ authorize: async (b) => b === "s3cr3t", onNudge: nudge });
     const req = mockReq({ sessionId: "s", workspaceId: "w", workingDirectory: "/", agentType: "c" });
     const res = mockRes();
     await handler(req, res);
@@ -46,7 +46,7 @@ describe("nudge handler", () => {
 
   it("rejects wrong shared secret", async () => {
     const nudge = vi.fn();
-    const handler = createNudgeHandler({ sharedSecret: "s3cr3t", onNudge: nudge });
+    const handler = createNudgeHandler({ authorize: async (b) => b === "s3cr3t", onNudge: nudge });
     const req = mockReq(
       { sessionId: "s", workspaceId: "w", workingDirectory: "/", agentType: "c" },
       { authorization: "Bearer wrong" },
@@ -59,7 +59,7 @@ describe("nudge handler", () => {
 
   it("rejects missing required fields", async () => {
     const nudge = vi.fn();
-    const handler = createNudgeHandler({ sharedSecret: "s3cr3t", onNudge: nudge });
+    const handler = createNudgeHandler({ authorize: async (b) => b === "s3cr3t", onNudge: nudge });
     const req = mockReq({ sessionId: "s" }, { authorization: "Bearer s3cr3t" });
     const res = mockRes();
     await handler(req, res);
@@ -69,7 +69,7 @@ describe("nudge handler", () => {
 
   it("calls onNudge with valid payload and returns 200", async () => {
     const nudge = vi.fn();
-    const handler = createNudgeHandler({ sharedSecret: "s3cr3t", onNudge: nudge });
+    const handler = createNudgeHandler({ authorize: async (b) => b === "s3cr3t", onNudge: nudge });
     const req = mockReq(
       {
         sessionId: "s1",
@@ -96,7 +96,7 @@ describe("nudge handler", () => {
 describe("workspace event handler", () => {
   it("rejects missing authorization header", async () => {
     const notify = vi.fn();
-    const handler = createWorkspaceEventHandler({ sharedSecret: "s3cr3t", onEvent: notify });
+    const handler = createWorkspaceEventHandler({ authorize: async (b) => b === "s3cr3t", onEvent: notify });
     const req = mockReq({ type: "queue_order_changed", workspaceId: "w1" });
     const res = mockRes();
     await handler(req, res);
@@ -106,7 +106,7 @@ describe("workspace event handler", () => {
 
   it("calls onEvent with a valid workspace event payload", async () => {
     const notify = vi.fn();
-    const handler = createWorkspaceEventHandler({ sharedSecret: "s3cr3t", onEvent: notify });
+    const handler = createWorkspaceEventHandler({ authorize: async (b) => b === "s3cr3t", onEvent: notify });
     const req = mockReq(
       {
         type: "queue_order_changed",
