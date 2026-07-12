@@ -15,6 +15,7 @@ export {
   type ClientUnsubscribe,
   type ClientInput,
   type ClientAck,
+  type ClientApprove,
   type ClientPing,
   type ClientStopSession,
   type ClientSessionClaimed,

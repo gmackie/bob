@@ -12,6 +12,7 @@ import {
   type ClientSubscribe,
   type ClientUnsubscribe,
   type ClientInput,
+  type ClientApprove,
   type ClientStopSession,
   type ClientSessionEvent,
   type ClientSessionStatus,
@@ -352,6 +353,14 @@ export class Relay {
         if (!requireUuid(msg.sessionId)) return;
         await this.handleStopSession(conn, msg);
         return;
+      case "approve":
+        if (conn.kind !== "browser") {
+          this.send(conn, createError("INVALID_FOR_DEVICE", "approve is for browsers"));
+          return;
+        }
+        if (!requireUuid(msg.sessionId)) return;
+        await this.handleApprove(conn, msg);
+        return;
       case "ack":
         // No-op in slim gateway: we persist every event synchronously.
         // The ack is informational — the browser's lastAckSeq is what matters on reconnect.
@@ -667,6 +676,65 @@ export class Relay {
       type: "input_ack",
       sessionId: input.sessionId,
       clientInputId: input.clientInputId,
+      acceptedSeq: 0,
+    });
+  }
+
+  // ── Browser approve → daemon ───────────────────────────────────────
+
+  /**
+   * Resolve a pending permission_request on a blocked run. Same ownership
+   * and routing rules as input; the daemon enforces exactly-once resolution
+   * per requestId, so a double-tapped approve is harmless.
+   */
+  private async handleApprove(conn: Connection, msg: ClientApprove): Promise<void> {
+    const rows = await db
+      .select({
+        sessionUserId: chatConversations.userId,
+        workspaceId: repositories.workspaceId,
+      })
+      .from(chatConversations)
+      .leftJoin(repositories, eq(repositories.id, chatConversations.repositoryId))
+      .where(eq(chatConversations.id, msg.sessionId))
+      .limit(1);
+
+    const row = rows[0];
+    if (!row || row.sessionUserId !== conn.userId) {
+      this.send(conn, createError("SESSION_NOT_FOUND", "Session not found", msg.sessionId));
+      return;
+    }
+
+    const daemon = row.workspaceId
+      ? this.daemonByWorkspace.get(row.workspaceId) ?? null
+      : this.findDaemonForUser(conn.userId!);
+
+    if (!daemon) {
+      this.send(
+        conn,
+        createError("DAEMON_OFFLINE", "No daemon online for this session", msg.sessionId, true),
+      );
+      return;
+    }
+
+    this.send(daemon, {
+      type: "event",
+      sessionId: msg.sessionId,
+      seq: 0,
+      eventType: "approval" as never,
+      direction: "client",
+      payload: {
+        requestId: msg.requestId,
+        decision: msg.decision,
+        ...(msg.message ? { message: msg.message } : {}),
+        clientInputId: msg.clientInputId,
+      },
+      createdAt: new Date().toISOString(),
+    });
+
+    this.send(conn, {
+      type: "input_ack",
+      sessionId: msg.sessionId,
+      clientInputId: msg.clientInputId,
       acceptedSeq: 0,
     });
   }

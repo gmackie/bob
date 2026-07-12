@@ -74,6 +74,20 @@ export interface ClientAck {
   seq: number;
 }
 
+/**
+ * Browser resolves a pending permission_request on a blocked run.
+ * clientInputId is the idempotency key for delivery; the daemon additionally
+ * dedups on requestId (a request resolves exactly once).
+ */
+export interface ClientApprove {
+  type: "approve";
+  sessionId: string;
+  requestId: string;
+  decision: "allow" | "deny";
+  message?: string;
+  clientInputId: string;
+}
+
 export interface ClientPing {
   type: "ping";
   ts: string;
@@ -342,6 +356,7 @@ export type ClientMessage =
   | ClientUnsubscribe
   | ClientInput
   | ClientAck
+  | ClientApprove
   | ClientPing
   | ClientCreateSession
   | ClientStopSession

@@ -1151,6 +1151,51 @@ describe("Relay", () => {
       expect(db.query.chatConversations.findFirst).not.toHaveBeenCalled();
     });
 
+    it("relays a browser approve to the daemon as an approval event and acks it", async () => {
+      const daemonWs = await connectDaemon();
+      const browserWs = new FakeWs();
+      relay.handleConnection(browserWs as any);
+      browserWs.receive({
+        type: "hello",
+        clientId: "c1",
+        deviceType: "web",
+        token: "good-browser",
+      });
+      await new Promise((r) => setImmediate(r));
+
+      // Session ownership lookup: owned by user-1, workspace ws-1.
+      (db.select as any).mockImplementation(() => ({
+        from: () => ({
+          leftJoin: () => ({
+            where: () => ({
+              limit: () =>
+                Promise.resolve([{ sessionUserId: "user-1", workspaceId: "ws-1" }]),
+            }),
+          }),
+          where: () => ({ limit: () => Promise.resolve([]) }),
+        }),
+      }));
+
+      browserWs.receive({
+        type: "approve",
+        sessionId: SID,
+        requestId: "req-9",
+        decision: "allow",
+        clientInputId: "ci-1",
+      } as any);
+      await new Promise((r) => setImmediate(r));
+
+      const forwarded = daemonWs
+        .sentOfType("event")
+        .find((m: any) => m.eventType === "approval") as any;
+      expect(forwarded).toBeDefined();
+      expect(forwarded.payload.requestId).toBe("req-9");
+      expect(forwarded.payload.decision).toBe("allow");
+
+      const acks = browserWs.sentOfType("input_ack") as any[];
+      expect(acks.some((a) => a.clientInputId === "ci-1")).toBe(true);
+    });
+
     it("legacy events without sendSeq keep the batched-writer path", async () => {
       const daemonWs = await connectDaemon();
       (db.query.chatConversations.findFirst as any).mockResolvedValue({

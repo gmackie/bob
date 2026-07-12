@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import WebSocket from "ws";
@@ -11,6 +11,13 @@ import type {
 } from "@gmacko/ooda/agent-adapters";
 import { bobRunReporterFromEnv, type BobRunReporter } from "./bob-run-reporter";
 import { EventBuffer } from "./event-buffer";
+import {
+  adoptSupervisedRun,
+  journalLength,
+  spawnSupervised,
+  writeConsumedOffset,
+  type RunMeta,
+} from "./supervisor";
 
 const RECONNECT_DELAY_MS = 5_000;
 const HEARTBEAT_INTERVAL_MS = 25_000;
@@ -124,7 +131,9 @@ export class BobGatewayConnector {
   private helloTimer: NodeJS.Timeout | null = null;
   private authenticated = false;
   private reconnectAttempt = 0;
-  private activeSessions = new Map<string, ChildProcess>();
+  // Presence map for capacity counting; values are never read. Adapter runs
+  // store a sentinel, CLI runs store the child process.
+  private activeSessions = new Map<string, ChildProcess | { supervised: true }>();
   // Live control handles (kill/steer) for every in-flight run, adapter or CLI.
   private sessionHandles = new Map<string, AdapterProcessHandle>();
   // Sessions the user asked to stop — their exit is reported as interrupted, not error.
@@ -138,6 +147,10 @@ export class BobGatewayConnector {
   // with a per-session send-seq before it is sent, replayed on reconnect, and
   // truncated when the gateway acks it (event_ack).
   private buffer: EventBuffer;
+  // Sessions running under a detached supervisor wrapper: graceful runner
+  // shutdown must NOT kill these (the wrapper owns them; the next runner
+  // generation adopts them).
+  private supervisedSessions = new Set<string>();
 
   constructor(
     private config: BobGatewayConfig,
@@ -153,12 +166,25 @@ export class BobGatewayConnector {
   start(): void {
     this.stopped = false;
     this.connect();
+    // Re-adopt runs whose detached wrappers outlived the previous runner
+    // generation. Status/output frames produced here are journaled by the
+    // event buffer and replay after hello_ok, so ordering vs. connection
+    // doesn't matter.
+    void this.adoptOrphanedRuns().catch((err) => {
+      console.error("[bob-gw] Adoption sweep failed:", err instanceof Error ? err.message : err);
+    });
   }
 
   stop(): void {
     this.stopped = true;
     this.cleanup();
     for (const [sessionId, handle] of this.sessionHandles) {
+      if (this.supervisedSessions.has(sessionId)) {
+        // Supervised runs survive runner shutdown by design — the detached
+        // wrapper keeps the agent alive and the next runner adopts it.
+        console.log(`[bob-gw] Leaving supervised session ${sessionId} running (wrapper owns it)`);
+        continue;
+      }
       console.log(`[bob-gw] Interrupting session ${sessionId} (graceful shutdown)`);
       this.sendStatus(sessionId, "failed", { reason: "interrupted", retryable: true });
       handle.kill();
@@ -287,6 +313,253 @@ export class BobGatewayConnector {
     }
   }
 
+  // ── Supervised-run adoption (runner restart survival) ──────────────
+
+  /**
+   * Line scanner shared by adoption replay and post-adoption live streaming.
+   * Forwards output as session events; detects control_request permission
+   * prompts. During replay, permission emission is deferred: a request
+   * followed by a later `result` line was already resolved before the
+   * restart — re-announcing it would produce a duplicate blocked push.
+   * flushPending() emits whichever requests are genuinely still open.
+   */
+  private makeAdoptionPump(sessionId: string) {
+    let lineBuffer = "";
+    const pending = new Map<string, { toolName?: string; input?: unknown }>();
+
+    const emitPermission = (requestId: string, info: { toolName?: string; input?: unknown }) => {
+      this.forwardAdapterEvent(sessionId, {
+        type: "permission_request",
+        data: `${info.toolName ?? "tool"} requires approval`,
+        timestamp: new Date().toISOString(),
+        permission: { requestId, toolName: info.toolName, input: info.input },
+      });
+    };
+
+    const feed = (text: string, stream: "stdout" | "stderr", replay: boolean) => {
+      this.forwardAdapterEvent(sessionId, {
+        type: stream,
+        data: text,
+        timestamp: new Date().toISOString(),
+      });
+      if (stream !== "stdout") return;
+      lineBuffer += text;
+      let idx: number;
+      while ((idx = lineBuffer.indexOf("\n")) !== -1) {
+        const line = lineBuffer.slice(0, idx).trim();
+        lineBuffer = lineBuffer.slice(idx + 1);
+        if (!line.startsWith("{")) continue;
+        if (line.includes('"type":"result"')) {
+          // A completed turn means every earlier request was answered.
+          pending.clear();
+          continue;
+        }
+        if (!line.includes('"type":"control_request"')) continue;
+        try {
+          const parsed = JSON.parse(line) as {
+            type?: string;
+            request_id?: string;
+            request?: { subtype?: string; tool_name?: string; input?: unknown };
+          };
+          if (
+            parsed.type === "control_request" &&
+            parsed.request?.subtype === "can_use_tool" &&
+            typeof parsed.request_id === "string"
+          ) {
+            const info = { toolName: parsed.request.tool_name, input: parsed.request.input };
+            pending.set(parsed.request_id, info);
+            if (!replay) emitPermission(parsed.request_id, info);
+          }
+        } catch {
+          /* not JSON */
+        }
+      }
+    };
+
+    const flushPending = () => {
+      for (const [requestId, info] of pending) emitPermission(requestId, info);
+    };
+
+    const respond = (
+      requestId: string,
+      behavior: "allow" | "deny",
+      message: string | undefined,
+      stdinWrite: (data: string) => void,
+    ): boolean => {
+      if (!pending.has(requestId)) return false;
+      pending.delete(requestId);
+      stdinWrite(
+        JSON.stringify({
+          type: "control_response",
+          response: {
+            subtype: "success",
+            request_id: requestId,
+            response:
+              behavior === "allow"
+                ? { behavior: "allow", updatedInput: undefined }
+                : { behavior: "deny", message: message ?? "Denied by user" },
+          },
+        }) + "\n",
+      );
+      return true;
+    };
+
+    return { feed, flushPending, respond };
+  }
+
+  /** Best-effort terminal handling for a run that completed under adoption. */
+  private async finalizeAdoptedRun(meta: RunMeta, sessionId: string): Promise<void> {
+    const session = meta.session as unknown as ServerSessionAvailable;
+    let prUrl: string | null = null;
+    if (meta.worktree) {
+      prUrl = await this.finalizeWorktreePr(session, meta.worktree).catch((e) => {
+        console.warn(
+          `[bob-gw] PR finalize failed for adopted run: ${e instanceof Error ? e.message : e}`,
+        );
+        return null;
+      });
+      if (prUrl) {
+        this.sendEvent(sessionId, "pull_request", "agent", {
+          url: prUrl,
+          branch: meta.worktree.branch,
+        });
+      }
+      await this.removeWorktree(meta.worktree).catch(() => {});
+    }
+    this.sendStatus(
+      sessionId,
+      "completed",
+      prUrl
+        ? { pullRequestUrl: prUrl, branch: meta.worktree?.branch, baseBranch: meta.worktree?.baseBranch }
+        : undefined,
+    );
+    this.sendEvent(sessionId, "state", "system", {
+      status: "completed",
+      pullRequestUrl: prUrl ?? undefined,
+    });
+  }
+
+  /**
+   * Startup sweep: re-adopt runs whose detached wrappers outlived the last
+   * runner generation. Journal replay happens BEFORE reconciliation — a
+   * completion that landed while no runner was alive is honored, never
+   * orphan-marked (that ordering is the false-death fix).
+   */
+  private async adoptOrphanedRuns(): Promise<void> {
+    const base =
+      process.env.BOB_RUNNER_SUPERVISE_DIR ?? join(homedir(), ".bob-runner", "runs");
+    if (!existsSync(base)) return;
+
+    for (const name of readdirSync(base)) {
+      const runDir = join(base, name);
+      let adoption;
+      try {
+        adoption = await adoptSupervisedRun(runDir);
+      } catch (err) {
+        console.error(
+          `[bob-gw] Adoption failed for ${name}:`,
+          err instanceof Error ? err.message : err,
+        );
+        continue;
+      }
+      if (!adoption) continue;
+      const sessionId = adoption.meta.sessionId;
+      const pump = this.makeAdoptionPump(sessionId);
+
+      if (adoption.kind !== "live") {
+        // Dead wrapper: the journal is the whole story. Replay unconsumed
+        // entries before deciding fate (replay-before-reconcile).
+        for (const entry of adoption.replayed) {
+          if (entry.ev === "data" && entry.b64) {
+            pump.feed(
+              Buffer.from(entry.b64, "base64").toString(),
+              entry.stream ?? "stdout",
+              true,
+            );
+          }
+        }
+        writeConsumedOffset(runDir, journalLength(runDir));
+      }
+
+      if (adoption.kind === "live") {
+        console.log(`[bob-gw] Adopted live run ${sessionId} (wrapper survived restart)`);
+        this.activeSessions.set(sessionId, { supervised: true });
+        this.supervisedSessions.add(sessionId);
+        this.sendStatus(sessionId, "running", { reason: "adopted" });
+
+        const proc = adoption.proc;
+        const writeStdin = (data: string) => void proc.stdin!.write(data);
+        // Snapshot entries (journal since last consumed offset) arrive first
+        // in replay mode — permission requests already resolved before the
+        // restart stay silent; snapshot_end flips to live and re-announces
+        // whichever requests are genuinely still open, so an approval sent
+        // AFTER the deploy still resumes the run.
+        let replayMode = true;
+        proc.on("snapshot_end", (count: number) => {
+          replayMode = false;
+          writeConsumedOffset(runDir, count);
+          pump.flushPending();
+        });
+        proc.stdout!.on("data", (d: Buffer) => pump.feed(d.toString(), "stdout", replayMode));
+        proc.stderr!.on("data", (d: Buffer) => pump.feed(d.toString(), "stderr", replayMode));
+        proc.subscribe(adoption.consumed);
+        this.sessionHandles.set(sessionId, {
+          write: (text) => {
+            writeStdin(
+              JSON.stringify({ type: "user", message: { role: "user", content: text } }) + "\n",
+            );
+            return true;
+          },
+          kill: () => proc.kill("SIGTERM"),
+          respondPermission: (requestId, behavior, message) =>
+            pump.respond(requestId, behavior, message, writeStdin),
+        });
+        proc.on("close", (exitCode) => {
+          const meta = adoption.meta;
+          const stopReq = this.stopRequested.has(sessionId);
+          this.activeSessions.delete(sessionId);
+          this.sessionHandles.delete(sessionId);
+          this.stopRequested.delete(sessionId);
+          this.supervisedSessions.delete(sessionId);
+          const done = stopReq
+            ? Promise.resolve(
+                this.sendStatus(sessionId, "interrupted", { reason: "stopped_by_user" }),
+              )
+            : exitCode === 0
+              ? this.finalizeAdoptedRun(meta, sessionId)
+              : Promise.resolve(
+                  this.sendStatus(sessionId, "error", {
+                    code: "AGENT_ERROR",
+                    error: `Agent exited with code ${exitCode} (adopted run)`,
+                  }),
+                );
+          void Promise.resolve(done)
+            .catch(() => {})
+            .finally(() => rmSync(runDir, { recursive: true, force: true }));
+        });
+      } else if (adoption.kind === "finished") {
+        console.log(`[bob-gw] Adopted finished run ${sessionId} (exit ${adoption.exitCode})`);
+        if (adoption.exitCode === 0) {
+          await this.finalizeAdoptedRun(adoption.meta, sessionId).catch(() => {});
+        } else {
+          this.sendStatus(sessionId, "error", {
+            code: "AGENT_ERROR",
+            error: `Agent exited with code ${adoption.exitCode} while unsupervised`,
+          });
+        }
+        rmSync(runDir, { recursive: true, force: true });
+      } else {
+        // The wrapper itself died (kill -9, reboot) with no exit on record:
+        // fate honestly unknown → interrupted, retryable. Never "failed by
+        // timeout" — silence is not failure.
+        console.log(`[bob-gw] Orphaned run ${sessionId} — reporting interrupted`);
+        this.sendStatus(sessionId, "interrupted", { reason: "orphaned", retryable: true });
+        this.sendEvent(sessionId, "state", "system", { status: "interrupted", reason: "orphaned" });
+        rmSync(runDir, { recursive: true, force: true });
+      }
+    }
+  }
+
   private startHeartbeat(): void {
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     this.heartbeatTimer = setInterval(() => {
@@ -365,13 +638,40 @@ export class BobGatewayConnector {
     handle.kill();
   }
 
-  /** Browser → daemon frames relayed by the gateway. Only `input` (steering
-   *  a running agent) is meaningful today. */
+  /** Browser → daemon frames relayed by the gateway: `input` (steering a
+   *  running agent) and `approval` (resolving a permission_request). */
   private handleInboundEvent(msg: {
     sessionId: string;
     eventType: string;
     payload: Record<string, unknown>;
   }): void {
+    if (msg.eventType === "approval") {
+      const requestId = typeof msg.payload?.requestId === "string" ? msg.payload.requestId : "";
+      const decision = msg.payload?.decision === "deny" ? "deny" : "allow";
+      const message = typeof msg.payload?.message === "string" ? msg.payload.message : undefined;
+      const handle = this.sessionHandles.get(msg.sessionId);
+      const resolved =
+        requestId !== "" && (handle?.respondPermission?.(requestId, decision, message) ?? false);
+      if (resolved) {
+        console.log(`[bob-gw] Permission ${decision} for ${msg.sessionId} (${requestId})`);
+        this.sendEvent(msg.sessionId, "permission_resolved", "client", {
+          requestId,
+          decision,
+          ...(message ? { message } : {}),
+        });
+        if (decision === "allow") {
+          this.sendStatus(msg.sessionId, "running");
+        }
+        // A denied tool doesn't end the run — the agent continues and decides
+        // what to do without that tool; its own result/exit sets final state.
+      } else {
+        // Double-send of an already-resolved request lands here — benign.
+        console.log(
+          `[bob-gw] Approval for ${msg.sessionId} not applied (unknown/resolved request ${requestId})`,
+        );
+      }
+      return;
+    }
     if (msg.eventType !== "input") return;
     const text = typeof msg.payload?.data === "string" ? msg.payload.data : "";
     if (!text.trim()) return;
@@ -404,6 +704,9 @@ export class BobGatewayConnector {
     }
 
     console.log(`[bob-gw] Claiming session ${session.sessionId}: ${session.title}`);
+    // Count the run against capacity immediately (adapter runs previously
+    // never registered here, so maxConcurrent only throttled CLI runs).
+    this.activeSessions.set(session.sessionId, { supervised: true });
     this.sendDurable(session.sessionId, {
       type: "session_claimed",
       sessionId: session.sessionId,
@@ -473,7 +776,7 @@ export class BobGatewayConnector {
     const startTime = Date.now();
     try {
       if (adapter) {
-        await this.runWithAdapter(session, adapter, workDir, prompt, collect);
+        await this.runWithAdapter(session, adapter, workDir, prompt, collect, worktree);
       } else {
         await this.runWithCli(session, workDir, prompt, collect);
       }
@@ -548,6 +851,10 @@ export class BobGatewayConnector {
       this.activeSessions.delete(session.sessionId);
       this.sessionHandles.delete(session.sessionId);
       this.stopRequested.delete(session.sessionId);
+      this.supervisedSessions.delete(session.sessionId);
+      // The run reached a terminal state under THIS runner generation — its
+      // supervisor dir has served its purpose.
+      rmSync(this.superviseDir(session.sessionId), { recursive: true, force: true });
     }
   }
 
@@ -750,12 +1057,62 @@ export class BobGatewayConnector {
     });
   }
 
+  /** Where a supervised run's wrapper, journal, and meta live. */
+  private superviseDir(sessionId: string): string {
+    return join(
+      process.env.BOB_RUNNER_SUPERVISE_DIR ?? join(homedir(), ".bob-runner", "runs"),
+      sessionId,
+    );
+  }
+
+  /** Map a persona's autonomy level to the adapter permission mode. */
+  private permissionModeFor(session: ServerSessionAvailable): "prompt" | "skip" {
+    return session.personaConfig?.autonomyLevel === "full" ? "skip" : "prompt";
+  }
+
+  /** Shared adapter-event → session-event mapping (live runs and adoption). */
+  private forwardAdapterEvent(
+    sessionId: string,
+    event: AdapterEvent,
+    onChunk?: (s: string) => void,
+  ): void {
+    if (event.type === "stdout" || event.type === "stderr") {
+      onChunk?.(event.data);
+      this.sendEvent(sessionId, "output_chunk", "agent", {
+        data: event.data,
+        stream: event.type,
+      });
+    } else if (event.type === "thought") {
+      this.sendEvent(sessionId, "thought", "agent", {
+        text: event.thought?.text ?? event.data,
+      });
+    } else if (event.type === "tool_call" || event.type === "tool_result") {
+      this.sendEvent(sessionId, "tool_call", "agent", {
+        phase: event.type === "tool_call" ? "start" : "end",
+        ...event.tool,
+      });
+    } else if (event.type === "permission_request") {
+      // The wedge's marquee moment: the run pauses, the phone learns why.
+      this.sendEvent(sessionId, "permission_request", "agent", {
+        requestId: event.permission?.requestId,
+        toolName: event.permission?.toolName,
+        input: event.permission?.input,
+      });
+      this.sendStatus(sessionId, "blocked", {
+        reason: "permission",
+        requestId: event.permission?.requestId,
+        toolName: event.permission?.toolName,
+      });
+    }
+  }
+
   private async runWithAdapter(
     session: ServerSessionAvailable,
     adapter: AgentAdapter,
     workDir: string,
     prompt: string,
     onChunk?: (s: string) => void,
+    worktree?: WorktreeContext | null,
   ): Promise<void> {
     const systemPrompt = this.buildSystemPrompt(session);
     const persona = session.personaConfig;
@@ -765,28 +1122,30 @@ export class BobGatewayConnector {
       systemPrompt,
       model: persona?.model,
       allowedTools: persona?.allowedTools,
+      permissionMode: this.permissionModeFor(session),
     });
 
-    const { exitCode } = await adapter.execute(command, (event: AdapterEvent) => {
-      if (event.type === "stdout" || event.type === "stderr") {
-        onChunk?.(event.data);
-        this.sendEvent(session.sessionId, "output_chunk", "agent", {
-          data: event.data,
-          stream: event.type,
-        });
-      } else if (event.type === "thought") {
-        this.sendEvent(session.sessionId, "thought", "agent", {
-          text: event.thought?.text ?? event.data,
-        });
-      } else if (event.type === "tool_call" || event.type === "tool_result") {
-        this.sendEvent(session.sessionId, "tool_call", "agent", {
-          phase: event.type === "tool_call" ? "start" : "end",
-          ...event.tool,
-        });
-      }
-    }, {
-      onSpawn: (handle) => this.sessionHandles.set(session.sessionId, handle),
-    });
+    // Supervised execution: the agent runs under a detached wrapper that
+    // survives runner restarts, so a blocked run waiting on an approval
+    // outlives a deploy. The adapter is unaware — it just gets a spawn.
+    const runDir = this.superviseDir(session.sessionId);
+    const meta: RunMeta = {
+      sessionId: session.sessionId,
+      session: session as unknown as Record<string, unknown>,
+      worktree: worktree ?? null,
+      startedAt: new Date().toISOString(),
+    };
+
+    this.supervisedSessions.add(session.sessionId);
+    const { exitCode } = await adapter.execute(
+      command,
+      (event: AdapterEvent) => this.forwardAdapterEvent(session.sessionId, event, onChunk),
+      {
+        onSpawn: (handle) => this.sessionHandles.set(session.sessionId, handle),
+        spawnImpl: (binary, args, opts) =>
+          spawnSupervised(runDir, meta, binary, args, opts),
+      },
+    );
 
     if (exitCode !== 0 && !this.stopRequested.has(session.sessionId)) {
       throw new Error(`Agent exited with code ${exitCode}`);
