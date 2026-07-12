@@ -1,7 +1,7 @@
 import type { WebSocket } from "ws";
 import { eq, and, gt, lt, inArray, asc, desc, sql } from "@bob/db";
 import { db } from "@bob/db/client";
-import { chatConversations, repositories, sessionEvents, taskRuns, workItems, agentRuns, activities, workspaces, tenants, tenantMembers, planDrafts, pullRequests } from "@bob/db/schema";
+import { chatConversations, repositories, sessionEvents, taskRuns, workItems, agentRuns, activities, workspaces, tenants, tenantMembers, planDrafts, pullRequests, runnerLeases, gatewayConfig } from "@bob/db/schema";
 
 import {
   parseClientMessage,
@@ -37,6 +37,7 @@ interface Connection {
   kind: "browser" | "daemon" | "unauth";
   userId: string | null;
   workspaceId: string | null; // set for daemon
+  hostId: string | null; // set for daemon (runner lease identity)
   clientId: string;
   subscribedSessions: Set<string>;
   heartbeatTimer: NodeJS.Timeout | null;
@@ -92,53 +93,124 @@ export class Relay {
   constructor(cfg: RelayConfig) {
     this.cfg = cfg;
     this.timeoutSweepTimer = setInterval(() => {
-      this.sweepTimedOutSessions().catch((err) => {
-        console.error("[Relay] Timeout sweep failed (will retry next interval):", err);
+      this.sweepExpiredLeases().catch((err) => {
+        console.error("[Relay] Lease sweep failed (will retry next interval):", err);
       });
-    }, 60_000);
+    }, 15_000);
   }
 
-  private async sweepTimedOutSessions(): Promise<void> {
-    // Key off inactivity, not age: a healthy long run keeps emitting events
-    // (lastActivityAt is bumped on every session_event), while a run whose
-    // daemon died goes silent and should be failed after the window.
-    const cutoff = new Date(Date.now() - 35 * 60 * 1000).toISOString();
-    const stale = await db.query.chatConversations.findMany({
-      where: and(
-        // "stopping" included: if the daemon dies before confirming a stop,
-        // the session would otherwise stay "stopping" forever.
-        inArray(chatConversations.status, ["running", "starting", "stopping"]),
-        lt(
-          sql`coalesce(${chatConversations.lastActivityAt}, ${chatConversations.createdAt})`,
-          cutoff,
-        ),
-      ),
-      columns: { id: true, userId: true, workItemId: true, agentType: true },
+  /**
+   * Lease sweep — the run-level inactivity timeout is GONE. Silence never
+   * means failure: the old 35-minute sweep marked long-quiet runs
+   * failed/timeout, which is the exact false-death class the trust work
+   * eliminates (a 40-minute compile inside a tool call is healthy). Liveness
+   * now belongs to the runner lease: only a lease whose heartbeat is older
+   * than the grace period moves that workspace's active sessions to
+   * host_unknown — "lost contact, fate unknown", never "failed".
+   */
+  private async sweepExpiredLeases(): Promise<void> {
+    const cfg = await db.query.gatewayConfig
+      .findFirst()
+      .catch(() => null as { leaseGraceMs: number } | null);
+    const graceMs = cfg?.leaseGraceMs ?? 60_000;
+    const cutoff = new Date(Date.now() - graceMs).toISOString();
+
+    const expired = await db.query.runnerLeases.findMany({
+      where: lt(runnerLeases.lastHeartbeatAt, cutoff),
     });
 
-    for (const session of stale) {
-      console.log(`[Relay] Timeout sweep: marking session ${session.id} as failed (>35min inactive)`);
-      await db
-        .update(chatConversations)
-        .set({ status: "failed" })
-        .where(eq(chatConversations.id, session.id));
+    for (const lease of expired) {
+      // A live daemon connection for the workspace overrides a stale lease
+      // row (belt over suspenders — its pings should have kept it fresh).
+      if (this.daemonByWorkspace.has(lease.workspaceId)) continue;
 
-      await db
-        .update(agentRuns)
-        .set({ status: "failed", completedAt: sql`now()`, summary: { reason: "timeout" } })
-        .where(eq(agentRuns.sessionId, session.id));
+      const sessions = await db
+        .select({
+          id: chatConversations.id,
+          userId: chatConversations.userId,
+          workItemId: chatConversations.workItemId,
+          agentType: chatConversations.agentType,
+        })
+        .from(chatConversations)
+        .leftJoin(repositories, eq(repositories.id, chatConversations.repositoryId))
+        .where(
+          and(
+            inArray(chatConversations.status, [
+              "running",
+              "starting",
+              "blocked",
+              "stopping",
+            ]),
+            eq(repositories.workspaceId, lease.workspaceId),
+          ),
+        );
 
-      if (session.workItemId) {
-        await db.insert(activities).values({
-          workItemId: session.workItemId,
-          userId: session.userId,
-          type: "status_changed",
-          fromValue: "running",
-          toValue: "failed",
-          metadata: { sessionId: session.id, reason: "timeout" },
-        });
+      for (const session of sessions) {
+        const result = await this.deriveAndWriteState(session.id, "host_unknown");
+        if (!result.applied) continue;
+        console.log(
+          `[Relay] Lease expired for workspace ${lease.workspaceId} (host ${lease.hostId}): session ${session.id} → host_unknown`,
+        );
+        await db
+          .update(agentRuns)
+          .set({ status: "host_unknown" })
+          .where(eq(agentRuns.sessionId, session.id));
+
+        const subs = this.subscribers.get(session.id);
+        if (subs) {
+          for (const sub of subs) {
+            this.send(sub, {
+              type: "session_status_changed",
+              sessionId: session.id,
+              status: "host_unknown",
+              agentType: session.agentType,
+            });
+          }
+        }
       }
     }
+  }
+
+  /**
+   * THE single writer for session status. Every status transition — daemon
+   * reports, lease sweeps, reconciliation — funnels through here, inside a
+   * per-row lock, with explicit precedence:
+   *   - terminal states (completed/failed/error/interrupted/stopped) can
+   *     never be downgraded to host_unknown;
+   *   - a terminal state arriving AFTER host_unknown applies and is flagged
+   *     corrective (the "lost contact" alarm gets retracted).
+   * No other code path may write chatConversations.status.
+   */
+  private async deriveAndWriteState(
+    sessionId: string,
+    incoming: SessionStatus,
+    extra?: Record<string, unknown>,
+    onlyIfPrevIn?: string[],
+  ): Promise<{ applied: boolean; previous: string | null; corrective: boolean }> {
+    const TERMINAL = ["completed", "failed", "error", "interrupted", "stopped"];
+    return await db.transaction(async (tx) => {
+      const rows = await tx
+        .select({ status: chatConversations.status })
+        .from(chatConversations)
+        .where(eq(chatConversations.id, sessionId))
+        .for("update");
+      const previous = rows[0]?.status ?? null;
+      if (previous === null) return { applied: false, previous, corrective: false };
+
+      if (onlyIfPrevIn && !onlyIfPrevIn.includes(previous)) {
+        return { applied: false, previous, corrective: false };
+      }
+      if (incoming === "host_unknown" && TERMINAL.includes(previous)) {
+        return { applied: false, previous, corrective: false };
+      }
+      const corrective = previous === "host_unknown" && TERMINAL.includes(incoming);
+
+      await tx
+        .update(chatConversations)
+        .set({ status: incoming, ...(extra ?? {}) })
+        .where(eq(chatConversations.id, sessionId));
+      return { applied: true, previous, corrective };
+    });
   }
 
   handleConnection(ws: WebSocket): void {
@@ -149,6 +221,7 @@ export class Relay {
       kind: "unauth",
       userId: null,
       workspaceId: null,
+      hostId: null,
       clientId: "",
       subscribedSessions: new Set(),
       heartbeatTimer: null,
@@ -295,9 +368,21 @@ export class Relay {
         return;
       case "ping":
         this.send(conn, { type: "pong", ts: new Date().toISOString() });
-        // Daemon pings double as liveness: keep lastHeartbeat fresh so
-        // "runner online" reflects the live connection, not connect time.
+        // Daemon pings double as liveness. The runner LEASE is the
+        // authoritative signal (only the runner's own ping updates it);
+        // workspaces.lastHeartbeat is kept fresh too for UI back-compat but
+        // has other writers and must not be trusted for liveness.
         if (conn.kind === "daemon" && conn.workspaceId) {
+          await db
+            .update(runnerLeases)
+            .set({ lastHeartbeatAt: sql`now()` })
+            .where(
+              and(
+                eq(runnerLeases.workspaceId, conn.workspaceId),
+                eq(runnerLeases.hostId, conn.hostId ?? "unknown"),
+              ),
+            )
+            .catch(() => {});
           await db
             .update(workspaces)
             .set({ lastHeartbeat: sql`now()` })
@@ -423,6 +508,7 @@ export class Relay {
       conn.kind = "daemon";
       conn.userId = userId;
       conn.workspaceId = hello.workspaceId;
+      conn.hostId = hello.hostId ?? "unknown";
 
       // If another daemon was registered for this workspace, boot it.
       const existing = this.daemonByWorkspace.get(hello.workspaceId);
@@ -434,6 +520,30 @@ export class Relay {
         console.log(`[Relay] Daemon registered: ${conn.id} (clientId=${hello.clientId}) for workspace ${hello.workspaceId}`);
       }
       this.daemonByWorkspace.set(hello.workspaceId, conn);
+
+      // Register/refresh the runner lease — the identity-backed liveness row
+      // only this daemon's heartbeats may touch. connectorInstanceId changes
+      // per runner start, letting adoption logic tell restart from reconnect.
+      await db
+        .insert(runnerLeases)
+        .values({
+          workspaceId: hello.workspaceId,
+          hostId: conn.hostId ?? "unknown",
+          connectorInstanceId: hello.connectorInstanceId ?? hello.clientId,
+          daemonVersion: hello.daemonVersion,
+        })
+        .onConflictDoUpdate({
+          target: [runnerLeases.workspaceId, runnerLeases.hostId],
+          set: {
+            connectorInstanceId: hello.connectorInstanceId ?? hello.clientId,
+            daemonVersion: hello.daemonVersion,
+            startedAt: sql`now()`,
+            lastHeartbeatAt: sql`now()`,
+          },
+        })
+        .catch((err) => {
+          console.error("[Relay] runner lease upsert failed:", err);
+        });
 
       // Update workspace heartbeat so the UI shows the node as online
       await db
@@ -788,29 +898,18 @@ export class Relay {
       : this.findDaemonForUser(userId);
 
     if (daemon) {
-      await db
-        .update(chatConversations)
-        .set({ status: "stopping" })
-        .where(
-          and(
-            eq(chatConversations.id, sessionId),
-            inArray(chatConversations.status, activeStatuses),
-          ),
-        );
+      await this.deriveAndWriteState(sessionId, "stopping", undefined, activeStatuses);
       this.send(daemon, { type: "session_stop", sessionId });
       console.log(`[Relay] Stop relayed to daemon for session ${sessionId}`);
       return { delivered: true };
     }
 
-    await db
-      .update(chatConversations)
-      .set({ status: "stopped", claimedByGatewayId: null, leaseExpiresAt: null })
-      .where(
-        and(
-          eq(chatConversations.id, sessionId),
-          inArray(chatConversations.status, activeStatuses),
-        ),
-      );
+    await this.deriveAndWriteState(
+      sessionId,
+      "stopped",
+      { claimedByGatewayId: null, leaseExpiresAt: null },
+      activeStatuses,
+    );
     console.log(`[Relay] Stop for session ${sessionId}: no daemon online, marked stopped`);
     return { delivered: false };
   }
@@ -818,17 +917,16 @@ export class Relay {
   // ── Daemon session_claimed ─────────────────────────────────────────
 
   private async handleSessionClaimed(conn: Connection, claim: ClientSessionClaimed): Promise<void> {
-    // Update DB: mark session as claimed by this daemon's workspace.
-    // For v1 we just update the status from "pending" to "starting".
-    await db
-      .update(chatConversations)
-      .set({ status: "starting" })
-      .where(
-        and(
-          eq(chatConversations.id, claim.sessionId),
-          eq(chatConversations.userId, conn.userId!),
-        ),
-      );
+    // Ownership check, then the single-writer path (pending → starting).
+    const owned = await db.query.chatConversations.findFirst({
+      where: and(
+        eq(chatConversations.id, claim.sessionId),
+        eq(chatConversations.userId, conn.userId!),
+      ),
+      columns: { id: true },
+    });
+    if (!owned) return;
+    await this.deriveAndWriteState(claim.sessionId, "starting");
 
     // Update associated task_run to "running" and work_item to "in_progress"
     const taskRun = await db.query.taskRuns.findFirst({
@@ -1190,21 +1288,24 @@ export class Relay {
       summary?.error ?? summary?.message ?? summary?.reason ?? undefined;
     const isError = msg.status === "error" || msg.status === "failed";
 
-    await db
-      .update(chatConversations)
-      .set({
-        status: msg.status,
-        ...(isError && errorMessage
-          ? {
-              lastError: {
-                code: summary?.code ?? "AGENT_ERROR",
-                message: errorMessage,
-                timestamp: new Date().toISOString(),
-              },
-            }
-          : {}),
-      })
-      .where(eq(chatConversations.id, msg.sessionId));
+    const stateResult = await this.deriveAndWriteState(
+      msg.sessionId,
+      msg.status,
+      isError && errorMessage
+        ? {
+            lastError: {
+              code: summary?.code ?? "AGENT_ERROR",
+              message: errorMessage,
+              timestamp: new Date().toISOString(),
+            },
+          }
+        : undefined,
+    );
+    if (!stateResult.applied) {
+      // Precedence rejected the transition (e.g. host_unknown after a
+      // terminal state) — no downstream side effects either.
+      return;
+    }
 
     // Sync task_run and work_item status on terminal states. "error" is
     // terminal too (the runner emits it on an agent crash) — without it here,
@@ -1285,8 +1386,16 @@ export class Relay {
       }
 
       // Push: notify the user's mobile devices that the run finished. Fire and
-      // forget — a push failure must never affect status handling.
-      void this.notifyTerminalPush(session, msg.status, errorMessage, summary);
+      // forget — a push failure must never affect status handling. When the
+      // session was host_unknown, the terminal push doubles as the retraction
+      // of the "lost contact" alarm.
+      void this.notifyTerminalPush(
+        session,
+        msg.status,
+        errorMessage,
+        summary,
+        stateResult.corrective,
+      );
     }
     const planningCounts = session.sessionType === "planning"
       ? (await this.getPlanningDraftCounts([session.id])).get(session.id) ?? {
@@ -1392,6 +1501,7 @@ export class Relay {
     status: SessionStatus,
     errorMessage: string | undefined,
     summary: { pullRequestUrl?: string } | undefined,
+    corrective = false,
   ): Promise<void> {
     if (session.sessionType === "planning") return;
 
@@ -1406,13 +1516,19 @@ export class Relay {
       url: session.workItemId ? undefined : `/chat?session=${session.id}`,
     };
 
+    // Corrective copy: contact was lost (host_unknown pushed earlier) but the
+    // run actually finished — say so explicitly, retracting the alarm.
+    const correctivePrefix = corrective ? "Contact restored — " : "";
+
     let notification: Parameters<typeof pushToUser>[1] | null = null;
     if (status === "completed") {
       notification = {
         title: `${label} completed`,
-        body: summary?.pullRequestUrl
-          ? "Pull request is ready for review."
-          : "The agent finished the task.",
+        body:
+          correctivePrefix +
+          (summary?.pullRequestUrl
+            ? "Pull request is ready for review."
+            : "The agent finished the task."),
         data: {
           type: "task.completed",
           pullRequestUrl: summary?.pullRequestUrl,

@@ -46,6 +46,11 @@ export interface ClientHello {
   lastGlobalSeenAt?: string;
   /** Required when deviceType === "daemon" */
   workspaceId?: string;
+  /** Daemon identity for the runner lease (e.g. "hetzner-bob"). */
+  hostId?: string;
+  /** Changes on every daemon restart — distinguishes restart from reconnect. */
+  connectorInstanceId?: string;
+  daemonVersion?: string;
 }
 
 export interface ClientSubscribe {

@@ -17,8 +17,10 @@ vi.mock("@bob/db/client", () => {
       };
     }),
   });
-  // Default select chain: .from().leftJoin().where().limit() → Promise<rows>
-  // and .from().where().limit() → Promise<rows> (the envelope dup check).
+  // Default select chain: .from().leftJoin().where().limit() → Promise<rows>,
+  // .from().where().limit() → Promise<rows> (the envelope dup check), and
+  // .from().where().for("update") → Promise<rows> (the single-writer lock —
+  // defaults to a "running" session so status transitions apply).
   const makeSelectChain = () => ({
     from: vi.fn(() => ({
       leftJoin: vi.fn(() => ({
@@ -28,21 +30,37 @@ vi.mock("@bob/db/client", () => {
       })),
       where: vi.fn(() => ({
         limit: vi.fn(() => Promise.resolve([])),
+        for: vi.fn(() => Promise.resolve([{ status: "running" }])),
       })),
     })),
   });
+  // insert().values() is awaited directly in some paths and chained with
+  // .onConflictDoUpdate()/.onConflictDoNothing() in others — return a
+  // thenable that supports both.
+  const makeInsertValuesResult = () => {
+    const p: any = Promise.resolve();
+    p.onConflictDoUpdate = vi.fn(() => Promise.resolve());
+    p.onConflictDoNothing = vi.fn(() => {
+      const q: any = Promise.resolve();
+      q.returning = vi.fn(() => Promise.resolve([]));
+      return q;
+    });
+    return p;
+  };
   const dbObj: any = {
     query: {
       chatConversations: { findFirst: vi.fn(), findMany: vi.fn(() => Promise.resolve([])) },
+      gatewayConfig: { findFirst: vi.fn(() => Promise.resolve(null)) },
       planDrafts: { findMany: vi.fn(() => Promise.resolve([])) },
       repositories: { findMany: vi.fn(() => Promise.resolve([])) },
+      runnerLeases: { findMany: vi.fn(() => Promise.resolve([])) },
       sessionEvents: { findMany: vi.fn() },
       taskRuns: { findFirst: vi.fn(() => Promise.resolve(null)) },
       workItems: { findMany: vi.fn(() => Promise.resolve([])) },
     },
     update: vi.fn(() => makeUpdateChain()),
     select: vi.fn(() => makeSelectChain()),
-    insert: vi.fn(() => ({ values: vi.fn(() => Promise.resolve()) })),
+    insert: vi.fn(() => ({ values: vi.fn(() => makeInsertValuesResult()) })),
   };
   // Transactions run the callback against the same mock — tests configure
   // db.select/update/insert as usual and the tx path picks them up.
@@ -984,7 +1002,10 @@ describe("Relay", () => {
       (db.select as any).mockImplementation(() => ({
         from: () => ({
           leftJoin: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
-          where: () => ({ limit: () => Promise.resolve([]) }),
+          where: () => ({
+            limit: () => Promise.resolve([]),
+            for: () => Promise.resolve([{ status: "running" }]),
+          }),
         }),
       }));
       (db.update as any).mockImplementation(() => ({
@@ -1216,6 +1237,137 @@ describe("Relay", () => {
       expect(persistedEvents).toHaveLength(1);
       expect(daemonWs.sentOfType("event_ack")).toHaveLength(0);
     });
+  });
+
+  describe("lease sweep + single-writer state (trust model)", () => {
+    const SID = "66666666-6666-4666-8666-666666666666";
+
+    beforeEach(() => {
+      // Defaults: no leases expired, single-writer lock sees a running session.
+      (db.query.runnerLeases.findMany as any).mockResolvedValue([]);
+      (db.query.gatewayConfig.findFirst as any).mockResolvedValue(null);
+      (db.select as any).mockImplementation(() => ({
+        from: () => ({
+          leftJoin: () => ({ where: () => Promise.resolve([]) }),
+          where: () => ({
+            limit: () => Promise.resolve([]),
+            for: () => Promise.resolve([{ status: "running" }]),
+          }),
+        }),
+      }));
+      (db.update as any).mockImplementation(() => ({
+        set: () => {
+          const whereResult: any = Promise.resolve();
+          whereResult.returning = vi.fn(() => Promise.resolve([{ newNextSeq: 2 }]));
+          whereResult.catch = Promise.prototype.catch.bind(whereResult);
+          return { where: () => whereResult };
+        },
+      }));
+    });
+
+    it("CRITICAL regression: a silent run on a healthy host is NEVER timed out to failed", async () => {
+      // The old 35-minute inactivity sweep is gone. With no expired lease,
+      // the sweep must not touch any session — no matter how long a run has
+      // been quiet (a 40-minute compile inside a tool call is healthy).
+      const setPayloads: any[] = [];
+      (db.update as any).mockImplementation(() => ({
+        set: (p: any) => {
+          setPayloads.push(p);
+          return { where: () => Promise.resolve() };
+        },
+      }));
+
+      await (relay as any).sweepExpiredLeases();
+
+      expect(setPayloads.some((p) => p.status === "failed")).toBe(false);
+      expect(setPayloads.some((p) => p.status)).toBe(false);
+    });
+
+    it("CRITICAL regression: an expired lease produces host_unknown, never failed", async () => {
+      (db.query.runnerLeases.findMany as any).mockResolvedValue([
+        { workspaceId: "ws-2", hostId: "hetzner-bob", lastHeartbeatAt: "old" },
+      ]);
+      // Session lookup for the workspace returns one active session; the
+      // FOR UPDATE lock sees it running.
+      (db.select as any).mockImplementation(() => ({
+        from: () => ({
+          leftJoin: () => ({
+            where: () =>
+              Promise.resolve([
+                { id: SID, userId: "user-1", workItemId: null, agentType: "claude" },
+              ]),
+          }),
+          where: () => ({
+            limit: () => Promise.resolve([]),
+            for: () => Promise.resolve([{ status: "running" }]),
+          }),
+        }),
+      }));
+      const setPayloads: any[] = [];
+      (db.update as any).mockImplementation(() => ({
+        set: (p: any) => {
+          setPayloads.push(p);
+          return { where: () => Promise.resolve() };
+        },
+      }));
+
+      await (relay as any).sweepExpiredLeases();
+
+      expect(setPayloads.some((p) => p.status === "host_unknown")).toBe(true);
+      expect(setPayloads.some((p) => p.status === "failed")).toBe(false);
+      // host_unknown is not terminal: no completedAt stamp.
+      expect(setPayloads.find((p) => p.status === "host_unknown")?.completedAt).toBeUndefined();
+    });
+
+    it("precedence: host_unknown never downgrades a terminal state", async () => {
+      const result = await withLockedStatus("completed", () =>
+        (relay as any).deriveAndWriteState(SID, "host_unknown"),
+      );
+      expect(result.applied).toBe(false);
+      expect(result.previous).toBe("completed");
+    });
+
+    it("precedence: a late completed overwrites host_unknown and is flagged corrective", async () => {
+      const result = await withLockedStatus("host_unknown", () =>
+        (relay as any).deriveAndWriteState(SID, "completed"),
+      );
+      expect(result.applied).toBe(true);
+      expect(result.corrective).toBe(true);
+    });
+
+    it("precedence: normal transitions apply without the corrective flag", async () => {
+      const result = await withLockedStatus("running", () =>
+        (relay as any).deriveAndWriteState(SID, "blocked"),
+      );
+      expect(result.applied).toBe(true);
+      expect(result.corrective).toBe(false);
+    });
+
+    it("guard: onlyIfPrevIn rejects transitions from unlisted states", async () => {
+      const result = await withLockedStatus("completed", () =>
+        (relay as any).deriveAndWriteState(SID, "stopping", undefined, [
+          "running",
+          "starting",
+        ]),
+      );
+      expect(result.applied).toBe(false);
+    });
+
+    async function withLockedStatus(
+      status: string,
+      fn: () => Promise<{ applied: boolean; previous: string | null; corrective: boolean }>,
+    ): Promise<{ applied: boolean; previous: string | null; corrective: boolean }> {
+      (db.select as any).mockImplementation(() => ({
+        from: () => ({
+          leftJoin: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
+          where: () => ({
+            limit: () => Promise.resolve([]),
+            for: () => Promise.resolve([{ status }]),
+          }),
+        }),
+      }));
+      return fn();
+    }
   });
 
   describe("cleanup on close", () => {

@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
 import WebSocket from "ws";
 
@@ -151,6 +152,10 @@ export class BobGatewayConnector {
   // shutdown must NOT kill these (the wrapper owns them; the next runner
   // generation adopts them).
   private supervisedSessions = new Set<string>();
+  // Lease identity: hostId names the box; connectorInstanceId changes every
+  // runner start so the gateway can tell a restart from a reconnect.
+  private readonly hostId = process.env.BOB_RUNNER_HOST_ID ?? hostname();
+  private readonly connectorInstanceId = `runner-${process.pid}-${randomUUID().slice(0, 8)}`;
 
   constructor(
     private config: BobGatewayConfig,
@@ -212,6 +217,9 @@ export class BobGatewayConnector {
         deviceType: "daemon",
         token: this.config.apiKey,
         workspaceId: this.config.workspaceId,
+        hostId: this.hostId,
+        connectorInstanceId: this.connectorInstanceId,
+        daemonVersion: process.env.BOB_RUNNER_VERSION,
       });
       // If hello_ok never arrives (e.g. the gateway hit a transient DB error
       // handling hello), the socket is open but we're unregistered and will
