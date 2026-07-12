@@ -79,9 +79,15 @@ const instanceStatusEnum = [
 export const agentRunStatusEnum = pgEnum("agent_run_status", [
   "queued",
   "running",
+  // Waiting on a human decision (permission request or re-auth). The run is
+  // paused, not dead — silence never means failure.
+  "blocked",
   "completed",
   "failed",
   "interrupted",
+  // Heartbeat lease expired: contact lost, process fate unknown. Terminal
+  // states take precedence over this on reconciliation.
+  "host_unknown",
 ]);
 
 export const agentRuns = pgTable(
@@ -100,6 +106,16 @@ export const agentRuns = pgTable(
       .references(() => tenants.id, { onDelete: "cascade" }),
     agentType: t.varchar("agent_type", { length: 64 }).notNull(),
     agentConfig: t.json("agent_config").$type<Record<string, unknown>>(),
+    // Immutable dispatch specification captured at dispatch time. Retry
+    // re-dispatches from this verbatim; it is never updated after insert.
+    dispatchSpec: t.json("dispatch_spec").$type<{
+      prompt: string;
+      repositoryId?: string;
+      worktreeConfig?: Record<string, unknown>;
+      personaId?: string;
+      model?: string;
+      allowedTools?: string[];
+    }>(),
     status: agentRunStatusEnum("status").notNull().default("queued"),
     startedAt: t.timestamp("started_at"),
     completedAt: t.timestamp("completed_at"),
@@ -247,10 +263,14 @@ export const sessionStatusEnum = [
   "provisioning",
   "starting",
   "running",
+  // Paused on a human decision (permission request / re-auth).
+  "blocked",
   "idle",
   "stopping",
   "stopped",
   "error",
+  // Lease expired: contact lost, process fate unknown (never implies failure).
+  "host_unknown",
 ] as const;
 export type SessionStatus = (typeof sessionStatusEnum)[number];
 
@@ -278,6 +298,12 @@ export const sessionEventTypeEnum = [
   "state",
   "error",
   "heartbeat",
+  // Lifecycle events (exempt from buffer eviction and retention pruning):
+  "permission_request",
+  "permission_resolved",
+  "status_change",
+  // Marks a span of evicted output_chunk events in a partition buffer.
+  "gap_marker",
 ] as const;
 export type SessionEventType = (typeof sessionEventTypeEnum)[number];
 
@@ -290,6 +316,12 @@ export const sessionEvents = pgTable(
       .notNull()
       .references(() => chatConversations.id, { onDelete: "cascade" }),
     seq: t.bigint({ mode: "number" }).notNull(),
+    // Runner-assigned monotonic per-session send sequence. NULL for
+    // gateway-originated events (sweeps, errors). Ingest dedups on this:
+    // at-least-once redelivery from the runner's disk buffer must not
+    // produce a second row. Postgres unique ignores NULLs, so
+    // gateway-originated events are unconstrained.
+    sendSeq: t.bigint("send_seq", { mode: "number" }),
     direction: t.varchar({ length: 20 }).notNull(),
     eventType: t.varchar({ length: 30 }).notNull(),
     payload: t.json().$type<Record<string, unknown>>().notNull().default({}),
@@ -299,6 +331,11 @@ export const sessionEvents = pgTable(
     {
       name: "session_events_session_seq_unique",
       columns: [table.sessionId, table.seq],
+      unique: true,
+    },
+    {
+      name: "session_events_session_send_seq_unique",
+      columns: [table.sessionId, table.sendSeq],
       unique: true,
     },
   ],
@@ -333,6 +370,46 @@ export const sessionConnections = pgTable("session_connections", (t) => ({
   lastAckSeq: t.bigint({ mode: "number" }).notNull().default(0),
   ip: t.text(),
   userAgent: t.text(),
+}));
+
+// --- Runner Leases ---
+// Host/connector identity for liveness. Only the runner's own heartbeat may
+// update lastHeartbeatAt — workspaces.lastHeartbeat has multiple writers, so
+// a healthy non-runner writer could mask a dead runner. One row per
+// (workspace, host); connectorInstanceId changes on every runner restart so
+// adoption logic can tell a restarted runner from a reconnected one.
+
+export const runnerLeases = pgTable(
+  "runner_leases",
+  (t) => ({
+    id: t.uuid().notNull().primaryKey().defaultRandom(),
+    workspaceId: t
+      .uuid()
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    hostId: t.text().notNull(),
+    connectorInstanceId: t.text().notNull(),
+    daemonVersion: t.text(),
+    startedAt: t.timestamp({ mode: "string", withTimezone: true }).defaultNow().notNull(),
+    lastHeartbeatAt: t
+      .timestamp({ mode: "string", withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  }),
+  (table) => [
+    {
+      name: "runner_leases_workspace_host_unique",
+      columns: [table.workspaceId, table.hostId],
+      unique: true,
+    },
+  ],
+);
+
+export const runnerLeasesRelations = relations(runnerLeases, ({ one }) => ({
+  workspace: one(workspaces, {
+    fields: [runnerLeases.workspaceId],
+    references: [workspaces.id],
+  }),
 }));
 
 // --- Run Lifecycle Events ---

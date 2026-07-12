@@ -27,7 +27,7 @@
 // =============================================================================
 
 import { relations } from "drizzle-orm";
-import { pgTable } from "drizzle-orm/pg-core";
+import { index, pgTable } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -125,6 +125,69 @@ export const CreateNotificationSchema = createInsertSchema(notifications, {
   archivedAt: true,
   createdAt: true,
 });
+
+// --- Notification Outbox ---
+// Protocol state, not inbox state (the `notifications` table above is the
+// user-facing inbox). One row per run-state transition occurrence; identity
+// derives from the source transition's runner send-seq, never a locally
+// counted occurrence (replay/concurrency can double-count a counter; a durable
+// event id cannot). The unique index is the exactly-once *send intent* guard.
+// Delivery over APNs/FCM is at-least-once; a crash between Expo-accept and
+// outcome-commit is unknowable — the row is retried and a rare duplicate push
+// is tolerated by design.
+
+export const outboxStatusEnum = [
+  "pending",
+  "claimed",
+  "sent",
+  "failed",
+] as const;
+export type OutboxStatus = (typeof outboxStatusEnum)[number];
+
+export const notificationOutbox = pgTable(
+  "notification_outbox",
+  (t) => ({
+    id: t.uuid().notNull().primaryKey().defaultRandom(),
+    sessionId: t.uuid().notNull(),
+    userId: t
+      .text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    // Derived run state this row announces: blocked | failed | interrupted |
+    // completed | host_unknown (varchar to avoid coupling to the pgEnum).
+    transition: t.varchar({ length: 30 }).notNull(),
+    // Runner send-seq of the event that caused the transition. -1 for
+    // gateway-originated transitions (lease expiry): the gateway writes a
+    // given transition at most once per lease cycle, so the unique key still
+    // dedups those.
+    sourceSendSeq: t.bigint("source_send_seq", { mode: "number" }).notNull(),
+    status: t.varchar({ length: 12 }).notNull().default("pending"),
+    attempts: t.integer().notNull().default(0),
+    claimedAt: t.timestamp({ mode: "string", withTimezone: true }),
+    sentAt: t.timestamp({ mode: "string", withTimezone: true }),
+    lastError: t.text(),
+    // Stable message id reused across retries so client-side dedup and Expo
+    // receipt lookups survive the ambiguous-send window.
+    messageId: t.uuid().notNull().defaultRandom(),
+    // Push payload contract: {sessionId, workItemId?, hostId?, transition,
+    // sourceSendSeq} plus title/body copy.
+    payload: t.json().$type<Record<string, unknown>>().notNull().default({}),
+    // Expo ticket ids by device token, written when the send is accepted;
+    // the receipts cron resolves them ~15 min later and prunes dead tokens.
+    expoTickets: t.json().$type<Record<string, string>>(),
+    receiptsResolvedAt: t.timestamp({ mode: "string", withTimezone: true }),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
+  }),
+  (table) => [
+    {
+      name: "notification_outbox_occurrence_unique",
+      columns: [table.sessionId, table.transition, table.sourceSendSeq],
+      unique: true,
+    },
+    index("notification_outbox_status_idx").on(table.status),
+    index("notification_outbox_user_idx").on(table.userId),
+  ],
+);
 
 // 6.1a Device Push Tokens (for mobile notifications)
 export const devicePushTokens = pgTable("device_push_tokens", (t) => ({
