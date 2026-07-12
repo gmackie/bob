@@ -4,6 +4,7 @@ import { db } from "@bob/db/client";
 import { sessionEvents } from "@bob/db/schema";
 
 import { PersistenceWriter, type SessionEventRecord } from "./persistence.js";
+import { OutboxWorker } from "./outbox.js";
 import { Relay } from "./relay.js";
 import { createNudgeHandler, createWorkspaceEventHandler, readJsonBody } from "./nudge.js";
 import { validateBrowserToken, validateDaemonAuth } from "./auth.js";
@@ -46,6 +47,11 @@ const relay = new Relay({
   validateBrowserToken,
   validateDaemonAuth,
 });
+
+// Outbox worker: delivers transition pushes with retries; receipts cron
+// resolves downstream APNs/FCM failures and prunes dead tokens.
+const outboxWorker = new OutboxWorker();
+outboxWorker.start();
 
 const nudgeHandler = createNudgeHandler({
   sharedSecret: NUDGE_SHARED_SECRET,
@@ -156,6 +162,7 @@ server.listen(PORT, () => {
 // Graceful shutdown
 async function shutdown(signal: string) {
   console.log(`[ws-gateway] received ${signal}, shutting down`);
+  outboxWorker.stop();
   server.close();
   wss.clients.forEach((ws) => ws.close());
   await writer.stop();

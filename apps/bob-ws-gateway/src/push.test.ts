@@ -72,15 +72,29 @@ describe("pushToUser", () => {
     expect(deleteWhere).toHaveBeenCalledTimes(1);
   });
 
-  it("never throws when the Expo API fails", async () => {
+  it("throws on Expo API failure so the outbox can retry", async () => {
+    // Contract change with the outbox: pushToUser signals retryable failures
+    // upward instead of swallowing them — the outbox worker owns retries and
+    // the never-crash guarantee.
     (globalThis.fetch as any) = vi.fn(async () => ({
       ok: false,
       status: 500,
       text: async () => "boom",
     }));
 
-    await expect(
-      pushToUser("user-1", { title: "x", body: "y" }),
-    ).resolves.toBeUndefined();
+    await expect(pushToUser("user-1", { title: "x", body: "y" })).rejects.toThrow(
+      "Expo API 500",
+    );
+  });
+
+  it("returns ticket ids keyed by token for the receipts cron", async () => {
+    (globalThis.fetch as any) = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ data: [{ status: "ok", id: "ticket-1" }] }),
+    }));
+
+    const result = await pushToUser("user-1", { title: "x", body: "y" });
+    expect(result.delivered).toBe(true);
+    expect(result.tickets).toEqual({ "ExponentPushToken[aaa]": "ticket-1" });
   });
 });

@@ -176,6 +176,9 @@ export const notificationOutbox = pgTable(
     // the receipts cron resolves them ~15 min later and prunes dead tokens.
     expoTickets: t.json().$type<Record<string, string>>(),
     receiptsResolvedAt: t.timestamp({ mode: "string", withTimezone: true }),
+    // Pull backstop: the mobile badge counts rows with seenAt IS NULL — a
+    // push dropped by APNs/FCM is still visible on next app open.
+    seenAt: t.timestamp({ mode: "string", withTimezone: true }),
     createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   }),
   (table) => [

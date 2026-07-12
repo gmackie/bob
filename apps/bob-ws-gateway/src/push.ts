@@ -24,6 +24,7 @@ interface ExpoMessage {
 }
 
 interface ExpoTicket {
+  id?: string;
   status: "ok" | "error";
   message?: string;
   details?: { error?: string };
@@ -64,16 +65,17 @@ export async function pushToUser(
     channelId?: string;
     priority?: "high" | "default";
   },
-): Promise<void> {
+): Promise<{ delivered: boolean; tickets: Record<string, string> }> {
   let tokens: string[];
   try {
-    if (!(await pushEnabledForUser(userId))) return;
+    if (!(await pushEnabledForUser(userId))) return { delivered: false, tickets: {} };
     tokens = await enabledTokensForUser(userId);
   } catch (err) {
     console.error("[push] token lookup failed:", err);
-    return;
+    // Lookup failure is retryable — signal it upward so the outbox retries.
+    throw err instanceof Error ? err : new Error(String(err));
   }
-  if (tokens.length === 0) return;
+  if (tokens.length === 0) return { delivered: false, tickets: {} };
 
   const messages: ExpoMessage[] = tokens.map((to) => ({
     to,
@@ -97,13 +99,14 @@ export async function pushToUser(
       body: JSON.stringify(messages),
     });
     if (!res.ok) {
-      console.error(`[push] Expo API ${res.status}: ${(await res.text().catch(() => "")).slice(0, 200)}`);
-      return;
+      const detail = (await res.text().catch(() => "")).slice(0, 200);
+      console.error(`[push] Expo API ${res.status}: ${detail}`);
+      throw new Error(`Expo API ${res.status}`);
     }
     tickets = ((await res.json()) as { data: ExpoTicket[] }).data ?? [];
   } catch (err) {
     console.error("[push] send failed:", err);
-    return;
+    throw err instanceof Error ? err : new Error(String(err));
   }
 
   // Prune tokens Expo says are dead so we stop trying them.
@@ -120,4 +123,21 @@ export async function pushToUser(
       .where(inArray(devicePushTokens.expoPushToken, dead))
       .catch((err) => console.error("[push] prune failed:", err));
   }
+
+  // Ticket ids by token for the receipts cron (send-time errors have none).
+  const ticketMap: Record<string, string> = {};
+  tickets.forEach((ticket, i) => {
+    const token = tokens[i];
+    if (token && ticket.status === "ok" && ticket.id) ticketMap[token] = ticket.id;
+  });
+  return { delivered: true, tickets: ticketMap };
+}
+
+/** Remove device tokens by value (used by the receipts cron). */
+export async function pruneTokens(tokens: string[]): Promise<void> {
+  if (tokens.length === 0) return;
+  await db
+    .delete(devicePushTokens)
+    .where(inArray(devicePushTokens.expoPushToken, tokens))
+    .catch((err) => console.error("[push] receipt prune failed:", err));
 }

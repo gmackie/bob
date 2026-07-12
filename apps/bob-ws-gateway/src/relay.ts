@@ -24,6 +24,7 @@ import {
 } from "./protocol.js";
 import type { SessionEventRecord } from "./persistence.js";
 import { pushToUser } from "./push.js";
+import { enqueueTransition } from "./outbox.js";
 import { parsePrUrl } from "./pr-url.js";
 
 const REPLAY_LIMIT = 500;
@@ -155,6 +156,25 @@ export class Relay {
           .update(agentRuns)
           .set({ status: "host_unknown" })
           .where(eq(agentRuns.sessionId, session.id));
+
+        // Distinct copy and severity: lost contact is NOT a death notice.
+        await enqueueTransition({
+          sessionId: session.id,
+          userId: session.userId,
+          transition: "host_unknown",
+          sourceSendSeq: -1,
+          title: "Lost contact with host",
+          body: `${lease.hostId}: contact lost — the run may still be going; not confirmed dead.`,
+          data: {
+            type: "session.host_unknown",
+            sessionId: session.id,
+            workItemId: session.workItemId ?? undefined,
+            hostId: lease.hostId,
+            transition: "host_unknown",
+            sourceSendSeq: -1,
+          },
+          priority: "default",
+        });
 
         const subs = this.subscribers.get(session.id);
         if (subs) {
@@ -1263,7 +1283,12 @@ export class Relay {
    */
   private async applySessionStatus(
     conn: Connection,
-    msg: { sessionId: string; status: SessionStatus; summary?: Record<string, unknown> },
+    msg: {
+      sessionId: string;
+      status: SessionStatus;
+      summary?: Record<string, unknown>;
+      sendSeq?: number;
+    },
   ): Promise<void> {
     const session = await db.query.chatConversations.findFirst({
       where: eq(chatConversations.id, msg.sessionId),
@@ -1385,17 +1410,44 @@ export class Relay {
         });
       }
 
-      // Push: notify the user's mobile devices that the run finished. Fire and
-      // forget — a push failure must never affect status handling. When the
-      // session was host_unknown, the terminal push doubles as the retraction
-      // of the "lost contact" alarm.
-      void this.notifyTerminalPush(
+      // Push (via the outbox): record the send intent exactly once per
+      // occurrence; the worker delivers with retries. When the session was
+      // host_unknown, the terminal push doubles as the retraction of the
+      // "lost contact" alarm.
+      await this.enqueueTerminalNotification(
         session,
-        msg.status,
+        runStatus as SessionStatus,
         errorMessage,
         summary,
         stateResult.corrective,
+        msg.sendSeq ?? -1,
       );
+    } else if (msg.status === "blocked") {
+      // The wedge's marquee push: the run is paused on a human decision.
+      const toolName =
+        typeof msg.summary?.toolName === "string" ? msg.summary.toolName : undefined;
+      const isReauth = msg.summary?.reason === "re-auth";
+      await enqueueTransition({
+        sessionId: msg.sessionId,
+        userId: session.userId,
+        transition: "blocked",
+        sourceSendSeq: msg.sendSeq ?? -1,
+        title: `${session.workItemIdentifierSnapshot ?? session.title ?? "Your agent task"} needs you`,
+        body: isReauth
+          ? "The agent hit an authentication problem and needs re-auth."
+          : toolName
+            ? `Approval requested: ${toolName}`
+            : "The agent is waiting for your approval.",
+        data: {
+          type: "session.blocked",
+          sessionId: msg.sessionId,
+          workItemId: session.workItemId ?? undefined,
+          transition: "blocked",
+          sourceSendSeq: msg.sendSeq ?? -1,
+          requestId: msg.summary?.requestId,
+        },
+        priority: "high",
+      });
     }
     const planningCounts = session.sessionType === "planning"
       ? (await this.getPlanningDraftCounts([session.id])).get(session.id) ?? {
@@ -1484,12 +1536,12 @@ export class Relay {
   }
 
   /**
-   * Push a "run finished" notification to the session owner's mobile devices.
-   * Completed → success (PR link if any); error/failed → the failure reason;
-   * interrupted → a stopped note. Planning sessions are skipped (they're
-   * short and interactive). Best-effort — never throws into the caller.
+   * Record the "run finished" send intent in the outbox (the worker delivers
+   * with retries). Completed → success (PR link if any); error/failed → the
+   * failure reason; interrupted → a stopped note. Planning sessions are
+   * skipped (they're short and interactive).
    */
-  private async notifyTerminalPush(
+  private async enqueueTerminalNotification(
     session: {
       id: string;
       userId: string;
@@ -1501,7 +1553,8 @@ export class Relay {
     status: SessionStatus,
     errorMessage: string | undefined,
     summary: { pullRequestUrl?: string } | undefined,
-    corrective = false,
+    corrective: boolean,
+    sourceSendSeq: number,
   ): Promise<void> {
     if (session.sessionType === "planning") return;
 
@@ -1556,9 +1609,21 @@ export class Relay {
     }
 
     if (!notification) return;
-    await pushToUser(session.userId, notification).catch((err) =>
-      console.error("[push] notifyTerminalPush failed:", err),
-    );
+    await enqueueTransition({
+      sessionId: session.id,
+      userId: session.userId,
+      transition: status === "error" ? "failed" : status,
+      sourceSendSeq,
+      title: notification.title,
+      body: notification.body,
+      data: {
+        ...(notification.data ?? {}),
+        transition: status === "error" ? "failed" : status,
+        sourceSendSeq,
+      },
+      channelId: notification.channelId,
+      priority: notification.priority,
+    });
   }
 
   private async broadcastWorkspaceSessionStatusChanged(

@@ -1246,6 +1246,20 @@ describe("Relay", () => {
       // Defaults: no leases expired, single-writer lock sees a running session.
       (db.query.runnerLeases.findMany as any).mockResolvedValue([]);
       (db.query.gatewayConfig.findFirst as any).mockResolvedValue(null);
+      // Restore the conflict-aware insert chain (earlier suites may have
+      // installed a plain values() implementation).
+      (db.insert as any).mockImplementation(() => ({
+        values: () => {
+          const p: any = Promise.resolve();
+          p.onConflictDoUpdate = vi.fn(() => Promise.resolve());
+          p.onConflictDoNothing = vi.fn(() => {
+            const q: any = Promise.resolve();
+            q.returning = vi.fn(() => Promise.resolve([]));
+            return q;
+          });
+          return p;
+        },
+      }));
       (db.select as any).mockImplementation(() => ({
         from: () => ({
           leftJoin: () => ({ where: () => Promise.resolve([]) }),
