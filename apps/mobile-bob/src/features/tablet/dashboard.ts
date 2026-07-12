@@ -161,6 +161,8 @@ export interface TaskDashboardLayout {
   laneWrap: "wrap" | "nowrap";
   laneCardMinWidth: number;
   providerFooterDirection: "row" | "column";
+  providerWrap: "wrap" | "nowrap";
+  providerCardMinWidth: number;
 }
 
 const TABLET_DASHBOARD_SECTION_ORDER: TabletDashboardSectionKey[] = [
@@ -723,7 +725,18 @@ export function getTaskDashboardLayout(screenWidth: number): TaskDashboardLayout
     laneWrap: showRightRail ? "nowrap" : "wrap",
     laneCardMinWidth: showRightRail ? 0 : 132,
     providerFooterDirection: showRightRail ? "column" : "row",
+    providerWrap: showRightRail ? "nowrap" : "wrap",
+    providerCardMinWidth: showRightRail ? 0 : 150,
   };
+}
+
+export function getProviderCapacityAccessibilityLabel(card: ProviderCapacityCard): string {
+  const usage = card.usageLimits.map((limit) => {
+    const value = limit.valueLabel ??
+      (limit.remainingPercent === null ? "Unavailable" : `${limit.remainingPercent}% remaining`);
+    return `${limit.label}: ${value}`;
+  });
+  return `${card.label}. ${usage.join(". ")}. Open provider detail`;
 }
 
 export function getTabletDashboardSectionOrder(): TabletDashboardSectionKey[] {

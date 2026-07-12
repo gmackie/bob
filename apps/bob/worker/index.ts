@@ -16,7 +16,11 @@ import type { ImageConfig } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
 import { runWithDb } from "../src/lib/db-client-lazy";
 import { wrapFetch } from "./lib/otel";
-import { getHyperdriveConnectionString, getSentryOptions } from "./runtime-env";
+import {
+  applyRuntimeAuthEnv,
+  getHyperdriveConnectionString,
+  getSentryOptions,
+} from "./runtime-env";
 
 interface Env {
   ASSETS: Fetcher;
@@ -128,6 +132,7 @@ export default Sentry.withSentry(
       ): Promise<Response> => {
         const url = new URL(request.url);
         const runtimeEnv = (rawEnv ?? {}) as Env;
+        applyRuntimeAuthEnv(runtimeEnv);
 
         // WebSocket proxy to gateway — forward upgrade to origin
         if (

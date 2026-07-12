@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { buildProviderCommand, normalizeProviderId, parseProviderStream, ProviderRunController } from "./runtime.js";
+import {
+  buildProviderCommand,
+  buildProviderEnvironment,
+  normalizeProviderId,
+  parseProviderStream,
+  ProviderRunController,
+} from "./runtime.js";
 
 describe("provider runtime", () => {
   it.each([
@@ -12,6 +18,21 @@ describe("provider runtime", () => {
     const result = buildProviderCommand(provider, "Inspect the repository", { sandbox: "workspace-write" });
     expect(result.command).toBe(command);
     expect(result.args).toEqual(expect.arrayContaining([...requiredArgs, "Inspect the repository"]));
+  });
+
+  it("runs Claude in non-interactive print mode", () => {
+    const result = buildProviderCommand("claude", "Inspect the repository");
+
+    expect(result.args.slice(-2)).toEqual(["-p", "Inspect the repository"]);
+  });
+
+  it("lets Claude use the logged-in subscription instead of an injected API key", () => {
+    expect(
+      buildProviderEnvironment("claude", {
+        ANTHROPIC_API_KEY: "stale-credit-key",
+        PATH: "/usr/bin",
+      }),
+    ).toEqual({ PATH: "/usr/bin" });
   });
 
   it("normalizes usage and native session IDs from JSONL", () => {
@@ -33,6 +54,20 @@ describe("provider runtime", () => {
     );
 
     expect(parsed.usage).toMatchObject({ source: "provider", inputTokens: 12, outputTokens: 3 });
+  });
+
+  it("estimates Grok usage when its JSONL stream omits provider token counts", () => {
+    const parsed = parseProviderStream(
+      "grok",
+      `${JSON.stringify({ type: "text", data: "GROK_OK" })}\n${JSON.stringify({ type: "end", stopReason: "EndTurn" })}`,
+      "Reply only GROK_OK",
+    );
+
+    expect(parsed.usage).toEqual({
+      source: "estimated",
+      inputTokens: 5,
+      outputTokens: 2,
+    });
   });
 
   it("cancels only once", () => {

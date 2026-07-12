@@ -13,7 +13,12 @@ import { existsSync } from "node:fs";
 import WebSocket from "ws";
 import { computeCostUsd  } from "@gmacko/core/agent/model-pricing";
 import type {TokenCounts} from "@gmacko/core/agent/model-pricing";
-import { buildProviderCommand, normalizeProviderId, parseProviderStream } from "../providers/runtime.js";
+import {
+  buildProviderCommand,
+  buildProviderEnvironment,
+  normalizeProviderId,
+  parseProviderStream,
+} from "../providers/runtime.js";
 import { probeCliProvider } from "../providers/cli-provider.js";
 import { providerIds } from "../providers/contract.js";
 import { SessionAdmission } from "./session-admission.js";
@@ -28,7 +33,7 @@ interface AgentExecutionResult {
     collectedAt: string;
     allowance: { status: "unavailable"; source: "provider" };
     observed?: {
-      source: "provider" | "bob_metered";
+      source: "provider" | "bob_metered" | "estimated";
       inputTokens: number;
       outputTokens: number;
       costUsd?: number;
@@ -523,7 +528,7 @@ function runAgent(session: ServerSessionAvailable, workDir: string, prompt: stri
       cwd: workDir,
       stdio: ["ignore", "pipe", "pipe"],
       env: {
-        ...process.env,
+        ...buildProviderEnvironment(providerId, process.env),
         CI: "true",
         TERM: "dumb",
         PULSE_API_KEY: process.env.PULSE_API_KEY ?? "",
@@ -555,7 +560,7 @@ function runAgent(session: ServerSessionAvailable, workDir: string, prompt: stri
     child.on("close", (code) => {
       const durationMs = Date.now() - startTime;
       const providerUsage = providerId
-        ? parseProviderStream(providerId, output).usage
+        ? parseProviderStream(providerId, output, prompt).usage
         : undefined;
       const tokenUsage = providerUsage
         ? {
@@ -581,7 +586,7 @@ function runAgent(session: ServerSessionAvailable, workDir: string, prompt: stri
                 ...(tokenUsage.inputTokens > 0 || tokenUsage.outputTokens > 0
                   ? {
                       observed: {
-                        source: providerUsage ? "provider" as const : "bob_metered" as const,
+                        source: providerUsage?.source ?? "bob_metered" as const,
                         inputTokens: tokenUsage.inputTokens,
                         outputTokens: tokenUsage.outputTokens,
                         ...(tokenUsage.costUsd > 0 ? { costUsd: tokenUsage.costUsd } : {}),

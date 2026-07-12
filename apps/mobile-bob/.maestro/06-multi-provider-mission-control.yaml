@@ -4,27 +4,42 @@ tags:
   - mission-control
 ---
 - launchApp
-- openLink: bob-dev://tasks
+- runFlow:
+    when:
+      visible: "http://10.0.2.2:8081"
+    commands:
+      - tapOn: "http://10.0.2.2:8081"
+- runFlow:
+    when:
+      visible: "Bob \\(Dev\\), http://.*:8081"
+    commands:
+      - tapOn: "Bob \\(Dev\\), http://.*:8081"
+- runFlow:
+    when:
+      visible: "This is the developer menu.*"
+    commands:
+      - tapOn: "Continue"
+      - waitForAnimationToEnd
+      - tapOn:
+          point: "91%,47%"
+- extendedWaitUntil:
+    visible: "Skip|Back to tasks|Open Tasks"
+    timeout: 30000
 - tapOn:
-    text: "Continue"
+    text: "Back to tasks"
+    optional: true
+- tapOn:
+    text: "Skip"
+    optional: true
+- waitForAnimationToEnd
+- tapOn:
+    text: "Tasks"
     optional: true
 - extendedWaitUntil:
     visible: "Tasks"
     timeout: 30000
-- scrollUntilVisible:
-    element:
-      text: "Claude"
-    direction: DOWN
-- assertVisible: "Claude"
-- assertVisible: "Codex"
-- assertVisible: "Grok"
-- assertVisible: "Cursor"
-- assertVisible: "Provider allowance"
-- assertVisible: "Bob observed usage"
-- tapOn:
-    text: "Grok"
-- extendedWaitUntil:
-    visible: "Grok"
-    timeout: 15000
-- assertVisible: "Provider"
+- assertVisible: "^Claude\\. Bob observed usage: [0-9]+ tokens\\. Open provider detail$"
+- assertVisible: "^Codex\\. Bob observed usage: [0-9]+ tokens\\. Open provider detail$"
+- assertVisible: "^Grok\\. Bob observed usage: [0-9]+ tokens\\. Open provider detail$"
+- assertVisible: "^Cursor\\. Bob observed usage: [0-9]+ tokens\\. Open provider detail$"
 - takeScreenshot: screenshots/06-multi-provider-mission-control

@@ -17,6 +17,15 @@ export function normalizeProviderId(value: string): ProviderId | null {
   return isProviderId(value) ? value : null;
 }
 
+export function buildProviderEnvironment(
+  provider: ProviderId | null,
+  env: NodeJS.ProcessEnv,
+): NodeJS.ProcessEnv {
+  const childEnv = { ...env };
+  if (provider === "claude") delete childEnv.ANTHROPIC_API_KEY;
+  return childEnv;
+}
+
 export function buildProviderCommand(
   provider: ProviderId,
   prompt: string,
@@ -27,7 +36,7 @@ export function buildProviderCommand(
     if (options.model) args.push("--model", options.model);
     if (options.allowedTools?.length) args.push("--allowedTools", options.allowedTools.join(","));
     if (options.systemPrompt) args.push("--append-system-prompt", options.systemPrompt);
-    return { command: "claude", args: [...args, prompt] };
+    return { command: "claude", args: [...args, "-p", prompt] };
   }
   if (provider === "codex") {
     const args = ["exec", "--json"];
@@ -51,11 +60,13 @@ function tokenNumber(value: unknown): number {
 }
 
 export function parseProviderStream(
-  _provider: ProviderId,
+  provider: ProviderId,
   output: string,
+  prompt = "",
 ): { nativeSessionId?: string; usage?: ProviderUsageValue } {
   let nativeSessionId: string | undefined;
   let usage: ProviderUsageValue | undefined;
+  let streamedText = "";
   for (const line of output.split("\n")) {
     try {
       const value: unknown = JSON.parse(line.trim());
@@ -63,6 +74,9 @@ export function parseProviderStream(
       const record = value as Record<string, unknown>;
       const sessionId = record.session_id ?? record.thread_id ?? record.chat_id;
       if (typeof sessionId === "string") nativeSessionId = sessionId;
+      if (provider === "grok" && record.type === "text" && typeof record.data === "string") {
+        streamedText += record.data;
+      }
       if (record.usage && typeof record.usage === "object") {
         const tokens = record.usage as Record<string, unknown>;
         usage = {
@@ -75,6 +89,13 @@ export function parseProviderStream(
     } catch {
       // Ignore provider progress lines that are not JSON.
     }
+  }
+  if (!usage && provider === "grok" && (prompt.length > 0 || streamedText.length > 0)) {
+    usage = {
+      source: "estimated",
+      inputTokens: Math.ceil(prompt.length / 4),
+      outputTokens: Math.ceil(streamedText.length / 4),
+    };
   }
   return { nativeSessionId, usage };
 }

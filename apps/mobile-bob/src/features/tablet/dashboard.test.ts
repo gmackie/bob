@@ -18,6 +18,7 @@ import {
   getRecentOutcomeRowModel,
   getRecentlyCompletedRowModel,
   getProviderCapacityStatusLine,
+  getProviderCapacityAccessibilityLabel,
   extractProviderCapacitySnapshotsFromRuns,
   getRecentOutcomeWorkItemStatus,
   getTaskLaneRowModel,
@@ -292,6 +293,8 @@ describe("tablet task dashboard model", () => {
       laneWrap: "nowrap",
       laneCardMinWidth: 0,
       providerFooterDirection: "column",
+      providerWrap: "nowrap",
+      providerCardMinWidth: 0,
     });
   });
 
@@ -302,7 +305,17 @@ describe("tablet task dashboard model", () => {
       laneWrap: "wrap",
       laneCardMinWidth: 132,
       providerFooterDirection: "row",
+      providerWrap: "wrap",
+      providerCardMinWidth: 150,
     });
+  });
+
+  it("exposes provider usage details in the card accessibility label", () => {
+    const [card] = buildProviderCapacityCards({ sessions: [], workItems: [] });
+
+    expect(getProviderCapacityAccessibilityLabel(card!)).toContain(
+      "Claude. Provider allowance: Unavailable. Bob observed usage: Unavailable",
+    );
   });
 
   it("filters the work items behind each operational summary box", () => {
