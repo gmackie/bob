@@ -69,7 +69,6 @@ const getScheme = () => {
 };
 
 const getSentryConfig = () => {
-  if (!SENTRY_DSN) return null;
   return [
     "@sentry/react-native/expo",
     {
