@@ -7,6 +7,7 @@ import type { HostSnapshotWire } from "@bob/ws";
 import { cn } from "@gmacko/core/ui";
 
 import { useBobRpcClient } from "~/rpc/react";
+import { useTRPC } from "~/trpc/react";
 import {
   buildProviderCapacitySummaries,
   extractProviderCapacitySnapshotsFromRuns,
@@ -102,10 +103,8 @@ function ProviderCard({
 
 export function ProviderCapacityCards({ workspaceId }: ProviderCapacityCardsProps) {
   const rpc = useBobRpcClient();
+  const trpc = useTRPC();
   const workItemsInput = { workspaceId: workspaceId ?? "", limit: 80 };
-  const runsInput = workspaceId
-    ? { workspaceId, limit: 100 }
-    : { limit: 100 };
   const { data: workItems } = useQuery({
     queryKey: ["rpc", "workItem.list", workItemsInput],
     queryFn: () =>
@@ -113,22 +112,19 @@ export function ProviderCapacityCards({ workspaceId }: ProviderCapacityCardsProp
     enabled: Boolean(workspaceId),
     refetchInterval: 10_000,
   });
-  const { data: runs } = useQuery({
-    queryKey: [
-      "rpc",
-      workspaceId ? "agent.run.list" : "agent.run.listAll",
-      runsInput,
-    ],
-    queryFn: () =>
-      workspaceId
-        ? (rpc.agent.listRuns(runsInput) as Promise<
-            ProviderCapacityRun[]
-          >)
-        : (rpc.agent.listAllRuns(runsInput) as Promise<
-            ProviderCapacityRun[]
-          >),
-    refetchInterval: 10_000,
-  });
+  const runsQueryOptions = (
+    workspaceId
+      ? trpc.agentRun.list.queryOptions(
+          { workspaceId, limit: 100 },
+          { refetchInterval: 10_000 },
+        )
+      : trpc.agentRun.listAll.queryOptions(
+          { limit: 100 },
+          { refetchInterval: 10_000 },
+        )
+  ) as ReturnType<typeof trpc.agentRun.listAll.queryOptions>;
+  const { data: runRows } = useQuery(runsQueryOptions);
+  const runs = (Array.isArray(runRows) ? runRows : []) as ProviderCapacityRun[];
   const { data: hostSnapshot } = useQuery<HostSnapshotWire | null>({
     queryKey: ["hostSnapshot", workspaceId ?? ""],
     queryFn: () => Promise.resolve(null),
@@ -136,7 +132,7 @@ export function ProviderCapacityCards({ workspaceId }: ProviderCapacityCardsProp
   });
 
   const cards = buildProviderCapacitySummaries({
-    sessions: (runs ?? []).map(
+    sessions: runs.map(
       (run): ProviderSessionSummary => ({
         id: run.id,
         status: run.status,
@@ -145,7 +141,7 @@ export function ProviderCapacityCards({ workspaceId }: ProviderCapacityCardsProp
     ),
     workItems: workItems ?? [],
     capacitySnapshots: extractProviderCapacitySnapshotsFromRuns(
-      runs ?? [],
+      runs,
     ),
   });
 

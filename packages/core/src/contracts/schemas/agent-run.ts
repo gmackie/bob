@@ -17,6 +17,8 @@ export const AgentRunSchema = Schema.Struct({
   workspaceId: Schema.String, // UUID
   sessionId: Schema.NullOr(Schema.String), // UUID
   workItemId: Schema.NullOr(Schema.String),
+  agentType: Schema.optional(Schema.String),
+  summary: Schema.optional(Schema.NullOr(Schema.Unknown)),
   status: Schema.Literals([
     "pending",
     "running",
