@@ -63,6 +63,13 @@
       },
       "channel": "beta"
     },
+    "preview": {
+      "extends": "beta",
+      "env": {
+        "APP_VARIANT": "preview"
+      },
+      "channel": "preview"
+    },
     "beta:production-api": {
       "extends": "beta",
       "env": {
