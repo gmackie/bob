@@ -59,10 +59,25 @@ truly kill a run, do it from the UI (cancel) or `kill` the wrapper's child.
 ## Deploy order (hard requirement)
 
 Migrate, then deploy the gateway, then the runner:
-1. `pnpm -F @bob/db migrate` (or `deploy.sh` runs it first) — applies `0022`
-   which adds the enum values, `runner_leases`, `notification_outbox`,
-   `gateway_config`, `dispatch_spec`, and `session_events.send_seq`. The gateway
-   throws invalid-enum / missing-relation on first query without it.
+1. **Migrate as `postgres`, not `bob`.** The bob DB's tables + the
+   `agent_run_status` enum are owned by the `postgres` superuser (82/85 objects);
+   the `bob` app role (`forge db url --app bob` + the Hyperdrive runtime) has DML
+   but CANNOT run DDL on them — `pnpm -F @bob/db migrate` as `bob` fails with
+   `42501 must be owner`. Run migrations as `postgres` via peer auth on the box
+   (no stored superuser secret):
+   ```
+   scp packages/bob/src/db/drizzle/00NN_*.sql root@hetzner-master:/tmp/
+   ssh root@hetzner-master \
+     "sudo -u postgres psql -d bob -v ON_ERROR_STOP=1 --single-transaction -f /tmp/00NN_*.sql \
+      && sudo -u postgres psql -d bob -c \"INSERT INTO bob_migrations(filename,hash) VALUES('00NN_*.sql','<sha256>') ON CONFLICT DO NOTHING\""
+   ```
+   Default privileges (`ALTER DEFAULT PRIVILEGES FOR ROLE postgres … GRANT … TO
+   bob`) auto-grant `bob` full DML on every new `postgres`-created table, so the
+   gateway can use them at once (verify with `has_table_privilege('bob', …)`).
+   `0022` (enum `blocked`/`host_unknown`, `runner_leases`, `notification_outbox`,
+   `gateway_config`, `dispatch_spec`, `session_events.send_seq`) was applied to
+   prod this way on 2026-07-13. The gateway throws invalid-enum / missing-relation
+   on first query without the migration applied.
 2. Deploy the **gateway** before the **runner**. The envelope protocol has the
    runner journal + replay frames the gateway acks; a new runner talking to an
    old gateway that doesn't ack would never truncate its journal and would
