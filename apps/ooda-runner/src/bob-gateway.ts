@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { homedir, hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
 import WebSocket from "ws";
@@ -860,9 +860,20 @@ export class BobGatewayConnector {
       this.sessionHandles.delete(session.sessionId);
       this.stopRequested.delete(session.sessionId);
       this.supervisedSessions.delete(session.sessionId);
-      // The run reached a terminal state under THIS runner generation — its
-      // supervisor dir has served its purpose.
-      rmSync(this.superviseDir(session.sessionId), { recursive: true, force: true });
+      // Reclaim the supervisor dir ONLY if the run genuinely ended. If the loop
+      // ended because we lost the wrapper socket while the wrapper + agent are
+      // still alive (a disconnect, not a child exit), deleting the dir would
+      // destroy a live run's journal and make re-adoption impossible — the
+      // false-death this slice exists to prevent. A still-live run is left for
+      // the next adoption sweep.
+      const dir = this.superviseDir(session.sessionId);
+      if (this.supervisedRunStillLive(dir)) {
+        console.warn(
+          `[bob-gw] Session ${session.sessionId}: wrapper still supervising a live child (socket lost) — leaving supervise dir for re-adoption`,
+        );
+      } else {
+        rmSync(dir, { recursive: true, force: true });
+      }
     }
   }
 
@@ -1071,6 +1082,40 @@ export class BobGatewayConnector {
       process.env.BOB_RUNNER_SUPERVISE_DIR ?? join(homedir(), ".bob-runner", "runs"),
       sessionId,
     );
+  }
+
+  /**
+   * A supervised run whose loop ended but whose wrapper is STILL alive with no
+   * journaled exit: the socket was lost, not the child. Deleting its dir here
+   * would destroy a live run's journal and make re-adoption impossible (the
+   * false-death this slice exists to prevent). Returns true → keep the dir for
+   * the next adoption sweep. False (no wrapper.json, a journaled exit, or a
+   * dead wrapper pid) → safe to reclaim.
+   */
+  private supervisedRunStillLive(dir: string): boolean {
+    let pid: number | undefined;
+    try {
+      const info = JSON.parse(readFileSync(join(dir, "wrapper.json"), "utf8")) as { pid?: number };
+      pid = info.pid;
+    } catch {
+      return false; // not supervised / already cleaned
+    }
+    if (pid === undefined) return false;
+    // A journaled exit means the run genuinely ended (the wrapper may still be
+    // lingering, but it is done) — reclaim is fine.
+    try {
+      const journal = readFileSync(join(dir, "output.jsonl"), "utf8");
+      if (/"ev":"exit"/.test(journal)) return false;
+    } catch {
+      /* no journal yet */
+    }
+    // No exit line: is the wrapper process still alive?
+    try {
+      process.kill(pid, 0);
+      return true; // alive + no exit ⇒ child still running under the wrapper
+    } catch {
+      return false; // wrapper is gone
+    }
   }
 
   /** Map a persona's autonomy level to the adapter permission mode. */

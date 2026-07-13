@@ -36,10 +36,24 @@
 "use strict";
 
 const { spawn } = require("node:child_process");
-const { appendFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } = require("node:fs");
+const { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } = require("node:fs");
 const net = require("node:net");
 const { join } = require("node:path");
 const crypto = require("node:crypto");
+
+// Bumped when the ctl.sock protocol changes. v2 stopped broadcasting the token
+// in hello and requires an {op:"auth",token} challenge before any privileged
+// op. An adopting runner branches on this to stay compatible with a v1 wrapper
+// that survived the deploy which introduced auth.
+const PROTOCOL_VERSION = 2;
+
+/** Constant-time token compare that tolerates unequal lengths. */
+function tokenMatches(a, b) {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const ba = crypto.createHash("sha256").update(a).digest();
+  const bb = crypto.createHash("sha256").update(b).digest();
+  return crypto.timingSafeEqual(ba, bb);
+}
 
 const KILL_GRACE_MS = 5000;
 const LINGER_MS = Number(process.env.BOB_SUPERVISOR_LINGER_MS || 10000);
@@ -54,9 +68,12 @@ if (!runDir) {
   process.stderr.write("supervisor-wrapper: --run-dir is required\n");
   process.exit(2);
 }
-mkdirSync(runDir, { recursive: true });
+// Owner-only run dir: on a shared box, other users must not be able to reach
+// the control socket, the journal, or the spawn config.
+mkdirSync(runDir, { recursive: true, mode: 0o700 });
 
-const config = JSON.parse(readFileSync(join(runDir, "spawn-config.json"), "utf8"));
+const spawnConfigPath = join(runDir, "spawn-config.json");
+const config = JSON.parse(readFileSync(spawnConfigPath, "utf8"));
 const journalPath = join(runDir, "output.jsonl");
 const sockPath = join(runDir, "ctl.sock");
 const token = crypto.randomBytes(16).toString("hex");
@@ -77,7 +94,17 @@ writeFileSync(
     token,
     startedAt: new Date().toISOString(),
   }),
+  { mode: 0o600 },
 );
+
+// The env (API keys included) is now applied to the running child, so the
+// plaintext copy on disk is no longer needed — remove it so a wrapper that
+// outlives its runner does not leave credentials at rest.
+try {
+  unlinkSync(spawnConfigPath);
+} catch {
+  /* already gone */
+}
 
 // Only subscribed clients receive live events — a client's snapshot must
 // finish before live data may reach it, or ordering breaks.
@@ -166,14 +193,19 @@ if (existsSync(sockPath)) {
 }
 
 const server = net.createServer((socket) => {
+  // hello no longer carries the token: broadcasting it authenticated nothing
+  // (any connector read it back). A client must ALREADY know the token (from
+  // the 0600 wrapper.json) and prove it via {op:"auth"} before any privileged
+  // op is honored.
+  let authed = false;
   socket.write(
     JSON.stringify({
       ev: "hello",
+      protocolVersion: PROTOCOL_VERSION,
       pid: process.pid,
       childPid: child.pid,
       running: childExit === null,
       exitCode: childExit ? childExit.exitCode : null,
-      token,
     }) + "\n",
   );
 
@@ -189,6 +221,21 @@ const server = net.createServer((socket) => {
       try {
         msg = JSON.parse(line);
       } catch {
+        continue;
+      }
+      if (msg.op === "auth") {
+        if (tokenMatches(msg.token, token)) {
+          authed = true;
+          try { socket.write(JSON.stringify({ ev: "auth_ok" }) + "\n"); } catch { /* gone */ }
+        } else {
+          try { socket.write(JSON.stringify({ ev: "auth_error" }) + "\n"); } catch { /* gone */ }
+          socket.destroy();
+        }
+        continue;
+      }
+      // Every other op requires a proven token first.
+      if (!authed) {
+        try { socket.write(JSON.stringify({ ev: "auth_required" }) + "\n"); } catch { /* gone */ }
         continue;
       }
       if (msg.op === "subscribe") {
@@ -228,7 +275,14 @@ const server = net.createServer((socket) => {
   socket.on("error", () => clients.delete(socket));
 });
 
-server.listen(sockPath);
+server.listen(sockPath, () => {
+  // Owner-only socket (defense in depth alongside the 0700 run dir).
+  try {
+    chmodSync(sockPath, 0o600);
+  } catch {
+    /* best effort */
+  }
+});
 server.on("error", (err) => {
   process.stderr.write(`supervisor-wrapper: socket error: ${err.message}\n`);
 });

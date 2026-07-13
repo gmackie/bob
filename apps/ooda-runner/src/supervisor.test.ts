@@ -93,6 +93,42 @@ describe("supervisor", () => {
     await waitFor(() => closed);
   });
 
+  it("ignores control ops from a client that has not proven the token", async () => {
+    const { createConnection } = await import("node:net");
+    const proc = spawnSupervised(dir, META, process.execPath, ["-e", HANG_CHILD], {
+      cwd: process.cwd(),
+      env: process.env,
+    });
+    const chunks: string[] = [];
+    proc.stdout!.on("data", (d: Buffer) => chunks.push(d.toString()));
+    await waitFor(() => chunks.join("").includes("started"));
+    let closed = false;
+    proc.on("close", () => (closed = true));
+
+    // The plaintext spawn config (env incl. secrets) must be unlinked once the
+    // child is running — it should not linger on disk.
+    expect(existsSync(join(dir, "spawn-config.json"))).toBe(false);
+
+    // An unauthenticated raw client cannot kill the run: the wrapper requires a
+    // proven token before honoring any control op.
+    await new Promise<void>((resolve) => {
+      const s = createConnection(join(dir, "ctl.sock"));
+      s.on("connect", () => {
+        s.write(JSON.stringify({ op: "kill", signal: "SIGKILL" }) + "\n");
+        setTimeout(() => {
+          s.destroy();
+          resolve();
+        }, 400);
+      });
+      s.on("error", () => resolve());
+    });
+    expect(closed).toBe(false); // the unauth'd kill was ignored
+
+    // Positive control: the authenticated facade CAN stop it.
+    proc.kill("SIGKILL");
+    await waitFor(() => closed);
+  });
+
   it("adoption: a live wrapper survives the facade going away and is re-adopted with journal replay", async () => {
     const proc = spawnSupervised(dir, META, process.execPath, ["-e", HANG_CHILD], {
       cwd: process.cwd(),

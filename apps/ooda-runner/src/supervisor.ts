@@ -100,9 +100,15 @@ export class SupervisedProcess extends EventEmitter implements SpawnedProcessLik
     this.sendOp({ op: "subscribe", fromEntry });
   }
 
-  /** @internal */
-  attachSocket(socket: Socket): void {
+  /**
+   * @internal
+   * @param token When set (protocol v2), prove knowledge of the wrapper token
+   *   before any queued privileged op is flushed. The wrapper no longer
+   *   broadcasts the token, so an unauthenticated client's ops are ignored.
+   */
+  attachSocket(socket: Socket, token?: string | null): void {
     this.socket = socket;
+    if (token) socket.write(JSON.stringify({ op: "auth", token }) + "\n");
     for (const line of this.pendingOps) socket.write(line);
     this.pendingOps = [];
 
@@ -157,6 +163,10 @@ export class SupervisedProcess extends EventEmitter implements SpawnedProcessLik
       );
     } else if (msg.ev === "snapshot_end") {
       this.emit("snapshot_end", (msg.count as number) ?? 0);
+    } else if (msg.ev === "auth_error" || msg.ev === "auth_required") {
+      // The wrapper rejected (or never received) our token — we cannot drive
+      // this run. Surface it as a spawn failure so the caller reconciles.
+      this.failSpawn(new Error("supervisor rejected auth token"));
     } else if (msg.ev === "hello" && msg.running === false) {
       // Connected after the child already exited (adoption race): the exit
       // line is in the journal; the caller replays it. Nothing to do live.
@@ -177,17 +187,33 @@ export class SupervisedProcess extends EventEmitter implements SpawnedProcessLik
   }
 }
 
+function readWrapperToken(runDir: string): string | null {
+  try {
+    const info = JSON.parse(
+      readFileSync(join(runDir, "wrapper.json"), "utf8"),
+    ) as { token?: string };
+    return info.token ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function connectWithRetry(
-  sockPath: string,
+  runDir: string,
   proc: SupervisedProcess,
   attemptsLeft: number,
 ): void {
+  const sockPath = join(runDir, "ctl.sock");
   const socket = createConnection(sockPath);
-  socket.once("connect", () => proc.attachSocket(socket));
+  socket.once("connect", () => {
+    // The wrapper writes wrapper.json before it listens, so by connect time the
+    // token is present. Send it so our queued ops (subscribe, stdin) are honored.
+    proc.attachSocket(socket, readWrapperToken(runDir));
+  });
   socket.once("error", (err) => {
     socket.destroy();
     if (attemptsLeft > 0) {
-      setTimeout(() => connectWithRetry(sockPath, proc, attemptsLeft - 1), 100);
+      setTimeout(() => connectWithRetry(runDir, proc, attemptsLeft - 1), 100);
     } else {
       proc.failSpawn(new Error(`supervisor socket never came up: ${err.message}`));
     }
@@ -225,7 +251,7 @@ export function spawnSupervised(
   // Fresh run: subscribe from entry 0 so even output the child produces
   // before our socket lands is delivered (via the journal snapshot).
   proc.subscribe(0);
-  connectWithRetry(join(runDir, "ctl.sock"), proc, 50);
+  connectWithRetry(runDir, proc, 50);
   return proc;
 }
 
@@ -286,39 +312,71 @@ export async function adoptSupervisedRun(runDir: string): Promise<AdoptionResult
     : null;
 
   const sockPath = join(runDir, "ctl.sock");
-  if (wrapperInfo && existsSync(sockPath)) {
-    const live = await new Promise<{ socket: Socket; hello: Record<string, unknown> } | null>(
+  if (wrapperInfo?.token && existsSync(sockPath)) {
+    const token = wrapperInfo.token;
+    // Probe the live wrapper. Stale-pid safety now rests on proving the token:
+    //   - v2 wrapper: hello omits the token; send {op:"auth"} and require
+    //     auth_ok (a stale/reused-PID process on the socket won't have this
+    //     run's token, so auth fails).
+    //   - v1 wrapper (survived the deploy that added auth): hello still carries
+    //     the token; verify it directly, no auth round-trip.
+    const live = await new Promise<{ socket: Socket; running: boolean } | null>(
       (resolve) => {
         const socket = createConnection(sockPath);
-        const timeout = setTimeout(() => {
-          socket.destroy();
-          resolve(null);
-        }, 2000);
-        socket.once("error", () => {
+        let settled = false;
+        let helloRunning: boolean | null = null;
+        let sawV1 = false;
+        let buf = "";
+        const done = (result: { socket: Socket; running: boolean } | null) => {
+          if (settled) return;
+          settled = true;
           clearTimeout(timeout);
-          resolve(null);
-        });
-        socket.once("data", (data) => {
-          clearTimeout(timeout);
-          try {
-            const hello = JSON.parse(data.toString().split("\n")[0]!) as Record<string, unknown>;
-            resolve({ socket, hello });
-          } catch {
-            socket.destroy();
-            resolve(null);
+          if (!result) socket.destroy();
+          resolve(result);
+        };
+        const timeout = setTimeout(() => done(null), 2000);
+        socket.once("error", () => done(null));
+        socket.on("data", (data) => {
+          buf += data.toString();
+          let idx: number;
+          while ((idx = buf.indexOf("\n")) !== -1) {
+            const line = buf.slice(0, idx);
+            buf = buf.slice(idx + 1);
+            if (!line.trim()) continue;
+            let msg: Record<string, unknown>;
+            try {
+              msg = JSON.parse(line) as Record<string, unknown>;
+            } catch {
+              continue;
+            }
+            if (msg.ev === "hello") {
+              helloRunning = msg.running === true;
+              if (typeof msg.token === "string") {
+                // v1 wrapper: verify token inline, no auth op.
+                sawV1 = true;
+                if (msg.token !== token) return done(null);
+                done({ socket, running: helloRunning });
+              } else {
+                // v2 wrapper: challenge with the recorded token.
+                socket.write(JSON.stringify({ op: "auth", token }) + "\n");
+              }
+            } else if (msg.ev === "auth_ok" && !sawV1) {
+              done({ socket, running: helloRunning === true });
+            } else if (
+              (msg.ev === "auth_error" || msg.ev === "auth_required") &&
+              !sawV1
+            ) {
+              done(null);
+            }
           }
         });
       },
     );
 
     if (live) {
-      // Stale-pid safety: the socket must speak with the recorded token.
-      if (live.hello.token !== wrapperInfo.token) {
-        live.socket.destroy();
-        return { kind: "orphaned", meta, replayed };
-      }
-      if (live.hello.running === true) {
+      if (live.running) {
         const proc = new SupervisedProcess();
+        // Already authenticated during the probe — no token needed here.
         proc.attachSocket(live.socket);
         return { kind: "live", proc, meta, consumed };
       }
