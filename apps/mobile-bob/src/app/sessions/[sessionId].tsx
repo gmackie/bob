@@ -45,12 +45,25 @@ export default function ExecutionSessionScreen() {
   // banner; approving/denying resolves it via the gateway → daemon → CLI.
   const pendingPermission = useMemo(() => {
     const resolved = new Set<string>();
+    let latestRunStatus: string | undefined;
     for (const event of selectedSessionEvents) {
       if (event.eventType === ("permission_resolved" as never)) {
         const requestId = (event.payload as { requestId?: string }).requestId;
         if (requestId) resolved.add(requestId);
+      } else if (event.eventType === ("status_change" as never)) {
+        const status = (event.payload as { status?: string }).status;
+        if (status) latestRunStatus = status;
       }
     }
+    // Once the run leaves "blocked" (resumed or ended), any lingering request
+    // is stale — clear the banner. status_change events are always replayed
+    // even when chatty output is truncated, so this stays correct.
+    if (latestRunStatus !== undefined && latestRunStatus !== "blocked") {
+      return null;
+    }
+    // The newest UNRESOLVED request drives the banner. Keep scanning past a
+    // resolved newest request to surface an older still-pending one (the
+    // adapter supports concurrent pending prompts) instead of stopping early.
     for (let i = selectedSessionEvents.length - 1; i >= 0; i--) {
       const event = selectedSessionEvents[i]!;
       if (event.eventType === ("permission_request" as never)) {
@@ -58,9 +71,6 @@ export default function ExecutionSessionScreen() {
         if (payload.requestId && !resolved.has(payload.requestId)) {
           return { requestId: payload.requestId, toolName: payload.toolName };
         }
-        // Older requests are either resolved or superseded — stop at the
-        // newest one either way.
-        return null;
       }
     }
     return null;

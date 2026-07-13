@@ -793,11 +793,47 @@ export class Relay {
       }
 
       if (events.length > REPLAY_LIMIT) {
+        const lastSentSeq = toReplay[toReplay.length - 1]?.seq ?? sub.lastAckSeq;
         this.send(conn, {
           type: "replay_truncated",
           sessionId: sub.sessionId,
-          oldestAvailableSeq: toReplay[toReplay.length - 1]?.seq ?? sub.lastAckSeq,
+          oldestAvailableSeq: lastSentSeq,
         });
+
+        // Trust-critical: output replay is capped, but the events that drive
+        // the approval banner and status MUST NOT be dropped. A permission
+        // request that is the 501st+ event since lastAckSeq would otherwise be
+        // invisible — opening its push deep-link would show no approve/deny
+        // controls. Re-send the tail lifecycle events (past the truncation
+        // point) so the client always reconstructs the current pending-approval
+        // and status state, even when the chatty output between them was cut.
+        const lifecycle = await db.query.sessionEvents.findMany({
+          where: and(
+            eq(sessionEvents.sessionId, sub.sessionId),
+            gt(sessionEvents.seq, lastSentSeq),
+            inArray(sessionEvents.eventType, [
+              "permission_request",
+              "permission_resolved",
+              "status_change",
+            ]),
+          ),
+          orderBy: asc(sessionEvents.seq),
+          limit: REPLAY_LIMIT,
+        });
+        for (const event of lifecycle) {
+          this.send(conn, {
+            type: "event",
+            sessionId: event.sessionId,
+            seq: event.seq,
+            eventType: event.eventType as any,
+            direction: event.direction as any,
+            payload: event.payload,
+            createdAt:
+              (event.createdAt as unknown) instanceof Date
+                ? (event.createdAt as unknown as Date).toISOString()
+                : String(event.createdAt),
+          });
+        }
       }
     }
   }
