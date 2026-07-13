@@ -148,6 +148,10 @@ export async function validateBrowserToken(token: string): Promise<string | null
   if (devUserId) return devUserId;
   if (token.startsWith(AUTH_BYPASS_TOKEN_PREFIX)) return null;
 
+  if (token.startsWith("bob_") || token.startsWith("gmk_")) {
+    return validateBrowserApiKey(token);
+  }
+
   const sessionToken = extractBrowserSessionToken(token);
   if (!sessionToken) return null;
 
@@ -161,6 +165,27 @@ export async function validateBrowserToken(token: string): Promise<string | null
   if (expiresAt.getTime() <= Date.now()) return null;
 
   return row.userId;
+}
+
+async function validateBrowserApiKey(apiKey: string): Promise<string | null> {
+  try {
+    const keyRow = await db.query.apiKeys.findFirst({
+      where: (apiKeys, { eq }) => eq(apiKeys.keyHash, hashApiKey(apiKey)),
+    });
+    if (!keyRow || keyRow.revokedAt) return null;
+    if (keyRow.expiresAt) {
+      const raw: unknown = keyRow.expiresAt;
+      const expiresAt = raw instanceof Date ? raw : new Date(raw as string);
+      if (expiresAt.getTime() <= Date.now()) return null;
+    }
+
+    const permissions = Array.isArray(keyRow.permissions) ? keyRow.permissions : [];
+    if (!permissions.includes("read") || !permissions.includes("write")) return null;
+    return keyRow.userId;
+  } catch (err) {
+    console.error("[auth] browser API-key lookup failed:", err);
+    return null;
+  }
 }
 
 function resolveDevAuthBypassToken(credential: string): string | null {

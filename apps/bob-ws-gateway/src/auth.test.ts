@@ -137,6 +137,58 @@ describe("validateBrowserToken", () => {
     expect(result).toBe("user-abc");
   });
 
+  it("accepts a live read-write device API key", async () => {
+    (db.query.apiKeys.findFirst as any).mockResolvedValueOnce({
+      id: "key-device",
+      userId: "user-device",
+      revokedAt: null,
+      expiresAt: null,
+      permissions: ["read", "write"],
+    });
+
+    const result = await validateBrowserToken("bob_device_secret");
+
+    expect(result).toBe("user-device");
+    expect(db.query.session.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("rejects a device API key without write permission", async () => {
+    (db.query.apiKeys.findFirst as any).mockResolvedValueOnce({
+      id: "key-read-only",
+      userId: "user-device",
+      revokedAt: null,
+      expiresAt: null,
+      permissions: ["read"],
+    });
+
+    const result = await validateBrowserToken("bob_read_only_secret");
+
+    expect(result).toBeNull();
+    expect(db.query.session.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("rejects revoked or expired device API keys", async () => {
+    (db.query.apiKeys.findFirst as any)
+      .mockResolvedValueOnce({
+        id: "key-revoked",
+        userId: "user-device",
+        revokedAt: new Date(),
+        expiresAt: null,
+        permissions: ["read", "write"],
+      })
+      .mockResolvedValueOnce({
+        id: "key-expired",
+        userId: "user-device",
+        revokedAt: null,
+        expiresAt: new Date(Date.now() - 1000),
+        permissions: ["read", "write"],
+      });
+
+    await expect(validateBrowserToken("bob_revoked_secret")).resolves.toBeNull();
+    await expect(validateBrowserToken("bob_expired_secret")).resolves.toBeNull();
+    expect(db.query.session.findFirst).not.toHaveBeenCalled();
+  });
+
   it("returns null when token does not match any session", async () => {
     (db.query.session.findFirst as any).mockResolvedValueOnce(null);
 
