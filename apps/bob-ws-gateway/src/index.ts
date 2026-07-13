@@ -26,11 +26,20 @@ function auditInternal(
   eventType: string,
   payload: Record<string, unknown>,
 ): void {
-  const actingUserId =
-    principal.kind === "apiKey" ? principal.userId : "internal:legacy-secret";
+  // event_log.user_id is an FK to a real user, so a legacy (shared-secret)
+  // principal has no valid id to write — inserting a sentinel would violate the
+  // FK and the row would be silently lost. Log legacy calls to the console
+  // (they are the deprecated ramp path anyway) and only persist api-key calls.
+  if (principal.kind !== "apiKey") {
+    console.warn(
+      `[ws-gateway] internal ${eventType} via legacy shared secret (unaudited):`,
+      JSON.stringify(payload),
+    );
+    return;
+  }
   void db
     .insert(eventLog)
-    .values({ userId: actingUserId, eventType, payload })
+    .values({ userId: principal.userId, eventType, payload })
     .catch((err) => console.error(`[ws-gateway] internal audit write failed (${eventType}):`, err));
 }
 

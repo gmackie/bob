@@ -103,7 +103,8 @@ describe("pushToUser", () => {
 
     const result = await pushToUser("user-1", { title: "x", body: "y" });
 
-    expect(result).toEqual({ delivered: false, tickets: {} });
+    // No tokens: undelivered and NOT retryable (retrying won't create a token).
+    expect(result).toEqual({ delivered: false, tickets: {}, retryable: false });
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 

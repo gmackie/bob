@@ -1493,11 +1493,18 @@ export class Relay {
           }
         : undefined,
     );
-    if (!stateResult.applied) {
-      // Precedence rejected the transition (e.g. host_unknown after a
-      // terminal state) — no downstream side effects either.
+    // Tell a genuinely REJECTED transition (terminal-is-final / onlyIfPrevIn)
+    // apart from a same-state REDELIVERY (previous === incoming). A rejection
+    // gets no side effects. A same-state redelivery still needs to (re-)issue
+    // the idempotent push intent below: a crash between the status commit and
+    // the outbox enqueue on the FIRST pass would otherwise leave the ack unsent,
+    // the runner redelivers, this pass no-ops the state write, and the owed
+    // blocked/terminal notification would be permanently lost (no backstop row).
+    const alreadyAtTarget = !stateResult.applied && stateResult.previous === msg.status;
+    if (!stateResult.applied && !alreadyAtTarget) {
       return;
     }
+    const freshlyApplied = stateResult.applied;
 
     // Sync task_run and work_item status on terminal states. "error" is
     // terminal too (the runner emits it on an agent crash) — without it here,
@@ -1511,15 +1518,19 @@ export class Relay {
       // task_runs / work_items don't have an "error" status in their enum —
       // map it to "failed" so the downstream writes satisfy the constraint.
       const runStatus = msg.status === "error" ? "failed" : msg.status;
+
+      // These status writes are all idempotent (SET status = terminal), so they
+      // run on BOTH fresh apply and same-state redelivery — a crash between the
+      // status commit and these writes would otherwise leave task_run/agent_run
+      // stuck "running" while the conversation is terminal, never repaired.
       const taskRun = await db.query.taskRuns.findFirst({
         where: eq(taskRuns.sessionId, msg.sessionId),
         columns: { id: true, workItemId: true },
       });
       if (taskRun) {
         // Record the PR (opened on the git host by the runner) in bob's own
-        // tracking so it's visible in the UI, and link it to the task run.
-        // Gateway-dispatched work (the autonomous driver + manual starts) goes
-        // through this path, which previously left pull_requests empty.
+        // tracking so it's visible in the UI. recordPullRequest is idempotent
+        // on the PR url.
         let pullRequestId: string | undefined;
         if (msg.status === "completed" && summary?.pullRequestUrl) {
           pullRequestId = await this.recordPullRequest(
@@ -1551,7 +1562,7 @@ export class Relay {
         }
       }
 
-      // Bridge: update agent_runs for dashboard
+      // Bridge: update agent_runs for dashboard (idempotent)
       await db
         .update(agentRuns)
         .set({
@@ -1561,8 +1572,10 @@ export class Relay {
         })
         .where(eq(agentRuns.sessionId, msg.sessionId));
 
-      // Bridge: write activity for work-item-linked sessions
-      if (session.workItemId) {
+      // Bridge: write activity for work-item-linked sessions. This INSERT is the
+      // only non-idempotent write here, so it is the one thing gated on a fresh
+      // apply — a redelivery must not append a duplicate activity row.
+      if (freshlyApplied && session.workItemId) {
         await db.insert(activities).values({
           workItemId: session.workItemId,
           userId: session.userId,
@@ -1577,8 +1590,10 @@ export class Relay {
         });
       }
 
-      // Push (via the outbox): record the send intent exactly once per
-      // occurrence; the worker delivers with retries. When the session was
+      // Push (via the outbox): record the send intent. Idempotent — the outbox
+      // occurrence key (sessionId, transition, sourceSendSeq) dedups a redeliver
+      // — so this ALWAYS runs (fresh apply OR same-state redelivery), closing
+      // the crash-between-commit-and-enqueue window. When the session was
       // host_unknown, the terminal push doubles as the retraction of the
       // "lost contact" alarm.
       await this.enqueueTerminalNotification(
@@ -1616,6 +1631,12 @@ export class Relay {
         priority: "high",
       });
     }
+
+    // A same-state redelivery only needed to (re)issue the idempotent push
+    // intent above; the ephemeral subscriber fan-out already fired on the fresh
+    // apply, so stop here (also avoids redundant broadcast queries).
+    if (!freshlyApplied) return;
+
     const planningCounts = session.sessionType === "planning"
       ? (await this.getPlanningDraftCounts([session.id])).get(session.id) ?? {
           draftCount: 0,

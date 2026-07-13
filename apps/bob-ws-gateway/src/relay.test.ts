@@ -1386,6 +1386,17 @@ describe("Relay", () => {
           return { where: () => whereResult };
         },
       }));
+      // Capture outbox inserts to prove the owed push is (re-)issued.
+      const inserted: any[] = [];
+      (db.insert as any).mockImplementation(() => ({
+        values: (v: any) => {
+          inserted.push(v);
+          const p: any = Promise.resolve();
+          p.onConflictDoNothing = vi.fn(() => Promise.resolve());
+          p.onConflictDoUpdate = vi.fn(() => Promise.resolve());
+          return p;
+        },
+      }));
 
       daemonWs.receive({
         type: "session_status",
@@ -1397,9 +1408,12 @@ describe("Relay", () => {
 
       // Still acked (redelivery must not stall the runner).
       expect(daemonWs.sentOfType("event_ack")).toHaveLength(1);
-      // Idempotent: the single writer saw the state already applied, so no
-      // status column was re-written (and no duplicate push/activity).
-      expect(setPayloads.some((p) => p.status === "completed")).toBe(false);
+      // The owed terminal push intent IS re-issued (idempotent via the outbox
+      // occurrence key) — this closes the crash-between-commit-and-enqueue
+      // window that would otherwise permanently drop the push.
+      expect(inserted.some((v) => v.transition === "completed")).toBe(true);
+      // But the non-idempotent activity row is NOT re-inserted on a redelivery.
+      expect(inserted.some((v) => v.type === "status_changed")).toBe(false);
     });
 
     it("relays a browser approve to the daemon as an approval event and acks it", async () => {

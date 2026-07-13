@@ -65,17 +65,19 @@ export async function pushToUser(
     channelId?: string;
     priority?: "high" | "default";
   },
-): Promise<{ delivered: boolean; tickets: Record<string, string> }> {
+): Promise<{ delivered: boolean; tickets: Record<string, string>; retryable: boolean }> {
   let tokens: string[];
   try {
-    if (!(await pushEnabledForUser(userId))) return { delivered: false, tickets: {} };
+    // Push disabled or no registered tokens: nothing to deliver, and retrying
+    // won't change that — NOT retryable (the badge backstop surfaces it in-app).
+    if (!(await pushEnabledForUser(userId))) return { delivered: false, tickets: {}, retryable: false };
     tokens = await enabledTokensForUser(userId);
   } catch (err) {
     console.error("[push] token lookup failed:", err);
     // Lookup failure is retryable — signal it upward so the outbox retries.
     throw err instanceof Error ? err : new Error(String(err));
   }
-  if (tokens.length === 0) return { delivered: false, tickets: {} };
+  if (tokens.length === 0) return { delivered: false, tickets: {}, retryable: false };
 
   const messages: ExpoMessage[] = tokens.map((to) => ({
     to,
@@ -142,9 +144,11 @@ export async function pushToUser(
     );
   }
   // delivered = at least one message got an OK ticket. If EVERY ticket errored
-  // (and none were DeviceNotRegistered prunes), the send effectively failed —
-  // return false so the outbox retries instead of marking the row sent.
-  return { delivered: Object.keys(ticketMap).length > 0, tickets: ticketMap };
+  // (and none were DeviceNotRegistered prunes), the send effectively failed and
+  // IS retryable (rate limits etc. are transient) — return false so the outbox
+  // retries instead of marking the row sent.
+  const delivered = Object.keys(ticketMap).length > 0;
+  return { delivered, tickets: ticketMap, retryable: !delivered };
 }
 
 /** Remove device tokens by value (used by the receipts cron). */

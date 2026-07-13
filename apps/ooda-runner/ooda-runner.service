@@ -8,6 +8,12 @@ Type=simple
 User=mackieg
 Group=users
 WorkingDirectory=/opt/ooda-runner/apps/ooda-runner
+# Create the writable runtime dirs BEFORE the sandbox applies. The '+' runs
+# this unsandboxed (ProtectSystem doesn't apply), so it can create + own the
+# dirs under /home; without it, ProtectSystem=strict leaves ~/.bob-runner's
+# read-only parent and the first supervised spawn crash-loops on EROFS (the
+# '-' ReadWritePaths prefix only tolerates absence, it does not create them).
+ExecStartPre=+/bin/sh -c 'mkdir -p /home/mackieg/.bob-runner /home/mackieg/.bob && chown mackieg:users /home/mackieg/.bob-runner /home/mackieg/.bob'
 ExecStart=/opt/ooda-runner/apps/ooda-runner/node_modules/.bin/tsx src/index.ts
 Restart=always
 RestartSec=5

@@ -232,6 +232,29 @@ export class OutboxWorker {
             channelId: payload.channelId,
             priority: payload.priority,
           });
+          if (!result.delivered) {
+            if (result.retryable) {
+              // Every Expo ticket errored (rate limit, bad payload). Transient —
+              // retry until exhausted so it isn't silently dropped.
+              const exhausted = row.attempts >= MAX_ATTEMPTS;
+              await db
+                .update(notificationOutbox)
+                .set({
+                  status: exhausted ? "failed" : "pending",
+                  lastError: "expo delivered no OK ticket",
+                })
+                .where(eq(notificationOutbox.id, row.id));
+            } else {
+              // No registered tokens / push disabled — nothing to deliver and
+              // retrying won't help. Resolve the row (the seenAt badge backstop
+              // still surfaces it in-app) instead of churning MAX_ATTEMPTS times.
+              await db
+                .update(notificationOutbox)
+                .set({ status: "sent", sentAt: sql`now()`, receiptsResolvedAt: sql`now()`, lastError: "no push target" })
+                .where(eq(notificationOutbox.id, row.id));
+            }
+            continue;
+          }
           await db
             .update(notificationOutbox)
             .set({

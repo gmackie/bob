@@ -94,4 +94,4 @@ CREATE TABLE IF NOT EXISTS "gateway_config" (
 -- table (see relay.ts sweepExpiredLeases / pending-session replay).
 CREATE INDEX IF NOT EXISTS "chat_conversations_active_status_idx"
   ON "chat_conversations" ("status")
-  WHERE "status" IN ('provisioning','starting','running','blocked','idle','stopping','host_unknown');
+  WHERE "status" IN ('pending','provisioning','starting','running','blocked','idle','stopping','host_unknown');

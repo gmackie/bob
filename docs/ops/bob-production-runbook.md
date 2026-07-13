@@ -70,6 +70,23 @@ Migrate, then deploy the gateway, then the runner:
    as a new row). Gateway-first avoids that window. A gateway ROLLBACK likewise
    requires clearing runner event buffers.
 
+## Known residuals (accepted for v1)
+
+- **ctl.sock is a same-UID boundary, not intra-user isolation.** The wrapper,
+  its agent, and the runner all run as the same Unix user, so a compromised
+  supervised agent can read a sibling run's `wrapper.json` token (mode 0600) and
+  drive its socket. The token challenge + 0700/0600 perms close the CROSS-user
+  hole; true intra-user isolation needs per-run Unix users or a sandbox and is
+  out of scope. A v1 wrapper that survives the auth-introducing deploy is also
+  unauthenticated until it exits.
+- **Legacy `NUDGE_SHARED_SECRET` is an unscoped cross-user ramp.** It is accepted
+  on `/internal/*` unless `BOB_ALLOW_LEGACY_NUDGE_SECRET=false`, and a legacy
+  principal bypasses per-user/workspace scoping (and is console-logged, not
+  written to `event_log`, because it has no real user id). **Set
+  `BOB_ALLOW_LEGACY_NUDGE_SECRET=false` as soon as every internal caller
+  (Worker, t3code, cron) presents a per-user API key** — until then the ramp is
+  a real cross-user path.
+
 ## Fast-follow (not in this slice)
 
 - **Retry from the immutable dispatch spec.** `agent_runs.dispatch_spec` /
