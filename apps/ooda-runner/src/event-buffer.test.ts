@@ -43,13 +43,15 @@ describe("EventBuffer", () => {
     expect(buf.assignSeq(S1)).toBe(3);
   });
 
-  it("returns unacked frames in send order and truncates on ack", () => {
+  it("returns unacked frames in send order and truncates on contiguous ack", () => {
     for (let i = 1; i <= 3; i++) {
       const seq = buf.assignSeq(S1);
       buf.append(S1, seq, outputFrame(S1, seq, `chunk-${seq}`));
     }
     expect(buf.unacked(S1).map((e) => e.sendSeq)).toEqual([1, 2, 3]);
 
+    // Acks arrive per-frame in send order.
+    buf.ack(S1, 1);
     buf.ack(S1, 2);
     expect(buf.unacked(S1).map((e) => e.sendSeq)).toEqual([3]);
     expect(buf.fullyAcked(S1)).toBe(false);
@@ -59,14 +61,20 @@ describe("EventBuffer", () => {
     expect(buf.fullyAcked(S1)).toBe(true);
   });
 
-  it("ignores stale (out-of-order) acks", () => {
+  it("does NOT skip a frame the gateway never acked (contiguous watermark)", () => {
     for (let i = 1; i <= 3; i++) {
       const seq = buf.assignSeq(S1);
       buf.append(S1, seq, outputFrame(S1, seq));
     }
-    buf.ack(S1, 3);
-    buf.ack(S1, 1); // stale
-    expect(buf.unacked(S1)).toEqual([]);
+    // Gateway failed to persist frame 1 (no ack) but persisted+acked frame 2.
+    // The watermark must NOT jump past the unacked frame 1 — otherwise that
+    // frame is silently dropped (the ack-gap bug).
+    buf.ack(S1, 2);
+    expect(buf.unacked(S1).map((e) => e.sendSeq)).toEqual([1, 2, 3]);
+    // Once frame 1 is finally acked (after reconnect + replay), the held ack
+    // for 2 is absorbed and the watermark advances contiguously.
+    buf.ack(S1, 1);
+    expect(buf.unacked(S1).map((e) => e.sendSeq)).toEqual([3]);
   });
 
   it("survives restart: meta and journal reload from disk", () => {

@@ -50,6 +50,7 @@ vi.mock("@bob/db/client", () => {
   const dbObj: any = {
     query: {
       chatConversations: { findFirst: vi.fn(), findMany: vi.fn(() => Promise.resolve([])) },
+      agentRuns: { findFirst: vi.fn(() => Promise.resolve(null)) },
       gatewayConfig: { findFirst: vi.fn(() => Promise.resolve(null)) },
       planDrafts: { findMany: vi.fn(() => Promise.resolve([])) },
       repositories: { findMany: vi.fn(() => Promise.resolve([])) },
@@ -61,6 +62,7 @@ vi.mock("@bob/db/client", () => {
     update: vi.fn(() => makeUpdateChain()),
     select: vi.fn(() => makeSelectChain()),
     insert: vi.fn(() => ({ values: vi.fn(() => makeInsertValuesResult()) })),
+    delete: vi.fn(() => ({ where: vi.fn(() => Promise.resolve()) })),
   };
   // Transactions run the callback against the same mock — tests configure
   // db.select/update/insert as usual and the tx path picks them up.
@@ -992,6 +994,202 @@ describe("Relay", () => {
     });
   });
 
+  describe("session_claimed (runner adoption bridge)", () => {
+    const SID = "55555555-5555-4555-8555-555555555555";
+
+    async function connectDaemon(): Promise<FakeWs> {
+      const daemonWs = new FakeWs();
+      relay.handleConnection(daemonWs as any);
+      daemonWs.receive({
+        type: "hello",
+        clientId: "d1",
+        deviceType: "daemon",
+        token: "good-daemon",
+        workspaceId: "ws-1",
+      });
+      await new Promise((r) => setImmediate(r));
+      return daemonWs;
+    }
+
+    beforeEach(() => {
+      // Restore default chains earlier suites may have replaced.
+      (db.select as any).mockImplementation(() => ({
+        from: () => ({
+          leftJoin: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
+          where: () => ({
+            limit: () => Promise.resolve([]),
+            for: () => Promise.resolve([{ status: "pending" }]),
+          }),
+        }),
+      }));
+      (db.insert as any).mockImplementation(() => ({
+        values: () => {
+          const p: any = Promise.resolve();
+          p.onConflictDoUpdate = () => Promise.resolve();
+          p.onConflictDoNothing = () => {
+            const q: any = Promise.resolve();
+            q.returning = () => Promise.resolve([]);
+            return q;
+          };
+          return p;
+        },
+      }));
+    });
+
+    it("promotes a claimed pending session to starting and syncs task_run/work_item", async () => {
+      const daemonWs = await connectDaemon();
+
+      // 1st findFirst: ownership check. 2nd: agent_runs bridge session lookup —
+      // return undefined to skip the bridge (tenant resolution is out of scope).
+      (db.query.chatConversations.findFirst as any)
+        .mockResolvedValueOnce({ id: SID })
+        .mockResolvedValueOnce(undefined);
+      (db.query.taskRuns.findFirst as any) = vi.fn(() =>
+        Promise.resolve({ id: "tr-1", workItemId: "wi-1" }),
+      );
+
+      const setPayloads: any[] = [];
+      (db.update as any).mockImplementation(() => ({
+        set: (payload: any) => {
+          setPayloads.push(payload);
+          const whereResult: any = Promise.resolve();
+          whereResult.returning = vi.fn(() => Promise.resolve([{ newNextSeq: 2 }]));
+          return { where: () => whereResult };
+        },
+      }));
+
+      daemonWs.receive({ type: "session_claimed", sessionId: SID } as any);
+      await new Promise((r) => setImmediate(r));
+      await new Promise((r) => setImmediate(r));
+
+      // Single-writer wrote pending → starting on the session
+      expect(setPayloads.some((p) => p.status === "starting")).toBe(true);
+      // task_run promoted to running, work_item to in_progress
+      expect(setPayloads.some((p) => p.status === "running")).toBe(true);
+      expect(setPayloads.some((p) => p.status === "in_progress")).toBe(true);
+    });
+
+    it("ignores a session_claimed for a session the daemon's user does not own", async () => {
+      const daemonWs = await connectDaemon();
+
+      (db.query.chatConversations.findFirst as any).mockResolvedValueOnce(undefined);
+
+      const setPayloads: any[] = [];
+      (db.update as any).mockImplementation(() => ({
+        set: (payload: any) => {
+          setPayloads.push(payload);
+          return { where: () => Promise.resolve() };
+        },
+      }));
+
+      daemonWs.receive({ type: "session_claimed", sessionId: SID } as any);
+      await new Promise((r) => setImmediate(r));
+      await new Promise((r) => setImmediate(r));
+
+      expect(setPayloads).toHaveLength(0);
+    });
+  });
+
+  describe("blocked status (needs-you push intent)", () => {
+    const SID = "66666666-6666-4666-8666-666666666666";
+
+    async function connectDaemon(): Promise<FakeWs> {
+      const daemonWs = new FakeWs();
+      relay.handleConnection(daemonWs as any);
+      daemonWs.receive({
+        type: "hello",
+        clientId: "d1",
+        deviceType: "daemon",
+        token: "good-daemon",
+        workspaceId: "ws-1",
+      });
+      await new Promise((r) => setImmediate(r));
+      return daemonWs;
+    }
+
+    beforeEach(() => {
+      (db.select as any).mockImplementation(() => ({
+        from: () => ({
+          leftJoin: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
+          where: () => ({
+            limit: () => Promise.resolve([]),
+            for: () => Promise.resolve([{ status: "running" }]),
+          }),
+        }),
+      }));
+      (db.update as any).mockImplementation(() => ({
+        set: () => {
+          const whereResult: any = Promise.resolve();
+          whereResult.returning = vi.fn(() => Promise.resolve([{ newNextSeq: 2 }]));
+          return { where: () => whereResult };
+        },
+      }));
+    });
+
+    async function sendBlocked(summary: Record<string, unknown>) {
+      const daemonWs = await connectDaemon();
+
+      (db.query.chatConversations.findFirst as any).mockResolvedValueOnce({
+        id: SID,
+        userId: "user-1",
+        status: "running",
+        title: "Fix login",
+        workItemId: "wi-1",
+        workItemIdentifierSnapshot: null,
+        agentType: "claude",
+        sessionType: "execution",
+      });
+
+      const insertedValues: any[] = [];
+      (db.insert as any).mockImplementation(() => ({
+        values: (payload: any) => {
+          insertedValues.push(payload);
+          const p: any = Promise.resolve();
+          p.onConflictDoUpdate = () => Promise.resolve();
+          p.onConflictDoNothing = () => {
+            const q: any = Promise.resolve();
+            q.returning = () => Promise.resolve([]);
+            return q;
+          };
+          return p;
+        },
+      }));
+
+      daemonWs.receive({
+        type: "session_status",
+        sessionId: SID,
+        status: "blocked",
+        summary,
+      } as any);
+      await new Promise((r) => setImmediate(r));
+      await new Promise((r) => setImmediate(r));
+
+      return insertedValues;
+    }
+
+    it("records a high-priority approval push intent naming the tool", async () => {
+      const inserted = await sendBlocked({ toolName: "Bash", requestId: "perm-1" });
+
+      const outboxRow = inserted.find((v) => v?.transition === "blocked");
+      expect(outboxRow).toBeDefined();
+      expect(outboxRow.userId).toBe("user-1");
+      expect(outboxRow.payload.title).toContain("needs you");
+      expect(outboxRow.payload.body).toBe("Approval requested: Bash");
+      expect(outboxRow.payload.priority).toBe("high");
+      expect(outboxRow.payload.data.requestId).toBe("perm-1");
+      // deep-link payload carries the sessionId so the tap never dead-ends
+      expect(outboxRow.payload.data.sessionId).toBe(SID);
+    });
+
+    it("uses the re-auth copy when the daemon reports an auth wedge", async () => {
+      const inserted = await sendBlocked({ reason: "re-auth" });
+
+      const outboxRow = inserted.find((v) => v?.transition === "blocked");
+      expect(outboxRow).toBeDefined();
+      expect(outboxRow.payload.body).toContain("re-auth");
+    });
+  });
+
   describe("envelope protocol (send-seq)", () => {
     const SID = "44444444-4444-4444-8444-444444444444";
 
@@ -1110,7 +1308,12 @@ describe("Relay", () => {
       (db.insert as any).mockImplementation(() => ({
         values: (v: any) => {
           inserted.push(v);
-          return Promise.resolve();
+          // Support the enqueueTransition onConflict chain (applySessionStatus
+          // now runs before the ack, so its terminal push must not throw).
+          const p: any = Promise.resolve();
+          p.onConflictDoNothing = vi.fn(() => Promise.resolve());
+          p.onConflictDoUpdate = vi.fn(() => Promise.resolve());
+          return p;
         },
       }));
       (db.query.chatConversations.findFirst as any).mockResolvedValue({
@@ -1149,15 +1352,40 @@ describe("Relay", () => {
       expect(setPayloads.some((p) => p.status === "completed")).toBe(true);
     });
 
-    it("does not re-apply side effects for a redelivered session_status", async () => {
+    it("re-applies a redelivered session_status idempotently (acked, no duplicate side effects)", async () => {
+      // A redelivered (duplicate) frame must still be acked AND re-run
+      // applySessionStatus — the ack now certifies persisted+applied, and
+      // re-application is a no-op because the single writer sees the state
+      // already set. The old early-return-on-duplicate permanently lost the
+      // transition if a crash landed between persist and apply.
       const daemonWs = await connectDaemon();
+      // Duplicate on the send-seq dup check; single-writer lock reports the
+      // session is ALREADY completed (so re-apply is a same-state no-op).
       (db.select as any).mockImplementation(() => ({
         from: () => ({
-          where: () => ({ limit: () => Promise.resolve([{ id: "existing" }]) }),
+          where: () => ({
+            limit: () => Promise.resolve([{ id: "existing" }]),
+            for: () => Promise.resolve([{ status: "completed" }]),
+          }),
           leftJoin: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
         }),
       }));
-      (db.query.chatConversations.findFirst as any).mockClear();
+      (db.query.chatConversations.findFirst as any).mockResolvedValue({
+        id: SID,
+        userId: "user-1",
+        status: "completed",
+        workItemId: null,
+        agentType: "claude",
+      });
+      const setPayloads: any[] = [];
+      (db.update as any).mockImplementation(() => ({
+        set: (payload: any) => {
+          setPayloads.push(payload);
+          const whereResult: any = Promise.resolve();
+          whereResult.returning = vi.fn(() => Promise.resolve([{ newNextSeq: 2 }]));
+          return { where: () => whereResult };
+        },
+      }));
 
       daemonWs.receive({
         type: "session_status",
@@ -1167,9 +1395,11 @@ describe("Relay", () => {
       } as any);
       await new Promise((r) => setImmediate(r));
 
-      // Ack only — applySessionStatus never ran (no session lookup).
+      // Still acked (redelivery must not stall the runner).
       expect(daemonWs.sentOfType("event_ack")).toHaveLength(1);
-      expect(db.query.chatConversations.findFirst).not.toHaveBeenCalled();
+      // Idempotent: the single writer saw the state already applied, so no
+      // status column was re-written (and no duplicate push/activity).
+      expect(setPayloads.some((p) => p.status === "completed")).toBe(false);
     });
 
     it("relays a browser approve to the daemon as an approval event and acks it", async () => {

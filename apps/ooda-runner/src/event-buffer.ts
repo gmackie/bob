@@ -90,6 +90,11 @@ export class EventBuffer {
   private readonly meta = new Map<string, SessionMeta>();
   private readonly journalFds = new Map<string, number>();
   private readonly journalBytes = new Map<string, number>();
+  // Acks received above the current contiguous watermark. In-memory only: on
+  // restart these are lost and the corresponding frames replay, which the
+  // gateway's (sessionId, sendSeq) unique index dedups — safe and simpler than
+  // persisting out-of-order ack state.
+  private readonly pendingAcks = new Map<string, Set<number>>();
 
   constructor(dir: string, opts: EventBufferOptions = {}) {
     this.dir = dir;
@@ -146,16 +151,31 @@ export class EventBuffer {
   }
 
   /**
-   * Gateway acked sendSeq. Acks arrive in send order, so everything ≤ seq is
-   * durable on the gateway; advance the watermark. Journal compaction is
-   * lazy — it happens on release or when eviction rewrites the file.
+   * Gateway acked sendSeq. The watermark advances only across a CONTIGUOUS run
+   * of acks: if the gateway fails to persist frame n (no ack) but later acks
+   * n+1, we must NOT skip n. n+1's ack is held pending until n is acked, so a
+   * failed frame stays in unacked() and is redelivered on reconnect. Journal
+   * compaction is lazy — on release or when eviction rewrites the file.
    */
   ack(sessionId: string, sendSeq: number): void {
     const m = this.getMeta(sessionId);
-    if (sendSeq > m.ackedSeq) {
-      m.ackedSeq = sendSeq;
-      this.writeMeta(sessionId, m);
+    if (sendSeq <= m.ackedSeq) return; // already covered by the watermark
+
+    let pending = this.pendingAcks.get(sessionId);
+    if (!pending) {
+      pending = new Set<number>();
+      this.pendingAcks.set(sessionId, pending);
     }
+    pending.add(sendSeq);
+
+    // Advance the watermark across every contiguous acked seq.
+    let advanced = false;
+    while (pending.has(m.ackedSeq + 1)) {
+      pending.delete(m.ackedSeq + 1);
+      m.ackedSeq += 1;
+      advanced = true;
+    }
+    if (advanced) this.writeMeta(sessionId, m);
   }
 
   /** True when every assigned seq has been acked. */
@@ -187,6 +207,7 @@ export class EventBuffer {
     rmSync(this.metaPath(sessionId), { force: true });
     this.meta.delete(sessionId);
     this.journalBytes.delete(sessionId);
+    this.pendingAcks.delete(sessionId);
   }
 
   // ── internals ──────────────────────────────────────────────────────

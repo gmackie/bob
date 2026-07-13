@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { eq, and, gt, lt, inArray, asc, desc, sql } from "@bob/db";
+import { eq, and, or, gt, lt, inArray, asc, desc, sql } from "@bob/db";
 import { db } from "@bob/db/client";
 import { chatConversations, repositories, sessionEvents, taskRuns, workItems, agentRuns, activities, workspaces, tenants, tenantMembers, planDrafts, pullRequests, runnerLeases, gatewayConfig, eventLog } from "@bob/db/schema";
 
@@ -28,6 +28,27 @@ import { enqueueTransition } from "./outbox.js";
 import { parsePrUrl } from "./pr-url.js";
 
 const REPLAY_LIMIT = 500;
+
+// Single source of truth for status-set membership so the state machine, lease
+// sweep, and stop path can't drift (they previously encoded these inline and
+// disagreed — e.g. stop didn't know about "blocked"/"host_unknown").
+// A terminal state can never be downgraded and is never swept.
+const TERMINAL_STATUSES = ["completed", "failed", "error", "interrupted", "stopped"] as const;
+// Statuses the lease sweep may move to host_unknown on contact loss.
+const SWEEP_ACTIVE_STATUSES = ["running", "starting", "blocked", "stopping"] as const;
+// Non-terminal statuses a user stop can act on. Includes the paused/lost states
+// so a blocked or host_unknown run can actually be stopped (otherwise it pins
+// forever while the UI reports the stop succeeded).
+const STOPPABLE_STATUSES = [
+  "pending",
+  "provisioning",
+  "starting",
+  "running",
+  "idle",
+  "blocked",
+  "host_unknown",
+  "stopping",
+] as const;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isUuid = (s: unknown): s is string => typeof s === "string" && UUID_RE.test(s);
@@ -136,15 +157,23 @@ export class Relay {
         .leftJoin(repositories, eq(repositories.id, chatConversations.repositoryId))
         .where(
           and(
-            inArray(chatConversations.status, [
-              "running",
-              "starting",
-              "blocked",
-              "stopping",
-            ]),
-            eq(repositories.workspaceId, lease.workspaceId),
+            inArray(chatConversations.status, [...SWEEP_ACTIVE_STATUSES]),
+            // Resolve the session's workspace by repo OR by planning workspace,
+            // so repo-less (ad-hoc/planning) sessions on a dead runner are not
+            // stranded "running" forever (the old inactivity sweep that used to
+            // catch them was deleted).
+            or(
+              eq(repositories.workspaceId, lease.workspaceId),
+              eq(chatConversations.planningWorkspaceId, lease.workspaceId),
+            ),
           ),
         );
+
+      // Delete the expired lease AFTER resolving its sessions: a permanently
+      // expired row must not be re-selected every 15s (that, plus the
+      // same-state no-op above, is what stopped the infinite sweep churn). A
+      // returning runner re-creates its lease via the hello upsert.
+      await db.delete(runnerLeases).where(eq(runnerLeases.id, lease.id));
 
       for (const session of sessions) {
         const result = await this.deriveAndWriteState(session.id, "host_unknown");
@@ -158,11 +187,17 @@ export class Relay {
           .where(eq(agentRuns.sessionId, session.id));
 
         // Distinct copy and severity: lost contact is NOT a death notice.
+        // reArmOnConflict: gateway-originated transitions all use sourceSendSeq
+        // -1, so the occurrence-unique key would suppress EVERY later
+        // host_unknown for this session's lifetime. Re-arm a prior, already
+        // resolved/seen alarm so a SECOND lost-contact (after recovery) still
+        // notifies — the exact trust defect the 10-run gate resets on.
         await enqueueTransition({
           sessionId: session.id,
           userId: session.userId,
           transition: "host_unknown",
           sourceSendSeq: -1,
+          reArmOnConflict: true,
           title: "Lost contact with host",
           body: `${lease.hostId}: contact lost — the run may still be going; not confirmed dead.`,
           data: {
@@ -207,7 +242,7 @@ export class Relay {
     extra?: Record<string, unknown>,
     onlyIfPrevIn?: string[],
   ): Promise<{ applied: boolean; previous: string | null; corrective: boolean }> {
-    const TERMINAL = ["completed", "failed", "error", "interrupted", "stopped"];
+    const TERMINAL: readonly string[] = TERMINAL_STATUSES;
     return await db.transaction(async (tx) => {
       const rows = await tx
         .select({ status: chatConversations.status })
@@ -217,10 +252,25 @@ export class Relay {
       const previous = rows[0]?.status ?? null;
       if (previous === null) return { applied: false, previous, corrective: false };
 
+      // Same-state write is a no-op. Without this the lease sweep re-applies
+      // host_unknown -> host_unknown every 15s forever (unbounded churn on the
+      // exhaustion-prone Postgres box), and a redelivered status frame would
+      // re-run non-idempotent side effects (e.g. duplicate activity rows).
+      if (previous === incoming) {
+        return { applied: false, previous, corrective: false };
+      }
+
       if (onlyIfPrevIn && !onlyIfPrevIn.includes(previous)) {
         return { applied: false, previous, corrective: false };
       }
-      if (incoming === "host_unknown" && TERMINAL.includes(previous)) {
+      // A terminal state is FINAL — nothing overwrites it. This blocks a
+      // replayed session_claimed ("starting"), an adopted "running", or a
+      // second differing terminal from resurrecting or flipping a finished run
+      // (previously only host_unknown was guarded, so any non-terminal could
+      // stomp a terminal — silent corruption). The intended terminal-retracts-
+      // host_unknown case still works: host_unknown is non-terminal, so a
+      // terminal arriving on top of it passes this guard and is corrective.
+      if (TERMINAL.includes(previous)) {
         return { applied: false, previous, corrective: false };
       }
       const corrective = previous === "host_unknown" && TERMINAL.includes(incoming);
@@ -949,7 +999,10 @@ export class Relay {
     const row = rows[0];
     if (!row || row.sessionUserId !== userId) return "not_found";
 
-    const activeStatuses = ["pending", "provisioning", "starting", "running", "idle"];
+    // Includes blocked/host_unknown so a paused or lost run can actually be
+    // stopped — otherwise the onlyIfPrevIn guard rejects the transition and the
+    // session pins forever while the UI reports the stop succeeded.
+    const activeStatuses = [...STOPPABLE_STATUSES];
     const daemon = row.workspaceId
       ? this.daemonByWorkspace.get(row.workspaceId) ?? null
       : this.findDaemonForUser(userId);
@@ -984,6 +1037,18 @@ export class Relay {
       columns: { id: true },
     });
     if (!owned) return;
+
+    // Idempotent claim: session_claimed is journaled with a send-seq and
+    // replayed on reconnect, but (unlike event/status envelopes) the gateway
+    // does not ack/dedup it. If this session already has an agent_runs row it
+    // was already claimed, so a replay must NOT reset status to "starting" or
+    // insert a duplicate dashboard row.
+    const existingRun = await db.query.agentRuns.findFirst({
+      where: eq(agentRuns.sessionId, claim.sessionId),
+      columns: { id: true },
+    });
+    if (existingRun) return;
+
     await this.deriveAndWriteState(claim.sessionId, "starting");
 
     // Update associated task_run to "running" and work_item to "in_progress"
@@ -1286,9 +1351,16 @@ export class Relay {
   private async handleSessionStatus(conn: Connection, msg: ClientSessionStatus): Promise<void> {
     if (typeof msg.sendSeq === "number") {
       // Envelope path: the status transition itself becomes a durable
-      // status_change event row — completion can no longer be lost while
-      // output survives a partition. Side effects run only on first insert;
-      // a redelivered frame is acked and dropped.
+      // status_change event row so completion can never be lost.
+      //
+      // Ordering is load-bearing: persist -> APPLY -> ack. The ack certifies
+      // both durability AND that the side effects (status column, work-item
+      // sync, terminal/blocked push) ran. If the gateway crashes or a DB error
+      // throws between persist and apply, no ack is sent, so the runner
+      // redelivers; the redelivered (duplicate) frame RE-RUNS applySessionStatus
+      // (idempotent — deriveAndWriteState precedence + the outbox occurrence
+      // key make re-application a no-op) instead of the old early-return that
+      // permanently dropped the transition. Acking before applying was the bug.
       const result = await this.persistEnvelopeEvent(
         conn,
         msg.sessionId,
@@ -1304,12 +1376,16 @@ export class Relay {
         );
         return;
       }
+      // Applies on both first delivery and redelivery. A throw here propagates
+      // to the message-queue catch, which sends INTERNAL_ERROR and NO ack, so
+      // the runner keeps the frame and redelivers.
+      await this.applySessionStatus(conn, msg);
       this.send(conn, {
         type: "event_ack",
         sessionId: msg.sessionId,
         sendSeq: msg.sendSeq,
       });
-      if (result.kind === "duplicate") return;
+      return;
     }
     await this.applySessionStatus(conn, msg);
   }

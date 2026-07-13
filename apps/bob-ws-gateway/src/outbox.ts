@@ -37,34 +37,69 @@ export interface TransitionNotification {
   data?: Record<string, unknown>;
   channelId?: string;
   priority?: "high" | "default";
+  /**
+   * Re-arm a prior, already-resolved occurrence on conflict instead of
+   * dropping the insert. Gateway-originated transitions all key on
+   * sourceSendSeq -1, so without this a second host_unknown for the same
+   * session (lost -> recovered -> lost again) would be silently suppressed —
+   * a missed trust-break notification. Only re-arms a row that already
+   * delivered/failed or has been seen; a still-pending alarm is left alone.
+   */
+  reArmOnConflict?: boolean;
 }
 
 /**
  * Record the send intent. Exactly-once per occurrence — a duplicate
- * (sessionId, transition, sourceSendSeq) is silently dropped by the unique
- * index, which is precisely what a redelivered envelope frame should do.
+ * (sessionId, transition, sourceSendSeq) is dropped by the unique index, which
+ * is precisely what a redelivered envelope frame should do. Set reArmOnConflict
+ * for gateway-originated transitions whose -1 key would otherwise suppress
+ * every later occurrence for the session's lifetime.
  */
 export async function enqueueTransition(n: TransitionNotification): Promise<void> {
-  await db
-    .insert(notificationOutbox)
-    .values({
-      sessionId: n.sessionId,
-      userId: n.userId,
-      transition: n.transition,
-      sourceSendSeq: n.sourceSendSeq,
-      payload: {
-        title: n.title,
-        body: n.body,
-        data: n.data ?? {},
-        channelId: n.channelId ?? "tasks",
-        priority: n.priority ?? "high",
-      },
-    })
-    .onConflictDoNothing()
-    .catch((err) => {
-      // The intent row is load-bearing (badge + delivery); log loudly.
-      console.error(`[outbox] enqueue failed for ${n.sessionId}/${n.transition}:`, err);
-    });
+  const payload = {
+    title: n.title,
+    body: n.body,
+    data: n.data ?? {},
+    channelId: n.channelId ?? "tasks",
+    priority: n.priority ?? "high",
+  };
+  const insert = db.insert(notificationOutbox).values({
+    sessionId: n.sessionId,
+    userId: n.userId,
+    transition: n.transition,
+    sourceSendSeq: n.sourceSendSeq,
+    payload,
+  });
+  const stmt = n.reArmOnConflict
+    ? insert.onConflictDoUpdate({
+        target: [
+          notificationOutbox.sessionId,
+          notificationOutbox.transition,
+          notificationOutbox.sourceSendSeq,
+        ],
+        set: {
+          status: "pending",
+          attempts: 0,
+          claimedAt: null,
+          sentAt: null,
+          lastError: null,
+          seenAt: null,
+          expoTickets: null,
+          receiptsResolvedAt: null,
+          messageId: sql`gen_random_uuid()`,
+          payload,
+          createdAt: sql`now()`,
+        },
+        // Only re-arm a genuinely finished-and-seen prior alarm (a new
+        // occurrence); a still-pending/unseen alarm is left untouched so one
+        // outage never stacks duplicate pushes.
+        setWhere: sql`(${notificationOutbox.status} in ('sent','failed') or ${notificationOutbox.seenAt} is not null)`,
+      })
+    : insert.onConflictDoNothing();
+  await stmt.catch((err) => {
+    // The intent row is load-bearing (badge + delivery); log loudly.
+    console.error(`[outbox] enqueue failed for ${n.sessionId}/${n.transition}:`, err);
+  });
 }
 
 export class OutboxWorker {
