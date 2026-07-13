@@ -47,10 +47,35 @@ truly kill a run, do it from the UI (cancel) or `kill` the wrapper's child.
 
 ## Tunables (live, no redeploy)
 
-`gateway_config` (single row): `heartbeatIntervalMs` (15s),
-`leaseGraceMs` (60s — the false-alarm vs silent-death dial; tune it during
-the 10-run experiment), `eventRetentionDays` (30 — output chunks of terminal
-runs are pruned; lifecycle events are kept forever).
+`gateway_config` (single row):
+- `leaseGraceMs` (60s) — read live by the lease sweep; the false-alarm vs
+  silent-death dial. Tune it during the 10-run experiment.
+- `eventRetentionDays` (30) — read live by the outbox retention cron (~hourly);
+  output chunks of terminal runs older than this are pruned, lifecycle events
+  are kept forever.
+- `heartbeatIntervalMs` (15s) — RESERVED, not yet wired. The gateway currently
+  uses a hardcoded 30s WS heartbeat; changing this row has no effect today.
+
+## Deploy order (hard requirement)
+
+Migrate, then deploy the gateway, then the runner:
+1. `pnpm -F @bob/db migrate` (or `deploy.sh` runs it first) — applies `0022`
+   which adds the enum values, `runner_leases`, `notification_outbox`,
+   `gateway_config`, `dispatch_spec`, and `session_events.send_seq`. The gateway
+   throws invalid-enum / missing-relation on first query without it.
+2. Deploy the **gateway** before the **runner**. The envelope protocol has the
+   runner journal + replay frames the gateway acks; a new runner talking to an
+   old gateway that doesn't ack would never truncate its journal and would
+   replay its whole history on every reconnect (the old gateway re-persists each
+   as a new row). Gateway-first avoids that window. A gateway ROLLBACK likewise
+   requires clearing runner event buffers.
+
+## Fast-follow (not in this slice)
+
+- **Retry from the immutable dispatch spec.** `agent_runs.dispatch_spec` /
+  `chat_conversations.dispatch_spec` columns exist but are not yet written at
+  dispatch time and there is no retry affordance — deferred with the web/mobile
+  run-screen work.
 
 ## Auth
 

@@ -655,7 +655,10 @@ export class BobGatewayConnector {
   }): void {
     if (msg.eventType === "approval") {
       const requestId = typeof msg.payload?.requestId === "string" ? msg.payload.requestId : "";
-      const decision = msg.payload?.decision === "deny" ? "deny" : "allow";
+      // Default DENY on a permission boundary: only an explicit "allow"
+      // approves. A malformed/missing/garbage decision must never be treated as
+      // approval (the old `=== "deny" ? deny : allow` failed open).
+      const decision = msg.payload?.decision === "allow" ? "allow" : "deny";
       const message = typeof msg.payload?.message === "string" ? msg.payload.message : undefined;
       const handle = this.sessionHandles.get(msg.sessionId);
       const resolved =

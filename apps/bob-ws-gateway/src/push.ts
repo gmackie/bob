@@ -130,7 +130,21 @@ export async function pushToUser(
     const token = tokens[i];
     if (token && ticket.status === "ok" && ticket.id) ticketMap[token] = ticket.id;
   });
-  return { delivered: true, tickets: ticketMap };
+  // Surface non-DeviceNotRegistered ticket errors (rate limits, bad payloads)
+  // so they aren't silently swallowed.
+  const otherErrors = tickets.filter(
+    (t) => t.status === "error" && t.details?.error !== "DeviceNotRegistered",
+  );
+  if (otherErrors.length > 0) {
+    console.error(
+      `[push] ${otherErrors.length} Expo ticket error(s):`,
+      otherErrors.map((t) => t.details?.error ?? t.message).join(", "),
+    );
+  }
+  // delivered = at least one message got an OK ticket. If EVERY ticket errored
+  // (and none were DeviceNotRegistered prunes), the send effectively failed —
+  // return false so the outbox retries instead of marking the row sent.
+  return { delivered: Object.keys(ticketMap).length > 0, tickets: ticketMap };
 }
 
 /** Remove device tokens by value (used by the receipts cron). */

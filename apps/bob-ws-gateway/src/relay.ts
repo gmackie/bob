@@ -936,6 +936,23 @@ export class Relay {
    * per requestId, so a double-tapped approve is harmless.
    */
   private async handleApprove(conn: Connection, msg: ClientApprove): Promise<void> {
+    // Validate the decision at the trust boundary (parseClientMessage does not).
+    // Anything other than an explicit allow/deny is rejected rather than
+    // forwarded — the runner defaults unknown decisions to deny, but a garbage
+    // requestId/message should not reach the agent control channel unchecked.
+    if (msg.decision !== "allow" && msg.decision !== "deny") {
+      this.send(conn, createError("INVALID_MESSAGE", "decision must be allow or deny", msg.sessionId));
+      return;
+    }
+    if (typeof msg.requestId !== "string" || msg.requestId.length === 0 || msg.requestId.length > 200) {
+      this.send(conn, createError("INVALID_MESSAGE", "invalid requestId", msg.sessionId));
+      return;
+    }
+    if (msg.message !== undefined && (typeof msg.message !== "string" || msg.message.length > 2000)) {
+      this.send(conn, createError("INVALID_MESSAGE", "invalid message", msg.sessionId));
+      return;
+    }
+
     const rows = await db
       .select({
         sessionUserId: chatConversations.userId,
@@ -1742,8 +1759,12 @@ export class Relay {
       };
     } else if (status === "error" || status === "failed") {
       notification = {
+        // Generic body: errorMessage is agent/tool-derived free text that can
+        // contain secrets, tokens, paths, or stack traces, and a push body is
+        // shown on the lock screen and passes through APNs/FCM. The detail is
+        // kept in-app (chatConversations.lastError); the push just says to open.
         title: `${label} failed`,
-        body: errorMessage ? errorMessage.slice(0, 140) : "The agent run failed.",
+        body: "The agent run failed — open to see details.",
         data: { type: "session.error", ...routing },
         channelId: "tasks",
         priority: "high",

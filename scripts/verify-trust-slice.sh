@@ -46,6 +46,49 @@ info() { printf '\033[36m----\033[0m %s\n' "$1"; }
 prompt() { printf '\033[33m????\033[0m %s ' "$1"; read -r REPLY; }
 FAILURES=0
 
+# --- fault-injection cleanup: never leave a partition installed -------------
+# Every iptables DROP rule we install is tracked here as "host|||rulespec"
+# (the args after `iptables -A`). The EXIT/INT/TERM trap deletes exactly those
+# rules on the exact hosts they were installed on, so an abnormal exit (Ctrl-C,
+# dropped SSH, crash mid-sleep) can never leave production partitioned.
+declare -a PARTITION_RULES=()
+
+partition_up() { # host, rulespec...  (installs `iptables -A <rulespec>`, tracks on success)
+  local host="$1"; shift
+  local rule="$*"
+  if ssh "$host" "iptables -A ${rule}"; then
+    PARTITION_RULES+=("${host}|||${rule}")
+    return 0
+  fi
+  return 1
+}
+
+partition_down() { # host, rulespec...  (removes the rule and stops tracking it)
+  local host="$1"; shift
+  local rule="$*"
+  ssh "$host" "iptables -D ${rule}" 2>/dev/null || true
+  local key="${host}|||${rule}" i
+  for i in "${!PARTITION_RULES[@]}"; do
+    [ "${PARTITION_RULES[$i]}" = "$key" ] && unset 'PARTITION_RULES[$i]'
+  done
+}
+
+cleanup_partitions() { # trap handler — remove every still-installed rule
+  [ "${#PARTITION_RULES[@]}" -eq 0 ] && return 0
+  local entry host rule
+  for entry in "${PARTITION_RULES[@]}"; do
+    host="${entry%%|||*}"
+    rule="${entry#*|||}"
+    info "cleanup: removing leftover iptables DROP on ${host} (${rule})"
+    ssh "$host" "iptables -D ${rule}" 2>/dev/null || true
+  done
+  PARTITION_RULES=()
+}
+trap cleanup_partitions EXIT INT TERM
+
+# Guard against SQL/command interpolation: session ids must be plain UUIDs.
+valid_uuid() { [[ "$1" =~ ^[0-9a-f-]{36}$ ]]; }
+
 psql_gateway() {
   # All DB assertions run on the gateway box (Postgres lives there).
   ssh "$GATEWAY_HOST" "psql '${PG_DSN}' -tAc \"$1\""
@@ -97,9 +140,14 @@ check_runner_kill() {
   info "CUT 1: runner-kill — SIGKILL ooda-runner mid-run on ${RUNNER_HOST}"
   prompt "Dispatch a real run now (web or phone), then press enter when it is 'running'."
   local sid; sid=$(latest_active_session)
-  [ -n "$sid" ] || { fail "no active session found"; return; }
-  info "session ${sid}; killing runner (the supervised agent must survive)"
-  ssh "$RUNNER_HOST" "pkill -9 -f ooda-runner || true"
+  valid_uuid "$sid" || { fail "no valid active session id (got '${sid:-none}')"; return; }
+  info "session ${sid}; killing runner main only (supervisor-wrapper + supervised agent must survive)"
+  # Target ONLY the runner main process. A broad 'ooda-runner' pattern also
+  # matches .../apps/ooda-runner/src/supervisor-wrapper.cjs (the wrapper whose
+  # job is to re-adopt the run) — killing it would make the re-adoption
+  # assertion fail for the wrong reason. 'ooda-runner/src/index' is unique to
+  # the main process; the wrapper's argv contains 'supervisor-wrapper.cjs'.
+  ssh "$RUNNER_HOST" "pkill -9 -f 'ooda-runner/src/index' || true"
 
   info "waiting past the lease grace (${LEASE_GRACE_S}s) for host_unknown"
   if wait_for_status "$sid" "host_unknown" $((LEASE_GRACE_S + 45)); then
@@ -127,10 +175,11 @@ check_partition_gateway() {
   info "CUT 2: partition runner→gateway (${RUNNER_HOST} egress to :${GATEWAY_PORT})"
   prompt "Dispatch a run, press enter when running."
   local sid; sid=$(latest_active_session)
-  ssh "$RUNNER_HOST" "iptables -A OUTPUT -p tcp --dport ${GATEWAY_PORT} -j DROP"
+  valid_uuid "$sid" || { fail "no valid active session id (got '${sid:-none}')"; return; }
+  partition_up "$RUNNER_HOST" "OUTPUT -p tcp --dport ${GATEWAY_PORT} -j DROP"
   info "partition up for 90s — the runner journals events to its disk buffer"
   sleep 90
-  ssh "$RUNNER_HOST" "iptables -D OUTPUT -p tcp --dport ${GATEWAY_PORT} -j DROP"
+  partition_down "$RUNNER_HOST" "OUTPUT -p tcp --dport ${GATEWAY_PORT} -j DROP"
   sleep 20
   local dups
   dups=$(psql_gateway "select count(*) from (select session_id, send_seq, count(*) c from session_events where session_id='${sid}' and send_seq is not null group by 1,2 having count(*)>1) d")
@@ -142,11 +191,11 @@ check_partition_gateway() {
 
 check_partition_db() {
   info "CUT 3: partition gateway→Postgres on ${GATEWAY_HOST} (the 2026-07-06 class)"
-  ssh "$GATEWAY_HOST" "iptables -A OUTPUT -p tcp --dport 5432 -o lo -j DROP" || {
+  partition_up "$GATEWAY_HOST" "OUTPUT -p tcp --dport 5432 -o lo -j DROP" || {
     info "loopback DROP refused; if Postgres is remote adjust the rule"; }
   info "partition up for 60s — gateway must NOT crash-loop, runner buffers"
   sleep 60
-  ssh "$GATEWAY_HOST" "iptables -D OUTPUT -p tcp --dport 5432 -o lo -j DROP" || true
+  partition_down "$GATEWAY_HOST" "OUTPUT -p tcp --dport 5432 -o lo -j DROP"
   sleep 10
   if gateway_health >/dev/null; then
     pass "gateway alive after DB partition (no crash loop)"
@@ -169,6 +218,7 @@ check_auth_failure() {
   info "CUT 5: credential-failure termination (v1 'needs you' signal)"
   prompt "On ${RUNNER_HOST}, temporarily break the agent credential (e.g. move ~/.claude credentials for the bob user), dispatch a run, press enter when dispatched."
   local sid; sid=$(latest_active_session)
+  valid_uuid "$sid" || { fail "no valid active session id (got '${sid:-none}')"; return; }
   if wait_for_status "$sid" "error" 120 || wait_for_status "$sid" "failed" 10; then
     pass "run terminated on auth failure"
   else
@@ -182,6 +232,7 @@ check_approval() {
   info "CUT 6: approval trigger — blocked → approve from phone → resumes"
   prompt "Dispatch a run whose prompt requires a non-allowlisted tool (e.g. 'delete scratch file X with rm'). Press enter when dispatched."
   local sid; sid=$(latest_active_session)
+  valid_uuid "$sid" || { fail "no valid active session id (got '${sid:-none}')"; return; }
   if wait_for_status "$sid" "blocked" 180; then
     pass "run paused as blocked on the permission request"
   else
@@ -200,7 +251,7 @@ check_approval() {
 check_lock_contention() {
   info "CUT 7: single-writer row lock on REAL Postgres"
   local sid; sid=$(psql_gateway "select id from chat_conversations order by created_at desc limit 1")
-  [ -n "$sid" ] || { fail "no session row to lock"; return; }
+  valid_uuid "$sid" || { fail "no valid session row to lock (got '${sid:-none}')"; return; }
   # tx1 takes the row lock and holds it; tx2 must block until timeout.
   local out
   out=$(ssh "$GATEWAY_HOST" "psql '${PG_DSN}' -c \"begin; select status from chat_conversations where id='${sid}' for update; select pg_sleep(3); commit;\" & sleep 0.5; psql '${PG_DSN}' -c \"set statement_timeout='1000'; begin; select status from chat_conversations where id='${sid}' for update; commit;\" 2>&1; wait")

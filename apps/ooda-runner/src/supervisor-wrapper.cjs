@@ -36,10 +36,17 @@
 "use strict";
 
 const { spawn } = require("node:child_process");
-const { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } = require("node:fs");
+const { chmodSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync, writeSync } = require("node:fs");
 const net = require("node:net");
 const { join } = require("node:path");
 const crypto = require("node:crypto");
+
+// Cap the output journal so a runaway/chatty agent cannot fill the disk shared
+// with Postgres (hetzner-bob has ENOSPC history). Past the cap, output "data"
+// lines are no longer journaled (the LIVE stream is unaffected), but lifecycle
+// lines like the exit record are always written — adoption and the terminal
+// outcome keep working.
+const MAX_JOURNAL_BYTES = Number(process.env.BOB_SUPERVISOR_JOURNAL_MAX_BYTES || 64 * 1024 * 1024);
 
 // Bumped when the ctl.sock protocol changes. v2 stopped broadcasting the token
 // in hello and requires an {op:"auth",token} challenge before any privileged
@@ -110,14 +117,43 @@ try {
 // finish before live data may reach it, or ordering breaks.
 const clients = new Set();
 let journalCount = 0;
+let journalBytes = 0;
+let journalCapped = false;
+// Open the journal fd once and write through it, instead of an open/write/close
+// syscall trio per output chunk.
+const journalFd = openSync(journalPath, "a");
 
-function journal(entry) {
+function writeJournalLine(line) {
   try {
-    appendFileSync(journalPath, JSON.stringify(entry) + "\n");
+    writeSync(journalFd, line);
+    journalBytes += Buffer.byteLength(line);
     journalCount += 1;
   } catch {
     /* disk trouble: live streaming still works */
   }
+}
+
+function journal(entry) {
+  const isData = entry.ev === "data";
+  // Lifecycle lines (exit, spawn error) are always journaled. Data lines stop
+  // once the cap is hit.
+  if (isData && journalCapped) return;
+  const line = JSON.stringify(entry) + "\n";
+  if (isData && journalBytes + line.length > MAX_JOURNAL_BYTES) {
+    journalCapped = true;
+    writeJournalLine(
+      JSON.stringify({
+        t: Date.now(),
+        ev: "data",
+        stream: "stderr",
+        b64: Buffer.from(
+          "[supervisor] output journal cap reached — further output is streamed live but not journaled\n",
+        ).toString("base64"),
+      }) + "\n",
+    );
+    return;
+  }
+  writeJournalLine(line);
 }
 
 function readJournalLines() {

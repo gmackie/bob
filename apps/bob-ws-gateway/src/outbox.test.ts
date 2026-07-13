@@ -20,6 +20,18 @@ vi.mock("@bob/db/client", () => {
     query: {
       notificationOutbox: { findMany: vi.fn(() => Promise.resolve(findManyRows)) },
     },
+    // Bounded-claim subquery: db.select().from().where().orderBy().limit().for()
+    // is passed to inArray on the update; the update mock ignores its where arg.
+    select: vi.fn(() => {
+      const chain: any = {
+        from: () => chain,
+        where: () => chain,
+        orderBy: () => chain,
+        limit: () => chain,
+        for: () => chain,
+      };
+      return chain;
+    }),
     update: vi.fn(() => ({
       set: (payload: any) => ({
         where: () => {

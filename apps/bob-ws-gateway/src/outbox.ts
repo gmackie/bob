@@ -14,9 +14,9 @@
 // send time; DeviceNotRegistered receipts prune dead tokens so they stop
 // eating tickets.
 
-import { and, eq, isNull, isNotNull, lt, sql } from "@bob/db";
+import { and, asc, eq, inArray, isNull, isNotNull, lt, sql } from "@bob/db";
 import { db } from "@bob/db/client";
-import { notificationOutbox } from "@bob/db/schema";
+import { notificationOutbox, sessionEvents, chatConversations } from "@bob/db/schema";
 
 import { pushToUser, pruneTokens } from "./push.js";
 
@@ -24,6 +24,23 @@ const EXPO_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts";
 const MAX_ATTEMPTS = 5;
 const RECLAIM_AFTER_MS = 60_000;
 const RECEIPTS_AFTER_MS = 15 * 60_000;
+// Bound the per-tick claim so a backlog (DB-outage recovery, mass lease expiry)
+// can't load an unbounded set into memory or run past the reclaim window and
+// have its own rows re-claimed mid-flight by a second instance. The backlog
+// drains across ticks.
+const CLAIM_BATCH = 50;
+// A sent row whose Expo receipts never resolve (permanent 4xx) must not occupy
+// the receipts window forever — release it after this age.
+const RECEIPTS_GIVE_UP_MS = 24 * 60 * 60_000;
+// Event retention (prune output chunks of terminal runs). Bounded per tick.
+const RETENTION_BATCH = 5_000;
+const RETENTION_TERMINAL_STATUSES = [
+  "completed",
+  "failed",
+  "error",
+  "interrupted",
+  "stopped",
+] as const;
 
 export interface TransitionNotification {
   sessionId: string;
@@ -105,9 +122,10 @@ export async function enqueueTransition(n: TransitionNotification): Promise<void
 export class OutboxWorker {
   private timer: NodeJS.Timeout | null = null;
   private receiptsTimer: NodeJS.Timeout | null = null;
+  private retentionTimer: NodeJS.Timeout | null = null;
   private ticking = false;
 
-  start(intervalMs = 2_000, receiptsIntervalMs = 60_000): void {
+  start(intervalMs = 2_000, receiptsIntervalMs = 60_000, retentionIntervalMs = 60 * 60_000): void {
     this.timer = setInterval(() => {
       void this.tick().catch((err) => console.error("[outbox] tick failed:", err));
     }, intervalMs);
@@ -116,13 +134,48 @@ export class OutboxWorker {
         console.error("[outbox] receipts tick failed:", err),
       );
     }, receiptsIntervalMs);
+    this.retentionTimer = setInterval(() => {
+      void this.retentionTick().catch((err) =>
+        console.error("[outbox] retention tick failed:", err),
+      );
+    }, retentionIntervalMs);
   }
 
   stop(): void {
     if (this.timer) clearInterval(this.timer);
     if (this.receiptsTimer) clearInterval(this.receiptsTimer);
+    if (this.retentionTimer) clearInterval(this.retentionTimer);
     this.timer = null;
     this.receiptsTimer = null;
+    this.retentionTimer = null;
+  }
+
+  /**
+   * Prune output-chunk events of TERMINAL runs older than the configured
+   * retention window (gateway_config.eventRetentionDays, default 30). Lifecycle
+   * events (permission_request/_resolved, status_change, state, error,
+   * gap_marker) are kept forever — they are the trust audit trail. Bounded per
+   * tick so a large backlog drains gradually rather than locking the table.
+   */
+  async retentionTick(): Promise<void> {
+    const cfg = await db.query.gatewayConfig.findFirst().catch(() => null);
+    const days = cfg?.eventRetentionDays ?? 30;
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60_000).toISOString();
+    const victims = await db
+      .select({ id: sessionEvents.id })
+      .from(sessionEvents)
+      .innerJoin(chatConversations, eq(chatConversations.id, sessionEvents.sessionId))
+      .where(
+        and(
+          inArray(chatConversations.status, [...RETENTION_TERMINAL_STATUSES]),
+          eq(sessionEvents.eventType, "output_chunk"),
+          lt(sessionEvents.createdAt, cutoff),
+        ),
+      )
+      .limit(RETENTION_BATCH);
+    if (victims.length === 0) return;
+    await db.delete(sessionEvents).where(inArray(sessionEvents.id, victims.map((v) => v.id)));
+    console.log(`[outbox] retention: pruned ${victims.length} output-chunk event(s) older than ${days}d`);
   }
 
   /** Claim and deliver pending rows; reclaim stuck "claimed" rows. */
@@ -143,6 +196,15 @@ export class OutboxWorker {
           ),
         );
 
+      // Claim a BOUNDED batch. FOR UPDATE SKIP LOCKED lets a second gateway
+      // instance claim a disjoint set without blocking or double-claiming.
+      const claimTargets = db
+        .select({ id: notificationOutbox.id })
+        .from(notificationOutbox)
+        .where(eq(notificationOutbox.status, "pending"))
+        .orderBy(asc(notificationOutbox.createdAt))
+        .limit(CLAIM_BATCH)
+        .for("update", { skipLocked: true });
       const claimed = await db
         .update(notificationOutbox)
         .set({
@@ -150,7 +212,7 @@ export class OutboxWorker {
           claimedAt: sql`now()`,
           attempts: sql`${notificationOutbox.attempts} + 1`,
         })
-        .where(eq(notificationOutbox.status, "pending"))
+        .where(inArray(notificationOutbox.id, claimTargets))
         .returning();
 
       for (const row of claimed) {
@@ -208,6 +270,20 @@ export class OutboxWorker {
    * misses downstream APNs/FCM failures — this closes that loop.
    */
   async receiptsTick(): Promise<void> {
+    // Release rows whose receipts can never resolve (permanent Expo 4xx) so a
+    // stuck batch does not occupy the window forever, starving newer receipts.
+    const giveUpCutoff = new Date(Date.now() - RECEIPTS_GIVE_UP_MS).toISOString();
+    await db
+      .update(notificationOutbox)
+      .set({ receiptsResolvedAt: sql`now()`, lastError: "receipts unresolved past give-up window" })
+      .where(
+        and(
+          eq(notificationOutbox.status, "sent"),
+          isNull(notificationOutbox.receiptsResolvedAt),
+          lt(notificationOutbox.sentAt, giveUpCutoff),
+        ),
+      );
+
     const cutoff = new Date(Date.now() - RECEIPTS_AFTER_MS).toISOString();
     const rows = await db.query.notificationOutbox.findMany({
       where: and(
@@ -216,6 +292,9 @@ export class OutboxWorker {
         isNotNull(notificationOutbox.expoTickets),
         lt(notificationOutbox.sentAt, cutoff),
       ),
+      // Oldest first so a churning tail of new sends can't perpetually jump
+      // ahead of rows waiting to resolve.
+      orderBy: asc(notificationOutbox.sentAt),
       limit: 100,
     });
     if (rows.length === 0) return;
