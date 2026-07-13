@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ServerWorkspaceInvalidationType } from "./protocol.js";
+import type { InternalPrincipal } from "./auth.js";
 
 interface NudgeBody {
   sessionId: string;
@@ -23,8 +24,19 @@ interface NudgeBody {
 }
 
 export interface NudgeConfig {
-  /** Async bearer authorization (API key primary, legacy secret ramp). */
-  authorize: (bearer: string) => Promise<boolean>;
+  /**
+   * Async bearer authorization returning the principal (API key owner or the
+   * legacy shared secret), or null if unauthorized.
+   */
+  authorize: (bearer: string) => Promise<InternalPrincipal | null>;
+  /**
+   * Resolve the owning userId of a workspace. Used to scope an api-key
+   * principal to workspaces it owns — without this any user's key could spawn
+   * agents in any workspace via /internal/nudge.
+   */
+  resolveWorkspaceOwner: (workspaceId: string) => Promise<string | null>;
+  /** Best-effort audit of the acting principal. */
+  onAudit?: (principal: InternalPrincipal, action: string, payload: Record<string, unknown>) => void;
   onNudge: (body: NudgeBody) => void;
 }
 
@@ -36,8 +48,24 @@ export interface WorkspaceEventBody {
 }
 
 export interface WorkspaceEventConfig {
-  authorize: (bearer: string) => Promise<boolean>;
+  authorize: (bearer: string) => Promise<InternalPrincipal | null>;
+  resolveWorkspaceOwner: (workspaceId: string) => Promise<string | null>;
+  onAudit?: (principal: InternalPrincipal, action: string, payload: Record<string, unknown>) => void;
   onEvent: (body: WorkspaceEventBody) => void;
+}
+
+/**
+ * An api-key principal may only act on workspaces it owns. Legacy (shared ops
+ * secret) is unscoped. Returns true if allowed.
+ */
+async function principalOwnsWorkspace(
+  principal: InternalPrincipal,
+  workspaceId: string,
+  resolveWorkspaceOwner: (workspaceId: string) => Promise<string | null>,
+): Promise<boolean> {
+  if (principal.kind === "legacy") return true;
+  const owner = await resolveWorkspaceOwner(workspaceId);
+  return owner !== null && owner === principal.userId;
 }
 
 /** Extract the bearer token from an Authorization header, or null. */
@@ -65,7 +93,8 @@ export function createNudgeHandler(cfg: NudgeConfig) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     // Auth
     const bearer = bearerFrom(req.headers.authorization);
-    if (!bearer || !(await cfg.authorize(bearer))) {
+    const principal = bearer ? await cfg.authorize(bearer) : null;
+    if (!principal) {
       res.writeHead(401, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Unauthorized" }));
       return;
@@ -87,6 +116,17 @@ export function createNudgeHandler(cfg: NudgeConfig) {
       return;
     }
 
+    // Scope: a per-user API key may only spawn agents in its own workspaces.
+    // Without this, /internal/nudge lets any key run arbitrary agent
+    // instructions in any workspace (Codex adversarial P1).
+    if (!(await principalOwnsWorkspace(principal, nudge.workspaceId, cfg.resolveWorkspaceOwner))) {
+      cfg.onAudit?.(principal, "internal.denied", { endpoint: "nudge", workspaceId: nudge.workspaceId, sessionId: nudge.sessionId });
+      res.writeHead(403, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Forbidden: key does not own this workspace" }));
+      return;
+    }
+
+    cfg.onAudit?.(principal, "internal.nudge", { workspaceId: nudge.workspaceId, sessionId: nudge.sessionId, agentType: nudge.agentType });
     cfg.onNudge(nudge as NudgeBody);
 
     res.writeHead(200, { "Content-Type": "application/json" });
@@ -97,7 +137,8 @@ export function createNudgeHandler(cfg: NudgeConfig) {
 export function createWorkspaceEventHandler(cfg: WorkspaceEventConfig) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const bearer = bearerFrom(req.headers.authorization);
-    if (!bearer || !(await cfg.authorize(bearer))) {
+    const principal = bearer ? await cfg.authorize(bearer) : null;
+    if (!principal) {
       res.writeHead(401, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Unauthorized" }));
       return;
@@ -119,6 +160,14 @@ export function createWorkspaceEventHandler(cfg: WorkspaceEventConfig) {
     ) {
       res.writeHead(400, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Missing required fields" }));
+      return;
+    }
+
+    // Scope workspace fan-out to the api-key principal that owns it.
+    if (!(await principalOwnsWorkspace(principal, event.workspaceId, cfg.resolveWorkspaceOwner))) {
+      cfg.onAudit?.(principal, "internal.denied", { endpoint: "workspace-event", workspaceId: event.workspaceId, type: event.type });
+      res.writeHead(403, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Forbidden: key does not own this workspace" }));
       return;
     }
 

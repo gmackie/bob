@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { WebSocketServer } from "ws";
 import { db } from "@bob/db/client";
-import { sessionEvents } from "@bob/db/schema";
+import { sessionEvents, eventLog } from "@bob/db/schema";
 
 import { PersistenceWriter, type SessionEventRecord } from "./persistence.js";
 import { OutboxWorker } from "./outbox.js";
@@ -12,7 +12,39 @@ import {
   validateBrowserToken,
   validateDaemonAuth,
   validateInternalBearer,
+  workspaceOwnerId,
+  type InternalPrincipal,
 } from "./auth.js";
+
+/**
+ * Audit an internal control-plane call. Best-effort — an audit failure must
+ * never block the action. Records the acting principal (the api-key owner, or
+ * the sentinel legacy id) so cross-user internal calls are attributable.
+ */
+function auditInternal(
+  principal: InternalPrincipal,
+  eventType: string,
+  payload: Record<string, unknown>,
+): void {
+  const actingUserId =
+    principal.kind === "apiKey" ? principal.userId : "internal:legacy-secret";
+  void db
+    .insert(eventLog)
+    .values({ userId: actingUserId, eventType, payload })
+    .catch((err) => console.error(`[ws-gateway] internal audit write failed (${eventType}):`, err));
+}
+
+/**
+ * An api-key principal may only act on its own user's resources. Legacy
+ * (shared ops secret) is unscoped by nature. Returns true if the principal is
+ * allowed to act as `targetUserId`.
+ */
+function principalMayActAs(
+  principal: InternalPrincipal,
+  targetUserId: string,
+): boolean {
+  return principal.kind === "legacy" || principal.userId === targetUserId;
+}
 
 // Boot guard: a stray BOB_AUTH_BYPASS in a production unit must be a loud
 // startup failure, never a silently fake-authenticated control plane.
@@ -72,11 +104,15 @@ outboxWorker.start();
 
 const nudgeHandler = createNudgeHandler({
   authorize: validateInternalBearer,
+  resolveWorkspaceOwner: workspaceOwnerId,
+  onAudit: auditInternal,
   onNudge: (body) =>
     relay.nudgeSession(body as unknown as Parameters<typeof relay.nudgeSession>[0]),
 });
 const workspaceEventHandler = createWorkspaceEventHandler({
   authorize: validateInternalBearer,
+  resolveWorkspaceOwner: workspaceOwnerId,
+  onAudit: auditInternal,
   onEvent: (body) => relay.notifyWorkspaceEvent(body),
 });
 
@@ -114,7 +150,8 @@ const server = createServer(async (req, res) => {
 
   if (req.method === "POST" && req.url === "/internal/session-send") {
     const bearer = bearerFrom(req.headers.authorization);
-    if (!bearer || !(await validateInternalBearer(bearer))) {
+    const principal = bearer ? await validateInternalBearer(bearer) : null;
+    if (!principal) {
       res.writeHead(401, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Unauthorized" }));
       return;
@@ -125,6 +162,15 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "Missing userId, sessionId, or message" }));
       return;
     }
+    // A per-user API key may only act on its own sessions. Without this an
+    // api-key holder could steer any other user's run by supplying their id.
+    if (!principalMayActAs(principal, body.userId)) {
+      auditInternal(principal, "internal.denied", { endpoint: "session-send", targetUserId: body.userId, sessionId: body.sessionId });
+      res.writeHead(403, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Forbidden: key does not own this user's sessions" }));
+      return;
+    }
+    auditInternal(principal, "internal.session_send", { targetUserId: body.userId, sessionId: body.sessionId });
     const delivered = await relay.sendToSession(body.sessionId, body.userId, body.message);
     res.writeHead(delivered ? 200 : 404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ ok: delivered }));
@@ -133,7 +179,8 @@ const server = createServer(async (req, res) => {
 
   if (req.method === "POST" && req.url === "/internal/session-stop") {
     const bearer = bearerFrom(req.headers.authorization);
-    if (!bearer || !(await validateInternalBearer(bearer))) {
+    const principal = bearer ? await validateInternalBearer(bearer) : null;
+    if (!principal) {
       res.writeHead(401, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Unauthorized" }));
       return;
@@ -144,6 +191,13 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "Missing userId or sessionId" }));
       return;
     }
+    if (!principalMayActAs(principal, body.userId)) {
+      auditInternal(principal, "internal.denied", { endpoint: "session-stop", targetUserId: body.userId, sessionId: body.sessionId });
+      res.writeHead(403, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Forbidden: key does not own this user's sessions" }));
+      return;
+    }
+    auditInternal(principal, "internal.session_stop", { targetUserId: body.userId, sessionId: body.sessionId });
     const result = await relay.requestSessionStop(body.userId, body.sessionId);
     if (result === "not_found") {
       res.writeHead(404, { "Content-Type": "application/json" });

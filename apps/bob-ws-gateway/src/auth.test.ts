@@ -273,13 +273,18 @@ describe("validateInternalBearer", () => {
     delete process.env.BOB_ALLOW_LEGACY_NUDGE_SECRET;
   });
 
-  it("accepts a valid, unrevoked, unexpired API key", async () => {
+  it("returns the api-key OWNER for a valid, unrevoked, unexpired key", async () => {
     (db.query.apiKeys.findFirst as any).mockResolvedValue({
       userId: "user-1",
       revokedAt: null,
       expiresAt: null,
     });
-    expect(await validateInternalBearer("bob_live_key")).toBe(true);
+    // The principal must carry the owner so callers can scope actions to it —
+    // a bare boolean was the privilege-escalation bug.
+    expect(await validateInternalBearer("bob_live_key")).toEqual({
+      kind: "apiKey",
+      userId: "user-1",
+    });
   });
 
   it("rejects a revoked API key even when it hashes correctly", async () => {
@@ -288,25 +293,64 @@ describe("validateInternalBearer", () => {
       revokedAt: new Date().toISOString(),
       expiresAt: null,
     });
-    expect(await validateInternalBearer("bob_live_key")).toBe(false);
+    expect(await validateInternalBearer("bob_live_key")).toBeNull();
   });
 
   it("accepts the legacy shared secret only while the ramp is open", async () => {
     (db.query.apiKeys.findFirst as any).mockResolvedValue(null);
     process.env.NUDGE_SHARED_SECRET = "legacy-secret";
-    expect(await validateInternalBearer("legacy-secret")).toBe(true);
+    expect(await validateInternalBearer("legacy-secret")).toEqual({ kind: "legacy" });
   });
 
   it("rejects the legacy secret once BOB_ALLOW_LEGACY_NUDGE_SECRET=false", async () => {
     (db.query.apiKeys.findFirst as any).mockResolvedValue(null);
     process.env.NUDGE_SHARED_SECRET = "legacy-secret";
     process.env.BOB_ALLOW_LEGACY_NUDGE_SECRET = "false";
-    expect(await validateInternalBearer("legacy-secret")).toBe(false);
+    expect(await validateInternalBearer("legacy-secret")).toBeNull();
   });
 
   it("rejects everything else", async () => {
     (db.query.apiKeys.findFirst as any).mockResolvedValue(null);
-    expect(await validateInternalBearer("nonsense")).toBe(false);
-    expect(await validateInternalBearer("")).toBe(false);
+    expect(await validateInternalBearer("nonsense")).toBeNull();
+    expect(await validateInternalBearer("")).toBeNull();
+  });
+
+  it("rejects an API key whose expiresAt is in the past", async () => {
+    (db.query.apiKeys.findFirst as any).mockResolvedValue({
+      userId: "user-1",
+      revokedAt: null,
+      expiresAt: new Date(Date.now() - 1000),
+    });
+    expect(await validateInternalBearer("bob_live_key")).toBeNull();
+  });
+
+  it("returns the owner for an API key whose expiresAt is in the future", async () => {
+    (db.query.apiKeys.findFirst as any).mockResolvedValue({
+      userId: "user-1",
+      revokedAt: null,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    expect(await validateInternalBearer("bob_live_key")).toEqual({
+      kind: "apiKey",
+      userId: "user-1",
+    });
+  });
+
+  it("accepts the DB-free legacy secret even when the key lookup throws (ops not locked out)", async () => {
+    (db.query.apiKeys.findFirst as any).mockRejectedValue(
+      new Error("connection refused"),
+    );
+    process.env.NUDGE_SHARED_SECRET = "legacy-secret";
+    expect(await validateInternalBearer("legacy-secret")).toEqual({ kind: "legacy" });
+  });
+
+  it("FAILS CLOSED for an api-key caller when the key lookup throws", async () => {
+    // A valid-key caller cannot be verified during a DB outage, and must NOT
+    // be authorized — an attacker inducing DB pressure must not force acceptance.
+    (db.query.apiKeys.findFirst as any).mockRejectedValue(
+      new Error("connection refused"),
+    );
+    process.env.NUDGE_SHARED_SECRET = "legacy-secret";
+    expect(await validateInternalBearer("not-the-secret")).toBeNull();
   });
 });

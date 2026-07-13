@@ -1,6 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
 import { createNudgeHandler, createWorkspaceEventHandler } from "./nudge.js";
+import type { InternalPrincipal } from "./auth.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
+
+// The legacy shared secret is unscoped by nature — the happy-path tests below
+// use it so they exercise the handler without workspace-ownership plumbing.
+const legacyAuth = async (b: string): Promise<InternalPrincipal | null> =>
+  b === "s3cr3t" ? { kind: "legacy" } : null;
+// Ownership resolver is irrelevant for a legacy principal (never consulted).
+const noOwner = async (): Promise<string | null> => null;
 
 function mockReq(body: any, headers: Record<string, string> = {}): IncomingMessage {
   const chunks = [Buffer.from(JSON.stringify(body))];
@@ -36,7 +44,7 @@ function mockRes(): ServerResponse & { _status: number; _body: string } {
 describe("nudge handler", () => {
   it("rejects missing authorization header", async () => {
     const nudge = vi.fn();
-    const handler = createNudgeHandler({ authorize: async (b) => b === "s3cr3t", onNudge: nudge });
+    const handler = createNudgeHandler({ authorize: legacyAuth, resolveWorkspaceOwner: noOwner, onNudge: nudge });
     const req = mockReq({ sessionId: "s", workspaceId: "w", workingDirectory: "/", agentType: "c" });
     const res = mockRes();
     await handler(req, res);
@@ -46,7 +54,7 @@ describe("nudge handler", () => {
 
   it("rejects wrong shared secret", async () => {
     const nudge = vi.fn();
-    const handler = createNudgeHandler({ authorize: async (b) => b === "s3cr3t", onNudge: nudge });
+    const handler = createNudgeHandler({ authorize: legacyAuth, resolveWorkspaceOwner: noOwner, onNudge: nudge });
     const req = mockReq(
       { sessionId: "s", workspaceId: "w", workingDirectory: "/", agentType: "c" },
       { authorization: "Bearer wrong" },
@@ -59,7 +67,7 @@ describe("nudge handler", () => {
 
   it("rejects missing required fields", async () => {
     const nudge = vi.fn();
-    const handler = createNudgeHandler({ authorize: async (b) => b === "s3cr3t", onNudge: nudge });
+    const handler = createNudgeHandler({ authorize: legacyAuth, resolveWorkspaceOwner: noOwner, onNudge: nudge });
     const req = mockReq({ sessionId: "s" }, { authorization: "Bearer s3cr3t" });
     const res = mockRes();
     await handler(req, res);
@@ -69,7 +77,7 @@ describe("nudge handler", () => {
 
   it("calls onNudge with valid payload and returns 200", async () => {
     const nudge = vi.fn();
-    const handler = createNudgeHandler({ authorize: async (b) => b === "s3cr3t", onNudge: nudge });
+    const handler = createNudgeHandler({ authorize: legacyAuth, resolveWorkspaceOwner: noOwner, onNudge: nudge });
     const req = mockReq(
       {
         sessionId: "s1",
@@ -91,12 +99,48 @@ describe("nudge handler", () => {
       title: "test",
     });
   });
+
+  it("FORBIDS an api-key principal from nudging a workspace it does not own", async () => {
+    // The privilege-escalation fix: a per-user key may only spawn agents in
+    // its own workspaces. Owner is user-B, key belongs to user-A.
+    const nudge = vi.fn();
+    const handler = createNudgeHandler({
+      authorize: async () => ({ kind: "apiKey", userId: "user-A" }),
+      resolveWorkspaceOwner: async () => "user-B",
+      onNudge: nudge,
+    });
+    const req = mockReq(
+      { sessionId: "s1", workspaceId: "w-owned-by-B", workingDirectory: "/tmp", agentType: "claude" },
+      { authorization: "Bearer user-A-key" },
+    );
+    const res = mockRes();
+    await handler(req, res);
+    expect(res._status).toBe(403);
+    expect(nudge).not.toHaveBeenCalled();
+  });
+
+  it("ALLOWS an api-key principal to nudge a workspace it owns", async () => {
+    const nudge = vi.fn();
+    const handler = createNudgeHandler({
+      authorize: async () => ({ kind: "apiKey", userId: "user-A" }),
+      resolveWorkspaceOwner: async () => "user-A",
+      onNudge: nudge,
+    });
+    const req = mockReq(
+      { sessionId: "s1", workspaceId: "w-owned-by-A", workingDirectory: "/tmp", agentType: "claude" },
+      { authorization: "Bearer user-A-key" },
+    );
+    const res = mockRes();
+    await handler(req, res);
+    expect(res._status).toBe(200);
+    expect(nudge).toHaveBeenCalled();
+  });
 });
 
 describe("workspace event handler", () => {
   it("rejects missing authorization header", async () => {
     const notify = vi.fn();
-    const handler = createWorkspaceEventHandler({ authorize: async (b) => b === "s3cr3t", onEvent: notify });
+    const handler = createWorkspaceEventHandler({ authorize: legacyAuth, resolveWorkspaceOwner: noOwner, onEvent: notify });
     const req = mockReq({ type: "queue_order_changed", workspaceId: "w1" });
     const res = mockRes();
     await handler(req, res);
@@ -106,7 +150,7 @@ describe("workspace event handler", () => {
 
   it("calls onEvent with a valid workspace event payload", async () => {
     const notify = vi.fn();
-    const handler = createWorkspaceEventHandler({ authorize: async (b) => b === "s3cr3t", onEvent: notify });
+    const handler = createWorkspaceEventHandler({ authorize: legacyAuth, resolveWorkspaceOwner: noOwner, onEvent: notify });
     const req = mockReq(
       {
         type: "queue_order_changed",

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { db } from "@bob/db/client";
 
 const SESSION_COOKIE_NAMES = new Set([
@@ -30,16 +30,40 @@ export function assertNoAuthBypassInProduction(
 }
 
 /**
+ * The identity behind an authorized /internal/* call.
+ *
+ *   - `apiKey`: a specific user's revocable API key. The caller may ONLY act
+ *     on that user's own resources — endpoints MUST bind body.userId /
+ *     workspace ownership to `userId`. This is the fix for the privilege
+ *     escalation where any user's key controlled any other user's sessions.
+ *   - `legacy`: the shared NUDGE_SHARED_SECRET (ops-held, not user-scoped).
+ *     Accepted only during the rotation ramp; unscoped by nature, so it is
+ *     trusted to pass any userId. Audited on every use.
+ */
+export type InternalPrincipal =
+  | { kind: "apiKey"; userId: string }
+  | { kind: "legacy" };
+
+/**
  * Authorize an internal HTTP endpoint bearer (/internal/*).
  *
- * Primary: a hashed, revocable API key from the api_keys table — the same
- * mechanism daemons use, minus the workspace pairing. Legacy: the static
- * NUDGE_SHARED_SECRET env value, accepted only while
+ * Primary: a hashed, revocable API key from the api_keys table — returns the
+ * key's OWNER so callers can scope the action to that user. Legacy: the static
+ * NUDGE_SHARED_SECRET env value (constant-time compared), accepted only while
  * BOB_ALLOW_LEGACY_NUDGE_SECRET is not "false" — a rotation ramp, not a
  * permanent path; every legacy acceptance logs a deprecation warning.
+ *
+ * Returns the principal, or null if unauthorized.
+ *
+ * Fail-closed: if the key lookup THROWS (DB trouble), the API-key path returns
+ * indeterminate and we do NOT authorize it — an attacker who can induce DB
+ * pressure must not be able to force acceptance. The legacy secret below is
+ * DB-free, so genuine ops callers holding it still work during an outage.
  */
-export async function validateInternalBearer(bearer: string): Promise<boolean> {
-  if (!bearer) return false;
+export async function validateInternalBearer(
+  bearer: string,
+): Promise<InternalPrincipal | null> {
+  if (!bearer) return null;
 
   try {
     const keyHash = hashApiKey(bearer);
@@ -47,29 +71,64 @@ export async function validateInternalBearer(bearer: string): Promise<boolean> {
       where: (apiKeys, { eq }) => eq(apiKeys.keyHash, keyHash),
     });
     if (keyRow && !keyRow.revokedAt) {
-      if (!keyRow.expiresAt) return true;
+      if (!keyRow.expiresAt) return { kind: "apiKey", userId: keyRow.userId };
       const raw: unknown = keyRow.expiresAt;
       const expiresAt = raw instanceof Date ? raw : new Date(raw as string);
-      if (expiresAt.getTime() > Date.now()) return true;
-      return false;
+      if (expiresAt.getTime() > Date.now()) {
+        return { kind: "apiKey", userId: keyRow.userId };
+      }
+      // Expired key: fall through to the legacy check (a valid ops secret may
+      // still be presented), but the expired key itself never authorizes.
     }
   } catch (err) {
     console.error("[auth] internal bearer key lookup failed:", err);
-    // fall through to the legacy check — DB trouble must not lock out ops
+    // Fail closed for the API-key path. The legacy secret below does not touch
+    // the DB, so ops callers presenting it are unaffected by the outage.
   }
 
   const legacy = process.env.NUDGE_SHARED_SECRET;
   if (
     legacy &&
-    bearer === legacy &&
-    process.env.BOB_ALLOW_LEGACY_NUDGE_SECRET !== "false"
+    process.env.BOB_ALLOW_LEGACY_NUDGE_SECRET !== "false" &&
+    constantTimeEquals(bearer, legacy)
   ) {
     console.warn(
       "[auth] internal endpoint authorized via legacy NUDGE_SHARED_SECRET — rotate the caller to an API key and set BOB_ALLOW_LEGACY_NUDGE_SECRET=false",
     );
-    return true;
+    return { kind: "legacy" };
   }
-  return false;
+  return null;
+}
+
+/**
+ * Resolve the owning userId of a workspace, or null. Used to scope internal
+ * endpoints that act on a workspace (nudge, workspace-event) to the API-key
+ * principal that owns it.
+ */
+export async function workspaceOwnerId(
+  workspaceId: string,
+): Promise<string | null> {
+  if (!workspaceId) return null;
+  try {
+    const ws = await db.query.workspaces.findFirst({
+      where: (workspaces, { eq }) => eq(workspaces.id, workspaceId),
+    });
+    return ws?.ownerUserId ?? null;
+  } catch (err) {
+    console.error("[auth] workspace owner lookup failed:", err);
+    return null;
+  }
+}
+
+/**
+ * Constant-time string comparison that does not leak length via early return.
+ * Hashes both sides to fixed-length digests first (timingSafeEqual requires
+ * equal-length buffers), so a length mismatch is not observable.
+ */
+function constantTimeEquals(a: string, b: string): boolean {
+  const da = createHash("sha256").update(a).digest();
+  const db_ = createHash("sha256").update(b).digest();
+  return timingSafeEqual(da, db_);
 }
 
 /**
