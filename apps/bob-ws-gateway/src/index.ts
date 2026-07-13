@@ -64,7 +64,7 @@ try {
   process.exit(1);
 }
 
-const PORT = parseInt(process.env.GATEWAY_PORT ?? "3002", 10);
+const PORT = parseInt(process.env.GATEWAY_PORT ?? "3003", 10);
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const NUDGE_SHARED_SECRET = process.env.NUDGE_SHARED_SECRET ?? "";
 

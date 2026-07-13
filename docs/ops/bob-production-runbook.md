@@ -36,8 +36,9 @@ truly kill a run, do it from the UI (cancel) or `kill` the wrapper's child.
   - `hetzner-bob`: withholds when the runner unit is down/wedged.
   - Install: copy `apps/*/ops/bob-*deadman*` to `/opt/bob/ops/`, create
     `/opt/bob/ops/deadman.env` with `DEADMAN_URL` (+ `PG_DSN` on master).
-    On master also set `GATEWAY_PORT=3002` **if the gateway unit overrides the
-    default port** — the script defaults to 3002 to match
+    The dead-man defaults `GATEWAY_PORT=3003` to match production (set in
+    `/opt/bob/ws-gateway/.env`, which systemd reads after the unit's
+    `Environment=` line). Override `GATEWAY_PORT` in `deadman.env` only if
     `bob-ws-gateway.service`; a mismatch health-checks a dead socket and fires
     constantly. Then `systemctl enable --now bob-deadman.timer` (master) /
     `bob-runner-deadman.timer` (bob).

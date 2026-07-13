@@ -12,7 +12,7 @@ ExecStart=/usr/bin/node dist/index.js
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
-Environment=GATEWAY_PORT=3002
+Environment=GATEWAY_PORT=3003
 # Auth is REAL: browser Better Auth sessions + hashed revocable API keys.
 # BOB_AUTH_BYPASS must never appear here — the gateway refuses to boot with
 # it set in production (assertNoAuthBypassInProduction). Callers that used

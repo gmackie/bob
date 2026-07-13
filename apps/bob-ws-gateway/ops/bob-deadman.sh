@@ -14,10 +14,11 @@
 set -uo pipefail
 
 DEADMAN_URL="${DEADMAN_URL:?DEADMAN_URL is required}"
-# MUST match the gateway unit's Environment=GATEWAY_PORT (bob-ws-gateway.service
-# sets 3002; index.ts defaults to 3002). A wrong port health-checks a dead
-# socket and the dead-man would fire constantly.
-GATEWAY_PORT="${GATEWAY_PORT:-3002}"
+# MUST match the gateway's effective port. Production runs 3003 (set in
+# /opt/bob/ws-gateway/.env, which systemd reads AFTER the unit's Environment=
+# line, so the .env wins). A wrong port health-checks a dead socket and the
+# dead-man fires constantly.
+GATEWAY_PORT="${GATEWAY_PORT:-3003}"
 PG_DSN="${PG_DSN:-}"
 # Alert when Postgres has fewer free connection slots than this.
 MIN_FREE_CONNECTIONS="${MIN_FREE_CONNECTIONS:-50}"
