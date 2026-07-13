@@ -162,6 +162,10 @@ const ACTIVE_STATUSES = new Set([
   "pending",
   "awaiting-input",
   "awaiting_input",
+  // Paused awaiting a human decision — still active (the "needs you" state).
+  "blocked",
+  // Lease expired: contact lost, process fate unknown — still active.
+  "host_unknown",
 ]);
 const COMPLETED_FILTER_STATUSES = new Set([
   "cancelled",
@@ -754,11 +758,15 @@ function getShellStatusTone(status: string): TabletShellStatusTone {
     case "awaiting-input":
     case "awaiting_input":
     case "stopping":
+    // Paused awaiting a human decision — the amber "needs you" state.
+    case "blocked":
       return "warning";
     case "error":
     case "failed":
     case "interrupted":
       return "danger";
+    // "host_unknown" (lease expired, contact lost) falls through to the
+    // neutral/muted "default" tone — a "lost contact", never a failure.
     default:
       return "default";
   }

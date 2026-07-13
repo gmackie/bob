@@ -82,6 +82,10 @@ const ACTIVE_PLANNING_STATUSES = new Set([
   "provisioning",
   "running",
   "starting",
+  // Paused awaiting a human decision — still active (the "needs you" state).
+  "blocked",
+  // Lease expired: contact lost, process fate unknown — still active.
+  "host_unknown",
 ]);
 const AWAITING_INPUT_STATUSES = new Set(["awaiting-input", "awaiting_input"]);
 
@@ -317,13 +321,17 @@ function getPlanningSessionStatusTone(status?: string | null): PlanningDashboard
     normalized === "awaiting_input" ||
     normalized === "pending" ||
     normalized === "provisioning" ||
-    normalized === "idle"
+    normalized === "idle" ||
+    // Paused awaiting a human decision — the "needs you" / warning state.
+    normalized === "blocked"
   ) {
     return "warning";
   }
   if (normalized === "failed" || normalized === "error" || normalized === "interrupted") {
     return "danger";
   }
+  // "host_unknown" (lease expired, contact lost) falls through to the neutral
+  // "default" tone — muted "lost contact", never surfaced as a failure.
   return "default";
 }
 

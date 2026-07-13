@@ -1,6 +1,8 @@
 import type { TRPCRouterRecord } from "@trpc/server";
 import { z } from "zod/v4";
 
+import { sessionStatusEnum } from "@bob/db/schema";
+
 import { workflowStatusValues } from "../services/sessions/workflowStatusService";
 import {
   sessionList,
@@ -34,15 +36,11 @@ import {
 } from "../handlers/session";
 import { protectedProcedure } from "../trpc";
 
-const sessionStatusValues = [
-  "provisioning",
-  "starting",
-  "running",
-  "idle",
-  "stopping",
-  "stopped",
-  "error",
-] as const;
+// Full session status set (single source of truth: @bob/agents/schema).
+// Includes `blocked` (paused on a human decision) and `host_unknown`
+// (lease expired, contact lost) so those states no longer throw zod
+// validation errors on session.list / session.updateStatus.
+const sessionStatusValues = sessionStatusEnum;
 
 export const sessionRouter = {
   list: protectedProcedure

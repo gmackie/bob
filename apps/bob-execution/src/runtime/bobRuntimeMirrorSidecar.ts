@@ -53,7 +53,11 @@ class HttpError extends Error {
 }
 
 function mapChatStatus(status: RuntimeStatus) {
-  return status === "completed" || status === "failed" ? "stopped" : "running";
+  if (status === "completed" || status === "failed") return "stopped";
+  // Paused awaiting a human decision — surface the distinct session status
+  // instead of collapsing it into a generic "running".
+  if (status === "blocked") return "blocked";
+  return "running";
 }
 
 function mapWorkflowStatus(status: RuntimeStatus) {

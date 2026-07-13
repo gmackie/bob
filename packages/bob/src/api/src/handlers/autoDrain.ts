@@ -29,7 +29,11 @@ const ACTIVE_SESSION_STATUSES = [
   "provisioning",
   "starting",
   "running",
+  // Paused awaiting a human decision — still active (the run isn't dead).
+  "blocked",
   "stopping",
+  // Lease expired: contact lost, process fate unknown — still active.
+  "host_unknown",
 ];
 
 // Work-item statuses the driver will pick up and dispatch. "ready" is the

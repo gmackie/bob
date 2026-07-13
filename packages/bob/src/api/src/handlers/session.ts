@@ -76,10 +76,14 @@ type SessionStatus =
   | "provisioning"
   | "starting"
   | "running"
+  // Paused on a human decision (permission request / re-auth).
+  | "blocked"
   | "idle"
   | "stopping"
   | "stopped"
-  | "error";
+  | "error"
+  // Lease expired: contact lost, process fate unknown (never implies failure).
+  | "host_unknown";
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
