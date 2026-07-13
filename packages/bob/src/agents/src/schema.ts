@@ -329,9 +329,12 @@ export const sessionEvents = pgTable(
   }),
   (table) => [
     {
-      name: "session_events_session_seq_unique",
+      // Non-unique: production has historical duplicate (session_id, seq) rows
+      // (pre-dating the atomic nextSeq increment), so this is a lookup index for
+      // the replay query, not a uniqueness constraint. Ingest dedup is enforced
+      // by the (session_id, send_seq) unique index below.
+      name: "session_events_session_seq_idx",
       columns: [table.sessionId, table.seq],
-      unique: true,
     },
     {
       name: "session_events_session_send_seq_unique",

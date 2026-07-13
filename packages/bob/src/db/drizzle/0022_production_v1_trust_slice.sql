@@ -32,8 +32,13 @@ ALTER TABLE "chat_conversations" ADD COLUMN IF NOT EXISTS "dispatch_spec" json;
 
 -- --- session_events: runner send-seq + ingest dedup ------------------------
 ALTER TABLE "session_events" ADD COLUMN IF NOT EXISTS "send_seq" bigint;
--- (session_id, seq) uniqueness may predate this branch; assert it either way.
-CREATE UNIQUE INDEX IF NOT EXISTS "session_events_session_seq_unique"
+-- Non-unique lookup index for the replay query (WHERE session_id=? AND seq>?).
+-- It is NOT unique: production session_events has historical duplicate
+-- (session_id, seq) rows (pre-dating the atomic nextSeq increment), so a unique
+-- constraint here is unenforceable without destructive dedup. Ingest dedup is
+-- enforced by the (session_id, send_seq) unique index below, which is what the
+-- envelope protocol actually relies on.
+CREATE INDEX IF NOT EXISTS "session_events_session_seq_idx"
   ON "session_events" ("session_id", "seq");
 -- Ingest dedup: at-least-once redelivery from the runner disk buffer must not
 -- produce a second row. NULL send_seq (gateway-originated) is unconstrained.
