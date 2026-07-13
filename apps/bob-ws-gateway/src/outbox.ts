@@ -113,10 +113,16 @@ export async function enqueueTransition(n: TransitionNotification): Promise<void
         setWhere: sql`(${notificationOutbox.status} in ('sent','failed') or ${notificationOutbox.seenAt} is not null)`,
       })
     : insert.onConflictDoNothing();
-  await stmt.catch((err) => {
-    // The intent row is load-bearing (badge + delivery); log loudly.
+  try {
+    await stmt;
+  } catch (err) {
+    // The intent row is load-bearing (badge + delivery). RETHROW so the caller
+    // (applySessionStatus) does not ack a status frame whose owed push failed
+    // to persist — the runner then redelivers and the enqueue is retried.
+    // Best-effort callers (the lease sweep) wrap this in their own try/catch.
     console.error(`[outbox] enqueue failed for ${n.sessionId}/${n.transition}:`, err);
-  });
+    throw err instanceof Error ? err : new Error(String(err));
+  }
 }
 
 export class OutboxWorker {

@@ -192,24 +192,31 @@ export class Relay {
         // host_unknown for this session's lifetime. Re-arm a prior, already
         // resolved/seen alarm so a SECOND lost-contact (after recovery) still
         // notifies — the exact trust defect the 10-run gate resets on.
-        await enqueueTransition({
-          sessionId: session.id,
-          userId: session.userId,
-          transition: "host_unknown",
-          sourceSendSeq: -1,
-          reArmOnConflict: true,
-          title: "Lost contact with host",
-          body: `${lease.hostId}: contact lost — the run may still be going; not confirmed dead.`,
-          data: {
-            type: "session.host_unknown",
+        // Best-effort here (enqueueTransition rethrows for the ack-gating
+        // status path): a failed push for one session must not abort the sweep
+        // for the rest. The next tick re-derives owed host_unknown pushes.
+        try {
+          await enqueueTransition({
             sessionId: session.id,
-            workItemId: session.workItemId ?? undefined,
-            hostId: lease.hostId,
+            userId: session.userId,
             transition: "host_unknown",
             sourceSendSeq: -1,
-          },
-          priority: "default",
-        });
+            reArmOnConflict: true,
+            title: "Lost contact with host",
+            body: `${lease.hostId}: contact lost — the run may still be going; not confirmed dead.`,
+            data: {
+              type: "session.host_unknown",
+              sessionId: session.id,
+              workItemId: session.workItemId ?? undefined,
+              hostId: lease.hostId,
+              transition: "host_unknown",
+              sourceSendSeq: -1,
+            },
+            priority: "default",
+          });
+        } catch (err) {
+          console.error(`[Relay] host_unknown enqueue failed for ${session.id}:`, err);
+        }
 
         const subs = this.subscribers.get(session.id);
         if (subs) {
