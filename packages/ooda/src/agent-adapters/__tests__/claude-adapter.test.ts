@@ -262,6 +262,41 @@ rl.on('close', () => process.exit(0));
       expect(skip.args).toContain("--dangerously-skip-permissions");
     });
 
+    it("routes prompt-mode permissions onto the control channel via --permission-prompt-tool stdio", () => {
+      const adapter = new ClaudeAdapter();
+      const prompt = adapter.buildCommand({ prompt: "p", workspaceRoot: "/tmp" });
+
+      const idx = prompt.args.indexOf("--permission-prompt-tool");
+      expect(idx).toBeGreaterThan(-1);
+      expect(prompt.args[idx + 1]).toBe("stdio");
+
+      // skip mode must not carry the prompt-tool flag alongside the bypass.
+      const skip = adapter.buildCommand({
+        prompt: "p",
+        workspaceRoot: "/tmp",
+        permissionMode: "skip",
+      });
+      expect(skip.args).not.toContain("--permission-prompt-tool");
+    });
+
+    it("honors the CLAUDE_PERMISSION_PROMPT_ARGS override (version-probed CLI boundary)", () => {
+      const prev = process.env.CLAUDE_PERMISSION_PROMPT_ARGS;
+      process.env.CLAUDE_PERMISSION_PROMPT_ARGS = "--permission-mode ask  --extra";
+      try {
+        const adapter = new ClaudeAdapter();
+        const prompt = adapter.buildCommand({ prompt: "p", workspaceRoot: "/tmp" });
+        expect(prompt.args).toContain("--permission-mode");
+        expect(prompt.args).toContain("ask");
+        // double space must not inject empty argv entries
+        expect(prompt.args).toContain("--extra");
+        expect(prompt.args).not.toContain("");
+        expect(prompt.args).not.toContain("--permission-prompt-tool");
+      } finally {
+        if (prev === undefined) delete process.env.CLAUDE_PERMISSION_PROMPT_ARGS;
+        else process.env.CLAUDE_PERMISSION_PROMPT_ARGS = prev;
+      }
+    });
+
     it("surfaces a control_request as permission_request, pauses past the idle window, and resumes on allow", async () => {
       const adapter = new ClaudeAdapter();
       const events: AdapterEvent[] = [];

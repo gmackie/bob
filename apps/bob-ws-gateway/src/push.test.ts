@@ -97,4 +97,22 @@ describe("pushToUser", () => {
     expect(result.delivered).toBe(true);
     expect(result.tickets).toEqual({ "ExponentPushToken[aaa]": "ticket-1" });
   });
+
+  it("returns undelivered without calling Expo when the user has zero tokens", async () => {
+    tokensFindMany.mockResolvedValue([]);
+
+    const result = await pushToUser("user-1", { title: "x", body: "y" });
+
+    expect(result).toEqual({ delivered: false, tickets: {} });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rethrows token-lookup failures so the outbox can retry", async () => {
+    tokensFindMany.mockRejectedValue(new Error("db down"));
+
+    await expect(
+      pushToUser("user-1", { title: "x", body: "y" }),
+    ).rejects.toThrow("db down");
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
 });
