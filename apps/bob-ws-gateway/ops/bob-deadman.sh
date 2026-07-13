@@ -14,7 +14,10 @@
 set -uo pipefail
 
 DEADMAN_URL="${DEADMAN_URL:?DEADMAN_URL is required}"
-GATEWAY_PORT="${GATEWAY_PORT:-3003}"
+# MUST match the gateway unit's Environment=GATEWAY_PORT (bob-ws-gateway.service
+# sets 3002; index.ts defaults to 3002). A wrong port health-checks a dead
+# socket and the dead-man would fire constantly.
+GATEWAY_PORT="${GATEWAY_PORT:-3002}"
 PG_DSN="${PG_DSN:-}"
 # Alert when Postgres has fewer free connection slots than this.
 MIN_FREE_CONNECTIONS="${MIN_FREE_CONNECTIONS:-50}"
@@ -26,9 +29,12 @@ fail() {
   exit 1
 }
 
-# 1. Gateway alive and its writer healthy.
+# 1. Gateway alive AND its persistence writer healthy. status:ok alone only
+# proves the HTTP server answers — a wedged writer (the durability path that
+# makes completions safe) still returns status:ok, so assert writerHealthy too.
 health=$(curl -fsS -m 5 "http://127.0.0.1:${GATEWAY_PORT}/health") || fail "gateway /health unreachable"
 echo "$health" | grep -q '"status":"ok"' || fail "gateway health not ok"
+echo "$health" | grep -q '"writerHealthy":true' || fail "gateway persistence writer unhealthy"
 
 # 2. Postgres reachable with connection headroom (the 7/06 class).
 if [ -n "$PG_DSN" ]; then

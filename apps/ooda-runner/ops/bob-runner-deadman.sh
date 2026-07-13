@@ -9,9 +9,14 @@ set -uo pipefail
 
 DEADMAN_URL="${DEADMAN_URL:?DEADMAN_URL is required}"
 RUNNER_UNIT="${RUNNER_UNIT:-ooda-runner}"
-# The runner logs "[bob-gw] Authenticated" on every (re)connect; silence for
-# longer than this without an active unit means it is wedged, not idle.
-MAX_LOG_SILENCE_MIN="${MAX_LOG_SILENCE_MIN:-30}"
+# Window over which we look for a gateway reconnect/auth-failure LOOP.
+CHURN_WINDOW_MIN="${CHURN_WINDOW_MIN:-30}"
+# A healthy runner authenticates once and stays connected — it logs ZERO
+# reconnect/error events while idle. This many churn events in the window means
+# it is wedged in a reconnect/auth-failure loop (e.g. rejected credentials),
+# NOT idle. Counting any journal line (the old check) treated that loop's own
+# error spew as proof of health.
+MAX_RECONNECT_CHURN="${MAX_RECONNECT_CHURN:-5}"
 
 fail() {
   echo "bob-runner-deadman: $1 — withholding ping"
@@ -21,10 +26,14 @@ fail() {
 
 systemctl is-active --quiet "$RUNNER_UNIT" || fail "unit ${RUNNER_UNIT} not active"
 
-recent=$(journalctl -u "$RUNNER_UNIT" --since "-${MAX_LOG_SILENCE_MIN}m" -n 1 --no-pager -q | wc -l)
-if [ "$recent" -eq 0 ]; then
-  # No output at all in the window: verify the process is really alive.
-  systemctl show -p MainPID --value "$RUNNER_UNIT" | grep -qv '^0$' || fail "runner has no main pid"
+systemctl show -p MainPID --value "$RUNNER_UNIT" | grep -qv '^0$' || fail "runner has no main pid"
+
+# Detect a reconnect/auth-failure loop: the runner logs these markers only when
+# its gateway connection is failing. A steady authenticated connection logs none.
+churn=$(journalctl -u "$RUNNER_UNIT" --since "-${CHURN_WINDOW_MIN}m" --no-pager -q 2>/dev/null \
+  | grep -cE '\[bob-gw\] (Disconnected, reconnecting|Server error|WebSocket error|No hello_ok)' || true)
+if [ "${churn:-0}" -ge "$MAX_RECONNECT_CHURN" ]; then
+  fail "gateway connection churn (${churn} reconnect/error events in ${CHURN_WINDOW_MIN}m) — likely auth failure or wedge"
 fi
 
 curl -fsS -m 10 --retry 3 "$DEADMAN_URL" >/dev/null || echo "bob-runner-deadman: ping delivery failed"

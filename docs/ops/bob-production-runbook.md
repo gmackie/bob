@@ -35,8 +35,11 @@ truly kill a run, do it from the UI (cancel) or `kill` the wrapper's child.
     Postgres has <50 free connection slots (the 2026-07-06 class).
   - `hetzner-bob`: withholds when the runner unit is down/wedged.
   - Install: copy `apps/*/ops/bob-*deadman*` to `/opt/bob/ops/`, create
-    `/opt/bob/ops/deadman.env` with `DEADMAN_URL` (+ `PG_DSN` on master),
-    `systemctl enable --now bob-deadman.timer` (master) /
+    `/opt/bob/ops/deadman.env` with `DEADMAN_URL` (+ `PG_DSN` on master).
+    On master also set `GATEWAY_PORT=3002` **if the gateway unit overrides the
+    default port** — the script defaults to 3002 to match
+    `bob-ws-gateway.service`; a mismatch health-checks a dead socket and fires
+    constantly. Then `systemctl enable --now bob-deadman.timer` (master) /
     `bob-runner-deadman.timer` (bob).
   - **Monthly test-fire (do not skip):** stop the timer for one interval,
     confirm the phone alert arrives, start it again. The alerting service
