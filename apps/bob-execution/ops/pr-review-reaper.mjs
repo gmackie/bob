@@ -94,10 +94,17 @@ async function main() {
     if (!sha || seen.has(key)) { skipped++; continue; }
     // Gate 1: mergeable (no conflict)
     if (pr.mergeable !== true) { seen.add(key); skipped++; continue; }
-    // Gate 2: CI green
+    // Gate 2: CI. If the repo runs CI, require it green (skip red = give up,
+    // pending = retry next run without marking seen). If the repo has NO CI
+    // configured at all (0 statuses), there's nothing to be green — fall through
+    // to the AI review as the sole quality gate rather than blocking forever.
     let ci;
     try { ci = await api(`/repos/${OWNER}/${repo}/commits/${sha}/status`); } catch { skipped++; continue; }
-    if ((ci?.state) !== "success") { seen.add(key); skipped++; continue; }
+    const ciCount = (ci?.statuses || []).length;
+    if (ciCount > 0 && ci.state !== "success") {
+      if (ci.state === "pending") { skipped++; continue; }   // wait for CI, re-check next run
+      seen.add(key); skipped++; continue;                    // red/error: give up
+    }
     // Gate 3: AI review (subscription)
     const diff = await rawDiff(OWNER, repo, num);
     if (!diff) { skipped++; continue; }
