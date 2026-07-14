@@ -176,6 +176,10 @@ const ACTIVE_SESSION_STATUSES = new Set([
   "pending",
   "awaiting-input",
   "awaiting_input",
+  // Paused awaiting a human decision — still active (the "needs you" state).
+  "blocked",
+  // Lease expired: contact lost, process fate unknown — still active.
+  "host_unknown",
 ]);
 const ACTIVE_RUN_STATUSES = new Set([
   "queued",
@@ -185,6 +189,10 @@ const ACTIVE_RUN_STATUSES = new Set([
   "pending",
   "awaiting-input",
   "awaiting_input",
+  // Paused awaiting a human decision — still active (the "needs you" state).
+  "blocked",
+  // Lease expired: contact lost, process fate unknown — still active.
+  "host_unknown",
 ]);
 const COMPLETED_RUN_STATUSES = new Set(["completed", "done", "stopped", "idle"]);
 const FAILED_RUN_STATUSES = new Set(["failed", "error", "interrupted", "cancelled", "canceled"]);
@@ -208,6 +216,10 @@ const ACTIVE_AGENT_WORK_STATUSES = new Set([
   "pending",
   "awaiting-input",
   "awaiting_input",
+  // Paused awaiting a human decision — still active (the "needs you" state).
+  "blocked",
+  // Lease expired: contact lost, process fate unknown — still active.
+  "host_unknown",
 ]);
 const FAILED_AGENT_WORK_STATUSES = new Set(["error", "failed", "interrupted"]);
 const WORK_ITEM_OUTCOME_STATUSES = new Set([
@@ -441,6 +453,9 @@ function isResolvableWorkItemReference(value: string | null | undefined): value 
 
 function getProviderRunStatusTone(status: string): DashboardTone {
   if (FAILED_RUN_STATUSES.has(status)) return "danger";
+  // Lease expired: contact lost — muted/neutral "lost contact", not the
+  // amber "needs you" of a blocked run and never a failure.
+  if (status === "host_unknown") return "default";
   if (REVIEW_RUN_STATUSES.has(status)) return "warning";
   if (ACTIVE_RUN_STATUSES.has(status)) return "warning";
   if (COMPLETED_RUN_STATUSES.has(status)) return "success";

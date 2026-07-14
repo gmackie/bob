@@ -74,6 +74,10 @@ const ACTIVE_AGENT_STATUSES = new Set([
   "pending",
   "awaiting-input",
   "awaiting_input",
+  // Paused awaiting a human decision — still active (the "needs you" state).
+  "blocked",
+  // Lease expired: contact lost, process fate unknown — still active.
+  "host_unknown",
 ]);
 const FAILED_AGENT_STATUSES = new Set(["error", "failed", "interrupted"]);
 const TERMINAL_AGENT_OUTCOME_STATUSES = new Set([

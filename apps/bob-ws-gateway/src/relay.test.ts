@@ -17,7 +17,10 @@ vi.mock("@bob/db/client", () => {
       };
     }),
   });
-  // Default select chain: .from().leftJoin().where().limit() → Promise<rows>
+  // Default select chain: .from().leftJoin().where().limit() → Promise<rows>,
+  // .from().where().limit() → Promise<rows> (the envelope dup check), and
+  // .from().where().for("update") → Promise<rows> (the single-writer lock —
+  // defaults to a "running" session so status transitions apply).
   const makeSelectChain = () => ({
     from: vi.fn(() => ({
       leftJoin: vi.fn(() => ({
@@ -25,23 +28,46 @@ vi.mock("@bob/db/client", () => {
           limit: vi.fn(() => Promise.resolve([])),
         })),
       })),
+      where: vi.fn(() => ({
+        limit: vi.fn(() => Promise.resolve([])),
+        for: vi.fn(() => Promise.resolve([{ status: "running" }])),
+      })),
     })),
   });
-  return {
-    db: {
-      query: {
-        chatConversations: { findFirst: vi.fn(), findMany: vi.fn(() => Promise.resolve([])) },
-        planDrafts: { findMany: vi.fn(() => Promise.resolve([])) },
-        repositories: { findMany: vi.fn(() => Promise.resolve([])) },
-        sessionEvents: { findMany: vi.fn() },
-        taskRuns: { findFirst: vi.fn(() => Promise.resolve(null)) },
-        workItems: { findMany: vi.fn(() => Promise.resolve([])) },
-      },
-      update: vi.fn(() => makeUpdateChain()),
-      select: vi.fn(() => makeSelectChain()),
-      insert: vi.fn(() => ({ values: vi.fn(() => Promise.resolve()) })),
-    },
+  // insert().values() is awaited directly in some paths and chained with
+  // .onConflictDoUpdate()/.onConflictDoNothing() in others — return a
+  // thenable that supports both.
+  const makeInsertValuesResult = () => {
+    const p: any = Promise.resolve();
+    p.onConflictDoUpdate = vi.fn(() => Promise.resolve());
+    p.onConflictDoNothing = vi.fn(() => {
+      const q: any = Promise.resolve();
+      q.returning = vi.fn(() => Promise.resolve([]));
+      return q;
+    });
+    return p;
   };
+  const dbObj: any = {
+    query: {
+      chatConversations: { findFirst: vi.fn(), findMany: vi.fn(() => Promise.resolve([])) },
+      agentRuns: { findFirst: vi.fn(() => Promise.resolve(null)) },
+      gatewayConfig: { findFirst: vi.fn(() => Promise.resolve(null)) },
+      planDrafts: { findMany: vi.fn(() => Promise.resolve([])) },
+      repositories: { findMany: vi.fn(() => Promise.resolve([])) },
+      runnerLeases: { findMany: vi.fn(() => Promise.resolve([])) },
+      sessionEvents: { findMany: vi.fn() },
+      taskRuns: { findFirst: vi.fn(() => Promise.resolve(null)) },
+      workItems: { findMany: vi.fn(() => Promise.resolve([])) },
+    },
+    update: vi.fn(() => makeUpdateChain()),
+    select: vi.fn(() => makeSelectChain()),
+    insert: vi.fn(() => ({ values: vi.fn(() => makeInsertValuesResult()) })),
+    delete: vi.fn(() => ({ where: vi.fn(() => Promise.resolve()) })),
+  };
+  // Transactions run the callback against the same mock — tests configure
+  // db.select/update/insert as usual and the tx path picks them up.
+  dbObj.transaction = vi.fn(async (cb: (tx: any) => Promise<unknown>) => cb(dbObj));
+  return { db: dbObj };
 });
 
 import { db } from "@bob/db/client";
@@ -966,6 +992,640 @@ describe("Relay", () => {
       );
       expect(taskUpdate?.blockedReason).toBe("boom: agent exited 1");
     });
+  });
+
+  describe("session_claimed (runner adoption bridge)", () => {
+    const SID = "55555555-5555-4555-8555-555555555555";
+
+    async function connectDaemon(): Promise<FakeWs> {
+      const daemonWs = new FakeWs();
+      relay.handleConnection(daemonWs as any);
+      daemonWs.receive({
+        type: "hello",
+        clientId: "d1",
+        deviceType: "daemon",
+        token: "good-daemon",
+        workspaceId: "ws-1",
+      });
+      await new Promise((r) => setImmediate(r));
+      return daemonWs;
+    }
+
+    beforeEach(() => {
+      // Restore default chains earlier suites may have replaced.
+      (db.select as any).mockImplementation(() => ({
+        from: () => ({
+          leftJoin: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
+          where: () => ({
+            limit: () => Promise.resolve([]),
+            for: () => Promise.resolve([{ status: "pending" }]),
+          }),
+        }),
+      }));
+      (db.insert as any).mockImplementation(() => ({
+        values: () => {
+          const p: any = Promise.resolve();
+          p.onConflictDoUpdate = () => Promise.resolve();
+          p.onConflictDoNothing = () => {
+            const q: any = Promise.resolve();
+            q.returning = () => Promise.resolve([]);
+            return q;
+          };
+          return p;
+        },
+      }));
+    });
+
+    it("promotes a claimed pending session to starting and syncs task_run/work_item", async () => {
+      const daemonWs = await connectDaemon();
+
+      // 1st findFirst: ownership check. 2nd: agent_runs bridge session lookup —
+      // return undefined to skip the bridge (tenant resolution is out of scope).
+      (db.query.chatConversations.findFirst as any)
+        .mockResolvedValueOnce({ id: SID })
+        .mockResolvedValueOnce(undefined);
+      (db.query.taskRuns.findFirst as any) = vi.fn(() =>
+        Promise.resolve({ id: "tr-1", workItemId: "wi-1" }),
+      );
+
+      const setPayloads: any[] = [];
+      (db.update as any).mockImplementation(() => ({
+        set: (payload: any) => {
+          setPayloads.push(payload);
+          const whereResult: any = Promise.resolve();
+          whereResult.returning = vi.fn(() => Promise.resolve([{ newNextSeq: 2 }]));
+          return { where: () => whereResult };
+        },
+      }));
+
+      daemonWs.receive({ type: "session_claimed", sessionId: SID } as any);
+      await new Promise((r) => setImmediate(r));
+      await new Promise((r) => setImmediate(r));
+
+      // Single-writer wrote pending → starting on the session
+      expect(setPayloads.some((p) => p.status === "starting")).toBe(true);
+      // task_run promoted to running, work_item to in_progress
+      expect(setPayloads.some((p) => p.status === "running")).toBe(true);
+      expect(setPayloads.some((p) => p.status === "in_progress")).toBe(true);
+    });
+
+    it("ignores a session_claimed for a session the daemon's user does not own", async () => {
+      const daemonWs = await connectDaemon();
+
+      (db.query.chatConversations.findFirst as any).mockResolvedValueOnce(undefined);
+
+      const setPayloads: any[] = [];
+      (db.update as any).mockImplementation(() => ({
+        set: (payload: any) => {
+          setPayloads.push(payload);
+          return { where: () => Promise.resolve() };
+        },
+      }));
+
+      daemonWs.receive({ type: "session_claimed", sessionId: SID } as any);
+      await new Promise((r) => setImmediate(r));
+      await new Promise((r) => setImmediate(r));
+
+      expect(setPayloads).toHaveLength(0);
+    });
+  });
+
+  describe("blocked status (needs-you push intent)", () => {
+    const SID = "66666666-6666-4666-8666-666666666666";
+
+    async function connectDaemon(): Promise<FakeWs> {
+      const daemonWs = new FakeWs();
+      relay.handleConnection(daemonWs as any);
+      daemonWs.receive({
+        type: "hello",
+        clientId: "d1",
+        deviceType: "daemon",
+        token: "good-daemon",
+        workspaceId: "ws-1",
+      });
+      await new Promise((r) => setImmediate(r));
+      return daemonWs;
+    }
+
+    beforeEach(() => {
+      (db.select as any).mockImplementation(() => ({
+        from: () => ({
+          leftJoin: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
+          where: () => ({
+            limit: () => Promise.resolve([]),
+            for: () => Promise.resolve([{ status: "running" }]),
+          }),
+        }),
+      }));
+      (db.update as any).mockImplementation(() => ({
+        set: () => {
+          const whereResult: any = Promise.resolve();
+          whereResult.returning = vi.fn(() => Promise.resolve([{ newNextSeq: 2 }]));
+          return { where: () => whereResult };
+        },
+      }));
+    });
+
+    async function sendBlocked(summary: Record<string, unknown>) {
+      const daemonWs = await connectDaemon();
+
+      (db.query.chatConversations.findFirst as any).mockResolvedValueOnce({
+        id: SID,
+        userId: "user-1",
+        status: "running",
+        title: "Fix login",
+        workItemId: "wi-1",
+        workItemIdentifierSnapshot: null,
+        agentType: "claude",
+        sessionType: "execution",
+      });
+
+      const insertedValues: any[] = [];
+      (db.insert as any).mockImplementation(() => ({
+        values: (payload: any) => {
+          insertedValues.push(payload);
+          const p: any = Promise.resolve();
+          p.onConflictDoUpdate = () => Promise.resolve();
+          p.onConflictDoNothing = () => {
+            const q: any = Promise.resolve();
+            q.returning = () => Promise.resolve([]);
+            return q;
+          };
+          return p;
+        },
+      }));
+
+      daemonWs.receive({
+        type: "session_status",
+        sessionId: SID,
+        status: "blocked",
+        summary,
+      } as any);
+      await new Promise((r) => setImmediate(r));
+      await new Promise((r) => setImmediate(r));
+
+      return insertedValues;
+    }
+
+    it("records a high-priority approval push intent naming the tool", async () => {
+      const inserted = await sendBlocked({ toolName: "Bash", requestId: "perm-1" });
+
+      const outboxRow = inserted.find((v) => v?.transition === "blocked");
+      expect(outboxRow).toBeDefined();
+      expect(outboxRow.userId).toBe("user-1");
+      expect(outboxRow.payload.title).toContain("needs you");
+      expect(outboxRow.payload.body).toBe("Approval requested: Bash");
+      expect(outboxRow.payload.priority).toBe("high");
+      expect(outboxRow.payload.data.requestId).toBe("perm-1");
+      // deep-link payload carries the sessionId so the tap never dead-ends
+      expect(outboxRow.payload.data.sessionId).toBe(SID);
+    });
+
+    it("uses the re-auth copy when the daemon reports an auth wedge", async () => {
+      const inserted = await sendBlocked({ reason: "re-auth" });
+
+      const outboxRow = inserted.find((v) => v?.transition === "blocked");
+      expect(outboxRow).toBeDefined();
+      expect(outboxRow.payload.body).toContain("re-auth");
+    });
+  });
+
+  describe("envelope protocol (send-seq)", () => {
+    const SID = "44444444-4444-4444-8444-444444444444";
+
+    // vi.clearAllMocks() clears calls but NOT implementations installed by
+    // earlier tests via mockImplementation — restore the default chains this
+    // suite depends on so test order can't poison the tx path.
+    beforeEach(() => {
+      (db.select as any).mockImplementation(() => ({
+        from: () => ({
+          leftJoin: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
+          where: () => ({
+            limit: () => Promise.resolve([]),
+            for: () => Promise.resolve([{ status: "running" }]),
+          }),
+        }),
+      }));
+      (db.update as any).mockImplementation(() => ({
+        set: () => {
+          const whereResult: any = Promise.resolve();
+          whereResult.returning = vi.fn(() => Promise.resolve([{ newNextSeq: 2 }]));
+          return { where: () => whereResult };
+        },
+      }));
+      (db.insert as any).mockImplementation(() => ({
+        values: () => Promise.resolve(),
+      }));
+    });
+
+    async function connectDaemon(): Promise<FakeWs> {
+      const daemonWs = new FakeWs();
+      relay.handleConnection(daemonWs as any);
+      daemonWs.receive({
+        type: "hello",
+        clientId: "d1",
+        deviceType: "daemon",
+        token: "good-daemon",
+        workspaceId: "ws-1",
+      });
+      await new Promise((r) => setImmediate(r));
+      return daemonWs;
+    }
+
+    it("persists an enveloped event transactionally, then acks", async () => {
+      const daemonWs = await connectDaemon();
+      const inserted: any[] = [];
+      (db.insert as any).mockImplementation(() => ({
+        values: (v: any) => {
+          inserted.push(v);
+          return Promise.resolve();
+        },
+      }));
+      (db.query.chatConversations.findFirst as any).mockResolvedValue({
+        id: SID,
+        userId: "user-1",
+        status: "running",
+      });
+
+      daemonWs.receive({
+        type: "session_event",
+        sessionId: SID,
+        eventType: "output_chunk",
+        direction: "agent",
+        payload: { data: "hello" },
+        sendSeq: 7,
+      } as any);
+      await new Promise((r) => setImmediate(r));
+
+      // Persisted synchronously in the tx (NOT via the batched writer)…
+      expect(inserted).toHaveLength(1);
+      expect(inserted[0].sendSeq).toBe(7);
+      expect(persistedEvents).toHaveLength(0);
+      // …and acked after commit.
+      const acks = daemonWs.sentOfType("event_ack");
+      expect(acks).toHaveLength(1);
+      expect((acks[0] as any).sendSeq).toBe(7);
+      // The transaction wrapper was actually used.
+      expect((db as any).transaction).toHaveBeenCalled();
+    });
+
+    it("acks a redelivered send-seq without inserting a second row", async () => {
+      const daemonWs = await connectDaemon();
+      // Dup check finds an existing row for (sessionId, sendSeq).
+      (db.select as any).mockImplementation(() => ({
+        from: () => ({
+          where: () => ({ limit: () => Promise.resolve([{ id: "existing" }]) }),
+          leftJoin: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
+        }),
+      }));
+      const inserted: any[] = [];
+      (db.insert as any).mockImplementation(() => ({
+        values: (v: any) => {
+          inserted.push(v);
+          return Promise.resolve();
+        },
+      }));
+
+      daemonWs.receive({
+        type: "session_event",
+        sessionId: SID,
+        eventType: "output_chunk",
+        direction: "agent",
+        payload: { data: "again" },
+        sendSeq: 7,
+      } as any);
+      await new Promise((r) => setImmediate(r));
+
+      expect(inserted).toHaveLength(0);
+      const acks = daemonWs.sentOfType("event_ack");
+      expect(acks).toHaveLength(1);
+      expect((acks[0] as any).sendSeq).toBe(7);
+    });
+
+    it("persists session_status as a durable status_change event and applies side effects once", async () => {
+      const daemonWs = await connectDaemon();
+      const inserted: any[] = [];
+      (db.insert as any).mockImplementation(() => ({
+        values: (v: any) => {
+          inserted.push(v);
+          // Support the enqueueTransition onConflict chain (applySessionStatus
+          // now runs before the ack, so its terminal push must not throw).
+          const p: any = Promise.resolve();
+          p.onConflictDoNothing = vi.fn(() => Promise.resolve());
+          p.onConflictDoUpdate = vi.fn(() => Promise.resolve());
+          return p;
+        },
+      }));
+      (db.query.chatConversations.findFirst as any).mockResolvedValue({
+        id: SID,
+        userId: "user-1",
+        status: "running",
+        workItemId: null,
+        agentType: "claude",
+      });
+      const setPayloads: any[] = [];
+      (db.update as any).mockImplementation(() => ({
+        set: (payload: any) => {
+          setPayloads.push(payload);
+          const whereResult: any = Promise.resolve();
+          whereResult.returning = vi.fn(() => Promise.resolve([{ newNextSeq: 2 }]));
+          return { where: () => whereResult };
+        },
+      }));
+
+      daemonWs.receive({
+        type: "session_status",
+        sessionId: SID,
+        status: "completed",
+        sendSeq: 3,
+      } as any);
+      await new Promise((r) => setImmediate(r));
+
+      // The transition itself became a durable event row.
+      const statusRow = inserted.find((v) => v.eventType === "status_change");
+      expect(statusRow).toBeDefined();
+      expect(statusRow.sendSeq).toBe(3);
+      expect(statusRow.payload.status).toBe("completed");
+      // Acked.
+      expect(daemonWs.sentOfType("event_ack")).toHaveLength(1);
+      // Side effects ran (status column written).
+      expect(setPayloads.some((p) => p.status === "completed")).toBe(true);
+    });
+
+    it("re-applies a redelivered session_status idempotently (acked, no duplicate side effects)", async () => {
+      // A redelivered (duplicate) frame must still be acked AND re-run
+      // applySessionStatus — the ack now certifies persisted+applied, and
+      // re-application is a no-op because the single writer sees the state
+      // already set. The old early-return-on-duplicate permanently lost the
+      // transition if a crash landed between persist and apply.
+      const daemonWs = await connectDaemon();
+      // Duplicate on the send-seq dup check; single-writer lock reports the
+      // session is ALREADY completed (so re-apply is a same-state no-op).
+      (db.select as any).mockImplementation(() => ({
+        from: () => ({
+          where: () => ({
+            limit: () => Promise.resolve([{ id: "existing" }]),
+            for: () => Promise.resolve([{ status: "completed" }]),
+          }),
+          leftJoin: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
+        }),
+      }));
+      (db.query.chatConversations.findFirst as any).mockResolvedValue({
+        id: SID,
+        userId: "user-1",
+        status: "completed",
+        workItemId: null,
+        agentType: "claude",
+      });
+      const setPayloads: any[] = [];
+      (db.update as any).mockImplementation(() => ({
+        set: (payload: any) => {
+          setPayloads.push(payload);
+          const whereResult: any = Promise.resolve();
+          whereResult.returning = vi.fn(() => Promise.resolve([{ newNextSeq: 2 }]));
+          return { where: () => whereResult };
+        },
+      }));
+      // Capture outbox inserts to prove the owed push is (re-)issued.
+      const inserted: any[] = [];
+      (db.insert as any).mockImplementation(() => ({
+        values: (v: any) => {
+          inserted.push(v);
+          const p: any = Promise.resolve();
+          p.onConflictDoNothing = vi.fn(() => Promise.resolve());
+          p.onConflictDoUpdate = vi.fn(() => Promise.resolve());
+          return p;
+        },
+      }));
+
+      daemonWs.receive({
+        type: "session_status",
+        sessionId: SID,
+        status: "completed",
+        sendSeq: 3,
+      } as any);
+      await new Promise((r) => setImmediate(r));
+
+      // Still acked (redelivery must not stall the runner).
+      expect(daemonWs.sentOfType("event_ack")).toHaveLength(1);
+      // The owed terminal push intent IS re-issued (idempotent via the outbox
+      // occurrence key) — this closes the crash-between-commit-and-enqueue
+      // window that would otherwise permanently drop the push.
+      expect(inserted.some((v) => v.transition === "completed")).toBe(true);
+      // But the non-idempotent activity row is NOT re-inserted on a redelivery.
+      expect(inserted.some((v) => v.type === "status_changed")).toBe(false);
+    });
+
+    it("relays a browser approve to the daemon as an approval event and acks it", async () => {
+      const daemonWs = await connectDaemon();
+      const browserWs = new FakeWs();
+      relay.handleConnection(browserWs as any);
+      browserWs.receive({
+        type: "hello",
+        clientId: "c1",
+        deviceType: "web",
+        token: "good-browser",
+      });
+      await new Promise((r) => setImmediate(r));
+
+      // Session ownership lookup: owned by user-1, workspace ws-1.
+      (db.select as any).mockImplementation(() => ({
+        from: () => ({
+          leftJoin: () => ({
+            where: () => ({
+              limit: () =>
+                Promise.resolve([{ sessionUserId: "user-1", workspaceId: "ws-1" }]),
+            }),
+          }),
+          where: () => ({ limit: () => Promise.resolve([]) }),
+        }),
+      }));
+
+      browserWs.receive({
+        type: "approve",
+        sessionId: SID,
+        requestId: "req-9",
+        decision: "allow",
+        clientInputId: "ci-1",
+      } as any);
+      await new Promise((r) => setImmediate(r));
+
+      const forwarded = daemonWs
+        .sentOfType("event")
+        .find((m: any) => m.eventType === "approval") as any;
+      expect(forwarded).toBeDefined();
+      expect(forwarded.payload.requestId).toBe("req-9");
+      expect(forwarded.payload.decision).toBe("allow");
+
+      const acks = browserWs.sentOfType("input_ack") as any[];
+      expect(acks.some((a) => a.clientInputId === "ci-1")).toBe(true);
+    });
+
+    it("legacy events without sendSeq keep the batched-writer path", async () => {
+      const daemonWs = await connectDaemon();
+      (db.query.chatConversations.findFirst as any).mockResolvedValue({
+        id: SID,
+        userId: "user-1",
+        status: "running",
+      });
+
+      daemonWs.receive({
+        type: "session_event",
+        sessionId: SID,
+        eventType: "output_chunk",
+        direction: "agent",
+        payload: { data: "legacy" },
+      });
+      await new Promise((r) => setImmediate(r));
+
+      expect(persistedEvents).toHaveLength(1);
+      expect(daemonWs.sentOfType("event_ack")).toHaveLength(0);
+    });
+  });
+
+  describe("lease sweep + single-writer state (trust model)", () => {
+    const SID = "66666666-6666-4666-8666-666666666666";
+
+    beforeEach(() => {
+      // Defaults: no leases expired, single-writer lock sees a running session.
+      (db.query.runnerLeases.findMany as any).mockResolvedValue([]);
+      (db.query.gatewayConfig.findFirst as any).mockResolvedValue(null);
+      // Restore the conflict-aware insert chain (earlier suites may have
+      // installed a plain values() implementation).
+      (db.insert as any).mockImplementation(() => ({
+        values: () => {
+          const p: any = Promise.resolve();
+          p.onConflictDoUpdate = vi.fn(() => Promise.resolve());
+          p.onConflictDoNothing = vi.fn(() => {
+            const q: any = Promise.resolve();
+            q.returning = vi.fn(() => Promise.resolve([]));
+            return q;
+          });
+          return p;
+        },
+      }));
+      (db.select as any).mockImplementation(() => ({
+        from: () => ({
+          leftJoin: () => ({ where: () => Promise.resolve([]) }),
+          where: () => ({
+            limit: () => Promise.resolve([]),
+            for: () => Promise.resolve([{ status: "running" }]),
+          }),
+        }),
+      }));
+      (db.update as any).mockImplementation(() => ({
+        set: () => {
+          const whereResult: any = Promise.resolve();
+          whereResult.returning = vi.fn(() => Promise.resolve([{ newNextSeq: 2 }]));
+          whereResult.catch = Promise.prototype.catch.bind(whereResult);
+          return { where: () => whereResult };
+        },
+      }));
+    });
+
+    it("CRITICAL regression: a silent run on a healthy host is NEVER timed out to failed", async () => {
+      // The old 35-minute inactivity sweep is gone. With no expired lease,
+      // the sweep must not touch any session — no matter how long a run has
+      // been quiet (a 40-minute compile inside a tool call is healthy).
+      const setPayloads: any[] = [];
+      (db.update as any).mockImplementation(() => ({
+        set: (p: any) => {
+          setPayloads.push(p);
+          return { where: () => Promise.resolve() };
+        },
+      }));
+
+      await (relay as any).sweepExpiredLeases();
+
+      expect(setPayloads.some((p) => p.status === "failed")).toBe(false);
+      expect(setPayloads.some((p) => p.status)).toBe(false);
+    });
+
+    it("CRITICAL regression: an expired lease produces host_unknown, never failed", async () => {
+      (db.query.runnerLeases.findMany as any).mockResolvedValue([
+        { workspaceId: "ws-2", hostId: "hetzner-bob", lastHeartbeatAt: "old" },
+      ]);
+      // Session lookup for the workspace returns one active session; the
+      // FOR UPDATE lock sees it running.
+      (db.select as any).mockImplementation(() => ({
+        from: () => ({
+          leftJoin: () => ({
+            where: () =>
+              Promise.resolve([
+                { id: SID, userId: "user-1", workItemId: null, agentType: "claude" },
+              ]),
+          }),
+          where: () => ({
+            limit: () => Promise.resolve([]),
+            for: () => Promise.resolve([{ status: "running" }]),
+          }),
+        }),
+      }));
+      const setPayloads: any[] = [];
+      (db.update as any).mockImplementation(() => ({
+        set: (p: any) => {
+          setPayloads.push(p);
+          return { where: () => Promise.resolve() };
+        },
+      }));
+
+      await (relay as any).sweepExpiredLeases();
+
+      expect(setPayloads.some((p) => p.status === "host_unknown")).toBe(true);
+      expect(setPayloads.some((p) => p.status === "failed")).toBe(false);
+      // host_unknown is not terminal: no completedAt stamp.
+      expect(setPayloads.find((p) => p.status === "host_unknown")?.completedAt).toBeUndefined();
+    });
+
+    it("precedence: host_unknown never downgrades a terminal state", async () => {
+      const result = await withLockedStatus("completed", () =>
+        (relay as any).deriveAndWriteState(SID, "host_unknown"),
+      );
+      expect(result.applied).toBe(false);
+      expect(result.previous).toBe("completed");
+    });
+
+    it("precedence: a late completed overwrites host_unknown and is flagged corrective", async () => {
+      const result = await withLockedStatus("host_unknown", () =>
+        (relay as any).deriveAndWriteState(SID, "completed"),
+      );
+      expect(result.applied).toBe(true);
+      expect(result.corrective).toBe(true);
+    });
+
+    it("precedence: normal transitions apply without the corrective flag", async () => {
+      const result = await withLockedStatus("running", () =>
+        (relay as any).deriveAndWriteState(SID, "blocked"),
+      );
+      expect(result.applied).toBe(true);
+      expect(result.corrective).toBe(false);
+    });
+
+    it("guard: onlyIfPrevIn rejects transitions from unlisted states", async () => {
+      const result = await withLockedStatus("completed", () =>
+        (relay as any).deriveAndWriteState(SID, "stopping", undefined, [
+          "running",
+          "starting",
+        ]),
+      );
+      expect(result.applied).toBe(false);
+    });
+
+    async function withLockedStatus(
+      status: string,
+      fn: () => Promise<{ applied: boolean; previous: string | null; corrective: boolean }>,
+    ): Promise<{ applied: boolean; previous: string | null; corrective: boolean }> {
+      (db.select as any).mockImplementation(() => ({
+        from: () => ({
+          leftJoin: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
+          where: () => ({
+            limit: () => Promise.resolve([]),
+            for: () => Promise.resolve([{ status }]),
+          }),
+        }),
+      }));
+      return fn();
+    }
   });
 
   describe("cleanup on close", () => {

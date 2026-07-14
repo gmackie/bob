@@ -56,6 +56,10 @@ const ACTIVE_RUN_STATUSES = new Set([
   "pending",
   "awaiting-input",
   "awaiting_input",
+  // Paused awaiting a human decision — still active (the "needs you" state).
+  "blocked",
+  // Lease expired: contact lost, process fate unknown — still active.
+  "host_unknown",
 ]);
 const COMPLETED_RUN_STATUSES = new Set(["completed", "done", "stopped", "idle"]);
 const FAILED_RUN_STATUSES = new Set(["failed", "error", "interrupted", "cancelled", "canceled"]);
@@ -258,6 +262,9 @@ function getRunStatusTone(
 ): ProviderRunRowModel["statusTone"] {
   const normalized = status ?? "";
   if (FAILED_RUN_STATUSES.has(normalized)) return "danger";
+  // Lease expired: contact lost — muted/neutral "lost contact", never a
+  // failure and not the amber "needs you" of a blocked run.
+  if (normalized === "host_unknown") return "default";
   if (REVIEW_RUN_STATUSES.has(normalized)) return "warning";
   if (ACTIVE_RUN_STATUSES.has(normalized)) return "warning";
   if (COMPLETED_RUN_STATUSES.has(normalized)) return "success";

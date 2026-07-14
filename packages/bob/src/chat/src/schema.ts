@@ -91,6 +91,18 @@ export const chatConversations = pgTable(
     planningLaunchContext: t.json("planning_launch_context"),
     retryCount: t.integer().notNull().default(0),
     interruptedAt: t.timestamp({ mode: "string", withTimezone: true }),
+    // Immutable dispatch specification captured at dispatch time — the exact
+    // prompt, repo/worktree config, persona, model, and tool allowlist.
+    // Retry re-dispatches from this verbatim; titles and reconstructed
+    // prompts are not equivalent. Never updated after insert.
+    dispatchSpec: t.json("dispatch_spec").$type<{
+      prompt: string;
+      repositoryId?: string;
+      worktreeConfig?: Record<string, unknown>;
+      personaId?: string;
+      model?: string;
+      allowedTools?: string[];
+    }>(),
     createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
     updatedAt: t.timestamp({ mode: "string", withTimezone: true }),
   }),

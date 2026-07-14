@@ -154,6 +154,10 @@ const ACTIVE_EXECUTION_SESSION_STATUSES = new Set([
   "pending",
   "awaiting-input",
   "awaiting_input",
+  // Paused awaiting a human decision — still active (the "needs you" state).
+  "blocked",
+  // Lease expired: contact lost, process fate unknown — still active.
+  "host_unknown",
 ]);
 
 export function getSidebarModeItems(): SidebarModeItem[] {

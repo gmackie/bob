@@ -46,6 +46,10 @@ const ACTIVE_LINKED_SESSION_STATUSES = [
   "pending",
   "awaiting-input",
   "awaiting_input",
+  // Paused awaiting a human decision — still active (the "needs you" state).
+  "blocked",
+  // Lease expired: contact lost, process fate unknown — still active.
+  "host_unknown",
 ];
 
 /**
