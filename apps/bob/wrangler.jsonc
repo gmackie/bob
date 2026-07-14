@@ -1,4 +1,6 @@
 {
+  // Production deploy target: Cloudflare Workers @ bob.blder.bot (see deploy/README.md).
+  // Node/VPS (bob-server) is desktop/local only — not a production path.
   "name": "blder-bot",
   "main": "./worker/index.ts",
   "compatibility_date": "2025-12-01",

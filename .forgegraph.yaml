@@ -11,7 +11,8 @@ stages:
     sortOrder: 10
 
 # ForgeGraph operator notes:
-# deploy target: Cloudflare Workers (apps/bob/wrangler.jsonc, worker "blder-bot" at bob.blder.bot)
+# PRODUCTION WEB: Cloudflare Workers (apps/bob/wrangler.jsonc, worker "blder-bot" at bob.blder.bot)
+#   — NOT Node/VPS. See deploy/README.md. bob-server is desktop/local only.
 # deploy trigger: .forgejo/workflows/ci.yml "Deploy web to bob.blder.bot" job on push to master
 #   (Forgejo runner, `pnpm exec vinext deploy`)
 # primary web service path: apps/bob
