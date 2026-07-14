@@ -216,6 +216,57 @@ export function buildWorkLaneSummaries(items: WorkPipelineItem[]): WorkLaneSumma
   ];
 }
 
+// Lane → work-item statuses, for the count-based summaries. Board-state view:
+// "active" means a card marked in_progress/running (execution liveness is the
+// separate Running-now rail). Keeping this a pure status map is what lets the
+// counts come from an uncapped GROUP BY instead of a truncated list of rows.
+const LANE_STATUSES: Record<WorkLaneKey, string[]> = {
+  "needs-attention": ["blocked", "error", "failed", "interrupted"],
+  ready: ["backlog", "todo", "ready", "draft"],
+  active: ["in_progress", "running"],
+  review: ["in_review", "review"],
+};
+
+const LANE_META: Array<{ key: WorkLaneKey; title: string; activeTone: DashboardTone }> = [
+  { key: "needs-attention", title: "Needs Attention", activeTone: "danger" },
+  { key: "ready", title: "Ready", activeTone: "success" },
+  { key: "active", title: "Active", activeTone: "success" },
+  { key: "review", title: "Review", activeTone: "warning" },
+];
+
+/**
+ * The work-item statuses a lane fetches, so its table can request only its own
+ * rows (status-scoped) instead of slicing the recency-capped list. Includes a
+ * generous superset for needs-attention so failed/blocked rows are fetched;
+ * `filterWorkLaneItems` still applies the precise per-lane predicate.
+ */
+export function getLaneQueryStatuses(lane: WorkLaneKey): string[] {
+  return [...LANE_STATUSES[lane]];
+}
+
+/**
+ * Build the four lane summary cards from uncapped per-status counts
+ * (`workItem.statusCounts`). This replaces counting a recency-capped page of
+ * rows — the bug where a workspace full of `in_review` items pushed the
+ * backlog past the 100-row cap and every lane read 0.
+ */
+export function buildWorkLaneSummariesFromCounts(
+  counts: Record<string, number>,
+): WorkLaneSummary[] {
+  return LANE_META.map(({ key, title, activeTone }) => {
+    const count = LANE_STATUSES[key].reduce(
+      (total, status) => total + (counts[status] ?? 0),
+      0,
+    );
+    return {
+      key,
+      title,
+      count,
+      tone: count > 0 ? activeTone : "default",
+    };
+  });
+}
+
 export function getWorkPipelineHeaderModel(): WorkPipelineHeaderModel {
   return {
     title: "Operations",

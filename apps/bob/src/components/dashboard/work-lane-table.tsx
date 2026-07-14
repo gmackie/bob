@@ -5,9 +5,10 @@ import { useQuery } from "@tanstack/react-query";
 
 import { cn } from "@gmacko/core/ui";
 
-import { useBobRpcClient } from "~/rpc/react";
+import { useTRPC } from "~/trpc/react";
 import {
   filterWorkLaneItems,
+  getLaneQueryStatuses,
   getWorkLaneEntryHref,
   getWorkLaneRowModel,
   getWorkLaneTableHeaderModel,
@@ -30,14 +31,17 @@ export function WorkLaneTable({
   workspaceId?: string;
   lane: WorkLaneKey;
 }) {
-  const rpc = useBobRpcClient();
-  const input = { workspaceId: workspaceId ?? "", limit: 100 };
-  const { data: workItems, isLoading } = useQuery({
-    queryKey: ["rpc", "workItem.list", input],
-    queryFn: () => rpc.workItems.list(input),
-    enabled: Boolean(workspaceId),
-    refetchInterval: 10_000,
-  });
+  const trpc = useTRPC();
+  const { data: workItems, isLoading } = useQuery(
+    trpc.workItem.list.queryOptions(
+      {
+        workspaceId: workspaceId ?? "",
+        statuses: getLaneQueryStatuses(lane),
+        limit: 100,
+      },
+      { enabled: Boolean(workspaceId), refetchInterval: 10_000 },
+    ),
+  );
   const items = filterWorkLaneItems((workItems ?? []) as WorkPipelineItem[], lane);
   const header = getWorkLaneTableHeaderModel(lane);
 

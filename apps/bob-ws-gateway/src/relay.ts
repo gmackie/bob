@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { eq, and, or, gt, lt, inArray, asc, desc, sql } from "@bob/db";
+import { eq, and, or, gt, lt, inArray, asc, desc, sql, isNull } from "@bob/db";
 import { db } from "@bob/db/client";
 import { chatConversations, repositories, sessionEvents, taskRuns, workItems, agentRuns, activities, workspaces, tenants, tenantMembers, planDrafts, pullRequests, runnerLeases, gatewayConfig, eventLog } from "@bob/db/schema";
 
@@ -49,6 +49,15 @@ const STOPPABLE_STATUSES = [
   "host_unknown",
   "stopping",
 ] as const;
+
+// Orphan reaper: a run stuck in an active status (queued/running) with NO
+// session for longer than this has never been claimed (a real claim attaches a
+// session at once) — a crashed dispatch, a retired daemon, or an ancient dev
+// artifact. 60 min is far beyond the seconds a dispatch→claim actually takes,
+// so legitimate just-dispatched runs are never touched. Runs WITH a session are
+// the lease sweep's domain (host_unknown), never the reaper's.
+const REAP_ORPHAN_GRACE_MS = 60 * 60_000;
+const REAP_INTERVAL_MS = 5 * 60_000;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isUuid = (s: unknown): s is string => typeof s === "string" && UUID_RE.test(s);
@@ -111,6 +120,7 @@ export class Relay {
   private nextConnId = 0;
 
   private timeoutSweepTimer: NodeJS.Timeout | null = null;
+  private reapTimer: NodeJS.Timeout | null = null;
 
   constructor(cfg: RelayConfig) {
     this.cfg = cfg;
@@ -119,6 +129,44 @@ export class Relay {
         console.error("[Relay] Lease sweep failed (will retry next interval):", err);
       });
     }, 15_000);
+    this.reapTimer = setInterval(() => {
+      this.reapOrphanedRuns().catch((err) => {
+        console.error("[Relay] Orphan reaper failed (will retry next interval):", err);
+      });
+    }, REAP_INTERVAL_MS);
+  }
+
+  /**
+   * Reap orphaned agent runs — the self-healing companion to the one-time
+   * manual cleanup. A run in queued/running with a NULL session_id past the
+   * grace period was never claimed by any runner (a claim attaches a session
+   * immediately), so it is provably dead: terminalize it so it stops showing as
+   * "active"/"running" in every pipeline view and count. `running` → interrupted
+   * (it purported to be executing), `queued` → failed (it never started). Runs
+   * WITH a session are untouched here — those are the lease sweep's job.
+   */
+  private async reapOrphanedRuns(): Promise<void> {
+    const cutoff = new Date(Date.now() - REAP_ORPHAN_GRACE_MS).toISOString();
+    const reaped = await db
+      .update(agentRuns)
+      .set({
+        status: sql`case when ${agentRuns.status} = 'running' then 'interrupted'::agent_run_status else 'failed'::agent_run_status end`,
+        completedAt: new Date(),
+        summary: sql`(coalesce(${agentRuns.summary}::jsonb, '{}'::jsonb) || jsonb_build_object('reaped', true, 'reap_reason', 'orphaned: active status with no session past grace'))::json`,
+      })
+      .where(
+        and(
+          inArray(agentRuns.status, ["queued", "running"]),
+          isNull(agentRuns.sessionId),
+          lt(agentRuns.createdAt, cutoff),
+        ),
+      )
+      .returning({ id: agentRuns.id });
+    if (reaped.length > 0) {
+      console.log(
+        `[Relay] Reaped ${reaped.length} orphaned run(s): active status with no session past grace`,
+      );
+    }
   }
 
   /**

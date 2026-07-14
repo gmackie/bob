@@ -11,6 +11,7 @@ import {
   listCurrentArtifactsInputSchema,
   listNotificationsInputSchema,
   listWorkItemsInputSchema,
+  workItemStatusCountsInputSchema,
   markNotificationAsReadInputSchema,
   promoteToTaskInputSchema,
   updateWorkItemInputSchema,
@@ -22,6 +23,7 @@ import {
 } from "../trpc";
 import {
   workItemsList,
+  workItemStatusCounts,
   workItemsGet,
   workItemsUpdate,
   workItemsReorderQueue,
@@ -160,6 +162,11 @@ const buildMarkNotificationAsReadProcedure = <
   );
 
 const listWorkItemsProcedure = buildListWorkItemsProcedure(protectedProcedure);
+const statusCountsProcedure = protectedProcedure
+  .input(workItemStatusCountsInputSchema)
+  .query(({ ctx, input }) =>
+    workItemStatusCounts({ db: ctx.db, userId: ctx.session.user.id }, input),
+  );
 const getWorkItemProcedure = buildGetWorkItemProcedure(protectedProcedure);
 const updateWorkItemProcedure = buildUpdateWorkItemProcedure(protectedProcedure);
 const listCommentsProcedure = buildListCommentsProcedure(protectedProcedure);
@@ -207,6 +214,7 @@ const publicMarkNotificationAsReadProcedure =
 
 export const workItemRouter = {
   list: listWorkItemsProcedure,
+  statusCounts: statusCountsProcedure,
   get: getWorkItemProcedure,
   promoteToTask: promoteToTaskProcedure,
   dispatch: protectedProcedure
