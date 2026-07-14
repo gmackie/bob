@@ -113,7 +113,8 @@ function AccountSection() {
     <View className="border-border bg-card mt-4 rounded-lg border p-4">
       <Text className="text-lg font-semibold text-foreground">Account</Text>
       <Text className="mt-2 text-sm text-muted">
-        Manage the active session on this device.
+        Manage the paired session on this device. To delete your account, sign
+        in on the web app.
       </Text>
       <Pressable
         onPress={handleLogout}

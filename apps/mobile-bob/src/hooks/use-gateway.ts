@@ -19,7 +19,7 @@ import type {
 } from "@bob/ws";
 import { BobWsClient } from "@bob/ws";
 
-import { authClient } from "~/utils/auth";
+import { authClient, getApiKey } from "~/utils/auth";
 import { getBaseUrl } from "~/utils/base-url";
 import { mergeGatewaySessionStatusChange } from "./gateway-sessions";
 import { invalidateGatewayEventQueries } from "./gateway-query-invalidations";
@@ -201,12 +201,11 @@ export function useGateway(): UseGatewayResult {
   }, [queryClient]);
 
   useEffect(() => {
-    const cookies = authClient.getCookie();
-    if (!cookies) return;
-
-    // Extract a token from cookies for the gateway hello handshake.
-    // The gateway authenticates via the same session cookie the API uses.
-    const token = cookies;
+    // The gateway's validateBrowserToken accepts a `bob_`/`gmk_` device API
+    // key as the handshake token (as well as the dev-bypass token); this is
+    // the same credential tRPC/RPC send as `Authorization: Bearer`.
+    const token = getApiKey();
+    if (!token) return;
 
     const client = new BobWsClient({
       url: getGatewayWsUrl(),

@@ -1,17 +1,13 @@
 import { Redirect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { Platform, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
-import { Button, Card, Screen } from "~/components/ui";
+import { Button, Screen } from "~/components/ui";
 import { getTabletDashboardHref } from "~/features/tablet/navigation";
 import { ONBOARDING_SLIDES } from "~/features/planning/onboarding-copy";
 import { hasSeenOnboarding, setOnboardingComplete } from "~/lib/storage";
 import { authClient } from "~/utils/auth";
 import { shouldSkipOnboardingForDevAuth } from "~/utils/dev-auth-bypass";
-import {
-  dismissExistingAuthBrowser,
-  getMobileOAuthCallbackPath,
-} from "~/utils/oauth";
 
 function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -84,118 +80,6 @@ function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   );
 }
 
-function SignInScreen() {
-  const [signingIn, setSigningIn] = useState<string | null>(null);
-
-  const handleSignIn = useCallback(async (provider: "apple" | "google" | "github") => {
-    if (signingIn) return;
-    setSigningIn(provider);
-    try {
-      const WebBrowser = await import("expo-web-browser");
-      await dismissExistingAuthBrowser(WebBrowser.dismissBrowser);
-      await authClient.signIn.social({
-        provider,
-        callbackURL: getMobileOAuthCallbackPath(),
-      });
-    } catch (error: unknown) {
-      console.error("Sign in error:", error);
-    } finally {
-      setSigningIn(null);
-    }
-  }, [signingIn]);
-
-  return (
-    <Screen className="pt-16 pb-10">
-      <View className="flex-1">
-        <Text className="text-foreground text-4xl font-semibold tracking-tight">
-          Welcome to Bob
-        </Text>
-        <Text className="text-muted mt-2 text-base leading-6">
-          Planning stays primary. Task execution stays one tap away.
-        </Text>
-
-        <View className="mt-10 space-y-3">
-          <Card>
-            <View className="flex-row items-center">
-              <View className="bg-accent/10 mr-3 h-10 w-10 items-center justify-center rounded-xl">
-                <Text className="text-lg">🧱</Text>
-              </View>
-              <View className="flex-1">
-                <Text className="text-foreground text-base font-semibold">
-                  Workspaces, projects, and work items
-                </Text>
-                <Text className="text-muted text-sm">
-                  One planning model across web and mobile
-                </Text>
-              </View>
-            </View>
-          </Card>
-
-          <Card>
-            <View className="flex-row items-center">
-              <View className="bg-accent/10 mr-3 h-10 w-10 items-center justify-center rounded-xl">
-                <Text className="text-lg">🤖</Text>
-              </View>
-              <View className="flex-1">
-                <Text className="text-foreground text-base font-semibold">
-                  Task-scoped Bob execution
-                </Text>
-                <Text className="text-muted text-sm">
-                  Chat, status, and artifacts focused on one task
-                </Text>
-              </View>
-            </View>
-          </Card>
-
-          <Card>
-            <View className="flex-row items-center">
-              <View className="bg-accent/10 mr-3 h-10 w-10 items-center justify-center rounded-xl">
-                <Text className="text-lg">🔔</Text>
-              </View>
-              <View className="flex-1">
-                <Text className="text-foreground text-base font-semibold">
-                  Single inbox
-                </Text>
-                <Text className="text-muted text-sm">
-                  Review-ready and needs-input updates in one place
-                </Text>
-              </View>
-            </View>
-          </Card>
-        </View>
-      </View>
-
-      <View className="mt-auto gap-3">
-        {Platform.OS === "ios" ? (
-          <Button
-            onPress={() => handleSignIn("apple")}
-            variant="primary"
-            disabled={signingIn !== null}
-          >
-            {signingIn === "apple" ? "Signing in..." : "Continue with Apple"}
-          </Button>
-        ) : null}
-        <Button
-          onPress={() => handleSignIn("google")}
-          variant="secondary"
-          disabled={signingIn !== null}
-        >
-          {signingIn === "google" ? "Signing in..." : "Continue with Google"}
-        </Button>
-        <Button
-          onPress={() => handleSignIn("github")}
-          variant="secondary"
-          disabled={signingIn !== null}
-        >
-          {signingIn === "github" ? "Signing in..." : "Continue with GitHub"}
-        </Button>
-        <Text className="text-muted2 mt-1 text-center text-xs">
-          Workspace access uses the same shared Bob identity on web and mobile
-        </Text>
-      </View>
-    </Screen>
-  );
-}
 
 function SessionBootstrapScreen() {
   return (
@@ -249,7 +133,7 @@ export default function Index() {
   }
 
   if (!session) {
-    return <SignInScreen />;
+    return <Redirect href={"/pairing" as never} />;
   }
 
   return <Redirect href={getTabletDashboardHref() as never} />;

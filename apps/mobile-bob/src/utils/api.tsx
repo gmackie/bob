@@ -6,7 +6,7 @@ import superjson from "superjson";
 
 import type { AppRouter } from "@bob/api";
 
-import { authClient } from "./auth";
+import { getApiKey } from "./auth";
 import { getBaseUrl } from "./base-url";
 
 export const queryClient = new QueryClient({
@@ -36,9 +36,9 @@ export const trpc = createTRPCOptionsProxy<AppRouter>({
           const headers = new Map<string, string>();
           headers.set("x-trpc-source", "expo-react");
 
-          const cookies = authClient.getCookie();
-          if (cookies) {
-            headers.set("Cookie", cookies);
+          const apiKey = getApiKey();
+          if (apiKey) {
+            headers.set("Authorization", `Bearer ${apiKey}`);
           }
           return headers;
         },
@@ -51,12 +51,12 @@ export const trpc = createTRPCOptionsProxy<AppRouter>({
 export type { RouterInputs, RouterOutputs } from "@bob/api";
 
 export function createMobileBobRpcClient() {
-  const cookies = authClient.getCookie();
+  const apiKey = getApiKey();
   return createBobRpcClient({
     baseURL: `${getBaseUrl()}/api/rpc`,
     headers: {
       "x-rpc-source": "expo-react",
-      ...(cookies ? { Cookie: cookies } : {}),
+      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
     },
   });
 }

@@ -6,7 +6,9 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { queryClient } from "~/utils/api";
+import { authClient } from "~/utils/auth";
 import { Providers } from "../providers";
+import PairingScreen from "./pairing";
 import { TabletSidebar } from "~/components/tablet/TabletSidebar";
 import { AgentThreadView } from "~/components/tablet/AgentThreadView";
 import { WorkItemPane } from "~/components/tablet/WorkItemPane";
@@ -636,11 +638,19 @@ function TabletLayout() {
   );
 }
 
+function TabletRoot() {
+  // The tablet layout bypasses the expo-router Stack (and therefore the
+  // index-route auth gate), so it gates on the session directly: unpaired
+  // iPads land on the same pairing screen phones reach via `/`.
+  const { data: session } = authClient.useSession();
+  return session ? <TabletLayout /> : <PairingScreen />;
+}
+
 export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <Providers>
-        {isTablet ? <TabletLayout /> : <PhoneLayout />}
+        {isTablet ? <TabletRoot /> : <PhoneLayout />}
         <StatusBar style="light" />
       </Providers>
     </QueryClientProvider>

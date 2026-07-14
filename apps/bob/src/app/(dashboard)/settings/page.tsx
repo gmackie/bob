@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { CollapsibleSection } from "./_components/collapsible-section";
 import { ApiKeysSection } from "./_components/api-keys";
+import { DevicePairingSection } from "./_components/device-pairing";
 import { CookieJar } from "./_components/cookie-jar";
 import { ConfigFilesSection } from "./_components/config-files";
 import { GitProvidersSection } from "./_components/git-providers";
@@ -47,6 +48,9 @@ export default function SettingsPage() {
         </CollapsibleSection>
         <CollapsibleSection title="Config Files (MCP / Skills / Agents)" sectionId="config-files" defaultOpen={false}>
           <ConfigFilesSection />
+        </CollapsibleSection>
+        <CollapsibleSection title="Pair Mobile Device" sectionId="device-pairing" defaultOpen={false} forceOpen={openSection === "device-pairing"}>
+          <DevicePairingSection />
         </CollapsibleSection>
         <CollapsibleSection title="API Keys" sectionId="api-keys" defaultOpen={false} forceOpen={openSection === "api-keys"}>
           <ApiKeysSection />

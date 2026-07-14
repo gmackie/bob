@@ -4,7 +4,7 @@ import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import { Screen } from "~/components/ui";
 import { env } from "~/config/env";
-import { authClient } from "~/utils/auth";
+import { authClient, getApiKey } from "~/utils/auth";
 
 import type { ChatMessage } from "./chat-messages";
 import { MessageList } from "./components/message-list";
@@ -37,7 +37,7 @@ export function ChatScreen() {
   const commandContext = useMemo<CommandContext>(
     () => ({
       oodaBaseUrl: env.oodaApiUrl,
-      getCookies: () => authClient.getCookie(),
+      getAuthToken: () => getApiKey() ?? undefined,
       threadId: oodaChat.selectedThreadId ?? undefined,
     }),
     [oodaChat.selectedThreadId],

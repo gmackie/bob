@@ -5,7 +5,7 @@ import type { AnyRouter } from "@trpc/server";
 import SuperJSON from "superjson";
 
 import { env } from "~/config/env";
-import { authClient } from "~/utils/auth";
+import { getApiKey } from "~/utils/auth";
 
 export interface VaultFile {
   relativePath: string;
@@ -40,8 +40,8 @@ function createVaultClient(baseUrl: string): VaultClient {
         headers() {
           const headers = new Map<string, string>();
           headers.set("x-trpc-source", "mobile-bob");
-          const cookies = authClient.getCookie();
-          if (cookies) headers.set("Cookie", cookies);
+          const apiKey = getApiKey();
+          if (apiKey) headers.set("Authorization", `Bearer ${apiKey}`);
           return headers;
         },
       }),

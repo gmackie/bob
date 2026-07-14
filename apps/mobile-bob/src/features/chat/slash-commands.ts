@@ -17,7 +17,7 @@ interface CommandHandler {
 
 export interface CommandContext {
   oodaBaseUrl: string;
-  getCookies: () => string | undefined;
+  getAuthToken: () => string | undefined;
   threadId?: string;
 }
 
@@ -36,7 +36,7 @@ async function trpcQuery(
   baseUrl: string,
   path: string,
   input: unknown,
-  cookies?: string,
+  authToken?: string,
 ): Promise<unknown> {
   const url = new URL(`${baseUrl.replace(/\/$/, "")}/api/trpc/${path}`);
   url.searchParams.set("input", JSON.stringify({ json: input }));
@@ -44,7 +44,7 @@ async function trpcQuery(
   const headers: Record<string, string> = {
     "x-trpc-source": "mobile-bob",
   };
-  if (cookies) headers.Cookie = cookies;
+  if (authToken) headers.Authorization = `Bearer ${authToken}`;
 
   const response = await fetch(url.toString(), { headers });
   if (!response.ok) {
@@ -76,7 +76,7 @@ const searchCommand: CommandHandler = {
       ctx.oodaBaseUrl,
       "oracle.query",
       { task: "mobile knowledge search", question: args.trim(), topK: 5 },
-      ctx.getCookies(),
+      ctx.getAuthToken(),
     )) as {
       chunks: {
         sourceTitle: string | null;
@@ -116,7 +116,7 @@ const papersCommand: CommandHandler = {
       ctx.oodaBaseUrl,
       "research.papersSearchVault",
       { query: args.trim(), limit: 5 },
-      ctx.getCookies(),
+      ctx.getAuthToken(),
     )) as {
       papers: {
         title: string;
@@ -151,7 +151,7 @@ const memoryCommand: CommandHandler = {
       ctx.oodaBaseUrl,
       "research.threadMemorySearch",
       { query: args.trim(), scope: "all", limit: 5 },
-      ctx.getCookies(),
+      ctx.getAuthToken(),
     )) as {
       threads: {
         title: string | null;
@@ -187,7 +187,7 @@ const vaultCommand: CommandHandler = {
       ctx.oodaBaseUrl,
       "vault.list",
       { vaultKind: kind, glob: "notes/**" },
-      ctx.getCookies(),
+      ctx.getAuthToken(),
     )) as string[];
 
     if (!files.length) {

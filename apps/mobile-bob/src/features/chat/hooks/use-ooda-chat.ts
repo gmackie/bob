@@ -6,7 +6,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import SuperJSON from "superjson";
 
 import { env } from "~/config/env";
-import { authClient } from "~/utils/auth";
+import { getApiKey } from "~/utils/auth";
 
 import type { ChatMessage, OodaSessionEvent } from "../chat-messages";
 import { collapseOodaEventsToMessages } from "../chat-messages";
@@ -89,8 +89,8 @@ function createOodaClient(baseUrl: string): OodaClient {
         headers() {
           const headers = new Map<string, string>();
           headers.set("x-trpc-source", "mobile-bob");
-          const cookies = authClient.getCookie();
-          if (cookies) headers.set("Cookie", cookies);
+          const apiKey = getApiKey();
+          if (apiKey) headers.set("Authorization", `Bearer ${apiKey}`);
           return headers;
         },
       }),
@@ -215,13 +215,13 @@ export function useOodaChat(enabled: boolean): AgentChat & OodaChatExtensions {
 
     async function streamSessionEvents() {
       try {
-        const cookies = authClient.getCookie();
+        const apiKey = getApiKey();
         const response = await fetch(
           `${baseUrl.replace(/\/$/, "")}/api/runner/events?sessionId=${encodeURIComponent(activeSessionId ?? "")}`,
           {
             headers: {
               Accept: "text/event-stream",
-              ...(cookies ? { Cookie: cookies } : {}),
+              ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
             },
             signal: controller.signal,
           },
