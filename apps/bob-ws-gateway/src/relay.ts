@@ -58,6 +58,21 @@ const STOPPABLE_STATUSES = [
 // the lease sweep's domain (host_unknown), never the reaper's.
 const REAP_ORPHAN_GRACE_MS = 60 * 60_000;
 const REAP_INTERVAL_MS = 5 * 60_000;
+/**
+ * How long an unanswered approval may hold its slot before we call it abandoned.
+ *
+ * A `blocked` run is parked on a live agent process waiting for a human, so it
+ * genuinely holds a runner slot and auto-drain counts it against the concurrency
+ * cap. Nothing ever expired it, though — two prompts nobody answered pinned
+ * concurrency=2 at zero free slots and silently sealed the whole pipeline for
+ * two days ("N todo eligible yet 0 dispatched").
+ *
+ * The grace is deliberately generous: answering the next morning is normal, not
+ * a failure. This keys on THE HUMAN not answering — never on the agent being
+ * quiet — which is what separates it from the deleted 35-minute inactivity sweep
+ * that manufactured false deaths out of long tool calls.
+ */
+const BLOCKED_ABANDON_MS = 24 * 60 * 60_000;
 
 // How often the gateway pushes newly-pending sessions to connected daemons.
 // 15s keeps dispatch→run latency low while the DB scan stays cheap (one indexed
@@ -144,6 +159,9 @@ export class Relay {
       this.reapOrphanedRuns().catch((err) => {
         console.error("[Relay] Orphan reaper failed (will retry next interval):", err);
       });
+      this.sweepAbandonedApprovals().catch((err) => {
+        console.error("[Relay] Abandoned-approval sweep failed (will retry next interval):", err);
+      });
     }, REAP_INTERVAL_MS);
     this.pendingDeliveryTimer = setInterval(() => {
       this.deliverPendingTick().catch((err) => {
@@ -181,6 +199,62 @@ export class Relay {
     if (reaped.length > 0) {
       console.log(
         `[Relay] Reaped ${reaped.length} orphaned run(s): active status with no session past grace`,
+      );
+    }
+  }
+
+  /**
+   * Expire abandoned approvals so an unanswered prompt can't hold a slot
+   * forever. See BLOCKED_ABANDON_MS for why this exists and why the grace is
+   * long. Only `blocked` sessions whose last activity is past the grace are
+   * touched; everything else — including a run that is merely quiet — is left
+   * strictly alone.
+   */
+  private async sweepAbandonedApprovals(): Promise<void> {
+    const cutoff = new Date(Date.now() - BLOCKED_ABANDON_MS).toISOString();
+    const stale = await db
+      .select({ id: chatConversations.id })
+      .from(chatConversations)
+      .where(
+        and(
+          eq(chatConversations.status, "blocked"),
+          // lastActivityAt is set when the run parks; fall back to createdAt so
+          // a row that never recorded activity can still age out.
+          sql`coalesce(${chatConversations.lastActivityAt}, ${chatConversations.createdAt}) < ${cutoff}`,
+        ),
+      );
+
+    for (const session of stale) {
+      // Route through the single writer, and gate on the previous state still
+      // being "blocked": if the human answered between the select and now, the
+      // status has already moved and we must not stomp their live run.
+      const result = await this.deriveAndWriteState(
+        session.id,
+        "interrupted",
+        { interruptedAt: new Date().toISOString() },
+        ["blocked"],
+      );
+      if (!result.applied) continue;
+
+      // The parked run is real and still claims to be executing; the orphan
+      // reaper can't see it because it HAS a session. Terminalize it here so
+      // "what's running" stops lying.
+      await db
+        .update(agentRuns)
+        .set({
+          status: sql`'interrupted'::agent_run_status`,
+          completedAt: new Date(),
+          summary: sql`(coalesce(${agentRuns.summary}::jsonb, '{}'::jsonb) || jsonb_build_object('reaped', true, 'reap_reason', 'abandoned: approval unanswered past grace'))::json`,
+        })
+        .where(
+          and(
+            eq(agentRuns.sessionId, session.id),
+            inArray(agentRuns.status, ["queued", "running", "blocked"]),
+          ),
+        );
+
+      console.log(
+        `[Relay] Expired abandoned approval for session ${session.id} (blocked, no answer in ${BLOCKED_ABANDON_MS / 3_600_000}h) — slot released`,
       );
     }
   }
