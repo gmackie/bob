@@ -1,14 +1,22 @@
 import { app, BrowserWindow } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import crypto from "node:crypto";
-import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
+import {
+  resolveDaemonBinaryPath,
+  resolveDesktopPaths,
+} from "./packaging.js";
 import { RotatingFileSink } from "./rotatingFileSink.js";
 
-// apps/desktop/dist-electron/main.js → ../../.. lands at the monorepo root.
-const APP_ROOT = path.resolve(__dirname, "../../..");
+const DESKTOP_PATHS = resolveDesktopPaths({
+  isPackaged: app.isPackaged,
+  resourcesPath: process.resourcesPath,
+  electronDir: __dirname,
+});
+const { appRoot: APP_ROOT, bobServerBin: BOB_SERVER_BIN, daemonBinDir: DAEMON_BIN_DIR, serverCwd: SERVER_CWD } =
+  DESKTOP_PATHS;
 
 const USERDATA_DIR = path.join(os.homedir(), ".bob", "userdata");
 const LOG_DIR = path.join(USERDATA_DIR, "logs");
@@ -43,17 +51,6 @@ function pipeChildLogs(source: string, child: ChildProcess): void {
     });
   }
 }
-const BOB_SERVER_BIN = path.join(
-  APP_ROOT,
-  "apps",
-  "bob-server",
-  "dist",
-  "bin.js",
-);
-// Go daemon binary bundled under apps/desktop/resources/bin/.
-// dist-electron/main.js → ../resources/bin.
-const DAEMON_BIN_DIR = path.resolve(__dirname, "..", "resources", "bin");
-
 let serverChild: ChildProcess | null = null;
 let daemonChild: ChildProcess | null = null;
 let win: BrowserWindow | null = null;
@@ -63,7 +60,7 @@ type ServerReady = { url: string; token: string };
 async function spawnBobServer(): Promise<ServerReady> {
   const token = crypto.randomBytes(32).toString("hex");
   const child = spawn(
-    "node",
+    process.execPath,
     [
       BOB_SERVER_BIN,
       "--port",
@@ -75,9 +72,18 @@ async function spawnBobServer(): Promise<ServerReady> {
       "--no-browser",
     ],
     {
-      cwd: APP_ROOT,
+      cwd: SERVER_CWD,
       stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env },
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: "1",
+        BOB_BLDER_DIR: app.isPackaged
+          ? path.join(process.resourcesPath, "blder")
+          : path.join(APP_ROOT, "apps", "bob"),
+        BOB_DB_MIGRATIONS_DIR: app.isPackaged
+          ? path.join(process.resourcesPath, "db-migrations")
+          : path.join(APP_ROOT, "packages", "bob", "src", "db", "drizzle"),
+      },
     },
   );
   serverChild = child;
@@ -136,27 +142,28 @@ async function spawnBobServer(): Promise<ServerReady> {
   return await readyPromise;
 }
 
-function resolveDaemonBinaryPath(): string | null {
-  if (process.platform !== "darwin") {
-    return null;
-  }
-  const arch = os.arch() === "arm64" ? "arm64" : "amd64";
-  const binPath = path.join(DAEMON_BIN_DIR, `bob-darwin-${arch}`);
-  if (!fs.existsSync(binPath)) {
-    return null;
-  }
-  return binPath;
-}
-
 function spawnDaemon(serverUrl: string, token: string): void {
-  const binPath = resolveDaemonBinaryPath();
-  if (!binPath) {
+  const resolution = resolveDaemonBinaryPath({
+    platform: process.platform,
+    arch: os.arch(),
+    binDir: DAEMON_BIN_DIR,
+  });
+
+  if (resolution.kind === "unsupported-platform") {
     console.warn(
-      `[desktop] bob daemon binary not found under ${DAEMON_BIN_DIR} for arch ${os.arch()} — skipping daemon spawn`,
+      `[desktop] bob daemon is not supported on ${resolution.platform} — skipping daemon spawn`,
     );
     return;
   }
 
+  if (resolution.kind === "missing") {
+    console.warn(
+      `[desktop] bob daemon binary not found at ${resolution.expectedPath} — skipping daemon spawn`,
+    );
+    return;
+  }
+
+  const binPath = resolution.path;
   // The Go CLI (github.com/blder/bob) honors BOB_SERVER_URL / BOB_AUTH_TOKEN /
   // BOB_GATEWAY_URL env vars at runtime (internal/config/config.go), so we can
   // point the bundled daemon at Electron's local bob-server without touching
