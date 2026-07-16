@@ -24,7 +24,12 @@ const OWNER = "gmackie";
 const TOKEN = process.env.FORGEJO_TOKEN;
 const DRY_RUN = String(process.env.REAPER_DRY_RUN ?? "true") !== "false";
 const MAX = Number(process.env.REAPER_MAX ?? 8);
-const MAX_DIFF = 14000;
+// The reviewer must see the WHOLE diff. An earlier 14k-char cap silently cut
+// diffs mid-file, and the reviewer rightly refused to approve code it couldn't
+// see — producing mass false rejections that looked like a quality signal. The
+// diff now goes over stdin (not argv, which has a hard ARG_MAX) and anything
+// past this bound is escalated to a human rather than reviewed half-blind.
+const MAX_DIFF = 400_000;
 const STATE = process.env.REAPER_STATE ?? join(homedir(), ".bob-pr-reaper-seen.json");
 
 if (!TOKEN) { console.error("FORGEJO_TOKEN required"); process.exit(1); }
@@ -48,18 +53,21 @@ function saveSeen(set) { try { writeFileSync(STATE, JSON.stringify([...set].slic
 function claudeReview(diff) {
   const prompt =
     "You are a rigorous senior engineer reviewing a pull request opened by an AI agent. " +
+    "The complete, untruncated unified diff for the PR is on stdin. " +
     "Judge whether the change is correct, self-consistent, and complete for its stated intent. " +
     "Be skeptical: reject if it references call sites it doesn't update, is half-finished, or could break compilation/tests. " +
-    "Reply with ONE line of JSON ONLY, no prose: {\"approve\": true|false, \"summary\": \"<=200 chars\"}. " +
-    "Unified diff follows:\n\n" + diff.slice(0, MAX_DIFF);
+    "Judge only what the diff actually does — a diff that ends because the change ends is complete, not truncated. " +
+    "Reply with ONE line of JSON ONLY, no prose: {\"approve\": true|false, \"summary\": \"<=200 chars\"}.";
   return new Promise((resolve) => {
-    execFile("claude", ["-p", prompt], { timeout: 150000, maxBuffer: 8 * 1024 * 1024 }, (err, stdout) => {
+    const child = execFile("claude", ["-p", prompt], { timeout: 300000, maxBuffer: 16 * 1024 * 1024 }, (err, stdout) => {
       if (err) return resolve({ approve: false, summary: `review error: ${err.message.slice(0, 120)}`, errored: true });
       const m = String(stdout).match(/\{[\s\S]*"approve"[\s\S]*\}/);
       if (!m) return resolve({ approve: false, summary: "unparseable review; not approving", errored: true });
       try { const v = JSON.parse(m[0]); resolve({ approve: !!v.approve, summary: String(v.summary ?? "").slice(0, 400) }); }
       catch { resolve({ approve: false, summary: "unparseable review JSON; not approving", errored: true }); }
     });
+    child.stdin.on("error", () => {});
+    child.stdin.end(diff);
   });
 }
 
@@ -108,6 +116,13 @@ async function main() {
     // Gate 3: AI review (subscription)
     const diff = await rawDiff(OWNER, repo, num);
     if (!diff) { skipped++; continue; }
+    // Too large to review in one pass: leave it for a human rather than judge a
+    // fragment. Never post a REQUEST-CHANGES verdict we didn't actually earn.
+    if (diff.length > MAX_DIFF) {
+      seen.add(key); skipped++;
+      console.log(`[pr-reaper] ${repo}#${num} TOO-BIG ${diff.length} chars — left for human`);
+      continue;
+    }
     const verdict = await claudeReview(diff);
     reviewed++;
     if (verdict.errored) { console.log(`[pr-reaper] ${repo}#${num} REVIEW-ERROR ${verdict.summary}`); continue; }
