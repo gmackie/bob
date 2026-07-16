@@ -51,7 +51,13 @@ async function getLinearClient(db: Db, workspaceId: string): Promise<LinearClien
     });
   }
 
-  return new LinearClient({ apiKey: integration.apiKey });
+  // A NULL linearApiUrl keeps the SDK's default (api.linear.app). Setting it
+  // points the same SDK at a Linear-API-compatible instance — e.g. Kanbanger —
+  // which speaks the identical wire protocol and accepts lin_api_/lc_ keys.
+  return new LinearClient({
+    apiKey: integration.apiKey,
+    ...(integration.linearApiUrl ? { apiUrl: integration.linearApiUrl } : {}),
+  });
 }
 
 async function assertWorkspaceAccess(db: Db, userId: string, workspaceId: string) {
