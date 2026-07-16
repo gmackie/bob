@@ -39,6 +39,9 @@ export function isPendingApproval(status: string): boolean {
 export function filterPendingApprovalSessions<T extends PendingApprovalSessionLike>(
   sessions: T[],
 ): T[] {
+  // Defensive: a caller passing a non-array (e.g. a paginated { items } object
+  // by mistake) must not throw — a thrown render here blanks the whole page.
+  if (!Array.isArray(sessions)) return [];
   return sessions.filter((s) => isPendingApproval(s.status));
 }
 

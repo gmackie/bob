@@ -19,15 +19,19 @@ import {
 export function PendingApproval({ workspaceId }: { workspaceId?: string | null }) {
   const trpc = useTRPC();
 
-  const { data: sessions } = useQuery(
+  const { data } = useQuery(
     trpc.session.list.queryOptions(
       { status: "blocked", limit: 20 },
       { refetchInterval: 10_000 },
     ),
   );
 
+  // session.list is PAGINATED: it returns { items, nextCursor }, NOT a bare
+  // array. Reading it as an array made buildPendingApprovalRows call
+  // `.filter` on the object and threw, which — with no error boundary around
+  // MissionControl — unmounted the entire /tasks page (blank screen).
   const rows = buildPendingApprovalRows({
-    sessions: (sessions ?? []) as PendingApprovalSessionLike[],
+    sessions: (data?.items ?? []) as PendingApprovalSessionLike[],
     workspaceId,
   });
 
