@@ -143,7 +143,7 @@ export function ProviderCapacityCards({ workspaceId }: ProviderCapacityCardsProp
   });
 
   return (
-    <section className="grid gap-5 md:grid-cols-2">
+    <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
       {cards.map((card) => (
         <ProviderCard key={card.provider} card={card} workspaceId={workspaceId} />
       ))}

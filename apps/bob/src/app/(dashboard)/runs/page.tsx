@@ -270,6 +270,7 @@ export default function RunsPage() {
       <div className="flex w-fit items-center gap-1 rounded-lg border border-border bg-card p-1">
         {[
           { key: "all", label: "All" },
+          { key: "claude", label: "Claude" },
           { key: "codex", label: "Codex" },
           { key: "cursor", label: "Cursor" },
           { key: "grok", label: "Grok" },
@@ -278,7 +279,7 @@ export default function RunsPage() {
             key={item.key}
             onClick={() => {
               router.push(getProviderRunsFilterHref(searchParams?.toString() ?? "", {
-                provider: item.key as "all" | "codex" | "cursor" | "grok",
+                provider: item.key as "all" | "claude" | "codex" | "cursor" | "grok",
               }));
             }}
             className={cn(

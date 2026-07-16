@@ -17,8 +17,20 @@ export interface WorkPipelineItem {
   agentStatus?: WorkPipelineAgentStatus | null;
 }
 
-export type ProviderKey = "codex" | "cursor";
+export type ProviderKey = "claude" | "grok" | "codex" | "cursor";
 export type DashboardTone = "default" | "warning" | "danger" | "success";
+
+// Every agent Bob rotates through (see autoDrain AGENT_ROTATION). The dashboard
+// shows one capacity card per provider, in dispatch-rotation order. Claude and
+// Grok run on subscriptions (no metered API quota), so their cards report
+// live active/queued counts without the usage bars that Codex/Cursor expose.
+const PROVIDER_ORDER: ProviderKey[] = ["claude", "grok", "codex", "cursor"];
+const PROVIDER_LABELS: Record<ProviderKey, string> = {
+  claude: "Claude",
+  grok: "Grok",
+  codex: "Codex",
+  cursor: "Cursor",
+};
 
 export interface ProviderSessionSummary {
   id: string;
@@ -495,7 +507,12 @@ function getRecentlyCompletedStatusTone(status: string): DashboardTone {
 }
 
 function getProvider(agentType: string): ProviderKey {
-  return agentType.toLowerCase().includes("cursor") ? "cursor" : "codex";
+  const normalized = agentType.toLowerCase();
+  if (normalized.includes("claude")) return "claude";
+  if (normalized.includes("grok")) return "grok";
+  if (normalized.includes("cursor")) return "cursor";
+  // Default to codex — it's the historical default and covers "codex"/unknown.
+  return "codex";
 }
 
 function buildProviderCapacitySummary(
@@ -509,13 +526,20 @@ function buildProviderCapacitySummary(
   const startingCount = matching.filter((session) => STARTING_AGENT_STATUSES.has(session.status)).length;
   const hasFailure = matching.some((session) => FAILED_AGENT_STATUSES.has(session.status));
   const usageLimits = snapshot?.usageLimits ?? getDefaultProviderUsageLimits(provider);
+  const isSubscription = provider === "claude" || provider === "grok";
 
   return {
     provider,
-    label: provider === "codex" ? "Codex" : "Cursor",
+    label: PROVIDER_LABELS[provider],
     activeCount,
     queuedOrStartingCount: startingCount + (provider === "codex" ? queuedCount : 0),
-    limitLabel: snapshot ? "Capacity connected" : "Capacity not connected",
+    // Subscription providers have no capacity socket to connect; their card is
+    // "live" whenever it has work, rather than reporting a metered quota link.
+    limitLabel: isSubscription
+      ? "Subscription"
+      : snapshot
+        ? "Capacity connected"
+        : "Capacity not connected",
     statusLabel: hasFailure ? "Recent failure" : "Normal",
     tone: hasFailure ? "danger" : activeCount > 0 ? "success" : "default",
     usageLimits,
@@ -534,10 +558,14 @@ export function buildProviderCapacitySummaries(input: {
     (input.capacitySnapshots ?? []).map((snapshot) => [snapshot.provider, snapshot]),
   );
 
-  return [
-    buildProviderCapacitySummary("codex", input.sessions, queuedCount, snapshots.get("codex")),
-    buildProviderCapacitySummary("cursor", input.sessions, queuedCount, snapshots.get("cursor")),
-  ];
+  return PROVIDER_ORDER.map((provider) =>
+    buildProviderCapacitySummary(
+      provider,
+      input.sessions,
+      queuedCount,
+      snapshots.get(provider),
+    ),
+  );
 }
 
 export function getProviderCapacityStatusLine(card: ProviderCapacitySummary): string {
@@ -626,31 +654,30 @@ function buildProviderUsageLimit(input: {
 }
 
 function getDefaultProviderUsageLimits(provider: ProviderKey): ProviderUsageLimit[] {
-  return provider === "codex"
-    ? [
+  switch (provider) {
+    case "codex":
+      return [
+        buildProviderUsageLimit({ label: "5 hour usage limit", remainingPercent: null, resetLabel: null }),
+        buildProviderUsageLimit({ label: "Weekly usage limit", remainingPercent: null, resetLabel: null }),
+      ];
+    case "cursor":
+      return [
+        buildProviderUsageLimit({ label: "Included usage", remainingPercent: null, resetLabel: null }),
+        buildProviderUsageLimit({ label: "On-demand spend", remainingPercent: null, resetLabel: null }),
+      ];
+    // Claude / Grok run on a subscription — no metered quota to chart. Show a
+    // single informational row (valueLabel "Subscription") instead of an empty
+    // "Unavailable" bar, so the card reads intentional rather than broken.
+    default:
+      return [
         buildProviderUsageLimit({
-          label: "5 hour usage limit",
+          label: "Plan",
           remainingPercent: null,
-          resetLabel: null,
-        }),
-        buildProviderUsageLimit({
-          label: "Weekly usage limit",
-          remainingPercent: null,
-          resetLabel: null,
-        }),
-      ]
-    : [
-        buildProviderUsageLimit({
-          label: "Included usage",
-          remainingPercent: null,
-          resetLabel: null,
-        }),
-        buildProviderUsageLimit({
-          label: "On-demand spend",
-          remainingPercent: null,
+          valueLabel: "Subscription",
           resetLabel: null,
         }),
       ];
+  }
 }
 
 function clampPercent(value: number): number {
