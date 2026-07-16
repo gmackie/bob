@@ -34,8 +34,17 @@ export const AgentRunSchema = Schema.Struct({
   // Raw DB agent_run_status value — a plain string, not a narrowed union; see
   // the file header for why enumerating it here is a footgun.
   status: Schema.String,
-  startedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
-  completedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
-  createdAt: Schema.DateTimeUtcFromString,
+  // Timestamps are passed through untyped on purpose. agentRunList returns raw
+  // drizzle rows where these fields are INCONSISTENT: createdAt is mode:"string"
+  // (a "2026-07-16 15:29:20" string) while startedAt/completedAt have no mode
+  // (JS Date objects). DateTimeUtcFromString expects a DateTime.Utc on encode
+  // and got neither, so it failed the encode of EVERY row — the second half of
+  // why "Running Now" and the capacity cards read empty (the first was status).
+  // JSON transport turns a Date into an ISO string and leaves a string as-is,
+  // and every client wraps the value in `new Date(...)`, so an untyped
+  // pass-through is both safe and sufficient for a display contract.
+  startedAt: Schema.NullOr(Schema.Unknown),
+  completedAt: Schema.NullOr(Schema.Unknown),
+  createdAt: Schema.Unknown,
 });
 export type AgentRunWire = Schema.Schema.Type<typeof AgentRunSchema>;
