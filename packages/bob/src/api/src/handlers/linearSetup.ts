@@ -5,7 +5,7 @@
  * Phase 7B-4D-beta Task 7.
  */
 import { TRPCError } from "@trpc/server";
-import { eq, and } from "@bob/db";
+import { eq, and, inArray } from "@bob/db";
 import type { Db } from "@bob/db/client";
 import {
   projects,
@@ -211,9 +211,19 @@ export async function syncLinearProjects(
         const stateType = state?.type ?? "backlog";
         if (!isOpenLinearState(stateType)) continue;
 
+        // Match BOTH external-id formats. Older rows were keyed by the Linear
+        // identifier ("GMA-5"); this importer keys by the issue UUID. Checking
+        // only the UUID never matches an identifier-keyed row, so every such
+        // issue was re-imported and re-worked, producing duplicate PRs (the
+        // "GMA-64" / "458f83a2-…" twins).
         const existing = await ctx.db.query.workItems.findFirst({
           where: and(
-            eq(workItems.externalId, issue.id),
+            inArray(
+              workItems.externalId,
+              [issue.id, issue.identifier].filter(
+                (v): v is string => typeof v === "string" && v.length > 0,
+              ),
+            ),
             eq(workItems.externalProvider, "linear"),
           ),
           columns: { id: true },
