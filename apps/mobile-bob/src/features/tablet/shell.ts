@@ -758,8 +758,7 @@ function getShellStatusTone(status: string): TabletShellStatusTone {
     case "awaiting-input":
     case "awaiting_input":
     case "stopping":
-    // Paused awaiting a human decision — the amber "needs you" state.
-    case "blocked":
+    case "blocked": // Paused awaiting a human decision — the amber "needs you" state.
       return "warning";
     case "error":
     case "failed":
