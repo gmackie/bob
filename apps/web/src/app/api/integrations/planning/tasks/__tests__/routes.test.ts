@@ -91,6 +91,7 @@ describe("Planning task control routes", () => {
           issueId: "task-123",
           issueIdentifier: "BUILD-123",
           title: "Example task",
+          agentType: "codex",
           actor: {
             id: "user-123",
             email: "alice@example.com",
@@ -104,6 +105,7 @@ describe("Planning task control routes", () => {
       expect.objectContaining({
         issueId: "task-123",
         issueIdentifier: "BUILD-123",
+        agentType: "codex",
       }),
     );
     await expect(response.json()).resolves.toEqual(snapshot);

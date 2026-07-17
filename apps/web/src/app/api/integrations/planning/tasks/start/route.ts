@@ -17,6 +17,7 @@ const startIssueSessionSchema = z.object({
   description: z.string().optional(),
   labels: z.array(z.string()).optional(),
   priority: z.number().int().optional(),
+  agentType: z.string().min(1).optional(),
   actor: z.object({
     id: z.string().min(1),
     name: z.string().optional(),

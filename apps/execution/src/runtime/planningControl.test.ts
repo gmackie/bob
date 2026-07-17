@@ -3,10 +3,12 @@ import path from "node:path";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { taskRunsFindFirstMock, userFindFirstMock } = vi.hoisted(() => ({
-  taskRunsFindFirstMock: vi.fn(),
-  userFindFirstMock: vi.fn(),
-}));
+const { taskRunsFindFirstMock, userFindFirstMock, executeTaskMock } =
+  vi.hoisted(() => ({
+    taskRunsFindFirstMock: vi.fn(),
+    userFindFirstMock: vi.fn(),
+    executeTaskMock: vi.fn(),
+  }));
 
 vi.mock("@bob/db/client", () => ({
   db: {
@@ -39,6 +41,7 @@ vi.mock("@bob/db", () => ({
 
 vi.mock("@bob/db/schema", () => ({
   chatConversations: { id: { name: "id" } },
+  taskRunStatusEnum: ["starting", "running", "blocked", "completed", "failed"],
   taskRuns: {
     workItemId: { name: "work_item_id" },
     planningItemId: { name: "planning_item_id" },
@@ -51,12 +54,12 @@ vi.mock("@bob/db/schema", () => ({
 }));
 
 vi.mock("./taskExecutor.js", () => ({
-  executeTask: vi.fn(),
+  executeTask: executeTaskMock,
   markTaskBlocked: vi.fn(),
   resumeBlockedTask: vi.fn(),
 }));
 
-import { getIssueSessionSnapshot } from "./planningControl";
+import { getIssueSessionSnapshot, startIssueSession } from "./planningControl";
 
 describe("planning control runtime", () => {
   beforeEach(() => {
@@ -131,5 +134,49 @@ describe("planning control runtime", () => {
     expect(source).not.toContain("Stopped from Kanbanger and moved to blocked");
     expect(source).toContain("PlanningControlActor");
     expect(source).toContain("Stopped from planning and moved to blocked");
+  });
+
+  it("defaults hosted issue starts to codex for the T3 bridge", async () => {
+    userFindFirstMock.mockResolvedValueOnce({
+      id: "user-1",
+      email: "alice@example.com",
+    });
+    taskRunsFindFirstMock
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: "run-1",
+        workItemId: "task-1",
+        planningItemId: "task-1",
+        workItemIdentifierSnapshot: "BOB-1",
+        planningItemIdentifier: "BOB-1",
+        sessionId: "session-1",
+        status: "running",
+        blockedReason: null,
+        branch: "bob/BOB-1/prove-hosted-bob-execution-through-t3",
+        repository: null,
+        worktree: null,
+        session: null,
+      });
+
+    await startIssueSession({
+      workspaceId: "workspace-1",
+      projectId: "project-1",
+      issueId: "task-1",
+      issueIdentifier: "BOB-1",
+      title: "Prove hosted Bob execution through T3",
+      actor: {
+        id: "planner-1",
+        email: "alice@example.com",
+      },
+    });
+
+    expect(executeTaskMock).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({
+        id: "task-1",
+        identifier: "BOB-1",
+      }),
+      { agentType: "codex" },
+    );
   });
 });

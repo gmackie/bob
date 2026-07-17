@@ -6,6 +6,7 @@ import { join, dirname, basename } from "path";
 import { SessionManager, SessionRecord, SessionManagerCallbacks } from "./sessions/SessionManager.js";
 import { PersistenceWriter, SessionEventRecord } from "./persistence/PersistenceWriter.js";
 import { SessionCleanup } from "./sessions/SessionCleanup.js";
+import { sendSessionMessageFromHttp, startSessionFromHttp } from "./sessions/http.js";
 import { AgentProcessManager } from "./agents/agent-process-manager.js";
 import { getStdioAdapter } from "./agents/adapters/base-stdio-adapter.js";
 import { detectVcs, getVcsAdapter } from "./vcs/vcs-adapter.js";
@@ -1173,6 +1174,25 @@ const server = createServer(async (req, res) => {
         case "/git/checkout":
           await handleGitCheckout(body, res);
           return;
+        case "/session/start": {
+          const result = await startSessionFromHttp(body, {
+            sessionManager,
+            agentProcessManager,
+            startAgentForSession: async (actor, startUserId, initialPrompt) => {
+              await startAgentForSession(actor, startUserId, initialPrompt);
+            },
+          });
+          sendJson(res, 200, result);
+          return;
+        }
+        case "/session/send": {
+          const result = await sendSessionMessageFromHttp(body, {
+            sessionManager,
+            agentProcessManager,
+          });
+          sendJson(res, 200, result);
+          return;
+        }
         case "/git/reset":
           await handleGitReset(body, res);
           return;

@@ -35,6 +35,7 @@ export interface StartIssueSessionInput {
   priority?: number;
   actor: PlanningControlActor;
   repository?: PlanningTask["repository"];
+  agentType?: string;
 }
 
 export interface ResumeIssueSessionInput {
@@ -235,18 +236,24 @@ export async function startIssueSession(
 
   const userId = await ensureControlUserId(input.actor);
 
-  await executeTask(userId, {
-    id: input.issueId,
-    identifier: input.issueIdentifier,
-    title: input.title ?? input.issueIdentifier,
-    description: input.description ?? null,
-    workspaceId: input.workspaceId,
-    projectId: input.projectId,
-    assigneeId: input.actor.id,
-    labels: input.labels ?? [],
-    priority: input.priority ?? 0,
-    repository: input.repository,
-  });
+  await executeTask(
+    userId,
+    {
+      id: input.issueId,
+      identifier: input.issueIdentifier,
+      title: input.title ?? input.issueIdentifier,
+      description: input.description ?? null,
+      workspaceId: input.workspaceId,
+      projectId: input.projectId,
+      assigneeId: input.actor.id,
+      labels: input.labels ?? [],
+      priority: input.priority ?? 0,
+      repository: input.repository,
+    },
+    {
+      agentType: input.agentType ?? "codex",
+    },
+  );
 
   return getIssueSessionSnapshot(input);
 }
