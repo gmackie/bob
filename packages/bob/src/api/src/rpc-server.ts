@@ -34,7 +34,6 @@ import { makePublicApiRpcHandlers } from "./rpc-handlers/publicApi.js";
 import { makeIntegrationRpcHandlers } from "./rpc-handlers/integration.js";
 import { makeRequirementRpcHandlers } from "./rpc-handlers/requirement.js";
 import { makeLinkRpcHandlers } from "./rpc-handlers/link.js";
-import { makeRestBridge } from "./rest-bridge.js";
 
 import { makeAgentHandlers } from "./rpc-layers/agent.js";
 import { makeProjectsHandlers } from "./rpc-layers/projects.js";
@@ -392,11 +391,4 @@ export function makeRpcHandler(
 
   const { handler } = HttpRouter.toWebHandler(serverLayer);
   return handler;
-}
-
-/** Build Bob's REST bridge without exposing the merged RPC group's inferred type. */
-export function makeBobRestBridge(
-  rpcHandler: (request: Request) => Promise<Response>,
-): (request: Request) => Promise<Response> {
-  return makeRestBridge(BobRpcGroup, rpcHandler);
 }

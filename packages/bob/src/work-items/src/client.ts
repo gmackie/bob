@@ -117,9 +117,7 @@ interface WorkItemsOperationOutputMap {
 export interface WorkItemsClientOptions {
   baseUrl: string;
   fetch?: typeof globalThis.fetch;
-  getHeaders?:
-    | ConstructorParameters<typeof Headers>[0]
-    | (() => MaybePromise<ConstructorParameters<typeof Headers>[0] | undefined>);
+  getHeaders?: HeadersInit | (() => MaybePromise<HeadersInit | undefined>);
 }
 
 export class WorkItemsClientError<TBody = unknown> extends Error {

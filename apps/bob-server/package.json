@@ -15,12 +15,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@bob/api": "workspace:*",
-    "@bob/auth": "workspace:*",
     "@bob/blder": "workspace:*",
     "@bob/db": "workspace:*",
-    "commander": "^12.1.0",
-    "effect": "4.0.0-beta.43"
+    "commander": "^12.1.0"
   },
   "devDependencies": {
     "@bob/tsconfig": "workspace:*",
