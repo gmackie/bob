@@ -46,7 +46,7 @@ function isDemoLoginEmail(email: string): boolean {
   if (e.endsWith(DEMO_EMAIL_DOMAIN)) return true;
   const extra = (process.env.DEMO_LOGIN_EMAILS ?? "")
     .split(",")
-    .map((s) => s.trim().toLowerCase())
+    .map((s: string) => s.trim().toLowerCase())
     .filter(Boolean);
   return extra.includes(e);
 }
