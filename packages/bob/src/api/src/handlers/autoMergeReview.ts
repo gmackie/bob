@@ -167,7 +167,11 @@ export async function autoReviewAndMerge(
       }
       if (!accessToken) {
         result.skipped++;
-        result.items.push({ pr: label, action: "skipped", reason: "no connection" });
+        result.items.push({
+          pr: label,
+          action: "skipped",
+          reason: `no auth (conn=${!!connection} botTok=${!!cfg.forgejoToken} prov=${pr.provider} instMatch=${pr.instanceUrl === cfg.forgejoInstanceUrl})`,
+        });
         continue;
       }
 
