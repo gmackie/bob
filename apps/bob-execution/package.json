@@ -12,8 +12,7 @@
   "scripts": {
     "lint": "eslint --flag unstable_native_nodejs_ts_config",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
-    "build:daemon": "tsup --config tsup.daemon.ts"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@bob/db": "workspace:*",

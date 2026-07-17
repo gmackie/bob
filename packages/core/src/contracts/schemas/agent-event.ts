@@ -14,7 +14,7 @@ import { Schema } from "effect";
 // --- Enums ------------------------------------------------------------------
 
 /** Event type (matches Bob's eventTypeEnum). */
-export const EventTypeEnum = Schema.Literal(
+export const EventTypeEnum = Schema.Literals([
   "instance.started",
   "instance.stopped",
   "instance.error",
@@ -35,7 +35,7 @@ export const EventTypeEnum = Schema.Literal(
   "worktree.deleted",
   "link.created",
   "link.removed",
-);
+]);
 export type EventType = Schema.Schema.Type<typeof EventTypeEnum>;
 
 // --- Record schemas ---------------------------------------------------------

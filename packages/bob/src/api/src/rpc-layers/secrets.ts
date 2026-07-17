@@ -17,6 +17,7 @@ import type { HandlerContext } from "../handlers/context.js";
 import { SecretsRpc } from "@gmacko/core/contracts/groups/secrets";
 import { BobNotFoundError } from "@gmacko/bob/contracts";
 import { makeSecretsRpcHandlers } from "../rpc-handlers/secrets.js";
+import { adaptRpcHandlers } from "./adapter.js";
 
 /**
  * Returns the raw handler mapping object for SecretsRpc (14 entries).
@@ -69,4 +70,4 @@ export const makeSecretsHandlers = (ctx: HandlerContext) => {
 };
 
 export const makeSecretsLayer = (ctx: HandlerContext) =>
-  SecretsRpc.toLayer(makeSecretsHandlers(ctx));
+  SecretsRpc.toLayer(adaptRpcHandlers(makeSecretsHandlers(ctx)));

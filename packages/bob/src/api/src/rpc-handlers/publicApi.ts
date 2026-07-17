@@ -18,7 +18,9 @@ import {
   publicApiListRunsByWorkItem,
   publicApiHeartbeat,
   publicApiGenerateApiKey,
+  publicApiMirrorT3RuntimeEvent,
 } from "../handlers/publicApi.js";
+import type { T3RuntimeStatus } from "../services/t3code/runtimeEventMirror.js";
 
 export const makePublicApiRpcHandlers = (ctx: HandlerContext) => ({
   "publicApi.registerWorkspace": ({
@@ -64,6 +66,19 @@ export const makePublicApiRpcHandlers = (ctx: HandlerContext) => ({
     };
   }) => wrapHandler(publicApiCreateArtifact, ctx, payload, "publicApi"),
 
+  "publicApi.mirrorT3RuntimeEvent": ({
+    payload,
+  }: {
+    payload: {
+      sessionId?: string;
+      taskRunId?: string;
+      threadId?: string;
+      status: T3RuntimeStatus;
+      message: string;
+      details?: Record<string, unknown>;
+    };
+  }) => wrapHandler(publicApiMirrorT3RuntimeEvent, ctx, payload, "publicApi"),
+
   "publicApi.getRun": ({
     payload,
   }: {
@@ -88,6 +103,11 @@ export const makePublicApiRpcHandlers = (ctx: HandlerContext) => ({
     payload: {
       workspaceId: string;
       agentTypes?: string[];
+      capabilities?: string[];
+      runtime?: {
+        execution?: Record<string, unknown>;
+        t3code?: Record<string, unknown>;
+      };
       forgeAvailable?: boolean;
       repos?: Array<{
         name: string;

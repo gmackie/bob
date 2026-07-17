@@ -13,13 +13,14 @@ import { WorkItemsRpc } from "@gmacko/bob/contracts";
 import { makeWorkItemsRpcHandlers } from "../rpc-handlers/workItems.js";
 import { makeRequirementRpcHandlers } from "../rpc-handlers/requirement.js";
 import { makeLinkRpcHandlers } from "../rpc-handlers/link.js";
+import { adaptRpcHandlers } from "./adapter.js";
 
 export const makeWorkItemsLayer = (ctx: HandlerContext) => {
   const wi = makeWorkItemsRpcHandlers(ctx);
   const req = makeRequirementRpcHandlers(ctx);
   const lnk = makeLinkRpcHandlers(ctx);
 
-  return WorkItemsRpc.toLayer({
+  return WorkItemsRpc.toLayer(adaptRpcHandlers({
     // --- Core (6) ---
     "workItem.list": wi["workItems.list"],
     "workItem.get": wi["workItems.get"],
@@ -69,5 +70,5 @@ export const makeWorkItemsLayer = (ctx: HandlerContext) => {
     "workItem.link.delete": lnk["link.delete"],
     "workItem.link.linkToPlanningTask": lnk["link.linkToPlanningTask"],
     "workItem.link.linkToGitHubPR": lnk["link.linkToGitHubPR"],
-  });
+  }));
 };

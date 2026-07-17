@@ -18,7 +18,7 @@
   "dependencies": {
     "@bob/auth": "workspace:*",
     "@bob/chat": "workspace:*",
-    "better-sqlite3": "^11.0.0",
+    "better-sqlite3": "^12.0.0",
     "drizzle-orm": "^0.44.7"
   },
   "devDependencies": {

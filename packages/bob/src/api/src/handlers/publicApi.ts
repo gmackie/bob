@@ -22,6 +22,10 @@ import {
 } from "@bob/db/schema";
 
 import type { HandlerContext } from "./context.js";
+import {
+  mirrorT3RuntimeEvent,
+  type T3RuntimeStatus,
+} from "../services/t3code/runtimeEventMirror.js";
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -379,6 +383,20 @@ export async function publicApiCreateArtifact(
   return artifact;
 }
 
+export async function publicApiMirrorT3RuntimeEvent(
+  ctx: HandlerContext,
+  input: {
+    sessionId?: string;
+    taskRunId?: string;
+    threadId?: string;
+    status: T3RuntimeStatus;
+    message: string;
+    details?: Record<string, unknown>;
+  },
+) {
+  return mirrorT3RuntimeEvent(ctx, input);
+}
+
 export async function publicApiGetRun(
   ctx: HandlerContext,
   input: { runId: string },
@@ -440,6 +458,11 @@ export async function publicApiHeartbeat(
   input: {
     workspaceId: string;
     agentTypes?: string[];
+    capabilities?: string[];
+    runtime?: {
+      execution?: Record<string, unknown>;
+      t3code?: Record<string, unknown>;
+    };
     forgeAvailable?: boolean;
     repos?: Array<{
       name: string;
@@ -465,10 +488,44 @@ export async function publicApiHeartbeat(
     lastHeartbeat: new Date().toISOString(),
   };
 
-  if (input.agentTypes && input.agentTypes.length > 0) {
-    const agentConfigs: Record<string, unknown> = {};
-    for (const agent of input.agentTypes) {
-      agentConfigs[agent] = { available: true };
+  if (
+    (input.agentTypes && input.agentTypes.length > 0) ||
+    input.capabilities ||
+    input.runtime
+  ) {
+    const existingConfigs =
+      workspace.agentConfigs &&
+      typeof workspace.agentConfigs === "object" &&
+      !Array.isArray(workspace.agentConfigs)
+        ? { ...(workspace.agentConfigs as Record<string, unknown>) }
+        : {};
+    const agentConfigs: Record<string, unknown> = existingConfigs;
+    for (const agent of input.agentTypes ?? []) {
+      const existingAgent =
+        agentConfigs[agent] &&
+        typeof agentConfigs[agent] === "object" &&
+        !Array.isArray(agentConfigs[agent])
+          ? (agentConfigs[agent] as Record<string, unknown>)
+          : {};
+      agentConfigs[agent] = { ...existingAgent, available: true };
+    }
+    if (input.capabilities) {
+      agentConfigs.__capabilities = {
+        names: input.capabilities,
+        ...(input.runtime?.execution
+          ? { execution: input.runtime.execution }
+          : {}),
+      };
+    }
+    if (input.runtime?.t3code) {
+      agentConfigs.__runtime = {
+        ...((agentConfigs.__runtime &&
+        typeof agentConfigs.__runtime === "object" &&
+        !Array.isArray(agentConfigs.__runtime)
+          ? agentConfigs.__runtime
+          : {}) as Record<string, unknown>),
+        t3code: input.runtime.t3code,
+      };
     }
     updates.agentConfigs = agentConfigs;
   }

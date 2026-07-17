@@ -13,6 +13,29 @@ import { onTaskStatusChange } from "../services/automation/task-trigger";
 
 import type { HandlerContext } from "./context.js";
 
+type ProjectSummary = {
+  id: string;
+  name: string;
+  key: string;
+  status?: string | null;
+  color?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  workspaceId?: string | null;
+};
+
+type WorkItemRow = {
+  id: string;
+  title?: string;
+  status?: string;
+  kind?: string;
+  projectId?: string | null;
+  sequenceNumber?: number | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  workspaceId?: string | null;
+};
+
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
@@ -114,7 +137,18 @@ export async function planningListProjects(
     where: eq(workItems.workspaceId, input.workspaceId),
   });
 
-  const result = projectRows.map((project: any) => {
+  const result: Array<{
+    project: {
+      id: string;
+      name: string;
+      key: string;
+      status?: string | null;
+      color: string;
+    };
+    issueCount: number;
+    completedCount: number;
+    _latestActivity: string | null | undefined;
+  }> = projectRows.map((project: ProjectSummary) => {
     const projectItems = items.filter(
       (item: any) => item.projectId === project.id,
     );
@@ -233,11 +267,11 @@ export async function planningListTasks(
           where: eq(projects.workspaceId, workspaceId),
         })
       : [];
-  const projectById = new Map(
-    projectRows.map((p: any) => [p.id, p]),
+  const projectById = new Map<string, ProjectSummary>(
+    (projectRows as ProjectSummary[]).map((p) => [p.id, p]),
   );
 
-  return filtered.map((item: any) => {
+  return (filtered as WorkItemRow[]).map((item) => {
     const project = item.projectId
       ? projectById.get(item.projectId) ?? null
       : null;
@@ -607,11 +641,11 @@ export async function planningSearchTasks(
           where: eq(projects.workspaceId, input.workspaceId),
         })
       : [];
-  const projectById = new Map(
-    projectRows.map((p: any) => [p.id, p]),
+  const projectById = new Map<string, ProjectSummary>(
+    (projectRows as ProjectSummary[]).map((p) => [p.id, p]),
   );
 
-  return items.map((item: any) => {
+  return (items as WorkItemRow[]).map((item) => {
     const project = item.projectId
       ? projectById.get(item.projectId) ?? null
       : null;

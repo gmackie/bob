@@ -23,6 +23,7 @@ import { makePullRequestRpcHandlers } from "../rpc-handlers/pullRequest.js";
 import { makeFeatureBranchRpcHandlers } from "../rpc-handlers/featureBranch.js";
 import { makeGitProvidersRpcHandlers } from "../rpc-handlers/gitProviders.js";
 import { makeGitRpcHandlers } from "../rpc-handlers/git.js";
+import { adaptRpcHandlers } from "./adapter.js";
 
 /**
  * Returns the raw handler mapping object for ProjectsRpc (56 entries).
@@ -130,4 +131,4 @@ export const makeProjectsHandlers = (ctx: HandlerContext) => {
 };
 
 export const makeProjectsLayer = (ctx: HandlerContext) =>
-  ProjectsRpc.toLayer(makeProjectsHandlers(ctx));
+  ProjectsRpc.toLayer(adaptRpcHandlers(makeProjectsHandlers(ctx)));

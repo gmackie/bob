@@ -19,6 +19,7 @@ import { makeDispatchRpcHandlers } from "../rpc-handlers/dispatch.js";
 import { makeSkillRpcHandlers } from "../rpc-handlers/skill.js";
 import { makeSnapshotRpcHandlers } from "../rpc-handlers/snapshot.js";
 import { makeCheckpointRpcHandlers } from "../rpc-handlers/checkpoint.js";
+import { adaptRpcHandlers } from "./adapter.js";
 
 export const makePlanningLayer = (ctx: HandlerContext) => {
   const pl = makePlanningRpcHandlers(ctx);
@@ -29,7 +30,7 @@ export const makePlanningLayer = (ctx: HandlerContext) => {
   const sn = makeSnapshotRpcHandlers(ctx);
   const cp = makeCheckpointRpcHandlers(ctx);
 
-  return PlanningRpc.toLayer({
+  return PlanningRpc.toLayer(adaptRpcHandlers({
     // --- Core planning (21) ---
     "planning.listWorkspaces": pl["planning.listWorkspaces"],
     "planning.listProjects": pl["planning.listProjects"],
@@ -119,5 +120,5 @@ export const makePlanningLayer = (ctx: HandlerContext) => {
     "planning.checkpoint.create": cp["checkpoint.create"],
     "planning.checkpoint.list": cp["checkpoint.list"],
     "planning.checkpoint.branchFrom": cp["checkpoint.branchFrom"],
-  });
+  }));
 };

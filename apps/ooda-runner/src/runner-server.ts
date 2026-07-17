@@ -1,4 +1,4 @@
-import { hostname } from "node:os";
+import { hostname, platform } from "node:os";
 import { execSync } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -8,6 +8,7 @@ import { SessionManager } from "./session/session-manager";
 import { SessionExecutor } from "./session/session-executor";
 import { CodexAdapter } from "@gmacko/ooda/agent-adapters";
 import { ClaudeAdapter } from "@gmacko/ooda/agent-adapters";
+import { CursorAgentAdapter } from "@gmacko/ooda/agent-adapters";
 import type { AgentAdapter } from "@gmacko/ooda/agent-adapters";
 import { generateRunnerToken } from "./auth/auth";
 import { promoteNote } from "@gmacko/ooda/thread-workspace";
@@ -41,6 +42,29 @@ function ensureStorageRoot(storageRoot: string): void {
   mkdirSync(storageRoot, { recursive: true });
   if (existsSync(join(storageRoot, ".git"))) return;
   execSync("git init", { cwd: storageRoot, stdio: "pipe" });
+}
+
+function getPlatformCapabilities(os = platform()): string[] {
+  return os === "darwin" ? ["macos", "darwin"] : [os];
+}
+
+function buildRunnerCapabilities(adapterIds: Iterable<string>): string[] {
+  return Array.from(new Set([...adapterIds, ...getPlatformCapabilities()]));
+}
+
+function classifyEndpointMode(serverUrl: string): "loopback" | "tailnet" | "remote" {
+  try {
+    const hostname = new URL(serverUrl).hostname.toLowerCase();
+    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
+      return "loopback";
+    }
+    if (hostname.endsWith(".ts.net")) {
+      return "tailnet";
+    }
+  } catch {
+    return "remote";
+  }
+  return "remote";
 }
 
 function isPromotionKind(value: unknown): value is PromotionKind {
@@ -106,8 +130,10 @@ export class RunnerServer {
     this.adapters = new Map();
     const codex = new CodexAdapter();
     const claude = new ClaudeAdapter();
+    const cursor = new CursorAgentAdapter();
     if (codex.isAvailable()) this.adapters.set("codex", codex);
     if (claude.isAvailable()) this.adapters.set("claude", claude);
+    if (cursor.isAvailable()) this.adapters.set("cursor-agent", cursor);
 
     // Bob gateway connector (optional — only starts if BOB_GATEWAY_URL is set)
     if (config.bobGatewayUrl && config.bobApiKey && config.bobWorkspaceId) {
@@ -136,6 +162,21 @@ export class RunnerServer {
     return new SessionExecutor({
       adapter,
       storageRoot: this.config.storageRoot,
+      t3code:
+        this.config.t3codeServerUrl &&
+        this.config.t3codeProjectId &&
+        this.config.t3codeModelInstanceId &&
+        this.config.t3codeModel
+          ? {
+              serverUrl: this.config.t3codeServerUrl,
+              authToken: this.config.t3codeAuthToken,
+              projectId: this.config.t3codeProjectId,
+              modelInstanceId: this.config.t3codeModelInstanceId,
+              model: this.config.t3codeModel,
+              worktreePath: this.config.t3codeWorktreePath,
+              runtimeMode: this.config.t3codeRuntimeMode,
+            }
+          : undefined,
     });
   }
 
@@ -153,6 +194,7 @@ export class RunnerServer {
 
     // Register with web app
     await this.register();
+    await this.publishBobHeartbeat();
 
     // Start heartbeat loop
     this.heartbeatTimer = setInterval(() => {
@@ -178,7 +220,7 @@ export class RunnerServer {
       const [device] = await this.trpc.runner.register.mutate({
         name: this.config.runnerName,
         hostname: hostname(),
-        capabilities: [...this.adapters.keys()],
+        capabilities: buildRunnerCapabilities(this.adapters.keys()),
       });
 
       if (device) {
@@ -207,12 +249,107 @@ export class RunnerServer {
       await this.trpc.runner.heartbeat.mutate({
         runnerId: this.runnerId,
       });
+      await this.publishBobHeartbeat();
       console.log("[runner] heartbeat OK");
     } catch (err) {
       console.warn(
         "[runner] heartbeat failed:",
         err instanceof Error ? err.message : err,
       );
+    }
+  }
+
+  private async publishBobHeartbeat(): Promise<void> {
+    const os = platform();
+    const capabilities = getPlatformCapabilities(os);
+    const t3code = await this.buildT3codeRuntimeStatus();
+
+    await this.bobReporter.heartbeat({
+      agentTypes: [...this.adapters.keys()],
+      capabilities,
+      runtime: {
+        execution: {
+          environmentName: this.config.runnerName,
+          hostname: hostname(),
+          os,
+          supportsMacos: os === "darwin",
+          maxConcurrent: this.config.bobMaxConcurrent,
+        },
+        ...(t3code ? { t3code } : {}),
+      },
+    });
+  }
+
+  private async buildT3codeRuntimeStatus(): Promise<Record<string, unknown> | undefined> {
+    if (
+      !this.config.t3codeServerUrl ||
+      !this.config.t3codeProjectId ||
+      !this.config.t3codeModelInstanceId ||
+      !this.config.t3codeModel
+    ) {
+      return undefined;
+    }
+
+    const checkedAt = new Date().toISOString();
+    const base = {
+      serverUrl: this.config.t3codeServerUrl,
+      endpointMode: classifyEndpointMode(this.config.t3codeServerUrl),
+      projectId: this.config.t3codeProjectId,
+      modelInstanceId: this.config.t3codeModelInstanceId,
+      model: this.config.t3codeModel,
+      runtimeMode: this.config.t3codeRuntimeMode ?? "full-access",
+      runnerStorageRoot: this.config.storageRoot,
+      worktreePath: this.config.t3codeWorktreePath,
+      checkedAt,
+    };
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3_000);
+    try {
+      const url = new URL(this.config.t3codeServerUrl);
+      url.pathname = "/api/auth/session";
+      url.search = "";
+      url.hash = "";
+
+      const headers: Record<string, string> = {};
+      if (this.config.t3codeAuthToken) {
+        headers.Authorization = `Bearer ${this.config.t3codeAuthToken}`;
+      }
+
+      const response = await fetch(url.toString(), {
+        headers,
+        signal: controller.signal,
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | Record<string, unknown>
+        | null;
+
+      return {
+        ...base,
+        status: response.ok ? "online" : "unreachable",
+        httpStatus: response.status,
+        authenticated:
+          payload && typeof payload.authenticated === "boolean"
+            ? payload.authenticated
+            : undefined,
+        sessionCookieName:
+          payload &&
+          typeof payload.auth === "object" &&
+          payload.auth &&
+          !Array.isArray(payload.auth) &&
+          typeof (payload.auth as Record<string, unknown>).sessionCookieName === "string"
+            ? (payload.auth as Record<string, unknown>).sessionCookieName
+            : undefined,
+        scopes: Array.isArray(payload?.scopes) ? payload.scopes : undefined,
+      };
+    } catch (error) {
+      return {
+        ...base,
+        status: "unreachable",
+        error: error instanceof Error ? error.message : String(error),
+      };
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
@@ -412,6 +549,15 @@ export class RunnerServer {
           type: "stdout",
           content: result.agentResponse,
         });
+      }
+
+      if (result.dispatchedToT3Code) {
+        if (bobFlush) clearInterval(bobFlush);
+        await this.bobReporter.pushLog(bobRunId, bobLog);
+        console.log(
+          `[runner] session ${session.id} dispatched to t3code; awaiting mirrored runtime events`,
+        );
+        return;
       }
 
       // Mark completed

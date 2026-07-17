@@ -12,7 +12,7 @@ interface ExecutionContext {
   passThroughOnException?(): void;
 }
 
-type FetchHandler = (request: Request, env: Record<string, unknown>, ctx: ExecutionContext) => Promise<Response>;
+type FetchHandler = (request: Request, env: Record<string, unknown> | undefined, ctx: ExecutionContext) => Promise<Response>;
 
 interface InstrumentOptions {
   serviceName?: string;
@@ -44,13 +44,18 @@ function buildTraceparent(traceId: string, spanId: string): string {
 
 export function wrapFetch(handler: FetchHandler, options?: InstrumentOptions): FetchHandler {
   return async (request, env, ctx) => {
-    const serviceName = options?.serviceName ?? (env.FG_APP as string) ?? "unknown";
-    const endpoint = options?.endpoint ?? (env.OTEL_ENDPOINT as string) ?? "https://otlp.forgegraf.com";
-    const disabled = (env.OTEL_DISABLED as string) === "true";
+    const runtimeEnv =
+      env ?? (typeof process !== "undefined" && process.env ? process.env : {});
+    const runtimeCtx = ctx ?? {
+      waitUntil() {},
+    };
+    const serviceName = options?.serviceName ?? (runtimeEnv.FG_APP as string) ?? "unknown";
+    const endpoint = options?.endpoint ?? (runtimeEnv.OTEL_ENDPOINT as string) ?? "https://otlp.forgegraf.com";
+    const disabled = (runtimeEnv.OTEL_DISABLED as string) === "true";
     const sampleRate = options?.sampleRate ?? 1.0;
 
     if (disabled || (sampleRate < 1.0 && Math.random() >= sampleRate)) {
-      return handler(request, env, ctx);
+      return handler(request, runtimeEnv, runtimeCtx);
     }
 
     const incoming = parseTraceparent(request.headers.get("traceparent"));
@@ -62,7 +67,7 @@ export function wrapFetch(handler: FetchHandler, options?: InstrumentOptions): F
     let error: unknown;
 
     try {
-      response = await handler(request, env, ctx);
+      response = await handler(request, runtimeEnv, runtimeCtx);
     } catch (err) {
       error = err;
       response = new Response("Internal Server Error", { status: 500 });
@@ -71,11 +76,11 @@ export function wrapFetch(handler: FetchHandler, options?: InstrumentOptions): F
     const latencyMs = Date.now() - start;
     const url = new URL(request.url);
 
-    ctx.waitUntil(
+    runtimeCtx.waitUntil(
       pushSpan({
         endpoint,
         serviceName,
-        stage: env.FG_STAGE as string,
+        stage: runtimeEnv.FG_STAGE as string,
         method: request.method,
         path: url.pathname,
         status: response.status,

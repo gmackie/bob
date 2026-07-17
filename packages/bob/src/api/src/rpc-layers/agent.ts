@@ -25,8 +25,8 @@ import { makeTerminalRpcHandlers } from "../rpc-handlers/terminal.js";
 import { makeEventRpcHandlers } from "../rpc-handlers/event.js";
 import { makeFilesystemRpcHandlers } from "../rpc-handlers/filesystem.js";
 import { makeChatRpcHandlers } from "../rpc-handlers/chat.js";
-import { makePostRpcHandlers } from "../rpc-handlers/post.js";
 import { makePersonaRpcHandlers } from "../rpc-handlers/persona.js";
+import { adaptRpcHandlers } from "./adapter.js";
 
 /**
  * Returns the raw handler mapping object for AgentRpc (78 entries).
@@ -42,7 +42,6 @@ export const makeAgentHandlers = (ctx: HandlerContext) => {
   const ev = makeEventRpcHandlers(ctx);
   const fs = makeFilesystemRpcHandlers(ctx);
   const ch = makeChatRpcHandlers(ctx);
-  const po = makePostRpcHandlers(ctx);
   const per = makePersonaRpcHandlers(ctx);
 
   return {
@@ -162,10 +161,22 @@ export const makeAgentHandlers = (ctx: HandlerContext) => {
     "agent.chat.getAttachments": ch["chat.getAttachments"],
 
     // --- Post (4) ---
-    "agent.post.all": po["post.all"],
-    "agent.post.byId": po["post.byId"],
-    "agent.post.create": po["post.create"],
-    "agent.post.delete": po["post.delete"],
+    "agent.post.all": () =>
+      Effect.fail(
+        new BobNotFoundError({ entity: "post", id: "not-implemented" }),
+      ),
+    "agent.post.byId": () =>
+      Effect.fail(
+        new BobNotFoundError({ entity: "post", id: "not-implemented" }),
+      ),
+    "agent.post.create": () =>
+      Effect.fail(
+        new BobNotFoundError({ entity: "post", id: "not-implemented" }),
+      ),
+    "agent.post.delete": () =>
+      Effect.fail(
+        new BobNotFoundError({ entity: "post", id: "not-implemented" }),
+      ),
 
     // --- Persona (6) ---
     "agent.persona.create": per["persona.create"],
@@ -178,4 +189,4 @@ export const makeAgentHandlers = (ctx: HandlerContext) => {
 };
 
 export const makeAgentLayer = (ctx: HandlerContext) =>
-  AgentRpc.toLayer(makeAgentHandlers(ctx));
+  AgentRpc.toLayer(adaptRpcHandlers(makeAgentHandlers(ctx)));

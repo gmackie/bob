@@ -41,7 +41,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createServer, type Server } from "node:http";
 import { AddressInfo } from "node:net";
 
-import { Layer } from "effect";
+import { Layer, ServiceMap } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
@@ -158,7 +158,10 @@ beforeAll(async () => {
     try {
       const body = await readNodeRequestBody(req);
       const webReq = buildWebRequest(req, body, "http://127.0.0.1");
-      const webResp = await handler(webReq);
+      const webResp = await handler(
+        webReq,
+        ServiceMap.empty() as ServiceMap.ServiceMap<unknown>,
+      );
       await writeWebResponse(res, webResp);
     } catch (err) {
       res.statusCode = 500;

@@ -38,6 +38,36 @@ function formatAbsolute(dateStr: string | null): string {
   return new Date(dateStr).toLocaleString();
 }
 
+function getNodeRuntime(agentConfigs: unknown) {
+  if (!agentConfigs || typeof agentConfigs !== "object" || Array.isArray(agentConfigs)) {
+    return {};
+  }
+  const configs = agentConfigs as Record<string, any>;
+  return {
+    capabilities: configs.__capabilities as
+      | { names?: string[]; execution?: Record<string, unknown> }
+      | undefined,
+    runtime: configs.__runtime as
+      | { t3code?: Record<string, unknown> }
+      | undefined,
+  };
+}
+
+function getAgentEntries(agentConfigs: unknown): Array<{ name: string; config: any }> {
+  if (!agentConfigs || typeof agentConfigs !== "object" || Array.isArray(agentConfigs)) {
+    return [];
+  }
+  return Object.entries(agentConfigs as Record<string, unknown>)
+    .filter(([name]) => !name.startsWith("__"))
+    .map(([name, config]) => ({ name, config }));
+}
+
+function stringifyRuntimeValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "-";
+  if (typeof value === "boolean") return value ? "yes" : "no";
+  return String(value);
+}
+
 export default function NodeDetailPage({
   params,
 }: {
@@ -101,12 +131,10 @@ export default function NodeDetailPage({
     ),
   );
 
-  const agents: Array<{ name: string; config: any }> = workspace?.agentConfigs
-    ? Object.entries(workspace.agentConfigs).map(([name, config]) => ({
-        name,
-        config,
-      }))
-    : [];
+  const agents = getAgentEntries(workspace?.agentConfigs);
+  const { capabilities, runtime } = getNodeRuntime(workspace?.agentConfigs);
+  const t3codeRuntime = runtime?.t3code;
+  const executionRuntime = capabilities?.execution;
 
   const activeRuns = (runs ?? []).filter((r: any) => r.status === "running");
   const completedRuns = (runs ?? []).filter((r: any) => r.status === "completed");
@@ -289,6 +317,43 @@ export default function NodeDetailPage({
               </Card>
             </div>
 
+            {/* Runtime status */}
+            <Card className="p-4 space-y-3">
+              <h2 className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                Runtime
+              </h2>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">t3code backend</span>
+                  {t3codeRuntime ? (
+                    <span className={cn(
+                      "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                      t3codeRuntime.status === "online"
+                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                        : "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                    )}>
+                      {stringifyRuntimeValue(t3codeRuntime.status ?? "configured")}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">not reported</span>
+                  )}
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">macOS execution</span>
+                  <span className={cn(
+                    "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                    executionRuntime?.supportsMacos || capabilities?.names?.includes("macos")
+                      ? "bg-sky-500/10 text-sky-600 dark:text-sky-400"
+                      : "bg-neutral-500/10 text-neutral-500",
+                  )}>
+                    {executionRuntime?.supportsMacos || capabilities?.names?.includes("macos")
+                      ? "available"
+                      : "not reported"}
+                  </span>
+                </div>
+              </div>
+            </Card>
+
             {/* Needs attention */}
             {attentionItems.length > 0 && (
               <Card className="border-amber-500/30 bg-amber-500/5 p-4">
@@ -317,6 +382,158 @@ export default function NodeDetailPage({
 
         {/* Right Panel — Detail */}
         <div className="space-y-8">
+          {/* Agents Section */}
+          <section>
+            <h2 className="font-display text-lg font-semibold text-foreground">
+              t3code Backend
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Runtime reported by the node heartbeat.
+            </p>
+
+            <Card className="mt-4 p-4">
+              {t3codeRuntime ? (
+                <div className="grid gap-3 text-sm sm:grid-cols-2">
+                  <div>
+                    <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                      Status
+                    </div>
+                    <div className="mt-1 font-medium text-foreground">
+                      {stringifyRuntimeValue(t3codeRuntime.status ?? "configured")}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                      Model
+                    </div>
+                    <div className="mt-1 font-medium text-foreground">
+                      {stringifyRuntimeValue(t3codeRuntime.model)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                      HTTP
+                    </div>
+                    <div className="mt-1 font-medium text-foreground">
+                      {stringifyRuntimeValue(t3codeRuntime.httpStatus)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                      Auth
+                    </div>
+                    <div className="mt-1 font-medium text-foreground">
+                      {stringifyRuntimeValue(t3codeRuntime.authenticated)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                      Runtime Mode
+                    </div>
+                    <div className="mt-1 font-medium text-foreground">
+                      {stringifyRuntimeValue(t3codeRuntime.runtimeMode)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                      Endpoint
+                    </div>
+                    <div className="mt-1 truncate font-mono text-xs text-muted-foreground">
+                      {stringifyRuntimeValue(t3codeRuntime.serverUrl)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                      Endpoint Mode
+                    </div>
+                    <div className="mt-1 font-medium text-foreground">
+                      {stringifyRuntimeValue(t3codeRuntime.endpointMode)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                      Last Checked
+                    </div>
+                    <div className="mt-1 font-medium text-foreground">
+                      {typeof t3codeRuntime.checkedAt === "string"
+                        ? formatRelative(t3codeRuntime.checkedAt)
+                        : stringifyRuntimeValue(t3codeRuntime.checkedAt)}
+                    </div>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                      Runner Storage
+                    </div>
+                    <div className="mt-1 truncate font-mono text-xs text-muted-foreground">
+                      {stringifyRuntimeValue(t3codeRuntime.runnerStorageRoot)}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  This node has not reported a t3code backend yet.
+                </p>
+              )}
+            </Card>
+          </section>
+
+          <section>
+            <h2 className="font-display text-lg font-semibold text-foreground">
+              Execution Environment
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Capabilities this node can use when selecting where agents run.
+            </p>
+
+            <Card className="mt-4 p-4">
+              <div className="grid gap-3 text-sm sm:grid-cols-2">
+                <div>
+                  <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                    Environment
+                  </div>
+                  <div className="mt-1 font-medium text-foreground">
+                    {stringifyRuntimeValue(executionRuntime?.environmentName ?? workspace.name)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                    OS
+                  </div>
+                  <div className="mt-1 font-medium text-foreground">
+                    {stringifyRuntimeValue(executionRuntime?.os)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                    Capacity
+                  </div>
+                  <div className="mt-1 font-medium text-foreground">
+                    {stringifyRuntimeValue(executionRuntime?.maxConcurrent)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                    Capabilities
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {(capabilities?.names ?? []).length > 0 ? (
+                      capabilities!.names!.map((name) => (
+                        <span
+                          key={name}
+                          className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-medium text-foreground"
+                        >
+                          {name}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-muted-foreground">none reported</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </section>
+
           {/* Agents Section */}
           <section>
             <h2 className="font-display text-lg font-semibold text-foreground">

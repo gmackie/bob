@@ -11,6 +11,10 @@ import { authClient } from "~/utils/auth";
 import type { ChatMessage, OodaSessionEvent } from "../chat-messages";
 import { collapseOodaEventsToMessages } from "../chat-messages";
 import { readSseMessages } from "../ooda-sse";
+import {
+  chooseOodaAdapter,
+  chooseOodaRunnerForCapabilities,
+} from "../ooda-runner-selection";
 import { slugify } from "../slugify";
 import type { AgentChat, AgentChatStatus } from "./use-bob-chat";
 
@@ -60,6 +64,7 @@ interface OodaClient {
         adapterId: string;
         toolProfileId: string;
         prompt: string;
+        requiredCapabilities?: string[];
       }) => Promise<unknown>;
     };
     requestPromotion: {
@@ -100,15 +105,6 @@ function createOodaClient(baseUrl: string): OodaClient {
   return client as unknown as OodaClient;
 }
 
-function chooseAdapter(device: OodaRunnerDevice | undefined): string {
-  const capabilities = device?.capabilities ?? [];
-  return capabilities.includes("claude")
-    ? "claude"
-    : capabilities.includes("codex")
-      ? "codex"
-      : capabilities[0] ?? "claude";
-}
-
 function hasTerminalEvent(events: OodaSessionEvent[] | undefined): boolean {
   return Boolean(
     events?.some((event) => event.type === "exit" || event.type === "error"),
@@ -143,7 +139,10 @@ export interface OodaChatExtensions {
   createThread: (title: string) => Promise<void>;
 }
 
-export function useOodaChat(enabled: boolean): AgentChat & OodaChatExtensions {
+export function useOodaChat(
+  enabled: boolean,
+  requiredCapabilities: string[] = [],
+): AgentChat & OodaChatExtensions {
   const queryClient = useQueryClient();
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
@@ -181,8 +180,12 @@ export function useOodaChat(enabled: boolean): AgentChat & OodaChatExtensions {
       : undefined) ??
     threadsQuery.data?.find((t) => t.status === "active") ??
     threadsQuery.data?.[0];
-  const activeRunner = runnersQuery.data?.find((runner) => runner.status === "online") ??
-    runnersQuery.data?.[0];
+  const onlineRunners = runnersQuery.data?.filter(
+    (runner) => runner.status === "online",
+  );
+  const activeRunner =
+    chooseOodaRunnerForCapabilities(onlineRunners, requiredCapabilities) ??
+    chooseOodaRunnerForCapabilities(runnersQuery.data, requiredCapabilities);
 
   const eventsQuery = useQuery({
     queryKey: ["mobile-bob", "ooda", "events", activeSessionId],
@@ -284,9 +287,10 @@ export function useOodaChat(enabled: boolean): AgentChat & OodaChatExtensions {
       return client.runner.sendPrompt.mutate({
         threadId: activeThread.id,
         runnerId: activeRunner.id,
-        adapterId: chooseAdapter(activeRunner),
+        adapterId: chooseOodaAdapter(activeRunner),
         toolProfileId: "default",
         prompt: text,
+        ...(requiredCapabilities.length > 0 ? { requiredCapabilities } : {}),
       }) as Promise<OodaRunnerSession | null>;
     },
     onSuccess: (session) => {

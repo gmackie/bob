@@ -3,9 +3,18 @@ import path from "node:path";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { taskRunsFindFirstMock, userFindFirstMock } = vi.hoisted(() => ({
+const {
+  chatConversationsFindFirstMock,
+  repositoriesFindFirstMock,
+  taskRunsFindFirstMock,
+  userFindFirstMock,
+  worktreesFindFirstMock,
+} = vi.hoisted(() => ({
+  chatConversationsFindFirstMock: vi.fn(),
+  repositoriesFindFirstMock: vi.fn(),
   taskRunsFindFirstMock: vi.fn(),
   userFindFirstMock: vi.fn(),
+  worktreesFindFirstMock: vi.fn(),
 }));
 
 vi.mock("@bob/db/client", () => ({
@@ -14,8 +23,17 @@ vi.mock("@bob/db/client", () => ({
       taskRuns: {
         findFirst: taskRunsFindFirstMock,
       },
+      chatConversations: {
+        findFirst: chatConversationsFindFirstMock,
+      },
+      repositories: {
+        findFirst: repositoriesFindFirstMock,
+      },
       user: {
         findFirst: userFindFirstMock,
+      },
+      worktrees: {
+        findFirst: worktreesFindFirstMock,
       },
     },
     insert: vi.fn(() => ({
@@ -39,6 +57,7 @@ vi.mock("@bob/db", () => ({
 
 vi.mock("@bob/db/schema", () => ({
   chatConversations: { id: { name: "id" } },
+  repositories: { id: { name: "id" } },
   taskRunStatusEnum: ["starting", "running", "blocked", "failed", "completed"],
   taskRuns: {
     workItemId: { name: "work_item_id" },
@@ -49,6 +68,7 @@ vi.mock("@bob/db/schema", () => ({
     id: { name: "id" },
     email: { name: "email" },
   },
+  worktrees: { id: { name: "id" } },
 }));
 
 vi.mock("./taskExecutor.js", () => ({
@@ -75,19 +95,20 @@ describe("planning control runtime", () => {
       status: "running",
       blockedReason: null,
       branch: "bob/BUILD-42/task",
-      repository: {
-        id: "repo-1",
-        name: "builder",
-        path: "/repos/builder",
-        mainBranch: "main",
-      },
-      worktree: null,
-      session: {
-        workflowStatus: "working",
-        status: "running",
-        statusMessage: "Applying changes",
-        workingDirectory: "/repos/builder",
-      },
+      repositoryId: "repo-1",
+      worktreeId: null,
+    });
+    chatConversationsFindFirstMock.mockResolvedValueOnce({
+      workflowStatus: "working",
+      status: "running",
+      statusMessage: "Applying changes",
+      workingDirectory: "/repos/builder",
+    });
+    repositoriesFindFirstMock.mockResolvedValueOnce({
+      id: "repo-1",
+      name: "builder",
+      path: "/repos/builder",
+      mainBranch: "main",
     });
 
     const snapshot = await getIssueSessionSnapshot({
@@ -100,7 +121,7 @@ describe("planning control runtime", () => {
     expect(snapshot).toEqual({
       issueId: "task-1",
       issueIdentifier: "BUILD-42",
-      executionBackend: "bob",
+      executionBackend: "t3code",
       taskRunId: "run-1",
       sessionId: "session-1",
       sessionUrl: "http://localhost:3000/chat?session=session-1",

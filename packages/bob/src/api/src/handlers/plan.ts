@@ -96,7 +96,7 @@ export async function planCreate(
   ctx: HandlerContext,
   input: {
     worktreeId: string;
-    title: string;
+    title?: string;
     goal?: string;
     status?: string;
     planningTaskId?: string | null;

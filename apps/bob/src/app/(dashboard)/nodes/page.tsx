@@ -23,6 +23,30 @@ function formatRelative(dateStr: string | null): string {
   return `${Math.floor(diff / 86400000)}d ago`;
 }
 
+function getNodeRuntime(agentConfigs: unknown) {
+  if (!agentConfigs || typeof agentConfigs !== "object" || Array.isArray(agentConfigs)) {
+    return {};
+  }
+  const configs = agentConfigs as Record<string, any>;
+  return {
+    capabilities: configs.__capabilities as
+      | { names?: string[]; execution?: Record<string, unknown> }
+      | undefined,
+    runtime: configs.__runtime as
+      | { t3code?: Record<string, unknown> }
+      | undefined,
+  };
+}
+
+function getAgentCount(agentConfigs: unknown): number {
+  if (!agentConfigs || typeof agentConfigs !== "object" || Array.isArray(agentConfigs)) {
+    return 0;
+  }
+  return Object.keys(agentConfigs as Record<string, unknown>).filter(
+    (key) => !key.startsWith("__"),
+  ).length;
+}
+
 export default function NodesPage() {
   const trpc = useTRPC();
 
@@ -83,6 +107,7 @@ export default function NodesPage() {
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Node</th>
                 <th className="px-4 py-3">Workspace</th>
+                <th className="px-4 py-3">Runtime</th>
                 <th className="px-4 py-3 text-right">Agents</th>
                 <th className="px-4 py-3 text-right">Repos</th>
                 <th className="px-4 py-3 text-right">Last Seen</th>
@@ -92,9 +117,12 @@ export default function NodesPage() {
               {workspaces.map((ws: any) => {
                 const online = isNodeOnline(ws.lastHeartbeat);
                 const machineId = ws.machineId || ws.slug;
-                const agentCount = ws.agentConfigs
-                  ? Object.keys(ws.agentConfigs).length
-                  : 0;
+                const agentCount = getAgentCount(ws.agentConfigs);
+                const { capabilities, runtime } = getNodeRuntime(ws.agentConfigs);
+                const t3code = runtime?.t3code;
+                const supportsMacos = capabilities?.names?.some((name) =>
+                  name === "macos" || name === "darwin",
+                );
                 const repoCount = repos.filter(
                   (r) => r.workspaceId === ws.id,
                 ).length;
@@ -117,6 +145,28 @@ export default function NodesPage() {
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
                       {ws.slug}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-1.5">
+                        {t3code ? (
+                          <span className={cn(
+                            "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                            t3code.status === "online"
+                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                              : "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                          )}>
+                            t3code {String(t3code.status ?? "configured")}
+                          </span>
+                        ) : null}
+                        {supportsMacos ? (
+                          <span className="rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] font-medium text-sky-600 dark:text-sky-400">
+                            macOS
+                          </span>
+                        ) : null}
+                        {!t3code && !supportsMacos ? (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        ) : null}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-muted-foreground">
                       {agentCount}

@@ -20,6 +20,18 @@ import {
   instanceUpdateStatus,
 } from "../handlers/instance.js";
 
+type AgentType =
+  | "claude"
+  | "opencode"
+  | "kiro"
+  | "codex"
+  | "gemini"
+  | "smol-agent"
+  | "cursor-agent"
+  | "elevenlabs";
+
+type InstanceStatus = "starting" | "running" | "stopped" | "error";
+
 export const makeInstanceRpcHandlers = (ctx: HandlerContext) => ({
   "instance.list": () => wrapHandler(instanceList, ctx, undefined as never, "instance"),
 
@@ -44,7 +56,7 @@ export const makeInstanceRpcHandlers = (ctx: HandlerContext) => ({
   "instance.start": ({
     payload,
   }: {
-    payload: { worktreeId: string; agentType: string };
+    payload: { worktreeId: string; agentType: AgentType };
   }) => wrapHandler(instanceStart, ctx, payload, "instance"),
 
   "instance.stop": ({
@@ -70,7 +82,7 @@ export const makeInstanceRpcHandlers = (ctx: HandlerContext) => ({
   }: {
     payload: {
       id: string;
-      status: string;
+      status: InstanceStatus;
       pid?: number;
       errorMessage?: string;
     };

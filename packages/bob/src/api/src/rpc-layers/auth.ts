@@ -18,6 +18,7 @@ import type { HandlerContext } from "../handlers/context.js";
 import { AuthRpc } from "@gmacko/core/contracts/groups/auth";
 import { BobNotFoundError } from "@gmacko/bob/contracts";
 import { makeAuthRpcHandlers } from "../rpc-handlers/auth.js";
+import { adaptRpcHandlers } from "./adapter.js";
 
 /**
  * Returns the raw handler mapping object for AuthRpc (11 entries).
@@ -73,4 +74,4 @@ export const makeAuthHandlers = (ctx: HandlerContext) => {
 };
 
 export const makeAuthLayer = (ctx: HandlerContext) =>
-  AuthRpc.toLayer(makeAuthHandlers(ctx));
+  AuthRpc.toLayer(adaptRpcHandlers(makeAuthHandlers(ctx)));

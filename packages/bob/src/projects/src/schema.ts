@@ -130,6 +130,7 @@ export const workspaceIntegrations = pgTable(
     apiKey: t.text(),
     webhookSigningSecret: t.text(),
     linearTeamId: t.text(),
+    linearWebBaseUrl: t.text(),
     createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
     updatedAt: t
       .timestamp({ mode: "string", withTimezone: true })

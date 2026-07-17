@@ -9,7 +9,9 @@ import { and, count, desc, eq, sql } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
   chatConversations,
+  skillCategory,
   skillExecutions,
+  skillSource,
   skills,
   workItems,
   workspaceMembers,
@@ -180,6 +182,15 @@ const BUILTIN_SKILLS = [
   },
 ];
 
+type SkillCategoryFilter = (typeof skillCategory)[number];
+type SkillSourceFilter = (typeof skillSource)[number];
+
+const isSkillCategoryFilter = (value: string): value is SkillCategoryFilter =>
+  (skillCategory as readonly string[]).includes(value);
+
+const isSkillSourceFilter = (value: string): value is SkillSourceFilter =>
+  (skillSource as readonly string[]).includes(value);
+
 // ---------------------------------------------------------------------------
 // Handler functions
 // ---------------------------------------------------------------------------
@@ -189,10 +200,10 @@ export async function skillList(
   input?: { category?: string; source?: string },
 ) {
   const conditions = [];
-  if (input?.category) {
+  if (input?.category && isSkillCategoryFilter(input.category)) {
     conditions.push(eq(skills.category, input.category));
   }
-  if (input?.source) {
+  if (input?.source && isSkillSourceFilter(input.source)) {
     conditions.push(eq(skills.source, input.source));
   }
 

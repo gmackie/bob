@@ -72,6 +72,60 @@ describe("BobRunReporter", () => {
     expect(calls[0].body.metadata.content).toBe("hello stdout");
   });
 
+  it("publishes node heartbeat metadata for t3code and macOS execution capacity", async () => {
+    const calls: Array<{ url: string; method: string; body: any }> = [];
+    vi.spyOn(globalThis, "fetch" as any).mockImplementation((async (
+      url: string,
+      init: any,
+    ) => {
+      calls.push({ url, method: init.method, body: JSON.parse(init.body) });
+      return new Response("{}", { status: 200 });
+    }) as any);
+
+    const r = new BobRunReporter(CFG);
+    await r.heartbeat({
+      agentTypes: ["codex", "claude"],
+      capabilities: ["macos", "darwin"],
+      runtime: {
+        execution: {
+          environmentName: "gmacko-mini",
+          os: "darwin",
+          supportsMacos: true,
+          maxConcurrent: 4,
+        },
+        t3code: {
+          status: "online",
+          serverUrl: "https://t3code.gmacko.io",
+          model: "gpt-5-codex",
+          runtimeMode: "full-access",
+        },
+      },
+    });
+
+    expect(calls[0]).toMatchObject({
+      url: "https://bob.example/api/v1/workspaces/ws-1/heartbeat",
+      method: "POST",
+      body: {
+        agentTypes: ["codex", "claude"],
+        capabilities: ["macos", "darwin"],
+        runtime: {
+          execution: {
+            environmentName: "gmacko-mini",
+            os: "darwin",
+            supportsMacos: true,
+            maxConcurrent: 4,
+          },
+          t3code: {
+            status: "online",
+            serverUrl: "https://t3code.gmacko.io",
+            model: "gpt-5-codex",
+            runtimeMode: "full-access",
+          },
+        },
+      },
+    });
+  });
+
   it("never throws when the network fails", async () => {
     vi.spyOn(globalThis, "fetch" as any).mockRejectedValue(new Error("ECONNREFUSED"));
     const r = new BobRunReporter(CFG);

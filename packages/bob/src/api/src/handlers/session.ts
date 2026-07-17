@@ -38,6 +38,14 @@ function buildWorkItemUrl(workItemId: string | null | undefined): string | null 
 
 import type { HandlerContext } from "./context.js";
 
+type SessionListRow = {
+  id: string;
+  workItemId?: string | null;
+  workItemIdentifierSnapshot?: string | null;
+  planningTaskId?: string | null;
+  [key: string]: unknown;
+};
+
 // ---------------------------------------------------------------------------
 // Shared helpers (moved verbatim from the router)
 // ---------------------------------------------------------------------------
@@ -182,7 +190,7 @@ export async function sessionList(
     .limit(input.limit + 1);
 
   const hasMore = sessions.length > input.limit;
-  const items = hasMore ? sessions.slice(0, -1) : sessions;
+  const items = (hasMore ? sessions.slice(0, -1) : sessions) as SessionListRow[];
   const nextCursor = hasMore ? items[items.length - 1]?.id : undefined;
   const sessionIds = items.map((session) => session.id);
   const linkedTaskRows =

@@ -12,6 +12,7 @@ import {
   getTaskWorkspaceHref,
   resolveTaskWorkspaceTarget,
 } from "~/lib/planning/task-workspace";
+import { buildT3codeInteractionReport } from "~/lib/t3code/reporting";
 
 interface TaskWorkspacePageProps {
   params: Promise<{ workItemId: string }>;
@@ -44,13 +45,26 @@ export default async function TaskWorkspacePage({
   });
 
   const activeSessionId = target.activeRun?.sessionId ?? null;
-  const [activeSession, workflowState] = activeSessionId
+  const [activeSession, workflowState, activeSessionEvents] = activeSessionId
     ? await Promise.all([
         caller.session.get({ id: activeSessionId }),
         caller.session.getWorkflowState({ sessionId: activeSessionId }),
+        caller.session.getEvents({ sessionId: activeSessionId, limit: 25 }),
       ])
-    : [null, null];
+    : [null, null, null];
   const validationState = deriveTaskWorkspaceValidationState(detail.currentArtifacts);
+  const t3Report = buildT3codeInteractionReport({
+    sessionId: activeSessionId,
+    taskRunId: target.activeRun?.id ?? null,
+    assumeT3code: Boolean(activeSessionId && target.activeRun),
+    workflowState: workflowState
+      ? {
+          workflowStatus: workflowState.workflowStatus,
+          statusMessage: workflowState.statusMessage ?? null,
+        }
+      : null,
+    events: activeSessionEvents?.events ?? [],
+  });
   const handoffComments = comments.slice(0, 3);
 
   const validationToneClass =
@@ -248,6 +262,81 @@ export default async function TaskWorkspacePage({
                 </div>
                 {workflowState.statusMessage ? (
                   <div className="mt-2">{workflowState.statusMessage}</div>
+                ) : null}
+              </div>
+            ) : null}
+            {t3Report ? (
+              <div className="mt-4 rounded-2xl border border-sky-400/30 bg-sky-500/10 px-4 py-4 text-sm text-sky-100">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.18em] text-sky-100/70">
+                      t3code server
+                    </div>
+                    <div className="mt-2 font-semibold text-sky-50">
+                      {t3Report.status.replace(/_/g, " ")}
+                    </div>
+                  </div>
+                  <div className="rounded-full border border-sky-200/30 px-3 py-1 text-xs text-sky-50">
+                    mirrored
+                  </div>
+                </div>
+                {t3Report.message ? (
+                  <div className="mt-3 leading-6 text-sky-100/80">
+                    {t3Report.message}
+                  </div>
+                ) : null}
+                <div className="mt-4 grid gap-2 text-xs sm:grid-cols-2">
+                  <div className="rounded-xl border border-sky-200/20 bg-sky-950/20 px-3 py-2">
+                    <div className="uppercase tracking-[0.14em] text-sky-100/60">
+                      Thread
+                    </div>
+                    <div className="mt-1 break-all font-mono text-sky-50">
+                      {t3Report.threadId ?? "Pending"}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-sky-200/20 bg-sky-950/20 px-3 py-2">
+                    <div className="uppercase tracking-[0.14em] text-sky-100/60">
+                      Task run
+                    </div>
+                    <div className="mt-1 break-all font-mono text-sky-50">
+                      {t3Report.taskRunId ?? "Pending"}
+                    </div>
+                  </div>
+                </div>
+                {t3Report.linear?.url ? (
+                  <a
+                    href={t3Report.linear.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-4 inline-flex text-sm font-medium text-sky-50 underline-offset-4 hover:underline"
+                  >
+                    {t3Report.linear.identifier ?? "Open Linear issue"}
+                    {t3Report.linear.title ? ` · ${t3Report.linear.title}` : ""}
+                  </a>
+                ) : null}
+                {t3Report.events.length > 0 ? (
+                  <div className="mt-4 space-y-2">
+                    {t3Report.events.slice(-3).map((event) => (
+                      <div
+                        key={event.id}
+                        className="rounded-xl border border-sky-200/20 bg-sky-950/20 px-3 py-2"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-mono text-xs text-sky-100/70">
+                            #{event.seq}
+                          </span>
+                          <span className="text-xs text-sky-100/70">
+                            {event.status.replace(/_/g, " ")}
+                          </span>
+                        </div>
+                        {event.message ? (
+                          <div className="mt-1 text-xs leading-5 text-sky-100/80">
+                            {event.message}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
                 ) : null}
               </div>
             ) : null}

@@ -2,8 +2,10 @@ import { desc, eq, or } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
   chatConversations,
+  repositories,
   taskRuns,
   user,
+  worktrees,
 } from "@bob/db/schema";
 import {
   taskRunStatusEnum,
@@ -65,7 +67,7 @@ export interface GetIssueSessionInput {
 export interface IssueSessionSnapshot {
   issueId: string;
   issueIdentifier: string;
-  executionBackend: "bob";
+  executionBackend: "t3code";
   taskRunId: string | null;
   sessionId: string | null;
   sessionUrl: string | null;
@@ -125,18 +127,42 @@ async function ensureControlUserId(
 }
 
 async function getLatestTaskRunForIssue(planningItemId: string) {
-  return db.query.taskRuns.findFirst({
+  const taskRun = await db.query.taskRuns.findFirst({
     where: or(
       eq(taskRuns.workItemId, planningItemId),
       eq(taskRuns.planningItemId, planningItemId),
     ),
-    with: {
-      repository: true,
-      session: true,
-      worktree: true,
-    },
     orderBy: desc(taskRuns.createdAt),
   });
+
+  if (!taskRun) {
+    return null;
+  }
+
+  const [session, repository, worktree] = await Promise.all([
+    taskRun.sessionId
+      ? db.query.chatConversations.findFirst({
+          where: eq(chatConversations.id, taskRun.sessionId),
+        })
+      : Promise.resolve(null),
+    taskRun.repositoryId
+      ? db.query.repositories.findFirst({
+          where: eq(repositories.id, taskRun.repositoryId),
+        })
+      : Promise.resolve(null),
+    taskRun.worktreeId
+      ? db.query.worktrees.findFirst({
+          where: eq(worktrees.id, taskRun.worktreeId),
+        })
+      : Promise.resolve(null),
+  ]);
+
+  return {
+    ...taskRun,
+    session,
+    repository,
+    worktree,
+  };
 }
 
 function buildSessionUrl(sessionId: string | null): string | null {
@@ -153,7 +179,7 @@ function emptyIssueSessionSnapshot(
   return {
     issueId: input.issueId,
     issueIdentifier: input.issueIdentifier ?? input.issueId,
-    executionBackend: "bob",
+    executionBackend: "t3code",
     taskRunId: null,
     sessionId: null,
     sessionUrl: null,
@@ -182,7 +208,7 @@ function buildIssueSessionSnapshot(
       fallback.issueIdentifier ??
       taskRun.workItemIdentifierSnapshot ??
       taskRun.planningItemIdentifier,
-    executionBackend: "bob",
+    executionBackend: "t3code",
     taskRunId: taskRun.id,
     sessionId: taskRun.sessionId,
     sessionUrl: buildSessionUrl(taskRun.sessionId),

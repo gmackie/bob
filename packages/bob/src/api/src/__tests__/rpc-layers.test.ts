@@ -62,6 +62,26 @@ import { makePublicApiRpcHandlers } from "../rpc-handlers/publicApi.js";
 
 const mockCtx = { db: {} as any, userId: "test-user" };
 
+const countWorkItemsContractHandlers = () =>
+  Object.keys(makeWorkItemsRpcHandlers(mockCtx)).filter(
+    (key) => key !== "workItems.dispatch",
+  ).length;
+
+const countDispatchContractHandlers = () =>
+  Object.keys(makeDispatchRpcHandlers(mockCtx)).filter(
+    (key) => key !== "dispatch.executionBatch",
+  ).length;
+
+const countSkillContractHandlers = () =>
+  Object.keys(makeSkillRpcHandlers(mockCtx)).filter(
+    (key) => key !== "skill.stats",
+  ).length;
+
+const countPublicApiContractHandlers = () =>
+  Object.keys(makePublicApiRpcHandlers(mockCtx)).filter(
+    (key) => key !== "publicApi.mirrorT3RuntimeEvent",
+  ).length;
+
 // ---------------------------------------------------------------------------
 // Aggregate layer construction
 // ---------------------------------------------------------------------------
@@ -183,9 +203,10 @@ describe("RPC aggregate layers — Phase 7B-4D-delta verification", () => {
 
 describe("RPC handler factory key counts", () => {
   describe("WorkItems group (31 procedures)", () => {
-    it("workItems factory produces 18 keys", () => {
+    it("workItems factory produces 19 keys including dispatch helper", () => {
       const handlers = makeWorkItemsRpcHandlers(mockCtx);
-      expect(Object.keys(handlers)).toHaveLength(18);
+      expect(Object.keys(handlers)).toHaveLength(19);
+      expect(handlers).toHaveProperty("workItems.dispatch");
     });
 
     it("requirement factory produces 5 keys", () => {
@@ -198,8 +219,8 @@ describe("RPC handler factory key counts", () => {
       expect(Object.keys(handlers)).toHaveLength(8);
     });
 
-    it("total handler keys sum to 31", () => {
-      const wi = Object.keys(makeWorkItemsRpcHandlers(mockCtx)).length;
+    it("contract handler keys sum to 31", () => {
+      const wi = countWorkItemsContractHandlers();
       const req = Object.keys(makeRequirementRpcHandlers(mockCtx)).length;
       const lnk = Object.keys(makeLinkRpcHandlers(mockCtx)).length;
       expect(wi + req + lnk).toBe(31);
@@ -222,14 +243,16 @@ describe("RPC handler factory key counts", () => {
       expect(Object.keys(handlers)).toHaveLength(11);
     });
 
-    it("dispatch factory produces 8 keys", () => {
+    it("dispatch factory produces 9 keys including executionBatch helper", () => {
       const handlers = makeDispatchRpcHandlers(mockCtx);
-      expect(Object.keys(handlers)).toHaveLength(8);
+      expect(Object.keys(handlers)).toHaveLength(9);
+      expect(handlers).toHaveProperty("dispatch.executionBatch");
     });
 
-    it("skill factory produces 6 keys", () => {
+    it("skill factory produces 7 keys including stats helper", () => {
       const handlers = makeSkillRpcHandlers(mockCtx);
-      expect(Object.keys(handlers)).toHaveLength(6);
+      expect(Object.keys(handlers)).toHaveLength(7);
+      expect(handlers).toHaveProperty("skill.stats");
     });
 
     it("snapshot factory produces 3 keys", () => {
@@ -242,13 +265,13 @@ describe("RPC handler factory key counts", () => {
       expect(Object.keys(handlers)).toHaveLength(3);
     });
 
-    it("total handler keys sum to 66 (+ 1 inline stub = 67)", () => {
+    it("contract handler keys sum to 66 (+ 1 inline stub = 67)", () => {
       // planning.getCurrentUser is an inline stub in the layer, not from a factory
       const pl = Object.keys(makePlanningRpcHandlers(mockCtx)).length;
       const ps = Object.keys(makePlanSessionRpcHandlers(mockCtx)).length;
       const pn = Object.keys(makePlanRpcHandlers(mockCtx)).length;
-      const di = Object.keys(makeDispatchRpcHandlers(mockCtx)).length;
-      const sk = Object.keys(makeSkillRpcHandlers(mockCtx)).length;
+      const di = countDispatchContractHandlers();
+      const sk = countSkillContractHandlers();
       const sn = Object.keys(makeSnapshotRpcHandlers(mockCtx)).length;
       const cp = Object.keys(makeCheckpointRpcHandlers(mockCtx)).length;
       const fromFactories = pl + ps + pn + di + sk + sn + cp;
@@ -269,15 +292,16 @@ describe("RPC handler factory key counts", () => {
       expect(Object.keys(handlers)).toHaveLength(8);
     });
 
-    it("publicApi factory produces 9 keys", () => {
+    it("publicApi factory produces 10 keys including t3 mirror route helper", () => {
       const handlers = makePublicApiRpcHandlers(mockCtx);
-      expect(Object.keys(handlers)).toHaveLength(9);
+      expect(Object.keys(handlers)).toHaveLength(10);
+      expect(handlers).toHaveProperty("publicApi.mirrorT3RuntimeEvent");
     });
 
-    it("total handler keys sum to 31", () => {
+    it("contract handler keys sum to 31", () => {
       const fg = Object.keys(makeForgeGraphRpcHandlers(mockCtx)).length;
       const wh = Object.keys(makeWebhookRpcHandlers(mockCtx)).length;
-      const pa = Object.keys(makePublicApiRpcHandlers(mockCtx)).length;
+      const pa = countPublicApiContractHandlers();
       expect(fg + wh + pa).toBe(31);
     });
   });
@@ -325,7 +349,7 @@ describe("RPC handler factory key counts", () => {
     it("314 contract procedures + 1 health = 315 total", () => {
       // Domain groups (3): WorkItems 31 + Planning 67 + External 31 = 129
       const workItemsKeys =
-        Object.keys(makeWorkItemsRpcHandlers(mockCtx)).length +
+        countWorkItemsContractHandlers() +
         Object.keys(makeRequirementRpcHandlers(mockCtx)).length +
         Object.keys(makeLinkRpcHandlers(mockCtx)).length;
       // Planning: 66 from factories + 1 inline getCurrentUser stub = 67
@@ -333,15 +357,15 @@ describe("RPC handler factory key counts", () => {
         Object.keys(makePlanningRpcHandlers(mockCtx)).length +
         Object.keys(makePlanSessionRpcHandlers(mockCtx)).length +
         Object.keys(makePlanRpcHandlers(mockCtx)).length +
-        Object.keys(makeDispatchRpcHandlers(mockCtx)).length +
-        Object.keys(makeSkillRpcHandlers(mockCtx)).length +
+        countDispatchContractHandlers() +
+        countSkillContractHandlers() +
         Object.keys(makeSnapshotRpcHandlers(mockCtx)).length +
         Object.keys(makeCheckpointRpcHandlers(mockCtx)).length +
         1; // inline getCurrentUser stub
       const externalKeys =
         Object.keys(makeForgeGraphRpcHandlers(mockCtx)).length +
         Object.keys(makeWebhookRpcHandlers(mockCtx)).length +
-        Object.keys(makePublicApiRpcHandlers(mockCtx)).length;
+        countPublicApiContractHandlers();
 
       // Platform groups (5): Agent 84 + Projects 56 + Settings 20 + Secrets 14 + Auth 11 = 185
       const agentKeys = Object.keys(makeAgentHandlers(mockCtx)).length;

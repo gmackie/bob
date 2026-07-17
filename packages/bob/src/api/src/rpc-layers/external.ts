@@ -13,13 +13,14 @@ import { ExternalRpc } from "@gmacko/bob/contracts";
 import { makeForgeGraphRpcHandlers } from "../rpc-handlers/forgegraph.js";
 import { makeWebhookRpcHandlers } from "../rpc-handlers/webhook.js";
 import { makePublicApiRpcHandlers } from "../rpc-handlers/publicApi.js";
+import { adaptRpcHandlers } from "./adapter.js";
 
 export const makeExternalLayer = (ctx: HandlerContext) => {
   const fg = makeForgeGraphRpcHandlers(ctx);
   const wh = makeWebhookRpcHandlers(ctx);
   const pa = makePublicApiRpcHandlers(ctx);
 
-  return ExternalRpc.toLayer({
+  return ExternalRpc.toLayer(adaptRpcHandlers({
     // --- ForgeGraph (14) ---
     "external.forgegraph.listRevisions": fg["forgegraph.listRevisions"],
     "external.forgegraph.getRevision": fg["forgegraph.getRevision"],
@@ -58,5 +59,5 @@ export const makeExternalLayer = (ctx: HandlerContext) => {
       pa["publicApi.listRunsByWorkItem"],
     "external.publicApi.heartbeat": pa["publicApi.heartbeat"],
     "external.publicApi.generateApiKey": pa["publicApi.generateApiKey"],
-  });
+  }));
 };

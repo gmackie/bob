@@ -16,6 +16,17 @@ export const RunnerConfigSchema = z.object({
   bobWorkspaceId: z.string().optional(),
   bobDevDir: z.string().default(join(homedir(), "dev")),
   bobMaxConcurrent: z.coerce.number().default(2),
+  t3codeServerUrl: z.string().url().optional(),
+  t3codeAuthToken: z.string().optional(),
+  t3codeProjectId: z.string().optional(),
+  t3codeModelInstanceId: z.string().optional(),
+  t3codeModel: z.string().optional(),
+  t3codeWorktreePath: z.string().optional(),
+  t3codeRuntimeMode: z.enum([
+    "approval-required",
+    "auto-accept-edits",
+    "full-access",
+  ]).optional(),
 });
 
 export type RunnerConfig = z.infer<typeof RunnerConfigSchema>;
@@ -33,5 +44,15 @@ export function loadConfig(): RunnerConfig {
     bobWorkspaceId: process.env.BOB_WORKSPACE_ID,
     bobDevDir: process.env.BOB_DEV_DIR,
     bobMaxConcurrent: process.env.BOB_MAX_CONCURRENT,
+    t3codeServerUrl: process.env.OODA_T3CODE_SERVER_URL ?? process.env.T3CODE_SERVER_URL,
+    t3codeAuthToken: process.env.OODA_T3CODE_AUTH_TOKEN ?? process.env.T3CODE_AUTH_TOKEN,
+    t3codeProjectId: process.env.OODA_T3CODE_PROJECT_ID ?? process.env.T3CODE_PROJECT_ID,
+    t3codeModelInstanceId:
+      process.env.OODA_T3CODE_MODEL_INSTANCE_ID ?? process.env.T3CODE_MODEL_INSTANCE_ID,
+    t3codeModel: process.env.OODA_T3CODE_MODEL ?? process.env.T3CODE_MODEL,
+    t3codeWorktreePath:
+      process.env.OODA_T3CODE_WORKTREE_PATH ?? process.env.T3CODE_WORKTREE_PATH,
+    t3codeRuntimeMode:
+      process.env.OODA_T3CODE_RUNTIME_MODE ?? process.env.T3CODE_RUNTIME_MODE,
   });
 }

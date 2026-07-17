@@ -89,10 +89,10 @@ export async function agentRunListAll(
   ctx: HandlerContext,
   input: { limit: number },
 ) {
-  const memberships = await ctx.db.query.workspaceMembers.findMany({
+  const memberships = (await ctx.db.query.workspaceMembers.findMany({
     where: eq(workspaceMembers.userId, ctx.userId),
     columns: { workspaceId: true },
-  });
+  })) as Array<{ workspaceId: string }>;
 
   const wsIds = memberships.map((m) => m.workspaceId);
   if (wsIds.length === 0) return [];

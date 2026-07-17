@@ -8,7 +8,7 @@ import { Schema } from "effect";
 export const CaptureTargetSchema = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
-  type: Schema.Literal("browser", "screen", "window"),
+  type: Schema.Literals(["browser", "screen", "window"]),
   description: Schema.String,
   connected: Schema.Boolean,
 });

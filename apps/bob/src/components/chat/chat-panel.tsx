@@ -16,6 +16,11 @@ import { useChatPanel } from "./chat-panel-provider";
 
 const PANEL_WIDTH = 500;
 
+interface ChatPanelSessionDetails {
+  sessionType: string | null;
+  title: string | null;
+}
+
 export function ChatPanel() {
   const { isOpen, sessionId, contextLabel, closePanel } = useChatPanel();
 
@@ -34,8 +39,9 @@ export function ChatPanel() {
   if (!isOpen) return null;
 
   const isAwaitingInput = workflowState?.workflowStatus === "awaiting_input";
-  const isPlanningSession = sessionData?.sessionType === "planning";
-  const title = sessionData?.title ?? (sessionId ? `Session ${sessionId.slice(0, 8)}` : "Chat");
+  const session = sessionData as unknown as ChatPanelSessionDetails | null;
+  const isPlanningSession = session?.sessionType === "planning";
+  const title = session?.title ?? (sessionId ? `Session ${sessionId.slice(0, 8)}` : "Chat");
 
   return (
     <aside

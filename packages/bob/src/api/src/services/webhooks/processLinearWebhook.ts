@@ -15,7 +15,7 @@ import {
   type WebhookProvider,
 } from "./processWebhook";
 import { ensureLinearProject } from "../linear/ensureLinearProject";
-import { traceWebhook } from "@bob/telemetry";
+import { traceWebhook } from "@bob/telemetry/spans";
 
 const LINEAR_BOB_ACTOR = "bob-automation";
 

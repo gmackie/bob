@@ -19,6 +19,17 @@ import { detectProjectCapabilities } from "../services/projects/projectCapabilit
 
 import type { HandlerContext } from "./context.js";
 
+type ProjectListItem = {
+  project: unknown;
+  counts: {
+    issues: number;
+    tasks: number;
+    epics: number;
+    active: number;
+  };
+  _latestActivity: string | null | undefined;
+};
+
 // ---------------------------------------------------------------------------
 // Shared helper
 // ---------------------------------------------------------------------------
@@ -81,7 +92,7 @@ export async function projectList(
     where: eq(workItems.workspaceId, input.workspaceId),
   });
 
-  const result = projectRows.map((project: any) => {
+  const result: ProjectListItem[] = projectRows.map((project: any) => {
     const projectItems = items.filter((item: any) => item.projectId === project.id);
     const latestItemDate = projectItems.reduce((latest: string | null, item: any) => {
       const d = item.updatedAt ?? item.createdAt;

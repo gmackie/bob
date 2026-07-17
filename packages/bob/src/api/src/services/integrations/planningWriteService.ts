@@ -1,6 +1,6 @@
 import { and, desc, eq } from "@bob/db";
 import { db } from "@bob/db/client";
-import { chatConversations, projects, taskRuns } from "@bob/db/schema";
+import { chatConversations, projects, taskRuns, workItems } from "@bob/db/schema";
 
 import {
   resolvePlanningProvider,
@@ -43,6 +43,7 @@ export type PlanningArtifactRole =
 interface SessionTaskContext {
   sessionId: string;
   issueId: string | null;
+  bobWorkItemId: string | null;
   taskRunId: string | null;
   issueIdentifier: string | null;
   planningProvider: string;
@@ -138,14 +139,26 @@ async function getSessionTaskContext(
     orderBy: desc(taskRuns.createdAt),
   });
 
+  const bobWorkItemId =
+    session.workItemId ??
+    session.planningTaskId ??
+    taskRun?.workItemId ??
+    taskRun?.planningItemId ??
+    null;
+  const workItem = bobWorkItemId
+    ? await db.query.workItems.findFirst({
+        where: eq(workItems.id, bobWorkItemId),
+      })
+    : null;
+  const providerIssueId =
+    workItem?.externalProvider === "linear" && workItem.externalId
+      ? workItem.externalId
+      : bobWorkItemId;
+
   return {
     sessionId: session.id,
-    issueId:
-      session.workItemId ??
-      session.planningTaskId ??
-      taskRun?.workItemId ??
-      taskRun?.planningItemId ??
-      null,
+    issueId: providerIssueId,
+    bobWorkItemId,
     taskRunId: taskRun?.id ?? null,
     issueIdentifier:
       session.workItemIdentifierSnapshot ??

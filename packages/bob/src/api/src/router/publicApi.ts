@@ -15,7 +15,9 @@ import {
   publicApiListRunsByWorkItem,
   publicApiHeartbeat,
   publicApiGenerateApiKey,
+  publicApiMirrorT3RuntimeEvent,
 } from "../handlers/publicApi";
+import { t3RuntimeStatusValues } from "../services/t3code/runtimeEventMirror";
 
 export const publicApiRouter = {
   // POST /workspaces — register a workspace
@@ -88,6 +90,26 @@ export const publicApiRouter = {
       ),
     ),
 
+  mirrorT3RuntimeEvent: apiKeyWriteProcedure
+    .input(
+      z.object({
+        sessionId: z.string().uuid().optional(),
+        taskRunId: z.string().uuid().optional(),
+        threadId: z.string().optional(),
+        status: z.enum(t3RuntimeStatusValues),
+        message: z.string().min(1),
+        details: z.record(z.string(), z.unknown()).optional(),
+      }).refine((value) => value.sessionId || value.taskRunId, {
+        message: "sessionId or taskRunId is required",
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      publicApiMirrorT3RuntimeEvent(
+        { db: ctx.db, userId: ctx.session.user.id },
+        input,
+      ),
+    ),
+
   // GET /runs/:id — get run with artifacts
   getRun: apiKeyReadProcedure
     .input(z.object({ runId: z.string().uuid() }))
@@ -134,6 +156,13 @@ export const publicApiRouter = {
       z.object({
         workspaceId: z.string().uuid(),
         agentTypes: z.array(z.string()).optional(),
+        capabilities: z.array(z.string()).optional(),
+        runtime: z
+          .object({
+            execution: z.record(z.string(), z.unknown()).optional(),
+            t3code: z.record(z.string(), z.unknown()).optional(),
+          })
+          .optional(),
         forgeAvailable: z.boolean().optional(),
         repos: z
           .array(

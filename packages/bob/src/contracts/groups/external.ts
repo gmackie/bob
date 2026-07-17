@@ -361,6 +361,13 @@ export const PublicApiHeartbeatRpc = Rpc.make("external.publicApi.heartbeat", {
   payload: Schema.Struct({
     workspaceId: Schema.String,
     agentTypes: Schema.optional(Schema.Array(Schema.String)),
+    capabilities: Schema.optional(Schema.Array(Schema.String)),
+    runtime: Schema.optional(
+      Schema.Struct({
+        execution: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+        t3code: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+      }),
+    ),
     forgeAvailable: Schema.optional(Schema.Boolean),
     repos: Schema.optional(Schema.Array(HeartbeatRepoSchema)),
   }),

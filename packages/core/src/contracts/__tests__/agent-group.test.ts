@@ -83,7 +83,7 @@ describe("stubAgentHandlers — agent.sendTurn streaming", () => {
       program.pipe(
         Effect.provide(stubAgentHandlers.layer),
         Effect.scoped,
-      ) as Effect.Effect<ReadonlyArray<unknown>, unknown, never>,
+      ) as unknown as Effect.Effect<ReadonlyArray<unknown>, unknown, never>,
     );
 
     expect(events).toHaveLength(3);

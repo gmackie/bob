@@ -39,6 +39,42 @@ import {
   sessionHandleVoiceTranscript,
 } from "../handlers/session.js";
 
+type SessionStatus =
+  | "idle"
+  | "provisioning"
+  | "starting"
+  | "running"
+  | "stopping"
+  | "stopped"
+  | "error";
+
+type WorkflowReportStatus =
+  | "started"
+  | "working"
+  | "awaiting_input"
+  | "awaiting_review"
+  | "blocked"
+  | "completed";
+
+type ArtifactType =
+  | "doc"
+  | "build"
+  | "test_report"
+  | "pr"
+  | "verification"
+  | "deliverable"
+  | "other";
+
+type ArtifactRole =
+  | "primary"
+  | "verification"
+  | "build"
+  | "test_report"
+  | "review"
+  | "documentation"
+  | "deliverable"
+  | "other";
+
 export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
   "session.list": ({
     payload,
@@ -46,7 +82,7 @@ export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
     payload: {
       repositoryId?: string;
       worktreeId?: string;
-      status?: string;
+      status?: SessionStatus;
       limit: number;
       cursor?: string;
     };
@@ -130,7 +166,7 @@ export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
   }: {
     payload: {
       id: string;
-      status: string;
+      status: SessionStatus;
       lastError?: { code: string; message: string; timestamp: string };
     };
   }) => wrapHandler(sessionUpdateStatus, ctx, payload, "session"),
@@ -184,7 +220,7 @@ export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
   }: {
     payload: {
       sessionId: string;
-      status: string;
+      status: WorkflowReportStatus;
       message: string;
       details?: { phase?: string; progress?: string };
     };
@@ -206,8 +242,8 @@ export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
   }: {
     payload: {
       sessionId: string;
-      artifactType: string;
-      artifactRole?: string;
+      artifactType: ArtifactType;
+      artifactRole?: ArtifactRole;
       url: string;
       title?: string;
       summary?: string;

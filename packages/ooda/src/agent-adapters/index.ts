@@ -9,6 +9,7 @@ export {
 
 export { CodexAdapter } from "./codex-adapter";
 export { ClaudeAdapter } from "./claude-adapter";
+export { CursorAgentAdapter } from "./cursor-agent-adapter";
 
 export {
   createBuddyToolDescriptors,

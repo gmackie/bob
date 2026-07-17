@@ -5,10 +5,19 @@ import { createThreadWorkspace } from "@gmacko/ooda/thread-workspace";
 import { resolveThreadPath } from "@gmacko/ooda/thread-model";
 
 import { extractAgentResponse } from "../pty-output-parser";
+import {
+  buildOodaT3ThreadTurnStartCommand,
+  dispatchOodaSessionToT3Code,
+  type OodaT3DispatchRuntimeConfig,
+} from "./t3-dispatch";
 
 export interface SessionExecutorConfig {
   adapter: AgentAdapter;
   storageRoot: string;
+  t3code?: OodaT3DispatchRuntimeConfig & {
+    worktreePath?: string;
+    dispatch?: (command: Record<string, unknown>) => Promise<unknown>;
+  };
 }
 
 export interface ExecuteSessionInput {
@@ -26,15 +35,18 @@ export interface ExecuteSessionResult {
   threadDir: string;
   rawOutput: string;
   agentResponse: string;
+  dispatchedToT3Code?: boolean;
 }
 
 export class SessionExecutor {
   private adapter: AgentAdapter;
   private storageRoot: string;
+  private t3code?: SessionExecutorConfig["t3code"];
 
   constructor(config: SessionExecutorConfig) {
     this.adapter = config.adapter;
     this.storageRoot = config.storageRoot;
+    this.t3code = config.t3code;
   }
 
   async execute(input: ExecuteSessionInput): Promise<ExecuteSessionResult> {
@@ -47,6 +59,54 @@ export class SessionExecutor {
         slug: input.threadSlug,
         title: input.threadTitle,
       });
+    }
+
+    if (this.t3code) {
+      const t3WorkspaceRoot = this.t3code.worktreePath ?? threadDir;
+      const command = buildOodaT3ThreadTurnStartCommand({
+        threadId: input.threadSlug,
+        threadSlug: input.threadSlug,
+        threadTitle: input.threadTitle,
+        sessionId: input.sessionId,
+        prompt: input.prompt,
+        workspaceRoot: t3WorkspaceRoot,
+        externalTask: {
+          origin: "ooda",
+          oodaThreadId: input.threadSlug,
+          oodaThreadSlug: input.threadSlug,
+          oodaSessionId: input.sessionId,
+        },
+        config: this.t3code,
+        makeId: (prefix) =>
+          prefix === "thread"
+            ? `ooda-session-${input.sessionId}`
+            : `${prefix}-${input.sessionId}`,
+      });
+
+      if (this.t3code.dispatch) {
+        await this.t3code.dispatch(command);
+      } else {
+        await dispatchOodaSessionToT3Code({
+          serverUrl: this.t3code.serverUrl,
+          authToken: this.t3code.authToken,
+          command,
+        });
+      }
+
+      const message = `Dispatched OODA session to t3code thread ${command.threadId}`;
+      input.onEvent({
+        type: "stdout",
+        data: message,
+        timestamp: new Date().toISOString(),
+      });
+
+      return {
+        exitCode: 0,
+        threadDir,
+        rawOutput: message,
+        agentResponse: message,
+        dispatchedToT3Code: true,
+      };
     }
 
     // TODO(acp): When the ACP dispatcher lands, build a HandlerContext

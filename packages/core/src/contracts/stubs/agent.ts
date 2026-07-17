@@ -19,7 +19,7 @@
 //     for deterministic streaming output. Both exist in Effect 4.0.0-beta.43
 //     (`Stream.d.ts:698,858`).
 
-import { Effect, Stream } from "effect";
+import { DateTime, Effect, Stream } from "effect";
 
 import { AgentSessionNotFoundError } from "@gmacko/core/agent/errors";
 import { NotFoundError } from "../../rpc/errors.js";
@@ -27,6 +27,10 @@ import { NotFoundError } from "../../rpc/errors.js";
 import { AgentRpc } from "../groups/agent.js";
 
 import { SessionLeaseConflictError } from "../schemas/agent-session.js";
+import {
+  PersonaNotFoundError,
+  PersonaReadOnlyError,
+} from "../schemas/agent-persona.js";
 
 const STUB_CONVERSATION_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc";
 const STUB_TENANT_ID = "00000000-0000-0000-0000-000000000001";
@@ -39,7 +43,9 @@ const STUB_GATEWAY_ID = "gw-stub-001";
 const STUB_INSTANCE_ID = "iiiiiiii-iiii-iiii-iiii-iiiiiiiiiiii";
 const STUB_REPO_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const STUB_WORKTREE_ID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+const STUB_PERSONA_ID = "pppppppp-pppp-pppp-pppp-pppppppppppp";
 const STUB_DATE = new Date("2026-04-21T00:00:00.000Z");
+const STUB_DATE_TIME = DateTime.makeUnsafe("2026-04-21T00:00:00.000Z");
 
 /** Minimal stub instance record reused across instance handlers. */
 const STUB_INSTANCE = {
@@ -83,6 +89,26 @@ const STUB_SESSION = {
   workItemId: null,
   workItemIdentifierSnapshot: null,
   planningTaskId: null,
+  createdAt: STUB_DATE,
+  updatedAt: STUB_DATE,
+};
+
+/** Minimal stub persona record reused across persona handlers. */
+const STUB_PERSONA = {
+  id: STUB_PERSONA_ID,
+  tenantId: STUB_TENANT_ID,
+  name: "Repo Persona",
+  slug: "repo-persona",
+  description: "Deterministic repo persona",
+  adapterId: "claude",
+  model: null,
+  systemPrompt: null,
+  allowedTools: null,
+  autonomyLevel: "observe",
+  budgetLimitCents: null,
+  source: "repo" as const,
+  active: true,
+  metadata: {},
   createdAt: STUB_DATE,
   updatedAt: STUB_DATE,
 };
@@ -196,9 +222,9 @@ const handlers = AgentRpc.of({
       sessionId: null,
       workItemId: null,
       status: "completed" as const,
-      startedAt: "2026-04-21T00:00:00.000Z",
-      completedAt: "2026-04-21T00:00:10.000Z",
-      createdAt: "2026-04-21T00:00:00.000Z",
+      startedAt: STUB_DATE_TIME,
+      completedAt: DateTime.makeUnsafe("2026-04-21T00:00:10.000Z"),
+      createdAt: STUB_DATE_TIME,
     });
   },
 
@@ -652,6 +678,61 @@ const handlers = AgentRpc.of({
 
   "agent.post.delete": (_payload) =>
     Effect.succeed({ success: true }),
+
+  // --- agent.persona stubs -------------------------------------------------
+
+  "agent.persona.create": ({
+    name,
+    slug,
+    description,
+    adapterId,
+    model,
+    systemPrompt,
+    allowedTools,
+    autonomyLevel,
+    budgetLimitCents,
+    metadata,
+  }) =>
+    Effect.succeed({
+      ...STUB_PERSONA,
+      id: "pppppppp-pppp-pppp-pppp-ppppppppppp1",
+      name,
+      slug,
+      description: description ?? null,
+      adapterId,
+      model: model ?? null,
+      systemPrompt: systemPrompt ?? null,
+      allowedTools: allowedTools ?? null,
+      autonomyLevel: autonomyLevel ?? null,
+      budgetLimitCents: budgetLimitCents ?? null,
+      source: "ui" as const,
+      metadata: metadata ?? {},
+    }),
+
+  "agent.persona.list": ({ active }) =>
+    Effect.succeed(active === false ? [] : [STUB_PERSONA]),
+
+  "agent.persona.get": ({ id }) =>
+    id === STUB_PERSONA_ID
+      ? Effect.succeed(STUB_PERSONA)
+      : Effect.fail(new PersonaNotFoundError({ personaId: id })),
+
+  "agent.persona.update": ({ id, ...updates }) =>
+    id !== STUB_PERSONA_ID
+      ? Effect.fail(new PersonaNotFoundError({ personaId: id }))
+      : Effect.fail(new PersonaReadOnlyError({ personaId: id })),
+
+  "agent.persona.delete": ({ id }) =>
+    id !== STUB_PERSONA_ID
+      ? Effect.fail(new PersonaNotFoundError({ personaId: id }))
+      : Effect.fail(new PersonaReadOnlyError({ personaId: id })),
+
+  "agent.persona.syncRepo": () =>
+    Effect.succeed({
+      created: 0,
+      updated: 0,
+      unchanged: 1,
+    }),
 });
 
 /**

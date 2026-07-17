@@ -22,8 +22,42 @@ import {
 } from "@bob/db/schema";
 
 import { suggestAgent } from "../services/dispatch/agentHeuristics";
+import { buildExecutionPlanningTask } from "../services/dispatch/executionPlanningTask";
 
 import type { HandlerContext } from "./context.js";
+
+type PlanDraftRow = {
+  id: string;
+  workspaceId: string;
+  projectId: string | null;
+  title: string;
+  description: string | null;
+  kind: string;
+};
+
+type DispatchItemRow = {
+  id: string;
+  batchId: string;
+  planningTaskId: string;
+  planningTaskIdentifier: string;
+  title: string;
+  description: string | null;
+  agentType: string;
+  status: string;
+  taskRunId: string | null;
+  blockedByItems?: unknown;
+  pipelineState: string | null;
+  sortOrder?: number | null;
+};
+
+type TaskRunRow = {
+  id: string;
+  status: string;
+  sessionId?: string | null;
+  workItemId?: string | null;
+  repositoryId?: string | null;
+  branch?: string | null;
+};
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -265,7 +299,9 @@ export async function dispatchCreateBatch(
   );
 
   // Filter to only drafts that have matching task mappings
-  const matchedDrafts = drafts.filter((d) => taskMap.has(d.id));
+  const matchedDrafts = (drafts as PlanDraftRow[]).filter((d) =>
+    taskMap.has(d.id),
+  );
 
   if (matchedDrafts.length === 0) {
     throw new TRPCError({
@@ -506,19 +542,16 @@ export async function dispatchDispatch(
 
   for (const item of toDispatch) {
     try {
+      const workItem = await ctx.db.query.workItems.findFirst({
+        where: eq(workItems.id, item.planningTaskId),
+        columns: {
+          externalId: true,
+          externalProvider: true,
+        },
+      });
       const result = await executeTask(
         ctx.userId,
-        {
-          id: item.planningTaskId,
-          identifier: item.planningTaskIdentifier,
-          title: item.title,
-          description: item.description,
-          workspaceId: batch.workspaceId,
-          projectId: batch.projectId,
-          assigneeId: null,
-          labels: [],
-          priority: 0,
-        },
+        buildExecutionPlanningTask({ batch, item, workItem }),
         { agentType: item.agentType },
       );
 
@@ -558,10 +591,10 @@ export async function dispatchCheckProgress(
 ) {
   const batch = await loadOwnedBatch(ctx.db, ctx.userId, input.batchId);
 
-  const items = await ctx.db.query.dispatchItems.findMany({
+  const items = (await ctx.db.query.dispatchItems.findMany({
     where: eq(dispatchItems.batchId, input.batchId),
     orderBy: [dispatchItems.sortOrder],
-  });
+  })) as DispatchItemRow[];
 
   let newCompleted = 0;
   let newFailed = 0;
@@ -578,9 +611,9 @@ export async function dispatchCheckProgress(
 
     const runs =
       taskRunIds.length > 0
-        ? await ctx.db.query.taskRuns.findMany({
+        ? ((await ctx.db.query.taskRuns.findMany({
             where: inArray(taskRuns.id, taskRunIds),
-          })
+          })) as TaskRunRow[])
         : [];
 
     const runMap = new Map(runs.map((r) => [r.id, r]));
@@ -692,10 +725,10 @@ export async function dispatchCheckProgress(
 
   // Build set of completed item IDs for dependency checking
   // Re-fetch to get updated statuses
-  const itemsAfterUpdate = await ctx.db.query.dispatchItems.findMany({
+  const itemsAfterUpdate = (await ctx.db.query.dispatchItems.findMany({
     where: eq(dispatchItems.batchId, input.batchId),
     orderBy: [dispatchItems.sortOrder],
-  });
+  })) as DispatchItemRow[];
 
   const completedItemIds = new Set(
     itemsAfterUpdate
@@ -720,10 +753,10 @@ export async function dispatchCheckProgress(
   }
 
   // Re-fetch items to get current state after unblocking
-  const updatedItems = await ctx.db.query.dispatchItems.findMany({
+  const updatedItems = (await ctx.db.query.dispatchItems.findMany({
     where: eq(dispatchItems.batchId, input.batchId),
     orderBy: [dispatchItems.sortOrder],
-  });
+  })) as DispatchItemRow[];
 
   const stillRunning = updatedItems.filter(
     (i) => i.status === "running",
@@ -742,19 +775,16 @@ export async function dispatchCheckProgress(
 
       for (const item of toStart) {
         try {
+          const workItem = await ctx.db.query.workItems.findFirst({
+            where: eq(workItems.id, item.planningTaskId),
+            columns: {
+              externalId: true,
+              externalProvider: true,
+            },
+          });
           const result = await executeTask(
             ctx.userId,
-            {
-              id: item.planningTaskId,
-              identifier: item.planningTaskIdentifier,
-              title: item.title,
-              description: item.description,
-              workspaceId: batch.workspaceId,
-              projectId: batch.projectId,
-              assigneeId: null,
-              labels: [],
-              priority: 0,
-            },
+            buildExecutionPlanningTask({ batch, item, workItem }),
             { agentType: item.agentType },
           );
 
@@ -781,10 +811,10 @@ export async function dispatchCheckProgress(
   }
 
   // Check if all items are done
-  const finalItems = await ctx.db.query.dispatchItems.findMany({
+  const finalItems = (await ctx.db.query.dispatchItems.findMany({
     where: eq(dispatchItems.batchId, input.batchId),
     orderBy: [dispatchItems.sortOrder],
-  });
+  })) as DispatchItemRow[];
 
   const allDone = finalItems.every(
     (i) => i.status === "completed" || i.status === "failed",

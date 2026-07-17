@@ -6,6 +6,12 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./src/index.ts"
+    },
+    "./spans": {
+      "types": "./dist/spans.d.ts",
+      "react-server": "./src/spans.ts",
+      "import": "./src/spans.ts",
+      "default": "./src/spans.ts"
     }
   },
   "scripts": {

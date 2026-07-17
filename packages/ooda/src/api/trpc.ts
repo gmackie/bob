@@ -34,11 +34,23 @@ export const createTRPCRouter = t.router;
 
 export const publicProcedure = t.procedure;
 
+function getRunnerSecrets(): string[] {
+  const primary = process.env.OODA_RUNNER_SECRET?.trim();
+  const additional = process.env.OODA_RUNNER_ADDITIONAL_SECRETS ?? "";
+  return [
+    ...(primary ? [primary] : []),
+    ...additional
+      .split(/[\n,]/)
+      .map((secret) => secret.trim())
+      .filter((secret) => secret.length > 0),
+  ];
+}
+
 export const runnerProcedure = t.procedure.use(async ({ ctx, next }) => {
-  const secret = process.env.OODA_RUNNER_SECRET;
-  if (!secret) return next();
+  const secrets = getRunnerSecrets();
+  if (secrets.length === 0) return next();
   const bearer = ctx.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  if (!bearer || bearer !== secret) {
+  if (!bearer || !secrets.includes(bearer)) {
     throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid runner secret" });
   }
   return next();

@@ -14,12 +14,12 @@ import { PullRequestSchema } from "./project-pull-request.js";
 // --- Enums ------------------------------------------------------------------
 
 /** Feature branch lifecycle status. */
-export const FeatureBranchStatusEnum = Schema.Literal(
+export const FeatureBranchStatusEnum = Schema.Literals([
   "active",
   "ready",
   "merged",
   "abandoned",
-);
+]);
 export type FeatureBranchStatus = Schema.Schema.Type<
   typeof FeatureBranchStatusEnum
 >;

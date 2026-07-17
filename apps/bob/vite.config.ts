@@ -1,13 +1,16 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import vinext from "vinext";
 import { cloudflare } from "@cloudflare/vite-plugin";
+import { getResolveAliases } from "./vite.aliases";
 
 const target = (process.env.BOB_BUILD_TARGET ?? "cloudflare") as
   | "cloudflare"
   | "node";
 const isDev = process.env.NODE_ENV !== "production" && !process.env.CF_PAGES;
-const useCloudflarePlugin = !isDev && target === "cloudflare";
+const useCloudflarePlugin = !isDev;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const rpcStubPath = path.resolve(__dirname, "src/lib/rpc-stub.ts");
 const rpcRealPath = path.resolve(__dirname, "src/server/rpc");
@@ -36,18 +39,6 @@ function rpcStubPlugin() {
   };
 }
 
-const nodeAliases: Record<string, string> = {
-  "~": path.resolve(__dirname, "src"),
-};
-
-const cloudflareAliases: Record<string, string> = {
-  ...nodeAliases,
-  "@bob/db/client": path.resolve(__dirname, "src/lib/db-client-lazy.ts"),
-  "node:fs": path.resolve(__dirname, "src/lib/fs-stub.ts"),
-  "node:os": path.resolve(__dirname, "src/lib/os-stub.ts"),
-  "pg-native": path.resolve(__dirname, "src/lib/pg-native-stub.ts"),
-};
-
 export default defineConfig({
   plugins: [
     ...(target === "cloudflare" ? [rpcStubPlugin()] : []),
@@ -64,7 +55,7 @@ export default defineConfig({
       : []),
   ],
   resolve: {
-    alias: target === "node" ? nodeAliases : cloudflareAliases,
+    alias: getResolveAliases(target),
   },
   ssr: {
     noExternal: [/^@bob\//, "postgres", "drizzle-orm"],

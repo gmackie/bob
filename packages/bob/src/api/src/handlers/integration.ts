@@ -41,6 +41,7 @@ export async function integrationGet(
     hasApiKey: !!integration.apiKey,
     hasWebhookSecret: !!integration.webhookSigningSecret,
     linearTeamId: integration.linearTeamId,
+    linearWebBaseUrl: integration.linearWebBaseUrl,
     createdAt: integration.createdAt,
   };
 }
@@ -53,6 +54,7 @@ export async function integrationSave(
     apiKey?: string;
     webhookSigningSecret?: string;
     linearTeamId?: string;
+    linearWebBaseUrl?: string | null;
     enabled?: boolean;
   },
 ) {
@@ -69,6 +71,7 @@ export async function integrationSave(
   if (input.apiKey !== undefined) updates.apiKey = input.apiKey;
   if (input.webhookSigningSecret !== undefined) updates.webhookSigningSecret = input.webhookSigningSecret;
   if (input.linearTeamId !== undefined) updates.linearTeamId = input.linearTeamId;
+  if (input.linearWebBaseUrl !== undefined) updates.linearWebBaseUrl = input.linearWebBaseUrl;
   if (input.enabled !== undefined) updates.enabled = input.enabled;
 
   if (existing) {
@@ -89,6 +92,7 @@ export async function integrationSave(
       apiKey: input.apiKey ?? null,
       webhookSigningSecret: input.webhookSigningSecret ?? null,
       linearTeamId: input.linearTeamId ?? null,
+      linearWebBaseUrl: input.linearWebBaseUrl ?? null,
     })
     .returning({ id: workspaceIntegrations.id });
 
@@ -166,6 +170,7 @@ export async function integrationSetupLinear(
     apiKey: input.apiKey,
     linearTeamId: input.teamId,
     webhookSigningSecret: (webhook as any).secret ?? null,
+    linearWebBaseUrl: null,
     enabled: true,
   };
 
@@ -223,6 +228,7 @@ export async function integrationList(
     hasApiKey: !!i.apiKey,
     hasWebhookSecret: !!i.webhookSigningSecret,
     linearTeamId: i.linearTeamId,
+    linearWebBaseUrl: i.linearWebBaseUrl,
     createdAt: i.createdAt,
   }));
 }

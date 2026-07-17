@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { and, desc, eq } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
@@ -9,15 +11,13 @@ import {
   runLifecycleEvents,
   taskRuns,
 } from "@bob/db/schema";
+import { buildBobExternalTaskMetadata } from "./externalTaskMetadata.js";
 import { applySnapshotToTask, snapshotTaskFromProvider } from "./providerSnapshot.js";
-
-function getGatewayUrl() {
-  return (globalThis as any).GATEWAY_URL ?? process.env.GATEWAY_URL ?? "http://localhost:3002";
-}
-
-function getNudgeSecret(): string | undefined {
-  return (globalThis as any).NUDGE_SHARED_SECRET ?? process.env.NUDGE_SHARED_SECRET;
-}
+import {
+  buildT3ThreadTurnStartCommand,
+  dispatchTaskToT3Code,
+  getT3DispatchRuntimeConfig,
+} from "./t3DispatchClient.js";
 
 export interface PlanningTask {
   id: string;
@@ -30,6 +30,9 @@ export interface PlanningTask {
   labels: string[];
   priority: number;
   url?: string;
+  externalId?: string | null;
+  externalProvider?: string | null;
+  linearWebBaseUrl?: string | null;
   repository?: {
     id?: string;
     fullName?: string;
@@ -73,45 +76,42 @@ export async function gatewayRequest(
   endpoint: string,
   body: Record<string, unknown>,
 ): Promise<unknown> {
-  const gatewayUrl = getGatewayUrl();
-  const nudgeSecret = getNudgeSecret();
-
-  // Route /session/send through ws-gateway's /internal/session-send
-  if (endpoint === "/session/send" && nudgeSecret) {
-    const response = await fetch(`${gatewayUrl}/internal/session-send`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${nudgeSecret}`,
-      },
-      body: JSON.stringify({
-        userId,
-        sessionId: body.sessionId,
-        message: body.message,
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Gateway session-send error: ${error}`);
-    }
-
-    return response.json();
+  const t3Config = getT3DispatchRuntimeConfig();
+  if (!t3Config) {
+    throw new Error(
+      "T3CODE_SERVER_URL, T3CODE_PROJECT_ID, T3CODE_MODEL_INSTANCE_ID, and T3CODE_MODEL are required for Bob execution messaging",
+    );
   }
 
-  // Fallback for other endpoints (shouldn't happen in current code)
-  const response = await fetch(`${gatewayUrl}${endpoint}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId, ...body }),
+  if (endpoint !== "/session/send") {
+    throw new Error(`Unsupported t3code execution endpoint: ${endpoint}`);
+  }
+
+  const taskRun = await db.query.taskRuns.findFirst({
+    where: eq(taskRuns.sessionId, body.sessionId as string),
   });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Gateway error: ${error}`);
+  if (!taskRun) {
+    throw new Error(`No Bob task run found for session ${String(body.sessionId)}`);
   }
 
-  return response.json();
+  return dispatchTaskToT3Code({
+    serverUrl: t3Config.serverUrl,
+    authToken: t3Config.authToken,
+    command: {
+      type: "thread.turn.start",
+      commandId: `bob-message-${randomUUID()}`,
+      threadId: `bob-session-${body.sessionId as string}`,
+      message: {
+        messageId: `bob-message-${randomUUID()}`,
+        role: "user",
+        text: String(body.message ?? ""),
+        attachments: [],
+      },
+      runtimeMode: t3Config.runtimeMode ?? "full-access",
+      interactionMode: "default",
+      createdAt: new Date().toISOString(),
+    },
+  });
 }
 
 function slugify(text: string): string {
@@ -277,10 +277,15 @@ export async function executeTask(
 
   const branch = generateBranchName(task);
   const selectedAgent = options?.agentType ?? "opencode";
+  const t3Config = getT3DispatchRuntimeConfig();
+  if (!t3Config) {
+    throw new Error(
+      "T3CODE_SERVER_URL, T3CODE_PROJECT_ID, T3CODE_MODEL_INSTANCE_ID, and T3CODE_MODEL are required to dispatch Bob tasks through t3code",
+    );
+  }
 
-  // Create session and task run in DB. The daemon handles git ops
-  // (worktree creation, branch checkout, credential setup) when it
-  // receives the session_available nudge.
+  // Create Bob bookkeeping records. t3code owns the execution thread and
+  // worktree preparation; Bob keeps task runs for Linear/status write-back.
   const [session] = await db
     .insert(chatConversations)
     .values({
@@ -321,35 +326,37 @@ export async function executeTask(
     taskRun,
     "Failed to create starting task run",
   );
+  const externalTask = buildBobExternalTaskMetadata({
+    task,
+    planningProvider: resolvedProvider,
+    taskRunId: insertedTaskRun.id,
+  });
+  const command = buildT3ThreadTurnStartCommand({
+    task,
+    branch,
+    workingDirectory: repoInfo.path,
+    baseBranch: repoInfo.mainBranch,
+    externalTask,
+    config: t3Config,
+    makeId: (prefix) =>
+      prefix === "thread" ? `bob-session-${insertedSession.id}` : `${prefix}-${randomUUID()}`,
+  });
 
-  // Nudge ws-gateway so the daemon picks up the session immediately.
-  // Same pattern as planSession.start — best-effort, daemon will also
-  // discover pending sessions on reconnect.
-  const gatewayUrl = getGatewayUrl();
-  const nudgeSecret = getNudgeSecret();
-  if (nudgeSecret) {
-    try {
-      await fetch(`${gatewayUrl}/internal/nudge`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${nudgeSecret}`,
-        },
-        body: JSON.stringify({
-          sessionId: insertedSession.id,
-          workspaceId: task.workspaceId,
-          workingDirectory: repoInfo.path,
-          agentType: selectedAgent,
-          title: `${task.identifier}: ${task.title}`,
-          sessionType: "execution",
-          description: task.description ?? undefined,
-          identifier: task.identifier,
-          branch,
-        }),
-      });
-    } catch (err) {
-      console.warn("[taskExecutor] nudge failed:", err);
-    }
+  try {
+    await dispatchTaskToT3Code({
+      serverUrl: t3Config.serverUrl,
+      authToken: t3Config.authToken,
+      command,
+    });
+  } catch (err) {
+    await db
+      .update(taskRuns)
+      .set({
+        status: "failed",
+        blockedReason: err instanceof Error ? err.message : String(err),
+      })
+      .where(eq(taskRuns.id, insertedTaskRun.id));
+    throw err;
   }
 
   // Fire-and-forget: write run_started lifecycle event
@@ -363,6 +370,8 @@ export async function executeTask(
       agentType: selectedAgent,
       branch,
       taskIdentifier: task.identifier,
+      executionBackend: "t3code",
+      externalTask,
     },
   }).catch((err: unknown) =>
     console.warn("[taskExecutor] Failed to write run_started lifecycle event:", err),

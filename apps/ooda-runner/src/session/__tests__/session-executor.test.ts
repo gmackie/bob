@@ -177,6 +177,65 @@ describe("SessionExecutor", () => {
     expect(events.some((e) => e.type === "stdout")).toBe(true);
   });
 
+  it("dispatches to t3code instead of running the local adapter when configured", async () => {
+    const storageRoot = mkdtempSync(join(tmpdir(), "ooda-exec-"));
+    tempDirs.push(storageRoot);
+    initVaultRepo(storageRoot);
+
+    const adapter = new MockAdapter(["local adapter should not run"]);
+    const dispatches: unknown[] = [];
+    const events: AdapterEvent[] = [];
+    const executor = new SessionExecutor({
+      adapter,
+      storageRoot,
+      t3code: {
+        serverUrl: "https://t3.example.com",
+        projectId: "t3-project-1",
+        modelInstanceId: "codex",
+        model: "gpt-5",
+        worktreePath: "/shared/bob-checkout",
+        dispatch: async (command) => {
+          dispatches.push(command);
+          return { accepted: true };
+        },
+      },
+    });
+
+    const result = await executor.execute({
+      threadSlug: "t3-thread",
+      threadTitle: "T3 Thread",
+      sessionId: "session_t3",
+      prompt: "Research through t3",
+      toolProfileId: "research-light",
+      onEvent: (event) => events.push(event),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.threadDir).toBe(join(storageRoot, "t3-thread"));
+    expect(result.agentResponse).toContain("Dispatched OODA session to t3code");
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "stdout",
+        data: expect.stringContaining("Dispatched OODA session to t3code"),
+      }),
+    );
+    expect(dispatches).toHaveLength(1);
+    expect(dispatches[0]).toMatchObject({
+      type: "thread.turn.start",
+      threadId: "ooda-session-session_t3",
+      externalTask: {
+        origin: "ooda",
+        oodaThreadSlug: "t3-thread",
+        oodaSessionId: "session_t3",
+      },
+      bootstrap: {
+        createThread: {
+          worktreePath: "/shared/bob-checkout",
+        },
+      },
+    });
+  });
+
   it("creates thread workspace if it does not exist", async () => {
     const storageRoot = mkdtempSync(join(tmpdir(), "ooda-exec-"));
     tempDirs.push(storageRoot);

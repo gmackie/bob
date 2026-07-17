@@ -30,6 +30,8 @@ import {
   workItemsListRecentActivities,
 } from "../handlers/workItems.js";
 
+type WorkItemKind = "issue" | "task" | "epic";
+
 export const makeWorkItemsRpcHandlers = (ctx: HandlerContext) => ({
   "workItems.list": ({
     payload,
@@ -38,7 +40,7 @@ export const makeWorkItemsRpcHandlers = (ctx: HandlerContext) => ({
       workspaceId: string;
       projectId?: string;
       parentId?: string | null;
-      kind?: string;
+      kind?: WorkItemKind;
       status?: string;
       limit?: number;
     };

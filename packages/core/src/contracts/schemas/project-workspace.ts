@@ -30,7 +30,7 @@ export const WorkspaceMemberSchema = Schema.Struct({
   id: Schema.String, // UUID
   workspaceId: Schema.String, // UUID
   userId: Schema.String, // UUID
-  role: Schema.Literal("owner", "admin", "member"),
+  role: Schema.Literals(["owner", "admin", "member"]),
   joinedAt: Schema.DateTimeUtcFromString,
   workspace: Schema.optional(WorkspaceSchema),
 });

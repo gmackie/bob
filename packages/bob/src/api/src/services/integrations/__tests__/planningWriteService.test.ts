@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const findConversationMock = vi.fn();
 const findTaskRunMock = vi.fn();
+const findWorkItemMock = vi.fn();
 const selectMock = vi.fn();
 const fromMock = vi.fn();
 const whereMock = vi.fn();
@@ -15,6 +16,9 @@ vi.mock("@bob/db/client", () => ({
       },
       taskRuns: {
         findFirst: findTaskRunMock,
+      },
+      workItems: {
+        findFirst: findWorkItemMock,
       },
     },
     select: selectMock,
@@ -32,6 +36,7 @@ vi.mock("@bob/db", () => ({
 vi.mock("@bob/db/schema", () => ({
   chatConversations: { id: "id", userId: "userId" },
   taskRuns: { sessionId: "sessionId", userId: "userId", createdAt: "createdAt" },
+  workItems: { id: "workItemId" },
   projects: { workspaceId: "workspaceId", planningProvider: "planningProvider", linearProjectId: "linearProjectId" },
   workspaceIntegrations: { workspaceId: "workspaceId", provider: "provider", enabled: "enabled" },
 }));
@@ -78,6 +83,7 @@ describe("planningWriteService (provider delegation)", () => {
       planningProvider: "linear",
       planningWorkspaceId: "ws-123",
     });
+    findWorkItemMock.mockResolvedValue(null);
 
     // Mock the project lookup chain
     selectMock.mockReturnValue({ from: fromMock });
@@ -168,6 +174,46 @@ describe("planningWriteService (provider delegation)", () => {
       "issue-123",
       "run-123",
       "started",
+    );
+  });
+
+  it("uses the Linear external id when the linked Bob work item is Linear-backed", async () => {
+    findConversationMock.mockResolvedValue({
+      id: "session-123",
+      userId: "user-123",
+      planningTaskId: null,
+      workItemId: "bob-work-item-123",
+      workItemIdentifierSnapshot: "ENG-123",
+    });
+    findTaskRunMock.mockResolvedValue({
+      id: "run-123",
+      sessionId: "session-123",
+      userId: "user-123",
+      planningItemId: "bob-work-item-123",
+      planningItemIdentifier: "ENG-123",
+      workItemId: "bob-work-item-123",
+      workItemIdentifierSnapshot: "ENG-123",
+      planningProvider: "linear",
+      planningWorkspaceId: "ws-123",
+    });
+    findWorkItemMock.mockResolvedValue({
+      id: "bob-work-item-123",
+      externalId: "linear-issue-123",
+      externalProvider: "linear",
+    });
+
+    const { setIssueStatus } = await import("../planningWriteService");
+
+    await setIssueStatus({
+      userId: "user-123",
+      sessionId: "session-123",
+      status: "in_review",
+    });
+
+    expect(mockProvider.setStatus).toHaveBeenCalledWith(
+      "linear-issue-123",
+      "run-123",
+      "review_ready",
     );
   });
 

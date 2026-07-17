@@ -189,6 +189,7 @@ export async function resolvePlanningProvider(
       integration.apiKey,
       integration.linearTeamId,
       project.linearProjectId,
+      integration.linearWebBaseUrl,
     );
   }
 

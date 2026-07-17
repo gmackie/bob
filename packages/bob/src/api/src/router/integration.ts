@@ -37,6 +37,7 @@ export const integrationRouter = {
         apiKey: z.string().optional(),
         webhookSigningSecret: z.string().optional(),
         linearTeamId: z.string().optional(),
+        linearWebBaseUrl: z.string().url().nullable().optional(),
         enabled: z.boolean().optional(),
       }),
     )

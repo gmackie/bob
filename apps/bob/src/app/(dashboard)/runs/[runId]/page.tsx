@@ -15,6 +15,7 @@ import { Badge } from "@gmacko/core/ui/badge";
 import { Card } from "@gmacko/core/ui/card";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
+import { buildT3codeInteractionReport } from "~/lib/t3code/reporting";
 import { useTRPC } from "~/trpc/react";
 
 // ── Constants ─────────────────────────────────────────────────────────
@@ -46,10 +47,11 @@ function getSummary(run: any, key: string): unknown {
 
 // ── Tab types ─────────────────────────────────────────────────────────
 
-type Tab = "summary" | "chat" | "files" | "diff" | "artifacts";
+type Tab = "summary" | "t3code" | "chat" | "files" | "diff" | "artifacts";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "summary", label: "Summary" },
+  { key: "t3code", label: "t3code" },
   { key: "chat", label: "Chat" },
   { key: "files", label: "Files" },
   { key: "diff", label: "Diff" },
@@ -67,15 +69,16 @@ export default function RunDetailPage({
   const trpc = useTRPC();
   const [activeTab, setActiveTab] = useState<Tab>("summary");
 
-  const { data: run, isLoading } = useQuery(
+  const { data: runData, isLoading } = useQuery(
     trpc.agentRun.get.queryOptions(
       { runId },
       {
         refetchInterval: (query) =>
-          query.state.data?.status === "running" ? 3000 : false,
+          (query.state.data as any)?.status === "running" ? 3000 : false,
       },
     ),
   );
+  const run = runData as any;
 
   if (isLoading) {
     return (
@@ -167,10 +170,146 @@ export default function RunDetailPage({
 
       {/* Tab content */}
       {activeTab === "summary" && <SummaryTab run={run} duration={duration} filesChanged={filesChanged} exitCode={exitCode} />}
+      {activeTab === "t3code" && <T3codeTab run={run} />}
       {activeTab === "chat" && <ChatTab run={run} />}
       {activeTab === "files" && <FilesTab run={run} />}
       {activeTab === "diff" && <DiffTab run={run} />}
       {activeTab === "artifacts" && <ArtifactsTab run={run} />}
+    </div>
+  );
+}
+
+function T3codeTab({ run }: { run: any }) {
+  const trpc = useTRPC();
+  const sessionId = typeof run.sessionId === "string" ? run.sessionId : "";
+  const hasSession = Boolean(sessionId);
+
+  const { data: workflowState } = useQuery({
+    ...trpc.session.getWorkflowState.queryOptions({ sessionId }),
+    enabled: hasSession,
+    refetchInterval: run.status === "running" ? 3000 : false,
+  });
+
+  const { data: eventResult } = useQuery({
+    ...trpc.session.getEvents.queryOptions({ sessionId, limit: 100 }),
+    enabled: hasSession,
+    refetchInterval: run.status === "running" ? 3000 : false,
+  });
+
+  const report = buildT3codeInteractionReport({
+    sessionId: sessionId || null,
+    taskRunId: run.id ?? null,
+    workflowState: workflowState
+      ? {
+          workflowStatus: workflowState.workflowStatus,
+          statusMessage: workflowState.statusMessage ?? null,
+        }
+      : null,
+    events: eventResult?.events ?? [],
+  });
+
+  if (!hasSession) {
+    return (
+      <Card className="p-8 text-center">
+        <p className="text-muted-foreground text-sm">
+          This run does not have a linked Bob session yet.
+        </p>
+      </Card>
+    );
+  }
+
+  if (!report) {
+    return (
+      <Card className="p-8 text-center">
+        <p className="text-muted-foreground text-sm">
+          No t3code server events have been mirrored into this Bob session yet.
+        </p>
+      </Card>
+    );
+  }
+
+  return <T3codeReportPanel report={report} />;
+}
+
+function T3codeReportPanel({ report }: { report: ReturnType<typeof buildT3codeInteractionReport> }) {
+  if (!report) return null;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card className="p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-muted-foreground text-xs font-medium uppercase tracking-wider">
+              Backend
+            </p>
+            <h3 className="mt-1 text-lg font-semibold">{report.backendLabel}</h3>
+            {report.message ? (
+              <p className="text-muted-foreground mt-2 text-sm">{report.message}</p>
+            ) : null}
+          </div>
+          <Badge variant="slate" className="capitalize">
+            {report.status.replace(/_/g, " ")}
+          </Badge>
+        </div>
+
+        <div className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
+          <T3codeKeyValue label="Thread" value={report.threadId} />
+          <T3codeKeyValue label="Task run" value={report.taskRunId} />
+          <T3codeKeyValue label="Session" value={report.sessionId} />
+          <T3codeKeyValue label="Linear domain" value={report.linear?.webBaseUrl ?? null} />
+        </div>
+
+        {report.linear?.url ? (
+          <a
+            href={report.linear.url}
+            target="_blank"
+            rel="noreferrer"
+            className="text-primary mt-5 inline-flex text-sm font-medium hover:underline"
+          >
+            {report.linear.identifier ?? "Open Linear issue"}
+            {report.linear.title ? ` · ${report.linear.title}` : ""}
+          </a>
+        ) : null}
+      </Card>
+
+      <Card className="p-5">
+        <h3 className="text-muted-foreground mb-3 text-xs font-medium uppercase tracking-wider">
+          Mirrored runtime events
+        </h3>
+        <div className="space-y-3">
+          {report.events.map((event) => (
+            <div key={event.id} className="rounded-lg border border-border bg-muted/30 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground font-mono text-xs">#{event.seq}</span>
+                  <Badge variant="slate" className="text-[10px] capitalize">
+                    {event.status.replace(/_/g, " ")}
+                  </Badge>
+                </div>
+                {event.createdAt ? (
+                  <span className="text-muted-foreground text-xs">
+                    {new Date(event.createdAt).toLocaleString()}
+                  </span>
+                ) : null}
+              </div>
+              {event.message ? (
+                <p className="text-muted-foreground mt-2 text-sm">{event.message}</p>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function T3codeKeyValue({ label, value }: { label: string; value: string | null }) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 p-3">
+      <p className="text-muted-foreground text-[10px] font-medium uppercase tracking-wider">
+        {label}
+      </p>
+      <p className="mt-1 break-all font-mono text-xs">{value ?? "—"}</p>
     </div>
   );
 }
@@ -248,20 +387,23 @@ function SummaryTab({ run, duration, filesChanged, exitCode }: {
 
 function ChatTab({ run }: { run: any }) {
   const trpc = useTRPC();
+  const sessionId = typeof run.sessionId === "string" ? run.sessionId : "";
+  const hasSession = Boolean(sessionId);
 
-  const { data: events } = useQuery({
+  const { data: eventResult } = useQuery({
     ...trpc.session.getEvents.queryOptions(
-      { sessionId: run.sessionId, limit: 200 },
+      { sessionId, limit: 200 },
     ),
-    enabled: !!run.sessionId,
+    enabled: hasSession,
   });
 
   const logArtifact = run.artifacts?.find((a: any) => a.type === "log");
-  const outputEvents = (events ?? []).filter(
+  const events = eventResult?.events ?? [];
+  const outputEvents = events.filter(
     (e: any) => e.eventType === "output_chunk" || e.eventType === "assistant",
   );
 
-  if (!run.sessionId && !logArtifact) {
+  if (!hasSession && !logArtifact) {
     return (
       <Card className="p-8 text-center">
         <p className="text-muted-foreground text-sm">
@@ -291,14 +433,14 @@ function ChatTab({ run }: { run: any }) {
         </Card>
       )}
 
-      {outputEvents.length === 0 && run.sessionId && (
+      {outputEvents.length === 0 && hasSession && (
         <Card className="p-4">
           <h3 className="mb-3 text-sm font-medium">Session Events</h3>
-          {(events ?? []).length === 0 ? (
+          {events.length === 0 ? (
             <p className="text-sm text-muted-foreground">No events recorded for this session.</p>
           ) : (
             <div className="max-h-[600px] overflow-y-auto space-y-1">
-              {(events as any[]).map((evt: any) => (
+              {events.map((evt: any) => (
                 <div key={evt.id} className="flex items-center gap-3 py-1.5 text-xs">
                   <span className="text-muted-foreground shrink-0 font-mono w-16">
                     #{evt.seq}

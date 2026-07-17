@@ -15,6 +15,7 @@ import { SettingsRpc } from "@gmacko/core/contracts/groups/settings";
 import { makeSettingsRpcHandlers } from "../rpc-handlers/settings.js";
 import { makeCookiesRpcHandlers } from "../rpc-handlers/cookies.js";
 import { makeSystemRpcHandlers } from "../rpc-handlers/system.js";
+import { adaptRpcHandlers } from "./adapter.js";
 
 /**
  * Returns the raw handler mapping object for SettingsRpc (20 entries).
@@ -56,4 +57,4 @@ export const makeSettingsHandlers = (ctx: HandlerContext) => {
 };
 
 export const makeSettingsLayer = (ctx: HandlerContext) =>
-  SettingsRpc.toLayer(makeSettingsHandlers(ctx));
+  SettingsRpc.toLayer(adaptRpcHandlers(makeSettingsHandlers(ctx)));

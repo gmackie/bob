@@ -48,6 +48,10 @@ describe("execution task runtime helpers", () => {
   beforeEach(() => {
     findFirstMock.mockReset();
     insertCalls.length = 0;
+    vi.stubGlobal("T3CODE_SERVER_URL", "https://t3.example.com");
+    vi.stubGlobal("T3CODE_PROJECT_ID", "t3-project-1");
+    vi.stubGlobal("T3CODE_MODEL_INSTANCE_ID", "codex");
+    vi.stubGlobal("T3CODE_MODEL", "gpt-5");
     vi.stubGlobal(
       "fetch",
       vi.fn(() =>

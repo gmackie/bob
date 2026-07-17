@@ -85,6 +85,10 @@ interface UseChatSessionOptions {
   enabled?: boolean;
 }
 
+interface ChatSessionDetails {
+  status: string;
+}
+
 export function useChatSession({ sessionId, enabled = true }: UseChatSessionOptions) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
@@ -273,7 +277,9 @@ export function useChatSession({ sessionId, enabled = true }: UseChatSessionOpti
 
   const sessionStatus =
     socketSessionStatus ??
-    (sessionData ? toSessionStatus(sessionData.status) : "stopped");
+    (sessionData
+      ? toSessionStatus((sessionData as unknown as ChatSessionDetails).status)
+      : "stopped");
 
   const isConnected = connectionState.status === "connected";
   const canSend =

@@ -22,6 +22,15 @@ export interface BobRunReporterConfig {
   workspaceId?: string;
 }
 
+export interface BobHeartbeatInput {
+  agentTypes?: string[];
+  capabilities?: string[];
+  runtime?: {
+    execution?: Record<string, unknown>;
+    t3code?: Record<string, unknown>;
+  };
+}
+
 /** Keep inline log payloads bounded — full output is tailed, not unbounded. */
 const MAX_LOG_CHARS = 60_000;
 
@@ -106,6 +115,16 @@ export class BobRunReporter {
       storageKey: `inline:${runId}:log`,
       metadata: { content: tail, truncated: output.length > MAX_LOG_CHARS },
     });
+  }
+
+  /** Publish node/runtime status to Bob so the dashboard can monitor capacity. */
+  async heartbeat(input: BobHeartbeatInput): Promise<void> {
+    if (!this.enabled) return;
+    await this.call(
+      "POST",
+      `/api/v1/workspaces/${this.workspaceId}/heartbeat`,
+      input,
+    );
   }
 
   /** Attach a unified diff as a `diff` artifact (inline in metadata). */

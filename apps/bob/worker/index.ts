@@ -14,15 +14,16 @@ import { runWithDb } from "../src/lib/db-client-lazy";
 import { wrapFetch } from "./lib/otel";
 
 interface Env {
-  ASSETS: Fetcher;
-  IMAGES: {
+  ASSETS?: Fetcher;
+  IMAGES?: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
         output(options: { format: string; quality: number }): Promise<{ response(): Response }>;
       };
     };
   };
-  HYPERDRIVE: { connectionString: string };
+  HYPERDRIVE?: { connectionString: string };
+  DATABASE_URL?: string;
   GATEWAY_URL?: string;
   NUDGE_SHARED_SECRET?: string;
   [key: string]: unknown;
@@ -39,43 +40,82 @@ interface ExecutionContext {
 // dangerouslyAllowSVG: true in next.config.js and uncomment below:
 // const imageConfig: ImageConfig = { dangerouslyAllowSVG: true };
 
+function getRuntimeEnv(env: Record<string, unknown> | undefined): Record<string, unknown> {
+  if (env) return env;
+  if (typeof process !== "undefined" && process.env) return process.env;
+  return {};
+}
+
+function getExecutionContext(ctx: ExecutionContext | undefined): ExecutionContext {
+  return ctx ?? {
+    waitUntil() {},
+    passThroughOnException() {},
+  };
+}
+
 export default Sentry.withSentry(
-  (env: Record<string, unknown>) => ({
-    dsn: env.SENTRY_DSN as string,
-    environment: (env.FG_STAGE as string) ?? "production",
-    tracesSampleRate: 0.1,
-  }),
+  (env: Record<string, unknown> | undefined) => {
+    const runtimeEnv = getRuntimeEnv(env);
+    return {
+      dsn: runtimeEnv.SENTRY_DSN as string | undefined,
+      environment: (runtimeEnv.FG_STAGE as string | undefined) ?? "production",
+      tracesSampleRate: 0.1,
+    };
+  },
   {
-    fetch: wrapFetch(async (request: Request, env: Env, ctx: ExecutionContext): Promise<Response> => {
+    fetch: wrapFetch(async (request: Request, env: Env | undefined, ctx: ExecutionContext | undefined): Promise<Response> => {
+      const runtimeEnv = getRuntimeEnv(env) as Env;
+      const runtimeCtx = getExecutionContext(ctx);
       const url = new URL(request.url);
+
+      if (typeof process !== "undefined" && process.env) {
+        for (const [key, value] of Object.entries(runtimeEnv)) {
+          if (typeof value === "string" && process.env[key] === undefined) {
+            process.env[key] = value;
+          }
+        }
+      }
 
       // WebSocket proxy to gateway — forward upgrade to origin
       if (url.pathname === "/ws/sessions" && request.headers.get("Upgrade") === "websocket") {
-        const gatewayOrigin = env.GATEWAY_URL || "https://ws.blder.bot";
+        const gatewayOrigin = runtimeEnv.GATEWAY_URL || "https://ws.blder.bot";
         const target = `${gatewayOrigin}/sessions${url.search}`;
         return fetch(target, request);
       }
 
       // Image optimization via Cloudflare Images binding.
       if (url.pathname === "/_vinext/image") {
+        if (!runtimeEnv.ASSETS || !runtimeEnv.IMAGES) {
+          return new Response("Image optimization is not configured.", { status: 503 });
+        }
         const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
         return handleImageOptimization(request, {
-          fetchAsset: (path) => env.ASSETS.fetch(new Request(new URL(path, request.url))),
+          fetchAsset: (path) => runtimeEnv.ASSETS!.fetch(new Request(new URL(path, request.url))),
           transformImage: async (body, { width, format, quality }) => {
-            const result = await env.IMAGES.input(body).transform(width > 0 ? { width } : {}).output({ format, quality });
+            const result = await runtimeEnv.IMAGES!.input(body).transform(width > 0 ? { width } : {}).output({ format, quality });
             return result.response();
           },
         }, allowedWidths);
       }
 
       // Expose secrets to server-side code via globalThis.
-      if (env.NUDGE_SHARED_SECRET) {
-        (globalThis as any).NUDGE_SHARED_SECRET = env.NUDGE_SHARED_SECRET;
+      if (runtimeEnv.NUDGE_SHARED_SECRET) {
+        (globalThis as any).NUDGE_SHARED_SECRET = runtimeEnv.NUDGE_SHARED_SECRET;
       }
 
-      // Run vinext with a request-scoped DB client.
-      const dbUrl = env.HYPERDRIVE.connectionString;
-      return runWithDb(dbUrl, true, () => handler.fetch(request, env, ctx));
+      const dbUrl =
+        runtimeEnv.HYPERDRIVE?.connectionString ??
+        (typeof runtimeEnv.DATABASE_URL === "string" ? runtimeEnv.DATABASE_URL : undefined);
+      if (!dbUrl) {
+        return Response.json(
+          { error: { code: "DATABASE_URL_MISSING", message: "Database not configured." } },
+          { status: 503, headers: { "Cache-Control": "no-store" } },
+        );
+      }
+
+      return runWithDb(dbUrl, Boolean(runtimeEnv.HYPERDRIVE), () =>
+        handler.fetch(request, runtimeEnv, runtimeCtx),
+      );
     }),
   },
 );

@@ -19,7 +19,7 @@
 //
 // Phase 7B-4B Task 8: Added stubs for 6 gitProvider + 7 git procedures
 // — 56 handlers total.
-import { Effect } from "effect";
+import { DateTime, Effect } from "effect";
 
 import { ProjectNotFoundError } from "@gmacko/core/projects/errors";
 import { NotFoundError } from "@gmacko/core/rpc/errors";
@@ -47,6 +47,7 @@ import type { GitProviderConnectionWire, ConnectionTestResultWire, RemoteDetecti
 import type { PushAndCreatePrResultWire, JjCommitWire, JjMutationResultWire, JjDiffResultWire } from "../schemas/project-git.js";
 
 export const STUB_TENANT_ID = "00000000-0000-0000-0000-000000000001";
+const STUB_DATE_TIME = DateTime.makeUnsafe("2026-04-21T12:00:00Z");
 
 export const STUB_PROJECT_1: ProjectWire = {
   id: "11111111-1111-1111-1111-111111111111",
@@ -74,8 +75,8 @@ export const STUB_WORKSPACE_1: WorkspaceWire = {
   name: "Acme Workspace",
   slug: "acme-ws",
   description: null,
-  createdAt: "2026-04-21T12:00:00Z",
-  updatedAt: "2026-04-21T12:00:00Z",
+  createdAt: STUB_DATE_TIME,
+  updatedAt: STUB_DATE_TIME,
 };
 
 export const STUB_WORKSPACE_MEMBER_1: WorkspaceMemberWire = {
@@ -83,7 +84,7 @@ export const STUB_WORKSPACE_MEMBER_1: WorkspaceMemberWire = {
   workspaceId: STUB_WORKSPACE_1.id,
   userId: "00000000-0000-0000-0000-000000000099",
   role: "owner",
-  joinedAt: "2026-04-21T12:00:00Z",
+  joinedAt: STUB_DATE_TIME,
   workspace: STUB_WORKSPACE_1,
 };
 
@@ -408,7 +409,11 @@ export const stubProjectsHandlers = {
       title?: string;
       goal?: string;
       planningTaskId?: string;
-      tasks?: Array<{ key: string; content: string; status?: string }>;
+      tasks?: readonly {
+        readonly key: string;
+        readonly content: string;
+        readonly status?: "pending" | "in_progress" | "completed" | "cancelled";
+      }[];
     };
   }) => {
     if (repositoryId !== STUB_REPOSITORY_1.id) {
@@ -455,7 +460,11 @@ export const stubProjectsHandlers = {
     goal?: string;
     status?: string;
     planningTaskId?: string | null;
-    tasks?: Array<{ key: string; content: string; status?: string }>;
+    tasks?: readonly {
+      readonly key: string;
+      readonly content: string;
+      readonly status?: "pending" | "in_progress" | "completed" | "cancelled";
+    }[];
   }) => {
     if (worktreeId !== STUB_WORKTREE_1.id) {
       return Effect.fail(

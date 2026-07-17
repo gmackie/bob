@@ -1,4 +1,4 @@
-import { traceEmbedding } from "@bob/telemetry";
+import { traceEmbedding } from "@bob/telemetry/spans";
 
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const EMBEDDING_DIMS = 1536;

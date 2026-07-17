@@ -6,7 +6,11 @@ import { useTRPC } from "~/trpc/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSessionStream } from "~/hooks/use-session-stream";
 
-import { chooseDefaultAdapter, type RunnerDevice } from "./adapter-selection";
+import {
+  chooseDefaultAdapter,
+  chooseRunnerForCapabilities,
+  type RunnerDevice,
+} from "./adapter-selection";
 
 interface ChatMessage {
   id: string;
@@ -18,10 +22,16 @@ interface ChatMessage {
 interface ChatPanelProps {
   threadId: string;
   runnerId?: string;
+  requiredCapabilities?: string[];
   onPromoted?: () => void;
 }
 
-export function ChatPanel({ threadId, runnerId, onPromoted }: ChatPanelProps) {
+export function ChatPanel({
+  threadId,
+  runnerId,
+  requiredCapabilities = [],
+  onPromoted,
+}: ChatPanelProps) {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -71,7 +81,10 @@ export function ChatPanel({ threadId, runnerId, onPromoted }: ChatPanelProps) {
   // Get available runners
   const runnersQuery = useQuery(trpc.runner.listDevices.queryOptions());
   const runners = (runnersQuery.data ?? []) as RunnerDevice[];
-  const availableRunner = runnerId ?? runners[0]?.id;
+  const selectedRunner = runnerId
+    ? runners.find((runner) => runner.id === runnerId)
+    : chooseRunnerForCapabilities(runners, requiredCapabilities);
+  const availableRunner = selectedRunner?.id;
 
   const sendMutation = useMutation(
     trpc.runner.sendPrompt.mutationOptions({
@@ -115,11 +128,10 @@ export function ChatPanel({ threadId, runnerId, onPromoted }: ChatPanelProps) {
     sendMutation.mutate({
       threadId,
       runnerId: availableRunner,
-      adapterId: chooseDefaultAdapter(
-        runners.find((runner) => runner.id === availableRunner),
-      ),
+      adapterId: chooseDefaultAdapter(selectedRunner),
       toolProfileId: "default",
       prompt: input.trim(),
+      ...(requiredCapabilities.length > 0 ? { requiredCapabilities } : {}),
     });
 
     setInput("");

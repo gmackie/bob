@@ -1,10 +1,38 @@
 import type { RouterRecord } from "@trpc/server/unstable-core-do-not-import";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import { eq, and, gt } from "@gmacko/ooda/db";
 import { runnerDevice, runnerSession, sessionEvent } from "@gmacko/ooda/db/schema";
 
 import { authedProcedure, publicProcedure, runnerProcedure } from "../trpc";
+
+const runnerDeviceColumns = {
+  id: runnerDevice.id,
+  name: runnerDevice.name,
+  hostname: runnerDevice.hostname,
+  status: runnerDevice.status,
+  lastHeartbeatAt: runnerDevice.lastHeartbeatAt,
+  capabilities: runnerDevice.capabilities,
+};
+
+async function findRunnerDeviceByName(db: any, name: string) {
+  const [device] = await db
+    .select(runnerDeviceColumns)
+    .from(runnerDevice)
+    .where(eq(runnerDevice.name, name))
+    .limit(1);
+  return device ?? null;
+}
+
+async function findRunnerDeviceById(db: any, id: string) {
+  const [device] = await db
+    .select(runnerDeviceColumns)
+    .from(runnerDevice)
+    .where(eq(runnerDevice.id, id))
+    .limit(1);
+  return device ?? null;
+}
 
 export const runnerRouter = {
   register: runnerProcedure
@@ -19,9 +47,7 @@ export const runnerRouter = {
     .output(z.any())
     .mutation(async ({ ctx, input }) => {
       // Upsert by name — avoid creating duplicate devices on runner restart
-      const existing = await ctx.db.query.runnerDevice.findFirst({
-        where: eq(runnerDevice.name, input.name),
-      });
+      const existing = await findRunnerDeviceByName(ctx.db, input.name);
       if (existing) {
         return ctx.db
           .update(runnerDevice)
@@ -64,7 +90,7 @@ export const runnerRouter = {
     .meta({ openapi: { method: "GET", path: "/api/runner/devices", tags: ["runner"] } })
     .output(z.any())
     .query(({ ctx }) => {
-    return ctx.db.query.runnerDevice.findMany();
+    return ctx.db.select(runnerDeviceColumns).from(runnerDevice);
   }),
 
   createSession: runnerProcedure
@@ -115,10 +141,31 @@ export const runnerRouter = {
         adapterId: z.string(),
         toolProfileId: z.string(),
         prompt: z.string().min(1),
+        requiredCapabilities: z.array(z.string()).optional(),
       }),
     )
     .output(z.any())
     .mutation(async ({ ctx, input }) => {
+      if (input.requiredCapabilities?.length) {
+        const device = await findRunnerDeviceById(ctx.db, input.runnerId);
+        if (!device) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: `Runner ${input.runnerId} was not found`,
+          });
+        }
+        const available = new Set((device.capabilities ?? []) as string[]);
+        const missing = input.requiredCapabilities.filter(
+          (capability) => !available.has(capability),
+        );
+        if (missing.length > 0) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: `Runner ${input.runnerId} lacks required capabilities: ${missing.join(", ")}`,
+          });
+        }
+      }
+
       // Create session record
       const [session] = await ctx.db
         .insert(runnerSession)
@@ -288,9 +335,7 @@ export const runnerRouter = {
     .input(z.object({ runnerId: z.string() }))
     .output(z.any())
     .query(async ({ ctx, input }) => {
-      const device = await ctx.db.query.runnerDevice.findFirst({
-        where: eq(runnerDevice.id, input.runnerId),
-      });
+      const device = await findRunnerDeviceById(ctx.db, input.runnerId);
       return (device?.capabilities ?? []) as string[];
     }),
 

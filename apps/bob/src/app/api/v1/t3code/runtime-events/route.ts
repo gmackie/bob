@@ -1,0 +1,15 @@
+import { NextResponse } from "next/server";
+import { createPublicApiCaller, errorResponse } from "~/lib/rest/api-helpers";
+
+export async function POST(request: Request) {
+  try {
+    const caller = await createPublicApiCaller(request);
+    const body = (await request.json()) as Parameters<
+      typeof caller.publicApi.mirrorT3RuntimeEvent
+    >[0];
+    const result = await caller.publicApi.mirrorT3RuntimeEvent(body);
+    return NextResponse.json(result);
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
