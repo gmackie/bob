@@ -41,6 +41,7 @@ export const makeWorkItemsRpcHandlers = (ctx: HandlerContext) => ({
       parentId?: string | null;
       kind?: WorkItemKind;
       status?: string;
+      statuses?: string[];
       limit?: number;
     };
   }) => wrapHandler(workItemsList, ctx, payload, "workItem"),

@@ -1,7 +1,7 @@
 // Run-history providers are independent of work-pipeline capacity planning:
 // Grok runs appear in Recent Outcomes but have no capacity model, so we keep a
 // local key union here instead of widening work-pipeline-model's ProviderKey.
-export type RunProviderKey = "codex" | "cursor" | "grok";
+export type RunProviderKey = "claude" | "codex" | "cursor" | "grok";
 
 export type ProviderRunFilter = RunProviderKey | "all";
 
@@ -74,13 +74,17 @@ const UUID_PATTERN =
 const WORK_ITEM_IDENTIFIER_PATTERN = /^[A-Za-z][A-Za-z0-9]*-\d+$/;
 
 export function normalizeProviderParam(value: string | null): ProviderRunFilter {
-  return value === "codex" || value === "cursor" || value === "grok"
+  return value === "claude" ||
+    value === "codex" ||
+    value === "cursor" ||
+    value === "grok"
     ? value
     : "all";
 }
 
 export function getRunProvider(run: ProviderRunLike): RunProviderKey {
   const agentType = run.agentType?.toLowerCase() ?? "";
+  if (agentType.includes("claude")) return "claude";
   if (agentType.includes("grok")) return "grok";
   if (agentType.includes("cursor")) return "cursor";
   return "codex";
@@ -95,6 +99,7 @@ export function filterRunsByProvider<T extends ProviderRunLike>(
 }
 
 export function getProviderRunsHeading(provider: ProviderRunFilter): string {
+  if (provider === "claude") return "Claude Runs";
   if (provider === "codex") return "Codex Runs";
   if (provider === "cursor") return "Cursor Runs";
   if (provider === "grok") return "Grok Runs";
@@ -274,6 +279,7 @@ function getRunStatusTone(
 function formatAgentLabel(agentType?: string | null): string {
   const normalized = agentType?.trim().toLowerCase();
   if (!normalized) return "Agent";
+  if (normalized.includes("claude")) return "Claude";
   if (normalized.includes("grok")) return "Grok";
   if (normalized.includes("cursor")) return "Cursor";
   if (normalized.includes("codex")) return "Codex";

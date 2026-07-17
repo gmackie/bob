@@ -45,8 +45,10 @@
     "BOB_AUTO_MERGE_MODEL": "claude-sonnet-5",
     "BOB_AUTO_MERGE_INSTANCE_HINT": "gitea @ git.forgegraf.com",
     "BOB_FORGEJO_INSTANCE_URL": "https://git.forgegraf.com",
-    // Start in dry-run: review + post verdicts + log the merge decision, but do
-    // NOT merge. Flip to "false" to enable live auto-merge once validated.
-    "BOB_AUTO_MERGE_DRY_RUN": "true"
+    // Live auto-merge enabled (2026-07-14): merges only PRs that clear all
+    // three gates — CI green AND an approving AI review AND no merge conflict.
+    // Whatever can't clear the bar stays in review for a human. maxPerRun caps
+    // the merge/deploy fan-out per cron run so it clears the backlog steadily.
+    "BOB_AUTO_MERGE_DRY_RUN": "false"
   }
 }

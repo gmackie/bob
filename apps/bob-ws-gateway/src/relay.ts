@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { eq, and, or, gt, lt, inArray, asc, desc, sql } from "@bob/db";
+import { eq, and, or, gt, lt, inArray, asc, desc, sql, isNull } from "@bob/db";
 import { db } from "@bob/db/client";
 import { chatConversations, repositories, sessionEvents, taskRuns, workItems, agentRuns, activities, workspaces, tenants, tenantMembers, planDrafts, pullRequests, runnerLeases, gatewayConfig, eventLog } from "@bob/db/schema";
 
@@ -50,6 +50,36 @@ const STOPPABLE_STATUSES = [
   "stopping",
 ] as const;
 
+// Orphan reaper: a run stuck in an active status (queued/running) with NO
+// session for longer than this has never been claimed (a real claim attaches a
+// session at once) — a crashed dispatch, a retired daemon, or an ancient dev
+// artifact. 60 min is far beyond the seconds a dispatch→claim actually takes,
+// so legitimate just-dispatched runs are never touched. Runs WITH a session are
+// the lease sweep's domain (host_unknown), never the reaper's.
+const REAP_ORPHAN_GRACE_MS = 60 * 60_000;
+const REAP_INTERVAL_MS = 5 * 60_000;
+/**
+ * How long an unanswered approval may hold its slot before we call it abandoned.
+ *
+ * A `blocked` run is parked on a live agent process waiting for a human, so it
+ * genuinely holds a runner slot and auto-drain counts it against the concurrency
+ * cap. Nothing ever expired it, though — two prompts nobody answered pinned
+ * concurrency=2 at zero free slots and silently sealed the whole pipeline for
+ * two days ("N todo eligible yet 0 dispatched").
+ *
+ * The grace is deliberately generous: answering the next morning is normal, not
+ * a failure. This keys on THE HUMAN not answering — never on the agent being
+ * quiet — which is what separates it from the deleted 35-minute inactivity sweep
+ * that manufactured false deaths out of long tool calls.
+ */
+const BLOCKED_ABANDON_MS = 24 * 60 * 60_000;
+
+// How often the gateway pushes newly-pending sessions to connected daemons.
+// 15s keeps dispatch→run latency low while the DB scan stays cheap (one indexed
+// query per connected daemon). This is the reliable dispatch path — the CF
+// Worker cannot reach /internal/nudge over HTTP post-supersession.
+const PENDING_DELIVERY_INTERVAL_MS = 15_000;
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isUuid = (s: unknown): s is string => typeof s === "string" && UUID_RE.test(s);
 
@@ -67,6 +97,10 @@ interface Connection {
   workspaceSubscribed: boolean;
   workspaceScopeId?: string;
   workspaceStatusFilter?: SessionStatus[];
+  // Daemon only: sessionIds already delivered via session_available on this
+  // connection, so the periodic pending-delivery tick doesn't re-send (and
+  // trigger a double-claim) for a session already handed over.
+  deliveredSessions?: Set<string>;
 }
 
 interface NudgeInput {
@@ -111,6 +145,8 @@ export class Relay {
   private nextConnId = 0;
 
   private timeoutSweepTimer: NodeJS.Timeout | null = null;
+  private reapTimer: NodeJS.Timeout | null = null;
+  private pendingDeliveryTimer: NodeJS.Timeout | null = null;
 
   constructor(cfg: RelayConfig) {
     this.cfg = cfg;
@@ -119,6 +155,108 @@ export class Relay {
         console.error("[Relay] Lease sweep failed (will retry next interval):", err);
       });
     }, 15_000);
+    this.reapTimer = setInterval(() => {
+      this.reapOrphanedRuns().catch((err) => {
+        console.error("[Relay] Orphan reaper failed (will retry next interval):", err);
+      });
+      this.sweepAbandonedApprovals().catch((err) => {
+        console.error("[Relay] Abandoned-approval sweep failed (will retry next interval):", err);
+      });
+    }, REAP_INTERVAL_MS);
+    this.pendingDeliveryTimer = setInterval(() => {
+      this.deliverPendingTick().catch((err) => {
+        console.error("[Relay] Pending-session delivery failed (will retry next interval):", err);
+      });
+    }, PENDING_DELIVERY_INTERVAL_MS);
+  }
+
+  /**
+   * Reap orphaned agent runs — the self-healing companion to the one-time
+   * manual cleanup. A run in queued/running with a NULL session_id past the
+   * grace period was never claimed by any runner (a claim attaches a session
+   * immediately), so it is provably dead: terminalize it so it stops showing as
+   * "active"/"running" in every pipeline view and count. `running` → interrupted
+   * (it purported to be executing), `queued` → failed (it never started). Runs
+   * WITH a session are untouched here — those are the lease sweep's job.
+   */
+  private async reapOrphanedRuns(): Promise<void> {
+    const cutoff = new Date(Date.now() - REAP_ORPHAN_GRACE_MS).toISOString();
+    const reaped = await db
+      .update(agentRuns)
+      .set({
+        status: sql`case when ${agentRuns.status} = 'running' then 'interrupted'::agent_run_status else 'failed'::agent_run_status end`,
+        completedAt: new Date(),
+        summary: sql`(coalesce(${agentRuns.summary}::jsonb, '{}'::jsonb) || jsonb_build_object('reaped', true, 'reap_reason', 'orphaned: active status with no session past grace'))::json`,
+      })
+      .where(
+        and(
+          inArray(agentRuns.status, ["queued", "running"]),
+          isNull(agentRuns.sessionId),
+          lt(agentRuns.createdAt, cutoff),
+        ),
+      )
+      .returning({ id: agentRuns.id });
+    if (reaped.length > 0) {
+      console.log(
+        `[Relay] Reaped ${reaped.length} orphaned run(s): active status with no session past grace`,
+      );
+    }
+  }
+
+  /**
+   * Expire abandoned approvals so an unanswered prompt can't hold a slot
+   * forever. See BLOCKED_ABANDON_MS for why this exists and why the grace is
+   * long. Only `blocked` sessions whose last activity is past the grace are
+   * touched; everything else — including a run that is merely quiet — is left
+   * strictly alone.
+   */
+  private async sweepAbandonedApprovals(): Promise<void> {
+    const cutoff = new Date(Date.now() - BLOCKED_ABANDON_MS).toISOString();
+    const stale = await db
+      .select({ id: chatConversations.id })
+      .from(chatConversations)
+      .where(
+        and(
+          eq(chatConversations.status, "blocked"),
+          // lastActivityAt is set when the run parks; fall back to createdAt so
+          // a row that never recorded activity can still age out.
+          sql`coalesce(${chatConversations.lastActivityAt}, ${chatConversations.createdAt}) < ${cutoff}`,
+        ),
+      );
+
+    for (const session of stale) {
+      // Route through the single writer, and gate on the previous state still
+      // being "blocked": if the human answered between the select and now, the
+      // status has already moved and we must not stomp their live run.
+      const result = await this.deriveAndWriteState(
+        session.id,
+        "interrupted",
+        { interruptedAt: new Date().toISOString() },
+        ["blocked"],
+      );
+      if (!result.applied) continue;
+
+      // The parked run is real and still claims to be executing; the orphan
+      // reaper can't see it because it HAS a session. Terminalize it here so
+      // "what's running" stops lying.
+      await db
+        .update(agentRuns)
+        .set({
+          status: sql`'interrupted'::agent_run_status`,
+          completedAt: new Date(),
+          summary: sql`(coalesce(${agentRuns.summary}::jsonb, '{}'::jsonb) || jsonb_build_object('reaped', true, 'reap_reason', 'abandoned: approval unanswered past grace'))::json`,
+        })
+        .where(
+          and(
+            eq(agentRuns.sessionId, session.id),
+            inArray(agentRuns.status, ["queued", "running", "blocked"]),
+          ),
+        );
+
+      console.log(
+        `[Relay] Expired abandoned approval for session ${session.id} (blocked, no answer in ${BLOCKED_ABANDON_MS / 3_600_000}h) — slot released`,
+      );
+    }
   }
 
   /**
@@ -675,66 +813,103 @@ export class Relay {
 
     // Send pending sessions on daemon connect (recovery for offline daemon)
     if (conn.kind === "daemon") {
-      const pending = await db.query.chatConversations.findMany({
-        where: and(
-          eq(chatConversations.status, "pending"),
-          eq(chatConversations.userId, conn.userId!),
-        ),
-      });
-      for (const session of pending) {
-        const isPlanning = session.sessionType === "planning";
+      await this.deliverPendingSessionsToDaemon(conn);
+    }
+  }
 
-        // Enrich execution sessions with task context from work_items
-        let description: string | undefined;
-        let identifier: string | undefined;
-        let branch: string | undefined;
-        if (!isPlanning && session.workItemId) {
-          const taskRun = await db.query.taskRuns.findFirst({
-            where: eq(taskRuns.sessionId, session.id),
-            columns: { branch: true, workItemIdentifierSnapshot: true },
-          });
-          const wi = await db.query.workItems.findFirst({
-            where: eq(workItems.id, session.workItemId),
-            columns: { description: true },
-          });
-          description = wi?.description ?? undefined;
-          identifier = taskRun?.workItemIdentifierSnapshot ?? undefined;
-          branch = taskRun?.branch ?? undefined;
-        }
+  /**
+   * Push every pending session for the daemon's user as a session_available.
+   * Called on daemon connect AND periodically (deliverPendingTick) — the
+   * periodic call is what makes dispatch reliable now that the CF Worker cannot
+   * reach the gateway's /internal/nudge over HTTP (ws.blder.bot serves only the
+   * WS upgrade; a Worker-side nudge silently no-ops). Without a live nudge, a
+   * session created while the daemon is already connected would otherwise sit
+   * pending until the next reconnect. Per-connection dedup via
+   * `deliveredSessions` avoids re-sending (and double-claiming) a session
+   * already handed over; a claimed session leaves `status='pending'` so it also
+   * naturally drops out of the query.
+   */
+  private async deliverPendingSessionsToDaemon(conn: Connection): Promise<void> {
+    if (conn.kind !== "daemon" || !conn.userId) return;
+    if (!conn.deliveredSessions) conn.deliveredSessions = new Set<string>();
 
-        const personaMetadata = (session as any).personaMetadata as Record<string, unknown> | null;
+    const pending = await db.query.chatConversations.findMany({
+      where: and(
+        eq(chatConversations.status, "pending"),
+        eq(chatConversations.userId, conn.userId),
+      ),
+    });
+    for (const session of pending) {
+      if (conn.deliveredSessions.has(session.id)) continue;
+      const isPlanning = session.sessionType === "planning";
 
-        this.send(conn, {
-          type: "session_available",
-          sessionId: session.id,
-          workingDirectory: session.workingDirectory ?? "",
-          agentType: session.agentType,
-          title: session.title ?? undefined,
-          sessionType: isPlanning ? "planning" : "execution",
-          planningContext:
-            isPlanning &&
-            (session as any).planningWorkspaceId &&
-            (session as any).planningProjectId
-              ? ({
-                  workspaceId: (session as any).planningWorkspaceId,
-                  projectId: (session as any).planningProjectId,
-                  projectName: (session as any).planningProjectName ?? "",
-                  launchContext: (session as any).planningLaunchContext ?? undefined,
-                } as any)
-              : undefined,
-          description,
-          identifier,
-          branch,
-          personaId: (session as any).personaId ?? undefined,
-          personaConfig: personaMetadata ? {
-            model: typeof personaMetadata.model === "string" ? personaMetadata.model : undefined,
-            systemPrompt: typeof personaMetadata.systemPrompt === "string" ? personaMetadata.systemPrompt : undefined,
-            allowedTools: Array.isArray(personaMetadata.allowedTools) ? personaMetadata.allowedTools as string[] : undefined,
-            autonomyLevel: typeof personaMetadata.autonomyLevel === "string" ? personaMetadata.autonomyLevel : undefined,
-            metadata: typeof personaMetadata.metadata === "object" ? personaMetadata.metadata as Record<string, unknown> : undefined,
-          } : undefined,
+      // Enrich execution sessions with task context from work_items
+      let description: string | undefined;
+      let identifier: string | undefined;
+      let branch: string | undefined;
+      if (!isPlanning && session.workItemId) {
+        const taskRun = await db.query.taskRuns.findFirst({
+          where: eq(taskRuns.sessionId, session.id),
+          columns: { branch: true, workItemIdentifierSnapshot: true },
         });
+        const wi = await db.query.workItems.findFirst({
+          where: eq(workItems.id, session.workItemId),
+          columns: { description: true },
+        });
+        description = wi?.description ?? undefined;
+        identifier = taskRun?.workItemIdentifierSnapshot ?? undefined;
+        branch = taskRun?.branch ?? undefined;
       }
+
+      const personaMetadata = (session as any).personaMetadata as Record<string, unknown> | null;
+
+      // Mark delivered BEFORE send so a send that races the next tick is not
+      // double-emitted; a genuinely undelivered session (socket dead) will be
+      // re-picked on the daemon's next connect via the same method.
+      conn.deliveredSessions.add(session.id);
+      this.send(conn, {
+        type: "session_available",
+        sessionId: session.id,
+        workingDirectory: session.workingDirectory ?? "",
+        agentType: session.agentType,
+        title: session.title ?? undefined,
+        sessionType: isPlanning ? "planning" : "execution",
+        planningContext:
+          isPlanning &&
+          (session as any).planningWorkspaceId &&
+          (session as any).planningProjectId
+            ? ({
+                workspaceId: (session as any).planningWorkspaceId,
+                projectId: (session as any).planningProjectId,
+                projectName: (session as any).planningProjectName ?? "",
+                launchContext: (session as any).planningLaunchContext ?? undefined,
+              } as any)
+            : undefined,
+        description,
+        identifier,
+        branch,
+        personaId: (session as any).personaId ?? undefined,
+        personaConfig: personaMetadata ? {
+          model: typeof personaMetadata.model === "string" ? personaMetadata.model : undefined,
+          systemPrompt: typeof personaMetadata.systemPrompt === "string" ? personaMetadata.systemPrompt : undefined,
+          allowedTools: Array.isArray(personaMetadata.allowedTools) ? personaMetadata.allowedTools as string[] : undefined,
+          autonomyLevel: typeof personaMetadata.autonomyLevel === "string" ? personaMetadata.autonomyLevel : undefined,
+          metadata: typeof personaMetadata.metadata === "object" ? personaMetadata.metadata as Record<string, unknown> : undefined,
+        } : undefined,
+      });
+    }
+  }
+
+  /**
+   * Periodic drain: push newly-pending sessions to each connected daemon. This
+   * is the reliable path for auto-drain + manual dispatch — see
+   * deliverPendingSessionsToDaemon for why the Worker nudge can't be relied on.
+   */
+  private async deliverPendingTick(): Promise<void> {
+    for (const daemon of this.daemonByWorkspace.values()) {
+      await this.deliverPendingSessionsToDaemon(daemon).catch((err) =>
+        console.error("[Relay] pending-delivery failed for a daemon:", err),
+      );
     }
   }
 

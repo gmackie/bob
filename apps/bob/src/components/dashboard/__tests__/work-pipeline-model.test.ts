@@ -17,9 +17,43 @@ import {
   getWorkPipelineHeaderModel,
   getWorkPipelineSectionOrder,
   buildWorkLaneSummaries,
+  buildWorkLaneSummariesFromCounts,
   filterWorkLaneItems,
   groupWorkPipelineItems,
 } from "../work-pipeline-model";
+
+describe("buildWorkLaneSummariesFromCounts", () => {
+  it("maps uncapped per-status counts to the four lanes (fixes the starved firehose)", () => {
+    // The exact shape that read 0 in the UI: 329 in_review saturating a
+    // capped list, hiding 25 backlog + 8 in_progress. From counts, they show.
+    const summaries = buildWorkLaneSummariesFromCounts({
+      in_review: 329,
+      backlog: 25,
+      todo: 4,
+      draft: 1,
+      in_progress: 8,
+      running: 0,
+      blocked: 2,
+      done: 25,
+    });
+    const byKey = Object.fromEntries(summaries.map((s) => [s.key, s.count]));
+    expect(byKey["ready"]).toBe(30); // backlog 25 + todo 4 + draft 1
+    expect(byKey["active"]).toBe(8); // in_progress 8 + running 0
+    expect(byKey["review"]).toBe(329); // uncapped, not clamped to 100
+    expect(byKey["needs-attention"]).toBe(2); // blocked
+  });
+
+  it("returns all four lanes at zero for an empty workspace", () => {
+    const summaries = buildWorkLaneSummariesFromCounts({});
+    expect(summaries.map((s) => s.key)).toEqual([
+      "needs-attention",
+      "ready",
+      "active",
+      "review",
+    ]);
+    expect(summaries.every((s) => s.count === 0)).toBe(true);
+  });
+});
 
 describe("work pipeline model", () => {
   it("labels the dashboard summary boxes as Operations without explanatory copy", () => {

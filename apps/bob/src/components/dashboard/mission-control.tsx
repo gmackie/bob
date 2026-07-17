@@ -1,5 +1,6 @@
 "use client";
 
+import { PendingApproval } from "./pending-approval";
 import { ProviderCapacityCards } from "./provider-capacity-cards";
 import { RunningNowRail } from "./running-now-rail";
 import { WorkPipeline } from "./work-pipeline";
@@ -14,6 +15,10 @@ export function MissionControl({ workspaceId }: MissionControlProps) {
 
   return (
     <div className="flex flex-col gap-5">
+      {/* Top billing: the "needs you" approvals. Self-hides when none are
+          pending, so it only ever appears to demand action. */}
+      <PendingApproval workspaceId={workspaceId} />
+
       {sections.includes("provider-capacity") ? (
         <ProviderCapacityCards workspaceId={workspaceId} />
       ) : null}
