@@ -37,12 +37,6 @@
         "gradleCommand": ":app:assembleDebug"
       }
     },
-    "development:device": {
-      "extends": "development",
-      "ios": {
-        "simulator": false
-      }
-    },
     "beta": {
       "extends": "base",
       "distribution": "internal",
@@ -93,6 +87,12 @@
         "buildType": "app-bundle"
       },
       "channel": "production"
+    },
+    "development-device": {
+      "extends": "development",
+      "ios": {
+        "simulator": false
+      }
     }
   },
   "submit": {

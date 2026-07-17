@@ -1,4 +1,4 @@
-appId: com.gmacko.bob.dev
+appId: com.gmacko.bob.expo
 ---
 # Test: Onboarding screen has all expected elements
 - launchApp

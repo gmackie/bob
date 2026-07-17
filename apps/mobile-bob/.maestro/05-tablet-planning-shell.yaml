@@ -1,4 +1,4 @@
-appId: com.gmacko.bob.dev
+appId: com.gmacko.bob.expo
 ---
 # Build/install with production endpoints, EXPO_PUBLIC_BOB_AUTH_BYPASS=true,
 # and EXPO_PUBLIC_BOB_AUTH_BYPASS_TOKEN set to the backend bypass secret.

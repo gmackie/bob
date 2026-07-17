@@ -1,4 +1,4 @@
-appId: com.gmacko.bob.dev
+appId: com.gmacko.bob.expo
 ---
 # Test: Tapping GitHub login button triggers auth flow
 - launchApp

@@ -37,15 +37,15 @@ const getAppName = () => {
     case "production":
       return "Bob";
     case "preview":
-      return "Bob (Preview)";
-    default:
       return "Bob (Dev)";
+    default:
+      return "Bob (Expo)";
   }
 };
 
 const getVariantIcon = () => {
-  if (APP_VARIANT === "development") return "./assets/icon-dev.png";
-  if (APP_VARIANT === "preview") return "./assets/icon-preview.png";
+  if (APP_VARIANT === "development") return "./assets/icon-expo.png";
+  if (APP_VARIANT === "preview") return "./assets/icon-dev.png";
   return "./assets/icon.png";
 };
 
@@ -55,9 +55,9 @@ const getBundleId = () => {
     case "production":
       return base;
     case "preview":
-      return `${base}.preview`;
-    default:
       return `${base}.dev`;
+    default:
+      return `${base}.expo`;
   }
 };
 
@@ -66,9 +66,9 @@ const getScheme = () => {
     case "production":
       return "bob";
     case "preview":
-      return "bob-preview";
-    default:
       return "bob-dev";
+    default:
+      return "bob-expo";
   }
 };
 
@@ -91,6 +91,13 @@ module.exports = ({ config }) => {
     "expo-router",
     "expo-secure-store",
     "expo-web-browser",
+    [
+      "expo-camera",
+      {
+        cameraPermission:
+          "Bob needs camera access to scan the pairing QR code from the web app.",
+      },
+    ],
     [
       "expo-speech-recognition",
       {

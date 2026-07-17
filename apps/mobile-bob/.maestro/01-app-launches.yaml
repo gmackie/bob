@@ -1,6 +1,10 @@
-appId: com.gmacko.bob.dev
+appId: com.gmacko.bob.expo
+name: "Bob app launches"
+tags: [smoke]
 ---
-# Test: App launches and shows onboarding
+# Launch-only smoke for the simulator gate. Auth onboarding copy is covered by
+# 03-github-auth-attempt.yaml once the client is attached to Metro.
+- clearState
 - launchApp
-- assertVisible: "Continue with GitHub"
-- takeScreenshot: screenshots/01-onboarding
+- waitForAnimationToEnd:
+    timeout: 20000
