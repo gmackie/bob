@@ -7,13 +7,15 @@
  *
  * Run: BOB_API_KEY=... BOB_WORKSPACE_ID=... GATEWAY_WS_URL=ws://... node daemon/index.js
  */
-import { execFile, spawn, type ChildProcess } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
-import { computeCostUsd, type TokenCounts } from "@gmacko/core/agent/model-pricing";
+import { computeCostUsd } from "@gmacko/core/agent/model-pricing";
+import type { TokenCounts } from "@gmacko/core/agent/model-pricing";
 import {
   buildProviderCommand,
   buildProviderEnvironment,
@@ -395,11 +397,11 @@ async function handleSessionAvailable(session: ServerSessionAvailable): Promise<
     // Seed the oracle with the planning substance (work-item title + brief), not the
     // intent enum ("shape"/"breakdown"). Fall back to the session title/description.
     const question =
-      buildSeedQuestion(lc?.workItem?.title, lc?.notes) ||
+      buildSeedQuestion(lc?.workItem.title, lc?.notes) ||
       buildSeedQuestion(session.title, session.description);
     // Repo hint comes from the selected repo source, not the git branch (a branch name
     // is not a repository identifier and would silently mis-filter oracle results).
-    const repo = lc?.selectedRepoSources?.[0]?.label ?? lc?.selectedRepoSources?.[0]?.path;
+    const repo = lc?.selectedRepoSources[0]?.label ?? lc?.selectedRepoSources[0]?.path;
     const section = await fetchOracleSeed(oracleClient, { question, repo }, (m) => console.log(m));
     if (section) prompt = `${prompt}\n\n${section}`;
   }

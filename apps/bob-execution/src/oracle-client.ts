@@ -51,14 +51,14 @@ export function createOracleClient(baseUrl: string, token: string): OracleClient
 
 /** Combine planning intent and notes into a single oracle question. */
 export function buildSeedQuestion(intent?: string, notes?: string): string {
-  return [intent, notes].filter((s) => s && s.trim()).join("\n\n").trim();
+  return [intent, notes].filter((s) => s?.trim()).join("\n\n").trim();
 }
 
 /** Render oracle chunks as a prompt section. Returns "" when there are no chunks. */
 export function formatOracleSection(result: OracleQueryResult): string {
   if (!result.chunks.length) return "";
   const lines = result.chunks.map((c, i) => {
-    const title = c.sourceTitle?.trim() || "untitled source";
+    const title = c.sourceTitle?.trim() ?? "untitled source";
     const content = c.content.trim().replace(/\s+/g, " ");
     return `${i + 1}. [${title}] ${content}`;
   });

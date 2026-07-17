@@ -3,13 +3,14 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-import { createOracleClient, type OracleQueryResult } from "./oracle-client";
+import { createOracleClient } from "./oracle-client";
+import type { OracleQueryResult } from "./oracle-client";
 import { readOracleConfig } from "./oracle-config";
 
 export function renderToolText(result: OracleQueryResult): string {
   if (!result.chunks.length) return "No knowledge found in the OODA oracle for that query.";
   const lines = result.chunks.map((c, i) => {
-    const title = c.sourceTitle?.trim() || "untitled source";
+    const title = c.sourceTitle?.trim() ?? "untitled source";
     return `${i + 1}. [${title}] ${c.content.trim().replace(/\s+/g, " ")}`;
   });
   return [`Oracle results (confidence ${result.confidence.toFixed(2)}):`, ...lines].join("\n");
@@ -52,6 +53,6 @@ async function main(): Promise<void> {
 }
 
 // Only run the server when executed directly (not when imported by tests).
-if (process.argv[1] && process.argv[1].endsWith("ooda-oracle-mcp.ts")) {
+if (process.argv[1]?.endsWith("ooda-oracle-mcp.ts")) {
   void main();
 }

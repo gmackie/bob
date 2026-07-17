@@ -313,7 +313,9 @@ describe("tablet task dashboard model", () => {
   it("exposes provider usage details in the card accessibility label", () => {
     const [card] = buildProviderCapacityCards({ sessions: [], workItems: [] });
 
-    expect(getProviderCapacityAccessibilityLabel(card!)).toContain(
+    expect(card).toBeDefined();
+    if (!card) throw new Error("Expected a provider capacity card");
+    expect(getProviderCapacityAccessibilityLabel(card)).toContain(
       "Claude. Provider allowance: Unavailable. Bob observed usage: Unavailable",
     );
   });

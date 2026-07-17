@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildSeedQuestion, formatOracleSection, type OracleQueryResult } from "./oracle-client";
+import { buildSeedQuestion, formatOracleSection } from "./oracle-client";
+import type { OracleQueryResult } from "./oracle-client";
 import { fetchOracleSeed } from "./oracle-client";
 
 describe("buildSeedQuestion", () => {
@@ -57,21 +58,21 @@ describe("fetchOracleSeed", () => {
   };
 
   it("returns a formatted section and logs queryId on success", async () => {
-    const client = { oracle: { query: { query: async () => okResult } } };
+    const client = { oracle: { query: { query: () => Promise.resolve(okResult) } } };
     const section = await fetchOracleSeed(client, { question: "q", topK: 6 }, log);
     expect(section).toContain("## Knowledge from OODA");
     expect(logs.some((l) => l.includes("qid"))).toBe(true);
   });
 
   it("returns empty string and never throws when the client rejects", async () => {
-    const client = { oracle: { query: { query: async () => { throw new Error("boom"); } } } };
+    const client = { oracle: { query: { query: () => Promise.reject(new Error("boom")) } } };
     const section = await fetchOracleSeed(client, { question: "q" }, log);
     expect(section).toBe("");
   });
 
   it("returns empty string when the question is blank", async () => {
     let called = false;
-    const client = { oracle: { query: { query: async () => { called = true; return okResult; } } } };
+    const client = { oracle: { query: { query: () => { called = true; return Promise.resolve(okResult); } } } };
     const section = await fetchOracleSeed(client, { question: "   " }, log);
     expect(section).toBe("");
     expect(called).toBe(false);
@@ -84,7 +85,7 @@ describe("fetchOracleSeed", () => {
 
     it("clears the timeout timer when the query resolves first (no dangling timer)", async () => {
       vi.useFakeTimers();
-      const client = { oracle: { query: { query: async () => okResult } } };
+      const client = { oracle: { query: { query: () => Promise.resolve(okResult) } } };
       // Query resolves on a microtask, winning the race before the (long) timeout fires.
       await fetchOracleSeed(client, { question: "q", timeoutMs: 60_000 }, log);
       // The finally block must have cleared the timer; nothing should remain pending.
