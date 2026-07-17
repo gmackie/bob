@@ -1,7 +1,7 @@
 import { buildExecutionQueue, formatStatusLabel } from "./queue";
 import type { TabletQueueItem } from "./queue";
 
-export type ProviderKey = "codex" | "cursor";
+export type ProviderKey = "claude" | "codex" | "grok" | "cursor-agent";
 export type DashboardTone = "default" | "warning" | "danger" | "success";
 
 export interface TabletDashboardSession {
@@ -161,6 +161,8 @@ export interface TaskDashboardLayout {
   laneWrap: "wrap" | "nowrap";
   laneCardMinWidth: number;
   providerFooterDirection: "row" | "column";
+  providerWrap: "wrap" | "nowrap";
+  providerCardMinWidth: number;
 }
 
 const TABLET_DASHBOARD_SECTION_ORDER: TabletDashboardSectionKey[] = [
@@ -250,12 +252,19 @@ function appendWorkspaceParam(path: string, workspaceId?: string | null): string
 }
 
 function getProvider(agentType: string): ProviderKey {
-  return agentType.toLowerCase().includes("cursor") ? "cursor" : "codex";
+  const normalized = agentType.toLowerCase();
+  if (normalized.includes("cursor")) return "cursor-agent";
+  if (normalized.includes("claude")) return "claude";
+  if (normalized.includes("grok")) return "grok";
+  return "codex";
 }
 
 export function normalizeProviderKey(value: string | string[] | undefined): ProviderKey {
   const raw = Array.isArray(value) ? value[0] : value;
-  return raw === "cursor" ? "cursor" : "codex";
+  if (raw === "claude" || raw === "grok" || raw === "cursor-agent" || raw === "cursor") {
+    return raw === "cursor" ? "cursor-agent" : raw;
+  }
+  return "codex";
 }
 
 export function getTaskDashboardHeaderModel(): TaskDashboardHeaderModel {
@@ -517,7 +526,9 @@ function buildProviderCard(
 
   return {
     provider,
-    label: provider === "codex" ? "Codex" : "Cursor",
+    label: provider === "cursor-agent"
+      ? "Cursor"
+      : provider.charAt(0).toUpperCase() + provider.slice(1),
     activeCount,
     queuedOrStartingCount: startingCount + (provider === "codex" ? queuedCount : 0),
     limitLabel: snapshot ? "Capacity connected" : "Capacity not connected",
@@ -540,8 +551,10 @@ export function buildProviderCapacityCards(input: {
   );
 
   return [
+    buildProviderCard("claude", input.sessions, queuedCount, snapshots.get("claude")),
     buildProviderCard("codex", input.sessions, queuedCount, snapshots.get("codex")),
-    buildProviderCard("cursor", input.sessions, queuedCount, snapshots.get("cursor")),
+    buildProviderCard("grok", input.sessions, queuedCount, snapshots.get("grok")),
+    buildProviderCard("cursor-agent", input.sessions, queuedCount, snapshots.get("cursor-agent")),
   ];
 }
 
@@ -571,6 +584,17 @@ function parseProviderUsageLimits(summary: unknown): ProviderUsageLimit[] {
   if (!summary || typeof summary !== "object") return [];
   const capacity = (summary as { providerCapacity?: unknown }).providerCapacity;
   if (!capacity || typeof capacity !== "object") return [];
+  const observed = (capacity as { observed?: unknown }).observed;
+  if (observed && typeof observed === "object") {
+    const usage = observed as { inputTokens?: unknown; outputTokens?: unknown };
+    const inputTokens = typeof usage.inputTokens === "number" ? usage.inputTokens : 0;
+    const outputTokens = typeof usage.outputTokens === "number" ? usage.outputTokens : 0;
+    return [buildProviderUsageLimit({
+      label: "Bob observed usage",
+      valueLabel: `${inputTokens + outputTokens} tokens`,
+      resetLabel: null,
+    })];
+  }
   const usageLimits = (capacity as { usageLimits?: unknown }).usageLimits;
   if (!Array.isArray(usageLimits)) return [];
 
@@ -644,7 +668,8 @@ function getDefaultProviderUsageLimits(provider: ProviderKey): ProviderUsageLimi
           resetLabel: null,
         }),
       ]
-    : [
+    : provider === "cursor-agent"
+      ? [
         buildProviderUsageLimit({
           label: "Included usage",
           remainingPercent: null,
@@ -655,7 +680,19 @@ function getDefaultProviderUsageLimits(provider: ProviderKey): ProviderUsageLimi
           remainingPercent: null,
           resetLabel: null,
         }),
-      ];
+      ]
+      : [
+          buildProviderUsageLimit({
+            label: "Provider allowance",
+            remainingPercent: null,
+            resetLabel: null,
+          }),
+          buildProviderUsageLimit({
+            label: "Bob observed usage",
+            remainingPercent: null,
+            resetLabel: null,
+          }),
+        ];
 }
 
 export function buildTaskLaneSummaries(
@@ -703,7 +740,18 @@ export function getTaskDashboardLayout(screenWidth: number): TaskDashboardLayout
     laneWrap: showRightRail ? "nowrap" : "wrap",
     laneCardMinWidth: showRightRail ? 0 : 132,
     providerFooterDirection: showRightRail ? "column" : "row",
+    providerWrap: showRightRail ? "nowrap" : "wrap",
+    providerCardMinWidth: showRightRail ? 0 : 150,
   };
+}
+
+export function getProviderCapacityAccessibilityLabel(card: ProviderCapacityCard): string {
+  const usage = card.usageLimits.map((limit) => {
+    const value = limit.valueLabel ??
+      (limit.remainingPercent === null ? "Unavailable" : `${limit.remainingPercent}% remaining`);
+    return `${limit.label}: ${value}`;
+  });
+  return `${card.label}. ${usage.join(". ")}. Open provider detail`;
 }
 
 export function getTabletDashboardSectionOrder(): TabletDashboardSectionKey[] {

@@ -17,19 +17,19 @@ export interface WorkPipelineItem {
   agentStatus?: WorkPipelineAgentStatus | null;
 }
 
-export type ProviderKey = "claude" | "grok" | "codex" | "cursor";
+export type ProviderKey = "claude" | "codex" | "grok" | "cursor-agent";
 export type DashboardTone = "default" | "warning" | "danger" | "success";
 
 // Every agent Bob rotates through (see autoDrain AGENT_ROTATION). The dashboard
 // shows one capacity card per provider, in dispatch-rotation order. Claude and
 // Grok run on subscriptions (no metered API quota), so their cards report
 // live active/queued counts without the usage bars that Codex/Cursor expose.
-const PROVIDER_ORDER: ProviderKey[] = ["claude", "grok", "codex", "cursor"];
+const PROVIDER_ORDER: ProviderKey[] = ["claude", "codex", "grok", "cursor-agent"];
 const PROVIDER_LABELS: Record<ProviderKey, string> = {
   claude: "Claude",
   grok: "Grok",
   codex: "Codex",
-  cursor: "Cursor",
+  "cursor-agent": "Cursor",
 };
 
 export interface ProviderSessionSummary {
@@ -508,9 +508,9 @@ function getRecentlyCompletedStatusTone(status: string): DashboardTone {
 
 function getProvider(agentType: string): ProviderKey {
   const normalized = agentType.toLowerCase();
+  if (normalized.includes("cursor")) return "cursor-agent";
   if (normalized.includes("claude")) return "claude";
   if (normalized.includes("grok")) return "grok";
-  if (normalized.includes("cursor")) return "cursor";
   // Default to codex — it's the historical default and covers "codex"/unknown.
   return "codex";
 }
@@ -535,10 +535,10 @@ function buildProviderCapacitySummary(
     queuedOrStartingCount: startingCount + (provider === "codex" ? queuedCount : 0),
     // Subscription providers have no capacity socket to connect; their card is
     // "live" whenever it has work, rather than reporting a metered quota link.
-    limitLabel: isSubscription
-      ? "Subscription"
-      : snapshot
-        ? "Capacity connected"
+    limitLabel: snapshot
+      ? "Capacity connected"
+      : isSubscription
+        ? "Subscription"
         : "Capacity not connected",
     statusLabel: hasFailure ? "Recent failure" : "Normal",
     tone: hasFailure ? "danger" : activeCount > 0 ? "success" : "default",
@@ -594,6 +594,17 @@ function parseProviderUsageLimits(summary: unknown): ProviderUsageLimit[] {
   if (!summary || typeof summary !== "object") return [];
   const capacity = (summary as { providerCapacity?: unknown }).providerCapacity;
   if (!capacity || typeof capacity !== "object") return [];
+  const observed = (capacity as { observed?: unknown }).observed;
+  if (observed && typeof observed === "object") {
+    const usage = observed as { inputTokens?: unknown; outputTokens?: unknown };
+    const inputTokens = typeof usage.inputTokens === "number" ? usage.inputTokens : 0;
+    const outputTokens = typeof usage.outputTokens === "number" ? usage.outputTokens : 0;
+    return [buildProviderUsageLimit({
+      label: "Bob observed usage",
+      valueLabel: `${inputTokens + outputTokens} tokens`,
+      resetLabel: null,
+    })];
+  }
   const usageLimits = (capacity as { usageLimits?: unknown }).usageLimits;
   if (!Array.isArray(usageLimits)) return [];
 
@@ -660,7 +671,7 @@ function getDefaultProviderUsageLimits(provider: ProviderKey): ProviderUsageLimi
         buildProviderUsageLimit({ label: "5 hour usage limit", remainingPercent: null, resetLabel: null }),
         buildProviderUsageLimit({ label: "Weekly usage limit", remainingPercent: null, resetLabel: null }),
       ];
-    case "cursor":
+    case "cursor-agent":
       return [
         buildProviderUsageLimit({ label: "Included usage", remainingPercent: null, resetLabel: null }),
         buildProviderUsageLimit({ label: "On-demand spend", remainingPercent: null, resetLabel: null }),

@@ -13,6 +13,26 @@ export interface PriorityQueueHeaderModel {
   subtitle: null;
 }
 
+export interface TaskDashboardWorkspace {
+  id: string;
+  name?: string | null;
+  slug?: string | null;
+}
+
+export function selectTaskDashboardWorkspace(
+  memberships: Array<{ workspace?: TaskDashboardWorkspace | null }>,
+  workspaceId: string | null,
+): TaskDashboardWorkspace | null {
+  const workspaces = memberships.flatMap((membership) =>
+    membership.workspace ? [membership.workspace] : [],
+  );
+  return (
+    (workspaceId
+      ? workspaces.find((workspace) => workspace.id === workspaceId)
+      : workspaces[0]) ?? null
+  );
+}
+
 export type TaskShellRoute = "/tasks" | "/runs" | "/tasks/queue";
 
 export interface PriorityQueueItem {

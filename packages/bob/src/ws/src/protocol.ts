@@ -34,6 +34,39 @@ export type SessionEventType =
   // Marks a span of output events evicted from the runner's partition buffer.
   | "gap_marker";
 
+export interface ProviderCapabilityWire {
+  approval?: boolean;
+  followUp?: boolean;
+  resume?: boolean;
+  cancel?: boolean;
+  structuredUsage?: boolean;
+  providerAllowance?: boolean;
+  providerResetAt?: boolean;
+  directCost?: boolean;
+  modelIdentity?: boolean;
+}
+
+export interface ProviderHealthWire {
+  provider: "claude" | "codex" | "grok" | "cursor-agent";
+  command: string;
+  installed: boolean;
+  authenticated: boolean;
+  version?: string;
+  status: "ready" | "unavailable" | "unauthenticated" | "degraded";
+  capabilities: ProviderCapabilityWire;
+  checkedAt: string;
+  error?: string;
+}
+
+export interface HostSnapshotWire {
+  schemaVersion: 1;
+  hostId: string;
+  daemonVersion: string;
+  queueDepth: number;
+  checkedAt: string;
+  providers: ProviderHealthWire[];
+}
+
 // ---------------------------------------------------------------------------
 // Client → Server messages
 // ---------------------------------------------------------------------------
@@ -51,6 +84,7 @@ export interface ClientHello {
   /** Changes on every daemon restart — distinguishes restart from reconnect. */
   connectorInstanceId?: string;
   daemonVersion?: string;
+  hostSnapshot?: HostSnapshotWire;
 }
 
 export interface ClientSubscribe {
@@ -96,6 +130,7 @@ export interface ClientApprove {
 export interface ClientPing {
   type: "ping";
   ts: string;
+  hostSnapshot?: HostSnapshotWire;
 }
 
 /**
@@ -360,6 +395,12 @@ export interface ServerEventAck {
   sendSeq: number;
 }
 
+export interface ServerHostSnapshot {
+  type: "host_snapshot";
+  workspaceId: string;
+  snapshot: HostSnapshotWire;
+}
+
 // ---------------------------------------------------------------------------
 // Union types
 // ---------------------------------------------------------------------------
@@ -397,7 +438,8 @@ export type ServerMessage =
   | ServerWorkspaceInvalidation
   | ServerSessionAvailable
   | ServerReplayTruncated
-  | ServerEventAck;
+  | ServerEventAck
+  | ServerHostSnapshot;
 
 // ---------------------------------------------------------------------------
 // Helpers

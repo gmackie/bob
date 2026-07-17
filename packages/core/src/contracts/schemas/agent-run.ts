@@ -31,6 +31,7 @@ export const AgentRunSchema = Schema.Struct({
   // dashboard needs it to attribute a run to its provider; without it on the
   // wire every run defaulted to "codex" and Claude/Grok never got a card.
   agentType: Schema.NullOr(Schema.String),
+  summary: Schema.optional(Schema.NullOr(Schema.Unknown)),
   // Raw DB agent_run_status value — a plain string, not a narrowed union; see
   // the file header for why enumerating it here is a footgun.
   status: Schema.String,

@@ -4,29 +4,23 @@ import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 
 import { MissionControl } from "~/components/dashboard/mission-control";
-import { getTaskDashboardHeaderModel } from "~/components/tasks/task-shell-model";
-import { useBobRpcClient } from "~/rpc/react";
-
-type WorkspaceSummary = {
-  id: string;
-  name?: string | null;
-  slug?: string | null;
-};
+import {
+  getTaskDashboardHeaderModel,
+  selectTaskDashboardWorkspace,
+} from "~/components/tasks/task-shell-model";
+import { useTRPC } from "~/trpc/react";
 
 export default function TasksDashboardPage() {
-  const rpc = useBobRpcClient();
+  const trpc = useTRPC();
   const searchParams = useSearchParams();
-  const { data: workspaceRows } = useQuery({
-    queryKey: ["rpc", "planning.listWorkspaces"],
-    queryFn: () => rpc.planning.listWorkspaces() as Promise<WorkspaceSummary[]>,
-    staleTime: 60_000,
-  });
-  const workspaces = (workspaceRows ?? []) as WorkspaceSummary[];
+  const { data: workspaceRows } = useQuery(
+    trpc.workspace.list.queryOptions(undefined, { staleTime: 60_000 }),
+  );
   const workspaceParam = searchParams?.get("workspace") ?? null;
-  const currentWorkspace =
-    (workspaceParam
-      ? workspaces.find((workspace) => workspace.id === workspaceParam)
-      : workspaces[0]) ?? null;
+  const currentWorkspace = selectTaskDashboardWorkspace(
+    Array.isArray(workspaceRows) ? workspaceRows : [],
+    workspaceParam,
+  );
   const header = getTaskDashboardHeaderModel();
 
   return (

@@ -7,18 +7,38 @@
  *
  * Run: BOB_API_KEY=... BOB_WORKSPACE_ID=... GATEWAY_WS_URL=ws://... node daemon/index.js
  */
-import { spawn  } from "node:child_process";
+import { execFile, spawn  } from "node:child_process";
 import type {ChildProcess} from "node:child_process";
 import { existsSync } from "node:fs";
 import WebSocket from "ws";
 import { computeCostUsd  } from "@gmacko/core/agent/model-pricing";
 import type {TokenCounts} from "@gmacko/core/agent/model-pricing";
+import {
+  buildProviderCommand,
+  buildProviderEnvironment,
+  normalizeProviderId,
+  parseProviderStream,
+} from "../providers/runtime.js";
+import { probeCliProvider } from "../providers/cli-provider.js";
+import { providerIds } from "../providers/contract.js";
+import { SessionAdmission } from "./session-admission.js";
 
 interface AgentExecutionResult {
   exitCode: number;
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
+  providerCapacity?: {
+    provider: string;
+    collectedAt: string;
+    allowance: { status: "unavailable"; source: "provider" };
+    observed?: {
+      source: "provider" | "bob_metered" | "estimated";
+      inputTokens: number;
+      outputTokens: number;
+      costUsd?: number;
+    };
+  };
 }
 
 function initTelemetry(_config: { serviceName: string; serviceVersion?: string }): void {
@@ -147,6 +167,42 @@ let ws: WebSocket | null = null;
 let heartbeatTimer: NodeJS.Timeout | null = null;
 let reconnectAttempt = 0;
 const activeSessions = new Map<string, ChildProcess>();
+const sessionAdmission = new SessionAdmission(MAX_CONCURRENT);
+let providerSnapshot: Awaited<ReturnType<typeof probeCliProvider>>[] = [];
+let lastProviderProbeAt = 0;
+
+async function collectHostSnapshot() {
+  if (Date.now() - lastProviderProbeAt > 5 * 60_000 || providerSnapshot.length === 0) {
+    providerSnapshot = await Promise.all(
+      providerIds.map((provider) =>
+        probeCliProvider(provider, (command, args) =>
+          new Promise((resolve, reject) => {
+            execFile(command, args, { timeout: 10_000 }, (error, stdout, stderr) => {
+              if (error && "code" in error && error.code === "ENOENT") {
+                reject(error instanceof Error ? error : new Error("command not found"));
+                return;
+              }
+              resolve({
+                code: typeof error?.code === "number" ? error.code : error ? 1 : 0,
+                stdout,
+                stderr,
+              });
+            });
+          }),
+        ),
+      ),
+    );
+    lastProviderProbeAt = Date.now();
+  }
+  return {
+    schemaVersion: 1 as const,
+    hostId: CLIENT_ID,
+    daemonVersion: "dev",
+    queueDepth: sessionAdmission.size,
+    checkedAt: new Date().toISOString(),
+    providers: providerSnapshot,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // WebSocket connection
@@ -159,12 +215,15 @@ function connect(): void {
   ws.on("open", () => {
     reconnectAttempt = 0;
     console.log("[executor] Connected, sending hello");
-    send({
-      type: "hello",
-      clientId: CLIENT_ID,
-      deviceType: "daemon",
-      token: BOB_API_KEY,
-      workspaceId: BOB_WORKSPACE_ID,
+    void collectHostSnapshot().then((hostSnapshot) => {
+      send({
+        type: "hello",
+        clientId: CLIENT_ID,
+        deviceType: "daemon",
+        token: BOB_API_KEY,
+        workspaceId: BOB_WORKSPACE_ID,
+        hostSnapshot,
+      });
     });
     startHeartbeat();
   });
@@ -213,7 +272,10 @@ function send(msg: Record<string, unknown>): void {
 function startHeartbeat(): void {
   if (heartbeatTimer) clearInterval(heartbeatTimer);
   heartbeatTimer = setInterval(() => {
-    send({ type: "ping", ts: new Date().toISOString() });
+    void collectHostSnapshot().then((hostSnapshot) => {
+      send({ type: "ping", ts: new Date().toISOString(), hostSnapshot });
+      console.log(`[executor] Heartbeat sent (${hostSnapshot.queueDepth} in flight)`);
+    });
   }, HEARTBEAT_INTERVAL_MS);
 }
 
@@ -259,7 +321,7 @@ function handleMessage(msg: ServerMessage): void {
 // ---------------------------------------------------------------------------
 
 async function handleSessionAvailable(session: ServerSessionAvailable): Promise<void> {
-  if (activeSessions.size >= MAX_CONCURRENT) {
+  if (!sessionAdmission.reserve(session.sessionId)) {
     console.log(`[executor] At capacity (${MAX_CONCURRENT}), skipping ${session.sessionId}`);
     return;
   }
@@ -277,6 +339,7 @@ async function handleSessionAvailable(session: ServerSessionAvailable): Promise<
   if (!existsSync(workDir)) {
     console.error(`[executor] Working directory not found: ${workDir}`);
     send({ type: "session_status", sessionId: session.sessionId, status: "error" });
+    sessionAdmission.release(session.sessionId);
     return;
   }
 
@@ -301,6 +364,7 @@ async function handleSessionAvailable(session: ServerSessionAvailable): Promise<
   sendEvent(session.sessionId, "state", "system", { status: "running" });
 
   try {
+    let executionResult: AgentExecutionResult | undefined;
     await traceAgentExecution(
       {
         agentType,
@@ -312,11 +376,18 @@ async function handleSessionAvailable(session: ServerSessionAvailable): Promise<
       },
       async (span) => {
         const persona = getPersonaConfig(session);
-        const result = await runAgent(session, workDir, prompt, persona);
-        setAgentResult(span, result);
+        executionResult = await runAgent(session, workDir, prompt, persona);
+        setAgentResult(span, executionResult);
       },
     );
-    send({ type: "session_status", sessionId: session.sessionId, status: "completed" });
+    send({
+      type: "session_status",
+      sessionId: session.sessionId,
+      status: "completed",
+      summary: executionResult?.providerCapacity
+        ? { providerCapacity: executionResult.providerCapacity }
+        : undefined,
+    });
     sendEvent(session.sessionId, "state", "system", { status: "completed" });
     console.log(`[executor] Session ${session.sessionId} completed`);
   } catch (err) {
@@ -326,6 +397,7 @@ async function handleSessionAvailable(session: ServerSessionAvailable): Promise<
     sendEvent(session.sessionId, "error", "system", { code: "AGENT_ERROR", message: errMsg });
   } finally {
     activeSessions.delete(session.sessionId);
+    sessionAdmission.release(session.sessionId);
   }
 }
 
@@ -439,7 +511,15 @@ function runAgent(session: ServerSessionAvailable, workDir: string, prompt: stri
   return new Promise((resolve, reject) => {
     const sessionId = session.sessionId;
     const agentType = session.agentType || DEFAULT_AGENT_TYPE;
-    const { command, args } = getAgentCommand(agentType, prompt, persona);
+    const providerId = normalizeProviderId(agentType);
+    const { command, args } = providerId
+      ? buildProviderCommand(providerId, prompt, {
+          model: persona?.model ?? (providerId === "codex" ? CODEX_MODEL : undefined),
+          sandbox: CODEX_SANDBOX,
+          allowedTools: persona?.allowedTools,
+          systemPrompt: persona?.systemPrompt,
+        })
+      : getAgentCommand(agentType, prompt, persona);
     console.log(`[executor] Spawning: ${command} ${args.join(" ").slice(0, 80)}...`);
 
     const startTime = Date.now();
@@ -448,7 +528,7 @@ function runAgent(session: ServerSessionAvailable, workDir: string, prompt: stri
       cwd: workDir,
       stdio: ["ignore", "pipe", "pipe"],
       env: {
-        ...process.env,
+        ...buildProviderEnvironment(providerId, process.env),
         CI: "true",
         TERM: "dumb",
         PULSE_API_KEY: process.env.PULSE_API_KEY ?? "",
@@ -479,12 +559,43 @@ function runAgent(session: ServerSessionAvailable, workDir: string, prompt: stri
 
     child.on("close", (code) => {
       const durationMs = Date.now() - startTime;
-      const tokenUsage = parseTokenUsage(output, persona?.model);
+      const providerUsage = providerId
+        ? parseProviderStream(providerId, output, prompt).usage
+        : undefined;
+      const tokenUsage = providerUsage
+        ? {
+            inputTokens: providerUsage.inputTokens,
+            outputTokens: providerUsage.outputTokens,
+            cacheReadTokens: 0,
+            cacheCreationTokens: 0,
+            costUsd: providerUsage.costUsd ?? 0,
+            model: persona?.model ?? agentType,
+          }
+        : parseTokenUsage(output, persona?.model);
       const result: AgentExecutionResult = {
         exitCode: code ?? 1,
         inputTokens: tokenUsage.inputTokens,
         outputTokens: tokenUsage.outputTokens,
         costUsd: tokenUsage.costUsd,
+        ...(providerId
+          ? {
+              providerCapacity: {
+                provider: providerId,
+                collectedAt: new Date().toISOString(),
+                allowance: { status: "unavailable" as const, source: "provider" as const },
+                ...(tokenUsage.inputTokens > 0 || tokenUsage.outputTokens > 0
+                  ? {
+                      observed: {
+                        source: providerUsage?.source ?? "bob_metered" as const,
+                        inputTokens: tokenUsage.inputTokens,
+                        outputTokens: tokenUsage.outputTokens,
+                        ...(tokenUsage.costUsd > 0 ? { costUsd: tokenUsage.costUsd } : {}),
+                      },
+                    }
+                  : {}),
+              },
+            }
+          : {}),
       };
 
       void reportToBizPulse(

@@ -152,6 +152,42 @@ describe("Relay", () => {
   });
 
   describe("browser workspace subscription", () => {
+    it("publishes the connected daemon host snapshot to workspace observers", async () => {
+      const daemon = new FakeWs();
+      relay.handleConnection(daemon as any);
+      daemon.receive({
+        type: "hello",
+        clientId: "hetzner-bob",
+        deviceType: "daemon",
+        token: "good-daemon",
+        workspaceId: "ws-1",
+        hostSnapshot: {
+          schemaVersion: 1,
+          hostId: "hetzner-bob",
+          daemonVersion: "0.1.0",
+          queueDepth: 0,
+          checkedAt: "2026-07-11T18:00:00.000Z",
+          providers: [],
+        },
+      } as ClientMessage);
+      await new Promise((r) => setImmediate(r));
+
+      const browser = new FakeWs();
+      relay.handleConnection(browser as any);
+      browser.receive({ type: "hello", clientId: "web", deviceType: "web", token: "good-browser" });
+      await new Promise((r) => setImmediate(r));
+      browser.receive({ type: "subscribe_workspace", workspaceId: "ws-1" });
+      await new Promise((r) => setImmediate(r));
+
+      expect(browser.sentOfType("host_snapshot")).toEqual([
+        expect.objectContaining({
+          type: "host_snapshot",
+          workspaceId: "ws-1",
+          snapshot: expect.objectContaining({ hostId: "hetzner-bob" }),
+        }),
+      ]);
+    });
+
     it("includes planning draft and produced task counts in workspace snapshots", async () => {
       (db.query.chatConversations.findMany as any).mockResolvedValueOnce([
         {

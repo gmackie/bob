@@ -302,6 +302,16 @@ export async function mirrorRuntimeEventWithPostgres(
       );
     }
 
+    const providerCapacity = input.event.details?.providerCapacity;
+    if (providerCapacity && typeof providerCapacity === "object") {
+      await client.query(
+        `update agent_runs
+         set summary = coalesce(summary, '{}'::jsonb) || $2::jsonb
+         where session_id = $1`,
+        [sessionId, JSON.stringify({ providerCapacity })],
+      );
+    }
+
     await client.query("commit");
     return { ok: true };
   } catch (error) {

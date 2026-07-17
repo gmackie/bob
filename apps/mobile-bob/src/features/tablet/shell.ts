@@ -1,4 +1,4 @@
-import type { TaskLaneKey } from "./dashboard";
+import type { ProviderKey, TaskLaneKey } from "./dashboard";
 import { buildRecentOutcomeWorkItems, getRecentOutcomeRowModel } from "./dashboard";
 import { buildPriorityQueueItems  } from "./queue";
 import type {TabletQueueItem} from "./queue";
@@ -19,7 +19,7 @@ export type TabletShellTarget =
   | { type: "execution-session"; sessionId: string }
   | { type: "planning-session"; sessionId: string }
   | { type: "project"; projectId: string }
-  | { type: "provider"; provider: "codex" | "cursor" }
+  | { type: "provider"; provider: ProviderKey }
   | { type: "task-lane"; lane: TaskLaneKey }
   | { type: "settings" };
 
@@ -717,8 +717,11 @@ function pathSegment(pathname: string, index: number): string | undefined {
   return pathname.split("/").filter(Boolean)[index];
 }
 
-function normalizeProvider(value: string | undefined): "codex" | "cursor" | null {
-  return value === "codex" || value === "cursor" ? value : null;
+function normalizeProvider(value: string | undefined): ProviderKey | null {
+  if (value === "claude" || value === "codex" || value === "grok" || value === "cursor-agent") {
+    return value;
+  }
+  return value === "cursor" ? "cursor-agent" : null;
 }
 
 function normalizeTaskLane(value: string | undefined): TaskLaneKey | null {

@@ -7,6 +7,9 @@ export {
   type DeviceType,
   type EventDirection,
   type SessionEventType,
+  type HostSnapshotWire,
+  type ProviderHealthWire,
+  type ProviderCapabilityWire,
 
   // Client → Server
   type ClientMessage,
@@ -38,6 +41,7 @@ export {
   type ServerSessionStatusChanged,
   type ServerReplayTruncated,
   type ServerEventAck,
+  type ServerHostSnapshot,
   type ServerWorkspaceSnapshot,
   type ServerWorkspaceInvalidationType,
   type WorkspaceSessionInfo,

@@ -18,6 +18,7 @@ import {
   getRecentOutcomeRowModel,
   getRecentlyCompletedRowModel,
   getProviderCapacityStatusLine,
+  getProviderCapacityAccessibilityLabel,
   extractProviderCapacitySnapshotsFromRuns,
   getRecentOutcomeWorkItemStatus,
   getTaskLaneRowModel,
@@ -105,7 +106,7 @@ describe("tablet task dashboard model", () => {
     });
   });
 
-  it("builds first-class Codex and Cursor capacity cards", () => {
+  it("builds first-class capacity cards for every provider", () => {
     const cards = buildProviderCapacityCards({
       sessions,
       workItems: [
@@ -120,8 +121,8 @@ describe("tablet task dashboard model", () => {
       ],
     });
 
-    expect(cards.map((card) => card.provider)).toEqual(["codex", "cursor"]);
-    expect(cards[0]).toMatchObject({
+    expect(cards.map((card) => card.provider)).toEqual(["claude", "codex", "grok", "cursor-agent"]);
+    expect(cards.find((card) => card.provider === "codex")).toMatchObject({
       label: "Codex",
       activeCount: 2,
       queuedOrStartingCount: 1,
@@ -131,7 +132,7 @@ describe("tablet task dashboard model", () => {
         { label: "Weekly usage limit", remainingPercent: null },
       ],
     });
-    expect(cards[1]).toMatchObject({
+    expect(cards.find((card) => card.provider === "cursor-agent")).toMatchObject({
       label: "Cursor",
       activeCount: 1,
       queuedOrStartingCount: 1,
@@ -219,7 +220,7 @@ describe("tablet task dashboard model", () => {
       capacitySnapshots: snapshots,
     });
 
-    expect(cards.find((card) => card.provider === "cursor")).toMatchObject({
+    expect(cards.find((card) => card.provider === "cursor-agent")).toMatchObject({
       limitLabel: "Capacity connected",
       usageLimits: [
         {
@@ -242,7 +243,7 @@ describe("tablet task dashboard model", () => {
   });
 
   it("formats provider capacity connection and health as a visible status line", () => {
-    const [card] = buildProviderCapacityCards({
+    const card = buildProviderCapacityCards({
       sessions: [{ sessionId: "codex-1", status: "running", agentType: "codex", lastActivityAt: "2026-05-31T12:00:00.000Z" }],
       workItems: [],
       capacitySnapshots: [
@@ -257,7 +258,7 @@ describe("tablet task dashboard model", () => {
           ],
         },
       ],
-    });
+    }).find((entry) => entry.provider === "codex");
 
     if (!card) throw new Error("Expected Codex capacity card");
     expect(getProviderCapacityStatusLine(card)).toBe("Capacity connected · Normal");
@@ -292,6 +293,8 @@ describe("tablet task dashboard model", () => {
       laneWrap: "nowrap",
       laneCardMinWidth: 0,
       providerFooterDirection: "column",
+      providerWrap: "nowrap",
+      providerCardMinWidth: 0,
     });
   });
 
@@ -302,7 +305,17 @@ describe("tablet task dashboard model", () => {
       laneWrap: "wrap",
       laneCardMinWidth: 132,
       providerFooterDirection: "row",
+      providerWrap: "wrap",
+      providerCardMinWidth: 150,
     });
+  });
+
+  it("exposes provider usage details in the card accessibility label", () => {
+    const [card] = buildProviderCapacityCards({ sessions: [], workItems: [] });
+
+    expect(getProviderCapacityAccessibilityLabel(card!)).toContain(
+      "Claude. Provider allowance: Unavailable. Bob observed usage: Unavailable",
+    );
   });
 
   it("filters the work items behind each operational summary box", () => {
@@ -507,13 +520,11 @@ describe("tablet task dashboard model", () => {
     ];
 
     expect(normalizeProviderKey("codex")).toBe("codex");
-    expect(normalizeProviderKey("cursor")).toBe("cursor");
+    expect(normalizeProviderKey("cursor")).toBe("cursor-agent");
     expect(normalizeProviderKey("bad")).toBe("codex");
-    expect(filterProviderRuns(runs, "codex").map((run) => run.id)).toEqual([
-      "codex",
-      "claude",
-    ]);
-    expect(filterProviderRuns(runs, "cursor").map((run) => run.id)).toEqual([
+    expect(filterProviderRuns(runs, "codex").map((run) => run.id)).toEqual(["codex"]);
+    expect(filterProviderRuns(runs, "claude").map((run) => run.id)).toEqual(["claude"]);
+    expect(filterProviderRuns(runs, "cursor-agent").map((run) => run.id)).toEqual([
       "cursor",
     ]);
   });
@@ -1294,5 +1305,44 @@ describe("tablet task dashboard model", () => {
       workItemId: "active",
       view: "queue",
     });
+  });
+
+  it("builds honest capacity cards for all four providers", () => {
+    const snapshots = extractProviderCapacitySnapshotsFromRuns([{
+      id: "grok-run",
+      agentType: "grok",
+      summary: {
+        providerCapacity: {
+          provider: "grok",
+          collectedAt: "2026-07-11T18:00:00.000Z",
+          allowance: { status: "unavailable", source: "provider" },
+          observed: { source: "bob_metered", inputTokens: 80, outputTokens: 20 },
+        },
+      },
+    }]);
+    const cards = buildProviderCapacityCards({
+      sessions: [
+        { sessionId: "c", status: "running", agentType: "claude", lastActivityAt: "now" },
+        { sessionId: "x", status: "running", agentType: "codex", lastActivityAt: "now" },
+        { sessionId: "g", status: "running", agentType: "grok", lastActivityAt: "now" },
+        { sessionId: "u", status: "running", agentType: "cursor-agent", lastActivityAt: "now" },
+      ],
+      workItems: [],
+      capacitySnapshots: snapshots,
+    });
+
+    expect(cards.map((card) => card.provider)).toEqual([
+      "claude",
+      "codex",
+      "grok",
+      "cursor-agent",
+    ]);
+    expect(cards.find((card) => card.provider === "grok")?.usageLimits).toEqual([
+      expect.objectContaining({
+        label: "Bob observed usage",
+        remainingPercent: null,
+        valueLabel: "100 tokens",
+      }),
+    ]);
   });
 });

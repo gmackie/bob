@@ -14,6 +14,7 @@ const AGENT_COMMANDS: Record<AgentType, string> = {
   opencode: "opencode",
   kiro: "kiro-cli",
   "cursor-agent": "cursor-agent",
+  grok: "grok",
 };
 
 /**
