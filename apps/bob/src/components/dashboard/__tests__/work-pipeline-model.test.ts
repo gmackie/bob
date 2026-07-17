@@ -623,11 +623,18 @@ describe("work pipeline model", () => {
 
     expect(card).toMatchObject({
       limitLabel: "Capacity connected",
-      usageLimits: [{
-        label: "Bob observed usage",
-        remainingPercent: null,
-        valueLabel: "150 tokens",
-      }],
+      usageLimits: [
+        {
+          label: "Provider allowance",
+          remainingPercent: null,
+          valueLabel: "Unavailable",
+        },
+        {
+          label: "Bob observed usage",
+          remainingPercent: null,
+          valueLabel: "150 tokens",
+        },
+      ],
     });
   });
 

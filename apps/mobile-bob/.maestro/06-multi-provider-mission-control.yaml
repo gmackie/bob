@@ -6,14 +6,19 @@ tags:
 - launchApp
 - runFlow:
     when:
-      visible: "http://10.0.2.2:8081"
+      visible: "http://10.0.2.2:808[12]"
     commands:
-      - tapOn: "http://10.0.2.2:8081"
+      - tapOn: "http://10.0.2.2:808[12]"
 - runFlow:
     when:
-      visible: "Bob \\(Dev\\), http://.*:8081"
+      visible: "http://.*:808[12]"
     commands:
-      - tapOn: "Bob \\(Dev\\), http://.*:8081"
+      - tapOn: "http://.*:808[12]"
+- runFlow:
+    when:
+      visible: "Bob \\(Dev\\), http://.*:808[12]"
+    commands:
+      - tapOn: "Bob \\(Dev\\), http://.*:808[12]"
 - runFlow:
     when:
       visible: "This is the developer menu.*"
@@ -31,6 +36,36 @@ tags:
 - tapOn:
     text: "Skip"
     optional: true
+- runFlow:
+    when:
+      visible: "Reload"
+    commands:
+      - tapOn:
+          point: "90%,49%"
+- runFlow:
+    when:
+      visible: "Capture the issue.*"
+    commands:
+      - tapOn:
+          text: "Continue"
+          optional: true
+      - tapOn:
+          text: "Continue"
+          optional: true
+      - tapOn:
+          text: "Continue|Get Started|Open Tasks"
+          optional: true
+- runFlow:
+    when:
+      visible: "Continue to Sign In"
+    commands:
+      - tapOn: "Continue to Sign In"
+      - extendedWaitUntil:
+          visible: "Skip|Tasks"
+          timeout: 30000
+      - tapOn:
+          text: "Skip"
+          optional: true
 - waitForAnimationToEnd
 - tapOn:
     text: "Tasks"
@@ -38,8 +73,8 @@ tags:
 - extendedWaitUntil:
     visible: "Tasks"
     timeout: 30000
-- assertVisible: "^Claude\\. Bob observed usage: [0-9]+ tokens\\. Open provider detail$"
-- assertVisible: "^Codex\\. Bob observed usage: [0-9]+ tokens\\. Open provider detail$"
-- assertVisible: "^Grok\\. Bob observed usage: [0-9]+ tokens\\. Open provider detail$"
-- assertVisible: "^Cursor\\. Bob observed usage: [0-9]+ tokens\\. Open provider detail$"
+- assertVisible: "^Claude\\. Provider allowance: Unavailable\\. Bob observed usage: [0-9]+ tokens\\. Open provider detail$"
+- assertVisible: "^Codex\\. Provider allowance: Unavailable\\. Bob observed usage: [0-9]+ tokens\\. Open provider detail$"
+- assertVisible: "^Grok\\. Provider allowance: Unavailable\\. Bob observed usage: [0-9]+ tokens\\. Open provider detail$"
+- assertVisible: "^Cursor\\. Provider allowance: Unavailable\\. Bob observed usage: [0-9]+ tokens\\. Open provider detail$"
 - takeScreenshot: screenshots/06-multi-provider-mission-control

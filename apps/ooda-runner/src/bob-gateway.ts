@@ -110,6 +110,54 @@ interface ServerSessionAvailable {
   };
 }
 
+export function buildCliCommand(
+  agentType: string,
+  prompt: string,
+  session: Pick<ServerSessionAvailable, "personaConfig">,
+): { command: string; args: string[] } {
+  const persona = session.personaConfig;
+  switch (agentType) {
+    case "claude": {
+      const args = ["--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"];
+      if (persona?.model) args.push("--model", persona.model);
+      if (persona?.allowedTools?.length) args.push("--allowedTools", persona.allowedTools.join(","));
+      if (persona?.systemPrompt) args.push("--append-system-prompt", persona.systemPrompt);
+      args.push(prompt);
+      return { command: "claude", args };
+    }
+    case "codex": {
+      const codexPrompt = persona?.systemPrompt
+        ? `${persona.systemPrompt}\n\n---\n\n${prompt}`
+        : prompt;
+      const args = [
+        "exec",
+        "--json",
+        "--skip-git-repo-check",
+        "--dangerously-bypass-approvals-and-sandbox",
+      ];
+      if (persona?.model) args.push("-m", persona.model);
+      args.push(codexPrompt);
+      return { command: "codex", args };
+    }
+    case "cursor": {
+      const args = ["--print", "--yolo", "--trust"];
+      if (persona?.model) args.push("--model", persona.model);
+      const cursorPrompt = persona?.systemPrompt
+        ? `${persona.systemPrompt}\n\n---\n\n${prompt}`
+        : prompt;
+      args.push(cursorPrompt);
+      return { command: "cursor-agent", args };
+    }
+    default: {
+      const args = ["--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"];
+      if (persona?.model) args.push("--model", persona.model);
+      if (persona?.systemPrompt) args.push("--append-system-prompt", persona.systemPrompt);
+      args.push(prompt);
+      return { command: "claude", args };
+    }
+  }
+}
+
 type ServerMessage =
   | { type: "hello_ok"; userId: string; heartbeatIntervalMs: number }
   | { type: "error"; code: string; message: string }
@@ -1215,7 +1263,7 @@ export class BobGatewayConnector {
     onChunk?: (s: string) => void,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
-      const { command, args } = this.getCliCommand(session.agentType || "claude", prompt, session);
+      const { command, args } = buildCliCommand(session.agentType || "claude", prompt, session);
       console.log(`[bob-gw] Spawning: ${command} ${args.join(" ").slice(0, 80)}...`);
 
       const child = spawn(command, args, {
@@ -1270,60 +1318,6 @@ export class BobGatewayConnector {
 
       child.on("close", () => clearTimeout(timeout));
     });
-  }
-
-  private getCliCommand(
-    agentType: string,
-    prompt: string,
-    session: ServerSessionAvailable,
-  ): { command: string; args: string[] } {
-    const persona = session.personaConfig;
-    switch (agentType) {
-      case "claude": {
-        const args = ["--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"];
-        if (persona?.model) args.push("--model", persona.model);
-        if (persona?.allowedTools?.length) args.push("--allowedTools", persona.allowedTools.join(","));
-        if (persona?.systemPrompt) args.push("--append-system-prompt", persona.systemPrompt);
-        args.push(prompt);
-        return { command: "claude", args };
-      }
-      case "codex": {
-        const codexPrompt = persona?.systemPrompt
-          ? `${persona.systemPrompt}\n\n---\n\n${prompt}`
-          : prompt;
-        // codex-cli 0.135 grammar: `--full-auto` is deprecated, and exec
-        // refuses to run outside a trusted git dir without --skip-git-repo-check
-        // (Bob's fallback workdir isn't always a repo). --dangerously-bypass-
-        // approvals-and-sandbox = non-interactive autonomy (the box IS the
-        // sandbox), matching claude's --dangerously-skip-permissions posture.
-        // --json emits JSONL events we stream as output.
-        const codexArgs = [
-          "exec",
-          "--json",
-          "--skip-git-repo-check",
-          "--dangerously-bypass-approvals-and-sandbox",
-        ];
-        if (persona?.model) codexArgs.push("-m", persona.model);
-        codexArgs.push(codexPrompt);
-        return { command: "codex", args: codexArgs };
-      }
-      case "cursor": {
-        const cursorArgs = ["--print", "--yolo", "--trust"];
-        if (persona?.model) cursorArgs.push("--model", persona.model);
-        const cursorPrompt = persona?.systemPrompt
-          ? `${persona.systemPrompt}\n\n---\n\n${prompt}`
-          : prompt;
-        cursorArgs.push(cursorPrompt);
-        return { command: "agent", args: cursorArgs };
-      }
-      default: {
-        const args = ["--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"];
-        if (persona?.model) args.push("--model", persona.model);
-        if (persona?.systemPrompt) args.push("--append-system-prompt", persona.systemPrompt);
-        args.push(prompt);
-        return { command: "claude", args };
-      }
-    }
   }
 
   private buildSystemPrompt(session: ServerSessionAvailable): string | undefined {

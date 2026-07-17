@@ -589,11 +589,14 @@ function parseProviderUsageLimits(summary: unknown): ProviderUsageLimit[] {
     const usage = observed as { inputTokens?: unknown; outputTokens?: unknown };
     const inputTokens = typeof usage.inputTokens === "number" ? usage.inputTokens : 0;
     const outputTokens = typeof usage.outputTokens === "number" ? usage.outputTokens : 0;
-    return [buildProviderUsageLimit({
-      label: "Bob observed usage",
-      valueLabel: `${inputTokens + outputTokens} tokens`,
-      resetLabel: null,
-    })];
+    return [
+      buildProviderAllowanceLimit((capacity as { allowance?: unknown }).allowance),
+      buildProviderUsageLimit({
+        label: "Bob observed usage",
+        valueLabel: `${inputTokens + outputTokens} tokens`,
+        resetLabel: null,
+      }),
+    ];
   }
   const usageLimits = (capacity as { usageLimits?: unknown }).usageLimits;
   if (!Array.isArray(usageLimits)) return [];
@@ -616,6 +619,35 @@ function parseProviderUsageLimits(summary: unknown): ProviderUsageLimit[] {
       valueLabel: candidate.valueLabel,
       resetLabel: candidate.resetLabel,
     })];
+  });
+}
+
+function buildProviderAllowanceLimit(allowance: unknown): ProviderUsageLimit {
+  if (!allowance || typeof allowance !== "object") {
+    return buildProviderUsageLimit({ label: "Provider allowance" });
+  }
+  const value = allowance as {
+    status?: unknown;
+    used?: unknown;
+    limit?: unknown;
+    unit?: unknown;
+    resetAt?: unknown;
+  };
+  if (
+    value.status !== "available" ||
+    typeof value.used !== "number" ||
+    typeof value.limit !== "number" ||
+    value.limit <= 0
+  ) {
+    return buildProviderUsageLimit({ label: "Provider allowance" });
+  }
+  const unit = typeof value.unit === "string" && value.unit ? ` ${value.unit}` : "";
+  return buildProviderUsageLimit({
+    label: "Provider allowance",
+    usedPercent: (value.used / value.limit) * 100,
+    valueLabel: `${value.used} / ${value.limit}${unit}`,
+    resetLabel:
+      typeof value.resetAt === "string" ? `Resets ${value.resetAt}` : null,
   });
 }
 

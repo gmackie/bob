@@ -1339,6 +1339,11 @@ describe("tablet task dashboard model", () => {
     ]);
     expect(cards.find((card) => card.provider === "grok")?.usageLimits).toEqual([
       expect.objectContaining({
+        label: "Provider allowance",
+        remainingPercent: null,
+        valueLabel: "Unavailable",
+      }),
+      expect.objectContaining({
         label: "Bob observed usage",
         remainingPercent: null,
         valueLabel: "100 tokens",
