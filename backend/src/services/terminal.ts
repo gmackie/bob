@@ -46,6 +46,44 @@ export class TerminalService {
     return session;
   }
 
+  // Create a system terminal session (not tied to any instance)
+  createSystemSession(cwd?: string, initialCommand?: string): TerminalSession {
+    const sessionId = `system-terminal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    const pty = spawn(process.platform === 'win32' ? 'powershell.exe' : 'bash', [], {
+      name: 'xterm-color',
+      cols: 80,
+      rows: 30,
+      cwd: cwd || process.env.HOME || '/',
+      env: process.env as { [key: string]: string }
+    });
+
+    const session: TerminalSession = {
+      id: sessionId,
+      instanceId: 'system', // Special marker for system terminals
+      pty,
+      createdAt: new Date()
+    };
+
+    this.sessions.set(sessionId, session);
+
+    // If an initial command is provided, send it after a short delay
+    if (initialCommand) {
+      setTimeout(() => {
+        pty.write(initialCommand + '\r');
+      }, 100);
+    }
+
+    pty.onExit(() => {
+      this.sessions.delete(sessionId);
+      if (session.websocket) {
+        session.websocket.close();
+      }
+    });
+
+    return session;
+  }
+
   // Generic agent PTY session (alias to Claude PTY session machinery)
   createAgentPtySession(instanceId: string, agentPty: IPty): TerminalSession {
     const sessionId = `terminal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;

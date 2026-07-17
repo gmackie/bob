@@ -16,6 +16,8 @@ export class DatabaseService {
   public all: (sql: string, params?: any[]) => Promise<any[]>;
   public exec: (sql: string) => Promise<void>;
 
+  private initPromise: Promise<void>;
+
   constructor(dbPath: string = 'bob.db') {
     this.db = new sqlite3.Database(dbPath);
 
@@ -36,7 +38,11 @@ export class DatabaseService {
     this.all = promisify(this.db.all.bind(this.db));
     this.exec = promisify(this.db.exec.bind(this.db));
     this.migrationRunner = new MigrationRunner(this.db);
-    this.initialize();
+    this.initPromise = this.initialize();
+  }
+
+  async waitForInit(): Promise<void> {
+    return this.initPromise;
   }
 
   private async initialize(): Promise<void> {

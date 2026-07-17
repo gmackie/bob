@@ -127,6 +127,14 @@ class ApiClient {
     });
   }
 
+  // System terminal (not tied to any instance)
+  async createSystemTerminal(initialCommand?: string): Promise<{ sessionId: string }> {
+    return this.request('/instances/system-terminal', {
+      method: 'POST',
+      body: JSON.stringify({ initialCommand }),
+    });
+  }
+
   // Git operations
   async getGitDiff(worktreeId: string): Promise<string> {
     const token = localStorage.getItem('authToken');
@@ -483,6 +491,75 @@ class ApiClient {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.text();
+  }
+
+  // GitHub repository operations
+  async getGitHubRepos(search?: string): Promise<Array<{
+    name: string;
+    nameWithOwner: string;
+    description: string | null;
+    isPrivate: boolean;
+    url: string;
+  }>> {
+    const params = search ? `?search=${encodeURIComponent(search)}` : '';
+    return this.request(`/git/github/repos${params}`);
+  }
+
+  async getGitHubBranches(owner: string, repo: string): Promise<string[]> {
+    return this.request(`/git/github/repos/${owner}/${repo}/branches`);
+  }
+
+  async cloneGitHubRepo(repoFullName: string, branch?: string): Promise<{
+    message: string;
+    repository: any;
+    clonePath: string;
+  }> {
+    return this.request('/git/github/clone', {
+      method: 'POST',
+      body: JSON.stringify({ repoFullName, branch }),
+    });
+  }
+
+  // Agent config operations
+  async getAgentConfig(agentType: string): Promise<{
+    agentType: string;
+    configDir: string;
+    files: Array<{
+      name: string;
+      path: string;
+      exists: boolean;
+      content?: string;
+    }>;
+  }> {
+    return this.request(`/agents/${agentType}/config`);
+  }
+
+  async saveAgentConfig(agentType: string, fileName: string, content: string): Promise<{
+    message: string;
+    path: string;
+  }> {
+    return this.request(`/agents/${agentType}/config/${encodeURIComponent(fileName)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ content }),
+    });
+  }
+
+  async createAgentConfigFile(agentType: string, fileName: string, content?: string): Promise<{
+    message: string;
+    path: string;
+  }> {
+    return this.request(`/agents/${agentType}/config`, {
+      method: 'POST',
+      body: JSON.stringify({ fileName, content }),
+    });
+  }
+
+  async deleteAgentConfigFile(agentType: string, fileName: string): Promise<{
+    message: string;
+  }> {
+    return this.request(`/agents/${agentType}/config/${encodeURIComponent(fileName)}`, {
+      method: 'DELETE',
+    });
   }
 }
 

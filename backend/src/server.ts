@@ -39,7 +39,8 @@ const corsOptions = {
       'http://localhost:47285',
       'http://localhost:5173',
       'http://127.0.0.1:47285',
-      'http://127.0.0.1:5173'
+      'http://127.0.0.1:5173',
+      'https://claude.gmac.io'
     ];
 
     // Add production frontend URL if configured
@@ -80,6 +81,7 @@ app.use(passport.session());
 
 // Initialize database
 const db = new DatabaseService();
+await db.waitForInit();
 console.log('Database initialized');
 
 // Initialize services
@@ -252,9 +254,10 @@ const gracefulShutdown = async () => {
 process.on('SIGTERM', gracefulShutdown);
 process.on('SIGINT', gracefulShutdown);
 
-// Bind to localhost only; nginx terminates TLS and proxies to this backend
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`Bob server running on port ${PORT}`);
+// Bind address: 0.0.0.0 in Docker (for container networking), 127.0.0.1 otherwise
+const BIND_ADDRESS = process.env.DOCKER_ENV === 'true' ? '0.0.0.0' : '127.0.0.1';
+server.listen(PORT, BIND_ADDRESS, () => {
+  console.log(`Bob server running on ${BIND_ADDRESS}:${PORT}`);
   console.log(`WebSocket server ready for terminal connections`);
 });
 

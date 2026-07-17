@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ClaudeInstance, Worktree, AgentInfo } from '../types';
 import { TerminalComponent } from './Terminal';
 import { DeleteWorktreeModal } from './DeleteWorktreeModal';
+import { AgentConfigPanel } from './AgentConfigPanel';
 import { api } from '../api';
 
 interface AgentPanelProps {
@@ -581,6 +582,27 @@ const SystemStatusDashboard: React.FC = () => {
   const [systemStatus, setSystemStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [showAuthTerminal, setShowAuthTerminal] = useState(false);
+  const [authTerminalSessionId, setAuthTerminalSessionId] = useState<string | null>(null);
+  const [showAgentConfig, setShowAgentConfig] = useState(false);
+
+  const handleOpenAuthTerminal = async () => {
+    try {
+      const { sessionId } = await api.createSystemTerminal('gh auth login');
+      setAuthTerminalSessionId(sessionId);
+      setShowAuthTerminal(true);
+    } catch (error) {
+      console.error('Failed to create auth terminal:', error);
+    }
+  };
+
+  const handleCloseAuthTerminal = () => {
+    if (authTerminalSessionId) {
+      api.closeTerminalSession(authTerminalSessionId).catch(console.error);
+    }
+    setShowAuthTerminal(false);
+    setAuthTerminalSessionId(null);
+  };
 
   useEffect(() => {
     const loadSystemStatus = async () => {
@@ -707,7 +729,26 @@ const SystemStatusDashboard: React.FC = () => {
         padding: '24px',
         marginBottom: '24px'
       }}>
-        <h3 style={{ color: '#fff', margin: 0, marginBottom: '20px', fontSize: '18px' }}>System Dependencies</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h3 style={{ color: '#fff', margin: 0, fontSize: '18px' }}>System Dependencies</h3>
+          <button
+            onClick={() => setShowAgentConfig(true)}
+            style={{
+              padding: '6px 12px',
+              backgroundColor: '#333',
+              color: '#fff',
+              border: '1px solid #444',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <span>⚙️</span> Configure Agents
+          </button>
+        </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
           {/* AI Agent CLIs */}
@@ -769,34 +810,112 @@ const SystemStatusDashboard: React.FC = () => {
                 <div style={{ color: '#fff', fontSize: '14px', fontWeight: 'bold' }}>GitHub CLI</div>
                 <div style={{ color: '#888', fontSize: '12px' }}>
                   {systemStatus.github.status === 'available' ? 'Ready for PR operations' :
-                   systemStatus.github.status === 'not_authenticated' ? 'Run: gh auth login' :
+                   systemStatus.github.status === 'not_authenticated' ? 'Authentication required' :
                    'Required for PR creation and updates'}
                 </div>
               </div>
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{
-                color: getStatusColor(systemStatus.github.status),
-                fontSize: '12px',
-                fontWeight: 'bold',
-                marginBottom: '2px'
-              }}>
-                {systemStatus.github.status.replace('_', ' ').toUpperCase()}
+            <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {systemStatus.github.status === 'not_authenticated' && (
+                <button
+                  onClick={handleOpenAuthTerminal}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '11px',
+                    backgroundColor: '#238636',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Authenticate
+                </button>
+              )}
+              <div>
+                <div style={{
+                  color: getStatusColor(systemStatus.github.status),
+                  fontSize: '12px',
+                  fontWeight: 'bold',
+                  marginBottom: '2px'
+                }}>
+                  {systemStatus.github.status.replace('_', ' ').toUpperCase()}
+                </div>
+                {systemStatus.github.user && (
+                  <div style={{ color: '#666', fontSize: '10px' }}>
+                    @{systemStatus.github.user}
+                  </div>
+                )}
+                {systemStatus.github.version && (
+                  <div style={{ color: '#666', fontSize: '10px' }}>
+                    {systemStatus.github.version.split(' ')[0]}
+                  </div>
+                )}
               </div>
-              {systemStatus.github.user && (
-                <div style={{ color: '#666', fontSize: '10px' }}>
-                  @{systemStatus.github.user}
-                </div>
-              )}
-              {systemStatus.github.version && (
-                <div style={{ color: '#666', fontSize: '10px' }}>
-                  {systemStatus.github.version.split(' ')[0]}
-                </div>
-              )}
             </div>
           </div>
         </div>
       </div>
+
+      {/* GitHub Auth Terminal Modal */}
+      {showAuthTerminal && authTerminalSessionId && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            width: '80%',
+            maxWidth: '900px',
+            height: '500px',
+            backgroundColor: '#1e1e1e',
+            borderRadius: '8px',
+            border: '1px solid #333',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '12px 16px',
+              borderBottom: '1px solid #333',
+              backgroundColor: '#252526'
+            }}>
+              <span style={{ color: '#fff', fontWeight: 'bold' }}>GitHub CLI Authentication</span>
+              <button
+                onClick={handleCloseAuthTerminal}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#888',
+                  fontSize: '20px',
+                  cursor: 'pointer',
+                  padding: '0 8px'
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              <TerminalComponent sessionId={authTerminalSessionId} onClose={handleCloseAuthTerminal} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Agent Config Panel */}
+      {showAgentConfig && (
+        <AgentConfigPanel onClose={() => setShowAgentConfig(false)} />
+      )}
 
       {/* Metrics */}
       <div style={{
