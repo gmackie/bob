@@ -24,25 +24,35 @@ afterEach(() => {
   delete require.cache[configPath];
 });
 
+// EVERY profile — development included — resolves EAS Updates against its own
+// channel. That reverses the older "dev never touches EAS Updates" rule on
+// purpose: docs/ota-updates.md defines the release path as publish and verify
+// on `development` first, then beta, then republish the verified bundle to
+// production. Dev builds are dev-clients (Debug, developmentClient: true) and
+// still boot from the Expo dev server; the channel is what makes an update
+// publishable to them for verification.
+const EXPECTED_UPDATES = {
+  checkAutomatically: "ON_LOAD",
+  fallbackToCacheTimeout: 0,
+  url: "https://u.expo.dev/e1dd0ab0-4dc1-40f8-b066-7cb91fde1759",
+};
+
 describe("Expo app config", () => {
-  it("keeps development builds on Expo dev server instead of EAS Updates", () => {
+  it("resolves EAS Updates for development builds so updates can be verified there first", () => {
     const config = loadConfig({ APP_ENV: "development" });
 
-    expect(config.updates).toEqual({ enabled: false });
+    expect(config.updates).toEqual(EXPECTED_UPDATES);
   });
 
   it("keeps EAS Updates enabled for hosted staging builds", () => {
     const config = loadConfig({ APP_ENV: "staging" });
 
-    expect(config.updates).toEqual({
-      fallbackToCacheTimeout: 0,
-      url: "https://u.expo.dev/e1dd0ab0-4dc1-40f8-b066-7cb91fde1759",
-    });
+    expect(config.updates).toEqual(EXPECTED_UPDATES);
   });
 });
 
 describe("EAS build profiles", () => {
-  it("does not attach an update channel to the development dev-client build", () => {
+  it("gives every profile its own update channel while keeping development a debug dev-client", () => {
     const easConfig = JSON.parse(
       readFileSync(resolve(__dirname, "../../eas.json"), "utf8"),
     ) as {
@@ -56,7 +66,10 @@ describe("EAS build profiles", () => {
       >;
     };
 
-    expect(easConfig.build.development?.channel).toBeUndefined();
+    // Per docs/ota-updates.md: development publishes to its own channel and is
+    // the first stop in the release path — but stays a Debug dev-client build,
+    // so it still runs off the dev server rather than an OTA bundle.
+    expect(easConfig.build.development?.channel).toBe("development");
     expect(easConfig.build.development?.ios?.buildConfiguration).toBe("Debug");
     expect(easConfig.build.development?.android?.gradleCommand).toBe(
       ":app:assembleDebug",
