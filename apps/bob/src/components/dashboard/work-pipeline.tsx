@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { cn } from "@gmacko/core/ui";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
 import {
   buildRecentlyCompletedItems,
   buildWorkLaneSummariesFromCounts,
@@ -60,25 +60,35 @@ function laneHref(lane: string, workspaceId: string): string {
 }
 
 export function WorkPipeline({ workspaceId }: WorkPipelineProps) {
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
+  const statusCountsInput = { workspaceId: workspaceId ?? "" };
+  const completedItemsInput = {
+    workspaceId: workspaceId ?? "",
+    statuses: RECENTLY_COMPLETED_STATUSES,
+    limit: 50,
+  };
 
   // Lane cards from uncapped per-status counts — immune to the list cap that
   // let a pile of in_review items starve the backlog out of every view.
-  const { data: statusCounts, isLoading: countsLoading } = useQuery(
-    trpc.workItem.statusCounts.queryOptions(
-      { workspaceId: workspaceId ?? "" },
-      { enabled: Boolean(workspaceId), refetchInterval: 10_000 },
-    ),
-  );
+  const { data: statusCounts, isLoading: countsLoading } = useQuery({
+    queryKey: ["rpc", "workItem.statusCounts", statusCountsInput],
+    queryFn: () =>
+      rpc.workItems.statusCounts(statusCountsInput) as Promise<
+        Record<string, number>
+      >,
+    enabled: Boolean(workspaceId),
+    refetchInterval: 10_000,
+  });
 
   // Recently-completed strip: a status-scoped fetch of terminal items (sorted
   // client-side by completion time), not a slice of the recency firehose.
-  const { data: completedItems } = useQuery(
-    trpc.workItem.list.queryOptions(
-      { workspaceId: workspaceId ?? "", statuses: RECENTLY_COMPLETED_STATUSES, limit: 50 },
-      { enabled: Boolean(workspaceId), refetchInterval: 30_000 },
-    ),
-  );
+  const { data: completedItems } = useQuery({
+    queryKey: ["rpc", "workItem.list", completedItemsInput],
+    queryFn: () =>
+      rpc.workItems.list(completedItemsInput) as Promise<WorkPipelineItem[]>,
+    enabled: Boolean(workspaceId),
+    refetchInterval: 30_000,
+  });
 
   const isLoading = countsLoading;
   const laneSummaries = buildWorkLaneSummariesFromCounts(
