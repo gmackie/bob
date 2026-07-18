@@ -1,0 +1,11 @@
+[Unit]
+Description=Synchronize the Hermes Obsidian vault every ten minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+Persistent=true
+Unit=hermes-vault-sync.service
+
+[Install]
+WantedBy=timers.target

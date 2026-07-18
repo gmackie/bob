@@ -68,6 +68,13 @@ const UTILITY_ICON: Record<SidebarUtilityItem["key"], NavItem["icon"]> = {
       <path d="M10 4V2.5" stroke="currentColor" strokeWidth="1" />
     </svg>
   ),
+  hermes: () => (
+    <svg className="size-[15px]" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M3 11.5V5.75L7.5 2l4.5 3.75v5.75" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
+      <path d="M5.25 12.5V8.25h4.5v4.25M2 12.5h11" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="7.5" cy="5.75" r="1" fill="currentColor" />
+    </svg>
+  ),
 };
 
 function TabIcon({ label }: { label: string }) {

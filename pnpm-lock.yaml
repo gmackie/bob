@@ -190,6 +190,9 @@ importers:
       '@bob/execution':
         specifier: workspace:*
         version: link:../bob-execution
+      '@bob/hermes-client':
+        specifier: workspace:*
+        version: link:../../packages/bob/src/hermes-client
       '@bob/ws':
         specifier: workspace:*
         version: link:../../packages/bob/src/ws
@@ -565,6 +568,8 @@ importers:
       vitest:
         specifier: ^4.0.0
         version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.17)(@vitest/coverage-v8@4.1.5)(jsdom@26.1.0)(vite@8.0.8(@types/node@22.19.17)(esbuild@0.27.7)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
+
+  apps/hermes-shepherd: {}
 
   apps/mobile-bob:
     dependencies:
@@ -1494,6 +1499,18 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+
+  packages/bob/src/hermes-client:
+    devDependencies:
+      '@bob/tsconfig':
+        specifier: workspace:*
+        version: link:../../../../tooling/bob-typescript
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.0
+        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.5)(jsdom@26.1.0)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
 
   packages/bob/src/notifications:
     dependencies:

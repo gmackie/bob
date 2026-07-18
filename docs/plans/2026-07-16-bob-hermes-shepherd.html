@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bob as Shepherd for Hermes — Implementation Plan</title>
+<style>
+  :root {
+    --bg: #fbfaf8; --surface: #ffffff; --ink: #1f2430; --muted: #6b7280;
+    --line: #e5e1d8; --accent: #2f6f4f; --accent-soft: #e7f0ea;
+    --warn: #9a6700; --warn-soft: #fff3d6; --bad: #b3261e; --bad-soft: #fbe9e7;
+    --info: #1f5f8b; --info-soft: #e3eef5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161b; --surface: #1c1f26; --ink: #e8e6e1; --muted: #9aa0aa;
+      --line: #2c303a; --accent: #7fb89a; --accent-soft: #22352b;
+      --warn: #e0b45c; --warn-soft: #3a3120; --bad: #e08a84; --bad-soft: #3a2422;
+      --info: #7fb1d4; --info-soft: #1f2d38;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  main { max-width: 860px; margin: 0 auto; padding: 3rem 1.5rem 5rem; }
+  h1 { font-size: 1.9rem; line-height: 1.25; margin: 0 0 .25rem; }
+  h2 { font-size: 1.25rem; margin: 2.5rem 0 .75rem; padding-bottom: .35rem; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 1.05rem; margin: 1.5rem 0 .5rem; }
+  p { margin: .5rem 0 1rem; }
+  .meta { color: var(--muted); font-size: .9rem; margin-bottom: 1.5rem; }
+  .meta span + span::before { content: "·"; margin: 0 .5rem; }
+  .badge {
+    display: inline-block; padding: .1rem .55rem; border-radius: 999px;
+    font-size: .75rem; font-weight: 600; letter-spacing: .02em; vertical-align: middle;
+  }
+  .badge.draft    { background: var(--info-soft);   color: var(--info); }
+  .badge.approved { background: var(--accent-soft); color: var(--accent); }
+  .badge.risk     { background: var(--warn-soft);   color: var(--warn); }
+  .badge.high     { background: var(--bad-soft);    color: var(--bad); }
+  .badge.blocked  { background: var(--bad-soft);    color: var(--bad); }
+  .badge.done     { background: var(--accent-soft); color: var(--accent); }
+  .badge.todo     { background: var(--line);        color: var(--muted); }
+  .badge.low      { background: var(--info-soft);   color: var(--info); }
+  table { width: 100%; border-collapse: collapse; margin: .75rem 0 1.25rem; font-size: .92rem; }
+  th { text-align: left; color: var(--muted); font-weight: 600; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; }
+  th, td { padding: .5rem .65rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  code { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: .1rem .35rem; font-size: .85em; }
+  pre { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 1rem; overflow-x: auto; }
+  pre code { border: none; background: none; padding: 0; }
+  ul { padding-left: 1.3rem; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 1rem 1.25rem; margin: 1rem 0; }
+  .goals { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 640px) { .goals { grid-template-columns: 1fr; } }
+  .goals h3 { margin-top: 0; }
+  details { border: 1px solid var(--line); border-radius: 8px; padding: .6rem .9rem; margin: .6rem 0; background: var(--surface); }
+  summary { cursor: pointer; font-weight: 600; }
+  .callout { border-left: 3px solid var(--warn); background: var(--warn-soft); border-radius: 0 8px 8px 0; padding: .75rem 1rem; margin: 1rem 0; }
+  .callout.info { border-left-color: var(--info); background: var(--info-soft); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Bob as Shepherd for Hermes <span class="badge approved">Approved · execution update</span></h1>
+  <p class="meta">
+    <span>2026-07-16</span>
+    <span>repo: <code>bob/bob</code> @ <code>fix/pipeline-visibility</code></span>
+    <span>author: Claude (Fable)</span>
+  </p>
+
+  <h2>Overview</h2>
+  <p>
+    Deploy <a href="https://hermes-agent.org/">Hermes</a> (Nous Research's self-hosted persistent
+    personal agent, MIT-licensed) on the Bob node, authenticated through our existing model
+    subscriptions via its native OAuth flows. Bob is the <strong>shepherd/interface</strong>: it hosts
+    the Hermes management surface — first by putting Hermes' own web dashboard behind Bob's auth, then
+    with a Bob-native <em>connectors console</em> built on the dashboard's REST API for managing
+    endpoints (Telegram, Discord, …), cron automations, providers, and health. Telegram comes up
+    first, restoring the daily briefing/wrap-up loop into the Obsidian vault (dead since 2026-04-16).
+  </p>
+  <div class="callout info">
+    <strong>v3 note:</strong> shepherd scope corrected — the primary integration is <em>hosting the
+    Hermes UI / a connector-management wrapper in Bob</em>, not a dispatch lane. Dispatching work items
+    to Hermes over ACP is now a stretch phase. (v2 corrected the identity: Hermes =
+    <code>NousResearch/hermes-agent</code>, a fresh install — nothing is deployed yet, verified.)
+  </div>
+
+  <h2>Execution update — 2026-07-17</h2>
+  <div class="card">
+    <p><strong>Approved direction:</strong> all four phases and the recommendations below were approved. The implementation is live; the remaining acceptance work depends on owner credentials, an authenticated device session, and elapsed time.</p>
+    <ul>
+      <li><strong>Phase 1 complete.</strong> Hermes Agent <code>0.18.2</code> / release <code>2026.7.7.2</code> is pinned on hetzner-bob. ChatGPT OAuth is primary (<code>gpt-5.4</code>), xAI is the tested fallback, and <code>gpt-5.4-mini</code> handles compression. Gateway and loopback dashboard run as enabled systemd services with 2 GB / 1 GB memory caps. Nightly off-host backup, checksum verification, and a restore drill passed. An actual host reboot on 2026-07-17 proved that gateway, dashboard, nginx, backup, vault-sync, and canary timers all recover active/enabled.</li>
+      <li><strong>Phase 2 complete in production.</strong> <code>bob.blder.bot/hermes/</code> is a Bob-session-gated proxy to the loopback dashboard through <code>claude.gmac.io/hermes/</code>. Direct unauthenticated HTML reaches Bob login; API access returns 401. DNS, TLS routing, nginx auth_request, path-prefix support, and the Bob nav entry are live.</li>
+      <li><strong>Phase 3 host loop complete; Telegram acceptance pending.</strong> Because the planned Gitea remote is stale/unavailable and GitHub is the verified freshest remote, GitHub is now canonical (plan drift accepted from live evidence). Hermes owns a clean clone at <code>/home/bob/hermes-workspace/obsidian</code>. The 07:00 briefing and 22:00 wrap-up jobs are active; real runs created, committed, and pushed daily notes. The ten-minute sync and daily canary timers pass, and the clone matches <code>origin/master</code> after reboot. Telegram still needs a BotFather token plus the owner's Telegram user ID; the console requires an owner allowlist before it will enable Telegram. Two consecutive morning/device convergence and voice-memo acceptance necessarily remain elapsed-time/credential dependent.</li>
+      <li><strong>Phase 4 implemented and deployed.</strong> Bob now has a mobile-first native console at <code>/hermes-console</code> with a typed <code>@bob/hermes-client</code>, 30-second health refresh, gateway/provider/briefing status, connector secret + allowlist configuration, connection tests, automation pause/resume/run-now, and read-only recent sessions. The stock dashboard remains one click away. Hermes' rotating management token is bootstrapped only inside the Worker after Bob authentication and is never exposed to the browser or Bob database. Focused client/proxy tests, package/app typechecks, and the vinext production build pass; Worker version <code>8fec216f-073c-423a-879e-e34dc9dc0748</code> is live.</li>
+    </ul>
+  </div>
+  <div class="callout">
+    <strong>Remaining acceptance boundary:</strong> sign into Bob on the target browser/iPhone, supply the BotFather token and owner Telegram user ID, then prove a DM + voice memo, a console-triggered automation mutation, a second connector round trip, and two consecutive morning notes on both machines. The Mac vault checkout is intentionally untouched because it contains unrelated local changes; convergence must wait for its owner to resolve or preserve that dirty state.
+  </div>
+
+  <h2>Current state (verified)</h2>
+  <ul>
+    <li><strong>No Hermes deployment exists yet</strong> on hetzner-bob or any reachable node. Fresh install.</li>
+    <li><strong>Subscriptions in hand:</strong> ChatGPT/Codex (OAuth profile active in another local tool) and xAI/Grok (working in Bob's grok lane). Hermes natively supports both via <code>hermes auth</code>. Anthropic in Hermes is API-key only — no Claude-subscription OAuth.</li>
+    <li><strong>Hermes ships its own management plane:</strong> <code>hermes dashboard</code> — a React SPA on a FastAPI server with a REST API (<code>/api/config</code>, <code>/api/env</code>, <code>/api/mcp</code>, <code>/api/model/*</code>, messaging pairing, webhooks, gateway, sessions, logs, cron, skills; <code>?profile=</code> scoping). Also <code>hermes serve</code>, a headless JSON-RPC/WebSocket backend, and <code>--json</code> on most CLI commands. This is the substrate the Bob console builds on.</li>
+    <li><strong>Bob has the hosting pieces:</strong> nginx + cloudflared on hetzner-bob for routing, better-auth in the Bob app for gating, and an established health-chip pattern in the UI.</li>
+    <li><strong>Two diverged copies of the Obsidian vault:</strong> <code>/opt/obsidian</code> on hetzner-bob → GitHub remote (stale, 2026-02-08); Mac <code>~/obsidian</code> → Gitea remote, last commit <em>“daily wrapup: 2026-04-16”</em> — the old daily-update loop is dead; this plan revives it under Hermes cron.</li>
+    <li><strong>hetzner-bob is a busy production box</strong> (bob-nextjs, ooda-runner, forgejo-runner, k3s, trading bots) with a past memory-exhaustion incident — Hermes gets resource caps and a conservative exec surface.</li>
+  </ul>
+
+  <h2>Goals &amp; Non-goals</h2>
+  <div class="goals">
+    <div class="card">
+      <h3>Goals</h3>
+      <ul>
+        <li>Hermes gateway + dashboard running as systemd services on hetzner-bob (user <code>bob</code>), surviving reboots.</li>
+        <li>Auth via subscriptions: Codex ChatGPT OAuth primary, Grok OAuth fallback. No raw API keys where OAuth works.</li>
+        <li>Hermes dashboard reachable through Bob — routed and gated by Bob's auth, usable from the iPhone.</li>
+        <li>Bob-native connectors console: enable/configure endpoints (Telegram first), allowlists, cron automations, provider status, health — a curated wrapper over the dashboard REST API.</li>
+        <li>Telegram live + daily briefing/wrap-up restored (vault <code>Daily/</code> note → git push → Telegram summary).</li>
+        <li>Vault unified: one canonical remote, both machines converge.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Non-goals (v1)</h3>
+      <ul>
+        <li>Dispatching Bob work items to Hermes (ACP lane) — stretch Phase 5, not v1.</li>
+        <li>Endpoints beyond Telegram in v1 — but the console must make adding Discord/Slack/WhatsApp a config-only act.</li>
+        <li>Replacing Bob's claude/grok/cursor lanes.</li>
+        <li>Nous Portal / vLLM / local models (revisit if subscription lanes rate-limit).</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Architecture</h2>
+  <pre><code>Telegram (owner DMs) · future: Discord, Slack… ⇄ ┐
+                                                  │  hermes gateway (hetzner-bob, systemd, user bob)
+                                                  │      ├─ providers: Codex OAuth → Grok OAuth → fallback
+                                                  │      ├─ cron: 07:00 briefing · 22:00 wrapup → /opt/obsidian → git → TG
+                                                  │      └─ state: ~/.hermes (SQLite memory/skills, auth.json)
+        hermes dashboard (FastAPI+SPA, loopback) ─┤
+              │ REST /api/config /api/env /api/mcp /api/model cron sessions logs
+              │
+Bob web/mobile ⇄ Bob app (better-auth) ─┬─ “Hermes” section: connectors console (curated wrapper)
+                                        └─ authenticated proxy route → full stock dashboard
+</code></pre>
+  <p>
+    Two shepherd layers, cheapest first: <strong>(a) proxy</strong> — the stock dashboard, bound to
+    loopback, exposed only through an authenticated Bob route (full power, zero UI work, upstream
+    maintains it); <strong>(b) wrapper</strong> — a Bob-native console for the daily-driver operations
+    (connector on/off, tokens, allowlists, cron toggles, health), consuming the same REST API, in Bob's
+    design language and mobile-friendly. Hermes' endpoints and cron run independently of Bob — the
+    daily loop survives Bob outages.
+  </p>
+
+  <h2>Phase 1 — Hermes on hetzner-bob, subscription auth <span class="badge done">Done</span></h2>
+  <p>Stand up the agent as user <code>bob</code>, OAuth'd to our subscriptions, resource-capped.</p>
+  <table>
+    <thead><tr><th>Task</th><th>Where</th><th>Verification</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Install hermes-agent (official installer) for user <code>bob</code>; review installer script before piping to bash; pin version</td><td>hetzner-bob <code>~/.hermes</code></td><td><code>hermes --version</code>; <code>hermes doctor</code> clean; <code>hermes chat</code> smoke test</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Subscription OAuth: <code>hermes auth</code> for Codex (ChatGPT) and xAI Grok — over SSH port-forward for the browser callback, or complete locally and copy <code>~/.hermes/auth.json</code></td><td><code>~/.hermes/auth.json</code></td><td>Test prompt on each provider; <code>hermes auth status</code> green; no API keys in <code>.env</code> for these lanes</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Configure <code>model.default</code> (Codex lane) + <code>fallback_providers</code> (Grok); compression on with cheap auxiliary model</td><td><code>~/.hermes/config.yaml</code></td><td>Forced failure on primary → fallback picks up</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>systemd: <code>hermes gateway install</code> (or hand-rolled units) for gateway + dashboard (<code>hermes dashboard --no-open</code> on loopback), <code>Restart=always</code>, <code>MemoryMax</code> caps</td><td>hetzner-bob systemd</td><td>Reboot test; both services healthy; dashboard answers only on loopback</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Exec surface: local terminal backend, dedicated <code>~/hermes-workspace</code>, no sudo; evaluate Docker backend if defaults feel loose</td><td><code>config.yaml</code></td><td>Command test scoped to workspace</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Backups: nightly <code>hermes backup</code> (config/skills/sessions zip) shipped off-box</td><td>cron</td><td>Archive exists; one <code>hermes import</code> restore drill</td><td><span class="badge todo">Todo</span></td></tr>
+    </tbody>
+  </table>
+  <details>
+    <summary>Provider notes</summary>
+    <p>
+      “Use our subscriptions” maps to Hermes' native OAuth providers: <strong>Codex (ChatGPT OAuth)</strong>
+      and <strong>xAI Grok (OAuth)</strong>. Hermes has no Claude-subscription OAuth — Anthropic is
+      API-key only there. Recommend skipping Claude inside Hermes (Bob's claude lane covers Claude
+      workloads); OpenRouter or a small Anthropic key are fallbacks if wanted. Subscription rate limits
+      are shared with interactive use; the fallback chain absorbs 429s, and cron jobs run off-peak.
+    </p>
+  </details>
+
+  <h2>Phase 2 — Bob hosts the Hermes UI <span class="badge done">Live · device check pending</span></h2>
+  <p>The stock dashboard becomes reachable through Bob — full management power before any custom UI is written.</p>
+  <table>
+    <thead><tr><th>Task</th><th>Where</th><th>Verification</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Spike the dashboard's own auth story (does it assume localhost-trusted?) — decide proxy hardening accordingly</td><td>dashboard docs/source</td><td>Written note in this plan; auth model understood</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Authenticated route: Bob session (better-auth) gates a reverse-proxy path to the loopback dashboard (nginx auth_request against Bob, or a proxy handler inside the Bob app)</td><td>hetzner-bob nginx / <code>apps/bob</code></td><td>Logged-out request → Bob login; logged-in owner reaches full dashboard; direct public access impossible</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Mobile check: dashboard usable from iPhone Safari through the Bob route (user is iOS-primary)</td><td>—</td><td>Config edit performed from the phone</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Link the dashboard from Bob's nav (simple entry until the native console lands in Phase 4)</td><td><code>apps/bob</code> nav</td><td>Entry visible, opens gated dashboard</td><td><span class="badge todo">Todo</span></td></tr>
+    </tbody>
+  </table>
+  <details>
+    <summary>Security note</summary>
+    <p>
+      The dashboard can edit <code>.env</code> (secrets) and config, and enroll integrations — it is
+      effectively root over the agent. It must never be directly internet-reachable: loopback bind,
+      Bob-auth gate in front, and the cloudflared/nginx audit confirms no accidental public route.
+      Tailnet access can remain as a break-glass path.
+    </p>
+  </details>
+
+  <h2>Phase 3 — Telegram + Obsidian daily loop <span class="badge blocked">Credentials + elapsed acceptance pending</span></h2>
+  <p>First connector live end-to-end; independent of the console work.</p>
+  <table>
+    <thead><tr><th>Task</th><th>Where</th><th>Verification</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Create bot via @BotFather; set <code>TELEGRAM_BOT_TOKEN</code> + <code>TELEGRAM_ALLOWED_USERS</code> (owner ID); mirror token into <code>forge secret set</code></td><td><code>~/.hermes/.env</code></td><td>DM round-trip: message the bot, get a Hermes reply</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Admin command tier (<code>allow_admin_from</code>); voice-memo transcription confirmed (user is voice-first)</td><td><code>config.yaml</code></td><td><code>/status</code> works; voice memo transcribed and answered</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Unify the vault: snapshot both copies, merge (Mac copy primary), set canonical remote on both machines, auto pull/push on hetzner-bob</td><td><code>/opt/obsidian</code>, Mac <code>~/obsidian</code></td><td>Edit on one side appears on the other; histories converge</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Vault access for Hermes; commit style matches history (<code>daily wrapup: YYYY-MM-DD</code>)</td><td>Hermes config</td><td>Hermes reads <code>Home.md</code>, writes a test note, pushes</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Daily jobs via <code>hermes cron create</code>: morning briefing (07:00 → <code>Daily/</code> note + TG) and nightly wrap-up (22:00 → vault commit/push + TG), delivery target <code>telegram</code></td><td><code>~/.hermes/cron/</code></td><td>Two consecutive mornings: fresh Daily note on both machines + TG summary received</td><td><span class="badge todo">Todo</span></td></tr>
+    </tbody>
+  </table>
+
+  <h2>Phase 4 — Bob-native connectors console <span class="badge done">Implemented · authenticated acceptance pending</span></h2>
+  <p>The curated wrapper: daily-driver Hermes management inside Bob's UI (web + mobile), on the dashboard REST API.</p>
+  <table>
+    <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Typed client for the dashboard REST API (<code>/api/config</code>, <code>/api/env</code>, <code>/api/model/*</code>, gateway/cron/sessions/logs endpoints; <code>?profile=</code> support), server-side from the Bob app</td><td><code>packages/bob/src/</code> (new <code>hermes-client</code>)</td><td>Unit tests against recorded fixtures; live smoke vs loopback dashboard</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Connectors panel: per-platform cards (Telegram, Discord, Slack, WhatsApp, …) — configured/connected state, enable/disable, token + allowlist editing (secrets write to <code>/api/env</code>, never stored in Bob's DB)</td><td><code>apps/bob</code> “Hermes” section</td><td>Add a second platform (e.g. Discord) entirely from Bob UI; round-trip message on it</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Automations panel: cron jobs list/pause/resume/run-now (the daily briefing/wrapup as first-class cards with last-run status)</td><td><code>apps/bob</code></td><td>Pause from Bob → <code>hermes cron status</code> reflects it; run-now delivers to TG</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Status strip: gateway state, provider/auth health (subscription lanes), last briefing timestamp — health-chip pattern; red within a minute of failure</td><td><code>apps/bob</code> + status endpoint</td><td><code>systemctl stop</code> gateway → chip red; restart → green</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Sessions/activity view (read-only v1): recent sessions + token/cost from <code>hermes insights</code>-equivalent endpoints</td><td><code>apps/bob</code></td><td>Today's Telegram conversation visible in Bob</td><td><span class="badge todo">Todo</span></td></tr>
+    </tbody>
+  </table>
+  <details>
+    <summary>Scope guard</summary>
+    <p>
+      The proxy (Phase 2) is the safety net: anything the console doesn't cover yet is one click away
+      in the stock dashboard. Build console panels in the order they're actually used — connectors,
+      automations, status — and stop when the proxy covers the rest comfortably. Mobile-first layout:
+      the primary consumer is an iPhone.
+    </p>
+  </details>
+
+  <h2>Phase 5 (stretch) — Dispatch lane over ACP <span class="badge todo">Later</span></h2>
+  <p>
+    Optional follow-up once the console is in use: a <code>hermes-adapter.ts</code> next to Bob's
+    existing adapters (Hermes ships an ACP/JSON-RPC adapter; Bob's <code>acp-client.ts</code> already
+    speaks ACP for Grok), registering <code>hermes</code> as a dispatchable agent kind. Valuable for
+    “send this work item to my personal agent,” but not part of the shepherd v1.
+  </p>
+
+  <h2>Hardening &amp; ops (rolling, alongside phases)</h2>
+  <table>
+    <thead><tr><th>Task</th><th>Where</th><th>Verification</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Daily-briefing canary: alert if no fresh <code>Daily/</code> note by cutoff (promtail/otel path)</td><td>hetzner-bob monitoring</td><td>Disable cron job → alert fires</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Resource guardrails under load (<code>MemoryMax</code>, swap headroom) — box has a prior exhaustion incident</td><td>systemd units</td><td><code>systemd-cgtop</code> sane during a long session</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Secrets hygiene: tokens in <code>~/.hermes/.env</code> (mode 600) + forge secrets mirror; nothing in git; Bob console writes secrets through <code>/api/env</code> only</td><td>forge secrets</td><td><code>forge secret list</code> shows entries; repo grep clean</td><td><span class="badge todo">Todo</span></td></tr>
+    </tbody>
+  </table>
+
+  <h2>Risks &amp; Mitigations</h2>
+  <table>
+    <thead><tr><th>Risk</th><th>Severity</th><th>Mitigation</th></tr></thead>
+    <tbody>
+      <tr><td>Dashboard = root over the agent (secrets, exec config); accidental public exposure would be severe</td><td><span class="badge high">High</span></td><td>Loopback bind; Bob-auth gate; nginx/cloudflared route audit; tailnet-only break-glass.</td></tr>
+      <tr><td>Autonomous agent with shell access on a production box</td><td><span class="badge high">High</span></td><td>Dedicated workspace, no sudo, conservative/Docker terminal backend, memory-capped units; vault is the only shared write surface.</td></tr>
+      <tr><td>Dashboard REST API is young and undocumented in places — console breaks on Hermes upgrades</td><td><span class="badge risk">Medium</span></td><td>Pin Hermes version; typed client with contract tests; upgrade deliberately; proxy remains the fallback UI.</td></tr>
+      <tr><td>Subscription rate limits shared with interactive/dev use of the same subs</td><td><span class="badge risk">Medium</span></td><td>Fallback chain (Codex → Grok); cron off-peak; watch 429s via console status strip.</td></tr>
+      <tr><td>Vault merge conflicts (two remotes, months diverged)</td><td><span class="badge risk">Medium</span></td><td>Snapshot both first; Mac copy primary; conflicts mostly append-only daily notes.</td></tr>
+      <tr><td>Telegram token leakage</td><td><span class="badge low">Low</span></td><td>Identity-based allowlist (user IDs), rotatable via BotFather, stored 600 + forge secrets.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Verification</h2>
+  <ul>
+    <li><strong>Phase 1:</strong> reboot test; prompts on Codex and Grok lanes; forced failure exercises fallback chain.</li>
+    <li><strong>Phase 2:</strong> logged-out → login wall; owner reaches dashboard from iPhone; public direct access impossible (external curl of the dashboard port/path).</li>
+    <li><strong>Phase 3 (the real acceptance test):</strong> two consecutive mornings with a fresh <code>Daily/</code> note on <em>both</em> machines + matching Telegram briefing; a voice memo transcribed and answered.</li>
+    <li><strong>Phase 4:</strong> a second connector enabled entirely from Bob UI with a round-trip message; cron pause/resume from Bob reflected in <code>hermes cron status</code>; status chip red within a minute of gateway stop. Console tests pass in <code>pnpm exec turbo run test --concurrency=1 -- --no-file-parallelism</code>.</li>
+  </ul>
+
+  <h2>Open Questions</h2>
+  <div class="callout">
+    <strong>1. Console placement:</strong> inside <code>apps/bob</code> (Vite + CF Workers — needs a path to reach the loopback dashboard, likely via bob-server) or served node-side (bob-server/bob-nextjs on the same box, trivial loopback access)? <em>Recommend: proxy + API calls through the node-side service; UI in apps/bob.</em>
+  </div>
+  <div class="callout">
+    <strong>2. Claude in Hermes' provider chain?</strong> No Claude-subscription OAuth in Hermes. <em>Recommend: skip — Codex + Grok subs cover it; Bob's claude lane exists for Claude workloads.</em>
+  </div>
+  <div class="callout">
+    <strong>3. Canonical vault remote:</strong> Gitea (freshest, Mac side) or GitHub (hetzner-bob side)? <em>Recommend Gitea canonical, GitHub mirror.</em>
+  </div>
+  <div class="callout">
+    <strong>4. Exec sandboxing:</strong> local backend + scoped workspace, or Docker backend from day one? <em>Recommend local + scoped workspace for v1 (simpler vault access), Docker if it runs wild.</em>
+  </div>
+</main>
+</body>
+</html>

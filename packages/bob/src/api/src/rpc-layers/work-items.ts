@@ -22,6 +22,7 @@ export const makeWorkItemsLayer = (ctx: HandlerContext) => {
   return WorkItemsRpc.toLayer({
     // --- Core (6) ---
     "workItem.list": wi["workItems.list"],
+    "workItem.statusCounts": wi["workItems.statusCounts"],
     "workItem.get": wi["workItems.get"],
     "workItem.update": wi["workItems.update"],
     "workItem.promoteToTask": wi["workItems.promoteToTask"],

@@ -1,0 +1,35 @@
+[Unit]
+Description=Hermes Agent Dashboard
+After=network-online.target hermes-gateway.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bob
+Group=bob
+WorkingDirectory=/home/bob/hermes-workspace
+Environment="HOME=/home/bob"
+Environment="USER=bob"
+Environment="LOGNAME=bob"
+Environment="HERMES_HOME=/home/bob/.hermes"
+Environment="VIRTUAL_ENV=/home/bob/.hermes/hermes-agent/venv"
+Environment="PATH=/home/bob/.hermes/hermes-agent/venv/bin:/home/bob/.hermes/hermes-agent/node_modules/.bin:/home/bob/.local/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/home/bob/.local/bin/hermes dashboard --host 127.0.0.1 --port 9119 --no-open --skip-build
+Restart=always
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=30
+MemoryMax=1G
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/bob/.hermes /home/bob/hermes-workspace
+RestrictSUIDSGID=true
+LimitNOFILE=65536
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hermes-dashboard
+
+[Install]
+WantedBy=multi-user.target

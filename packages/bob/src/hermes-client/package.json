@@ -1,0 +1,23 @@
+{
+  "name": "@bob/hermes-client",
+  "private": false,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "clean": "git clean -xdf .cache .turbo dist node_modules",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit --emitDeclarationOnly false"
+  },
+  "devDependencies": {
+    "@bob/tsconfig": "workspace:*",
+    "typescript": "catalog:",
+    "vitest": "^4.0.0"
+  }
+}

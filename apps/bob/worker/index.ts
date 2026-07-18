@@ -15,6 +15,14 @@ import {
 import type { ImageConfig } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
 import { runWithDb } from "../src/lib/db-client-lazy";
+import {
+  createHermesNativeApiRequest,
+  createHermesProxyRequest,
+  extractHermesSessionToken,
+  getHermesLoginRedirect,
+  isHermesNativeApiPath,
+  isHermesProxyPath,
+} from "../src/lib/hermes-proxy";
 import { wrapFetch } from "./lib/otel";
 import { getHyperdriveConnectionString, getSentryOptions } from "./runtime-env";
 
@@ -32,6 +40,7 @@ interface Env {
   };
   HYPERDRIVE: { connectionString: string };
   GATEWAY_URL?: string;
+  HERMES_ORIGIN_URL?: string;
   NUDGE_SHARED_SECRET?: string;
   [key: string]: unknown;
 }
@@ -180,6 +189,74 @@ export default Sentry.withSentry(
       ): Promise<Response> => {
         const url = new URL(request.url);
         const runtimeEnv = (rawEnv ?? {}) as Env;
+
+        const isHermesDashboard = isHermesProxyPath(url.pathname);
+        const isHermesNativeApi = isHermesNativeApiPath(url.pathname);
+        if (isHermesDashboard || isHermesNativeApi) {
+          const authUrl = new URL(
+            "/api/trpc/workspace.list?input=%7B%22json%22%3Anull%7D",
+            request.url,
+          );
+          const authRequest = new Request(authUrl, {
+            method: "GET",
+            headers: request.headers,
+          });
+          const { connectionString, isHyperdrive } =
+            getHyperdriveConnectionString(runtimeEnv);
+          const authResponse = await runWithDb(
+            connectionString,
+            isHyperdrive,
+            () => handler.fetch(authRequest, runtimeEnv, ctx),
+          );
+
+          if (authResponse.status === 401 || authResponse.status === 403) {
+            const loginUrl = getHermesLoginRedirect(request);
+            return loginUrl
+              ? Response.redirect(loginUrl, 302)
+              : new Response("unauthorized", { status: 401 });
+          }
+          if (!authResponse.ok) {
+            return new Response("Hermes authentication check unavailable", {
+              status: 503,
+            });
+          }
+
+          const hermesOrigin =
+            runtimeEnv.HERMES_ORIGIN_URL ?? "https://claude.gmac.io";
+
+          if (isHermesNativeApi) {
+            // Hermes protects management APIs with a rotating token injected
+            // into its dashboard HTML. Resolve it inside the Worker and never
+            // expose it to Bob's browser bundle or database.
+            const bootstrapHeaders = new Headers(request.headers);
+            bootstrapHeaders.set("accept", "text/html");
+            const bootstrapResponse = await fetch(
+              new Request(new URL("/hermes/", hermesOrigin), {
+                method: "GET",
+                headers: bootstrapHeaders,
+                redirect: "manual",
+              }),
+            );
+            if (!bootstrapResponse.ok) {
+              return new Response("Hermes token bootstrap unavailable", {
+                status: 502,
+              });
+            }
+            const token = extractHermesSessionToken(
+              await bootstrapResponse.text(),
+            );
+            if (!token) {
+              return new Response("Hermes session token unavailable", {
+                status: 502,
+              });
+            }
+            return fetch(
+              createHermesNativeApiRequest(request, hermesOrigin, token),
+            );
+          }
+
+          return fetch(createHermesProxyRequest(request, hermesOrigin));
+        }
 
         // WebSocket proxy to gateway — forward upgrade to origin
         if (

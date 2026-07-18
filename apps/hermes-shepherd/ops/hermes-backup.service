@@ -1,0 +1,23 @@
+[Unit]
+Description=Hermes Agent nightly off-host backup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=bob
+Group=bob
+WorkingDirectory=/home/bob
+Environment="HOME=/home/bob"
+Environment="HERMES_HOME=/home/bob/.hermes"
+ExecStart=/opt/bob/ops/hermes-backup.sh
+MemoryMax=512M
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/bob/.hermes /home/bob/hermes-backups
+RestrictSUIDSGID=true

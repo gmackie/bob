@@ -11,6 +11,7 @@ import type { WorkItemKind } from "@bob/work-items/schema";
 import { wrapHandler } from "../handlers/bridge.js";
 import {
   workItemsList,
+  workItemStatusCounts,
   workItemsGet,
   workItemsUpdate,
   workItemsPromoteToTask,
@@ -45,6 +46,12 @@ export const makeWorkItemsRpcHandlers = (ctx: HandlerContext) => ({
       limit?: number;
     };
   }) => wrapHandler(workItemsList, ctx, payload, "workItem"),
+
+  "workItems.statusCounts": ({
+    payload,
+  }: {
+    payload: { workspaceId: string; kind?: WorkItemKind };
+  }) => wrapHandler(workItemStatusCounts, ctx, payload, "workItem"),
 
   "workItems.get": ({
     payload,

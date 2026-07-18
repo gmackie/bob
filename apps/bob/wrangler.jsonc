@@ -30,6 +30,7 @@
     "FRONTEND_URL": "https://bob.blder.bot",
     "GATEWAY_PUBLIC_URL": "https://ws.blder.bot",
     "GATEWAY_URL": "https://ws.blder.bot",
+    "HERMES_ORIGIN_URL": "https://claude.gmac.io",
     "NODE_ENV": "production",
     "BOB_AUTO_DRAIN_ENABLED": "true",
     "BOB_AUTO_DRAIN_CONCURRENCY": "4",

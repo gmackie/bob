@@ -150,6 +150,7 @@ const workItemsHandlers = WorkItemsRpc.toLayer({
     const lnk = makeLinkRpcHandlers(ctx);
     return {
       "workItem.list": wi["workItems.list"],
+      "workItem.statusCounts": wi["workItems.statusCounts"],
       "workItem.get": wi["workItems.get"],
       "workItem.update": wi["workItems.update"],
       "workItem.promoteToTask": wi["workItems.promoteToTask"],

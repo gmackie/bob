@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Hermes Agent off-host backup nightly
+
+[Timer]
+OnCalendar=*-*-* 03:17:00 UTC
+Persistent=true
+RandomizedDelaySec=15m
+Unit=hermes-backup.service
+
+[Install]
+WantedBy=timers.target

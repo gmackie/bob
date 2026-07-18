@@ -35,9 +35,9 @@ export interface SidebarTabItem {
 }
 
 export interface SidebarUtilityItem {
-  key: "pull-requests" | "nodes";
-  label: "Pull Requests" | "Nodes";
-  href: "/pull-requests" | "/nodes";
+  key: "pull-requests" | "nodes" | "hermes";
+  label: "Pull Requests" | "Nodes" | "Hermes";
+  href: "/pull-requests" | "/nodes" | "/hermes-console";
 }
 
 export interface SidebarProjectSummary {
@@ -144,6 +144,7 @@ const PLANNING_TABS: SidebarTabItem[] = [
 const UTILITY_ITEMS: SidebarUtilityItem[] = [
   { key: "pull-requests", label: "Pull Requests", href: "/pull-requests" },
   { key: "nodes", label: "Nodes", href: "/nodes" },
+  { key: "hermes", label: "Hermes", href: "/hermes-console" },
 ];
 
 const WORK_ITEM_OUTCOME_STATUSES = new Set([

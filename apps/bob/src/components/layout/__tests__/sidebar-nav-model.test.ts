@@ -62,7 +62,13 @@ describe("sidebar nav model", () => {
     expect(getSidebarUtilityItems().map((item) => item.label)).toEqual([
       "Pull Requests",
       "Nodes",
+      "Hermes",
     ]);
+    expect(getSidebarUtilityItems().find((item) => item.label === "Hermes")).toEqual({
+      key: "hermes",
+      label: "Hermes",
+      href: "/hermes/",
+    });
   });
 
   it("preserves workspace context for mode and tab navigation", () => {
@@ -76,6 +82,7 @@ describe("sidebar nav model", () => {
       "/runs?provider=codex&workspace=workspace-1",
     );
     expect(getSidebarScopedHref("/nodes", "workspace-1")).toBe("/nodes");
+    expect(getSidebarScopedHref("/hermes/", "workspace-1")).toBe("/hermes/");
   });
 
   it("builds realtime badge counts for mode-scoped rail tabs", () => {
