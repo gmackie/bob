@@ -28,7 +28,7 @@ const STATUS_BADGE_CLASS: Record<RunningNowRailStatusTone, string> = {
 export function RunningNowRail({ workspaceId }: { workspaceId?: string | null }) {
   const rpc = useBobRpcClient();
   const scope = getRunningNowScope(workspaceId);
-  const { data: runs, isLoading } = useQuery({
+  const { data: runs, isLoading, error: runsError } = useQuery({
     queryKey: [
       "running-now",
       "runs",
@@ -91,6 +91,11 @@ export function RunningNowRail({ workspaceId }: { workspaceId?: string | null })
             <div key={i} className="h-10 animate-pulse rounded bg-muted/50" />
           ))}
         </div>
+      ) : runsError ? (
+        <p className="mt-3 rounded-md bg-rose-500/10 px-2 py-2 text-xs text-rose-500">
+          Couldn&apos;t load runs:{" "}
+          {(runsError as { message?: string })?.message ?? String(runsError)}
+        </p>
       ) : visibleRuns.length === 0 ? (
         <p className="mt-3 text-xs text-muted-foreground">
           No execution sessions are currently in progress.

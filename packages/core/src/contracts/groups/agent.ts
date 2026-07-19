@@ -80,7 +80,7 @@ import {
   PersonaReadOnlyError,
   PersonaSyncResultSchema,
 } from "../schemas/agent-persona.js";
-import { NotFoundError } from "../../rpc/errors.js";
+import { NotFoundError, RpcError } from "../../rpc/errors.js";
 
 /** Union of every error `agent.sendTurn` can surface (on its stream). */
 export const AgentStreamErrorSchema = Schema.Union([
@@ -170,6 +170,12 @@ export const AgentRunListRpc = Rpc.make("agent.run.list", {
     limit: Schema.optional(Schema.Number),
   }),
   success: Schema.Array(AgentRunSchema),
+  // Handler failures (workspace-access denial, DB/relational errors) are mapped
+  // to RpcError at the Bob rpc-handler boundary. Without a declared error
+  // channel the client could only decode the AuthMiddleware union
+  // (Unauthorized | TenantNotSelected), so any handler error surfaced as an
+  // undecodable SchemaError and the panel silently rendered empty.
+  error: RpcError,
 });
 
 // --- agent.run.listAll -------------------------------------------------------
@@ -179,6 +185,9 @@ export const AgentRunListAllRpc = Rpc.make("agent.run.listAll", {
     limit: Schema.optional(Schema.Number),
   }),
   success: Schema.Array(AgentRunSchema),
+  // See AgentRunListRpc — handler failures map to RpcError so the client can
+  // decode them instead of hitting an undecodable SchemaError.
+  error: RpcError,
 });
 
 // --- agent.run.listByWorkItem ------------------------------------------------
