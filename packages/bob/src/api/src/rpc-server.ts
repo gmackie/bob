@@ -164,6 +164,8 @@ const workItemsHandlers = WorkItemsRpc.toLayer({
       "workItem.notification.list": wi["workItems.listNotifications"],
       "workItem.notification.create": wi["workItems.createNotification"],
       "workItem.notification.markAsRead": wi["workItems.markNotificationAsRead"],
+      "workItem.notification.markAllAsRead":
+        wi["workItems.markAllNotificationsAsRead"],
       "workItem.notification.registerPushToken": wi["workItems.registerPushToken"],
       "workItem.taskRun.listByWorkItem": wi["workItems.taskRun.listByWorkItem"],
       "workItem.taskRun.execute": wi["workItems.taskRun.execute"],

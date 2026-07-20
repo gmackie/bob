@@ -24,6 +24,7 @@ describe("WorkItemsRpc — 7B-4C Task 2", () => {
     expect(names).toContain("workItem.notification.list");
     expect(names).toContain("workItem.notification.create");
     expect(names).toContain("workItem.notification.markAsRead");
+    expect(names).toContain("workItem.notification.markAllAsRead");
     expect(names).toContain("workItem.notification.registerPushToken");
   });
 

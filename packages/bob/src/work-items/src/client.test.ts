@@ -32,6 +32,7 @@ describe("createWorkItemsClient", () => {
       "listNotifications",
       "createNotification",
       "markNotificationAsRead",
+      "markAllNotificationsAsRead",
     ] as const;
 
     for (const methodName of methodNames) {

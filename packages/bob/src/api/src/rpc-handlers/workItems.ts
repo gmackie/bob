@@ -24,6 +24,7 @@ import {
   workItemsListChildArtifactGroups,
   workItemsListNotifications,
   workItemsCreateNotification,
+  workItemsMarkAllNotificationsAsRead,
   workItemsMarkNotificationAsRead,
   workItemsRegisterPushToken,
   workItemsTaskRunListByWorkItem,
@@ -141,6 +142,18 @@ export const makeWorkItemsRpcHandlers = (ctx: HandlerContext) => ({
   }: {
     payload: { id: string };
   }) => wrapHandler(workItemsMarkNotificationAsRead, ctx, payload, "notification"),
+
+  "workItems.markAllNotificationsAsRead": ({
+    payload,
+  }: {
+    payload: Record<string, never>;
+  }) =>
+    wrapHandler(
+      workItemsMarkAllNotificationsAsRead,
+      ctx,
+      payload,
+      "notification",
+    ),
 
   "workItems.registerPushToken": ({
     payload,

@@ -334,6 +334,19 @@
                       }
                     ]
                   },
+                  "statuses": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "limit": {
                     "anyOf": [
                       {
@@ -359,6 +372,106 @@
                               "-Infinity"
                             ]
                           }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "workspaceId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/work-item/status-counts": {
+      "post": {
+        "tags": [
+          "workItem"
+        ],
+        "operationId": "workItem.statusCounts",
+        "summary": "workItem.statusCounts",
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "NaN"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "Infinity"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "-Infinity"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request payload"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "workspaceId": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "issue",
+                          "epic",
+                          "task"
                         ]
                       },
                       {
@@ -3922,6 +4035,95 @@
                   "id"
                 ],
                 "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/work-item/notification/mark-all-as-read": {
+      "post": {
+        "tags": [
+          "workItem"
+        ],
+        "operationId": "workItem.notification.markAllAsRead",
+        "summary": "workItem.notification.markAllAsRead",
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "NaN"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "Infinity"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "-Infinity"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "count"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request payload"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "object"
+                  },
+                  {
+                    "type": "array"
+                  }
+                ]
               }
             }
           }
@@ -25675,21 +25877,37 @@
                         }
                       ]
                     },
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "pending",
-                        "running",
-                        "completed",
-                        "failed",
-                        "cancelled"
-                      ]
-                    },
-                    "startedAt": {
+                    "agentType": {
                       "anyOf": [
                         {
                           "type": "string"
                         },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "summary": {
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "startedAt": {
+                      "anyOf": [
+                        {},
                         {
                           "type": "null"
                         }
@@ -25697,23 +25915,20 @@
                     },
                     "completedAt": {
                       "anyOf": [
-                        {
-                          "type": "string"
-                        },
+                        {},
                         {
                           "type": "null"
                         }
                       ]
                     },
-                    "createdAt": {
-                      "type": "string"
-                    }
+                    "createdAt": {}
                   },
                   "required": [
                     "id",
                     "workspaceId",
                     "sessionId",
                     "workItemId",
+                    "agentType",
                     "status",
                     "startedAt",
                     "completedAt",
@@ -25809,21 +26024,37 @@
                           }
                         ]
                       },
-                      "status": {
-                        "type": "string",
-                        "enum": [
-                          "pending",
-                          "running",
-                          "completed",
-                          "failed",
-                          "cancelled"
-                        ]
-                      },
-                      "startedAt": {
+                      "agentType": {
                         "anyOf": [
                           {
                             "type": "string"
                           },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "summary": {
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {},
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "startedAt": {
+                        "anyOf": [
+                          {},
                           {
                             "type": "null"
                           }
@@ -25831,23 +26062,20 @@
                       },
                       "completedAt": {
                         "anyOf": [
-                          {
-                            "type": "string"
-                          },
+                          {},
                           {
                             "type": "null"
                           }
                         ]
                       },
-                      "createdAt": {
-                        "type": "string"
-                      }
+                      "createdAt": {}
                     },
                     "required": [
                       "id",
                       "workspaceId",
                       "sessionId",
                       "workItemId",
+                      "agentType",
                       "status",
                       "startedAt",
                       "completedAt",
@@ -25976,21 +26204,37 @@
                           }
                         ]
                       },
-                      "status": {
-                        "type": "string",
-                        "enum": [
-                          "pending",
-                          "running",
-                          "completed",
-                          "failed",
-                          "cancelled"
-                        ]
-                      },
-                      "startedAt": {
+                      "agentType": {
                         "anyOf": [
                           {
                             "type": "string"
                           },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "summary": {
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {},
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "startedAt": {
+                        "anyOf": [
+                          {},
                           {
                             "type": "null"
                           }
@@ -25998,23 +26242,20 @@
                       },
                       "completedAt": {
                         "anyOf": [
-                          {
-                            "type": "string"
-                          },
+                          {},
                           {
                             "type": "null"
                           }
                         ]
                       },
-                      "createdAt": {
-                        "type": "string"
-                      }
+                      "createdAt": {}
                     },
                     "required": [
                       "id",
                       "workspaceId",
                       "sessionId",
                       "workItemId",
+                      "agentType",
                       "status",
                       "startedAt",
                       "completedAt",
@@ -26137,21 +26378,37 @@
                           }
                         ]
                       },
-                      "status": {
-                        "type": "string",
-                        "enum": [
-                          "pending",
-                          "running",
-                          "completed",
-                          "failed",
-                          "cancelled"
-                        ]
-                      },
-                      "startedAt": {
+                      "agentType": {
                         "anyOf": [
                           {
                             "type": "string"
                           },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "summary": {
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {},
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "startedAt": {
+                        "anyOf": [
+                          {},
                           {
                             "type": "null"
                           }
@@ -26159,23 +26416,20 @@
                       },
                       "completedAt": {
                         "anyOf": [
-                          {
-                            "type": "string"
-                          },
+                          {},
                           {
                             "type": "null"
                           }
                         ]
                       },
-                      "createdAt": {
-                        "type": "string"
-                      }
+                      "createdAt": {}
                     },
                     "required": [
                       "id",
                       "workspaceId",
                       "sessionId",
                       "workItemId",
+                      "agentType",
                       "status",
                       "startedAt",
                       "completedAt",
