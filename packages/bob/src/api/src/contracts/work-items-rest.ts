@@ -21,6 +21,8 @@ import {
   listNotificationsOutputSchema,
   listWorkItemsInputSchema,
   listWorkItemsOutputSchema,
+  markAllNotificationsAsReadInputSchema,
+  markAllNotificationsAsReadOutputSchema,
   markNotificationAsReadInputSchema,
   markNotificationAsReadOutputSchema,
   promoteToTaskInputSchema,
@@ -43,7 +45,8 @@ export interface WorkItemsRestOperation {
     | "listChildArtifactGroups"
     | "listNotifications"
     | "createNotification"
-    | "markNotificationAsRead";
+    | "markNotificationAsRead"
+    | "markAllNotificationsAsRead";
   procedurePath: `publicWorkItems.${string}`;
   restPath: `/api/v1/work-items/${string}`;
   summary: string;
@@ -169,6 +172,15 @@ export const workItemsRestOperations: WorkItemsRestOperation[] = [
     auth: "apiKey",
     inputSchema: markNotificationAsReadInputSchema,
     outputSchema: markNotificationAsReadOutputSchema,
+  },
+  {
+    procedureName: "markAllNotificationsAsRead",
+    procedurePath: "publicWorkItems.markAllNotificationsAsRead",
+    restPath: "/api/v1/work-items/mark-all-notifications-as-read",
+    summary: "Mark all work item notifications as read",
+    auth: "apiKey",
+    inputSchema: markAllNotificationsAsReadInputSchema,
+    outputSchema: markAllNotificationsAsReadOutputSchema,
   },
 ];
 
