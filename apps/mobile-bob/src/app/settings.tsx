@@ -22,7 +22,6 @@ import {
 import type {
   MobileSettingsAction,
   MobileSettingsSectionKey,
-  WorkspaceSettingMembership,
 } from "~/features/settings/settings-model";
 import { SELECTED_WORKSPACE_KEY } from "~/features/settings/workspace-selection";
 import { colors } from "~/lib/colors";
@@ -143,7 +142,7 @@ function WorkspacesSection() {
     () =>
       buildWorkspaceSettingRows({
         selectedWorkspaceId,
-        memberships: (memberships ?? []) as WorkspaceSettingMembership[],
+        memberships: (memberships ?? []),
       }),
     [memberships, selectedWorkspaceId],
   );
@@ -216,7 +215,7 @@ function ProvidersSection() {
         {rows.map((row) => (
           <Pressable
             key={row.key}
-            onPress={() => router.push(row.href as never)}
+            onPress={() => router.push(row.href)}
             accessibilityRole="button"
             accessibilityLabel={`Open ${row.label} provider settings`}
             className="border-border rounded-lg border p-3 active:opacity-80"

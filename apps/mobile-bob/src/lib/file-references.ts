@@ -1,5 +1,7 @@
 import type { ServerEvent } from "@bob/ws";
 
+import { assertDefined } from "~/lib/assert";
+
 export interface FileReference {
   path: string;
   shortPath: string;
@@ -23,7 +25,10 @@ function tryParseArgs(args: unknown): Record<string, unknown> | null {
   if (typeof args === "object" && args !== null) return args as Record<string, unknown>;
   if (typeof args !== "string") return null;
   try {
-    return JSON.parse(args);
+    const parsed: unknown = JSON.parse(args);
+    return typeof parsed === "object" && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : null;
   } catch {
     return null;
   }
@@ -89,7 +94,7 @@ export function extractFileReferences(events: ServerEvent[]): FileReference[] {
       const command = args?.command;
       if (typeof command === "string") {
         // Extract obvious file paths from common patterns
-        const filePatterns = command.match(/(?:cat|head|tail|less|vi|vim|nano|code)\s+["']?([^\s"'|;]+)/);
+        const filePatterns = /(?:cat|head|tail|less|vi|vim|nano|code)\s+["']?([^\s"'|;]+)/.exec(command);
         if (filePatterns?.[1]) {
           refs.set(filePatterns[1], {
             path: filePatterns[1],
@@ -114,7 +119,7 @@ export function findFilePathsInText(text: string): string[] {
   const matches: string[] = [];
   let match;
   while ((match = regex.exec(text)) !== null) {
-    matches.push(match[1]!.trim());
+    matches.push(assertDefined(match[1]).trim());
   }
   return matches;
 }

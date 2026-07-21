@@ -28,6 +28,8 @@ export const UserPreferencesSchema = Schema.Struct({
   defaultModel: Schema.optional(Schema.NullOr(Schema.String)),
   editorFontSize: Schema.optional(Schema.NullOr(Schema.Number)),
   enableNotifications: Schema.optional(Schema.Boolean),
+  emailNotifications: Schema.optional(Schema.Boolean),
+  pushNotifications: Schema.optional(Schema.Boolean),
   timezone: Schema.optional(Schema.NullOr(Schema.String)),
   createdAt: Schema.optional(Schema.DateTimeUtc),
   updatedAt: Schema.optional(Schema.DateTimeUtc),

@@ -1,5 +1,6 @@
 import { findProfile, detectBrowsers } from "./browser-detect";
 import { readCookiesForDomain } from "./chromium-decrypt";
+import { createBobRpcClient } from "@gmacko/bob-client";
 
 interface CliArgs {
   command: "import" | "list" | "remove";
@@ -7,6 +8,16 @@ interface CliArgs {
   browser?: string;
   bobUrl: string;
   bobApiKey: string;
+}
+
+function createClient(args: CliArgs) {
+  return createBobRpcClient({
+    baseURL: `${args.bobUrl}/api/rpc`,
+    headers: {
+      Authorization: `Bearer ${args.bobApiKey}`,
+      "x-rpc-source": "bob-cookies-cli",
+    },
+  });
 }
 
 function parseArgs(args: string[]): CliArgs {
@@ -61,40 +72,33 @@ async function importCookies(args: CliArgs) {
 
   console.log(`Sending ${allCookies.length} cookies to Bob...`);
 
-  const res = await fetch(`${args.bobUrl}/api/cookies/import`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${args.bobApiKey}`,
-    },
-    body: JSON.stringify({ cookies: allCookies, source: "cli" }),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Request failed" }));
-    console.error(`Error: ${(err as { error: string }).error}`);
+  try {
+    const result = (await createClient(args).settings.cookies.import({
+      cookies: allCookies,
+      source: "cli",
+    })) as { imported: number; domains: string[] };
+    console.log(`Imported ${result.imported} cookies for ${result.domains.join(", ")}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Request failed";
+    console.error(`Error: ${message}`);
     process.exit(1);
   }
-
-  const result = (await res.json()) as { imported: number; domains: string[] };
-  console.log(`Imported ${result.imported} cookies for ${result.domains.join(", ")}`);
 }
 
 async function listCookies(args: CliArgs) {
-  const res = await fetch(`${args.bobUrl}/api/trpc/cookies.list`, {
-    headers: { Authorization: `Bearer ${args.bobApiKey}` },
-  });
-
-  if (!res.ok) {
+  let entries: Array<{
+    domain: string;
+    count: number;
+    source: string | null;
+    lastUpdated: string | Date | null;
+  }>;
+  try {
+    entries = (await createClient(args).settings.cookies.list(undefined)) as typeof entries;
+  } catch {
     console.error("Failed to list cookies");
     process.exit(1);
   }
 
-  const data = (await res.json()) as {
-    result: { data: Array<{ domain: string; count: number; source: string; lastUpdated: string }> };
-  };
-
-  const entries = data.result.data;
   if (entries.length === 0) {
     console.log("Cookie jar is empty.");
     return;
@@ -113,18 +117,10 @@ async function removeCookies(args: CliArgs) {
   }
 
   for (const domain of args.domains) {
-    const res = await fetch(`${args.bobUrl}/api/trpc/cookies.remove`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${args.bobApiKey}`,
-      },
-      body: JSON.stringify({ json: { domain } }),
-    });
-
-    if (res.ok) {
+    try {
+      await createClient(args).settings.cookies.remove({ domain });
       console.log(`Removed cookies for ${domain}`);
-    } else {
+    } catch {
       console.error(`Failed to remove cookies for ${domain}`);
     }
   }

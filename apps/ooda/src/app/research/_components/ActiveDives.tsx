@@ -6,6 +6,18 @@ import { useTRPC } from "~/trpc/react";
 
 type DiveStatus = "queued" | "running" | "done";
 
+// `research.divesRecent` is `.output(z.any())` for OpenAPI, which degenerates
+// the client query type; describe the projected dive row the UI consumes.
+interface RecentDive {
+  id: string;
+  threadId: string | null;
+  seed: string[];
+  status: string;
+  budgetPapers: number;
+  budgetSeconds: number | null;
+  elapsedMs: number | null;
+}
+
 const STATUS_COLOR: Record<DiveStatus, string> = {
   queued: "#8A8580",
   running: "#D4A04A",
@@ -33,7 +45,9 @@ export function ActiveDives() {
   if (divesQuery.isError) {
     return <div className="text-xs text-red-400">Failed to load dives.</div>;
   }
-  const items = divesQuery.data?.items ?? [];
+  const items =
+    (divesQuery.data as unknown as { items: RecentDive[] } | undefined)?.items ??
+    [];
   if (items.length === 0) {
     return <div className="text-xs text-[#5A5855]">No recent dives.</div>;
   }

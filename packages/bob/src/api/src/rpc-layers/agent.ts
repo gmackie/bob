@@ -68,9 +68,10 @@ export const makeAgentHandlers = (ctx: HandlerContext) => {
         new BobNotFoundError({ entity: "agent", id: "not-implemented" }),
       ),
 
-    // --- AgentRun (3) ---
+    // --- AgentRun (4) ---
     "agent.run.get": ar["agentRun.get"],
     "agent.run.list": ar["agentRun.list"],
+    "agent.run.listAll": ar["agentRun.listAll"],
     "agent.run.listByWorkItem": ar["agentRun.listByWorkItem"],
 
     // --- Capture (2) ---
@@ -178,4 +179,5 @@ export const makeAgentHandlers = (ctx: HandlerContext) => {
 };
 
 export const makeAgentLayer = (ctx: HandlerContext) =>
-  AgentRpc.toLayer(makeAgentHandlers(ctx));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbed handlers narrow the contract error channel (BobNotFoundError vs never); mirrors rpc-server.ts established pattern
+  AgentRpc.toLayer(makeAgentHandlers(ctx) as any);

@@ -4,29 +4,23 @@ import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 
 import { MissionControl } from "~/components/dashboard/mission-control";
-import { getTaskDashboardHeaderModel } from "~/components/tasks/task-shell-model";
+import {
+  getTaskDashboardHeaderModel,
+  selectTaskDashboardWorkspace,
+} from "~/components/tasks/task-shell-model";
 import { useTRPC } from "~/trpc/react";
-
-type WorkspaceMembership = {
-  workspace?: { id: string; name?: string | null } | null;
-};
 
 export default function TasksDashboardPage() {
   const trpc = useTRPC();
   const searchParams = useSearchParams();
-  const { data: workspaceMemberships } = useQuery(
+  const { data: workspaceRows } = useQuery(
     trpc.workspace.list.queryOptions(undefined, { staleTime: 60_000 }),
   );
-
-  const memberships = (workspaceMemberships ?? []) as unknown as WorkspaceMembership[];
-  const workspaces = memberships.flatMap((membership) =>
-    membership.workspace ? [membership.workspace] : [],
-  );
   const workspaceParam = searchParams?.get("workspace") ?? null;
-  const currentWorkspace =
-    (workspaceParam
-      ? workspaces.find((workspace) => workspace.id === workspaceParam)
-      : workspaces[0]) ?? null;
+  const currentWorkspace = selectTaskDashboardWorkspace(
+    Array.isArray(workspaceRows) ? workspaceRows : [],
+    workspaceParam,
+  );
   const header = getTaskDashboardHeaderModel();
 
   return (

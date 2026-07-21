@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { assertDefined } from "~/lib/assert";
 import {
   getDefaultShellTarget,
   getLeftRailTabs,
@@ -295,7 +296,7 @@ describe("tablet shell model", () => {
       entryView: "outcome",
       leftTab: "recent-outcomes",
     });
-    expect(getRecentOutcomeTarget(sessions[1]!)).toEqual({
+    expect(getRecentOutcomeTarget(assertDefined(sessions[1]))).toEqual({
       target: { type: "execution-session", sessionId: "run-2" },
       entryView: null,
       leftTab: "recent-outcomes",

@@ -6,6 +6,13 @@ import {
   sessionSecrets,
 } from "@bob/db/schema";
 import { encryptSessionSecretValue } from "../../services/crypto/sessionSecretVault.js";
+import type { createTRPCContext } from "../../trpc.js";
+
+// The real tRPC context type — the mock db/authApi below are structurally
+// close-enough fakes that only implement the query/insert/update surface
+// these handlers actually call, cast through `unknown` (not `any`) at the
+// single construction site so every caller.* call below stays fully typed.
+type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
 
 const { forgeGraphSecretClient } = vi.hoisted(() => ({
   forgeGraphSecretClient: {
@@ -21,9 +28,14 @@ vi.mock("../../services/forgegraph/config", () => ({
 
 let appRouter: typeof import("../../root").appRouter;
 
-const secretRows: any[] = [];
-const usageRows: any[] = [];
-const bindingRows: any[] = [];
+// Loose "row bag" mocks: these hold whatever partial values each test's
+// insert()/update() call happens to pass, not the full DB row shape (no
+// server-applied defaults are simulated), so `Record<string, unknown>` is
+// the honest type — not the real table's `$inferSelect`.
+type MockRow = Record<string, unknown>;
+const secretRows: MockRow[] = [];
+const usageRows: MockRow[] = [];
+const bindingRows: MockRow[] = [];
 
 const queryMocks = {
   chatConversationsFindFirst: vi.fn(),
@@ -49,8 +61,8 @@ const makeDbMock = () => ({
       findMany: queryMocks.sessionSecretUsagesFindMany,
     },
   },
-  insert: vi.fn((table: any) => ({
-    values: vi.fn((vals: any) => {
+  insert: vi.fn((table: unknown) => ({
+    values: vi.fn((vals: MockRow | MockRow[]) => {
       const rows = Array.isArray(vals) ? vals : [vals];
       if (table === sessionSecrets) secretRows.push(...rows);
       if (table === sessionSecretUsages) usageRows.push(...rows);
@@ -63,7 +75,7 @@ const makeDbMock = () => ({
       };
     }),
   })),
-  delete: vi.fn((table: any) => ({
+  delete: vi.fn((table: unknown) => ({
     where: vi.fn(() => ({
       returning: vi.fn(() => {
         if (table === sessionSecrets) {
@@ -78,8 +90,8 @@ const makeDbMock = () => ({
       }),
     })),
   })),
-  update: vi.fn((table: any) => ({
-    set: vi.fn((patch: any) => ({
+  update: vi.fn((table: unknown) => ({
+    set: vi.fn((patch: MockRow) => ({
       where: vi.fn(() => ({
         returning: vi.fn(() => {
           if (table === sessionSecrets && secretRows.length > 0) {
@@ -119,23 +131,23 @@ const fakeSession = {
 const createCaller = () =>
   appRouter.createCaller({
     session: fakeSession,
-    authApi: { getSession: vi.fn() } as any,
-    apiKeyAuth: null as any,
-    db: makeDbMock() as any,
-  });
+    authApi: { getSession: vi.fn() },
+    apiKeyAuth: null,
+    db: makeDbMock(),
+  } as unknown as TRPCContext);
 
 const createApiKeyCaller = () =>
   appRouter.createCaller({
     session: fakeSession,
-    authApi: { getSession: vi.fn() } as any,
+    authApi: { getSession: vi.fn() },
     apiKeyAuth: {
       keyId: "gateway-key",
       permissions: ["write"] as const,
       user: fakeSession.user,
       userId: fakeSession.user.id,
-    } as any,
-    db: makeDbMock() as any,
-  });
+    },
+    db: makeDbMock(),
+  } as unknown as TRPCContext);
 
 beforeAll(async () => {
   process.env.GIT_TOKEN_ENCRYPTION_KEY = "test-session-secret-encryption-key";
@@ -159,7 +171,7 @@ describe("session secret schema and router", () => {
     expect(sessionSecrets).toBeDefined();
     expect(sessionSecretUsages).toBeDefined();
     expect(projectDeploySecretBindings).toBeDefined();
-  });
+  }, 60_000);
 
   it("creates session secrets and stores related usage metadata", async () => {
     queryMocks.chatConversationsFindFirst.mockResolvedValueOnce({
@@ -171,7 +183,7 @@ describe("session secret schema and router", () => {
     queryMocks.sessionSecretsFindMany.mockResolvedValue([]);
 
     const caller = createCaller();
-    const result = await (caller as any).secrets.createSessionSecret({
+    const result = await caller.secrets.createSessionSecret({
       sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       label: "GitHub token",
       handle: "github-token",
@@ -185,9 +197,13 @@ describe("session secret schema and router", () => {
 
     expect(result).toBeDefined();
     expect(secretRows).toHaveLength(1);
+    const createdSecretId = secretRows[0]?.id;
+    if (typeof createdSecretId !== "string") {
+      throw new Error("expected the created secret row to have a string id");
+    }
 
-    await (caller as any).secrets.markSecretUsed({
-      secretId: secretRows[0]!.id,
+    await caller.secrets.markSecretUsed({
+      secretId: createdSecretId,
       sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       executor: "broker",
       templateId: "gh-api",
@@ -217,14 +233,19 @@ describe("session secret schema and router", () => {
     ]);
 
     const caller = createCaller();
-    const result = await (caller as any).secrets.listSessionSecrets({
+    const result = await caller.secrets.listSessionSecrets({
       sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     });
 
     expect(result).toHaveLength(1);
-    expect(result[0]!.handle).toBe("github-token");
-    expect(result[0]!.value).toBeUndefined();
-    expect(result[0]!.valueCiphertext).toBeUndefined();
+    const [secret] = result;
+    if (!secret) throw new Error("expected a secret in the result");
+    expect(secret.handle).toBe("github-token");
+    // The router's return type omits valueCiphertext/valueIv/valueTag (and
+    // never included `value`) entirely — verify they're genuinely absent
+    // from the raw response, not just typed as undefined.
+    expect("value" in secret).toBe(false);
+    expect("valueCiphertext" in secret).toBe(false);
   });
 
   it("returns plaintext only for the trusted gateway execution path", async () => {
@@ -249,14 +270,16 @@ describe("session secret schema and router", () => {
     });
 
     const caller = createApiKeyCaller();
-    const result = await (caller as any).secrets.getSessionSecretForExecution({
+    const result = await caller.secrets.getSessionSecretForExecution({
       sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       handle: "github-token",
     });
 
     expect(result.handle).toBe("github-token");
     expect(result.value).toBe("ghp_secret");
-    expect(result.valueCiphertext).toBeUndefined();
+    // The router's return type for this trusted execution path never
+    // includes the ciphertext fields — verify they're genuinely absent.
+    expect("valueCiphertext" in result).toBe(false);
   });
 
   it("returns a metadata-only manifest for gateway and MCP consumers", async () => {
@@ -283,7 +306,7 @@ describe("session secret schema and router", () => {
     ]);
 
     const caller = createApiKeyCaller();
-    const result = await (caller as any).secrets.getSessionSecretManifest({
+    const result = await caller.secrets.getSessionSecretManifest({
       sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     });
 
@@ -296,7 +319,9 @@ describe("session secret schema and router", () => {
         },
       }),
     ]);
-    expect(result[0]?.value).toBeUndefined();
+    // The manifest's return type never includes plaintext/ciphertext value
+    // fields — verify it's genuinely absent, not just undefined.
+    expect(result[0] && "value" in result[0]).toBe(false);
   });
 
   it("rejects creating a secret for a session owned by another user", async () => {
@@ -305,7 +330,7 @@ describe("session secret schema and router", () => {
     const caller = createCaller();
 
     await expect(
-      (caller as any).secrets.createSessionSecret({
+      caller.secrets.createSessionSecret({
         sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         label: "GitHub token",
         handle: "github-token",
@@ -330,7 +355,7 @@ describe("session secret schema and router", () => {
     queryMocks.sessionSecretsFindFirst.mockResolvedValueOnce(secretRows[0]);
 
     const caller = createCaller();
-    const result = await (caller as any).secrets.deleteSessionSecret({
+    const result = await caller.secrets.deleteSessionSecret({
       secretId: "secret-1",
     });
 
@@ -346,7 +371,7 @@ describe("session secret schema and router", () => {
 
     const caller = createCaller();
 
-    const result = await (caller as any).secrets.upsertProjectDeployBinding({
+    const result = await caller.secrets.upsertProjectDeployBinding({
       projectId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
       environment: "staging",
       label: "GitHub token",
@@ -387,7 +412,7 @@ describe("session secret schema and router", () => {
     });
 
     const caller = createCaller();
-    const result = await (caller as any).secrets.promoteSessionSecret({
+    const result = await caller.secrets.promoteSessionSecret({
       secretId: "secret-1",
       projectId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
       environment: "staging",

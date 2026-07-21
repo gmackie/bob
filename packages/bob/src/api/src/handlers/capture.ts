@@ -34,8 +34,8 @@ function generatePlaceholderCapture(
 // Handler functions
 // ---------------------------------------------------------------------------
 
-export async function captureListTargets(_ctx: HandlerContext, _input?: void) {
-  return [
+export function captureListTargets(_ctx: HandlerContext, _input?: void) {
+  return Promise.resolve([
     {
       id: "browser",
       name: "Browser",
@@ -57,7 +57,7 @@ export async function captureListTargets(_ctx: HandlerContext, _input?: void) {
       description: "Capture a specific window",
       connected: process.platform === "darwin",
     },
-  ];
+  ]);
 }
 
 export async function captureCapture(

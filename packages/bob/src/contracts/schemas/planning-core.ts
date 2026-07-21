@@ -150,6 +150,14 @@ export const PlanningCommentCreateResultSchema = Schema.Struct({
   createdAt: Schema.optional(Schema.String),
 });
 
+export const PlanningLinearSyncResultSchema = Schema.Struct({
+  projectsCreated: Schema.Number,
+  projectsExisting: Schema.Number,
+  issuesImported: Schema.Number,
+  projectsTruncated: Schema.Boolean,
+  issuesTruncated: Schema.Boolean,
+});
+
 export const PlanningSearchResultSchema = Schema.Struct({
   id: Schema.String,
   identifier: Schema.String,

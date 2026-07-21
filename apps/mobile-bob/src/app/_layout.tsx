@@ -329,7 +329,7 @@ function TabletLayout() {
 
   useEffect(() => {
     const nextShell = getShellStateForPath(
-      pathname ?? "/tasks",
+      pathname,
       routeShellParams,
       currentShellModeRef.current,
     );

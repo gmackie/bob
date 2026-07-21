@@ -21,7 +21,7 @@ export const makeCookiesRpcHandlers = (ctx: HandlerContext) => ({
     payload,
   }: {
     payload: {
-      cookies: Array<{
+      cookies: {
         name: string;
         value: string;
         domain: string;
@@ -30,16 +30,16 @@ export const makeCookiesRpcHandlers = (ctx: HandlerContext) => ({
         secure: boolean;
         httpOnly: boolean;
         sameSite: "Strict" | "Lax" | "None";
-      }>;
+      }[];
       source: "extension" | "cli";
     };
   }) => wrapHandler(cookiesImport, ctx, payload, "cookies"),
 
   "cookies.list": ({ payload }: { payload: void }) =>
     wrapHandler(
-      (ctx: HandlerContext) => cookiesList(ctx),
+      (c: HandlerContext) => cookiesList(c),
       ctx,
-      undefined as unknown as void,
+      payload,
       "cookies",
     ),
 

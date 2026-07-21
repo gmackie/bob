@@ -16,7 +16,7 @@ import { toast } from "@gmacko/core/ui/toast";
 
 import { formatLabel } from "~/lib/design/colors";
 import { useChatPanel } from "~/components/chat/chat-panel-provider";
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
 
 import type { badgeVariants } from "@gmacko/core/ui/badge";
 import type { VariantProps } from "class-variance-authority";
@@ -87,92 +87,72 @@ interface DispatchPlanProps {
 }
 
 export function DispatchPlan({ batchId }: DispatchPlanProps) {
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
   const queryClient = useQueryClient();
   const { openPanel } = useChatPanel();
 
   const { data, isLoading } = useQuery({
-    ...trpc.dispatch.getBatch.queryOptions({ batchId }),
+    queryKey: ["rpc", "planning.dispatch.getBatch", { batchId }],
+    queryFn: () =>
+      rpc.planning.dispatch.getBatch({ batchId }) as Promise<any>,
     refetchInterval: 5000,
   });
 
-  const updateAgent = useMutation(
-    trpc.dispatch.updateItemAgent.mutationOptions({
-      onSuccess: () => {
-        void queryClient.invalidateQueries({
-          queryKey: trpc.dispatch.getBatch.queryKey({ batchId }),
-        });
-      },
-      onError: (err) => {
-        toast(err.message, {
-          style: { background: "#1a0000", borderColor: "#f43f5e40" },
-        });
-      },
-    }),
-  );
+  const invalidateBatch = () =>
+    queryClient.invalidateQueries({
+      queryKey: ["rpc", "planning.dispatch.getBatch", { batchId }],
+    });
 
-  const updateConcurrency = useMutation(
-    trpc.dispatch.updateConcurrency.mutationOptions({
-      onSuccess: () => {
-        void queryClient.invalidateQueries({
-          queryKey: trpc.dispatch.getBatch.queryKey({ batchId }),
-        });
-      },
-      onError: (err) => {
-        toast(err.message, {
-          style: { background: "#1a0000", borderColor: "#f43f5e40" },
-        });
-      },
-    }),
-  );
+  const onMutationError = (err: Error) => {
+    toast(err.message, {
+      style: { background: "#1a0000", borderColor: "#f43f5e40" },
+    });
+  };
 
-  const dispatchBatch = useMutation(
-    trpc.dispatch.dispatch.mutationOptions({
-      onSuccess: (result) => {
-        toast(`Dispatched ${result.started} task${result.started === 1 ? "" : "s"}`);
-        void queryClient.invalidateQueries({
-          queryKey: trpc.dispatch.getBatch.queryKey({ batchId }),
-        });
-      },
-      onError: (err) => {
-        toast(err.message, {
-          style: { background: "#1a0000", borderColor: "#f43f5e40" },
-        });
-      },
-    }),
-  );
+  const updateAgent = useMutation({
+    mutationFn: (input: any) => rpc.planning.dispatch.updateItemAgent(input),
+    onSuccess: () => {
+      void invalidateBatch();
+    },
+    onError: onMutationError,
+  });
 
-  const approveProd = useMutation(
-    trpc.forgegraph.approveProdDeploy.mutationOptions({
-      onSuccess: () => {
-        toast("Production deploy approved");
-        void queryClient.invalidateQueries({
-          queryKey: trpc.dispatch.getBatch.queryKey({ batchId }),
-        });
-      },
-      onError: (err) => {
-        toast(err.message, {
-          style: { background: "#1a0000", borderColor: "#f43f5e40" },
-        });
-      },
-    }),
-  );
+  const updateConcurrency = useMutation({
+    mutationFn: (input: any) => rpc.planning.dispatch.updateConcurrency(input),
+    onSuccess: () => {
+      void invalidateBatch();
+    },
+    onError: onMutationError,
+  });
 
-  const resetPipeline = useMutation(
-    trpc.dispatch.resetPipelineState.mutationOptions({
-      onSuccess: () => {
-        toast("Pipeline reset — will retry on next poll");
-        void queryClient.invalidateQueries({
-          queryKey: trpc.dispatch.getBatch.queryKey({ batchId }),
-        });
-      },
-      onError: (err) => {
-        toast(err.message, {
-          style: { background: "#1a0000", borderColor: "#f43f5e40" },
-        });
-      },
-    }),
-  );
+  const dispatchBatch = useMutation({
+    mutationFn: (input: any) => rpc.planning.dispatch.dispatch(input),
+    onSuccess: (result: any) => {
+      toast(`Dispatched ${result.started} task${result.started === 1 ? "" : "s"}`);
+      void invalidateBatch();
+    },
+    onError: onMutationError,
+  });
+
+  const approveProd = useMutation({
+    mutationFn: (input: any) =>
+      rpc.external.forgegraph.approveProdDeploy(input),
+    onSuccess: () => {
+      toast("Production deploy approved");
+      void invalidateBatch();
+    },
+    onError: onMutationError,
+  });
+
+  const resetPipeline = useMutation({
+    mutationFn: (input: any) =>
+      rpc.planning.dispatch.resetPipelineState(input),
+    onSuccess: () => {
+      toast("Pipeline reset - will retry on next poll");
+      void invalidateBatch();
+    },
+    onError: onMutationError,
+  });
 
   if (isLoading || !data) {
     return (
@@ -182,22 +162,23 @@ export function DispatchPlan({ batchId }: DispatchPlanProps) {
     );
   }
 
-  const { batch, items } = data;
+  const { batch } = data;
+  const items = data.items as any[];
   const isDispatched = batch.status !== "pending";
   const isCompleted = batch.status === "completed";
 
   // Build a lookup from item ID to identifier for "blocked by" display
   const itemIdToIdentifier = new Map(
-    items.map((item) => [item.id, item.planningTaskIdentifier]),
+    items.map((item: any) => [item.id, item.planningTaskIdentifier]),
   );
 
   // Progress stats
   const total = batch.totalTasks;
   const completed = batch.completedTasks;
   const failed = batch.failedTasks;
-  const running = items.filter((i) => i.status === "running").length;
+  const running = items.filter((i: any) => i.status === "running").length;
   const queued = items.filter(
-    (i) => i.status === "queued" || i.status === "blocked",
+    (i: any) => i.status === "queued" || i.status === "blocked",
   ).length;
   const progressPct = total > 0 ? Math.round((completed / total) * 100) : 0;
 
@@ -275,7 +256,7 @@ export function DispatchPlan({ batchId }: DispatchPlanProps) {
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => {
+            {items.map((item: any) => {
               const blockers = (item.blockedByItems as string[]) ?? [];
               const blockerLabels = blockers
                 .map((id) => itemIdToIdentifier.get(id))

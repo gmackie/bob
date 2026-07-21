@@ -1,7 +1,7 @@
 import { buildExecutionQueue, formatStatusLabel } from "./queue";
 import type { TabletQueueItem } from "./queue";
 
-export type ProviderKey = "codex" | "cursor";
+export type ProviderKey = "claude" | "codex" | "grok" | "cursor-agent";
 export type DashboardTone = "default" | "warning" | "danger" | "success";
 
 export interface TabletDashboardSession {
@@ -47,7 +47,7 @@ export interface ProviderRunSectionModel<T extends ProviderDetailRun> {
   emptyLabel: string;
   count: number;
   runs: T[];
-  rows: Array<ProviderRunRowModel & { id: string; run: T }>;
+  rows: (ProviderRunRowModel & { id: string; run: T })[];
 }
 
 export interface TaskDashboardHeaderModel {
@@ -60,10 +60,10 @@ export type ProviderRunTarget =
   | { type: "execution-session"; sessionId: string }
   | { type: "none" };
 
-export type RunningNowWorkItemTarget = {
+export interface RunningNowWorkItemTarget {
   workItemId: string;
   view: "queue" | "outcome";
-};
+}
 
 export type RunningNowEntryTarget =
   | { type: "work-item"; workItemId: string; view: "outcome" }
@@ -161,6 +161,8 @@ export interface TaskDashboardLayout {
   laneWrap: "wrap" | "nowrap";
   laneCardMinWidth: number;
   providerFooterDirection: "row" | "column";
+  providerWrap: "wrap" | "nowrap";
+  providerCardMinWidth: number;
 }
 
 const TABLET_DASHBOARD_SECTION_ORDER: TabletDashboardSectionKey[] = [
@@ -176,6 +178,10 @@ const ACTIVE_SESSION_STATUSES = new Set([
   "pending",
   "awaiting-input",
   "awaiting_input",
+  // Paused awaiting a human decision — still active (the "needs you" state).
+  "blocked",
+  // Lease expired: contact lost, process fate unknown — still active.
+  "host_unknown",
 ]);
 const ACTIVE_RUN_STATUSES = new Set([
   "queued",
@@ -185,6 +191,10 @@ const ACTIVE_RUN_STATUSES = new Set([
   "pending",
   "awaiting-input",
   "awaiting_input",
+  // Paused awaiting a human decision — still active (the "needs you" state).
+  "blocked",
+  // Lease expired: contact lost, process fate unknown — still active.
+  "host_unknown",
 ]);
 const COMPLETED_RUN_STATUSES = new Set(["completed", "done", "stopped", "idle"]);
 const FAILED_RUN_STATUSES = new Set(["failed", "error", "interrupted", "cancelled", "canceled"]);
@@ -208,6 +218,10 @@ const ACTIVE_AGENT_WORK_STATUSES = new Set([
   "pending",
   "awaiting-input",
   "awaiting_input",
+  // Paused awaiting a human decision — still active (the "needs you" state).
+  "blocked",
+  // Lease expired: contact lost, process fate unknown — still active.
+  "host_unknown",
 ]);
 const FAILED_AGENT_WORK_STATUSES = new Set(["error", "failed", "interrupted"]);
 const WORK_ITEM_OUTCOME_STATUSES = new Set([
@@ -238,12 +252,19 @@ function appendWorkspaceParam(path: string, workspaceId?: string | null): string
 }
 
 function getProvider(agentType: string): ProviderKey {
-  return agentType.toLowerCase().includes("cursor") ? "cursor" : "codex";
+  const normalized = agentType.toLowerCase();
+  if (normalized.includes("cursor")) return "cursor-agent";
+  if (normalized.includes("claude")) return "claude";
+  if (normalized.includes("grok")) return "grok";
+  return "codex";
 }
 
 export function normalizeProviderKey(value: string | string[] | undefined): ProviderKey {
   const raw = Array.isArray(value) ? value[0] : value;
-  return raw === "cursor" ? "cursor" : "codex";
+  if (raw === "claude" || raw === "grok" || raw === "cursor-agent" || raw === "cursor") {
+    return raw === "cursor" ? "cursor-agent" : raw;
+  }
+  return "codex";
 }
 
 export function getTaskDashboardHeaderModel(): TaskDashboardHeaderModel {
@@ -302,14 +323,14 @@ export function buildProviderRunGroups<T extends ProviderDetailRun>(
 export function buildProviderRunSectionModels<T extends ProviderDetailRun>(
   runs: T[],
   options: { now?: Date; includeEmptyOther?: boolean } = {},
-): Array<ProviderRunSectionModel<T>> {
+): ProviderRunSectionModel<T>[] {
   const groups = buildProviderRunGroups(runs);
-  const sections: Array<{
+  const sections: {
     key: ProviderRunSectionKey;
     title: string;
     emptyLabel: string;
     runs: T[];
-  }> = [
+  }[] = [
     {
       key: "active",
       title: "Active Sessions",
@@ -337,7 +358,7 @@ export function buildProviderRunSectionModels<T extends ProviderDetailRun>(
   ];
 
   return sections
-    .filter((section) => section.key !== "other" || options.includeEmptyOther || section.runs.length > 0)
+    .filter((section) => section.key !== "other" || (options.includeEmptyOther ?? false) || section.runs.length > 0)
     .map((section) => ({
       key: section.key,
       title: section.title,
@@ -441,6 +462,9 @@ function isResolvableWorkItemReference(value: string | null | undefined): value 
 
 function getProviderRunStatusTone(status: string): DashboardTone {
   if (FAILED_RUN_STATUSES.has(status)) return "danger";
+  // Lease expired: contact lost — muted/neutral "lost contact", not the
+  // amber "needs you" of a blocked run and never a failure.
+  if (status === "host_unknown") return "default";
   if (REVIEW_RUN_STATUSES.has(status)) return "warning";
   if (ACTIVE_RUN_STATUSES.has(status)) return "warning";
   if (COMPLETED_RUN_STATUSES.has(status)) return "success";
@@ -502,7 +526,9 @@ function buildProviderCard(
 
   return {
     provider,
-    label: provider === "codex" ? "Codex" : "Cursor",
+    label: provider === "cursor-agent"
+      ? "Cursor"
+      : provider.charAt(0).toUpperCase() + provider.slice(1),
     activeCount,
     queuedOrStartingCount: startingCount + (provider === "codex" ? queuedCount : 0),
     limitLabel: snapshot ? "Capacity connected" : "Capacity not connected",
@@ -525,8 +551,10 @@ export function buildProviderCapacityCards(input: {
   );
 
   return [
+    buildProviderCard("claude", input.sessions, queuedCount, snapshots.get("claude")),
     buildProviderCard("codex", input.sessions, queuedCount, snapshots.get("codex")),
-    buildProviderCard("cursor", input.sessions, queuedCount, snapshots.get("cursor")),
+    buildProviderCard("grok", input.sessions, queuedCount, snapshots.get("grok")),
+    buildProviderCard("cursor-agent", input.sessions, queuedCount, snapshots.get("cursor-agent")),
   ];
 }
 
@@ -556,6 +584,20 @@ function parseProviderUsageLimits(summary: unknown): ProviderUsageLimit[] {
   if (!summary || typeof summary !== "object") return [];
   const capacity = (summary as { providerCapacity?: unknown }).providerCapacity;
   if (!capacity || typeof capacity !== "object") return [];
+  const observed = (capacity as { observed?: unknown }).observed;
+  if (observed && typeof observed === "object") {
+    const usage = observed as { inputTokens?: unknown; outputTokens?: unknown };
+    const inputTokens = typeof usage.inputTokens === "number" ? usage.inputTokens : 0;
+    const outputTokens = typeof usage.outputTokens === "number" ? usage.outputTokens : 0;
+    return [
+      buildProviderAllowanceLimit((capacity as { allowance?: unknown }).allowance),
+      buildProviderUsageLimit({
+        label: "Bob observed usage",
+        valueLabel: `${inputTokens + outputTokens} tokens`,
+        resetLabel: null,
+      }),
+    ];
+  }
   const usageLimits = (capacity as { usageLimits?: unknown }).usageLimits;
   if (!Array.isArray(usageLimits)) return [];
 
@@ -577,6 +619,35 @@ function parseProviderUsageLimits(summary: unknown): ProviderUsageLimit[] {
       valueLabel: candidate.valueLabel,
       resetLabel: candidate.resetLabel,
     })];
+  });
+}
+
+function buildProviderAllowanceLimit(allowance: unknown): ProviderUsageLimit {
+  if (!allowance || typeof allowance !== "object") {
+    return buildProviderUsageLimit({ label: "Provider allowance" });
+  }
+  const value = allowance as {
+    status?: unknown;
+    used?: unknown;
+    limit?: unknown;
+    unit?: unknown;
+    resetAt?: unknown;
+  };
+  if (
+    value.status !== "available" ||
+    typeof value.used !== "number" ||
+    typeof value.limit !== "number" ||
+    value.limit <= 0
+  ) {
+    return buildProviderUsageLimit({ label: "Provider allowance" });
+  }
+  const unit = typeof value.unit === "string" && value.unit ? ` ${value.unit}` : "";
+  return buildProviderUsageLimit({
+    label: "Provider allowance",
+    usedPercent: (value.used / value.limit) * 100,
+    valueLabel: `${value.used} / ${value.limit}${unit}`,
+    resetLabel:
+      typeof value.resetAt === "string" ? `Resets ${value.resetAt}` : null,
   });
 }
 
@@ -629,7 +700,8 @@ function getDefaultProviderUsageLimits(provider: ProviderKey): ProviderUsageLimi
           resetLabel: null,
         }),
       ]
-    : [
+    : provider === "cursor-agent"
+      ? [
         buildProviderUsageLimit({
           label: "Included usage",
           remainingPercent: null,
@@ -640,7 +712,19 @@ function getDefaultProviderUsageLimits(provider: ProviderKey): ProviderUsageLimi
           remainingPercent: null,
           resetLabel: null,
         }),
-      ];
+      ]
+      : [
+          buildProviderUsageLimit({
+            label: "Provider allowance",
+            remainingPercent: null,
+            resetLabel: null,
+          }),
+          buildProviderUsageLimit({
+            label: "Bob observed usage",
+            remainingPercent: null,
+            resetLabel: null,
+          }),
+        ];
 }
 
 export function buildTaskLaneSummaries(
@@ -688,7 +772,18 @@ export function getTaskDashboardLayout(screenWidth: number): TaskDashboardLayout
     laneWrap: showRightRail ? "nowrap" : "wrap",
     laneCardMinWidth: showRightRail ? 0 : 132,
     providerFooterDirection: showRightRail ? "column" : "row",
+    providerWrap: showRightRail ? "nowrap" : "wrap",
+    providerCardMinWidth: showRightRail ? 0 : 150,
   };
+}
+
+export function getProviderCapacityAccessibilityLabel(card: ProviderCapacityCard): string {
+  const usage = card.usageLimits.map((limit) => {
+    const value = limit.valueLabel ??
+      (limit.remainingPercent === null ? "Unavailable" : `${limit.remainingPercent}% remaining`);
+    return `${limit.label}: ${value}`;
+  });
+  return `${card.label}. ${usage.join(". ")}. Open provider detail`;
 }
 
 export function getTabletDashboardSectionOrder(): TabletDashboardSectionKey[] {
@@ -885,7 +980,11 @@ export function buildRunningNowEntries(input: {
       return !session.workItemId || !activeWorkItemIds.has(session.workItemId);
     })
     .map((session) => {
-      const title = session.title?.trim() || session.agentType || session.sessionId;
+      const trimmedTitle = session.title?.trim();
+      const title =
+        trimmedTitle && trimmedTitle.length > 0
+          ? trimmedTitle
+          : session.agentType || session.sessionId;
       const statusLabel = formatStatusLabel(session.status);
       const lastUpdatedLabel = formatLastUpdatedLabel(session.lastActivityAt, now);
 

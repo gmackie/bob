@@ -4,15 +4,16 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
-import { drizzle, type PgliteDatabase } from "drizzle-orm/pglite";
+import { drizzle  } from "drizzle-orm/pglite";
+import type {PgliteDatabase} from "drizzle-orm/pglite";
 import {
   generateDrizzleJson,
   generateMigration,
 } from "drizzle-kit/api";
 import * as schema from "./schema.js";
-import { applyMigrations } from "./migrate.js";
+import { applyMigrations, noop } from "./migrate.js";
 
-export type PgliteDbOptions = {
+export interface PgliteDbOptions {
   /** `:memory:` for tests, or an absolute directory path for persistence. */
   dataDir?: string;
   /**
@@ -24,13 +25,13 @@ export type PgliteDbOptions = {
    * exercises the migration runner against fixture SQL, not the real schema).
    */
   bootstrap?: boolean;
-};
+}
 
-export type PgliteDbHandle = {
+export interface PgliteDbHandle {
   db: PgliteDatabase<typeof schema>;
   client: PGlite;
   close: () => Promise<void>;
-};
+}
 
 const DEFAULT_DIR = path.join(os.homedir(), ".bob", "userdata", "db");
 
@@ -122,7 +123,16 @@ export async function bootstrapSchema(client: PGlite): Promise<void> {
     seen.add(value);
     deduped[key] = value;
   }
+  // drizzle-kit@0.31's bundled `api.d.ts` declares these return types against
+  // Zod v3 internals (ZodObject/ZodArray generic arity, `objectOutputType`,
+  // etc.), which don't resolve cleanly against this workspace's zod v4 —  a
+  // real third-party type-declaration mismatch, not an untyped value in our
+  // code. `prev`/`cur` are opaque snapshot blobs we only ever pass straight
+  // into `generateMigration`/drizzle-kit's own APIs; we never inspect their
+  // shape, so there's nothing here to narrow with a runtime guard.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- drizzle-kit d.ts vs zod v4 mismatch, see comment above
   const prev = generateDrizzleJson({}, undefined, undefined, "snake_case");
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- drizzle-kit d.ts vs zod v4 mismatch, see comment above
   const cur = generateDrizzleJson(deduped, undefined, undefined, "snake_case");
   const statements = await generateMigration(prev, cur);
 
@@ -137,7 +147,7 @@ export async function bootstrapSchema(client: PGlite): Promise<void> {
   // we log and move on. The env-var override exists so properly-packaged hosts
   // (e.g. Phase 2's `apps/bob-server`) can still opt in to the optimization.
   const migrationsDir = resolveMigrationsDir();
-  let files: Array<{ filename: string; hash: string }> = [];
+  let files: { filename: string; hash: string }[] = [];
   try {
     files = fs
       .readdirSync(migrationsDir)
@@ -159,7 +169,7 @@ export async function bootstrapSchema(client: PGlite): Promise<void> {
       "code" in err &&
       (err as { code?: string }).code === "ENOENT";
     if (!isEnoent) throw err;
-    // eslint-disable-next-line no-console
+
     console.warn(
       `[@bob/db] migrations dir not found at ${migrationsDir}; ` +
         `skipping pre-mark step. Set BOB_DB_MIGRATIONS_DIR to opt in. ` +
@@ -223,7 +233,7 @@ export async function makePgliteDb(options: PgliteDbOptions = {}): Promise<Pglit
     // env var nor the source-relative default resolves.
     await applyMigrations({
       client,
-      log: () => {},
+      log: noop,
       migrationsDir: resolveMigrationsDir(),
     });
   }
@@ -254,8 +264,8 @@ export async function makePgliteDb(options: PgliteDbOptions = {}): Promise<Pglit
  */
 function gateOnReady(client: PGlite, ready: Promise<void>): PGlite {
   return new Proxy(client, {
-    get(target, prop, receiver) {
-      const original = Reflect.get(target, prop, receiver);
+    get(target, prop, receiver): unknown {
+      const original: unknown = Reflect.get(target, prop, receiver);
 
       // Gate only the three async entry points drizzle-orm/pglite uses
       // to run SQL. Everything else (property access, sync getters,
@@ -271,7 +281,9 @@ function gateOnReady(client: PGlite, ready: Promise<void>): PGlite {
         };
       }
 
-      return typeof original === "function" ? original.bind(target) : original;
+      return typeof original === "function"
+        ? (original as (...a: unknown[]) => unknown).bind(target)
+        : original;
     },
   });
 }
@@ -310,7 +322,7 @@ export function makePgliteDbSync(
       // override for bundled hosts, tolerate a missing dir (no-op).
       await applyMigrations({
         client,
-        log: () => {},
+        log: noop,
         migrationsDir: resolveMigrationsDir(),
       });
     }
@@ -320,7 +332,7 @@ export function makePgliteDbSync(
   // will reject with the underlying error, but if nothing ever calls the db
   // we still want the root cause visible in logs rather than silenced.
   ready.catch((err: unknown) => {
-    // eslint-disable-next-line no-console
+
     console.error("[@bob/db] PGlite bootstrap failed:", err);
   });
 
@@ -335,14 +347,14 @@ export function makePgliteDbSync(
     try {
       await client.close();
     } catch (err) {
-      // eslint-disable-next-line no-console
+
       console.error("[@bob/db] PGlite close failed:", err);
     }
   };
   if (typeof process !== "undefined" && typeof process.once === "function") {
-    process.once("beforeExit", shutdown);
-    process.once("SIGINT", shutdown);
-    process.once("SIGTERM", shutdown);
+    process.once("beforeExit", () => void shutdown());
+    process.once("SIGINT", () => void shutdown());
+    process.once("SIGTERM", () => void shutdown());
   }
 
   const gatedClient = gateOnReady(client, ready);

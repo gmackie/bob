@@ -1,6 +1,6 @@
 /**
  * Aggregate layer that maps handler factory outputs to ProjectsRpc contract
- * names (56 procedures).
+ * names (58 procedures).
  *
  * Imports the seven handler factories (project, workspace, repository,
  * pullRequest, featureBranch, gitProviders, git), instantiates them with a
@@ -25,7 +25,7 @@ import { makeGitProvidersRpcHandlers } from "../rpc-handlers/gitProviders.js";
 import { makeGitRpcHandlers } from "../rpc-handlers/git.js";
 
 /**
- * Returns the raw handler mapping object for ProjectsRpc (56 entries).
+ * Returns the raw handler mapping object for ProjectsRpc (58 entries).
  * Can be used standalone with `liftHandlers` in the server, or called
  * by `makeProjectsLayer` which wraps the result in `ProjectsRpc.toLayer()`.
  */
@@ -49,19 +49,21 @@ export const makeProjectsHandlers = (ctx: HandlerContext) => {
         new BobNotFoundError({ entity: "project", id: "not-implemented" }),
       ),
 
-    // --- Project (6) — project.* → projects.* ---
+    // --- Project (7) — project.* → projects.* ---
     "projects.create": proj["project.create"],
     "projects.list": proj["project.list"],
     "projects.get": proj["project.get"],
     "projects.updateAutomationSettings":
       proj["project.updateAutomationSettings"],
+    "projects.setDefaultAgent": proj["project.setDefaultAgent"],
     "projects.discovery": proj["project.discovery"],
     "projects.dismissDir": proj["project.dismissDir"],
 
-    // --- Workspace (4) — workspace.* → projects.workspace.* ---
+    // --- Workspace (5) — workspace.* → projects.workspace.* ---
     "projects.workspace.list": ws["workspace.list"],
     "projects.workspace.create": ws["workspace.create"],
     "projects.workspace.rename": ws["workspace.rename"],
+    "projects.workspace.setDefaultAgent": ws["workspace.setDefaultAgent"],
     "projects.workspace.delete": ws["workspace.delete"],
 
     // --- Repository (12) — repository.* → projects.repository.* ---
@@ -130,4 +132,5 @@ export const makeProjectsHandlers = (ctx: HandlerContext) => {
 };
 
 export const makeProjectsLayer = (ctx: HandlerContext) =>
-  ProjectsRpc.toLayer(makeProjectsHandlers(ctx));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbed handlers narrow the contract error channel (BobNotFoundError vs never); mirrors rpc-server.ts established pattern
+  ProjectsRpc.toLayer(makeProjectsHandlers(ctx) as any);

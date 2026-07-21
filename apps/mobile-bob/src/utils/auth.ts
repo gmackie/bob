@@ -32,11 +32,17 @@ function createDevAuthClient() {
         error: null,
         isPending: false,
         isRefetching: false,
-        refetch: async () => ({ data: devSession }),
+        // Real better-auth `refetch` is `(queryParams?) => void` — fire and
+        // forget, it re-triggers an internal fetch rather than returning a
+        // promise the caller awaits. The dev session never changes, so
+        // there's nothing to actually refetch.
+        refetch: () => {
+          /* no-op: dev auth bypass session is static */
+        },
       }) as ReturnType<typeof realAuthClient.useSession>,
     signIn: {
       ...realAuthClient.signIn,
-      social: async () => ({ data: null, error: null }),
+      social: () => Promise.resolve({ data: null, error: null }),
     },
   };
 }

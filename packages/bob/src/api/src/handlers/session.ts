@@ -27,7 +27,6 @@ import {
   reportWorkflowStatus,
   requestInput,
   resolveAwaitingInput,
-  workflowStatusValues,
 } from "../services/sessions/workflowStatusService";
 import { createElevenLabsSessionService } from "../services/voice/elevenlabsSession";
 import { createOpenCodeClient } from "../services/opencode/opencodeClient";
@@ -73,15 +72,18 @@ function getElevenLabsService(): ElevenLabsSessionService | null {
   return elevenlabsService;
 }
 
-const sessionStatusValues = [
-  "provisioning",
-  "starting",
-  "running",
-  "idle",
-  "stopping",
-  "stopped",
-  "error",
-] as const;
+type SessionStatus =
+  | "provisioning"
+  | "starting"
+  | "running"
+  // Paused on a human decision (permission request / re-auth).
+  | "blocked"
+  | "idle"
+  | "stopping"
+  | "stopped"
+  | "error"
+  // Lease expired: contact lost, process fate unknown (never implies failure).
+  | "host_unknown";
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -141,7 +143,7 @@ export async function sessionList(
   input: {
     repositoryId?: string;
     worktreeId?: string;
-    status?: (typeof sessionStatusValues)[number];
+    status?: SessionStatus;
     limit: number;
     cursor?: string;
   },
@@ -436,6 +438,33 @@ export async function sessionStop(
     });
   }
 
+  // Ask the gateway to kill the running agent process. When a daemon holds
+  // the session, the gateway marks it "stopping" and the daemon's terminal
+  // "interrupted" report finalizes it; when no daemon is online the gateway
+  // finalizes it as "stopped" itself. Only fall back to a bare local status
+  // flip when the gateway is unreachable.
+  const gatewayUrl = process.env.GATEWAY_URL;
+  const nudgeSecret = process.env.NUDGE_SHARED_SECRET;
+  if (gatewayUrl && nudgeSecret) {
+    try {
+      const res = await fetch(`${gatewayUrl}/internal/session-stop`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${nudgeSecret}`,
+        },
+        body: JSON.stringify({ userId: ctx.userId, sessionId: input.id }),
+      });
+      if (res.ok) {
+        return await ctx.db.query.chatConversations.findFirst({
+          where: eq(chatConversations.id, input.id),
+        });
+      }
+    } catch {
+      // fall through to local finalize
+    }
+  }
+
   const [updated] = await ctx.db
     .update(chatConversations)
     .set({
@@ -668,7 +697,7 @@ export async function sessionUpdateStatus(
   ctx: HandlerContext,
   input: {
     id: string;
-    status: (typeof sessionStatusValues)[number];
+    status: SessionStatus;
     lastError?: { code: string; message: string; timestamp: string };
   },
 ) {
@@ -818,12 +847,12 @@ export async function sessionRecordEventBatch(
   ctx: HandlerContext,
   input: {
     sessionId: string;
-    events: Array<{
+    events: {
       seq: number;
       direction: "client" | "agent" | "system";
       eventType: string;
       payload: Record<string, unknown>;
-    }>;
+    }[];
   },
 ) {
   if (input.events.length === 0) return { count: 0 };
@@ -864,10 +893,13 @@ export async function sessionRecordEventBatch(
   return { count: input.events.length };
 }
 
+// Kept `async` (no real await) since rpc-handlers/session.ts wraps this via
+// wrapHandler, which requires a Promise-returning fn.
 export async function sessionGetGatewayWebSocketUrl(
   ctx: HandlerContext,
   _input: void,
 ) {
+  await Promise.resolve();
   return {
     url: getGatewaySocketUrl(),
     userId: ctx.userId,
@@ -1134,28 +1166,38 @@ export async function sessionCreateVoiceSession(
 
   const voiceSession = await service.createVoiceSession(input.sessionId);
 
-  // Register transcript callback to persist events
-  service.onTranscript(input.sessionId, async (event) => {
+  // Register transcript callback to persist events. onTranscript's callback
+  // type is `(event) => void` (fire-and-forget — emitTranscript calls it
+  // without awaiting), so this must never return a Promise the caller could
+  // silently drop a rejection from; errors are caught and logged instead.
+  service.onTranscript(input.sessionId, (event) => {
     const nextSeq = session.nextSeq;
-    await ctx.db.insert(sessionEvents).values({
-      sessionId: input.sessionId,
-      seq: nextSeq,
-      direction: event.type === "user" ? "client" : "agent",
-      eventType: "transcript",
-      payload: {
-        type: event.type,
-        text: event.text,
-        timestamp: event.timestamp.toISOString(),
-      },
-    });
+    void (async () => {
+      await ctx.db.insert(sessionEvents).values({
+        sessionId: input.sessionId,
+        seq: nextSeq,
+        direction: event.type === "user" ? "client" : "agent",
+        eventType: "transcript",
+        payload: {
+          type: event.type,
+          text: event.text,
+          timestamp: event.timestamp.toISOString(),
+        },
+      });
 
-    await ctx.db
-      .update(chatConversations)
-      .set({
-        nextSeq: sql`GREATEST(${chatConversations.nextSeq}, ${nextSeq + 1})`,
-        lastActivityAt: new Date().toISOString(),
-      })
-      .where(eq(chatConversations.id, input.sessionId));
+      await ctx.db
+        .update(chatConversations)
+        .set({
+          nextSeq: sql`GREATEST(${chatConversations.nextSeq}, ${nextSeq + 1})`,
+          lastActivityAt: new Date().toISOString(),
+        })
+        .where(eq(chatConversations.id, input.sessionId));
+    })().catch((err: unknown) => {
+      console.error(
+        `[session] Failed to persist transcript event for ${input.sessionId}:`,
+        err,
+      );
+    });
   });
 
   return voiceSession;

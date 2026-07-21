@@ -43,7 +43,9 @@ function ThreadResearchInner({ slug }: { slug: string }) {
     );
   }
 
-  const thread = threadQuery.data;
+  // `threads.bySlug` declares `.output(z.any())` (required by
+  // trpc-to-openapi), which degenerates the client-inferred type.
+  const thread = threadQuery.data as { id: string } | undefined;
   if (!thread) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#111113] text-[#E8E4DF]">

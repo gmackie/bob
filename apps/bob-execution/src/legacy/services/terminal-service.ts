@@ -13,6 +13,43 @@ export interface TerminalSession {
   createdAt: Date;
 }
 
+/** Inbound messages the terminal WebSocket protocol accepts from clients. */
+type TerminalClientMessage =
+  | { type: "data"; data: string }
+  | { type: "resize"; cols: unknown; rows: unknown }
+  | { type: "ping" };
+
+function isTerminalClientMessage(
+  value: unknown,
+): value is TerminalClientMessage {
+  if (typeof value !== "object" || value === null || !("type" in value)) {
+    return false;
+  }
+  const { type } = value;
+  if (type === "ping") {
+    return true;
+  }
+  if (type === "data") {
+    return typeof (value as { data?: unknown }).data === "string";
+  }
+  if (type === "resize") {
+    return "cols" in value && "rows" in value;
+  }
+  return false;
+}
+
+function parseTerminalClientMessage(
+  raw: string,
+): TerminalClientMessage | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  return isTerminalClientMessage(parsed) ? parsed : null;
+}
+
 export class TerminalService {
   private sessions = new Map<string, TerminalSession>();
 
@@ -27,7 +64,7 @@ export class TerminalService {
         cols: 80,
         rows: 30,
         cwd,
-        env: process.env as { [key: string]: string },
+        env: process.env,
       },
     );
 
@@ -60,8 +97,8 @@ export class TerminalService {
         name: "xterm-color",
         cols: 80,
         rows: 30,
-        cwd: cwd || process.env.HOME || "/",
-        env: process.env as { [key: string]: string },
+        cwd: cwd ?? process.env.HOME ?? "/",
+        env: process.env,
       },
     );
 
@@ -184,39 +221,40 @@ export class TerminalService {
   }
 
   private attachPtyWebSocket(session: TerminalSession, ws: WebSocket): void {
-    if (!session.pty) return;
+    const { pty } = session;
+    if (!pty) return;
 
-    session.pty.onData((data: string) => {
+    pty.onData((data: string) => {
       if (ws.readyState === ws.OPEN) {
         ws.send(JSON.stringify({ type: "data", data }));
       }
     });
 
     ws.on("message", (message: string) => {
-      try {
-        const msg = JSON.parse(message.toString());
+      const msg = parseTerminalClientMessage(message.toString());
+      if (!msg) {
+        console.error("Error processing terminal message: invalid payload");
+        return;
+      }
 
-        switch (msg.type) {
-          case "data":
-            session.pty!.write(msg.data);
-            break;
-          case "resize":
-            if (this.isValidResizeDimensions(msg.cols, msg.rows)) {
-              this.safeResize(session.pty!, msg.cols, msg.rows);
-            } else {
-              console.warn(
-                `Invalid resize dimensions: cols=${msg.cols}, rows=${msg.rows}`,
-              );
-            }
-            break;
-          case "ping":
-            if (ws.readyState === ws.OPEN) {
-              ws.send(JSON.stringify({ type: "pong" }));
-            }
-            break;
-        }
-      } catch (error) {
-        console.error("Error processing terminal message:", error);
+      switch (msg.type) {
+        case "data":
+          pty.write(msg.data);
+          break;
+        case "resize":
+          if (this.isValidResizeDimensions(msg)) {
+            this.safeResize(pty, msg.cols, msg.rows);
+          } else {
+            console.warn(
+              `Invalid resize dimensions: cols=${String(msg.cols)}, rows=${String(msg.rows)}`,
+            );
+          }
+          break;
+        case "ping":
+          if (ws.readyState === ws.OPEN) {
+            ws.send(JSON.stringify({ type: "pong" }));
+          }
+          break;
       }
     });
   }
@@ -225,38 +263,39 @@ export class TerminalService {
     session: TerminalSession,
     ws: WebSocket,
   ): void {
-    if (!session.claudeProcess) return;
+    const { claudeProcess } = session;
+    if (!claudeProcess) return;
 
-    session.claudeProcess.stdout?.on("data", (data: Buffer) => {
+    claudeProcess.stdout?.on("data", (data: Buffer) => {
       if (ws.readyState === ws.OPEN) {
         ws.send(JSON.stringify({ type: "data", data: data.toString() }));
       }
     });
 
-    session.claudeProcess.stderr?.on("data", (data: Buffer) => {
+    claudeProcess.stderr?.on("data", (data: Buffer) => {
       if (ws.readyState === ws.OPEN) {
         ws.send(JSON.stringify({ type: "data", data: data.toString() }));
       }
     });
 
     ws.on("message", (message: string) => {
-      try {
-        const msg = JSON.parse(message.toString());
+      const msg = parseTerminalClientMessage(message.toString());
+      if (!msg) {
+        console.error("Error processing terminal message: invalid payload");
+        return;
+      }
 
-        switch (msg.type) {
-          case "data":
-            if (session.claudeProcess?.stdin?.writable) {
-              session.claudeProcess.stdin.write(msg.data);
-            }
-            break;
-          case "ping":
-            if (ws.readyState === ws.OPEN) {
-              ws.send(JSON.stringify({ type: "pong" }));
-            }
-            break;
-        }
-      } catch (error) {
-        console.error("Error processing terminal message:", error);
+      switch (msg.type) {
+        case "data":
+          if (claudeProcess.stdin?.writable) {
+            claudeProcess.stdin.write(msg.data);
+          }
+          break;
+        case "ping":
+          if (ws.readyState === ws.OPEN) {
+            ws.send(JSON.stringify({ type: "pong" }));
+          }
+          break;
       }
     });
   }
@@ -265,61 +304,65 @@ export class TerminalService {
     session: TerminalSession,
     ws: WebSocket,
   ): void {
-    if (!session.claudePty) return;
+    const { claudePty } = session;
+    if (!claudePty) return;
 
-    session.claudePty.onData((data: string) => {
+    claudePty.onData((data: string) => {
       if (ws.readyState === ws.OPEN) {
         ws.send(JSON.stringify({ type: "data", data }));
       }
     });
 
     ws.on("message", (message: string) => {
-      try {
-        const msg = JSON.parse(message.toString());
+      const msg = parseTerminalClientMessage(message.toString());
+      if (!msg) {
+        console.error("Error processing terminal message: invalid payload");
+        return;
+      }
 
-        switch (msg.type) {
-          case "data":
-            session.claudePty!.write(msg.data);
-            break;
-          case "resize":
-            if (this.isValidResizeDimensions(msg.cols, msg.rows)) {
-              this.safeResize(session.claudePty!, msg.cols, msg.rows);
-            } else {
-              console.warn(
-                `Invalid resize dimensions: cols=${msg.cols}, rows=${msg.rows}`,
-              );
-            }
-            break;
-          case "ping":
-            if (ws.readyState === ws.OPEN) {
-              ws.send(JSON.stringify({ type: "pong" }));
-            }
-            break;
-        }
-      } catch (error) {
-        console.error("Error processing terminal message:", error);
+      switch (msg.type) {
+        case "data":
+          claudePty.write(msg.data);
+          break;
+        case "resize":
+          if (this.isValidResizeDimensions(msg)) {
+            this.safeResize(claudePty, msg.cols, msg.rows);
+          } else {
+            console.warn(
+              `Invalid resize dimensions: cols=${String(msg.cols)}, rows=${String(msg.rows)}`,
+            );
+          }
+          break;
+        case "ping":
+          if (ws.readyState === ws.OPEN) {
+            ws.send(JSON.stringify({ type: "pong" }));
+          }
+          break;
       }
     });
   }
 
-  private isValidResizeDimensions(cols: unknown, rows: unknown): boolean {
+  private isValidDimension(value: unknown): value is number {
     return (
-      typeof cols === "number" &&
-      typeof rows === "number" &&
-      Number.isInteger(cols) &&
-      Number.isInteger(rows) &&
-      cols > 0 &&
-      rows > 0
+      typeof value === "number" && Number.isInteger(value) && value > 0
+    );
+  }
+
+  private isValidResizeDimensions(
+    dimensions: { cols: unknown; rows: unknown },
+  ): dimensions is { cols: number; rows: number } {
+    return (
+      this.isValidDimension(dimensions.cols) &&
+      this.isValidDimension(dimensions.rows)
     );
   }
 
   private safeResize(pty: IPty, cols: number, rows: number): void {
     try {
-      if (pty.pid !== undefined) {
-        pty.resize(cols, rows);
-      }
+      pty.resize(cols, rows);
     } catch (err) {
-      console.warn(`Failed to resize terminal (PTY may have exited): ${err}`);
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`Failed to resize terminal (PTY may have exited): ${message}`);
     }
   }
 

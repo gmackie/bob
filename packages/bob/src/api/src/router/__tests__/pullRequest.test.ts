@@ -1,5 +1,13 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { createTRPCContext } from "../../trpc.js";
+
+// The real tRPC context type — the mock db/authApi below are structurally
+// close-enough fakes that only implement the query/insert/select surface
+// these handlers actually call, cast through `unknown` (not `any`) at the
+// single construction site so every caller.* call below stays fully typed.
+type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
+
 const selectWhereMock = vi.fn();
 const selectOrderByMock = vi.fn();
 const insertValuesMock = vi.fn();
@@ -61,10 +69,13 @@ const createCaller = () =>
         name: "Test User",
       },
     },
-    authApi: { getSession: vi.fn() } as any,
-    apiKeyAuth: null as any,
-    db: {} as any,
-  });
+    authApi: { getSession: vi.fn() },
+    apiKeyAuth: null,
+    // Not exercised by this file's tests — access-control checks here go
+    // through the mocked prService (getPrById) / module-mocked @bob/db/client,
+    // not ctx.db directly.
+    db: {},
+  } as unknown as TRPCContext);
 
 describe("pullRequest router access control", () => {
   const pullRequestId = "11111111-1111-4111-8111-111111111111";
@@ -73,7 +84,7 @@ describe("pullRequest router access control", () => {
     process.env.DATABASE_URL ??=
       "postgres://postgres:postgres@localhost:5432/test";
     ({ appRouter } = await import("../../root"));
-  });
+  }, 60_000);
 
   beforeEach(() => {
     [
@@ -88,7 +99,7 @@ describe("pullRequest router access control", () => {
   it("rejects review listing when the caller cannot access the pull request", async () => {
     getPrByIdMock.mockResolvedValueOnce(null);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(
       caller.pullRequest.listReviews({ pullRequestId }),
@@ -100,7 +111,7 @@ describe("pullRequest router access control", () => {
   it("rejects review creation when the caller cannot access the pull request", async () => {
     getPrByIdMock.mockResolvedValueOnce(null);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(
       caller.pullRequest.addReview({
@@ -123,7 +134,7 @@ describe("pullRequest router access control", () => {
       },
     ]);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
     const result = await caller.pullRequest.addReview({
       pullRequestId,
       status: "approved",

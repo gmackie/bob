@@ -1,5 +1,24 @@
 import { BaseAgentAdapter } from './base-adapter';
-import { AgentType } from '../types';
+import type { AgentType } from '../types';
+
+interface ClaudeUsagePayload {
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
+}
+
+function isClaudeUsagePayload(value: unknown): value is ClaudeUsagePayload {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  if (!('usage' in value)) {
+    return true;
+  }
+  return typeof value.usage === 'object' && value.usage !== null;
+}
 
 export class ClaudeAdapter extends BaseAgentAdapter {
   readonly type: AgentType = 'claude';
@@ -32,13 +51,17 @@ export class ClaudeAdapter extends BaseAgentAdapter {
       for (const line of lines) {
         const trimmed = line.trim();
         if (trimmed.startsWith('{') && trimmed.includes('usage')) {
-          const json = JSON.parse(trimmed);
+          const parsed: unknown = JSON.parse(trimmed);
+          if (!isClaudeUsagePayload(parsed) || !parsed.usage) {
+            continue;
+          }
 
-          if (json.usage && (json.usage.input_tokens || json.usage.output_tokens)) {
-            const inputTokens = json.usage.input_tokens || 0;
-            const outputTokens = json.usage.output_tokens || 0;
-            const cacheCreation = json.usage.cache_creation_input_tokens || 0;
-            const cacheRead = json.usage.cache_read_input_tokens || 0;
+          const { usage } = parsed;
+          if (usage.input_tokens ?? usage.output_tokens) {
+            const inputTokens = usage.input_tokens ?? 0;
+            const outputTokens = usage.output_tokens ?? 0;
+            const cacheCreation = usage.cache_creation_input_tokens ?? 0;
+            const cacheRead = usage.cache_read_input_tokens ?? 0;
 
             return {
               inputTokens,
@@ -60,7 +83,7 @@ export class ClaudeAdapter extends BaseAgentAdapter {
            fullOutput.length > 100;
   }
 
-  private calculateCost(inputTokens: number, outputTokens: number, cacheCreation: number = 0, cacheRead: number = 0): number {
+  private calculateCost(inputTokens: number, outputTokens: number, cacheCreation = 0, cacheRead = 0): number {
     // Sonnet pricing: $3 per 1M input tokens, $15 per 1M output tokens
     // Cache creation: $3.75 per 1M tokens, Cache read: $0.30 per 1M tokens
     const inputCost = (inputTokens / 1000000) * 3.00;

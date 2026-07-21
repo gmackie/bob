@@ -27,9 +27,10 @@ import {
   getMobileWorkItemEntryAction,
   getMobileWorkItemEntryValidationState,
   getMobileWorkItemDispatchSuccessHref,
-  normalizeMobileWorkItemEntryView,
-  type MobileWorkItemEntryValidationState,
+  normalizeMobileWorkItemEntryView
+
 } from "~/features/tablet/work-item-entry";
+import type {MobileWorkItemEntryValidationState} from "~/features/tablet/work-item-entry";
 import { getMobileDetailBackAction } from "~/features/tablet/navigation";
 import { authClient } from "~/utils/auth";
 import { trpc } from "~/utils/api";
@@ -136,7 +137,7 @@ export default function WorkItemDetailScreen() {
         await queryClient.invalidateQueries({
           queryKey: trpc.workItem.get.queryKey({ id: workItemId }),
         });
-        const workspaceId = workItemQuery.data?.workItem?.workspaceId ?? null;
+        const workspaceId = workItemQuery.data?.workItem.workspaceId ?? null;
         router.push(
           getMobileWorkItemDispatchSuccessHref({
             workItemId,
@@ -152,14 +153,14 @@ export default function WorkItemDetailScreen() {
 
   // Fetch child work items for epic/issue pipeline view
   const childListInput = {
-    workspaceId: workItemQuery.data?.workItem?.workspaceId ?? "",
+    workspaceId: workItemQuery.data?.workItem.workspaceId ?? "",
     parentId: workItemId,
     limit: 50,
   };
   const childItemsQuery = useQuery(
     trpc.workItem.list.queryOptions(
       childListInput,
-      { enabled: Boolean(session && workItemId && workItemQuery.data?.workItem?.kind !== "task") },
+      { enabled: Boolean(session && workItemId && workItemQuery.data?.workItem.kind !== "task") },
     ),
   );
   const dispatchChildTaskMutation = useMutation(

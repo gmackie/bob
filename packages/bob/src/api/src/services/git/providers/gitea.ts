@@ -1,4 +1,5 @@
 import type {
+  CommitStatus,
   CreatePullRequestInput,
   GitBranch,
   GitCommit,
@@ -7,6 +8,8 @@ import type {
   GitRepository,
   GitUser,
   ListRepositoriesInput,
+  PullRequestReview,
+  ReviewEvent,
   UpdatePullRequestInput,
 } from "./types";
 
@@ -44,7 +47,7 @@ export function createGiteaClient(
       input: ListRepositoriesInput,
     ): Promise<GitRepository[]> {
       const repos = await request<
-        Array<{
+        {
           id: number;
           owner: { login: string };
           name: string;
@@ -53,7 +56,7 @@ export function createGiteaClient(
           private: boolean;
           clone_url: string;
           html_url: string;
-        }>
+        }[]
       >(`/user/repos?page=${input.page}&limit=${input.perPage}`);
 
       return repos.map((repository) => ({
@@ -112,11 +115,11 @@ export function createGiteaClient(
 
     async listBranches(owner: string, repo: string): Promise<GitBranch[]> {
       const branches = await request<
-        Array<{
+        {
           name: string;
           commit: { id: string };
           protected: boolean;
-        }>
+        }[]
       >(`/repos/${owner}/${repo}/branches`);
 
       return branches.map((b) => ({
@@ -133,14 +136,14 @@ export function createGiteaClient(
       limit = 30,
     ): Promise<GitCommit[]> {
       const commits = await request<
-        Array<{
+        {
           sha: string;
           commit: {
             message: string;
             author: { name: string; email: string; date: string };
           };
           html_url: string;
-        }>
+        }[]
       >(`/repos/${owner}/${repo}/commits?sha=${branch}&limit=${limit}`);
 
       return commits.map((c) => ({
@@ -229,14 +232,14 @@ export function createGiteaClient(
       number: number,
     ): Promise<GitCommit[]> {
       const commits = await request<
-        Array<{
+        {
           sha: string;
           commit: {
             message: string;
             author: { name: string; email: string; date: string };
           };
           html_url: string;
-        }>
+        }[]
       >(`/repos/${owner}/${repo}/pulls/${number}/commits`);
 
       return commits.map((c) => ({
@@ -248,6 +251,66 @@ export function createGiteaClient(
         url: c.html_url,
       }));
     },
+
+    async getCommitStatus(
+      owner: string,
+      repo: string,
+      sha: string,
+    ): Promise<CommitStatus> {
+      // Forgejo's combined status: state is "" when no statuses exist yet.
+      const res = await request<{ state: string; total_count?: number }>(
+        `/repos/${owner}/${repo}/commits/${sha}/status`,
+      );
+      return { state: res.state || "pending", total: res.total_count ?? 0 };
+    },
+
+    async getPullRequestDiff(
+      owner: string,
+      repo: string,
+      number: number,
+    ): Promise<string> {
+      // The `.diff` endpoint returns text/plain, not JSON — use fetch directly.
+      const response = await fetch(
+        `${apiBase}/repos/${owner}/${repo}/pulls/${number}.diff`,
+        { headers: { Authorization: `token ${accessToken}` } },
+      );
+      if (!response.ok) {
+        throw new Error(`Gitea diff error (${response.status})`);
+      }
+      return response.text();
+    },
+
+    async listPullRequestReviews(
+      owner: string,
+      repo: string,
+      number: number,
+    ): Promise<PullRequestReview[]> {
+      const reviews = await request<
+        {
+          state: string;
+          commit_id: string | null;
+          user: { login: string } | null;
+        }[]
+      >(`/repos/${owner}/${repo}/pulls/${number}/reviews`);
+      return reviews.map((r) => ({
+        state: r.state,
+        commitId: r.commit_id,
+        userLogin: r.user?.login ?? null,
+      }));
+    },
+
+    async createPullRequestReview(
+      owner: string,
+      repo: string,
+      number: number,
+      event: ReviewEvent,
+      body: string,
+    ): Promise<void> {
+      await request(`/repos/${owner}/${repo}/pulls/${number}/reviews`, {
+        method: "POST",
+        body: JSON.stringify({ event, body }),
+      });
+    },
   };
 }
 
@@ -257,7 +320,9 @@ interface GiteaPR {
   title: string;
   body: string;
   state: string;
-  head: { ref: string };
+  draft?: boolean;
+  mergeable?: boolean;
+  head: { ref: string; sha?: string };
   base: { ref: string; repo: { full_name: string } };
   additions?: number;
   deletions?: number;
@@ -283,9 +348,11 @@ function mapPullRequest(pr: GiteaPR, instanceUrl: string): GitPullRequest {
     title: pr.title,
     body: pr.body,
     state,
-    draft: false,
+    draft: pr.draft ?? false,
     headBranch: pr.head.ref,
     baseBranch: pr.base.ref,
+    headSha: pr.head.sha,
+    mergeable: pr.mergeable,
     url: `${instanceUrl}/${pr.base.repo.full_name}/pulls/${pr.number}`,
     additions: pr.additions,
     deletions: pr.deletions,

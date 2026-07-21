@@ -16,12 +16,23 @@ export const thread_memory_search: ToolHandler<"thread_memory_search"> = async (
 ) => {
   // Schema scope values map 1:1 onto the router. When scope='this' the
   // router needs the caller's thread id; pull from ctx.threadId.
-  const r = await ctx.trpc.research.threadMemorySearch({
+  // `.output(z.any())` on the router → inferred `any`; restore the
+  // resolver's real shape so the `.map` callback below types.
+  const r = (await ctx.trpc.research.threadMemorySearch({
     query: args.query,
     scope: args.scope,
     ...(args.scope === "this" ? { threadId: ctx.threadId } : {}),
     limit: args.limit,
-  });
+  })) as {
+    threads: {
+      threadId: string;
+      title: string | null;
+      rollingSummaryMd: string;
+      topics: string[];
+      score: number;
+      updatedAt: Date | string;
+    }[];
+  };
   return {
     threads: r.threads.map((t) => ({
       thread_id: t.threadId,
@@ -59,10 +70,21 @@ export const thread_links_suggest: ToolHandler<"thread_links_suggest"> = async (
   args,
   ctx,
 ) => {
-  const r = await ctx.trpc.research.linksByThread({
+  // `.output(z.any())` on the router → inferred `any`; restore the
+  // resolver's real item shape so the `.map` callback below types.
+  const r = (await ctx.trpc.research.linksByThread({
     threadId: args.thread_id,
     limit: args.limit,
-  });
+  })) as {
+    items: {
+      otherThreadId: string;
+      otherThreadTitle: string | null;
+      kind: string;
+      score: number | null;
+      reasonMd: string | null;
+      discoveredAt: Date | string;
+    }[];
+  };
   return {
     links: r.items.map((it) => ({
       to_thread_id: it.otherThreadId,

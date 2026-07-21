@@ -7,7 +7,15 @@ import { Button } from "@gmacko/core/ui/button";
 import { Input } from "@gmacko/core/ui/input";
 import { Label } from "@gmacko/core/ui/label";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
+
+type WebhookConfig = {
+  id: string;
+  url: string;
+  active: boolean;
+  description?: string | null;
+  createdAt: Date | string;
+};
 
 function generateSecret(): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -28,39 +36,44 @@ export function WebhooksSection() {
   const [newDescription, setNewDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
   const queryClient = useQueryClient();
-  const { data: webhooks, isLoading } = useQuery(
-    trpc.webhook.list.queryOptions(undefined),
-  );
+  const { data: webhooks, isLoading } = useQuery({
+    queryKey: ["rpc", "external.webhook.list"],
+    queryFn: async () =>
+      (await rpc.external.webhook.list({})) as WebhookConfig[],
+  });
 
-  const createWebhook = useMutation(
-    trpc.webhook.create.mutationOptions({
-      onSuccess: () => {
-        setShowCreateForm(false);
-        setNewUrl("");
-        setNewSecret(generateSecret());
-        setNewDescription("");
-        setError(null);
-        void queryClient.invalidateQueries({
-          queryKey: trpc.webhook.list.queryKey(),
-        });
-      },
-      onError: (err) => {
-        setError(err.message);
-      },
-    }),
-  );
+  const createWebhook = useMutation({
+    mutationFn: (input: {
+      url: string;
+      secret: string;
+      description?: string;
+      active: boolean;
+    }) => rpc.external.webhook.create(input),
+    onSuccess: () => {
+      setShowCreateForm(false);
+      setNewUrl("");
+      setNewSecret(generateSecret());
+      setNewDescription("");
+      setError(null);
+      void queryClient.invalidateQueries({
+        queryKey: ["rpc", "external.webhook.list"],
+      });
+    },
+    onError: (err) => {
+      setError(err instanceof Error ? err.message : "Failed to create webhook");
+    },
+  });
 
-  const deleteWebhook = useMutation(
-    trpc.webhook.delete.mutationOptions({
-      onSuccess: () => {
-        void queryClient.invalidateQueries({
-          queryKey: trpc.webhook.list.queryKey(),
-        });
-      },
-    }),
-  );
+  const deleteWebhook = useMutation({
+    mutationFn: (input: { id: string }) => rpc.external.webhook.delete(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["rpc", "external.webhook.list"],
+      });
+    },
+  });
 
   const handleCreate = () => {
     if (!newUrl.trim() || newSecret.length < 16) return;

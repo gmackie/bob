@@ -2,7 +2,17 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
+
+interface ProjectProgressEntry {
+  project: {
+    id: string;
+    name: string;
+    color?: string | null;
+  };
+  issueCount: number;
+  completedCount: number;
+}
 
 const RING_SIZE = 40;
 const STROKE_WIDTH = 3;
@@ -65,11 +75,14 @@ interface ProjectProgressProps {
 }
 
 export function ProjectProgress({ workspaceId }: ProjectProgressProps) {
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
   const router = useRouter();
 
+  const input = { workspaceId };
   const { data: projectData, isLoading } = useQuery({
-    ...trpc.planning.listProjects.queryOptions({ workspaceId }),
+    queryKey: ["rpc", "planning.listProjects", input],
+    queryFn: () =>
+      rpc.planning.listProjects(input) as Promise<ProjectProgressEntry[]>,
     staleTime: 30_000,
     enabled: !!workspaceId,
   });

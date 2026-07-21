@@ -12,8 +12,11 @@ import {
   skillExecutions,
   skills,
   workItems,
-  workspaceMembers,
+  workspaceMembers
+
+
 } from "@bob/db/schema";
+import type {SkillCategory, SkillSource} from "@bob/db/schema";
 
 import type { HandlerContext } from "./context.js";
 
@@ -186,7 +189,7 @@ const BUILTIN_SKILLS = [
 
 export async function skillList(
   _ctx: HandlerContext,
-  input?: { category?: string; source?: string },
+  input?: { category?: SkillCategory; source?: SkillSource },
 ) {
   const conditions = [];
   if (input?.category) {
@@ -267,9 +270,9 @@ export async function skillGetExecution(
     .where(eq(skillExecutions.id, input.id))
     .limit(1);
 
-  if (rows.length === 0) return null;
+  const row = rows[0];
+  if (!row) return null;
 
-  const row = rows[0]!;
   await assertExecutionAccess(ctx.userId, row.execution);
 
   // Fetch parent execution if exists

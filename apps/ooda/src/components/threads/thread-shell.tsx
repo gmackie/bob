@@ -42,9 +42,11 @@ export function ThreadShell({ thread }: ThreadShellProps) {
 
   const trpc = useTRPC();
 
-  // Get available runners
+  // Get available runners. `runner.listDevices` is `.output(z.any())` for
+  // OpenAPI, which degenerates the client query type — cast to the row shape
+  // we actually read (`id`).
   const runnersQuery = useQuery(trpc.runner.listDevices.queryOptions());
-  const firstRunner = runnersQuery.data?.[0];
+  const firstRunner = (runnersQuery.data as unknown as { id: string }[] | undefined)?.[0];
 
   // Get adapters for the first available runner
   const adaptersQuery = useQuery({
@@ -54,7 +56,8 @@ export function ThreadShell({ thread }: ThreadShellProps) {
     enabled: !!firstRunner?.id && showCompareBar,
   });
 
-  const adapters = adaptersQuery.data ?? [];
+  // `runner.listAdapters` returns `string[]` but is `.output(z.any())`.
+  const adapters = (adaptersQuery.data ?? []) as unknown as string[];
 
   const sendPromptMutation = useMutation(
     trpc.runner.sendPrompt.mutationOptions(),

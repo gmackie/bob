@@ -150,9 +150,13 @@ export function PlanningSessionClient({
             ? "bg-emerald-500"
             : sessionStatus === "error"
               ? "bg-rose-500"
-              : sessionStatus === "provisioning" || sessionStatus === "starting"
-                ? "bg-amber-500 animate-pulse"
-                : "bg-muted-foreground",
+              : // Paused awaiting a human decision — steady amber "needs you".
+                sessionStatus === "blocked"
+                ? "bg-amber-500"
+                : sessionStatus === "provisioning" || sessionStatus === "starting"
+                  ? "bg-amber-500 animate-pulse"
+                  : // host_unknown (lease expired, contact lost) → muted dot.
+                    "bg-muted-foreground",
         )}
       />
       <span className="capitalize">{sessionStatus}</span>

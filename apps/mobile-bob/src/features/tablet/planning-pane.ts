@@ -6,6 +6,10 @@ const INTERACTIVE_PLANNING_STATUSES = new Set([
   "provisioning",
   "running",
   "starting",
+  // Paused awaiting a human decision — the pane stays interactive so the
+  // user can respond. ("host_unknown" is intentionally excluded: contact is
+  // lost, so there is nothing to interact with.)
+  "blocked",
 ]);
 const STARTING_PLANNING_STATUSES = new Set(["pending", "provisioning", "starting"]);
 

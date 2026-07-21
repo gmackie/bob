@@ -13,9 +13,10 @@ import {
 } from "~/features/tablet/navigation";
 import {
   getMobileOutcomeWorkItemHref,
-  getMobileQueueWorkItemHref,
-  type MobileWorkItemEntryView,
+  getMobileQueueWorkItemHref
+
 } from "~/features/tablet/work-item-entry";
+import type {MobileWorkItemEntryView} from "~/features/tablet/work-item-entry";
 import { getLiveDashboardSessions } from "~/hooks/gateway-sessions";
 import { useGateway } from "~/hooks/use-gateway";
 import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import type { Db } from "@bob/db/client";
+import type { projects } from "@bob/db/schema";
+
 import {
   ensureLinearProject,
   isOpenLinearState,
@@ -12,30 +15,35 @@ import {
  * generate a unique, column-safe key.
  */
 
+type Project = typeof projects.$inferSelect;
+type ProjectInsert = typeof projects.$inferInsert;
+
 function makeDb(opts: {
-  existing?: any;
+  existing?: Partial<Project>;
   existingKeys?: string[];
 }) {
-  const inserted: any[] = [];
+  const inserted: ProjectInsert[] = [];
   return {
     inserted,
     query: {
       projects: {
-        async findFirst() {
-          return opts.existing ?? undefined;
+        findFirst() {
+          return Promise.resolve(opts.existing as Project | undefined);
         },
-        async findMany() {
-          return (opts.existingKeys ?? []).map((key) => ({ key }));
+        findMany() {
+          return Promise.resolve(
+            (opts.existingKeys ?? []).map((key) => ({ key })),
+          );
         },
       },
     },
     insert() {
       return {
-        values(v: any) {
+        values(v: ProjectInsert) {
           inserted.push(v);
           return {
-            async returning() {
-              return [{ id: "proj-new", ...v }];
+            returning() {
+              return Promise.resolve([{ id: "proj-new", ...v } as Project]);
             },
           };
         },
@@ -47,7 +55,7 @@ function makeDb(opts: {
 describe("ensureLinearProject", () => {
   it("returns the existing project without inserting", async () => {
     const db = makeDb({ existing: { id: "p1", linearProjectId: "lin-1" } });
-    const res = await ensureLinearProject(db as any, {
+    const res = await ensureLinearProject(db as unknown as Db, {
       workspaceId: "ws-1",
       linearProjectId: "lin-1",
       name: "Splat GTM",
@@ -59,7 +67,7 @@ describe("ensureLinearProject", () => {
 
   it("creates a project with a derived key and autoDispatch off by default", async () => {
     const db = makeDb({ existingKeys: [] });
-    const res = await ensureLinearProject(db as any, {
+    const res = await ensureLinearProject(db as unknown as Db, {
       workspaceId: "ws-1",
       linearProjectId: "lin-2",
       name: "Splat GTM",
@@ -73,7 +81,7 @@ describe("ensureLinearProject", () => {
 
   it("de-duplicates the key when one already exists in the workspace", async () => {
     const db = makeDb({ existingKeys: ["SG"] });
-    const res = await ensureLinearProject(db as any, {
+    const res = await ensureLinearProject(db as unknown as Db, {
       workspaceId: "ws-1",
       linearProjectId: "lin-3",
       name: "Splat GTM",
@@ -83,7 +91,7 @@ describe("ensureLinearProject", () => {
 
   it("honors an explicit autoDispatch=true", async () => {
     const db = makeDb({ existingKeys: [] });
-    const res = await ensureLinearProject(db as any, {
+    const res = await ensureLinearProject(db as unknown as Db, {
       workspaceId: "ws-1",
       linearProjectId: "lin-4",
       name: "Latchflow",

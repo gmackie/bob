@@ -4,10 +4,22 @@
  *
  * Phase 7B-4D-beta Task 5.
  */
+import type { DatabaseLike } from "../services/secrets/sessionSecretService";
 import { SessionSecretService } from "../services/secrets/sessionSecretService";
 import { ForgeGraphSecretAdapter } from "../services/secrets/forgegraphSecretAdapter";
 
 import type { HandlerContext } from "./context.js";
+
+// SessionSecretService's DatabaseLike declares its relational-query methods
+// as `(args: unknown) => ...` so tests can supply Promise-returning mocks
+// without conforming to drizzle's full generic query-builder signature.
+// That looser param makes it *not* structurally assignable from the real
+// Db type (whose findFirst/findMany take a specific config type, and a
+// narrower-parameter function isn't assignable where a wider one is
+// declared) — hence the explicit `as unknown as DatabaseLike` here. ctx.db
+// genuinely implements every method DatabaseLike describes; this is a
+// real Db value crossing a deliberately looser DI-interface boundary, not
+// an unknown-shaped value.
 
 // ---------------------------------------------------------------------------
 // Handler functions
@@ -17,7 +29,7 @@ export async function secretsGetSessionSecretManifest(
   ctx: HandlerContext,
   input: { sessionId: string },
 ) {
-  const service = new SessionSecretService(ctx.db as any);
+  const service = new SessionSecretService(ctx.db as unknown as DatabaseLike);
   return service.listSessionSecrets({
     ...input,
     userId: ctx.userId,
@@ -28,7 +40,7 @@ export async function secretsGetSessionSecretForExecution(
   ctx: HandlerContext,
   input: { sessionId: string; handle: string },
 ) {
-  const service = new SessionSecretService(ctx.db as any);
+  const service = new SessionSecretService(ctx.db as unknown as DatabaseLike);
   return service.getSecretForSessionExecution({
     ...input,
     userId: ctx.userId,
@@ -54,7 +66,7 @@ export async function secretsCreateSessionSecret(
     };
   },
 ) {
-  const service = new SessionSecretService(ctx.db as any);
+  const service = new SessionSecretService(ctx.db as unknown as DatabaseLike);
   return service.createSessionSecret({
     ...input,
     userId: ctx.userId,
@@ -65,7 +77,7 @@ export async function secretsListSessionSecrets(
   ctx: HandlerContext,
   input: { sessionId: string },
 ) {
-  const service = new SessionSecretService(ctx.db as any);
+  const service = new SessionSecretService(ctx.db as unknown as DatabaseLike);
   return service.listSessionSecrets({
     ...input,
     userId: ctx.userId,
@@ -76,7 +88,7 @@ export async function secretsDeleteSessionSecret(
   ctx: HandlerContext,
   input: { secretId: string },
 ) {
-  const service = new SessionSecretService(ctx.db as any);
+  const service = new SessionSecretService(ctx.db as unknown as DatabaseLike);
   return service.deleteSessionSecret({
     ...input,
     userId: ctx.userId,
@@ -95,7 +107,7 @@ export async function secretsMarkSecretUsed(
     durationMs?: number;
   },
 ) {
-  const service = new SessionSecretService(_ctx.db as any);
+  const service = new SessionSecretService(_ctx.db as unknown as DatabaseLike);
   return service.markSecretUsed(input);
 }
 
@@ -111,7 +123,7 @@ export async function secretsUpsertProjectDeployBinding(
     templateId?: string;
   },
 ) {
-  const service = new SessionSecretService(_ctx.db as any);
+  const service = new SessionSecretService(_ctx.db as unknown as DatabaseLike);
   return service.upsertProjectDeployBinding(input);
 }
 
@@ -124,7 +136,7 @@ export async function secretsPromoteSessionSecret(
     forgegraphKey: string;
   },
 ) {
-  const service = new SessionSecretService(ctx.db as any);
+  const service = new SessionSecretService(ctx.db as unknown as DatabaseLike);
   const adapter = new ForgeGraphSecretAdapter();
   return service.promoteSessionSecret({
     ...input,

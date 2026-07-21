@@ -5,23 +5,23 @@ import { PlanningRpc } from "../groups/planning.js";
 import { ExternalRpc } from "../groups/external.js";
 
 describe("Bob contract groups — Phase 7B-4C verification", () => {
-  it("WorkItemsRpc has 31 procedures", () => {
-    expect(WorkItemsRpc.requests.size).toBe(31);
+  it("WorkItemsRpc has 32 procedures", () => {
+    expect(WorkItemsRpc.requests.size).toBe(32);
   });
 
-  it("PlanningRpc has 67 procedures", () => {
-    expect(PlanningRpc.requests.size).toBe(67);
+  it("PlanningRpc has 68 procedures", () => {
+    expect(PlanningRpc.requests.size).toBe(68);
   });
 
-  it("ExternalRpc has 31 procedures", () => {
-    expect(ExternalRpc.requests.size).toBe(31);
+  it("ExternalRpc has 37 procedures", () => {
+    expect(ExternalRpc.requests.size).toBe(37);
   });
 
-  it("Bob domain total is 129 procedures", () => {
+  it("Bob domain total is 137 procedures", () => {
     const total =
       WorkItemsRpc.requests.size +
       PlanningRpc.requests.size +
       ExternalRpc.requests.size;
-    expect(total).toBe(129);
+    expect(total).toBe(137);
   });
 });

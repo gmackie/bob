@@ -12,9 +12,9 @@ describe("mobile oauth", () => {
 
   it("does not fail OAuth startup when there is no stale browser to dismiss", async () => {
     await expect(
-      dismissExistingAuthBrowser(async () => {
-        throw new Error("There is no web browser to dismiss");
-      }),
+      dismissExistingAuthBrowser(() =>
+        Promise.reject(new Error("There is no web browser to dismiss")),
+      ),
     ).resolves.toBeUndefined();
   });
 });

@@ -1,6 +1,6 @@
 /**
  * Aggregate layer that maps handler factory outputs to WorkItemsRpc contract
- * names (31 procedures).
+ * names (33 procedures).
  *
  * Imports the four handler factories (workItems, agentRun, requirement, link),
  * instantiates them with a HandlerContext, and wires each factory key to the
@@ -20,8 +20,9 @@ export const makeWorkItemsLayer = (ctx: HandlerContext) => {
   const lnk = makeLinkRpcHandlers(ctx);
 
   return WorkItemsRpc.toLayer({
-    // --- Core (6) ---
+    // --- Core (7) ---
     "workItem.list": wi["workItems.list"],
+    "workItem.statusCounts": wi["workItems.statusCounts"],
     "workItem.get": wi["workItems.get"],
     "workItem.update": wi["workItems.update"],
     "workItem.promoteToTask": wi["workItems.promoteToTask"],
@@ -69,5 +70,8 @@ export const makeWorkItemsLayer = (ctx: HandlerContext) => {
     "workItem.link.delete": lnk["link.delete"],
     "workItem.link.linkToPlanningTask": lnk["link.linkToPlanningTask"],
     "workItem.link.linkToGitHubPR": lnk["link.linkToGitHubPR"],
-  });
+    // Same destructured-envelope-vs-unwrapped-payload erasure documented in
+    // rpc-layers/external.ts — widened to WorkItemsRpc.toLayer's own
+    // parameter type rather than `any`.
+  } as unknown as Parameters<typeof WorkItemsRpc.toLayer>[0]);
 };

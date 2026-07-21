@@ -69,4 +69,5 @@ export const makeSecretsHandlers = (ctx: HandlerContext) => {
 };
 
 export const makeSecretsLayer = (ctx: HandlerContext) =>
-  SecretsRpc.toLayer(makeSecretsHandlers(ctx));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbed handlers narrow the contract error channel (BobNotFoundError vs never); mirrors rpc-server.ts established pattern
+  SecretsRpc.toLayer(makeSecretsHandlers(ctx) as any);

@@ -138,4 +138,19 @@ export const ExternalStubLayer = ExternalRpc.toLayer({
       key: "bob_stub_key_0000",
       prefix: "bob_stub_key",
     }),
+
+  // Integration (6)
+  "external.integration.list": () => Effect.succeed([]),
+  "external.integration.get": () => Effect.succeed(null),
+  "external.integration.save": () =>
+    Effect.succeed({ id: "stub-integration-1", created: true }),
+  "external.integration.fetchLinearTeams": () =>
+    Effect.succeed([{ id: "stub-team-1", name: "Stub Team", key: "STUB" }]),
+  "external.integration.setupLinear": () =>
+    Effect.succeed({
+      id: "stub-integration-1",
+      created: true,
+      webhookId: "stub-webhook-1",
+    }),
+  "external.integration.delete": () => Effect.succeed({ deleted: true }),
 });

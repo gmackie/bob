@@ -13,7 +13,6 @@ import type {
   TabletRecentOutcomeRailRow,
 } from "~/features/tablet/shell";
 import { getMobileTasksDashboardHref } from "~/features/tablet/navigation";
-import type { TabletQueueItem } from "~/features/tablet/queue";
 import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
 import { colors } from "~/lib/colors";
 import { authClient } from "~/utils/auth";
@@ -37,7 +36,7 @@ export default function RecentOutcomesScreen() {
   const rows = useMemo(
     () => buildRecentOutcomeRailRows({
       workspaceId: workspace?.id,
-      workItems: (workItemsQuery.data ?? []) as TabletQueueItem[],
+      workItems: workItemsQuery.data ?? [],
       sessions: buildTabletShellSessionsFromAgentRuns(
         (sessionsQuery.data ?? []) as TabletAgentRunSessionInput[],
       ),

@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Mock } from "vitest";
+import type { Db } from "@bob/db/client";
 
 vi.mock("@bob/db", () => ({
   eq: vi.fn((left: unknown, right: unknown) => ({ left, right })),
@@ -27,18 +29,63 @@ vi.mock("@bob/db/schema", () => ({
 import { InternalPlanningProvider } from "../internalProvider.js";
 import { PlanningProviderError } from "../planningProvider.js";
 
+// Mimics the query-builder's PromiseLike#then — takes a synchronous
+// resolver, not a callback expected to return void, hence the explicit
+// signature (a bare ReturnType<typeof vi.fn> infers a void-returning
+// callback and trips no-misused-promises at every call site below).
+type MockThen = Mock<(onFulfilled: (rows: unknown[]) => unknown) => Promise<unknown>>;
+
+// where() sometimes resolves directly (update chains) and sometimes
+// returns a re-read thenable (select chains) — needs an explicit
+// non-void return type for the same reason MockThen does.
+type MockWhereResult = Promise<void> | { then: MockThen } | MockDb;
+
+/**
+ * Chainable drizzle-query test double. Only implements the subset of `Db`
+ * methods internalProvider.ts actually calls (insert/values/returning/
+ * select/from/where/orderBy/limit/update/set/then); cast to `Db` at
+ * construction so provider code sees the real, narrow type it depends on
+ * while tests keep full mock-function ergonomics (mockResolvedValue etc).
+ */
+interface MockDb {
+  insert: ReturnType<typeof vi.fn>;
+  values: ReturnType<typeof vi.fn>;
+  returning: ReturnType<typeof vi.fn>;
+  select: ReturnType<typeof vi.fn>;
+  from: ReturnType<typeof vi.fn>;
+  where: Mock<() => MockWhereResult>;
+  orderBy: ReturnType<typeof vi.fn>;
+  limit: ReturnType<typeof vi.fn>;
+  update: ReturnType<typeof vi.fn>;
+  set: ReturnType<typeof vi.fn>;
+  then: MockThen;
+}
+
 describe("InternalPlanningProvider", () => {
   let provider: InternalPlanningProvider;
-  let mockDb: any;
+  let mockDb: MockDb;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockDb = createMockDb();
-    provider = new InternalPlanningProvider(mockDb, "proj-1");
+    provider = new InternalPlanningProvider(mockDb as unknown as Db, "proj-1");
   });
 
-  function createMockDb() {
-    const mock: any = {};
+  /**
+   * Builds a one-shot thenable used to fake the re-read `select().from().where()`
+   * chain (see updateTask tests below), typed the same as MockDb#then so
+   * eslint doesn't infer a void-returning callback for its resolver.
+   */
+  function thenableOf(rows: unknown[]): { then: MockThen } {
+    return {
+      then: vi.fn().mockImplementation((cb: (rows: unknown[]) => unknown) =>
+        Promise.resolve(cb(rows)),
+      ),
+    };
+  }
+
+  function createMockDb(): MockDb {
+    const mock = {} as MockDb;
     mock.insert = vi.fn().mockReturnValue(mock);
     mock.values = vi.fn().mockReturnValue(mock);
     mock.returning = vi.fn().mockResolvedValue([]);
@@ -191,8 +238,9 @@ describe("InternalPlanningProvider", () => {
       expect(mockDb.orderBy).toHaveBeenCalled();
       expect(mockDb.limit).toHaveBeenCalledWith(25);
       expect(result).toHaveLength(2);
-      expect(result[0]!.externalId).toBe("wi-1");
-      expect(result[1]!.externalId).toBe("wi-2");
+      const [first, second] = result;
+      expect(first?.externalId).toBe("wi-1");
+      expect(second?.externalId).toBe("wi-2");
     });
 
     it("uses default limit of 50 when not specified", async () => {
@@ -224,11 +272,7 @@ describe("InternalPlanningProvider", () => {
           return Promise.resolve();
         }
         // This is the select().from().where() for re-read — return mock for .then()
-        return {
-          then: vi.fn().mockImplementation((cb: (rows: unknown[]) => unknown) =>
-            Promise.resolve(cb([updatedItem])),
-          ),
-        };
+        return thenableOf([updatedItem]);
       });
 
       const result = await provider.updateTask("wi-1", {
@@ -254,11 +298,7 @@ describe("InternalPlanningProvider", () => {
         if (callCount === 1) {
           return Promise.resolve();
         }
-        return {
-          then: vi.fn().mockImplementation((cb: (rows: unknown[]) => unknown) =>
-            Promise.resolve(cb([])),
-          ),
-        };
+        return thenableOf([]);
       });
 
       await expect(
@@ -316,7 +356,7 @@ describe("InternalPlanningProvider", () => {
       mockDb.values.mockResolvedValue(undefined);
 
       await provider.attachArtifact("wi-1", "run-1", {
-        type: "code",
+        type: "other",
         role: "implementation",
         title: "PR Link",
         url: "https://github.com/example/pr/1",
@@ -329,7 +369,7 @@ describe("InternalPlanningProvider", () => {
         taskRunId: "run-1",
         producerType: "bob",
         producerId: "run-1",
-        artifactType: "code",
+        artifactType: "other",
         artifactRole: "implementation",
         url: "https://github.com/example/pr/1",
         title: "PR Link",

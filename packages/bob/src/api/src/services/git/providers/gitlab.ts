@@ -89,11 +89,11 @@ export function createGitLabClient(
 
     async listBranches(owner: string, repo: string): Promise<GitBranch[]> {
       const branches = await request<
-        Array<{
+        {
           name: string;
           commit: { id: string };
           protected: boolean;
-        }>
+        }[]
       >(`/projects/${encodeProject(owner, repo)}/repository/branches`);
 
       return branches.map((b) => ({
@@ -110,14 +110,14 @@ export function createGitLabClient(
       limit = 30,
     ): Promise<GitCommit[]> {
       const commits = await request<
-        Array<{
+        {
           id: string;
           message: string;
           author_name: string;
           author_email: string;
           committed_date: string;
           web_url: string;
-        }>
+        }[]
       >(
         `/projects/${encodeProject(owner, repo)}/repository/commits?ref_name=${branch}&per_page=${limit}`,
       );
@@ -207,14 +207,14 @@ export function createGitLabClient(
       number: number,
     ): Promise<GitCommit[]> {
       const commits = await request<
-        Array<{
+        {
           id: string;
           message: string;
           author_name: string;
           author_email: string;
           committed_date: string;
           web_url: string;
-        }>
+        }[]
       >(
         `/projects/${encodeProject(owner, repo)}/merge_requests/${number}/commits`,
       );

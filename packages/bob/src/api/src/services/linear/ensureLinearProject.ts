@@ -7,6 +7,7 @@
  * entry points.
  */
 import { and, eq } from "@bob/db";
+import type { Db } from "@bob/db/client";
 import { projects } from "@bob/db/schema";
 
 export interface EnsureLinearProjectInput {
@@ -29,10 +30,11 @@ function deriveKeyBase(name: string): string {
   const cleaned = name.toUpperCase().replace(/[^A-Z0-9 ]/g, " ").trim();
   const words = cleaned.split(/\s+/).filter(Boolean);
   let base: string;
+  const [firstWord] = words;
   if (words.length >= 2) {
     base = words.map((w) => w[0]).join("");
-  } else if (words.length === 1) {
-    base = words[0]!.slice(0, 6);
+  } else if (firstWord) {
+    base = firstWord.slice(0, 6);
   } else {
     base = "PROJ";
   }
@@ -41,7 +43,7 @@ function deriveKeyBase(name: string): string {
 }
 
 async function generateUniqueProjectKey(
-  db: any,
+  db: Db,
   workspaceId: string,
   name: string,
 ): Promise<string> {
@@ -49,7 +51,7 @@ async function generateUniqueProjectKey(
     where: eq(projects.workspaceId, workspaceId),
     columns: { key: true },
   });
-  const used = new Set<string>(existing.map((p: any) => p.key));
+  const used = new Set<string>(existing.map((p) => p.key));
 
   const base = deriveKeyBase(name);
   if (!used.has(base)) return base;
@@ -61,7 +63,7 @@ async function generateUniqueProjectKey(
 }
 
 export async function ensureLinearProject(
-  db: any,
+  db: Db,
   input: EnsureLinearProjectInput,
 ): Promise<EnsureLinearProjectResult> {
   const existing = await db.query.projects.findFirst({
@@ -86,6 +88,10 @@ export async function ensureLinearProject(
       automationSettings: { autoDispatch: input.autoDispatch ?? false },
     })
     .returning();
+
+  if (!created) {
+    throw new Error("Failed to create Bob project for Linear project");
+  }
 
   return { project: created, created: true };
 }

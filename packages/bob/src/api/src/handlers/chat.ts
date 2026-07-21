@@ -6,6 +6,7 @@
  */
 import { TRPCError } from "@trpc/server";
 import { desc, eq, and, asc } from "@bob/db";
+import type { Db } from "@bob/db/client";
 import {
   chatAttachments,
   chatConversations,
@@ -22,7 +23,7 @@ import type { HandlerContext } from "./context.js";
 // Shared helpers (moved verbatim from the router)
 // ---------------------------------------------------------------------------
 
-async function loadAccessibleWorkItem(db: any, userId: string, workItemId: string) {
+async function loadAccessibleWorkItem(db: Db, userId: string, workItemId: string) {
   const workItem = await db.query.workItems.findFirst({
     where: eq(workItems.id, workItemId),
     columns: { id: true, workspaceId: true },
@@ -47,7 +48,7 @@ async function loadAccessibleWorkItem(db: any, userId: string, workItemId: strin
   return workItem;
 }
 
-async function loadOwnedRepository(db: any, userId: string, repositoryId: string) {
+async function loadOwnedRepository(db: Db, userId: string, repositoryId: string) {
   const repository = await db.query.repositories.findFirst({
     where: and(
       eq(repositories.id, repositoryId),
@@ -63,7 +64,7 @@ async function loadOwnedRepository(db: any, userId: string, repositoryId: string
   return repository;
 }
 
-async function loadOwnedWorktree(db: any, userId: string, worktreeId: string) {
+async function loadOwnedWorktree(db: Db, userId: string, worktreeId: string) {
   const worktree = await db.query.worktrees.findFirst({
     where: and(eq(worktrees.id, worktreeId), eq(worktrees.userId, userId)),
     columns: { id: true },
@@ -76,7 +77,7 @@ async function loadOwnedWorktree(db: any, userId: string, worktreeId: string) {
   return worktree;
 }
 
-async function loadOwnedConversation(db: any, userId: string, conversationId: string) {
+async function loadOwnedConversation(db: Db, userId: string, conversationId: string) {
   const conversation = await db.query.chatConversations.findFirst({
     where: and(
       eq(chatConversations.id, conversationId),
@@ -91,7 +92,7 @@ async function loadOwnedConversation(db: any, userId: string, conversationId: st
   return conversation;
 }
 
-async function loadOwnedMessage(db: any, userId: string, messageId: string) {
+async function loadOwnedMessage(db: Db, userId: string, messageId: string) {
   const message = await db.query.chatMessages.findFirst({
     where: eq(chatMessages.id, messageId),
     with: {
@@ -99,7 +100,7 @@ async function loadOwnedMessage(db: any, userId: string, messageId: string) {
     },
   });
 
-  if (!message || message.conversation?.userId !== userId) {
+  if (message?.conversation.userId !== userId) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Message not found" });
   }
 
@@ -215,8 +216,12 @@ export async function chatSendMessage(
     input.conversationId,
   );
 
-  // Persist the user message in the DB
-  const [userMessage] = await ctx.db
+  // Persist the user message in the DB. Not returned below (this endpoint
+  // always throws NOT_IMPLEMENTED next) — kept as a real insert rather than
+  // removed, since the write itself is the behavior other code may depend
+  // on even though the response is an error; only the local binding to the
+  // inserted row is unused.
+  const [_userMessage] = await ctx.db
     .insert(chatMessages)
     .values({
       conversationId: input.conversationId,

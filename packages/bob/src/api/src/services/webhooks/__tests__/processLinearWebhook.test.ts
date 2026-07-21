@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type {
+  markDeliveryFailed as MarkDeliveryFailedFn,
+  markDeliveryProcessed as MarkDeliveryProcessedFn,
+} from "../processWebhook.js";
+import type { executeTask as ExecuteTaskFn } from "@bob/execution/runtime/taskExecutor";
+
 const dbQueryMocks = {
   workItemsFindFirst: vi.fn(),
   projectsFindFirst: vi.fn(),
@@ -9,11 +15,13 @@ const dbQueryMocks = {
 const dbSelectMock = vi.fn();
 const dbSelectFromMock = vi.fn();
 const dbSelectWhereMock = vi.fn();
-const dbSelectThenMock = vi.fn();
+const dbSelectThenMock = vi.fn<
+  (fn: (rows: Record<string, unknown>[]) => unknown) => unknown
+>();
 
 const dbInsertMock = vi.fn();
 const dbInsertValuesMock = vi.fn();
-const dbInsertReturningMock = vi.fn();
+const dbInsertReturningMock = vi.fn<() => Promise<Record<string, unknown>[]>>();
 
 const dbUpdateMock = vi.fn();
 const dbUpdateSetMock = vi.fn();
@@ -34,7 +42,7 @@ const mockDb = {
           where: (cond: unknown) => {
             dbSelectWhereMock(cond);
             return {
-              then: (fn: (rows: any[]) => any) => dbSelectThenMock(fn),
+              then: (fn: (rows: Record<string, unknown>[]) => unknown) => dbSelectThenMock(fn),
             };
           },
         };
@@ -70,22 +78,63 @@ const mockDb = {
 
 vi.mock("@bob/db/client", () => ({ db: mockDb }));
 
-const mockMarkDeliveryProcessed = vi.fn();
-const mockMarkDeliveryFailed = vi.fn();
+const mockMarkDeliveryProcessed = vi.fn<typeof MarkDeliveryProcessedFn>();
+const mockMarkDeliveryFailed = vi.fn<typeof MarkDeliveryFailedFn>();
 
 vi.mock("../processWebhook", () => ({
-  markDeliveryProcessed: (...args: any[]) => mockMarkDeliveryProcessed(...args),
-  markDeliveryFailed: (...args: any[]) => mockMarkDeliveryFailed(...args),
+  markDeliveryProcessed: (...args: Parameters<typeof MarkDeliveryProcessedFn>) =>
+    mockMarkDeliveryProcessed(...args),
+  markDeliveryFailed: (...args: Parameters<typeof MarkDeliveryFailedFn>) =>
+    mockMarkDeliveryFailed(...args),
 }));
 
-const mockExecuteTask = vi.fn();
+const mockExecuteTask = vi.fn<typeof ExecuteTaskFn>();
 vi.mock("@bob/execution/runtime/taskExecutor", () => ({
-  executeTask: (...args: any[]) => mockExecuteTask(...args),
+  executeTask: (...args: Parameters<typeof ExecuteTaskFn>) => mockExecuteTask(...args),
 }));
 
 const { processLinearWebhook } = await import("../processLinearWebhook");
 
-function makeIssuePayload(overrides: Record<string, unknown> = {}) {
+interface LinearWebhookLabel {
+  id: string;
+  name: string;
+}
+
+interface LinearWebhookState {
+  id: string;
+  name: string;
+  type: string;
+}
+
+interface LinearIssuePayload {
+  // `processLinearWebhook`'s real parameter type is `Record<string, unknown>`
+  // (genuinely untyped webhook JSON, per its own comment) — this index
+  // signature keeps this concretely-typed test fixture structurally
+  // assignable to that real signature, since the fixture IS just JSON data.
+  [key: string]: unknown;
+  action: string;
+  type: string;
+  createdAt: string;
+  data: {
+    id: string;
+    identifier: string;
+    title: string;
+    description: string;
+    priority: number;
+    state: LinearWebhookState;
+    team: { id: string; key: string };
+    project: { id: string; name: string };
+    assignee: null;
+    labels: LinearWebhookLabel[];
+    creatorId: string;
+  };
+  url: string;
+  updatedFrom?: Record<string, unknown>;
+}
+
+function makeIssuePayload(
+  overrides: Record<string, unknown> = {},
+): LinearIssuePayload {
   return {
     action: "create",
     type: "Issue",
@@ -115,7 +164,7 @@ describe("processLinearWebhook", () => {
 
   it("marks non-Issue events as processed without handling", async () => {
     const payload = { action: "create", type: "Comment", data: {} };
-    await processLinearWebhook("Comment", payload as any, "delivery-1");
+    await processLinearWebhook("Comment", payload, "delivery-1");
 
     expect(mockMarkDeliveryProcessed).toHaveBeenCalledWith("delivery-1");
     expect(dbQueryMocks.workItemsFindFirst).not.toHaveBeenCalled();
@@ -123,13 +172,13 @@ describe("processLinearWebhook", () => {
 
   it("skips bob-originated issues (bob-managed label)", async () => {
     const payload = makeIssuePayload();
-    (payload.data as any).labels = [{ id: "lbl-1", name: "bob-managed" }];
+    payload.data.labels = [{ id: "lbl-1", name: "bob-managed" }];
 
-    dbSelectThenMock.mockImplementation((fn: Function) =>
+    dbSelectThenMock.mockImplementation((fn) =>
       fn([{ webhookSigningSecret: null, linearTeamId: "team-linear-1" }]),
     );
 
-    await processLinearWebhook("Issue", payload as any, "delivery-2");
+    await processLinearWebhook("Issue", payload, "delivery-2");
 
     expect(mockMarkDeliveryProcessed).toHaveBeenCalledWith("delivery-2");
     expect(dbInsertMock).not.toHaveBeenCalled();
@@ -138,9 +187,9 @@ describe("processLinearWebhook", () => {
   it("skips when no matching project found", async () => {
     const payload = makeIssuePayload();
 
-    dbSelectThenMock.mockImplementation((fn: Function) => fn([]));
+    dbSelectThenMock.mockImplementation((fn) => fn([]));
 
-    await processLinearWebhook("Issue", payload as any, "delivery-3");
+    await processLinearWebhook("Issue", payload, "delivery-3");
 
     expect(mockMarkDeliveryProcessed).toHaveBeenCalledWith("delivery-3");
     expect(mockExecuteTask).not.toHaveBeenCalled();
@@ -151,7 +200,7 @@ describe("processLinearWebhook", () => {
       action: "update",
       updatedFrom: { stateId: "old-state" },
     });
-    (payload.data as any).state = { id: "state-2", name: "In Progress", type: "started" };
+    payload.data.state = { id: "state-2", name: "In Progress", type: "started" };
 
     dbQueryMocks.workItemsFindFirst.mockResolvedValueOnce({
       id: "work-item-1",
@@ -159,7 +208,7 @@ describe("processLinearWebhook", () => {
       externalProvider: "linear",
     });
 
-    await processLinearWebhook("Issue", payload as any, "delivery-4");
+    await processLinearWebhook("Issue", payload, "delivery-4");
 
     expect(dbUpdateSetMock).toHaveBeenCalledWith(
       expect.objectContaining({ status: "in_progress" }),
@@ -176,7 +225,7 @@ describe("processLinearWebhook", () => {
       externalProvider: "linear",
     });
 
-    await processLinearWebhook("Issue", payload as any, "delivery-5");
+    await processLinearWebhook("Issue", payload, "delivery-5");
 
     expect(dbUpdateSetMock).toHaveBeenCalledWith(
       expect.objectContaining({ status: "cancelled" }),
@@ -192,7 +241,7 @@ describe("processLinearWebhook", () => {
 
     dbQueryMocks.workItemsFindFirst.mockResolvedValueOnce(null);
 
-    await processLinearWebhook("Issue", payload as any, "delivery-6");
+    await processLinearWebhook("Issue", payload, "delivery-6");
 
     expect(dbUpdateMock).not.toHaveBeenCalled();
     expect(mockMarkDeliveryProcessed).toHaveBeenCalledWith("delivery-6");
@@ -200,14 +249,14 @@ describe("processLinearWebhook", () => {
 
   it("marks delivery failed on processing error", async () => {
     const payload = makeIssuePayload({ action: "update" });
-    (payload as any).updatedFrom = { stateId: "old-state" };
+    payload.updatedFrom = { stateId: "old-state" };
 
     dbQueryMocks.workItemsFindFirst.mockRejectedValueOnce(
       new Error("DB connection failed"),
     );
 
     await expect(
-      processLinearWebhook("Issue", payload as any, "delivery-7"),
+      processLinearWebhook("Issue", payload, "delivery-7"),
     ).rejects.toThrow("DB connection failed");
 
     expect(mockMarkDeliveryFailed).toHaveBeenCalledWith(

@@ -21,37 +21,64 @@ const NOT_IMPLEMENTED_MSG =
 // ---------------------------------------------------------------------------
 
 export async function filesystemList(): Promise<never> {
+  // No async work yet (all filesystem ops are NOT_IMPLEMENTED stubs) —
+  // kept `async` for the caller's Promise-returning signature.
+  await Promise.resolve();
   throw new TRPCError({ code: "NOT_IMPLEMENTED", message: NOT_IMPLEMENTED_MSG });
 }
 
 export async function filesystemRead(): Promise<never> {
+  // No async work yet (all filesystem ops are NOT_IMPLEMENTED stubs) —
+  // kept `async` for the caller's Promise-returning signature.
+  await Promise.resolve();
   throw new TRPCError({ code: "NOT_IMPLEMENTED", message: NOT_IMPLEMENTED_MSG });
 }
 
 export async function filesystemWrite(): Promise<never> {
+  // No async work yet (all filesystem ops are NOT_IMPLEMENTED stubs) —
+  // kept `async` for the caller's Promise-returning signature.
+  await Promise.resolve();
   throw new TRPCError({ code: "NOT_IMPLEMENTED", message: NOT_IMPLEMENTED_MSG });
 }
 
 export async function filesystemDelete(): Promise<never> {
+  // No async work yet (all filesystem ops are NOT_IMPLEMENTED stubs) —
+  // kept `async` for the caller's Promise-returning signature.
+  await Promise.resolve();
   throw new TRPCError({ code: "NOT_IMPLEMENTED", message: NOT_IMPLEMENTED_MSG });
 }
 
 export async function filesystemMkdir(): Promise<never> {
+  // No async work yet (all filesystem ops are NOT_IMPLEMENTED stubs) —
+  // kept `async` for the caller's Promise-returning signature.
+  await Promise.resolve();
   throw new TRPCError({ code: "NOT_IMPLEMENTED", message: NOT_IMPLEMENTED_MSG });
 }
 
 export async function filesystemMove(): Promise<never> {
+  // No async work yet (all filesystem ops are NOT_IMPLEMENTED stubs) —
+  // kept `async` for the caller's Promise-returning signature.
+  await Promise.resolve();
   throw new TRPCError({ code: "NOT_IMPLEMENTED", message: NOT_IMPLEMENTED_MSG });
 }
 
 export async function filesystemCopy(): Promise<never> {
+  // No async work yet (all filesystem ops are NOT_IMPLEMENTED stubs) —
+  // kept `async` for the caller's Promise-returning signature.
+  await Promise.resolve();
   throw new TRPCError({ code: "NOT_IMPLEMENTED", message: NOT_IMPLEMENTED_MSG });
 }
 
 export async function filesystemSearch(): Promise<never> {
+  // No async work yet (all filesystem ops are NOT_IMPLEMENTED stubs) —
+  // kept `async` for the caller's Promise-returning signature.
+  await Promise.resolve();
   throw new TRPCError({ code: "NOT_IMPLEMENTED", message: NOT_IMPLEMENTED_MSG });
 }
 
 export async function filesystemGitStatus(): Promise<never> {
+  // No async work yet (all filesystem ops are NOT_IMPLEMENTED stubs) —
+  // kept `async` for the caller's Promise-returning signature.
+  await Promise.resolve();
   throw new TRPCError({ code: "NOT_IMPLEMENTED", message: NOT_IMPLEMENTED_MSG });
 }

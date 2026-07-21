@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 
 function detectCycle(
   nodeIds: string[],
-  edges: Array<{ draftId: string; dependsOnDraftId: string }>,
+  edges: { draftId: string; dependsOnDraftId: string }[],
 ): boolean {
   const inDegree = new Map<string, number>();
   const adjList = new Map<string, string[]>();
@@ -23,7 +23,8 @@ function detectCycle(
   const queue = nodeIds.filter((id) => (inDegree.get(id) ?? 0) === 0);
   let visited = 0;
   while (queue.length > 0) {
-    const node = queue.shift()!;
+    const node = queue.shift();
+    if (node === undefined) break;
     visited++;
     for (const neighbor of adjList.get(node) ?? []) {
       const deg = (inDegree.get(neighbor) ?? 1) - 1;
@@ -76,7 +77,7 @@ describe("commitPlanLocal cycle detection", () => {
 
   it("handles no dependencies (no cycle)", () => {
     const nodes = ["a", "b", "c"];
-    const edges: Array<{ draftId: string; dependsOnDraftId: string }> = [];
+    const edges: { draftId: string; dependsOnDraftId: string }[] = [];
     expect(detectCycle(nodes, edges)).toBe(false);
   });
 

@@ -31,9 +31,9 @@ function TaskTreeNode({ item, workspaceId, depth }: TaskTreeNodeProps) {
     { enabled: expanded && hasChildren },
   ));
 
-  const children = (childrenQuery.data ?? []) as Array<{
+  const children = (childrenQuery.data ?? []) as {
     id: string; identifier: string; title: string; kind: string; status: string; childCount?: number;
-  }>;
+  }[];
 
   return (
     <View>
@@ -117,9 +117,9 @@ export function TaskTree({ workItemId, workspaceId: providedWsId }: TaskTreeProp
     { enabled: Boolean(workItemId && workspaceId) },
   ));
 
-  const children = (childrenQuery.data ?? []) as Array<{
+  const children = (childrenQuery.data ?? []) as {
     id: string; identifier: string; title: string; kind: string; status: string; childCount?: number;
-  }>;
+  }[];
 
   if (childrenQuery.isLoading) {
     return (
@@ -129,7 +129,7 @@ export function TaskTree({ workItemId, workspaceId: providedWsId }: TaskTreeProp
     );
   }
 
-  if (children.length === 0) {
+  if (children.length === 0 || !workspaceId) {
     return (
       <View className="items-center justify-center px-4 py-8">
         <Text className="text-sm text-muted">No subtasks</Text>
@@ -143,7 +143,7 @@ export function TaskTree({ workItemId, workspaceId: providedWsId }: TaskTreeProp
         <TaskTreeNode
           key={child.id}
           item={child}
-          workspaceId={workspaceId!}
+          workspaceId={workspaceId}
           depth={0}
         />
       ))}

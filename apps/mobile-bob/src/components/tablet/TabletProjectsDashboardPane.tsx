@@ -11,11 +11,12 @@ import {
   getMobileProjectDashboardColumns,
   getMobileProjectQueryRefreshOptions,
   getMobileProjectsDashboardHeaderModel,
-  normalizeMobileProjectStatusFilter,
-  type MobileProjectDashboardColumnKey,
-  type MobileProjectStatusEntry,
-  type MobileProjectStatusRow,
+  normalizeMobileProjectStatusFilter
+
+
+
 } from "~/features/planning/project-status";
+import type {MobileProjectDashboardColumnKey, MobileProjectStatusEntry, MobileProjectStatusRow} from "~/features/planning/project-status";
 import { colors } from "~/lib/colors";
 import { trpc } from "~/utils/api";
 
@@ -28,8 +29,11 @@ export function TabletProjectsDashboardPane({
 }) {
   const { workspace } = useSelectedWorkspace();
   const searchParams = useLocalSearchParams<{ filter?: string }>();
+  const rawFilterParam: unknown = searchParams.filter;
   const statusFilter = normalizeMobileProjectStatusFilter(
-    Array.isArray(searchParams.filter) ? searchParams.filter[0] : searchParams.filter,
+    Array.isArray(rawFilterParam)
+      ? (rawFilterParam[0] as string | undefined)
+      : (rawFilterParam as string | undefined),
   );
   const projectsQuery = useQuery(
     trpc.project.list.queryOptions(

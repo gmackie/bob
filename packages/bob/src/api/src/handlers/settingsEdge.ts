@@ -14,7 +14,6 @@ import {
 
 import {
   encryptToken,
-  decryptToken,
   isEncryptionConfigured,
 } from "../services/crypto/tokenVault";
 
@@ -104,7 +103,7 @@ export async function settingsEdgeListApiKeys(
       expiresAt: true,
       createdAt: true,
     },
-    orderBy: (keys: any, { desc }: any) => [desc(keys.createdAt)],
+    orderBy: (keys, { desc }) => [desc(keys.createdAt)],
   });
 
   return keys;
@@ -114,7 +113,7 @@ export async function settingsEdgeCreateApiKey(
   ctx: HandlerContext,
   input: {
     name: string;
-    permissions: Array<"read" | "write" | "delete" | "admin">;
+    permissions: ("read" | "write" | "delete" | "admin")[];
     expiresInDays?: number;
   },
 ) {
@@ -231,8 +230,8 @@ export async function settingsEdgeConnectForgeGraph(
     userId: ctx.userId,
     provider: "forgegraph",
     instanceUrl: fgServer,
-    providerAccountId: String(fgUser.id ?? "unknown"),
-    providerUsername: fgUser.login ?? null,
+    providerAccountId: String(fgUser.id),
+    providerUsername: fgUser.login,
     accessTokenCiphertext: encrypted.ciphertext,
     accessTokenIv: encrypted.iv,
     accessTokenTag: encrypted.tag,
@@ -241,7 +240,7 @@ export async function settingsEdgeConnectForgeGraph(
 
   return {
     id: connectionId,
-    providerUsername: fgUser.login ?? null,
+    providerUsername: fgUser.login,
   };
 }
 

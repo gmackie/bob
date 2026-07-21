@@ -46,7 +46,7 @@ export class ElevenLabsSessionService {
    * Create a new voice session for a Bob chat session
    * Returns WebRTC signaling information for the client
    */
-  async createVoiceSession(sessionId: string): Promise<{
+  createVoiceSession(sessionId: string): Promise<{
     sessionId: string;
     signalingInfo: {
       // WebRTC signaling will be handled by the client SDK
@@ -73,13 +73,13 @@ export class ElevenLabsSessionService {
 
     this.activeSessions.set(sessionId, voiceSession);
 
-    return {
+    return Promise.resolve({
       sessionId: voiceSession.id,
       signalingInfo: {
         agentId: this.config.agentId,
         conversationToken,
       },
-    };
+    });
   }
 
   /**
@@ -159,15 +159,16 @@ export class ElevenLabsSessionService {
   /**
    * Stop a voice session
    */
-  async stopVoiceSession(sessionId: string): Promise<void> {
+  stopVoiceSession(sessionId: string): Promise<void> {
     const voiceSession = this.activeSessions.get(sessionId);
     if (!voiceSession) {
-      return;
+      return Promise.resolve();
     }
 
     voiceSession.status = "disconnected";
     this.activeSessions.delete(sessionId);
     this.transcriptCallbacks.delete(sessionId);
+    return Promise.resolve();
   }
 
   /**

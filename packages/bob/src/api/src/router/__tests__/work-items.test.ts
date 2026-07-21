@@ -1,6 +1,14 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { createTRPCContext } from "../../trpc.js";
+
 let appRouter: typeof import("../../root").appRouter;
+
+// The real tRPC context type — the mock db/authApi below are structurally
+// close-enough fakes that only implement the query/insert/update surface
+// these handlers actually call, cast through `unknown` (not `any`) at the
+// single construction site so every caller.* call below stays fully typed.
+type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
 
 const insertValuesMock = vi.fn();
 const insertReturningMock = vi.fn();
@@ -83,10 +91,10 @@ const createCaller = () =>
         name: "Test User",
       },
     },
-    authApi: { getSession: vi.fn() } as any,
-    apiKeyAuth: null as any,
-    db: makeDbMock() as any,
-  });
+    authApi: { getSession: vi.fn() },
+    apiKeyAuth: null,
+    db: makeDbMock(),
+  } as unknown as TRPCContext);
 
 describe("workItems router", () => {
   const workItemId = "11111111-1111-4111-8111-111111111111";
@@ -97,7 +105,7 @@ describe("workItems router", () => {
     process.env.DATABASE_URL ??=
       "postgres://postgres:postgres@localhost:5432/test";
     ({ appRouter } = await import("../../root"));
-  });
+  }, 60_000);
 
   beforeEach(() => {
     insertValuesMock.mockReset();
@@ -134,7 +142,7 @@ describe("workItems router", () => {
       ])
       .mockResolvedValueOnce([{ id: "activity-1" }]);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     const result = await caller.workItems.createComment({
       workItemId,
@@ -164,7 +172,7 @@ describe("workItems router", () => {
       id: "membership-1",
     });
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(
       caller.workItems.reorderQueue({
@@ -192,7 +200,7 @@ describe("workItems router", () => {
       },
     ]);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(
       caller.workItems.createComment({
@@ -230,7 +238,7 @@ describe("workItems router", () => {
       },
     ]);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     const result = await caller.workItems.createArtifact({
       workItemId,
@@ -278,7 +286,7 @@ describe("workItems router", () => {
       },
     ]);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(
       caller.workItems.createArtifact({
@@ -333,7 +341,7 @@ describe("workItems router", () => {
       ])
       .mockResolvedValueOnce([]);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     const result = await caller.workItems.listChildArtifactGroups({
       parentWorkItemId,
@@ -341,6 +349,10 @@ describe("workItems router", () => {
 
     expect(result).toEqual([
       {
+        // vitest's expect.objectContaining always returns `any` per its own
+        // type declarations, regardless of generic — nesting it as an
+        // object-literal property value trips no-unsafe-assignment here.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         workItem: expect.objectContaining({
           id: "child-1",
           title: "Child one",
@@ -362,7 +374,7 @@ describe("workItems router", () => {
     });
     findFirstMocks.workspaceMembers.mockResolvedValueOnce(null);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(
       caller.workItems.listComments({
@@ -380,7 +392,7 @@ describe("workItems router", () => {
     });
     findFirstMocks.workspaceMembers.mockResolvedValueOnce(null);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(
       caller.workItems.listActivities({
@@ -399,7 +411,7 @@ describe("workItems router", () => {
     });
     findFirstMocks.workspaceMembers.mockResolvedValueOnce(null);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(
       caller.workItems.listCurrentArtifacts({
@@ -417,7 +429,7 @@ describe("workItems router", () => {
     });
     findFirstMocks.workspaceMembers.mockResolvedValueOnce(null);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(
       caller.workItems.listChildArtifactGroups({
@@ -440,7 +452,7 @@ describe("workItems router", () => {
       },
     ]);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     const result = await caller.workItems.listNotifications({
       unreadOnly: false,
@@ -465,7 +477,7 @@ describe("workItems router", () => {
     });
     findFirstMocks.workspaceMembers.mockResolvedValueOnce(null);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(
       caller.taskRun.listByWorkItem({
@@ -483,7 +495,7 @@ describe("workItems router", () => {
     });
     findFirstMocks.workspaceMembers.mockResolvedValueOnce(null);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(
       caller.taskRun.execute({
@@ -522,7 +534,7 @@ describe("workItems router", () => {
     ]);
     insertReturningMock.mockResolvedValueOnce([{ id: "activity-1" }]);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     const result = await caller.workItems.promoteToTask({
       id: workItemId,
@@ -540,6 +552,9 @@ describe("workItems router", () => {
         type: "status_changed",
         fromValue: "issue",
         toValue: "task",
+        // Nested expect.objectContaining always returns `any` — see comment
+        // earlier in this file.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         metadata: expect.objectContaining({
           field: "kind",
         }),
@@ -571,7 +586,7 @@ describe("workItems router", () => {
       },
     ]);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(
       caller.workItems.promoteToTask({

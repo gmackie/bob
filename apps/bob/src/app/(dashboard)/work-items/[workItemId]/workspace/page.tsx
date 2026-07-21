@@ -148,6 +148,21 @@ export default async function TaskWorkspacePage({
                 ) : null}
               </div>
             ) : null}
+            {activeSession?.lastError ? (
+              <div className="mt-4 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-4 text-sm">
+                <div className="text-xs uppercase tracking-[0.18em] text-rose-300">
+                  Agent error{activeSession.lastError.code ? ` · ${activeSession.lastError.code}` : ""}
+                </div>
+                <div className="mt-2 whitespace-pre-wrap break-words leading-6 text-rose-100">
+                  {activeSession.lastError.message}
+                </div>
+                {activeSession.lastError.timestamp ? (
+                  <div className="mt-2 text-xs text-rose-300/70">
+                    {new Date(activeSession.lastError.timestamp).toLocaleString()}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <div className="mt-4">
               <WorkspaceControls
                 workItemId={detail.workItem.id}
@@ -279,7 +294,13 @@ export default async function TaskWorkspacePage({
                   >
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
-                        <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                        <div
+                          className={`text-xs uppercase tracking-[0.18em] ${
+                            run.status === "failed"
+                              ? "text-rose-300"
+                              : "text-muted-foreground"
+                          }`}
+                        >
                           {run.status.replace(/_/g, " ")}
                         </div>
                         <div className="mt-2 text-sm text-foreground">
@@ -295,6 +316,11 @@ export default async function TaskWorkspacePage({
                         </Link>
                       ) : null}
                     </div>
+                    {run.status === "failed" && run.blockedReason ? (
+                      <div className="mt-3 whitespace-pre-wrap break-words rounded-xl border border-rose-400/20 bg-rose-500/5 px-3 py-2 text-xs leading-5 text-rose-200">
+                        {run.blockedReason}
+                      </div>
+                    ) : null}
                   </div>
                 ))
               )}

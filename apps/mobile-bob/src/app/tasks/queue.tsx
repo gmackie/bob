@@ -1,5 +1,5 @@
 import { Redirect, router } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -42,6 +42,23 @@ export default function PriorityQueueScreen() {
   );
   const header = getMobilePriorityQueueHeaderModel();
   const defaultOrder = useMemo(() => buildPriorityQueueSaveOrder(rows), [rows]);
+  const defaultOrderKey = defaultOrder.join("|");
+
+  // `localOrder` tracks the user's in-progress reordering, but it should
+  // reset to the server-derived `defaultOrder` whenever the underlying data
+  // changes (e.g. a refetch brings in a different set/order of items).
+  // Rather than doing that reset in a useEffect body (which triggers an
+  // extra render pass and trips react-hooks/set-state-in-effect), we adjust
+  // state during render via React's sanctioned "adjust state when a prop
+  // changes" pattern: track the last-applied key in state and update
+  // `localOrder` directly during render when the key changes.
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  const [lastAppliedOrderKey, setLastAppliedOrderKey] = useState<string | undefined>(undefined);
+  if (defaultOrderKey !== lastAppliedOrderKey) {
+    setLastAppliedOrderKey(defaultOrderKey);
+    setLocalOrder(defaultOrder);
+  }
+
   const orderedRows = useMemo(() => {
     const byId = new Map(rows.map((row) => [row.id, row]));
     const ordered = localOrder.flatMap((id) => {
@@ -51,10 +68,6 @@ export default function PriorityQueueScreen() {
     const missing = rows.filter((row) => !localOrder.includes(row.id));
     return [...ordered, ...missing];
   }, [localOrder, rows]);
-
-  useEffect(() => {
-    setLocalOrder(defaultOrder);
-  }, [defaultOrder.join("|")]);
 
   const reorderMutation = useMutation(
     trpc.workItems.reorderQueue.mutationOptions({
@@ -115,11 +128,6 @@ export default function PriorityQueueScreen() {
             <Text className="text-3xl font-semibold tracking-tight text-foreground">
               {header.title}
             </Text>
-            {header.subtitle ? (
-              <Text className="mt-1 text-sm text-muted" numberOfLines={1}>
-                {header.subtitle}
-              </Text>
-            ) : null}
           </View>
           <Pressable
             accessibilityRole="button"

@@ -16,8 +16,8 @@ vi.mock("@bob/db/client", () => ({
 }));
 
 vi.mock("@bob/db", () => ({
-  and: vi.fn((...args) => args),
-  eq: vi.fn((left, right) => ({ left, right })),
+  and: vi.fn((...args: unknown[]) => args),
+  eq: vi.fn((left: unknown, right: unknown) => ({ left, right })),
 }));
 
 describe("taskAutoCreate early-return reasons", () => {

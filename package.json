@@ -1,6 +1,7 @@
 {
   "name": "gmacko",
   "private": true,
+  "license": "MIT",
   "packageManager": "pnpm@10.12.1",
   "engines": {
     "node": ">=24.0.0"
@@ -17,12 +18,15 @@
     "dev:ooda": "turbo watch dev --filter=@gmacko/ooda-web",
     "dev:ooda-runner": "turbo watch dev --filter=@gmacko/ooda-runner",
     "dev:research": "cd packages/research-backend && uv run uvicorn research_backend.main:app --reload --port 8000",
-    "generate:openapi": "tsx scripts/generate-openapi.ts"
+    "generate:openapi": "tsx scripts/generate-openapi.ts",
+    "generate:openapi:bob": "tsx scripts/generate-bob-openapi.ts"
   },
   "pnpm": {
     "overrides": {
       "@electric-sql/pglite": "0.3.16",
       "@types/pg": "8.16.0",
+      "@types/react": "19.1.17",
+      "@types/react-dom": "19.1.0",
       "node-gyp": "^10.0.0",
       "react": "19.2.5",
       "react-dom": "19.2.5",
@@ -38,6 +42,8 @@
     ]
   },
   "devDependencies": {
+    "@gmacko/emulate": "^0.5.3",
+    "tsx": "catalog:",
     "turbo": "^2.8.0",
     "typescript": "^5.9.0"
   }

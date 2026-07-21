@@ -12,7 +12,11 @@ interface ExecutionContext {
   passThroughOnException?(): void;
 }
 
-type FetchHandler = (request: Request, env: Record<string, unknown>, ctx: ExecutionContext) => Promise<Response>;
+type FetchHandler = (
+  request: Request,
+  env: Record<string, unknown> | undefined,
+  ctx: ExecutionContext,
+) => Promise<Response>;
 
 interface InstrumentOptions {
   serviceName?: string;
@@ -34,19 +38,37 @@ function parseTraceparent(header: string | null): TraceContext | null {
   const traceId = parts[1]!;
   const parentId = parts[2]!;
   const flags = parts[3]!;
-  if (version !== "00" || traceId.length !== 32 || parentId.length !== 16) return null;
-  return { traceId, parentSpanId: parentId, sampled: (parseInt(flags, 16) & 1) === 1 };
+  if (version !== "00" || traceId.length !== 32 || parentId.length !== 16)
+    return null;
+  return {
+    traceId,
+    parentSpanId: parentId,
+    sampled: (parseInt(flags, 16) & 1) === 1,
+  };
 }
 
 function buildTraceparent(traceId: string, spanId: string): string {
   return `00-${traceId}-${spanId}-01`;
 }
 
-export function wrapFetch(handler: FetchHandler, options?: InstrumentOptions): FetchHandler {
+export function wrapFetch(
+  handler: FetchHandler,
+  options?: InstrumentOptions,
+): FetchHandler {
   return async (request, env, ctx) => {
-    const serviceName = options?.serviceName ?? (env.FG_APP as string) ?? "unknown";
-    const endpoint = options?.endpoint ?? (env.OTEL_ENDPOINT as string) ?? "https://otlp.forgegraf.com";
-    const disabled = (env.OTEL_DISABLED as string) === "true";
+    const serviceName =
+      options?.serviceName ??
+      (env?.FG_APP as string | undefined) ??
+      process.env.FG_APP ??
+      "unknown";
+    const endpoint =
+      options?.endpoint ??
+      (env?.OTEL_ENDPOINT as string | undefined) ??
+      process.env.OTEL_ENDPOINT ??
+      "https://otlp.forgegraf.com";
+    const disabled =
+      (env?.OTEL_DISABLED as string | undefined) === "true" ||
+      process.env.OTEL_DISABLED === "true";
     const sampleRate = options?.sampleRate ?? 1.0;
 
     if (disabled || (sampleRate < 1.0 && Math.random() >= sampleRate)) {
@@ -75,7 +97,7 @@ export function wrapFetch(handler: FetchHandler, options?: InstrumentOptions): F
       pushSpan({
         endpoint,
         serviceName,
-        stage: env.FG_STAGE as string,
+        stage: (env?.FG_STAGE as string | undefined) ?? process.env.FG_STAGE,
         method: request.method,
         path: url.pathname,
         status: response.status,
@@ -92,7 +114,11 @@ export function wrapFetch(handler: FetchHandler, options?: InstrumentOptions): F
     const headers = new Headers(response.headers);
     headers.set("X-Fg-Trace", traceId);
     headers.set("traceparent", buildTraceparent(traceId, spanId));
-    return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
   };
 }
 
@@ -118,15 +144,30 @@ async function pushSpan(opts: {
     { key: "http.target", value: { stringValue: opts.path } },
     { key: "http.status_code", value: { intValue: String(opts.status) } },
     { key: "http.latency_ms", value: { intValue: String(opts.latencyMs) } },
-    { key: "fg.trace_url", value: { stringValue: `https://forgegraf.com/traces/${opts.traceId}` } },
+    {
+      key: "fg.trace_url",
+      value: { stringValue: `https://forgegraf.com/traces/${opts.traceId}` },
+    },
   ];
-  if (opts.stage) attributes.push({ key: "deployment.environment", value: { stringValue: opts.stage } });
-  if (opts.error) attributes.push({ key: "exception.message", value: { stringValue: opts.error } });
+  if (opts.stage)
+    attributes.push({
+      key: "deployment.environment",
+      value: { stringValue: opts.stage },
+    });
+  if (opts.error)
+    attributes.push({
+      key: "exception.message",
+      value: { stringValue: opts.error },
+    });
 
   const resourceAttrs = [
     { key: "service.name", value: { stringValue: opts.serviceName } },
   ];
-  if (opts.stage) resourceAttrs.push({ key: "deployment.environment", value: { stringValue: opts.stage } });
+  if (opts.stage)
+    resourceAttrs.push({
+      key: "deployment.environment",
+      value: { stringValue: opts.stage },
+    });
 
   const span: Record<string, unknown> = {
     traceId: opts.traceId,
@@ -141,13 +182,17 @@ async function pushSpan(opts: {
   if (opts.parentSpanId) span.parentSpanId = opts.parentSpanId;
 
   const payload = {
-    resourceSpans: [{
-      resource: { attributes: resourceAttrs },
-      scopeSpans: [{
-        scope: { name: "@forgegraph/otel" },
-        spans: [span],
-      }],
-    }],
+    resourceSpans: [
+      {
+        resource: { attributes: resourceAttrs },
+        scopeSpans: [
+          {
+            scope: { name: "@forgegraph/otel" },
+            spans: [span],
+          },
+        ],
+      },
+    ],
   };
 
   await fetch(`${opts.endpoint}/v1/traces`, {

@@ -24,9 +24,9 @@ vi.mock("@bob/db/client", () => ({
 }));
 
 vi.mock("@bob/db", () => ({
-  and: vi.fn((...args: any[]) => args),
-  desc: vi.fn((value: any) => value),
-  eq: vi.fn((left: any, right: any) => ({ left, right })),
+  and: vi.fn((...args: unknown[]) => args),
+  desc: vi.fn((value: unknown) => value),
+  eq: vi.fn((left: unknown, right: unknown) => ({ left, right })),
 }));
 
 vi.mock("@bob/db/schema", () => ({
@@ -85,8 +85,15 @@ describe("planningWriteService (provider delegation)", () => {
     whereMock.mockReturnValue({
       then: thenMock,
     });
-    thenMock.mockImplementation((cb: any) =>
-      Promise.resolve(cb([{ planningProvider: "linear", linearProjectId: "lin-proj-1" }])),
+    thenMock.mockImplementation(
+      (
+        cb: (
+          rows: { planningProvider: string; linearProjectId: string }[],
+        ) => unknown,
+      ) =>
+        Promise.resolve(
+          cb([{ planningProvider: "linear", linearProjectId: "lin-proj-1" }]),
+        ),
     );
   });
 

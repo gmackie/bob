@@ -82,7 +82,7 @@ export type {
   UpdateWorkItemResult,
 } from "./schema";
 
-type WorkItemsOperationInputMap = {
+interface WorkItemsOperationInputMap {
   list: ListWorkItemsInput;
   get: GetWorkItemInput;
   update: UpdateWorkItemInput;
@@ -96,9 +96,9 @@ type WorkItemsOperationInputMap = {
   listNotifications: ListNotificationsInput;
   createNotification: CreateNotificationInput;
   markNotificationAsRead: MarkNotificationAsReadInput;
-};
+}
 
-type WorkItemsOperationOutputMap = {
+interface WorkItemsOperationOutputMap {
   list: ListWorkItemsResult;
   get: GetWorkItemResult;
   update: UpdateWorkItemResult;
@@ -112,7 +112,7 @@ type WorkItemsOperationOutputMap = {
   listNotifications: ListNotificationsResult;
   createNotification: CreateNotificationResult;
   markNotificationAsRead: MarkNotificationAsReadResult;
-};
+}
 
 export interface WorkItemsClientOptions {
   baseUrl: string;

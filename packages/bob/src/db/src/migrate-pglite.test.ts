@@ -3,8 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { makePgliteDb, type PgliteDbHandle } from "./client-pglite.js";
-import { applyMigrations } from "./migrate.js";
+import { makePgliteDb } from "./client-pglite.js";
+import type { PgliteDbHandle } from "./client-pglite.js";
+import { applyMigrations, noop } from "./migrate.js";
 
 /**
  * Cross-driver smoke test for {@link applyMigrations}.
@@ -20,25 +21,29 @@ import { applyMigrations } from "./migrate.js";
 let tmpDir: string;
 let handle: PgliteDbHandle;
 
-const FIXTURE_MIGRATIONS: Array<{ filename: string; sql: string }> = [
-  {
-    filename: "0001_initial.sql",
-    sql: `
+const FIRST_MIGRATION = {
+  filename: "0001_initial.sql",
+  sql: `
       CREATE TABLE "foo" (
         "id" serial PRIMARY KEY,
         "name" text NOT NULL
       );
     `,
-  },
-  {
-    filename: "0002_add_bar.sql",
-    sql: `
+};
+
+const SECOND_MIGRATION = {
+  filename: "0002_add_bar.sql",
+  sql: `
       CREATE TABLE "bar" (
         "id" serial PRIMARY KEY,
         "foo_id" integer REFERENCES "foo"("id")
       );
     `,
-  },
+};
+
+const FIXTURE_MIGRATIONS: { filename: string; sql: string }[] = [
+  FIRST_MIGRATION,
+  SECOND_MIGRATION,
 ];
 
 describe("applyMigrations against PGlite", () => {
@@ -62,7 +67,7 @@ describe("applyMigrations against PGlite", () => {
     await applyMigrations({
       client: handle.client,
       migrationsDir: tmpDir,
-      log: () => {},
+      log: noop,
     });
 
     const applied = await handle.db.execute(
@@ -70,7 +75,11 @@ describe("applyMigrations against PGlite", () => {
     );
     expect(applied.rows.length).toBeGreaterThan(0);
     // Sanity: the first committed migration filename starts with "0001"
+    // vitest types `expect.stringContaining` as `any` (it's an asymmetric
+    // matcher placeholder, not a real value), so the object literal below
+    // trips no-unsafe-assignment despite being inert assertion syntax.
     expect(applied.rows[0]).toMatchObject({
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- expect.stringContaining is `any` by vitest's own types
       filename: expect.stringContaining("0001"),
     });
   });
@@ -79,20 +88,20 @@ describe("applyMigrations against PGlite", () => {
     await applyMigrations({
       client: handle.client,
       migrationsDir: tmpDir,
-      log: () => {},
+      log: noop,
     });
 
     // Mutate an already-applied file on disk, then re-run.
     writeFileSync(
-      join(tmpDir, FIXTURE_MIGRATIONS[0]!.filename),
-      `-- tampered\n${FIXTURE_MIGRATIONS[0]!.sql}`,
+      join(tmpDir, FIRST_MIGRATION.filename),
+      `-- tampered\n${FIRST_MIGRATION.sql}`,
     );
 
     await expect(
       applyMigrations({
         client: handle.client,
         migrationsDir: tmpDir,
-        log: () => {},
+        log: noop,
       }),
     ).rejects.toThrow(/hash has changed|immutable/i);
   });
@@ -109,7 +118,7 @@ describe("applyMigrations against PGlite", () => {
       applyMigrations({
         client: handle.client,
         migrationsDir: tmpDir,
-        log: () => {},
+        log: noop,
       }),
     ).rejects.toThrow();
 
@@ -127,7 +136,7 @@ describe("applyMigrations against PGlite", () => {
     await applyMigrations({
       client: handle.client,
       migrationsDir: tmpDir,
-      log: () => {},
+      log: noop,
     });
     const firstCount = (
       await handle.db.execute(
@@ -138,7 +147,7 @@ describe("applyMigrations against PGlite", () => {
     await applyMigrations({
       client: handle.client,
       migrationsDir: tmpDir,
-      log: () => {},
+      log: noop,
     });
     const secondCount = (
       await handle.db.execute(

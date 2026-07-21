@@ -1,9 +1,10 @@
 import { extractSessionEventText } from "../chat/session-event-text";
 import {
-  formatStatusLabel,
-  type TabletQueueAgentStatus,
-  type TabletQueueItem,
+  formatStatusLabel
+
+
 } from "./queue";
+import type {TabletQueueAgentStatus, TabletQueueItem} from "./queue";
 
 export type MobileWorkItemEntryView = "queue" | "outcome" | "planning";
 
@@ -172,6 +173,10 @@ const ACTIVE_AGENT_STATUSES = new Set([
   "pending",
   "awaiting-input",
   "awaiting_input",
+  // Paused awaiting a human decision — still active (the "needs you" state).
+  "blocked",
+  // Lease expired: contact lost, process fate unknown — still active.
+  "host_unknown",
 ]);
 
 const QUEUE_DETAIL_SECTIONS: MobileWorkItemEntrySection[] = [

@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "react";
 import { ScrollView, Text, View } from "react-native";
 
-import { colors } from "~/lib/colors";
 
 import type { ChatMessage } from "../chat-messages";
 import { MessageBubble } from "./message-bubble";

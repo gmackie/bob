@@ -17,6 +17,7 @@ export { ExternalRpc } from "./groups/external.js";
 
 export {
   WorkItemListRpc,
+  WorkItemStatusCountsRpc,
   WorkItemGetRpc,
   WorkItemUpdateRpc,
   WorkItemPromoteToTaskRpc,
@@ -65,6 +66,7 @@ export {
   PlanningSearchTasksRpc,
   PlanningListLabelsRpc,
   PlanningListCyclesRpc,
+  PlanningSyncLinearProjectsRpc,
   PlanningGetCurrentUserRpc,
   PlanningAgentClaimTaskRpc,
   PlanningAgentReportProgressRpc,
@@ -155,6 +157,12 @@ export {
   PublicApiListRunsByWorkItemRpc,
   PublicApiHeartbeatRpc,
   PublicApiGenerateApiKeyRpc,
+  IntegrationListRpc,
+  IntegrationGetRpc,
+  IntegrationSaveRpc,
+  IntegrationFetchLinearTeamsRpc,
+  IntegrationSetupLinearRpc,
+  IntegrationDeleteRpc,
 } from "./groups/external.js";
 
 // --- Schemas: WorkItem ---
@@ -210,6 +218,7 @@ export {
   PlanningTaskMutationResultSchema,
   PlanningCommentRecordSchema,
   PlanningCommentCreateResultSchema,
+  PlanningLinearSyncResultSchema,
   PlanningSearchResultSchema,
   PlanningCycleRecordSchema,
   PlanningUserRecordSchema,
@@ -283,6 +292,11 @@ export {
   HeartbeatRepoSchema,
   WorkspaceRegistrationResultSchema,
   ApiKeyResultSchema,
+  IntegrationRecordSchema,
+  IntegrationMutationResultSchema,
+  IntegrationSetupLinearResultSchema,
+  IntegrationDeleteResultSchema,
+  LinearTeamSchema,
 } from "./schemas/external.js";
 
 // --- Stub layers ---

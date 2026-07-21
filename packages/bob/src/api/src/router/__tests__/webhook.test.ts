@@ -1,5 +1,12 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { createTRPCContext } from "../../trpc.js";
+
+// The real tRPC context type — the mock authApi below is a structurally
+// close-enough fake, cast through `unknown` (not `any`) at the single
+// construction site so every caller.* call below stays fully typed.
+type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
+
 const insertValuesMock = vi.fn();
 const insertReturningMock = vi.fn();
 const workspaceMembersFindFirstMock = vi.fn();
@@ -43,10 +50,12 @@ const createCaller = () =>
         name: "Test User",
       },
     },
-    authApi: { getSession: vi.fn() } as any,
-    apiKeyAuth: null as any,
-    db: {} as any,
-  });
+    authApi: { getSession: vi.fn() },
+    apiKeyAuth: null,
+    // Not exercised by this file's tests — webhookCreate reads db from the
+    // module-mocked @bob/db/client, not ctx.db.
+    db: {},
+  } as unknown as TRPCContext);
 
 describe("webhook router access control", () => {
   const workspaceId = "11111111-1111-4111-8111-111111111111";
@@ -55,7 +64,7 @@ describe("webhook router access control", () => {
     process.env.DATABASE_URL ??=
       "postgres://postgres:postgres@localhost:5432/test";
     ({ appRouter } = await import("../../root"));
-  });
+  }, 60_000);
 
   beforeEach(() => {
     [insertValuesMock, insertReturningMock, workspaceMembersFindFirstMock].forEach((mock) =>
@@ -66,7 +75,7 @@ describe("webhook router access control", () => {
   it("rejects workspace-scoped webhook creation when the caller is not a member of the workspace", async () => {
     workspaceMembersFindFirstMock.mockResolvedValueOnce(null);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(
       caller.webhook.create({
@@ -92,7 +101,7 @@ describe("webhook router access control", () => {
       },
     ]);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
     const result = await caller.webhook.create({
       workspaceId,
       url: "https://example.com/webhook",

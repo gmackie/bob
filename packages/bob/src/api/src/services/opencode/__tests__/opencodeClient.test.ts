@@ -5,8 +5,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { OpenCodeClient } from "../opencodeClient.js";
 
-// Mock fetch globally
-global.fetch = vi.fn();
+// Mock fetch globally — typed to the real `fetch` signature so every
+// mockResolvedValueOnce fixture below is checked against Response's shape.
+// Fixtures only implement the subset of Response that OpenCodeClient's
+// `request()` actually reads (ok/json/body/status/statusText/text), so each
+// literal is cast through `as Response` at its call site rather than
+// constructing a real Response.
+const fetchMock = vi.fn<typeof fetch>();
+global.fetch = fetchMock;
 
 describe("OpenCodeClient", () => {
   beforeEach(() => {
@@ -22,10 +28,10 @@ describe("OpenCodeClient", () => {
         },
       };
 
-      (global.fetch as any).mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: true,
-        json: async () => mockSession,
-      });
+        json: () => Promise.resolve(mockSession),
+      } as Response);
 
       const client = new OpenCodeClient({
         baseUrl: "http://localhost:8080",
@@ -42,6 +48,9 @@ describe("OpenCodeClient", () => {
         "http://localhost:8080/session",
         expect.objectContaining({
           method: "POST",
+          // vitest's nested expect.objectContaining always returns `any` per
+          // its own type declarations, regardless of generic argument.
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           headers: expect.objectContaining({
             "Content-Type": "application/json",
           }),
@@ -57,10 +66,10 @@ describe("OpenCodeClient", () => {
         },
       };
 
-      (global.fetch as any).mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: true,
-        json: async () => mockSession,
-      });
+        json: () => Promise.resolve(mockSession),
+      } as Response);
 
       const client = new OpenCodeClient({
         baseUrl: "http://localhost:8080",
@@ -72,6 +81,9 @@ describe("OpenCodeClient", () => {
       expect(global.fetch).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
+          // vitest's nested expect.objectContaining always returns `any` per
+          // its own type declarations, regardless of generic argument.
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           headers: expect.objectContaining({
             Authorization: "Bearer test-api-key",
           }),
@@ -96,10 +108,10 @@ describe("OpenCodeClient", () => {
         },
       });
 
-      (global.fetch as any).mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: true,
         body: mockStream,
-      });
+      } as Response);
 
       const client = new OpenCodeClient({
         baseUrl: "http://localhost:8080",
@@ -122,12 +134,12 @@ describe("OpenCodeClient", () => {
 
   describe("error handling", () => {
     it("should throw error on non-ok response", async () => {
-      (global.fetch as any).mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: false,
         status: 500,
         statusText: "Internal Server Error",
-        text: async () => "Server error",
-      });
+        text: () => Promise.resolve("Server error"),
+      } as Response);
 
       const client = new OpenCodeClient({
         baseUrl: "http://localhost:8080",

@@ -8,6 +8,7 @@ import { randomBytes, createHash } from "node:crypto";
 
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray } from "@bob/db";
+import type { Db } from "@bob/db/client";
 import {
   agentRuns,
   apiKeys,
@@ -33,8 +34,8 @@ const UUID_RE =
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-async function ensureTenant(db: any, userId: string) {
-  let membership = await db.query.tenantMembers.findFirst({
+async function ensureTenant(db: Db, userId: string) {
+  const membership = await db.query.tenantMembers.findFirst({
     where: eq(tenantMembers.userId, userId),
     with: { tenant: true },
   });
@@ -66,7 +67,7 @@ async function ensureTenant(db: any, userId: string) {
   });
 }
 
-async function listAuthorizedTenantIds(db: any, userId: string) {
+async function listAuthorizedTenantIds(db: Db, userId: string) {
   const memberships = await db.query.tenantMembers.findMany({
     where: eq(tenantMembers.userId, userId),
     columns: { tenantId: true },
@@ -78,7 +79,7 @@ async function listAuthorizedTenantIds(db: any, userId: string) {
 }
 
 async function assertTenantAccess(
-  db: any,
+  db: Db,
   userId: string,
   tenantId: string | null | undefined,
 ) {
@@ -142,11 +143,11 @@ async function notifyAgentRunChanged(input: {
 }
 
 async function processDiscoveredRepos(
-  db: any,
+  db: Db,
   userId: string,
   workspaceId: string,
   tenantId: string,
-  repos: Array<{
+  repos: {
     name: string;
     path: string;
     isGit: boolean;
@@ -155,7 +156,7 @@ async function processDiscoveredRepos(
     dirty?: boolean;
     buildSystem?: string;
     forgeAppId?: string;
-  }>,
+  }[],
 ) {
   const gitRepos = repos.filter((r) => r.isGit);
   const nonGitDirs = repos.filter((r) => !r.isGit);
@@ -420,7 +421,14 @@ export async function publicApiUpdateRun(
   ctx: HandlerContext,
   input: {
     runId: string;
-    status: "running" | "completed" | "failed";
+    status:
+      | "queued"
+      | "running"
+      | "blocked"
+      | "completed"
+      | "failed"
+      | "interrupted"
+      | "host_unknown";
     summary?: Record<string, unknown>;
   },
 ) {
@@ -442,7 +450,14 @@ export async function publicApiUpdateRun(
   const updates: Record<string, unknown> = { status: input.status };
 
   if (input.status === "running") updates.startedAt = now;
-  if (input.status === "completed" || input.status === "failed")
+  // Terminal outcomes stamp completedAt. "interrupted" is terminal;
+  // "blocked" and "host_unknown" are NOT (the run is paused / contact lost,
+  // not finished), so they leave completedAt untouched.
+  if (
+    input.status === "completed" ||
+    input.status === "failed" ||
+    input.status === "interrupted"
+  )
     updates.completedAt = now;
   if (input.summary) updates.summary = input.summary;
 
@@ -576,7 +591,7 @@ export async function publicApiHeartbeat(
     workspaceId: string;
     agentTypes?: string[];
     forgeAvailable?: boolean;
-    repos?: Array<{
+    repos?: {
       name: string;
       path: string;
       isGit: boolean;
@@ -585,7 +600,7 @@ export async function publicApiHeartbeat(
       dirty?: boolean;
       buildSystem?: string;
       forgeAppId?: string;
-    }>;
+    }[];
   },
 ) {
   const workspace = await ctx.db.query.workspaces.findFirst({

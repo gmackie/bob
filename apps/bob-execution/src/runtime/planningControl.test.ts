@@ -3,9 +3,14 @@ import path from "node:path";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { taskRunsFindFirstMock, userFindFirstMock } = vi.hoisted(() => ({
+const {
+  taskRunsFindFirstMock,
+  userFindFirstMock,
+  chatConversationsFindFirstMock,
+} = vi.hoisted(() => ({
   taskRunsFindFirstMock: vi.fn(),
   userFindFirstMock: vi.fn(),
+  chatConversationsFindFirstMock: vi.fn(),
 }));
 
 vi.mock("@bob/db/client", () => ({
@@ -16,6 +21,9 @@ vi.mock("@bob/db/client", () => ({
       },
       user: {
         findFirst: userFindFirstMock,
+      },
+      chatConversations: {
+        findFirst: chatConversationsFindFirstMock,
       },
     },
     insert: vi.fn(() => ({
@@ -82,12 +90,15 @@ describe("planning control runtime", () => {
         mainBranch: "main",
       },
       worktree: null,
-      session: {
-        workflowStatus: "working",
-        status: "running",
-        statusMessage: "Applying changes",
-        workingDirectory: "/repos/builder",
-      },
+    });
+
+    // The session is no longer a relation on taskRuns; it is fetched directly
+    // from chatConversations by sessionId.
+    chatConversationsFindFirstMock.mockResolvedValueOnce({
+      workflowStatus: "working",
+      status: "running",
+      statusMessage: "Applying changes",
+      workingDirectory: "/repos/builder",
     });
 
     const snapshot = await getIssueSessionSnapshot({

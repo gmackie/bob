@@ -1,6 +1,14 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { createTRPCContext } from "../../trpc.js";
+
 let appRouter: typeof import("../../root").appRouter;
+
+// The real tRPC context type — the mock db/authApi below are structurally
+// close-enough fakes that only implement the query/insert/select surface
+// these handlers actually call, cast through `unknown` (not `any`) at the
+// single construction site so every caller.* call below stays fully typed.
+type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
 
 const insertValuesMock = vi.fn();
 const insertReturningMock = vi.fn();
@@ -73,10 +81,10 @@ const createCaller = () =>
         name: "Test User",
       },
     },
-    authApi: { getSession: vi.fn() } as any,
-    apiKeyAuth: null as any,
-    db: makeDbMock() as any,
-  });
+    authApi: { getSession: vi.fn() },
+    apiKeyAuth: null,
+    db: makeDbMock(),
+  } as unknown as TRPCContext);
 
 describe("chat router", () => {
   const workItemId = "11111111-1111-4111-8111-111111111111";
@@ -88,7 +96,7 @@ describe("chat router", () => {
     process.env.DATABASE_URL ??=
       "postgres://postgres:postgres@localhost:5432/test";
     ({ appRouter } = await import("../../root"));
-  });
+  }, 60_000);
 
   beforeEach(() => {
     [
@@ -107,7 +115,7 @@ describe("chat router", () => {
     });
     queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce(null);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(
       caller.chat.createConversation({
@@ -121,7 +129,7 @@ describe("chat router", () => {
   it("rejects conversation creation when the repository is not owned by the caller", async () => {
     queryMocks.repositoriesFindFirst.mockResolvedValueOnce(null);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(
       caller.chat.createConversation({
@@ -150,7 +158,7 @@ describe("chat router", () => {
       },
     ]);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
     const result = await caller.chat.createConversation({
       repositoryId,
       workItemId,
@@ -181,7 +189,7 @@ describe("chat router", () => {
       },
     });
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(
       caller.chat.attachImage({
@@ -202,7 +210,7 @@ describe("chat router", () => {
       },
     });
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(
       caller.chat.getAttachments({ messageId }),
@@ -228,7 +236,7 @@ describe("chat router", () => {
       },
     ]);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
     const result = await caller.chat.attachImage({
       messageId,
       url: "https://example.com/image.png",

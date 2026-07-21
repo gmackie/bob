@@ -11,7 +11,6 @@ import {
   gitCommits,
   prReviews,
   pullRequests,
-  repositories,
   sessionEvents,
   taskRuns,
   webhookDeliveries,
@@ -154,13 +153,13 @@ interface GitHubPRPayload {
 
 interface GitHubPushPayload {
   ref: string;
-  commits: Array<{
+  commits: {
     id: string;
     message: string;
     author: { name: string; email: string };
     timestamp: string;
     url: string;
-  }>;
+  }[];
   repository: {
     owner: { login: string };
     name: string;
@@ -387,13 +386,13 @@ async function handleGitLabPush(
   payload: Record<string, unknown>,
   instanceUrl: string | null,
 ): Promise<void> {
-  const commits = payload.commits as Array<{
+  const commits = payload.commits as {
     id: string;
     message: string;
     author: { name: string; email: string };
     timestamp: string;
     url: string;
-  }>;
+  }[];
   const project = payload.project as {
     namespace: string;
     name: string;
@@ -513,13 +512,13 @@ async function handleGiteaPush(
   payload: Record<string, unknown>,
   instanceUrl: string,
 ): Promise<void> {
-  const commits = payload.commits as Array<{
+  const commits = payload.commits as {
     id: string;
     message: string;
     author: { name: string; email: string };
     timestamp: string;
     url: string;
-  }>;
+  }[];
   const repository = payload.repository as {
     owner: { login: string };
     name: string;
@@ -601,10 +600,9 @@ function truncateStatusMessage(value: string): string {
 function buildExternalCommentMessage(
   payload: NormalizedPlanningCommentPayload,
 ): string {
-  const author =
-    payload.comment.user.name ||
-    payload.comment.user.email ||
-    payload.comment.user.id;
+  const name = payload.comment.user.name.trim();
+  const email = payload.comment.user.email?.trim();
+  const author = name.length > 0 ? name : email && email.length > 0 ? email : payload.comment.user.id;
   return `Planning comment from ${author}:\n\n${payload.comment.body.trim()}`;
 }
 
@@ -612,9 +610,9 @@ function normalizePlanningCommentPayload(
   payload: PlanningCommentPayload,
 ): NormalizedPlanningCommentPayload | null {
   const issueId = payload.issue?.id ?? payload.issueId ?? null;
-  const body = payload.comment?.body?.trim();
+  const body = payload.comment.body.trim();
 
-  if (!issueId || !payload.comment?.id || !body || !payload.comment.user?.id) {
+  if (!issueId || !payload.comment.id || !body || !payload.comment.user.id) {
     return null;
   }
 
@@ -795,8 +793,9 @@ export async function handlePlanningComment(
     return;
   }
 
+  // At this point payload.bobRouting.reason can only be "mention": the
+  // "prompt_reply" branch above always returns before reaching here.
   if (
-    payload.bobRouting.reason === "mention" &&
     ["awaiting_review", "blocked", "working"].includes(session.workflow_status)
   ) {
     await insertExternalUserMessage(session.id, message);
@@ -913,7 +912,7 @@ async function handleGitHubPullRequestReview(
 
   // Upsert the review record
   const reviewerUserId = review.user?.login ?? "unknown";
-  const status = review.state as "approved" | "changes_requested";
+  const status = review.state;
 
   await db.insert(prReviews).values({
     pullRequestId: existingPr.id,
@@ -933,7 +932,7 @@ async function handleGitHubPullRequestReview(
       where: eq(forgeRevisions.revId, headSha),
     });
 
-    if (revision?.taskId && revision?.taskRunId) {
+    if (revision?.taskId && revision.taskRunId) {
       const item = await db.query.dispatchItems.findFirst({
         where: eq(dispatchItems.taskRunId, revision.taskRunId),
       });
@@ -1017,7 +1016,7 @@ async function handleGitHubCheckRun(payload: Record<string, unknown>): Promise<v
   // Update gate status on the revision
   if (revision.gates && Array.isArray(revision.gates)) {
     const normalizedName = checkName.toLowerCase();
-    const updatedGates = (revision.gates as Array<{ name: string; status: string }>).map(
+    const updatedGates = (revision.gates as { name: string; status: string }[]).map(
       (gate) => {
         if (normalizedName === gate.name.toLowerCase()) {
           return { ...gate, status: buildStatus };

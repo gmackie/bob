@@ -1,14 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { Db } from "@bob/db/client";
+
 import { ForgeGraphEventReporter } from "../eventReporter";
 
 // Mocks for DB operations
 const dbInsertMock = vi.fn();
 const dbInsertValuesMock = vi.fn();
-const dbInsertReturningMock = vi.fn();
+const dbInsertReturningMock = vi.fn<() => Promise<Record<string, unknown>[] | undefined>>();
 const dbInsertOnConflictMock = vi.fn();
 
-const dbQueryFindFirstMock = vi.fn();
+const dbQueryFindFirstMock = vi.fn<
+  (table: string, ...args: unknown[]) => Promise<Record<string, unknown> | null | undefined>
+>();
 
 const makeDbMock = () => ({
   insert: (table: unknown) => {
@@ -49,14 +53,14 @@ describe("ForgeGraphEventReporter", () => {
 
   beforeEach(() => {
     db = makeDbMock();
-    reporter = new ForgeGraphEventReporter(db as any);
+    reporter = new ForgeGraphEventReporter(db as unknown as Db);
     dbInsertMock.mockReset();
     dbInsertValuesMock.mockReset();
     dbInsertReturningMock.mockReset();
     dbInsertOnConflictMock.mockReset();
     dbQueryFindFirstMock.mockReset();
-    vi.spyOn(console, "log").mockImplementation(() => {});
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
   });
 
   describe("reportCreated", () => {

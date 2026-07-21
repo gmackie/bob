@@ -29,7 +29,7 @@ export async function linkList(
     conditions.push(eq(worktreeLinks.worktreeId, input.worktreeId));
   }
   if (input.linkType) {
-    conditions.push(eq(worktreeLinks.linkType, input.linkType as any));
+    conditions.push(eq(worktreeLinks.linkType, input.linkType));
   }
 
   const links = await ctx.db.query.worktreeLinks.findMany({
@@ -94,7 +94,7 @@ export async function linkCreate(
     externalId?: string;
     url?: string;
     title?: string;
-    metadata?: Record<string, unknown>;
+    metadata?: Record<string, unknown> | null;
   },
 ) {
   const wt = await ctx.db.query.worktrees.findFirst({

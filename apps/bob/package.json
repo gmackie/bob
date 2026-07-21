@@ -1,6 +1,7 @@
 {
   "name": "@bob/blder",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vinext dev",
@@ -20,6 +21,9 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@elevenlabs/client": "^0.13.0",
+    "@gmacko/bob": "workspace:*",
+    "@gmacko/bob-client": "workspace:*",
     "@gmacko/core": "workspace:*",
     "@opentelemetry/exporter-trace-otlp-http": "^0.57.0",
     "@opentelemetry/resources": "^1.30.0",
@@ -38,6 +42,7 @@
     "@xyflow/react": "^12.10.1",
     "better-auth": "catalog:",
     "dagre": "^0.8.5",
+    "effect": "4.0.0-beta.43",
     "postgres": "^3.4.8",
     "react": "catalog:react19",
     "react-dom": "catalog:react19",
@@ -60,6 +65,7 @@
     "typescript": "catalog:",
     "vite": "8.0.8",
     "vitest": "^4.0.0",
-    "wrangler": "4.83.0"
+    "wrangler": "4.83.0",
+    "@types/dagre": "^0.7.52"
   }
 }

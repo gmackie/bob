@@ -8,11 +8,11 @@ import { SettingsRpc } from "../groups/settings.js";
 
 describe("Platform contract groups — Phase 7B-4B verification", () => {
   it("AgentRpc has 78 procedures", () => {
-    expect(AgentRpc.requests.size).toBe(78);
+    expect(AgentRpc.requests.size).toBe(85);
   });
 
   it("ProjectsRpc has 56 procedures", () => {
-    expect(ProjectsRpc.requests.size).toBe(56);
+    expect(ProjectsRpc.requests.size).toBe(58);
   });
 
   it("SettingsRpc has 20 procedures", () => {
@@ -34,6 +34,6 @@ describe("Platform contract groups — Phase 7B-4B verification", () => {
       SettingsRpc.requests.size +
       SecretsRpc.requests.size +
       AuthRpc.requests.size;
-    expect(total).toBe(179);
+    expect(total).toBe(188);
   });
 });

@@ -7,7 +7,7 @@ import { detectProjectCapabilities } from "../projectCapabilities";
 
 const tempDirs: string[] = [];
 
-function createTempRepo(paths: Array<{ path: string; content?: string }>): string {
+function createTempRepo(paths: { path: string; content?: string }[]): string {
   const root = mkdtempSync(path.join(os.tmpdir(), "bob-project-capabilities-"));
   tempDirs.push(root);
 

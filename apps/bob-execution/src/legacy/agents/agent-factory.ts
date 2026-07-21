@@ -1,13 +1,16 @@
-import { AgentAdapter, AgentType, AgentInfo } from '../types';
+import type { IPty } from 'node-pty';
+
+import type { AgentAdapter, AgentType, AgentInfo } from '../types';
 import { ClaudeAdapter } from './claude-adapter';
 import { CodexAdapter } from './codex-adapter';
 import { GeminiAdapter } from './gemini-adapter';
 import { KiroAdapter } from './kiro-adapter';
 import { OpenCodeAdapter } from './opencode-adapter';
 import { CursorAgentAdapter } from './cursor-agent-adapter';
+import { GrokAdapter } from './grok-adapter';
 
 export class AgentFactory {
-  private adapters: Map<AgentType, AgentAdapter> = new Map();
+  private adapters = new Map<AgentType, AgentAdapter>();
 
   constructor() {
     this.registerAdapters();
@@ -20,7 +23,8 @@ export class AgentFactory {
       ['gemini', new GeminiAdapter()],
       ['kiro', new KiroAdapter()],
       ['opencode', new OpenCodeAdapter()],
-      ['cursor-agent', new CursorAgentAdapter()]
+      ['cursor-agent', new CursorAgentAdapter()],
+      ['grok', new GrokAdapter()]
     ];
 
     for (const [type, adapter] of allAdapters) {
@@ -32,7 +36,7 @@ export class AgentFactory {
    * Get an agent adapter by type
    */
   getAdapter(type: AgentType): AgentAdapter | null {
-    return this.adapters.get(type) || null;
+    return this.adapters.get(type) ?? null;
   }
 
   /**
@@ -168,7 +172,7 @@ export class AgentFactory {
   /**
    * Start an agent process for a specific worktree
    */
-  async startAgent(type: AgentType, worktreePath: string, port?: number): Promise<any> {
+  async startAgent(type: AgentType, worktreePath: string, port?: number): Promise<IPty> {
     const adapter = this.getAdapter(type);
     if (!adapter) {
       throw new Error(`Agent type '${type}' is not supported`);
@@ -194,7 +198,7 @@ export class AgentFactory {
    */
   parseAgentOutput(type: AgentType, output: string): { inputTokens?: number; outputTokens?: number; cost?: number } | null {
     const adapter = this.getAdapter(type);
-    if (!adapter || !adapter.parseOutput) {
+    if (!adapter?.parseOutput) {
       return null;
     }
     return adapter.parseOutput(output);
@@ -203,13 +207,11 @@ export class AgentFactory {
   /**
    * Clean up an agent process
    */
-  async cleanupAgent(type: AgentType, process: any): Promise<void> {
+  async cleanupAgent(type: AgentType, process: IPty): Promise<void> {
     const adapter = this.getAdapter(type);
-    if (!adapter || !adapter.cleanup) {
+    if (!adapter?.cleanup) {
       // Default cleanup
-      if (process && typeof process.kill === 'function') {
-        process.kill();
-      }
+      process.kill();
       return;
     }
 

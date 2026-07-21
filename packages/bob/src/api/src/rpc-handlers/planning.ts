@@ -30,6 +30,7 @@ import {
   planningAgentStartSession,
   planningAgentEndSession,
 } from "../handlers/planning.js";
+import { syncLinearProjects } from "../handlers/linearSetup.js";
 
 export const makePlanningRpcHandlers = (ctx: HandlerContext) => ({
   "planning.listWorkspaces": ({
@@ -136,6 +137,12 @@ export const makePlanningRpcHandlers = (ctx: HandlerContext) => ({
     payload: { workspaceId: string; status?: string };
   }) => wrapHandler(planningListCycles, ctx, payload, "cycle"),
 
+  "planning.syncLinearProjects": ({
+    payload,
+  }: {
+    payload: { workspaceId: string; importIssues?: boolean };
+  }) => wrapHandler(syncLinearProjects, ctx, payload, "planning"),
+
   "planning.agentClaimTask": ({
     payload,
   }: {
@@ -154,11 +161,11 @@ export const makePlanningRpcHandlers = (ctx: HandlerContext) => ({
     payload: {
       taskRunId: string;
       summary?: string;
-      artifacts?: Array<{
+      artifacts?: {
         type: "pr" | "commit" | "file" | "comment";
         url?: string;
         description?: string;
-      }>;
+      }[];
       markIssueDone?: boolean;
     };
   }) => wrapHandler(planningAgentCompleteTask, ctx, payload, "agent"),

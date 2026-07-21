@@ -16,7 +16,8 @@ import { authClient } from "~/utils/auth";
 
 function getRouteSessionId(value: string | string[] | undefined): string | null {
   const raw = Array.isArray(value) ? value[0] : value;
-  return raw?.trim() || null;
+  const trimmed = raw?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : null;
 }
 
 export default function PlanningSessionScreen() {

@@ -1,12 +1,23 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { createTRPCRouter } from "../../trpc.js";
+import type { publicApiRouter } from "../publicApi.js";
+import type { createTRPCContext } from "../../trpc.js";
+
 process.env.DATABASE_URL ??= "postgres://postgres:postgres@localhost:5432/test";
+
+// The real tRPC context type — the mock db below is a structurally
+// close-enough fake that only implements the query/insert/update surface
+// these handlers actually call, cast through `unknown` (not `any`) at the
+// single construction site so every caller.* call below stays fully typed.
+type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
+type TestRouter = ReturnType<typeof createTRPCRouter<{ publicApi: typeof publicApiRouter }>>;
 
 type MockDb = ReturnType<typeof createMockDb>;
 
 const createMockDb = () => {
   const insertReturning = vi.fn();
-  const insertValues = vi.fn((values: Record<string, unknown>) => ({
+  const insertValues = vi.fn((_values: Record<string, unknown>) => ({
     returning: insertReturning,
   }));
   const insert = vi.fn(() => ({
@@ -53,13 +64,13 @@ const createMockDb = () => {
   };
 };
 
-let createCaller: (db: MockDb) => ReturnType<any>;
+let createCaller: (db: MockDb) => ReturnType<TestRouter["createCaller"]>;
 
 beforeAll(async () => {
   const { createTRPCRouter } = await import("../../trpc");
   const { publicApiRouter } = await import("../publicApi");
 
-  const router = createTRPCRouter({
+  const router: TestRouter = createTRPCRouter({
     publicApi: publicApiRouter,
   });
 
@@ -82,8 +93,8 @@ beforeAll(async () => {
         userId: "user-1",
       },
       db,
-    } as any);
-});
+    } as unknown as TRPCContext);
+}, 60_000);
 
 describe("publicApi router tenant isolation", () => {
   beforeEach(() => {
@@ -105,7 +116,7 @@ describe("publicApi router tenant isolation", () => {
       artifacts: [],
     });
 
-    const caller = createCaller(db) as any;
+    const caller = createCaller(db);
 
     await expect(
       caller.publicApi.getRun({
@@ -126,7 +137,7 @@ describe("publicApi router tenant isolation", () => {
       tenantId: "tenant-2",
     });
 
-    const caller = createCaller(db) as any;
+    const caller = createCaller(db);
 
     await expect(
       caller.publicApi.listRuns({
@@ -149,7 +160,7 @@ describe("publicApi router tenant isolation", () => {
       },
     ]);
 
-    const caller = createCaller(db) as any;
+    const caller = createCaller(db);
 
     await expect(
       caller.publicApi.listRunsByWorkItem({
@@ -178,7 +189,7 @@ describe("publicApi router tenant isolation", () => {
       },
     ]);
 
-    const caller = createCaller(db) as any;
+    const caller = createCaller(db);
 
     await expect(
       caller.publicApi.createRun({
@@ -215,7 +226,7 @@ describe("publicApi router tenant isolation", () => {
     process.env.GATEWAY_URL = "http://gw.local";
     process.env.NUDGE_SHARED_SECRET = "shh";
 
-    const caller = createCaller(db) as any;
+    const caller = createCaller(db);
 
     await caller.publicApi.createRun({
       workItemId: "BOB-42",
@@ -227,6 +238,9 @@ describe("publicApi router tenant isolation", () => {
       "http://gw.local/internal/workspace-event",
       expect.objectContaining({
         method: "POST",
+        // vitest's nested expect.objectContaining always returns `any` per
+        // its own type declarations, regardless of generic argument.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         headers: expect.objectContaining({
           Authorization: "Bearer shh",
         }),
@@ -273,7 +287,7 @@ describe("publicApi router tenant isolation", () => {
     process.env.GATEWAY_URL = "http://gw.local";
     process.env.NUDGE_SHARED_SECRET = "shh";
 
-    const caller = createCaller(db) as any;
+    const caller = createCaller(db);
 
     await caller.publicApi.updateRun({
       runId: "88888888-8888-4888-8888-888888888888",
@@ -284,6 +298,9 @@ describe("publicApi router tenant isolation", () => {
       "http://gw.local/internal/workspace-event",
       expect.objectContaining({
         method: "POST",
+        // vitest's nested expect.objectContaining always returns `any` per
+        // its own type declarations, regardless of generic argument.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         headers: expect.objectContaining({
           Authorization: "Bearer shh",
         }),
@@ -328,7 +345,7 @@ describe("publicApi router tenant isolation", () => {
     process.env.GATEWAY_URL = "http://gw.local";
     process.env.NUDGE_SHARED_SECRET = "shh";
 
-    const caller = createCaller(db) as any;
+    const caller = createCaller(db);
 
     await caller.publicApi.createArtifact({
       runId: "99999999-9999-4999-8999-999999999999",
@@ -340,6 +357,9 @@ describe("publicApi router tenant isolation", () => {
       "http://gw.local/internal/workspace-event",
       expect.objectContaining({
         method: "POST",
+        // vitest's nested expect.objectContaining always returns `any` per
+        // its own type declarations, regardless of generic argument.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         headers: expect.objectContaining({
           Authorization: "Bearer shh",
         }),
@@ -377,7 +397,7 @@ describe("publicApi router tenant isolation", () => {
       ])
       .mockResolvedValueOnce([{ id: "member-1" }]);
 
-    const caller = createCaller(db) as any;
+    const caller = createCaller(db);
 
     await caller.publicApi.registerWorkspace({
       name: "Bob CLI",
@@ -413,7 +433,7 @@ describe("publicApi router tenant isolation", () => {
     process.env.GATEWAY_URL = "http://gw.local";
     process.env.NUDGE_SHARED_SECRET = "shh";
 
-    const caller = createCaller(db) as any;
+    const caller = createCaller(db);
 
     await caller.publicApi.heartbeat({
       workspaceId: "66666666-6666-4666-8666-666666666666",
@@ -434,6 +454,9 @@ describe("publicApi router tenant isolation", () => {
       "http://gw.local/internal/workspace-event",
       expect.objectContaining({
         method: "POST",
+        // vitest's nested expect.objectContaining always returns `any` per
+        // its own type declarations, regardless of generic argument.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         headers: expect.objectContaining({
           Authorization: "Bearer shh",
         }),

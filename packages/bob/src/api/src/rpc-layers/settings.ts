@@ -56,4 +56,5 @@ export const makeSettingsHandlers = (ctx: HandlerContext) => {
 };
 
 export const makeSettingsLayer = (ctx: HandlerContext) =>
-  SettingsRpc.toLayer(makeSettingsHandlers(ctx));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbed handlers narrow the contract error channel (BobNotFoundError vs never); mirrors rpc-server.ts established pattern
+  SettingsRpc.toLayer(makeSettingsHandlers(ctx) as any);

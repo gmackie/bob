@@ -106,7 +106,10 @@ export function InboxList({ threadId }: InboxListProps) {
       </div>
     );
   }
-  const items = inboxQuery.data?.items ?? [];
+  // `research.inboxByThread` declares `.output(z.any())` (required by
+  // trpc-to-openapi), which degenerates the client-inferred type.
+  const items =
+    (inboxQuery.data as { items: InboxItem[] } | undefined)?.items ?? [];
   if (items.length === 0) {
     return (
       <div className="p-3 text-xs text-[#5A5855]">No pending findings.</div>

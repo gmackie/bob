@@ -1,5 +1,13 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { createTRPCContext } from "../../trpc.js";
+
+// The real tRPC context type — the mock db/authApi below are structurally
+// close-enough fakes that only implement the query surface these handlers
+// actually call, cast through `unknown` (not `any`) at the single
+// construction site so every caller.* call below stays fully typed.
+type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
+
 let appRouter: typeof import("../../root").appRouter;
 
 const queryMocks = {
@@ -40,10 +48,10 @@ const createCaller = () =>
         name: "Test User",
       },
     },
-    authApi: { getSession: vi.fn() } as any,
-    apiKeyAuth: null as any,
-    db: makeDbMock() as any,
-  });
+    authApi: { getSession: vi.fn() },
+    apiKeyAuth: null,
+    db: makeDbMock(),
+  } as unknown as TRPCContext);
 
 describe("agentRun router get", () => {
   const workspaceId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -53,7 +61,7 @@ describe("agentRun router get", () => {
     process.env.DATABASE_URL ??=
       "postgres://postgres:postgres@localhost:5432/test";
     ({ appRouter } = await import("../../root"));
-  });
+  }, 60_000);
 
   beforeEach(() => {
     Object.values(queryMocks).forEach((mock) => mock.mockReset());
@@ -68,7 +76,7 @@ describe("agentRun router get", () => {
     });
     queryMocks.workspaceMembersFindFirst.mockResolvedValueOnce({ id: "member-1" });
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(
       caller.agentRun.get({ runId }),

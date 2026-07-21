@@ -1,5 +1,6 @@
 import { LinearClient } from "@linear/sdk";
 import { eq } from "@bob/db";
+import type { Db } from "@bob/db/client";
 import { taskRuns, workItemArtifacts } from "@bob/db/schema";
 
 import type {
@@ -18,17 +19,46 @@ import type {
 import { PlanningProviderError } from "./planningProvider.js";
 import { rewriteLinearWebUrl } from "./linearUrls.js";
 
+/**
+ * Structural shape of a Linear issue as read by mapIssueToProviderTask.
+ *
+ * The real `@linear/sdk` `Issue` class exposes `state`/`assignee` as async
+ * getters (`LinearFetch<T>`, i.e. `Promise<T>`) and `labels` as a method
+ * returning a connection — genuinely different from the plain, already-
+ * resolved shape this code has always read synchronously (`issue.state?.name`,
+ * `issue.labels?.nodes`, `issue.assignee?.id`). That mismatch predates this
+ * fix and is out of scope here (see commit message); this interface types
+ * the shape the code actually consumes, without changing runtime behavior.
+ */
+interface LinearIssueLike {
+  id: string;
+  identifier: string;
+  title: string;
+  description?: string | null;
+  state?: { name?: string | null } | null;
+  priority: number;
+  url?: string | null;
+  labels?: { nodes?: { name: string }[] | null } | null;
+  assignee?: { id?: string | null } | null;
+}
+
 export class LinearPlanningProvider implements PlanningProvider {
   private client: LinearClient;
 
   constructor(
-    private db: any,
+    private db: Db,
     apiKey: string,
     private teamId: string,
     private projectId: string,
     private linearWebBaseUrl?: string | null,
+    linearApiUrl?: string | null,
   ) {
-    this.client = new LinearClient({ apiKey });
+    // NULL apiUrl keeps the SDK default (api.linear.app); set it to drive a
+    // Linear-API-compatible instance (e.g. Kanbanger) with the same SDK.
+    this.client = new LinearClient({
+      apiKey,
+      ...(linearApiUrl ? { apiUrl: linearApiUrl } : {}),
+    });
   }
 
   // ===========================================================================
@@ -58,7 +88,7 @@ export class LinearPlanningProvider implements PlanningProvider {
         );
       }
 
-      return this.mapIssueToProviderTask(issue);
+      return this.mapIssueToProviderTask(issue as unknown as LinearIssueLike);
     } catch (error) {
       throw this.wrapError(error, "createTask");
     }
@@ -67,9 +97,14 @@ export class LinearPlanningProvider implements PlanningProvider {
   async getTask(externalId: string): Promise<ProviderTask | null> {
     try {
       const issue = await this.client.issue(externalId);
-      return this.mapIssueToProviderTask(issue);
-    } catch (error: any) {
-      if (error?.message?.includes("not found") || error?.extensions?.code === "NOT_FOUND") {
+      return this.mapIssueToProviderTask(issue as unknown as LinearIssueLike);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : undefined;
+      const code =
+        error && typeof error === "object" && "extensions" in error
+          ? (error as { extensions?: { code?: string } }).extensions?.code
+          : undefined;
+      if (message?.includes("not found") || code === "NOT_FOUND") {
         return null;
       }
       throw this.wrapError(error, "getTask");
@@ -79,9 +114,9 @@ export class LinearPlanningProvider implements PlanningProvider {
   async getTaskByIdentifier(identifier: string): Promise<ProviderTask | null> {
     try {
       const result = await this.client.issueSearch({ query: identifier, first: 1 });
-      const issues = result.nodes;
-      if (issues.length === 0) return null;
-      return this.mapIssueToProviderTask(issues[0]!);
+      const [firstIssue] = result.nodes;
+      if (!firstIssue) return null;
+      return this.mapIssueToProviderTask(firstIssue as unknown as LinearIssueLike);
     } catch (error) {
       throw this.wrapError(error, "getTaskByIdentifier");
     }
@@ -93,11 +128,13 @@ export class LinearPlanningProvider implements PlanningProvider {
         first: filter.limit ?? 50,
         filter: {
           team: { id: { eq: this.teamId } },
-          project: { id: { eq: filter.providerProjectId || this.projectId } },
+          project: { id: { eq: filter.providerProjectId ?? this.projectId } },
           ...(filter.assigneeId && { assignee: { id: { eq: filter.assigneeId } } }),
         },
       });
-      return Promise.all(issues.nodes.map((issue) => this.mapIssueToProviderTask(issue)));
+      return issues.nodes.map((issue) =>
+        this.mapIssueToProviderTask(issue as unknown as LinearIssueLike),
+      );
     } catch (error) {
       throw this.wrapError(error, "listTasks");
     }
@@ -114,7 +151,7 @@ export class LinearPlanningProvider implements PlanningProvider {
 
       await this.client.updateIssue(externalId, payload);
       const issue = await this.client.issue(externalId);
-      return this.mapIssueToProviderTask(issue);
+      return this.mapIssueToProviderTask(issue as unknown as LinearIssueLike);
     } catch (error) {
       throw this.wrapError(error, "updateTask");
     }
@@ -167,7 +204,7 @@ export class LinearPlanningProvider implements PlanningProvider {
         taskRunId,
         producerType: "bob",
         producerId: taskRunId,
-        artifactType: artifact.type as any,
+        artifactType: artifact.type,
         artifactRole: artifact.role,
         url: artifact.url,
         title: artifact.title,
@@ -176,7 +213,7 @@ export class LinearPlanningProvider implements PlanningProvider {
       });
 
       const link = artifact.url ? ` [${artifact.title || "Link"}](${artifact.url})` : "";
-      await this.postComment(externalId, taskRunId, `Artifact: ${artifact.title || artifact.type}`, `${artifact.summary || ""}${link}`);
+      await this.postComment(externalId, taskRunId, `Artifact: ${artifact.title || artifact.type}`, `${artifact.summary ?? ""}${link}`);
     });
   }
 
@@ -221,10 +258,10 @@ export class LinearPlanningProvider implements PlanningProvider {
   ): Promise<void> {
     try {
       await fn();
-    } catch (error: any) {
+    } catch (error: unknown) {
       const failure = {
         method,
-        error: error?.message ?? String(error),
+        error: error instanceof Error ? error.message : String(error),
         timestamp: new Date().toISOString(),
       };
 
@@ -233,9 +270,9 @@ export class LinearPlanningProvider implements PlanningProvider {
           .select({ syncFailures: taskRuns.syncFailures })
           .from(taskRuns)
           .where(eq(taskRuns.id, taskRunId))
-          .then((rows: any[]) => rows[0]);
+          .then((rows) => rows[0]);
 
-        const existing = (run?.syncFailures ?? []) as Array<{ method: string; error: string; timestamp: string }>;
+        const existing = run?.syncFailures ?? [];
         existing.push(failure);
 
         await this.db
@@ -276,7 +313,7 @@ export class LinearPlanningProvider implements PlanningProvider {
       .select({ workItemId: taskRuns.workItemId })
       .from(taskRuns)
       .where(eq(taskRuns.id, taskRunId))
-      .then((rows: any[]) => rows[0]);
+      .then((rows) => rows[0]);
 
     if (!run?.workItemId) {
       throw new Error(`No workItemId found for taskRun ${taskRunId}`);
@@ -284,7 +321,7 @@ export class LinearPlanningProvider implements PlanningProvider {
     return run.workItemId;
   }
 
-  private mapIssueToProviderTask(issue: any): ProviderTask {
+  private mapIssueToProviderTask(issue: LinearIssueLike): ProviderTask {
     return {
       externalId: issue.id,
       identifier: issue.identifier,
@@ -293,7 +330,7 @@ export class LinearPlanningProvider implements PlanningProvider {
       status: issue.state?.name ?? "Unknown",
       priority: this.mapPriorityFromLinear(issue.priority),
       url: rewriteLinearWebUrl(issue.url ?? null, this.linearWebBaseUrl),
-      labels: issue.labels?.nodes?.map((l: any) => l.name) ?? [],
+      labels: issue.labels?.nodes?.map((l) => l.name) ?? [],
       assigneeId: issue.assignee?.id ?? null,
     };
   }

@@ -8,6 +8,18 @@ interface SynergyListProps {
   threadId: string;
 }
 
+// Shape of `research.linksByThread` items. The procedure declares
+// `.output(z.any())` (required by trpc-to-openapi), which degenerates the
+// client-inferred type, so we re-attach the real resolver shape here.
+interface SynergyItem {
+  otherThreadId: string;
+  otherThreadTitle: string | null;
+  kind: string;
+  score: number | null;
+  reasonMd: string | null;
+  discoveredAt: Date | null;
+}
+
 const KIND_LABEL: Record<string, string> = {
   topic_overlap: "topic",
   citation_overlap: "cites",
@@ -29,7 +41,8 @@ export function SynergyList({ threadId }: SynergyListProps) {
       <div className="p-3 text-xs text-red-400">Failed to load synergies.</div>
     );
   }
-  const items = linksQuery.data?.items ?? [];
+  const items =
+    (linksQuery.data as { items: SynergyItem[] } | undefined)?.items ?? [];
   if (items.length === 0) {
     return (
       <div className="p-3 text-xs text-[#5A5855]">No cross-thread links.</div>

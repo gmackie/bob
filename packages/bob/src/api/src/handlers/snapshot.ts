@@ -6,6 +6,7 @@
  */
 import { TRPCError } from "@trpc/server";
 import { desc, eq, and } from "@bob/db";
+import type { Db } from "@bob/db/client";
 import { workItemSnapshots, workItems, workspaceMembers } from "@bob/db/schema";
 
 import type { HandlerContext } from "./context.js";
@@ -15,7 +16,7 @@ import type { HandlerContext } from "./context.js";
 // ---------------------------------------------------------------------------
 
 async function loadAccessibleWorkItem(
-  db: any,
+  db: Db,
   userId: string,
   workItemId: string,
 ) {

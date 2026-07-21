@@ -49,6 +49,28 @@ interface ReagraphEdge {
   label?: string;
 }
 
+// Shapes of `research.graphByThread` / `research.inboxByThread`. Both
+// procedures declare `.output(z.any())` (required by trpc-to-openapi), which
+// degenerates the client-inferred type, so we re-attach the resolver shapes.
+interface GraphNode {
+  sourceId: number;
+  title: string | null;
+  author: string | null;
+  year: number | null;
+  influenceScore: number | null;
+  s2PaperId: string | null;
+}
+interface GraphEdge {
+  fromSourceId: number;
+  toSourceId: number;
+  kind: string;
+  weight: number | null;
+}
+interface GraphByThreadData {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
 // influenceScore varies by orders of magnitude, so log-scale before clamping
 // to [4, 24] px -- prevents one high-influence node from dwarfing the canvas.
 function sizeForInfluence(influence: number | null): number {
@@ -75,14 +97,17 @@ export function GraphCanvas({ threadId }: GraphCanvasProps) {
 
   const flaggedSourceIds = useMemo(() => {
     const set = new Set<number>();
-    for (const item of inboxQuery.data?.items ?? []) {
+    const inboxItems =
+      (inboxQuery.data as { items: { sourceId: number }[] } | undefined)
+        ?.items ?? [];
+    for (const item of inboxItems) {
       set.add(item.sourceId);
     }
     return set;
   }, [inboxQuery.data]);
 
   const { nodes, edges } = useMemo(() => {
-    const raw = graphQuery.data;
+    const raw = graphQuery.data as GraphByThreadData | undefined;
     if (!raw) {
       return {
         nodes: [] as ReagraphNode[],

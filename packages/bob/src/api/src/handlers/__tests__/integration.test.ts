@@ -33,12 +33,19 @@ vi.mock("@linear/sdk", () => ({
 }));
 
 import { integrationGet, integrationList, integrationSave } from "../integration.js";
+import type { HandlerContext } from "../context.js";
 
 describe("integration handlers", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
+  // The chainable db fake (insert/values/update/set/where/delete all return
+  // `this`-equivalent via mockReturnThis) doesn't — and can't reasonably —
+  // implement drizzle's full fluent builder surface. createCtx() returns it
+  // twice: once cast to the real HandlerContext (for passing into handler
+  // calls) and once as its own honest raw shape (for assertions like
+  // `rawDb.values` below), so no `any` is needed at either use site.
   function createCtx(input: {
     existingIntegration?: Record<string, unknown> | null;
     integrations?: Record<string, unknown>[];
@@ -52,7 +59,7 @@ describe("integration handlers", () => {
         findMany: vi.fn().mockResolvedValue(input.integrations ?? []),
       },
     };
-    const db: any = {
+    const rawDb = {
       query,
       insert: vi.fn().mockReturnThis(),
       values: vi.fn().mockReturnThis(),
@@ -62,11 +69,15 @@ describe("integration handlers", () => {
       where: vi.fn().mockReturnThis(),
       delete: vi.fn().mockReturnThis(),
     };
-    return { db, userId: "user-1", session: { user: { id: "user-1" } } } as any;
+    const ctx: HandlerContext = {
+      db: rawDb as unknown as HandlerContext["db"],
+      userId: "user-1",
+    };
+    return { ctx, rawDb };
   }
 
   it("saves linearWebBaseUrl for Linear integrations", async () => {
-    const ctx = createCtx({});
+    const { ctx, rawDb } = createCtx({});
 
     await integrationSave(ctx, {
       workspaceId: "workspace-1",
@@ -74,7 +85,7 @@ describe("integration handlers", () => {
       linearWebBaseUrl: "https://tasks.gmac.io",
     });
 
-    expect(ctx.db.values).toHaveBeenCalledWith(
+    expect(rawDb.values).toHaveBeenCalledWith(
       expect.objectContaining({ linearWebBaseUrl: "https://tasks.gmac.io" }),
     );
   });
@@ -91,12 +102,12 @@ describe("integration handlers", () => {
       createdAt: "2026-06-04T00:00:00.000Z",
     };
 
-    const getCtx = createCtx({ existingIntegration: integration });
+    const { ctx: getCtx } = createCtx({ existingIntegration: integration });
     await expect(
       integrationGet(getCtx, { workspaceId: "workspace-1", provider: "linear" }),
     ).resolves.toMatchObject({ linearWebBaseUrl: "https://tasks.gmac.io" });
 
-    const listCtx = createCtx({ integrations: [integration] });
+    const { ctx: listCtx } = createCtx({ integrations: [integration] });
     await expect(integrationList(listCtx, { workspaceId: "workspace-1" })).resolves.toEqual([
       expect.objectContaining({ linearWebBaseUrl: "https://tasks.gmac.io" }),
     ]);

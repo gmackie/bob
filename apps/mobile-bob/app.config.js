@@ -2,17 +2,14 @@
 
 const APP_VARIANT =
   process.env.APP_VARIANT ?? process.env.APP_ENV ?? "development";
-const isHostedEnv =
-  APP_VARIANT === "production" || APP_VARIANT === "preview";
+const isHostedEnv = APP_VARIANT === "production" || APP_VARIANT === "staging";
 const API_URL =
   process.env.API_URL ??
   process.env.EXPO_PUBLIC_API_URL ??
   process.env.EXPO_PUBLIC_PRODUCTION_API_URL ??
   "https://bob.blder.bot";
 const AUTH_URL =
-  process.env.AUTH_URL ??
-  process.env.EXPO_PUBLIC_AUTH_URL ??
-  API_URL;
+  process.env.AUTH_URL ?? process.env.EXPO_PUBLIC_AUTH_URL ?? API_URL;
 const OODA_API_URL =
   process.env.OODA_API_URL ??
   process.env.EXPO_PUBLIC_OODA_API_URL ??
@@ -21,12 +18,11 @@ const GATEWAY_PUBLIC_URL =
   process.env.GATEWAY_PUBLIC_URL ??
   process.env.EXPO_PUBLIC_GATEWAY_URL ??
   (isHostedEnv ? "wss://ws.blder.bot" : undefined);
-const updatesConfig = isHostedEnv
-  ? {
-      fallbackToCacheTimeout: 0,
-      url: "https://u.expo.dev/e1dd0ab0-4dc1-40f8-b066-7cb91fde1759",
-    }
-  : { enabled: false };
+const updatesConfig = {
+  checkAutomatically: "ON_LOAD",
+  fallbackToCacheTimeout: 0,
+  url: "https://u.expo.dev/e1dd0ab0-4dc1-40f8-b066-7cb91fde1759",
+};
 
 const SENTRY_DSN = process.env.SENTRY_DSN;
 const POSTHOG_KEY = process.env.POSTHOG_KEY;
@@ -73,7 +69,6 @@ const getScheme = () => {
 };
 
 const getSentryConfig = () => {
-  if (!SENTRY_DSN) return null;
   return [
     "@sentry/react-native/expo",
     {
@@ -94,9 +89,12 @@ module.exports = ({ config }) => {
     [
       "expo-speech-recognition",
       {
-        microphonePermission: "Allow Bob to use the microphone for voice prompts.",
+        microphonePermission:
+          "Allow Bob to use the microphone for voice prompts.",
         speechRecognitionPermission: "Allow Bob to transcribe voice prompts.",
-        androidSpeechServicePackages: ["com.google.android.googlequicksearchbox"],
+        androidSpeechServicePackages: [
+          "com.google.android.googlequicksearchbox",
+        ],
       },
     ],
     [
@@ -110,6 +108,10 @@ module.exports = ({ config }) => {
         },
       },
     ],
+    // Enables native push: adds the iOS aps-environment entitlement and the
+    // Android notification channel/icon. APNs key + FCM credentials are
+    // configured on EAS (eas credentials), not here.
+    "expo-notifications",
   ];
 
   if (sentryPlugin) {
@@ -126,7 +128,7 @@ module.exports = ({ config }) => {
     icon: getVariantIcon(),
     userInterfaceStyle: "automatic",
     updates: updatesConfig,
-    runtimeVersion: "1.0.0",
+    runtimeVersion: { policy: "fingerprint" },
     newArchEnabled: true,
     assetBundlePatterns: ["**/*"],
     ios: {
@@ -143,6 +145,15 @@ module.exports = ({ config }) => {
           "UIInterfaceOrientationLandscapeLeft",
           "UIInterfaceOrientationLandscapeRight",
         ],
+        // Wake the app for background/data pushes so the badge + delivery work
+        // even when the app isn't foregrounded.
+        UIBackgroundModes: ["remote-notification"],
+      },
+      entitlements: {
+        // "development" for dev/preview builds; EAS overrides to "production"
+        // for release/TestFlight automatically via the push credentials.
+        "aps-environment":
+          APP_VARIANT === "production" ? "production" : "development",
       },
     },
     android: {

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-type LegacyPlanningBase = {
+interface LegacyPlanningBase {
   legacyId: string;
   projectId: string;
   parentLegacyId?: string;
@@ -11,7 +11,7 @@ type LegacyPlanningBase = {
   status: string;
   createdAt: Date;
   updatedAt: Date;
-};
+}
 
 interface LegacyProjectRecord {
   id: string;

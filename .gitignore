@@ -21,3 +21,6 @@ packages/research-backend/.venv/
 .gstack/
 .wrangler/
 .deploy/
+
+# Preflight local build metadata
+.preflight/

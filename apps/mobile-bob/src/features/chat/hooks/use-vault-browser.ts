@@ -79,11 +79,19 @@ export function useVaultBrowser(): VaultBrowserHook {
   const fileQuery = useQuery({
     queryKey: ["mobile-bob", "vault", "read", vaultKind, selectedPath],
     enabled: Boolean(selectedPath),
-    queryFn: () =>
-      client.vault.read.query({
+    queryFn: () => {
+      // `enabled` guarantees `selectedPath` is truthy whenever React Query
+      // actually calls `queryFn`, but that invariant crosses two separate
+      // option fields that TS can't correlate — guard explicitly instead of
+      // asserting with `!`.
+      if (!selectedPath) {
+        throw new Error("vault file query ran without a selected path");
+      }
+      return client.vault.read.query({
         vaultKind,
-        filePath: selectedPath!,
-      }),
+        filePath: selectedPath,
+      });
+    },
   });
 
   const selectFile = useCallback((path: string) => {

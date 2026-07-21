@@ -3,10 +3,11 @@ import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import {
   buildMobileReadableOutcomeRows,
-  selectLatestMobileSessionBackedOutcomeRun,
-  type MobileReadableOutcomeEvent,
-  type MobileWorkItemOutcomeRun,
+  selectLatestMobileSessionBackedOutcomeRun
+
+
 } from "~/features/tablet/work-item-entry";
+import type {MobileReadableOutcomeEvent, MobileWorkItemOutcomeRun} from "~/features/tablet/work-item-entry";
 import { colors } from "~/lib/colors";
 import { trpc } from "~/utils/api";
 

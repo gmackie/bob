@@ -2,7 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import { existsSync } from "node:fs";
 
-import { AgentType } from "../types";
+import type { AgentType } from "../types";
 
 const isDocker = process.env.DOCKER_ENV === "true";
 
@@ -14,6 +14,7 @@ const AGENT_COMMANDS: Record<AgentType, string> = {
   opencode: "opencode",
   kiro: "kiro-cli",
   "cursor-agent": "cursor-agent",
+  grok: "grok",
 };
 
 /**

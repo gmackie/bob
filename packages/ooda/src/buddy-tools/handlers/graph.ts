@@ -13,11 +13,31 @@ export const graph_neighborhood: ToolHandler<"graph_neighborhood"> = async (
   args,
   ctx,
 ) => {
-  const r = await ctx.trpc.research.paperNeighborhood({
+  // The router procedure is declared `.output(z.any())` (required by
+  // trpc-to-openapi), so the inferred result is `any`. Re-attach the
+  // resolver's real return shape here so the `.map` callbacks below type.
+  const r = (await ctx.trpc.research.paperNeighborhood({
     sourceId: args.source_id,
     kinds: args.kinds,
     limit: args.limit,
-  });
+  })) as {
+    edges: {
+      fromSourceId: number;
+      toSourceId: number;
+      kind: string;
+      weight: number | null;
+    }[];
+    papers: {
+      sourceId: number;
+      title: string;
+      author: string | null;
+      body: string | null;
+      year: number | null;
+      doi: string | null;
+      s2PaperId: string | null;
+      influenceScore: number | null;
+    }[];
+  };
   return {
     edges: r.edges.map((e) => ({
       from_source_id: e.fromSourceId,
@@ -46,11 +66,16 @@ export const graph_neighborhood: ToolHandler<"graph_neighborhood"> = async (
 };
 
 export const graph_path: ToolHandler<"graph_path"> = async (args, ctx) => {
-  const r = await ctx.trpc.research.paperPath({
+  // `.output(z.any())` on the router → inferred `any`; restore the
+  // resolver's real shape so `r.path.map` and `r.hops` type below.
+  const r = (await ctx.trpc.research.paperPath({
     from: args.from,
     to: args.to,
     maxHops: args.max_hops,
-  });
+  })) as {
+    path: { fromSourceId: number; toSourceId: number; kind: string }[];
+    hops: number;
+  };
   return {
     path: r.path.map((p) => ({
       from_source_id: p.fromSourceId,

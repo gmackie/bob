@@ -92,9 +92,13 @@ export function getSessionHref(sessionId: string, workspaceId?: string | null): 
 export function getNotificationTargetHref(data: {
   workItemId?: string | null;
   workspaceId?: string | null;
+  sessionId?: string | null;
   url?: string | null;
 }): string | null {
   if (data.workItemId) return getWorkItemHref(data.workItemId, data.workspaceId);
+  // Ad-hoc runs (blocked/host_unknown/terminal pushes) have no work item —
+  // deep-link straight to the run screen so a tap never dead-ends.
+  if (data.sessionId) return `/sessions/${data.sessionId}`;
   return data.url ?? null;
 }
 

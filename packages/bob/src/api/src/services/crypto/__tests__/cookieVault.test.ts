@@ -70,7 +70,7 @@ describe("cookieVault", () => {
     it("should detect tampered ciphertext", () => {
       const encrypted = encryptCookieValue("val", "cookie-1");
       const buf = Buffer.from(encrypted.ciphertext, "base64");
-      buf[0] = (buf[0]! + 1) % 256;
+      buf[0] = ((buf[0] ?? 0) + 1) % 256;
       encrypted.ciphertext = buf.toString("base64");
 
       expect(() => decryptCookieValue(encrypted, "cookie-1")).toThrow();
@@ -79,7 +79,7 @@ describe("cookieVault", () => {
     it("should detect tampered IV", () => {
       const encrypted = encryptCookieValue("val", "cookie-1");
       const buf = Buffer.from(encrypted.iv, "base64");
-      buf[0] = (buf[0]! + 1) % 256;
+      buf[0] = ((buf[0] ?? 0) + 1) % 256;
       encrypted.iv = buf.toString("base64");
 
       expect(() => decryptCookieValue(encrypted, "cookie-1")).toThrow();
@@ -88,7 +88,7 @@ describe("cookieVault", () => {
     it("should detect tampered auth tag", () => {
       const encrypted = encryptCookieValue("val", "cookie-1");
       const buf = Buffer.from(encrypted.tag, "base64");
-      buf[0] = (buf[0]! + 1) % 256;
+      buf[0] = ((buf[0] ?? 0) + 1) % 256;
       encrypted.tag = buf.toString("base64");
 
       expect(() => decryptCookieValue(encrypted, "cookie-1")).toThrow();

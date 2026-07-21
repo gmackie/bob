@@ -1,16 +1,13 @@
 import { eq } from "@bob/db";
+import type { Db } from "@bob/db/client";
 import {
   forgeRevisions,
   forgeRunEvents,
   taskRuns,
 } from "@bob/db/schema";
 
-// Use the same db type as ctx.db in tRPC procedures (or the default export from @bob/db/client)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Database = any;
-
 export class ForgeGraphEventReporter {
-  constructor(private db: Database) {}
+  constructor(private db: Db) {}
 
   /** Called after executeTask creates a session + taskRun */
   async reportCreated(taskRun: {

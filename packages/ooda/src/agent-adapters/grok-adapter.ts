@@ -7,7 +7,12 @@ import {
   runGrokAcpSession,
   type SessionUpdate,
 } from "./grok-acp";
-import type { AgentAdapter, AdapterCommand, AdapterEvent } from "./types";
+import type {
+  AgentAdapter,
+  AdapterCommand,
+  AdapterEvent,
+  BuildCommandOptions,
+} from "./types";
 
 /**
  * Grok Build adapter — drives xAI's `grok` coding agent over ACP
@@ -33,11 +38,7 @@ export class GrokAdapter implements AgentAdapter {
     }
   }
 
-  buildCommand(opts: {
-    prompt: string;
-    workspaceRoot: string;
-    systemPrompt?: string;
-  }): AdapterCommand {
+  buildCommand(opts: BuildCommandOptions): AdapterCommand {
     // grok CLI grammar: top-level opts -> `agent` -> agent opts -> `stdio`.
     // `--cwd` is top-level; `--always-approve` is an `agent` option; the
     // `agent stdio` subcommand takes no flags of its own. (Verified against

@@ -40,12 +40,15 @@ export function WorkspacePanel({ threadSlug }: WorkspacePanelProps) {
   const [activeFilter, setActiveFilter] = useState<FilterValue>("all");
   const trpc = useTRPC();
 
-  const { data: entries = [] } = useQuery(
+  // `threads.listNotes` is `.output(z.any())` for OpenAPI, which degenerates
+  // the client query type; cast to the promoted-note shape we render.
+  const notesQuery = useQuery(
     trpc.threads.listNotes.queryOptions(
       { slug: threadSlug },
       { refetchInterval: 3000 },
     ),
   );
+  const entries = (notesQuery.data ?? []) as unknown as WorkspaceEntry[];
 
   const filtered =
     activeFilter === "all"

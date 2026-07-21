@@ -1,6 +1,5 @@
 import { Pressable, ScrollView, Text, View } from "react-native";
 
-import { colors } from "~/lib/colors";
 
 import type { OracleChunk } from "../hooks/use-oracle-search";
 

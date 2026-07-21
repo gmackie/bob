@@ -1,6 +1,6 @@
-import { and, eq, inArray } from "@bob/db";
+import { and, eq } from "@bob/db";
 import { db } from "@bob/db/client";
-import { devicePushTokens, user } from "@bob/db/schema";
+import { devicePushTokens } from "@bob/db/schema";
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
@@ -55,11 +55,11 @@ export interface SendResult {
   success: boolean;
   sent: number;
   failed: number;
-  errors: Array<{
+  errors: {
     token: string;
     error: string;
     shouldRemoveToken: boolean;
-  }>;
+  }[];
 }
 
 async function sendToExpo(
@@ -151,9 +151,20 @@ export async function sendPushNotification(
   let sent = 0;
   let failed = 0;
 
+  if (tickets.length !== tokens.length) {
+    // The Expo push API is expected to return one ticket per submitted
+    // message, in order — but that's a contract with an external service,
+    // not something TypeScript can prove. Fail loudly instead of silently
+    // mis-pairing tickets with the wrong device token.
+    throw new Error(
+      `Expo push API returned ${tickets.length} tickets for ${tokens.length} messages`,
+    );
+  }
+
   for (let i = 0; i < tickets.length; i++) {
-    const ticket = tickets[i]!;
-    const token = tokens[i]!;
+    const ticket = tickets[i];
+    const token = tokens[i];
+    if (!ticket || !token) continue;
 
     if (ticket.status === "ok") {
       sent++;
@@ -206,7 +217,7 @@ export async function notifyTaskBlocked(
     title: `Task ${taskIdentifier} Blocked`,
     body: reason.length > 100 ? `${reason.slice(0, 97)}...` : reason,
     data: {
-      type: "task.blocked" as NotificationType,
+      type: "task.blocked",
       taskIdentifier,
       sessionId,
       deepLink: sessionId ? `bob://session/${sessionId}` : undefined,
@@ -228,7 +239,7 @@ export async function notifyTaskCompleted(
       ? "Pull request is ready for review"
       : "Task has been completed",
     data: {
-      type: "task.completed" as NotificationType,
+      type: "task.completed",
       taskIdentifier,
       prUrl,
       deepLink: prUrl ? `bob://pr/${encodeURIComponent(prUrl)}` : undefined,
@@ -249,7 +260,7 @@ export async function notifyPRReady(
     title: "PR Ready for Review",
     body: `#${prNumber} ${prTitle} in ${repositoryName}`,
     data: {
-      type: "pr.ready" as NotificationType,
+      type: "pr.ready",
       prNumber,
       prUrl,
       repositoryName,
@@ -270,7 +281,7 @@ export async function notifyPRMerged(
     title: "PR Merged",
     body: `#${prNumber} ${prTitle} has been merged`,
     data: {
-      type: "pr.merged" as NotificationType,
+      type: "pr.merged",
       prNumber,
       repositoryName,
     },
@@ -289,7 +300,7 @@ export async function notifySessionError(
     title: "Session Error",
     body: `${sessionTitle}: ${errorMessage.slice(0, 80)}`,
     data: {
-      type: "session.error" as NotificationType,
+      type: "session.error",
       sessionId,
       deepLink: `bob://session/${sessionId}`,
     },
@@ -341,7 +352,11 @@ export async function registerPushToken(
     })
     .returning();
 
-  return { id: newToken!.id, created: true };
+  if (!newToken) {
+    throw new Error("Failed to register push token: insert returned no row");
+  }
+
+  return { id: newToken.id, created: true };
 }
 
 export async function unregisterPushToken(
@@ -380,14 +395,14 @@ export async function disablePushToken(
 }
 
 export async function listUserTokens(userId: string): Promise<
-  Array<{
+  {
     id: string;
     deviceType: string;
     deviceName: string | null;
     enabled: boolean;
     lastSeenAt: string | null;
     createdAt: string;
-  }>
+  }[]
 > {
   const tokens = await db.query.devicePushTokens.findMany({
     where: eq(devicePushTokens.userId, userId),

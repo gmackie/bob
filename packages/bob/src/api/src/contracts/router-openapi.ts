@@ -65,8 +65,7 @@ function isProcedure(
     | Record<string, unknown>
     | undefined;
   return (
-    def !== undefined &&
-    def.procedure === true &&
+    def?.procedure === true &&
     (def.type === "query" || def.type === "mutation" || def.type === "subscription")
   );
 }
@@ -82,7 +81,7 @@ function isRouter(
   const def = (value as Record<string, unknown>)._def as
     | Record<string, unknown>
     | undefined;
-  return def !== undefined && def.router === true && typeof def.record === "object";
+  return def?.router === true && typeof def.record === "object";
 }
 
 /**
@@ -100,11 +99,12 @@ function extractInputSchema(inputs: unknown[]): z.ZodTypeAny | undefined {
     }
   }
 
-  if (zodSchemas.length === 0) return undefined;
-  if (zodSchemas.length === 1) return zodSchemas[0]!;
+  const [first, second] = zodSchemas;
+  if (zodSchemas.length === 0 || !first) return undefined;
+  if (zodSchemas.length === 1 || !second) return first;
 
   // Multiple inputs → intersection
-  return z.intersection(zodSchemas[0]!, zodSchemas[1]!);
+  return z.intersection(first, second);
 }
 
 /**
@@ -166,13 +166,13 @@ export function extractProcedures(
         path: currentPath,
         type: def.type as "query" | "mutation",
         tag: currentTag,
-        inputSchema: extractInputSchema(def.inputs ?? []),
+        inputSchema: extractInputSchema(def.inputs),
       });
     } else if (isRouter(value)) {
       // Wrapped router: recurse into _def.record
       results.push(
         ...extractProcedures(
-          value._def.record as Record<string, unknown>,
+          value._def.record,
           currentPath,
           currentTag,
         ),
@@ -233,7 +233,7 @@ export function generateOpenApiFromRouter(
 ): OpenAPIV3_1.Document {
   // If we got a wrapped router, extract its record
   const record = isRouter(routerOrRecord)
-    ? (routerOrRecord._def.record as Record<string, unknown>)
+    ? (routerOrRecord._def.record)
     : routerOrRecord;
 
   const procedures = extractProcedures(record);
@@ -265,7 +265,7 @@ export function generateOpenApiFromRouter(
             string,
             OpenAPIV3_1.SchemaObject
           >;
-          const required = (jsonSchema.required as string[]) ?? [];
+          const required = jsonSchema.required ?? [];
 
           operation.parameters = Object.entries(properties).map(
             ([name, schema]) =>
@@ -313,5 +313,5 @@ export function generateOpenApiFromRouter(
     tags: [...tagSet]
       .sort()
       .map((t) => ({ name: t })),
-  } as OpenAPIV3_1.Document;
+  };
 }

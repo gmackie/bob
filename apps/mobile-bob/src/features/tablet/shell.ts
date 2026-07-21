@@ -1,6 +1,7 @@
-import type { TaskLaneKey } from "./dashboard";
+import type { ProviderKey, TaskLaneKey } from "./dashboard";
 import { buildRecentOutcomeWorkItems, getRecentOutcomeRowModel } from "./dashboard";
-import { buildPriorityQueueItems, type TabletQueueItem } from "./queue";
+import { buildPriorityQueueItems  } from "./queue";
+import type {TabletQueueItem} from "./queue";
 import type { MobileWorkItemEntryView } from "./work-item-entry";
 
 export type TabletShellMode = "tasks" | "planning";
@@ -18,7 +19,7 @@ export type TabletShellTarget =
   | { type: "execution-session"; sessionId: string }
   | { type: "planning-session"; sessionId: string }
   | { type: "project"; projectId: string }
-  | { type: "provider"; provider: "codex" | "cursor" }
+  | { type: "provider"; provider: ProviderKey }
   | { type: "task-lane"; lane: TaskLaneKey }
   | { type: "settings" };
 
@@ -161,6 +162,10 @@ const ACTIVE_STATUSES = new Set([
   "pending",
   "awaiting-input",
   "awaiting_input",
+  // Paused awaiting a human decision — still active (the "needs you" state).
+  "blocked",
+  // Lease expired: contact lost, process fate unknown — still active.
+  "host_unknown",
 ]);
 const COMPLETED_FILTER_STATUSES = new Set([
   "cancelled",
@@ -331,6 +336,11 @@ export function getRightRailTitle(mode: TabletShellMode): string {
   return mode === "tasks" ? "Running Now" : "Active Sessions";
 }
 
+function normalizeWorkspaceName(value: string | null | undefined): string {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : "Workspace";
+}
+
 export function getShellGlobalActions(
   workspaceName?: string | null,
 ): TabletShellGlobalAction[] {
@@ -338,7 +348,7 @@ export function getShellGlobalActions(
     {
       key: "settings",
       label: "Settings",
-      detailLabel: workspaceName?.trim() || "Workspace",
+      detailLabel: normalizeWorkspaceName(workspaceName),
     },
   ];
 }
@@ -348,7 +358,7 @@ export function getShellHeaderStatusLabel(input: {
   connectionState: string;
   sessionCount: number;
 }): string {
-  const workspaceName = input.workspaceName?.trim() || "Workspace";
+  const workspaceName = normalizeWorkspaceName(input.workspaceName);
   const status =
     input.connectionState === "connected"
       ? `${input.sessionCount} session${input.sessionCount === 1 ? "" : "s"}`
@@ -707,8 +717,11 @@ function pathSegment(pathname: string, index: number): string | undefined {
   return pathname.split("/").filter(Boolean)[index];
 }
 
-function normalizeProvider(value: string | undefined): "codex" | "cursor" | null {
-  return value === "codex" || value === "cursor" ? value : null;
+function normalizeProvider(value: string | undefined): ProviderKey | null {
+  if (value === "claude" || value === "codex" || value === "grok" || value === "cursor-agent") {
+    return value;
+  }
+  return value === "cursor" ? "cursor-agent" : null;
 }
 
 function normalizeTaskLane(value: string | undefined): TaskLaneKey | null {
@@ -748,11 +761,14 @@ function getShellStatusTone(status: string): TabletShellStatusTone {
     case "awaiting-input":
     case "awaiting_input":
     case "stopping":
+    case "blocked": // Paused awaiting a human decision — the amber "needs you" state.
       return "warning";
     case "error":
     case "failed":
     case "interrupted":
       return "danger";
+    // "host_unknown" (lease expired, contact lost) falls through to the
+    // neutral/muted "default" tone — a "lost contact", never a failure.
     default:
       return "default";
   }

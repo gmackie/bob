@@ -8,10 +8,7 @@ import {
   buildMobileSettingsActions,
   buildWorkspaceSettingRows,
 } from "~/features/settings/settings-model";
-import type {
-  MobileSettingsSectionKey,
-  WorkspaceSettingMembership,
-} from "~/features/settings/settings-model";
+import type { MobileSettingsSectionKey } from "~/features/settings/settings-model";
 import {
   buildWorkspaceSelectionPath,
   SELECTED_WORKSPACE_KEY,
@@ -27,8 +24,8 @@ interface TabletSettingsPaneProps {
 
 export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) {
   const queryClient = useQueryClient();
-  const pathname = usePathname() ?? "/settings";
-  const searchParams = useLocalSearchParams<Record<string, string | string[] | undefined>>();
+  const pathname = usePathname();
+  const searchParams = useLocalSearchParams();
   const scrollRef = useRef<ScrollView>(null);
   const sectionOffsets = useRef<Record<MobileSettingsSectionKey, number>>({
     workspace: 0,
@@ -67,7 +64,7 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
     () =>
       buildWorkspaceSettingRows({
         selectedWorkspaceId,
-        memberships: (memberships ?? []) as WorkspaceSettingMembership[],
+        memberships: (memberships ?? []),
       }),
     [memberships, selectedWorkspaceId],
   );
@@ -87,7 +84,12 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
       void queryClient.invalidateQueries({ queryKey: trpc.workspace.list.queryKey() });
       void queryClient.invalidateQueries({ queryKey: trpc.project.list.queryKey() });
       void queryClient.invalidateQueries({ queryKey: trpc.workItem.list.queryKey() });
-      router.replace(buildWorkspaceSelectionPath(currentPath(pathname, searchParams), workspaceId));
+      router.replace(
+        buildWorkspaceSelectionPath(
+          currentPath(pathname, searchParams),
+          workspaceId,
+        ) as Parameters<typeof router.replace>[0],
+      );
     });
   };
 
@@ -135,14 +137,16 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
       </View>
 
       <View className="mt-6 flex-row flex-wrap gap-3">
-        {actions.map((action) => (
+        {actions.map((action) => {
+          const targetSection = action.targetSection;
+          return (
           <Pressable
             key={action.key}
             onPress={
               action.kind === "logout"
                 ? handleLogout
-                : action.targetSection
-                  ? () => scrollToSection(action.targetSection!)
+                : targetSection
+                  ? () => scrollToSection(targetSection)
                   : undefined
             }
             accessibilityRole="button"
@@ -166,7 +170,8 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
               {action.description}
             </Text>
           </Pressable>
-        ))}
+          );
+        })}
       </View>
 
       <View
@@ -260,7 +265,7 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
             Providers
           </Text>
           <View className="mt-3 flex-row gap-2">
-            {(["codex", "cursor"] as const).map((provider) => (
+            {(["claude", "codex", "grok", "cursor-agent"] as const).map((provider) => (
               <Pressable
                 key={provider}
                 onPress={() => onOpenProvider?.(provider)}
@@ -270,7 +275,9 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
                 style={{ backgroundColor: colors.secondary }}
               >
                 <Text className="text-center text-xs font-semibold text-foreground">
-                  {provider === "codex" ? "Codex" : "Cursor"}
+                  {provider === "cursor-agent"
+                    ? "Cursor"
+                    : provider.charAt(0).toUpperCase() + provider.slice(1)}
                 </Text>
               </Pressable>
             ))}

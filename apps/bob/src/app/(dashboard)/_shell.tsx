@@ -11,7 +11,7 @@ import { getShellRealtimeStatusModel } from "~/components/layout/shell-status-mo
 import { ChatPanelProvider } from "~/components/chat/chat-panel-provider";
 import { ChatPanel } from "~/components/chat/chat-panel";
 import { useWorkspaceEvents } from "~/hooks/use-workspace-events";
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
 
 function formatNotificationTime(dateString: string): string {
   const diffMs = Date.now() - new Date(dateString).getTime();
@@ -41,28 +41,31 @@ export default function BilderShell({ children }: { children: React.ReactNode })
   const realtimeStatus = getShellRealtimeStatusModel(connectionState.status);
   const pathname = usePathname() ?? "";
   const router = useRouter();
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
   const queryClient = useQueryClient();
   const [showNotif, setShowNotif] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
 
-  const { data: notifications } = useQuery(
-    trpc.notification.list.queryOptions(
-      { unreadOnly: true, limit: 20 },
-      { refetchInterval: 30_000 },
-    ),
-  );
-  const notificationRows = Array.isArray(notifications)
-    ? (notifications as ShellNotification[])
-    : [];
+  const notificationInput = { unreadOnly: true, limit: 20 };
+  const { data: notifications } = useQuery({
+    queryKey: ["rpc", "workItem.notification.list", notificationInput],
+    queryFn: () =>
+      rpc.workItems.notification.list(notificationInput) as Promise<{
+        items: ShellNotification[];
+      }>,
+    refetchInterval: 30_000,
+  });
+  const notificationRows = notifications?.items ?? [];
 
-  const markReadMutation = useMutation(
-    trpc.notification.markAsRead.mutationOptions({
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: trpc.notification.list.queryKey() });
-      },
-    }),
-  );
+  const markReadMutation = useMutation({
+    mutationFn: (input: { id: string }) =>
+      rpc.workItems.notification.markAsRead(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["rpc", "workItem.notification.list"],
+      });
+    },
+  });
 
   const unreadCount = notificationRows.length;
 

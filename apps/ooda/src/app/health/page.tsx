@@ -4,6 +4,17 @@ import { useQuery } from "@tanstack/react-query";
 import { useTRPC } from "~/trpc/react";
 import { ConnectorStatusCard } from "~/components/health/connector-status-card";
 
+// `runner.getHealth` is `.output(z.any())` for OpenAPI, which degenerates the
+// client query type; mirror the connector-status shape the resolver returns.
+interface ConnectorHealth {
+  connectorId: string;
+  status: "up" | "degraded" | "down" | "unknown";
+  rateLimitRemaining: number | undefined;
+  lastSuccessAt: string | undefined;
+  errorCount: number;
+  avgResponseMs: number | undefined;
+}
+
 export default function HealthPage() {
   const trpc = useTRPC();
   const healthQuery = useQuery({
@@ -11,7 +22,7 @@ export default function HealthPage() {
     refetchInterval: 5_000,
   });
 
-  const connectors = healthQuery.data ?? [];
+  const connectors = (healthQuery.data ?? []) as unknown as ConnectorHealth[];
 
   const upCount = connectors.filter((c) => c.status === "up").length;
   const degradedCount = connectors.filter((c) => c.status === "degraded").length;

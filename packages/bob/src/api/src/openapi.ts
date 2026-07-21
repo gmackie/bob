@@ -7,6 +7,14 @@ import { workItemsRestOperations } from "./contracts/work-items-rest";
 import { generateOpenApiFromRouter } from "./contracts/router-openapi";
 import type { RouterOpenApiConfig } from "./contracts/router-openapi";
 
+// Effect-RPC OpenAPI generation lives in a light, contracts-only module so it
+// can be imported by a standalone build script. Re-exported here for callers
+// that already import from "@bob/api/openapi".
+export {
+  BOB_RPC_GROUPS,
+  generateBobRpcApiDocument,
+} from "./contracts/bob-rpc-groups.js";
+
 export interface OpenApiConfig {
   title: string;
   version: string;
@@ -111,7 +119,7 @@ export function generateApiDocument(
         description: "RPC-style REST adapters for work item procedures",
       },
     ],
-  } as OpenAPIV3_1.Document;
+  };
 }
 
 export function getOpenApiSpec(config?: Partial<OpenApiConfig>): string {
@@ -147,3 +155,8 @@ export function generateFullBobApiDocument(
     baseUrl: merged.baseUrl,
   } satisfies RouterOpenApiConfig);
 }
+
+// Effect-RPC OpenAPI generation (`generateBobRpcApiDocument`, `BOB_RPC_GROUPS`)
+// is defined in ./contracts/bob-rpc-groups.ts and re-exported at the top of
+// this file. It supersedes the tRPC-era `generateFullBobApiDocument` above.
+// See docs/plans/2026-06-21-bob-effect-rpc-openapi.md.

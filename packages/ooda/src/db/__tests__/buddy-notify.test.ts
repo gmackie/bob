@@ -7,26 +7,69 @@
  *
  * Skipped automatically when DATABASE_URL is unset (e.g., in the sandbox /
  * lint-only CI lane) so the suite stays green without a DB.
+ *
+ * Also skipped when DATABASE_URL IS set but points at a database that hasn't
+ * had this package's schema + custom triggers applied (e.g. the shared CI
+ * Postgres service container used for `@bob/api`/`@bob/db`'s tests, which
+ * only provisions Bob's schema, not ooda's `research_thread` table or the
+ * `001_buddy_notify.sql` triggers). Without this check, turbo's `globalEnv`
+ * passthrough of `DATABASE_URL` to every package would un-skip this suite in
+ * CI and fail it on "relation does not exist" errors that have nothing to do
+ * with the LISTEN/NOTIFY behavior under test.
  */
 import postgres from "postgres";
 import { describe, expect, it } from "vitest";
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const HAS_DB = Boolean(DATABASE_URL);
+
+async function schemaIsReady(): Promise<boolean> {
+  if (!DATABASE_URL) return false;
+  const probe = postgres(DATABASE_URL, { max: 1 });
+  try {
+    const rows = await probe<{ exists: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'research_thread'
+      ) AS exists
+    `;
+    return rows[0]?.exists ?? false;
+  } catch {
+    return false;
+  } finally {
+    await probe.end({ timeout: 2 });
+  }
+}
+
+const HAS_DB = await schemaIsReady();
 
 type Sql = ReturnType<typeof postgres>;
 
 /**
- * Register a LISTEN on `channel` and return a Promise that resolves with the
- * first received payload. Awaits the LISTEN registration handshake with the
- * server before returning, so the caller can safely issue writes and know the
- * subsequent NOTIFY won't be lost.
+ * Register a LISTEN on `channel` and resolve once the LISTEN registration
+ * handshake with the server completes, handing back a *separate* Promise
+ * (`received`) that resolves with the first NOTIFY payload. Awaiting the
+ * handshake before returning means the caller can safely issue writes
+ * knowing the subsequent NOTIFY won't fire into the void.
+ *
+ * Return-shape note: this must NOT resolve/return the `received` promise
+ * directly (e.g. `async function setupListener(...): Promise<Promise<string>>
+ * { ...; return received; }`). Per the Promise resolution procedure, any time
+ * a promise is resolved with a thenable — whether via an async function's
+ * implicit `return`, `.then()`, or `resolve(thenable)` — the outer promise
+ * adopts (chains onto, i.e. waits for) the inner one instead of holding it as
+ * an opaque value. That previously made `await setupListener(...)` block
+ * until the NOTIFY payload arrived (or the timeout rejected) rather than
+ * resolving as soon as the LISTEN handshake completed, so every test in this
+ * file hung for the full timeout. Wrapping `received` in a plain object
+ * (`{ received }`) sidesteps this: a plain object is not itself thenable, so
+ * it resolves immediately once the handshake completes, and the caller
+ * `await`s the nested `received` promise separately, later, on its own.
  */
-async function setupListener(
+function setupListener(
   listener: Sql,
   channel: string,
   timeoutMs = 5_000,
-): Promise<Promise<string>> {
+): Promise<{ received: Promise<string> }> {
   let resolvePayload!: (p: string) => void;
   let rejectPayload!: (e: unknown) => void;
   const received = new Promise<string>((resolve, reject) => {
@@ -41,11 +84,12 @@ async function setupListener(
   // LISTEN command has been acknowledged by the server. Awaiting it here is
   // the fix for the M2 race: we must not INSERT before the subscription is
   // live, or the NOTIFY fires into the void and the test times out.
-  await listener.listen(channel, (payload) => {
-    clearTimeout(timer);
-    resolvePayload(payload);
-  });
-  return received;
+  return listener
+    .listen(channel, (payload) => {
+      clearTimeout(timer);
+      resolvePayload(payload);
+    })
+    .then(() => ({ received }));
 }
 
 describe.skipIf(!HAS_DB)("buddy pg_notify triggers", () => {
@@ -55,7 +99,7 @@ describe.skipIf(!HAS_DB)("buddy pg_notify triggers", () => {
       const listener = postgres(DATABASE_URL!, { max: 1 });
       const writer = postgres(DATABASE_URL!, { max: 1 });
       try {
-        const received = await setupListener(listener, "buddy_tool_call");
+        const { received } = await setupListener(listener, "buddy_tool_call");
 
         const [thread] = await writer<{ id: string }[]>`
           INSERT INTO research_thread (id, slug, title, status)
@@ -97,7 +141,7 @@ describe.skipIf(!HAS_DB)("buddy pg_notify triggers", () => {
       const writer = postgres(DATABASE_URL!, { max: 1 });
       try {
         // First round: capture the INSERT notification.
-        const insertReceived = await setupListener(
+        const { received: insertReceived } = await setupListener(
           listener,
           "buddy_dive_update",
         );
@@ -131,7 +175,7 @@ describe.skipIf(!HAS_DB)("buddy pg_notify triggers", () => {
           // so we don't race the already-resolved Promise.
           const updateListener = postgres(DATABASE_URL!, { max: 1 });
           try {
-            const updateReceived = await setupListener(
+            const { received: updateReceived } = await setupListener(
               updateListener,
               "buddy_dive_update",
             );
@@ -168,7 +212,7 @@ describe.skipIf(!HAS_DB)("buddy pg_notify triggers", () => {
       const listener = postgres(DATABASE_URL!, { max: 1 });
       const writer = postgres(DATABASE_URL!, { max: 1 });
       try {
-        const received = await setupListener(listener, "buddy_inbox_new");
+        const { received } = await setupListener(listener, "buddy_inbox_new");
 
         const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const [source] = await writer<{ id: number }[]>`
@@ -216,7 +260,7 @@ describe.skipIf(!HAS_DB)("buddy pg_notify triggers", () => {
       const listener = postgres(DATABASE_URL!, { max: 1 });
       const writer = postgres(DATABASE_URL!, { max: 1 });
       try {
-        const received = await setupListener(listener, "buddy_inbox_new");
+        const { received } = await setupListener(listener, "buddy_inbox_new");
 
         const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const [source] = await writer<{ id: number }[]>`

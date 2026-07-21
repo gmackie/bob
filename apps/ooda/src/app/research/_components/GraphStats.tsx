@@ -4,6 +4,15 @@ import { useQuery } from "@tanstack/react-query";
 
 import { useTRPC } from "~/trpc/react";
 
+// `research.graphStats` is `.output(z.any())` for OpenAPI, which degenerates
+// the client query type; mirror the aggregate shape the resolver returns.
+interface GraphStatsData {
+  totalNodes: number;
+  totalEdges: number;
+  totalSources: number;
+  edgesByKind: Record<string, number>;
+}
+
 export function GraphStats() {
   const trpc = useTRPC();
   const statsQuery = useQuery(trpc.research.graphStats.queryOptions({}));
@@ -16,7 +25,7 @@ export function GraphStats() {
       <div className="text-xs text-red-400">Failed to load graph stats.</div>
     );
   }
-  const data = statsQuery.data;
+  const data = statsQuery.data as unknown as GraphStatsData | undefined;
   if (!data) {
     return <div className="text-xs text-[#5A5855]">No graph data yet.</div>;
   }

@@ -2,6 +2,7 @@
   "name": "@bob/cookies",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": {
@@ -18,6 +19,7 @@
   "dependencies": {
     "@bob/auth": "workspace:*",
     "@bob/chat": "workspace:*",
+    "@gmacko/bob-client": "workspace:*",
     "better-sqlite3": "^11.0.0",
     "drizzle-orm": "^0.44.7"
   },

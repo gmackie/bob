@@ -13,6 +13,7 @@ import {
   projectList,
   projectGet,
   projectUpdateAutomationSettings,
+  projectSetDefaultAgent,
   projectDiscovery,
   projectDismissDir,
 } from "../handlers/project.js";
@@ -55,11 +56,17 @@ export const makeProjectRpcHandlers = (ctx: HandlerContext) => ({
         reactFrontend?: boolean;
         stageSkills?: Record<
           string,
-          Array<{ slug: string; label: string; enabled: boolean }>
+          { slug: string; label: string; enabled: boolean }[]
         >;
       };
     };
   }) => wrapHandler(projectUpdateAutomationSettings, ctx, payload, "project"),
+
+  "project.setDefaultAgent": ({
+    payload,
+  }: {
+    payload: { projectId: string; defaultAgentType: string | null };
+  }) => wrapHandler(projectSetDefaultAgent, ctx, payload, "project"),
 
   "project.discovery": ({
     payload,

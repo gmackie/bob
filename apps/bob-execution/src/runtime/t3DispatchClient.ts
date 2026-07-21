@@ -16,7 +16,7 @@ export interface T3DispatchRuntimeConfig extends T3DispatchConfig {
 }
 
 function readRuntimeValue(key: string): string | undefined {
-  const globalValue = (globalThis as any)[key];
+  const globalValue: unknown = (globalThis as Record<string, unknown>)[key];
   if (typeof globalValue === "string" && globalValue.trim()) {
     return globalValue.trim();
   }
@@ -77,56 +77,78 @@ function defaultMakeId(prefix: "command" | "thread" | "message") {
 }
 
 function buildInitialPrompt(task: PlanningTask): string {
+  const trimmedDescription = task.description?.trim();
   return [
     `${task.identifier}: ${task.title}`,
     "",
-    task.description?.trim() || "No description provided.",
+    trimmedDescription && trimmedDescription.length > 0
+      ? trimmedDescription
+      : "No description provided.",
   ].join("\n");
 }
 
-export function buildT3ThreadTurnStartCommand(
+function buildModelSelection(config: T3DispatchConfig) {
+  return {
+    instanceId: config.modelInstanceId,
+    model: config.model,
+  };
+}
+
+function buildThreadTitle(task: PlanningTask) {
+  return `${task.identifier}: ${task.title}`;
+}
+
+export function buildT3ThreadCreateCommand(
   input: BuildT3ThreadTurnStartCommandInput,
 ) {
   const now = input.now?.() ?? new Date().toISOString();
   const makeId = input.makeId ?? defaultMakeId;
-  const modelSelection = {
-    instanceId: input.config.modelInstanceId,
-    model: input.config.model,
+  const title = buildThreadTitle(input.task);
+
+  return {
+    type: "thread.create" as const,
+    commandId: makeId("command"),
+    threadId: makeId("thread"),
+    projectId: input.config.projectId,
+    title,
+    modelSelection: buildModelSelection(input.config),
+    runtimeMode: input.config.runtimeMode ?? "full-access",
+    interactionMode: "default" as const,
+    branch: input.branch,
+    worktreePath: input.workingDirectory,
+    externalTask: input.externalTask,
+    createdAt: now,
   };
-  const title = `${input.task.identifier}: ${input.task.title}`;
+}
+
+export function buildT3ThreadTurnStartCommand(
+  input: BuildT3ThreadTurnStartCommandInput & { threadId: string },
+) {
+  const now = input.now?.() ?? new Date().toISOString();
+  const makeId = input.makeId ?? defaultMakeId;
+  const title = buildThreadTitle(input.task);
 
   return {
     type: "thread.turn.start" as const,
     commandId: makeId("command"),
-    threadId: makeId("thread"),
+    threadId: input.threadId,
     message: {
       messageId: makeId("message"),
       role: "user" as const,
       text: buildInitialPrompt(input.task),
       attachments: [],
     },
-    modelSelection,
+    modelSelection: buildModelSelection(input.config),
     titleSeed: title,
     runtimeMode: input.config.runtimeMode ?? "full-access",
     interactionMode: "default" as const,
     bootstrap: {
-      createThread: {
-        projectId: input.config.projectId,
-        title,
-        modelSelection,
-        runtimeMode: input.config.runtimeMode ?? "full-access",
-        interactionMode: "default" as const,
-        branch: input.branch,
-        worktreePath: input.workingDirectory,
-        externalTask: input.externalTask,
-        createdAt: now,
-      },
       prepareWorktree: {
         projectCwd: input.workingDirectory,
         baseBranch: input.baseBranch,
         branch: input.branch,
       },
-      runSetupScript: true,
+      runSetupScript: false,
     },
     externalTask: input.externalTask,
     createdAt: now,
@@ -136,7 +158,7 @@ export function buildT3ThreadTurnStartCommand(
 export async function dispatchTaskToT3Code(input: {
   serverUrl: string;
   authToken?: string;
-  command: Record<string, unknown>;
+  commands: Record<string, unknown>[];
 }): Promise<unknown> {
   const url = new URL(input.serverUrl);
   url.pathname = "/api/orchestration/dispatch";
@@ -150,15 +172,20 @@ export async function dispatchTaskToT3Code(input: {
     headers.Authorization = `Bearer ${input.authToken}`;
   }
 
-  const response = await fetch(url.toString(), {
-    method: "POST",
-    headers,
-    body: JSON.stringify(input.command),
-  });
+  let lastResponse: unknown = null;
+  for (const command of input.commands) {
+    const response = await fetch(url.toString(), {
+      method: "POST",
+      headers,
+      body: JSON.stringify(command),
+    });
 
-  if (!response.ok) {
-    throw new Error(`t3code dispatch failed: ${response.status} ${await response.text()}`);
+    if (!response.ok) {
+      throw new Error(`t3code dispatch failed: ${response.status} ${await response.text()}`);
+    }
+
+    lastResponse = await response.json();
   }
 
-  return response.json();
+  return lastResponse;
 }

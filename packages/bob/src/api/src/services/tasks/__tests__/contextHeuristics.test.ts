@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { ContextInput, DiffStats } from "../contextHeuristics";
+import type { ContextInput } from "../contextHeuristics";
 import {
   evaluateContextReadiness,
   isContextReady,

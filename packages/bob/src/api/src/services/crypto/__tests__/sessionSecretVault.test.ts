@@ -36,7 +36,7 @@ describe("sessionSecretVault", () => {
   it("detects tampered ciphertext", () => {
     const encrypted = encryptSessionSecretValue("super-secret", "secret-A");
     const buf = Buffer.from(encrypted.ciphertext, "base64");
-    buf[0] = (buf[0]! + 1) % 256;
+    buf[0] = ((buf[0] ?? 0) + 1) % 256;
     encrypted.ciphertext = buf.toString("base64");
 
     expect(() => decryptSessionSecretValue(encrypted, "secret-A")).toThrow();

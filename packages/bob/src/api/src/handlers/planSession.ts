@@ -6,6 +6,7 @@
  */
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray, ne } from "@bob/db";
+import type { Db } from "@bob/db/client";
 import {
   agentPersonas,
   chatConversations,
@@ -17,8 +18,10 @@ import {
   workItemArtifacts,
   workItemDependencies,
   workItems,
-  workspaceMembers,
+  workspaceMembers
+
 } from "@bob/db/schema";
+import type {WorkItemKind} from "@bob/db/schema";
 
 import { resolvePlanningProvider } from "../services/integrations/planningProvider.js";
 
@@ -28,7 +31,7 @@ import type { HandlerContext } from "./context.js";
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-async function assertWorkspaceAccess(db: any, userId: string, workspaceId: string) {
+async function assertWorkspaceAccess(db: Db, userId: string, workspaceId: string) {
   const membership = await db.query.workspaceMembers.findFirst({
     where: and(
       eq(workspaceMembers.workspaceId, workspaceId),
@@ -66,7 +69,7 @@ async function notifyWorkspaceEvent(input: {
   }
 }
 
-async function loadAccessibleWorkItem(db: any, userId: string, workItemId: string) {
+async function loadAccessibleWorkItem(db: Db, userId: string, workItemId: string) {
   const workItem = await db.query.workItems.findFirst({
     where: eq(workItems.id, workItemId),
   });
@@ -79,7 +82,7 @@ async function loadAccessibleWorkItem(db: any, userId: string, workItemId: strin
   return workItem;
 }
 
-async function loadOwnedPlanningSession(db: any, userId: string, sessionId: string) {
+async function loadOwnedPlanningSession(db: Db, userId: string, sessionId: string) {
   const session = await db.query.chatConversations.findFirst({
     where: and(
       eq(chatConversations.id, sessionId),
@@ -95,7 +98,7 @@ async function loadOwnedPlanningSession(db: any, userId: string, sessionId: stri
   return session;
 }
 
-async function loadOwnedDraft(db: any, userId: string, draftId: string) {
+async function loadOwnedDraft(db: Db, userId: string, draftId: string) {
   const draft = await db.query.planDrafts.findFirst({
     where: eq(planDrafts.id, draftId),
   });
@@ -183,7 +186,14 @@ export async function planSessionCreate(
     })
     .returning();
 
-  return session!;
+  if (!session) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to create planning session",
+    });
+  }
+
+  return session;
 }
 
 export async function planSessionStart(
@@ -203,17 +213,17 @@ export async function planSessionStart(
         title: string;
         kind: string;
       };
-      selectedRepoSources: Array<{
+      selectedRepoSources: {
         id: string;
         label: string;
         path: string;
         detail: string;
-      }>;
-      attachedFiles: Array<{
+      }[];
+      attachedFiles: {
         name: string;
         sizeLabel: string;
         content?: string;
-      }>;
+      }[];
     };
   },
 ) {
@@ -253,7 +263,7 @@ export async function planSessionStart(
       planningProjectName: input.projectName,
       planningLaunchContext: input.launchContext ?? null,
       ...(plannerPersona ? { personaId: plannerPersona.id, personaMetadata: personaConfig } : {}),
-    } as any)
+    })
     .where(eq(chatConversations.id, input.sessionId));
 
   const gatewayUrl = process.env.GATEWAY_URL;
@@ -310,7 +320,7 @@ export async function planSessionGet(
     orderBy: [planDrafts.sortOrder, planDrafts.createdAt],
   });
 
-  const draftIds = drafts.map((d: any) => d.id);
+  const draftIds = drafts.map((d) => d.id);
 
   const deps =
     draftIds.length > 0
@@ -344,7 +354,7 @@ export async function planSessionList(
     limit: input.limit,
   });
 
-  const sessionIds = sessions.map((session: any) => session.id).filter(Boolean);
+  const sessionIds = sessions.map((session) => session.id);
   if (sessionIds.length === 0) return sessions;
 
   const drafts = await ctx.db.query.planDrafts.findMany({
@@ -357,7 +367,7 @@ export async function planSessionList(
   });
   const countsBySession = new Map<string, { draftCount: number; producedTaskCount: number }>();
 
-  for (const draft of drafts as Array<{ sessionId: string; status: string }>) {
+  for (const draft of drafts as { sessionId: string; status: string }[]) {
     const counts = countsBySession.get(draft.sessionId) ?? {
       draftCount: 0,
       producedTaskCount: 0,
@@ -372,7 +382,7 @@ export async function planSessionList(
     countsBySession.set(draft.sessionId, counts);
   }
 
-  return sessions.map((session: any) => ({
+  return sessions.map((session) => ({
     ...session,
     draftCount: countsBySession.get(session.id)?.draftCount ?? 0,
     producedTaskCount: countsBySession.get(session.id)?.producedTaskCount ?? 0,
@@ -442,7 +452,14 @@ export async function planSessionSaveArtifact(
     })
     .returning();
 
-  return artifact!;
+  if (!artifact) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to create planning artifact",
+    });
+  }
+
+  return artifact;
 }
 
 export async function planSessionGetPriorContext(
@@ -474,13 +491,13 @@ export async function planSessionGetPriorContext(
 
   // Truncate content to fit within the total character budget
   let remainingChars = input.maxChars;
-  const result: Array<{
+  const result: {
     id: string;
     title: string | null;
     sessionId: string | null;
     content: string | null;
     createdAt: string;
-  }> = [];
+  }[] = [];
 
   for (const artifact of artifacts) {
     if (remainingChars <= 0) break;
@@ -514,7 +531,7 @@ export async function planSessionCreateDraft(
     projectId: string;
     title: string;
     description?: string;
-    kind: string;
+    kind: WorkItemKind;
     priority: string;
     sortOrder: number;
   },
@@ -535,6 +552,13 @@ export async function planSessionCreateDraft(
     })
     .returning();
 
+  if (!draft) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to create plan draft",
+    });
+  }
+
   console.log(
     `[planning] Draft created: "${input.title}" (${input.kind}) in session ${input.sessionId}`,
   );
@@ -544,10 +568,10 @@ export async function planSessionCreateDraft(
     workspaceId: input.workspaceId,
     sessionId: input.sessionId,
     projectId: input.projectId,
-    draftIds: [draft!.id],
+    draftIds: [draft.id],
   });
 
-  return draft!;
+  return draft;
 }
 
 export async function planSessionUpdateDraft(
@@ -556,13 +580,13 @@ export async function planSessionUpdateDraft(
     id: string;
     title?: string;
     description?: string;
-    kind?: string;
+    kind?: WorkItemKind;
     priority?: string;
     sortOrder?: number;
   },
 ) {
   const { id, ...updates } = input;
-  const existingDraft = await loadOwnedDraft(ctx.db, ctx.userId, id);
+  await loadOwnedDraft(ctx.db, ctx.userId, id);
 
   const [draft] = await ctx.db
     .update(planDrafts)
@@ -570,15 +594,22 @@ export async function planSessionUpdateDraft(
     .where(eq(planDrafts.id, id))
     .returning();
 
+  if (!draft) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to update plan draft",
+    });
+  }
+
   await notifyPlanningDraftsChanged({
     action: "updated",
-    workspaceId: draft?.workspaceId ?? existingDraft.workspaceId,
-    sessionId: draft?.sessionId ?? existingDraft.sessionId,
-    projectId: draft?.projectId ?? existingDraft.projectId,
+    workspaceId: draft.workspaceId,
+    sessionId: draft.sessionId,
+    projectId: draft.projectId,
     draftIds: [id],
   });
 
-  return draft!;
+  return draft;
 }
 
 export async function planSessionRemoveDraft(
@@ -617,6 +648,13 @@ export async function planSessionSetDependency(
     })
     .returning();
 
+  if (!dep) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to create draft dependency",
+    });
+  }
+
   console.log(
     `[planning] Dependency set: ${input.draftId} depends on ${input.dependsOnDraftId}`,
   );
@@ -629,7 +667,7 @@ export async function planSessionSetDependency(
     draftIds: [input.draftId, input.dependsOnDraftId],
   });
 
-  return dep!;
+  return dep;
 }
 
 export async function planSessionRemoveDependency(
@@ -682,12 +720,12 @@ export async function planSessionCommitPlan(
     return { committed: 0, tasks: [] };
   }
 
-  const createdTasks: Array<{
+  const createdTasks: {
     draftId: string;
     taskId: string;
     identifier: string;
     workspaceId: string;
-  }> = [];
+  }[] = [];
 
   for (const draft of drafts) {
     try {
@@ -722,7 +760,8 @@ export async function planSessionCommitPlan(
     }
   }
 
-  if (createdTasks.length > 0) {
+  const [firstCreatedTask] = createdTasks;
+  if (firstCreatedTask) {
     const committedIds = createdTasks.map((t) => t.draftId);
     await ctx.db
       .update(planDrafts)
@@ -731,7 +770,7 @@ export async function planSessionCommitPlan(
 
     await notifyWorkspaceEvent({
       type: "planning_session_produced_tasks",
-      workspaceId: createdTasks[0]!.workspaceId,
+      workspaceId: firstCreatedTask.workspaceId,
       entityId: input.sessionId,
       payload: {
         committed: createdTasks.length,
@@ -778,7 +817,7 @@ export async function planSessionCommitPlanLocal(
   }
 
   // Fetch draft dependencies
-  const draftIds = drafts.map((d: any) => d.id);
+  const draftIds = drafts.map((d) => d.id);
   const draftDeps =
     draftIds.length > 0
       ? await ctx.db.query.planDraftDependencies.findMany({
@@ -802,8 +841,7 @@ export async function planSessionCommitPlanLocal(
     }
     const queue = draftIds.filter((id: string) => (inDegree.get(id) ?? 0) === 0);
     let visited = 0;
-    while (queue.length > 0) {
-      const node = queue.shift()!;
+    for (let node = queue.shift(); node !== undefined; node = queue.shift()) {
       visited++;
       for (const neighbor of adjList.get(node) ?? []) {
         const deg = (inDegree.get(neighbor) ?? 1) - 1;
@@ -826,19 +864,19 @@ export async function planSessionCommitPlanLocal(
 
   // ── Local DB path ─────────────────────────────────────────────
   // All DB writes in a single transaction
-  const result = await ctx.db.transaction(async (tx: any) => {
+  const result = await ctx.db.transaction(async (tx) => {
     // Batch insert all work items (epics first for ordering, but all under same parent)
     const sorted = [
-      ...drafts.filter((d: any) => d.kind === "epic"),
-      ...drafts.filter((d: any) => d.kind !== "epic"),
+      ...drafts.filter((d) => d.kind === "epic"),
+      ...drafts.filter((d) => d.kind !== "epic"),
     ];
 
-    const workItemValues = sorted.map((draft: any) => ({
+    const workItemValues = sorted.map((draft) => ({
       ownerUserId: ctx.userId,
       workspaceId: parentWI.workspaceId,
       projectId: parentWI.projectId,
       parentId: input.parentWorkItemId,
-      kind: draft.kind as "epic" | "task" | "issue",
+      kind: draft.kind,
       title: draft.title,
       description: draft.description,
       status: "todo" as const,
@@ -849,17 +887,25 @@ export async function planSessionCommitPlanLocal(
       .values(workItemValues)
       .returning({ id: workItems.id, title: workItems.title });
 
+    if (createdRows.length !== sorted.length) {
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Work item batch insert returned an unexpected row count",
+      });
+    }
+
     // Build draftId → workItemId map
     const draftToWorkItem = new Map<string, string>();
-    const created: Array<{
+    const created: {
       draftId: string;
       workItemId: string;
       title: string;
-    }> = [];
+    }[] = [];
 
     for (let i = 0; i < sorted.length; i++) {
-      const draft = sorted[i]!;
-      const row = createdRows[i]!;
+      const draft = sorted[i];
+      const row = createdRows[i];
+      if (!draft || !row) continue;
       draftToWorkItem.set(draft.id, row.id);
       created.push({
         draftId: draft.id,
@@ -872,7 +918,7 @@ export async function planSessionCommitPlanLocal(
     let depCount = 0;
     if (draftDeps.length > 0) {
       const depValues = draftDeps
-        .map((dep: any) => {
+        .map((dep) => {
           const workItemId = draftToWorkItem.get(dep.draftId);
           const dependsOnWorkItemId = draftToWorkItem.get(
             dep.dependsOnDraftId,
@@ -881,7 +927,7 @@ export async function planSessionCommitPlanLocal(
           return { workItemId, dependsOnWorkItemId };
         })
         .filter(
-          (v: any): v is { workItemId: string; dependsOnWorkItemId: string } =>
+          (v): v is { workItemId: string; dependsOnWorkItemId: string } =>
             v !== null,
         );
 

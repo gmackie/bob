@@ -176,7 +176,7 @@ export const forgegraphRouter = {
     )
     .mutation(({ ctx, input }) =>
       forgegraphImportApp(
-        { db: ctx.db, userId: ctx.session.user.id, session: ctx.session },
+        { db: ctx.db, userId: ctx.session.user.id },
         input,
       ),
     ),
@@ -185,7 +185,7 @@ export const forgegraphRouter = {
     .input(z.object({ workspaceId: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       forgegraphImportAllApps(
-        { db: ctx.db, userId: ctx.session.user.id, session: ctx.session },
+        { db: ctx.db, userId: ctx.session.user.id },
         input,
       ),
     ),

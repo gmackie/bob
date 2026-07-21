@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { PlanningRpc } from "../groups/planning.js";
 
 describe("PlanningRpc — 7B-4C Task 7 (planning.skill.* + snapshot.* + checkpoint.*)", () => {
-  it("has 67 procedures after Task 7", () => {
-    expect(PlanningRpc.requests.size).toBe(67);
+  it("has 68 procedures after adding Linear sync coverage", () => {
+    expect(PlanningRpc.requests.size).toBe(68);
   });
 
   const skillProcedures = [
@@ -46,6 +46,11 @@ describe("PlanningRpc — 7B-4C Task 7 (planning.skill.* + snapshot.* + checkpoi
     for (const proc of checkpointProcedures) {
       expect(names).toContain(proc);
     }
+  });
+
+  it("contains the Linear project sync procedure", () => {
+    const names = [...PlanningRpc.requests.keys()];
+    expect(names).toContain("planning.syncLinearProjects");
   });
 
   it("still contains the 55 Task 4+5+6 procedures", () => {

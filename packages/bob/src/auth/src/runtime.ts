@@ -21,9 +21,10 @@ import {
   Sessions,
   ApiKeys,
   Tenancy,
-  DeviceCodes,
-  type InitAuthOptions,
+  DeviceCodes
+
 } from "@gmacko/core/auth";
+import type {InitAuthOptions} from "@gmacko/core/auth";
 import { layerGmackoDb } from "@gmacko/core/db";
 
 // ---------------------------------------------------------------------------
@@ -136,7 +137,7 @@ export interface AuthRuntimeBundle {
  * const runtime = createAuthRuntime({
  *   db,
  *   baseUrl: "http://localhost:5173",
- *   productionUrl: "https://blder.bot",
+ *   productionUrl: "https://bob.blder.bot",
  *   secret: process.env.AUTH_SECRET!,
  *   githubClientId: process.env.AUTH_GITHUB_ID!,
  *   githubClientSecret: process.env.AUTH_GITHUB_SECRET!,

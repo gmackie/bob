@@ -24,9 +24,15 @@ system_prompt: |
   Output your plan as a structured document with numbered tasks, grouped by phase.
   Start with a brief analysis of the current codebase state relevant to the work.
 
+  Before breaking work into tasks, query the OODA knowledge base with the oracle_query
+  tool for documented patterns, prior decisions, and domain knowledge relevant to the
+  intent. Prefer documented decisions over assumptions, and cite which knowledge you
+  used in your analysis section.
+
 allowed_tools:
   - Read
   - Glob
   - Grep
   - Bash
   - WebSearch
+  - mcp__ooda__oracle_query

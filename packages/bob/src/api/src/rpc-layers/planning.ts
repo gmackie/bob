@@ -1,6 +1,6 @@
 /**
  * Aggregate layer that maps handler factory outputs to PlanningRpc contract
- * names (67 procedures).
+ * names (68 procedures).
  *
  * Imports the seven handler factories (planning, planSession, plan, dispatch,
  * skill, snapshot, checkpoint), instantiates them with a HandlerContext, and
@@ -44,6 +44,7 @@ export const makePlanningLayer = (ctx: HandlerContext) => {
     "planning.searchTasks": pl["planning.searchTasks"],
     "planning.listLabels": pl["planning.listLabels"],
     "planning.listCycles": pl["planning.listCycles"],
+    "planning.syncLinearProjects": pl["planning.syncLinearProjects"],
     // getCurrentUser requires session.user context not present in
     // HandlerContext — stub returns a minimal record from ctx.userId until
     // the auth layer lands in 7B-5.
@@ -119,5 +120,8 @@ export const makePlanningLayer = (ctx: HandlerContext) => {
     "planning.checkpoint.create": cp["checkpoint.create"],
     "planning.checkpoint.list": cp["checkpoint.list"],
     "planning.checkpoint.branchFrom": cp["checkpoint.branchFrom"],
-  });
+    // Same destructured-envelope-vs-unwrapped-payload erasure documented in
+    // rpc-layers/external.ts — widened to PlanningRpc.toLayer's own
+    // parameter type rather than `any`.
+  } as unknown as Parameters<typeof PlanningRpc.toLayer>[0]);
 };

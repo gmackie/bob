@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { cn } from "@gmacko/core/ui";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
 
 const STATUS_DOT: Record<string, string> = {
   queued: "bg-neutral-400",
@@ -14,6 +14,17 @@ const STATUS_DOT: Record<string, string> = {
   failed: "bg-red-500",
   interrupted: "bg-orange-400",
 };
+
+interface RecentRun {
+  id: string;
+  status: string;
+  agentType?: string;
+  createdAt: string;
+  workItemId?: string | null;
+  session?: {
+    title?: string | null;
+  } | null;
+}
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -31,19 +42,20 @@ interface RecentRunsProps {
 }
 
 export function RecentRuns({ workspaceId }: RecentRunsProps) {
-  const trpc = useTRPC();
-
-  const { data: runs, isLoading } = useQuery(
-    workspaceId
-      ? trpc.agentRun.list.queryOptions(
-          { workspaceId, limit: 8 },
-          { refetchInterval: 10_000 },
-        )
-      : trpc.agentRun.listAll.queryOptions(
-          { limit: 8 },
-          { refetchInterval: 10_000 },
-        ),
-  );
+  const rpc = useBobRpcClient();
+  const input = workspaceId ? { workspaceId, limit: 8 } : { limit: 8 };
+  const { data: runs, isLoading } = useQuery({
+    queryKey: [
+      "rpc",
+      workspaceId ? "agent.run.list" : "agent.run.listAll",
+      input,
+    ],
+    queryFn: () =>
+      workspaceId
+        ? (rpc.agent.listRuns(input) as Promise<RecentRun[]>)
+        : (rpc.agent.listAllRuns(input) as Promise<RecentRun[]>),
+    refetchInterval: 10_000,
+  });
 
   return (
     <div className="flex flex-col gap-3">
@@ -72,7 +84,7 @@ export function RecentRuns({ workspaceId }: RecentRunsProps) {
         </p>
       ) : (
         <div className="flex flex-col gap-1">
-          {(runs as any[]).map((run) => {
+          {runs.map((run) => {
             const title =
               run.session?.title ?? run.workItemId ?? "Untitled";
             const displayTitle =

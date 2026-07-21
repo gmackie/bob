@@ -131,7 +131,7 @@ export function ActivityFeed({ workspaceId }: { workspaceId?: string }) {
                     {eventDescription(activity)}
                   </p>
                   <div className="flex items-center gap-2">
-                    {activity.workItemIdentifier && (
+                    {activity.workItemId && activity.workItemIdentifier && (
                       <a
                         href={getWorkItemEntryHref(activity.workItemId, "planning", workspaceId)}
                         className="font-mono text-xs text-primary hover:underline"

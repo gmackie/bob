@@ -28,7 +28,13 @@ export const makeRepositoryRpcHandlers = (ctx: HandlerContext) => ({
     payload,
   }: {
     payload: Record<string, never>;
-  }) => wrapHandler(repositoryList, ctx, payload as any, "repository"),
+  }) =>
+    wrapHandler(
+      (c: HandlerContext, _input: Record<string, never>) => repositoryList(c),
+      ctx,
+      payload,
+      "repository",
+    ),
 
   "repository.byId": ({
     payload,
@@ -86,11 +92,11 @@ export const makeRepositoryRpcHandlers = (ctx: HandlerContext) => ({
         title?: string;
         goal?: string;
         planningTaskId?: string;
-        tasks?: Array<{
+        tasks?: {
           key: string;
           content: string;
           status?: "pending" | "in_progress" | "completed" | "cancelled";
-        }>;
+        }[];
       };
     };
   }) => wrapHandler(repositoryCreateWorktree, ctx, payload, "repository"),
@@ -111,11 +117,11 @@ export const makeRepositoryRpcHandlers = (ctx: HandlerContext) => ({
       goal?: string;
       status?: string;
       planningTaskId?: string | null;
-      tasks?: Array<{
+      tasks?: {
         key: string;
         content: string;
         status?: "pending" | "in_progress" | "completed" | "cancelled";
-      }>;
+      }[];
     };
   }) => wrapHandler(repositoryUpdateWorktreePlanning, ctx, payload, "repository"),
 

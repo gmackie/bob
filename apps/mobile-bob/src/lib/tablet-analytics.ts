@@ -99,6 +99,6 @@ export function trackConnectionStateChanged(state: string) {
 
 // --- Export buffer for debugging ---
 
-export function getAnalyticsBuffer(): ReadonlyArray<AnalyticsEvent> {
+export function getAnalyticsBuffer(): readonly AnalyticsEvent[] {
   return buffer;
 }

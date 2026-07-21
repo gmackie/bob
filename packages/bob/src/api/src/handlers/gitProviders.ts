@@ -32,7 +32,7 @@ function parseRemoteUrl(url: string): {
   try {
     let parsed: URL;
     if (url.startsWith("git@")) {
-      const match = url.match(/^git@([^:]+):(.+)\.git$/);
+      const match = /^git@([^:]+):(.+)\.git$/.exec(url);
       if (!match)
         return { provider: null, instanceUrl: null, owner: null, name: null };
       const [, host, path] = match;
@@ -42,12 +42,10 @@ function parseRemoteUrl(url: string): {
     }
 
     const pathParts = parsed.pathname.split("/").filter(Boolean);
-    if (pathParts.length < 2) {
+    const [owner, name] = pathParts;
+    if (pathParts.length < 2 || !owner || !name) {
       return { provider: null, instanceUrl: null, owner: null, name: null };
     }
-
-    const owner = pathParts[0]!;
-    const name = pathParts[1]!;
     const host = parsed.hostname.toLowerCase();
 
     let provider: GitProvider | null = null;
@@ -91,7 +89,7 @@ export async function gitProvidersConnectPat(
     instanceUrl?: string;
   },
 ) {
-  const provider = input.provider as GitProvider;
+  const provider = input.provider;
 
   if (provider === "gitea" && !input.instanceUrl) {
     throw new TRPCError({
@@ -176,7 +174,7 @@ export async function gitProvidersTestConnection(
     provider = connection.provider;
     instanceUrl = connection.instanceUrl;
   } else if (input.provider) {
-    provider = input.provider as GitProvider;
+    provider = input.provider;
     instanceUrl = input.instanceUrl ?? null;
   } else {
     throw new TRPCError({

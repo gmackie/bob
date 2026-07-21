@@ -43,13 +43,7 @@ export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
   "session.list": ({
     payload,
   }: {
-    payload: {
-      repositoryId?: string;
-      worktreeId?: string;
-      status?: string;
-      limit: number;
-      cursor?: string;
-    };
+    payload: Parameters<typeof sessionList>[1];
   }) => wrapHandler(sessionList, ctx, payload, "session"),
 
   "session.get": ({
@@ -128,11 +122,7 @@ export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
   "session.updateStatus": ({
     payload,
   }: {
-    payload: {
-      id: string;
-      status: string;
-      lastError?: { code: string; message: string; timestamp: string };
-    };
+    payload: Parameters<typeof sessionUpdateStatus>[1];
   }) => wrapHandler(sessionUpdateStatus, ctx, payload, "session"),
 
   "session.claimLease": ({
@@ -164,12 +154,12 @@ export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
   }: {
     payload: {
       sessionId: string;
-      events: Array<{
+      events: {
         seq: number;
         direction: "client" | "agent" | "system";
         eventType: string;
         payload: Record<string, unknown>;
-      }>;
+      }[];
     };
   }) => wrapHandler(sessionRecordEventBatch, ctx, payload, "session"),
 
@@ -182,12 +172,7 @@ export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
   "session.reportWorkflowStatus": ({
     payload,
   }: {
-    payload: {
-      sessionId: string;
-      status: string;
-      message: string;
-      details?: { phase?: string; progress?: string };
-    };
+    payload: Parameters<typeof sessionReportWorkflowStatus>[1];
   }) => wrapHandler(sessionReportWorkflowStatus, ctx, payload, "session"),
 
   "session.reportTaskProgress": ({
@@ -204,14 +189,7 @@ export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
   "session.linkTaskArtifact": ({
     payload,
   }: {
-    payload: {
-      sessionId: string;
-      artifactType: string;
-      artifactRole?: string;
-      url: string;
-      title?: string;
-      summary?: string;
-    };
+    payload: Parameters<typeof sessionLinkTaskArtifact>[1];
   }) => wrapHandler(sessionLinkTaskArtifact, ctx, payload, "session"),
 
   "session.markTaskReviewReady": ({

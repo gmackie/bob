@@ -1,4 +1,5 @@
-import { type ReactNode, useCallback, useEffect, useRef } from "react";
+import {  useCallback, useEffect, useRef } from "react";
+import type {ReactNode} from "react";
 import { Linking, Platform } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 
@@ -46,9 +47,9 @@ interface CespAlertsResponse {
   generatedAt: string;
 }
 
-type ProvidersProps = {
+interface ProvidersProps {
   children: ReactNode;
-};
+}
 
 const CESP_POLL_INTERVAL_MS = 20_000;
 const CESP_POLL_LIMIT = 80;
@@ -69,12 +70,12 @@ function logCespDebug(message: string, payload?: Record<string, unknown>) {
   console.info(`[CESP][mobile] ${message}`);
 }
 
-type CESPDestPayload = {
+interface CESPDestPayload {
   destination?: string;
   destinationPath?: string;
   destinationTask?: string | null;
   destinationProject?: string | null;
-};
+}
 
 function getProjectFromAlert(alert: CespAlert): string | null {
   if (alert.repository?.planningProjectId) {
@@ -87,7 +88,7 @@ function getProjectFromAlert(alert: CespAlert): string | null {
 }
 
 function getTaskFromAlert(alert: CespAlert): string | null {
-  if (typeof alert.metadata?.issueId === "string") {
+  if (typeof alert.metadata.issueId === "string") {
     const candidate = alert.metadata.issueId.trim();
     if (candidate.length > 0) return candidate;
   }
@@ -131,8 +132,7 @@ function parsePlanningPathFromDestination(value: string): string | null {
   try {
     const parsed = new URL(trimmed);
     if (parsed.pathname !== PLANNING_PATH_PREFIX) return null;
-    const search = parsed.search ?? "";
-    return `${PLANNING_PATH_PREFIX}${search}`;
+    return `${PLANNING_PATH_PREFIX}${parsed.search}`;
   } catch {
     return null;
   }
@@ -180,7 +180,7 @@ function getNotificationTitle(alert: CespAlert): string {
 function getNotificationBody(alert: CespAlert): string {
   const body = alert.message.trim();
   const label = body.length > 0 ? body : alert.title;
-  const repoPath = alert.repository?.path?.trim();
+  const repoPath = alert.repository?.path.trim();
   if (!repoPath) return label;
   return `${label}\n${repoPath}`;
 }
@@ -223,12 +223,12 @@ async function hasNotificationPermission(): Promise<boolean> {
   if (!canUseNotificationsApi()) return false;
 
   const status = await Notifications.getPermissionsAsync();
-  if (status.status === "granted") {
+  if (status.status === Notifications.PermissionStatus.GRANTED) {
     return true;
   }
 
   const next = await Notifications.requestPermissionsAsync();
-  return next.status === "granted";
+  return next.status === Notifications.PermissionStatus.GRANTED;
 }
 
 export function CESPNotificationsProvider({ children }: ProvidersProps) {

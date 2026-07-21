@@ -1,9 +1,8 @@
+import { env } from "./env";
+
 import type { AuthRuntimeBundle } from "./runtime";
-import {
-  isApiKey,
-  type ApiKeyAuth,
-  validateApiKey,
-} from "./api-key";
+import { isApiKey, validateApiKey } from "./api-key";
+import type { ApiKeyAuth } from "./api-key";
 
 export interface WorkspaceSelection {
   projectId: string | null;
@@ -31,8 +30,14 @@ export interface RequestAuthContext {
   workspace: WorkspaceSelection;
 }
 
+/** Dev-only fallback user id; not used automatically in production. */
 const DEFAULT_USER_ID = "default-user";
 const AUTH_BYPASS_TOKEN_PREFIX = "bob-auth-bypass:";
+
+/** Whether the implicit default-user fallback is allowed (dev only). */
+export function isDefaultUserFallbackEnabled(): boolean {
+  return !env.REQUIRE_AUTH && !env.IS_PRODUCTION;
+}
 
 function readHeader(headers: Headers, key: string): string | null {
   const value = headers.get(key);
@@ -41,14 +46,12 @@ function readHeader(headers: Headers, key: string): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
-function getConfiguredAuthBypassUserId(): string {
-  const configured = process.env.BOB_AUTH_BYPASS_USER_ID?.trim();
-  return configured && configured.length > 0 ? configured : DEFAULT_USER_ID;
+function getConfiguredAuthBypassUserId(): string | null {
+  return env.BOB_AUTH_BYPASS_USER_ID;
 }
 
 function getConfiguredAuthBypassToken(): string | null {
-  const configured = process.env.BOB_AUTH_BYPASS_TOKEN?.trim();
-  return configured && configured.length > 0 ? configured : null;
+  return env.BOB_AUTH_BYPASS_TOKEN;
 }
 
 function extractAuthBypassToken(value: string | null): string | null {
@@ -75,7 +78,7 @@ function extractAuthBypassToken(value: string | null): string | null {
 }
 
 export function resolveAuthBypassUserId(headers: Headers): string | null {
-  if (process.env.BOB_AUTH_BYPASS !== "true") {
+  if (!env.BOB_AUTH_BYPASS) {
     return null;
   }
 
@@ -92,7 +95,8 @@ export function resolveAuthBypassUserId(headers: Headers): string | null {
 
   if (!requestedToken || requestedToken !== configuredToken) return null;
 
-  return getConfiguredAuthBypassUserId();
+  const configuredUserId = getConfiguredAuthBypassUserId();
+  return configuredUserId;
 }
 
 export function resolveWorkspaceSelection(headers: Headers): WorkspaceSelection {
@@ -152,8 +156,7 @@ export async function resolveAuthContext(opts: {
   const authBypassUserId = resolveAuthBypassUserId(opts.headers);
   if (
     authBypassUserId &&
-    opts.defaultUser &&
-    opts.defaultUser.user.id === authBypassUserId
+    opts.defaultUser?.user.id === authBypassUserId
   ) {
     return {
       apiKeyAuth: null,
@@ -178,8 +181,8 @@ export async function resolveAuthContext(opts: {
     };
   }
 
-  // 4. Default user fallback.
-  if (process.env.REQUIRE_AUTH !== "true") {
+  // 4. Default user fallback (dev only — disabled in production).
+  if (isDefaultUserFallbackEnabled()) {
     return {
       apiKeyAuth: null,
       authMethod: "default_user",

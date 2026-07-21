@@ -1,5 +1,6 @@
 import { Text, View, ScrollView } from "react-native";
 
+import { assertDefined } from "~/lib/assert";
 import { colors } from "~/lib/colors";
 
 interface CodeViewerProps {
@@ -11,7 +12,7 @@ interface CodeViewerProps {
 export function CodeViewer({ content, filePath, startLine = 1 }: CodeViewerProps) {
   const lines = content.split("\n");
   // Detect if this is line-numbered output (e.g., "  1\tconst foo = ...")
-  const isNumbered = lines.length > 0 && /^\s*\d+\t/.test(lines[0]!);
+  const isNumbered = lines.length > 0 && /^\s*\d+\t/.test(assertDefined(lines[0]));
 
   return (
     <View className="flex-1" style={{ backgroundColor: colors.background }}>
@@ -33,10 +34,10 @@ export function CodeViewer({ content, filePath, startLine = 1 }: CodeViewerProps
               let lineContent: string;
 
               if (isNumbered) {
-                const match = line.match(/^\s*(\d+)\t(.*)$/);
+                const match = /^\s*(\d+)\t(.*)$/.exec(line);
                 if (match) {
-                  lineNum = parseInt(match[1]!, 10);
-                  lineContent = match[2]!;
+                  lineNum = parseInt(assertDefined(match[1]), 10);
+                  lineContent = assertDefined(match[2]);
                 } else {
                   lineNum = startLine + i;
                   lineContent = line;

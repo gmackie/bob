@@ -136,11 +136,11 @@ export async function snapshotTaskFromProvider(
 // Internal provider snapshot
 // =============================================================================
 
-async function snapshotFromInternal(task: PlanningTask): Promise<ProviderResolutionResult> {
+function snapshotFromInternal(task: PlanningTask): Promise<ProviderResolutionResult> {
   // For the internal provider, the PlanningTask object passed in by the caller
   // already contains the canonical data (it was built from workItems or
   // dispatchItems). Return it directly as the snapshot.
-  return {
+  return Promise.resolve({
     provider: "internal",
     snapshot: {
       title: task.title,
@@ -151,7 +151,7 @@ async function snapshotFromInternal(task: PlanningTask): Promise<ProviderResolut
       priority: task.priority,
       assigneeId: task.assigneeId,
     },
-  };
+  });
 }
 
 // =============================================================================
@@ -207,8 +207,8 @@ async function snapshotFromLinear(task: PlanningTask): Promise<ProviderResolutio
         externalId: issue.id,
         externalProvider: "linear",
         linearWebBaseUrl: normalizeLinearWebBaseUrl(integration.linearWebBaseUrl),
-        labels: issue.labels?.nodes?.map((l: { name: string }) => l.name) ?? [],
-        priority: issue.priority ?? 0,
+        labels: issue.labels.nodes.map((l) => l.name),
+        priority: issue.priority,
         assigneeId: issue.assignee?.id ?? null,
       },
     };
@@ -235,7 +235,7 @@ interface LinearIssueResponse {
   url: string;
   priority: number;
   assignee: { id: string } | null;
-  labels: { nodes: Array<{ name: string }> };
+  labels: { nodes: { name: string }[] };
 }
 
 async function fetchLinearIssue(
@@ -272,7 +272,7 @@ async function fetchLinearIssue(
 
   const json = (await response.json()) as {
     data?: { issue?: LinearIssueResponse };
-    errors?: Array<{ message: string }>;
+    errors?: { message: string }[];
   };
 
   if (json.errors?.length) {

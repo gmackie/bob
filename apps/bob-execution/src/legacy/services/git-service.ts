@@ -1,5 +1,5 @@
 import { exec } from "child_process";
-import { existsSync } from "fs";
+import { existsSync, mkdirSync } from "fs";
 import { homedir } from "os";
 import { basename, join } from "path";
 import { promisify } from "util";
@@ -25,12 +25,18 @@ export interface GitStorageAdapter {
  * In-memory storage adapter (no persistence)
  */
 export class InMemoryGitStorage implements GitStorageAdapter {
-  async getAllRepositories(): Promise<Repository[]> {
-    return [];
+  getAllRepositories(): Promise<Repository[]> {
+    return Promise.resolve([]);
   }
-  async saveRepository(_repo: Repository): Promise<void> {}
-  async saveWorktree(_worktree: Worktree): Promise<void> {}
-  async deleteWorktree(_worktreeId: string): Promise<void> {}
+  saveRepository(_repo: Repository): Promise<void> {
+    return Promise.resolve();
+  }
+  saveWorktree(_worktree: Worktree): Promise<void> {
+    return Promise.resolve();
+  }
+  deleteWorktree(_worktreeId: string): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 /**
@@ -49,7 +55,6 @@ export class DefaultUserPaths implements UserPathsConfig {
   readonly baseDir = join(homedir(), ".bob", "worktrees");
 
   ensureUserDirectories(userId: string): void {
-    const { mkdirSync } = require("fs");
     const userDir = join(this.baseDir, userId);
     mkdirSync(userDir, { recursive: true });
   }
@@ -60,7 +65,7 @@ export class DefaultUserPaths implements UserPathsConfig {
     branchName: string,
   ): string {
     // Sanitize branch name for filesystem
-    const safeBranch = branchName.replace(/[\/\\:*?"<>|]/g, "-");
+    const safeBranch = branchName.replace(/[/\\:*?"<>|]/g, "-");
     return join(this.baseDir, userId, repoName, safeBranch);
   }
 }
@@ -68,6 +73,19 @@ export class DefaultUserPaths implements UserPathsConfig {
 export interface GitServiceConfig {
   storage?: GitStorageAdapter;
   userPaths?: UserPathsConfig;
+}
+
+export interface BranchInfo {
+  name: string;
+  isLocal: boolean;
+  isRemote: boolean;
+  isCurrent: boolean;
+  lastCommit?: {
+    hash: string;
+    message: string;
+    author: string;
+    date: string;
+  };
 }
 
 /**
@@ -142,7 +160,7 @@ export class GitService {
       const repoId = Buffer.from(repoPath).toString("base64");
       const repo: Repository = {
         id: repoId,
-        userId: userId || DEFAULT_USER_ID,
+        userId: userId ?? DEFAULT_USER_ID,
         name: basename(repoPath),
         path: repoPath,
         branch: currentBranch,
@@ -232,7 +250,7 @@ export class GitService {
 
       let currentWorktree: Partial<Worktree> = {};
       let isFirstWorktree = true;
-      const effectiveUserId = userId || repository.userId || DEFAULT_USER_ID;
+      const effectiveUserId = userId ?? repository.userId ?? DEFAULT_USER_ID;
 
       for (const line of lines) {
         if (line.startsWith("worktree ")) {
@@ -315,7 +333,7 @@ export class GitService {
           },
         );
         baseBranch = defaultBranch.trim();
-      } catch (error) {
+      } catch {
         // Fallback: try main, then master
         try {
           await execAsync("git show-ref --verify --quiet refs/heads/main", {
@@ -337,7 +355,7 @@ export class GitService {
       }
     }
 
-    const effectiveUserId = userId || repository.userId || DEFAULT_USER_ID;
+    const effectiveUserId = userId ?? repository.userId ?? DEFAULT_USER_ID;
     this.userPaths.ensureUserDirectories(effectiveUserId);
     const worktreePath = this.userPaths.getWorktreePath(
       effectiveUserId,
@@ -346,7 +364,7 @@ export class GitService {
     );
 
     const worktreeId = Buffer.from(worktreePath).toString("base64");
-    const preferredAgent = agentType || "claude";
+    const preferredAgent = agentType ?? "claude";
 
     // If the worktree path already exists, return the existing worktree
     if (existsSync(worktreePath)) {
@@ -418,7 +436,8 @@ export class GitService {
 
       return worktree;
     } catch (error) {
-      throw new Error(`Failed to create worktree: ${error}`);
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to create worktree: ${message}`);
     }
   }
 
@@ -457,12 +476,14 @@ export class GitService {
       }
     }
 
-    throw new Error(`Failed to check merge status: ${lastError}`);
+    const message =
+      lastError instanceof Error ? lastError.message : String(lastError);
+    throw new Error(`Failed to check merge status: ${message}`);
   }
 
   async removeWorktree(
     worktreeId: string,
-    force: boolean = false,
+    force = false,
   ): Promise<void> {
     const worktree = this.worktrees.get(worktreeId);
     if (!worktree) {
@@ -514,8 +535,12 @@ export class GitService {
             );
           }
         } catch (revertError) {
+          const message =
+            revertError instanceof Error
+              ? revertError.message
+              : String(revertError);
           console.warn(
-            `Warning: Could not revert changes in ${worktree.path}: ${revertError}`,
+            `Warning: Could not revert changes in ${worktree.path}: ${message}`,
           );
         }
       }
@@ -532,8 +557,12 @@ export class GitService {
             cwd: repository.path,
           });
         } catch (branchError) {
+          const message =
+            branchError instanceof Error
+              ? branchError.message
+              : String(branchError);
           console.warn(
-            `Warning: Could not delete branch ${worktree.branch}: ${branchError}`,
+            `Warning: Could not delete branch ${worktree.branch}: ${message}`,
           );
         }
       }
@@ -545,7 +574,8 @@ export class GitService {
 
       await this.storage.deleteWorktree(worktreeId);
     } catch (error) {
-      throw new Error(`Failed to remove worktree: ${error}`);
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to remove worktree: ${message}`);
     }
   }
 
@@ -630,16 +660,15 @@ export class GitService {
         `Error refreshing main branch for ${repository.name}:`,
         error,
       );
-      throw new Error(
-        `Failed to refresh main branch: ${error instanceof Error ? error.message : error}`,
-      );
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to refresh main branch: ${message}`);
     }
   }
 
   // ----- Repository Dashboard helpers -----
   async getGitRemotes(
     repositoryId: string,
-  ): Promise<Array<{ name: string; url: string; type: "fetch" | "push" }>> {
+  ): Promise<{ name: string; url: string; type: "fetch" | "push" }[]> {
     const repository = this.repositories.get(repositoryId);
     if (!repository) {
       throw new Error(`Repository ${repositoryId} not found`);
@@ -649,14 +678,14 @@ export class GitService {
       cwd: repository.path,
     });
     const lines = stdout.trim().split("\n").filter(Boolean);
-    const remotes: Array<{
+    const remotes: {
       name: string;
       url: string;
       type: "fetch" | "push";
-    }> = [];
+    }[] = [];
 
     for (const line of lines) {
-      const match = line.match(/^(\S+)\s+(\S+)\s+\((fetch|push)\)$/);
+      const match = /^(\S+)\s+(\S+)\s+\((fetch|push)\)$/.exec(line);
       if (match) {
         const name = match[1];
         const url = match[2];
@@ -669,20 +698,7 @@ export class GitService {
     return remotes;
   }
 
-  async getGitBranches(repositoryId: string): Promise<
-    Array<{
-      name: string;
-      isLocal: boolean;
-      isRemote: boolean;
-      isCurrent: boolean;
-      lastCommit?: {
-        hash: string;
-        message: string;
-        author: string;
-        date: string;
-      };
-    }>
-  > {
+  async getGitBranches(repositoryId: string): Promise<BranchInfo[]> {
     const repository = this.repositories.get(repositoryId);
     if (!repository) {
       throw new Error(`Repository ${repositoryId} not found`);
@@ -731,14 +747,18 @@ export class GitService {
         .filter(Boolean)
         .map((s) => s.replace(/^'|'$/g, ""))
         .filter((name) => !name.endsWith("/HEAD"));
-    } catch {}
+    } catch {
+      // No remotes configured (or `git for-each-ref` failed) -- fall back
+      // to local-only branch info below.
+    }
 
-    const branchMap = new Map<string, any>();
+    const branchMap = new Map<string, BranchInfo>();
     for (const b of locals) branchMap.set(b.name, b);
     for (const r of remotes) {
       const rn = r.replace(/^origin\//, "");
-      if (branchMap.has(rn)) {
-        branchMap.set(rn, { ...branchMap.get(rn), isRemote: true });
+      const existing = branchMap.get(rn);
+      if (existing) {
+        branchMap.set(rn, { ...existing, isRemote: true });
       } else {
         branchMap.set(rn, {
           name: rn,
@@ -753,7 +773,7 @@ export class GitService {
   }
 
   async getGitGraph(repositoryId: string): Promise<
-    Array<{
+    {
       hash: string;
       parents: string[];
       message: string;
@@ -762,7 +782,7 @@ export class GitService {
       branch?: string;
       x: number;
       y: number;
-    }>
+    }[]
   > {
     const repository = this.repositories.get(repositoryId);
     if (!repository) {
@@ -783,7 +803,10 @@ export class GitService {
           const [h, b] = line.replace(/^'|'$/g, "").split("|");
           if (h && b) branchHeads.set(h, b);
         });
-    } catch {}
+    } catch {
+      // No local branches / `git for-each-ref` failed -- graph will just
+      // omit branch-head annotations below.
+    }
 
     const { stdout: logOut } = await execAsync(
       "git log --all --date-order --pretty=format:'%H|%P|%s|%an|%ad' --date=iso-strict -n 200",

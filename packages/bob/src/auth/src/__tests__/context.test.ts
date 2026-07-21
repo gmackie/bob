@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { AuthRuntimeBundle } from "../runtime";
+
 const {
   validateApiKeyMock,
   isApiKeyMock,
@@ -29,14 +31,20 @@ describe("resolveAuthContext", () => {
     },
   };
 
+  // The test only ever calls `authBundle.authInstance.api.getSession(...)` —
+  // `runtime` (an Effect `ManagedRuntime`) is never exercised by
+  // `resolveAuthContext`, so it's safe to stub. We go through `unknown` (not
+  // `any`) because the real `AuthRuntimeBundle` shape is fully known but
+  // impractical to construct in a unit test; the cast is scoped to this one
+  // fixture rather than sprinkled at each call site.
   const mockAuthBundle = {
     authInstance: {
       api: {
         getSession: getSessionMock,
       },
     },
-    runtime: {} as any,
-  };
+    runtime: {},
+  } as unknown as AuthRuntimeBundle;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -45,6 +53,7 @@ describe("resolveAuthContext", () => {
     delete process.env.BOB_AUTH_BYPASS_TOKEN;
     delete process.env.BOB_AUTH_BYPASS_USER_ID;
     delete process.env.REQUIRE_AUTH;
+    delete process.env.NODE_ENV;
   });
 
   afterEach(() => {
@@ -52,6 +61,7 @@ describe("resolveAuthContext", () => {
     delete process.env.BOB_AUTH_BYPASS_TOKEN;
     delete process.env.BOB_AUTH_BYPASS_USER_ID;
     delete process.env.REQUIRE_AUTH;
+    delete process.env.NODE_ENV;
   });
 
   it("prefers a better-auth session from the request headers", async () => {
@@ -62,7 +72,7 @@ describe("resolveAuthContext", () => {
 
     const { resolveAuthContext } = await import("../context");
     const result = await resolveAuthContext({
-      authBundle: mockAuthBundle as any,
+      authBundle: mockAuthBundle,
       defaultUser,
       headers: new Headers(),
     });
@@ -79,7 +89,7 @@ describe("resolveAuthContext", () => {
 
     const { resolveAuthContext } = await import("../context");
     const result = await resolveAuthContext({
-      authBundle: mockAuthBundle as any,
+      authBundle: mockAuthBundle,
       defaultUser,
       headers: new Headers({
         "x-workspace-id": "workspace-1",
@@ -102,7 +112,7 @@ describe("resolveAuthContext", () => {
 
     const { resolveAuthContext } = await import("../context");
     const result = await resolveAuthContext({
-      authBundle: mockAuthBundle as any,
+      authBundle: mockAuthBundle,
       defaultUser: null,
       headers: new Headers({
         authorization: "Bearer bad-token",
@@ -122,7 +132,7 @@ describe("resolveAuthContext", () => {
 
     const { resolveAuthContext } = await import("../context");
     const result = await resolveAuthContext({
-      authBundle: mockAuthBundle as any,
+      authBundle: mockAuthBundle,
       defaultUser,
       headers: new Headers({
         cookie: "bob-auth-bypass:prod-secret",
@@ -144,7 +154,7 @@ describe("resolveAuthContext", () => {
 
     const { resolveAuthContext } = await import("../context");
     const result = await resolveAuthContext({
-      authBundle: mockAuthBundle as any,
+      authBundle: mockAuthBundle,
       defaultUser,
       headers: new Headers({
         cookie: "bob-auth-bypass:wrong-secret",
@@ -163,11 +173,65 @@ describe("resolveAuthContext", () => {
 
     const { resolveAuthContext } = await import("../context");
     const result = await resolveAuthContext({
-      authBundle: mockAuthBundle as any,
+      authBundle: mockAuthBundle,
       defaultUser,
       headers: new Headers({
         cookie: "bob-auth-bypass:prod-secret",
       }),
+    });
+
+    expect(result.authMethod).toBe("none");
+    expect(result.session).toBeNull();
+  });
+
+  it("rejects auth bypass tokens when no bypass user id is configured", async () => {
+    process.env.BOB_AUTH_BYPASS = "true";
+    process.env.BOB_AUTH_BYPASS_TOKEN = "prod-secret";
+    process.env.REQUIRE_AUTH = "true";
+    getSessionMock.mockResolvedValueOnce(null);
+    isApiKeyMock.mockReturnValueOnce(false);
+
+    const { resolveAuthContext } = await import("../context");
+    const result = await resolveAuthContext({
+      authBundle: mockAuthBundle,
+      defaultUser,
+      headers: new Headers({
+        cookie: "bob-auth-bypass:prod-secret",
+      }),
+    });
+
+    expect(result.authMethod).toBe("none");
+    expect(result.session).toBeNull();
+    expect(getSessionMock).toHaveBeenCalled();
+  });
+
+  it("requires auth in production even when REQUIRE_AUTH is unset", async () => {
+    process.env.NODE_ENV = "production";
+    getSessionMock.mockResolvedValueOnce(null);
+    isApiKeyMock.mockReturnValueOnce(false);
+
+    const { resolveAuthContext } = await import("../context");
+    const result = await resolveAuthContext({
+      authBundle: mockAuthBundle,
+      defaultUser,
+      headers: new Headers(),
+    });
+
+    expect(result.authMethod).toBe("none");
+    expect(result.session).toBeNull();
+  });
+
+  it("disables the default-user fallback in production even when REQUIRE_AUTH is false", async () => {
+    process.env.NODE_ENV = "production";
+    process.env.REQUIRE_AUTH = "false";
+    getSessionMock.mockResolvedValueOnce(null);
+    isApiKeyMock.mockReturnValueOnce(false);
+
+    const { resolveAuthContext } = await import("../context");
+    const result = await resolveAuthContext({
+      authBundle: mockAuthBundle,
+      defaultUser,
+      headers: new Headers(),
     });
 
     expect(result.authMethod).toBe("none");

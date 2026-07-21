@@ -172,6 +172,15 @@ export const AgentRunListRpc = Rpc.make("agent.run.list", {
   success: Schema.Array(AgentRunSchema),
 });
 
+// --- agent.run.listAll -------------------------------------------------------
+
+export const AgentRunListAllRpc = Rpc.make("agent.run.listAll", {
+  payload: Schema.Struct({
+    limit: Schema.optional(Schema.Number),
+  }),
+  success: Schema.Array(AgentRunSchema),
+});
+
 // --- agent.run.listByWorkItem ------------------------------------------------
 
 export const AgentRunListByWorkItemRpc = Rpc.make("agent.run.listByWorkItem", {
@@ -1143,9 +1152,10 @@ export const AgentRpc = RpcGroup.make(
   AgentCancelSessionRpc,
   AgentCloseSessionRpc,
   AgentGetTranscriptRpc,
-  // agent.run (3) — Task 1
+  // agent.run (4) — Task 1
   AgentRunGetRpc,
   AgentRunListRpc,
+  AgentRunListAllRpc,
   AgentRunListByWorkItemRpc,
   // agent.capture (2) — Task 1
   AgentCaptureListTargetsRpc,

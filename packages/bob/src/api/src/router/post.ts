@@ -1,10 +1,16 @@
 import type { TRPCRouterRecord } from "@trpc/server";
 import { z } from "zod/v4";
 
-import { CreatePostSchema } from "@bob/db/schema";
-
 import { protectedProcedure, publicProcedure } from "../trpc";
 import { postAll, postById, postCreate, postDelete } from "../handlers/post";
+
+// The `Post` demo table (and its `CreatePostSchema`) was removed from
+// `@bob/db/schema`; this router is dead code (imported nowhere) but kept
+// compiling with an inline schema.
+const CreatePostSchema = z.object({
+  title: z.string(),
+  content: z.string(),
+});
 
 export const postRouter: TRPCRouterRecord = {
   all: publicProcedure.query(({ ctx }) =>

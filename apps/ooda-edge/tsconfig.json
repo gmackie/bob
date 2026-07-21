@@ -3,6 +3,11 @@
   "compilerOptions": {
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
+    // App, not a published package — it never emits declarations, so disable the
+    // declaration-portability check. Avoids TS2742 on the tRPC useTRPC/TRPCProvider
+    // exports, whose inferred types reach into @gmacko/ooda's deep oracle paths.
+    "declaration": false,
+    "declarationMap": false,
     "paths": {
       "~/*": ["./src/*"],
       "@gmacko/ooda/db/client": ["./src/lib/db-client-lazy.ts"]

@@ -62,7 +62,7 @@ function loadMigrations(dir: string = MIGRATIONS_DIR): MigrationFile[] {
     // it as "no pending migrations". Callers that need the real roster must set
     // `BOB_DB_MIGRATIONS_DIR` (consumed by `client-pglite.ts`'s
     // `resolveMigrationsDir`) or pass the directory explicitly.
-    // eslint-disable-next-line no-console
+
     console.warn(
       `[@bob/db] migrations dir not found at ${dir}; ` +
         `treating as no pending migrations. Set BOB_DB_MIGRATIONS_DIR or pass ` +
@@ -87,13 +87,21 @@ function loadMigrations(dir: string = MIGRATIONS_DIR): MigrationFile[] {
  * pg.Client does NOT have `exec`, but its `query(sql)` without params happily
  * runs multi-statement SQL, so we fall back to that when `exec` is absent.
  */
-export type MigrationClient = {
+/**
+ * No-op logger. Use as `log: noop` to silence {@link applyMigrations} output
+ * (e.g. in tests) without tripping `no-empty-function` on an inline arrow.
+ */
+export function noop(): void {
+  // Intentionally empty: named no-op silences the logger param.
+}
+
+export interface MigrationClient {
   query<R = unknown>(
     sql: string,
     params?: unknown[],
   ): Promise<{ rows: R[] }>;
   exec?: (sql: string) => Promise<unknown>;
-};
+}
 
 /**
  * Run a (possibly multi-statement) migration SQL blob against the client.
@@ -114,7 +122,7 @@ async function runMigrationSql(
   await client.query(sqlText);
 }
 
-export type ApplyMigrationsOptions = {
+export interface ApplyMigrationsOptions {
   client: MigrationClient;
   /** If true, record migrations as applied WITHOUT running their SQL. */
   bootstrap?: boolean;
@@ -127,7 +135,7 @@ export type ApplyMigrationsOptions = {
    * `packages/db/drizzle/` (resolved relative to this file).
    */
   migrationsDir?: string;
-};
+}
 
 /**
  * Apply pending forward migrations against the given client.

@@ -8,8 +8,18 @@ const mockCreateComment = vi.fn();
 const mockIssueSearch = vi.fn();
 const mockTeam = vi.fn();
 
+interface MockLinearClientInstance {
+  createIssue: typeof mockCreateIssue;
+  issue: typeof mockIssue;
+  issues: typeof mockIssues;
+  updateIssue: typeof mockUpdateIssue;
+  createComment: typeof mockCreateComment;
+  issueSearch: typeof mockIssueSearch;
+  team: typeof mockTeam;
+}
+
 vi.mock("@linear/sdk", () => {
-  const MockLinearClient = function (this: any) {
+  function MockLinearClient(this: MockLinearClientInstance) {
     this.createIssue = mockCreateIssue;
     this.issue = mockIssue;
     this.issues = mockIssues;
@@ -17,7 +27,7 @@ vi.mock("@linear/sdk", () => {
     this.createComment = mockCreateComment;
     this.issueSearch = mockIssueSearch;
     this.team = mockTeam;
-  } as any;
+  }
   return { LinearClient: MockLinearClient };
 });
 
@@ -38,10 +48,29 @@ vi.mock("@bob/db/schema", () => ({
 
 import { LinearPlanningProvider } from "../linearProvider.js";
 import { PlanningProviderError } from "../planningProvider.js";
+import type { Db } from "@bob/db/client";
+
+// `LinearPlanningProvider` takes a real drizzle `Db`, but this mock is a
+// self-referential "everything chains back to itself, then thenable
+// resolves like a query result" fake that doesn't (and can't reasonably)
+// implement drizzle's full fluent builder surface. Typed here as its own
+// honest shape and cast `as unknown as Db` only at the constructor call —
+// the boundary where the real interface is actually required.
+interface MockDb {
+  select: ReturnType<typeof vi.fn>;
+  from: ReturnType<typeof vi.fn>;
+  where: ReturnType<typeof vi.fn>;
+  then: ReturnType<typeof vi.fn<(cb: (rows: unknown[]) => unknown) => Promise<unknown>>>;
+  insert: ReturnType<typeof vi.fn>;
+  values: ReturnType<typeof vi.fn>;
+  returning: ReturnType<typeof vi.fn>;
+  update: ReturnType<typeof vi.fn>;
+  set: ReturnType<typeof vi.fn>;
+}
 
 describe("LinearPlanningProvider", () => {
   let provider: LinearPlanningProvider;
-  let mockDb: any;
+  let mockDb: MockDb;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -49,7 +78,7 @@ describe("LinearPlanningProvider", () => {
     mockDb = createMockDb();
 
     provider = new LinearPlanningProvider(
-      mockDb,
+      mockDb as unknown as Db,
       "lin_test_key",
       "team-1",
       "project-1",
@@ -57,8 +86,8 @@ describe("LinearPlanningProvider", () => {
     );
   });
 
-  function createMockDb() {
-    const mock: any = {};
+  function createMockDb(): MockDb {
+    const mock = {} as MockDb;
     mock.select = vi.fn().mockReturnValue(mock);
     mock.from = vi.fn().mockReturnValue(mock);
     mock.where = vi.fn().mockReturnValue(mock);
@@ -247,7 +276,9 @@ describe("LinearPlanningProvider", () => {
         },
       });
       expect(result).toHaveLength(1);
-      expect(result[0]!.externalId).toBe("issue-1");
+      const [firstResult] = result;
+      if (!firstResult) throw new Error("expected a result");
+      expect(firstResult.externalId).toBe("issue-1");
     });
   });
 
@@ -285,7 +316,17 @@ describe("LinearPlanningProvider", () => {
       const setMock = vi.fn();
       const updateWhereMock = vi.fn().mockResolvedValue(undefined);
 
-      const lifecycleDb: any = {};
+      interface LifecycleMockDb {
+        select: ReturnType<typeof vi.fn>;
+        from: ReturnType<typeof vi.fn>;
+        where: ReturnType<typeof vi.fn>;
+        then: ReturnType<typeof vi.fn>;
+        update: ReturnType<typeof vi.fn>;
+        insert: ReturnType<typeof vi.fn>;
+        values: ReturnType<typeof vi.fn>;
+      }
+
+      const lifecycleDb = {} as LifecycleMockDb;
       lifecycleDb.select = vi.fn().mockReturnValue(lifecycleDb);
       lifecycleDb.from = vi.fn().mockReturnValue(lifecycleDb);
       lifecycleDb.where = vi.fn().mockReturnValue(lifecycleDb);
@@ -302,7 +343,7 @@ describe("LinearPlanningProvider", () => {
 
       // Recreate provider with the lifecycle-specific mock db
       const testProvider = new LinearPlanningProvider(
-        lifecycleDb,
+        lifecycleDb as unknown as Db,
         "lin_test_key",
         "team-1",
         "project-1",
@@ -316,6 +357,9 @@ describe("LinearPlanningProvider", () => {
       expect(lifecycleDb.update).toHaveBeenCalled();
       expect(setMock).toHaveBeenCalledWith(
         expect.objectContaining({
+          // vitest's expect.arrayContaining/objectContaining always return
+          // `any` per their own type declarations, regardless of generic.
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           syncFailures: expect.arrayContaining([
             expect.objectContaining({
               method: "reportMilestone",
@@ -340,6 +384,9 @@ describe("LinearPlanningProvider", () => {
 
       expect(mockCreateComment).toHaveBeenCalledWith({
         issueId: "issue-1",
+        // vitest's expect.stringContaining always returns `any` per its own
+        // type declarations.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         body: expect.stringContaining("Task blocked"),
       });
       expect(mockUpdateIssue).not.toHaveBeenCalled();
@@ -356,6 +403,7 @@ describe("LinearPlanningProvider", () => {
 
       expect(mockCreateComment).toHaveBeenCalledWith({
         issueId: "issue-1",
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         body: expect.stringContaining("Task failed"),
       });
       expect(mockUpdateIssue).not.toHaveBeenCalled();
@@ -396,10 +444,14 @@ describe("LinearPlanningProvider", () => {
 
       expect(mockCreateComment).toHaveBeenCalledWith({
         issueId: "issue-1",
+        // vitest's expect.stringMatching/stringContaining always return
+        // `any` per their own type declarations.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         body: expect.stringMatching(/\*\*🤖 Bob — Note\*\*/),
       });
       expect(mockCreateComment).toHaveBeenCalledWith({
         issueId: "issue-1",
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         body: expect.stringContaining("`run-abc-123`"),
       });
     });

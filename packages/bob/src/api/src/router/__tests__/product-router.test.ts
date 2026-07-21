@@ -1,15 +1,27 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { createTRPCContext } from "../../trpc.js";
+
 let appRouter: typeof import("../../root").appRouter;
+
+// The real tRPC context type — the mock db/authApi below are structurally
+// close-enough fakes that only implement the query/insert/update surface
+// these handlers actually call, cast through `unknown` (not `any`) at the
+// single construction site so every caller.* call below stays fully typed.
+type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
 
 const queryMocks = {
   workspaceMembersFindMany: vi.fn(),
   workspaceMembersFindFirst: vi.fn(),
   projectsFindMany: vi.fn(),
   projectsFindFirst: vi.fn(),
+  repositoriesFindMany: vi.fn(),
   workItemsFindMany: vi.fn(),
   workItemsFindFirst: vi.fn(),
   workItemArtifactsFindMany: vi.fn(),
+  workItemDependenciesFindMany: vi.fn(),
+  chatConversationsFindMany: vi.fn(),
+  chatConversationsFindFirst: vi.fn(),
   commentsFindMany: vi.fn(),
   notificationsFindMany: vi.fn(),
   taskRunsFindMany: vi.fn(),
@@ -28,12 +40,22 @@ const makeDbMock = () => ({
       findMany: queryMocks.projectsFindMany,
       findFirst: queryMocks.projectsFindFirst,
     },
+    repositories: {
+      findMany: queryMocks.repositoriesFindMany,
+    },
     workItems: {
       findMany: queryMocks.workItemsFindMany,
       findFirst: queryMocks.workItemsFindFirst,
     },
     workItemArtifacts: {
       findMany: queryMocks.workItemArtifactsFindMany,
+    },
+    workItemDependencies: {
+      findMany: queryMocks.workItemDependenciesFindMany,
+    },
+    chatConversations: {
+      findMany: queryMocks.chatConversationsFindMany,
+      findFirst: queryMocks.chatConversationsFindFirst,
     },
     comments: {
       findMany: queryMocks.commentsFindMany,
@@ -81,10 +103,10 @@ const createCaller = () =>
         name: "Test User",
       },
     },
-    authApi: { getSession: vi.fn() } as any,
-    apiKeyAuth: null as any,
-    db: makeDbMock() as any,
-  });
+    authApi: { getSession: vi.fn() },
+    apiKeyAuth: null,
+    db: makeDbMock(),
+  } as unknown as TRPCContext);
 
 describe("product-facing app router", () => {
   const workspaceId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -96,7 +118,7 @@ describe("product-facing app router", () => {
     process.env.DATABASE_URL ??=
       "postgres://postgres:postgres@localhost:5432/test";
     ({ appRouter } = await import("../../root"));
-  });
+  }, 60_000);
 
   beforeEach(() => {
     Object.values(queryMocks).forEach((mock) => mock.mockReset());
@@ -105,8 +127,12 @@ describe("product-facing app router", () => {
   });
 
   it("exposes the unified planning and collaboration subrouters", async () => {
-    expect((appRouter as any)._def.record.planning).toBeDefined();
-    expect((appRouter as any)._def.record.kanbanger).toBeUndefined();
+    expect(appRouter._def.record.planning).toBeDefined();
+    // Regression guard: the old pre-rename router key must not have
+    // resurfaced. It's intentionally not a key of the real record type, so
+    // access it through a loosely-typed view rather than `any`.
+    const record: Record<string, unknown> = appRouter._def.record;
+    expect(record.kanbanger).toBeUndefined();
 
     queryMocks.workspaceMembersFindMany.mockResolvedValueOnce([
       {
@@ -143,6 +169,8 @@ describe("product-facing app router", () => {
         updatedAt: new Date("2026-03-11T10:00:00.000Z"),
       },
     ]);
+    queryMocks.repositoriesFindMany.mockResolvedValue([]);
+    queryMocks.chatConversationsFindMany.mockResolvedValue([]);
     queryMocks.taskRunsFindMany.mockResolvedValue([
       {
         id: taskId,
@@ -182,6 +210,7 @@ describe("product-facing app router", () => {
         createdAt: new Date("2026-03-11T11:06:00.000Z"),
       },
     ]);
+    queryMocks.chatConversationsFindFirst.mockResolvedValueOnce(null);
     queryMocks.commentsFindMany.mockResolvedValueOnce([
       {
         id: "comment-1",
@@ -209,7 +238,7 @@ describe("product-facing app router", () => {
       },
     ]);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     expect(typeof caller.planning.listWorkspaces).toBe("function");
 
@@ -220,6 +249,9 @@ describe("product-facing app router", () => {
       { id: "child-1" },
       { id: "child-2" },
     ]);
+    queryMocks.workItemDependenciesFindMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
     const detail = await caller.workItem.get({ id: taskId });
     const comments = await caller.comment.listByWorkItem({ workItemId: taskId });
     const notifications = await caller.notification.list({ limit: 20 });
@@ -230,6 +262,7 @@ describe("product-facing app router", () => {
     expect(workspaces[0]?.workspace.id).toBe(workspaceId);
     expect(projects[0]?.project.id).toBe(projectId);
     expect(workItems[0]?.identifier).toBe("MERGE-12");
+    if (!detail) throw new Error("expected caller.workItem.get to return a detail");
     expect(detail.workItem.identifier).toBe("MERGE-12");
     expect(comments[0]?.body).toContain("mobile focused");
     expect(notifications.items[0]?.title).toBe("Review ready");

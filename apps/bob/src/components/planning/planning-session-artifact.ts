@@ -1,6 +1,7 @@
 import { formatSessionEventText } from "../runs/session-event-format";
 
 interface PlanningArtifactEvent {
+  seq?: number;
   direction: string;
   eventType: string;
   payload: Record<string, unknown>;

@@ -1,4 +1,6 @@
 {
+  // Production deploy target: Cloudflare Workers @ bob.blder.bot (see deploy/README.md).
+  // Node/VPS (bob-server) is desktop/local only — not a production path.
   "name": "blder-bot",
   "main": "./worker/index.ts",
   "compatibility_date": "2025-12-01",
@@ -19,14 +21,36 @@
       "id": "c1f467f772dc4ce99d99e572df74c121"
     }
   ],
+  "triggers": {
+    // Autonomous backlog driver: every 5 minutes, dispatch ready work items up
+    // to the concurrency cap + daily rate limit (see worker/index.ts scheduled).
+    "crons": ["*/5 * * * *"]
+  },
   "vars": {
     "FG_APP": "bob",
     "REQUIRE_AUTH": "true",
-    "BOB_AUTH_BYPASS": "true",
-    "BOB_AUTH_BYPASS_USER_ID": "default-user",
     "FRONTEND_URL": "https://bob.blder.bot",
     "GATEWAY_PUBLIC_URL": "https://ws.blder.bot",
     "GATEWAY_URL": "https://ws.blder.bot",
-    "NODE_ENV": "production"
+    "NODE_ENV": "production",
+    "BOB_AUTH_BYPASS": "true",
+    "BOB_AUTH_BYPASS_USER_ID": "tkE66fMc4mevdYYjtq78ALErJ7QnhAge",
+    "BOB_AUTO_DRAIN_ENABLED": "true",
+    "BOB_AUTO_DRAIN_CONCURRENCY": "4",
+    "BOB_AUTO_DRAIN_DAILY_CAP": "20",
+    // Autonomous PR reviewer + auto-merge (see worker/index.ts scheduled →
+    // handlers/autoMergeReview). Reviews open PRs with Claude and merges those
+    // that are CI-green + AI-approved + conflict-free. Needs the ANTHROPIC_API_KEY
+    // secret (set via `wrangler secret put`, NOT a plaintext var here).
+    "BOB_AUTO_MERGE_ENABLED": "true",
+    "BOB_AUTO_MERGE_MAX_PER_RUN": "5",
+    "BOB_AUTO_MERGE_MODEL": "claude-sonnet-5",
+    "BOB_AUTO_MERGE_INSTANCE_HINT": "gitea @ git.forgegraf.com",
+    "BOB_FORGEJO_INSTANCE_URL": "https://git.forgegraf.com",
+    // Live auto-merge enabled (2026-07-14): merges only PRs that clear all
+    // three gates — CI green AND an approving AI review AND no merge conflict.
+    // Whatever can't clear the bar stays in review for a human. maxPerRun caps
+    // the merge/deploy fan-out per cron run so it clears the backlog steadily.
+    "BOB_AUTO_MERGE_DRY_RUN": "false"
   }
 }

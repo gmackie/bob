@@ -7,6 +7,9 @@ export {
   type DeviceType,
   type EventDirection,
   type SessionEventType,
+  type HostSnapshotWire,
+  type ProviderHealthWire,
+  type ProviderCapabilityWire,
 
   // Client → Server
   type ClientMessage,
@@ -15,7 +18,9 @@ export {
   type ClientUnsubscribe,
   type ClientInput,
   type ClientAck,
+  type ClientApprove,
   type ClientPing,
+  type ClientStopSession,
   type ClientSessionClaimed,
   type ClientSessionEvent,
   type ClientSessionStatus,
@@ -32,9 +37,13 @@ export {
   type ServerPong,
   type ServerError,
   type ServerSessionAvailable,
+  type ServerSessionStop,
   type ServerSessionStatusChanged,
   type ServerReplayTruncated,
+  type ServerEventAck,
+  type ServerHostSnapshot,
   type ServerWorkspaceSnapshot,
+  type ServerWorkspaceInvalidationType,
   type WorkspaceSessionInfo,
 
   // Codec

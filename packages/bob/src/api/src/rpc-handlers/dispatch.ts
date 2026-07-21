@@ -27,11 +27,11 @@ export const makeDispatchRpcHandlers = (ctx: HandlerContext) => ({
     payload: {
       sessionId: string;
       concurrency: number;
-      tasks: Array<{
+      tasks: {
         draftId: string;
         taskId: string;
         identifier: string;
-      }>;
+      }[];
     };
   }) => wrapHandler(dispatchCreateBatch, ctx, payload, "dispatch"),
 
@@ -84,11 +84,11 @@ export const makeDispatchRpcHandlers = (ctx: HandlerContext) => ({
       workspaceId: string;
       agentType: string;
       concurrency: number;
-      items: Array<{
+      items: {
         workItemId?: string;
         title?: string;
         description?: string;
-      }>;
+      }[];
     };
   }) => wrapHandler(dispatchExecutionBatch, ctx, payload, "dispatch"),
 });

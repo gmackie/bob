@@ -22,7 +22,7 @@ export const makeSkillRpcHandlers = (ctx: HandlerContext) => ({
   "skill.list": ({
     payload,
   }: {
-    payload?: { category?: string; source?: string };
+    payload?: Parameters<typeof skillList>[1];
   }) => wrapHandler(skillList, ctx, payload, "skill"),
 
   "skill.stats": () =>
@@ -35,9 +35,9 @@ export const makeSkillRpcHandlers = (ctx: HandlerContext) => ({
 
   "skill.seed": ({ payload }: { payload: void }) =>
     wrapHandler(
-      (ctx: HandlerContext) => skillSeed(ctx),
+      (c: HandlerContext) => skillSeed(c),
       ctx,
-      undefined as unknown as void,
+      payload,
       "skill",
     ),
 

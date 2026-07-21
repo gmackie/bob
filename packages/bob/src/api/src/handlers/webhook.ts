@@ -98,7 +98,11 @@ export async function webhookCreate(
     })
     .returning();
 
-  return row!;
+  if (!row) {
+    throw new Error("Failed to create webhook config");
+  }
+
+  return row;
 }
 
 export async function webhookUpdate(
@@ -183,9 +187,11 @@ export async function webhookDeliveriesList(
   const hasMore = items.length > input.limit;
   if (hasMore) items.pop();
 
+  const lastItem = items.at(-1);
+
   return {
     items,
-    nextCursor: hasMore ? items.at(-1)!.receivedAt : null,
+    nextCursor: hasMore && lastItem ? lastItem.receivedAt : null,
   };
 }
 
@@ -205,7 +211,7 @@ export async function webhookRedeliver(
     .limit(1);
 
   const row = rows[0];
-  if (!row || row.userId !== ctx.userId) {
+  if (row?.userId !== ctx.userId) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Delivery not found" });
   }
   if (row.delivery.status !== "failed") {
@@ -224,7 +230,11 @@ export async function webhookRedeliver(
     .where(eq(webhookDeliveries.id, input.deliveryId))
     .returning();
 
-  return updated!;
+  if (!updated) {
+    throw new Error("Failed to update webhook delivery");
+  }
+
+  return updated;
 }
 
 export async function webhookTestWebhook(

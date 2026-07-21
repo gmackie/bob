@@ -14,6 +14,18 @@ const EXAMPLE_TOPICS = [
   "Evaluate latest breakthroughs in battery technology",
 ];
 
+// `threads.list` is declared `.output(z.any())` (required by trpc-to-openapi),
+// which degenerates the client-inferred query data type. Describe the real
+// `researchThread` row shape the UI consumes so the cast below stays honest.
+interface ThreadSummary {
+  id: string;
+  slug: string;
+  title: string;
+  status: string;
+  createdAt: Date | string | null;
+  domainPackId: string | null;
+}
+
 export default function ThreadsPage() {
   return (
     <Suspense>
@@ -51,7 +63,7 @@ function ThreadsPageInner() {
     }),
   );
 
-  const threads = threadsQuery.data ?? [];
+  const threads = (threadsQuery.data ?? []) as unknown as ThreadSummary[];
 
   return (
     <div className="min-h-screen bg-[#111113] text-[#E8E4DF]">

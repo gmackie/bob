@@ -8,6 +8,15 @@ interface ColdThreadUpdatesProps {
   threadId: string;
 }
 
+// `research.coldThreadUpdatesByThread` is `.output(z.any())` for OpenAPI,
+// which degenerates the client query type; describe the projected row shape.
+interface ColdThreadUpdate {
+  sourceId: number;
+  title: string;
+  foundAt: string;
+  reasonMd: string;
+}
+
 export function ColdThreadUpdates({ threadId }: ColdThreadUpdatesProps) {
   const trpc = useTRPC();
   const updatesQuery = useQuery(
@@ -29,7 +38,9 @@ export function ColdThreadUpdates({ threadId }: ColdThreadUpdatesProps) {
       </div>
     );
   }
-  const items = updatesQuery.data?.items ?? [];
+  const items =
+    (updatesQuery.data as unknown as { items: ColdThreadUpdate[] } | undefined)
+      ?.items ?? [];
   if (items.length === 0) {
     return (
       <div className="p-3 text-xs text-[#5A5855]">

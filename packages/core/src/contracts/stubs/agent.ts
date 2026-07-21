@@ -19,7 +19,7 @@
 //     for deterministic streaming output. Both exist in Effect 4.0.0-beta.43
 //     (`Stream.d.ts:698,858`).
 
-import { Effect, Stream } from "effect";
+import { DateTime, Effect, Stream } from "effect";
 
 import { AgentSessionNotFoundError } from "@gmacko/core/agent/errors";
 import { NotFoundError } from "../../rpc/errors.js";
@@ -27,6 +27,10 @@ import { NotFoundError } from "../../rpc/errors.js";
 import { AgentRpc } from "../groups/agent.js";
 
 import { SessionLeaseConflictError } from "../schemas/agent-session.js";
+import {
+  PersonaNotFoundError,
+  type AgentPersonaWire,
+} from "../schemas/agent-persona.js";
 
 const STUB_CONVERSATION_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc";
 const STUB_TENANT_ID = "00000000-0000-0000-0000-000000000001";
@@ -86,6 +90,26 @@ const STUB_SESSION = {
   createdAt: STUB_DATE,
   updatedAt: STUB_DATE,
 };
+
+/** Minimal stub persona record reused across persona handlers. */
+const STUB_PERSONA = {
+  id: "persona-stub-1",
+  tenantId: STUB_TENANT_ID,
+  name: "Stub Persona",
+  slug: "stub-persona",
+  description: null,
+  adapterId: "claude",
+  model: null,
+  systemPrompt: null,
+  allowedTools: null,
+  autonomyLevel: null,
+  budgetLimitCents: null,
+  source: "ui" as const,
+  active: true,
+  metadata: {},
+  createdAt: STUB_DATE,
+  updatedAt: STUB_DATE,
+} satisfies AgentPersonaWire;
 
 const handlers = AgentRpc.of({
   "agent.createSession": (_payload) =>
@@ -195,14 +219,18 @@ const handlers = AgentRpc.of({
       workspaceId: STUB_WORKSPACE_ID,
       sessionId: null,
       workItemId: null,
-      status: "completed" as const,
-      startedAt: "2026-04-21T00:00:00.000Z",
-      completedAt: "2026-04-21T00:00:10.000Z",
-      createdAt: "2026-04-21T00:00:00.000Z",
+      agentType: "claude",
+      status: "completed",
+      startedAt: DateTime.makeUnsafe("2026-04-21T00:00:00.000Z"),
+      completedAt: DateTime.makeUnsafe("2026-04-21T00:00:10.000Z"),
+      createdAt: DateTime.makeUnsafe("2026-04-21T00:00:00.000Z"),
     });
   },
 
   "agent.run.list": (_payload) =>
+    Effect.succeed([]),
+
+  "agent.run.listAll": (_payload) =>
     Effect.succeed([]),
 
   "agent.run.listByWorkItem": ({ workItemId }) => {
@@ -652,6 +680,58 @@ const handlers = AgentRpc.of({
 
   "agent.post.delete": (_payload) =>
     Effect.succeed({ success: true }),
+
+  // --- agent.persona (6) ----------------------------------------------------
+
+  "agent.persona.create": ({
+    name,
+    slug,
+    description,
+    adapterId,
+    model,
+    systemPrompt,
+    allowedTools,
+    autonomyLevel,
+    budgetLimitCents,
+    metadata,
+  }) =>
+    Effect.succeed({
+      ...STUB_PERSONA,
+      name,
+      slug,
+      adapterId,
+      description: description ?? null,
+      model: model ?? null,
+      systemPrompt: systemPrompt ?? null,
+      allowedTools: allowedTools ?? null,
+      autonomyLevel: autonomyLevel ?? null,
+      budgetLimitCents: budgetLimitCents ?? null,
+      metadata: metadata ?? {},
+    } satisfies AgentPersonaWire),
+
+  "agent.persona.list": (_payload) => Effect.succeed([STUB_PERSONA]),
+
+  "agent.persona.get": ({ id }) =>
+    id === STUB_PERSONA.id
+      ? Effect.succeed(STUB_PERSONA)
+      : Effect.fail(new PersonaNotFoundError({ personaId: id })),
+
+  "agent.persona.update": ({ id, name, description }) =>
+    id === STUB_PERSONA.id
+      ? Effect.succeed({
+          ...STUB_PERSONA,
+          name: name ?? STUB_PERSONA.name,
+          description: description ?? STUB_PERSONA.description,
+        } satisfies AgentPersonaWire)
+      : Effect.fail(new PersonaNotFoundError({ personaId: id })),
+
+  "agent.persona.delete": ({ id }) =>
+    id === STUB_PERSONA.id
+      ? Effect.succeed(undefined)
+      : Effect.fail(new PersonaNotFoundError({ personaId: id })),
+
+  "agent.persona.syncRepo": (_payload) =>
+    Effect.succeed({ created: 0, updated: 0, unchanged: 0 }),
 });
 
 /**

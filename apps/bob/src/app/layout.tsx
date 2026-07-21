@@ -7,13 +7,14 @@ import { ThemeToggle } from "@gmacko/core/ui/theme-toggle";
 import { Toaster } from "@gmacko/core/ui/toast";
 
 import { TRPCReactProvider } from "~/trpc/react";
+import { BobRpcProvider } from "~/rpc/react";
 import { Providers } from "./providers";
 
 import "~/app/styles.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL(
-    process.env.FRONTEND_URL ?? "https://blder.bot",
+    process.env.FRONTEND_URL ?? "https://bob.blder.bot",
   ),
   title: "blder.bot - AI Agent Manager",
   description: "Manage AI agents, plan work, and ship code with blder.bot",
@@ -23,7 +24,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "blder.bot - AI Agent Manager",
     description: "Manage AI agents, plan work, and ship code with blder.bot",
-    url: "https://blder.bot",
+    url: "https://bob.blder.bot",
     siteName: "blder.bot",
   },
 };
@@ -85,7 +86,9 @@ export default function RootLayout(props: { children: React.ReactNode; params: P
             Skip to content
           </a>
           <TRPCReactProvider>
-            <Providers>{props.children}</Providers>
+            <BobRpcProvider>
+              <Providers>{props.children}</Providers>
+            </BobRpcProvider>
           </TRPCReactProvider>
           <div className="fixed right-6 bottom-20 z-50">
             <ThemeToggle />

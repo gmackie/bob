@@ -20,5 +20,5 @@ export const makeSystemRpcHandlers = (ctx: HandlerContext) => ({
     ),
 
   "system.status": ({ payload }: { payload: void }) =>
-    wrapHandler(systemStatus, ctx, payload as any, "system"),
+    wrapHandler(systemStatus, ctx, payload, "system"),
 });

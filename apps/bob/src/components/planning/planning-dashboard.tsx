@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { Badge } from "@gmacko/core/ui/badge";
 import Link from "next/link";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
 import {
   buildPlanningDashboardSessionRows,
   buildPlanningDashboardSummaryCards,
@@ -97,24 +97,30 @@ function ActivePlanningSessionsRail({
 }
 
 export function PlanningDashboard({ workspaceId }: PlanningDashboardProps) {
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
   const searchParams = useSearchParams();
   const sessionFilter = normalizePlanningDashboardFilter(searchParams?.get("filter"));
-  const { data: sessions, isLoading } = useQuery(
-    trpc.planSession.list.queryOptions(
-      { workspaceId, limit: 20 },
-      { refetchInterval: 10_000 },
-    ),
-  );
-  const { data: projects } = useQuery(
-    trpc.planning.listProjects.queryOptions(
+  const { data: sessions, isLoading } = useQuery({
+    queryKey: ["rpc", "planning.session.list", { workspaceId, limit: 20 }],
+    queryFn: () =>
+      rpc.planning.session.list({ workspaceId, limit: 20 }) as Promise<
+        PlanningDashboardSession[]
+      >,
+    refetchInterval: 10_000,
+  });
+  const { data: projects } = useQuery({
+    queryKey: [
+      "rpc",
+      "planning.listProjects",
       { workspaceId: workspaceId ?? "" },
-      {
-        enabled: Boolean(workspaceId),
-        ...getPlanningProjectQueryRefreshOptions(),
-      },
-    ),
-  );
+    ],
+    queryFn: () =>
+      rpc.planning.listProjects({ workspaceId: workspaceId ?? "" }) as Promise<
+        PlanningProjectOption[]
+      >,
+    enabled: Boolean(workspaceId),
+    ...getPlanningProjectQueryRefreshOptions(),
+  });
 
   const groups = buildPlanningSessionGroups((sessions ?? []) as PlanningDashboardSession[]);
   const projectOptions = (projects ?? []) as unknown as PlanningProjectOption[];

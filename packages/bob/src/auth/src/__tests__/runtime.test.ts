@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Effect } from "effect";
-import { makePgliteDb, type PgliteDbHandle } from "@bob/db/client-pglite";
+import { makePgliteDb  } from "@bob/db/client-pglite";
+import type {PgliteDbHandle} from "@bob/db/client-pglite";
 import * as bobSchema from "@bob/db/schema";
 
 import {
   createAuthRuntime,
-  Sessions,
-  type AuthRuntime,
+  Sessions
+
 } from "../runtime.js";
+import type {AuthRuntime} from "../runtime.js";
 
 // ---------------------------------------------------------------------------
 // Test-scoped PGlite + auth runtime
@@ -26,7 +28,7 @@ beforeEach(async () => {
     // Pass Bob's schema so better-auth's drizzle adapter can resolve tables.
     // Bob's schema includes gmacko's plural auth tables (users, sessions, etc.)
     // via the re-exports added in Task 1.
-    schema: bobSchema as unknown as Record<string, unknown>,
+    schema: bobSchema,
     pluralizeTables: true,
     baseUrl: "http://localhost:5173",
     productionUrl: "http://localhost:5173",
@@ -56,7 +58,7 @@ describe("createAuthRuntime", () => {
     // afterEach cleanup handles the main one).
     const bundle2 = createAuthRuntime({
       db: handle.db,
-      schema: bobSchema as unknown as Record<string, unknown>,
+      schema: bobSchema,
       pluralizeTables: true,
       baseUrl: "http://localhost:5173",
       productionUrl: "http://localhost:5173",

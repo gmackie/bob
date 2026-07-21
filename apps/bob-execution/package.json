@@ -1,6 +1,7 @@
 {
   "name": "@bob/execution",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "exports": {
     "./services": "./src/services.ts",
@@ -19,14 +20,21 @@
     "@bob/db": "workspace:*",
     "@bob/telemetry": "workspace:*",
     "@gmacko/core": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@trpc/client": "catalog:",
+    "@trpc/server": "catalog:",
     "node-pty": "^1.0.0",
-    "ws": "^8.18.0"
+    "pg": "^8.17.1",
+    "superjson": "catalog:",
+    "ws": "^8.18.0",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@bob/eslint-config": "workspace:*",
     "@bob/prettier-config": "workspace:*",
     "@bob/tsconfig": "workspace:*",
     "@types/node": "catalog:",
+    "@types/pg": "8.16.0",
     "@types/ws": "^8.5.13",
     "eslint": "catalog:",
     "prettier": "catalog:",

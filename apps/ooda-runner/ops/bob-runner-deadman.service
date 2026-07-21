@@ -1,0 +1,8 @@
+[Unit]
+Description=Bob runner dead-man switch ping
+After=network.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/opt/bob/ops/deadman.env
+ExecStart=/opt/bob/ops/bob-runner-deadman.sh

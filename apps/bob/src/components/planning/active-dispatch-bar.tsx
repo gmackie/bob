@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { cn } from "@gmacko/core/ui";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
 import { getPlanningDispatchHref } from "./planning-shell-model";
 
 /**
@@ -13,14 +13,14 @@ import { getPlanningDispatchHref } from "./planning-shell-model";
  * actively running. Polls every 10 seconds for fresh data.
  */
 export function ActiveDispatchBar() {
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
 
-  const { data: batches } = useQuery(
-    trpc.dispatch.listBatches.queryOptions(
-      { limit: 1 },
-      { refetchInterval: 10_000 },
-    ),
-  );
+  const { data: batches } = useQuery({
+    queryKey: ["rpc", "planning.dispatch.listBatches", { limit: 1 }],
+    queryFn: () =>
+      rpc.planning.dispatch.listBatches({ limit: 1 }) as Promise<any[]>,
+    refetchInterval: 10_000,
+  });
 
   const batch = batches?.[0];
 

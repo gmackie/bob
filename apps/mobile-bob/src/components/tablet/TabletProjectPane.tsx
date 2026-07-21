@@ -13,13 +13,14 @@ import {
   buildMobileProjectAutomationControls,
   buildMobileProjectConfigurationManagementGroups,
   buildMobileProjectConfigurationSections,
-  buildMobileProjectStatusRows,
-  type MobileProjectAutomationKey,
-  type MobileProjectConfigurationManagementGroup,
-  type MobileProjectConfigurationSection,
-  type MobileProjectStatusEntry,
-  type MobileProjectStatusRow,
+  buildMobileProjectStatusRows
+
+
+
+
+
 } from "~/features/planning/project-status";
+import type {MobileProjectAutomationKey, MobileProjectConfigurationManagementGroup, MobileProjectConfigurationSection, MobileProjectStatusEntry, MobileProjectStatusRow} from "~/features/planning/project-status";
 import type { MobileWorkItemEntryView } from "~/features/tablet/work-item-entry";
 import { formatStatusLabel } from "~/features/tablet/queue";
 import { colors } from "~/lib/colors";

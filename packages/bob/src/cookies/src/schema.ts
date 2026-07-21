@@ -22,8 +22,18 @@
 import { relations, sql } from "drizzle-orm";
 import { index, pgTable, uniqueIndex } from "drizzle-orm/pg-core";
 
-import { user } from "@bob/auth/schema";
-import { chatConversations } from "@bob/chat/schema";
+import { user as _user } from "@bob/auth/schema";
+import { chatConversations as _chatConversations } from "@bob/chat/schema";
+
+// drizzle-orm dual-instance shim: @bob/cookies resolves a different drizzle-orm
+// peer-hash copy of 0.44.7 (better-sqlite3@11) than @bob/auth / @bob/chat
+// (better-sqlite3@12). Because PgColumn.config is `protected`, the two copies'
+// table/column types are nominally incompatible across the `.references()` and
+// `relations()` boundaries below. Re-brand the cross-area tables to this
+// package's instance. Root fix is to dedupe drizzle-orm in the lockfile
+// (reported, not changed here). Runtime is unaffected — these are type-only casts.
+const user = _user as any;
+const chatConversations = _chatConversations as any;
 
 // ── Const-array enums ─────────────────────────────────────────────
 

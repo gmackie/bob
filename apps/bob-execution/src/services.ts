@@ -11,10 +11,6 @@ import {
   TerminalService,
 } from "./legacy/services";
 
-declare global {
-  var __executionServiceManager: any;
-}
-
 class ServiceManager {
   private _gitService: GitService | null = null;
   private _agentService: AgentService | null = null;
@@ -24,7 +20,10 @@ class ServiceManager {
   private async autoDiscoverRepositories(): Promise<void> {
     if (!this._gitService) return;
 
-    const reposDir = process.env.BOB_REPOS_DIR || join(homedir(), "bob-repos");
+    const reposDir =
+      process.env.BOB_REPOS_DIR && process.env.BOB_REPOS_DIR.length > 0
+        ? process.env.BOB_REPOS_DIR
+        : join(homedir(), "bob-repos");
     if (!existsSync(reposDir)) return;
 
     let entries: string[];
@@ -110,10 +109,12 @@ class ServiceManager {
   }
 }
 
+declare global {
+  var __executionServiceManager: ServiceManager | undefined;
+}
+
 function getServiceManager(): ServiceManager {
-  if (!globalThis.__executionServiceManager) {
-    globalThis.__executionServiceManager = new ServiceManager();
-  }
+  globalThis.__executionServiceManager ??= new ServiceManager();
   return globalThis.__executionServiceManager;
 }
 

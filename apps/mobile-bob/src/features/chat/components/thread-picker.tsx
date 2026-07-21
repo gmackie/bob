@@ -26,8 +26,6 @@ interface ThreadPickerProps {
   onClose: () => void;
 }
 
-import { slugify } from "../slugify";
-
 export function ThreadPicker({
   threads,
   selectedId,

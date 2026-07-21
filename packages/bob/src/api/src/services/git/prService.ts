@@ -74,23 +74,34 @@ export interface PrWithCommits {
   updatedAt: string | null;
   mergedAt: string | null;
   closedAt: string | null;
-  commits: Array<{
+  commits: {
     sha: string;
     message: string;
     authorName: string | null;
     authorEmail: string | null;
     committedAt: string;
     isBobCommit: boolean;
-  }>;
+  }[];
 }
+
+type RepositoryRow = NonNullable<
+  Awaited<ReturnType<typeof db.query.repositories.findFirst>>
+>;
+
+/** Repository row narrowed to a repo that's actually connected to a remote
+ * provider — remoteOwner/remoteName are real (non-null) once past the
+ * getRepoWithConnection guard below, so downstream code can read them
+ * directly instead of asserting past the base row type's nullability. */
+type ConnectedRepositoryRow = RepositoryRow & {
+  remoteOwner: string;
+  remoteName: string;
+};
 
 async function getRepoWithConnection(
   userId: string,
   repositoryId: string,
 ): Promise<{
-  repo: NonNullable<
-    Awaited<ReturnType<typeof db.query.repositories.findFirst>>
-  >;
+  repo: ConnectedRepositoryRow;
   client: GitProviderClient;
   provider: GitProvider;
   instanceUrl: string | null;
@@ -128,7 +139,12 @@ async function getRepoWithConnection(
     instanceUrl,
   );
 
-  return { repo, client, provider, instanceUrl };
+  return {
+    repo: repo as ConnectedRepositoryRow,
+    client,
+    provider,
+    instanceUrl,
+  };
 }
 
 function mapPrStatus(
@@ -151,8 +167,8 @@ export async function createDraftPr(
   const baseBranch = input.baseBranch ?? repo.mainBranch;
 
   const createInput: CreatePullRequestInput = {
-    owner: repo.remoteOwner!,
-    repo: repo.remoteName!,
+    owner: repo.remoteOwner,
+    repo: repo.remoteName,
     title: input.title,
     body: input.body,
     head: input.headBranch,
@@ -170,8 +186,8 @@ export async function createDraftPr(
       gitProviderConnectionId: repo.gitProviderConnectionId,
       provider,
       instanceUrl,
-      remoteOwner: repo.remoteOwner!,
-      remoteName: repo.remoteName!,
+      remoteOwner: repo.remoteOwner,
+      remoteName: repo.remoteName,
       number: remotePr.number,
       headBranch: remotePr.headBranch,
       baseBranch: remotePr.baseBranch,
@@ -187,11 +203,15 @@ export async function createDraftPr(
     })
     .returning();
 
+  if (!prRecord) {
+    throw new Error("Failed to create pull request record");
+  }
+
   if (input.sessionId) {
     await db
       .update(chatConversations)
       .set({
-        pullRequestId: prRecord!.id,
+        pullRequestId: prRecord.id,
         gitBranch: input.headBranch,
       })
       .where(eq(chatConversations.id, input.sessionId));
@@ -199,9 +219,9 @@ export async function createDraftPr(
 
   const commits = await syncPrCommits(
     client,
-    prRecord!.id,
-    repo.remoteOwner!,
-    repo.remoteName!,
+    prRecord.id,
+    repo.remoteOwner,
+    repo.remoteName,
     remotePr.number,
     provider,
     instanceUrl,
@@ -210,7 +230,7 @@ export async function createDraftPr(
   );
 
   return {
-    ...prRecord!,
+    ...prRecord,
     commits,
   };
 }
@@ -268,13 +288,17 @@ export async function updatePr(input: UpdatePrInput): Promise<PrWithCommits> {
     .where(eq(pullRequests.id, input.pullRequestId))
     .returning();
 
+  if (!updatedPr) {
+    throw new Error("Failed to update pull request record");
+  }
+
   const commits = await db.query.gitCommits.findMany({
     where: eq(gitCommits.pullRequestId, input.pullRequestId),
     orderBy: (c, { desc }) => [desc(c.committedAt)],
   });
 
   return {
-    ...updatedPr!,
+    ...updatedPr,
     commits: commits.map((c) => ({
       sha: c.sha,
       message: c.message,
@@ -357,14 +381,14 @@ async function syncPrCommits(
   repositoryId: string,
   sessionId?: string | null,
 ): Promise<
-  Array<{
+  {
     sha: string;
     message: string;
     authorName: string | null;
     authorEmail: string | null;
     committedAt: string;
     isBobCommit: boolean;
-  }>
+  }[]
 > {
   const remoteCommits = await client.listPullRequestCommits(
     owner,
@@ -372,14 +396,14 @@ async function syncPrCommits(
     prNumber,
   );
 
-  const commitRecords: Array<{
+  const commitRecords: {
     sha: string;
     message: string;
     authorName: string | null;
     authorEmail: string | null;
     committedAt: string;
     isBobCommit: boolean;
-  }> = [];
+  }[] = [];
 
   for (const commit of remoteCommits) {
     const isBobCommit = detectBobCommit(commit);
@@ -407,7 +431,7 @@ async function syncPrCommits(
       sha: commit.sha,
       message: commit.message,
       authorName: commit.authorName,
-      authorEmail: commit.authorEmail ?? null,
+      authorEmail: commit.authorEmail,
       committedAt: commit.committedAt.toISOString(),
       isBobCommit,
     });
@@ -418,14 +442,14 @@ async function syncPrCommits(
 
 export async function syncCommits(input: SyncCommitsInput): Promise<{
   synced: number;
-  commits: Array<{
+  commits: {
     sha: string;
     message: string;
     authorName: string | null;
     authorEmail: string | null;
     committedAt: string;
     isBobCommit: boolean;
-  }>;
+  }[];
 }> {
   const prRecord = await db.query.pullRequests.findFirst({
     where: and(
@@ -513,7 +537,7 @@ export async function listAllPrs(
     status?: "draft" | "open" | "merged" | "closed";
     limit?: number;
   },
-): Promise<Array<PrWithCommits>> {
+): Promise<PrWithCommits[]> {
   const conditions = [eq(pullRequests.userId, userId)];
 
   if (options?.status) {
@@ -537,7 +561,7 @@ export async function listPrsByRepository(
     limit?: number;
     includeCommits?: boolean;
   },
-): Promise<Array<PrWithCommits>> {
+): Promise<PrWithCommits[]> {
   const conditions = [
     eq(pullRequests.userId, userId),
     eq(pullRequests.repositoryId, repositoryId),
@@ -591,7 +615,7 @@ export async function listPrsByRepository(
 export async function listPrsBySession(
   userId: string,
   sessionId: string,
-): Promise<Array<PrWithCommits>> {
+): Promise<PrWithCommits[]> {
   const prs = await db.query.pullRequests.findMany({
     where: and(
       eq(pullRequests.userId, userId),
@@ -698,6 +722,10 @@ export async function refreshPrFromRemote(
     .where(eq(pullRequests.id, pullRequestId))
     .returning();
 
+  if (!updatedPr) {
+    throw new Error("Failed to update pull request record");
+  }
+
   const commits = await syncPrCommits(
     client,
     prRecord.id,
@@ -711,14 +739,14 @@ export async function refreshPrFromRemote(
   );
 
   return {
-    ...updatedPr!,
+    ...updatedPr,
     commits,
   };
 }
 
 function detectBobCommit(commit: GitCommit): boolean {
-  const email = commit.authorEmail?.toLowerCase() ?? "";
-  const name = commit.authorName?.toLowerCase() ?? "";
+  const email = commit.authorEmail.toLowerCase();
+  const name = commit.authorName.toLowerCase();
   const message = commit.message.toLowerCase();
 
   if (
@@ -830,5 +858,9 @@ export async function upsertPrFromWebhook(params: {
     })
     .returning();
 
-  return newPr!.id;
+  if (!newPr) {
+    throw new Error("Failed to create pull request record from webhook");
+  }
+
+  return newPr.id;
 }

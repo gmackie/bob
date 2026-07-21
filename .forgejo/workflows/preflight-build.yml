@@ -1,0 +1,82 @@
+# Preflight build — ForgeGraph CI → Preflight build farm
+#
+# On push (and on demand) it enqueues a Preflight build of the *exact pushed
+# commit*. The build runs on the Preflight build farm (the macOS runner), NOT
+# in CI: CI only POSTs a source binding. The runner clones/fetches the commit
+# into a dedicated clean checkout `/Volumes/dev/.preflight-ci/<repo>`, so it
+# never touches a developer's working tree.
+#
+# Setup per repo (one-time): Forgejo secret PREFLIGHT_TOKEN + the APP_* env below.
+
+name: preflight-build
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: ios | android
+        default: ios
+      lane:
+        description: simulator | development
+        default: simulator
+
+env:
+  PREFLIGHT_API: https://preflight.forgegraf.com
+  WORKSPACE_ID: 00000000-0000-4000-8000-000000000001
+  # ---- per-app identity ---------------------------------------------------
+  APP_ID: pfapp_bob_mobile
+  APP_PACKAGE_PATH: apps/mobile-bob
+  APP_EXPO_SLUG: bob
+  APP_IOS_BUNDLE_ID: com.gmacko.bob.dev
+  APP_EAS_PROJECT_ID: e1dd0ab0-4dc1-40f8-b066-7cb91fde1759
+  # ------------------------------------------------------------------------
+  PLATFORM: ${{ github.event.inputs.platform || 'ios' }}
+  LANE: ${{ github.event.inputs.lane || 'simulator' }}
+
+jobs:
+  enqueue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enqueue Preflight build of this commit
+        run: |
+          set -euo pipefail
+          REPO="${GITHUB_REPOSITORY##*/}"
+          REMOTE="https://git.forgegraf.com/${GITHUB_REPOSITORY}.git"
+          BRANCH="${GITHUB_REF_NAME}"
+          SHA="${GITHUB_SHA}"
+          WORKSPACE_ROOT="/Volumes/dev/.preflight-ci/${REPO}"
+
+          BODY=$(cat <<JSON
+          {
+            "workspaceId": "${WORKSPACE_ID}",
+            "sourceBinding": {
+              "appId": "${APP_ID}",
+              "packageName": "@${REPO}/expo",
+              "packageManager": "pnpm",
+              "workspaceRoot": "${WORKSPACE_ROOT}",
+              "packagePath": "${APP_PACKAGE_PATH}",
+              "workflowIntent": "prove-app",
+              "platform": "${PLATFORM}",
+              "lane": "${LANE}",
+              "expoSlug": "${APP_EXPO_SLUG}",
+              "iosBundleId": "${APP_IOS_BUNDLE_ID}",
+              "easProjectId": "${APP_EAS_PROJECT_ID}",
+              "expoConfigDigest": "sha256:ci-deferred",
+              "easProfileName": "development",
+              "gitRemoteUrl": "${REMOTE}",
+              "gitBranch": "${BRANCH}",
+              "gitCommitSha": "${SHA}"
+            }
+          }
+          JSON
+          )
+
+          echo "Enqueuing ${PLATFORM}/${LANE} build of ${REPO}@${SHA:0:8} (branch ${BRANCH})"
+          RESP=$(curl -sS -m 60 -X POST "${PREFLIGHT_API}/api/preflight/v1/workflows/prove-app" \
+            -H "Authorization: Bearer ${{ secrets.PREFLIGHT_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "${BODY}")
+          echo "${RESP}" | head -c 1200; echo
+          echo "${RESP}" | grep -q '"workflow"' || { echo "::error::Preflight did not queue the build"; exit 1; }
+          echo "Queued Preflight build for ${REPO}"

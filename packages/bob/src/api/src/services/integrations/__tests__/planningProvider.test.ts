@@ -1,4 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Db } from "@bob/db/client";
+
+// `resolvePlanningProvider` takes a real drizzle `Db`, but this mock is a
+// self-referential "everything chains back to itself, then thenable
+// resolves like a query result" fake that doesn't (and can't reasonably)
+// implement drizzle's full fluent builder surface. Typed here as its own
+// honest shape and cast `as unknown as Db` only where the real interface
+// is actually required (the resolvePlanningProvider call sites) — plain
+// arrow functions (not `mockReturnThis()`, which needs an unbound `this`)
+// so no unbound-method concerns either.
+interface MockDb {
+  select: ReturnType<typeof vi.fn>;
+  from: ReturnType<typeof vi.fn>;
+  where: ReturnType<typeof vi.fn>;
+  then: ReturnType<typeof vi.fn<(cb: (rows: unknown[]) => unknown) => Promise<unknown>>>;
+}
 
 vi.mock("@bob/db", () => ({
   and: vi.fn((...args: unknown[]) => args),
@@ -40,15 +56,14 @@ describe("resolvePlanningProvider", () => {
     PlanningProviderError = mod.PlanningProviderError;
   });
 
-  function createMockDb(rows: unknown[] = []) {
-    const mock: any = {
-      select: vi.fn().mockReturnThis(),
-      from: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnThis(),
-      then: vi.fn().mockImplementation((cb: (rows: unknown[]) => unknown) =>
-        Promise.resolve(cb(rows)),
-      ),
-    };
+  function createMockDb(rows: unknown[] = []): MockDb {
+    const mock = {} as MockDb;
+    mock.select = vi.fn(() => mock);
+    mock.from = vi.fn(() => mock);
+    mock.where = vi.fn(() => mock);
+    mock.then = vi.fn((cb: (rows: unknown[]) => unknown) =>
+      Promise.resolve(cb(rows)),
+    );
     return mock;
   }
 
@@ -56,11 +71,11 @@ describe("resolvePlanningProvider", () => {
     const db = createMockDb();
     const project = { planningProvider: "internal", linearProjectId: null };
 
-    const provider = await resolvePlanningProvider(db, project, "ws-1");
+    const provider = await resolvePlanningProvider(db as unknown as Db, project, "ws-1");
 
     expect(provider).toBeDefined();
-    expect(provider.createTask).toBeTypeOf("function");
-    expect(provider.getTask).toBeTypeOf("function");
+    expect(typeof provider.createTask).toBe("function");
+    expect(typeof provider.getTask).toBe("function");
     // Verify it's the internal provider by checking it doesn't require linear-specific setup
     expect(db.select).not.toHaveBeenCalled();
   });
@@ -79,10 +94,10 @@ describe("resolvePlanningProvider", () => {
 
     const project = { planningProvider: "linear", linearProjectId: "proj-1" };
 
-    const provider = await resolvePlanningProvider(db, project, "ws-1");
+    const provider = await resolvePlanningProvider(db as unknown as Db, project, "ws-1");
 
     expect(provider).toBeDefined();
-    expect(provider.createTask).toBeTypeOf("function");
+    expect(typeof provider.createTask).toBe("function");
     expect(db.select).toHaveBeenCalled();
   });
 
@@ -90,10 +105,10 @@ describe("resolvePlanningProvider", () => {
     const db = createMockDb([]);
     const project = { planningProvider: "linear", linearProjectId: "proj-1" };
 
-    await expect(resolvePlanningProvider(db, project, "ws-1")).rejects.toThrow(
+    await expect(resolvePlanningProvider(db as unknown as Db, project, "ws-1")).rejects.toThrow(
       PlanningProviderError,
     );
-    await expect(resolvePlanningProvider(db, project, "ws-1")).rejects.toMatchObject({
+    await expect(resolvePlanningProvider(db as unknown as Db, project, "ws-1")).rejects.toMatchObject({
       code: "INTEGRATION_NOT_CONFIGURED",
       retriable: false,
     });
@@ -113,10 +128,10 @@ describe("resolvePlanningProvider", () => {
 
     const project = { planningProvider: "linear", linearProjectId: "proj-1" };
 
-    await expect(resolvePlanningProvider(db, project, "ws-1")).rejects.toThrow(
+    await expect(resolvePlanningProvider(db as unknown as Db, project, "ws-1")).rejects.toThrow(
       PlanningProviderError,
     );
-    await expect(resolvePlanningProvider(db, project, "ws-1")).rejects.toMatchObject({
+    await expect(resolvePlanningProvider(db as unknown as Db, project, "ws-1")).rejects.toMatchObject({
       code: "API_KEY_MISSING",
       retriable: false,
     });
@@ -136,10 +151,10 @@ describe("resolvePlanningProvider", () => {
 
     const project = { planningProvider: "linear", linearProjectId: "proj-1" };
 
-    await expect(resolvePlanningProvider(db, project, "ws-1")).rejects.toThrow(
+    await expect(resolvePlanningProvider(db as unknown as Db, project, "ws-1")).rejects.toThrow(
       PlanningProviderError,
     );
-    await expect(resolvePlanningProvider(db, project, "ws-1")).rejects.toMatchObject({
+    await expect(resolvePlanningProvider(db as unknown as Db, project, "ws-1")).rejects.toMatchObject({
       code: "TEAM_ID_MISSING",
       retriable: false,
     });
@@ -159,10 +174,10 @@ describe("resolvePlanningProvider", () => {
 
     const project = { planningProvider: "linear", linearProjectId: null };
 
-    await expect(resolvePlanningProvider(db, project, "ws-1")).rejects.toThrow(
+    await expect(resolvePlanningProvider(db as unknown as Db, project, "ws-1")).rejects.toThrow(
       PlanningProviderError,
     );
-    await expect(resolvePlanningProvider(db, project, "ws-1")).rejects.toMatchObject({
+    await expect(resolvePlanningProvider(db as unknown as Db, project, "ws-1")).rejects.toMatchObject({
       code: "PROJECT_NOT_MAPPED",
       retriable: false,
     });
@@ -172,10 +187,10 @@ describe("resolvePlanningProvider", () => {
     const db = createMockDb();
     const project = { planningProvider: "jira", linearProjectId: null };
 
-    await expect(resolvePlanningProvider(db, project, "ws-1")).rejects.toThrow(
+    await expect(resolvePlanningProvider(db as unknown as Db, project, "ws-1")).rejects.toThrow(
       PlanningProviderError,
     );
-    await expect(resolvePlanningProvider(db, project, "ws-1")).rejects.toMatchObject({
+    await expect(resolvePlanningProvider(db as unknown as Db, project, "ws-1")).rejects.toMatchObject({
       code: "UNKNOWN_PROVIDER",
       retriable: false,
     });

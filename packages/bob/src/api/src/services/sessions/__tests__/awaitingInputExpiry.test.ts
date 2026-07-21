@@ -24,9 +24,12 @@ vi.mock("@bob/db/client", () => ({
 }));
 
 vi.mock("@bob/db", () => ({
-  and: vi.fn((...args) => args),
-  eq: vi.fn((a, b) => ({ field: a, value: b })),
-  sql: vi.fn((strings, ...values) => ({ strings, values })),
+  and: vi.fn((...args: unknown[]) => args),
+  eq: vi.fn((a: unknown, b: unknown) => ({ field: a, value: b })),
+  sql: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
+    strings,
+    values,
+  })),
 }));
 
 describe("awaiting-input expiry cron", () => {
@@ -53,7 +56,7 @@ describe("awaiting-input expiry cron", () => {
         (row: {
           id: string;
           user_id: string;
-          awaiting_input_default: string;
+          awaiting_input_default: string | null;
           kanbanger_task_id: string | null;
         }) => ({
           id: row.id,
@@ -65,11 +68,12 @@ describe("awaiting-input expiry cron", () => {
       );
 
       expect(sessions).toHaveLength(2);
-      expect(sessions[0]!.id).toBe("session-1");
-      expect(sessions[0]!.userId).toBe("user-1");
-      expect(sessions[0]!.awaitingInputDefault).toBe("proceed with default");
-      expect(sessions[0]!.planningTaskId).toBe("task-1");
-      expect(sessions[1]!.planningTaskId).toBeNull();
+      const [first, second] = sessions;
+      expect(first?.id).toBe("session-1");
+      expect(first?.userId).toBe("user-1");
+      expect(first?.awaitingInputDefault).toBe("proceed with default");
+      expect(first?.planningTaskId).toBe("task-1");
+      expect(second?.planningTaskId).toBeNull();
     });
 
     it("should handle empty result set", () => {
@@ -166,7 +170,11 @@ describe("awaiting-input expiry cron", () => {
     });
 
     it("should allow requests when CRON_SECRET is not set", () => {
-      const cronSecret: string | undefined = undefined;
+      // Returned through a function typed `string | undefined` (rather than
+      // a literal `undefined`) so TS can't statically narrow `cronSecret` to
+      // always-falsy — this actually exercises the runtime branch below.
+      const readUnsetSecret = (): string | undefined => undefined;
+      const cronSecret = readUnsetSecret();
       const authHeader = "Bearer anything";
 
       const shouldAuthorize =
@@ -251,7 +259,7 @@ describe("awaiting-input expiry cron", () => {
     });
 
     it("should skip notification when no task linked", () => {
-      const session = {
+      const session: { id: string; planningTaskId: string | null } = {
         id: "session-123",
         planningTaskId: null,
       };
@@ -262,7 +270,7 @@ describe("awaiting-input expiry cron", () => {
     });
 
     it("should trigger notification when task linked", () => {
-      const session = {
+      const session: { id: string; planningTaskId: string | null } = {
         id: "session-123",
         planningTaskId: "task-456",
       };

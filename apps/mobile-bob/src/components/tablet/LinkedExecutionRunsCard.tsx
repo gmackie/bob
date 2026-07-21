@@ -2,9 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import {
-  buildMobileWorkItemEntryRunRows,
-  type MobileWorkItemOutcomeRun,
+  buildMobileWorkItemEntryRunRows
+
 } from "~/features/tablet/work-item-entry";
+import type {MobileWorkItemOutcomeRun} from "~/features/tablet/work-item-entry";
 import { colors } from "~/lib/colors";
 import { trpc } from "~/utils/api";
 
@@ -57,7 +58,7 @@ export function LinkedExecutionRunsCard({
         >
           {rows.map((row, index) => {
             const sessionId = row.sessionHref?.match(/^\/sessions\/([^?]+)/)?.[1] ?? null;
-            const isActionable = Boolean(sessionId || onOpenRun);
+            const isActionable = Boolean(sessionId ?? onOpenRun);
 
             return (
               <Pressable

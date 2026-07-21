@@ -6,6 +6,7 @@
  */
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray } from "@bob/db";
+import type { Db } from "@bob/db/client";
 import { agentRuns, workItems, workspaceMembers } from "@bob/db/schema";
 
 import type { HandlerContext } from "./context.js";
@@ -15,7 +16,7 @@ import type { HandlerContext } from "./context.js";
 // ---------------------------------------------------------------------------
 
 async function assertWorkspaceAccess(
-  db: any,
+  db: Db,
   userId: string,
   workspaceId: string,
 ) {
@@ -33,7 +34,7 @@ async function assertWorkspaceAccess(
 }
 
 async function loadAccessibleWorkItem(
-  db: any,
+  db: Db,
   userId: string,
   workItemId: string,
 ) {

@@ -13,7 +13,10 @@ import type { HandlerContext, PublicHandlerContext } from "./context.js";
 // Handler functions
 // ---------------------------------------------------------------------------
 
+// Kept `async` (no real await) since rpc-handlers/system.ts wraps this via
+// wrapHandler, which requires a Promise-returning fn.
 export async function systemHealth(_ctx: PublicHandlerContext) {
+  await Promise.resolve();
   return {
     status: "ok",
     timestamp: new Date().toISOString(),
@@ -37,7 +40,7 @@ export async function systemStatus(ctx: HandlerContext, _input?: void) {
     .where(eq(agentInstances.userId, ctx.userId));
 
   const activeInstances = instances.filter(
-    (i: any) => i.status === "running" || i.status === "starting",
+    (i) => i.status === "running" || i.status === "starting",
   ).length;
 
   const memUsage = process.memoryUsage();

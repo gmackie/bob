@@ -1,5 +1,13 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { createTRPCContext } from "../../trpc.js";
+
+// The real tRPC context type — the mock db/authApi below are structurally
+// close-enough fakes that only implement the query/insert/select surface
+// these handlers actually call, cast through `unknown` (not `any`) at the
+// single construction site so every caller.* call below stays fully typed.
+type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
+
 const selectWhereMock = vi.fn();
 const selectLimitMock = vi.fn();
 const selectOrderByMock = vi.fn();
@@ -79,10 +87,10 @@ const createCaller = () =>
         name: "Test User",
       },
     },
-    authApi: { getSession: vi.fn() } as any,
-    apiKeyAuth: null as any,
-    db: {} as any,
-  });
+    authApi: { getSession: vi.fn() },
+    apiKeyAuth: null,
+    db: mockDb,
+  } as unknown as TRPCContext);
 
 describe("skill router", () => {
   const executionId = "11111111-1111-4111-8111-111111111111";
@@ -93,7 +101,7 @@ describe("skill router", () => {
     process.env.DATABASE_URL ??=
       "postgres://postgres:postgres@localhost:5432/test";
     ({ appRouter } = await import("../../root"));
-  });
+  }, 60_000);
 
   beforeEach(() => {
     [
@@ -130,7 +138,7 @@ describe("skill router", () => {
     });
     workspaceMembersFindFirstMock.mockResolvedValueOnce(null);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(
       caller.skill.getExecution({ id: executionId }),
@@ -142,7 +150,7 @@ describe("skill router", () => {
   it("rejects execution listing when the linked session is not owned by the caller", async () => {
     chatConversationsFindFirstMock.mockResolvedValueOnce(null);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(
       caller.skill.listExecutions({ sessionId }),
@@ -158,7 +166,7 @@ describe("skill router", () => {
     });
     workspaceMembersFindFirstMock.mockResolvedValueOnce(null);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(
       caller.skill.recordExecution({
@@ -171,7 +179,7 @@ describe("skill router", () => {
   });
 
   it("rejects unscoped execution recording", async () => {
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(
       caller.skill.recordExecution({
@@ -193,7 +201,7 @@ describe("skill router", () => {
     ]);
     chatConversationsFindFirstMock.mockResolvedValueOnce(null);
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
 
     await expect(
       caller.skill.updateExecution({

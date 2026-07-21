@@ -27,17 +27,14 @@ import type { HandlerContext } from "./context.js";
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-const CONFIG_ROOT_IDS = [
-  "opencode_xdg",
-  "opencode_dot",
-  "claude_dot",
-  "codex_dot",
-  "gemini_dot",
-  "kiro_dot",
-  "cursor_agent_dot",
-] as const;
-
-export type ConfigRootId = (typeof CONFIG_ROOT_IDS)[number];
+export type ConfigRootId =
+  | "opencode_xdg"
+  | "opencode_dot"
+  | "claude_dot"
+  | "codex_dot"
+  | "gemini_dot"
+  | "kiro_dot"
+  | "cursor_agent_dot";
 
 export function getConfigRootDir(rootId: ConfigRootId): string {
   const homeDir = os.homedir();
@@ -160,7 +157,7 @@ export async function settingsListApiKeys(ctx: HandlerContext) {
       expiresAt: true,
       createdAt: true,
     },
-    orderBy: (keys: any, { desc }: any) => [desc(keys.createdAt)],
+    orderBy: (keys, { desc }) => [desc(keys.createdAt)],
   });
 
   return keys;
@@ -170,7 +167,7 @@ export async function settingsCreateApiKey(
   ctx: HandlerContext,
   input: {
     name: string;
-    permissions: Array<"read" | "write" | "delete" | "admin">;
+    permissions: ("read" | "write" | "delete" | "admin")[];
     expiresInDays?: number;
   },
 ) {
@@ -226,7 +223,7 @@ export async function settingsRevokeApiKey(
 }
 
 export async function settingsListConfigRoots() {
-  const roots: Array<{ id: ConfigRootId; label: string; dir: string }> = [
+  const roots: { id: ConfigRootId; label: string; dir: string }[] = [
     { id: "opencode_xdg", label: "OpenCode (XDG config)", dir: getConfigRootDir("opencode_xdg") },
     { id: "opencode_dot", label: "OpenCode (.opencode)", dir: getConfigRootDir("opencode_dot") },
     { id: "claude_dot", label: "Claude (.claude)", dir: getConfigRootDir("claude_dot") },
@@ -251,6 +248,14 @@ export async function settingsListConfigRoots() {
   return withExists;
 }
 
+export interface ConfigEntry {
+  name: string;
+  path: string;
+  isDir: boolean;
+  size: number | null;
+  mtimeMs: number;
+}
+
 export async function settingsListConfigEntries(
   _ctx: HandlerContext,
   input: { rootId: ConfigRootId; dir?: string },
@@ -262,10 +267,10 @@ export async function settingsListConfigEntries(
   try {
     const st = await fs.stat(targetDir);
     if (!st.isDirectory()) {
-      return { rootDir, dir: input.dir ?? "", entries: [] as any[] };
+      return { rootDir, dir: input.dir ?? "", entries: [] as ConfigEntry[] };
     }
   } catch {
-    return { rootDir, dir: input.dir ?? "", entries: [] as any[] };
+    return { rootDir, dir: input.dir ?? "", entries: [] as ConfigEntry[] };
   }
 
   const names = await fs.readdir(targetDir);
@@ -440,8 +445,8 @@ export async function settingsConnectForgeGraph(
     userId: ctx.userId,
     provider: "forgegraph",
     instanceUrl: fgServer,
-    providerAccountId: String(fgUser.id ?? "unknown"),
-    providerUsername: fgUser.login ?? null,
+    providerAccountId: String(fgUser.id),
+    providerUsername: fgUser.login,
     accessTokenCiphertext: encrypted.ciphertext,
     accessTokenIv: encrypted.iv,
     accessTokenTag: encrypted.tag,
@@ -450,7 +455,7 @@ export async function settingsConnectForgeGraph(
 
   return {
     id: connectionId,
-    providerUsername: fgUser.login ?? null,
+    providerUsername: fgUser.login,
   };
 }
 

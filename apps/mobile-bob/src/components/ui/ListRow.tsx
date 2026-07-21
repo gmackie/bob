@@ -1,6 +1,5 @@
 import { Pressable, Text, View } from "react-native";
 
-import { colors } from "~/lib/colors";
 
 interface ListRowProps {
   title: string;

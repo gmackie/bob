@@ -1,5 +1,7 @@
 import { eq, and } from "@bob/db";
+import type { Db } from "@bob/db/client";
 import { workspaceIntegrations } from "@bob/db/schema";
+import type { WorkItemArtifactType } from "@bob/work-items/schema";
 
 // =============================================================================
 // Types
@@ -60,7 +62,7 @@ export interface InputResolutionPayload {
 }
 
 export interface ArtifactPayload {
-  type: string;
+  type: WorkItemArtifactType;
   role: string;
   title: string;
   url?: string;
@@ -128,7 +130,7 @@ export interface ProjectProviderConfig {
 }
 
 export async function resolvePlanningProvider(
-  db: any,
+  db: Db,
   project: ProjectProviderConfig,
   workspaceId: string,
   userId?: string,
@@ -149,7 +151,7 @@ export async function resolvePlanningProvider(
           eq(workspaceIntegrations.enabled, true),
         ),
       )
-      .then((rows: any[]) => rows[0]);
+      .then((rows) => rows[0]);
 
     if (!integration) {
       throw new PlanningProviderError(
@@ -190,6 +192,7 @@ export async function resolvePlanningProvider(
       integration.linearTeamId,
       project.linearProjectId,
       integration.linearWebBaseUrl,
+      integration.linearApiUrl,
     );
   }
 

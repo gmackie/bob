@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
 
 import { NotificationItem } from "./notification-item";
 
@@ -14,25 +14,29 @@ interface NotificationPanelProps {
 
 export function NotificationPanel({ open, onClose }: NotificationPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
   const queryClient = useQueryClient();
+  const listInput = { limit: 30 };
 
-  const { data, isFetching } = useQuery(
-    trpc.notification.list.queryOptions(
-      { limit: 30 },
-      { enabled: open, refetchInterval: open ? 30_000 : false },
-    ),
-  );
+  const { data, isFetching } = useQuery({
+    queryKey: ["rpc", "workItem.notification.list", listInput],
+    queryFn: () =>
+      rpc.workItems.notification.list(listInput) as Promise<{
+        items: any[];
+      }>,
+    enabled: open,
+    refetchInterval: open ? 30_000 : false,
+  });
 
-  const markAsRead = useMutation(
-    trpc.notification.markAsRead.mutationOptions({
-      onSuccess: () => {
-        void queryClient.invalidateQueries({
-          queryKey: trpc.notification.list.queryKey(),
-        });
-      },
-    }),
-  );
+  const markAsRead = useMutation({
+    mutationFn: (input: { id: string }) =>
+      rpc.workItems.notification.markAsRead(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["rpc", "workItem.notification.list"],
+      });
+    },
+  });
 
   // Close on click outside
   useEffect(() => {
@@ -103,12 +107,13 @@ export function NotificationPanel({ open, onClose }: NotificationPanelProps) {
 
 /** Hook to get unread notification count for sidebar badge */
 export function useUnreadCount() {
-  const trpc = useTRPC();
-  const { data } = useQuery(
-    trpc.notification.list.queryOptions(
-      { unreadOnly: true, limit: 50 },
-      { refetchInterval: 30_000 },
-    ),
-  );
+  const rpc = useBobRpcClient();
+  const input = { unreadOnly: true, limit: 50 };
+  const { data } = useQuery({
+    queryKey: ["rpc", "workItem.notification.list", input],
+    queryFn: () =>
+      rpc.workItems.notification.list(input) as Promise<{ items: any[] }>,
+    refetchInterval: 30_000,
+  });
   return data?.items?.length ?? 0;
 }

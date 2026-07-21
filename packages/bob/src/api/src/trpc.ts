@@ -3,12 +3,12 @@ import superjson from "superjson";
 import { z, ZodError } from "zod/v4";
 
 import {
-  type ApiKeyAuth,
-  type ApiKeyPermission,
   DEFAULT_USER_ID,
+  isDefaultUserFallbackEnabled,
   resolveAuthBypassUserId,
   resolveAuthContext,
 } from "@bob/auth";
+import type {ApiKeyPermission} from "@bob/auth";
 import type { AuthRuntimeBundle } from "@bob/auth/runtime";
 import { eq } from "@bob/db";
 import { db } from "@bob/db/client";
@@ -39,7 +39,7 @@ export const createTRPCContext = async (opts: {
   const authBypassUserId = resolveAuthBypassUserId(opts.headers);
   const defaultUserId = authBypassUserId ?? DEFAULT_USER_ID;
 
-  if (process.env.REQUIRE_AUTH !== "true" || authBypassUserId) {
+  if (isDefaultUserFallbackEnabled() || authBypassUserId) {
     const [userRecord] = await db
       .select()
       .from(user)
@@ -67,7 +67,7 @@ export const createTRPCContext = async (opts: {
   return {
     authApi,
     session: authContext.session,
-    apiKeyAuth: authContext.apiKeyAuth as ApiKeyAuth | null,
+    apiKeyAuth: authContext.apiKeyAuth,
     db,
   };
 };

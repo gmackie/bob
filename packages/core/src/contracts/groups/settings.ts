@@ -49,6 +49,8 @@ export const SettingsUpdatePreferencesRpc = Rpc.make("settings.updatePreferences
     defaultModel: Schema.optional(Schema.NullOr(Schema.String)),
     editorFontSize: Schema.optional(Schema.NullOr(Schema.Number)),
     enableNotifications: Schema.optional(Schema.Boolean),
+    emailNotifications: Schema.optional(Schema.Boolean),
+    pushNotifications: Schema.optional(Schema.Boolean),
     timezone: Schema.optional(Schema.NullOr(Schema.String)),
   }),
   success: UserPreferencesSchema,

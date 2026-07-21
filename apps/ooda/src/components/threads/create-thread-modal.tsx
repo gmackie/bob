@@ -10,6 +10,15 @@ interface CreateThreadModalProps {
   onCreate: (data: { title: string; slug: string; domainPackId?: string }) => void;
 }
 
+// `threads.listDomainPacks` is `.output(z.any())` for OpenAPI, which
+// degenerates the client query type; describe the projected pack shape.
+interface DomainPackOption {
+  id: string;
+  name: string;
+  description: string;
+  warnings: string[];
+}
+
 function slugify(text: string): string {
   return text
     .toLowerCase()
@@ -27,7 +36,7 @@ export function CreateThreadModal({
   const trpc = useTRPC();
 
   const packsQuery = useQuery(trpc.threads.listDomainPacks.queryOptions());
-  const domainPacks = packsQuery.data ?? [];
+  const domainPacks = (packsQuery.data ?? []) as unknown as DomainPackOption[];
 
   const selectedPack = domainPacks.find((p) => p.id === domainPackId);
 

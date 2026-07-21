@@ -1,6 +1,7 @@
 import { BaseAgentAdapter } from './base-adapter';
-import { AgentType } from '../types';
+import type { AgentType } from '../types';
 import { spawn } from 'child_process';
+import { extractUsageFields, isGenericUsagePayload } from './usage-parsing';
 
 export class CursorAgentAdapter extends BaseAgentAdapter {
   readonly type: AgentType = 'cursor-agent';
@@ -14,11 +15,11 @@ export class CursorAgentAdapter extends BaseAgentAdapter {
       const child = spawn(this.command, ['create-chat'], { stdio: 'pipe' });
       let chatId = '';
 
-      child.stdout?.on('data', (data) => {
+      child.stdout.on('data', (data: Buffer) => {
         chatId += data.toString().trim();
       });
 
-      child.on('close', (code) => {
+      child.on('close', (code: number | null) => {
         if (code === 0 && chatId) {
           resolve(chatId);
         } else {
@@ -26,7 +27,7 @@ export class CursorAgentAdapter extends BaseAgentAdapter {
         }
       });
 
-      child.on('error', (error) => {
+      child.on('error', (error: Error) => {
         reject(error);
       });
 
@@ -50,8 +51,16 @@ export class CursorAgentAdapter extends BaseAgentAdapter {
       }
     }
 
-    // Set current chat ID for getSpawnArgs to use
-    this.currentChatId = this.chatIdMap.get(worktreePath)!;
+    // Set current chat ID for getSpawnArgs to use. Guaranteed present: we
+    // either just created and stored it above, or `has()` confirmed it
+    // already existed in the map.
+    const chatId = this.chatIdMap.get(worktreePath);
+    if (!chatId) {
+      throw new Error(
+        `Invariant violated: no chat ID recorded for worktree ${worktreePath}`,
+      );
+    }
+    this.currentChatId = chatId;
 
     // Call parent startProcess which will use getSpawnArgs
     try {
@@ -152,26 +161,33 @@ export class CursorAgentAdapter extends BaseAgentAdapter {
 
         if (trimmed.startsWith('{')) {
           try {
-            const json = JSON.parse(trimmed);
+            const parsed: unknown = JSON.parse(trimmed);
+            if (!isGenericUsagePayload(parsed)) {
+              continue;
+            }
 
             // Look for usage in the JSON output
-            if (json.usage) {
-              return {
-                inputTokens: json.usage.input_tokens || json.usage.prompt_tokens || 0,
-                outputTokens: json.usage.output_tokens || json.usage.completion_tokens || 0,
-                cost: json.usage.cost || 0
-              };
+            if (parsed.usage) {
+              const usage = extractUsageFields(parsed);
+              if (usage) {
+                return {
+                  inputTokens: usage.input_tokens ?? usage.prompt_tokens ?? 0,
+                  outputTokens: usage.output_tokens ?? usage.completion_tokens ?? 0,
+                  cost: usage.cost ?? 0
+                };
+              }
             }
 
             // Look for token counts in metadata
-            if (json.metadata?.tokens) {
+            if (parsed.metadata?.tokens) {
+              const { tokens } = parsed.metadata;
               return {
-                inputTokens: json.metadata.tokens.input || 0,
-                outputTokens: json.metadata.tokens.output || 0,
-                cost: json.metadata.tokens.cost || 0
+                inputTokens: tokens.input ?? 0,
+                outputTokens: tokens.output ?? 0,
+                cost: tokens.cost ?? 0
               };
             }
-          } catch (e) {
+          } catch {
             // Skip invalid JSON lines
           }
         }

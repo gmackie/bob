@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ForgeGraphClient } from "../forgeGraphClient.js";
 
-global.fetch = vi.fn();
+// Typed to the real `fetch` signature so every mockResolvedValueOnce fixture
+// below is checked against Response's shape. Fixtures only implement the
+// subset of Response that ForgeGraphClient actually reads (ok/json), so each
+// literal is cast through `as Response` at its call site.
+const fetchMock = vi.fn<typeof fetch>();
+global.fetch = fetchMock;
 
 describe("ForgeGraphClient secret methods", () => {
   beforeEach(() => {
@@ -10,10 +15,10 @@ describe("ForgeGraphClient secret methods", () => {
   });
 
   it("upserts a deploy secret", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    fetchMock.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ ref: "fg://secret/staging/github-token" }),
-    });
+      json: () => Promise.resolve({ ref: "fg://secret/staging/github-token" }),
+    } as Response);
 
     const client = new ForgeGraphClient({
       baseUrl: "https://forge.example.com",
@@ -44,16 +49,17 @@ describe("ForgeGraphClient secret methods", () => {
   });
 
   it("lists deploy secrets", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    fetchMock.mockResolvedValueOnce({
       ok: true,
-      json: async () => [
-        {
-          key: "GITHUB_TOKEN",
-          ref: "fg://secret/staging/github-token",
-          updatedAt: "2026-03-30T00:00:00.000Z",
-        },
-      ],
-    });
+      json: () =>
+        Promise.resolve([
+          {
+            key: "GITHUB_TOKEN",
+            ref: "fg://secret/staging/github-token",
+            updatedAt: "2026-03-30T00:00:00.000Z",
+          },
+        ]),
+    } as Response);
 
     const client = new ForgeGraphClient({
       baseUrl: "https://forge.example.com",

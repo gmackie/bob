@@ -87,6 +87,14 @@ describe("syncVault", () => {
     });
     await pushVault(clone1);
 
+    // pushVault swallows push errors (offline-tolerant by design), which
+    // would otherwise turn a real push failure into a confusing downstream
+    // "expected conflicts to be true" failure below. Assert the push
+    // actually landed before proceeding, so a real failure here fails loud
+    // and points straight at the cause.
+    const bareLogAfterC1Edit = execSync("git log --oneline", { cwd: bare }).toString();
+    expect(bareLogAfterC1Edit).toContain("c1 edit");
+
     // Diverge: clone2 edits same file
     writeFileSync(join(clone2, "shared.md"), "edit from clone2");
     execSync("git add -A", { cwd: clone2, stdio: "pipe" });

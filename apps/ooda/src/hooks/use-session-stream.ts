@@ -11,6 +11,13 @@ interface SessionStreamState {
   error?: string;
 }
 
+// `runner.getSessionEvents` is `.output(z.any())` for OpenAPI, which
+// degenerates the client query type; describe the event-row fields we read.
+interface SessionEventRow {
+  type: string;
+  content: string;
+}
+
 /**
  * Streams session output via SSE (live) with tRPC query for content.
  *
@@ -47,13 +54,14 @@ export function useSessionStream(
 
   // Rebuild output from the full event list whenever the query returns.
   useEffect(() => {
-    if (!eventsQuery.data || eventsQuery.data.length === 0) return;
+    const events = eventsQuery.data as unknown as SessionEventRow[] | undefined;
+    if (!events || events.length === 0) return;
 
     let accumulated = "";
     let ended = false;
     let errMsg: string | undefined;
 
-    for (const event of eventsQuery.data) {
+    for (const event of events) {
       if (event.type === "stdout_chunk") {
         accumulated += event.content;
       }
@@ -66,7 +74,7 @@ export function useSessionStream(
 
     // If no chunks yet, fall back to the legacy single stdout event.
     if (!accumulated) {
-      for (const event of eventsQuery.data) {
+      for (const event of events) {
         if (event.type === "stdout") {
           accumulated += event.content;
         }

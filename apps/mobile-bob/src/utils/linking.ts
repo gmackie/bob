@@ -2,6 +2,8 @@ import { Linking } from "react-native";
 import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 
+import { assertDefined } from "~/lib/assert";
+
 export type DeepLinkRoute =
   | { type: "session"; sessionId: string }
   | { type: "repo"; repositoryId: string }
@@ -65,13 +67,13 @@ export function parseDeepLink(url: string): DeepLinkRoute | null {
       case "pr":
         if (rest.length >= 4) {
           const [provider, owner, repo, numberStr] = rest;
-          const number = parseInt(numberStr!, 10);
+          const number = parseInt(assertDefined(numberStr), 10);
           if (!isNaN(number)) {
             return {
               type: "pr_details",
-              provider: provider!,
-              owner: owner!,
-              repo: repo!,
+              provider: assertDefined(provider),
+              owner: assertDefined(owner),
+              repo: assertDefined(repo),
               number,
             };
           }
@@ -116,7 +118,9 @@ export function navigateToDeepLink(route: DeepLinkRoute): void {
       break;
 
     case "pr":
-      WebBrowser.openBrowserAsync(route.url);
+      WebBrowser.openBrowserAsync(route.url).catch((error: unknown) => {
+        console.error("[deep-link] Failed to open browser for PR link:", error);
+      });
       break;
 
     case "pr_details":

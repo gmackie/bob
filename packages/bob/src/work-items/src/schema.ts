@@ -58,7 +58,8 @@
 // =============================================================================
 
 import { relations, sql } from "drizzle-orm";
-import { type AnyPgColumn, index, pgEnum, pgTable } from "drizzle-orm/pg-core";
+import {  index, pgEnum, pgTable } from "drizzle-orm/pg-core";
+import type {AnyPgColumn} from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -299,7 +300,21 @@ export const listWorkItemsInputSchema = z.object({
   parentId: z.string().uuid().nullable().optional(),
   kind: z.enum(["issue", "epic", "task"]).optional(),
   status: z.string().optional(),
+  // Multi-status filter. When present, takes precedence over `status`. Lets a
+  // lane (e.g. the priority queue: backlog/todo/ready/draft) fetch only its own
+  // statuses instead of slicing a recency-capped firehose of every item — the
+  // bug where a workspace full of `in_review` items starved the backlog out of
+  // the first 100 rows and every "what's next" view read 0.
+  statuses: z.array(z.string()).optional(),
   limit: z.number().min(1).max(100).default(50),
+});
+
+// Per-status counts for a workspace's work items. Cheap GROUP BY that is immune
+// to the list cap, so lane cards / sidebar badges can show accurate totals
+// (e.g. 329 in_review, 25 backlog) without fetching every row.
+export const workItemStatusCountsInputSchema = z.object({
+  workspaceId: z.string().uuid(),
+  kind: z.enum(["issue", "epic", "task"]).optional(),
 });
 
 export const getWorkItemInputSchema = z.object({
@@ -716,7 +731,7 @@ export const taskRuns = pgTable("task_runs", (t) => ({
   runPhase: t.varchar({ length: 20 }).notNull().default("execute"),
   // runPhase values: "shape" | "plan" | "execute" | "review" | "ship"
   planningProvider: t.varchar({ length: 20 }).notNull().default("internal"),
-  syncFailures: t.jsonb().$type<Array<{ method: string; error: string; timestamp: string }>>(),
+  syncFailures: t.jsonb().$type<{ method: string; error: string; timestamp: string }[]>(),
   createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t
     .timestamp({ mode: "string", withTimezone: true })

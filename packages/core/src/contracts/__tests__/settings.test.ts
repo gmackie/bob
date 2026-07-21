@@ -107,11 +107,19 @@ describe("@gmacko/contracts SettingsRpc group", () => {
       Schema.decodeUnknownSync(UserPreferencesSchema)(prefs);
       expect(prefs.userId).toBe(STUB_USER_ID);
       expect(prefs.theme).toBe("dark");
+      expect(prefs.emailNotifications).toBe(true);
+      expect(prefs.pushNotifications).toBe(true);
 
       // Update preferences
-      const updated = yield* client["settings.updatePreferences"]({ theme: "light" });
+      const updated = yield* client["settings.updatePreferences"]({
+        theme: "light",
+        emailNotifications: false,
+        pushNotifications: false,
+      });
       Schema.decodeUnknownSync(UserPreferencesSchema)(updated);
       expect(updated.theme).toBe("light");
+      expect(updated.emailNotifications).toBe(false);
+      expect(updated.pushNotifications).toBe(false);
 
       // API keys
       const keys = yield* client["settings.listApiKeys"]();

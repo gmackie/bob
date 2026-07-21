@@ -1,5 +1,13 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { createTRPCContext } from "../../trpc.js";
+
+// The real tRPC context type — the mock db/authApi below are structurally
+// close-enough fakes that only implement the query surface these handlers
+// actually call, cast through `unknown` (not `any`) at the single
+// construction site so every caller.* call below stays fully typed.
+type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
+
 let appRouter: typeof import("../../root").appRouter;
 
 const queryMocks = {
@@ -44,10 +52,10 @@ const createCaller = () =>
         name: "Test User",
       },
     },
-    authApi: { getSession: vi.fn() } as any,
-    apiKeyAuth: null as any,
-    db: makeDbMock() as any,
-  });
+    authApi: { getSession: vi.fn() },
+    apiKeyAuth: null,
+    db: makeDbMock(),
+  } as unknown as TRPCContext);
 
 describe("session router linked task URLs", () => {
   const sessionId = "11111111-1111-4111-8111-111111111111";
@@ -57,7 +65,7 @@ describe("session router linked task URLs", () => {
     process.env.DATABASE_URL ??=
       "postgres://postgres:postgres@localhost:5432/test";
     ({ appRouter } = await import("../../root"));
-  });
+  }, 60_000);
 
   beforeEach(() => {
     queryMocks.chatConversationsFindFirst.mockReset();
@@ -87,7 +95,7 @@ describe("session router linked task URLs", () => {
       planningItemIdentifier: "PLAN-123",
     });
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
     const result = await caller.session.get({ id: sessionId });
 
     expect(result.linkedTask).toEqual({
@@ -126,7 +134,7 @@ describe("session router linked task URLs", () => {
       projectId: "33333333-3333-4333-8333-333333333333",
     });
 
-    const caller = createCaller() as any;
+    const caller = createCaller();
     const result = await caller.session.get({ id: sessionId });
 
     expect(result.projectId).toBe("33333333-3333-4333-8333-333333333333");

@@ -12,23 +12,38 @@ import {
 import { buildBobExternalTaskMetadata } from "./externalTaskMetadata.js";
 import { applySnapshotToTask, snapshotTaskFromProvider } from "./providerSnapshot.js";
 import {
+  buildT3ThreadCreateCommand,
   buildT3ThreadTurnStartCommand,
   dispatchTaskToT3Code,
   getT3DispatchRuntimeConfig,
 } from "./t3DispatchClient.js";
 
-function getGatewayUrl() {
-  return (globalThis as any).GATEWAY_URL ?? process.env.GATEWAY_URL ?? "http://localhost:3002";
+function readGlobalString(key: string): string | undefined {
+  const value = (globalThis as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function getGatewayUrl(): string {
+  return readGlobalString("GATEWAY_URL") ?? process.env.GATEWAY_URL ?? "http://localhost:3002";
 }
 
 function getNudgeSecret(): string | undefined {
-  return (globalThis as any).NUDGE_SHARED_SECRET ?? process.env.NUDGE_SHARED_SECRET;
+  return readGlobalString("NUDGE_SHARED_SECRET") ?? process.env.NUDGE_SHARED_SECRET;
 }
 
 function getExecutionBackend(): "gateway" | "t3code" {
   const backend =
-    (globalThis as any).BOB_EXECUTION_BACKEND ?? process.env.BOB_EXECUTION_BACKEND;
+    readGlobalString("BOB_EXECUTION_BACKEND") ?? process.env.BOB_EXECUTION_BACKEND;
   return backend === "t3code" ? "t3code" : "gateway";
+}
+
+function resolveExecutionBackend(): "gateway" | "t3code" {
+  const configuredBackend = getExecutionBackend();
+  if (configuredBackend === "t3code") {
+    return "t3code";
+  }
+
+  return getT3DispatchRuntimeConfig() ? "t3code" : "gateway";
 }
 
 export interface PlanningTask {
@@ -223,16 +238,13 @@ export async function findRepositoryForTask(
     }
   }
 
-  const firstRepo = repos[0];
-  if (!firstRepo) {
-    return null;
-  }
-
-  return {
-    repositoryId: firstRepo.id,
-    path: firstRepo.path,
-    mainBranch: firstRepo.mainBranch,
-  };
+  // No confident match. Do NOT fall back to an arbitrary repo — an autonomous
+  // driver (auto-drain) would otherwise run a Linear task against a random
+  // codebase. Return null so executeTask marks the run blocked ("No repository
+  // found"), surfacing it for the operator to map project→repo. A user with a
+  // single repo is handled above; the arbitrary-first-repo fallback was only
+  // ever safe for that case.
+  return null;
 }
 
 export async function executeTask(
@@ -292,7 +304,7 @@ export async function executeTask(
 
   const branch = generateBranchName(task);
   const selectedAgent = options?.agentType ?? "opencode";
-  const executionBackend = getExecutionBackend();
+  const executionBackend = resolveExecutionBackend();
   const t3RuntimeConfig =
     executionBackend === "t3code" ? getT3DispatchRuntimeConfig() : null;
   if (executionBackend === "t3code" && !t3RuntimeConfig) {
@@ -352,9 +364,19 @@ export async function executeTask(
 
   if (executionBackend === "t3code" && t3RuntimeConfig) {
     try {
-      const command = buildT3ThreadTurnStartCommand({
+      const threadCreateCommand = buildT3ThreadCreateCommand({
         task,
         taskRunId: insertedTaskRun.id,
+        branch,
+        workingDirectory: repoInfo.path,
+        baseBranch: repoInfo.mainBranch,
+        externalTask,
+        config: t3RuntimeConfig,
+      });
+      const turnStartCommand = buildT3ThreadTurnStartCommand({
+        task,
+        taskRunId: insertedTaskRun.id,
+        threadId: threadCreateCommand.threadId,
         branch,
         workingDirectory: repoInfo.path,
         baseBranch: repoInfo.mainBranch,
@@ -364,7 +386,7 @@ export async function executeTask(
       await dispatchTaskToT3Code({
         serverUrl: t3RuntimeConfig.serverUrl,
         authToken: t3RuntimeConfig.authToken,
-        command,
+        commands: [threadCreateCommand, turnStartCommand],
       });
     } catch (err) {
       await db

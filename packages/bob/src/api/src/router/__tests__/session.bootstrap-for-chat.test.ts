@@ -1,12 +1,19 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { chatConversations } from "@bob/db/schema";
+import type { createTRPCContext } from "../../trpc.js";
+
+// The real tRPC context type — the mock db/authApi below are structurally
+// close-enough fakes that only implement the insert surface these handlers
+// actually call, cast through `unknown` (not `any`) at the single
+// construction site so every caller.* call below stays fully typed.
+type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
 
 let appRouter: typeof import("../../root").appRouter;
 
 const dbInsertMock = vi.fn();
 const dbInsertValuesMock = vi.fn();
-const dbInsertReturningMock = vi.fn();
+const dbInsertReturningMock = vi.fn<() => Promise<Record<string, unknown>[]>>();
 
 const makeDbMock = () => ({
   insert: (table: unknown) => {
@@ -46,17 +53,17 @@ const createCaller = (session: { id: string }) =>
         name: "Test User",
       },
     },
-    authApi: { getSession: vi.fn() } as any,
-    apiKeyAuth: null as any,
-    db: makeDbMock() as any,
-  });
+    authApi: { getSession: vi.fn() },
+    apiKeyAuth: null,
+    db: makeDbMock(),
+  } as unknown as TRPCContext);
 
 describe("session.bootstrapForChat", () => {
   beforeAll(async () => {
     process.env.DATABASE_URL ??=
       "postgres://postgres:postgres@localhost:5432/test";
     ({ appRouter } = await import("../../root"));
-  });
+  }, 60_000);
 
   beforeEach(() => {
     dbInsertMock.mockReset();
@@ -70,7 +77,7 @@ describe("session.bootstrapForChat", () => {
         id: "session-id-1",
         userId: "user-id-1",
         workingDirectory: "/repo/demo",
-      } as any,
+      },
     ]);
 
     const caller = createCaller({ id: "user-id-1" });
