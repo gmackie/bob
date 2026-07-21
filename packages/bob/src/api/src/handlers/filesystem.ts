@@ -87,10 +87,10 @@ export interface FilesystemEntry {
 
 export interface FilesystemSearchResult {
   path: string;
-  matches: Array<{
+  matches: {
     line: number;
     content: string;
-  }>;
+  }[];
 }
 
 export interface FilesystemGitStatusEntry {
@@ -116,23 +116,23 @@ function ensurePath(value: string, field = "path"): string {
 
 function mapFsError(error: unknown): never {
   const err = error as NodeJS.ErrnoException;
-  if (err?.code === "ENOENT") {
+  if (err.code === "ENOENT") {
     throw new TRPCError({ code: "NOT_FOUND", message: err.message });
   }
-  if (err?.code === "EACCES" || err?.code === "EPERM") {
+  if (err.code === "EACCES" || err.code === "EPERM") {
     throw new TRPCError({ code: "FORBIDDEN", message: err.message });
   }
   if (
-    err?.code === "ENOTDIR" ||
-    err?.code === "EISDIR" ||
-    err?.code === "ENOTEMPTY" ||
-    err?.code === "EINVAL"
+    err.code === "ENOTDIR" ||
+    err.code === "EISDIR" ||
+    err.code === "ENOTEMPTY" ||
+    err.code === "EINVAL"
   ) {
     throw new TRPCError({ code: "BAD_REQUEST", message: err.message });
   }
   throw new TRPCError({
     code: "INTERNAL_SERVER_ERROR",
-    message: err?.message ?? String(error),
+    message: err.message,
   });
 }
 
@@ -344,7 +344,7 @@ function parseGitStatusLine(line: string): FilesystemGitStatusEntry | null {
   const y = line[1] ?? " ";
   const rawPath = line.slice(3);
   const file = rawPath.includes(" -> ")
-    ? rawPath.split(" -> ").at(-1)!
+    ? (rawPath.split(" -> ").at(-1) ?? rawPath)
     : rawPath;
 
   let status = "modified";
@@ -379,7 +379,7 @@ export async function filesystemGitStatus(
       .filter((entry): entry is FilesystemGitStatusEntry => entry !== null);
   } catch (error) {
     const err = error as NodeJS.ErrnoException & { stderr?: string | Buffer };
-    if (err?.code === "ENOENT") mapFsError(error);
+    if (err.code === "ENOENT") mapFsError(error);
     throw new TRPCError({
       code: "BAD_REQUEST",
       message:
