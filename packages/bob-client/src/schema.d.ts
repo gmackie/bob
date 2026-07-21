@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/work-item/status-counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** workItem.statusCounts */
+        post: operations["workItem.statusCounts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/work-item/get": {
         parameters: {
             query?: never;
@@ -236,6 +253,23 @@ export interface paths {
         put?: never;
         /** workItem.notification.markAsRead */
         post: operations["workItem.notification.markAsRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/work-item/notification/mark-all-as-read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** workItem.notification.markAllAsRead */
+        post: operations["workItem.notification.markAllAsRead"];
         delete?: never;
         options?: never;
         head?: never;
@@ -746,6 +780,23 @@ export interface paths {
         put?: never;
         /** planning.listCycles */
         post: operations["planning.listCycles"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/planning/sync-linear-projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** planning.syncLinearProjects */
+        post: operations["planning.syncLinearProjects"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2197,6 +2248,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/external/integration/list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** external.integration.list */
+        post: operations["external.integration.list"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/external/integration/get": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** external.integration.get */
+        post: operations["external.integration.get"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/external/integration/save": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** external.integration.save */
+        post: operations["external.integration.save"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/external/integration/fetch-linear-teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** external.integration.fetchLinearTeams */
+        post: operations["external.integration.fetchLinearTeams"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/external/integration/setup-linear": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** external.integration.setupLinear */
+        post: operations["external.integration.setupLinear"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/external/integration/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** external.integration.delete */
+        post: operations["external.integration.delete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agent/create-session": {
         parameters: {
             query?: never;
@@ -2310,6 +2463,23 @@ export interface paths {
         put?: never;
         /** agent.run.list */
         post: operations["agent.run.list"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/run/list-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** agent.run.listAll */
+        post: operations["agent.run.listAll"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3744,6 +3914,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/set-default-agent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** projects.setDefaultAgent */
+        post: operations["projects.setDefaultAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/dismiss-dir": {
         parameters: {
             query?: never;
@@ -3806,6 +3993,23 @@ export interface paths {
         put?: never;
         /** projects.workspace.rename */
         post: operations["projects.workspace.rename"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/workspace/set-default-agent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** projects.workspace.setDefaultAgent */
+        post: operations["projects.workspace.setDefaultAgent"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5369,6 +5573,7 @@ export interface operations {
                     parentId?: (string | null) | null;
                     kind?: ("issue" | "epic" | "task") | null;
                     status?: string | null;
+                    statuses?: string[] | null;
                     limit?: (number | "NaN" | "Infinity" | "-Infinity") | null;
                 };
             };
@@ -5401,6 +5606,63 @@ export interface operations {
                         createdAt?: string | null;
                         updatedAt?: string | null;
                     }[];
+                };
+            };
+            /** @description Invalid request payload */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "workItem.statusCounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    workspaceId: string;
+                    kind?: ("issue" | "epic" | "task") | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number | "NaN" | "Infinity" | "-Infinity";
+                    };
                 };
             };
             /** @description Invalid request payload */
@@ -6358,6 +6620,60 @@ export interface operations {
                         readAt?: (string | null) | null;
                         createdAt?: string | null;
                     } | null;
+                };
+            };
+            /** @description Invalid request payload */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "workItem.notification.markAllAsRead": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never> | unknown[];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        count: number | "NaN" | "Infinity" | "-Infinity";
+                    };
                 };
             };
             /** @description Invalid request payload */
@@ -8326,6 +8642,67 @@ export interface operations {
                         issueCount: number | "NaN" | "Infinity" | "-Infinity";
                         completedCount: number | "NaN" | "Infinity" | "-Infinity";
                     }[];
+                };
+            };
+            /** @description Invalid request payload */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "planning.syncLinearProjects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    workspaceId: string;
+                    importIssues?: boolean | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        projectsCreated: number | "NaN" | "Infinity" | "-Infinity";
+                        projectsExisting: number | "NaN" | "Infinity" | "-Infinity";
+                        issuesImported: number | "NaN" | "Infinity" | "-Infinity";
+                        projectsTruncated: boolean;
+                        issuesTruncated: boolean;
+                    };
                 };
             };
             /** @description Invalid request payload */
@@ -13984,6 +14361,373 @@ export interface operations {
             };
         };
     };
+    "external.integration.list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    workspaceId: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        provider: string;
+                        enabled: boolean;
+                        hasApiKey: boolean;
+                        hasWebhookSecret: boolean;
+                        linearTeamId: string | null;
+                        linearWebBaseUrl: string | null;
+                        createdAt?: unknown | null;
+                    }[];
+                };
+            };
+            /** @description Invalid request payload */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "external.integration.get": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    workspaceId: string;
+                    provider: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        provider: string;
+                        enabled: boolean;
+                        hasApiKey: boolean;
+                        hasWebhookSecret: boolean;
+                        linearTeamId: string | null;
+                        linearWebBaseUrl: string | null;
+                        createdAt?: unknown | null;
+                    } | null;
+                };
+            };
+            /** @description Invalid request payload */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "external.integration.save": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    workspaceId: string;
+                    provider: string;
+                    apiKey?: string | null;
+                    webhookSigningSecret?: string | null;
+                    linearTeamId?: string | null;
+                    linearWebBaseUrl?: (string | null) | null;
+                    enabled?: boolean | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        created: boolean;
+                    };
+                };
+            };
+            /** @description Invalid request payload */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "external.integration.fetchLinearTeams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    apiKey: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        name: string;
+                        key: string;
+                    }[];
+                };
+            };
+            /** @description Invalid request payload */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "external.integration.setupLinear": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    workspaceId: string;
+                    apiKey: string;
+                    teamId: string;
+                    webhookUrl: string;
+                    linearWebBaseUrl?: (string | null) | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        created: boolean;
+                        webhookId: string;
+                    };
+                };
+            };
+            /** @description Invalid request payload */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "external.integration.delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    workspaceId: string;
+                    provider: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        deleted: boolean;
+                    };
+                };
+            };
+            /** @description Invalid request payload */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     "agent.createSession": {
         parameters: {
             query?: never;
@@ -14312,11 +15056,12 @@ export interface operations {
                         workspaceId: string;
                         sessionId: string | null;
                         workItemId: string | null;
-                        /** @enum {string} */
-                        status: "pending" | "running" | "completed" | "failed" | "cancelled";
-                        startedAt: string | null;
-                        completedAt: string | null;
-                        createdAt: string;
+                        agentType: string | null;
+                        summary?: (unknown | null) | null;
+                        status: string;
+                        startedAt: unknown | null;
+                        completedAt: unknown | null;
+                        createdAt: unknown;
                     };
                 };
             };
@@ -14377,11 +15122,77 @@ export interface operations {
                         workspaceId: string;
                         sessionId: string | null;
                         workItemId: string | null;
-                        /** @enum {string} */
-                        status: "pending" | "running" | "completed" | "failed" | "cancelled";
-                        startedAt: string | null;
-                        completedAt: string | null;
-                        createdAt: string;
+                        agentType: string | null;
+                        summary?: (unknown | null) | null;
+                        status: string;
+                        startedAt: unknown | null;
+                        completedAt: unknown | null;
+                        createdAt: unknown;
+                    }[];
+                };
+            };
+            /** @description Invalid request payload */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "agent.run.listAll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    limit?: (number | "NaN" | "Infinity" | "-Infinity") | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        workspaceId: string;
+                        sessionId: string | null;
+                        workItemId: string | null;
+                        agentType: string | null;
+                        summary?: (unknown | null) | null;
+                        status: string;
+                        startedAt: unknown | null;
+                        completedAt: unknown | null;
+                        createdAt: unknown;
                     }[];
                 };
             };
@@ -14442,11 +15253,12 @@ export interface operations {
                         workspaceId: string;
                         sessionId: string | null;
                         workItemId: string | null;
-                        /** @enum {string} */
-                        status: "pending" | "running" | "completed" | "failed" | "cancelled";
-                        startedAt: string | null;
-                        completedAt: string | null;
-                        createdAt: string;
+                        agentType: string | null;
+                        summary?: (unknown | null) | null;
+                        status: string;
+                        startedAt: unknown | null;
+                        completedAt: unknown | null;
+                        createdAt: unknown;
                     }[];
                 };
             };
@@ -19805,6 +20617,68 @@ export interface operations {
             };
         };
     };
+    "projects.setDefaultAgent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    projectId: string;
+                    defaultAgentType: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        tenantId: string;
+                        slug: string;
+                        name: string;
+                        createdAt: string;
+                        updatedAt: string;
+                    };
+                };
+            };
+            /** @description Invalid request payload */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     "projects.dismissDir": {
         parameters: {
             query?: never;
@@ -19893,6 +20767,7 @@ export interface operations {
                             name: string;
                             slug: string;
                             description: string | null;
+                            defaultAgentType?: (string | null) | null;
                             forgeAvailable?: boolean | null;
                             createdAt: string;
                             updatedAt: string;
@@ -19959,6 +20834,7 @@ export interface operations {
                         name: string;
                         slug: string;
                         description: string | null;
+                        defaultAgentType?: (string | null) | null;
                         forgeAvailable?: boolean | null;
                         createdAt: string;
                         updatedAt: string;
@@ -20023,6 +20899,72 @@ export interface operations {
                         name: string;
                         slug: string;
                         description: string | null;
+                        defaultAgentType?: (string | null) | null;
+                        forgeAvailable?: boolean | null;
+                        createdAt: string;
+                        updatedAt: string;
+                    };
+                };
+            };
+            /** @description Invalid request payload */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "projects.workspace.setDefaultAgent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    id: string;
+                    defaultAgentType: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        ownerUserId: string;
+                        name: string;
+                        slug: string;
+                        description: string | null;
+                        defaultAgentType?: (string | null) | null;
                         forgeAvailable?: boolean | null;
                         createdAt: string;
                         updatedAt: string;
@@ -23130,6 +24072,8 @@ export interface operations {
                         defaultModel?: (string | null) | null;
                         editorFontSize?: ((number | "NaN" | "Infinity" | "-Infinity") | null) | null;
                         enableNotifications?: boolean | null;
+                        emailNotifications?: boolean | null;
+                        pushNotifications?: boolean | null;
                         timezone?: (string | null) | null;
                         createdAt?: string | null;
                         updatedAt?: string | null;
@@ -23180,6 +24124,8 @@ export interface operations {
                     defaultModel?: (string | null) | null;
                     editorFontSize?: ((number | "NaN" | "Infinity" | "-Infinity") | null) | null;
                     enableNotifications?: boolean | null;
+                    emailNotifications?: boolean | null;
+                    pushNotifications?: boolean | null;
                     timezone?: (string | null) | null;
                 };
             };
@@ -23197,6 +24143,8 @@ export interface operations {
                         defaultModel?: (string | null) | null;
                         editorFontSize?: ((number | "NaN" | "Infinity" | "-Infinity") | null) | null;
                         enableNotifications?: boolean | null;
+                        emailNotifications?: boolean | null;
+                        pushNotifications?: boolean | null;
                         timezone?: (string | null) | null;
                         createdAt?: string | null;
                         updatedAt?: string | null;

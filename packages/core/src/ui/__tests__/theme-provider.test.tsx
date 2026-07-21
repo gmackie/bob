@@ -24,7 +24,8 @@ beforeEach(() => {
     })),
   );
   document.documentElement.removeAttribute("data-theme");
-  document.documentElement.classList.remove("light", "dark");
+  document.documentElement.classList.remove("light", "dark", "auto");
+  document.documentElement.style.colorScheme = "";
   try {
     localStorage.clear();
   } catch {
@@ -112,6 +113,15 @@ describe("ThemeProvider", () => {
     expect(document.documentElement.classList.contains("dark")).toBe(true);
     expect(screen.getByTestId("mode").textContent).toBe("system");
     expect(screen.getByTestId("resolved-mode").textContent).toBe("dark");
+  });
+
+  it("adds .auto class when defaultMode=system", () => {
+    render(
+      <ThemeProvider defaultTheme="bob" defaultMode="system">
+        <ThemeConsumer />
+      </ThemeProvider>,
+    );
+    expect(document.documentElement.classList.contains("auto")).toBe(true);
   });
 
   it("listens to media-query change events and flips dark/light class", () => {

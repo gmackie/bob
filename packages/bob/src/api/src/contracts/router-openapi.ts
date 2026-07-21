@@ -10,8 +10,8 @@
  *  - A router   has `_def.router === true` and `_def.record` / `_def.procedures`
  *  - A plain router record is a plain object whose values are procedures/records
  */
-import { z } from "zod/v4";
 import type { OpenAPIV3_1 } from "openapi-types";
+import { z } from "zod/v4";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -66,7 +66,9 @@ function isProcedure(
     | undefined;
   return (
     def?.procedure === true &&
-    (def.type === "query" || def.type === "mutation" || def.type === "subscription")
+    (def.type === "query" ||
+      def.type === "mutation" ||
+      def.type === "subscription")
   );
 }
 
@@ -147,10 +149,7 @@ export function extractProcedures(
   const results: ProcedureInfo[] = [];
 
   for (const [key, value] of Object.entries(record)) {
-    if (
-      !value ||
-      (typeof value !== "object" && typeof value !== "function")
-    )
+    if (!value || (typeof value !== "object" && typeof value !== "function"))
       continue;
 
     const currentPath = parentPath ? `${parentPath}.${key}` : key;
@@ -171,11 +170,7 @@ export function extractProcedures(
     } else if (isRouter(value)) {
       // Wrapped router: recurse into _def.record
       results.push(
-        ...extractProcedures(
-          value._def.record,
-          currentPath,
-          currentTag,
-        ),
+        ...extractProcedures(value._def.record, currentPath, currentTag),
       );
     } else if (typeof value === "object" && !Array.isArray(value)) {
       // Could be a plain router record (an object whose values are procedures)
@@ -190,9 +185,7 @@ export function extractProcedures(
       );
 
       if (hasChildren) {
-        results.push(
-          ...extractProcedures(val, currentPath, currentTag),
-        );
+        results.push(...extractProcedures(val, currentPath, currentTag));
       }
     }
   }
@@ -233,7 +226,7 @@ export function generateOpenApiFromRouter(
 ): OpenAPIV3_1.Document {
   // If we got a wrapped router, extract its record
   const record = isRouter(routerOrRecord)
-    ? (routerOrRecord._def.record)
+    ? routerOrRecord._def.record
     : routerOrRecord;
 
   const procedures = extractProcedures(record);
@@ -252,12 +245,35 @@ export function generateOpenApiFromRouter(
       responses: {
         "200": { description: "Successful response" },
         "401": { description: "Unauthorized" },
+        "429": {
+          description: "Rate limit exceeded",
+          headers: {
+            "RateLimit-Limit": {
+              schema: { type: "integer" },
+              description: "Maximum requests allowed in the current window",
+            },
+            "RateLimit-Remaining": {
+              schema: { type: "integer" },
+              description: "Requests remaining in the current window",
+            },
+            "RateLimit-Reset": {
+              schema: { type: "integer" },
+              description: "Unix timestamp when the current window resets",
+            },
+            "Retry-After": {
+              schema: { type: "integer" },
+              description: "Seconds to wait before retrying",
+            },
+          },
+        },
       },
     };
 
     if (proc.inputSchema) {
       try {
-        const jsonSchema = z.toJSONSchema(proc.inputSchema) as OpenAPIV3_1.SchemaObject;
+        const jsonSchema = z.toJSONSchema(
+          proc.inputSchema,
+        ) as OpenAPIV3_1.SchemaObject;
 
         if (method === "get") {
           // For GET requests, extract top-level properties as query parameters
@@ -310,8 +326,6 @@ export function generateOpenApiFromRouter(
         },
       },
     },
-    tags: [...tagSet]
-      .sort()
-      .map((t) => ({ name: t })),
+    tags: [...tagSet].sort().map((t) => ({ name: t })),
   };
 }

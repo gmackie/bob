@@ -6,7 +6,12 @@ import {
 } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
-import { isEncryptionConfigured } from "../tokenVault.js";
+import {
+  decryptToken as decryptTokenUnderEnv,
+  encryptToken as encryptTokenUnderEnv,
+  isEncryptionConfigured,
+  requireEncryptionConfigured,
+} from "../tokenVault.js";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
@@ -78,6 +83,35 @@ describe("tokenVault", () => {
     it("should return boolean based on env var", () => {
       const result = isEncryptionConfigured();
       expect(typeof result).toBe("boolean");
+    });
+
+    it("requireEncryptionConfigured throws when key missing", () => {
+      const saved = process.env.GIT_TOKEN_ENCRYPTION_KEY;
+      delete process.env.GIT_TOKEN_ENCRYPTION_KEY;
+      try {
+        expect(() => requireEncryptionConfigured()).toThrow(
+          /GIT_TOKEN_ENCRYPTION_KEY/,
+        );
+      } finally {
+        if (saved === undefined) delete process.env.GIT_TOKEN_ENCRYPTION_KEY;
+        else process.env.GIT_TOKEN_ENCRYPTION_KEY = saved;
+      }
+    });
+  });
+
+  describe("env-backed encrypt/decrypt", () => {
+    const KEY = "env-backed-token-key-32chars!!!!";
+
+    it("round-trips through process.env master key", () => {
+      const saved = process.env.GIT_TOKEN_ENCRYPTION_KEY;
+      process.env.GIT_TOKEN_ENCRYPTION_KEY = KEY;
+      try {
+        const encrypted = encryptTokenUnderEnv("ghp_abc", "conn-env-1");
+        expect(decryptTokenUnderEnv(encrypted, "conn-env-1")).toBe("ghp_abc");
+      } finally {
+        if (saved === undefined) delete process.env.GIT_TOKEN_ENCRYPTION_KEY;
+        else process.env.GIT_TOKEN_ENCRYPTION_KEY = saved;
+      }
     });
   });
 

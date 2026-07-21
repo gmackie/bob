@@ -72,11 +72,11 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
       />
 
       {/* Header */}
-      <section className="mt-4 rounded-[2rem] border border-border bg-gradient-to-br from-[#151f33] via-[#111827] to-[#101522] px-8 py-8">
+      <section className="mt-4 rounded-[2rem] border border-border bg-card px-8 py-8">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="font-display text-4xl font-bold tracking-tight leading-[1.15] text-white">
+              <h1 className="font-display text-4xl font-bold tracking-tight leading-[1.15] text-foreground">
                 {project.name}
               </h1>
               <span className="rounded-full border border-border bg-accent px-2.5 py-0.5 font-mono text-xs font-medium text-muted-foreground">
@@ -94,7 +94,7 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
                 {formatLabel(project.status)}
               </Badge>
             </div>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-white/60">
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
               {project.description?.trim() || "No project description yet."}
             </p>
           </div>

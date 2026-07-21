@@ -39,11 +39,13 @@ export const makeWorkItemsLayer = (ctx: HandlerContext) => {
     "workItem.activity.list": wi["workItems.listActivities"],
     "workItem.activity.listRecent": wi["workItems.listRecentActivities"],
 
-    // --- Notification (4) ---
+    // --- Notification (5) ---
     "workItem.notification.list": wi["workItems.listNotifications"],
     "workItem.notification.create": wi["workItems.createNotification"],
     "workItem.notification.markAsRead":
       wi["workItems.markNotificationAsRead"],
+    "workItem.notification.markAllAsRead":
+      wi["workItems.markAllNotificationsAsRead"],
     "workItem.notification.registerPushToken":
       wi["workItems.registerPushToken"],
 

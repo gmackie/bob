@@ -89,6 +89,13 @@ export async function instanceStart(
     throw new TRPCError({ code: "NOT_FOUND", message: "Worktree not found" });
   }
 
+  const { assertWithinQuotaOrThrow } = await import("../services/quotas/index.js");
+  await assertWithinQuotaOrThrow({
+    db: ctx.db,
+    userId: ctx.userId,
+    metric: "activeAgents",
+  });
+
   const [instance] = await ctx.db
     .insert(agentInstances)
     .values({

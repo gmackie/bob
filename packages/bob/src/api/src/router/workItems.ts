@@ -12,6 +12,7 @@ import {
   listNotificationsInputSchema,
   listWorkItemsInputSchema,
   workItemStatusCountsInputSchema,
+  markAllNotificationsAsReadInputSchema,
   markNotificationAsReadInputSchema,
   promoteToTaskInputSchema,
   updateWorkItemInputSchema,
@@ -37,6 +38,7 @@ import {
   workItemsListChildArtifactGroups,
   workItemsListNotifications,
   workItemsCreateNotification,
+  workItemsMarkAllNotificationsAsRead,
   workItemsMarkNotificationAsRead,
   workItemsRegisterPushToken,
   workItemsTaskRunListByWorkItem,
@@ -161,6 +163,20 @@ const buildMarkNotificationAsReadProcedure = <
     workItemsMarkNotificationAsRead({ db: ctx.db, userId: ctx.session.user.id }, input),
   );
 
+const buildMarkAllNotificationsAsReadProcedure = <
+  T extends WorkItemProcedureBuilder,
+>(
+  procedure: T,
+) =>
+  procedure
+    .input(markAllNotificationsAsReadInputSchema)
+    .mutation(({ ctx }) =>
+      workItemsMarkAllNotificationsAsRead({
+        db: ctx.db,
+        userId: ctx.session.user.id,
+      }),
+    );
+
 const listWorkItemsProcedure = buildListWorkItemsProcedure(protectedProcedure);
 const statusCountsProcedure = protectedProcedure
   .input(workItemStatusCountsInputSchema)
@@ -184,6 +200,8 @@ const createNotificationProcedure =
   buildCreateNotificationProcedure(protectedProcedure);
 const markNotificationAsReadProcedure =
   buildMarkNotificationAsReadProcedure(protectedProcedure);
+const markAllNotificationsAsReadProcedure =
+  buildMarkAllNotificationsAsReadProcedure(protectedProcedure);
 
 const publicListWorkItemsProcedure =
   buildListWorkItemsProcedure(apiKeyReadProcedure);
@@ -211,6 +229,8 @@ const publicCreateNotificationProcedure =
   buildCreateNotificationProcedure(apiKeyWriteProcedure);
 const publicMarkNotificationAsReadProcedure =
   buildMarkNotificationAsReadProcedure(apiKeyWriteProcedure);
+const publicMarkAllNotificationsAsReadProcedure =
+  buildMarkAllNotificationsAsReadProcedure(apiKeyWriteProcedure);
 
 export const workItemRouter = {
   list: listWorkItemsProcedure,
@@ -249,6 +269,7 @@ export const notificationRouter = {
   list: listNotificationsProcedure,
   create: createNotificationProcedure,
   markAsRead: markNotificationAsReadProcedure,
+  markAllAsRead: markAllNotificationsAsReadProcedure,
 
   registerPushToken: protectedProcedure
     .input(
@@ -381,6 +402,7 @@ export const workItemsRouter = {
   listNotifications: listNotificationsProcedure,
   createNotification: createNotificationProcedure,
   markNotificationAsRead: markNotificationAsReadProcedure,
+  markAllNotificationsAsRead: markAllNotificationsAsReadProcedure,
 };
 
 export const publicWorkItemsRouter = {
@@ -397,4 +419,5 @@ export const publicWorkItemsRouter = {
   listNotifications: publicListNotificationsProcedure,
   createNotification: publicCreateNotificationProcedure,
   markNotificationAsRead: publicMarkNotificationAsReadProcedure,
+  markAllNotificationsAsRead: publicMarkAllNotificationsAsReadProcedure,
 };

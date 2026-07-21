@@ -185,10 +185,10 @@ describe("RPC aggregate layers — Phase 7B-4D-delta verification", () => {
 // ---------------------------------------------------------------------------
 
 describe("RPC handler factory key counts", () => {
-  describe("WorkItems group (33 handler keys)", () => {
-    it("workItems factory produces 20 keys", () => {
+  describe("WorkItems group (34 handler keys)", () => {
+    it("workItems factory produces 21 keys", () => {
       const handlers = makeWorkItemsRpcHandlers(mockCtx);
-      expect(Object.keys(handlers)).toHaveLength(20);
+      expect(Object.keys(handlers)).toHaveLength(21);
     });
 
     it("requirement factory produces 5 keys", () => {
@@ -201,11 +201,11 @@ describe("RPC handler factory key counts", () => {
       expect(Object.keys(handlers)).toHaveLength(8);
     });
 
-    it("total handler keys sum to 33", () => {
+    it("total handler keys sum to 34", () => {
       const wi = Object.keys(makeWorkItemsRpcHandlers(mockCtx)).length;
       const req = Object.keys(makeRequirementRpcHandlers(mockCtx)).length;
       const lnk = Object.keys(makeLinkRpcHandlers(mockCtx)).length;
-      expect(wi + req + lnk).toBe(33);
+      expect(wi + req + lnk).toBe(34);
     });
   });
 
@@ -293,10 +293,10 @@ describe("RPC handler factory key counts", () => {
 
   // --- Platform aggregate handler key counts (5 groups) ---
 
-  describe("Agent group (85 procedures — 80 from factories + 5 stubs)", () => {
-    it("makeAgentHandlers produces 85 keys", () => {
+  describe("Agent group (81 procedures — 76 from factories + 5 stubs)", () => {
+    it("makeAgentHandlers produces 81 keys", () => {
       const handlers = makeAgentHandlers(mockCtx);
-      expect(Object.keys(handlers)).toHaveLength(85);
+      expect(Object.keys(handlers)).toHaveLength(81);
     });
   });
 
@@ -331,8 +331,7 @@ describe("RPC handler factory key counts", () => {
   // --- Grand total: all 8 RpcGroups ---
 
   describe("Grand total — all 8 RpcGroups", () => {
-    it("328 contract procedures + 1 health = 329 total", () => {
-      // Domain groups (3): WorkItems 33 + Planning 70 + External 37 = 140
+    it("325 contract procedures + 1 health = 326 total", () => {
       const workItemsKeys =
         Object.keys(makeWorkItemsRpcHandlers(mockCtx)).length +
         Object.keys(makeRequirementRpcHandlers(mockCtx)).length +
@@ -353,7 +352,7 @@ describe("RPC handler factory key counts", () => {
         Object.keys(makePublicApiRpcHandlers(mockCtx)).length +
         Object.keys(makeIntegrationRpcHandlers(mockCtx)).length;
 
-      // Platform groups (5): Agent 85 + Projects 58 + Settings 20 + Secrets 14 + Auth 11 = 188
+      // Platform groups (5): Agent 81 + Projects 58 + Settings 20 + Secrets 14 + Auth 11 = 184
       const agentKeys = Object.keys(makeAgentHandlers(mockCtx)).length;
       const projectsKeys = Object.keys(makeProjectsHandlers(mockCtx)).length;
       const settingsKeys = Object.keys(makeSettingsHandlers(mockCtx)).length;
@@ -366,10 +365,10 @@ describe("RPC handler factory key counts", () => {
       const contractTotal = domainTotal + platformTotal;
       const grandTotal = contractTotal + 1; // +1 for health endpoint
 
-      expect(domainTotal).toBe(140);
-      expect(platformTotal).toBe(188);
-      expect(contractTotal).toBe(328);
-      expect(grandTotal).toBe(329);
+      expect(domainTotal).toBe(141);
+      expect(platformTotal).toBe(184);
+      expect(contractTotal).toBe(325);
+      expect(grandTotal).toBe(326);
     });
   });
 });

@@ -646,41 +646,6 @@ const handlers = AgentRpc.of({
       ? Effect.succeed([])
       : Effect.fail(new NotFoundError({ entity: "Message", id: messageId })),
 
-  // --- 7B-4B Task 4: agent.post stubs -------------------------------------
-
-  "agent.post.all": () =>
-    Effect.succeed([
-      {
-        id: "post-stub-1",
-        title: "Stub Post",
-        content: "Stub content",
-        createdAt: STUB_DATE,
-      },
-    ]),
-
-  "agent.post.byId": ({ id }) =>
-    Effect.succeed(
-      id === "post-stub-1"
-        ? {
-            id: "post-stub-1",
-            title: "Stub Post",
-            content: "Stub content",
-            createdAt: STUB_DATE,
-          }
-        : null,
-    ),
-
-  "agent.post.create": ({ title, content }) =>
-    Effect.succeed({
-      id: "post-stub-new",
-      title,
-      content,
-      createdAt: STUB_DATE,
-    }),
-
-  "agent.post.delete": (_payload) =>
-    Effect.succeed({ success: true }),
-
   // --- agent.persona (6) ----------------------------------------------------
 
   "agent.persona.create": ({

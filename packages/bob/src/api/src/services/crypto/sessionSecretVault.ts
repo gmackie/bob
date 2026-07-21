@@ -5,24 +5,14 @@ import {
   randomBytes,
 } from "node:crypto";
 
+import {
+  getCurrentMasterKey,
+  getDecryptMasterKeys,
+  KEY_LENGTH,
+} from "./masterKey";
+
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
-const KEY_LENGTH = 32;
-
-function getMasterKey(): Buffer {
-  const key = process.env.GIT_TOKEN_ENCRYPTION_KEY;
-  if (!key) {
-    throw new Error(
-      "GIT_TOKEN_ENCRYPTION_KEY environment variable is required for session secret encryption",
-    );
-  }
-  if (key.length < KEY_LENGTH) {
-    throw new Error(
-      `GIT_TOKEN_ENCRYPTION_KEY must be at least ${KEY_LENGTH} characters`,
-    );
-  }
-  return Buffer.from(key.slice(0, KEY_LENGTH), "utf8");
-}
 
 function deriveSessionSecretKey(masterKey: Buffer, secretId: string): Buffer {
   return createHmac("sha256", masterKey)
@@ -41,7 +31,7 @@ export function encryptSessionSecretValue(
   plaintext: string,
   secretId: string,
 ): EncryptedSessionSecretValue {
-  const masterKey = getMasterKey();
+  const masterKey = getCurrentMasterKey();
   const rowKey = deriveSessionSecretKey(masterKey, secretId);
   const iv = randomBytes(IV_LENGTH);
 
@@ -59,11 +49,11 @@ export function encryptSessionSecretValue(
   };
 }
 
-export function decryptSessionSecretValue(
+function tryDecryptWithKey(
   encrypted: EncryptedSessionSecretValue,
   secretId: string,
+  masterKey: Buffer,
 ): string {
-  const masterKey = getMasterKey();
   const rowKey = deriveSessionSecretKey(masterKey, secretId);
 
   const iv = Buffer.from(encrypted.iv, "base64");
@@ -79,4 +69,56 @@ export function decryptSessionSecretValue(
   ]);
 
   return decrypted.toString("utf8");
+}
+
+/**
+ * Decrypt a session secret. Tries current master key, then previous (rotation).
+ */
+export function decryptSessionSecretValue(
+  encrypted: EncryptedSessionSecretValue,
+  secretId: string,
+): string {
+  const keys = getDecryptMasterKeys();
+  let lastError: unknown;
+  for (const key of keys) {
+    try {
+      return tryDecryptWithKey(encrypted, secretId, key);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Failed to decrypt session secret with available master keys");
+}
+
+export function sessionSecretNeedsReencryption(
+  encrypted: EncryptedSessionSecretValue,
+  secretId: string,
+): boolean {
+  const keys = getDecryptMasterKeys();
+  const [firstKey, secondKey] = keys;
+  if (!firstKey || !secondKey) return false;
+
+  try {
+    tryDecryptWithKey(encrypted, secretId, firstKey);
+    return false;
+  } catch {
+    // fall through
+  }
+
+  try {
+    tryDecryptWithKey(encrypted, secretId, secondKey);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function reencryptSessionSecretValue(
+  encrypted: EncryptedSessionSecretValue,
+  secretId: string,
+): EncryptedSessionSecretValue {
+  const plaintext = decryptSessionSecretValue(encrypted, secretId);
+  return encryptSessionSecretValue(plaintext, secretId);
 }

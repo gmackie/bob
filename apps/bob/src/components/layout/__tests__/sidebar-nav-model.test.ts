@@ -58,8 +58,9 @@ describe("sidebar nav model", () => {
     ]);
   });
 
-  it("keeps global settings out of the left navigation rail", () => {
+  it("exposes setup and operational system links in the left navigation rail", () => {
     expect(getSidebarUtilityItems().map((item) => item.label)).toEqual([
+      "Onboarding",
       "Pull Requests",
       "Nodes",
     ]);
@@ -71,6 +72,9 @@ describe("sidebar nav model", () => {
     );
     expect(getSidebarScopedHref("/planning", "workspace-1")).toBe(
       "/planning?workspace=workspace-1",
+    );
+    expect(getSidebarScopedHref("/onboarding", "workspace-1")).toBe(
+      "/onboarding?workspace=workspace-1",
     );
     expect(getSidebarScopedHref("/runs?provider=codex", "workspace-1")).toBe(
       "/runs?provider=codex&workspace=workspace-1",

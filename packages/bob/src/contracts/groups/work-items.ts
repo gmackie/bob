@@ -207,6 +207,17 @@ export const WorkItemNotificationMarkAsReadRpc = Rpc.make(
   },
 );
 
+export const WorkItemNotificationMarkAllAsReadRpc = Rpc.make(
+  "workItem.notification.markAllAsRead",
+  {
+    payload: Schema.Struct({}),
+    success: Schema.Struct({
+      count: Schema.Number,
+    }),
+    error: BobNotFoundError,
+  },
+);
+
 export const WorkItemNotificationRegisterPushTokenRpc = Rpc.make(
   "workItem.notification.registerPushToken",
   {
@@ -420,6 +431,7 @@ export const WorkItemsRpc = RpcGroup.make(
   WorkItemNotificationListRpc,
   WorkItemNotificationCreateRpc,
   WorkItemNotificationMarkAsReadRpc,
+  WorkItemNotificationMarkAllAsReadRpc,
   WorkItemNotificationRegisterPushTokenRpc,
   // TaskRun (Task 2)
   WorkItemTaskRunListByWorkItemRpc,

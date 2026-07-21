@@ -7,6 +7,7 @@ import {
   workspaceRename,
   workspaceSetDefaultAgent,
   workspaceDelete,
+  tenantAddMember,
 } from "../handlers/workspace";
 
 export const workspaceRouter = {
@@ -50,6 +51,18 @@ export const workspaceRouter = {
     )
     .mutation(({ ctx, input }) =>
       workspaceSetDefaultAgent({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
+
+  /** Add a seat to the caller's tenant (enforces plan `seats` quota). */
+  addTenantMember: protectedProcedure
+    .input(
+      z.object({
+        userId: z.string().min(1),
+        role: z.enum(["owner", "admin", "member"]).optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      tenantAddMember({ db: ctx.db, userId: ctx.session.user.id }, input),
     ),
 
   delete: protectedProcedure
