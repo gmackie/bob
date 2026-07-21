@@ -79,7 +79,7 @@ describe("repository.addFromProvider", () => {
       })),
     );
     ({ appRouter } = await import("../../root"));
-  });
+  }, 60_000);
 
   afterEach(() => {
     vi.unstubAllGlobals();

@@ -8,6 +8,7 @@ import { cn } from "@gmacko/core/ui";
 import { useBobRpcClient } from "~/rpc/react";
 import {
   filterWorkLaneItems,
+  getLaneQueryStatuses,
   getWorkLaneEntryHref,
   getWorkLaneRowModel,
   getWorkLaneTableHeaderModel,
@@ -31,10 +32,15 @@ export function WorkLaneTable({
   lane: WorkLaneKey;
 }) {
   const rpc = useBobRpcClient();
-  const input = { workspaceId: workspaceId ?? "", limit: 100 };
+  const workItemsInput = {
+    workspaceId: workspaceId ?? "",
+    statuses: getLaneQueryStatuses(lane),
+    limit: 100,
+  };
   const { data: workItems, isLoading } = useQuery({
-    queryKey: ["rpc", "workItem.list", input],
-    queryFn: () => rpc.workItems.list(input),
+    queryKey: ["rpc", "workItem.list", workItemsInput],
+    queryFn: () =>
+      rpc.workItems.list(workItemsInput) as Promise<WorkPipelineItem[]>,
     enabled: Boolean(workspaceId),
     refetchInterval: 10_000,
   });

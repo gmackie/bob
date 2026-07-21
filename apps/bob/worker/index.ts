@@ -16,7 +16,11 @@ import type { ImageConfig } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
 import { runWithDb } from "../src/lib/db-client-lazy";
 import { wrapFetch } from "./lib/otel";
-import { getHyperdriveConnectionString, getSentryOptions } from "./runtime-env";
+import {
+  applyRuntimeAuthEnv,
+  getHyperdriveConnectionString,
+  getSentryOptions,
+} from "./runtime-env";
 
 interface Env {
   ASSETS: Fetcher;
@@ -50,6 +54,128 @@ interface ExecutionContext {
 export default Sentry.withSentry(
   (env: Record<string, unknown> | undefined) => getSentryOptions(env),
   {
+    // Autonomous backlog driver — runs on the Cron trigger in wrangler.jsonc.
+    // Dispatches ready work items up to the concurrency cap + a daily rate
+    // limit, rotating across agents. Gated on BOB_AUTO_DRAIN_ENABLED so it can
+    // be turned off with a var change, no redeploy.
+    scheduled: async (
+      _event: unknown,
+      rawEnv: Record<string, unknown> | undefined,
+      ctx: ExecutionContext,
+    ): Promise<void> => {
+      const runtimeEnv = (rawEnv ?? {}) as Env;
+      const autoDrainOn =
+        String(runtimeEnv.BOB_AUTO_DRAIN_ENABLED ?? "") === "true";
+      const autoMergeOn =
+        String(runtimeEnv.BOB_AUTO_MERGE_ENABLED ?? "") === "true" &&
+        !!runtimeEnv.ANTHROPIC_API_KEY;
+      // Keep the Linear backlog fresh server-side (default on) — the sync was
+      // webhook-only, so new Linear tasks stopped reaching Bob when the webhook
+      // went quiet. This pull backfills + maintains. Gated to ~every 15 min to
+      // stay well under Linear's API rate limit.
+      const syncLinearOn =
+        String((runtimeEnv as any).BOB_AUTO_SYNC_LINEAR_ENABLED ?? "true") !== "false";
+      const scheduledTime =
+        typeof (_event as any)?.scheduledTime === "number"
+          ? (_event as any).scheduledTime
+          : Date.now();
+      const syncLinearDue = Math.floor(scheduledTime / 60_000) % 15 === 0;
+      if (!autoDrainOn && !autoMergeOn && !syncLinearOn) {
+        return;
+      }
+      const concurrency = Number(runtimeEnv.BOB_AUTO_DRAIN_CONCURRENCY ?? 4);
+      const dailyCap = Number(runtimeEnv.BOB_AUTO_DRAIN_DAILY_CAP ?? 20);
+      const nudgeSecret =
+        runtimeEnv.NUDGE_SHARED_SECRET ?? process.env.NUDGE_SHARED_SECRET;
+      if (nudgeSecret) {
+        (globalThis as any).NUDGE_SHARED_SECRET = nudgeSecret;
+      }
+      const { connectionString, isHyperdrive } =
+        getHyperdriveConnectionString(runtimeEnv);
+      const work = runWithDb(connectionString, isHyperdrive, async () => {
+        // 0. Keep the Linear backlog in sync (backfill + ongoing). Runs
+        // server-side with full DB access — no user session needed, which is
+        // why the cron is the right home for this (the RPC requires a browser
+        // session). Imports open Linear issues as work items; a Linear "Todo"
+        // maps to Bob "todo", which auto-drain then dispatches.
+        if (syncLinearOn && syncLinearDue) {
+          try {
+            const { db } = await import("@bob/db/client");
+            const { syncLinearProjects } = await import(
+              "@bob/api/handlers/linearSetup"
+            );
+            const { workspaceIntegrations, workspaceMembers } = await import(
+              "@bob/db/schema"
+            );
+            const { eq, and, asc } = await import("@bob/db");
+            const integrations = await db.query.workspaceIntegrations.findMany({
+              where: and(
+                eq(workspaceIntegrations.provider, "linear"),
+                eq(workspaceIntegrations.enabled, true),
+              ),
+            });
+            for (const integ of integrations) {
+              const owner = await db.query.workspaceMembers.findFirst({
+                where: eq(workspaceMembers.workspaceId, integ.workspaceId),
+                columns: { userId: true },
+                orderBy: [asc(workspaceMembers.joinedAt)],
+              });
+              if (!owner) continue;
+              const r = await syncLinearProjects(
+                { db, userId: owner.userId },
+                { workspaceId: integ.workspaceId, importIssues: true },
+              );
+              console.log(
+                `[linear-sync] ws=${integ.workspaceId} projectsCreated=${r.projectsCreated} projectsExisting=${r.projectsExisting} issuesImported=${r.issuesImported}` +
+                  (r.issuesTruncated ? " (issues truncated)" : ""),
+              );
+            }
+          } catch (err) {
+            console.error("[linear-sync] failed:", err);
+          }
+        }
+        // 1. Dispatch backlog work.
+        if (autoDrainOn) {
+          const { autoDrainBacklog } = await import(
+            "@bob/api/handlers/autoDrain"
+          );
+          const result = await autoDrainBacklog({ concurrency, dailyCap });
+          console.log(
+            `[auto-drain] dispatched=${result.dispatched} running=${result.running} today=${result.dispatchedToday}` +
+              (result.reason ? ` reason="${result.reason}"` : "") +
+              (result.items.length
+                ? ` items=${result.items.map((i) => `${i.identifier}:${i.agentType}`).join(",")}`
+                : ""),
+          );
+        }
+        // 2. Review + auto-merge the PRs those tasks produced.
+        if (autoMergeOn) {
+          const { autoReviewAndMerge } = await import(
+            "@bob/api/handlers/autoMergeReview"
+          );
+          const r = await autoReviewAndMerge({
+            maxPerRun: Number(runtimeEnv.BOB_AUTO_MERGE_MAX_PER_RUN ?? 5),
+            reviewModel:
+              (runtimeEnv.BOB_AUTO_MERGE_MODEL as string | undefined) ??
+              "claude-sonnet-5",
+            anthropicApiKey: runtimeEnv.ANTHROPIC_API_KEY as string,
+            dryRun: String(runtimeEnv.BOB_AUTO_MERGE_DRY_RUN ?? "") === "true",
+            forgejoToken: runtimeEnv.BOB_FORGEJO_TOKEN as string | undefined,
+            forgejoInstanceUrl:
+              (runtimeEnv.BOB_FORGEJO_INSTANCE_URL as string | undefined) ??
+              "https://git.forgegraf.com",
+          });
+          console.log(
+            `[auto-merge] scanned=${r.scanned} reviewed=${r.reviewed} merged=${r.merged} skipped=${r.skipped}` +
+              (r.items.length
+                ? ` items=${r.items.map((i) => `${i.pr}:${i.action}${i.reason ? `(${i.reason})` : ""}`).join(", ")}`
+                : ""),
+          );
+        }
+      });
+      ctx.waitUntil(work);
+      await work;
+    },
     fetch: wrapFetch(
       async (
         request: Request,
@@ -58,6 +184,7 @@ export default Sentry.withSentry(
       ): Promise<Response> => {
         const url = new URL(request.url);
         const runtimeEnv = (rawEnv ?? {}) as Env;
+        applyRuntimeAuthEnv(runtimeEnv);
 
         // WebSocket proxy to gateway — forward upgrade to origin
         if (

@@ -55,14 +55,16 @@ if ssh "${SSH_TARGET}" "test -f ${REMOTE_DIR}/.env"; then
   ssh "${SSH_TARGET}" "systemctl enable bob-execution && systemctl restart bob-execution"
   sleep 2
   ssh "${SSH_TARGET}" "journalctl -u bob-execution -n 10 --no-pager"
+  echo "==> Verifying service-user provider readiness..."
+  node "${REPO_ROOT}/scripts/verify-bob-provider-host.mjs" "${HOST}" "${USER}" || true
 else
   echo "    WARNING: No .env file at ${REMOTE_DIR}/.env"
   echo "    Create it with:"
   echo "      BOB_API_KEY=<api-key>"
   echo "      BOB_WORKSPACE_ID=<workspace-id>"
   echo "      GATEWAY_WS_URL=ws://100.101.32.120:3003/sessions"
-  echo "      ANTHROPIC_API_KEY=<key>"
   echo "      BOB_DEV_DIR=/home/bob/dev"
+  echo "    Authenticate locally as bob: claude auth login; codex login; grok login --device-auth; cursor-agent login"
   echo "    Then: systemctl enable bob-execution && systemctl start bob-execution"
 fi
 

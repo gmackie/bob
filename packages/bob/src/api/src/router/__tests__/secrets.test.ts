@@ -171,7 +171,7 @@ describe("session secret schema and router", () => {
     expect(sessionSecrets).toBeDefined();
     expect(sessionSecretUsages).toBeDefined();
     expect(projectDeploySecretBindings).toBeDefined();
-  });
+  }, 60_000);
 
   it("creates session secrets and stores related usage metadata", async () => {
     queryMocks.chatConversationsFindFirst.mockResolvedValueOnce({

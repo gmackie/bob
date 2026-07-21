@@ -1,7 +1,8 @@
 {
   "name": "@gmacko/desktop",
-  "private": true,
   "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
   "main": "dist/main.js",
   "scripts": {
     "dev": "vite build --watch --config vite.main.config.ts & sleep 2 && electron .",

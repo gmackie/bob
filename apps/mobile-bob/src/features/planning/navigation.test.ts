@@ -50,6 +50,26 @@ describe("planning navigation", () => {
     expect(getNotificationTargetHref({})).toBeNull();
   });
 
+  it("deep-links ad-hoc run pushes straight to the session screen", () => {
+    expect(getNotificationTargetHref({ sessionId: "session-9" })).toBe(
+      "/sessions/session-9",
+    );
+    // sessionId beats a raw url so blocked/host_unknown taps never dead-end.
+    expect(
+      getNotificationTargetHref({ sessionId: "session-9", url: "/runs" }),
+    ).toBe("/sessions/session-9");
+  });
+
+  it("prefers the work item destination over the session deep link", () => {
+    expect(
+      getNotificationTargetHref({
+        workItemId: "task-456",
+        workspaceId: "workspace-1",
+        sessionId: "session-9",
+      }),
+    ).toBe("/work-items/task-456?workspace=workspace-1");
+  });
+
   it("summarizes active execution states for the mobile planning shell", () => {
     expect(
       groupActiveTaskStatuses([

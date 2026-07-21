@@ -26,6 +26,10 @@ function readTrimmedOrNull(name: string): string | null {
   return value && value.length > 0 ? value : null;
 }
 
+function isProduction(): boolean {
+  return process.env.NODE_ENV === "production";
+}
+
 export const env = {
   get BOB_AUTH_BYPASS(): boolean {
     return readFlag("BOB_AUTH_BYPASS");
@@ -36,7 +40,14 @@ export const env = {
   get BOB_AUTH_BYPASS_USER_ID(): string | null {
     return readTrimmedOrNull("BOB_AUTH_BYPASS_USER_ID");
   },
+  get IS_PRODUCTION(): boolean {
+    return isProduction();
+  },
   get REQUIRE_AUTH(): boolean {
+    // Fail-closed in production: auth is required unless explicitly disabled.
+    if (isProduction()) {
+      return process.env.REQUIRE_AUTH !== "false";
+    }
     return readFlag("REQUIRE_AUTH");
   },
 };

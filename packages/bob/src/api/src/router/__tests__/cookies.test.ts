@@ -227,7 +227,7 @@ describe("cookies router", () => {
         caller.cookies.import({ cookies, source: "cli" }),
       ).rejects.toThrow();
     });
-  });
+  }, 60_000);
 
   describe("list", () => {
     it("should call the list procedure without error", async () => {

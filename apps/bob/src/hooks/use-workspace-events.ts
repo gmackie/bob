@@ -74,6 +74,10 @@ export function useWorkspaceEvents() {
     onEvent: () => invalidateShellQueries("event"),
     onStatusChange: () => invalidateShellQueries("session_created"),
     onWorkspaceSnapshot: () => invalidateShellQueries("workspace_snapshot"),
+    onHostSnapshot: (snapshotWorkspaceId, snapshot) => {
+      queryClient.setQueryData(["hostSnapshot", snapshotWorkspaceId], snapshot);
+      invalidateShellQueries("host_snapshot");
+    },
     onWorkspaceStatusChanged: (_info: ServerSessionStatusChanged) =>
       invalidateShellQueries("session_status_changed"),
     onWorkspaceEvent: (message) => invalidateShellQueries(message.type),

@@ -14,6 +14,7 @@ import {
   buildRecentlyCompletedWorkItems,
   buildTaskLaneSummaries,
   getProviderCapacityStatusLine,
+  getProviderCapacityAccessibilityLabel,
   getRecentlyCompletedRowModel,
   getTaskDashboardHeaderModel,
   getTaskDashboardLayout,
@@ -52,10 +53,12 @@ function ProviderCard({
   card,
   onOpenProvider,
   footerDirection,
+  minWidth,
 }: {
   card: ProviderCapacityCard;
   onOpenProvider?: (provider: ProviderKey) => void;
   footerDirection: "row" | "column";
+  minWidth: number;
 }) {
   const accent = toneColor(card.tone);
 
@@ -63,9 +66,9 @@ function ProviderCard({
     <Pressable
       onPress={() => onOpenProvider?.(card.provider)}
       accessibilityRole="button"
-      accessibilityLabel={`Open ${card.label} provider detail`}
+      accessibilityLabel={getProviderCapacityAccessibilityLabel(card)}
       className="flex-1 rounded-lg border p-4 active:opacity-80"
-      style={{ borderColor: colors.border, backgroundColor: colors.card }}
+      style={{ borderColor: colors.border, backgroundColor: colors.card, minWidth }}
     >
       <View className="flex-row items-center justify-between">
         <Text className="text-base font-semibold text-foreground">{card.label}</Text>
@@ -454,13 +457,14 @@ export function TasksDashboard({
               </View>
             ) : null}
 
-            <View className="flex-row gap-3">
+            <View className={dashboardLayout.providerWrap === "wrap" ? "flex-row flex-wrap gap-3" : "flex-row gap-3"}>
               {providerCards.map((card) => (
                 <ProviderCard
                   key={card.provider}
                   card={card}
                   onOpenProvider={onOpenProvider}
                   footerDirection={dashboardLayout.providerFooterDirection}
+                  minWidth={dashboardLayout.providerCardMinWidth}
                 />
               ))}
             </View>

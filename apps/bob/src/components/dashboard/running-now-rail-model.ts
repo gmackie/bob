@@ -46,6 +46,10 @@ const ACTIVE_RUN_STATUSES = new Set([
   "pending",
   "awaiting-input",
   "awaiting_input",
+  // Paused awaiting a human decision — still active (the "needs you" state).
+  "blocked",
+  // Lease expired: contact lost, process fate unknown — still active.
+  "host_unknown",
 ]);
 const ACTIVE_WORK_STATUSES = new Set(["in_progress", "running"]);
 const ACTIVE_AGENT_STATUSES = ACTIVE_RUN_STATUSES;
@@ -193,6 +197,9 @@ function formatStatusLabel(status: string): string {
 
 function getStatusTone(status: string): RunningNowRailStatusTone {
   if (status === "running" || status === "in_progress") return "success";
+  // Lease expired: contact lost — muted/neutral "lost contact", not the
+  // amber "needs you" of a blocked run.
+  if (status === "host_unknown") return "default";
   if (ACTIVE_RUN_STATUSES.has(status)) return "warning";
   return "default";
 }

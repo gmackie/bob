@@ -38,7 +38,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Typecheck
-        run: pnpm typecheck
+        # Run one tsc at a time. The default turbo concurrency runs many tscs
+        # in parallel, and the big Next.js app (@bob/blder) spikes enough memory
+        # that a concurrent run intermittently OOM-kills one (exit 137) under
+        # the runner's RAM+swap pressure. Serial typecheck can't collectively
+        # exhaust memory; same reasoning as the serialized test step below.
+        run: pnpm exec turbo run typecheck --concurrency=1
 
       - name: Lint
         run: pnpm lint
@@ -56,7 +61,13 @@ jobs:
           nohup npx @gmacko/emulate start -s postgres --seed emulate.config.yaml \
             > /tmp/emulate.log 2>&1 &
           echo "Waiting for emulated postgres wire protocol on :5432..."
-          for i in $(seq 1 90); do
+          # A cold npx cache means @gmacko/emulate has to install and compile
+          # its bundled Redis (jemalloc + LTO) from source before ANY of its
+          # output appears -- measured at ~125s in a genuinely cold container
+          # (see netcontrol's test/emulate-setup.ts, which hit the identical
+          # issue). 90s wasn't enough headroom and intermittently failed this
+          # step outright before the emulator ever got a chance to come up.
+          for i in $(seq 1 180); do
             if (echo > /dev/tcp/127.0.0.1/5432) >/dev/null 2>&1; then
               echo "postgres ready after ${i}s"
               exit 0

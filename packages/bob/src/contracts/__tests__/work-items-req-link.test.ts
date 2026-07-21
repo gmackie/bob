@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { WorkItemsRpc } from "../groups/work-items.js";
 
 describe("WorkItemsRpc — 7B-4C Task 3", () => {
-  it("has 31 procedures after Task 3", () => {
-    expect(WorkItemsRpc.requests.size).toBe(31);
+  it("has 32 procedures after Task 3", () => {
+    expect(WorkItemsRpc.requests.size).toBe(32);
   });
 
   it("contains requirement procedures", () => {

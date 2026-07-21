@@ -76,10 +76,14 @@ type SessionStatus =
   | "provisioning"
   | "starting"
   | "running"
+  // Paused on a human decision (permission request / re-auth).
+  | "blocked"
   | "idle"
   | "stopping"
   | "stopped"
-  | "error";
+  | "error"
+  // Lease expired: contact lost, process fate unknown (never implies failure).
+  | "host_unknown";
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -432,6 +436,33 @@ export async function sessionStop(
       code: "NOT_FOUND",
       message: "Session not found",
     });
+  }
+
+  // Ask the gateway to kill the running agent process. When a daemon holds
+  // the session, the gateway marks it "stopping" and the daemon's terminal
+  // "interrupted" report finalizes it; when no daemon is online the gateway
+  // finalizes it as "stopped" itself. Only fall back to a bare local status
+  // flip when the gateway is unreachable.
+  const gatewayUrl = process.env.GATEWAY_URL;
+  const nudgeSecret = process.env.NUDGE_SHARED_SECRET;
+  if (gatewayUrl && nudgeSecret) {
+    try {
+      const res = await fetch(`${gatewayUrl}/internal/session-stop`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${nudgeSecret}`,
+        },
+        body: JSON.stringify({ userId: ctx.userId, sessionId: input.id }),
+      });
+      if (res.ok) {
+        return await ctx.db.query.chatConversations.findFirst({
+          where: eq(chatConversations.id, input.id),
+        });
+      }
+    } catch {
+      // fall through to local finalize
+    }
   }
 
   const [updated] = await ctx.db

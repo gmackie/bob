@@ -45,7 +45,7 @@ const DEFAULTS: RpcOpenApiConfig = {
   title: "Bob API",
   version: "1.0.0",
   description: "OpenAPI 3.1 contract generated from Bob's Effect-RPC groups",
-  baseUrl: "https://blder.bot",
+  baseUrl: "https://bob.blder.bot",
 };
 
 /**

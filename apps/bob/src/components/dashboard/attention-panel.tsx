@@ -38,6 +38,24 @@ export function AttentionPanel() {
   const items: AttentionItem[] = [];
 
   if (allRuns) {
+    // Blocked runs are the "needs you" state — paused awaiting a human
+    // decision (permission request / re-auth). Surface them first.
+    const blockedRuns = (allRuns as any[]).filter(
+      (r) => r.status === "blocked",
+    );
+    for (const run of blockedRuns) {
+      const title = run.session?.title ?? run.workItemId ?? "Untitled run";
+      items.push({
+        id: `run-${run.id}`,
+        category: "approve",
+        title: typeof title === "string" && title.length > 60
+          ? title.slice(0, 60) + "..."
+          : title,
+        description: `${run.agentType} · ${run.status}`,
+        href: `/runs/${run.id}`,
+      });
+    }
+
     const failedRuns = (allRuns as any[]).filter(
       (r) => r.status === "failed" || r.status === "interrupted",
     );

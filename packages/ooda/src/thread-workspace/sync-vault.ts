@@ -2,7 +2,24 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 
-import simpleGit from "simple-git";
+import simpleGit, { type SimpleGit } from "simple-git";
+
+// Any git operation that might create a merge commit (a real `git pull`
+// merging divergent history, not just a fast-forward) fails outright with
+// "fatal: unable to auto-detect email address" when no committer identity
+// is configured anywhere -- globally or locally. That failure happens
+// BEFORE git writes any conflict markers to the working tree, so pullVault's
+// catch-block fallback (checking hasConflicts()) sees a clean tree and
+// wrongly reports conflicts: false, even though a real conflict exists.
+// This bit in CI (no global git config on the runner) but not on a typical
+// dev machine (which usually has ~/.gitconfig set) -- meaning any host
+// without global git identity hits this in production too. Set a local
+// identity on the vault repo unconditionally so merges never depend on the
+// host's global git config.
+async function ensureIdentity(git: SimpleGit): Promise<void> {
+  await git.addConfig("user.name", "OODA", true, "local");
+  await git.addConfig("user.email", "ooda@local", true, "local");
+}
 
 export async function initVaultRepo(
   vaultPath: string,
@@ -12,19 +29,12 @@ export async function initVaultRepo(
 
   if (!existsSync(join(vaultPath, ".git"))) {
     await git.init(["-b", "main"]);
+    await ensureIdentity(git);
     await git.addRemote("origin", remoteUrl);
-    await git.raw([
-      "-c",
-      "user.name=OODA",
-      "-c",
-      "user.email=ooda@local",
-      "commit",
-      "--allow-empty",
-      "-m",
-      "Initialize vault",
-    ]);
+    await git.raw(["commit", "--allow-empty", "-m", "Initialize vault"]);
     await git.push("origin", "main", ["--set-upstream"]);
   } else {
+    await ensureIdentity(git);
     const remotes = await git.getRemotes(true);
     if (!remotes.find((r) => r.name === "origin")) {
       await git.addRemote("origin", remoteUrl);
@@ -35,6 +45,7 @@ export async function initVaultRepo(
 export async function pushVault(vaultPath: string): Promise<void> {
   const git = simpleGit(vaultPath);
   try {
+    await ensureIdentity(git);
     await git.push("origin");
   } catch {
     // Silent failure when offline -- local is authoritative
@@ -49,6 +60,7 @@ export interface PullResult {
 
 export async function pullVault(vaultPath: string): Promise<PullResult> {
   const git = simpleGit(vaultPath);
+  await ensureIdentity(git);
 
   try {
     const pullSummary = await git.pull("origin", undefined, ["--no-rebase"]);

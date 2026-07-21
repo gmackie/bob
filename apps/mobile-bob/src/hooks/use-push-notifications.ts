@@ -150,6 +150,7 @@ function handleNotificationResponse(
   const data = response.notification.request.content.data as {
     workItemId?: string;
     workspaceId?: string;
+    sessionId?: string;
     url?: string;
     type?: string;
   };
@@ -163,14 +164,20 @@ function handleNotificationResponse(
 /**
  * Hook to set up push notifications on app launch.
  * Call this once in the root layout.
+ *
+ * Pass the authenticated user id: token registration hits a protected
+ * procedure, so it must wait until the user is signed in, and re-run if the
+ * signed-in user changes (registration is keyed on userId).
  */
-export function usePushNotifications() {
+export function usePushNotifications(userId?: string | null) {
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
   const notificationListener = useRef<ExpoNotifications.EventSubscription | null>(null);
   const responseListener = useRef<ExpoNotifications.EventSubscription | null>(null);
 
   useEffect(() => {
     if (!Notifications) return;
+    // Wait for auth — registerPushToken is a protected procedure.
+    if (!userId) return;
 
     // Register for push notifications
     registerForPushNotifications()
@@ -207,7 +214,7 @@ export function usePushNotifications() {
         responseListener.current.remove();
       }
     };
-  }, []);
+  }, [userId]);
 
   return { expoPushToken };
 }

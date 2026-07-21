@@ -1,62 +1,70 @@
-# Bob Desktop — Packaging Plan
+# Bob Desktop — Packaging
 
-`@bob/desktop` is a **self-contained local-first Electron app**: it spawns a local
+`@bob/desktop` is a self-contained local-first Electron app: it spawns a local
 `bob-server` (PGlite-backed) + a bundled Go daemon and loads the local server in a
-webview. It runs in dev today but has **never been packaged** — there's no
-electron-builder pipeline. This is the concrete plan to a shippable signed build.
+webview.
 
-## Current state (verified)
-- `pnpm build` (tsdown) passes → `dist-electron/main.js` + `preload.js`.
-- Go daemon binaries are present + git-tracked: `resources/bin/bob-darwin-arm64`
-  (10.0 MB), `bob-darwin-amd64` (10.7 MB) — real Mach-O, but **stale committed
-  blobs** (Apr 29) with no rebuild path; **macOS-only** (`resolveDaemonBinaryPath`
-  returns null off-darwin, `src/main.ts:139-149`).
-- `spawnBobServer()` (`src/main.ts:63-137`) runs `node apps/bob-server/dist/bin.js
-  --port 0 --host 127.0.0.1 --auth-token <rand>`; DB is **PGlite** local WASM
-  (`apps/bob-server/src/server.ts:43,59-60`, `~/.bob/userdata/db`).
+## What ships today
 
-## Gaps blocking a packaged release
-1. **No electron-builder pipeline.** `package.json` `build` is just
-   `{appId, productName}`; electron-builder isn't even a devDep; no `dist`/`make`
-   script; no `electron-builder.yml`.
-2. **Packaged paths break.** `APP_ROOT = path.resolve(__dirname, "../../..")`
-   (`src/main.ts:11`) and `BOB_SERVER_BIN` (`:46-52`) assume the monorepo layout;
-   inside `app.asar` (`Contents/Resources/app.asar/dist-electron/main.js`),
-   `../../..` is wrong and `apps/bob-server` won't exist. `DAEMON_BIN_DIR` (`:55`)
-   same issue unless shipped via `extraResources`.
-3. **bob-server not bundled.** Nothing copies `apps/bob-server/dist` + its runtime
-   deps (`@bob/blder`, `@bob/db`, the PGlite WASM) into the package.
-4. **Spawns a system `node`** (`src/main.ts:65-66`) that won't exist on user
-   machines — must use `process.execPath` + `ELECTRON_RUN_AS_NODE=1` (or `fork`).
-5. **No code-signing / notarization** (no identity, hardenedRuntime, entitlements,
-   notarize) — a child-process-spawning app will be Gatekeeper-blocked otherwise.
-6. **Daemon is a committed blob**, no Go cross-compile step; source is external
-   (`github.com/blder/bob`); no Linux/Windows daemon.
-7. **No app icon / DMG assets.**
+- **electron-builder pipeline** — `electron-builder.yml`, `pnpm package`, staging
+  via `scripts/stage-packaging.mjs`.
+- **Packaged-mode paths** — `src/packaging.ts` resolves `bob-server`, daemon
+  binaries, and DB migrations from `process.resourcesPath` when `app.isPackaged`.
+- **No runtime pnpm** — `@bob/server` spawns blder via `node` + vinext CLI or
+  `dist/server/{index,entry}.js`; the desktop shell spawns bob-server with
+  `process.execPath` + `ELECTRON_RUN_AS_NODE=1`.
+- **Cross-platform daemon strategy** — `bob-<os>-<arch>` naming for
+  darwin/linux/windows; missing binaries are skipped with a warning. Rebuild via
+  `pnpm build:daemon` (requires Go + `github.com/blder/bob`).
+- **Signing / notarization** — macOS hardened runtime + entitlements; notarize via
+  `APPLE_TEAM_ID` plus either Apple ID credentials or App Store Connect API key env
+  vars (see below).
 
-## Plan (ordered)
-1. **electron-builder setup** — add it as a devDep; add `package`/`dist` scripts;
-   add `electron-builder.yml` with `mac` (dmg, arm64+x64), `directories.buildResources`,
-   an app icon (`build/icon.icns`), and `extraResources` copying
-   `apps/bob-server/dist` (+ pruned `node_modules` incl. PGlite WASM) → `bob-server/`
-   and `resources/bin/` → `bin/`.
-2. **Packaged-mode path resolution** — branch on `app.isPackaged`: resolve
-   `BOB_SERVER_BIN` and `DAEMON_BIN_DIR` from `process.resourcesPath` in packaged
-   mode, keep `../../..` for dev. (Must match the `extraResources` layout from step 1.)
-3. **Node spawn** — replace `spawn("node", …)` with `spawn(process.execPath, …, {
-   env: { ELECTRON_RUN_AS_NODE: "1", … } })`.
-4. **Daemon build** — script the Go cross-compile (`GOOS`/`GOARCH`) of the external
-   `github.com/blder/bob` CLI → `resources/bin/bob-<os>-<arch>`, so the binary is
-   reproducible, not a stale blob; add Linux/Windows if those targets are wanted.
-5. **Signing/notarization** — Developer ID identity, `hardenedRuntime: true`, an
-   entitlements plist (JIT / inherit / network), and `notarize` (Apple ID or
-   App Store Connect API key) — wired into CI or a local `eas`-style step.
-6. **Verify** — package, then confirm the app boots end-to-end: server spawn →
-   PGlite init → daemon spawn → `loadURL`.
+## Build a release
 
-## Credential / environment gates (why this needs a dedicated Mac session)
-Steps 2-4 are pure code; **steps 1, 5, 6 need a macOS machine + an Apple Developer
-ID + a real `electron-builder` package run to validate** (the path code in step 2
-must match the actual bundled layout, which only a test package confirms). That
-test-build-sign loop can't be done from a headless/non-Mac context, so it's split
-out here as the explicit next deliverable.
+```bash
+# 1. Build workspace payloads the desktop bundles
+pnpm --filter @bob/blder build
+pnpm --filter @bob/server build
+
+# 2. (Optional) refresh Go daemon binaries
+cd apps/desktop-bob && pnpm build:daemon
+
+# 3. Package (stages resources, builds Electron main/preload, runs electron-builder)
+cd apps/desktop-bob && pnpm package
+```
+
+Artifacts land in `apps/desktop-bob/release/`.
+
+## macOS signing / notarization env
+
+Set these before `pnpm package` on a Mac with a Developer ID certificate installed:
+
+| Variable | Purpose |
+| --- | --- |
+| `CSC_NAME` or `CSC_LINK` + `CSC_KEY_PASSWORD` | Code-sign the `.app` |
+| `APPLE_TEAM_ID` | Team ID wired into `electron-builder.yml` |
+| `APPLE_ID` + `APPLE_APP_SPECIFIC_PASSWORD` | Apple ID notarization |
+| `APPLE_API_KEY` + `APPLE_API_KEY_ID` + `APPLE_API_ISSUER` | ASC API key notarization (alternative) |
+
+Without credentials, `electron-builder` still produces an unsigned build (useful for
+layout validation on CI/Linux).
+
+## Layout inside the packaged app
+
+```
+Contents/Resources/
+  bob-server/     # pnpm deploy of @bob/server
+  blder/          # pnpm deploy of @bob/blder (vinext dist + runtime deps)
+  db-migrations/  # packages/bob/src/db/drizzle
+  bin/            # Go daemon binaries (bob-darwin-*, bob-linux-*, bob-windows-*.exe)
+```
+
+## Dev mode
+
+```bash
+cd apps/desktop-bob && pnpm dev
+```
+
+Spawns against the monorepo layout (not `resourcesPath`). Set `BOB_DESKTOP_DEV=1`
+(via `dev-electron.mjs`) to run vinext HMR instead of the production server entry.

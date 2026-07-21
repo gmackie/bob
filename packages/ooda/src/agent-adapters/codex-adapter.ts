@@ -1,5 +1,10 @@
 import { execSync, spawn } from "node:child_process";
-import type { AgentAdapter, AdapterCommand, AdapterEvent } from "./types";
+import type {
+  AgentAdapter,
+  AdapterCommand,
+  AdapterEvent,
+  BuildCommandOptions,
+} from "./types";
 
 export class CodexAdapter implements AgentAdapter {
   id = "codex" as const;
@@ -17,15 +22,14 @@ export class CodexAdapter implements AgentAdapter {
     }
   }
 
-  buildCommand(opts: {
-    prompt: string;
-    workspaceRoot: string;
-    systemPrompt?: string;
-  }): AdapterCommand {
+  buildCommand(opts: BuildCommandOptions): AdapterCommand {
     const args: string[] = ["exec"];
 
     if (opts.systemPrompt) {
       args.push("--instructions", opts.systemPrompt);
+    }
+    if (opts.model) {
+      args.push("--model", opts.model);
     }
 
     args.push(opts.prompt);

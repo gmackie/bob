@@ -92,6 +92,13 @@ export interface UseGatewayResult {
   openPlanningSession: (sessionId: string) => void;
   sendInput: (sessionId: string, data: string) => void;
   stopSession: (sessionId: string) => void;
+  approve: (
+    sessionId: string,
+    requestId: string,
+    decision: "allow" | "deny",
+    message?: string,
+  ) => void;
+  reportRunView: (sessionId: string) => void;
   refresh: () => void;
 }
 
@@ -166,6 +173,18 @@ export function useGateway(): UseGatewayResult {
   const stopSession = useCallback((sessionId: string) => {
     trackAgentAction("stop");
     clientRef.current?.stopSession(sessionId);
+  }, []);
+
+  const approve = useCallback(
+    (sessionId: string, requestId: string, decision: "allow" | "deny", message?: string) => {
+      trackAgentAction(decision === "allow" ? "approve" : "reject");
+      clientRef.current?.approve(sessionId, requestId, decision, message);
+    },
+    [],
+  );
+
+  const reportRunView = useCallback((sessionId: string) => {
+    clientRef.current?.runView(sessionId);
   }, []);
 
   const refresh = useCallback(() => {
@@ -280,6 +299,8 @@ export function useGateway(): UseGatewayResult {
     openPlanningSession,
     sendInput,
     stopSession,
+    approve,
+    reportRunView,
     refresh,
   };
 }
