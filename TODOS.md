@@ -18,3 +18,30 @@ Requirements:
 
 Context: Codex flagged this as a critical gap for batch creation. Single-task creation
 (planning one task at a time) works fine without backoff. Batch dispatch is the risk.
+
+## pgbouncer in front of hetzner-master Postgres
+
+**Status:** Deferred (own workstream — shared ForgeGraph infra, not Bob code)
+**Priority:** P2
+**Depends on:** nothing; deployable any time
+**Added:** 2026-07-12 (/plan-eng-review of the Bob production v1 design)
+
+**What:** Deploy pgbouncer (transaction pooling) in front of Postgres on hetzner-master
+so ForgeGraph's ~100-connection steady state and Bob's gateway/worker/cron connections
+share a bounded pool.
+
+**Why:** The 2026-07-06 incident (error 53300, ws-gateway crash loop) was connection
+exhaustion at max_connections=200; the bump to 400 postpones the ceiling rather than
+removing it. Bob production v1 adds an outbox worker, an Expo receipts cron, and a
+sessionEvents retention job — all new connection consumers on the same box.
+
+**Where to start:** pgbouncer on hetzner-master alongside Postgres (its own volume at
+/mnt/HC_Volume_105211366); repoint DATABASE_URL-style secrets through the pooler.
+
+**Caveats:** prepared statements under transaction pooling — verify postgres.js and
+drizzle settings (postgres.js `prepare: false` or use session pooling for the few
+long-lived consumers). Roll out one consumer at a time; the runtime Hyperdrive path
+has its own pooling and may not need to move.
+
+**Rejected alternative:** folding this into the Bob production v1 slice — mixed blast
+radius (shared ForgeGraph dependency inside an already-XXL Bob build).

@@ -55,7 +55,7 @@ export interface StartInstanceRequest {
 
 export const DEFAULT_USER_ID = 'default-user';
 
-export type AgentType = 'claude' | 'cursor-agent' | 'codex' | 'gemini' | 'kiro' | 'opencode';
+export type AgentType = 'claude' | 'cursor-agent' | 'codex' | 'grok' | 'gemini' | 'kiro' | 'opencode';
 
 export interface AgentInfo {
   type: AgentType;

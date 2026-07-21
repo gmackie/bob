@@ -11,18 +11,16 @@ import {
 import { createServer as createNetServer, type AddressInfo } from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildBlderLaunchSpec, resolveBlderDir } from "./blder-spawn.js";
 import { createHttpServer } from "./http.js";
 import type { CliArgs } from "./cli.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// apps/bob-server/dist/server.js → ../../blder → apps/blder
-const BLDER_DIR = path.resolve(__dirname, "../../blder");
-// apps/bob-server/dist/server.js → ../../../packages/db/drizzle
+// apps/bob-server/dist/server.js → ../../../packages/bob/src/db/drizzle
 const DB_MIGRATIONS_DIR = path.resolve(
   __dirname,
-  "../../../packages/db/drizzle",
+  "../../../packages/bob/src/db/drizzle",
 );
 
 export type StartServerArgs = CliArgs & { authToken: string };
@@ -43,31 +41,29 @@ export async function startServer(
   const pgliteDir = path.join(args.baseDir, "userdata", "db");
 
   const useDev = process.env.BOB_DESKTOP_DEV === "1";
-  // Task 13 switches to "dev" when BOB_DESKTOP_DEV=1; for Task 6 we stay on
-  // the prod "start" path so blder's built dist/server/entry.js is used.
-  const blderScript = useDev ? "dev" : "start";
+  const blderDir = resolveBlderDir();
+  const launch = buildBlderLaunchSpec({
+    blderDir,
+    port: internalPort,
+    useDev,
+  });
 
-  const child: ChildProcess = spawn(
-    "pnpm",
-    ["--filter", "@bob/blder", blderScript],
-    {
-      cwd: BLDER_DIR,
-      env: {
-        ...process.env,
-        PORT: String(internalPort),
-        HOST: "127.0.0.1",
-        BOB_DB_DRIVER: "pglite",
-        BOB_DB_PGLITE_DIR: pgliteDir,
-        BOB_DB_MIGRATIONS_DIR: DB_MIGRATIONS_DIR,
-        BOB_BUILD_TARGET: "node",
-      },
-      stdio: ["ignore", "inherit", "inherit"],
-      // Put the child in its own process group so we can signal the whole
-      // tree (pnpm → vinext → etc.) on stop. Without this, pnpm exits but
-      // its grandchildren survive as orphans.
-      detached: process.platform !== "win32",
+  const child: ChildProcess = spawn(launch.executable, [...launch.args], {
+    cwd: launch.cwd,
+    env: {
+      ...process.env,
+      PORT: String(internalPort),
+      HOST: "127.0.0.1",
+      BOB_DB_DRIVER: "pglite",
+      BOB_DB_PGLITE_DIR: pgliteDir,
+      BOB_DB_MIGRATIONS_DIR: DB_MIGRATIONS_DIR,
+      BOB_BUILD_TARGET: "node",
     },
-  );
+    stdio: ["ignore", "inherit", "inherit"],
+    // Put the child in its own process group so we can signal the whole
+    // tree on stop. Without this, the parent exits but grandchildren survive.
+    detached: process.platform !== "win32",
+  });
 
   child.on("exit", (code, signal) => {
     if (code !== null && code !== 0) {

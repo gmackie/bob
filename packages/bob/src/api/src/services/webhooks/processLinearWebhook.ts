@@ -1,4 +1,4 @@
-import { and, eq } from "@bob/db";
+import { and, eq, inArray } from "@bob/db";
 import { db } from "@bob/db/client";
 import type {
   projects} from "@bob/db/schema";
@@ -139,9 +139,17 @@ async function findOrCreateWorkItem(
   workspaceId: string,
   ownerUserId: string,
 ): Promise<typeof workItems.$inferSelect> {
+  // Match BOTH external-id formats — see linearSetup.syncLinearProjects. Older
+  // rows are keyed by the Linear identifier ("GMA-5"), newer ones by the issue
+  // UUID; matching only one format re-creates the issue and duplicates work.
   const existing = await db.query.workItems.findFirst({
     where: and(
-      eq(workItems.externalId, payload.data.id),
+      inArray(
+        workItems.externalId,
+        [payload.data.id, payload.data.identifier].filter(
+          (v): v is string => typeof v === "string" && v.length > 0,
+        ),
+      ),
       eq(workItems.externalProvider, "linear"),
     ),
   });

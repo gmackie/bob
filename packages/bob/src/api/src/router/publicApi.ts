@@ -1,5 +1,7 @@
 import { z } from "zod/v4";
 
+import { agentRunStatusEnum } from "@bob/db/schema";
+
 import {
   protectedProcedure,
   apiKeyReadProcedure,
@@ -62,7 +64,10 @@ export const publicApiRouter = {
     .input(
       z.object({
         runId: z.string().uuid(),
-        status: z.enum(["running", "completed", "failed"]),
+        // Full agent-run status set (single source of truth:
+        // @bob/agents/schema) so "blocked", "interrupted" and
+        // "host_unknown" can be reported instead of being rejected.
+        status: z.enum(agentRunStatusEnum.enumValues),
         summary: z.record(z.string(), z.unknown()).optional(),
       }),
     )

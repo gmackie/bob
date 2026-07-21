@@ -13,6 +13,26 @@ export interface PriorityQueueHeaderModel {
   subtitle: null;
 }
 
+export interface TaskDashboardWorkspace {
+  id: string;
+  name?: string | null;
+  slug?: string | null;
+}
+
+export function selectTaskDashboardWorkspace(
+  memberships: Array<{ workspace?: TaskDashboardWorkspace | null }>,
+  workspaceId: string | null,
+): TaskDashboardWorkspace | null {
+  const workspaces = memberships.flatMap((membership) =>
+    membership.workspace ? [membership.workspace] : [],
+  );
+  return (
+    (workspaceId
+      ? workspaces.find((workspace) => workspace.id === workspaceId)
+      : workspaces[0]) ?? null
+  );
+}
+
 export type TaskShellRoute = "/tasks" | "/runs" | "/tasks/queue";
 
 export interface PriorityQueueItem {
@@ -74,6 +94,10 @@ const ACTIVE_AGENT_STATUSES = new Set([
   "pending",
   "awaiting-input",
   "awaiting_input",
+  // Paused awaiting a human decision — still active (the "needs you" state).
+  "blocked",
+  // Lease expired: contact lost, process fate unknown — still active.
+  "host_unknown",
 ]);
 const FAILED_AGENT_STATUSES = new Set(["error", "failed", "interrupted"]);
 const TERMINAL_AGENT_OUTCOME_STATUSES = new Set([

@@ -164,6 +164,10 @@ const ACTIVE_AGENT_STATUSES = new Set([
   "pending",
   "awaiting-input",
   "awaiting_input",
+  // Paused awaiting a human decision — still active (the "needs you" state).
+  "blocked",
+  // Lease expired: contact lost, process fate unknown — still active.
+  "host_unknown",
 ]);
 
 const QUEUE_DETAIL_SECTIONS: WorkItemEntrySection[] = [

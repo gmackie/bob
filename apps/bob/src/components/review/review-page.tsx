@@ -2,6 +2,10 @@
 "use client";
 
 import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
+import { toast } from "@gmacko/core/ui/toast";
+import { useBobRpcClient } from "~/rpc/react";
 import { PipelineRail, type PipelineNode } from "./pipeline-rail";
 import { TaskSelector, type TaskTab } from "./task-selector";
 import { CodeReviewCard, type CodeReviewData } from "./code-review-card";
@@ -121,9 +125,25 @@ function buildPipelineNodes(pipelineState: string | null): PipelineNode[] {
 
 // ---------- component ----------
 export function ReviewPage(props: ReviewPageProps) {
+  const rpc = useBobRpcClient();
+  const router = useRouter();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(
     props.items.length === 1 ? props.items[0]!.id : null,
   );
+
+  const approveProd = useMutation({
+    mutationFn: (dispatchItemId: string) =>
+      rpc.external.forgegraph.approveProdDeploy({ dispatchItemId }),
+    onSuccess: () => {
+      toast("Production deploy approved");
+      router.refresh();
+    },
+    onError: (err: Error) => {
+      toast(err.message, {
+        style: { background: "#1a0000", borderColor: "#f43f5e40" },
+      });
+    },
+  });
 
   // Determine which items to show
   const visibleItems = selectedTaskId
@@ -252,8 +272,12 @@ export function ReviewPage(props: ReviewPageProps) {
                 { label: "Code review approved", passed: Object.values(props.codeReviews).some(r => r.decision === "approve") },
                 { label: "Staging healthy", passed: props.deployments.some(d => d.environment === "staging" && d.status === "healthy") },
               ]}
-              onApprove={() => {/* TODO: wire trpc.forgegraph.approveProdDeploy */}}
-              isApproving={false}
+              onApprove={() => {
+                if (primaryItem?.id) {
+                  approveProd.mutate(primaryItem.id);
+                }
+              }}
+              isApproving={approveProd.isPending}
             />
           )}
 

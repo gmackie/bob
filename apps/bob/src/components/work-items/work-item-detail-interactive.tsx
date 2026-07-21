@@ -627,11 +627,15 @@ function PlanningSessionsList({
               className={`size-1.5 rounded-full ${
                 s.status === "running" || s.status === "idle"
                   ? "bg-emerald-500"
-                  : s.status === "provisioning" || s.status === "starting"
+                  : // Paused awaiting a human decision — amber "needs you".
+                    s.status === "provisioning" ||
+                      s.status === "starting" ||
+                      s.status === "blocked"
                     ? "bg-amber-500"
                     : s.status === "error"
                       ? "bg-rose-500"
-                      : "bg-muted-foreground"
+                      : // host_unknown (contact lost) → muted dot.
+                        "bg-muted-foreground"
               }`}
             />
             <span className="font-medium text-foreground">

@@ -8,13 +8,26 @@ import { cn } from "@gmacko/core/ui";
 import { useBobRpcClient } from "~/rpc/react";
 import {
   buildRecentlyCompletedItems,
-  buildWorkLaneSummaries,
+  buildWorkLaneSummariesFromCounts,
   type DashboardTone,
   type WorkPipelineItem,
   getRecentlyCompletedRowModel,
   getRecentlyCompletedWorkItemHref,
   getWorkPipelineHeaderModel,
 } from "./work-pipeline-model";
+
+// Terminal statuses fetched (scoped, not the capped firehose) to populate the
+// "Recently Completed" strip. The lane cards come from uncapped statusCounts.
+const RECENTLY_COMPLETED_STATUSES = [
+  "done",
+  "completed",
+  "cancelled",
+  "canceled",
+  "stopped",
+  "failed",
+  "interrupted",
+  "error",
+];
 import { getPriorityQueueHref, getTaskLaneHref } from "~/components/tasks/task-shell-model";
 
 interface WorkPipelineProps {
@@ -48,16 +61,42 @@ function laneHref(lane: string, workspaceId: string): string {
 
 export function WorkPipeline({ workspaceId }: WorkPipelineProps) {
   const rpc = useBobRpcClient();
-  const input = { workspaceId, limit: 80 };
-  const { data: workItems, isLoading } = useQuery({
-    queryKey: ["rpc", "workItem.list", input],
-    queryFn: () => rpc.workItems.list(input),
+  const statusCountsInput = { workspaceId: workspaceId ?? "" };
+  const completedItemsInput = {
+    workspaceId: workspaceId ?? "",
+    statuses: RECENTLY_COMPLETED_STATUSES,
+    limit: 50,
+  };
+
+  // Lane cards from uncapped per-status counts — immune to the list cap that
+  // let a pile of in_review items starve the backlog out of every view.
+  const { data: statusCounts, isLoading: countsLoading } = useQuery({
+    queryKey: ["rpc", "workItem.statusCounts", statusCountsInput],
+    queryFn: () =>
+      rpc.workItems.statusCounts(statusCountsInput) as Promise<
+        Record<string, number>
+      >,
     enabled: Boolean(workspaceId),
     refetchInterval: 10_000,
   });
 
-  const laneSummaries = buildWorkLaneSummaries((workItems ?? []) as WorkPipelineItem[]);
-  const recentlyCompleted = buildRecentlyCompletedItems((workItems ?? []) as WorkPipelineItem[]);
+  // Recently-completed strip: a status-scoped fetch of terminal items (sorted
+  // client-side by completion time), not a slice of the recency firehose.
+  const { data: completedItems } = useQuery({
+    queryKey: ["rpc", "workItem.list", completedItemsInput],
+    queryFn: () =>
+      rpc.workItems.list(completedItemsInput) as Promise<WorkPipelineItem[]>,
+    enabled: Boolean(workspaceId),
+    refetchInterval: 30_000,
+  });
+
+  const isLoading = countsLoading;
+  const laneSummaries = buildWorkLaneSummariesFromCounts(
+    (statusCounts ?? {}) as Record<string, number>,
+  );
+  const recentlyCompleted = buildRecentlyCompletedItems(
+    (completedItems ?? []) as WorkPipelineItem[],
+  );
   const header = getWorkPipelineHeaderModel();
 
   return (
