@@ -9,6 +9,7 @@ import {
   projectSetDefaultAgent,
   projectDiscovery,
   projectDismissDir,
+  projectRegisterForge,
 } from "../handlers/project";
 
 export const projectRouter = {
@@ -100,5 +101,19 @@ export const projectRouter = {
     .input(z.object({ dirId: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       projectDismissDir({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
+
+  // Registers a discovered repository (by daemon path) as a ForgeGraph-linked
+  // project. Replaces the removed `/forge/register` gateway proxy.
+  registerForge: protectedProcedure
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+        path: z.string().min(1),
+        key: z.string().min(1).max(16).optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      projectRegisterForge({ db: ctx.db, userId: ctx.session.user.id }, input),
     ),
 };

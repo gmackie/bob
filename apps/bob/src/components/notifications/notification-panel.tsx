@@ -1,41 +1,67 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useBobRpcClient } from "~/rpc/react";
 
 import { NotificationItem } from "./notification-item";
 
+interface NotificationRecord {
+  id: string;
+  title: string;
+  body?: string | null;
+  url?: string | null;
+  type: string;
+  read: boolean;
+  createdAt: string;
+}
+
 interface NotificationPanelProps {
   open: boolean;
   onClose: () => void;
+  /** When true, renders as a fixed right-side drawer (shell). Default: floating card. */
+  sideDrawer?: boolean;
 }
 
-export function NotificationPanel({ open, onClose }: NotificationPanelProps) {
+export function NotificationPanel({
+  open,
+  onClose,
+  sideDrawer = false,
+}: NotificationPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const rpc = useBobRpcClient();
   const queryClient = useQueryClient();
-  const listInput = { limit: 30 };
+  const listInput = { limit: 30, unreadOnly: false };
 
   const { data, isFetching } = useQuery({
     queryKey: ["rpc", "workItem.notification.list", listInput],
     queryFn: () =>
       rpc.workItems.notification.list(listInput) as Promise<{
-        items: any[];
+        items: NotificationRecord[];
       }>,
     enabled: open,
     refetchInterval: open ? 30_000 : false,
   });
 
+  const invalidate = () => {
+    void queryClient.invalidateQueries({
+      queryKey: ["rpc", "workItem.notification.list"],
+    });
+  };
+
   const markAsRead = useMutation({
     mutationFn: (input: { id: string }) =>
       rpc.workItems.notification.markAsRead(input),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: ["rpc", "workItem.notification.list"],
-      });
-    },
+    onSuccess: invalidate,
+  });
+
+  const markAllAsRead = useMutation({
+    mutationFn: () =>
+      rpc.workItems.notification.markAllAsRead({}) as Promise<{
+        count: number;
+      }>,
+    onSuccess: invalidate,
   });
 
   // Close on click outside
@@ -63,20 +89,50 @@ export function NotificationPanel({ open, onClose }: NotificationPanelProps) {
   if (!open) return null;
 
   const items = data?.items ?? [];
+  const unreadCount = items.filter((n) => !n.read).length;
 
-  return (
-    <div
-      ref={panelRef}
-      className="absolute bottom-12 left-2 z-50 w-80 rounded-xl border border-border bg-popover shadow-2xl"
-    >
+  const shell = (
+    <>
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <h3 className="text-sm font-semibold text-foreground">Notifications</h3>
-        <span className="text-xs text-muted-foreground">
-          {items.filter((n: any) => !n.read).length} unread
-        </span>
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">Notifications</h3>
+          <p className="text-xs text-muted-foreground">
+            {unreadCount === 0
+              ? "All caught up"
+              : `${unreadCount} unread`}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {unreadCount > 0 && (
+            <button
+              type="button"
+              onClick={() => markAllAsRead.mutate()}
+              disabled={markAllAsRead.isPending}
+              className="rounded px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+            >
+              Mark all read
+            </button>
+          )}
+          {sideDrawer && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              aria-label="Close notifications"
+            >
+              ×
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="max-h-96 overflow-y-auto p-1">
+      <div
+        className={
+          sideDrawer
+            ? "flex-1 overflow-y-auto p-1"
+            : "max-h-96 overflow-y-auto p-1"
+        }
+      >
         {isFetching && items.length === 0 ? (
           <div className="px-3 py-6 text-center text-sm text-muted-foreground">
             Loading...
@@ -86,13 +142,13 @@ export function NotificationPanel({ open, onClose }: NotificationPanelProps) {
             No notifications yet.
           </div>
         ) : (
-          items.map((item: any) => (
+          items.map((item) => (
             <NotificationItem
               key={item.id}
               id={item.id}
               title={item.title}
-              body={item.body}
-              url={item.url}
+              body={item.body ?? null}
+              url={item.url ?? null}
               type={item.type}
               read={item.read}
               createdAt={String(item.createdAt)}
@@ -101,6 +157,26 @@ export function NotificationPanel({ open, onClose }: NotificationPanelProps) {
           ))
         )}
       </div>
+    </>
+  );
+
+  if (sideDrawer) {
+    return (
+      <div
+        ref={panelRef}
+        className="fixed inset-y-0 right-0 z-40 flex w-80 flex-col border-l border-border bg-background shadow-2xl"
+      >
+        {shell}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={panelRef}
+      className="absolute bottom-12 left-2 z-50 w-80 rounded-xl border border-border bg-popover shadow-2xl"
+    >
+      {shell}
     </div>
   );
 }
@@ -112,7 +188,9 @@ export function useUnreadCount() {
   const { data } = useQuery({
     queryKey: ["rpc", "workItem.notification.list", input],
     queryFn: () =>
-      rpc.workItems.notification.list(input) as Promise<{ items: any[] }>,
+      rpc.workItems.notification.list(input) as Promise<{
+        items: NotificationRecord[];
+      }>,
     refetchInterval: 30_000,
   });
   return data?.items?.length ?? 0;

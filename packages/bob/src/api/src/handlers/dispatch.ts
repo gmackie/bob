@@ -11,7 +11,6 @@ import {
   chatConversations,
   dispatchBatches,
   dispatchItems,
-  notifications,
   planDraftDependencies,
   planDrafts,
   pullRequests,
@@ -636,12 +635,16 @@ export async function dispatchCheckProgress(
           void reporter.reportApproved(item.taskRunId);
         }
 
-        // Insert task-completed notification
-        await ctx.db.insert(notifications).values({
+        // Inbox + optional push for task completion
+        const { createInAppNotification } = await import(
+          "../services/notifications/notificationService.js"
+        );
+        await createInAppNotification(ctx.db, {
           userId: batch.userId,
+          workItemId: item.planningTaskId,
+          type: "task_completed",
           title: `Task ${item.planningTaskIdentifier} completed`,
           body: `Agent ${item.agentType} finished work on "${item.title}"`,
-          type: "task_completed",
           url: `/work-items/${item.planningTaskId}`,
         });
 
@@ -821,12 +824,15 @@ export async function dispatchCheckProgress(
       where: eq(dispatchBatches.id, input.batchId),
     });
 
-    // Batch completion notification
-    await ctx.db.insert(notifications).values({
+    // Inbox + optional push for batch completion
+    const { createInAppNotification } = await import(
+      "../services/notifications/notificationService.js"
+    );
+    await createInAppNotification(ctx.db, {
       userId: batch.userId,
+      type: "batch_completed",
       title: "Dispatch batch complete",
       body: `${finalBatch?.completedTasks ?? 0}/${batch.totalTasks} tasks finished`,
-      type: "batch_completed",
     });
   }
 

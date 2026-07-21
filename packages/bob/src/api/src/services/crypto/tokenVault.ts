@@ -5,24 +5,16 @@ import {
   randomBytes,
 } from "node:crypto";
 
+import {
+  getCurrentMasterKey,
+  getDecryptMasterKeys,
+  isEncryptionConfigured as isMasterKeyConfigured,
+  KEY_LENGTH,
+  requireEncryptionConfigured,
+} from "./masterKey";
+
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
-const KEY_LENGTH = 32;
-
-function getMasterKey(): Buffer {
-  const key = process.env.GIT_TOKEN_ENCRYPTION_KEY;
-  if (!key) {
-    throw new Error(
-      "GIT_TOKEN_ENCRYPTION_KEY environment variable is required",
-    );
-  }
-  if (key.length < KEY_LENGTH) {
-    throw new Error(
-      `GIT_TOKEN_ENCRYPTION_KEY must be at least ${KEY_LENGTH} characters`,
-    );
-  }
-  return Buffer.from(key.slice(0, KEY_LENGTH), "utf8");
-}
 
 function deriveRowKey(masterKey: Buffer, connectionId: string): Buffer {
   return createHmac("sha256", masterKey)
@@ -41,7 +33,7 @@ export function encryptToken(
   plaintext: string,
   connectionId: string,
 ): EncryptedToken {
-  const masterKey = getMasterKey();
+  const masterKey = getCurrentMasterKey();
   const rowKey = deriveRowKey(masterKey, connectionId);
   const iv = randomBytes(IV_LENGTH);
 
@@ -59,11 +51,11 @@ export function encryptToken(
   };
 }
 
-export function decryptToken(
+function tryDecryptWithKey(
   encrypted: EncryptedToken,
   connectionId: string,
+  masterKey: Buffer,
 ): string {
-  const masterKey = getMasterKey();
   const rowKey = deriveRowKey(masterKey, connectionId);
 
   const iv = Buffer.from(encrypted.iv, "base64");
@@ -81,7 +73,69 @@ export function decryptToken(
   return decrypted.toString("utf8");
 }
 
-export function isEncryptionConfigured(): boolean {
-  const key = process.env.GIT_TOKEN_ENCRYPTION_KEY;
-  return !!key && key.length >= KEY_LENGTH;
+/**
+ * Decrypt a token. Tries the current master key first, then the previous
+ * key (rotation window). Throws if none succeed.
+ */
+export function decryptToken(
+  encrypted: EncryptedToken,
+  connectionId: string,
+): string {
+  const keys = getDecryptMasterKeys();
+  let lastError: unknown;
+  for (const key of keys) {
+    try {
+      return tryDecryptWithKey(encrypted, connectionId, key);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Failed to decrypt token with available master keys");
 }
+
+/**
+ * True when the envelope decrypts with the previous key but not the current
+ * one — i.e. the row still needs re-encryption after a key rotation.
+ */
+export function tokenNeedsReencryption(
+  encrypted: EncryptedToken,
+  connectionId: string,
+): boolean {
+  const keys = getDecryptMasterKeys();
+  const [firstKey, secondKey] = keys;
+  if (!firstKey || !secondKey) return false;
+
+  try {
+    tryDecryptWithKey(encrypted, connectionId, firstKey);
+    return false;
+  } catch {
+    // fall through
+  }
+
+  try {
+    tryDecryptWithKey(encrypted, connectionId, secondKey);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Decrypt with any available key and re-encrypt under the current master key.
+ * Idempotent when already on the current key.
+ */
+export function reencryptToken(
+  encrypted: EncryptedToken,
+  connectionId: string,
+): EncryptedToken {
+  const plaintext = decryptToken(encrypted, connectionId);
+  return encryptToken(plaintext, connectionId);
+}
+
+export function isEncryptionConfigured(): boolean {
+  return isMasterKeyConfigured();
+}
+
+export { requireEncryptionConfigured };
