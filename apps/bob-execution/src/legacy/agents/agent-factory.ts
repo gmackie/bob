@@ -7,6 +7,7 @@ import { GeminiAdapter } from './gemini-adapter';
 import { KiroAdapter } from './kiro-adapter';
 import { OpenCodeAdapter } from './opencode-adapter';
 import { CursorAgentAdapter } from './cursor-agent-adapter';
+import { GrokAdapter } from './grok-adapter';
 
 export class AgentFactory {
   private adapters = new Map<AgentType, AgentAdapter>();
@@ -22,7 +23,8 @@ export class AgentFactory {
       ['gemini', new GeminiAdapter()],
       ['kiro', new KiroAdapter()],
       ['opencode', new OpenCodeAdapter()],
-      ['cursor-agent', new CursorAgentAdapter()]
+      ['cursor-agent', new CursorAgentAdapter()],
+      ['grok', new GrokAdapter()]
     ];
 
     for (const [type, adapter] of allAdapters) {

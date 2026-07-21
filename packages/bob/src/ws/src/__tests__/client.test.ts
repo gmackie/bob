@@ -503,6 +503,26 @@ describe("BobWsClient", () => {
       expect(onWorkspaceSnapshot).toHaveBeenCalledWith(sessions);
     });
 
+    it("routes host_snapshot to mission-control observers", () => {
+      const onHostSnapshot = vi.fn();
+      const opts = makeOptions({ onHostSnapshot });
+      const client = new BobWsClient(opts);
+      const ws = connectAndAuth(client);
+      const snapshot = {
+        schemaVersion: 1 as const,
+        hostId: "hetzner-bob",
+        daemonVersion: "dev",
+        queueDepth: 0,
+        checkedAt: "2026-07-11T18:00:00.000Z",
+        providers: [],
+      };
+
+      ws.simulateMessage({ type: "host_snapshot", workspaceId: "workspace-1", snapshot });
+
+      expect(onHostSnapshot).toHaveBeenCalledWith("workspace-1", snapshot);
+      client.disconnect();
+    });
+
     it("routes session_status_changed to callback", () => {
       const onSessionStatusChanged = vi.fn();
       const opts = makeOptions({ onSessionStatusChanged });

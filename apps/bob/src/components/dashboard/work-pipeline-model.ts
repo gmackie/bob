@@ -17,8 +17,20 @@ export interface WorkPipelineItem {
   agentStatus?: WorkPipelineAgentStatus | null;
 }
 
-export type ProviderKey = "codex" | "cursor";
+export type ProviderKey = "claude" | "codex" | "grok" | "cursor-agent";
 export type DashboardTone = "default" | "warning" | "danger" | "success";
+
+// Every agent Bob rotates through (see autoDrain AGENT_ROTATION). The dashboard
+// shows one capacity card per provider, in dispatch-rotation order. Claude and
+// Grok run on subscriptions (no metered API quota), so their cards report
+// live active/queued counts without the usage bars that Codex/Cursor expose.
+const PROVIDER_ORDER: ProviderKey[] = ["claude", "codex", "grok", "cursor-agent"];
+const PROVIDER_LABELS: Record<ProviderKey, string> = {
+  claude: "Claude",
+  grok: "Grok",
+  codex: "Codex",
+  "cursor-agent": "Cursor",
+};
 
 export interface ProviderSessionSummary {
   id: string;
@@ -214,6 +226,57 @@ export function buildWorkLaneSummaries(items: WorkPipelineItem[]): WorkLaneSumma
       tone: review.length > 0 ? "warning" : "default",
     },
   ];
+}
+
+// Lane → work-item statuses, for the count-based summaries. Board-state view:
+// "active" means a card marked in_progress/running (execution liveness is the
+// separate Running-now rail). Keeping this a pure status map is what lets the
+// counts come from an uncapped GROUP BY instead of a truncated list of rows.
+const LANE_STATUSES: Record<WorkLaneKey, string[]> = {
+  "needs-attention": ["blocked", "error", "failed", "interrupted"],
+  ready: ["backlog", "todo", "ready", "draft"],
+  active: ["in_progress", "running"],
+  review: ["in_review", "review"],
+};
+
+const LANE_META: Array<{ key: WorkLaneKey; title: string; activeTone: DashboardTone }> = [
+  { key: "needs-attention", title: "Needs Attention", activeTone: "danger" },
+  { key: "ready", title: "Ready", activeTone: "success" },
+  { key: "active", title: "Active", activeTone: "success" },
+  { key: "review", title: "Review", activeTone: "warning" },
+];
+
+/**
+ * The work-item statuses a lane fetches, so its table can request only its own
+ * rows (status-scoped) instead of slicing the recency-capped list. Includes a
+ * generous superset for needs-attention so failed/blocked rows are fetched;
+ * `filterWorkLaneItems` still applies the precise per-lane predicate.
+ */
+export function getLaneQueryStatuses(lane: WorkLaneKey): string[] {
+  return [...LANE_STATUSES[lane]];
+}
+
+/**
+ * Build the four lane summary cards from uncapped per-status counts
+ * (`workItem.statusCounts`). This replaces counting a recency-capped page of
+ * rows — the bug where a workspace full of `in_review` items pushed the
+ * backlog past the 100-row cap and every lane read 0.
+ */
+export function buildWorkLaneSummariesFromCounts(
+  counts: Record<string, number>,
+): WorkLaneSummary[] {
+  return LANE_META.map(({ key, title, activeTone }) => {
+    const count = LANE_STATUSES[key].reduce(
+      (total, status) => total + (counts[status] ?? 0),
+      0,
+    );
+    return {
+      key,
+      title,
+      count,
+      tone: count > 0 ? activeTone : "default",
+    };
+  });
 }
 
 export function getWorkPipelineHeaderModel(): WorkPipelineHeaderModel {
@@ -444,7 +507,12 @@ function getRecentlyCompletedStatusTone(status: string): DashboardTone {
 }
 
 function getProvider(agentType: string): ProviderKey {
-  return agentType.toLowerCase().includes("cursor") ? "cursor" : "codex";
+  const normalized = agentType.toLowerCase();
+  if (normalized.includes("cursor")) return "cursor-agent";
+  if (normalized.includes("claude")) return "claude";
+  if (normalized.includes("grok")) return "grok";
+  // Default to codex — it's the historical default and covers "codex"/unknown.
+  return "codex";
 }
 
 function buildProviderCapacitySummary(
@@ -458,13 +526,20 @@ function buildProviderCapacitySummary(
   const startingCount = matching.filter((session) => STARTING_AGENT_STATUSES.has(session.status)).length;
   const hasFailure = matching.some((session) => FAILED_AGENT_STATUSES.has(session.status));
   const usageLimits = snapshot?.usageLimits ?? getDefaultProviderUsageLimits(provider);
+  const isSubscription = provider === "claude" || provider === "grok";
 
   return {
     provider,
-    label: provider === "codex" ? "Codex" : "Cursor",
+    label: PROVIDER_LABELS[provider],
     activeCount,
     queuedOrStartingCount: startingCount + (provider === "codex" ? queuedCount : 0),
-    limitLabel: snapshot ? "Capacity connected" : "Capacity not connected",
+    // Subscription providers have no capacity socket to connect; their card is
+    // "live" whenever it has work, rather than reporting a metered quota link.
+    limitLabel: snapshot
+      ? "Capacity connected"
+      : isSubscription
+        ? "Subscription"
+        : "Capacity not connected",
     statusLabel: hasFailure ? "Recent failure" : "Normal",
     tone: hasFailure ? "danger" : activeCount > 0 ? "success" : "default",
     usageLimits,
@@ -483,10 +558,14 @@ export function buildProviderCapacitySummaries(input: {
     (input.capacitySnapshots ?? []).map((snapshot) => [snapshot.provider, snapshot]),
   );
 
-  return [
-    buildProviderCapacitySummary("codex", input.sessions, queuedCount, snapshots.get("codex")),
-    buildProviderCapacitySummary("cursor", input.sessions, queuedCount, snapshots.get("cursor")),
-  ];
+  return PROVIDER_ORDER.map((provider) =>
+    buildProviderCapacitySummary(
+      provider,
+      input.sessions,
+      queuedCount,
+      snapshots.get(provider),
+    ),
+  );
 }
 
 export function getProviderCapacityStatusLine(card: ProviderCapacitySummary): string {
@@ -515,6 +594,20 @@ function parseProviderUsageLimits(summary: unknown): ProviderUsageLimit[] {
   if (!summary || typeof summary !== "object") return [];
   const capacity = (summary as { providerCapacity?: unknown }).providerCapacity;
   if (!capacity || typeof capacity !== "object") return [];
+  const observed = (capacity as { observed?: unknown }).observed;
+  if (observed && typeof observed === "object") {
+    const usage = observed as { inputTokens?: unknown; outputTokens?: unknown };
+    const inputTokens = typeof usage.inputTokens === "number" ? usage.inputTokens : 0;
+    const outputTokens = typeof usage.outputTokens === "number" ? usage.outputTokens : 0;
+    return [
+      buildProviderAllowanceLimit((capacity as { allowance?: unknown }).allowance),
+      buildProviderUsageLimit({
+        label: "Bob observed usage",
+        valueLabel: `${inputTokens + outputTokens} tokens`,
+        resetLabel: null,
+      }),
+    ];
+  }
   const usageLimits = (capacity as { usageLimits?: unknown }).usageLimits;
   if (!Array.isArray(usageLimits)) return [];
 
@@ -536,6 +629,35 @@ function parseProviderUsageLimits(summary: unknown): ProviderUsageLimit[] {
       valueLabel: candidate.valueLabel,
       resetLabel: candidate.resetLabel,
     })];
+  });
+}
+
+function buildProviderAllowanceLimit(allowance: unknown): ProviderUsageLimit {
+  if (!allowance || typeof allowance !== "object") {
+    return buildProviderUsageLimit({ label: "Provider allowance" });
+  }
+  const value = allowance as {
+    status?: unknown;
+    used?: unknown;
+    limit?: unknown;
+    unit?: unknown;
+    resetAt?: unknown;
+  };
+  if (
+    value.status !== "available" ||
+    typeof value.used !== "number" ||
+    typeof value.limit !== "number" ||
+    value.limit <= 0
+  ) {
+    return buildProviderUsageLimit({ label: "Provider allowance" });
+  }
+  const unit = typeof value.unit === "string" && value.unit ? ` ${value.unit}` : "";
+  return buildProviderUsageLimit({
+    label: "Provider allowance",
+    usedPercent: (value.used / value.limit) * 100,
+    valueLabel: `${value.used} / ${value.limit}${unit}`,
+    resetLabel:
+      typeof value.resetAt === "string" ? `Resets ${value.resetAt}` : null,
   });
 }
 
@@ -575,31 +697,30 @@ function buildProviderUsageLimit(input: {
 }
 
 function getDefaultProviderUsageLimits(provider: ProviderKey): ProviderUsageLimit[] {
-  return provider === "codex"
-    ? [
+  switch (provider) {
+    case "codex":
+      return [
+        buildProviderUsageLimit({ label: "5 hour usage limit", remainingPercent: null, resetLabel: null }),
+        buildProviderUsageLimit({ label: "Weekly usage limit", remainingPercent: null, resetLabel: null }),
+      ];
+    case "cursor-agent":
+      return [
+        buildProviderUsageLimit({ label: "Included usage", remainingPercent: null, resetLabel: null }),
+        buildProviderUsageLimit({ label: "On-demand spend", remainingPercent: null, resetLabel: null }),
+      ];
+    // Claude / Grok run on a subscription — no metered quota to chart. Show a
+    // single informational row (valueLabel "Subscription") instead of an empty
+    // "Unavailable" bar, so the card reads intentional rather than broken.
+    default:
+      return [
         buildProviderUsageLimit({
-          label: "5 hour usage limit",
+          label: "Plan",
           remainingPercent: null,
-          resetLabel: null,
-        }),
-        buildProviderUsageLimit({
-          label: "Weekly usage limit",
-          remainingPercent: null,
-          resetLabel: null,
-        }),
-      ]
-    : [
-        buildProviderUsageLimit({
-          label: "Included usage",
-          remainingPercent: null,
-          resetLabel: null,
-        }),
-        buildProviderUsageLimit({
-          label: "On-demand spend",
-          remainingPercent: null,
+          valueLabel: "Subscription",
           resetLabel: null,
         }),
       ];
+  }
 }
 
 function clampPercent(value: number): number {

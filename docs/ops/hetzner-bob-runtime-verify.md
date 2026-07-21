@@ -1,6 +1,6 @@
 # Hetzner Bob Runtime Verify
 
-Last verified: 2026-06-29
+Last verified: 2026-07-17
 
 This runbook captures the current shared-backend Bob layout on `hetzner-bob`
 and the minimum checks needed to confirm that Bob still works locally and on
@@ -24,13 +24,10 @@ the host.
 - `t3code-bob.service` mirrors runtime events to the sidecar, not directly to
   the Bob app route.
 - `BOB_API_BASE_URL` in `/etc/t3code-bob/env` points to `http://127.0.0.1:3301`.
-- `BOB_API_KEY` in `/etc/t3code-bob/env` must be a REAL API key provisioned
-  via Bob's settings router (hashed + revocable in the `api_keys` table).
-  The legacy bypass form `bob-auth-bypass:<token>` is dead: the gateway
-  refuses to boot with `BOB_AUTH_BYPASS` set in production
-  (`assertNoAuthBypassInProduction`), and no production caller may depend on
-  it. To migrate: create an API key for the bob user, replace the value in
-  `/etc/t3code-bob/env`, restart `t3code-bob.service`, verify events flow.
+- The standalone sidecar currently expects its dedicated localhost-only
+  `bob-auth-bypass:<token>` bearer format and restricts writes to
+  `BOB_AUTH_BYPASS_USER_ID`. Do not expose port `3301` publicly or reuse this
+  credential for the public gateway/API.
 - Bob no longer uses local Postgres on `127.0.0.1:5432`.
   `DATABASE_URL` in `/opt/bob-gmacko/.env` points to `hetzner-master:5432`.
 - The runtime mirror sidecar only accepts events for sessions owned by the
@@ -93,7 +90,7 @@ The sidecar accepts only authenticated POSTs:
 
 ```bash
 curl -sS -X POST http://127.0.0.1:3301/api/v1/t3code/runtime-events \
-  -H "Authorization: Bearer $BOB_API_KEY" \
+  -H "Authorization: Bearer bob-auth-bypass:$BOB_AUTH_BYPASS_TOKEN" \
   -H 'Content-Type: application/json' \
   --data '{"taskRunId":"<live-task-run-id>","threadId":"probe","status":"working","message":"probe"}'
 ```

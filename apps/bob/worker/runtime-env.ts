@@ -3,6 +3,9 @@ interface HyperdriveBinding {
 }
 
 interface RuntimeEnv {
+  BOB_AUTH_BYPASS?: unknown;
+  BOB_AUTH_BYPASS_TOKEN?: unknown;
+  BOB_AUTH_BYPASS_USER_ID?: unknown;
   FG_STAGE?: unknown;
   HYPERDRIVE?: HyperdriveBinding;
   SENTRY_DSN?: unknown;
@@ -10,6 +13,20 @@ interface RuntimeEnv {
 
 function getEnvString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+export function applyRuntimeAuthEnv(
+  env: RuntimeEnv | undefined,
+  target: Record<string, string | undefined> = process.env,
+): void {
+  for (const key of [
+    "BOB_AUTH_BYPASS",
+    "BOB_AUTH_BYPASS_TOKEN",
+    "BOB_AUTH_BYPASS_USER_ID",
+  ] as const) {
+    const value = getEnvString(env?.[key]);
+    if (value) target[key] = value;
+  }
 }
 
 export function getSentryOptions(env: RuntimeEnv | undefined) {

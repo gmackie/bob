@@ -1,9 +1,32 @@
 import { describe, expect, it } from "vitest";
 
-import { getHyperdriveConnectionString, getSentryOptions } from "./runtime-env";
+import {
+  applyRuntimeAuthEnv,
+  getHyperdriveConnectionString,
+  getSentryOptions,
+} from "./runtime-env";
 import { wrapFetch } from "./lib/otel";
 
 describe("worker runtime env helpers", () => {
+  it("copies Cloudflare auth bindings into the Node-compatible environment", () => {
+    const target: Record<string, string | undefined> = {};
+
+    applyRuntimeAuthEnv(
+      {
+        BOB_AUTH_BYPASS: "true",
+        BOB_AUTH_BYPASS_TOKEN: "prod-secret",
+        BOB_AUTH_BYPASS_USER_ID: "default-user",
+      },
+      target,
+    );
+
+    expect(target).toEqual({
+      BOB_AUTH_BYPASS: "true",
+      BOB_AUTH_BYPASS_TOKEN: "prod-secret",
+      BOB_AUTH_BYPASS_USER_ID: "default-user",
+    });
+  });
+
   it("falls back to process.env when Cloudflare env is not provided", () => {
     const oldDatabaseUrl = process.env.DATABASE_URL;
     const oldSentryDsn = process.env.SENTRY_DSN;

@@ -22,6 +22,7 @@ describe("createBobRpcClient", () => {
     const client = createBobRpcClient({ baseURL: "http://127.0.0.1:0/rpc" });
 
     expect(client.workItems.list).toBeTypeOf("function");
+    expect(client.workItems.statusCounts).toBeTypeOf("function");
     expect(client.workItems.notification.list).toBeTypeOf("function");
     expect(client.workItems.taskRun.listLifecycleEvents).toBeTypeOf("function");
     expect(client.planning.listWorkspaces).toBeTypeOf("function");

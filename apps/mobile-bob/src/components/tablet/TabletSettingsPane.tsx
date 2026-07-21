@@ -265,7 +265,7 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
             Providers
           </Text>
           <View className="mt-3 flex-row gap-2">
-            {(["codex", "cursor"] as const).map((provider) => (
+            {(["claude", "codex", "grok", "cursor-agent"] as const).map((provider) => (
               <Pressable
                 key={provider}
                 onPress={() => onOpenProvider?.(provider)}
@@ -275,7 +275,9 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
                 style={{ backgroundColor: colors.secondary }}
               >
                 <Text className="text-center text-xs font-semibold text-foreground">
-                  {provider === "codex" ? "Codex" : "Cursor"}
+                  {provider === "cursor-agent"
+                    ? "Cursor"
+                    : provider.charAt(0).toUpperCase() + provider.slice(1)}
                 </Text>
               </Pressable>
             ))}

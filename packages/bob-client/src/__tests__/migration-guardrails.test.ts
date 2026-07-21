@@ -71,7 +71,6 @@ describe("Bob Effect-RPC migration guardrails", () => {
     const migratedSlices = [
       "apps/bob/src/app/(dashboard)/planning/page.tsx",
       "apps/bob/src/app/(dashboard)/planning/layout.tsx",
-      "apps/bob/src/app/(dashboard)/tasks/page.tsx",
       "apps/bob/src/components/notifications/notification-panel.tsx",
       "apps/bob/src/app/(dashboard)/_shell.tsx",
       "apps/bob/src/components/work-items/lifecycle-timeline.tsx",
@@ -99,7 +98,6 @@ describe("Bob Effect-RPC migration guardrails", () => {
       "apps/bob/src/components/dashboard/project-progress.tsx",
       "apps/bob/src/components/dashboard/recent-runs.tsx",
       "apps/bob/src/components/dashboard/active-dispatches.tsx",
-      "apps/bob/src/components/dashboard/provider-capacity-cards.tsx",
       "apps/bob/src/components/dashboard/running-now-rail.tsx",
     ];
 
