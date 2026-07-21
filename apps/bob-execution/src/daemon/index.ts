@@ -397,7 +397,7 @@ async function handleSessionAvailable(session: ServerSessionAvailable): Promise<
     // Seed the oracle with the planning substance (work-item title + brief), not the
     // intent enum ("shape"/"breakdown"). Fall back to the session title/description.
     const question =
-      buildSeedQuestion(lc?.workItem.title, lc?.notes) ||
+      buildSeedQuestion(lc?.workItem?.title, lc?.notes) ||
       buildSeedQuestion(session.title, session.description);
     // Repo hint comes from the selected repo source, not the git branch (a branch name
     // is not a repository identifier and would silently mis-filter oracle results).
