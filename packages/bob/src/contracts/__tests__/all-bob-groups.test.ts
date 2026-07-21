@@ -4,24 +4,25 @@ import { WorkItemsRpc } from "../groups/work-items.js";
 import { PlanningRpc } from "../groups/planning.js";
 import { ExternalRpc } from "../groups/external.js";
 
-describe("Bob contract groups — Phase 7B-4C verification", () => {
-  it("WorkItemsRpc has 33 procedures", () => {
-    expect(WorkItemsRpc.requests.size).toBe(33);
+// Structural invariants only — intentionally NOT hardcoded procedure counts.
+// Absolute-count assertions forced every RPC-adding PR to edit this file,
+// serially conflicting the backlog; the checks below catch real defects
+// (empty groups, tag collisions) without changing when a procedure is added.
+describe("Bob contract groups — structural invariants", () => {
+  const groups = { WorkItemsRpc, PlanningRpc, ExternalRpc };
+
+  it("every group defines at least one procedure", () => {
+    for (const [name, group] of Object.entries(groups)) {
+      expect(group.requests.size, `${name} should define procedures`).toBeGreaterThan(0);
+    }
   });
 
-  it("PlanningRpc has 68 procedures", () => {
-    expect(PlanningRpc.requests.size).toBe(68);
-  });
-
-  it("ExternalRpc has 37 procedures", () => {
-    expect(ExternalRpc.requests.size).toBe(37);
-  });
-
-  it("Bob domain total is 138 procedures", () => {
-    const total =
-      WorkItemsRpc.requests.size +
-      PlanningRpc.requests.size +
-      ExternalRpc.requests.size;
-    expect(total).toBe(138);
+  it("has no duplicate procedure tags across groups", () => {
+    const tags = [
+      ...WorkItemsRpc.requests.keys(),
+      ...PlanningRpc.requests.keys(),
+      ...ExternalRpc.requests.keys(),
+    ];
+    expect(new Set(tags).size).toBe(tags.length);
   });
 });
