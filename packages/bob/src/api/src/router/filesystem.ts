@@ -1,18 +1,18 @@
 import type { TRPCRouterRecord } from "@trpc/server";
 import { z } from "zod/v4";
 
-import { protectedProcedure } from "../trpc";
 import {
-  filesystemList,
-  filesystemRead,
-  filesystemWrite,
+  filesystemCopy,
   filesystemDelete,
+  filesystemGitStatus,
+  filesystemList,
   filesystemMkdir,
   filesystemMove,
-  filesystemCopy,
+  filesystemRead,
   filesystemSearch,
-  filesystemGitStatus,
+  filesystemWrite,
 } from "../handlers/filesystem";
+import { protectedProcedure } from "../trpc";
 
 export const filesystemRouter = {
   list: protectedProcedure
@@ -22,7 +22,9 @@ export const filesystemRouter = {
         showHidden: z.boolean().default(false),
       }),
     )
-    .query(() => filesystemList()),
+    .query(({ ctx, input }) =>
+      filesystemList({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
 
   read: protectedProcedure
     .input(
@@ -31,7 +33,9 @@ export const filesystemRouter = {
         encoding: z.enum(["utf-8", "base64"]).default("utf-8"),
       }),
     )
-    .query(() => filesystemRead()),
+    .query(({ ctx, input }) =>
+      filesystemRead({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
 
   write: protectedProcedure
     .input(
@@ -41,7 +45,9 @@ export const filesystemRouter = {
         createDirs: z.boolean().default(true),
       }),
     )
-    .mutation(() => filesystemWrite()),
+    .mutation(({ ctx, input }) =>
+      filesystemWrite({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
 
   delete: protectedProcedure
     .input(
@@ -50,7 +56,9 @@ export const filesystemRouter = {
         recursive: z.boolean().default(false),
       }),
     )
-    .mutation(() => filesystemDelete()),
+    .mutation(({ ctx, input }) =>
+      filesystemDelete({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
 
   mkdir: protectedProcedure
     .input(
@@ -59,7 +67,9 @@ export const filesystemRouter = {
         recursive: z.boolean().default(true),
       }),
     )
-    .mutation(() => filesystemMkdir()),
+    .mutation(({ ctx, input }) =>
+      filesystemMkdir({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
 
   move: protectedProcedure
     .input(
@@ -68,7 +78,9 @@ export const filesystemRouter = {
         destination: z.string(),
       }),
     )
-    .mutation(() => filesystemMove()),
+    .mutation(({ ctx, input }) =>
+      filesystemMove({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
 
   copy: protectedProcedure
     .input(
@@ -77,7 +89,9 @@ export const filesystemRouter = {
         destination: z.string(),
       }),
     )
-    .mutation(() => filesystemCopy()),
+    .mutation(({ ctx, input }) =>
+      filesystemCopy({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
 
   search: protectedProcedure
     .input(
@@ -87,7 +101,9 @@ export const filesystemRouter = {
         maxResults: z.number().min(1).max(1000).default(100),
       }),
     )
-    .query(() => filesystemSearch()),
+    .query(({ ctx, input }) =>
+      filesystemSearch({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
 
   gitStatus: protectedProcedure
     .input(
@@ -95,5 +111,7 @@ export const filesystemRouter = {
         path: z.string(),
       }),
     )
-    .query(() => filesystemGitStatus()),
+    .query(({ ctx, input }) =>
+      filesystemGitStatus({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
 } satisfies TRPCRouterRecord;
