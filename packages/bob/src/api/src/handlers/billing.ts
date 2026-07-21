@@ -186,7 +186,8 @@ function planForSubscription(
 ): TenantPlan {
   if (deleted || !ENTITLED_STATUSES.has(status)) return "free";
   const priceId = sub.items?.data?.[0]?.price?.id;
-  return (priceId && planForPriceId(priceId)) || "free";
+  const mapped = priceId ? planForPriceId(priceId) : null;
+  return mapped ?? "free";
 }
 
 export interface WebhookResult {

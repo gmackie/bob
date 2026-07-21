@@ -40,7 +40,8 @@ export function planForPriceId(priceId: string): PaidPlan | null {
 
 /** Resolve the Stripe price ID configured for a paid plan, or `null`. */
 export function priceIdForPlan(plan: PaidPlan): string | null {
-  return process.env[PAID_PLAN_ENV[plan]]?.trim() || null;
+  const priceId = process.env[PAID_PLAN_ENV[plan]]?.trim();
+  return priceId == null || priceId === "" ? null : priceId;
 }
 
 /** Paid plans that currently have a Stripe price configured. */

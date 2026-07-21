@@ -8,7 +8,7 @@
  * (only the schema enum) means the same table can be reused by the web UI to
  * render upgrade prompts.
  */
-import { tenantPlanEnum } from "@bob/db/schema";
+import type { tenantPlanEnum } from "@bob/db/schema";
 
 /** All tenant plans, lowest tier first. Derived from the DB enum. */
 export type TenantPlan = (typeof tenantPlanEnum.enumValues)[number];

@@ -17,11 +17,13 @@ const STRIPE_API_BASE = "https://api.stripe.com";
 const DEFAULT_TOLERANCE_SECONDS = 5 * 60;
 
 export function getStripeSecretKey(): string | undefined {
-  return process.env.STRIPE_SECRET_KEY?.trim() || undefined;
+  const key = process.env.STRIPE_SECRET_KEY?.trim();
+  return key == null || key === "" ? undefined : key;
 }
 
 export function getStripeWebhookSecret(): string | undefined {
-  return process.env.STRIPE_WEBHOOK_SECRET?.trim() || undefined;
+  const secret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
+  return secret == null || secret === "" ? undefined : secret;
 }
 
 /** Parse a `Stripe-Signature` header into its timestamp and v1 signatures. */
@@ -89,9 +91,9 @@ export interface StripeSubscriptionObject {
   readonly cancel_at_period_end?: boolean;
   readonly current_period_end?: number;
   readonly items?: {
-    readonly data?: ReadonlyArray<{
+    readonly data?: readonly {
       readonly price?: { readonly id?: string };
-    }>;
+    }[];
   };
   readonly metadata?: Record<string, string>;
 }
@@ -103,11 +105,11 @@ export interface StripeEvent {
 }
 
 export function parseStripeEvent(rawBody: string): StripeEvent {
-  const parsed = JSON.parse(rawBody) as StripeEvent;
+  const parsed = JSON.parse(rawBody) as Partial<StripeEvent> | null;
   if (!parsed || typeof parsed.type !== "string" || !parsed.data?.object) {
     throw new Error("Malformed Stripe event payload");
   }
-  return parsed;
+  return parsed as StripeEvent;
 }
 
 // --- Checkout ---

@@ -28,19 +28,23 @@ function makeDb(
   const db = {
     query: {
       tenantMembers: {
-        findFirst: async () => overrides.tenantMember ?? undefined,
+        findFirst: () => Promise.resolve(overrides.tenantMember ?? undefined),
       },
       tenantSubscriptions: {
-        findFirst: async () =>
-          overrides.existingSubscriptionTenantId
-            ? { tenantId: overrides.existingSubscriptionTenantId }
-            : undefined,
+        findFirst: () =>
+          Promise.resolve(
+            overrides.existingSubscriptionTenantId
+              ? { tenantId: overrides.existingSubscriptionTenantId }
+              : undefined,
+          ),
       },
       tenants: {
-        findFirst: async () =>
-          overrides.tenantByCustomerId
-            ? { id: overrides.tenantByCustomerId }
-            : undefined,
+        findFirst: () =>
+          Promise.resolve(
+            overrides.tenantByCustomerId
+              ? { id: overrides.tenantByCustomerId }
+              : undefined,
+          ),
       },
     },
     insert: () => ({
