@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { Db } from "@bob/db/client";
+
 const {
   findFirstMock,
   findManyMock,
@@ -8,12 +10,12 @@ const {
   selectLimitMock,
   leftJoinMock,
 } = vi.hoisted(() => ({
-  findFirstMock: vi.fn(),
-  findManyMock: vi.fn(),
-  insertReturningMock: vi.fn(),
-  updateReturningMock: vi.fn(),
-  selectLimitMock: vi.fn(),
-  leftJoinMock: vi.fn(),
+  findFirstMock: vi.fn<(table: string, ...a: unknown[]) => unknown>(),
+  findManyMock: vi.fn<(table: string, ...a: unknown[]) => unknown>(),
+  insertReturningMock: vi.fn<(...a: unknown[]) => unknown>(),
+  updateReturningMock: vi.fn<(...a: unknown[]) => unknown>(),
+  selectLimitMock: vi.fn<(...a: unknown[]) => unknown>(),
+  leftJoinMock: vi.fn<(...a: unknown[]) => unknown>(),
 }));
 
 vi.mock("@bob/db", () => ({
@@ -124,7 +126,7 @@ function makeDb() {
     delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }),
     select,
     transaction: vi.fn(),
-  } as any;
+  } as unknown as Db;
 }
 
 describe("planSession collaboration (BOB-14)", () => {
@@ -248,7 +250,7 @@ describe("planSession collaboration (BOB-14)", () => {
       "http://gw.local/internal/workspace-event",
       expect.objectContaining({
         method: "POST",
-        body: expect.stringContaining("planning_collab_message"),
+        body: expect.stringContaining("planning_collab_message") as unknown as string,
       }),
     );
 

@@ -555,7 +555,7 @@ export async function planSessionUpdateArtifact(
     });
   }
 
-  const nextVersion = (existing.contentVersion ?? 1) + 1;
+  const nextVersion = existing.contentVersion + 1;
   const [artifact] = await ctx.db
     .update(workItemArtifacts)
     .set({
