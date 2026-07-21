@@ -77,6 +77,13 @@ export async function startServer(
     }
   });
 
+  // Without an 'error' listener a spawn failure (e.g. pnpm not on PATH ->
+  // ENOENT) is re-thrown as an uncaught exception and crashes the process.
+  // With the listener, waitForPort below times out and rejects cleanly.
+  child.on("error", (err) => {
+    console.error("[bob-server] failed to spawn blder child:", err);
+  });
+
   try {
     await waitForPort("127.0.0.1", internalPort, 30_000);
   } catch (err) {

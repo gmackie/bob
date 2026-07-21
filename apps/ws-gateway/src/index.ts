@@ -12,6 +12,11 @@ const PORT = parseInt(process.env.GATEWAY_PORT ?? "3002", 10);
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const NUDGE_SHARED_SECRET = process.env.NUDGE_SHARED_SECRET ?? "";
 
+// Mirror relay.ts's session-id validation so a malformed id from the internal
+// caller is rejected before it reaches Postgres (a non-UUID triggers 22P02).
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 if (!NUDGE_SHARED_SECRET && process.env.NODE_ENV !== "test") {
   console.error("[ws-gateway] FATAL: NUDGE_SHARED_SECRET env var is required");
   process.exit(1);
@@ -55,52 +60,69 @@ const nudgeHandler = createNudgeHandler({
 
 // HTTP server (handles /health and /internal/nudge)
 const server = createServer(async (req, res) => {
-  if (!req.url) {
+  try {
+    if (!req.url) {
+      res.writeHead(404);
+      res.end();
+      return;
+    }
+
+    if (req.method === "GET" && req.url === "/health") {
+      const stats = relay.getStats();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          status: "ok",
+          uptimeSeconds: Math.floor(process.uptime()),
+          ...stats,
+          writerHealthy: writer.isHealthy(),
+        }),
+      );
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/internal/nudge") {
+      await nudgeHandler(req, res);
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/internal/session-send") {
+      const auth = req.headers.authorization;
+      if (!auth || auth !== `Bearer ${NUDGE_SHARED_SECRET}`) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Unauthorized" }));
+        return;
+      }
+      const body = await readJsonBody(req) as { userId?: string; sessionId?: string; message?: string } | null;
+      if (!body?.userId || !body?.sessionId || !body?.message) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Missing userId, sessionId, or message" }));
+        return;
+      }
+      if (!UUID_RE.test(body.sessionId)) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Invalid sessionId" }));
+        return;
+      }
+      const delivered = await relay.sendToSession(body.sessionId, body.userId, body.message);
+      res.writeHead(delivered ? 200 : 404, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: delivered }));
+      return;
+    }
+
     res.writeHead(404);
     res.end();
-    return;
-  }
-
-  if (req.method === "GET" && req.url === "/health") {
-    const stats = relay.getStats();
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(
-      JSON.stringify({
-        status: "ok",
-        uptimeSeconds: Math.floor(process.uptime()),
-        ...stats,
-        writerHealthy: writer.isHealthy(),
-      }),
-    );
-    return;
-  }
-
-  if (req.method === "POST" && req.url === "/internal/nudge") {
-    await nudgeHandler(req, res);
-    return;
-  }
-
-  if (req.method === "POST" && req.url === "/internal/session-send") {
-    const auth = req.headers.authorization;
-    if (!auth || auth !== `Bearer ${NUDGE_SHARED_SECRET}`) {
-      res.writeHead(401, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Unauthorized" }));
-      return;
+  } catch (err) {
+    // An unhandled throw in this async handler would otherwise become an
+    // unhandled rejection and crash the whole gateway process.
+    console.error("[ws-gateway] request handler error:", err);
+    if (!res.headersSent) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Internal server error" }));
+    } else {
+      res.end();
     }
-    const body = await readJsonBody(req) as { userId?: string; sessionId?: string; message?: string } | null;
-    if (!body?.userId || !body?.sessionId || !body?.message) {
-      res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Missing userId, sessionId, or message" }));
-      return;
-    }
-    const delivered = await relay.sendToSession(body.sessionId, body.userId, body.message);
-    res.writeHead(delivered ? 200 : 404, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ ok: delivered }));
-    return;
   }
-
-  res.writeHead(404);
-  res.end();
 });
 
 // WebSocket server mounted on /sessions

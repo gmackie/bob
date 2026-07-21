@@ -70,23 +70,37 @@ export class JjClient {
     const cmd = description
       ? `jj new -m "${description.replace(/"/g, '\\"')}"`
       : "jj new";
-    return execSync(cmd, { cwd: this.cwd, encoding: "utf8" });
+    return this.run(cmd);
   }
 
   describe(description: string, revision?: string): string {
     const rev = revision ? `-r ${revision}` : "";
-    return execSync(
+    return this.run(
       `jj describe ${rev} -m "${description.replace(/"/g, '\\"')}"`,
-      { cwd: this.cwd, encoding: "utf8" },
     );
   }
 
   squash(): string {
-    return execSync("jj squash", { cwd: this.cwd, encoding: "utf8" });
+    return this.run("jj squash");
   }
 
   diff(revision?: string): string {
     const rev = revision ? `-r ${revision}` : "";
-    return execSync(`jj diff ${rev}`, { cwd: this.cwd, encoding: "utf8" });
+    return this.run(`jj diff ${rev}`);
+  }
+
+  /**
+   * Run a mutating/diff jj command. A non-zero `jj` exit makes execSync throw
+   * the raw ChildProcess error (with stdout/stderr buffers) as an uncaught
+   * exception; wrapping it surfaces a clean, descriptive error instead — the
+   * same defensive posture as isJjRepo()/log().
+   */
+  private run(cmd: string): string {
+    try {
+      return execSync(cmd, { cwd: this.cwd, encoding: "utf8" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`jj command failed (${cmd}): ${message}`);
+    }
   }
 }
