@@ -1,6 +1,7 @@
 {
   "name": "@gmacko/ooda-runner",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "build": "tsc",

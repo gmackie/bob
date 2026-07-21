@@ -12,6 +12,7 @@ export {
   resolveAuthContext,
   resolveAuthBypassUserId,
   resolveWorkspaceSelection,
+  isDefaultUserFallbackEnabled,
   DEFAULT_USER_ID,
   type RequestAuthContext,
   type WorkspaceSelection,

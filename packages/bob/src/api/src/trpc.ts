@@ -6,6 +6,7 @@ import type { ApiKeyPermission } from "@bob/auth";
 import type { AuthRuntimeBundle } from "@bob/auth/runtime";
 import {
   DEFAULT_USER_ID,
+  isDefaultUserFallbackEnabled,
   resolveAuthBypassUserId,
   resolveAuthContext,
 } from "@bob/auth";
@@ -44,7 +45,7 @@ export const createTRPCContext = async (opts: {
   const authBypassUserId = resolveAuthBypassUserId(opts.headers);
   const defaultUserId = authBypassUserId ?? DEFAULT_USER_ID;
 
-  if (process.env.REQUIRE_AUTH !== "true" || authBypassUserId) {
+  if (isDefaultUserFallbackEnabled() || authBypassUserId) {
     const [userRecord] = await db
       .select()
       .from(user)

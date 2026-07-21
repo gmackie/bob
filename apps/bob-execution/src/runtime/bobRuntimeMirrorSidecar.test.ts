@@ -110,6 +110,14 @@ describe("bob runtime mirror sidecar", () => {
       event: buildRuntimeEvent({
         status: "completed",
         message: "turn finished",
+        details: {
+          providerCapacity: {
+            provider: "grok",
+            collectedAt: "2026-07-11T18:00:00.000Z",
+            allowance: { status: "unavailable", source: "provider" },
+            observed: { source: "bob_metered", inputTokens: 120, outputTokens: 30 },
+          },
+        },
       }),
     });
 
@@ -124,6 +132,7 @@ describe("bob runtime mirror sidecar", () => {
         expect.stringContaining("update chat_conversations"),
         expect.stringContaining("insert into session_events"),
         expect.stringContaining("update task_runs"),
+        expect.stringContaining("update agent_runs"),
         "commit",
       ]),
     );
@@ -131,6 +140,10 @@ describe("bob runtime mirror sidecar", () => {
       entry.text.includes("update task_runs"),
     );
     expect(taskRunUpdate?.values?.[1]).toBe("completed");
+    const agentRunUpdate = queries.find((entry) =>
+      entry.text.includes("update agent_runs"),
+    );
+    expect(agentRunUpdate?.values?.[1]).toContain('"provider":"grok"');
     expect(queries).toContainEqual({
       text: "update chat_conversations set next_seq = $2 where id = $1",
       values: ["0485c6c6-cafb-468b-a878-4e7bdfc183ec", 42],

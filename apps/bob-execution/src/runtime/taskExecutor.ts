@@ -238,16 +238,13 @@ export async function findRepositoryForTask(
     }
   }
 
-  const firstRepo = repos[0];
-  if (!firstRepo) {
-    return null;
-  }
-
-  return {
-    repositoryId: firstRepo.id,
-    path: firstRepo.path,
-    mainBranch: firstRepo.mainBranch,
-  };
+  // No confident match. Do NOT fall back to an arbitrary repo — an autonomous
+  // driver (auto-drain) would otherwise run a Linear task against a random
+  // codebase. Return null so executeTask marks the run blocked ("No repository
+  // found"), surfacing it for the operator to map project→repo. A user with a
+  // single repo is handled above; the arbitrary-first-repo fallback was only
+  // ever safe for that case.
+  return null;
 }
 
 export async function executeTask(

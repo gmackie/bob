@@ -14,6 +14,7 @@ import {
   getTaskShellTabs,
   matchTaskShellRoute,
   movePriorityQueueRow,
+  selectTaskDashboardWorkspace,
 } from "../task-shell-model";
 
 describe("task shell model", () => {
@@ -21,6 +22,22 @@ describe("task shell model", () => {
     expect(getTaskDashboardHeaderModel()).toEqual({
       title: "Tasks",
       subtitle: null,
+    });
+  });
+
+  it("selects a dashboard workspace from tRPC membership rows", () => {
+    const memberships = [
+      { workspace: { id: "workspace-1", name: "Hetzner" } },
+      { workspace: { id: "workspace-2", name: "Lab NUC" } },
+    ];
+
+    expect(selectTaskDashboardWorkspace(memberships, "workspace-2")).toEqual({
+      id: "workspace-2",
+      name: "Lab NUC",
+    });
+    expect(selectTaskDashboardWorkspace(memberships, null)).toEqual({
+      id: "workspace-1",
+      name: "Hetzner",
     });
   });
 

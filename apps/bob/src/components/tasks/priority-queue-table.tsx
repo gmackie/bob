@@ -38,7 +38,13 @@ function statusVariant(status: string): "default" | "slate" | "blue" | "amber" |
 export function PriorityQueueTable({ workspaceId }: PriorityQueueTableProps) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
-  const listInput = { workspaceId: workspaceId ?? "", limit: 100 };
+  // Fetch only dispatchable statuses so the queue isn't starved by a workspace
+  // full of in_review/terminal items overflowing the row cap.
+  const listInput = {
+    workspaceId: workspaceId ?? "",
+    statuses: ["backlog", "todo", "ready", "draft"],
+    limit: 100,
+  };
   const { data: workItems, isLoading } = useQuery(
     trpc.workItem.list.queryOptions(
       listInput,

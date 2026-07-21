@@ -9,6 +9,7 @@ import type {
   ServerSessionStatusChanged,
   SessionStatus,
   WorkspaceSessionInfo,
+  HostSnapshotWire,
 } from "./protocol.js";
 import { encodeClientMessage, parseServerMessage } from "./protocol.js";
 
@@ -44,6 +45,7 @@ export interface BobWsClientOptions {
   onEvent: (sessionId: string, event: ServerEvent) => void;
   onSessionStatus: (sessionId: string, status: SessionStatus) => void;
   onWorkspaceSnapshot?: (sessions: WorkspaceSessionInfo[]) => void;
+  onHostSnapshot?: (workspaceId: string, snapshot: HostSnapshotWire) => void;
   onSessionStatusChanged?: (info: ServerSessionStatusChanged) => void;
   onWorkspaceEvent?: (message: ServerWorkspaceInvalidation) => void;
   onError: (error: ServerError) => void;
@@ -146,6 +148,25 @@ export class BobWsClient {
     return clientInputId;
   }
 
+  /** Resolve a pending permission_request on a blocked run. Idempotent on
+   *  the daemon side (a request resolves exactly once). */
+  approve(
+    sessionId: string,
+    requestId: string,
+    decision: "allow" | "deny",
+    message?: string,
+  ): string {
+    const clientInputId = `${this.opts.clientId}-${++this.inputCounter}`;
+    this.send({ type: "approve", sessionId, requestId, decision, message, clientInputId });
+    return clientInputId;
+  }
+
+  /** Report an explicit foreground run-screen view (observe.run_view audit —
+   *  the instrument behind the unattended-trust "not watching" proxy). */
+  runView(sessionId: string): void {
+    this.send({ type: "run_view", sessionId });
+  }
+
   createSession(config: Omit<ClientCreateSession, "type">): void {
     this.send({ type: "create_session", ...config });
   }
@@ -232,6 +253,10 @@ export class BobWsClient {
 
       case "workspace_snapshot":
         this.opts.onWorkspaceSnapshot?.(msg.sessions);
+        break;
+
+      case "host_snapshot":
+        this.opts.onHostSnapshot?.(msg.workspaceId, msg.snapshot);
         break;
 
       case "session_status_changed":

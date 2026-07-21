@@ -37,6 +37,37 @@ describe("protocol", () => {
       });
     });
 
+    it("parses a versioned daemon host snapshot without credentials", () => {
+      const raw = JSON.stringify({
+        type: "hello",
+        clientId: "hetzner-bob",
+        deviceType: "daemon",
+        token: "api-key-abc",
+        workspaceId: "ws-uuid-123",
+        hostSnapshot: {
+          schemaVersion: 1,
+          hostId: "hetzner-bob",
+          daemonVersion: "0.1.0",
+          queueDepth: 2,
+          checkedAt: "2026-07-11T18:00:00.000Z",
+          providers: [{
+            provider: "grok",
+            command: "grok",
+            installed: true,
+            authenticated: true,
+            status: "ready",
+            checkedAt: "2026-07-11T18:00:00.000Z",
+            capabilities: { cancel: true },
+          }],
+        },
+      });
+
+      expect(parseClientMessage(raw)).toMatchObject({
+        type: "hello",
+        hostSnapshot: { schemaVersion: 1, hostId: "hetzner-bob" },
+      });
+    });
+
     it("parses a session_event message from a daemon", () => {
       const raw = JSON.stringify({
         type: "session_event",

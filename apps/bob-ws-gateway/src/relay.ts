@@ -1,7 +1,7 @@
 import type { WebSocket } from "ws";
-import { eq, and, gt, lt, inArray, asc, desc, sql } from "@bob/db";
+import { eq, and, or, gt, lt, inArray, asc, desc, sql, isNull } from "@bob/db";
 import { db } from "@bob/db/client";
-import { chatConversations, repositories, sessionEvents, taskRuns, workItems, agentRuns, activities, workspaces, tenants, tenantMembers, planDrafts, pullRequests } from "@bob/db/schema";
+import { chatConversations, repositories, sessionEvents, taskRuns, workItems, agentRuns, activities, workspaces, tenants, tenantMembers, planDrafts, pullRequests, runnerLeases, gatewayConfig, eventLog } from "@bob/db/schema";
 
 import {
   parseClientMessage,
@@ -12,6 +12,7 @@ import {
   type ClientSubscribe,
   type ClientUnsubscribe,
   type ClientInput,
+  type ClientApprove,
   type ClientStopSession,
   type ClientSessionEvent,
   type ClientSessionStatus,
@@ -20,12 +21,65 @@ import {
   type ServerMessage,
   type ServerWorkspaceInvalidationType,
   type SessionStatus,
+  type HostSnapshotWire,
 } from "./protocol.js";
 import type { SessionEventRecord } from "./persistence.js";
 import { pushToUser } from "./push.js";
+import { enqueueTransition } from "./outbox.js";
 import { parsePrUrl } from "./pr-url.js";
 
 const REPLAY_LIMIT = 500;
+
+// Single source of truth for status-set membership so the state machine, lease
+// sweep, and stop path can't drift (they previously encoded these inline and
+// disagreed — e.g. stop didn't know about "blocked"/"host_unknown").
+// A terminal state can never be downgraded and is never swept.
+const TERMINAL_STATUSES = ["completed", "failed", "error", "interrupted", "stopped"] as const;
+// Statuses the lease sweep may move to host_unknown on contact loss.
+const SWEEP_ACTIVE_STATUSES = ["running", "starting", "blocked", "stopping"] as const;
+// Non-terminal statuses a user stop can act on. Includes the paused/lost states
+// so a blocked or host_unknown run can actually be stopped (otherwise it pins
+// forever while the UI reports the stop succeeded).
+const STOPPABLE_STATUSES = [
+  "pending",
+  "provisioning",
+  "starting",
+  "running",
+  "idle",
+  "blocked",
+  "host_unknown",
+  "stopping",
+] as const;
+
+// Orphan reaper: a run stuck in an active status (queued/running) with NO
+// session for longer than this has never been claimed (a real claim attaches a
+// session at once) — a crashed dispatch, a retired daemon, or an ancient dev
+// artifact. 60 min is far beyond the seconds a dispatch→claim actually takes,
+// so legitimate just-dispatched runs are never touched. Runs WITH a session are
+// the lease sweep's domain (host_unknown), never the reaper's.
+const REAP_ORPHAN_GRACE_MS = 60 * 60_000;
+const REAP_INTERVAL_MS = 5 * 60_000;
+/**
+ * How long an unanswered approval may hold its slot before we call it abandoned.
+ *
+ * A `blocked` run is parked on a live agent process waiting for a human, so it
+ * genuinely holds a runner slot and auto-drain counts it against the concurrency
+ * cap. Nothing ever expired it, though — two prompts nobody answered pinned
+ * concurrency=2 at zero free slots and silently sealed the whole pipeline for
+ * two days ("N todo eligible yet 0 dispatched").
+ *
+ * The grace is deliberately generous: answering the next morning is normal, not
+ * a failure. This keys on THE HUMAN not answering — never on the agent being
+ * quiet — which is what separates it from the deleted 35-minute inactivity sweep
+ * that manufactured false deaths out of long tool calls.
+ */
+const BLOCKED_ABANDON_MS = 24 * 60 * 60_000;
+
+// How often the gateway pushes newly-pending sessions to connected daemons.
+// 15s keeps dispatch→run latency low while the DB scan stays cheap (one indexed
+// query per connected daemon). This is the reliable dispatch path — the CF
+// Worker cannot reach /internal/nudge over HTTP post-supersession.
+const PENDING_DELIVERY_INTERVAL_MS = 15_000;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isUuid = (s: unknown): s is string => typeof s === "string" && UUID_RE.test(s);
@@ -36,6 +90,7 @@ interface Connection {
   kind: "browser" | "daemon" | "unauth";
   userId: string | null;
   workspaceId: string | null; // set for daemon
+  hostId: string | null; // set for daemon (runner lease identity)
   clientId: string;
   subscribedSessions: Set<string>;
   heartbeatTimer: NodeJS.Timeout | null;
@@ -43,6 +98,11 @@ interface Connection {
   workspaceSubscribed: boolean;
   workspaceScopeId?: string;
   workspaceStatusFilter?: SessionStatus[];
+  // Daemon only: sessionIds already delivered via session_available on this
+  // connection, so the periodic pending-delivery tick doesn't re-send (and
+  // trigger a double-claim) for a session already handed over.
+  deliveredSessions?: Set<string>;
+  hostSnapshot?: HostSnapshotWire;
 }
 
 interface NudgeInput {
@@ -87,57 +147,287 @@ export class Relay {
   private nextConnId = 0;
 
   private timeoutSweepTimer: NodeJS.Timeout | null = null;
+  private reapTimer: NodeJS.Timeout | null = null;
+  private pendingDeliveryTimer: NodeJS.Timeout | null = null;
 
   constructor(cfg: RelayConfig) {
     this.cfg = cfg;
     this.timeoutSweepTimer = setInterval(() => {
-      this.sweepTimedOutSessions().catch((err) => {
-        console.error("[Relay] Timeout sweep failed (will retry next interval):", err);
+      this.sweepExpiredLeases().catch((err) => {
+        console.error("[Relay] Lease sweep failed (will retry next interval):", err);
       });
-    }, 60_000);
+    }, 15_000);
+    this.reapTimer = setInterval(() => {
+      this.reapOrphanedRuns().catch((err) => {
+        console.error("[Relay] Orphan reaper failed (will retry next interval):", err);
+      });
+      this.sweepAbandonedApprovals().catch((err) => {
+        console.error("[Relay] Abandoned-approval sweep failed (will retry next interval):", err);
+      });
+    }, REAP_INTERVAL_MS);
+    this.pendingDeliveryTimer = setInterval(() => {
+      this.deliverPendingTick().catch((err) => {
+        console.error("[Relay] Pending-session delivery failed (will retry next interval):", err);
+      });
+    }, PENDING_DELIVERY_INTERVAL_MS);
   }
 
-  private async sweepTimedOutSessions(): Promise<void> {
-    // Key off inactivity, not age: a healthy long run keeps emitting events
-    // (lastActivityAt is bumped on every session_event), while a run whose
-    // daemon died goes silent and should be failed after the window.
-    const cutoff = new Date(Date.now() - 35 * 60 * 1000).toISOString();
-    const stale = await db.query.chatConversations.findMany({
-      where: and(
-        // "stopping" included: if the daemon dies before confirming a stop,
-        // the session would otherwise stay "stopping" forever.
-        inArray(chatConversations.status, ["running", "starting", "stopping"]),
-        lt(
-          sql`coalesce(${chatConversations.lastActivityAt}, ${chatConversations.createdAt})`,
-          cutoff,
+  /**
+   * Reap orphaned agent runs — the self-healing companion to the one-time
+   * manual cleanup. A run in queued/running with a NULL session_id past the
+   * grace period was never claimed by any runner (a claim attaches a session
+   * immediately), so it is provably dead: terminalize it so it stops showing as
+   * "active"/"running" in every pipeline view and count. `running` → interrupted
+   * (it purported to be executing), `queued` → failed (it never started). Runs
+   * WITH a session are untouched here — those are the lease sweep's job.
+   */
+  private async reapOrphanedRuns(): Promise<void> {
+    const cutoff = new Date(Date.now() - REAP_ORPHAN_GRACE_MS).toISOString();
+    const reaped = await db
+      .update(agentRuns)
+      .set({
+        status: sql`case when ${agentRuns.status} = 'running' then 'interrupted'::agent_run_status else 'failed'::agent_run_status end`,
+        completedAt: new Date(),
+        summary: sql`(coalesce(${agentRuns.summary}::jsonb, '{}'::jsonb) || jsonb_build_object('reaped', true, 'reap_reason', 'orphaned: active status with no session past grace'))::json`,
+      })
+      .where(
+        and(
+          inArray(agentRuns.status, ["queued", "running"]),
+          isNull(agentRuns.sessionId),
+          lt(agentRuns.createdAt, cutoff),
         ),
-      ),
-      columns: { id: true, userId: true, workItemId: true, agentType: true },
-    });
+      )
+      .returning({ id: agentRuns.id });
+    if (reaped.length > 0) {
+      console.log(
+        `[Relay] Reaped ${reaped.length} orphaned run(s): active status with no session past grace`,
+      );
+    }
+  }
+
+  /**
+   * Expire abandoned approvals so an unanswered prompt can't hold a slot
+   * forever. See BLOCKED_ABANDON_MS for why this exists and why the grace is
+   * long. Only `blocked` sessions whose last activity is past the grace are
+   * touched; everything else — including a run that is merely quiet — is left
+   * strictly alone.
+   */
+  private async sweepAbandonedApprovals(): Promise<void> {
+    const cutoff = new Date(Date.now() - BLOCKED_ABANDON_MS).toISOString();
+    const stale = await db
+      .select({ id: chatConversations.id })
+      .from(chatConversations)
+      .where(
+        and(
+          eq(chatConversations.status, "blocked"),
+          // lastActivityAt is set when the run parks; fall back to createdAt so
+          // a row that never recorded activity can still age out.
+          sql`coalesce(${chatConversations.lastActivityAt}, ${chatConversations.createdAt}) < ${cutoff}`,
+        ),
+      );
 
     for (const session of stale) {
-      console.log(`[Relay] Timeout sweep: marking session ${session.id} as failed (>35min inactive)`);
-      await db
-        .update(chatConversations)
-        .set({ status: "failed" })
-        .where(eq(chatConversations.id, session.id));
+      // Route through the single writer, and gate on the previous state still
+      // being "blocked": if the human answered between the select and now, the
+      // status has already moved and we must not stomp their live run.
+      const result = await this.deriveAndWriteState(
+        session.id,
+        "interrupted",
+        { interruptedAt: new Date().toISOString() },
+        ["blocked"],
+      );
+      if (!result.applied) continue;
 
+      // The parked run is real and still claims to be executing; the orphan
+      // reaper can't see it because it HAS a session. Terminalize it here so
+      // "what's running" stops lying.
       await db
         .update(agentRuns)
-        .set({ status: "failed", completedAt: sql`now()`, summary: { reason: "timeout" } })
-        .where(eq(agentRuns.sessionId, session.id));
+        .set({
+          status: sql`'interrupted'::agent_run_status`,
+          completedAt: new Date(),
+          summary: sql`(coalesce(${agentRuns.summary}::jsonb, '{}'::jsonb) || jsonb_build_object('reaped', true, 'reap_reason', 'abandoned: approval unanswered past grace'))::json`,
+        })
+        .where(
+          and(
+            eq(agentRuns.sessionId, session.id),
+            inArray(agentRuns.status, ["queued", "running", "blocked"]),
+          ),
+        );
 
-      if (session.workItemId) {
-        await db.insert(activities).values({
-          workItemId: session.workItemId,
-          userId: session.userId,
-          type: "status_changed",
-          fromValue: "running",
-          toValue: "failed",
-          metadata: { sessionId: session.id, reason: "timeout" },
-        });
+      console.log(
+        `[Relay] Expired abandoned approval for session ${session.id} (blocked, no answer in ${BLOCKED_ABANDON_MS / 3_600_000}h) — slot released`,
+      );
+    }
+  }
+
+  /**
+   * Lease sweep — the run-level inactivity timeout is GONE. Silence never
+   * means failure: the old 35-minute sweep marked long-quiet runs
+   * failed/timeout, which is the exact false-death class the trust work
+   * eliminates (a 40-minute compile inside a tool call is healthy). Liveness
+   * now belongs to the runner lease: only a lease whose heartbeat is older
+   * than the grace period moves that workspace's active sessions to
+   * host_unknown — "lost contact, fate unknown", never "failed".
+   */
+  private async sweepExpiredLeases(): Promise<void> {
+    const cfg = await db.query.gatewayConfig
+      .findFirst()
+      .catch(() => null as { leaseGraceMs: number } | null);
+    const graceMs = cfg?.leaseGraceMs ?? 60_000;
+    const cutoff = new Date(Date.now() - graceMs).toISOString();
+
+    const expired = await db.query.runnerLeases.findMany({
+      where: lt(runnerLeases.lastHeartbeatAt, cutoff),
+    });
+
+    for (const lease of expired) {
+      // A live daemon connection for the workspace overrides a stale lease
+      // row (belt over suspenders — its pings should have kept it fresh).
+      if (this.daemonByWorkspace.has(lease.workspaceId)) continue;
+
+      const sessions = await db
+        .select({
+          id: chatConversations.id,
+          userId: chatConversations.userId,
+          workItemId: chatConversations.workItemId,
+          agentType: chatConversations.agentType,
+        })
+        .from(chatConversations)
+        .leftJoin(repositories, eq(repositories.id, chatConversations.repositoryId))
+        .where(
+          and(
+            inArray(chatConversations.status, [...SWEEP_ACTIVE_STATUSES]),
+            // Resolve the session's workspace by repo OR by planning workspace,
+            // so repo-less (ad-hoc/planning) sessions on a dead runner are not
+            // stranded "running" forever (the old inactivity sweep that used to
+            // catch them was deleted).
+            or(
+              eq(repositories.workspaceId, lease.workspaceId),
+              eq(chatConversations.planningWorkspaceId, lease.workspaceId),
+            ),
+          ),
+        );
+
+      // Delete the expired lease AFTER resolving its sessions: a permanently
+      // expired row must not be re-selected every 15s (that, plus the
+      // same-state no-op above, is what stopped the infinite sweep churn). A
+      // returning runner re-creates its lease via the hello upsert.
+      await db.delete(runnerLeases).where(eq(runnerLeases.id, lease.id));
+
+      for (const session of sessions) {
+        const result = await this.deriveAndWriteState(session.id, "host_unknown");
+        if (!result.applied) continue;
+        console.log(
+          `[Relay] Lease expired for workspace ${lease.workspaceId} (host ${lease.hostId}): session ${session.id} → host_unknown`,
+        );
+        await db
+          .update(agentRuns)
+          .set({ status: "host_unknown" })
+          .where(eq(agentRuns.sessionId, session.id));
+
+        // Distinct copy and severity: lost contact is NOT a death notice.
+        // reArmOnConflict: gateway-originated transitions all use sourceSendSeq
+        // -1, so the occurrence-unique key would suppress EVERY later
+        // host_unknown for this session's lifetime. Re-arm a prior, already
+        // resolved/seen alarm so a SECOND lost-contact (after recovery) still
+        // notifies — the exact trust defect the 10-run gate resets on.
+        // Best-effort here (enqueueTransition rethrows for the ack-gating
+        // status path): a failed push for one session must not abort the sweep
+        // for the rest. The next tick re-derives owed host_unknown pushes.
+        try {
+          await enqueueTransition({
+            sessionId: session.id,
+            userId: session.userId,
+            transition: "host_unknown",
+            sourceSendSeq: -1,
+            reArmOnConflict: true,
+            title: "Lost contact with host",
+            body: `${lease.hostId}: contact lost — the run may still be going; not confirmed dead.`,
+            data: {
+              type: "session.host_unknown",
+              sessionId: session.id,
+              workItemId: session.workItemId ?? undefined,
+              hostId: lease.hostId,
+              transition: "host_unknown",
+              sourceSendSeq: -1,
+            },
+            priority: "default",
+          });
+        } catch (err) {
+          console.error(`[Relay] host_unknown enqueue failed for ${session.id}:`, err);
+        }
+
+        const subs = this.subscribers.get(session.id);
+        if (subs) {
+          for (const sub of subs) {
+            this.send(sub, {
+              type: "session_status_changed",
+              sessionId: session.id,
+              status: "host_unknown",
+              agentType: session.agentType,
+            });
+          }
+        }
       }
     }
+  }
+
+  /**
+   * THE single writer for session status. Every status transition — daemon
+   * reports, lease sweeps, reconciliation — funnels through here, inside a
+   * per-row lock, with explicit precedence:
+   *   - terminal states (completed/failed/error/interrupted/stopped) can
+   *     never be downgraded to host_unknown;
+   *   - a terminal state arriving AFTER host_unknown applies and is flagged
+   *     corrective (the "lost contact" alarm gets retracted).
+   * No other code path may write chatConversations.status.
+   */
+  private async deriveAndWriteState(
+    sessionId: string,
+    incoming: SessionStatus,
+    extra?: Record<string, unknown>,
+    onlyIfPrevIn?: string[],
+  ): Promise<{ applied: boolean; previous: string | null; corrective: boolean }> {
+    const TERMINAL: readonly string[] = TERMINAL_STATUSES;
+    return await db.transaction(async (tx) => {
+      const rows = await tx
+        .select({ status: chatConversations.status })
+        .from(chatConversations)
+        .where(eq(chatConversations.id, sessionId))
+        .for("update");
+      const previous = rows[0]?.status ?? null;
+      if (previous === null) return { applied: false, previous, corrective: false };
+
+      // Same-state write is a no-op. Without this the lease sweep re-applies
+      // host_unknown -> host_unknown every 15s forever (unbounded churn on the
+      // exhaustion-prone Postgres box), and a redelivered status frame would
+      // re-run non-idempotent side effects (e.g. duplicate activity rows).
+      if (previous === incoming) {
+        return { applied: false, previous, corrective: false };
+      }
+
+      if (onlyIfPrevIn && !onlyIfPrevIn.includes(previous)) {
+        return { applied: false, previous, corrective: false };
+      }
+      // A terminal state is FINAL — nothing overwrites it. This blocks a
+      // replayed session_claimed ("starting"), an adopted "running", or a
+      // second differing terminal from resurrecting or flipping a finished run
+      // (previously only host_unknown was guarded, so any non-terminal could
+      // stomp a terminal — silent corruption). The intended terminal-retracts-
+      // host_unknown case still works: host_unknown is non-terminal, so a
+      // terminal arriving on top of it passes this guard and is corrective.
+      if (TERMINAL.includes(previous)) {
+        return { applied: false, previous, corrective: false };
+      }
+      const corrective = previous === "host_unknown" && TERMINAL.includes(incoming);
+
+      await tx
+        .update(chatConversations)
+        .set({ status: incoming, ...(extra ?? {}) })
+        .where(eq(chatConversations.id, sessionId));
+      return { applied: true, previous, corrective };
+    });
   }
 
   handleConnection(ws: WebSocket): void {
@@ -148,6 +438,7 @@ export class Relay {
       kind: "unauth",
       userId: null,
       workspaceId: null,
+      hostId: null,
       clientId: "",
       subscribedSessions: new Set(),
       heartbeatTimer: null,
@@ -294,9 +585,25 @@ export class Relay {
         return;
       case "ping":
         this.send(conn, { type: "pong", ts: new Date().toISOString() });
-        // Daemon pings double as liveness: keep lastHeartbeat fresh so
-        // "runner online" reflects the live connection, not connect time.
+        // Daemon pings double as liveness. The runner LEASE is the
+        // authoritative signal (only the runner's own ping updates it);
+        // workspaces.lastHeartbeat is kept fresh too for UI back-compat but
+        // has other writers and must not be trusted for liveness.
         if (conn.kind === "daemon" && conn.workspaceId) {
+          if (msg.hostSnapshot) {
+            conn.hostSnapshot = msg.hostSnapshot;
+            this.broadcastHostSnapshot(conn.workspaceId, msg.hostSnapshot);
+          }
+          await db
+            .update(runnerLeases)
+            .set({ lastHeartbeatAt: sql`now()` })
+            .where(
+              and(
+                eq(runnerLeases.workspaceId, conn.workspaceId),
+                eq(runnerLeases.hostId, conn.hostId ?? "unknown"),
+              ),
+            )
+            .catch(() => {});
           await db
             .update(workspaces)
             .set({ lastHeartbeat: sql`now()` })
@@ -352,6 +659,14 @@ export class Relay {
         if (!requireUuid(msg.sessionId)) return;
         await this.handleStopSession(conn, msg);
         return;
+      case "approve":
+        if (conn.kind !== "browser") {
+          this.send(conn, createError("INVALID_FOR_DEVICE", "approve is for browsers"));
+          return;
+        }
+        if (!requireUuid(msg.sessionId)) return;
+        await this.handleApprove(conn, msg);
+        return;
       case "ack":
         // No-op in slim gateway: we persist every event synchronously.
         // The ack is informational — the browser's lastAckSeq is what matters on reconnect.
@@ -391,6 +706,16 @@ export class Relay {
         conn.workspaceSubscribed = false;
         conn.workspaceStatusFilter = undefined;
         return;
+      case "run_view": {
+        // Explicit foreground run-screen visibility — the honest instrument
+        // for the "not watching" acceptance proxy (WS subscribes don't
+        // count: background clients subscribe automatically).
+        const rv = msg as unknown as { sessionId?: string };
+        if (conn.kind === "browser" && isUuid(rv.sessionId)) {
+          this.audit(conn.userId!, "observe.run_view", { sessionId: rv.sessionId });
+        }
+        return;
+      }
     }
   }
 
@@ -414,6 +739,8 @@ export class Relay {
       conn.kind = "daemon";
       conn.userId = userId;
       conn.workspaceId = hello.workspaceId;
+      conn.hostId = hello.hostId ?? "unknown";
+      conn.hostSnapshot = hello.hostSnapshot;
 
       // If another daemon was registered for this workspace, boot it.
       const existing = this.daemonByWorkspace.get(hello.workspaceId);
@@ -425,6 +752,30 @@ export class Relay {
         console.log(`[Relay] Daemon registered: ${conn.id} (clientId=${hello.clientId}) for workspace ${hello.workspaceId}`);
       }
       this.daemonByWorkspace.set(hello.workspaceId, conn);
+
+      // Register/refresh the runner lease — the identity-backed liveness row
+      // only this daemon's heartbeats may touch. connectorInstanceId changes
+      // per runner start, letting adoption logic tell restart from reconnect.
+      await db
+        .insert(runnerLeases)
+        .values({
+          workspaceId: hello.workspaceId,
+          hostId: conn.hostId ?? "unknown",
+          connectorInstanceId: hello.connectorInstanceId ?? hello.clientId,
+          daemonVersion: hello.daemonVersion,
+        })
+        .onConflictDoUpdate({
+          target: [runnerLeases.workspaceId, runnerLeases.hostId],
+          set: {
+            connectorInstanceId: hello.connectorInstanceId ?? hello.clientId,
+            daemonVersion: hello.daemonVersion,
+            startedAt: sql`now()`,
+            lastHeartbeatAt: sql`now()`,
+          },
+        })
+        .catch((err) => {
+          console.error("[Relay] runner lease upsert failed:", err);
+        });
 
       // Update workspace heartbeat so the UI shows the node as online
       await db
@@ -469,66 +820,103 @@ export class Relay {
 
     // Send pending sessions on daemon connect (recovery for offline daemon)
     if (conn.kind === "daemon") {
-      const pending = await db.query.chatConversations.findMany({
-        where: and(
-          eq(chatConversations.status, "pending"),
-          eq(chatConversations.userId, conn.userId!),
-        ),
-      });
-      for (const session of pending) {
-        const isPlanning = session.sessionType === "planning";
+      await this.deliverPendingSessionsToDaemon(conn);
+    }
+  }
 
-        // Enrich execution sessions with task context from work_items
-        let description: string | undefined;
-        let identifier: string | undefined;
-        let branch: string | undefined;
-        if (!isPlanning && session.workItemId) {
-          const taskRun = await db.query.taskRuns.findFirst({
-            where: eq(taskRuns.sessionId, session.id),
-            columns: { branch: true, workItemIdentifierSnapshot: true },
-          });
-          const wi = await db.query.workItems.findFirst({
-            where: eq(workItems.id, session.workItemId),
-            columns: { description: true },
-          });
-          description = wi?.description ?? undefined;
-          identifier = taskRun?.workItemIdentifierSnapshot ?? undefined;
-          branch = taskRun?.branch ?? undefined;
-        }
+  /**
+   * Push every pending session for the daemon's user as a session_available.
+   * Called on daemon connect AND periodically (deliverPendingTick) — the
+   * periodic call is what makes dispatch reliable now that the CF Worker cannot
+   * reach the gateway's /internal/nudge over HTTP (ws.blder.bot serves only the
+   * WS upgrade; a Worker-side nudge silently no-ops). Without a live nudge, a
+   * session created while the daemon is already connected would otherwise sit
+   * pending until the next reconnect. Per-connection dedup via
+   * `deliveredSessions` avoids re-sending (and double-claiming) a session
+   * already handed over; a claimed session leaves `status='pending'` so it also
+   * naturally drops out of the query.
+   */
+  private async deliverPendingSessionsToDaemon(conn: Connection): Promise<void> {
+    if (conn.kind !== "daemon" || !conn.userId) return;
+    if (!conn.deliveredSessions) conn.deliveredSessions = new Set<string>();
 
-        const personaMetadata = (session as any).personaMetadata as Record<string, unknown> | null;
+    const pending = await db.query.chatConversations.findMany({
+      where: and(
+        eq(chatConversations.status, "pending"),
+        eq(chatConversations.userId, conn.userId),
+      ),
+    });
+    for (const session of pending) {
+      if (conn.deliveredSessions.has(session.id)) continue;
+      const isPlanning = session.sessionType === "planning";
 
-        this.send(conn, {
-          type: "session_available",
-          sessionId: session.id,
-          workingDirectory: session.workingDirectory ?? "",
-          agentType: session.agentType,
-          title: session.title ?? undefined,
-          sessionType: isPlanning ? "planning" : "execution",
-          planningContext:
-            isPlanning &&
-            (session as any).planningWorkspaceId &&
-            (session as any).planningProjectId
-              ? ({
-                  workspaceId: (session as any).planningWorkspaceId,
-                  projectId: (session as any).planningProjectId,
-                  projectName: (session as any).planningProjectName ?? "",
-                  launchContext: (session as any).planningLaunchContext ?? undefined,
-                } as any)
-              : undefined,
-          description,
-          identifier,
-          branch,
-          personaId: (session as any).personaId ?? undefined,
-          personaConfig: personaMetadata ? {
-            model: typeof personaMetadata.model === "string" ? personaMetadata.model : undefined,
-            systemPrompt: typeof personaMetadata.systemPrompt === "string" ? personaMetadata.systemPrompt : undefined,
-            allowedTools: Array.isArray(personaMetadata.allowedTools) ? personaMetadata.allowedTools as string[] : undefined,
-            autonomyLevel: typeof personaMetadata.autonomyLevel === "string" ? personaMetadata.autonomyLevel : undefined,
-            metadata: typeof personaMetadata.metadata === "object" ? personaMetadata.metadata as Record<string, unknown> : undefined,
-          } : undefined,
+      // Enrich execution sessions with task context from work_items
+      let description: string | undefined;
+      let identifier: string | undefined;
+      let branch: string | undefined;
+      if (!isPlanning && session.workItemId) {
+        const taskRun = await db.query.taskRuns.findFirst({
+          where: eq(taskRuns.sessionId, session.id),
+          columns: { branch: true, workItemIdentifierSnapshot: true },
         });
+        const wi = await db.query.workItems.findFirst({
+          where: eq(workItems.id, session.workItemId),
+          columns: { description: true },
+        });
+        description = wi?.description ?? undefined;
+        identifier = taskRun?.workItemIdentifierSnapshot ?? undefined;
+        branch = taskRun?.branch ?? undefined;
       }
+
+      const personaMetadata = (session as any).personaMetadata as Record<string, unknown> | null;
+
+      // Mark delivered BEFORE send so a send that races the next tick is not
+      // double-emitted; a genuinely undelivered session (socket dead) will be
+      // re-picked on the daemon's next connect via the same method.
+      conn.deliveredSessions.add(session.id);
+      this.send(conn, {
+        type: "session_available",
+        sessionId: session.id,
+        workingDirectory: session.workingDirectory ?? "",
+        agentType: session.agentType,
+        title: session.title ?? undefined,
+        sessionType: isPlanning ? "planning" : "execution",
+        planningContext:
+          isPlanning &&
+          (session as any).planningWorkspaceId &&
+          (session as any).planningProjectId
+            ? ({
+                workspaceId: (session as any).planningWorkspaceId,
+                projectId: (session as any).planningProjectId,
+                projectName: (session as any).planningProjectName ?? "",
+                launchContext: (session as any).planningLaunchContext ?? undefined,
+              } as any)
+            : undefined,
+        description,
+        identifier,
+        branch,
+        personaId: (session as any).personaId ?? undefined,
+        personaConfig: personaMetadata ? {
+          model: typeof personaMetadata.model === "string" ? personaMetadata.model : undefined,
+          systemPrompt: typeof personaMetadata.systemPrompt === "string" ? personaMetadata.systemPrompt : undefined,
+          allowedTools: Array.isArray(personaMetadata.allowedTools) ? personaMetadata.allowedTools as string[] : undefined,
+          autonomyLevel: typeof personaMetadata.autonomyLevel === "string" ? personaMetadata.autonomyLevel : undefined,
+          metadata: typeof personaMetadata.metadata === "object" ? personaMetadata.metadata as Record<string, unknown> : undefined,
+        } : undefined,
+      });
+    }
+  }
+
+  /**
+   * Periodic drain: push newly-pending sessions to each connected daemon. This
+   * is the reliable path for auto-drain + manual dispatch — see
+   * deliverPendingSessionsToDaemon for why the Worker nudge can't be relied on.
+   */
+  private async deliverPendingTick(): Promise<void> {
+    for (const daemon of this.daemonByWorkspace.values()) {
+      await this.deliverPendingSessionsToDaemon(daemon).catch((err) =>
+        console.error("[Relay] pending-delivery failed for a daemon:", err),
+      );
     }
   }
 
@@ -594,11 +982,47 @@ export class Relay {
       }
 
       if (events.length > REPLAY_LIMIT) {
+        const lastSentSeq = toReplay[toReplay.length - 1]?.seq ?? sub.lastAckSeq;
         this.send(conn, {
           type: "replay_truncated",
           sessionId: sub.sessionId,
-          oldestAvailableSeq: toReplay[toReplay.length - 1]?.seq ?? sub.lastAckSeq,
+          oldestAvailableSeq: lastSentSeq,
         });
+
+        // Trust-critical: output replay is capped, but the events that drive
+        // the approval banner and status MUST NOT be dropped. A permission
+        // request that is the 501st+ event since lastAckSeq would otherwise be
+        // invisible — opening its push deep-link would show no approve/deny
+        // controls. Re-send the tail lifecycle events (past the truncation
+        // point) so the client always reconstructs the current pending-approval
+        // and status state, even when the chatty output between them was cut.
+        const lifecycle = await db.query.sessionEvents.findMany({
+          where: and(
+            eq(sessionEvents.sessionId, sub.sessionId),
+            gt(sessionEvents.seq, lastSentSeq),
+            inArray(sessionEvents.eventType, [
+              "permission_request",
+              "permission_resolved",
+              "status_change",
+            ]),
+          ),
+          orderBy: asc(sessionEvents.seq),
+          limit: REPLAY_LIMIT,
+        });
+        for (const event of lifecycle) {
+          this.send(conn, {
+            type: "event",
+            sessionId: event.sessionId,
+            seq: event.seq,
+            eventType: event.eventType as any,
+            direction: event.direction as any,
+            payload: event.payload,
+            createdAt:
+              (event.createdAt as unknown) instanceof Date
+                ? (event.createdAt as unknown as Date).toISOString()
+                : String(event.createdAt),
+          });
+        }
       }
     }
   }
@@ -662,11 +1086,114 @@ export class Relay {
       createdAt: new Date().toISOString(),
     });
 
+    this.audit(conn.userId!, "control.input", { sessionId: input.sessionId });
+
     // Ack to the browser
     this.send(conn, {
       type: "input_ack",
       sessionId: input.sessionId,
       clientInputId: input.clientInputId,
+      acceptedSeq: 0,
+    });
+  }
+
+  // ── Audit ──────────────────────────────────────────────────────────
+
+  /**
+   * Audit trail on the control plane: every control action (stop, approve,
+   * input) and every explicit run observation writes an event_log row —
+   * user, action, session, timestamp. Observation events double as the
+   * measurement instrument for the "not watching" acceptance proxy.
+   * Best-effort: an audit failure must never block the action itself.
+   */
+  private audit(
+    userId: string,
+    eventType: string,
+    payload: Record<string, unknown>,
+  ): void {
+    void db
+      .insert(eventLog)
+      .values({ userId, eventType, payload })
+      .catch((err) => console.error(`[Relay] audit write failed (${eventType}):`, err));
+  }
+
+  // ── Browser approve → daemon ───────────────────────────────────────
+
+  /**
+   * Resolve a pending permission_request on a blocked run. Same ownership
+   * and routing rules as input; the daemon enforces exactly-once resolution
+   * per requestId, so a double-tapped approve is harmless.
+   */
+  private async handleApprove(conn: Connection, msg: ClientApprove): Promise<void> {
+    // Validate the decision at the trust boundary (parseClientMessage does not).
+    // Anything other than an explicit allow/deny is rejected rather than
+    // forwarded — the runner defaults unknown decisions to deny, but a garbage
+    // requestId/message should not reach the agent control channel unchecked.
+    if (msg.decision !== "allow" && msg.decision !== "deny") {
+      this.send(conn, createError("INVALID_MESSAGE", "decision must be allow or deny", msg.sessionId));
+      return;
+    }
+    if (typeof msg.requestId !== "string" || msg.requestId.length === 0 || msg.requestId.length > 200) {
+      this.send(conn, createError("INVALID_MESSAGE", "invalid requestId", msg.sessionId));
+      return;
+    }
+    if (msg.message !== undefined && (typeof msg.message !== "string" || msg.message.length > 2000)) {
+      this.send(conn, createError("INVALID_MESSAGE", "invalid message", msg.sessionId));
+      return;
+    }
+
+    const rows = await db
+      .select({
+        sessionUserId: chatConversations.userId,
+        workspaceId: repositories.workspaceId,
+      })
+      .from(chatConversations)
+      .leftJoin(repositories, eq(repositories.id, chatConversations.repositoryId))
+      .where(eq(chatConversations.id, msg.sessionId))
+      .limit(1);
+
+    const row = rows[0];
+    if (!row || row.sessionUserId !== conn.userId) {
+      this.send(conn, createError("SESSION_NOT_FOUND", "Session not found", msg.sessionId));
+      return;
+    }
+
+    const daemon = row.workspaceId
+      ? this.daemonByWorkspace.get(row.workspaceId) ?? null
+      : this.findDaemonForUser(conn.userId!);
+
+    if (!daemon) {
+      this.send(
+        conn,
+        createError("DAEMON_OFFLINE", "No daemon online for this session", msg.sessionId, true),
+      );
+      return;
+    }
+
+    this.send(daemon, {
+      type: "event",
+      sessionId: msg.sessionId,
+      seq: 0,
+      eventType: "approval" as never,
+      direction: "client",
+      payload: {
+        requestId: msg.requestId,
+        decision: msg.decision,
+        ...(msg.message ? { message: msg.message } : {}),
+        clientInputId: msg.clientInputId,
+      },
+      createdAt: new Date().toISOString(),
+    });
+    this.audit(conn.userId!, "control.approve", {
+      sessionId: msg.sessionId,
+      requestId: msg.requestId,
+      decision: msg.decision,
+    });
+
+    this.send(conn, {
+      type: "input_ack",
+      sessionId: msg.sessionId,
+      clientInputId: msg.clientInputId,
       acceptedSeq: 0,
     });
   }
@@ -714,35 +1241,28 @@ export class Relay {
     const row = rows[0];
     if (!row || row.sessionUserId !== userId) return "not_found";
 
-    const activeStatuses = ["pending", "provisioning", "starting", "running", "idle"];
+    // Includes blocked/host_unknown so a paused or lost run can actually be
+    // stopped — otherwise the onlyIfPrevIn guard rejects the transition and the
+    // session pins forever while the UI reports the stop succeeded.
+    const activeStatuses = [...STOPPABLE_STATUSES];
     const daemon = row.workspaceId
       ? this.daemonByWorkspace.get(row.workspaceId) ?? null
       : this.findDaemonForUser(userId);
 
     if (daemon) {
-      await db
-        .update(chatConversations)
-        .set({ status: "stopping" })
-        .where(
-          and(
-            eq(chatConversations.id, sessionId),
-            inArray(chatConversations.status, activeStatuses),
-          ),
-        );
+      await this.deriveAndWriteState(sessionId, "stopping", undefined, activeStatuses);
+      this.audit(userId, "control.stop", { sessionId });
       this.send(daemon, { type: "session_stop", sessionId });
       console.log(`[Relay] Stop relayed to daemon for session ${sessionId}`);
       return { delivered: true };
     }
 
-    await db
-      .update(chatConversations)
-      .set({ status: "stopped", claimedByGatewayId: null, leaseExpiresAt: null })
-      .where(
-        and(
-          eq(chatConversations.id, sessionId),
-          inArray(chatConversations.status, activeStatuses),
-        ),
-      );
+    await this.deriveAndWriteState(
+      sessionId,
+      "stopped",
+      { claimedByGatewayId: null, leaseExpiresAt: null },
+      activeStatuses,
+    );
     console.log(`[Relay] Stop for session ${sessionId}: no daemon online, marked stopped`);
     return { delivered: false };
   }
@@ -750,17 +1270,28 @@ export class Relay {
   // ── Daemon session_claimed ─────────────────────────────────────────
 
   private async handleSessionClaimed(conn: Connection, claim: ClientSessionClaimed): Promise<void> {
-    // Update DB: mark session as claimed by this daemon's workspace.
-    // For v1 we just update the status from "pending" to "starting".
-    await db
-      .update(chatConversations)
-      .set({ status: "starting" })
-      .where(
-        and(
-          eq(chatConversations.id, claim.sessionId),
-          eq(chatConversations.userId, conn.userId!),
-        ),
-      );
+    // Ownership check, then the single-writer path (pending → starting).
+    const owned = await db.query.chatConversations.findFirst({
+      where: and(
+        eq(chatConversations.id, claim.sessionId),
+        eq(chatConversations.userId, conn.userId!),
+      ),
+      columns: { id: true },
+    });
+    if (!owned) return;
+
+    // Idempotent claim: session_claimed is journaled with a send-seq and
+    // replayed on reconnect, but (unlike event/status envelopes) the gateway
+    // does not ack/dedup it. If this session already has an agent_runs row it
+    // was already claimed, so a replay must NOT reset status to "starting" or
+    // insert a duplicate dashboard row.
+    const existingRun = await db.query.agentRuns.findFirst({
+      where: eq(agentRuns.sessionId, claim.sessionId),
+      columns: { id: true },
+    });
+    if (existingRun) return;
+
+    await this.deriveAndWriteState(claim.sessionId, "starting");
 
     // Update associated task_run to "running" and work_item to "in_progress"
     const taskRun = await db.query.taskRuns.findFirst({
@@ -883,43 +1414,134 @@ export class Relay {
 
   // ── Daemon session_event → persist + fan out ───────────────────────
 
+  /**
+   * Envelope-protocol ingest: transactionally persist a daemon frame keyed by
+   * its runner send-seq, then ack. The transaction makes persist-then-ack
+   * atomic — an ack is only ever sent for a committed row, so the runner can
+   * safely truncate its disk journal on ack. Redelivery (the runner replaying
+   * after a partition) is detected by the (sessionId, sendSeq) unique key and
+   * acked without a second row or a second fan-out.
+   */
+  private async persistEnvelopeEvent(
+    conn: Connection,
+    sessionId: string,
+    sendSeq: number,
+    eventType: string,
+    direction: string,
+    payload: Record<string, unknown>,
+  ): Promise<{ kind: "inserted"; seq: number } | { kind: "duplicate" } | { kind: "denied" }> {
+    return await db.transaction(async (tx) => {
+      // Duplicate check first so redelivery doesn't burn a gateway seq.
+      const existing = await tx
+        .select({ id: sessionEvents.id })
+        .from(sessionEvents)
+        .where(
+          and(
+            eq(sessionEvents.sessionId, sessionId),
+            eq(sessionEvents.sendSeq, sendSeq),
+          ),
+        )
+        .limit(1);
+      if (existing.length > 0) return { kind: "duplicate" as const };
+
+      const updated = await tx
+        .update(chatConversations)
+        .set({
+          nextSeq: sql`${chatConversations.nextSeq} + 1`,
+          lastActivityAt: sql`now()`,
+        })
+        .where(
+          and(
+            eq(chatConversations.id, sessionId),
+            eq(chatConversations.userId, conn.userId!),
+          ),
+        )
+        .returning({ newNextSeq: chatConversations.nextSeq });
+      if (updated.length === 0) return { kind: "denied" as const };
+
+      const seq = updated[0]!.newNextSeq - 1;
+      // The unique index still guards a concurrent race on the same sendSeq:
+      // the loser's insert aborts the transaction, the runner redelivers, and
+      // the redelivery hits the duplicate check above.
+      await tx.insert(sessionEvents).values({
+        sessionId,
+        seq,
+        sendSeq,
+        direction,
+        eventType,
+        payload,
+      });
+      return { kind: "inserted" as const, seq };
+    });
+  }
+
   private async handleSessionEvent(conn: Connection, event: ClientSessionEvent): Promise<void> {
-    // Atomic increment with RETURNING — fuses the auth check into the WHERE clause
-    // and avoids the read-then-write race that caused duplicate seq values under burst.
-    const updated = await db
-      .update(chatConversations)
-      .set({
-        nextSeq: sql`${chatConversations.nextSeq} + 1`,
-        lastActivityAt: sql`now()`,
-      })
-      .where(
-        and(
-          eq(chatConversations.id, event.sessionId),
-          eq(chatConversations.userId, conn.userId!),
-        ),
-      )
-      .returning({ newNextSeq: chatConversations.nextSeq });
+    let seq: number;
 
-    if (updated.length === 0) {
-      this.send(
+    if (typeof event.sendSeq === "number") {
+      // Envelope path: durable persist, then ack, then fan out.
+      const result = await this.persistEnvelopeEvent(
         conn,
-        createError("ACCESS_DENIED", "Cannot emit events for this session", event.sessionId),
+        event.sessionId,
+        event.sendSeq,
+        event.eventType,
+        event.direction,
+        event.payload,
       );
-      return;
+      if (result.kind === "denied") {
+        this.send(
+          conn,
+          createError("ACCESS_DENIED", "Cannot emit events for this session", event.sessionId),
+        );
+        return;
+      }
+      this.send(conn, {
+        type: "event_ack",
+        sessionId: event.sessionId,
+        sendSeq: event.sendSeq,
+      });
+      if (result.kind === "duplicate") return; // already persisted + fanned out
+      seq = result.seq;
+    } else {
+      // Legacy (no sendSeq) path: batched writer, fire-and-forget durability.
+      // Atomic increment with RETURNING — fuses the auth check into the WHERE
+      // clause and avoids the read-then-write race that caused duplicate seq
+      // values under burst.
+      const updated = await db
+        .update(chatConversations)
+        .set({
+          nextSeq: sql`${chatConversations.nextSeq} + 1`,
+          lastActivityAt: sql`now()`,
+        })
+        .where(
+          and(
+            eq(chatConversations.id, event.sessionId),
+            eq(chatConversations.userId, conn.userId!),
+          ),
+        )
+        .returning({ newNextSeq: chatConversations.nextSeq });
+
+      if (updated.length === 0) {
+        this.send(
+          conn,
+          createError("ACCESS_DENIED", "Cannot emit events for this session", event.sessionId),
+        );
+        return;
+      }
+
+      // The returned value is AFTER increment, so the seq we use is (new - 1)
+      seq = updated[0]!.newNextSeq - 1;
+
+      const record: SessionEventRecord = {
+        sessionId: event.sessionId,
+        seq,
+        direction: event.direction,
+        eventType: event.eventType,
+        payload: event.payload,
+      };
+
+      await this.cfg.persistEvent(record);
     }
-
-    // The returned value is AFTER increment, so the seq we use is (new - 1)
-    const seq = updated[0]!.newNextSeq - 1;
-
-    const record: SessionEventRecord = {
-      sessionId: event.sessionId,
-      seq,
-      direction: event.direction,
-      eventType: event.eventType,
-      payload: event.payload,
-    };
-
-    await this.cfg.persistEvent(record);
 
     // Fan out to all subscribers of this session
     const subs = this.subscribers.get(event.sessionId);
@@ -969,6 +1591,61 @@ export class Relay {
   // ── Daemon session_status → update DB + notify subscribers ─────────
 
   private async handleSessionStatus(conn: Connection, msg: ClientSessionStatus): Promise<void> {
+    if (typeof msg.sendSeq === "number") {
+      // Envelope path: the status transition itself becomes a durable
+      // status_change event row so completion can never be lost.
+      //
+      // Ordering is load-bearing: persist -> APPLY -> ack. The ack certifies
+      // both durability AND that the side effects (status column, work-item
+      // sync, terminal/blocked push) ran. If the gateway crashes or a DB error
+      // throws between persist and apply, no ack is sent, so the runner
+      // redelivers; the redelivered (duplicate) frame RE-RUNS applySessionStatus
+      // (idempotent — deriveAndWriteState precedence + the outbox occurrence
+      // key make re-application a no-op) instead of the old early-return that
+      // permanently dropped the transition. Acking before applying was the bug.
+      const result = await this.persistEnvelopeEvent(
+        conn,
+        msg.sessionId,
+        msg.sendSeq,
+        "status_change",
+        "system",
+        { status: msg.status, ...(msg.summary ? { summary: msg.summary } : {}) },
+      );
+      if (result.kind === "denied") {
+        this.send(
+          conn,
+          createError("ACCESS_DENIED", "Cannot report status for this session", msg.sessionId),
+        );
+        return;
+      }
+      // Applies on both first delivery and redelivery. A throw here propagates
+      // to the message-queue catch, which sends INTERNAL_ERROR and NO ack, so
+      // the runner keeps the frame and redelivers.
+      await this.applySessionStatus(conn, msg);
+      this.send(conn, {
+        type: "event_ack",
+        sessionId: msg.sessionId,
+        sendSeq: msg.sendSeq,
+      });
+      return;
+    }
+    await this.applySessionStatus(conn, msg);
+  }
+
+  /**
+   * Side effects of a session status transition: status columns, task/work-item
+   * mapping, PR recording, activity rows, terminal pushes, subscriber fan-out.
+   * Runs exactly once per envelope occurrence (handleSessionStatus dedups).
+   */
+  private async applySessionStatus(
+    conn: Connection,
+    msg: {
+      sessionId: string;
+      status: SessionStatus;
+      summary?: Record<string, unknown>;
+      sendSeq?: number;
+    },
+  ): Promise<void> {
     const session = await db.query.chatConversations.findFirst({
       where: eq(chatConversations.id, msg.sessionId),
     });
@@ -992,21 +1669,31 @@ export class Relay {
       summary?.error ?? summary?.message ?? summary?.reason ?? undefined;
     const isError = msg.status === "error" || msg.status === "failed";
 
-    await db
-      .update(chatConversations)
-      .set({
-        status: msg.status,
-        ...(isError && errorMessage
-          ? {
-              lastError: {
-                code: summary?.code ?? "AGENT_ERROR",
-                message: errorMessage,
-                timestamp: new Date().toISOString(),
-              },
-            }
-          : {}),
-      })
-      .where(eq(chatConversations.id, msg.sessionId));
+    const stateResult = await this.deriveAndWriteState(
+      msg.sessionId,
+      msg.status,
+      isError && errorMessage
+        ? {
+            lastError: {
+              code: summary?.code ?? "AGENT_ERROR",
+              message: errorMessage,
+              timestamp: new Date().toISOString(),
+            },
+          }
+        : undefined,
+    );
+    // Tell a genuinely REJECTED transition (terminal-is-final / onlyIfPrevIn)
+    // apart from a same-state REDELIVERY (previous === incoming). A rejection
+    // gets no side effects. A same-state redelivery still needs to (re-)issue
+    // the idempotent push intent below: a crash between the status commit and
+    // the outbox enqueue on the FIRST pass would otherwise leave the ack unsent,
+    // the runner redelivers, this pass no-ops the state write, and the owed
+    // blocked/terminal notification would be permanently lost (no backstop row).
+    const alreadyAtTarget = !stateResult.applied && stateResult.previous === msg.status;
+    if (!stateResult.applied && !alreadyAtTarget) {
+      return;
+    }
+    const freshlyApplied = stateResult.applied;
 
     // Sync task_run and work_item status on terminal states. "error" is
     // terminal too (the runner emits it on an agent crash) — without it here,
@@ -1020,15 +1707,19 @@ export class Relay {
       // task_runs / work_items don't have an "error" status in their enum —
       // map it to "failed" so the downstream writes satisfy the constraint.
       const runStatus = msg.status === "error" ? "failed" : msg.status;
+
+      // These status writes are all idempotent (SET status = terminal), so they
+      // run on BOTH fresh apply and same-state redelivery — a crash between the
+      // status commit and these writes would otherwise leave task_run/agent_run
+      // stuck "running" while the conversation is terminal, never repaired.
       const taskRun = await db.query.taskRuns.findFirst({
         where: eq(taskRuns.sessionId, msg.sessionId),
         columns: { id: true, workItemId: true },
       });
       if (taskRun) {
         // Record the PR (opened on the git host by the runner) in bob's own
-        // tracking so it's visible in the UI, and link it to the task run.
-        // Gateway-dispatched work (the autonomous driver + manual starts) goes
-        // through this path, which previously left pull_requests empty.
+        // tracking so it's visible in the UI. recordPullRequest is idempotent
+        // on the PR url.
         let pullRequestId: string | undefined;
         if (msg.status === "completed" && summary?.pullRequestUrl) {
           pullRequestId = await this.recordPullRequest(
@@ -1060,7 +1751,7 @@ export class Relay {
         }
       }
 
-      // Bridge: update agent_runs for dashboard
+      // Bridge: update agent_runs for dashboard (idempotent)
       await db
         .update(agentRuns)
         .set({
@@ -1070,8 +1761,10 @@ export class Relay {
         })
         .where(eq(agentRuns.sessionId, msg.sessionId));
 
-      // Bridge: write activity for work-item-linked sessions
-      if (session.workItemId) {
+      // Bridge: write activity for work-item-linked sessions. This INSERT is the
+      // only non-idempotent write here, so it is the one thing gated on a fresh
+      // apply — a redelivery must not append a duplicate activity row.
+      if (freshlyApplied && session.workItemId) {
         await db.insert(activities).values({
           workItemId: session.workItemId,
           userId: session.userId,
@@ -1086,10 +1779,53 @@ export class Relay {
         });
       }
 
-      // Push: notify the user's mobile devices that the run finished. Fire and
-      // forget — a push failure must never affect status handling.
-      void this.notifyTerminalPush(session, msg.status, errorMessage, summary);
+      // Push (via the outbox): record the send intent. Idempotent — the outbox
+      // occurrence key (sessionId, transition, sourceSendSeq) dedups a redeliver
+      // — so this ALWAYS runs (fresh apply OR same-state redelivery), closing
+      // the crash-between-commit-and-enqueue window. When the session was
+      // host_unknown, the terminal push doubles as the retraction of the
+      // "lost contact" alarm.
+      await this.enqueueTerminalNotification(
+        session,
+        runStatus as SessionStatus,
+        errorMessage,
+        summary,
+        stateResult.corrective,
+        msg.sendSeq ?? -1,
+      );
+    } else if (msg.status === "blocked") {
+      // The wedge's marquee push: the run is paused on a human decision.
+      const toolName =
+        typeof msg.summary?.toolName === "string" ? msg.summary.toolName : undefined;
+      const isReauth = msg.summary?.reason === "re-auth";
+      await enqueueTransition({
+        sessionId: msg.sessionId,
+        userId: session.userId,
+        transition: "blocked",
+        sourceSendSeq: msg.sendSeq ?? -1,
+        title: `${session.workItemIdentifierSnapshot ?? session.title ?? "Your agent task"} needs you`,
+        body: isReauth
+          ? "The agent hit an authentication problem and needs re-auth."
+          : toolName
+            ? `Approval requested: ${toolName}`
+            : "The agent is waiting for your approval.",
+        data: {
+          type: "session.blocked",
+          sessionId: msg.sessionId,
+          workItemId: session.workItemId ?? undefined,
+          transition: "blocked",
+          sourceSendSeq: msg.sendSeq ?? -1,
+          requestId: msg.summary?.requestId,
+        },
+        priority: "high",
+      });
     }
+
+    // A same-state redelivery only needed to (re)issue the idempotent push
+    // intent above; the ephemeral subscriber fan-out already fired on the fresh
+    // apply, so stop here (also avoids redundant broadcast queries).
+    if (!freshlyApplied) return;
+
     const planningCounts = session.sessionType === "planning"
       ? (await this.getPlanningDraftCounts([session.id])).get(session.id) ?? {
           draftCount: 0,
@@ -1177,12 +1913,12 @@ export class Relay {
   }
 
   /**
-   * Push a "run finished" notification to the session owner's mobile devices.
-   * Completed → success (PR link if any); error/failed → the failure reason;
-   * interrupted → a stopped note. Planning sessions are skipped (they're
-   * short and interactive). Best-effort — never throws into the caller.
+   * Record the "run finished" send intent in the outbox (the worker delivers
+   * with retries). Completed → success (PR link if any); error/failed → the
+   * failure reason; interrupted → a stopped note. Planning sessions are
+   * skipped (they're short and interactive).
    */
-  private async notifyTerminalPush(
+  private async enqueueTerminalNotification(
     session: {
       id: string;
       userId: string;
@@ -1194,6 +1930,8 @@ export class Relay {
     status: SessionStatus,
     errorMessage: string | undefined,
     summary: { pullRequestUrl?: string } | undefined,
+    corrective: boolean,
+    sourceSendSeq: number,
   ): Promise<void> {
     if (session.sessionType === "planning") return;
 
@@ -1208,13 +1946,19 @@ export class Relay {
       url: session.workItemId ? undefined : `/chat?session=${session.id}`,
     };
 
+    // Corrective copy: contact was lost (host_unknown pushed earlier) but the
+    // run actually finished — say so explicitly, retracting the alarm.
+    const correctivePrefix = corrective ? "Contact restored — " : "";
+
     let notification: Parameters<typeof pushToUser>[1] | null = null;
     if (status === "completed") {
       notification = {
         title: `${label} completed`,
-        body: summary?.pullRequestUrl
-          ? "Pull request is ready for review."
-          : "The agent finished the task.",
+        body:
+          correctivePrefix +
+          (summary?.pullRequestUrl
+            ? "Pull request is ready for review."
+            : "The agent finished the task."),
         data: {
           type: "task.completed",
           pullRequestUrl: summary?.pullRequestUrl,
@@ -1225,8 +1969,12 @@ export class Relay {
       };
     } else if (status === "error" || status === "failed") {
       notification = {
+        // Generic body: errorMessage is agent/tool-derived free text that can
+        // contain secrets, tokens, paths, or stack traces, and a push body is
+        // shown on the lock screen and passes through APNs/FCM. The detail is
+        // kept in-app (chatConversations.lastError); the push just says to open.
         title: `${label} failed`,
-        body: errorMessage ? errorMessage.slice(0, 140) : "The agent run failed.",
+        body: "The agent run failed — open to see details.",
         data: { type: "session.error", ...routing },
         channelId: "tasks",
         priority: "high",
@@ -1242,9 +1990,21 @@ export class Relay {
     }
 
     if (!notification) return;
-    await pushToUser(session.userId, notification).catch((err) =>
-      console.error("[push] notifyTerminalPush failed:", err),
-    );
+    await enqueueTransition({
+      sessionId: session.id,
+      userId: session.userId,
+      transition: status === "error" ? "failed" : status,
+      sourceSendSeq,
+      title: notification.title,
+      body: notification.body,
+      data: {
+        ...(notification.data ?? {}),
+        transition: status === "error" ? "failed" : status,
+        sourceSendSeq,
+      },
+      channelId: notification.channelId,
+      priority: notification.priority,
+    });
   }
 
   private async broadcastWorkspaceSessionStatusChanged(
@@ -1363,6 +2123,28 @@ export class Relay {
     }
 
     this.send(conn, { type: "workspace_snapshot", sessions });
+    if (msg.workspaceId) {
+      const daemon = this.daemonByWorkspace.get(msg.workspaceId);
+      if (daemon?.hostSnapshot) {
+        this.send(conn, {
+          type: "host_snapshot",
+          workspaceId: msg.workspaceId,
+          snapshot: daemon.hostSnapshot,
+        });
+      }
+    }
+  }
+
+  private broadcastHostSnapshot(workspaceId: string, snapshot: HostSnapshotWire): void {
+    for (const conn of this.connections.values()) {
+      if (
+        conn.kind === "browser" &&
+        conn.workspaceSubscribed &&
+        conn.workspaceScopeId === workspaceId
+      ) {
+        this.send(conn, { type: "host_snapshot", workspaceId, snapshot });
+      }
+    }
   }
 
   private async getPlanningDraftCounts(
