@@ -3,13 +3,10 @@ import { NextResponse } from "next/server";
 import { validateApiKey } from "@bob/auth";
 import { and, desc, eq } from "@bob/db";
 import { db } from "@bob/db/client";
-import {
-  apiKeys,
-  chatConversations,
-  deviceHeartbeats,
-} from "@bob/db/schema";
+import { apiKeys, chatConversations, deviceHeartbeats } from "@bob/db/schema";
 
 import { auth } from "~/auth/server";
+import { withApiRateLimit } from "~/lib/rest/api-helpers";
 import {
   buildDeviceHeartbeatResponse,
   canUseDeviceHeartbeat,
@@ -24,6 +21,10 @@ import {
 } from "../device-heartbeat";
 
 export async function GET(request: Request) {
+  return withApiRateLimit(request, () => getHeartbeat(request), "device");
+}
+
+async function getHeartbeat(request: Request) {
   const token = extractBearerToken(request);
   if (token) {
     return getDeviceSelectionForApiKey(token);
@@ -79,6 +80,10 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  return withApiRateLimit(request, () => patchHeartbeat(request), "device");
+}
+
+async function patchHeartbeat(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -136,6 +141,10 @@ export async function PATCH(request: Request) {
 }
 
 export async function POST(request: Request) {
+  return withApiRateLimit(request, () => postHeartbeat(request), "device");
+}
+
+async function postHeartbeat(request: Request) {
   const token = extractBearerToken(request);
   if (!token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -241,7 +250,7 @@ async function getDeviceSelectionForApiKey(token: string) {
     ? await db.query.chatConversations.findFirst({
         where: and(
           eq(chatConversations.id, selectedSessionId),
-        eq(chatConversations.userId, apiKeyAuth.userId),
+          eq(chatConversations.userId, apiKeyAuth.userId),
         ),
       })
     : null;
@@ -253,6 +262,8 @@ async function getDeviceSelectionForApiKey(token: string) {
       selectedSessionId,
       online: isDeviceOnline(device.lastSeenAt),
     },
-    selectedSession: selected ? formatSessionOption(selected) : heartbeat.selectedSession,
+    selectedSession: selected
+      ? formatSessionOption(selected)
+      : heartbeat.selectedSession,
   });
 }

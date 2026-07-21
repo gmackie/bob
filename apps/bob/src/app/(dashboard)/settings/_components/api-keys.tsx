@@ -133,7 +133,7 @@ export function ApiKeysSection() {
             Copy this key now. You won&apos;t be able to see it again.
           </p>
           <div className="flex gap-2">
-            <code className="flex-1 rounded bg-white p-2 font-mono text-sm dark:bg-gray-900">
+            <code className="flex-1 rounded bg-muted p-2 font-mono text-sm text-foreground">
               {newKey}
             </code>
             <Button

@@ -1,8 +1,8 @@
-// Phase 7B-4B Task 4 — Verify AgentRpc includes all 21 agent.filesystem +
-// agent.chat + agent.post RPCs.
+// Phase 7B-4B Task 4 — Verify AgentRpc includes all agent.filesystem +
+// agent.chat RPCs.
 //
-// After adding 21 new procedures the group should have 78 total
-// (5 original + 5 Task 1 + 28 Task 2 + 19 Task 3 + 21 Task 4).
+// The group should have 81 total procedures
+// (5 original + 5 Task 1 + 28 Task 2 + 19 Task 3 + 17 filesystem/chat).
 
 import { describe, expect, it } from "vitest";
 
@@ -27,17 +27,12 @@ import {
   AgentChatGetMessagesRpc,
   AgentChatAttachImageRpc,
   AgentChatGetAttachmentsRpc,
-  // post (4)
-  AgentPostAllRpc,
-  AgentPostByIdRpc,
-  AgentPostCreateRpc,
-  AgentPostDeleteRpc,
 } from "../groups/agent.js";
 
-describe("AgentRpc group — agent.filesystem + chat + post (7B-4B Task 4)", () => {
-  it("has 78 procedures total (5 original + 5 Task 1 + 28 Task 2 + 19 Task 3 + 21 Task 4)", () => {
+describe("AgentRpc group — agent.filesystem + chat (7B-4B Task 4)", () => {
+  it("has 81 procedures total (5 original + 5 Task 1 + 28 Task 2 + 19 Task 3 + 17 filesystem/chat)", () => {
     const tags = Array.from(AgentRpc.requests.keys());
-    expect(tags.length).toBe(85);
+    expect(tags.length).toBe(81);
   });
 
   it("includes all 9 agent.filesystem procedures by tag", () => {
@@ -54,11 +49,11 @@ describe("AgentRpc group — agent.filesystem + chat + post (7B-4B Task 4)", () 
     expect(chatTags.length).toBe(8);
   });
 
-  it("includes all 4 agent.post procedures by tag", () => {
+  it("no longer registers any agent.post procedures", () => {
     const postTags = Array.from(AgentRpc.requests.keys()).filter((t) =>
       t.startsWith("agent.post."),
     );
-    expect(postTags.length).toBe(4);
+    expect(postTags.length).toBe(0);
   });
 
   it("spot-check agent.filesystem.list is registered", () => {
@@ -85,16 +80,6 @@ describe("AgentRpc group — agent.filesystem + chat + post (7B-4B Task 4)", () 
     );
   });
 
-  it("spot-check agent.post.all is registered", () => {
-    expect(AgentRpc.requests.get("agent.post.all")).toBe(AgentPostAllRpc);
-  });
-
-  it("spot-check agent.post.create is registered", () => {
-    expect(AgentRpc.requests.get("agent.post.create")).toBe(
-      AgentPostCreateRpc,
-    );
-  });
-
   it("preserves all previous procedures (original 5 + Tasks 1-3)", () => {
     // Original 5
     expect(AgentRpc.requests.has("agent.createSession")).toBe(true);
@@ -114,7 +99,7 @@ describe("AgentRpc group — agent.filesystem + chat + post (7B-4B Task 4)", () 
     expect(AgentRpc.requests.has("agent.event.stats")).toBe(true);
   });
 
-  it("all 21 Task 4 RPC exports resolve to defined values", () => {
+  it("all 17 filesystem/chat RPC exports resolve to defined values", () => {
     const rpcs = [
       AgentFilesystemListRpc,
       AgentFilesystemReadRpc,
@@ -133,14 +118,10 @@ describe("AgentRpc group — agent.filesystem + chat + post (7B-4B Task 4)", () 
       AgentChatGetMessagesRpc,
       AgentChatAttachImageRpc,
       AgentChatGetAttachmentsRpc,
-      AgentPostAllRpc,
-      AgentPostByIdRpc,
-      AgentPostCreateRpc,
-      AgentPostDeleteRpc,
     ];
     for (const rpc of rpcs) {
       expect(rpc).toBeDefined();
     }
-    expect(rpcs.length).toBe(21);
+    expect(rpcs.length).toBe(17);
   });
 });

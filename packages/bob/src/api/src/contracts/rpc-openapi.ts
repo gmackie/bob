@@ -14,8 +14,8 @@
  * JSON body. `$defs` are left inline on each operation; shared
  * `components.schemas` extraction is deferred.
  */
-import { Schema } from "effect";
 import type { OpenAPIV3_1 } from "openapi-types";
+import { Schema } from "effect";
 
 /** Structural view of an `Rpc` — avoids depending on effect's internal types. */
 export interface RpcLike {
@@ -124,6 +124,27 @@ export const generateOpenApiFromRpcGroups = (
           "401": { description: "Unauthorized" },
           "403": { description: "Forbidden" },
           "404": { description: "Not found" },
+          "429": {
+            description: "Rate limit exceeded",
+            headers: {
+              "RateLimit-Limit": {
+                schema: { type: "integer" },
+                description: "Maximum requests allowed in the current window",
+              },
+              "RateLimit-Remaining": {
+                schema: { type: "integer" },
+                description: "Requests remaining in the current window",
+              },
+              "RateLimit-Reset": {
+                schema: { type: "integer" },
+                description: "Unix timestamp when the current window resets",
+              },
+              "Retry-After": {
+                schema: { type: "integer" },
+                description: "Seconds to wait before retrying",
+              },
+            },
+          },
         },
       };
 

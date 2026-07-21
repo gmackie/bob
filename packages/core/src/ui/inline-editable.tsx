@@ -143,7 +143,7 @@ export function InlineEditable({
         )}
       >
         {value || (
-          <span className="text-white/35">{placeholder}</span>
+          <span className="text-muted-foreground/70">{placeholder}</span>
         )}
       </button>
     );
