@@ -8,6 +8,8 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { isAbsolute, resolve, dirname } from "node:path";
 
 import type { AcpClient } from "./acp-client";
+import { dispatchBuddyTool } from "./tool-dispatcher";
+import type { ToolDescriptor } from "./tool-registry";
 import type { AdapterEvent } from "./types";
 
 function now(): string {
@@ -215,15 +217,46 @@ function resolveInWorkspace(workspaceRoot: string, path: string | undefined): st
 }
 
 /**
+ * MCP JSON-RPC method by which an agent invokes a client-exposed tool by
+ * name, with params `{ name, arguments }` and an MCP tool result
+ * (`{ content, isError }`) as the response. Buddy tools are surfaced to the
+ * agent as MCP tools, so a buddy-tool call arrives here under this method.
+ *
+ * NOTE: this is the Model Context Protocol standard method name, NOT a
+ * verified-against-a-live-`grok`-binary constant. The repo's own ACP smoke
+ * script (`apps/ooda-runner/scripts/grok-acp-smoke.mjs`) only ever observed
+ * `fs/*` and `session/request_permission` agent->client requests — buddy
+ * tools were never advertised, so Grok never emitted a tool call to observe.
+ * Advertising buddy tools via `session/new`'s `mcpServers` so Grok emits
+ * these calls is the remaining integration hop (see PR notes). Handling the
+ * standard method here is additive and safe: unknown methods still fall
+ * through to the `null` default, preserving existing fs/permission behavior.
+ */
+const MCP_TOOLS_CALL_METHOD = "tools/call";
+
+/** MCP `tools/call` result envelope (a text content block + error flag). */
+interface McpToolCallResult {
+  content: Array<{ type: "text"; text: string }>;
+  isError: boolean;
+}
+
+/**
  * Answer agent->client ACP requests. Grok Build edits the working tree
- * itself, but ACP also lets it delegate fs ops and ask permission — we
- * handle both defensively so the agent never hangs. Returns the JSON-RPC
- * `result` for the request (or `null` for unhandled methods).
+ * itself, but ACP also lets it delegate fs ops, ask permission, and call
+ * client-exposed tools — we handle all three so the agent never hangs.
+ * Returns the JSON-RPC `result` for the request (or `null` for unhandled
+ * methods). Buddy-tool dispatch is async, so that branch returns a Promise
+ * (the AcpClient awaits it before replying).
+ *
+ * `descriptors` is the tool set exposed for this session (built + gated by
+ * the session executor). When empty, no tool is dispatchable and every
+ * tool call resolves to an `UNKNOWN_TOOL` error result.
  */
 export function handleAgentRequest(
   workspaceRoot: string,
   method: string,
   params: unknown,
+  descriptors: readonly ToolDescriptor[] = [],
 ): unknown {
   switch (method) {
     case "fs/read_text_file": {
@@ -246,7 +279,27 @@ export function handleAgentRequest(
       }
       return { outcome: { outcome: "selected" } };
     }
+    case MCP_TOOLS_CALL_METHOD:
+      return dispatchToolCall(descriptors, params);
     default:
       return null;
   }
+}
+
+/**
+ * Bridge an MCP `tools/call` request to the buddy-tool dispatcher and shape
+ * the buddy `ToolResult` back into the MCP tool-result envelope. The full
+ * structured result is serialized into the text block so the agent sees the
+ * `{ ok, data, error }` payload verbatim; `isError` mirrors `!ok`.
+ */
+function dispatchToolCall(
+  descriptors: readonly ToolDescriptor[],
+  params: unknown,
+): Promise<McpToolCallResult> {
+  const p = (params ?? {}) as { name?: string; arguments?: unknown };
+  const toolName = typeof p.name === "string" ? p.name : "";
+  return dispatchBuddyTool(descriptors, toolName, p.arguments).then((result) => ({
+    content: [{ type: "text" as const, text: JSON.stringify(result) }],
+    isError: !result.ok,
+  }));
 }

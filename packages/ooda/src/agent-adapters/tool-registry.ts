@@ -1,17 +1,15 @@
 // Tool registration hook for ACP-exposed buddy tools.
 //
-// Status: V1.5 stub. There is no in-process tool dispatcher today —
-// `CodexAdapter` and `ClaudeAdapter` spawn CLI subprocesses whose tool
-// traffic originates inside their own prompts, not via this registry.
-// The code here exists so the downstream ACP wiring (V2) has a stable
-// shape to target, and so `apps/runner/` can assemble descriptors at
-// session start without another refactor.
+// Status: LIVE on the Grok/ACP path. `GrokAdapter` implements
+// `registerTools` — it stashes the descriptors built here and threads them
+// into its ACP request handler (`handleAgentRequest`), where an in-process
+// dispatcher (`tool-dispatcher.ts`) validates + runs the tool a live agent
+// asks for mid-session.
 //
-// When ACP lands, the adapter implementation that speaks it will
-// override `registerTools` to push descriptors into its session init
-// payload. Until then, `registerTools` is a recorded-on-adapter noop:
-// it stashes the list so tests/observers can verify the call site
-// without needing a live dispatcher.
+// Still a no-op for the CLI-spawn adapters (`CodexAdapter`,
+// `ClaudeAdapter`): they have no ACP tool channel, so their tool traffic
+// originates inside their own prompts, not via this registry. `registerTools`
+// safely no-ops for any adapter that doesn't implement the hook.
 
 import {
   HANDLERS,
@@ -29,7 +27,8 @@ import type { z } from "zod";
 import type { AgentAdapter } from "./types";
 
 /**
- * Fully wired tool descriptor consumed by a V2 ACP dispatcher.
+ * Fully wired tool descriptor consumed by the ACP tool dispatcher
+ * (`tool-dispatcher.ts`).
  *
  * `argsSchema` is the Zod schema the dispatcher validates with; we
  * re-use the one from `TOOLS[name].args` so there's a single source of
@@ -45,14 +44,13 @@ export interface ToolDescriptor {
 }
 
 /**
- * Stash tool descriptors on an adapter instance for later ACP
- * consumption. If the adapter implements `registerTools` (V2), we call
- * it; otherwise this is a no-op. Returns nothing — callers don't need
- * a handle back.
+ * Register tool descriptors on an adapter for the upcoming session. If the
+ * adapter implements `registerTools` (Grok/ACP does), we hand it the list;
+ * otherwise this is a no-op. Returns nothing — callers don't need a handle
+ * back.
  *
- * Intentionally non-invocable by CLI-spawn adapters: those have no ACP
- * channel to push tool schemas through, and their tool traffic goes
- * through prompts instead.
+ * No-op for CLI-spawn adapters: those have no ACP channel to push tool
+ * schemas through, and their tool traffic goes through prompts instead.
  */
 export function registerTools(
   adapter: AgentAdapter,
