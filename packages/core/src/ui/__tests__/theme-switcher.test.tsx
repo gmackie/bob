@@ -41,7 +41,7 @@ beforeEach(() => {
     })),
   );
   document.documentElement.removeAttribute("data-theme");
-  document.documentElement.classList.remove("light", "dark");
+  document.documentElement.classList.remove("light", "dark", "auto");
 });
 
 afterEach(() => {
@@ -120,6 +120,7 @@ describe("ThemeSwitcher", () => {
       </ThemeProvider>,
     );
     fireEvent.click(screen.getByText("System"));
+    expect(document.documentElement.classList.contains("auto")).toBe(true);
     expect(document.documentElement.classList.contains("light")).toBe(true);
     expect(document.documentElement.classList.contains("dark")).toBe(false);
   });
