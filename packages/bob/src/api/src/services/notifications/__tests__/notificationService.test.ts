@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const sendPushNotification = vi.fn();
 
 vi.mock("../../push/pushService.js", () => ({
-  sendPushNotification: (...args: unknown[]) => sendPushNotification(...args),
+  sendPushNotification: (...args: unknown[]) => void sendPushNotification(...args),
 }));
 
 import {
@@ -87,7 +87,7 @@ describe("notificationService", () => {
         data: expect.objectContaining({
           type: "work_item_commented",
           notificationId: "notif-1",
-        }),
+        }) as unknown,
       }),
     );
     expect(result.id).toBe("notif-1");
