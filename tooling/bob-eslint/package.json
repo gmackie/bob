@@ -1,6 +1,7 @@
 {
   "name": "@bob/eslint-config",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "exports": {
     "./base": "./base.ts",

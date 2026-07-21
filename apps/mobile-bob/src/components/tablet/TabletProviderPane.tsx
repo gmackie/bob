@@ -72,7 +72,9 @@ export function TabletProviderPane({
     }),
     [runs.length, sections],
   );
-  const providerLabel = provider === "codex" ? "Codex" : "Cursor";
+  const providerLabel = provider === "cursor-agent"
+    ? "Cursor"
+    : provider.charAt(0).toUpperCase() + provider.slice(1);
 
   return (
     <ScrollView

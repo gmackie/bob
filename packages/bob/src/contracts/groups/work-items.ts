@@ -39,9 +39,19 @@ export const WorkItemListRpc = Rpc.make("workItem.list", {
     parentId: Schema.optional(Schema.NullOr(Schema.String)),
     kind: Schema.optional(WorkItemKindEnum),
     status: Schema.optional(Schema.String),
+    statuses: Schema.optional(Schema.Array(Schema.String)),
     limit: Schema.optional(Schema.Number),
   }),
   success: Schema.Array(WorkItemRecordSchema),
+  error: BobNotFoundError,
+});
+
+export const WorkItemStatusCountsRpc = Rpc.make("workItem.statusCounts", {
+  payload: Schema.Struct({
+    workspaceId: Schema.String,
+    kind: Schema.optional(WorkItemKindEnum),
+  }),
+  success: Schema.Record(Schema.String, Schema.Number),
   error: BobNotFoundError,
 });
 
@@ -393,6 +403,7 @@ export const WorkItemLinkToGitHubPRRpc = Rpc.make(
 export const WorkItemsRpc = RpcGroup.make(
   // Core (Task 1)
   WorkItemListRpc,
+  WorkItemStatusCountsRpc,
   WorkItemGetRpc,
   WorkItemUpdateRpc,
   WorkItemPromoteToTaskRpc,

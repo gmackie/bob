@@ -14,10 +14,15 @@ function toSessionStatus(status: string): SessionStatus {
     "provisioning",
     "starting",
     "running",
+    "blocked",
     "idle",
     "stopping",
     "stopped",
+    "completed",
+    "failed",
     "error",
+    "interrupted",
+    "host_unknown",
   ].includes(status)
     ? (status as SessionStatus)
     : "stopped";
@@ -34,6 +39,10 @@ function toEventType(eventType: string): SessionEvent["eventType"] {
     "error",
     "heartbeat",
     "transcript",
+    "permission_request",
+    "permission_resolved",
+    "status_change",
+    "gap_marker",
   ].includes(eventType)
     ? (eventType as SessionEvent["eventType"])
     : "error";

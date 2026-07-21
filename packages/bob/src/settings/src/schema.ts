@@ -58,3 +58,27 @@ export const autoDrainConfig = pgTable("auto_drain_config", (t) => ({
     .timestamp({ mode: "string", withTimezone: true })
     .$onUpdateFn(() => sql`now()`),
 }));
+
+// Single-row runtime config for the ws-gateway trust machinery (heartbeat
+// cadence, lease grace, event retention). Same live-tunable pattern as
+// autoDrainConfig — the gateway reads this on its sweep tick and falls back
+// to these defaults when the row is absent. Grace-period tuning happens here
+// during the 10-run trust experiment, no redeploy.
+export const gatewayConfig = pgTable("gateway_config", (t) => ({
+  id: t.integer().primaryKey().default(1),
+  // RESERVED — not yet wired. The gateway currently uses a hardcoded 30s WS
+  // heartbeat (index.ts HEARTBEAT_INTERVAL_MS). Kept so the cadence can be made
+  // live-tunable later without a migration; do not document it as active.
+  heartbeatIntervalMs: t.integer().notNull().default(15_000),
+  // Read live by the lease sweep: a lease whose heartbeat is older than this is
+  // expired -> host_unknown. Too short recreates false alarms; too long
+  // recreates silent death.
+  leaseGraceMs: t.integer().notNull().default(60_000),
+  // Read live by the outbox retention cron: output-chunk events of TERMINAL
+  // runs older than this are pruned; lifecycle/transition events are kept
+  // forever (trust audit trail).
+  eventRetentionDays: t.integer().notNull().default(30),
+  updatedAt: t
+    .timestamp({ mode: "string", withTimezone: true })
+    .$onUpdateFn(() => sql`now()`),
+}));

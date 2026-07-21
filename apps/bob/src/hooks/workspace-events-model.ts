@@ -46,6 +46,7 @@ const WORKSPACE_REALTIME_INVALIDATION_MESSAGES = new Set([
   "task_status_changed",
   "work_item_dispatched",
   "workspace_snapshot",
+  "host_snapshot",
 ]);
 
 export function getWorkspaceEventQueryRoot(queryKey: readonly unknown[]): string {

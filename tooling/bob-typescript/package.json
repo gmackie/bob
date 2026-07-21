@@ -1,6 +1,7 @@
 {
   "name": "@bob/tsconfig",
   "private": true,
+  "license": "MIT",
   "files": [
     "*.json"
   ]

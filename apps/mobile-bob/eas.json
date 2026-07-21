@@ -35,7 +35,8 @@
       "android": {
         "buildType": "apk",
         "gradleCommand": ":app:assembleDebug"
-      }
+      },
+      "channel": "development"
     },
     "development:device": {
       "extends": "development",
@@ -61,6 +62,13 @@
         "buildType": "apk"
       },
       "channel": "beta"
+    },
+    "preview": {
+      "extends": "beta",
+      "env": {
+        "APP_VARIANT": "preview"
+      },
+      "channel": "preview"
     },
     "beta:production-api": {
       "extends": "beta",

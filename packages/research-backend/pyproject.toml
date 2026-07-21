@@ -7,6 +7,7 @@ packages = ["src/research_backend"]
 
 [project]
 name = "ooda-research-backend"
+license = "MIT"
 version = "0.1.0"
 description = "Python FastAPI sidecar for research operations (paper discovery, KB compile, embeddings, clustering)"
 requires-python = ">=3.12"

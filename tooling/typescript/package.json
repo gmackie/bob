@@ -1,5 +1,6 @@
 {
   "name": "@gmacko/tsconfig",
+  "version": "0.0.0",
   "private": true,
-  "version": "0.0.0"
+  "license": "MIT"
 }
