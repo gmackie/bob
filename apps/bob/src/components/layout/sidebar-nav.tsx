@@ -162,6 +162,20 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
       { enabled: Boolean(workspaceId), refetchInterval: 10_000 },
     ),
   );
+  // Dispatchable-scoped fetch + uncapped counts so the queue/outcome badges are
+  // accurate instead of counting a recency-capped page (which read 0 backlog).
+  const { data: dispatchableItems } = useQuery(
+    trpc.workItem.list.queryOptions(
+      { workspaceId, statuses: ["backlog", "todo", "ready", "draft"], limit: 100 },
+      { enabled: Boolean(workspaceId), refetchInterval: 10_000 },
+    ),
+  );
+  const { data: statusCounts } = useQuery(
+    trpc.workItem.statusCounts.queryOptions(
+      { workspaceId },
+      { enabled: Boolean(workspaceId), refetchInterval: 10_000 },
+    ),
+  );
   const { data: executionSessions } = useQuery(
     trpc.agentRun.list.queryOptions(
       { workspaceId, limit: 50 },
@@ -182,6 +196,8 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
   );
   const tabBadges = buildSidebarTabBadges({
     workItems: (workItems ?? []) as SidebarTabBadgeInput["workItems"],
+    dispatchableItems: (dispatchableItems ?? []) as SidebarTabBadgeInput["dispatchableItems"],
+    statusCounts: (statusCounts ?? undefined) as SidebarTabBadgeInput["statusCounts"],
     executionSessions: (executionSessions ?? []) as SidebarTabBadgeInput["executionSessions"],
     planningSessions: (planningSessions ?? []) as SidebarTabBadgeInput["planningSessions"],
     projects: buildSidebarProjectSummaries((projects ?? []) as SidebarProjectEntry[]),

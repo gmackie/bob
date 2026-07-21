@@ -21,6 +21,7 @@ import {
   normalizeProviderParam,
 } from "~/components/dashboard/provider-runs-model";
 import { useTRPC } from "~/trpc/react";
+import { DeviceHeartbeatsSection } from "../settings/_components/device-heartbeats";
 
 const STATUS_COLORS: Record<string, string> = {
   queued: "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-300",
@@ -270,6 +271,7 @@ export default function RunsPage() {
       <div className="flex w-fit items-center gap-1 rounded-lg border border-border bg-card p-1">
         {[
           { key: "all", label: "All" },
+          { key: "claude", label: "Claude" },
           { key: "codex", label: "Codex" },
           { key: "cursor", label: "Cursor" },
           { key: "grok", label: "Grok" },
@@ -278,7 +280,7 @@ export default function RunsPage() {
             key={item.key}
             onClick={() => {
               router.push(getProviderRunsFilterHref(searchParams?.toString() ?? "", {
-                provider: item.key as "all" | "codex" | "cursor" | "grok",
+                provider: item.key as "all" | "claude" | "codex" | "cursor" | "grok",
               }));
             }}
             className={cn(
@@ -430,6 +432,10 @@ export default function RunsPage() {
           <ProviderMetricCard label="Failed" value={providerGroups.metrics.failed} tone="danger" />
         </div>
       ) : null}
+      <DeviceHeartbeatsSection
+        title="Handheld"
+        description="Choose the Bob session currently controlled by the Whisplay device."
+      />
 
       {/* Runs List */}
       {isLoading ? (

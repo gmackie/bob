@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const validateApiKeyMock = vi.fn();
 const getSessionMock = vi.fn();
 const selectMock = vi.fn();
+const findDeviceMock = vi.fn();
 
 vi.mock("@bob/auth", () => ({
   validateApiKey: validateApiKeyMock,
@@ -11,6 +12,9 @@ vi.mock("@bob/auth", () => ({
 vi.mock("@bob/db/client", () => ({
   db: {
     select: selectMock,
+    query: {
+      deviceHeartbeats: { findFirst: findDeviceMock },
+    },
   },
 }));
 
@@ -27,6 +31,8 @@ describe("device heartbeat route", () => {
     validateApiKeyMock.mockReset();
     getSessionMock.mockReset();
     selectMock.mockReset();
+    findDeviceMock.mockReset();
+    findDeviceMock.mockResolvedValue(undefined);
   });
 
   it("rejects requests without a bearer API key", async () => {
@@ -42,6 +48,7 @@ describe("device heartbeat route", () => {
 
   it("returns the authenticated user's selected session", async () => {
     validateApiKeyMock.mockResolvedValue({
+      keyId: "key-1",
       userId: "user-1",
       permissions: ["read", "write"],
     });

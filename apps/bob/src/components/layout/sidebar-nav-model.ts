@@ -80,10 +80,31 @@ export type SidebarTabBadges = Record<SidebarTabBadgeKey, number>;
 
 export interface SidebarTabBadgeInput {
   workItems: Array<WorkPipelineItem & PriorityQueueItem>;
+  // Dispatchable-status-scoped fetch for an accurate priority-queue badge.
+  // Without it the badge is computed from the recency-capped `workItems` list,
+  // which reads 0 in a workspace full of in_review items (the reported bug).
+  dispatchableItems?: Array<WorkPipelineItem & PriorityQueueItem>;
+  // Uncapped per-status counts for an accurate recent-outcomes badge (the
+  // capped list clamps it to the page size, e.g. 99).
+  statusCounts?: Record<string, number>;
   executionSessions?: SidebarExecutionSessionSummary[];
   planningSessions: PlanningDashboardSession[];
   projects: SidebarProjectSummary[];
 }
+
+// Work-item statuses that count as an "outcome" for the recent-outcomes badge.
+const OUTCOME_BADGE_STATUSES = [
+  "in_review",
+  "review",
+  "completed",
+  "done",
+  "failed",
+  "error",
+  "interrupted",
+  "cancelled",
+  "canceled",
+  "stopped",
+];
 
 export type SidebarRailStatusTone = "success" | "warning" | "danger" | "default";
 
@@ -156,6 +177,10 @@ const ACTIVE_EXECUTION_SESSION_STATUSES = new Set([
   "pending",
   "awaiting-input",
   "awaiting_input",
+  // Paused awaiting a human decision — still active (the "needs you" state).
+  "blocked",
+  // Lease expired: contact lost, process fate unknown — still active.
+  "host_unknown",
 ]);
 
 export function getSidebarModeItems(): SidebarModeItem[] {
@@ -245,9 +270,22 @@ export function buildSidebarTabBadges(input: SidebarTabBadgeInput): SidebarTabBa
     Number.MAX_SAFE_INTEGER,
   );
 
+  // Prefer the uncapped statusCounts / dispatchable-scoped fetch when provided,
+  // so the badges match the (now status-scoped) queue and outcome views.
+  const outcomeCount = input.statusCounts
+    ? OUTCOME_BADGE_STATUSES.reduce(
+        (total, status) => total + (input.statusCounts?.[status] ?? 0),
+        0,
+      ) + sessionOnlyOutcomes.length
+    : recentOutcomeItems.length + sessionOnlyOutcomes.length;
+
+  const priorityQueueCount = buildPriorityQueueRows(
+    input.dispatchableItems ?? input.workItems,
+  ).length;
+
   return {
-    "recent-outcomes": recentOutcomeItems.length + sessionOnlyOutcomes.length,
-    "priority-queue": buildPriorityQueueRows(input.workItems).length,
+    "recent-outcomes": outcomeCount,
+    "priority-queue": priorityQueueCount,
     "recent-sessions": planningGroups.recent.length,
     projects: input.projects.length,
   };

@@ -24,6 +24,7 @@ interface ExpoMessage {
 }
 
 interface ExpoTicket {
+  id?: string;
   status: "ok" | "error";
   message?: string;
   details?: { error?: string };
@@ -64,16 +65,19 @@ export async function pushToUser(
     channelId?: string;
     priority?: "high" | "default";
   },
-): Promise<void> {
+): Promise<{ delivered: boolean; tickets: Record<string, string>; retryable: boolean }> {
   let tokens: string[];
   try {
-    if (!(await pushEnabledForUser(userId))) return;
+    // Push disabled or no registered tokens: nothing to deliver, and retrying
+    // won't change that — NOT retryable (the badge backstop surfaces it in-app).
+    if (!(await pushEnabledForUser(userId))) return { delivered: false, tickets: {}, retryable: false };
     tokens = await enabledTokensForUser(userId);
   } catch (err) {
     console.error("[push] token lookup failed:", err);
-    return;
+    // Lookup failure is retryable — signal it upward so the outbox retries.
+    throw err instanceof Error ? err : new Error(String(err));
   }
-  if (tokens.length === 0) return;
+  if (tokens.length === 0) return { delivered: false, tickets: {}, retryable: false };
 
   const messages: ExpoMessage[] = tokens.map((to) => ({
     to,
@@ -97,13 +101,14 @@ export async function pushToUser(
       body: JSON.stringify(messages),
     });
     if (!res.ok) {
-      console.error(`[push] Expo API ${res.status}: ${(await res.text().catch(() => "")).slice(0, 200)}`);
-      return;
+      const detail = (await res.text().catch(() => "")).slice(0, 200);
+      console.error(`[push] Expo API ${res.status}: ${detail}`);
+      throw new Error(`Expo API ${res.status}`);
     }
     tickets = ((await res.json()) as { data: ExpoTicket[] }).data ?? [];
   } catch (err) {
     console.error("[push] send failed:", err);
-    return;
+    throw err instanceof Error ? err : new Error(String(err));
   }
 
   // Prune tokens Expo says are dead so we stop trying them.
@@ -120,4 +125,37 @@ export async function pushToUser(
       .where(inArray(devicePushTokens.expoPushToken, dead))
       .catch((err) => console.error("[push] prune failed:", err));
   }
+
+  // Ticket ids by token for the receipts cron (send-time errors have none).
+  const ticketMap: Record<string, string> = {};
+  tickets.forEach((ticket, i) => {
+    const token = tokens[i];
+    if (token && ticket.status === "ok" && ticket.id) ticketMap[token] = ticket.id;
+  });
+  // Surface non-DeviceNotRegistered ticket errors (rate limits, bad payloads)
+  // so they aren't silently swallowed.
+  const otherErrors = tickets.filter(
+    (t) => t.status === "error" && t.details?.error !== "DeviceNotRegistered",
+  );
+  if (otherErrors.length > 0) {
+    console.error(
+      `[push] ${otherErrors.length} Expo ticket error(s):`,
+      otherErrors.map((t) => t.details?.error ?? t.message).join(", "),
+    );
+  }
+  // delivered = at least one message got an OK ticket. If EVERY ticket errored
+  // (and none were DeviceNotRegistered prunes), the send effectively failed and
+  // IS retryable (rate limits etc. are transient) — return false so the outbox
+  // retries instead of marking the row sent.
+  const delivered = Object.keys(ticketMap).length > 0;
+  return { delivered, tickets: ticketMap, retryable: !delivered };
+}
+
+/** Remove device tokens by value (used by the receipts cron). */
+export async function pruneTokens(tokens: string[]): Promise<void> {
+  if (tokens.length === 0) return;
+  await db
+    .delete(devicePushTokens)
+    .where(inArray(devicePushTokens.expoPushToken, tokens))
+    .catch((err) => console.error("[push] receipt prune failed:", err));
 }

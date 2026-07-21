@@ -1,0 +1,10 @@
+[Unit]
+Description=Bob dead-man switch ping (gateway + Postgres headroom)
+After=network.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/opt/bob/ops/deadman.env
+ExecStart=/opt/bob/ops/bob-deadman.sh
+User=bob
+Group=bob

@@ -18,7 +18,12 @@ vi.mock("@bob/db/client", () => ({
 }));
 
 import { db } from "@bob/db/client";
-import { validateBrowserToken, validateDaemonAuth } from "./auth.js";
+import {
+  assertNoAuthBypassInProduction,
+  validateBrowserToken,
+  validateDaemonAuth,
+  validateInternalBearer,
+} from "./auth.js";
 
 describe("validateBrowserToken", () => {
   beforeEach(() => {
@@ -132,6 +137,58 @@ describe("validateBrowserToken", () => {
     expect(result).toBe("user-abc");
   });
 
+  it("accepts a live read-write device API key", async () => {
+    (db.query.apiKeys.findFirst as any).mockResolvedValueOnce({
+      id: "key-device",
+      userId: "user-device",
+      revokedAt: null,
+      expiresAt: null,
+      permissions: ["read", "write"],
+    });
+
+    const result = await validateBrowserToken("bob_device_secret");
+
+    expect(result).toBe("user-device");
+    expect(db.query.session.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("rejects a device API key without write permission", async () => {
+    (db.query.apiKeys.findFirst as any).mockResolvedValueOnce({
+      id: "key-read-only",
+      userId: "user-device",
+      revokedAt: null,
+      expiresAt: null,
+      permissions: ["read"],
+    });
+
+    const result = await validateBrowserToken("bob_read_only_secret");
+
+    expect(result).toBeNull();
+    expect(db.query.session.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("rejects revoked or expired device API keys", async () => {
+    (db.query.apiKeys.findFirst as any)
+      .mockResolvedValueOnce({
+        id: "key-revoked",
+        userId: "user-device",
+        revokedAt: new Date(),
+        expiresAt: null,
+        permissions: ["read", "write"],
+      })
+      .mockResolvedValueOnce({
+        id: "key-expired",
+        userId: "user-device",
+        revokedAt: null,
+        expiresAt: new Date(Date.now() - 1000),
+        permissions: ["read", "write"],
+      });
+
+    await expect(validateBrowserToken("bob_revoked_secret")).resolves.toBeNull();
+    await expect(validateBrowserToken("bob_expired_secret")).resolves.toBeNull();
+    expect(db.query.session.findFirst).not.toHaveBeenCalled();
+  });
+
   it("returns null when token does not match any session", async () => {
     (db.query.session.findFirst as any).mockResolvedValueOnce(null);
 
@@ -227,5 +284,125 @@ describe("validateDaemonAuth", () => {
   it("returns null when api key is missing", async () => {
     expect(await validateDaemonAuth("", "ws-1")).toBeNull();
     expect(await validateDaemonAuth("bob_live_xyz", "")).toBeNull();
+  });
+});
+
+describe("assertNoAuthBypassInProduction (refuse-to-boot guard)", () => {
+  it("throws when BOB_AUTH_BYPASS is set under NODE_ENV=production", () => {
+    expect(() =>
+      assertNoAuthBypassInProduction({ NODE_ENV: "production", BOB_AUTH_BYPASS: "true" }),
+    ).toThrow(/refusing to boot/);
+  });
+
+  it("throws when BOB_AUTH_BYPASS is set under BOB_ENV=production", () => {
+    expect(() =>
+      assertNoAuthBypassInProduction({ BOB_ENV: "production", BOB_AUTH_BYPASS: "true" }),
+    ).toThrow(/refusing to boot/);
+  });
+
+  it("allows the bypass in non-production environments", () => {
+    expect(() =>
+      assertNoAuthBypassInProduction({ NODE_ENV: "development", BOB_AUTH_BYPASS: "true" }),
+    ).not.toThrow();
+  });
+
+  it("allows production without the bypass", () => {
+    expect(() =>
+      assertNoAuthBypassInProduction({ NODE_ENV: "production" }),
+    ).not.toThrow();
+  });
+});
+
+describe("validateInternalBearer", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.NUDGE_SHARED_SECRET;
+    delete process.env.BOB_ALLOW_LEGACY_NUDGE_SECRET;
+  });
+
+  afterEach(() => {
+    delete process.env.NUDGE_SHARED_SECRET;
+    delete process.env.BOB_ALLOW_LEGACY_NUDGE_SECRET;
+  });
+
+  it("returns the api-key OWNER for a valid, unrevoked, unexpired key", async () => {
+    (db.query.apiKeys.findFirst as any).mockResolvedValue({
+      userId: "user-1",
+      revokedAt: null,
+      expiresAt: null,
+    });
+    // The principal must carry the owner so callers can scope actions to it —
+    // a bare boolean was the privilege-escalation bug.
+    expect(await validateInternalBearer("bob_live_key")).toEqual({
+      kind: "apiKey",
+      userId: "user-1",
+    });
+  });
+
+  it("rejects a revoked API key even when it hashes correctly", async () => {
+    (db.query.apiKeys.findFirst as any).mockResolvedValue({
+      userId: "user-1",
+      revokedAt: new Date().toISOString(),
+      expiresAt: null,
+    });
+    expect(await validateInternalBearer("bob_live_key")).toBeNull();
+  });
+
+  it("accepts the legacy shared secret only while the ramp is open", async () => {
+    (db.query.apiKeys.findFirst as any).mockResolvedValue(null);
+    process.env.NUDGE_SHARED_SECRET = "legacy-secret";
+    expect(await validateInternalBearer("legacy-secret")).toEqual({ kind: "legacy" });
+  });
+
+  it("rejects the legacy secret once BOB_ALLOW_LEGACY_NUDGE_SECRET=false", async () => {
+    (db.query.apiKeys.findFirst as any).mockResolvedValue(null);
+    process.env.NUDGE_SHARED_SECRET = "legacy-secret";
+    process.env.BOB_ALLOW_LEGACY_NUDGE_SECRET = "false";
+    expect(await validateInternalBearer("legacy-secret")).toBeNull();
+  });
+
+  it("rejects everything else", async () => {
+    (db.query.apiKeys.findFirst as any).mockResolvedValue(null);
+    expect(await validateInternalBearer("nonsense")).toBeNull();
+    expect(await validateInternalBearer("")).toBeNull();
+  });
+
+  it("rejects an API key whose expiresAt is in the past", async () => {
+    (db.query.apiKeys.findFirst as any).mockResolvedValue({
+      userId: "user-1",
+      revokedAt: null,
+      expiresAt: new Date(Date.now() - 1000),
+    });
+    expect(await validateInternalBearer("bob_live_key")).toBeNull();
+  });
+
+  it("returns the owner for an API key whose expiresAt is in the future", async () => {
+    (db.query.apiKeys.findFirst as any).mockResolvedValue({
+      userId: "user-1",
+      revokedAt: null,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    expect(await validateInternalBearer("bob_live_key")).toEqual({
+      kind: "apiKey",
+      userId: "user-1",
+    });
+  });
+
+  it("accepts the DB-free legacy secret even when the key lookup throws (ops not locked out)", async () => {
+    (db.query.apiKeys.findFirst as any).mockRejectedValue(
+      new Error("connection refused"),
+    );
+    process.env.NUDGE_SHARED_SECRET = "legacy-secret";
+    expect(await validateInternalBearer("legacy-secret")).toEqual({ kind: "legacy" });
+  });
+
+  it("FAILS CLOSED for an api-key caller when the key lookup throws", async () => {
+    // A valid-key caller cannot be verified during a DB outage, and must NOT
+    // be authorized — an attacker inducing DB pressure must not force acceptance.
+    (db.query.apiKeys.findFirst as any).mockRejectedValue(
+      new Error("connection refused"),
+    );
+    process.env.NUDGE_SHARED_SECRET = "legacy-secret";
+    expect(await validateInternalBearer("not-the-secret")).toBeNull();
   });
 });

@@ -52,7 +52,7 @@ export const createBobRpcClient = (opts: BobClientOptions): BobRpcClient => {
  * (`/api/rpc`); use this for plain typed HTTP — external consumers, codegen, or
  * environments without the Effect runtime.
  */
-export function createBobClient(baseUrl = "https://blder.bot") {
+export function createBobClient(baseUrl = "https://bob.blder.bot") {
   return createClient<paths>({ baseUrl });
 }
 

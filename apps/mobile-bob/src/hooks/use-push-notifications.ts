@@ -150,6 +150,7 @@ function handleNotificationResponse(
   const data = response.notification.request.content.data as {
     workItemId?: string;
     workspaceId?: string;
+    sessionId?: string;
     url?: string;
     type?: string;
   };

@@ -6,6 +6,7 @@ export {
   type AdapterProcessHandle,
   type AgentAdapter,
   type ExecuteOptions,
+  type SpawnedProcessLike,
   type ToolDescriptorLike,
 } from "./types";
 
