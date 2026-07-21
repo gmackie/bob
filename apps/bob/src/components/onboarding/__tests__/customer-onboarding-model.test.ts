@@ -36,16 +36,16 @@ describe("customer onboarding model", () => {
     expect(getCustomerOnboardingHref("workspace-1")).toBe(
       "/onboarding?workspace=workspace-1",
     );
-    expect(getCustomerOnboardingStepHref(steps[1], "workspace-1")).toBe(
+    expect(getCustomerOnboardingStepHref(steps[1]!, "workspace-1")).toBe(
       "/planning?workspace=workspace-1",
     );
-    expect(getCustomerOnboardingStepHref(steps[2], "workspace-1")).toBe(
+    expect(getCustomerOnboardingStepHref(steps[2]!, "workspace-1")).toBe(
       "/planning/projects?workspace=workspace-1",
     );
-    expect(getCustomerOnboardingStepHref(steps[3], "workspace-1")).toBe(
+    expect(getCustomerOnboardingStepHref(steps[3]!, "workspace-1")).toBe(
       "/settings?section=git-providers",
     );
-    expect(getCustomerOnboardingStepHref(steps[5], "workspace-1")).toBe(
+    expect(getCustomerOnboardingStepHref(steps[5]!, "workspace-1")).toBe(
       "/tasks/queue?workspace=workspace-1",
     );
   });
