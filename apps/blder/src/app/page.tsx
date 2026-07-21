@@ -45,6 +45,39 @@ export default function HomePage() {
             Sign in
           </a>
         </div>
+
+        <nav
+          className="mt-8 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-muted-foreground"
+          aria-label="Legal"
+        >
+          <a className="transition hover:text-foreground" href="/legal/terms">
+            Terms
+          </a>
+          <a className="transition hover:text-foreground" href="/legal/privacy">
+            Privacy
+          </a>
+          <a className="transition hover:text-foreground" href="/legal/dpa">
+            DPA
+          </a>
+          <a
+            className="transition hover:text-foreground"
+            href="/legal/subprocessors"
+          >
+            Subprocessors
+          </a>
+          <a className="transition hover:text-foreground" href="/legal/security">
+            Security
+          </a>
+          <a
+            className="transition hover:text-foreground"
+            href="/legal/data-deletion-export"
+          >
+            Data
+          </a>
+          <a className="transition hover:text-foreground" href="/legal/cookies">
+            Cookies
+          </a>
+        </nav>
       </div>
     </main>
   );
