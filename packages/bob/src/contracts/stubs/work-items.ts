@@ -44,6 +44,7 @@ export const WorkItemsStubLayer = WorkItemsRpc.toLayer({
       title: "stub notification",
     }),
   "workItem.notification.markAsRead": () => Effect.succeed(null),
+  "workItem.notification.markAllAsRead": () => Effect.succeed({ count: 0 }),
   "workItem.notification.registerPushToken": () =>
     Effect.succeed({ ok: true }),
   // --- TaskRun (Task 2) ---

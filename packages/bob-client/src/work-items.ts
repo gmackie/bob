@@ -26,6 +26,7 @@ export interface WorkItemsClient {
     readonly list: RpcMethod;
     readonly create: RpcMethod;
     readonly markAsRead: RpcMethod;
+    readonly markAllAsRead: RpcMethod;
     readonly registerPushToken: RpcMethod;
   };
   readonly taskRun: {
@@ -82,6 +83,8 @@ export const makeWorkItemsClient = (
       create: (input) => invoke("workItem.notification.create", input),
       markAsRead: (input) =>
         invoke("workItem.notification.markAsRead", input),
+      markAllAsRead: (input) =>
+        invoke("workItem.notification.markAllAsRead", input ?? {}),
       registerPushToken: (input) =>
         invoke("workItem.notification.registerPushToken", input),
     },

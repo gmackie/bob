@@ -185,10 +185,10 @@ describe("RPC aggregate layers — Phase 7B-4D-delta verification", () => {
 // ---------------------------------------------------------------------------
 
 describe("RPC handler factory key counts", () => {
-  describe("WorkItems group (33 handler keys)", () => {
-    it("workItems factory produces 20 keys", () => {
+  describe("WorkItems group (34 handler keys)", () => {
+    it("workItems factory produces 21 keys", () => {
       const handlers = makeWorkItemsRpcHandlers(mockCtx);
-      expect(Object.keys(handlers)).toHaveLength(20);
+      expect(Object.keys(handlers)).toHaveLength(21);
     });
 
     it("requirement factory produces 5 keys", () => {
@@ -201,11 +201,11 @@ describe("RPC handler factory key counts", () => {
       expect(Object.keys(handlers)).toHaveLength(8);
     });
 
-    it("total handler keys sum to 33", () => {
+    it("total handler keys sum to 34", () => {
       const wi = Object.keys(makeWorkItemsRpcHandlers(mockCtx)).length;
       const req = Object.keys(makeRequirementRpcHandlers(mockCtx)).length;
       const lnk = Object.keys(makeLinkRpcHandlers(mockCtx)).length;
-      expect(wi + req + lnk).toBe(33);
+      expect(wi + req + lnk).toBe(34);
     });
   });
 
@@ -331,7 +331,7 @@ describe("RPC handler factory key counts", () => {
   // --- Grand total: all 8 RpcGroups ---
 
   describe("Grand total — all 8 RpcGroups", () => {
-    it("324 contract procedures + 1 health = 325 total", () => {
+    it("325 contract procedures + 1 health = 326 total", () => {
       const workItemsKeys =
         Object.keys(makeWorkItemsRpcHandlers(mockCtx)).length +
         Object.keys(makeRequirementRpcHandlers(mockCtx)).length +
@@ -365,10 +365,10 @@ describe("RPC handler factory key counts", () => {
       const contractTotal = domainTotal + platformTotal;
       const grandTotal = contractTotal + 1; // +1 for health endpoint
 
-      expect(domainTotal).toBe(140);
+      expect(domainTotal).toBe(141);
       expect(platformTotal).toBe(184);
-      expect(contractTotal).toBe(324);
-      expect(grandTotal).toBe(325);
+      expect(contractTotal).toBe(325);
+      expect(grandTotal).toBe(326);
     });
   });
 });

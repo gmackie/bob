@@ -19,6 +19,8 @@ import type {
   ListNotificationsResult,
   ListWorkItemsInput,
   ListWorkItemsResult,
+  MarkAllNotificationsAsReadInput,
+  MarkAllNotificationsAsReadResult,
   MarkNotificationAsReadInput,
   MarkNotificationAsReadResult,
   PromoteToTaskInput,
@@ -43,6 +45,8 @@ const workItemsRestPaths = {
   listNotifications: "/api/v1/work-items/list-notifications",
   createNotification: "/api/v1/work-items/create-notification",
   markNotificationAsRead: "/api/v1/work-items/mark-notification-as-read",
+  markAllNotificationsAsRead:
+    "/api/v1/work-items/mark-all-notifications-as-read",
 } as const satisfies Record<
   keyof WorkItemsOperationInputMap,
   `/api/v1/work-items/${string}`
@@ -74,6 +78,8 @@ export type {
   ListNotificationsResult,
   ListWorkItemsInput,
   ListWorkItemsResult,
+  MarkAllNotificationsAsReadInput,
+  MarkAllNotificationsAsReadResult,
   MarkNotificationAsReadInput,
   MarkNotificationAsReadResult,
   PromoteToTaskInput,
@@ -96,6 +102,7 @@ interface WorkItemsOperationInputMap {
   listNotifications: ListNotificationsInput;
   createNotification: CreateNotificationInput;
   markNotificationAsRead: MarkNotificationAsReadInput;
+  markAllNotificationsAsRead: MarkAllNotificationsAsReadInput;
 }
 
 interface WorkItemsOperationOutputMap {
@@ -112,6 +119,7 @@ interface WorkItemsOperationOutputMap {
   listNotifications: ListNotificationsResult;
   createNotification: CreateNotificationResult;
   markNotificationAsRead: MarkNotificationAsReadResult;
+  markAllNotificationsAsRead: MarkAllNotificationsAsReadResult;
 }
 
 export interface WorkItemsClientOptions {
@@ -166,6 +174,9 @@ export interface WorkItemsClient {
   markNotificationAsRead(
     input: MarkNotificationAsReadInput,
   ): Promise<MarkNotificationAsReadResult>;
+  markAllNotificationsAsRead(
+    input?: MarkAllNotificationsAsReadInput,
+  ): Promise<MarkAllNotificationsAsReadResult>;
 }
 
 function normalizeBaseUrl(baseUrl: string) {
@@ -293,6 +304,8 @@ export function createWorkItemsClient(
       options,
       "markNotificationAsRead",
     ),
+    markAllNotificationsAsRead: (input = {}) =>
+      createMethodCaller(options, "markAllNotificationsAsRead")(input),
   };
 }
 

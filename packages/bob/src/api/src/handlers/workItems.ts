@@ -646,7 +646,11 @@ export async function workItemsCreateComment(
     bodyHtml?: string | null;
   },
 ) {
-  await loadAccessibleWorkItem(ctx.db, ctx.userId, input.workItemId);
+  const workItem = await loadAccessibleWorkItem(
+    ctx.db,
+    ctx.userId,
+    input.workItemId,
+  );
 
   const [comment] = await ctx.db
     .insert(comments)
@@ -668,6 +672,39 @@ export async function workItemsCreateComment(
       metadata: { commentId: comment?.id ?? null },
     })
     .returning();
+
+  // Notify owner + assignee (except the commenter) so collaboration lands
+  // in the shared inbox and as a push when devices are registered.
+  const recipients = new Set<string>();
+  if (workItem.ownerUserId && workItem.ownerUserId !== ctx.userId) {
+    recipients.add(workItem.ownerUserId);
+  }
+  if (workItem.assigneeUserId && workItem.assigneeUserId !== ctx.userId) {
+    recipients.add(workItem.assigneeUserId);
+  }
+
+  if (recipients.size > 0) {
+    const { createInAppNotification } = await import(
+      "../services/notifications/notificationService.js"
+    );
+    const preview =
+      input.body.length > 140
+        ? `${input.body.slice(0, 137)}...`
+        : input.body;
+    await Promise.all(
+      [...recipients].map((userId) =>
+        createInAppNotification(ctx.db, {
+          userId,
+          workItemId: input.workItemId,
+          actorId: ctx.userId,
+          type: "work_item_commented",
+          title: `New comment on ${workItem.title}`,
+          body: preview,
+          url: `/work-items/${input.workItemId}`,
+        }),
+      ),
+    );
+  }
 
   return comment;
 }
@@ -866,20 +903,18 @@ export async function workItemsCreateNotification(
     url?: string | null;
   },
 ) {
-  const [notification] = await ctx.db
-    .insert(notifications)
-    .values({
-      userId: input.userId,
-      workItemId: input.workItemId ?? null,
-      actorId: input.actorId ?? null,
-      type: input.type,
-      title: input.title,
-      body: input.body ?? null,
-      url: input.url ?? null,
-    })
-    .returning();
-
-  return notification;
+  const { createInAppNotification } = await import(
+    "../services/notifications/notificationService.js"
+  );
+  return createInAppNotification(ctx.db, {
+    userId: input.userId,
+    workItemId: input.workItemId,
+    actorId: input.actorId ?? ctx.userId,
+    type: input.type,
+    title: input.title,
+    body: input.body,
+    url: input.url,
+  });
 }
 
 export async function workItemsMarkNotificationAsRead(
@@ -901,6 +936,16 @@ export async function workItemsMarkNotificationAsRead(
     .returning();
 
   return notification;
+}
+
+export async function workItemsMarkAllNotificationsAsRead(
+  ctx: HandlerContext,
+  _input: Record<string, never> = {},
+) {
+  const { markAllNotificationsAsRead } = await import(
+    "../services/notifications/notificationService.js"
+  );
+  return markAllNotificationsAsRead(ctx.db, ctx.userId);
 }
 
 export async function workItemsRegisterPushToken(
