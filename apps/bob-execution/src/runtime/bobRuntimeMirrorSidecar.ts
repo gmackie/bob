@@ -53,7 +53,11 @@ class HttpError extends Error {
 }
 
 function mapChatStatus(status: RuntimeStatus) {
-  return status === "completed" || status === "failed" ? "stopped" : "running";
+  if (status === "completed" || status === "failed") return "stopped";
+  // Paused awaiting a human decision — surface the distinct session status
+  // instead of collapsing it into a generic "running".
+  if (status === "blocked") return "blocked";
+  return "running";
 }
 
 function mapWorkflowStatus(status: RuntimeStatus) {
@@ -295,6 +299,16 @@ export async function mirrorRuntimeEventWithPostgres(
           input.event.status === "completed",
           now,
         ],
+      );
+    }
+
+    const providerCapacity = input.event.details?.providerCapacity;
+    if (providerCapacity && typeof providerCapacity === "object") {
+      await client.query(
+        `update agent_runs
+         set summary = coalesce(summary, '{}'::jsonb) || $2::jsonb
+         where session_id = $1`,
+        [sessionId, JSON.stringify({ providerCapacity })],
       );
     }
 

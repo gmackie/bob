@@ -48,6 +48,9 @@ export interface GitPullRequest {
   draft: boolean;
   headBranch: string;
   baseBranch: string;
+  headSha?: string;
+  /** Provider's mergeability check; undefined if the provider didn't report it. */
+  mergeable?: boolean;
   url: string;
   additions?: number;
   deletions?: number;
@@ -57,6 +60,23 @@ export interface GitPullRequest {
   mergedAt: Date | null;
   closedAt: Date | null;
 }
+
+/** Combined CI/commit status for a SHA. `state` follows the provider's
+ * combined-status vocabulary ("success" | "pending" | "failure" | "error"). */
+export interface CommitStatus {
+  state: string;
+  total: number;
+}
+
+/** A submitted PR review, used to detect whether we've already reviewed the
+ * current head (so the reaper doesn't re-review every tick). */
+export interface PullRequestReview {
+  state: string; // "APPROVED" | "REQUEST_CHANGES" | "COMMENT" | "PENDING"
+  commitId: string | null;
+  userLogin: string | null;
+}
+
+export type ReviewEvent = "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
 
 export interface CreatePullRequestInput {
   owner: string;
@@ -118,4 +138,38 @@ export interface GitProviderClient {
     repo: string,
     number: number,
   ): Promise<GitCommit[]>;
+
+  // ── Optional: review/auto-merge support ─────────────────────────────
+  // Implemented for gitea (Forgejo); other providers may omit them and the
+  // auto-merge reaper simply skips PRs on providers that don't support them.
+
+  /** Combined CI status for a commit SHA. */
+  getCommitStatus?: (
+    owner: string,
+    repo: string,
+    sha: string,
+  ) => Promise<CommitStatus>;
+
+  /** Raw unified diff for a PR. */
+  getPullRequestDiff?: (
+    owner: string,
+    repo: string,
+    number: number,
+  ) => Promise<string>;
+
+  /** Existing reviews on a PR (to detect an already-submitted verdict). */
+  listPullRequestReviews?: (
+    owner: string,
+    repo: string,
+    number: number,
+  ) => Promise<PullRequestReview[]>;
+
+  /** Submit a review verdict on a PR. */
+  createPullRequestReview?: (
+    owner: string,
+    repo: string,
+    number: number,
+    event: ReviewEvent,
+    body: string,
+  ) => Promise<void>;
 }

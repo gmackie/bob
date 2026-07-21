@@ -503,6 +503,26 @@ describe("BobWsClient", () => {
       expect(onWorkspaceSnapshot).toHaveBeenCalledWith(sessions);
     });
 
+    it("routes host_snapshot to mission-control observers", () => {
+      const onHostSnapshot = vi.fn();
+      const opts = makeOptions({ onHostSnapshot });
+      const client = new BobWsClient(opts);
+      const ws = connectAndAuth(client);
+      const snapshot = {
+        schemaVersion: 1 as const,
+        hostId: "hetzner-bob",
+        daemonVersion: "dev",
+        queueDepth: 0,
+        checkedAt: "2026-07-11T18:00:00.000Z",
+        providers: [],
+      };
+
+      ws.simulateMessage({ type: "host_snapshot", workspaceId: "workspace-1", snapshot });
+
+      expect(onHostSnapshot).toHaveBeenCalledWith("workspace-1", snapshot);
+      client.disconnect();
+    });
+
     it("routes session_status_changed to callback", () => {
       const onSessionStatusChanged = vi.fn();
       const opts = makeOptions({ onSessionStatusChanged });
@@ -610,6 +630,72 @@ describe("BobWsClient", () => {
         sessionId: "s-1",
         data: "hello",
       });
+    });
+  });
+
+  // -- approve / runView -----------------------------------------------------
+
+  describe("approve", () => {
+    it("sends an allow approval with the pending requestId and a clientInputId", () => {
+      const opts = makeOptions();
+      const client = new BobWsClient(opts);
+      const ws = connectAndAuth(client);
+
+      const id = client.approve("s-1", "perm-1", "allow");
+
+      const approvals = ws.sentParsed().filter((m) => m.type === "approve");
+      expect(approvals).toHaveLength(1);
+      expect(approvals[0]).toMatchObject({
+        type: "approve",
+        sessionId: "s-1",
+        requestId: "perm-1",
+        decision: "allow",
+        clientInputId: id,
+      });
+      expect(id).toContain("test-client-");
+    });
+
+    it("sends a deny approval carrying the operator message", () => {
+      const opts = makeOptions();
+      const client = new BobWsClient(opts);
+      const ws = connectAndAuth(client);
+
+      client.approve("s-1", "perm-2", "deny", "not on prod");
+
+      const approvals = ws.sentParsed().filter((m) => m.type === "approve");
+      expect(approvals).toHaveLength(1);
+      expect(approvals[0]).toMatchObject({
+        type: "approve",
+        sessionId: "s-1",
+        requestId: "perm-2",
+        decision: "deny",
+        message: "not on prod",
+      });
+    });
+
+    it("issues clientInputIds from the same counter as sendInput", () => {
+      const opts = makeOptions();
+      const client = new BobWsClient(opts);
+      connectAndAuth(client);
+
+      const inputId = client.sendInput("s-1", "hello");
+      const approveId = client.approve("s-1", "perm-1", "allow");
+
+      expect(approveId).not.toBe(inputId);
+    });
+  });
+
+  describe("runView", () => {
+    it("sends a run_view frame for the foreground session", () => {
+      const opts = makeOptions();
+      const client = new BobWsClient(opts);
+      const ws = connectAndAuth(client);
+
+      client.runView("s-1");
+
+      const views = ws.sentParsed().filter((m) => m.type === "run_view");
+      expect(views).toHaveLength(1);
+      expect(views[0]).toMatchObject({ type: "run_view", sessionId: "s-1" });
     });
   });
 

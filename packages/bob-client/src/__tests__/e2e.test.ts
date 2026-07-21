@@ -191,6 +191,16 @@ describe("@gmacko/bob-client e2e round-trip against Effect stub server", () => {
   it("calls one read method per Bob RPC group over HTTP", async () => {
     const client = createBobRpcClient({ baseURL });
 
+    await expect(
+      client.workItems.statusCounts({ workspaceId: "stub-ws-1" }),
+    ).resolves.toEqual({});
+    await expect(
+      client.workItems.list({
+        workspaceId: "stub-ws-1",
+        statuses: ["done", "failed"],
+        limit: 50,
+      }),
+    ).resolves.toEqual([]);
     await expect(client.workItems.notification.list({})).resolves.toEqual({
       items: [],
     });

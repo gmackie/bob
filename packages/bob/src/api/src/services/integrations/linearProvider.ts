@@ -51,8 +51,14 @@ export class LinearPlanningProvider implements PlanningProvider {
     private teamId: string,
     private projectId: string,
     private linearWebBaseUrl?: string | null,
+    linearApiUrl?: string | null,
   ) {
-    this.client = new LinearClient({ apiKey });
+    // NULL apiUrl keeps the SDK default (api.linear.app); set it to drive a
+    // Linear-API-compatible instance (e.g. Kanbanger) with the same SDK.
+    this.client = new LinearClient({
+      apiKey,
+      ...(linearApiUrl ? { apiUrl: linearApiUrl } : {}),
+    });
   }
 
   // ===========================================================================

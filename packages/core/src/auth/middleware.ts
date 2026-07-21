@@ -105,6 +105,24 @@ const readCookie = (
   return typeof v === "string" ? v : null;
 };
 
+// better-auth prefixes its session cookie with `__Secure-` (and can use
+// `__Host-`) when it issues Secure cookies — which it does over HTTPS in
+// production. The presence check below must accept those prefixed names or the
+// production session cookie (`__Secure-better-auth.session_token`) is never
+// found and every RPC call fails with "No credentials", even though the actual
+// validation (better-auth's getSession) already handles the prefix.
+const COOKIE_PREFIXES = ["", "__Secure-", "__Host-"] as const;
+const readSessionCookie = (
+  cookies: AuthRequest["cookies"],
+  baseName: string,
+): string | null => {
+  for (const prefix of COOKIE_PREFIXES) {
+    const value = readCookie(cookies, prefix + baseName);
+    if (value) return value;
+  }
+  return null;
+};
+
 const extractBearer = (headerValue: string | null): string | null => {
   if (!headerValue) return null;
   const trimmed = headerValue.trim();
@@ -235,8 +253,8 @@ export const resolveCurrentUser = (
     // before doing the DB lookup. Without this, signature-blind raw
     // lookups never match a real better-auth-issued cookie value.
     const cookieToken =
-      readCookie(req.cookies, DEFAULT_SESSION_COOKIE_NAME) ??
-      readCookie(req.cookies, "session");
+      readSessionCookie(req.cookies, DEFAULT_SESSION_COOKIE_NAME) ??
+      readSessionCookie(req.cookies, "session");
     if (!cookieToken) {
       return yield* Effect.fail(
         new UnauthorizedError({ message: "No credentials" }),

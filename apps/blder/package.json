@@ -1,6 +1,7 @@
 {
   "name": "@gmacko/blder",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vinext dev",

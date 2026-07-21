@@ -17,6 +17,7 @@ export { ExternalRpc } from "./groups/external.js";
 
 export {
   WorkItemListRpc,
+  WorkItemStatusCountsRpc,
   WorkItemGetRpc,
   WorkItemUpdateRpc,
   WorkItemPromoteToTaskRpc,

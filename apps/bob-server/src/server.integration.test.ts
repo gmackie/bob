@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { startServer } from "./server.js";
 
-// Heavyweight — spawns pnpm + blder. Run manually:
+// Heavyweight — spawns blder. Run manually:
 //   pnpm --filter @bob/server test:integration
 describe.skip("bob-server integration (manual only)", () => {
   it("boots blder + proxies auth-gated traffic", async () => {

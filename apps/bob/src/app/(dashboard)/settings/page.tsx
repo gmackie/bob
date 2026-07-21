@@ -7,6 +7,7 @@ import { CollapsibleSection } from "./_components/collapsible-section";
 import { ApiKeysSection } from "./_components/api-keys";
 import { CookieJar } from "./_components/cookie-jar";
 import { ConfigFilesSection } from "./_components/config-files";
+import { DeviceHeartbeatsSection } from "./_components/device-heartbeats";
 import { GitProvidersSection } from "./_components/git-providers";
 import { IntegrationsSection } from "./_components/integrations";
 import { PreferencesSection } from "./_components/preferences";
@@ -50,6 +51,9 @@ export default function SettingsPage() {
         </CollapsibleSection>
         <CollapsibleSection title="API Keys" sectionId="api-keys" defaultOpen={false} forceOpen={openSection === "api-keys"}>
           <ApiKeysSection />
+        </CollapsibleSection>
+        <CollapsibleSection title="Devices" sectionId="devices" defaultOpen forceOpen={openSection === "devices"}>
+          <DeviceHeartbeatsSection />
         </CollapsibleSection>
         <CollapsibleSection title="Cookie Jar" sectionId="cookie-jar" defaultOpen={false} forceOpen={openSection === "cookie-jar"}>
           <CookieJar />

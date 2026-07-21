@@ -142,7 +142,7 @@ const healthHandlers = RpcGroup.make(HealthRpc).toLayer({
   health: () => Effect.succeed({ ok: true }),
 });
 
-// WorkItemsRpc (31 procedures)
+// WorkItemsRpc (33 procedures)
 const workItemsHandlers = WorkItemsRpc.toLayer({
   ...liftHandlers((ctx) => {
     const wi = makeWorkItemsRpcHandlers(ctx);
@@ -150,6 +150,7 @@ const workItemsHandlers = WorkItemsRpc.toLayer({
     const lnk = makeLinkRpcHandlers(ctx);
     return {
       "workItem.list": wi["workItems.list"],
+      "workItem.statusCounts": wi["workItems.statusCounts"],
       "workItem.get": wi["workItems.get"],
       "workItem.update": wi["workItems.update"],
       "workItem.promoteToTask": wi["workItems.promoteToTask"],
