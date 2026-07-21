@@ -115,6 +115,7 @@
     "@bob/execution": "workspace:*",
     "@bob/execution-lib": "workspace:*",
     "@bob/telemetry": "workspace:*",
+    "@bob/tenancy": "workspace:*",
     "@bob/work-items": "workspace:*",
     "@elevenlabs/client": "^0.13.0",
     "@gmacko/bob": "workspace:*",

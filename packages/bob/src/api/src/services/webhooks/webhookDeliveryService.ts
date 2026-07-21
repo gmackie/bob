@@ -40,6 +40,15 @@ export async function emitWebhookEvent(
   const configs = await getMatchingConfigs(eventType, userId, workspaceId);
   if (configs.length === 0) return [];
 
+  // Meter outbound deliveries against the tenant's webhook volume quota.
+  const { assertWithinQuotaOrThrow } = await import("../quotas/index.js");
+  await assertWithinQuotaOrThrow({
+    db,
+    userId,
+    metric: "webhookVolume",
+    delta: configs.length,
+  });
+
   const envelope = {
     event: eventType,
     timestamp: new Date().toISOString(),
