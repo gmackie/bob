@@ -13,10 +13,13 @@ import { MessageStream } from "~/app/(dashboard)/chat/_components/message-stream
 import { InputComposer } from "~/app/(dashboard)/chat/_components/input-composer";
 import { AwaitingInputCard } from "~/app/(dashboard)/chat/_components/awaiting-input-card";
 import { useChatSession } from "~/hooks/use-chat-session";
+import { usePlanningCollaboration } from "~/hooks/use-planning-collaboration";
 import { useTRPC } from "~/trpc/react";
 
 import { ResizableSplitView } from "~/components/planning/resizable-split-view";
 import { ArtifactPreviewPanel } from "~/components/planning/artifact-preview-panel";
+import { CollabChatPanel } from "~/components/planning/collab-chat-panel";
+import { PresenceAvatars } from "~/components/planning/presence-avatars";
 import { extractPlanningArtifactContent } from "~/components/planning/planning-session-artifact";
 import { getWorkItemEntryHref } from "~/components/work-items/work-item-entry-model";
 
@@ -84,6 +87,25 @@ export function PlanningSessionClient({
     canSend,
   } = useChatSession({ sessionId: session.id, enabled: true });
 
+  const collab = usePlanningCollaboration({
+    sessionId: session.id,
+    enabled: true,
+  });
+
+  const updateArtifact = useMutation(
+    trpc.planSession.updateArtifact.mutationOptions({
+      onSuccess: () => toast.success("Artifact updated for collaborators"),
+      onError: () => toast.error("Failed to update artifact"),
+    }),
+  );
+
+  // Apply live artifact edits from other collaborators
+  useEffect(() => {
+    if (collab.liveArtifact?.content) {
+      setArtifactContent(collab.liveArtifact.content);
+    }
+  }, [collab.liveArtifact]);
+
   // Also check the live session status — if it's stuck at provisioning, retry
   const shouldStart =
     !isReadOnly &&
@@ -141,6 +163,35 @@ export function PlanningSessionClient({
 
   const isAwaitingInput = workflowState?.workflowStatus === "awaiting_input";
 
+  const handleArtifactEdit = (content: string) => {
+    setArtifactContent(content);
+    const artifactId = collab.liveArtifact?.artifactId;
+    if (artifactId) {
+      updateArtifact.mutate({
+        artifactId,
+        content,
+        expectedVersion: collab.liveArtifact?.contentVersion,
+      });
+      return;
+    }
+    // First shared save creates the artifact for the work item.
+    saveArtifact.mutate({
+      sessionId: session.id,
+      workItemId: workItem.id,
+      title: `${session.planningSessionType ?? "Planning"} — ${workItem.title}`,
+      content,
+      planningSessionType:
+        (session.planningSessionType as
+          | "shape"
+          | "breakdown"
+          | "office_hours"
+          | "ceo_review"
+          | "eng_review"
+          | "design_review"
+          | undefined) ?? undefined,
+    });
+  };
+
   const statusIndicator = (
     <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground border-b border-border">
       <div
@@ -163,6 +214,7 @@ export function PlanningSessionClient({
       {!isConnected && sessionStatus !== "stopped" && (
         <span className="text-muted-foreground/60">(connecting...)</span>
       )}
+      <PresenceAvatars participants={collab.participants} className="ml-1" />
       {(sessionStatus === "provisioning" || sessionStatus === "error" || sessionStatus === "stopped") && !isReadOnly && (
         <button
           onClick={() => {
@@ -218,13 +270,24 @@ export function PlanningSessionClient({
         </div>
       )}
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto">
-        <MessageStream
-          sessionId={session.id}
-          events={events}
-          isConnected={isConnected}
-        />
+      {/* Agent stream + team collab chat */}
+      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_12rem]">
+        <div className="min-h-0 overflow-y-auto">
+          <MessageStream
+            sessionId={session.id}
+            events={events}
+            isConnected={isConnected}
+          />
+        </div>
+        <div className="min-h-0 border-t border-border">
+          <CollabChatPanel
+            messages={collab.messages}
+            onSend={collab.sendCollabMessage}
+            disabled={isReadOnly}
+            isSending={collab.isSending}
+            className="h-full"
+          />
+        </div>
       </div>
 
       {/* Input */}
@@ -241,7 +304,7 @@ export function PlanningSessionClient({
                   ? "Session starting..."
                   : isAwaitingInput
                     ? "Resolve input prompt above"
-                    : "Type a message..."
+                    : "Type a message to the agent..."
             }
           />
         </div>
@@ -261,6 +324,7 @@ export function PlanningSessionClient({
               liveContent={artifactContent}
               priorArtifacts={priorArtifacts}
               isSessionActive={!isReadOnly}
+              onContentEdit={handleArtifactEdit}
             />
           }
         />
@@ -274,6 +338,7 @@ export function PlanningSessionClient({
           priorArtifacts={priorArtifacts}
           isReadOnly={isReadOnly}
           sessionId={session.id}
+          onContentEdit={handleArtifactEdit}
         />
       </div>
     </div>
@@ -286,12 +351,14 @@ function MobilePlanningTabs({
   priorArtifacts,
   isReadOnly,
   sessionId,
+  onContentEdit,
 }: {
   chatPanel: React.ReactNode;
   artifactContent: string | null;
   priorArtifacts: Array<{ id: string; title: string | null; content: string | null; createdAt: string }>;
   isReadOnly: boolean;
   sessionId: string;
+  onContentEdit?: (content: string) => void;
 }) {
   const [tab, setTab] = useState<"chat" | "artifact">("chat");
 
@@ -320,6 +387,7 @@ function MobilePlanningTabs({
             liveContent={artifactContent}
             priorArtifacts={priorArtifacts}
             isSessionActive={!isReadOnly}
+            onContentEdit={onContentEdit}
           />
         )}
       </div>

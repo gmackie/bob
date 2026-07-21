@@ -693,6 +693,7 @@ describe("planSession router", () => {
     });
 
     it("scopes planning session lists to the requested workspace", async () => {
+      dbQueryFindFirstMock.mockResolvedValueOnce({ id: "membership-1" });
       dbQueryFindManyMock.mockResolvedValueOnce([]);
 
       const caller = createCaller({ id: "user-1" });

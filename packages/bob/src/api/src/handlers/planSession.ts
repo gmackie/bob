@@ -12,16 +12,17 @@ import {
   chatConversations,
   planDraftDependencies,
   planDrafts,
+  planningSessionMessages,
   projects,
   repositories,
   runLifecycleEvents,
+  user,
   workItemArtifacts,
   workItemDependencies,
   workItems,
-  workspaceMembers
-
+  workspaceMembers,
 } from "@bob/db/schema";
-import type {WorkItemKind} from "@bob/db/schema";
+import type { WorkItemKind } from "@bob/db/schema";
 
 import { resolvePlanningProvider } from "../services/integrations/planningProvider.js";
 
@@ -82,11 +83,18 @@ async function loadAccessibleWorkItem(db: Db, userId: string, workItemId: string
   return workItem;
 }
 
-async function loadOwnedPlanningSession(db: Db, userId: string, sessionId: string) {
+/**
+ * Load a planning session the caller can collaborate on.
+ * Access: session owner OR workspace member (via planningWorkspaceId or work item workspace).
+ */
+async function loadAccessiblePlanningSession(
+  db: Db,
+  userId: string,
+  sessionId: string,
+) {
   const session = await db.query.chatConversations.findFirst({
     where: and(
       eq(chatConversations.id, sessionId),
-      eq(chatConversations.userId, userId),
       eq(chatConversations.sessionType, "planning"),
     ),
   });
@@ -95,8 +103,29 @@ async function loadOwnedPlanningSession(db: Db, userId: string, sessionId: strin
     throw new TRPCError({ code: "NOT_FOUND" });
   }
 
+  if (session.userId === userId) {
+    return session;
+  }
+
+  let workspaceId = session.planningWorkspaceId ?? null;
+  if (!workspaceId && session.workItemId) {
+    const workItem = await db.query.workItems.findFirst({
+      where: eq(workItems.id, session.workItemId),
+      columns: { workspaceId: true },
+    });
+    workspaceId = workItem?.workspaceId ?? null;
+  }
+
+  if (!workspaceId) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+
+  await assertWorkspaceAccess(db, userId, workspaceId);
   return session;
 }
+
+/** Alias — collaborators may mutate drafts, not only the session owner. */
+const loadOwnedPlanningSession = loadAccessiblePlanningSession;
 
 async function loadOwnedDraft(db: Db, userId: string, draftId: string) {
   const draft = await db.query.planDrafts.findFirst({
@@ -107,7 +136,7 @@ async function loadOwnedDraft(db: Db, userId: string, draftId: string) {
     throw new TRPCError({ code: "NOT_FOUND" });
   }
 
-  await loadOwnedPlanningSession(db, userId, draft.sessionId);
+  await loadAccessiblePlanningSession(db, userId, draft.sessionId);
   return draft;
 }
 
@@ -305,15 +334,16 @@ export async function planSessionGet(
   ctx: HandlerContext,
   input: { sessionId: string },
 ) {
-  const session = await ctx.db.query.chatConversations.findFirst({
-    where: and(
-      eq(chatConversations.id, input.sessionId),
-      eq(chatConversations.sessionType, "planning"),
-      eq(chatConversations.userId, ctx.userId),
-    ),
-  });
-
-  if (!session) return null;
+  let session;
+  try {
+    session = await loadAccessiblePlanningSession(
+      ctx.db,
+      ctx.userId,
+      input.sessionId,
+    );
+  } catch {
+    return null;
+  }
 
   const drafts = await ctx.db.query.planDrafts.findMany({
     where: eq(planDrafts.sessionId, input.sessionId),
@@ -339,13 +369,18 @@ export async function planSessionList(
     limit: number;
   },
 ) {
-  const conditions = [
-    eq(chatConversations.userId, ctx.userId),
-    eq(chatConversations.sessionType, "planning"),
-  ];
+  // Workspace-scoped lists include every collaborator's planning sessions.
+  // Without a workspace filter, keep the legacy "mine only" behavior.
+  if (input.workspaceId) {
+    await assertWorkspaceAccess(ctx.db, ctx.userId, input.workspaceId);
+  }
+
+  const conditions = [eq(chatConversations.sessionType, "planning")];
 
   if (input.workspaceId) {
     conditions.push(eq(chatConversations.planningWorkspaceId, input.workspaceId));
+  } else {
+    conditions.push(eq(chatConversations.userId, ctx.userId));
   }
 
   const sessions = await ctx.db.query.chatConversations.findMany({
@@ -396,9 +431,10 @@ export async function planSessionListByWorkItem(
     limit: number;
   },
 ) {
+  await loadAccessibleWorkItem(ctx.db, ctx.userId, input.workItemId);
+
   const sessions = await ctx.db.query.chatConversations.findMany({
     where: and(
-      eq(chatConversations.userId, ctx.userId),
       eq(chatConversations.sessionType, "planning"),
       eq(chatConversations.workItemId, input.workItemId),
     ),
@@ -413,9 +449,10 @@ export async function planSessionGetActiveForWorkItem(
   ctx: HandlerContext,
   input: { workItemId: string },
 ) {
+  await loadAccessibleWorkItem(ctx.db, ctx.userId, input.workItemId);
+
   const session = await ctx.db.query.chatConversations.findFirst({
     where: and(
-      eq(chatConversations.userId, ctx.userId),
       eq(chatConversations.sessionType, "planning"),
       eq(chatConversations.workItemId, input.workItemId),
       ne(chatConversations.status, "stopped"),
@@ -436,7 +473,8 @@ export async function planSessionSaveArtifact(
     planningSessionType?: string;
   },
 ) {
-  await loadAccessibleWorkItem(ctx.db, ctx.userId, input.workItemId);
+  await loadAccessiblePlanningSession(ctx.db, ctx.userId, input.sessionId);
+  const workItem = await loadAccessibleWorkItem(ctx.db, ctx.userId, input.workItemId);
 
   const [artifact] = await ctx.db
     .insert(workItemArtifacts)
@@ -449,6 +487,9 @@ export async function planSessionSaveArtifact(
       title: input.title,
       content: input.content,
       isCurrent: true,
+      contentVersion: 1,
+      lastEditedByUserId: ctx.userId,
+      updatedAt: new Date().toISOString(),
     })
     .returning();
 
@@ -459,7 +500,236 @@ export async function planSessionSaveArtifact(
     });
   }
 
+  if (workItem.workspaceId) {
+    await notifyWorkspaceEvent({
+      type: "planning_artifact_updated",
+      workspaceId: workItem.workspaceId,
+      entityId: input.sessionId,
+      payload: {
+        action: "created",
+        artifactId: artifact.id,
+        workItemId: input.workItemId,
+        contentVersion: artifact.contentVersion,
+        lastEditedByUserId: ctx.userId,
+      },
+    });
+  }
+
   return artifact;
+}
+
+export async function planSessionUpdateArtifact(
+  ctx: HandlerContext,
+  input: {
+    artifactId: string;
+    content: string;
+    title?: string;
+    expectedVersion?: number;
+  },
+) {
+  const existing = await ctx.db.query.workItemArtifacts.findFirst({
+    where: eq(workItemArtifacts.id, input.artifactId),
+  });
+
+  if (!existing) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Artifact not found" });
+  }
+
+  const workItem = await loadAccessibleWorkItem(
+    ctx.db,
+    ctx.userId,
+    existing.workItemId,
+  );
+
+  if (existing.sessionId) {
+    await loadAccessiblePlanningSession(ctx.db, ctx.userId, existing.sessionId);
+  }
+
+  if (
+    input.expectedVersion != null &&
+    existing.contentVersion !== input.expectedVersion
+  ) {
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: `Artifact was modified (version ${existing.contentVersion}, expected ${input.expectedVersion})`,
+    });
+  }
+
+  const nextVersion = existing.contentVersion + 1;
+  const [artifact] = await ctx.db
+    .update(workItemArtifacts)
+    .set({
+      content: input.content,
+      ...(input.title !== undefined ? { title: input.title } : {}),
+      contentVersion: nextVersion,
+      lastEditedByUserId: ctx.userId,
+      updatedAt: new Date().toISOString(),
+      producerType: "human",
+    })
+    .where(eq(workItemArtifacts.id, input.artifactId))
+    .returning();
+
+  if (!artifact) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to update planning artifact",
+    });
+  }
+
+  if (workItem.workspaceId) {
+    await notifyWorkspaceEvent({
+      type: "planning_artifact_updated",
+      workspaceId: workItem.workspaceId,
+      entityId: existing.sessionId ?? undefined,
+      payload: {
+        action: "updated",
+        artifactId: artifact.id,
+        workItemId: existing.workItemId,
+        contentVersion: nextVersion,
+        lastEditedByUserId: ctx.userId,
+        content: input.content,
+        title: artifact.title,
+      },
+    });
+  }
+
+  return artifact;
+}
+
+export async function planSessionListArtifacts(
+  ctx: HandlerContext,
+  input: { sessionId: string },
+) {
+  await loadAccessiblePlanningSession(ctx.db, ctx.userId, input.sessionId);
+
+  return ctx.db.query.workItemArtifacts.findMany({
+    where: and(
+      eq(workItemArtifacts.sessionId, input.sessionId),
+      eq(workItemArtifacts.artifactType, "planning_doc"),
+    ),
+    orderBy: desc(workItemArtifacts.createdAt),
+  });
+}
+
+export async function planSessionListMessages(
+  ctx: HandlerContext,
+  input: { sessionId: string; limit?: number },
+) {
+  await loadAccessiblePlanningSession(ctx.db, ctx.userId, input.sessionId);
+  const limit = input.limit ?? 100;
+
+  const rows = await ctx.db
+    .select({
+      id: planningSessionMessages.id,
+      sessionId: planningSessionMessages.sessionId,
+      userId: planningSessionMessages.userId,
+      clientMessageId: planningSessionMessages.clientMessageId,
+      body: planningSessionMessages.body,
+      createdAt: planningSessionMessages.createdAt,
+      userName: user.name,
+      userImage: user.image,
+    })
+    .from(planningSessionMessages)
+    .leftJoin(user, eq(user.id, planningSessionMessages.userId))
+    .where(eq(planningSessionMessages.sessionId, input.sessionId))
+    .orderBy(desc(planningSessionMessages.createdAt))
+    .limit(limit);
+
+  return rows.reverse();
+}
+
+export async function planSessionSendMessage(
+  ctx: HandlerContext,
+  input: {
+    sessionId: string;
+    body: string;
+    clientMessageId?: string;
+  },
+) {
+  const session = await loadAccessiblePlanningSession(
+    ctx.db,
+    ctx.userId,
+    input.sessionId,
+  );
+
+  const body = input.body.trim();
+  if (!body) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Message body is required",
+    });
+  }
+  if (body.length > 4000) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Message body must be at most 4000 characters",
+    });
+  }
+
+  if (input.clientMessageId) {
+    const existing = await ctx.db.query.planningSessionMessages.findFirst({
+      where: and(
+        eq(planningSessionMessages.sessionId, input.sessionId),
+        eq(planningSessionMessages.userId, ctx.userId),
+        eq(planningSessionMessages.clientMessageId, input.clientMessageId),
+      ),
+    });
+    if (existing) {
+      const [author] = await ctx.db
+        .select({ name: user.name, image: user.image })
+        .from(user)
+        .where(eq(user.id, ctx.userId))
+        .limit(1);
+      return {
+        ...existing,
+        userName: author?.name ?? null,
+        userImage: author?.image ?? null,
+      };
+    }
+  }
+
+  const [message] = await ctx.db
+    .insert(planningSessionMessages)
+    .values({
+      sessionId: input.sessionId,
+      userId: ctx.userId,
+      clientMessageId: input.clientMessageId ?? null,
+      body,
+    })
+    .returning();
+
+  if (!message) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to send message",
+    });
+  }
+
+  const [author] = await ctx.db
+    .select({ name: user.name, image: user.image })
+    .from(user)
+    .where(eq(user.id, ctx.userId))
+    .limit(1);
+
+  const result = {
+    ...message,
+    userName: author?.name ?? null,
+    userImage: author?.image ?? null,
+  };
+
+  const workspaceId = session.planningWorkspaceId;
+  if (workspaceId) {
+    await notifyWorkspaceEvent({
+      type: "planning_collab_message",
+      workspaceId,
+      entityId: input.sessionId,
+      payload: {
+        message: result,
+      },
+    });
+  }
+
+  return result;
 }
 
 export async function planSessionGetPriorContext(

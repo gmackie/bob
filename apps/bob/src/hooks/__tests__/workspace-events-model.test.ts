@@ -16,6 +16,8 @@ describe("workspace events model", () => {
   it("invalidates shell data touched by workspace session events", () => {
     expect(shouldInvalidateQueryForWorkspaceEvent([["workItem", "list"]])).toBe(true);
     expect(shouldInvalidateQueryForWorkspaceEvent([["planSession", "list"]])).toBe(true);
+    expect(shouldInvalidateForWorkspaceRealtimeMessage("planning_collab_message")).toBe(true);
+    expect(shouldInvalidateForWorkspaceRealtimeMessage("planning_artifact_updated")).toBe(true);
     expect(shouldInvalidateQueryForWorkspaceEvent([["project", "list"]])).toBe(true);
     expect(shouldInvalidateQueryForWorkspaceEvent([["agentRun", "list"]])).toBe(true);
     expect(shouldInvalidateQueryForWorkspaceEvent([["taskRun", "listByWorkItem"]])).toBe(true);

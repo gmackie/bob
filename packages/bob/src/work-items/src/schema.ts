@@ -824,7 +824,12 @@ export const workItemArtifacts = pgTable("work_item_artifacts", (t) => ({
   sessionId: t.uuid(),
   metadata: t.json().$type<Record<string, unknown>>(),
   isCurrent: t.boolean().notNull().default(true),
+  contentVersion: t.integer().notNull().default(1),
+  lastEditedByUserId: t
+    .text()
+    .references(() => user.id, { onDelete: "set null" }),
   createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
+  updatedAt: t.timestamp({ mode: "string", withTimezone: true }),
 }));
 
 export const CreateWorkItemArtifactSchema = createInsertSchema(

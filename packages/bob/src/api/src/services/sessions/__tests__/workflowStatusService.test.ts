@@ -123,6 +123,7 @@ describe("workflowStatusService", () => {
   describe("getSessionWorkflowState", () => {
     it("reads workflow state from the owned conversation row", async () => {
       findFirstMock.mockResolvedValueOnce({
+        userId: "user-1",
         workflowStatus: "started",
         statusMessage: "Queued for execution",
         awaitingInputQuestion: null,
@@ -146,6 +147,7 @@ describe("workflowStatusService", () => {
         new TypeError("Cannot read properties of undefined (reading 'length')"),
       );
       findFirstMock.mockResolvedValueOnce({
+        userId: "user-1",
         workflowStatus: "awaiting_input",
         statusMessage: "Need a decision",
         awaitingInputQuestion: "Proceed?",

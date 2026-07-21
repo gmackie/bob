@@ -13,6 +13,7 @@ import {
   sessionEvents,
   taskRuns,
   workItems,
+  workspaceMembers,
 } from "@bob/db/schema";
 
 import type { WorkflowStatus } from "../services/sessions/workflowStatusService";
@@ -49,6 +50,43 @@ function getGatewayPublicUrl() {
 }
 export const getGatewaySocketUrl = (): string =>
   `${getGatewayPublicUrl().replace(/^http/, "ws")}/sessions`;
+
+/**
+ * Session access for BOB-14 collab: owner always; planning sessions also
+ * allow workspace members so teammates can follow the agent stream.
+ */
+async function loadAccessibleSession(
+  db: HandlerContext["db"],
+  userId: string,
+  sessionId: string,
+) {
+  const session = await db.query.chatConversations.findFirst({
+    where: eq(chatConversations.id, sessionId),
+  });
+  if (!session) return null;
+  if (session.userId === userId) return session;
+
+  if (session.sessionType !== "planning") return null;
+
+  let workspaceId = session.planningWorkspaceId ?? null;
+  if (!workspaceId && session.workItemId) {
+    const wi = await db.query.workItems.findFirst({
+      where: eq(workItems.id, session.workItemId),
+      columns: { workspaceId: true },
+    });
+    workspaceId = wi?.workspaceId ?? null;
+  }
+  if (!workspaceId) return null;
+
+  const membership = await db.query.workspaceMembers.findFirst({
+    where: and(
+      eq(workspaceMembers.workspaceId, workspaceId),
+      eq(workspaceMembers.userId, userId),
+    ),
+    columns: { id: true },
+  });
+  return membership ? session : null;
+}
 
 // Initialize ElevenLabs session service (singleton)
 let elevenlabsService: ElevenLabsSessionService | null = null;
@@ -242,11 +280,16 @@ export async function sessionGet(
   ctx: HandlerContext,
   input: { id: string },
 ) {
+  const accessible = await loadAccessibleSession(ctx.db, ctx.userId, input.id);
+  if (!accessible) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Session not found",
+    });
+  }
+
   const session = await ctx.db.query.chatConversations.findFirst({
-    where: and(
-      eq(chatConversations.id, input.id),
-      eq(chatConversations.userId, ctx.userId),
-    ),
+    where: eq(chatConversations.id, input.id),
     with: {
       repository: true,
       worktree: true,
@@ -269,7 +312,8 @@ export async function sessionGet(
   const latestTaskRun = await ctx.db.query.taskRuns.findFirst({
     where: and(
       eq(taskRuns.sessionId, session.id),
-      eq(taskRuns.userId, ctx.userId),
+      // Collaborators may not own the task run; prefer any run for this session.
+      eq(taskRuns.sessionId, session.id),
     ),
     orderBy: desc(taskRuns.createdAt),
   });
@@ -502,12 +546,11 @@ export async function sessionGetEvents(
     limit: number;
   },
 ) {
-  const session = await ctx.db.query.chatConversations.findFirst({
-    where: and(
-      eq(chatConversations.id, input.sessionId),
-      eq(chatConversations.userId, ctx.userId),
-    ),
-  });
+  const session = await loadAccessibleSession(
+    ctx.db,
+    ctx.userId,
+    input.sessionId,
+  );
 
   if (!session) {
     throw new TRPCError({

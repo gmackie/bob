@@ -74,7 +74,7 @@ describe("session router linked task URLs", () => {
   });
 
   it("builds linked task URLs from planning host aliases and work-item routes", async () => {
-    queryMocks.chatConversationsFindFirst.mockResolvedValueOnce({
+    queryMocks.chatConversationsFindFirst.mockResolvedValue({
       id: sessionId,
       userId: "user-1",
       workingDirectory: "/repo/demo",
@@ -108,7 +108,7 @@ describe("session router linked task URLs", () => {
   });
 
   it("resolves projectId from the latest task run work item when the session snapshot lacks it", async () => {
-    queryMocks.chatConversationsFindFirst.mockResolvedValueOnce({
+    queryMocks.chatConversationsFindFirst.mockResolvedValue({
       id: sessionId,
       userId: "user-1",
       workingDirectory: "/repo/demo",

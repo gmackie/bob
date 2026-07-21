@@ -1,10 +1,15 @@
 import type {
   ClientCreateSession,
   ClientMessage,
+  ClientPresenceUpdate,
   DeviceType,
+  ServerArtifactUpdated,
+  ServerCollabChatMessage,
   ServerError,
   ServerEvent,
   ServerMessage,
+  ServerPresenceChanged,
+  ServerPresenceSnapshot,
   ServerWorkspaceInvalidation,
   ServerSessionStatusChanged,
   SessionStatus,
@@ -48,6 +53,10 @@ export interface BobWsClientOptions {
   onHostSnapshot?: (workspaceId: string, snapshot: HostSnapshotWire) => void;
   onSessionStatusChanged?: (info: ServerSessionStatusChanged) => void;
   onWorkspaceEvent?: (message: ServerWorkspaceInvalidation) => void;
+  onPresenceSnapshot?: (message: ServerPresenceSnapshot) => void;
+  onPresenceChanged?: (message: ServerPresenceChanged) => void;
+  onCollabChatMessage?: (message: ServerCollabChatMessage) => void;
+  onArtifactUpdated?: (message: ServerArtifactUpdated) => void;
   onError: (error: ServerError) => void;
   onConnectionStateChange: (state: ConnectionState) => void;
   /** Override WebSocket constructor for React Native or testing. */
@@ -175,6 +184,34 @@ export class BobWsClient {
     this.send({ type: "stop_session", sessionId });
   }
 
+  /** Update live presence focus within a planning session (BOB-14). */
+  updatePresence(
+    sessionId: string,
+    update: Omit<ClientPresenceUpdate, "type" | "sessionId">,
+  ): void {
+    this.send({ type: "presence_update", sessionId, ...update });
+  }
+
+  /**
+   * Optimistic collab chat fan-out. Prefer tRPC planSession.sendMessage for
+   * durable persistence; this keeps co-present clients snappy.
+   */
+  sendCollabChat(
+    sessionId: string,
+    body: string,
+    clientMessageId: string,
+    meta?: { displayName?: string; imageUrl?: string | null },
+  ): void {
+    this.send({
+      type: "collab_chat",
+      sessionId,
+      clientMessageId,
+      body,
+      displayName: meta?.displayName,
+      imageUrl: meta?.imageUrl,
+    });
+  }
+
   // -- connection lifecycle -------------------------------------------------
 
   private doConnect(): void {
@@ -266,6 +303,8 @@ export class BobWsClient {
       case "git_status_changed":
       case "planning_session_produced_drafts":
       case "planning_session_produced_tasks":
+      case "planning_artifact_updated":
+      case "planning_collab_message":
       case "project_sync_changed":
       case "provider_capacity_changed":
       case "provider_limit_changed":
@@ -275,6 +314,22 @@ export class BobWsClient {
       case "task_status_changed":
       case "work_item_dispatched":
         this.opts.onWorkspaceEvent?.(msg);
+        break;
+
+      case "presence_snapshot":
+        this.opts.onPresenceSnapshot?.(msg);
+        break;
+
+      case "presence_changed":
+        this.opts.onPresenceChanged?.(msg);
+        break;
+
+      case "collab_chat_message":
+        this.opts.onCollabChatMessage?.(msg);
+        break;
+
+      case "artifact_updated":
+        this.opts.onArtifactUpdated?.(msg);
         break;
 
       case "input_ack":

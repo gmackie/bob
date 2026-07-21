@@ -10,6 +10,7 @@ export {
   type HostSnapshotWire,
   type ProviderHealthWire,
   type ProviderCapabilityWire,
+  type SessionPresenceParticipant,
 
   // Client → Server
   type ClientMessage,
@@ -26,6 +27,8 @@ export {
   type ClientSessionStatus,
   type ClientSubscribeWorkspace,
   type ClientUnsubscribeWorkspace,
+  type ClientPresenceUpdate,
+  type ClientCollabChat,
 
   // Server → Client
   type ServerMessage,
@@ -45,6 +48,10 @@ export {
   type ServerWorkspaceSnapshot,
   type ServerWorkspaceInvalidationType,
   type WorkspaceSessionInfo,
+  type ServerPresenceSnapshot,
+  type ServerPresenceChanged,
+  type ServerCollabChatMessage,
+  type ServerArtifactUpdated,
 
   // Codec
   parseClientMessage,

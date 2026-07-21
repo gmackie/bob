@@ -79,6 +79,8 @@ const WORKSPACE_EVENT_TYPES = new Set<ServerWorkspaceInvalidationType>([
   "git_status_changed",
   "planning_session_produced_drafts",
   "planning_session_produced_tasks",
+  "planning_artifact_updated",
+  "planning_collab_message",
   "project_sync_changed",
   "provider_capacity_changed",
   "provider_limit_changed",

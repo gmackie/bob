@@ -9,6 +9,9 @@ import { AwaitingInputCard } from "~/app/(dashboard)/chat/_components/awaiting-i
 import { InputComposer } from "~/app/(dashboard)/chat/_components/input-composer";
 import { MessageStream } from "~/app/(dashboard)/chat/_components/message-stream";
 import { useChatSession } from "~/hooks/use-chat-session";
+import { usePlanningCollaboration } from "~/hooks/use-planning-collaboration";
+import { CollabChatPanel } from "./collab-chat-panel";
+import { PresenceAvatars } from "./presence-avatars";
 import { formatPlanningSessionStatus } from "./planning-dashboard-model";
 import { getPlanningDashboardHref } from "./planning-shell-model";
 
@@ -60,6 +63,11 @@ export function PlanningSessionWorkspace({
     workflowState,
   } = useChatSession({ sessionId: session.id, enabled: true });
 
+  const collab = usePlanningCollaboration({
+    sessionId: session.id,
+    enabled: true,
+  });
+
   const isReadOnly = session.status === "stopped" || session.status === "completed";
   const isAwaitingInput = workflowState?.workflowStatus === "awaiting_input";
   const sessionLabel = useMemo(
@@ -79,9 +87,12 @@ export function PlanningSessionWorkspace({
               {session.workingDirectory ?? "/"} · {isConnected ? "Connected" : "Connecting"}
             </p>
           </div>
-          <Badge variant={STATUS_VARIANT[sessionStatus] ?? STATUS_VARIANT[session.status ?? ""] ?? "slate"}>
-            {formatPlanningSessionStatus(sessionStatus ?? session.status)}
-          </Badge>
+          <div className="flex flex-wrap items-center gap-3">
+            <PresenceAvatars participants={collab.participants} />
+            <Badge variant={STATUS_VARIANT[sessionStatus] ?? STATUS_VARIANT[session.status ?? ""] ?? "slate"}>
+              {formatPlanningSessionStatus(sessionStatus ?? session.status)}
+            </Badge>
+          </div>
         </div>
 
         {workflowState?.awaitingInput ? (
@@ -123,49 +134,61 @@ export function PlanningSessionWorkspace({
         ) : null}
       </section>
 
-      <aside className="rounded-2xl border border-border bg-card p-5">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="font-display text-sm font-semibold text-foreground">
-            Draft Tasks
-          </h2>
-          <span className="text-xs font-semibold tabular-nums text-muted-foreground">
-            {drafts.length}
-          </span>
+      <aside className="flex min-h-[36rem] flex-col gap-4">
+        <div className="max-h-[18rem] overflow-hidden rounded-2xl border border-border bg-card">
+          <CollabChatPanel
+            messages={collab.messages}
+            onSend={collab.sendCollabMessage}
+            disabled={isReadOnly}
+            isSending={collab.isSending}
+            className="h-[18rem]"
+          />
         </div>
 
-        {drafts.length === 0 ? (
-          <p className="mt-4 text-sm text-muted-foreground">
-            No draft tasks have been produced by this session yet.
-          </p>
-        ) : (
-          <div className="mt-4 flex flex-col gap-2">
-            {drafts.map((draft) => (
-              <div
-                key={draft.id}
-                className="rounded-lg border border-border/70 bg-background/40 px-3 py-2.5"
-              >
-                <p className="text-sm font-medium text-foreground">
-                  {draft.title}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {formatDraftMeta(draft)}
-                </p>
-                {draft.description ? (
-                  <p className="mt-2 line-clamp-3 text-xs text-muted-foreground">
-                    {draft.description}
-                  </p>
-                ) : null}
-              </div>
-            ))}
+        <div className="flex-1 rounded-2xl border border-border bg-card p-5">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="font-display text-sm font-semibold text-foreground">
+              Draft Tasks
+            </h2>
+            <span className="text-xs font-semibold tabular-nums text-muted-foreground">
+              {drafts.length}
+            </span>
           </div>
-        )}
 
-        <Link
-          href={getPlanningDashboardHref(session.workspaceId)}
-          className="mt-5 inline-flex text-xs font-medium text-primary hover:text-primary/80"
-        >
-          Back to recent sessions
-        </Link>
+          {drafts.length === 0 ? (
+            <p className="mt-4 text-sm text-muted-foreground">
+              No draft tasks have been produced by this session yet.
+            </p>
+          ) : (
+            <div className="mt-4 flex flex-col gap-2">
+              {drafts.map((draft) => (
+                <div
+                  key={draft.id}
+                  className="rounded-lg border border-border/70 bg-background/40 px-3 py-2.5"
+                >
+                  <p className="text-sm font-medium text-foreground">
+                    {draft.title}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {formatDraftMeta(draft)}
+                  </p>
+                  {draft.description ? (
+                    <p className="mt-2 line-clamp-3 text-xs text-muted-foreground">
+                      {draft.description}
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <Link
+            href={getPlanningDashboardHref(session.workspaceId)}
+            className="mt-5 inline-flex text-xs font-medium text-primary hover:text-primary/80"
+          >
+            Back to recent sessions
+          </Link>
+        </div>
       </aside>
     </div>
   );

@@ -1,7 +1,7 @@
 import type { WebSocket } from "ws";
 import { eq, and, or, gt, lt, inArray, asc, desc, sql, isNull } from "@bob/db";
 import { db } from "@bob/db/client";
-import { chatConversations, repositories, sessionEvents, taskRuns, workItems, agentRuns, activities, workspaces, tenants, tenantMembers, planDrafts, pullRequests, runnerLeases, gatewayConfig, eventLog } from "@bob/db/schema";
+import { chatConversations, repositories, sessionEvents, taskRuns, workItems, agentRuns, activities, workspaces, tenants, tenantMembers, planDrafts, pullRequests, runnerLeases, gatewayConfig, eventLog, workspaceMembers, user } from "@bob/db/schema";
 
 import {
   parseClientMessage,
@@ -18,10 +18,13 @@ import {
   type ClientSessionStatus,
   type ClientSessionClaimed,
   type ClientSubscribeWorkspace,
+  type ClientPresenceUpdate,
+  type ClientCollabChat,
   type ServerMessage,
   type ServerWorkspaceInvalidationType,
   type SessionStatus,
   type HostSnapshotWire,
+  type SessionPresenceParticipant,
 } from "./protocol.js";
 import type { SessionEventRecord } from "./persistence.js";
 import { pushToUser } from "./push.js";
@@ -144,6 +147,8 @@ export class Relay {
   private readonly clientsByUser = new Map<string, Set<Connection>>();
   private readonly daemonByWorkspace = new Map<string, Connection>();
   private readonly subscribers = new Map<string, Set<Connection>>();
+  /** Live presence roster for planning session collaborators (BOB-14). */
+  private readonly presenceBySession = new Map<string, Map<string, SessionPresenceParticipant>>();
   private nextConnId = 0;
 
   private timeoutSweepTimer: NodeJS.Timeout | null = null;
@@ -574,6 +579,53 @@ export class Relay {
       input.entityId,
       input.payload,
     );
+
+    // Session-level fan-out for collab features (BOB-14).
+    if (input.entityId && input.type === "planning_collab_message") {
+      const message = (input.payload?.message ?? input.payload) as
+        | Record<string, unknown>
+        | undefined;
+      if (message && typeof message === "object") {
+        this.broadcastToSessionSubscribers(input.entityId, {
+          type: "collab_chat_message",
+          sessionId: input.entityId,
+          message: {
+            id: typeof message.id === "string" ? message.id : undefined,
+            clientMessageId:
+              typeof message.clientMessageId === "string"
+                ? message.clientMessageId
+                : undefined,
+            userId: String(message.userId ?? ""),
+            displayName: String(
+              message.userName ?? message.displayName ?? message.userId ?? "User",
+            ),
+            imageUrl:
+              typeof message.userImage === "string"
+                ? message.userImage
+                : typeof message.imageUrl === "string"
+                  ? message.imageUrl
+                  : null,
+            body: String(message.body ?? ""),
+            createdAt: String(message.createdAt ?? new Date().toISOString()),
+          },
+        });
+      }
+    }
+
+    if (input.entityId && input.type === "planning_artifact_updated") {
+      const p = input.payload ?? {};
+      this.broadcastToSessionSubscribers(input.entityId, {
+        type: "artifact_updated",
+        sessionId: input.entityId,
+        artifactId: String(p.artifactId ?? ""),
+        workItemId: String(p.workItemId ?? ""),
+        contentVersion: Number(p.contentVersion ?? 1),
+        lastEditedByUserId: String(p.lastEditedByUserId ?? ""),
+        title: typeof p.title === "string" ? p.title : null,
+        content: typeof p.content === "string" ? p.content : null,
+        action: p.action === "created" ? "created" : "updated",
+      });
+    }
   }
 
   // ── Message dispatch ───────────────────────────────────────────────
@@ -716,6 +768,22 @@ export class Relay {
         }
         return;
       }
+      case "presence_update":
+        if (conn.kind !== "browser") {
+          this.send(conn, createError("INVALID_FOR_DEVICE", "presence_update is for browsers"));
+          return;
+        }
+        if (!requireUuid(msg.sessionId)) return;
+        await this.handlePresenceUpdate(conn, msg);
+        return;
+      case "collab_chat":
+        if (conn.kind !== "browser") {
+          this.send(conn, createError("INVALID_FOR_DEVICE", "collab_chat is for browsers"));
+          return;
+        }
+        if (!requireUuid(msg.sessionId)) return;
+        await this.handleCollabChat(conn, msg);
+        return;
     }
   }
 
@@ -932,7 +1000,8 @@ export class Relay {
       return;
     }
 
-    if (session.userId !== conn.userId) {
+    const allowed = await this.canAccessSession(conn.userId!, session);
+    if (!allowed) {
       this.send(conn, createError("ACCESS_DENIED", "Not authorized for this session", sub.sessionId));
       return;
     }
@@ -953,6 +1022,11 @@ export class Relay {
       currentState: (session.status ?? "stopped") as SessionStatus,
       latestSeq: session.nextSeq - 1,
     });
+
+    // Planning sessions: announce presence and send roster (BOB-14)
+    if (session.sessionType === "planning") {
+      await this.joinPresence(conn, sub.sessionId);
+    }
 
     // Replay missed events
     if (sub.lastAckSeq < session.nextSeq - 1) {
@@ -1034,7 +1108,211 @@ export class Relay {
       if (subs.size === 0) this.subscribers.delete(unsub.sessionId);
     }
     conn.subscribedSessions.delete(unsub.sessionId);
+    this.leavePresence(conn, unsub.sessionId);
     this.send(conn, { type: "unsubscribed", sessionId: unsub.sessionId });
+  }
+
+  /**
+   * Owner always has access. Planning sessions also allow workspace members
+   * so multiple humans can collaborate (BOB-14).
+   */
+  private async canAccessSession(
+    userId: string,
+    session: {
+      userId: string;
+      sessionType?: string | null;
+      planningWorkspaceId?: string | null;
+      workItemId?: string | null;
+    },
+  ): Promise<boolean> {
+    if (session.userId === userId) return true;
+    if (session.sessionType !== "planning") return false;
+
+    let workspaceId = session.planningWorkspaceId ?? null;
+    if (!workspaceId && session.workItemId) {
+      const wi = await db.query.workItems.findFirst({
+        where: eq(workItems.id, session.workItemId),
+        columns: { workspaceId: true },
+      });
+      workspaceId = wi?.workspaceId ?? null;
+    }
+    if (!workspaceId) return false;
+
+    const membership = await db.query.workspaceMembers.findFirst({
+      where: and(
+        eq(workspaceMembers.workspaceId, workspaceId),
+        eq(workspaceMembers.userId, userId),
+      ),
+      columns: { id: true },
+    });
+    return Boolean(membership);
+  }
+
+  private async joinPresence(conn: Connection, sessionId: string): Promise<void> {
+    const now = new Date().toISOString();
+    let displayName = conn.userId ?? "User";
+    let imageUrl: string | null = null;
+    try {
+      const [row] = await db
+        .select({ name: user.name, image: user.image })
+        .from(user)
+        .where(eq(user.id, conn.userId!))
+        .limit(1);
+      if (row?.name) displayName = row.name;
+      imageUrl = row?.image ?? null;
+    } catch {
+      // Best-effort profile lookup
+    }
+
+    const participant: SessionPresenceParticipant = {
+      userId: conn.userId!,
+      clientId: conn.clientId || conn.id,
+      displayName,
+      imageUrl,
+      focus: null,
+      artifactId: null,
+      cursor: null,
+      joinedAt: now,
+      lastSeenAt: now,
+    };
+
+    let roster = this.presenceBySession.get(sessionId);
+    if (!roster) {
+      roster = new Map();
+      this.presenceBySession.set(sessionId, roster);
+    }
+    roster.set(conn.id, participant);
+
+    // Snapshot for the joining client
+    this.send(conn, {
+      type: "presence_snapshot",
+      sessionId,
+      participants: Array.from(roster.values()),
+    });
+
+    // Notify others
+    this.broadcastToSessionSubscribers(
+      sessionId,
+      {
+        type: "presence_changed",
+        sessionId,
+        change: "join",
+        participant,
+      },
+      conn,
+    );
+  }
+
+  private leavePresence(conn: Connection, sessionId: string): void {
+    const roster = this.presenceBySession.get(sessionId);
+    if (!roster) return;
+    const participant = roster.get(conn.id);
+    if (!participant) return;
+    roster.delete(conn.id);
+    if (roster.size === 0) this.presenceBySession.delete(sessionId);
+
+    this.broadcastToSessionSubscribers(sessionId, {
+      type: "presence_changed",
+      sessionId,
+      change: "leave",
+      participant: {
+        ...participant,
+        lastSeenAt: new Date().toISOString(),
+      },
+    });
+  }
+
+  private async handlePresenceUpdate(
+    conn: Connection,
+    msg: ClientPresenceUpdate,
+  ): Promise<void> {
+    if (!conn.subscribedSessions.has(msg.sessionId)) {
+      this.send(
+        conn,
+        createError("NOT_SUBSCRIBED", "Subscribe before sending presence", msg.sessionId),
+      );
+      return;
+    }
+
+    let roster = this.presenceBySession.get(msg.sessionId);
+    if (!roster) {
+      roster = new Map();
+      this.presenceBySession.set(msg.sessionId, roster);
+    }
+
+    const existing = roster.get(conn.id);
+    const now = new Date().toISOString();
+    const participant: SessionPresenceParticipant = {
+      userId: conn.userId!,
+      clientId: conn.clientId || conn.id,
+      displayName: msg.displayName ?? existing?.displayName ?? conn.userId ?? "User",
+      imageUrl: msg.imageUrl !== undefined ? msg.imageUrl : existing?.imageUrl ?? null,
+      focus: msg.focus !== undefined ? msg.focus : existing?.focus ?? null,
+      artifactId:
+        msg.artifactId !== undefined ? msg.artifactId : existing?.artifactId ?? null,
+      cursor: msg.cursor !== undefined ? msg.cursor : existing?.cursor ?? null,
+      joinedAt: existing?.joinedAt ?? now,
+      lastSeenAt: now,
+    };
+    roster.set(conn.id, participant);
+
+    this.broadcastToSessionSubscribers(msg.sessionId, {
+      type: "presence_changed",
+      sessionId: msg.sessionId,
+      change: "update",
+      participant,
+    });
+  }
+
+  private async handleCollabChat(
+    conn: Connection,
+    msg: ClientCollabChat,
+  ): Promise<void> {
+    if (!conn.subscribedSessions.has(msg.sessionId)) {
+      this.send(
+        conn,
+        createError("NOT_SUBSCRIBED", "Subscribe before sending collab chat", msg.sessionId),
+      );
+      return;
+    }
+
+    const body = typeof msg.body === "string" ? msg.body.trim() : "";
+    if (!body || body.length > 4000) {
+      this.send(
+        conn,
+        createError("INVALID_MESSAGE", "Collab chat body must be 1–4000 chars", msg.sessionId),
+      );
+      return;
+    }
+
+    // Live fan-out only — persistence is owned by planSession.sendMessage (tRPC).
+    // Clients should call tRPC for durable storage; this path keeps latency low
+    // for co-present collaborators when the UI also posts optimistically.
+    this.broadcastToSessionSubscribers(msg.sessionId, {
+      type: "collab_chat_message",
+      sessionId: msg.sessionId,
+      message: {
+        clientMessageId: msg.clientMessageId,
+        userId: conn.userId!,
+        displayName: msg.displayName ?? conn.userId ?? "User",
+        imageUrl: msg.imageUrl ?? null,
+        body,
+        createdAt: new Date().toISOString(),
+      },
+    });
+  }
+
+  private broadcastToSessionSubscribers(
+    sessionId: string,
+    message: ServerMessage,
+    except?: Connection,
+  ): void {
+    const subs = this.subscribers.get(sessionId);
+    if (!subs) return;
+    for (const c of subs) {
+      if (except && c.id === except.id) continue;
+      this.send(c, message);
+    }
   }
 
   // ── Browser input → daemon ─────────────────────────────────────────
@@ -1047,6 +1325,9 @@ export class Relay {
     const rows = await db
       .select({
         sessionUserId: chatConversations.userId,
+        sessionType: chatConversations.sessionType,
+        planningWorkspaceId: chatConversations.planningWorkspaceId,
+        workItemId: chatConversations.workItemId,
         workspaceId: repositories.workspaceId,
       })
       .from(chatConversations)
@@ -1055,18 +1336,31 @@ export class Relay {
       .limit(1);
 
     const row = rows[0];
-    if (!row || row.sessionUserId !== conn.userId) {
+    if (!row) {
+      this.send(conn, createError("SESSION_NOT_FOUND", "Session not found", input.sessionId));
+      return;
+    }
+
+    const allowed = await this.canAccessSession(conn.userId!, {
+      userId: row.sessionUserId,
+      sessionType: row.sessionType,
+      planningWorkspaceId: row.planningWorkspaceId,
+      workItemId: row.workItemId,
+    });
+    if (!allowed) {
       this.send(conn, createError("SESSION_NOT_FOUND", "Session not found", input.sessionId));
       return;
     }
 
     // Look up the daemon for this session's workspace.
-    // TODO(phase-2): sessions without a repository currently fall back to findDaemonForUser.
-    //   Planning sessions often don't have a repository attached yet. When we add an explicit
-    //   workspaceId column on chat_conversations this can be tightened.
-    const daemon = row.workspaceId
-      ? this.daemonByWorkspace.get(row.workspaceId) ?? null
-      : this.findDaemonForUser(conn.userId!);
+    // Prefer planningWorkspaceId (planning sessions), then repository workspace,
+    // then owner-user daemon fallback.
+    const planningWs = row.planningWorkspaceId;
+    const daemon = planningWs
+      ? this.daemonByWorkspace.get(planningWs) ?? null
+      : row.workspaceId
+        ? this.daemonByWorkspace.get(row.workspaceId) ?? null
+        : this.findDaemonForUser(row.sessionUserId);
 
     if (!daemon) {
       this.send(
@@ -2220,13 +2514,14 @@ export class Relay {
       conn.heartbeatTimer = null;
     }
 
-    // Remove from subscribers
+    // Remove from subscribers + presence
     for (const sessionId of conn.subscribedSessions) {
       const subs = this.subscribers.get(sessionId);
       if (subs) {
         subs.delete(conn);
         if (subs.size === 0) this.subscribers.delete(sessionId);
       }
+      this.leavePresence(conn, sessionId);
     }
 
     // Remove from user clients

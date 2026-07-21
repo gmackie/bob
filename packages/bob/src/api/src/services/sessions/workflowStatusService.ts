@@ -1,6 +1,11 @@
 import { and, eq, sql } from "@bob/db";
 import { db } from "@bob/db/client";
-import { chatConversations, sessionEvents } from "@bob/db/schema";
+import {
+  chatConversations,
+  sessionEvents,
+  workItems,
+  workspaceMembers,
+} from "@bob/db/schema";
 import {
   attachArtifact,
   completeTaskRun,
@@ -53,17 +58,40 @@ function isValidTransition(from: WorkflowStatus, to: WorkflowStatus): boolean {
 
 async function getOwnedSession(userId: string, sessionId: string) {
   const session = await db.query.chatConversations.findFirst({
-    where: and(
-      eq(chatConversations.id, sessionId),
-      eq(chatConversations.userId, userId),
-    ),
+    where: eq(chatConversations.id, sessionId),
   });
 
   if (!session) {
     throw new Error("Session not found");
   }
 
-  return session;
+  if (session.userId === userId) {
+    return session;
+  }
+
+  // Planning collaborators (workspace members) may act on the session (BOB-14).
+  if (session.sessionType === "planning") {
+    let workspaceId = session.planningWorkspaceId ?? null;
+    if (!workspaceId && session.workItemId) {
+      const wi = await db.query.workItems.findFirst({
+        where: eq(workItems.id, session.workItemId),
+        columns: { workspaceId: true },
+      });
+      workspaceId = wi?.workspaceId ?? null;
+    }
+    if (workspaceId) {
+      const membership = await db.query.workspaceMembers.findFirst({
+        where: and(
+          eq(workspaceMembers.workspaceId, workspaceId),
+          eq(workspaceMembers.userId, userId),
+        ),
+        columns: { id: true },
+      });
+      if (membership) return session;
+    }
+  }
+
+  throw new Error("Session not found");
 }
 
 async function updateWorkflowState(
@@ -538,8 +566,14 @@ export async function getSessionWorkflowState(
     expiresAt: Date | string;
   } | null;
 } | null> {
-  const row = await db.query.chatConversations.findFirst({
+  const session = await db.query.chatConversations.findFirst({
+    where: eq(chatConversations.id, sessionId),
     columns: {
+      id: true,
+      userId: true,
+      sessionType: true,
+      planningWorkspaceId: true,
+      workItemId: true,
       workflowStatus: true,
       statusMessage: true,
       awaitingInputQuestion: true,
@@ -547,13 +581,32 @@ export async function getSessionWorkflowState(
       awaitingInputDefault: true,
       awaitingInputExpiresAt: true,
     },
-    where: and(
-      eq(chatConversations.id, sessionId),
-      eq(chatConversations.userId, userId),
-    ),
   });
 
-  if (!row) return null;
+  if (!session) return null;
+
+  if (session.userId !== userId) {
+    if (session.sessionType !== "planning") return null;
+    let workspaceId = session.planningWorkspaceId ?? null;
+    if (!workspaceId && session.workItemId) {
+      const wi = await db.query.workItems.findFirst({
+        where: eq(workItems.id, session.workItemId),
+        columns: { workspaceId: true },
+      });
+      workspaceId = wi?.workspaceId ?? null;
+    }
+    if (!workspaceId) return null;
+    const membership = await db.query.workspaceMembers.findFirst({
+      where: and(
+        eq(workspaceMembers.workspaceId, workspaceId),
+        eq(workspaceMembers.userId, userId),
+      ),
+      columns: { id: true },
+    });
+    if (!membership) return null;
+  }
+
+  const row = session;
 
   const awaitingInput =
     row.workflowStatus === "awaiting_input" && row.awaitingInputQuestion
