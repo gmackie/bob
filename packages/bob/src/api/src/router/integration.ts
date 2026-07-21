@@ -1,15 +1,15 @@
 import type { TRPCRouterRecord } from "@trpc/server";
 import { z } from "zod/v4";
 
-import { protectedProcedure } from "../trpc";
 import {
-  integrationGet,
-  integrationSave,
   integrationDelete,
-  integrationList,
   integrationFetchLinearTeams,
+  integrationGet,
+  integrationList,
+  integrationSave,
   integrationSetupLinear,
 } from "../handlers/integration";
+import { protectedProcedure, requireFeature } from "../trpc";
 
 export const integrationRouter = {
   list: protectedProcedure
@@ -29,7 +29,8 @@ export const integrationRouter = {
       integrationGet({ db: ctx.db, userId: ctx.session.user.id }, input),
     ),
 
-  save: protectedProcedure
+  // Provisioning a third-party integration is a paid feature.
+  save: requireFeature("integrations")
     .input(
       z.object({
         workspaceId: z.string().uuid(),
@@ -54,7 +55,7 @@ export const integrationRouter = {
       ),
     ),
 
-  setupLinear: protectedProcedure
+  setupLinear: requireFeature("integrations")
     .input(
       z.object({
         workspaceId: z.string().uuid(),
