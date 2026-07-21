@@ -2,6 +2,16 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 
+import {
+  MODE_STORAGE_KEY,
+  THEME_STORAGE_KEY,
+  applyThemeToDocument,
+  readStoredMode,
+  readStoredTheme,
+  resolveMode,
+  resolveSystemMode,
+} from "./theme-init";
+
 export type Theme = "ooda" | "bob";
 export type Mode = "light" | "dark" | "system";
 export type ResolvedMode = "light" | "dark";
@@ -16,33 +26,6 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
-const THEME_STORAGE_KEY = "gmacko-theme";
-const MODE_STORAGE_KEY = "gmacko-mode";
-
-function readStored<T extends string>(
-  key: string,
-  isValid: (s: string) => s is T,
-  fallback: T,
-): T {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw && isValid(raw)) return raw;
-  } catch {
-    // localStorage may be unavailable
-  }
-  return fallback;
-}
-
-const isTheme = (s: string): s is Theme => s === "ooda" || s === "bob";
-const isMode = (s: string): s is Mode =>
-  s === "light" || s === "dark" || s === "system";
-
-function resolveSystemMode(): ResolvedMode {
-  if (typeof window === "undefined" || !window.matchMedia) return "light";
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
 export function ThemeProvider({
   children,
   defaultTheme,
@@ -53,13 +36,13 @@ export function ThemeProvider({
   defaultMode?: Mode;
 }) {
   const [theme, setThemeState] = useState<Theme>(() =>
-    readStored(THEME_STORAGE_KEY, isTheme, defaultTheme),
+    readStoredTheme(defaultTheme),
   );
   const [mode, setModeState] = useState<Mode>(() =>
-    readStored(MODE_STORAGE_KEY, isMode, defaultMode),
+    readStoredMode(defaultMode),
   );
   const [resolvedMode, setResolvedMode] = useState<ResolvedMode>(() =>
-    mode === "system" ? resolveSystemMode() : mode,
+    resolveMode(readStoredMode(defaultMode)),
   );
 
   // Track system-preference changes when mode === "system".
@@ -77,12 +60,10 @@ export function ThemeProvider({
     return () => mql.removeEventListener("change", handler);
   }, [mode]);
 
-  // Apply data-theme + dark/light class to <html>.
+  // Apply data-theme + dark/light/auto classes to <html>.
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
-    document.documentElement.classList.remove("light", "dark");
-    document.documentElement.classList.add(resolvedMode);
-  }, [theme, resolvedMode]);
+    applyThemeToDocument({ theme, mode, resolvedMode });
+  }, [theme, mode, resolvedMode]);
 
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next);

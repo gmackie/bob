@@ -38,7 +38,7 @@ export function PreferencesSection() {
     },
   });
 
-  const { setMode } = useTheme();
+  const { mode, setMode } = useTheme();
 
   const handleThemeChange = (theme: "light" | "dark" | "system") => {
     // Apply mode immediately via ThemeProvider
@@ -85,7 +85,7 @@ export function PreferencesSection() {
             {(["light", "dark", "system"] as const).map((theme) => (
               <Button
                 key={theme}
-                variant={preferences?.theme === theme ? "default" : "outline"}
+                variant={mode === theme ? "default" : "outline"}
                 size="sm"
                 onClick={() => handleThemeChange(theme)}
                 disabled={isPending}
@@ -105,7 +105,7 @@ export function PreferencesSection() {
                 checked={preferences?.emailNotifications ?? true}
                 onChange={() => handleNotificationToggle("email")}
                 disabled={isPending}
-                className="h-4 w-4 rounded border-gray-300"
+                className="h-4 w-4 rounded border-border"
               />
               <span>Email notifications</span>
             </label>
@@ -115,7 +115,7 @@ export function PreferencesSection() {
                 checked={preferences?.pushNotifications ?? true}
                 onChange={() => handleNotificationToggle("push")}
                 disabled={isPending}
-                className="h-4 w-4 rounded border-gray-300"
+                className="h-4 w-4 rounded border-border"
               />
               <span>Push notifications</span>
             </label>

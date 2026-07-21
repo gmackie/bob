@@ -93,6 +93,7 @@
     "./ui/separator": "./src/ui/separator.tsx",
     "./ui/textarea": "./src/ui/textarea.tsx",
     "./ui/theme": "./src/ui/theme-provider.tsx",
+    "./ui/theme-init": "./src/ui/theme-init.ts",
     "./ui/toast": "./src/ui/toast.tsx",
     "./ui/theme-toggle": "./src/ui/theme-toggle.tsx",
     "./ui/tooltip": "./src/ui/tooltip.tsx",
