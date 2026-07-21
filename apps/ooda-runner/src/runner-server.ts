@@ -15,8 +15,11 @@ import { promoteNote } from "@gmacko/ooda/thread-workspace";
 import { resolveThreadPath } from "@gmacko/ooda/thread-model";
 import {
   createRunnerTRPCClient,
+  createResearchSurface,
   type RunnerTRPCClient,
 } from "./trpc-client";
+import { CapabilityRegistry } from "@gmacko/ooda/capability-registry";
+import type { ResearchTRPCSurface } from "@gmacko/ooda/buddy-tools";
 import { BobGatewayConnector } from "./bob-gateway";
 import { BobRunReporter } from "./bob-run-reporter";
 
@@ -90,10 +93,18 @@ export class RunnerServer {
   private activePromotions = new Set<string>();
   private bobGateway: BobGatewayConnector | null = null;
   private bobReporter: BobRunReporter;
+  private research: ResearchTRPCSurface;
+  private capabilityRegistry: CapabilityRegistry;
 
   constructor(private config: RunnerConfig) {
     this.sessions = new SessionManager();
     this.trpc = createRunnerTRPCClient(config.serverUrl);
+    // Buddy-tool wiring: research surface the tool handlers call, plus a
+    // capability registry that gates the exposed tool set by profile. The
+    // registry is unseeded today, so profile gating falls back to the full
+    // implemented tool set (see SessionExecutor.allowedToolNames).
+    this.research = createResearchSurface(this.trpc);
+    this.capabilityRegistry = new CapabilityRegistry();
 
     // Report run status + output to Bob's public API so OODA-originated work is
     // monitorable/reviewable in the Bob dashboard. No-ops unless bob* env is set.
@@ -139,6 +150,8 @@ export class RunnerServer {
     return new SessionExecutor({
       adapter,
       storageRoot: this.config.storageRoot,
+      research: this.research,
+      capabilityRegistry: this.capabilityRegistry,
     });
   }
 
@@ -371,6 +384,7 @@ export class RunnerServer {
         threadSlug: thread.slug,
         threadTitle: thread.title,
         sessionId: session.id,
+        threadId: session.threadId,
         prompt: promptEvent.content,
         toolProfileId: session.toolProfileId,
         onEvent: (event) => {

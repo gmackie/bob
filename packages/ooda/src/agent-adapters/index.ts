@@ -28,3 +28,5 @@ export {
   type CreateBuddyToolDescriptorsOptions,
   type ToolDescriptor,
 } from "./tool-registry";
+
+export { dispatchBuddyTool } from "./tool-dispatcher";
