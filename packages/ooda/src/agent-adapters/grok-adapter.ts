@@ -7,6 +7,7 @@ import {
   runGrokAcpSession,
   type SessionUpdate,
 } from "./grok-acp";
+import type { ToolDescriptor } from "./tool-registry";
 import type {
   AgentAdapter,
   AdapterCommand,
@@ -27,6 +28,18 @@ export class GrokAdapter implements AgentAdapter {
   id = "grok" as const;
   name = "Grok Build" as const;
   transport = "stdio" as const;
+
+  /**
+   * Buddy-tool descriptors exposed to the agent for the next `execute`.
+   * Stashed by `registerTools` (called via the tool-registry helper at
+   * session start) and threaded into the ACP request handler so the agent
+   * can actually invoke them mid-session.
+   */
+  private toolDescriptors: readonly ToolDescriptor[] = [];
+
+  registerTools(tools: ToolDescriptor[]): void {
+    this.toolDescriptors = tools;
+  }
 
   isAvailable(): boolean {
     if (process.env.XAI_API_KEY) return true;
@@ -85,7 +98,7 @@ export class GrokAdapter implements AgentAdapter {
         if (event) onEvent(event);
       },
       onRequest: (method, params) =>
-        handleAgentRequest(command.cwd, method, params),
+        handleAgentRequest(command.cwd, method, params, this.toolDescriptors),
     });
 
     child.stdout.on("data", (data: Buffer) => client.feed(data.toString()));
