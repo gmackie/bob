@@ -89,8 +89,9 @@ describe("rate limiting", () => {
     checkRateLimit(request, { env, now: 1_100 });
     const result = checkRateLimit(request, { env, now: 1_200 });
     expect(result?.limited).toBe(true);
+    if (!result) throw new Error("expected a rate limit result");
 
-    const response = rateLimitResponse(result!);
+    const response = rateLimitResponse(result);
     expect(response.status).toBe(429);
     expect(response.headers.get("RateLimit-Limit")).toBe("2");
     expect(response.headers.get("RateLimit-Remaining")).toBe("0");

@@ -73,8 +73,10 @@ const fnv1a = (value: string): string => {
   return (hash >>> 0).toString(36);
 };
 
-const firstHeaderValue = (value: string | null): string | undefined =>
-  value?.split(",")[0]?.trim() || undefined;
+const firstHeaderValue = (value: string | null): string | undefined => {
+  const first = value?.split(",")[0]?.trim();
+  return first === "" ? undefined : first;
+};
 
 const cookieValue = (
   cookie: string | null,
