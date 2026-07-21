@@ -520,7 +520,7 @@ export async function projectRegisterForge(
       name: repo.name,
       key,
       repoUrl: repo.remoteUrl,
-      defaultBranch: repo.mainBranch ?? repo.branch,
+      defaultBranch: repo.mainBranch,
       status: "active",
     })
     .returning();
