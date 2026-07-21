@@ -13,7 +13,7 @@ describe("secretAccessAudit", () => {
   });
 
   it("records events in the ring buffer without plaintext", () => {
-    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    const log = vi.spyOn(console, "info").mockImplementation(() => undefined);
 
     auditSecretAccess({
       resource: "session_secret",
@@ -42,7 +42,7 @@ describe("secretAccessAudit", () => {
   });
 
   it("caps the ring buffer", () => {
-    vi.spyOn(console, "info").mockImplementation(() => {});
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
     for (let i = 0; i < 520; i++) {
       auditSecretAccess({
         resource: "browser_cookie",

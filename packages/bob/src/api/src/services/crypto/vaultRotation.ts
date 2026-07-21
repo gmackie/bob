@@ -11,10 +11,11 @@
  * Decrypt paths already accept both keys during the window (see masterKey.ts).
  */
 
+import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import { eq, isNull } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
-  browserCookies,
+  browserCookies as _browserCookies,
   gitProviderConnections,
   sessionSecrets,
 } from "@bob/db/schema";
@@ -29,11 +30,33 @@ import {
   reencryptSessionSecretValue,
   sessionSecretNeedsReencryption,
 } from "./sessionSecretVault";
-import {
-  reencryptToken,
-  tokenNeedsReencryption,
-  type EncryptedToken,
-} from "./tokenVault";
+import { reencryptToken, tokenNeedsReencryption } from "./tokenVault";
+import type { EncryptedToken } from "./tokenVault";
+
+// drizzle-orm dual-instance shim: browserCookies is defined in @bob/cookies,
+// which resolves a different drizzle-orm peer-hash copy of 0.44.7 than
+// @bob/api / @bob/db, so it is nominally incompatible with this package s
+// drizzle query builder (see handlers/cookies.ts for the full explanation).
+// Table-position uses (.select().from / .update) go through the base PgTable
+// type via unknown, column-position uses (eq()) through a small column record,
+// and the query result is cast to the real row shape -- all still type-checked,
+// no any. sessionSecrets comes from @bob/secrets, which shares @bob/api s
+// instance, so it needs no shim. Runtime is unaffected. Root fix is to dedupe
+// drizzle-orm in the lockfile (reported, not changed here).
+interface BrowserCookiesColumns {
+  id: PgColumn;
+}
+const browserCookies = _browserCookies as unknown as PgTable &
+  BrowserCookiesColumns;
+
+interface BrowserCookieRow {
+  id: string;
+  userId: string;
+  domain: string;
+  valueCiphertext: string;
+  valueIv: string;
+  valueTag: string;
+}
 
 export interface VaultRotationResult {
   gitTokens: { scanned: number; reencrypted: number; skipped: number; errors: number };
@@ -133,7 +156,9 @@ export async function rotateTokenVaultMaterial(): Promise<VaultRotationResult> {
   }
 
   // ── Browser cookies ──────────────────────────────────────────────
-  const cookies = await db.select().from(browserCookies);
+  const cookies = (await db
+    .select()
+    .from(browserCookies)) as unknown as BrowserCookieRow[];
   result.cookies.scanned = cookies.length;
 
   for (const cookie of cookies) {

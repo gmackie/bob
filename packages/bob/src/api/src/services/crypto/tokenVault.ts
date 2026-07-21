@@ -104,17 +104,18 @@ export function tokenNeedsReencryption(
   connectionId: string,
 ): boolean {
   const keys = getDecryptMasterKeys();
-  if (keys.length < 2) return false;
+  const [firstKey, secondKey] = keys;
+  if (!firstKey || !secondKey) return false;
 
   try {
-    tryDecryptWithKey(encrypted, connectionId, keys[0]!);
+    tryDecryptWithKey(encrypted, connectionId, firstKey);
     return false;
   } catch {
     // fall through
   }
 
   try {
-    tryDecryptWithKey(encrypted, connectionId, keys[1]!);
+    tryDecryptWithKey(encrypted, connectionId, secondKey);
     return true;
   } catch {
     return false;

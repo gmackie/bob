@@ -97,17 +97,18 @@ export function cookieNeedsReencryption(
   cookieId: string,
 ): boolean {
   const keys = getDecryptMasterKeys();
-  if (keys.length < 2) return false;
+  const [firstKey, secondKey] = keys;
+  if (!firstKey || !secondKey) return false;
 
   try {
-    tryDecryptWithKey(encrypted, cookieId, keys[0]!);
+    tryDecryptWithKey(encrypted, cookieId, firstKey);
     return false;
   } catch {
     // fall through
   }
 
   try {
-    tryDecryptWithKey(encrypted, cookieId, keys[1]!);
+    tryDecryptWithKey(encrypted, cookieId, secondKey);
     return true;
   } catch {
     return false;

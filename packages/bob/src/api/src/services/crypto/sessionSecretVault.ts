@@ -97,17 +97,18 @@ export function sessionSecretNeedsReencryption(
   secretId: string,
 ): boolean {
   const keys = getDecryptMasterKeys();
-  if (keys.length < 2) return false;
+  const [firstKey, secondKey] = keys;
+  if (!firstKey || !secondKey) return false;
 
   try {
-    tryDecryptWithKey(encrypted, secretId, keys[0]!);
+    tryDecryptWithKey(encrypted, secretId, firstKey);
     return false;
   } catch {
     // fall through
   }
 
   try {
-    tryDecryptWithKey(encrypted, secretId, keys[1]!);
+    tryDecryptWithKey(encrypted, secretId, secondKey);
     return true;
   } catch {
     return false;

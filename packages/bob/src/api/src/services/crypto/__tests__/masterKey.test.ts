@@ -63,7 +63,8 @@ describe("masterKey", () => {
     process.env[PREVIOUS_KEY_ENV] = PREV;
     const key = getPreviousMasterKey();
     expect(key).not.toBeNull();
-    expect(key!.length).toBe(KEY_LENGTH);
+    if (key === null) throw new Error("expected a previous key");
+    expect(key.length).toBe(KEY_LENGTH);
   });
 
   it("getPreviousMasterKey throws when previous is set but short", () => {
@@ -80,7 +81,11 @@ describe("masterKey", () => {
     process.env[PREVIOUS_KEY_ENV] = PREV;
     const keys = getDecryptMasterKeys();
     expect(keys).toHaveLength(2);
-    expect(keys[0]!.equals(getCurrentMasterKey())).toBe(true);
-    expect(keys[1]!.equals(getPreviousMasterKey()!)).toBe(true);
+    const [first, second] = keys;
+    if (!first || !second) throw new Error("expected two keys");
+    expect(first.equals(getCurrentMasterKey())).toBe(true);
+    const previous = getPreviousMasterKey();
+    if (previous === null) throw new Error("expected a previous key");
+    expect(second.equals(previous)).toBe(true);
   });
 });

@@ -62,9 +62,10 @@ export function getPreviousMasterKey(): Buffer | null {
 
 /** Keys to try on decrypt, current first then previous (if any). */
 export function getDecryptMasterKeys(): Buffer[] {
-  const keys = [getCurrentMasterKey()];
+  const current = getCurrentMasterKey();
+  const keys = [current];
   const previous = getPreviousMasterKey();
-  if (previous && !previous.equals(keys[0]!)) {
+  if (previous && !previous.equals(current)) {
     keys.push(previous);
   }
   return keys;
