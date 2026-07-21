@@ -36,7 +36,9 @@ describe("generateOpenApiFromRpcGroups", () => {
     const requestBody = op?.requestBody as {
       content: Record<string, { schema: { properties?: Record<string, unknown> } }>;
     };
-    const schema = requestBody.content["application/json"]!.schema;
+    const schema = (requestBody.content["application/json"] as {
+      schema: { properties?: Record<string, unknown> };
+    }).schema;
     // WorkItemListRpc payload has workspaceId + optional projectId/kind
     expect(schema.properties).toHaveProperty("workspaceId");
   });
@@ -44,7 +46,7 @@ describe("generateOpenApiFromRpcGroups", () => {
   it("emits a 200 response with the success schema", () => {
     const doc = generateOpenApiFromRpcGroups([WorkItemsRpc], config);
     const op = doc.paths?.[tagToRestPath("workItem.list")]?.post;
-    expect(op?.responses?.["200"]).toBeDefined();
+    expect(op?.responses["200"]).toBeDefined();
   });
 
   it("declares cookie + bearer security schemes", () => {

@@ -119,14 +119,10 @@ export function generateApiDocument(
         description: "RPC-style REST adapters for work item procedures",
       },
     ],
-  } as OpenAPIV3_1.Document;
+  };
 }
 
 export function getOpenApiSpec(config?: Partial<OpenApiConfig>): string {
-  if (!integrations.openapi) {
-    return JSON.stringify({ error: "OpenAPI not enabled" });
-  }
-
   return JSON.stringify(generateApiDocument(config), null, 2);
 }
 
