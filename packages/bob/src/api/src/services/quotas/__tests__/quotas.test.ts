@@ -9,9 +9,11 @@ import {
   isTenantPlan,
   planMeetsMinimum,
   quotasForPlan,
-  type PlanQuotas,
-  type QuotaMetric,
-  type TenantPlan,
+} from "@bob/tenancy/plan-limits";
+import type {
+  PlanQuotas,
+  QuotaMetric,
+  TenantPlan,
 } from "@bob/tenancy/plan-limits";
 
 import {
@@ -30,7 +32,7 @@ interface TenantUsage {
 }
 
 function makeSnapshot(
-  overrides: Partial<TenantUsage> & {
+  overrides: Omit<Partial<TenantUsage>, "usage" | "limits"> & {
     usage?: Partial<TenantUsage["usage"]>;
     limits?: Partial<TenantUsage["limits"]>;
   } = {},

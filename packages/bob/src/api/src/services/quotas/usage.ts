@@ -37,7 +37,6 @@ import type {
 } from "@bob/tenancy/plan-limits";
 import {
   DEFAULT_PLAN,
-  QUOTA_METRICS,
   isTenantPlan,
   quotasForPlan,
 } from "@bob/tenancy/plan-limits";
@@ -277,11 +276,6 @@ export async function measureTenantUsage(
     apiKeys: apiKeysCount,
     webhookVolume,
   };
-
-  // Ensure every metric key is present even if a future metric is added.
-  for (const metric of QUOTA_METRICS) {
-    if (usage[metric] === undefined) usage[metric] = 0;
-  }
 
   return {
     tenantId,

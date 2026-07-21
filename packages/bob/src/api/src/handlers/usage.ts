@@ -9,9 +9,8 @@ import {
   QUOTA_METRICS,
   formatQuotaValue,
   quotasForPlan,
-  type QuotaMetric,
-  type TenantPlan,
 } from "@bob/tenancy/plan-limits";
+import type { QuotaMetric, TenantPlan } from "@bob/tenancy/plan-limits";
 
 import {
   isQuotaEnforcementEnabled,

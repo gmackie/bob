@@ -16,8 +16,8 @@ import {
 import {
   measureTenantUsage,
   resolveUserTenantId,
-  type TenantUsage,
 } from "./usage.js";
+import type { TenantUsage } from "./usage.js";
 
 export {
   QuotaExceededError,
