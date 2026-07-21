@@ -8,6 +8,12 @@ Type=simple
 User=mackieg
 Group=users
 WorkingDirectory=/opt/ooda-runner/apps/ooda-runner
+# Create the writable runtime dirs BEFORE the sandbox applies. The '+' runs
+# this unsandboxed (ProtectSystem doesn't apply), so it can create + own the
+# dirs under /home; without it, ProtectSystem=strict leaves ~/.bob-runner's
+# read-only parent and the first supervised spawn crash-loops on EROFS (the
+# '-' ReadWritePaths prefix only tolerates absence, it does not create them).
+ExecStartPre=+/bin/sh -c 'mkdir -p /home/mackieg/.bob-runner /home/mackieg/.bob && chown mackieg:users /home/mackieg/.bob-runner /home/mackieg/.bob'
 ExecStart=/opt/ooda-runner/apps/ooda-runner/node_modules/.bin/tsx src/index.ts
 Restart=always
 RestartSec=5
@@ -15,16 +21,41 @@ Environment=NODE_ENV=production
 EnvironmentFile=/opt/ooda-runner/.env
 Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
+# Supervised runs must SURVIVE `systemctl restart` (blocked runs outlive
+# deploys — that is the whole point of the supervisor). The default
+# KillMode=control-group SIGTERMs every process in the unit's cgroup on
+# stop/restart, and `detached: true` in spawnSupervised only escapes the
+# process group, NOT the cgroup — so the wrapper + agent would die on every
+# deploy. KillMode=process signals only the main runner; the detached
+# wrappers keep running and the next runner re-adopts them.
+#
+# NOTE: a surviving wrapper stays in this unit's cgroup, so MemoryMax below
+# still counts against it. The fully-isolated design would launch wrappers via
+# `systemd-run --scope` into their own transient scope; KillMode=process is the
+# in-unit fix that unblocks restart-survival without that plumbing.
+KillMode=process
+
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=false
 ReadWritePaths=/opt/ooda-runner
 ReadWritePaths=/opt/ooda-runner/apps/ooda-runner
 ReadWritePaths=/home/mackieg/.ooda
+# ProtectSystem=strict makes ALL of /home read-only except these paths. The
+# supervisor journal + event buffer live under ~/.bob-runner and worktrees
+# under ~/.bob; without these the runner crash-loops on the first supervised
+# spawn (EventBuffer mkdirSync -> EROFS). The leading '-' tolerates the dirs
+# not existing yet at first boot.
+ReadWritePaths=-/home/mackieg/.bob-runner
+ReadWritePaths=-/home/mackieg/.bob
 PrivateTmp=true
 
 LimitNOFILE=65536
-MemoryMax=1G
+# Cap covers the runner AND every supervised agent child sharing the cgroup
+# (KillMode=process keeps them here). 1G is too tight for concurrent Claude
+# agents; raised so a normal fleet doesn't OOM-kill the unit. Revisit if
+# wrappers move to their own scope.
+MemoryMax=6G
 
 StandardOutput=journal
 StandardError=journal

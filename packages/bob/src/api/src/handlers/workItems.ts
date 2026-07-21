@@ -5,7 +5,7 @@
  * Phase 7B-4D-beta Task 9.
  */
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, isNull, or } from "@bob/db";
+import { and, desc, eq, isNull, or, sql } from "@bob/db";
 import { inArray } from "@bob/db";
 import type { Db } from "@bob/db/client";
 import {
@@ -46,6 +46,10 @@ const ACTIVE_LINKED_SESSION_STATUSES = [
   "pending",
   "awaiting-input",
   "awaiting_input",
+  // Paused awaiting a human decision — still active (the "needs you" state).
+  "blocked",
+  // Lease expired: contact lost, process fate unknown — still active.
+  "host_unknown",
 ];
 
 /**
@@ -155,6 +159,7 @@ export async function workItemsList(
     parentId?: string | null;
     kind?: WorkItemKind;
     status?: string;
+    statuses?: string[];
     limit?: number;
   },
 ) {
@@ -170,7 +175,14 @@ export async function workItemsList(
           ? eq(workItems.parentId, input.parentId)
           : undefined,
       input.kind ? eq(workItems.kind, input.kind) : undefined,
-      input.status ? eq(workItems.status, input.status) : undefined,
+      // `statuses` (multi) takes precedence over the single `status`. A
+      // status-scoped fetch is what keeps the backlog visible in a workspace
+      // dominated by terminal/in_review items — see the schema comment.
+      input.statuses && input.statuses.length > 0
+        ? inArray(workItems.status, input.statuses)
+        : input.status
+          ? eq(workItems.status, input.status)
+          : undefined,
     ),
     orderBy: [workItems.queueSortOrder, desc(workItems.updatedAt)],
     limit: input.limit,
@@ -228,6 +240,36 @@ export async function workItemsList(
         : null,
     };
   });
+}
+
+/**
+ * Per-status work-item counts for a workspace. A cheap GROUP BY that returns
+ * the FULL totals (e.g. { in_review: 329, backlog: 25, in_progress: 8, ... })
+ * regardless of the list cap, so lane cards and sidebar badges can display
+ * accurate numbers instead of counting a recency-truncated page of rows.
+ */
+export async function workItemStatusCounts(
+  ctx: HandlerContext,
+  input: { workspaceId: string; kind?: WorkItemKind },
+): Promise<Record<string, number>> {
+  await assertWorkspaceAccess(ctx.db, ctx.userId, input.workspaceId);
+
+  const rows = await ctx.db
+    .select({ status: workItems.status, count: sql<number>`count(*)::int` })
+    .from(workItems)
+    .where(
+      and(
+        eq(workItems.workspaceId, input.workspaceId),
+        input.kind ? eq(workItems.kind, input.kind) : undefined,
+      ),
+    )
+    .groupBy(workItems.status);
+
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    if (row.status) counts[row.status] = Number(row.count);
+  }
+  return counts;
 }
 
 export async function workItemsGet(

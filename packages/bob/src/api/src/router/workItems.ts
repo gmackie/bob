@@ -11,6 +11,7 @@ import {
   listCurrentArtifactsInputSchema,
   listNotificationsInputSchema,
   listWorkItemsInputSchema,
+  workItemStatusCountsInputSchema,
   markNotificationAsReadInputSchema,
   promoteToTaskInputSchema,
   updateWorkItemInputSchema,
@@ -22,6 +23,7 @@ import {
 } from "../trpc";
 import {
   workItemsList,
+  workItemStatusCounts,
   workItemsGet,
   workItemsUpdate,
   workItemsReorderQueue,
@@ -160,6 +162,11 @@ const buildMarkNotificationAsReadProcedure = <
   );
 
 const listWorkItemsProcedure = buildListWorkItemsProcedure(protectedProcedure);
+const statusCountsProcedure = protectedProcedure
+  .input(workItemStatusCountsInputSchema)
+  .query(({ ctx, input }) =>
+    workItemStatusCounts({ db: ctx.db, userId: ctx.session.user.id }, input),
+  );
 const getWorkItemProcedure = buildGetWorkItemProcedure(protectedProcedure);
 const updateWorkItemProcedure = buildUpdateWorkItemProcedure(protectedProcedure);
 const listCommentsProcedure = buildListCommentsProcedure(protectedProcedure);
@@ -207,6 +214,7 @@ const publicMarkNotificationAsReadProcedure =
 
 export const workItemRouter = {
   list: listWorkItemsProcedure,
+  statusCounts: statusCountsProcedure,
   get: getWorkItemProcedure,
   promoteToTask: promoteToTaskProcedure,
   dispatch: protectedProcedure
@@ -256,6 +264,44 @@ export const notificationRouter = {
         input,
       ),
     ),
+
+  // Pull backstop for the push-first trust model: the outbox ledger is the
+  // source of truth for run-state transitions, so a push dropped by APNs/FCM
+  // is still visible here on next app open (the badge counts these rows).
+  unseenTransitions: protectedProcedure.query(async ({ ctx }) => {
+    const rows = await ctx.db.query.notificationOutbox.findMany({
+      where: (outbox, { and, eq, isNull }) =>
+        and(eq(outbox.userId, ctx.session.user.id), isNull(outbox.seenAt)),
+      orderBy: (outbox, { desc }) => [desc(outbox.createdAt)],
+      limit: 50,
+      columns: {
+        id: true,
+        sessionId: true,
+        transition: true,
+        payload: true,
+        createdAt: true,
+      },
+    });
+    return { count: rows.length, rows };
+  }),
+
+  markTransitionsSeen: protectedProcedure
+    .input(z.object({ ids: z.array(z.string().uuid()).min(1).max(100) }))
+    .mutation(async ({ ctx, input }) => {
+      const { notificationOutbox } = await import("@bob/db/schema");
+      const { and, eq, inArray, isNull, sql } = await import("@bob/db");
+      await ctx.db
+        .update(notificationOutbox)
+        .set({ seenAt: sql`now()` })
+        .where(
+          and(
+            eq(notificationOutbox.userId, ctx.session.user.id),
+            inArray(notificationOutbox.id, input.ids),
+            isNull(notificationOutbox.seenAt),
+          ),
+        );
+      return { ok: true };
+    }),
 };
 
 export const taskRunRouter = {

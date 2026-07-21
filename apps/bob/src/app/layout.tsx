@@ -14,7 +14,7 @@ import "~/app/styles.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL(
-    process.env.FRONTEND_URL ?? "https://blder.bot",
+    process.env.FRONTEND_URL ?? "https://bob.blder.bot",
   ),
   title: "blder.bot - AI Agent Manager",
   description: "Manage AI agents, plan work, and ship code with blder.bot",
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "blder.bot - AI Agent Manager",
     description: "Manage AI agents, plan work, and ship code with blder.bot",
-    url: "https://blder.bot",
+    url: "https://bob.blder.bot",
     siteName: "blder.bot",
   },
 };

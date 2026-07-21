@@ -32,6 +32,14 @@ export interface BuildCommandOptions {
   model?: string;
   /** Persona-restricted tool allowlist passed to the agent CLI. */
   allowedTools?: string[];
+  /**
+   * "prompt" (default): the agent runs WITHOUT blanket permission bypass;
+   * tool calls outside the allowlist surface as permission_request events
+   * that a human resolves via AdapterProcessHandle.respondPermission.
+   * "skip": legacy full-autonomy behavior (--dangerously-skip-permissions);
+   * selected by personas with autonomyLevel "full".
+   */
+  permissionMode?: "prompt" | "skip";
 }
 
 export interface AdapterEvent {
@@ -45,7 +53,10 @@ export interface AdapterEvent {
     // that don't recognize them simply ignore them — they are additive.
     | "thought"
     | "tool_call"
-    | "tool_result";
+    | "tool_result"
+    // The agent is paused waiting for a human permission decision
+    // (permissionMode "prompt"). Resolved via handle.respondPermission.
+    | "permission_request";
   /** Text for stdout/stderr/thought; a short JSON-ish summary otherwise. */
   data: string;
   timestamp: string;
@@ -60,6 +71,12 @@ export interface AdapterEvent {
   };
   /** Structured payload for `thought` events. */
   thought?: { text: string };
+  /** Structured payload for `permission_request` events. */
+  permission?: {
+    requestId: string;
+    toolName?: string;
+    input?: unknown;
+  };
 }
 
 /**
@@ -73,11 +90,52 @@ export interface AdapterProcessHandle {
   write(text: string): boolean;
   /** Terminate the agent (SIGTERM, escalating to SIGKILL after a grace period). */
   kill(): void;
+  /**
+   * Resolve a pending permission_request. Idempotent per requestId — the
+   * second call for the same id returns false. False also when the adapter
+   * doesn't support permission prompts or the request is unknown.
+   */
+  respondPermission?(
+    requestId: string,
+    behavior: "allow" | "deny",
+    message?: string,
+  ): boolean;
+}
+
+/**
+ * Minimal ChildProcess-shaped surface adapters actually use. Lets the runner
+ * inject a supervised spawn (a detached wrapper process reached over a unix
+ * socket) without adapters knowing the difference.
+ */
+export interface SpawnedProcessLike {
+  stdin: {
+    write(data: string): boolean;
+    end(): void;
+    destroyed: boolean;
+    on(event: "error", cb: (err: Error) => void): void;
+  } | null;
+  stdout: { on(event: "data", cb: (data: Buffer) => void): void } | null;
+  stderr: { on(event: "data", cb: (data: Buffer) => void): void } | null;
+  on(event: "error", cb: (err: Error) => void): void;
+  on(event: "close", cb: (exitCode: number | null) => void): void;
+  kill(signal?: string): void;
+  exitCode: number | null;
+  signalCode: string | null;
 }
 
 export interface ExecuteOptions {
   /** Called once the agent process is live, with its control handle. */
   onSpawn?: (handle: AdapterProcessHandle) => void;
+  /**
+   * Spawn injection: when set, adapters create the agent process through
+   * this instead of child_process.spawn — the runner uses it to run agents
+   * under a detached supervisor wrapper that survives runner restarts.
+   */
+  spawnImpl?: (
+    binary: string,
+    args: string[],
+    opts: { cwd: string; env: Record<string, string | undefined> },
+  ) => SpawnedProcessLike;
 }
 
 export interface AgentAdapter {

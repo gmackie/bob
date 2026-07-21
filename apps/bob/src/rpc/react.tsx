@@ -33,6 +33,14 @@ export function BobRpcProvider(props: {
       headers: {
         "x-rpc-source": "bob-react",
       },
+      // Effect's FetchHttpClient issues fetch() with no `credentials`, so the
+      // better-auth session cookie never reached /api/rpc and every Effect-RPC
+      // call failed auth with UnauthorizedError("No credentials"). That silently
+      // emptied every Effect-RPC-backed panel (Running Now, provider capacity
+      // cards) while the tRPC-backed panels worked. Force credentials on the
+      // wire so the cookie is always sent.
+      fetch: ((input: RequestInfo | URL, init?: RequestInit) =>
+        fetch(input, { ...init, credentials: "include" })) as typeof fetch,
       ...props.options,
     }),
   );

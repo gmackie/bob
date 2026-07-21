@@ -5,6 +5,7 @@ import { makeInvoke, type RpcMethod } from "./internal/invoke.js";
 
 export interface WorkItemsClient {
   readonly list: RpcMethod;
+  readonly statusCounts: RpcMethod;
   readonly get: RpcMethod;
   readonly update: RpcMethod;
   readonly promoteToTask: RpcMethod;
@@ -58,6 +59,7 @@ export const makeWorkItemsClient = (
 
   return {
     list: (input) => invoke("workItem.list", input),
+    statusCounts: (input) => invoke("workItem.statusCounts", input),
     get: (input) => invoke("workItem.get", input),
     update: (input) => invoke("workItem.update", input),
     promoteToTask: (input) => invoke("workItem.promoteToTask", input),

@@ -477,6 +477,24 @@ export async function completeTask(
   });
 }
 
+/**
+ * UNUSED — and it is NOT the safety net it looks like. Nothing in production
+ * calls this: no cron, no gateway sweep, no handler. `requestInput` writes
+ * `awaitingInputExpiresAt`, but no code ever acts on an elapsed one, so a
+ * session that reached `awaiting_input` would wait forever with its
+ * `awaitingInputDefault` never applied.
+ *
+ * In practice nothing reaches that state at all — every conversation in
+ * production sits at workflowStatus "started"; the value has never been
+ * anything else, and no client calls `session.requestInput`.
+ *
+ * The LIVE human-wait is a different axis entirely: `chatConversations.status`
+ * = "blocked" (the permission-mode tool gate), expired by the gateway's
+ * sweepAbandonedApprovals. Do not read this function, the
+ * `[workflowStatus, awaitingInputExpiresAt]` index, or its tests as covering
+ * that path — they never have. Wire this up or delete it; leaving it looking
+ * load-bearing is how the blocked path went two days without a TTL.
+ */
 export async function findExpiredAwaitingInputSessions(): Promise<
   {
     id: string;

@@ -1,0 +1,19 @@
+appId: com.gmacko.bob.dev
+tags:
+  - live
+  - mission-control
+---
+# Requires BOB_E2E_SESSION_ID for a real running session owned by the test user.
+- launchApp
+- openLink: bob-dev://sessions/${BOB_E2E_SESSION_ID}
+- extendedWaitUntil:
+    visible: "Stop"
+    timeout: 30000
+- assertVisible: "Stop"
+- assertVisible:
+    text: ".*(Running|Awaiting Input|Working).*"
+- tapOn: "Stop"
+- extendedWaitUntil:
+    visible: ".*(Stopped|Completed|Interrupted).*"
+    timeout: 30000
+- takeScreenshot: screenshots/07-live-agent-control

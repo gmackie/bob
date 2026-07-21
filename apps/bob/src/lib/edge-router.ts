@@ -1,5 +1,5 @@
 /**
- * Edge-compatible tRPC router for blder.bot on Cloudflare Workers.
+ * Edge-compatible tRPC router for bob.blder.bot on Cloudflare Workers.
  *
  * Excludes routers that depend on Node.js-only APIs:
  * - capture (child_process, fs)

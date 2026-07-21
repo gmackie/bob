@@ -1,0 +1,15 @@
+.git
+node_modules
+.pnpm-store
+.turbo
+.expo
+dist
+
+# The Bob mobile build needs workspace packages but not sibling applications.
+apps/*
+!apps/mobile-bob
+!apps/mobile-bob/**
+docs
+screenshots
+test
+*.log
