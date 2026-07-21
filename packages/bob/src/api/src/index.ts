@@ -24,4 +24,17 @@ export {
   workItemsRestOperations,
 } from "./contracts/work-items-rest";
 export { createTRPCContext } from "./trpc";
+export {
+  checkRateLimit,
+  getRateLimitPolicy,
+  rateLimitKeyForRequest,
+  rateLimitResponse,
+  setRateLimitHeaders,
+} from "./rate-limit";
+export type {
+  RateLimitOptions,
+  RateLimitPolicy,
+  RateLimitProfile,
+  RateLimitResult,
+} from "./rate-limit";
 export type { RouterInputs, RouterOutputs };

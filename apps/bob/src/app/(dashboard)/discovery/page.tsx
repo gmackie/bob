@@ -75,21 +75,33 @@ export default function DiscoveryPage() {
 
   // Forge register handler
   async function handleForgeRegister(path: string) {
+    if (!currentWorkspace) {
+      toast("Select a workspace first");
+      return;
+    }
     setRegisteringPaths((prev) => new Set(prev).add(path));
     try {
       const res = await fetch("/api/v1/forge/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path }),
+        body: JSON.stringify({ workspaceId: currentWorkspace.id, path }),
       });
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        status?: "registered" | "already_registered";
+        project?: { name?: string };
+      };
       if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(body.error ?? `Registration failed (${res.status})`);
       }
-      toast("Registered with ForgeGraph");
+      toast(
+        body.status === "already_registered"
+          ? `${body.project?.name ?? "Repository"} is already registered`
+          : `Registered ${body.project?.name ?? "repository"} with ForgeGraph`,
+      );
       void queryClient.invalidateQueries({
         queryKey: trpc.project.discovery.queryKey({
-          workspaceId: currentWorkspace?.id ?? "",
+          workspaceId: currentWorkspace.id,
         }),
       });
     } catch (err: any) {
@@ -146,18 +158,53 @@ export default function DiscoveryPage() {
         )}
       </div>
 
-      {/* Forge unavailable banner */}
+      {/* Forge unavailable — customer-facing recovery state */}
       {discovery && !discovery.forgeAvailable && !forgeBannerDismissed && (
-        <div className="mt-6 flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-          <p className="text-sm text-amber-300">
-            ForgeGraph CLI not detected on daemon. Some features unavailable.
-          </p>
-          <button
-            onClick={() => setForgeBannerDismissed(true)}
-            className="ml-4 text-xs text-amber-400 hover:text-amber-200 transition-colors"
-          >
-            Dismiss
-          </button>
+        <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-amber-200">
+                ForgeGraph CLI not detected on the daemon
+              </p>
+              <p className="mt-1 text-xs text-amber-300/90">
+                Repository registration and build/deploy tracking stay disabled
+                until the daemon reports ForgeGraph as available. To recover:
+              </p>
+              <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-amber-300/90">
+                <li>
+                  Install the ForgeGraph CLI on the daemon machine
+                  (<code className="font-mono">forge --version</code> to verify).
+                </li>
+                <li>
+                  Restart the Bob daemon so it re-runs discovery and heartbeats
+                  <code className="ml-1 font-mono">forgeAvailable</code>.
+                </li>
+                <li>Recheck below — this refreshes automatically every 30s.</li>
+              </ol>
+            </div>
+            <button
+              onClick={() => setForgeBannerDismissed(true)}
+              className="shrink-0 text-xs text-amber-400 transition-colors hover:text-amber-200"
+            >
+              Dismiss
+            </button>
+          </div>
+          <div className="mt-3">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={discoveryLoading}
+              onClick={() =>
+                void queryClient.invalidateQueries({
+                  queryKey: trpc.project.discovery.queryKey({
+                    workspaceId: currentWorkspace?.id ?? "",
+                  }),
+                })
+              }
+            >
+              {discoveryLoading ? "Rechecking…" : "Recheck"}
+            </Button>
+          </div>
         </div>
       )}
 

@@ -405,6 +405,12 @@ export const markNotificationAsReadInputSchema = z.object({
   id: z.string().uuid(),
 });
 
+export const markAllNotificationsAsReadInputSchema = z.object({});
+
+export const markAllNotificationsAsReadOutputSchema = z.object({
+  count: z.number().int().nonnegative(),
+});
+
 export const listWorkItemsOutputSchema = z.array(workItemRecordSchema);
 
 export const getWorkItemOutputSchema = z
@@ -478,6 +484,12 @@ export type MarkNotificationAsReadInput = z.infer<
 >;
 export type MarkNotificationAsReadResult = z.infer<
   typeof markNotificationAsReadOutputSchema
+>;
+export type MarkAllNotificationsAsReadInput = z.infer<
+  typeof markAllNotificationsAsReadInputSchema
+>;
+export type MarkAllNotificationsAsReadResult = z.infer<
+  typeof markAllNotificationsAsReadOutputSchema
 >;
 
 // =============================================================================

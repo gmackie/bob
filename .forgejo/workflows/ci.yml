@@ -100,7 +100,7 @@ jobs:
         # PGlite-backed postgres doesn't support LISTEN/NOTIFY. @bob/db and
         # @bob/api set DATABASE_URL themselves via their own vitest.config.ts
         # `test.env`, scoping it to only the packages that need it.
-        run: pnpm test
+        run: pnpm exec turbo run test --concurrency=1 -- --no-file-parallelism
 
       - name: Report CI result to ForgeGraph
         if: always()

@@ -1,6 +1,11 @@
 import type { NextRequest } from "next/server";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { getHTTPStatusCodeFromError } from "@trpc/server/http";
+import {
+  checkRateLimit,
+  rateLimitResponse,
+  setRateLimitHeaders,
+} from "@bob/api/rate-limit";
 
 import { createTRPCContext } from "@bob/api";
 
@@ -21,6 +26,13 @@ export const OPTIONS = () => {
 };
 
 const handler = async (req: NextRequest) => {
+  const rateLimit = checkRateLimit(req, { profile: "authenticated" });
+  if (rateLimit?.limited) {
+    const response = rateLimitResponse(rateLimit);
+    setCorsHeaders(response);
+    return response;
+  }
+
   const response = await fetchRequestHandler({
     endpoint: "/api/trpc",
     router: edgeRouter,
@@ -41,8 +53,14 @@ const handler = async (req: NextRequest) => {
   });
 
   setCorsHeaders(response);
-  return response;
+  return setRateLimitHeaders(response, rateLimit);
 };
 
-export const GET = (req: NextRequest, ctx: { params: Promise<{ trpc: string }> }) => handler(req);
-export const POST = (req: NextRequest, ctx: { params: Promise<{ trpc: string }> }) => handler(req);
+export const GET = (
+  req: NextRequest,
+  ctx: { params: Promise<{ trpc: string }> },
+) => handler(req);
+export const POST = (
+  req: NextRequest,
+  ctx: { params: Promise<{ trpc: string }> },
+) => handler(req);
