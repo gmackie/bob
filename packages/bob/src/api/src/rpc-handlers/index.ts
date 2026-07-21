@@ -17,7 +17,6 @@ export { makeLinkRpcHandlers } from "./link.js";
 export { makePlanRpcHandlers } from "./plan.js";
 export { makePlanningRpcHandlers } from "./planning.js";
 export { makePlanSessionRpcHandlers } from "./planSession.js";
-export { makePostRpcHandlers } from "./post.js";
 export { makeProjectRpcHandlers } from "./project.js";
 export { makePublicApiRpcHandlers } from "./publicApi.js";
 export { makePullRequestRpcHandlers } from "./pullRequest.js";

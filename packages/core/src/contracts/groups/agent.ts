@@ -72,7 +72,6 @@ import {
   FileSearchResultSchema,
 } from "../schemas/agent-filesystem.js";
 import { ChatAttachmentSchema } from "../schemas/agent-chat.js";
-import { PostSchema } from "../schemas/agent-post.js";
 import {
   AgentPersonaSchema,
   PersonaSourceEnum,
@@ -1049,41 +1048,6 @@ export const AgentChatGetAttachmentsRpc = Rpc.make(
   },
 );
 
-// ---------------------------------------------------------------------------
-// agent.post.* — 4 RPCs (7B-4B Task 4)
-// ---------------------------------------------------------------------------
-
-// --- agent.post.all --------------------------------------------------------
-
-export const AgentPostAllRpc = Rpc.make("agent.post.all", {
-  payload: Schema.Void,
-  success: Schema.Array(PostSchema),
-});
-
-// --- agent.post.byId -------------------------------------------------------
-
-export const AgentPostByIdRpc = Rpc.make("agent.post.byId", {
-  payload: Schema.Struct({ id: Schema.String }),
-  success: Schema.NullOr(PostSchema),
-});
-
-// --- agent.post.create -----------------------------------------------------
-
-export const AgentPostCreateRpc = Rpc.make("agent.post.create", {
-  payload: Schema.Struct({
-    title: Schema.String,
-    content: Schema.String,
-  }),
-  success: PostSchema,
-});
-
-// --- agent.post.delete -----------------------------------------------------
-
-export const AgentPostDeleteRpc = Rpc.make("agent.post.delete", {
-  payload: Schema.Struct({ id: Schema.String }),
-  success: Schema.Struct({ success: Schema.Boolean }),
-});
-
 // --- agent.persona (6) ------------------------------------------------------
 
 export const AgentPersonaCreateRpc = Rpc.make("agent.persona.create", {
@@ -1230,11 +1194,6 @@ export const AgentRpc = RpcGroup.make(
   AgentChatGetMessagesRpc,
   AgentChatAttachImageRpc,
   AgentChatGetAttachmentsRpc,
-  // agent.post (4) — Task 4
-  AgentPostAllRpc,
-  AgentPostByIdRpc,
-  AgentPostCreateRpc,
-  AgentPostDeleteRpc,
   // agent.persona (6)
   AgentPersonaCreateRpc,
   AgentPersonaListRpc,

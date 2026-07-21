@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { TRPCError } from "@trpc/server";
 import { createTRPCContext } from "@bob/api";
+import {
+  checkRateLimit,
+  rateLimitResponse,
+  setRateLimitHeaders,
+  type RateLimitProfile,
+} from "@bob/api/rate-limit";
 import { edgeRouter } from "~/lib/edge-router";
 import { authBundle } from "~/auth/server";
 
@@ -26,10 +32,16 @@ export function errorResponse(error: unknown) {
           chain.push({
             name: cur.name,
             message: cur.message,
-            ...(("code" in cur) && { code: (cur as { code?: unknown }).code }),
-            ...(("severity" in cur) && { severity: (cur as { severity?: unknown }).severity }),
-            ...(("detail" in cur) && { detail: (cur as { detail?: unknown }).detail }),
-            ...(("constraint" in cur) && { constraint: (cur as { constraint?: unknown }).constraint }),
+            ...("code" in cur && { code: (cur as { code?: unknown }).code }),
+            ...("severity" in cur && {
+              severity: (cur as { severity?: unknown }).severity,
+            }),
+            ...("detail" in cur && {
+              detail: (cur as { detail?: unknown }).detail,
+            }),
+            ...("constraint" in cur && {
+              constraint: (cur as { constraint?: unknown }).constraint,
+            }),
             stack: cur.stack?.split("\n").slice(0, 4).join("\n"),
           });
           cur = (cur as { cause?: unknown }).cause;
@@ -48,10 +60,14 @@ export function errorResponse(error: unknown) {
   console.error("[rest-api] unhandled error", {
     message,
     name: error instanceof Error ? error.name : undefined,
-    cause: error instanceof Error && error.cause instanceof Error
-      ? { name: error.cause.name, message: error.cause.message }
-      : undefined,
-    stack: error instanceof Error ? error.stack?.split("\n").slice(0, 5).join("\n") : undefined,
+    cause:
+      error instanceof Error && error.cause instanceof Error
+        ? { name: error.cause.name, message: error.cause.message }
+        : undefined,
+    stack:
+      error instanceof Error
+        ? error.stack?.split("\n").slice(0, 5).join("\n")
+        : undefined,
   });
   return NextResponse.json({ error: message }, { status: 500 });
 }
@@ -62,4 +78,14 @@ export async function createPublicApiCaller(request: Request) {
     authBundle,
   });
   return edgeRouter.createCaller(ctx);
+}
+
+export async function withApiRateLimit(
+  request: Request,
+  handler: () => Promise<Response>,
+  profile: RateLimitProfile = "authenticated",
+) {
+  const result = checkRateLimit(request, { profile });
+  if (result?.limited) return rateLimitResponse(result);
+  return setRateLimitHeaders(await handler(), result);
 }

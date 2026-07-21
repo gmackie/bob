@@ -9,13 +9,20 @@ export const badgeVariants = cva(
     variants: {
       variant: {
         default: "bg-secondary text-secondary-foreground",
-        slate: "bg-slate-500/20 text-slate-300",
-        blue: "bg-blue-500/20 text-blue-300",
-        amber: "bg-amber-500/20 text-amber-300",
-        purple: "bg-purple-500/20 text-purple-300",
-        emerald: "bg-emerald-500/20 text-emerald-300",
-        rose: "bg-rose-500/20 text-rose-300",
-        orange: "bg-orange-500/20 text-orange-300",
+        slate:
+          "bg-slate-500/15 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300",
+        blue:
+          "bg-blue-500/15 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300",
+        amber:
+          "bg-amber-500/15 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300",
+        purple:
+          "bg-purple-500/15 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300",
+        emerald:
+          "bg-emerald-500/15 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300",
+        rose:
+          "bg-rose-500/15 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300",
+        orange:
+          "bg-orange-500/15 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300",
       },
     },
     defaultVariants: {

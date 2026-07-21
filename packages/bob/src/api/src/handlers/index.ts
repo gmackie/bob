@@ -16,7 +16,6 @@ export * from "./link.js";
 export * from "./plan.js";
 export * from "./planning.js";
 export * from "./planSession.js";
-export * from "./post.js";
 export * from "./project.js";
 export * from "./publicApi.js";
 export * from "./pullRequest.js";

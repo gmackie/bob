@@ -1,11 +1,14 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
+import Script from "next/script";
 
 import { cn } from "@gmacko/core/ui";
+import { THEME_INIT_SCRIPT } from "@gmacko/core/ui/theme-init";
 import { ThemeProvider } from "@gmacko/core/ui/theme";
 import { ThemeToggle } from "@gmacko/core/ui/theme-toggle";
 import { Toaster } from "@gmacko/core/ui/toast";
 
+import { ThemePreferencesSync } from "~/components/theme/theme-preferences-sync";
 import { TRPCReactProvider } from "~/trpc/react";
 import { BobRpcProvider } from "~/rpc/react";
 import { Providers } from "./providers";
@@ -70,6 +73,13 @@ const jetBrainsMono = localFont({
 export default function RootLayout(props: { children: React.ReactNode; params: Promise<any> }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <Script
+          id="theme-init"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }}
+        />
+      </head>
       <body
         className={cn(
           "bg-background text-foreground min-h-screen font-sans antialiased",
@@ -87,6 +97,7 @@ export default function RootLayout(props: { children: React.ReactNode; params: P
           </a>
           <TRPCReactProvider>
             <BobRpcProvider>
+              <ThemePreferencesSync />
               <Providers>{props.children}</Providers>
             </BobRpcProvider>
           </TRPCReactProvider>

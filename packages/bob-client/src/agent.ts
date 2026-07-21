@@ -76,12 +76,6 @@ export interface AgentClient extends Record<string, unknown> {
     readonly gitStatus: RpcMethod;
   };
   readonly chat: Record<string, RpcMethod>;
-  readonly post: {
-    readonly all: () => Promise<unknown>;
-    readonly byId: RpcMethod;
-    readonly create: RpcMethod;
-    readonly delete: RpcMethod;
-  };
   readonly persona: {
     readonly create: RpcMethod;
     readonly list: RpcMethod;
@@ -218,12 +212,6 @@ export const makeAgentClient = (runtime: ClientRuntime): AgentClient => {
       attachImage: (input) => invoke("agent.chat.attachImage", input),
       getAttachments: (input) =>
         invoke("agent.chat.getAttachments", input),
-    },
-    post: {
-      all: () => invoke("agent.post.all"),
-      byId: (input) => invoke("agent.post.byId", input),
-      create: (input) => invoke("agent.post.create", input),
-      delete: (input) => invoke("agent.post.delete", input),
     },
     persona: {
       create: (input) => invoke("agent.persona.create", input),
