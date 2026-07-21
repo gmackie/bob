@@ -708,6 +708,20 @@ export async function workItemsCreateArtifact(
     return duplicateArtifact;
   }
 
+  const storageDelta =
+    (input.content?.length ?? 0) + (input.summary?.length ?? 0);
+  if (storageDelta > 0) {
+    const { assertWithinQuotaOrThrow } = await import(
+      "../services/quotas/index.js"
+    );
+    await assertWithinQuotaOrThrow({
+      db: ctx.db,
+      userId: ctx.userId,
+      metric: "storageBytes",
+      delta: storageDelta,
+    });
+  }
+
   const currentArtifactsForRole = existingArtifacts.filter(
     (artifact) =>
       artifact.artifactRole === input.artifactRole && artifact.isCurrent,
@@ -943,6 +957,18 @@ export async function workItemsTaskRunExecute(
     input.workItemId,
   );
 
+  const { assertWithinQuotaOrThrow } = await import("../services/quotas/index.js");
+  await assertWithinQuotaOrThrow({
+    db: ctx.db,
+    userId: ctx.userId,
+    metric: "taskRuns",
+  });
+  await assertWithinQuotaOrThrow({
+    db: ctx.db,
+    userId: ctx.userId,
+    metric: "activeAgents",
+  });
+
   const project = workItem.projectId
     ? await ctx.db.query.projects.findFirst({
         where: eq(projects.id, workItem.projectId),
@@ -989,6 +1015,18 @@ export async function workItemsDispatch(
     ctx.userId,
     input.workItemId,
   );
+
+  const { assertWithinQuotaOrThrow } = await import("../services/quotas/index.js");
+  await assertWithinQuotaOrThrow({
+    db: ctx.db,
+    userId: ctx.userId,
+    metric: "taskRuns",
+  });
+  await assertWithinQuotaOrThrow({
+    db: ctx.db,
+    userId: ctx.userId,
+    metric: "activeAgents",
+  });
 
   const project = workItem.projectId
     ? await ctx.db.query.projects.findFirst({

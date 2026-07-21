@@ -171,6 +171,13 @@ export async function settingsCreateApiKey(
     expiresInDays?: number;
   },
 ) {
+  const { assertWithinQuotaOrThrow } = await import("../services/quotas/index.js");
+  await assertWithinQuotaOrThrow({
+    db: ctx.db,
+    userId: ctx.userId,
+    metric: "apiKeys",
+  });
+
   const key = generateApiKey();
   const keyHash = hashApiKey(key);
   const keyPrefix = getKeyPrefix(key);

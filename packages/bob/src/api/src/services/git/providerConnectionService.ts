@@ -9,7 +9,9 @@ import {
   decryptToken,
   encryptToken,
   isEncryptionConfigured,
+  requireEncryptionConfigured,
 } from "../crypto/tokenVault";
+import { auditSecretAccess } from "../crypto/secretAccessAudit";
 import { createGiteaClient } from "./providers/gitea";
 import { createGitHubClient } from "./providers/github";
 import { createGitLabClient } from "./providers/gitlab";
@@ -61,6 +63,12 @@ async function ensureGitHubConnectionFromOAuth(userId: string): Promise<void> {
     }
 
     if (!isEncryptionConfigured()) {
+      // Production must fail closed — never leave OAuth tokens unencrypted
+      // or silently skip connection creation. Dev/test may soft-skip so local
+      // smoke runs without vault keys still boot.
+      if (process.env.NODE_ENV === "production") {
+        requireEncryptionConfigured();
+      }
       console.error(
         "[git-provider] GIT_TOKEN_ENCRYPTION_KEY is not set or too short. " +
           "Cannot encrypt GitHub token to create provider connection.",
@@ -133,45 +141,66 @@ export async function getConnection(
 
   if (!connection) return null;
 
-  const accessToken = decryptToken(
-    {
-      ciphertext: connection.accessTokenCiphertext,
-      iv: connection.accessTokenIv,
-      tag: connection.accessTokenTag,
-    },
-    connection.id,
-  );
-
-  let refreshToken: string | null = null;
-  if (
-    connection.refreshTokenCiphertext &&
-    connection.refreshTokenIv &&
-    connection.refreshTokenTag
-  ) {
-    refreshToken = decryptToken(
+  try {
+    const accessToken = decryptToken(
       {
-        ciphertext: connection.refreshTokenCiphertext,
-        iv: connection.refreshTokenIv,
-        tag: connection.refreshTokenTag,
+        ciphertext: connection.accessTokenCiphertext,
+        iv: connection.accessTokenIv,
+        tag: connection.accessTokenTag,
       },
       connection.id,
     );
-  }
 
-  return {
-    id: connection.id,
-    userId: connection.userId,
-    provider: connection.provider as GitProvider,
-    instanceUrl: connection.instanceUrl,
-    providerAccountId: connection.providerAccountId,
-    providerUsername: connection.providerUsername,
-    scopes: connection.scopes,
-    accessToken,
-    refreshToken,
-    accessTokenExpiresAt: connection.accessTokenExpiresAt,
-    refreshTokenExpiresAt: connection.refreshTokenExpiresAt,
-    createdAt: connection.createdAt,
-  };
+    let refreshToken: string | null = null;
+    if (
+      connection.refreshTokenCiphertext &&
+      connection.refreshTokenIv &&
+      connection.refreshTokenTag
+    ) {
+      refreshToken = decryptToken(
+        {
+          ciphertext: connection.refreshTokenCiphertext,
+          iv: connection.refreshTokenIv,
+          tag: connection.refreshTokenTag,
+        },
+        connection.id,
+      );
+    }
+
+    auditSecretAccess({
+      resource: "git_token",
+      action: "decrypt",
+      userId,
+      resourceId: connection.id,
+      success: true,
+      detail: `provider=${connection.provider}`,
+    });
+
+    return {
+      id: connection.id,
+      userId: connection.userId,
+      provider: connection.provider as GitProvider,
+      instanceUrl: connection.instanceUrl,
+      providerAccountId: connection.providerAccountId,
+      providerUsername: connection.providerUsername,
+      scopes: connection.scopes,
+      accessToken,
+      refreshToken,
+      accessTokenExpiresAt: connection.accessTokenExpiresAt,
+      refreshTokenExpiresAt: connection.refreshTokenExpiresAt,
+      createdAt: connection.createdAt,
+    };
+  } catch (err) {
+    auditSecretAccess({
+      resource: "git_token",
+      action: "decrypt",
+      userId,
+      resourceId: connection.id,
+      success: false,
+      detail: err instanceof Error ? err.message : "decrypt failed",
+    });
+    throw err;
+  }
 }
 
 export async function listConnections(userId: string): Promise<

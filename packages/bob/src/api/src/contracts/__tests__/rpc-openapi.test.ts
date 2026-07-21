@@ -36,9 +36,11 @@ describe("generateOpenApiFromRpcGroups", () => {
     const requestBody = op?.requestBody as {
       content: Record<string, { schema: { properties?: Record<string, unknown> } }>;
     };
-    const schema = requestBody.content["application/json"]?.schema;
+    const schema = (requestBody.content["application/json"] as {
+      schema: { properties?: Record<string, unknown> };
+    }).schema;
     // WorkItemListRpc payload has workspaceId + optional projectId/kind
-    expect(schema?.properties).toHaveProperty("workspaceId");
+    expect(schema.properties).toHaveProperty("workspaceId");
   });
 
   it("emits a 200 response with the success schema", () => {

@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { workItemsRestOperations } from "@bob/api/contracts/work-items-rest";
-import { createPublicApiCaller, errorResponse } from "~/lib/rest/api-helpers";
+import {
+  createPublicApiCaller,
+  errorResponse,
+  withApiRateLimit,
+} from "~/lib/rest/api-helpers";
 
 const operationByName = new Map(
   workItemsRestOperations.map((operation) => [
@@ -18,13 +22,16 @@ export function createWorkItemRouteHandler(
   }
 
   return async function POST(request: Request) {
-    try {
-      const caller = (await createPublicApiCaller(request)) as any;
-      const body = await request.json();
-      const result = await caller.publicWorkItems[operation.procedureName](body);
-      return NextResponse.json(result);
-    } catch (error) {
-      return errorResponse(error);
-    }
+    return withApiRateLimit(request, async () => {
+      try {
+        const caller = (await createPublicApiCaller(request)) as any;
+        const body = await request.json();
+        const result =
+          await caller.publicWorkItems[operation.procedureName](body);
+        return NextResponse.json(result);
+      } catch (error) {
+        return errorResponse(error);
+      }
+    });
   };
 }

@@ -245,6 +245,83 @@ export async function workspaceSetDefaultAgent(
   return updated;
 }
 
+/**
+ * Add a seat (tenant member) to the caller's tenant. Enforces the plan's
+ * `seats` quota when usage limits are enabled.
+ */
+export async function tenantAddMember(
+  ctx: HandlerContext,
+  input: {
+    userId: string;
+    role?: "owner" | "admin" | "member";
+  },
+) {
+  const membership = await ctx.db.query.tenantMembers.findFirst({
+    where: eq(tenantMembers.userId, ctx.userId),
+    columns: { tenantId: true, role: true },
+  });
+  if (!membership) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "No tenant to add members to — create a workspace first",
+    });
+  }
+  if (membership.role !== "owner" && membership.role !== "admin") {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Only tenant owners and admins can add seats",
+    });
+  }
+
+  const existing = await ctx.db.query.tenantMembers.findFirst({
+    where: and(
+      eq(tenantMembers.tenantId, membership.tenantId),
+      eq(tenantMembers.userId, input.userId),
+    ),
+    columns: { id: true, role: true },
+  });
+  if (existing) {
+    return {
+      id: existing.id,
+      tenantId: membership.tenantId,
+      userId: input.userId,
+      role: existing.role,
+      alreadyMember: true as const,
+    };
+  }
+
+  const { assertWithinQuotaOrThrow } = await import("../services/quotas/index.js");
+  await assertWithinQuotaOrThrow({
+    db: ctx.db,
+    tenantId: membership.tenantId,
+    metric: "seats",
+  });
+
+  const [row] = await ctx.db
+    .insert(tenantMembers)
+    .values({
+      tenantId: membership.tenantId,
+      userId: input.userId,
+      role: input.role ?? "member",
+    })
+    .returning();
+
+  if (!row) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to add tenant member",
+    });
+  }
+
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    userId: row.userId,
+    role: row.role,
+    alreadyMember: false as const,
+  };
+}
+
 export async function workspaceDelete(
   ctx: HandlerContext,
   input: { id: string },

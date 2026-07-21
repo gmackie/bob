@@ -1,11 +1,11 @@
-import { z } from "zod/v4";
 import type { OpenAPIV3_1 } from "openapi-types";
+import { z } from "zod/v4";
 
 import { integrations } from "@bob/config";
 
-import { workItemsRestOperations } from "./contracts/work-items-rest";
-import { generateOpenApiFromRouter } from "./contracts/router-openapi";
 import type { RouterOpenApiConfig } from "./contracts/router-openapi";
+import { generateOpenApiFromRouter } from "./contracts/router-openapi";
+import { workItemsRestOperations } from "./contracts/work-items-rest";
 
 // Effect-RPC OpenAPI generation lives in a light, contracts-only module so it
 // can be imported by a standalone build script. Re-exported here for callers
@@ -32,6 +32,28 @@ const defaultConfig: OpenApiConfig = {
 function toOpenApiSchema(schema: z.ZodTypeAny): OpenAPIV3_1.SchemaObject {
   return z.toJSONSchema(schema) as OpenAPIV3_1.SchemaObject;
 }
+
+const rateLimitResponse: OpenAPIV3_1.ResponseObject = {
+  description: "Rate limit exceeded",
+  headers: {
+    "RateLimit-Limit": {
+      schema: { type: "integer" },
+      description: "Maximum requests allowed in the current window",
+    },
+    "RateLimit-Remaining": {
+      schema: { type: "integer" },
+      description: "Requests remaining in the current window",
+    },
+    "RateLimit-Reset": {
+      schema: { type: "integer" },
+      description: "Unix timestamp when the current window resets",
+    },
+    "Retry-After": {
+      schema: { type: "integer" },
+      description: "Seconds to wait before retrying",
+    },
+  },
+};
 
 export function isOpenApiEnabled(): boolean {
   return integrations.openapi;
@@ -80,6 +102,7 @@ export function generateApiDocument(
             "404": {
               description: "Resource not found",
             },
+            "429": rateLimitResponse,
           },
         },
       },
@@ -123,10 +146,6 @@ export function generateApiDocument(
 }
 
 export function getOpenApiSpec(config?: Partial<OpenApiConfig>): string {
-  if (!integrations.openapi) {
-    return JSON.stringify({ error: "OpenAPI not enabled" });
-  }
-
   return JSON.stringify(generateApiDocument(config), null, 2);
 }
 

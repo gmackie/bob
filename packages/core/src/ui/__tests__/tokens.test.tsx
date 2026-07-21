@@ -73,7 +73,7 @@ describe("@gmacko/ui token resolution", () => {
     }
   });
 
-  it("bob + dark → --primary contains the Bob light amber", () => {
+  it("bob + dark → --primary is the Bob light amber", () => {
     render(
       <ThemeProvider defaultTheme="bob" defaultMode="dark">
         <div />
@@ -81,11 +81,11 @@ describe("@gmacko/ui token resolution", () => {
     );
     const computed = getPrimary();
     if (computed) {
-      expect(computed.toLowerCase()).toContain("oklch");
+      expect(computed.toLowerCase()).toBe("#e8a33c");
     } else {
       expect(themeCss).toContain('[data-theme="bob"].dark');
       expect(themeCss).toMatch(
-        /\[data-theme="bob"\]\.dark[\s\S]*?--primary:\s*oklch\(0\.7649/,
+        /\[data-theme="bob"\]\.dark[\s\S]*?--primary:\s*#e8a33c/,
       );
     }
   });

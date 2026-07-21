@@ -295,8 +295,6 @@ export type {
 } from "./schemas/agent-filesystem";
 export { ChatAttachmentSchema } from "./schemas/agent-chat";
 export type { ChatAttachmentWire } from "./schemas/agent-chat";
-export { PostSchema } from "./schemas/agent-post";
-export type { PostWire } from "./schemas/agent-post";
 
 // --- Secrets -------------------------------------------------------------
 // Standalone RpcGroup. `secrets.decryptForUse` is the only plaintext-returning

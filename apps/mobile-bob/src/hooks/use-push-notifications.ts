@@ -86,14 +86,17 @@ async function registerForPushNotifications(): Promise<string | null> {
 
   // Get Expo push token.
   // `expoConfig.extra` is a genuinely open bag (arbitrary app.json/app.config
-  // content), so `expo/config`'s types leave it as `any` all the way down —
-  // narrow it explicitly rather than propagating the `any`.
+  // content) and the legacy `easConfig` field is untyped, so narrow both
+  // explicitly rather than propagating `any`.
   const extraEasProjectId: unknown = (
     Constants.expoConfig?.extra as { eas?: { projectId?: unknown } } | undefined
   )?.eas?.projectId;
+  const legacyEasProjectId: unknown = (
+    Constants as unknown as { easConfig?: { projectId?: unknown } }
+  ).easConfig?.projectId;
   const projectId =
     (typeof extraEasProjectId === "string" ? extraEasProjectId : undefined) ??
-    Constants.easConfig?.projectId;
+    (typeof legacyEasProjectId === "string" ? legacyEasProjectId : undefined);
   if (!projectId) {
     console.log("[push] No EAS project ID found");
     return null;

@@ -18,12 +18,8 @@ import { SecretsRpc } from "@gmacko/core/contracts/groups/secrets";
 import { AuthRpc } from "@gmacko/core/contracts/groups/auth";
 import type { OpenAPIV3_1 } from "openapi-types";
 
-import {
-  generateOpenApiFromRpcGroups
-
-
-} from "./rpc-openapi.js";
-import type {RpcGroupLike, RpcOpenApiConfig} from "./rpc-openapi.js";
+import { generateOpenApiFromRpcGroups } from "./rpc-openapi.js";
+import type { RpcGroupLike, RpcOpenApiConfig } from "./rpc-openapi.js";
 
 /**
  * The 8 exported Effect-RPC contract groups served by Bob, in the same order
