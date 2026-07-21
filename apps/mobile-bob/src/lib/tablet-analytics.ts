@@ -1,5 +1,7 @@
 import { Platform } from "react-native";
 
+import { env } from "~/config/env";
+
 /**
  * Lightweight tablet usage analytics.
  *
@@ -8,9 +10,6 @@ import { Platform } from "react-native";
  * - Does the user reach for the tablet instead of waiting for the desk?
  * - Which features get used (monitoring vs. planning vs. code inspection)?
  * - What's the session duration pattern?
- *
- * Implementation: logs to console in dev, ready for PostHog integration.
- * To enable PostHog: import posthog and replace the track() calls.
  */
 
 const isTablet = Platform.OS === "ios" && Platform.isPad;
@@ -20,9 +19,34 @@ interface AnalyticsEvent {
   properties: Record<string, string | number | boolean>;
 }
 
-// Buffer events for batch sending (PostHog integration point)
+// Buffer events for batch sending
 const buffer: AnalyticsEvent[] = [];
 let sessionStartTime: number | null = null;
+
+async function sendToPostHog(entry: AnalyticsEvent): Promise<void> {
+  const { posthogKey, posthogHost } = env.observability;
+  if (!posthogKey) return;
+
+  try {
+    await fetch(`${posthogHost}/capture/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: posthogKey,
+        event: entry.event,
+        properties: {
+          ...entry.properties,
+          $lib: "bob-mobile-tablet",
+        },
+        distinct_id: "tablet-anonymous",
+      }),
+    });
+  } catch (error) {
+    if (__DEV__) {
+      console.warn("[TabletAnalytics] PostHog capture failed", error);
+    }
+  }
+}
 
 function track(event: string, properties: Record<string, string | number | boolean> = {}) {
   if (!isTablet) return;
@@ -42,8 +66,7 @@ function track(event: string, properties: Record<string, string | number | boole
     console.log("[TabletAnalytics]", event, properties);
   }
 
-  // TODO: PostHog integration
-  // posthog.capture(event, entry.properties);
+  void sendToPostHog(entry);
 }
 
 // --- Session lifecycle ---

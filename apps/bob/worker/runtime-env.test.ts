@@ -40,6 +40,7 @@ describe("worker runtime env helpers", () => {
         dsn: "https://sentry.example/1",
         environment: "hetzner",
         tracesSampleRate: 0.1,
+        enabled: true,
       });
       expect(getHyperdriveConnectionString(undefined)).toEqual({
         connectionString: "postgres://node-hosted",

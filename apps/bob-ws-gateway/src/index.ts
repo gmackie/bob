@@ -2,6 +2,12 @@ import { createServer } from "node:http";
 import { WebSocketServer } from "ws";
 import { db } from "@bob/db/client";
 import { sessionEvents, eventLog } from "@bob/db/schema";
+import {
+  captureCriticalFailure,
+  initNodeObservability,
+  resolveObservabilityConfig,
+  shutdownNodeObservability,
+} from "@bob/observability";
 
 import { PersistenceWriter, type SessionEventRecord } from "./persistence.js";
 import { OutboxWorker } from "./outbox.js";
@@ -68,6 +74,11 @@ const PORT = parseInt(process.env.GATEWAY_PORT ?? "3003", 10);
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const NUDGE_SHARED_SECRET = process.env.NUDGE_SHARED_SECRET ?? "";
 
+const observabilityConfig = resolveObservabilityConfig({
+  serviceName: "bob-ws-gateway",
+});
+initNodeObservability(observabilityConfig);
+
 if (!NUDGE_SHARED_SECRET && process.env.BOB_ALLOW_LEGACY_NUDGE_SECRET !== "false" && process.env.NODE_ENV !== "test") {
   console.error(
     "[ws-gateway] FATAL: NUDGE_SHARED_SECRET env var is required " +
@@ -93,6 +104,16 @@ const writer = new PersistenceWriter({
   },
   onError: (err, events) => {
     console.error(`[ws-gateway] Failed to persist ${events.length} events:`, err);
+    captureCriticalFailure({
+      surface: "gateway",
+      operation: "persist_session_events",
+      error: err,
+      alertId: "gateway-persistence-failure",
+      tenant: observabilityConfig.tenantId
+        ? { tenantId: observabilityConfig.tenantId }
+        : undefined,
+      metadata: { batchSize: events.length },
+    });
   },
 });
 writer.start();
@@ -246,6 +267,7 @@ async function shutdown(signal: string) {
   server.close();
   wss.clients.forEach((ws) => ws.close());
   await writer.stop();
+  await shutdownNodeObservability();
   process.exit(0);
 }
 
