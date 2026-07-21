@@ -434,7 +434,14 @@ export async function publicApiUpdateRun(
   ctx: HandlerContext,
   input: {
     runId: string;
-    status: "running" | "completed" | "failed";
+    status:
+      | "queued"
+      | "running"
+      | "blocked"
+      | "completed"
+      | "failed"
+      | "interrupted"
+      | "host_unknown";
     summary?: Record<string, unknown>;
   },
 ) {
@@ -456,7 +463,14 @@ export async function publicApiUpdateRun(
   const updates: Record<string, unknown> = { status: input.status };
 
   if (input.status === "running") updates.startedAt = now;
-  if (input.status === "completed" || input.status === "failed")
+  // Terminal outcomes stamp completedAt. "interrupted" is terminal;
+  // "blocked" and "host_unknown" are NOT (the run is paused / contact lost,
+  // not finished), so they leave completedAt untouched.
+  if (
+    input.status === "completed" ||
+    input.status === "failed" ||
+    input.status === "interrupted"
+  )
     updates.completedAt = now;
   if (input.summary) updates.summary = input.summary;
 

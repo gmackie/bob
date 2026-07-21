@@ -47,6 +47,7 @@ describe("workspace events model", () => {
 
   it("invalidates shell data for all workspace realtime message types", () => {
     expect(shouldInvalidateForWorkspaceRealtimeMessage("workspace_snapshot")).toBe(true);
+    expect(shouldInvalidateForWorkspaceRealtimeMessage("host_snapshot")).toBe(true);
     expect(shouldInvalidateForWorkspaceRealtimeMessage("session_status_changed")).toBe(true);
     expect(shouldInvalidateForWorkspaceRealtimeMessage("event")).toBe(true);
     expect(shouldInvalidateForWorkspaceRealtimeMessage("session_created")).toBe(true);

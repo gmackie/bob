@@ -135,6 +135,12 @@ export const workspaceIntegrations = pgTable(
     webhookSigningSecret: t.text(),
     linearTeamId: t.text(),
     linearWebBaseUrl: t.text(),
+    /**
+     * GraphQL endpoint for this integration. NULL uses the @linear/sdk default
+     * (api.linear.app); set it to drive a Linear-API-compatible instance such
+     * as Kanbanger (https://tasks.gmac.io/graphql) instead.
+     */
+    linearApiUrl: t.text(),
     createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
     updatedAt: t
       .timestamp({ mode: "string", withTimezone: true })

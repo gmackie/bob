@@ -1,0 +1,44 @@
+appId: bot.blder.desktop
+productName: Bob
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist-electron/**/*
+  - package.json
+extraResources:
+  - from: .packaging/bob-server
+    to: bob-server
+    filter:
+      - "**/*"
+  - from: .packaging/blder
+    to: blder
+    filter:
+      - "**/*"
+  - from: .packaging/db-migrations
+    to: db-migrations
+    filter:
+      - "**/*"
+  - from: resources/bin
+    to: bin
+    filter:
+      - "**/*"
+asar: true
+mac:
+  category: public.app-category.productivity
+  target:
+    - dmg
+    - zip
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  notarize: true
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Development
+win:
+  target:
+    - nsis

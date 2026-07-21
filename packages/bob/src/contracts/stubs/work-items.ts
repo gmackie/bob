@@ -8,6 +8,7 @@ import { WorkItemsRpc } from "../groups/work-items.js";
 export const WorkItemsStubLayer = WorkItemsRpc.toLayer({
   // --- Core (Task 1) ---
   "workItem.list": () => Effect.succeed([]),
+  "workItem.statusCounts": () => Effect.succeed({}),
   "workItem.get": () => Effect.succeed(null),
   "workItem.update": () => Effect.succeed(null),
   "workItem.promoteToTask": () => Effect.succeed(null),

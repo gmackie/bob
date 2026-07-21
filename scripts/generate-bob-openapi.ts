@@ -21,7 +21,7 @@ async function main() {
     "../packages/bob/src/api/src/contracts/bob-rpc-groups.ts"
   );
 
-  const spec = generateBobRpcApiDocument({ baseUrl: "https://blder.bot" });
+  const spec = generateBobRpcApiDocument({ baseUrl: "https://bob.blder.bot" });
 
   const outDir = join(root, "packages", "bob-client", "openapi");
   mkdirSync(outDir, { recursive: true });
