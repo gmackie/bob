@@ -7,6 +7,7 @@ import {
   sessionSecretUsages,
 } from "@bob/db/schema";
 
+import { auditSecretAccess } from "../crypto/secretAccessAudit";
 import {
   decryptSessionSecretValue,
   encryptSessionSecretValue,
@@ -236,8 +237,71 @@ export class SessionSecretService {
     });
 
     if (row?.userId !== input.userId) {
+      auditSecretAccess({
+        resource: "session_secret",
+        action: "decrypt",
+        userId: input.userId,
+        resourceId: input.secretId,
+        success: false,
+        detail: "not found or not owned",
+      });
       throw new Error("Session secret not found");
     }
+
+    if (!row.valueCiphertext || !row.valueIv || !row.valueTag) {
+      auditSecretAccess({
+        resource: "session_secret",
+        action: "decrypt",
+        userId: input.userId,
+        sessionId: row.sessionId,
+        resourceId: row.id,
+        success: false,
+        detail: "missing encrypted value",
+      });
+      throw new Error("Session secret is missing its encrypted value");
+    }
+
+    let value: string;
+    try {
+      value = decryptSessionSecretValue(
+        {
+          ciphertext: row.valueCiphertext,
+          iv: row.valueIv,
+          tag: row.valueTag,
+        },
+        row.id,
+      );
+    } catch (err) {
+      auditSecretAccess({
+        resource: "session_secret",
+        action: "decrypt",
+        userId: input.userId,
+        sessionId: row.sessionId,
+        resourceId: row.id,
+        success: false,
+        detail: err instanceof Error ? err.message : "decrypt failed",
+      });
+      throw err;
+    }
+
+    // Durable audit trail — every plaintext fetch is a use event.
+    await this.db
+      .insert(sessionSecretUsages)
+      .values({
+        id: crypto.randomUUID(),
+        secretId: row.id,
+        sessionId: row.sessionId,
+        executor: "api-decrypt",
+        templateId: null,
+        commandPreview: "getSecretForExecution",
+      })
+      .returning();
+
+    await this.db
+      .update(sessionSecrets)
+      .set({ lastUsedAt: new Date().toISOString() })
+      .where(eq(sessionSecrets.id, row.id))
+      .returning();
 
     const usageCount = (
       await this.db.query.sessionSecretUsages?.findMany?.({
@@ -245,21 +309,19 @@ export class SessionSecretService {
       })
     )?.length;
 
-    if (!row.valueCiphertext || !row.valueIv || !row.valueTag) {
-      throw new Error("Session secret is missing its encrypted value");
-    }
+    auditSecretAccess({
+      resource: "session_secret",
+      action: "decrypt",
+      userId: input.userId,
+      sessionId: row.sessionId,
+      resourceId: row.id,
+      success: true,
+    });
 
     return {
       ...this.toPublicSecret(row),
       usageCount: usageCount ?? 0,
-      value: decryptSessionSecretValue(
-        {
-          ciphertext: row.valueCiphertext,
-          iv: row.valueIv,
-          tag: row.valueTag,
-        },
-        row.id,
-      ),
+      value,
     };
   }
 
@@ -278,8 +340,70 @@ export class SessionSecretService {
     });
 
     if (row?.userId !== input.userId) {
+      auditSecretAccess({
+        resource: "session_secret",
+        action: "decrypt_for_session",
+        userId: input.userId,
+        sessionId: input.sessionId,
+        success: false,
+        detail: "not found or not owned",
+      });
       throw new Error("Session secret not found");
     }
+
+    if (!row.valueCiphertext || !row.valueIv || !row.valueTag) {
+      auditSecretAccess({
+        resource: "session_secret",
+        action: "decrypt_for_session",
+        userId: input.userId,
+        sessionId: row.sessionId,
+        resourceId: row.id,
+        success: false,
+        detail: "missing encrypted value",
+      });
+      throw new Error("Session secret is missing its encrypted value");
+    }
+
+    let value: string;
+    try {
+      value = decryptSessionSecretValue(
+        {
+          ciphertext: row.valueCiphertext,
+          iv: row.valueIv,
+          tag: row.valueTag,
+        },
+        row.id,
+      );
+    } catch (err) {
+      auditSecretAccess({
+        resource: "session_secret",
+        action: "decrypt_for_session",
+        userId: input.userId,
+        sessionId: row.sessionId,
+        resourceId: row.id,
+        success: false,
+        detail: err instanceof Error ? err.message : "decrypt failed",
+      });
+      throw err;
+    }
+
+    await this.db
+      .insert(sessionSecretUsages)
+      .values({
+        id: crypto.randomUUID(),
+        secretId: row.id,
+        sessionId: row.sessionId,
+        executor: "api-decrypt",
+        templateId: null,
+        commandPreview: "getSecretForSessionExecution",
+      })
+      .returning();
+
+    await this.db
+      .update(sessionSecrets)
+      .set({ lastUsedAt: new Date().toISOString() })
+      .where(eq(sessionSecrets.id, row.id))
+      .returning();
 
     const usageCount = (
       await this.db.query.sessionSecretUsages?.findMany?.({
@@ -287,21 +411,19 @@ export class SessionSecretService {
       })
     )?.length;
 
-    if (!row.valueCiphertext || !row.valueIv || !row.valueTag) {
-      throw new Error("Session secret is missing its encrypted value");
-    }
+    auditSecretAccess({
+      resource: "session_secret",
+      action: "decrypt_for_session",
+      userId: input.userId,
+      sessionId: row.sessionId,
+      resourceId: row.id,
+      success: true,
+    });
 
     return {
       ...this.toPublicSecret(row),
       usageCount: usageCount ?? 0,
-      value: decryptSessionSecretValue(
-        {
-          ciphertext: row.valueCiphertext,
-          iv: row.valueIv,
-          tag: row.valueTag,
-        },
-        row.id,
-      ),
+      value,
     };
   }
 
