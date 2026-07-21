@@ -39,17 +39,17 @@ export const integrations = {
 export type Integrations = typeof integrations;
 
 export const isSentryEnabled = () =>
-  Boolean(
-    process.env.SENTRY_DSN?.trim() ||
-      process.env.NEXT_PUBLIC_SENTRY_DSN?.trim() ||
-      process.env.EXPO_PUBLIC_SENTRY_DSN?.trim(),
-  );
+  [
+    process.env.SENTRY_DSN,
+    process.env.NEXT_PUBLIC_SENTRY_DSN,
+    process.env.EXPO_PUBLIC_SENTRY_DSN,
+  ].some((v) => Boolean(v?.trim()));
 export const isPostHogEnabled = () =>
-  Boolean(
-    process.env.POSTHOG_KEY?.trim() ||
-      process.env.NEXT_PUBLIC_POSTHOG_KEY?.trim() ||
-      process.env.EXPO_PUBLIC_POSTHOG_KEY?.trim(),
-  );
+  [
+    process.env.POSTHOG_KEY,
+    process.env.NEXT_PUBLIC_POSTHOG_KEY,
+    process.env.EXPO_PUBLIC_POSTHOG_KEY,
+  ].some((v) => Boolean(v?.trim()));
 export const isStripeEnabled = () => integrations.stripe;
 export const isRevenueCatEnabled = () => integrations.revenuecat;
 export const isNotificationsEnabled = () => integrations.notifications;
