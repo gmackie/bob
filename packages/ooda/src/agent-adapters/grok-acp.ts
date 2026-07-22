@@ -10,7 +10,7 @@ import { isAbsolute, resolve, dirname } from "node:path";
 import type { AcpClient } from "./acp-client";
 import { dispatchBuddyTool } from "./tool-dispatcher";
 import type { ToolDescriptor } from "./tool-registry";
-import type { AdapterEvent } from "./types";
+import type { AdapterEvent, McpServerConfigLike } from "./types";
 
 function now(): string {
   return new Date().toISOString();
@@ -163,6 +163,12 @@ export async function runGrokAcpSession(opts: {
   apiKeyPresent: boolean;
   systemPrompt?: string;
   timeoutMs?: number;
+  /**
+   * MCP servers advertised on `session/new`. Grok connects OUT to these and
+   * invokes their tools mid-session — this is how buddy tools reach the
+   * agent. Defaults to none.
+   */
+  mcpServers?: readonly McpServerConfigLike[];
 }): Promise<{ exitCode: number; sessionId?: string }> {
   const { client, prompt, cwd, apiKeyPresent } = opts;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
@@ -185,7 +191,7 @@ export async function runGrokAcpSession(opts: {
 
   const session = (await request("session/new", {
     cwd,
-    mcpServers: [],
+    mcpServers: opts.mcpServers ?? [],
   })) as NewSessionResult;
   const sessionId = session?.sessionId;
 
@@ -222,15 +228,17 @@ function resolveInWorkspace(workspaceRoot: string, path: string | undefined): st
  * (`{ content, isError }`) as the response. Buddy tools are surfaced to the
  * agent as MCP tools, so a buddy-tool call arrives here under this method.
  *
- * NOTE: this is the Model Context Protocol standard method name, NOT a
- * verified-against-a-live-`grok`-binary constant. The repo's own ACP smoke
- * script (`apps/ooda-runner/scripts/grok-acp-smoke.mjs`) only ever observed
- * `fs/*` and `session/request_permission` agent->client requests — buddy
- * tools were never advertised, so Grok never emitted a tool call to observe.
- * Advertising buddy tools via `session/new`'s `mcpServers` so Grok emits
- * these calls is the remaining integration hop (see PR notes). Handling the
- * standard method here is additive and safe: unknown methods still fall
- * through to the `null` default, preserving existing fs/permission behavior.
+ * DORMANT BACKSTOP. The live buddy-tool path is now `buddy-mcp-server.ts`:
+ * Grok connects OUT to the in-process HTTP MCP server advertised via
+ * `session/new.mcpServers` and calls `tools/call` THERE, not back over ACP.
+ * This was verified live (grok 0.2.106 / grok-4.5): with an http MCP server
+ * advertised, Grok emits `_x.ai/mcp_initialized {mcpToolCount:N}` and issues
+ * MCP `tools/call` to the server — it never sends an agent->client
+ * `tools/call`. So this branch no longer fires for buddy tools. It is kept as
+ * a harmless, spec-correct backstop (an ACP agent that DID choose to call a
+ * client-exposed tool by the standard method still gets a valid result);
+ * unknown methods still fall through to the `null` default, preserving the
+ * fs/* + `session/request_permission` behavior Grok actually uses.
  */
 const MCP_TOOLS_CALL_METHOD = "tools/call";
 

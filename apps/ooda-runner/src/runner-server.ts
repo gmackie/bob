@@ -9,6 +9,7 @@ import { SessionExecutor } from "./session/session-executor";
 import { CodexAdapter } from "@gmacko/ooda/agent-adapters";
 import { ClaudeAdapter } from "@gmacko/ooda/agent-adapters";
 import { GrokAdapter } from "@gmacko/ooda/agent-adapters";
+import { BuddyMcpServer } from "@gmacko/ooda/agent-adapters";
 import type { AgentAdapter } from "@gmacko/ooda/agent-adapters";
 import { generateRunnerToken } from "./auth/auth";
 import { promoteNote } from "@gmacko/ooda/thread-workspace";
@@ -95,6 +96,7 @@ export class RunnerServer {
   private bobReporter: BobRunReporter;
   private research: ResearchTRPCSurface;
   private capabilityRegistry: CapabilityRegistry;
+  private buddyMcpServer: BuddyMcpServer;
 
   constructor(private config: RunnerConfig) {
     this.sessions = new SessionManager();
@@ -105,6 +107,11 @@ export class RunnerServer {
     // implemented tool set (see SessionExecutor.allowedToolNames).
     this.research = createResearchSurface(this.trpc);
     this.capabilityRegistry = new CapabilityRegistry();
+    // In-process HTTP MCP server: one shared loopback listener that exposes
+    // each session's gated buddy tools to the agent (Grok connects out to it
+    // via session/new.mcpServers). Started in start(); each session registers
+    // + disposes its own descriptor set (see SessionExecutor).
+    this.buddyMcpServer = new BuddyMcpServer();
 
     // Report run status + output to Bob's public API so OODA-originated work is
     // monitorable/reviewable in the Bob dashboard. No-ops unless bob* env is set.
@@ -152,6 +159,7 @@ export class RunnerServer {
       storageRoot: this.config.storageRoot,
       research: this.research,
       capabilityRegistry: this.capabilityRegistry,
+      mcpServer: this.buddyMcpServer,
     });
   }
 
@@ -162,6 +170,13 @@ export class RunnerServer {
     );
     console.log(`[runner] server URL: ${this.config.serverUrl}`);
     ensureStorageRoot(this.config.storageRoot);
+
+    // Bring up the in-process MCP server before any session can claim work,
+    // so buddy tools are advertisable on the first session/new.
+    await this.buddyMcpServer.start();
+    console.log(
+      `[runner] buddy MCP server listening on ${this.buddyMcpServer.address.host}:${this.buddyMcpServer.address.port}`,
+    );
 
     // Generate or load token
     const token = generateRunnerToken(this.config.storageRoot);
@@ -562,5 +577,6 @@ export class RunnerServer {
     if (this.bobGateway) {
       this.bobGateway.stop();
     }
+    await this.buddyMcpServer.stop();
   }
 }
