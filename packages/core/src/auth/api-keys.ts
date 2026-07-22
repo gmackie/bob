@@ -12,7 +12,7 @@
 // NOTE: not exported from the package barrel yet — Task 17 handles the public
 // API surface.
 import { and, desc, eq } from "drizzle-orm";
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { Effect, Layer, ServiceMap } from "effect";
 
 import { GmackoDb } from "@gmacko/core/db";
@@ -20,11 +20,29 @@ import {
   apiKeys as apiKeysTable,
   type ApiKeyPermission,
 } from "@gmacko/core/db/schema/api-keys";
-import { users as usersTable } from "@gmacko/core/db/schema/auth";
 import type { ApiKeyId, TenantId, UserId } from "@gmacko/core/validators";
 
 import { InvalidApiKeyError } from "./errors.js";
+import {
+  API_KEY_PREFIXES,
+  type ApiKeyRejectionReason,
+  hashApiKey,
+  isApiKeyLike,
+  validateApiKey as validateApiKeyPlain,
+} from "./validate-api-key.js";
 export { InvalidApiKeyError };
+export { API_KEY_PREFIXES };
+
+// Reason → message map. Keeps `validateKey`'s public error messages
+// byte-identical to the pre-refactor implementation (asserted by the
+// existing api-keys unit tests) while sharing the validation algorithm with
+// the plain `validateApiKey` used by OODA.
+const REJECTION_MESSAGE: Record<ApiKeyRejectionReason, string> = {
+  "not-an-api-key": "Not an API key",
+  "not-found": "API key not found",
+  revoked: "API key revoked",
+  expired: "API key expired",
+};
 
 export interface IssueKeyInput {
   readonly userId: UserId;
@@ -97,14 +115,12 @@ export const layerApiKeys = (
           : (["gmk_"] as const);
       const issuePrefix = prefixes[0]!;
 
-      const hashKey = (plaintext: string) =>
-        createHash("sha256").update(plaintext).digest("hex");
+      const hashKey = hashApiKey;
 
       const isApiKey: ApiKeysShape["isApiKey"] = ((
         value: string | null | undefined,
       ): value is string =>
-        typeof value === "string" &&
-        prefixes.some((p) => value.startsWith(p))) as ApiKeysShape["isApiKey"];
+        isApiKeyLike(value, prefixes)) as ApiKeysShape["isApiKey"];
 
       const issueKey: ApiKeysShape["issueKey"] = ({
         userId,
@@ -151,44 +167,34 @@ export const layerApiKeys = (
 
       const validateKey: ApiKeysShape["validateKey"] = (plaintext) =>
         Effect.gen(function* () {
-          if (!isApiKey(plaintext)) {
+          // Delegate the entire hash/lookup/revoked/expired algorithm to the
+          // shared plain-async validator (the SAME implementation OODA's
+          // tRPC path uses), then map its discriminated result back onto this
+          // service's tagged-error + branded-id surface.
+          const result = yield* Effect.promise(() =>
+            validateApiKeyPlain(db, plaintext, prefixes),
+          );
+          if (!result.ok) {
             return yield* Effect.fail(
-              new InvalidApiKeyError({ message: "Not an API key" }),
+              new InvalidApiKeyError({
+                message: REJECTION_MESSAGE[result.reason],
+              }),
             );
           }
-          const keyHash = hashKey(plaintext);
-          const rows = yield* Effect.promise(() =>
+          const { value } = result;
+
+          // Enrich with `tenantId`. The shared validator deliberately omits it
+          // (the live Bob `api_keys` table has no `tenant_id` column); this
+          // service targets the gmacko-core schema where it exists, so we read
+          // it here on the already-validated row.
+          const tenantRows = yield* Effect.promise(() =>
             db
-              .select({
-                keyId: apiKeysTable.id,
-                userId: apiKeysTable.userId,
-                tenantId: apiKeysTable.tenantId,
-                email: usersTable.email,
-                permissions: apiKeysTable.permissions,
-                revokedAt: apiKeysTable.revokedAt,
-                expiresAt: apiKeysTable.expiresAt,
-              })
+              .select({ tenantId: apiKeysTable.tenantId })
               .from(apiKeysTable)
-              .innerJoin(usersTable, eq(usersTable.id, apiKeysTable.userId))
-              .where(eq(apiKeysTable.keyHash, keyHash))
+              .where(eq(apiKeysTable.id, value.keyId))
               .limit(1),
           );
-          const row = rows[0];
-          if (!row) {
-            return yield* Effect.fail(
-              new InvalidApiKeyError({ message: "API key not found" }),
-            );
-          }
-          if (row.revokedAt) {
-            return yield* Effect.fail(
-              new InvalidApiKeyError({ message: "API key revoked" }),
-            );
-          }
-          if (row.expiresAt && row.expiresAt <= new Date()) {
-            return yield* Effect.fail(
-              new InvalidApiKeyError({ message: "API key expired" }),
-            );
-          }
+          const tenantId = tenantRows[0]!.tenantId;
 
           // Fire-and-forget `lastUsedAt` update. We use `forkDetach` (the
           // Effect 4 equivalent of `forkDaemon`) so the caller does not wait
@@ -198,18 +204,18 @@ export const layerApiKeys = (
             await db
               .update(apiKeysTable)
               .set({ lastUsedAt: new Date() })
-              .where(eq(apiKeysTable.id, row.keyId));
+              .where(eq(apiKeysTable.id, value.keyId));
           }).pipe(
             Effect.catchCause(() => Effect.void),
             Effect.forkDetach,
           );
 
           return {
-            keyId: row.keyId as ApiKeyId,
-            userId: row.userId as UserId,
-            tenantId: row.tenantId as TenantId,
-            email: row.email,
-            permissions: row.permissions as readonly ApiKeyPermission[],
+            keyId: value.keyId as ApiKeyId,
+            userId: value.userId as UserId,
+            tenantId: tenantId as TenantId,
+            email: value.email,
+            permissions: value.permissions,
           };
         });
 
