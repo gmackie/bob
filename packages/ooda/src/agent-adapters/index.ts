@@ -33,6 +33,12 @@ export {
 export { dispatchBuddyTool } from "./tool-dispatcher";
 
 export {
+  buildClaudeMcpConfigDocument,
+  buildClaudeMcpConfigFile,
+  buildCodexMcpConfigArgs,
+} from "./mcp-config";
+
+export {
   BuddyMcpServer,
   toMcpTool,
   toMcpToolCallResult,

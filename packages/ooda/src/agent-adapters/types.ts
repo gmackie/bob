@@ -166,14 +166,16 @@ export interface AgentAdapter {
   registerTools?(tools: ToolDescriptorLike[]): void;
 
   /**
-   * Advertise MCP servers for this adapter's upcoming ACP session. Grok
-   * connects OUT to these (via `session/new.mcpServers`) and calls their
-   * tools mid-session — the live buddy-tool seam. The session executor
-   * stands up an in-process MCP server, registers the session's gated
-   * descriptor set, and passes the resulting per-session config here.
+   * Advertise MCP servers for this adapter's upcoming session. The agent
+   * connects OUT to these and calls their tools mid-session — the live
+   * buddy-tool seam. The session executor stands up an in-process MCP server,
+   * registers the session's gated descriptor set, and passes the resulting
+   * per-session config here. Each adapter reaches the same server its own
+   * way: Grok via `session/new.mcpServers`, Claude via a `--mcp-config` file,
+   * Codex via `-c mcp_servers.*` overrides.
    *
-   * Optional: only ACP adapters that speak `session/new.mcpServers` (Grok)
-   * implement it; CLI-spawn adapters no-op.
+   * Optional: adapters that can't advertise MCP servers simply don't
+   * implement it.
    */
   registerMcpServers?(servers: McpServerConfigLike[]): void;
 }

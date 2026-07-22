@@ -1,4 +1,10 @@
 import { execSync, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { buildClaudeMcpConfigFile } from "./mcp-config";
 import type {
   AgentAdapter,
   AdapterCommand,
@@ -6,6 +12,7 @@ import type {
   AdapterProcessHandle,
   BuildCommandOptions,
   ExecuteOptions,
+  McpServerConfigLike,
   SpawnedProcessLike,
 } from "./types";
 
@@ -19,6 +26,28 @@ export class ClaudeAdapter implements AgentAdapter {
   id = "claude" as const;
   name = "Claude Code" as const;
   transport = "api" as const;
+
+  /**
+   * MCP servers advertised to claude on the next `execute`. Stashed by
+   * `registerMcpServers` (called by the session executor after it stands up
+   * the in-process buddy-tool MCP server for this session) and consumed in
+   * `buildCommand`, where they become a `--mcp-config` temp file. This is the
+   * live buddy-tool seam for the CLI path — claude connects OUT to the http
+   * MCP server and calls its tools mid-session, just as Grok does over
+   * `session/new.mcpServers`.
+   */
+  private mcpServers: readonly McpServerConfigLike[] = [];
+
+  /**
+   * Path of the temp `--mcp-config` file written by the last `buildCommand`,
+   * removed by `execute` once the process settles. Instance-scoped because one
+   * adapter runs one session at a time (matching GrokAdapter's stash pattern).
+   */
+  private mcpConfigPath: string | null = null;
+
+  registerMcpServers(servers: McpServerConfigLike[]): void {
+    this.mcpServers = servers;
+  }
 
   isAvailable(): boolean {
     // Check env var OR if the binary exists (it manages its own auth)
@@ -70,8 +99,26 @@ export class ClaudeAdapter implements AgentAdapter {
     if (opts.model) {
       args.push("--model", opts.model);
     }
-    if (opts.allowedTools?.length) {
-      args.push("--allowedTools", opts.allowedTools.join(","));
+
+    const allowedTools = [...(opts.allowedTools ?? [])];
+
+    // Buddy-tool MCP servers registered by the session executor for this
+    // session: write them to a temp `--mcp-config` file and point claude at
+    // it. `--strict-mcp-config` makes claude use ONLY these servers (ignoring
+    // any user/project `.mcp.json`), so the session gets exactly the gated
+    // set. Every tool from each server is auto-allowed (`mcp__<server>`) so
+    // buddy-tool calls aren't permission-gated in these non-interactive runs.
+    this.mcpConfigPath = null;
+    if (this.mcpServers.length > 0) {
+      const configPath = join(tmpdir(), `ooda-mcp-${randomUUID()}.json`);
+      writeFileSync(configPath, buildClaudeMcpConfigFile(this.mcpServers), "utf8");
+      this.mcpConfigPath = configPath;
+      args.push("--mcp-config", configPath, "--strict-mcp-config");
+      for (const server of this.mcpServers) allowedTools.push(`mcp__${server.name}`);
+    }
+
+    if (allowedTools.length) {
+      args.push("--allowedTools", allowedTools.join(","));
     }
 
     return {
@@ -90,6 +137,20 @@ export class ClaudeAdapter implements AgentAdapter {
     // Legacy callers may pass a command with the prompt baked into args and
     // no `prompt` field — run those exactly as before (no stdin).
     const interactive = command.prompt !== undefined;
+
+    // Adopt (and clear) any temp `--mcp-config` file this run's buildCommand
+    // wrote, so it's removed once the process settles regardless of how it
+    // exits. Cleared here so a later run without MCP servers can't re-delete it.
+    const mcpConfigPath = this.mcpConfigPath;
+    this.mcpConfigPath = null;
+    const cleanupMcpConfig = () => {
+      if (!mcpConfigPath) return;
+      try {
+        rmSync(mcpConfigPath, { force: true });
+      } catch {
+        /* best-effort: the temp file is in the OS tmpdir */
+      }
+    };
 
     // ChildProcess structurally satisfies SpawnedProcessLike for everything
     // this method touches; the cast collapses the union so the shared code
@@ -270,6 +331,7 @@ export class ClaudeAdapter implements AgentAdapter {
       const finish = (exitCode: number) => {
         if (settled) return;
         settled = true;
+        cleanupMcpConfig();
         resolve({ exitCode });
       };
 

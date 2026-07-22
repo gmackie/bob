@@ -44,12 +44,13 @@ export interface SessionExecutorConfig {
   capabilityRegistry?: CapabilityRegistry;
   /**
    * In-process HTTP MCP server that exposes the session's gated buddy tools
-   * to the agent. When provided (and the adapter speaks
-   * `registerMcpServers` — Grok does), the executor registers the session's
-   * descriptor set and advertises the resulting per-session URL on
-   * `session/new.mcpServers`, so the agent connects out and invokes tools
-   * mid-session. When omitted, only the (dormant) in-process ACP dispatch
-   * backstop is wired.
+   * to the agent. When provided (and the adapter speaks `registerMcpServers`),
+   * the executor registers the session's descriptor set and advertises the
+   * resulting per-session URL to the adapter, which connects out and invokes
+   * tools mid-session. Every advertising adapter reaches the SAME in-process
+   * server: Grok via `session/new.mcpServers`, Claude via a `--mcp-config`
+   * file, Codex via `-c mcp_servers.*` overrides. When omitted, only the
+   * (dormant) in-process ACP dispatch backstop is wired.
    */
   mcpServer?: BuddyMcpServer;
 }
@@ -105,11 +106,12 @@ export class SessionExecutor {
 
     // Build a HandlerContext + session budget and expose the (profile-gated)
     // buddy tool descriptors for this session. The live path stands them up
-    // on the in-process MCP server and advertises its per-session URL on
-    // `session/new.mcpServers` so the agent connects out and calls tools
-    // mid-session; the adapter's `registerTools` backstop is also wired.
-    // CLI-spawn adapters ignore both (no-op). `cleanupTools` tears the
-    // session's MCP exposure back down when execution finishes.
+    // on the in-process MCP server and advertises its per-session URL to the
+    // adapter (Grok over `session/new.mcpServers`, Claude/Codex via CLI MCP
+    // config) so the agent connects out and calls tools mid-session; the
+    // adapter's `registerTools` backstop is also wired. Adapters that speak
+    // neither hook ignore both (no-op). `cleanupTools` tears the session's
+    // MCP exposure back down when execution finishes.
     const cleanupTools = this.registerBuddyTools(input);
 
     try {
@@ -185,7 +187,8 @@ export class SessionExecutor {
     registerTools(this.adapter, descriptors);
 
     // Live path: expose the gated set on the in-process MCP server and
-    // advertise its per-session URL on `session/new.mcpServers`.
+    // advertise its per-session URL to any adapter that speaks
+    // `registerMcpServers` (Grok, Claude, Codex).
     if (this.mcpServer && typeof this.adapter.registerMcpServers === "function") {
       const handle = this.mcpServer.registerSession(descriptors);
       this.adapter.registerMcpServers([handle.config]);
