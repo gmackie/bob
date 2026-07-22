@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { CodexAdapter } from "../codex-adapter";
+import type { McpServerConfigLike } from "../types";
 
 describe("CodexAdapter", () => {
   it("returns correct metadata", () => {
@@ -46,5 +47,32 @@ describe("CodexAdapter", () => {
     expect(command.args[0]).toBe("exec");
     expect(command.args).toContain("Research sleep optimization");
     expect(command.cwd).toBe("/tmp/threads/sleep");
+  });
+
+  it("adds no MCP overrides when no servers are registered", () => {
+    const adapter = new CodexAdapter();
+    const command = adapter.buildCommand({ prompt: "p", workspaceRoot: "/tmp/ws" });
+    expect(command.args).not.toContain("-c");
+  });
+
+  it("registers buddy-tool MCP servers via `-c mcp_servers.*` before the prompt", () => {
+    const adapter = new CodexAdapter();
+    const mcpConfig: McpServerConfigLike = {
+      type: "http",
+      name: "ooda-buddy-tools",
+      url: "http://127.0.0.1:5123/mcp/tok-abc",
+      headers: [],
+    };
+    adapter.registerMcpServers([mcpConfig]);
+
+    const command = adapter.buildCommand({ prompt: "the prompt", workspaceRoot: "/tmp/ws" });
+
+    const cIdx = command.args.indexOf("-c");
+    expect(cIdx).toBeGreaterThan(-1);
+    expect(command.args[cIdx + 1]).toBe(
+      'mcp_servers.ooda-buddy-tools.url="http://127.0.0.1:5123/mcp/tok-abc"',
+    );
+    // Positional prompt stays last.
+    expect(command.args[command.args.length - 1]).toBe("the prompt");
   });
 });

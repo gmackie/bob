@@ -1,7 +1,9 @@
+import { existsSync, readFileSync, rmSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import { ClaudeAdapter } from "../claude-adapter";
-import type { AdapterEvent, AdapterProcessHandle } from "../types";
+import type { AdapterEvent, AdapterProcessHandle, McpServerConfigLike } from "../types";
 
 // Fake claude CLI: for each stream-json user message on stdin, emits a
 // `result` line after a short delay; exits when stdin closes (mirroring
@@ -137,6 +139,96 @@ describe("ClaudeAdapter", () => {
     });
     expect(command.args).not.toContain("--model");
     expect(command.args).not.toContain("--allowedTools");
+  });
+
+  describe("buddy-tool MCP servers", () => {
+    const mcpConfig: McpServerConfigLike = {
+      type: "http",
+      name: "ooda-buddy-tools",
+      url: "http://127.0.0.1:5123/mcp/tok-abc",
+      headers: [],
+    };
+
+    // Locate the temp file `buildCommand` wrote so tests can inspect + clean it.
+    function mcpConfigPathFrom(args: string[]): string {
+      const idx = args.indexOf("--mcp-config");
+      expect(idx).toBeGreaterThan(-1);
+      return args[idx + 1]!;
+    }
+
+    it("adds no MCP flags when no servers are registered", () => {
+      const adapter = new ClaudeAdapter();
+      const command = adapter.buildCommand({ prompt: "p", workspaceRoot: "/tmp/ws" });
+      expect(command.args).not.toContain("--mcp-config");
+      expect(command.args).not.toContain("--strict-mcp-config");
+    });
+
+    it("writes a --mcp-config file, isolates it, and auto-allows the server's tools", () => {
+      const adapter = new ClaudeAdapter();
+      adapter.registerMcpServers([mcpConfig]);
+
+      const command = adapter.buildCommand({ prompt: "p", workspaceRoot: "/tmp/ws" });
+
+      // --strict-mcp-config so ONLY our in-process server is used.
+      expect(command.args).toContain("--strict-mcp-config");
+
+      // The config file exists and holds the claude-code http shape.
+      const path = mcpConfigPathFrom(command.args);
+      try {
+        expect(existsSync(path)).toBe(true);
+        expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({
+          mcpServers: {
+            "ooda-buddy-tools": {
+              type: "http",
+              url: "http://127.0.0.1:5123/mcp/tok-abc",
+            },
+          },
+        });
+      } finally {
+        rmSync(path, { force: true });
+      }
+
+      // Every tool from the server is allowed so calls aren't permission-gated.
+      const allowIdx = command.args.indexOf("--allowedTools");
+      expect(allowIdx).toBeGreaterThan(-1);
+      expect(command.args[allowIdx + 1]!.split(",")).toContain("mcp__ooda-buddy-tools");
+    });
+
+    it("merges the MCP allowlist with persona allowedTools", () => {
+      const adapter = new ClaudeAdapter();
+      adapter.registerMcpServers([mcpConfig]);
+
+      const command = adapter.buildCommand({
+        prompt: "p",
+        workspaceRoot: "/tmp/ws",
+        allowedTools: ["Read", "Bash"],
+      });
+
+      const allowIdx = command.args.indexOf("--allowedTools");
+      const allowed = command.args[allowIdx + 1]!.split(",");
+      expect(allowed).toContain("Read");
+      expect(allowed).toContain("Bash");
+      expect(allowed).toContain("mcp__ooda-buddy-tools");
+
+      rmSync(mcpConfigPathFrom(command.args), { force: true });
+    });
+
+    it("removes the temp --mcp-config file after execute settles", async () => {
+      const adapter = new ClaudeAdapter();
+      adapter.registerMcpServers([mcpConfig]);
+
+      // buildCommand writes the file; swap in the fake CLI to actually run it.
+      const built = adapter.buildCommand({ prompt: "hi", workspaceRoot: process.cwd() });
+      const path = mcpConfigPathFrom(built.args);
+      expect(existsSync(path)).toBe(true);
+
+      const { exitCode } = await adapter.execute(
+        fakeCommand(FAKE_CLAUDE, "hi"),
+        () => {},
+      );
+      expect(exitCode).toBe(0);
+      expect(existsSync(path)).toBe(false);
+    });
   });
 
   it("runs a single-prompt session to completion (stdin closed after the turn)", async () => {
