@@ -32,6 +32,7 @@
     "./analytics": "./src/analytics/index.ts",
     "./auth": "./src/auth/index.ts",
     "./auth/errors": "./src/auth/errors.ts",
+    "./auth/validate-api-key": "./src/auth/validate-api-key.ts",
     "./auth/middleware": "./src/auth/middleware.ts",
     "./auth/client": "./src/auth/client.ts",
     "./secrets": "./src/secrets/index.ts",

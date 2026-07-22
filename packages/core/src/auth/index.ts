@@ -37,6 +37,22 @@ import { layerTenancy, Tenancy } from "./tenancy.js";
 // docs/plans/2026-04-25-phase7a-punchlist.md Task 6.
 export * from "./errors.js";
 
+// Shared plain-async API-key validator (the single source of truth reused by
+// both the Effect `ApiKeys` service and OODA's tRPC `authedProcedure`).
+// Consumers in a Node request path SHOULD import from the lighter subpath
+// `@gmacko/core/auth/validate-api-key` to avoid pulling in the full barrel.
+export {
+  API_KEY_PREFIXES,
+  hashApiKey,
+  isApiKeyLike,
+  validateApiKey,
+} from "./validate-api-key.js";
+export type {
+  ValidatedApiKey,
+  ApiKeyRejectionReason,
+  ApiKeyValidationResult,
+} from "./validate-api-key.js";
+
 export { BetterAuth, initAuth, layerBetterAuth } from "./better-auth.js";
 export type { AuthInstance, InitAuthOptions } from "./better-auth.js";
 

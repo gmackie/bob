@@ -14,6 +14,7 @@ import {
   InvalidApiKeyError,
   layerApiKeys,
 } from "../api-keys.js";
+import { validateApiKey } from "../validate-api-key.js";
 
 type TestCtx = Awaited<ReturnType<typeof createTestDb>>;
 
@@ -95,6 +96,33 @@ describe("@gmacko/auth ApiKeys service", () => {
       expect(result.email).toBe(USER_EMAIL);
       expect(result.permissions).toEqual(["read", "write"]);
     }).pipe(Effect.provide(apiKeyLayer)),
+  );
+
+  it.effect(
+    "validateKey agrees with the shared plain validateApiKey on shared fields",
+    () =>
+      Effect.gen(function* () {
+        const svc = yield* ApiKeys.asEffect();
+        const issued = yield* svc.issueKey({
+          userId: USER_ID,
+          tenantId: TENANT_ID,
+          name: "agreement",
+          permissions: ["read", "write"],
+        });
+        // Effect service path (with tenantId enrichment).
+        const svcResult = yield* svc.validateKey(issued.plaintext);
+        // Shared plain path (same algorithm OODA uses).
+        const plain = yield* Effect.promise(() =>
+          validateApiKey(ctx.db as never, issued.plaintext),
+        );
+        expect(plain.ok).toBe(true);
+        if (plain.ok) {
+          expect(plain.value.keyId).toBe(svcResult.keyId);
+          expect(plain.value.userId).toBe(svcResult.userId);
+          expect(plain.value.email).toBe(svcResult.email);
+          expect(plain.value.permissions).toEqual(svcResult.permissions);
+        }
+      }).pipe(Effect.provide(apiKeyLayer)),
   );
 
   it.effect("validateKey rejects non-API-key strings with 'Not an API key'", () =>
