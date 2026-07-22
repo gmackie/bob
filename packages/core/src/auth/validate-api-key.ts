@@ -54,7 +54,15 @@ export const API_KEY_PREFIXES = ["gmk_", "bob_"] as const;
 export interface ValidatedApiKey {
   readonly keyId: string;
   readonly userId: string;
-  readonly email: string;
+  /**
+   * Owner email, or `null` when the caller skipped the users-table join
+   * (`usersTable: null`) — required against the deployed Bob DB, whose
+   * `api_keys.user_id` FKs the better-auth `"user"` table (text id) and would
+   * type-clash the core `users` table (uuid id). Identity is still established
+   * by `userId`; callers that need the email resolve it against their own
+   * users table.
+   */
+  readonly email: string | null;
   readonly permissions: readonly ApiKeyPermission[];
 }
 
@@ -102,6 +110,14 @@ export async function validateApiKey(
   db: PgDatabase<any, any, any>,
   plaintext: string | null | undefined,
   prefixes: readonly string[] = API_KEY_PREFIXES,
+  /**
+   * Users table to join for the owner email. Defaults to the core `users`
+   * table (uuid id). Pass `null` to SKIP the join and validate against
+   * `api_keys` alone — required against the deployed Bob DB, where
+   * `api_keys.user_id` is a text FK to the better-auth `"user"` table and the
+   * uuid-vs-text comparison against core `users` fails the query outright.
+   */
+  usersTableForEmail: typeof usersTable | null = usersTable,
 ): Promise<ApiKeyValidationResult> {
   if (!isApiKeyLike(plaintext, prefixes)) {
     return { ok: false, reason: "not-an-api-key" };
@@ -109,24 +125,49 @@ export async function validateApiKey(
 
   const keyHash = hashApiKey(plaintext);
 
-  // Select ONLY columns present in both the core and live-Bob `api_keys`
-  // schemas (no `tenant_id`). `users.email` resolves against the populated
-  // `users` table in both databases.
-  const rows = await db
-    .select({
-      keyId: apiKeysTable.id,
-      userId: apiKeysTable.userId,
-      email: usersTable.email,
-      permissions: apiKeysTable.permissions,
-      revokedAt: apiKeysTable.revokedAt,
-      expiresAt: apiKeysTable.expiresAt,
-    })
-    .from(apiKeysTable)
-    .innerJoin(usersTable, eq(usersTable.id, apiKeysTable.userId))
-    .where(eq(apiKeysTable.keyHash, keyHash))
-    .limit(1);
+  // Columns present in BOTH the core and live-Bob `api_keys` schemas
+  // (no `tenant_id`). The owner email is joined only when a compatible users
+  // table is supplied (see `usersTableForEmail`).
+  const keyCols = {
+    keyId: apiKeysTable.id,
+    userId: apiKeysTable.userId,
+    permissions: apiKeysTable.permissions,
+    revokedAt: apiKeysTable.revokedAt,
+    expiresAt: apiKeysTable.expiresAt,
+  };
 
-  const row = rows[0];
+  let row:
+    | {
+        keyId: string;
+        userId: string;
+        permissions: readonly ApiKeyPermission[];
+        revokedAt: Date | null;
+        expiresAt: Date | null;
+        email: string | null;
+      }
+    | undefined;
+
+  if (usersTableForEmail) {
+    const rows = await db
+      .select({ ...keyCols, email: usersTableForEmail.email })
+      .from(apiKeysTable)
+      .innerJoin(
+        usersTableForEmail,
+        eq(usersTableForEmail.id, apiKeysTable.userId),
+      )
+      .where(eq(apiKeysTable.keyHash, keyHash))
+      .limit(1);
+    row = rows[0] as typeof row;
+  } else {
+    const rows = await db
+      .select(keyCols)
+      .from(apiKeysTable)
+      .where(eq(apiKeysTable.keyHash, keyHash))
+      .limit(1);
+    const r = rows[0];
+    row = r ? ({ ...r, email: null } as typeof row) : undefined;
+  }
+
   if (!row) {
     return { ok: false, reason: "not-found" };
   }

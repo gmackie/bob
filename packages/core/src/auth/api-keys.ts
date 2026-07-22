@@ -214,7 +214,9 @@ export const layerApiKeys = (
             keyId: value.keyId as ApiKeyId,
             userId: value.userId as UserId,
             tenantId: tenantId as TenantId,
-            email: value.email,
+            // Non-null in practice: this service passes the default (core)
+            // users-table join, so the shared validator always returns email.
+            email: value.email ?? "",
             permissions: value.permissions,
           };
         });

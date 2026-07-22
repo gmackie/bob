@@ -3,13 +3,25 @@ import { drizzle } from "drizzle-orm/postgres-js";
 
 import * as schema from "./schema";
 
-if (!process.env.DATABASE_URL) {
+// On the Cloudflare Workers edge (ooda-edge) these are injected on globalThis,
+// not process.env — mirror `apps/ooda-edge/src/lib/db-client-lazy.ts` so this
+// shared client is Hyperdrive-correct there too. Missing the globalThis check
+// left `isHyperdrive=false` on the edge, so postgres.js kept prepared
+// statements enabled — which Hyperdrive's pooled mode rejects, surfacing as
+// intermittent "Failed query" errors (e.g. the apiKey lookup in authedProcedure).
+const databaseUrl =
+  (globalThis as { DATABASE_URL?: string }).DATABASE_URL ??
+  process.env.DATABASE_URL;
+
+if (!databaseUrl) {
   throw new Error("Missing DATABASE_URL environment variable");
 }
 
-const isHyperdrive = process.env.DATABASE_HYPERDRIVE === "true";
+const isHyperdrive =
+  (globalThis as { DATABASE_HYPERDRIVE?: string }).DATABASE_HYPERDRIVE ===
+    "true" || process.env.DATABASE_HYPERDRIVE === "true";
 
-const sql = postgres(process.env.DATABASE_URL, {
+const sql = postgres(databaseUrl, {
   ...(isHyperdrive ? { prepare: false, ssl: false, max: 1 } : {}),
 });
 
