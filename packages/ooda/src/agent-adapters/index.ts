@@ -6,6 +6,7 @@ export {
   type AdapterProcessHandle,
   type AgentAdapter,
   type ExecuteOptions,
+  type McpServerConfigLike,
   type SpawnedProcessLike,
   type ToolDescriptorLike,
 } from "./types";
@@ -30,3 +31,13 @@ export {
 } from "./tool-registry";
 
 export { dispatchBuddyTool } from "./tool-dispatcher";
+
+export {
+  BuddyMcpServer,
+  toMcpTool,
+  toMcpToolCallResult,
+  extractToken,
+  type BuddyMcpServerOptions,
+  type BuddyMcpSessionHandle,
+  type McpServerConfig,
+} from "./buddy-mcp-server";

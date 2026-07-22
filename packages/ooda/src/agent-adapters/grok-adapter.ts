@@ -13,6 +13,7 @@ import type {
   AdapterCommand,
   AdapterEvent,
   BuildCommandOptions,
+  McpServerConfigLike,
 } from "./types";
 
 /**
@@ -37,8 +38,20 @@ export class GrokAdapter implements AgentAdapter {
    */
   private toolDescriptors: readonly ToolDescriptor[] = [];
 
+  /**
+   * MCP servers advertised to the agent on the next `session/new`. Grok
+   * connects OUT to these and calls their tools mid-session — the live
+   * buddy-tool path. Stashed by `registerMcpServers` (called by the session
+   * executor after it stands up the in-process MCP server for this session).
+   */
+  private mcpServers: readonly McpServerConfigLike[] = [];
+
   registerTools(tools: ToolDescriptor[]): void {
     this.toolDescriptors = tools;
+  }
+
+  registerMcpServers(servers: McpServerConfigLike[]): void {
+    this.mcpServers = servers;
   }
 
   isAvailable(): boolean {
@@ -120,6 +133,7 @@ export class GrokAdapter implements AgentAdapter {
         prompt: command.prompt ?? "",
         cwd: command.cwd,
         apiKeyPresent: Boolean(process.env.XAI_API_KEY),
+        mcpServers: this.mcpServers,
       });
       exitCode = result.exitCode;
     } catch (error) {

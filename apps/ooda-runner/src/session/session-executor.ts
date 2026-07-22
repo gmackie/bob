@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 
-import type { AgentAdapter, AdapterEvent } from "@gmacko/ooda/agent-adapters";
+import type { AgentAdapter, AdapterEvent, BuddyMcpServer } from "@gmacko/ooda/agent-adapters";
 import {
   createBuddyToolDescriptors,
   registerTools,
@@ -42,6 +42,16 @@ export interface SessionExecutorConfig {
    * unseeded default), the executor falls back to the full implemented set.
    */
   capabilityRegistry?: CapabilityRegistry;
+  /**
+   * In-process HTTP MCP server that exposes the session's gated buddy tools
+   * to the agent. When provided (and the adapter speaks
+   * `registerMcpServers` — Grok does), the executor registers the session's
+   * descriptor set and advertises the resulting per-session URL on
+   * `session/new.mcpServers`, so the agent connects out and invokes tools
+   * mid-session. When omitted, only the (dormant) in-process ACP dispatch
+   * backstop is wired.
+   */
+  mcpServer?: BuddyMcpServer;
 }
 
 export interface ExecuteSessionInput {
@@ -71,12 +81,14 @@ export class SessionExecutor {
   private storageRoot: string;
   private research?: ResearchTRPCSurface;
   private capabilityRegistry?: CapabilityRegistry;
+  private mcpServer?: BuddyMcpServer;
 
   constructor(config: SessionExecutorConfig) {
     this.adapter = config.adapter;
     this.storageRoot = config.storageRoot;
     this.research = config.research;
     this.capabilityRegistry = config.capabilityRegistry;
+    this.mcpServer = config.mcpServer;
   }
 
   async execute(input: ExecuteSessionInput): Promise<ExecuteSessionResult> {
@@ -91,50 +103,60 @@ export class SessionExecutor {
       });
     }
 
-    // Build a HandlerContext + session budget and register the (profile-
-    // gated) buddy tool descriptors on the adapter before execute. Adapters
-    // that speak ACP (Grok) consume these so the agent can call buddy tools
-    // mid-session; CLI-spawn adapters ignore the registration (no-op).
-    this.registerBuddyTools(input);
+    // Build a HandlerContext + session budget and expose the (profile-gated)
+    // buddy tool descriptors for this session. The live path stands them up
+    // on the in-process MCP server and advertises its per-session URL on
+    // `session/new.mcpServers` so the agent connects out and calls tools
+    // mid-session; the adapter's `registerTools` backstop is also wired.
+    // CLI-spawn adapters ignore both (no-op). `cleanupTools` tears the
+    // session's MCP exposure back down when execution finishes.
+    const cleanupTools = this.registerBuddyTools(input);
 
-    // Build command
-    const command = this.adapter.buildCommand({
-      prompt: input.prompt,
-      workspaceRoot: threadDir,
-      systemPrompt: input.systemPrompt,
-    });
+    try {
+      // Build command
+      const command = this.adapter.buildCommand({
+        prompt: input.prompt,
+        workspaceRoot: threadDir,
+        systemPrompt: input.systemPrompt,
+      });
 
-    // Capture output
-    let fullOutput = "";
+      // Capture output
+      let fullOutput = "";
 
-    const wrappedOnEvent = (event: AdapterEvent) => {
-      // Capture assistant text (stdout) for the parsed agentResponse.
-      // Structured ACP events (thought / tool_call / tool_result) pass
-      // through to the caller untouched for richer session reporting.
-      if (event.type === "stdout") {
-        fullOutput += event.data;
-      }
-      input.onEvent(event);
-    };
+      const wrappedOnEvent = (event: AdapterEvent) => {
+        // Capture assistant text (stdout) for the parsed agentResponse.
+        // Structured ACP events (thought / tool_call / tool_result) pass
+        // through to the caller untouched for richer session reporting.
+        if (event.type === "stdout") {
+          fullOutput += event.data;
+        }
+        input.onEvent(event);
+      };
 
-    // Execute
-    const result = await this.adapter.execute(command, wrappedOnEvent);
+      // Execute
+      const result = await this.adapter.execute(command, wrappedOnEvent);
 
-    return {
-      exitCode: result.exitCode,
-      threadDir,
-      rawOutput: fullOutput,
-      agentResponse: extractAgentResponse(fullOutput),
-    };
+      return {
+        exitCode: result.exitCode,
+        threadDir,
+        rawOutput: fullOutput,
+        agentResponse: extractAgentResponse(fullOutput),
+      };
+    } finally {
+      cleanupTools();
+    }
   }
 
   /**
-   * Build + register buddy tool descriptors for this session, gated by the
-   * session's tool profile. No-op unless a research surface is configured
-   * and the input carries a threadId (the handlers need both to run).
+   * Build + expose buddy tool descriptors for this session, gated by the
+   * session's tool profile. Returns a cleanup function that tears the
+   * session's MCP exposure back down (a no-op when nothing was registered).
+   *
+   * No-op unless a research surface is configured and the input carries a
+   * threadId (the handlers need both to run).
    */
-  private registerBuddyTools(input: ExecuteSessionInput): void {
-    if (!this.research || !input.threadId) return;
+  private registerBuddyTools(input: ExecuteSessionInput): () => void {
+    if (!this.research || !input.threadId) return () => {};
 
     const ctx: HandlerContext = {
       threadId: input.threadId,
@@ -158,7 +180,19 @@ export class SessionExecutor {
       descriptors = descriptors.filter((d) => allowed.has(d.name));
     }
 
+    // Backstop: stash on the adapter for the (now-dormant) in-process ACP
+    // `tools/call` dispatch path.
     registerTools(this.adapter, descriptors);
+
+    // Live path: expose the gated set on the in-process MCP server and
+    // advertise its per-session URL on `session/new.mcpServers`.
+    if (this.mcpServer && typeof this.adapter.registerMcpServers === "function") {
+      const handle = this.mcpServer.registerSession(descriptors);
+      this.adapter.registerMcpServers([handle.config]);
+      return () => handle.dispose();
+    }
+
+    return () => {};
   }
 
   /**

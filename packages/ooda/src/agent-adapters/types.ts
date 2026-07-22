@@ -164,6 +164,31 @@ export interface AgentAdapter {
    * See `tool-registry.ts` for the import-facing helpers.
    */
   registerTools?(tools: ToolDescriptorLike[]): void;
+
+  /**
+   * Advertise MCP servers for this adapter's upcoming ACP session. Grok
+   * connects OUT to these (via `session/new.mcpServers`) and calls their
+   * tools mid-session — the live buddy-tool seam. The session executor
+   * stands up an in-process MCP server, registers the session's gated
+   * descriptor set, and passes the resulting per-session config here.
+   *
+   * Optional: only ACP adapters that speak `session/new.mcpServers` (Grok)
+   * implement it; CLI-spawn adapters no-op.
+   */
+  registerMcpServers?(servers: McpServerConfigLike[]): void;
+}
+
+/**
+ * Structural type for an `mcpServers` entry threaded to
+ * `AgentAdapter#registerMcpServers`. Avoids importing the concrete
+ * `McpServerConfig` (which lives in `buddy-mcp-server.ts`) into this base
+ * module; that type conforms to this shape.
+ */
+export interface McpServerConfigLike {
+  type: "http";
+  name: string;
+  url: string;
+  headers: Array<{ name: string; value: string }>;
 }
 
 /**
