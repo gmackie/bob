@@ -43,6 +43,12 @@ export function initAuth<
     }),
     baseURL: options.baseUrl,
     secret: options.secret,
+    user: {
+      // App Store Guideline 5.1.1(v): allow in-app account deletion.
+      deleteUser: {
+        enabled: true,
+      },
+    },
     plugins: [
       expo(),
       ...(options.extraPlugins ?? []),

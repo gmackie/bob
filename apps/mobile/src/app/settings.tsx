@@ -9,11 +9,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
-import { Stack } from "expo-router";
+import { router, Stack } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { colors } from "~/lib/colors";
 import { trpc } from "~/utils/api";
+import { authClient } from "~/utils/auth";
 
 const PERMISSIONS = ["read", "write", "delete", "admin"] as const;
 
@@ -341,6 +342,69 @@ function ApiKeysSection() {
   );
 }
 
+function AccountSection() {
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const performDeleteAccount = async () => {
+    setIsDeleting(true);
+    try {
+      const { error } = await authClient.deleteUser();
+      if (error) {
+        throw new Error(error.message ?? "Failed to delete account");
+      }
+      // Sign out to clear the local session/secure store, then return to the
+      // sign-in screen.
+      await authClient.signOut();
+      router.replace("/");
+    } catch (err) {
+      setIsDeleting(false);
+      Alert.alert(
+        "Couldn't delete account",
+        err instanceof Error
+          ? err.message
+          : "Something went wrong. Please try again.",
+      );
+    }
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete Account",
+      "This permanently deletes your account and all associated data. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete Account",
+          style: "destructive",
+          onPress: () => void performDeleteAccount(),
+        },
+      ],
+    );
+  };
+
+  return (
+    <View className="border-border bg-card mt-4 rounded-lg border p-4">
+      <Text className="text-lg font-semibold" style={{ color: colors.foreground }}>
+        Account
+      </Text>
+      <Text className="mt-1 mb-4 text-sm" style={{ color: colors.muted }}>
+        Permanently delete your account and all associated data.
+      </Text>
+      <Pressable
+        testID="settings-delete-account"
+        accessibilityRole="button"
+        onPress={handleDeleteAccount}
+        disabled={isDeleting}
+        className="bg-destructive rounded-md px-4 py-2"
+      >
+        <Text style={{ color: colors.danger }}>
+          {isDeleting ? "Deleting…" : "Delete Account"}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
 export default function SettingsScreen() {
   return (
     <SafeAreaView className="bg-background flex-1">
@@ -351,6 +415,7 @@ export default function SettingsScreen() {
         </Text>
         <PreferencesSection />
         <ApiKeysSection />
+        <AccountSection />
       </ScrollView>
     </SafeAreaView>
   );
