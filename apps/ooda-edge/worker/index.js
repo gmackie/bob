@@ -3,6 +3,8 @@
  *
  * Wraps vinext's app-router-entry, binds Hyperdrive to DATABASE_URL.
  */
+import { runWithDb } from "../src/lib/db-client-lazy";
+
 let appRouterEntryPromise = null;
 const getAppRouterEntry = async () => {
   if (!appRouterEntryPromise) {
@@ -58,8 +60,16 @@ export default {
       );
     }
 
+    // Scope ONE DB client to this request (see src/lib/db-client-lazy.ts). Every
+    // `db.*` access inside the handler — better-auth's getSession, tRPC context,
+    // apiKey validation — reuses this single Hyperdrive connection instead of
+    // opening a fresh one per property access.
+    const isHyperdrive = Boolean(env?.HYPERDRIVE?.connectionString);
+
     try {
-      const response = await handler.default.fetch(request);
+      const response = await runWithDb(databaseUrl, isHyperdrive, () =>
+        handler.default.fetch(request),
+      );
       return response;
     } catch (error) {
       console.error("Worker handler error:", {

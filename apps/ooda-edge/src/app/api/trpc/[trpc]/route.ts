@@ -18,7 +18,31 @@ const handler = async (req: Request) => {
         db: edgeDb as unknown as Parameters<typeof createTRPCContext>[0]["db"],
       }),
     onError({ error, path }) {
-      console.error(`>>> tRPC Error on '${path}'`, error.message);
+      // postgres.js wraps the real failure as `error.cause` (a PostgresError
+      // carrying .code/.detail/.routine) or nests it under the tRPC cause
+      // chain. Surface all of it — the bare `error.message` is just
+      // "Failed query: ..." and hides why.
+      const chain: unknown[] = [];
+      let cur: unknown = error;
+      for (let i = 0; i < 5 && cur; i++) {
+        const e = cur as {
+          message?: string;
+          code?: string;
+          detail?: string;
+          routine?: string;
+          severity?: string;
+          cause?: unknown;
+        };
+        chain.push({
+          message: e.message,
+          code: e.code,
+          detail: e.detail,
+          routine: e.routine,
+          severity: e.severity,
+        });
+        cur = e.cause;
+      }
+      console.error(`>>> tRPC Error on '${path}'`, JSON.stringify(chain));
     },
   });
 };
