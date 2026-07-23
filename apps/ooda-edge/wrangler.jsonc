@@ -12,8 +12,13 @@
   },
   "hyperdrive": [
     {
+      // OODA shares Bob's database (research_thread, runner_*, api_keys all
+      // live in the `bob` DB). Bind Bob's live Hyperdrive config
+      // (blder-bot-db → pg-db.forgegraf.com/bob). The former OODA-only config
+      // (b053c840…) was pruned at the CF 25-Hyperdrive account cap, taking the
+      // whole edge DB down; the separate `ooda_production` DB is unused.
       "binding": "HYPERDRIVE",
-      "id": "b053c840acb441e3b80608c686204b97"
+      "id": "c1f467f772dc4ce99d99e572df74c121"
     }
   ],
   "vars": {
