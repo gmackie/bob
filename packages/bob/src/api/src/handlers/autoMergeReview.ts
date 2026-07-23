@@ -13,7 +13,7 @@
 //    live); PRs on providers without review/status support are skipped.
 //  - Reuses prService.mergePr, so DB status sync + branch cleanup are unchanged.
 
-import { asc, eq } from "@bob/db";
+import { desc, eq } from "@bob/db";
 import { db } from "@bob/db/client";
 import { pullRequests } from "@bob/db/schema";
 
@@ -24,8 +24,27 @@ import {
 } from "../services/git/providerConnectionService";
 
 export interface AutoMergeConfig {
-  /** Max open PRs to process per run (caps review spend + merge/deploy fan-out). */
+  /**
+   * Legacy knob. Used as the default for both {@link maxReviewsPerRun} and
+   * {@link maxMergesPerRun} when those aren't set individually. It no longer
+   * caps how many PRs are *scanned* — see {@link scanLimit}.
+   */
   maxPerRun: number;
+  /**
+   * How many open PRs to scan per run, newest-first. Scanning is cheap (a few
+   * Forgejo GETs per PR) and — critically — newest-first so freshly opened PRs
+   * are never starved behind a logjam of old, permanently-unmergeable PRs at
+   * the front of an oldest-first queue. Defaults to {@link maxPerRun} * 12.
+   */
+  scanLimit?: number;
+  /**
+   * Max *fresh* Claude reviews per run (the real spend cap). PRs already
+   * reviewed at their current head SHA don't consume this — they only get a
+   * cheap merge-eligibility re-check. Defaults to {@link maxPerRun}.
+   */
+  maxReviewsPerRun?: number;
+  /** Max merges (→ deploys) per run. Defaults to {@link maxPerRun}. */
+  maxMergesPerRun?: number;
   /** Anthropic model for the review pass. */
   reviewModel: string;
   anthropicApiKey: string;
@@ -138,10 +157,22 @@ export async function autoReviewAndMerge(
     items: [],
   };
 
+  // Newest-first, and scan well beyond the review/merge budgets. Oldest-first
+  // with a small cap starved every recent PR: the front of the queue fills with
+  // old PRs that are already reviewed but can never merge (CI-red / conflict /
+  // changes-requested), so each run re-touched the same stuck head and never
+  // reached anything new. Newest-first means freshly opened PRs are reviewed
+  // first; the two budgets below (not this limit) cap actual spend.
+  const scanLimit = cfg.scanLimit ?? cfg.maxPerRun * 12;
+  const reviewBudget = cfg.maxReviewsPerRun ?? cfg.maxPerRun;
+  const mergeBudget = cfg.maxMergesPerRun ?? cfg.maxPerRun;
+  let reviewsSpent = 0;
+  let mergesSpent = 0;
+
   const openPrs = await db.query.pullRequests.findMany({
     where: eq(pullRequests.status, "open"),
-    orderBy: [asc(pullRequests.createdAt)],
-    limit: cfg.maxPerRun,
+    orderBy: [desc(pullRequests.createdAt)],
+    limit: scanLimit,
   });
   result.scanned = openPrs.length;
 
@@ -252,6 +283,18 @@ export async function autoReviewAndMerge(
       if (ownReviewAtHead) {
         approved = ownReviewAtHead.state === "APPROVED";
       } else {
+        // A fresh review is the only expensive step — gate it on the review
+        // budget. Deferring (not skipping) keeps this PR at the front of next
+        // run's newest-first scan, so nothing is dropped, just rate-limited.
+        if (reviewsSpent >= reviewBudget) {
+          result.items.push({
+            pr: label,
+            action: "skipped",
+            reason: "review budget exhausted (deferred)",
+          });
+          continue;
+        }
+        reviewsSpent++;
         const diff = await client.getPullRequestDiff(
           pr.remoteOwner,
           pr.remoteName,
@@ -302,6 +345,16 @@ export async function autoReviewAndMerge(
         result.items.push({ pr: label, action: "reviewed", reason: "approved, dryRun" });
         continue;
       }
+
+      if (mergesSpent >= mergeBudget) {
+        result.items.push({
+          pr: label,
+          action: "reviewed",
+          reason: "approved+green, merge budget exhausted (deferred)",
+        });
+        continue;
+      }
+      mergesSpent++;
 
       await client.mergePullRequest(
         pr.remoteOwner,
