@@ -1,27 +1,46 @@
 // Autonomous PR reviewer + auto-merge reaper.
 //
 // Bob opens far more PRs than get merged by hand (hundreds sit in review). This
-// driver reviews each open PR with Claude and merges the ones that clear the
-// bar: CI green AND an approving AI review AND no merge conflict. It runs on a
+// driver gets each open PR reviewed BY A BOB RUNNER AGENT (a subscription-authed
+// CLI on the runner — NOT a metered model API) and merges the ones that clear
+// the bar: CI green AND an approving review AND no merge conflict. It runs on a
 // schedule (a Cloudflare Cron trigger on the bob worker), mirroring autoDrain.
 //
 // Design notes:
-//  - The AI-review *verdict* lives on the PR itself (a Forgejo review submitted
-//    at the head SHA), NOT in a bob table — so there's no migration and Forgejo
-//    is the single source of truth for "already reviewed this commit".
+//  - Review is done by dispatching a runner session (dispatchReviewSession) the
+//    same way every other Bob task runs. The agent posts its verdict as a native
+//    git-host review bound to the head SHA. There is NO api.anthropic.com call.
+//  - The verdict lives on the PR itself (a Forgejo review at the head SHA), NOT
+//    in a bob table — so Forgejo is the single source of truth for "already
+//    reviewed this commit", and the merge gate reads it directly.
+//  - Review is async: one pass dispatches the review session, a later pass sees
+//    the posted verdict and merges. An in-flight review (an active review
+//    taskRun for the PR) suppresses re-dispatch so we don't spawn duplicates.
 //  - Only gitea/Forgejo providers are handled (that's where all of Bob's PRs
 //    live); PRs on providers without review/status support are skipped.
-//  - Reuses prService.mergePr, so DB status sync + branch cleanup are unchanged.
 
-import { desc, eq } from "@bob/db";
+import { and, desc, eq, inArray } from "@bob/db";
 import { db } from "@bob/db/client";
-import { pullRequests } from "@bob/db/schema";
+import { pullRequests, taskRuns } from "@bob/db/schema";
+import { dispatchReviewSession } from "@bob/execution/runtime/taskExecutor";
 
 import type { GitProvider } from "../services/git/providers/types";
 import {
   createProviderClient,
   getConnection,
 } from "../services/git/providerConnectionService";
+
+// task_run statuses that mean a review session is still in flight for a PR — a
+// verdict hasn't been posted yet, so we must not dispatch another reviewer.
+const ACTIVE_REVIEW_STATUSES = [
+  "pending",
+  "provisioning",
+  "starting",
+  "running",
+  "blocked",
+  "stopping",
+  "host_unknown",
+];
 
 export interface AutoMergeConfig {
   /**
@@ -45,10 +64,13 @@ export interface AutoMergeConfig {
   maxReviewsPerRun?: number;
   /** Max merges (→ deploys) per run. Defaults to {@link maxPerRun}. */
   maxMergesPerRun?: number;
-  /** Anthropic model for the review pass. */
-  reviewModel: string;
-  anthropicApiKey: string;
-  /** When true, review and post verdicts but never actually merge. */
+  /**
+   * Runner agent used for the review session. Defaults to "codex" — claude
+   * currently hangs on the runner's stdio permission prompt, so it can't review
+   * unattended.
+   */
+  reviewAgentType?: string;
+  /** When true, dispatch reviews but never actually merge. */
   dryRun?: boolean;
   /**
    * Shared Forgejo/gitea token used to act on PRs that have no per-user OAuth
@@ -72,78 +94,17 @@ export interface AutoMergeResult {
   }[];
 }
 
-const MAX_DIFF_CHARS = 60_000;
-
-interface ReviewVerdict {
-  decision: "approve" | "request_changes";
-  summary: string;
-}
-
-async function reviewWithClaude(
-  cfg: AutoMergeConfig,
-  pr: { title: string; body: string | null; diff: string },
-): Promise<ReviewVerdict> {
-  const truncated = pr.diff.length > MAX_DIFF_CHARS;
-  const diff = truncated ? pr.diff.slice(0, MAX_DIFF_CHARS) : pr.diff;
-
-  const system =
-    "You are a rigorous senior engineer reviewing a pull request opened by an " +
-    "autonomous coding agent. Approve ONLY if the change is correct, safe, " +
-    "self-consistent, and complete for its stated intent. Request changes if " +
-    "you see bugs, security issues, broken/omitted logic, obvious test gaps, " +
-    "or if the diff looks incomplete or off-topic. Be decisive; do not hedge. " +
-    'Respond with ONLY a JSON object: {"decision":"approve"|"request_changes",' +
-    '"summary":"<=6 sentences, concrete"}.';
-
-  const user =
-    `PR title: ${pr.title}\n\n` +
-    `PR description:\n${pr.body ?? "(none)"}\n\n` +
-    `Unified diff${truncated ? " (TRUNCATED — treat missing context as risk)" : ""}:\n` +
-    "```diff\n" +
-    diff +
-    "\n```";
-
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": cfg.anthropicApiKey,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: cfg.reviewModel,
-      max_tokens: 1024,
-      system,
-      messages: [{ role: "user", content: user }],
-    }),
+/** Is a review session already in flight for this PR? (suppresses re-dispatch) */
+async function hasActiveReview(pullRequestId: string): Promise<boolean> {
+  const existing = await db.query.taskRuns.findFirst({
+    where: and(
+      eq(taskRuns.pullRequestId, pullRequestId),
+      eq(taskRuns.runPhase, "review"),
+      inArray(taskRuns.status, ACTIVE_REVIEW_STATUSES),
+    ),
+    columns: { id: true },
   });
-
-  if (!response.ok) {
-    throw new Error(
-      `Anthropic API error (${response.status}): ${await response.text()}`,
-    );
-  }
-
-  const data = (await response.json()) as {
-    content?: { type: string; text?: string }[];
-  };
-  const text =
-    data.content?.map((b) => (b.type === "text" ? b.text : "")).join("") ?? "";
-
-  // Tolerate prose around the JSON; grab the first {...} block.
-  const match = /\{[\s\S]*\}/.exec(text);
-  if (!match) {
-    // Unparseable → fail safe (never auto-approve on ambiguity).
-    return {
-      decision: "request_changes",
-      summary: "Automated review could not be parsed; not approving.",
-    };
-  }
-  const parsed = JSON.parse(match[0]) as Partial<ReviewVerdict>;
-  return {
-    decision: parsed.decision === "approve" ? "approve" : "request_changes",
-    summary: parsed.summary?.slice(0, 2000) ?? "(no summary)",
-  };
+  return !!existing;
 }
 
 export async function autoReviewAndMerge(
@@ -277,15 +238,22 @@ export async function autoReviewAndMerge(
           (r.state === "APPROVED" || r.state === "REQUEST_CHANGES"),
       );
 
-      // Review once per head SHA. If we've already reviewed this commit, reuse
-      // that verdict; otherwise run a fresh review and post it.
-      let approved: boolean;
-      if (ownReviewAtHead) {
-        approved = ownReviewAtHead.state === "APPROVED";
-      } else {
-        // A fresh review is the only expensive step — gate it on the review
-        // budget. Deferring (not skipping) keeps this PR at the front of next
-        // run's newest-first scan, so nothing is dropped, just rate-limited.
+      // Review once per head SHA. If a verdict already exists at this commit,
+      // use it for the merge gate below. Otherwise the review is done by a Bob
+      // runner agent — dispatch a review session (once) and move on; the verdict
+      // (a git-host review at the head SHA) appears on a later pass.
+      if (!ownReviewAtHead) {
+        if (await hasActiveReview(pr.id)) {
+          result.items.push({
+            pr: label,
+            action: "reviewed",
+            reason: "review in flight",
+          });
+          continue;
+        }
+        // Dispatching a review is the rate-limited step — gate it on the review
+        // budget. Deferring keeps this PR at the front of next run's newest-first
+        // scan, so nothing is dropped, just paced.
         if (reviewsSpent >= reviewBudget) {
           result.items.push({
             pr: label,
@@ -294,29 +262,51 @@ export async function autoReviewAndMerge(
           });
           continue;
         }
+        if (!pr.repositoryId) {
+          result.skipped++;
+          result.items.push({
+            pr: label,
+            action: "skipped",
+            reason: "no repository linked — cannot dispatch review",
+          });
+          continue;
+        }
+        const dispatched = await dispatchReviewSession(
+          pr.userId,
+          {
+            pullRequestId: pr.id,
+            repositoryId: pr.repositoryId,
+            remoteOwner: pr.remoteOwner,
+            remoteName: pr.remoteName,
+            number: pr.number,
+            instanceUrl: pr.instanceUrl,
+            headSha,
+            headBranch: pr.headBranch ?? null,
+            title: remote.title,
+            body: remote.body,
+          },
+          cfg.reviewAgentType ?? "codex",
+        );
+        if (!dispatched) {
+          result.skipped++;
+          result.items.push({
+            pr: label,
+            action: "skipped",
+            reason: "repo has no runner checkout/workspace for review",
+          });
+          continue;
+        }
         reviewsSpent++;
-        const diff = await client.getPullRequestDiff(
-          pr.remoteOwner,
-          pr.remoteName,
-          pr.number,
-        );
-        const verdict = await reviewWithClaude(cfg, {
-          title: remote.title,
-          body: remote.body,
-          diff,
-        });
-        approved = verdict.decision === "approve";
-        await client.createPullRequestReview(
-          pr.remoteOwner,
-          pr.remoteName,
-          pr.number,
-          approved ? "APPROVE" : "REQUEST_CHANGES",
-          `🤖 Bob auto-review: **${approved ? "approved" : "changes requested"}**\n\n${verdict.summary}`,
-        );
         result.reviewed++;
+        result.items.push({
+          pr: label,
+          action: "reviewed",
+          reason: "review dispatched to runner",
+        });
+        continue;
       }
 
-      if (!approved) {
+      if (ownReviewAtHead.state !== "APPROVED") {
         result.items.push({ pr: label, action: "reviewed", reason: "changes requested" });
         continue;
       }

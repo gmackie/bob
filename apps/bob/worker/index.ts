@@ -66,9 +66,10 @@ export default Sentry.withSentry(
       const runtimeEnv = (rawEnv ?? {}) as Env;
       const autoDrainOn =
         String(runtimeEnv.BOB_AUTO_DRAIN_ENABLED ?? "") === "true";
+      // Review is done by a runner agent (dispatchReviewSession), not a model
+      // API — so this no longer requires ANTHROPIC_API_KEY.
       const autoMergeOn =
-        String(runtimeEnv.BOB_AUTO_MERGE_ENABLED ?? "") === "true" &&
-        !!runtimeEnv.ANTHROPIC_API_KEY;
+        String(runtimeEnv.BOB_AUTO_MERGE_ENABLED ?? "") === "true";
       // Keep the Linear backlog fresh server-side (default on) — the sync was
       // webhook-only, so new Linear tasks stopped reaching Bob when the webhook
       // went quiet. This pull backfills + maintains. Gated to ~every 15 min to
@@ -183,10 +184,9 @@ export default Sentry.withSentry(
           );
           const r = await autoReviewAndMerge({
             maxPerRun: Number(runtimeEnv.BOB_AUTO_MERGE_MAX_PER_RUN ?? 5),
-            reviewModel:
-              (runtimeEnv.BOB_AUTO_MERGE_MODEL as string | undefined) ??
-              "claude-sonnet-5",
-            anthropicApiKey: runtimeEnv.ANTHROPIC_API_KEY as string,
+            reviewAgentType:
+              (runtimeEnv.BOB_AUTO_MERGE_REVIEW_AGENT as string | undefined) ??
+              "codex",
             dryRun: String(runtimeEnv.BOB_AUTO_MERGE_DRY_RUN ?? "") === "true",
             forgejoToken: runtimeEnv.BOB_FORGEJO_TOKEN as string | undefined,
             forgejoInstanceUrl:

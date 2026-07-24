@@ -466,6 +466,172 @@ export async function executeTask(
   };
 }
 
+export interface ReviewDispatchInput {
+  /** Bob's pullRequests.id (uuid) for the PR to review. */
+  pullRequestId: string;
+  /** Bob's repositories.id (uuid) — resolves the runner checkout + workspace. */
+  repositoryId: string;
+  remoteOwner: string;
+  remoteName: string;
+  number: number;
+  /** e.g. https://git.forgegraf.com — null for github.com. */
+  instanceUrl: string | null;
+  /** Head commit SHA — the review is bound to this so a re-push re-triggers. */
+  headSha: string;
+  headBranch: string | null;
+  title: string;
+  body: string | null;
+}
+
+export interface ReviewDispatchResult {
+  sessionId: string;
+  taskRunId: string;
+}
+
+/**
+ * Build the reviewer prompt handed to the runner agent. The agent reviews the
+ * PR and posts a NATIVE git-host review (APPROVE / REQUEST_CHANGES) bound to the
+ * head SHA — which the auto-merge reaper then reads to gate the merge. No
+ * metered model API is involved: the agent runs on the runner under its own
+ * subscription-authed CLI, exactly like every other Bob task.
+ */
+function buildPrReviewPrompt(
+  input: ReviewDispatchInput,
+  baseBranch: string,
+): string {
+  const host = input.instanceUrl ?? "https://github.com";
+  const api = `${host}/api/v1/repos/${input.remoteOwner}/${input.remoteName}`;
+  return [
+    `You are reviewing pull request #${input.number} in ${input.remoteOwner}/${input.remoteName}.`,
+    `PR title: ${input.title}`,
+    input.body ? `PR description:\n${input.body}` : "PR description: (none)",
+    "",
+    "## What to do",
+    "1. Read the PR diff and enough of the surrounding code to judge it. Fetch the diff with:",
+    `   curl -s -H "Authorization: token $TOKEN" "${api}/pulls/${input.number}.diff"`,
+    `   (also available: git fetch origin ${input.headBranch ?? `pull/${input.number}/head`} && git diff origin/${baseBranch}...FETCH_HEAD)`,
+    "2. Assess correctness, safety, completeness for the PR's stated intent, obvious bugs, and test gaps.",
+    "3. Submit your verdict AS A GIT-HOST REVIEW bound to the head commit:",
+    `   curl -s -X POST -H "Authorization: token $TOKEN" -H "Content-Type: application/json" \\`,
+    `     "${api}/pulls/${input.number}/reviews" \\`,
+    `     -d '{"event":"APPROVED"|"REQUEST_CHANGES","commit_id":"${input.headSha}","body":"<concise assessment>"}'`,
+    "   Use event APPROVED only if the change is correct, safe, and complete; otherwise REQUEST_CHANGES.",
+    "",
+    "## Getting $TOKEN",
+    "The checkout's origin remote embeds a usable token. Extract it, do not print it:",
+    `   TOKEN=$(git remote get-url origin | sed -E 's#https://[^:]+:([^@]+)@.*#\\1#')`,
+    "",
+    "## Hard rules",
+    "- Do NOT commit, push, or open/modify any pull request. Review only.",
+    "- Make no changes to the working tree. Your only side effect is the single review POST above.",
+    `- The review MUST include \"commit_id\":\"${input.headSha}\" so it binds to the current head.`,
+  ].join("\n");
+}
+
+/**
+ * Dispatch a PR code review to a runner agent (subscription-authed CLI — NOT a
+ * metered model API). Mirrors executeTask's proven session-create + /internal/
+ * nudge path, but the agent's job is to review an existing PR and post a
+ * git-host review verdict rather than implement a task. The auto-merge reaper
+ * reads that verdict on a later pass to decide the merge.
+ *
+ * Returns null (and dispatches nothing) if the repo can't be resolved or has no
+ * workspace — the caller logs a skip.
+ */
+export async function dispatchReviewSession(
+  userId: string,
+  input: ReviewDispatchInput,
+  agentType = "codex",
+): Promise<ReviewDispatchResult | null> {
+  const repo = await db.query.repositories.findFirst({
+    where: eq(repositories.id, input.repositoryId),
+  });
+  if (!repo || !repo.workspaceId || !repo.path) return null;
+
+  const workspaceId = repo.workspaceId;
+  const workingDirectory = repo.path;
+  const baseBranch = repo.mainBranch || "main";
+  // A throwaway branch for the worktree — the agent never commits to it, and it
+  // is deliberately NOT the PR head branch (a `-B` checkout would reset it).
+  const reviewBranch = `bob/review/${input.remoteName}-${input.number}-${input.headSha.slice(0, 8)}`;
+  const identifier = `review-${input.remoteName}#${input.number}`;
+  const title = `Review: ${input.remoteOwner}/${input.remoteName}#${input.number}`;
+
+  const [session] = await db
+    .insert(chatConversations)
+    .values({
+      userId,
+      repositoryId: input.repositoryId,
+      workingDirectory,
+      agentType,
+      title,
+      status: "pending",
+      gitBranch: reviewBranch,
+      sessionType: "execution",
+      planningWorkspaceId: workspaceId,
+    })
+    .returning();
+  const insertedSession = expectInsertedRow(
+    session,
+    "Failed to create review session",
+  );
+
+  const [taskRun] = await db
+    .insert(taskRuns)
+    .values({
+      userId,
+      planningWorkspaceId: workspaceId,
+      planningItemId: input.pullRequestId,
+      planningItemIdentifier: identifier,
+      planningProvider: "internal",
+      sessionId: insertedSession.id,
+      repositoryId: input.repositoryId,
+      status: "starting",
+      branch: reviewBranch,
+      runPhase: "review",
+      pullRequestId: input.pullRequestId,
+      workItemIdentifierSnapshot: identifier,
+    })
+    .returning();
+  const insertedTaskRun = expectInsertedRow(
+    taskRun,
+    "Failed to create review task run",
+  );
+
+  const description = buildPrReviewPrompt(input, baseBranch);
+  const gatewayUrl = getGatewayUrl();
+  const nudgeSecret = getNudgeSecret();
+  if (nudgeSecret) {
+    try {
+      await fetch(`${gatewayUrl}/internal/nudge`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${nudgeSecret}`,
+        },
+        body: JSON.stringify({
+          sessionId: insertedSession.id,
+          workspaceId,
+          workingDirectory,
+          agentType,
+          title,
+          sessionType: "execution",
+          description,
+          identifier,
+          branch: reviewBranch,
+        }),
+      });
+    } catch (err) {
+      console.warn("[reviewDispatch] nudge failed:", err);
+    }
+  }
+
+  return {
+    sessionId: insertedSession.id,
+    taskRunId: insertedTaskRun.id,
+  };
+}
+
 export async function markTaskBlocked(
   taskRunId: string,
   reason: string,
