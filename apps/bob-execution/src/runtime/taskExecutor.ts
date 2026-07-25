@@ -567,8 +567,11 @@ export async function dispatchReviewSession(
   const workingDirectory = repo.path;
   const baseBranch = repo.mainBranch || "main";
   // A throwaway branch for the worktree — the agent never commits to it, and it
-  // is deliberately NOT the PR head branch (a `-B` checkout would reset it).
-  const reviewBranch = `bob/review/${input.remoteName}-${input.number}-${input.headSha.slice(0, 8)}`;
+  // is deliberately NOT the PR head branch (a `-B` checkout would reset it). The
+  // unique suffix avoids a `git worktree add -B` collision with a leftover
+  // worktree from an earlier attempt at the same head SHA.
+  const uniq = crypto.randomUUID().slice(0, 8);
+  const reviewBranch = `bob/review/${input.remoteName}-${input.number}-${input.headSha.slice(0, 8)}-${uniq}`;
   const identifier = `review-${input.remoteName}#${input.number}`;
   const title = `Review: ${input.remoteOwner}/${input.remoteName}#${input.number}`;
 
