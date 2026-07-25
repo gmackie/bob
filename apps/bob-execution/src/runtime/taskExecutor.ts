@@ -481,6 +481,14 @@ export interface ReviewDispatchInput {
   headBranch: string | null;
   title: string;
   body: string | null;
+  /**
+   * Token the agent posts its review with. MUST be a DIFFERENT identity than
+   * the PR author — the git host rejects "review your own pull request", and
+   * every Bob PR is authored by the runner's own account. This is the dedicated
+   * reviewer bot's token (BOB_REVIEW_FORGEJO_TOKEN). Without it, the agent can
+   * still review but cannot post a verdict.
+   */
+  reviewToken?: string;
 }
 
 export interface ReviewDispatchResult {
@@ -501,10 +509,19 @@ function buildPrReviewPrompt(
 ): string {
   const host = input.instanceUrl ?? "https://github.com";
   const api = `${host}/api/v1/repos/${input.remoteOwner}/${input.remoteName}`;
+  // The reviewer token is a DIFFERENT identity than the PR author (the git host
+  // rejects self-reviews). It's embedded here because /internal/nudge carries no
+  // env channel; scope is limited (repo write on an internal instance).
+  const tokenLine = input.reviewToken
+    ? `A reviewer token is provided. Use it verbatim as $TOKEN (do not print it): TOKEN=${input.reviewToken}`
+    : "No reviewer token was provided — you will not be able to post the review; report that and stop.";
   return [
     `You are reviewing pull request #${input.number} in ${input.remoteOwner}/${input.remoteName}.`,
     `PR title: ${input.title}`,
     input.body ? `PR description:\n${input.body}` : "PR description: (none)",
+    "",
+    "## Reviewer token",
+    tokenLine,
     "",
     "## What to do",
     "1. Read the PR diff and enough of the surrounding code to judge it. Fetch the diff with:",
@@ -516,15 +533,13 @@ function buildPrReviewPrompt(
     `     "${api}/pulls/${input.number}/reviews" \\`,
     `     -d '{"event":"APPROVED"|"REQUEST_CHANGES","commit_id":"${input.headSha}","body":"<concise assessment>"}'`,
     "   Use event APPROVED only if the change is correct, safe, and complete; otherwise REQUEST_CHANGES.",
-    "",
-    "## Getting $TOKEN",
-    "The checkout's origin remote embeds a usable token. Extract it, do not print it:",
-    `   TOKEN=$(git remote get-url origin | sed -E 's#https://[^:]+:([^@]+)@.*#\\1#')`,
+    "   Confirm the POST returned a review object (an id + your state); if it errored, report the error verbatim.",
     "",
     "## Hard rules",
     "- Do NOT commit, push, or open/modify any pull request. Review only.",
     "- Make no changes to the working tree. Your only side effect is the single review POST above.",
     `- The review MUST include \"commit_id\":\"${input.headSha}\" so it binds to the current head.`,
+    "- Never print or echo the reviewer token.",
   ].join("\n");
 }
 

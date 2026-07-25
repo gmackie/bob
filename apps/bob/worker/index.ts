@@ -192,6 +192,14 @@ export default Sentry.withSentry(
             forgejoInstanceUrl:
               (runtimeEnv.BOB_FORGEJO_INSTANCE_URL as string | undefined) ??
               "https://git.forgegraf.com",
+            // Dedicated reviewer bot (separate identity — the git host rejects
+            // self-reviews on the author's own PRs).
+            reviewForgejoToken: runtimeEnv.BOB_REVIEW_FORGEJO_TOKEN as
+              | string
+              | undefined,
+            reviewerLogin:
+              (runtimeEnv.BOB_AUTO_MERGE_REVIEWER_LOGIN as string | undefined) ??
+              "bob-reviewer",
           });
           console.log(
             `[auto-merge] scanned=${r.scanned} reviewed=${r.reviewed} merged=${r.merged} skipped=${r.skipped}` +

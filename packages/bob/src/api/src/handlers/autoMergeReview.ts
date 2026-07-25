@@ -80,6 +80,17 @@ export interface AutoMergeConfig {
   forgejoToken?: string;
   /** Instance URL the forgejoToken is valid for (e.g. https://git.forgegraf.com). */
   forgejoInstanceUrl?: string;
+  /**
+   * Token of the dedicated reviewer bot — a DIFFERENT identity than the PR
+   * author, so the git host accepts the review (it rejects self-reviews). The
+   * agent posts its verdict with this. Without it the review can't be recorded.
+   */
+  reviewForgejoToken?: string;
+  /**
+   * Login of the reviewer bot — the merge gate only trusts a verdict authored by
+   * this identity at the head SHA. Defaults to "bob-reviewer".
+   */
+  reviewerLogin?: string;
 }
 
 export interface AutoMergeResult {
@@ -137,8 +148,7 @@ export async function autoReviewAndMerge(
   });
   result.scanned = openPrs.length;
 
-  // Cache the authenticated bot login per (userId, provider, instanceUrl).
-  const botLoginCache = new Map<string, string>();
+  const reviewerLogin = cfg.reviewerLogin ?? "bob-reviewer";
 
   for (const pr of openPrs) {
     const label = `${pr.remoteOwner}/${pr.remoteName}#${pr.number}`;
@@ -218,14 +228,8 @@ export async function autoReviewAndMerge(
         continue;
       }
 
-      // Resolve the bot login (to recognize our own prior review).
-      const cacheKey = `${pr.userId}:${pr.provider}:${pr.instanceUrl ?? ""}`;
-      let botLogin = botLoginCache.get(cacheKey);
-      if (botLogin === undefined) {
-        botLogin = (await client.getAuthenticatedUser()).username;
-        botLoginCache.set(cacheKey, botLogin);
-      }
-
+      // The verdict we trust is a review authored by the reviewer bot (a
+      // separate identity from the PR author) bound to the current head SHA.
       const reviews = await client.listPullRequestReviews(
         pr.remoteOwner,
         pr.remoteName,
@@ -233,7 +237,7 @@ export async function autoReviewAndMerge(
       );
       const ownReviewAtHead = reviews.find(
         (r) =>
-          r.userLogin === botLogin &&
+          r.userLogin === reviewerLogin &&
           r.commitId === headSha &&
           (r.state === "APPROVED" || r.state === "REQUEST_CHANGES"),
       );
@@ -271,6 +275,17 @@ export async function autoReviewAndMerge(
           });
           continue;
         }
+        if (!cfg.reviewForgejoToken) {
+          // No separate reviewer identity → the agent can't post a verdict the
+          // git host will accept. Don't spawn a no-op review session.
+          result.skipped++;
+          result.items.push({
+            pr: label,
+            action: "skipped",
+            reason: "no reviewer token configured",
+          });
+          continue;
+        }
         const dispatched = await dispatchReviewSession(
           pr.userId,
           {
@@ -284,6 +299,7 @@ export async function autoReviewAndMerge(
             headBranch: pr.headBranch ?? null,
             title: remote.title,
             body: remote.body,
+            reviewToken: cfg.reviewForgejoToken,
           },
           cfg.reviewAgentType ?? "codex",
         );
