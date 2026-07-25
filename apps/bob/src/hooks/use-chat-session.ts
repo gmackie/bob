@@ -216,6 +216,7 @@ export function useChatSession({ sessionId, enabled = true }: UseChatSessionOpti
     unsubscribe,
     sendInput,
     stopSession: wsStopSession,
+    runView: wsRunView,
     reconnect,
   } = useSessionSocket({
     gatewayUrl: gatewayInfo?.url ?? "",
@@ -269,6 +270,11 @@ export function useChatSession({ sessionId, enabled = true }: UseChatSessionOpti
     wsStopSession(activeId);
   }, [activeId, wsStopSession]);
 
+  const reportRunView = useCallback(() => {
+    if (!activeId) return;
+    wsRunView(activeId);
+  }, [activeId, wsRunView]);
+
   const resolveInput = useCallback(
     (response: string) => {
       if (!activeId || !workflowState?.awaitingInput) return;
@@ -294,7 +300,9 @@ export function useChatSession({ sessionId, enabled = true }: UseChatSessionOpti
     connectionState,
     sendMessage,
     stopSession,
+    reportRunView,
     resolveInput,
+    isResolving: resolveInputMutation.isPending,
     workflowState,
     sessionData: hasSession ? sessionData : null,
     sessionStatus,

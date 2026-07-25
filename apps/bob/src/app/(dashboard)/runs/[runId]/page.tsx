@@ -98,8 +98,25 @@ export default function RunDetailPage({
 
   if (!run) {
     return (
-      <div className="p-6">
-        <p className="text-muted-foreground">Run not found.</p>
+      <div className="flex min-h-[40vh] flex-col items-center justify-center gap-4 p-6 text-center">
+        <div className="flex size-12 items-center justify-center rounded-full bg-muted">
+          <CrossCircledIcon className="size-6 text-muted-foreground" />
+        </div>
+        <div>
+          <p className="font-display text-lg font-semibold text-foreground">
+            Run not found
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            This run may have been reaped, or the link is stale.
+          </p>
+        </div>
+        <Link
+          href="/runs"
+          className="inline-flex items-center gap-1.5 rounded-md bg-secondary px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent"
+        >
+          <ArrowLeftIcon className="size-4" />
+          Back to runs
+        </Link>
       </div>
     );
   }
@@ -436,16 +453,16 @@ function DiffTab({ run }: { run: any }) {
 
   return (
     <div className="rounded-lg border border-border overflow-hidden">
-      <pre className="overflow-x-auto p-4 font-mono text-xs leading-relaxed max-h-[700px] overflow-y-auto bg-[#1C1B18] text-[#EEEDEA]">
+      <pre className="overflow-x-auto p-4 font-mono text-xs leading-relaxed max-h-[700px] overflow-y-auto bg-muted text-foreground">
         {(rawDiff ?? "").split("\n").map((line: string, i: number) => (
           <div
             key={i}
             className={cn(
               "px-2 -mx-2",
-              line.startsWith("+") && !line.startsWith("+++") && "bg-green-900/20 text-green-300",
-              line.startsWith("-") && !line.startsWith("---") && "bg-red-900/20 text-red-300",
-              line.startsWith("@@") && "text-cyan-400",
-              line.startsWith("diff ") && "text-amber-400 font-semibold mt-4 first:mt-0",
+              line.startsWith("+") && !line.startsWith("+++") && "bg-green-500/10 text-green-700 dark:text-green-300",
+              line.startsWith("-") && !line.startsWith("---") && "bg-red-500/10 text-red-700 dark:text-red-300",
+              line.startsWith("@@") && "text-cyan-700 dark:text-cyan-400",
+              line.startsWith("diff ") && "text-amber-700 dark:text-amber-400 font-semibold mt-4 first:mt-0",
             )}
           >
             {line}
