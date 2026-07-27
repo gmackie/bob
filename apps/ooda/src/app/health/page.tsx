@@ -42,6 +42,8 @@ export default function HealthPage() {
         <div className="mt-4 flex items-center gap-4 rounded-[6px] border border-[#2A2A2F] bg-[#1A1A1E] px-4 py-2.5 text-sm font-mono">
           {healthQuery.isLoading ? (
             <span className="text-[#5A5855]">Loading...</span>
+          ) : healthQuery.isError ? (
+            <span className="text-[#C45454]">Health check unavailable</span>
           ) : (
             <>
               <span className="text-[#4A9E6B]">{upCount} up</span>
@@ -53,19 +55,39 @@ export default function HealthPage() {
           )}
         </div>
 
-        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-          {connectors.map((c) => (
-            <ConnectorStatusCard
-              key={c.connectorId}
-              connectorId={c.connectorId}
-              status={c.status}
-              rateLimitRemaining={c.rateLimitRemaining ?? undefined}
-              lastSuccessAt={c.lastSuccessAt ?? undefined}
-              errorCount={c.errorCount}
-              avgResponseMs={c.avgResponseMs ?? undefined}
-            />
-          ))}
-        </div>
+        {healthQuery.isError ? (
+          <div className="mt-6 rounded-[6px] border border-[#C45454]/30 bg-[#C45454]/5 px-4 py-6 text-center">
+            <p className="text-sm text-[#C45454]">
+              Couldn&apos;t reach the runner health endpoint.
+            </p>
+            <p className="mt-1 text-xs text-[#8A8580]">
+              {healthQuery.error instanceof Error
+                ? healthQuery.error.message
+                : "Retrying every 5 seconds."}
+            </p>
+          </div>
+        ) : !healthQuery.isLoading && connectors.length === 0 ? (
+          <div className="mt-6 rounded-[6px] border border-[#2A2A2F] bg-[#1A1A1E] px-4 py-10 text-center">
+            <p className="text-sm text-[#8A8580]">No connectors configured yet.</p>
+            <p className="mt-1 text-xs text-[#5A5855]">
+              Connector status will appear here once a runner registers a source.
+            </p>
+          </div>
+        ) : (
+          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+            {connectors.map((c) => (
+              <ConnectorStatusCard
+                key={c.connectorId}
+                connectorId={c.connectorId}
+                status={c.status}
+                rateLimitRemaining={c.rateLimitRemaining ?? undefined}
+                lastSuccessAt={c.lastSuccessAt ?? undefined}
+                errorCount={c.errorCount}
+                avgResponseMs={c.avgResponseMs ?? undefined}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
