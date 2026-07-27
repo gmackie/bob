@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 
 import { Badge } from "@gmacko/core/ui/badge";
+import { Button } from "@gmacko/core/ui/button";
 
 import { AwaitingInputCard } from "~/app/(dashboard)/chat/_components/awaiting-input-card";
 import { InputComposer } from "~/app/(dashboard)/chat/_components/input-composer";
@@ -53,9 +55,12 @@ export function ExecutionSessionWorkspace({
     canSend,
     events,
     isConnected,
+    isResolving,
+    reportRunView,
     resolveInput,
     sendMessage,
     sessionStatus,
+    stopSession,
     workflowState,
   } = useChatSession({ sessionId: session.id, enabled: true });
 
@@ -65,6 +70,15 @@ export function ExecutionSessionWorkspace({
     effectiveStatus === "stopped" ||
     effectiveStatus === "completed" ||
     effectiveStatus === "error";
+  const isStopping = effectiveStatus === "stopping";
+
+  // Explicit foreground view — the honest "was I watching?" instrument behind
+  // the unattended-trust acceptance proxy (parity with mobile's run screen).
+  // Fire once the socket is live so the run_view message actually reaches the
+  // gateway; re-fire on session change.
+  useEffect(() => {
+    if (isConnected) reportRunView();
+  }, [isConnected, reportRunView]);
   const linkedTaskHref = getExecutionSessionLinkedTaskHref({
     workItemId: session.workItemId,
     linkedTaskUrl: session.linkedTask?.url,
@@ -92,9 +106,21 @@ export function ExecutionSessionWorkspace({
               {isConnected ? "Connected" : "Connecting"}
             </p>
           </div>
-          <Badge variant={STATUS_VARIANT[effectiveStatus] ?? "slate"}>
-            {formatSessionStatus(effectiveStatus)}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant={STATUS_VARIANT[effectiveStatus] ?? "slate"}>
+              {formatSessionStatus(effectiveStatus)}
+            </Badge>
+            {!isReadOnly ? (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={stopSession}
+                disabled={!isConnected || isStopping}
+              >
+                {isStopping ? "Stopping…" : "Stop"}
+              </Button>
+            ) : null}
+          </div>
         </div>
 
         {workflowState?.awaitingInput ? (
@@ -105,7 +131,7 @@ export function ExecutionSessionWorkspace({
               defaultAction={workflowState.awaitingInput.defaultAction}
               expiresAt={workflowState.awaitingInput.expiresAt}
               onResolve={resolveInput}
-              isResolving={false}
+              isResolving={isResolving}
             />
           </div>
         ) : null}

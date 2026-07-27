@@ -202,6 +202,13 @@ export function useSessionSocket({
     clientRef.current?.stopSession(sessionId);
   }, []);
 
+  // Explicit foreground run-screen view — audited as observe.run_view, the
+  // honest "was I watching?" instrument behind the unattended-trust acceptance
+  // proxy (mirrors mobile's reportRunView).
+  const runView = useCallback((sessionId: string) => {
+    clientRef.current?.runView(sessionId);
+  }, []);
+
   const subscribeWorkspace = useCallback(
     (statusFilter?: SessionStatus[], workspaceId?: string) => {
       clientRef.current?.subscribeWorkspace(statusFilter, workspaceId);
@@ -223,6 +230,7 @@ export function useSessionSocket({
     sendInput,
     createSession,
     stopSession,
+    runView,
     reconnect,
   };
 }

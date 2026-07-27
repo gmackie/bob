@@ -278,6 +278,7 @@ export default function RunsPage() {
         ].map((item) => (
           <button
             key={item.key}
+            aria-pressed={provider === item.key}
             onClick={() => {
               router.push(getProviderRunsFilterHref(searchParams?.toString() ?? "", {
                 provider: item.key as "all" | "claude" | "codex" | "cursor" | "grok",
@@ -299,6 +300,7 @@ export default function RunsPage() {
       {workspaces.length > 1 && (
         <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1">
           <button
+            aria-pressed={!workspaceId}
             onClick={() =>
               router.push(getProviderRunsFilterHref(searchParams?.toString() ?? "", {
                 workspaceId: null,
@@ -316,6 +318,7 @@ export default function RunsPage() {
           {workspaces.map((ws: any) => (
             <button
               key={ws.id}
+              aria-pressed={ws.id === workspaceId}
               onClick={() =>
                 router.push(getProviderRunsFilterHref(searchParams?.toString() ?? "", {
                   workspaceId: ws.id,
@@ -336,6 +339,8 @@ export default function RunsPage() {
 
       {/* Fleet Status Bar */}
       <button
+        aria-expanded={fleetExpanded}
+        aria-label={`Fleet status: ${onlineNodes.length} nodes online, ${activeRuns.length} running. ${fleetExpanded ? "Collapse" : "Expand"} details.`}
         onClick={() => setFleetExpanded((p) => !p)}
         className="flex items-center gap-4 rounded-lg border border-border bg-card px-4 py-3 text-left transition-colors hover:bg-accent/50"
       >
@@ -357,6 +362,7 @@ export default function RunsPage() {
           {todayRuns.length} today
         </span>
         <svg
+          aria-hidden="true"
           className={cn(
             "ml-auto size-4 text-muted-foreground transition-transform",
             fleetExpanded && "rotate-180",
