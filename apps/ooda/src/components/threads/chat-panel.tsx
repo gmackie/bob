@@ -149,7 +149,7 @@ export function ChatPanel({ threadId, runnerId, onPromoted }: ChatPanelProps) {
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
         {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center">
-            <p className="text-sm text-[#5A5855]">
+            <p className="text-sm text-subtle">
               Start a research session by sending a message.
             </p>
           </div>
@@ -162,19 +162,19 @@ export function ChatPanel({ threadId, runnerId, onPromoted }: ChatPanelProps) {
               <div
                 className={`max-w-[80%] rounded-[6px] px-3 py-2 text-sm ${
                   msg.role === "user"
-                    ? "bg-[#D4A04A]/15 text-[#E8E4DF]"
-                    : "bg-[#1A1A1E] text-[#E8E4DF]"
+                    ? "bg-primary/15 text-foreground"
+                    : "bg-card text-foreground"
                 }`}
               >
                 <pre className="whitespace-pre-wrap font-sans">{msg.content}</pre>
-                <span className="mt-1 block font-mono text-[10px] text-[#5A5855]">
+                <span className="mt-1 block font-mono text-[10px] text-subtle">
                   {msg.timestamp}
                 </span>
                 {msg.role === "assistant" && (
                   <button
                     onClick={() => handlePromote(msg)}
                     disabled={promoteMutation.isPending}
-                    className="mt-2 rounded-[3px] border border-[#2A2A2F] bg-[#D4A04A]/10 px-2 py-0.5 font-mono text-[10px] text-[#D4A04A] transition-colors hover:border-[#D4A04A] hover:bg-[#D4A04A]/20 disabled:opacity-50"
+                    className="mt-2 rounded-[3px] border border-border bg-primary/10 px-2 py-0.5 font-mono text-[10px] text-primary transition-colors hover:border-primary hover:bg-primary/20 disabled:opacity-50"
                   >
                     {promoteMutation.isPending ? "Promoting..." : "Promote to workspace"}
                   </button>
@@ -189,7 +189,7 @@ export function ChatPanel({ threadId, runnerId, onPromoted }: ChatPanelProps) {
       {/* Input area */}
       <form
         onSubmit={handleSubmit}
-        className="border-t border-[#2A2A2F] p-3 pb-6 md:pb-3"
+        className="border-t border-border p-3 pb-6 md:pb-3"
       >
         {!availableRunner && (
           <div className="mb-2 rounded-[3px] bg-[#2E2A1A] px-3 py-1.5 text-xs text-amber-400">
@@ -203,12 +203,12 @@ export function ChatPanel({ threadId, runnerId, onPromoted }: ChatPanelProps) {
             onChange={(e) => setInput(e.target.value)}
             placeholder={isRunning ? "Agent is working..." : "Ask a research question..."}
             disabled={isRunning}
-            className="flex-1 rounded-[3px] border border-[#2A2A2F] bg-[#1A1A1E] px-3 py-2.5 text-sm text-[#E8E4DF] placeholder-[#5A5855] outline-none focus:border-[#D4A04A] disabled:opacity-50"
+            className="flex-1 rounded-[3px] border border-border bg-card px-3 py-2.5 text-sm text-foreground placeholder-subtle outline-none focus:border-primary disabled:opacity-50"
           />
           <button
             type="submit"
             disabled={!input.trim() || !availableRunner || isRunning}
-            className="rounded-[3px] bg-[#D4A04A] px-4 py-2.5 text-sm font-medium text-[#111113] transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="rounded-[3px] bg-primary px-4 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             {isRunning ? "Running..." : "Send"}
           </button>

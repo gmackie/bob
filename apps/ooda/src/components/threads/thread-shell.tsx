@@ -22,7 +22,7 @@ interface ThreadShellProps {
 const STATUS_COLORS: Record<string, string> = {
   active: "bg-green-500",
   paused: "bg-yellow-500",
-  archived: "bg-[#5A5855]",
+  archived: "bg-subtle",
   completed: "bg-blue-500",
 };
 
@@ -116,33 +116,33 @@ export function ThreadShell({ thread }: ThreadShellProps) {
   };
 
   return (
-    <div data-testid="thread-shell" className="flex h-screen flex-col bg-[#111113]">
+    <div data-testid="thread-shell" className="flex h-screen flex-col bg-background">
       {/* Header. `min-w-0` + `truncate` on the title lets it shrink /
           ellipsis under sibling flex items (status dot, badges, Compare
           button). Without the min-w-0 guard the title forces the flex
           container wider than the viewport on narrow widths. */}
-      <header className="flex items-center gap-3 border-b border-[#2A2A2F] px-4 py-3">
+      <header className="flex items-center gap-3 border-b border-border px-4 py-3">
         <div
-          className={`h-2 w-2 shrink-0 rounded-full ${STATUS_COLORS[thread.status] ?? "bg-[#5A5855]"}`}
+          className={`h-2 w-2 shrink-0 rounded-full ${STATUS_COLORS[thread.status] ?? "bg-subtle"}`}
           title={thread.status}
         />
-        <h1 className="min-w-0 truncate font-serif text-lg text-[#E8E4DF]">
+        <h1 className="min-w-0 truncate font-serif text-lg text-foreground">
           {thread.title}
         </h1>
         {thread.domainPackId && (
-          <span className="hidden shrink-0 rounded-[3px] bg-[#1A1A1E] px-2 py-0.5 font-mono text-xs text-[#8A8580] sm:inline">
+          <span className="hidden shrink-0 rounded-[3px] bg-card px-2 py-0.5 font-mono text-xs text-muted-foreground sm:inline">
             {thread.domainPackId}
           </span>
         )}
-        <span className="ml-auto hidden shrink-0 rounded-[3px] bg-[#1A1A1E] px-2 py-0.5 text-xs text-[#5A5855] sm:inline">
+        <span className="ml-auto hidden shrink-0 rounded-[3px] bg-card px-2 py-0.5 text-xs text-subtle sm:inline">
           {thread.status}
         </span>
         <button
           onClick={() => setShowCompareBar((v) => !v)}
-          className={`shrink-0 rounded-[3px] border px-3 py-1.5 font-mono text-xs transition-colors focus-visible:ring-2 focus-visible:ring-[#D4A04A] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111113] ${
+          className={`shrink-0 rounded-[3px] border px-3 py-1.5 font-mono text-xs transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
             showCompareBar || comparisonSessions
-              ? "border-[#D4A04A] bg-[#D4A04A]/15 text-[#D4A04A]"
-              : "border-[#2A2A2F] text-[#8A8580] hover:border-[#D4A04A] hover:text-[#D4A04A]"
+              ? "border-primary bg-primary/15 text-primary"
+              : "border-border text-muted-foreground hover:border-primary hover:text-primary"
           }`}
         >
           Compare
@@ -154,12 +154,12 @@ export function ThreadShell({ thread }: ThreadShellProps) {
           multiple rows on narrow widths instead of clipping or causing
           horizontal scroll. */}
       {showCompareBar && !comparisonSessions && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[#D4A04A]/40 bg-[#2E2A1A] px-4 py-2">
-          <span className="font-mono text-xs text-[#D4A04A]">Adapters:</span>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-primary/40 bg-[#2E2A1A] px-4 py-2">
+          <span className="font-mono text-xs text-primary">Adapters:</span>
           <select
             value={adapterA}
             onChange={(e) => setAdapterA(e.target.value)}
-            className="rounded-[3px] border border-[#D4A04A]/30 bg-[#1A1A1E] px-2 py-1 font-mono text-xs text-[#E8E4DF] outline-none"
+            className="rounded-[3px] border border-primary/30 bg-card px-2 py-1 font-mono text-xs text-foreground outline-none"
           >
             <option value="">Select A</option>
             {adapters.map((a) => (
@@ -168,11 +168,11 @@ export function ThreadShell({ thread }: ThreadShellProps) {
               </option>
             ))}
           </select>
-          <span className="font-mono text-xs text-[#5A5855]">vs</span>
+          <span className="font-mono text-xs text-subtle">vs</span>
           <select
             value={adapterB}
             onChange={(e) => setAdapterB(e.target.value)}
-            className="rounded-[3px] border border-[#D4A04A]/30 bg-[#1A1A1E] px-2 py-1 font-mono text-xs text-[#E8E4DF] outline-none"
+            className="rounded-[3px] border border-primary/30 bg-card px-2 py-1 font-mono text-xs text-foreground outline-none"
           >
             <option value="">Select B</option>
             {adapters.map((a) => (
@@ -187,7 +187,7 @@ export function ThreadShell({ thread }: ThreadShellProps) {
             onChange={(e) => setComparePrompt(e.target.value)}
             placeholder="Prompt to run through both…"
             aria-label="Comparison prompt"
-            className="min-w-0 flex-1 basis-48 rounded-[3px] border border-[#D4A04A]/30 bg-[#1A1A1E] px-2 py-1 font-mono text-xs text-[#E8E4DF] placeholder-[#5A5855] outline-none focus:border-[#D4A04A]"
+            className="min-w-0 flex-1 basis-48 rounded-[3px] border border-primary/30 bg-card px-2 py-1 font-mono text-xs text-foreground placeholder-subtle outline-none focus:border-primary"
           />
           <button
             onClick={handleRunComparison}
@@ -198,13 +198,13 @@ export function ThreadShell({ thread }: ThreadShellProps) {
               !comparePrompt.trim() ||
               sendPromptMutation.isPending
             }
-            className="rounded-[3px] bg-[#D4A04A] px-3 py-1 font-mono text-xs font-medium text-[#111113] transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="rounded-[3px] bg-primary px-3 py-1 font-mono text-xs font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             {sendPromptMutation.isPending ? "Starting..." : "Run Comparison"}
           </button>
           <button
             onClick={() => setShowCompareBar(false)}
-            className="ml-auto font-mono text-xs text-[#5A5855] hover:text-[#8A8580]"
+            className="ml-auto font-mono text-xs text-subtle hover:text-muted-foreground"
           >
             Cancel
           </button>
@@ -223,14 +223,14 @@ export function ThreadShell({ thread }: ThreadShellProps) {
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-          <div className="min-h-0 flex-1 border-b border-[#2A2A2F] md:w-[60%] md:flex-none md:border-b-0 md:border-r">
+          <div className="min-h-0 flex-1 border-b border-border md:w-[60%] md:flex-none md:border-b-0 md:border-r">
             <ChatPanel threadId={thread.id} />
           </div>
           <div className="md:w-[40%] md:flex-none">
             {/* Collapsible workspace header on mobile */}
             <button
               onClick={() => setWorkspaceOpen((v) => !v)}
-              className="flex w-full items-center justify-between border-b border-[#2A2A2F] px-4 py-2 text-sm font-medium text-[#8A8580] md:hidden"
+              className="flex w-full items-center justify-between border-b border-border px-4 py-2 text-sm font-medium text-muted-foreground md:hidden"
             >
               <span>Workspace</span>
               <span className="text-xs">{workspaceOpen ? "\u25B2" : "\u25BC"}</span>

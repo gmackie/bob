@@ -6,6 +6,10 @@
 
 @theme {
   --font-serif: "Instrument Serif", serif;
+  /* Dimmer than --muted-foreground (#8A8580); used for placeholders and the
+     faintest labels. Exposed here so `text-subtle`/`bg-subtle`/`border-subtle`
+     replace the previously hardcoded #5A5855 throughout the app. */
+  --color-subtle: #5a5855;
 }
 
 @source "../../../../packages/core/src/ui/*.{ts,tsx}";

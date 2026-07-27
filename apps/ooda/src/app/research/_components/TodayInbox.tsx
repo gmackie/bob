@@ -65,7 +65,7 @@ export function TodayInbox({ since }: TodayInboxProps) {
   );
 
   if (inboxQuery.isLoading) {
-    return <div className="text-xs text-[#5A5855]">Loading today's inbox…</div>;
+    return <div className="text-xs text-subtle">Loading today's inbox…</div>;
   }
   if (inboxQuery.isError) {
     return (
@@ -75,7 +75,7 @@ export function TodayInbox({ since }: TodayInboxProps) {
   const items = (inboxQuery.data?.items ?? []) as InboxItem[];
   if (items.length === 0) {
     return (
-      <div className="text-xs text-[#5A5855]">
+      <div className="text-xs text-subtle">
         No new findings yet today.
       </div>
     );
@@ -86,14 +86,14 @@ export function TodayInbox({ since }: TodayInboxProps) {
       {items.map((item) => (
         <div
           key={item.id}
-          className="rounded-[4px] border border-[#2A2A2F] bg-[#111113] p-3"
+          className="rounded-[4px] border border-border bg-background p-3"
         >
           <div className="mb-2 flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium text-[#E8E4DF]">
+              <div className="truncate text-sm font-medium text-foreground">
                 {item.title ?? "(untitled)"}
               </div>
-              <div className="mt-0.5 font-mono text-[10px] text-[#5A5855]">
+              <div className="mt-0.5 font-mono text-[10px] text-subtle">
                 {item.author ?? "unknown"}
                 {item.year !== null ? ` · ${item.year}` : ""}
                 {item.standingInterestLabel
@@ -102,7 +102,7 @@ export function TodayInbox({ since }: TodayInboxProps) {
               </div>
             </div>
             {item.score !== null && (
-              <span className="rounded-[2px] bg-[#D4A04A]/10 px-1.5 py-0.5 font-mono text-[10px] text-[#D4A04A]">
+              <span className="rounded-[2px] bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] text-primary">
                 {item.score.toFixed(2)}
               </span>
             )}
@@ -119,7 +119,7 @@ export function TodayInbox({ since }: TodayInboxProps) {
                 triageMutation.mutate({ id: item.id, action: "save" })
               }
               disabled={triageMutation.isPending}
-              className="rounded-[3px] border border-[#2A2A2F] bg-[#1A1A1E] px-2 py-1 font-mono text-[10px] text-[#E8E4DF] hover:border-[#D4A04A] disabled:opacity-50"
+              className="rounded-[3px] border border-border bg-card px-2 py-1 font-mono text-[10px] text-foreground hover:border-primary disabled:opacity-50"
             >
               Save
             </button>
@@ -129,7 +129,7 @@ export function TodayInbox({ since }: TodayInboxProps) {
                 triageMutation.mutate({ id: item.id, action: "dismiss" })
               }
               disabled={triageMutation.isPending}
-              className="rounded-[3px] border border-[#2A2A2F] bg-[#1A1A1E] px-2 py-1 font-mono text-[10px] text-[#5A5855] hover:border-red-500 hover:text-red-400 disabled:opacity-50"
+              className="rounded-[3px] border border-border bg-card px-2 py-1 font-mono text-[10px] text-subtle hover:border-red-500 hover:text-red-400 disabled:opacity-50"
             >
               Dismiss
             </button>

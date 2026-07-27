@@ -105,7 +105,7 @@ export function InboxList({ threadId }: InboxListProps) {
   );
 
   if (inboxQuery.isLoading) {
-    return <div className="p-3 text-xs text-[#5A5855]">Loading inbox…</div>;
+    return <div className="p-3 text-xs text-subtle">Loading inbox…</div>;
   }
   if (inboxQuery.isError) {
     return (
@@ -121,7 +121,7 @@ export function InboxList({ threadId }: InboxListProps) {
     [];
   if (items.length === 0) {
     return (
-      <div className="p-3 text-xs text-[#5A5855]">No pending findings.</div>
+      <div className="p-3 text-xs text-subtle">No pending findings.</div>
     );
   }
 
@@ -169,13 +169,13 @@ function InboxRow({ item, onSave, onDismiss, onPromote, disabled }: InboxRowProp
   const [note, setNote] = useState("");
 
   return (
-    <div className="rounded-[4px] border border-[#2A2A2F] bg-[#1A1A1E] p-3">
+    <div className="rounded-[4px] border border-border bg-card p-3">
       <div className="mb-2 flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium text-[#E8E4DF]">
+          <div className="truncate text-sm font-medium text-foreground">
             {item.title ?? "(untitled)"}
           </div>
-          <div className="mt-0.5 font-mono text-[10px] text-[#5A5855]">
+          <div className="mt-0.5 font-mono text-[10px] text-subtle">
             {item.author ?? "unknown"}
             {item.year !== null ? ` · ${item.year}` : ""}
             {item.standingInterestLabel
@@ -184,7 +184,7 @@ function InboxRow({ item, onSave, onDismiss, onPromote, disabled }: InboxRowProp
           </div>
         </div>
         {item.score !== null && (
-          <span className="rounded-[2px] bg-[#D4A04A]/10 px-1.5 py-0.5 font-mono text-[10px] text-[#D4A04A]">
+          <span className="rounded-[2px] bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] text-primary">
             {item.score.toFixed(2)}
           </span>
         )}
@@ -199,7 +199,7 @@ function InboxRow({ item, onSave, onDismiss, onPromote, disabled }: InboxRowProp
           type="button"
           onClick={onSave}
           disabled={disabled}
-          className="rounded-[3px] border border-[#2A2A2F] bg-[#1A1A1E] px-2 py-1 font-mono text-[10px] text-[#E8E4DF] hover:border-[#D4A04A] disabled:opacity-50"
+          className="rounded-[3px] border border-border bg-card px-2 py-1 font-mono text-[10px] text-foreground hover:border-primary disabled:opacity-50"
         >
           Save
         </button>
@@ -207,7 +207,7 @@ function InboxRow({ item, onSave, onDismiss, onPromote, disabled }: InboxRowProp
           type="button"
           onClick={onDismiss}
           disabled={disabled}
-          className="rounded-[3px] border border-[#2A2A2F] bg-[#1A1A1E] px-2 py-1 font-mono text-[10px] text-[#5A5855] hover:border-red-500 hover:text-red-400 disabled:opacity-50"
+          className="rounded-[3px] border border-border bg-card px-2 py-1 font-mono text-[10px] text-subtle hover:border-red-500 hover:text-red-400 disabled:opacity-50"
         >
           Dismiss
         </button>
@@ -215,7 +215,7 @@ function InboxRow({ item, onSave, onDismiss, onPromote, disabled }: InboxRowProp
           type="button"
           onClick={() => setPromoteOpen((v) => !v)}
           disabled={disabled}
-          className="rounded-[3px] border border-[#2A2A2F] bg-[#D4A04A]/10 px-2 py-1 font-mono text-[10px] text-[#D4A04A] hover:bg-[#D4A04A]/20 disabled:opacity-50"
+          className="rounded-[3px] border border-border bg-primary/10 px-2 py-1 font-mono text-[10px] text-primary hover:bg-primary/20 disabled:opacity-50"
         >
           Promote
         </button>
@@ -227,7 +227,7 @@ function InboxRow({ item, onSave, onDismiss, onPromote, disabled }: InboxRowProp
             onChange={(e) => setNote(e.target.value)}
             placeholder="Promotion note (markdown)…"
             rows={3}
-            className="w-full rounded-[3px] border border-[#2A2A2F] bg-[#111113] px-2 py-1.5 text-xs text-[#E8E4DF] placeholder-[#5A5855] outline-none focus:border-[#D4A04A]"
+            className="w-full rounded-[3px] border border-border bg-background px-2 py-1.5 text-xs text-foreground placeholder-subtle outline-none focus:border-primary"
           />
           <button
             type="button"
@@ -237,7 +237,7 @@ function InboxRow({ item, onSave, onDismiss, onPromote, disabled }: InboxRowProp
               setPromoteOpen(false);
               setNote("");
             }}
-            className="rounded-[3px] bg-[#D4A04A] px-3 py-1 font-mono text-[10px] font-medium text-[#111113] hover:opacity-90 disabled:opacity-50"
+            className="rounded-[3px] bg-primary px-3 py-1 font-mono text-[10px] font-medium text-background hover:opacity-90 disabled:opacity-50"
           >
             Create draft
           </button>

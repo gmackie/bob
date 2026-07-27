@@ -67,7 +67,7 @@ export function StandingInterestsPanel() {
   );
 
   if (listQuery.isLoading) {
-    return <div className="text-xs text-[#5A5855]">Loading interests…</div>;
+    return <div className="text-xs text-subtle">Loading interests…</div>;
   }
   if (listQuery.isError) {
     return (
@@ -77,7 +77,7 @@ export function StandingInterestsPanel() {
   const items: StandingInterest[] = listQuery.data?.items ?? [];
   if (items.length === 0) {
     return (
-      <div className="text-xs text-[#5A5855]">
+      <div className="text-xs text-subtle">
         No standing interests yet.
       </div>
     );
@@ -88,18 +88,18 @@ export function StandingInterestsPanel() {
       {items.map((interest) => (
         <div
           key={interest.id}
-          className="flex items-center justify-between gap-3 rounded-[4px] border border-[#2A2A2F] bg-[#111113] p-3"
+          className="flex items-center justify-between gap-3 rounded-[4px] border border-border bg-background p-3"
         >
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm text-[#E8E4DF]">
+            <div className="truncate text-sm text-foreground">
               {interest.label}
               {interest.threadId === null && (
-                <span className="ml-2 rounded-[2px] bg-[#2A2A2F] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[#8A8580]">
+                <span className="ml-2 rounded-[2px] bg-border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
                   global
                 </span>
               )}
             </div>
-            <div className="mt-0.5 font-mono text-[10px] text-[#5A5855]">
+            <div className="mt-0.5 font-mono text-[10px] text-subtle">
               every {formatCadence(interest.cadenceSeconds)} · last run{" "}
               {formatRelative(interest.lastRunAt)}
             </div>
@@ -117,7 +117,7 @@ export function StandingInterestsPanel() {
               "rounded-[3px] border px-2 py-1 font-mono text-[10px]",
               interest.enabled
                 ? "border-[#4A9D6B] bg-[#4A9D6B]/10 text-[#4A9D6B]"
-                : "border-[#2A2A2F] bg-[#1A1A1E] text-[#5A5855]",
+                : "border-border bg-card text-subtle",
               "disabled:opacity-50",
             ].join(" ")}
           >

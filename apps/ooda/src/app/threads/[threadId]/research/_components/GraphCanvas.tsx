@@ -185,7 +185,7 @@ export function GraphCanvas({ threadId }: GraphCanvasProps) {
 
   if (graphQuery.isLoading) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-[#8A8580]">
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
         loading graph…
       </div>
     );
@@ -193,7 +193,7 @@ export function GraphCanvas({ threadId }: GraphCanvasProps) {
 
   if (nodes.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-[#8A8580]">
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
         no graph data yet — spawn a dive
       </div>
     );
@@ -234,22 +234,22 @@ function NodeDetailPanel({ node, onClose }: NodeDetailPanelProps) {
   return (
     <div
       data-testid="graph-node-detail"
-      className="absolute inset-y-0 right-0 z-10 flex w-full flex-col border-l border-[#2A2A2F] bg-[#111113] p-4 sm:w-80"
+      className="absolute inset-y-0 right-0 z-10 flex w-full flex-col border-l border-border bg-background p-4 sm:w-80"
     >
       <div className="flex items-start justify-between">
         <div className="flex-1 pr-2">
-          <h3 className="text-sm font-medium text-[#E8E4DF]">
+          <h3 className="text-sm font-medium text-foreground">
             {data.title ?? "Untitled"}
           </h3>
           {data.author && (
-            <p className="mt-1 text-xs text-[#8A8580]">{data.author}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{data.author}</p>
           )}
         </div>
         <button
           type="button"
           onClick={onClose}
           aria-label="Close detail panel"
-          className="rounded-[3px] px-1.5 py-0.5 text-xs text-[#8A8580] hover:bg-[#1A1A1E] hover:text-[#E8E4DF]"
+          className="rounded-[3px] px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-card hover:text-foreground"
         >
           close
         </button>
@@ -257,25 +257,25 @@ function NodeDetailPanel({ node, onClose }: NodeDetailPanelProps) {
 
       <dl className="mt-4 space-y-2 text-xs">
         <div className="flex justify-between">
-          <dt className="text-[#5A5855]">Year</dt>
-          <dd className="text-[#E8E4DF]">{data.year ?? "—"}</dd>
+          <dt className="text-subtle">Year</dt>
+          <dd className="text-foreground">{data.year ?? "—"}</dd>
         </div>
         <div className="flex justify-between">
-          <dt className="text-[#5A5855]">Influence</dt>
-          <dd className="text-[#E8E4DF]">
+          <dt className="text-subtle">Influence</dt>
+          <dd className="text-foreground">
             {data.influenceScore !== null
               ? data.influenceScore.toFixed(2)
               : "—"}
           </dd>
         </div>
         <div className="flex justify-between">
-          <dt className="text-[#5A5855]">Kind</dt>
-          <dd className="text-[#E8E4DF]">{data.kind}</dd>
+          <dt className="text-subtle">Kind</dt>
+          <dd className="text-foreground">{data.kind}</dd>
         </div>
         {data.inboxFlagged && (
           <div className="flex justify-between">
-            <dt className="text-[#5A5855]">Inbox</dt>
-            <dd className="text-[#D4A04A]">flagged</dd>
+            <dt className="text-subtle">Inbox</dt>
+            <dd className="text-primary">flagged</dd>
           </div>
         )}
       </dl>
@@ -286,7 +286,7 @@ function NodeDetailPanel({ node, onClose }: NodeDetailPanelProps) {
             href={cpUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex w-full items-center justify-center rounded-[3px] bg-[#D4A04A]/20 px-3 py-2 text-xs font-medium text-[#D4A04A] transition-colors duration-150 hover:bg-[#D4A04A]/30"
+            className="inline-flex w-full items-center justify-center rounded-[3px] bg-primary/20 px-3 py-2 text-xs font-medium text-primary transition-colors duration-150 hover:bg-primary/30"
           >
             Open in Connected Papers
           </a>
@@ -295,7 +295,7 @@ function NodeDetailPanel({ node, onClose }: NodeDetailPanelProps) {
             type="button"
             disabled
             title="CP link unavailable"
-            className="inline-flex w-full cursor-not-allowed items-center justify-center rounded-[3px] bg-[#1A1A1E] px-3 py-2 text-xs font-medium text-[#5A5855]"
+            className="inline-flex w-full cursor-not-allowed items-center justify-center rounded-[3px] bg-card px-3 py-2 text-xs font-medium text-subtle"
           >
             Open in Connected Papers
           </button>

@@ -66,16 +66,16 @@ function ThreadsPageInner() {
   const threads = (threadsQuery.data ?? []) as unknown as ThreadSummary[];
 
   return (
-    <div className="min-h-screen bg-[#111113] text-[#E8E4DF]">
+    <div className="min-h-screen bg-background text-foreground">
     <div className="mx-auto max-w-4xl px-3 py-6 md:px-6 md:py-10">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="font-serif text-2xl text-[#D4A04A]">
+        <h1 className="font-serif text-2xl text-primary">
           Research Threads
         </h1>
         <button
           onClick={() => setModalOpen(true)}
-          className="rounded-[3px] bg-[#D4A04A] px-4 py-2.5 text-sm font-medium text-[#111113] transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[#D4A04A] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111113]"
+          className="rounded-[3px] bg-primary px-4 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           New Thread
         </button>
@@ -84,34 +84,34 @@ function ThreadsPageInner() {
       {/* Thread list */}
       <div className="mt-8">
         {threadsQuery.isLoading ? (
-          <div className="py-12 text-center text-sm text-[#5A5855]">
+          <div className="py-12 text-center text-sm text-subtle">
             Loading...
           </div>
         ) : threads.length === 0 ? (
           /* Empty state */
-          <div className="flex flex-col items-center rounded-[6px] border border-[#2A2A2F] bg-[#1A1A1E] px-6 py-16 text-center">
-            <h2 className="font-serif text-lg text-[#E8E4DF]">
+          <div className="flex flex-col items-center rounded-[6px] border border-border bg-card px-6 py-16 text-center">
+            <h2 className="font-serif text-lg text-foreground">
               Start your first research thread
             </h2>
-            <p className="mt-2 max-w-md text-sm text-[#8A8580]">
+            <p className="mt-2 max-w-md text-sm text-muted-foreground">
               Threads organize your research into focused investigations. Each
               thread has its own chat history and workspace.
             </p>
             <button
               onClick={() => setModalOpen(true)}
-              className="mt-6 rounded-[3px] bg-[#D4A04A] px-5 py-2 text-sm font-medium text-[#111113] transition-opacity hover:opacity-90"
+              className="mt-6 rounded-[3px] bg-primary px-5 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90"
             >
               Create Your First Thread
             </button>
             <div className="mt-8 w-full max-w-sm">
-              <p className="text-xs font-medium uppercase tracking-wider text-[#5A5855]">
+              <p className="text-xs font-medium uppercase tracking-wider text-subtle">
                 Example topics
               </p>
               <div className="mt-3 space-y-2">
                 {EXAMPLE_TOPICS.map((topic) => (
                   <div
                     key={topic}
-                    className="rounded-[3px] border border-[#2A2A2F] px-3 py-2 text-left text-sm text-[#8A8580]"
+                    className="rounded-[3px] border border-border px-3 py-2 text-left text-sm text-muted-foreground"
                   >
                     {topic}
                   </div>
@@ -126,17 +126,17 @@ function ThreadsPageInner() {
               <Link
                 key={thread.id}
                 href={`/threads/${thread.slug}`}
-                className="block rounded-[6px] border border-[#2A2A2F] bg-[#1A1A1E] p-4 transition-colors duration-150 hover:border-[#D4A04A]/30 focus-visible:ring-2 focus-visible:ring-[#D4A04A] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111113]"
+                className="block rounded-[6px] border border-border bg-card p-4 transition-colors duration-150 hover:border-primary/30 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                  <h3 className="font-serif text-base font-medium text-[#E8E4DF]">
+                  <h3 className="font-serif text-base font-medium text-foreground">
                     {thread.title}
                   </h3>
-                  <span className="self-start rounded-[3px] bg-[#111113] px-2 py-0.5 text-xs text-[#5A5855] sm:self-auto">
+                  <span className="self-start rounded-[3px] bg-background px-2 py-0.5 text-xs text-subtle sm:self-auto">
                     {thread.status}
                   </span>
                 </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#5A5855] md:gap-3">
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-subtle md:gap-3">
                   <span className="font-mono">/{thread.slug}</span>
                   {thread.createdAt && (
                     <span>
@@ -144,7 +144,7 @@ function ThreadsPageInner() {
                     </span>
                   )}
                   {thread.domainPackId && (
-                    <span className="rounded-[3px] bg-[#1A1A1E] px-2 py-0.5 font-mono text-xs text-[#5A5855]">
+                    <span className="rounded-[3px] bg-card px-2 py-0.5 font-mono text-xs text-subtle">
                       {thread.domainPackId}
                     </span>
                   )}

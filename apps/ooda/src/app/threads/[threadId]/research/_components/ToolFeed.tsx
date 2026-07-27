@@ -52,7 +52,7 @@ export function ToolFeed({ threadId }: ToolFeedProps) {
       )}
 
       {toolCalls.length === 0 ? (
-        <div className="rounded border border-[#2A2A2F] bg-[#1A1A1E] px-3 py-6 text-center font-mono text-xs text-[#5A5855]">
+        <div className="rounded border border-border bg-card px-3 py-6 text-center font-mono text-xs text-subtle">
           no tool calls yet
         </div>
       ) : (
@@ -79,7 +79,7 @@ function ToolCallRow({ event }: ToolCallRowProps) {
   return (
     <li
       data-testid="tool-call-row"
-      className="rounded border border-[#2A2A2F] bg-[#1A1A1E] font-mono text-xs text-[#E8E4DF]"
+      className="rounded border border-border bg-card font-mono text-xs text-foreground"
     >
       <button
         type="button"
@@ -87,47 +87,47 @@ function ToolCallRow({ event }: ToolCallRowProps) {
         aria-expanded={open}
         className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-[#22222A]"
       >
-        <span className="rounded-[3px] bg-[#2A2A2F] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[#8A8580]">
+        <span className="rounded-[3px] bg-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
           {toolKindLabel(event.tool_name)}
         </span>
         <span className="flex-1 truncate">
-          <span className="text-[#E8E4DF]">{event.tool_name}</span>
-          <span className="mx-2 text-[#5A5855]">{"\u2022"}</span>
+          <span className="text-foreground">{event.tool_name}</span>
+          <span className="mx-2 text-subtle">{"\u2022"}</span>
           <span
             data-testid="status-dot"
             aria-label={statusText}
             className={`inline-block h-2 w-2 rounded-full align-middle ${dot}`}
           />
-          <span className="ml-2 text-[#8A8580]">{statusText}</span>
-          <span className="mx-2 text-[#5A5855]">{"\u2022"}</span>
-          <span className="text-[#8A8580]">
+          <span className="ml-2 text-muted-foreground">{statusText}</span>
+          <span className="mx-2 text-subtle">{"\u2022"}</span>
+          <span className="text-muted-foreground">
             {duration === null ? "--" : `${duration}ms`}
           </span>
         </span>
-        <span className="text-[#5A5855]" aria-hidden>
+        <span className="text-subtle" aria-hidden>
           {open ? "\u25B2" : "\u25BC"}
         </span>
       </button>
       {open && (
         <div
           data-testid="tool-call-details"
-          className="border-t border-[#2A2A2F] bg-[#111113] px-3 py-2"
+          className="border-t border-border bg-background px-3 py-2"
         >
-          <div className="mb-1 text-[10px] uppercase tracking-wide text-[#5A5855]">
+          <div className="mb-1 text-[10px] uppercase tracking-wide text-subtle">
             args
           </div>
           <pre
             data-testid="tool-call-args"
-            className="max-h-48 overflow-auto rounded bg-[#0A0A0C] p-2 text-[11px] text-[#D4A04A]"
+            className="max-h-48 overflow-auto rounded bg-[#0A0A0C] p-2 text-[11px] text-primary"
           >
             {formatJson(event.args)}
           </pre>
-          <div className="mt-2 mb-1 text-[10px] uppercase tracking-wide text-[#5A5855]">
+          <div className="mt-2 mb-1 text-[10px] uppercase tracking-wide text-subtle">
             result
           </div>
           <pre
             data-testid="tool-call-result"
-            className="max-h-48 overflow-auto rounded bg-[#0A0A0C] p-2 text-[11px] text-[#8A8580]"
+            className="max-h-48 overflow-auto rounded bg-[#0A0A0C] p-2 text-[11px] text-muted-foreground"
           >
             {formatJson(event.result)}
           </pre>

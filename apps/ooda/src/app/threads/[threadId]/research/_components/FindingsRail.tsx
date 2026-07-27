@@ -32,7 +32,7 @@ interface SectionProps {
 function Section({ title, children }: SectionProps) {
   return (
     <section>
-      <h3 className="mb-2 font-mono text-[11px] uppercase tracking-wider text-[#5A5855]">
+      <h3 className="mb-2 font-mono text-[11px] uppercase tracking-wider text-subtle">
         {title}
       </h3>
       {children}

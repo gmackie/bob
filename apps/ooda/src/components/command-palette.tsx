@@ -154,26 +154,26 @@ export function CommandPalette() {
       onClick={() => setOpen(false)}
     >
       <div
-        className="mx-3 w-full rounded-[6px] border border-[#2A2A2F] bg-[#1A1A1E] shadow-xl md:mx-0 md:max-w-md"
+        className="mx-3 w-full rounded-[6px] border border-border bg-card shadow-xl md:mx-0 md:max-w-md"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
       >
         {/* Search input */}
-        <div className="border-b border-[#2A2A2F] px-4 py-3">
+        <div className="border-b border-border px-4 py-3">
           <input
             ref={inputRef}
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Type a command..."
-            className="w-full bg-transparent text-sm text-[#E8E4DF] placeholder-[#5A5855] outline-none"
+            className="w-full bg-transparent text-sm text-foreground placeholder-subtle outline-none"
           />
         </div>
 
         {/* Command list */}
         <div className="max-h-64 overflow-y-auto py-2">
           {filtered.length === 0 ? (
-            <div className="px-4 py-3 text-sm text-[#5A5855]">
+            <div className="px-4 py-3 text-sm text-subtle">
               No commands found
             </div>
           ) : (
@@ -183,12 +183,12 @@ export function CommandPalette() {
                 onClick={() => executeCommand(cmd)}
                 className={`flex w-full items-center justify-between px-4 py-2.5 text-left text-sm transition-colors ${
                   i === selectedIndex
-                    ? "bg-[#D4A04A]/15 text-[#E8E4DF]"
-                    : "text-[#8A8580] hover:bg-[#111113]"
+                    ? "bg-primary/15 text-foreground"
+                    : "text-muted-foreground hover:bg-background"
                 }`}
               >
                 <span>{cmd.label}</span>
-                <kbd className="rounded-[3px] border border-[#2A2A2F] bg-[#111113] px-1.5 py-0.5 font-mono text-[10px] text-[#5A5855]">
+                <kbd className="rounded-[3px] border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] text-subtle">
                   {cmd.shortcut}
                 </kbd>
               </button>

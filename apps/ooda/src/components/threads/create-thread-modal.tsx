@@ -75,29 +75,29 @@ export function CreateThreadModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="create-thread-title"
-        className="w-full max-w-md rounded-[6px] border border-[#2A2A2F] bg-[#1A1A1E] p-6 shadow-xl"
+        className="w-full max-w-md rounded-[6px] border border-border bg-card p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <h2
           id="create-thread-title"
-          className="font-serif text-lg text-[#E8E4DF]"
+          className="font-serif text-lg text-foreground"
         >
           New Research Thread
         </h2>
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           {/* Title */}
           <div>
-            <label className="text-sm font-medium text-[#8A8580]">Title</label>
+            <label className="text-sm font-medium text-muted-foreground">Title</label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g., Improve Sleep Quality"
-              className="mt-1 w-full rounded-[3px] border border-[#2A2A2F] bg-[#111113] px-3 py-2 text-sm text-[#E8E4DF] placeholder-[#5A5855] outline-none focus:border-[#D4A04A]"
+              className="mt-1 w-full rounded-[3px] border border-border bg-background px-3 py-2 text-sm text-foreground placeholder-subtle outline-none focus:border-primary"
               autoFocus
             />
             {title && (
-              <div className="mt-1 font-mono text-xs text-[#5A5855]">
+              <div className="mt-1 font-mono text-xs text-subtle">
                 slug: {slugify(title)}
               </div>
             )}
@@ -105,14 +105,14 @@ export function CreateThreadModal({
 
           {/* Domain Pack (optional) */}
           <div>
-            <label className="text-sm font-medium text-[#8A8580]">
+            <label className="text-sm font-medium text-muted-foreground">
               Domain Pack{" "}
-              <span className="font-normal text-[#5A5855]">(optional)</span>
+              <span className="font-normal text-subtle">(optional)</span>
             </label>
             <select
               value={domainPackId}
               onChange={(e) => setDomainPackId(e.target.value)}
-              className="mt-1 w-full rounded-[3px] border border-[#2A2A2F] bg-[#111113] px-3 py-2 text-sm text-[#E8E4DF] outline-none focus:border-[#D4A04A]"
+              className="mt-1 w-full rounded-[3px] border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
             >
               <option value="">None</option>
               {domainPacks.map((dp) => (
@@ -139,14 +139,14 @@ export function CreateThreadModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-[3px] border border-[#2A2A2F] px-4 py-2 text-sm text-[#8A8580] transition-colors hover:text-[#E8E4DF]"
+              className="rounded-[3px] border border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!title.trim()}
-              className="rounded-[3px] bg-[#D4A04A] px-4 py-2 text-sm font-medium text-[#111113] transition-opacity hover:opacity-90 disabled:opacity-50"
+              className="rounded-[3px] bg-primary px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
             >
               Create
             </button>
