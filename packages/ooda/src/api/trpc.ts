@@ -10,8 +10,14 @@ import { db } from "@gmacko/ooda/db/client";
 export const createTRPCContext = async (opts: {
   headers: Headers;
   auth?: AuthInstance;
+  // On the CF Workers edge, callers inject the per-request Hyperdrive client
+  // (apps/ooda-edge's lazy proxy) — the module-level `db` binds its
+  // prepared-statement config at import time, before the edge sets its
+  // per-request env, so it can't be used to query at the edge. Defaults to the
+  // module `db` for the Node runtime.
+  db?: typeof db;
 }) => {
-  return { db, headers: opts.headers, auth: opts.auth };
+  return { db: opts.db ?? db, headers: opts.headers, auth: opts.auth };
 };
 
 export const t = initTRPC
@@ -89,17 +95,29 @@ export const authedProcedure = t.procedure.use(async ({ ctx, next }) => {
     // fails. Same cross-package shim the Bob auth runtime uses (`opts.db as
     // never`). The validator only issues plain `select`s via explicit table
     // refs, so runtime behavior is identical.
-    const result = await validateApiKey(db as never, apiKey);
+    // `usersTable: null` skips the owner-email join: the deployed Bob DB's
+    // `api_keys.user_id` is a text FK to the better-auth `"user"` table, which
+    // type-clashes the core `users` (uuid) table and fails the join query.
+    // Identity is established by `userId`; email is best-effort (empty when the
+    // join is skipped) and not used for authorization.
+    // NOTE (edge): on ooda-edge this db lookup currently fails with
+    // "Hyperdrive config not found" (pg 58000) — the apiKey query opens a db
+    // connection outside the request's Hyperdrive-bound path that better-auth's
+    // own getSession access holds. A missing/unreachable key therefore surfaces
+    // as a 500 rather than 401 at the edge; the Node runtime path is unaffected.
+    // Follow-up: route this lookup through the same connection better-auth uses.
+    const result = await validateApiKey(ctx.db as never, apiKey, undefined, null);
     if (result.ok) {
+      const email = result.value.email ?? "";
       return next({
         ctx: {
           ...ctx,
           userId: result.value.userId,
-          email: result.value.email,
+          email,
           // Minimal session-shaped object so downstream code reading
           // `ctx.session.user` continues to work for key-authenticated calls.
           session: {
-            user: { id: result.value.userId, email: result.value.email },
+            user: { id: result.value.userId, email },
           },
         },
       });
