@@ -2,6 +2,7 @@
 
 import { ErrorBoundary } from "@gmacko/core/ui/error-boundary";
 
+import { LinearProgress } from "./linear-progress";
 import { PendingApproval } from "./pending-approval";
 import { ProviderCapacityCards } from "./provider-capacity-cards";
 import { RunningNowRail } from "./running-now-rail";
@@ -42,6 +43,12 @@ export function MissionControl({ workspaceId }: MissionControlProps) {
           ) : null}
         </div>
         <div className="flex flex-col gap-5">
+          {workspaceId ? (
+            <ErrorBoundary section="Linear progress">
+              {/* Self-hides when the workspace has no Linear-synced issues. */}
+              <LinearProgress workspaceId={workspaceId} />
+            </ErrorBoundary>
+          ) : null}
           {sections.includes("running-now") ? (
             <ErrorBoundary section="Running now">
               <RunningNowRail workspaceId={workspaceId} />

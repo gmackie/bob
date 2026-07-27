@@ -50,6 +50,9 @@ export const WorkItemStatusCountsRpc = Rpc.make("workItem.statusCounts", {
   payload: Schema.Struct({
     workspaceId: Schema.String,
     kind: Schema.optional(WorkItemKindEnum),
+    // Filter to a single sync source (e.g. "linear") so callers can roll up
+    // "N Linear issues by status" without an extra query.
+    externalProvider: Schema.optional(Schema.String),
   }),
   success: Schema.Record(Schema.String, Schema.Number),
   error: BobNotFoundError,

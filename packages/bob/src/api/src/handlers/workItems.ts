@@ -250,7 +250,7 @@ export async function workItemsList(
  */
 export async function workItemStatusCounts(
   ctx: HandlerContext,
-  input: { workspaceId: string; kind?: WorkItemKind },
+  input: { workspaceId: string; kind?: WorkItemKind; externalProvider?: string },
 ): Promise<Record<string, number>> {
   await assertWorkspaceAccess(ctx.db, ctx.userId, input.workspaceId);
 
@@ -261,6 +261,9 @@ export async function workItemStatusCounts(
       and(
         eq(workItems.workspaceId, input.workspaceId),
         input.kind ? eq(workItems.kind, input.kind) : undefined,
+        input.externalProvider
+          ? eq(workItems.externalProvider, input.externalProvider)
+          : undefined,
       ),
     )
     .groupBy(workItems.status);
