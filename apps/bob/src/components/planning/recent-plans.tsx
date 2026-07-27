@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { Badge } from "@gmacko/core/ui/badge";
 
+import { sessionStatusVariant } from "~/lib/design/colors";
 import { useBobRpcClient } from "~/rpc/react";
 import { getPlanningSessionHref } from "./planning-shell-model";
 import {
@@ -36,14 +37,6 @@ function formatRelativeDate(value?: string | Date | null): string {
   if (diffDays < 7) return `${diffDays}d ago`;
   return date.toLocaleDateString();
 }
-
-const STATUS_VARIANT: Record<string, "default" | "slate" | "blue" | "amber" | "emerald" | "rose"> = {
-  provisioning: "amber",
-  running: "blue",
-  stopped: "slate",
-  completed: "emerald",
-  failed: "rose",
-};
 
 export function RecentPlans({
   sessions: providedSessions,
@@ -104,7 +97,7 @@ export function RecentPlans({
               </span>
             </span>
             <Badge
-              variant={STATUS_VARIANT[session.status ?? ""] ?? "slate"}
+              variant={sessionStatusVariant(session.status)}
               className="shrink-0 text-[10px]"
             >
               {formatPlanningSessionStatus(session.status)}

@@ -10,6 +10,7 @@ import { AwaitingInputCard } from "~/app/(dashboard)/chat/_components/awaiting-i
 import { InputComposer } from "~/app/(dashboard)/chat/_components/input-composer";
 import { MessageStream } from "~/app/(dashboard)/chat/_components/message-stream";
 import { useChatSession } from "~/hooks/use-chat-session";
+import { sessionStatusVariant } from "~/lib/design/colors";
 import { getExecutionSessionLinkedTaskHref } from "./execution-session-workspace-model";
 
 interface ExecutionSessionWorkspaceProps {
@@ -29,19 +30,6 @@ interface ExecutionSessionWorkspaceProps {
     } | null;
   };
 }
-
-const STATUS_VARIANT: Record<string, "default" | "slate" | "blue" | "amber" | "emerald" | "rose"> = {
-  awaiting_input: "amber",
-  completed: "emerald",
-  error: "rose",
-  failed: "rose",
-  idle: "slate",
-  provisioning: "amber",
-  running: "blue",
-  starting: "blue",
-  stopped: "slate",
-  stopping: "amber",
-};
 
 function formatSessionStatus(status?: string | null): string {
   if (!status) return "Unknown";
@@ -107,7 +95,7 @@ export function ExecutionSessionWorkspace({
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant={STATUS_VARIANT[effectiveStatus] ?? "slate"}>
+            <Badge variant={sessionStatusVariant(effectiveStatus)}>
               {formatSessionStatus(effectiveStatus)}
             </Badge>
             {!isReadOnly ? (

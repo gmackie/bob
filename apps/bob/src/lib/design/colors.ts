@@ -47,6 +47,34 @@ export const DEPLOY_COLOR: Record<string, BadgeVariant> = {
   rolled_back: "slate",
 };
 
+/**
+ * Session / run lifecycle status → badge color. The single source of truth
+ * for the vocabulary that was previously hand-redefined (identically, but as
+ * partial subsets) in the session/planning run views. Keys are the union of
+ * those maps; every shared key had the same color across them, so this is a
+ * strict superset with no value conflicts.
+ */
+export const SESSION_STATUS_COLOR: Record<string, BadgeVariant> = {
+  awaiting_input: "amber",
+  completed: "emerald",
+  error: "rose",
+  failed: "rose",
+  idle: "slate",
+  pending: "amber",
+  provisioning: "amber",
+  running: "blue",
+  starting: "blue",
+  stopped: "slate",
+  stopping: "amber",
+};
+
+/** Session status → badge variant, defaulting to `slate` for unknown states. */
+export function sessionStatusVariant(
+  status: string | null | undefined,
+): BadgeVariant {
+  return SESSION_STATUS_COLOR[status ?? ""] ?? "slate";
+}
+
 /** Pretty-print a status/priority/kind key for display */
 export function formatLabel(key: string): string {
   return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());

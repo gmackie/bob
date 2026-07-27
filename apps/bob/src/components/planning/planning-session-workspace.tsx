@@ -10,6 +10,7 @@ import { InputComposer } from "~/app/(dashboard)/chat/_components/input-composer
 import { MessageStream } from "~/app/(dashboard)/chat/_components/message-stream";
 import { useChatSession } from "~/hooks/use-chat-session";
 import { usePlanningCollaboration } from "~/hooks/use-planning-collaboration";
+import { SESSION_STATUS_COLOR } from "~/lib/design/colors";
 import { CollabChatPanel } from "./collab-chat-panel";
 import { PresenceAvatars } from "./presence-avatars";
 import { formatPlanningSessionStatus } from "./planning-dashboard-model";
@@ -33,17 +34,6 @@ interface PlanningSessionWorkspaceProps {
     description?: string | null;
   }>;
 }
-
-const STATUS_VARIANT: Record<string, "default" | "slate" | "blue" | "amber" | "emerald" | "rose"> = {
-  awaiting_input: "amber",
-  completed: "emerald",
-  failed: "rose",
-  pending: "amber",
-  provisioning: "amber",
-  running: "blue",
-  starting: "blue",
-  stopped: "slate",
-};
 
 function formatDraftMeta(draft: PlanningSessionWorkspaceProps["drafts"][number]): string {
   return [draft.priority, draft.status].filter(Boolean).join(" · ") || "Draft";
@@ -89,7 +79,7 @@ export function PlanningSessionWorkspace({
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <PresenceAvatars participants={collab.participants} />
-            <Badge variant={STATUS_VARIANT[sessionStatus] ?? STATUS_VARIANT[session.status ?? ""] ?? "slate"}>
+            <Badge variant={SESSION_STATUS_COLOR[sessionStatus] ?? SESSION_STATUS_COLOR[session.status ?? ""] ?? "slate"}>
               {formatPlanningSessionStatus(sessionStatus ?? session.status)}
             </Badge>
           </div>
