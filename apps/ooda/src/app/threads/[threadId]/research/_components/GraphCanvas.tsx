@@ -191,6 +191,19 @@ export function GraphCanvas({ threadId }: GraphCanvasProps) {
     );
   }
 
+  if (graphQuery.isError) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-1 px-4 text-center">
+        <p className="text-sm text-destructive">couldn&apos;t load the graph</p>
+        <p className="text-xs text-subtle">
+          {graphQuery.error instanceof Error
+            ? graphQuery.error.message
+            : "try refreshing the thread"}
+        </p>
+      </div>
+    );
+  }
+
   if (nodes.length === 0) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">

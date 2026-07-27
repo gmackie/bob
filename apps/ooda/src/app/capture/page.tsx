@@ -61,10 +61,24 @@ export default function CapturePage() {
         </div>
 
         {/* Tabs */}
-        <div className="mt-6 flex gap-1 rounded-[6px] bg-card p-1">
+        <div
+          role="tablist"
+          aria-label="Capture mode"
+          className="mt-6 flex gap-1 rounded-[6px] bg-card p-1"
+          onKeyDown={(e) => {
+            if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+            e.preventDefault();
+            setTab((prev) => (prev === "note" ? "import" : "note"));
+          }}
+        >
           <button
+            role="tab"
+            id="capture-tab-note"
+            aria-selected={tab === "note"}
+            aria-controls="capture-panel-note"
+            tabIndex={tab === "note" ? 0 : -1}
             onClick={() => setTab("note")}
-            className={`flex-1 rounded-[3px] px-4 py-2 text-sm font-medium transition-colors ${
+            className={`flex-1 rounded-[3px] px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
               tab === "note"
                 ? "bg-border text-foreground"
                 : "text-subtle hover:text-muted-foreground"
@@ -73,8 +87,13 @@ export default function CapturePage() {
             Quick Note
           </button>
           <button
+            role="tab"
+            id="capture-tab-import"
+            aria-selected={tab === "import"}
+            aria-controls="capture-panel-import"
+            tabIndex={tab === "import" ? 0 : -1}
             onClick={() => setTab("import")}
-            className={`flex-1 rounded-[3px] px-4 py-2 text-sm font-medium transition-colors ${
+            className={`flex-1 rounded-[3px] px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
               tab === "import"
                 ? "bg-border text-foreground"
                 : "text-subtle hover:text-muted-foreground"
@@ -86,7 +105,12 @@ export default function CapturePage() {
 
         {/* Note tab */}
         {tab === "note" && (
-          <div className="mt-6">
+          <div
+            role="tabpanel"
+            id="capture-panel-note"
+            aria-labelledby="capture-tab-note"
+            className="mt-6"
+          >
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
@@ -111,7 +135,7 @@ export default function CapturePage() {
               <button
                 onClick={saveNote}
                 disabled={!note.trim() || noteMutation.isPending}
-                className="rounded-[3px] bg-primary px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-40"
+                className="rounded-[3px] bg-primary px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-40"
               >
                 {noteMutation.isPending ? "Saving..." : "Save Note"}
               </button>
@@ -121,7 +145,12 @@ export default function CapturePage() {
 
         {/* Import tab */}
         {tab === "import" && (
-          <div className="mt-6">
+          <div
+            role="tabpanel"
+            id="capture-panel-import"
+            aria-labelledby="capture-tab-import"
+            className="mt-6"
+          >
             <p className="mb-3 text-sm text-muted-foreground">
               Paste a Claude, ChatGPT, or OODA conversation JSON export to
               import it as sources.
@@ -153,7 +182,7 @@ export default function CapturePage() {
                   }
                 }}
                 disabled={!importJson.trim() || importMutation.isPending}
-                className="rounded-[3px] bg-primary px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-40"
+                className="rounded-[3px] bg-primary px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-40"
               >
                 Import
               </button>
