@@ -200,9 +200,19 @@ export default Sentry.withSentry(
             reviewerLogin:
               (runtimeEnv.BOB_AUTO_MERGE_REVIEWER_LOGIN as string | undefined) ??
               "bob-reviewer",
+            // Auto-repair: send a runner agent to fix PRs stuck on CI/conflict/
+            // requested-changes so the review→repair→merge loop converges.
+            repairEnabled:
+              String(runtimeEnv.BOB_AUTO_REPAIR_ENABLED ?? "") === "true",
+            repairAgentType:
+              (runtimeEnv.BOB_AUTO_REPAIR_AGENT as string | undefined) ?? "codex",
+            maxRepairsPerRun: Number(runtimeEnv.BOB_AUTO_REPAIR_MAX_PER_RUN ?? 3),
+            maxRepairAttemptsPerPr: Number(
+              runtimeEnv.BOB_AUTO_REPAIR_MAX_ATTEMPTS_PER_PR ?? 3,
+            ),
           });
           console.log(
-            `[auto-merge] scanned=${r.scanned} reviewed=${r.reviewed} merged=${r.merged} skipped=${r.skipped}` +
+            `[auto-merge] scanned=${r.scanned} reviewed=${r.reviewed} repaired=${r.repaired} merged=${r.merged} skipped=${r.skipped}` +
               (r.items.length
                 ? ` items=${r.items.map((i) => `${i.pr}:${i.action}${i.reason ? `(${i.reason})` : ""}`).join(", ")}`
                 : ""),
