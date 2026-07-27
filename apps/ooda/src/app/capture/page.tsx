@@ -48,26 +48,26 @@ export default function CapturePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#111113] text-[#E8E4DF]">
+    <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto max-w-3xl px-3 py-6 md:px-6 md:py-10">
         <div className="flex items-center justify-between">
-          <h1 className="font-serif text-2xl text-[#D4A04A]">Capture</h1>
+          <h1 className="font-serif text-2xl text-primary">Capture</h1>
           <Link
             href="/"
-            className="text-sm text-[#5A5855] transition-colors hover:text-[#8A8580]"
+            className="text-sm text-subtle transition-colors hover:text-muted-foreground"
           >
             Home
           </Link>
         </div>
 
         {/* Tabs */}
-        <div className="mt-6 flex gap-1 rounded-[6px] bg-[#1A1A1E] p-1">
+        <div className="mt-6 flex gap-1 rounded-[6px] bg-card p-1">
           <button
             onClick={() => setTab("note")}
             className={`flex-1 rounded-[3px] px-4 py-2 text-sm font-medium transition-colors ${
               tab === "note"
-                ? "bg-[#2A2A2F] text-[#E8E4DF]"
-                : "text-[#5A5855] hover:text-[#8A8580]"
+                ? "bg-border text-foreground"
+                : "text-subtle hover:text-muted-foreground"
             }`}
           >
             Quick Note
@@ -76,8 +76,8 @@ export default function CapturePage() {
             onClick={() => setTab("import")}
             className={`flex-1 rounded-[3px] px-4 py-2 text-sm font-medium transition-colors ${
               tab === "import"
-                ? "bg-[#2A2A2F] text-[#E8E4DF]"
-                : "text-[#5A5855] hover:text-[#8A8580]"
+                ? "bg-border text-foreground"
+                : "text-subtle hover:text-muted-foreground"
             }`}
           >
             Import
@@ -91,12 +91,12 @@ export default function CapturePage() {
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="Capture a thought, link, or idea..."
-              className="w-full resize-none rounded-[6px] border border-[#2A2A2F] bg-[#1A1A1E] px-4 py-3 text-sm text-[#E8E4DF] placeholder-[#5A5855] focus:border-[#D4A04A]/50 focus:outline-none"
+              className="w-full resize-none rounded-[6px] border border-border bg-card px-4 py-3 text-sm text-foreground placeholder-subtle focus:border-primary/50 focus:outline-none"
               rows={8}
             />
             <div className="mt-3 flex items-center justify-between">
               <span
-                className="text-xs text-[#5A5855]"
+                className="text-xs text-subtle"
                 role="status"
                 aria-live="polite"
               >
@@ -111,7 +111,7 @@ export default function CapturePage() {
               <button
                 onClick={saveNote}
                 disabled={!note.trim() || noteMutation.isPending}
-                className="rounded-[3px] bg-[#D4A04A] px-4 py-2 text-sm font-medium text-[#111113] transition-opacity hover:opacity-90 disabled:opacity-40"
+                className="rounded-[3px] bg-primary px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-40"
               >
                 {noteMutation.isPending ? "Saving..." : "Save Note"}
               </button>
@@ -122,7 +122,7 @@ export default function CapturePage() {
         {/* Import tab */}
         {tab === "import" && (
           <div className="mt-6">
-            <p className="mb-3 text-sm text-[#8A8580]">
+            <p className="mb-3 text-sm text-muted-foreground">
               Paste a Claude, ChatGPT, or OODA conversation JSON export to
               import it as sources.
             </p>
@@ -130,11 +130,11 @@ export default function CapturePage() {
               value={importJson}
               onChange={(e) => setImportJson(e.target.value)}
               placeholder='Paste conversation JSON here...'
-              className="w-full resize-none rounded-[6px] border border-[#2A2A2F] bg-[#1A1A1E] px-4 py-3 font-mono text-xs text-[#E8E4DF] placeholder-[#5A5855] focus:border-[#D4A04A]/50 focus:outline-none"
+              className="w-full resize-none rounded-[6px] border border-border bg-card px-4 py-3 font-mono text-xs text-foreground placeholder-subtle focus:border-primary/50 focus:outline-none"
               rows={12}
             />
             <div className="mt-3 flex items-center justify-between">
-              <span className="text-xs text-[#5A5855]">
+              <span className="text-xs text-subtle">
                 {importMutation.isPending
                   ? "Importing..."
                   : importMutation.isSuccess
@@ -153,7 +153,7 @@ export default function CapturePage() {
                   }
                 }}
                 disabled={!importJson.trim() || importMutation.isPending}
-                className="rounded-[3px] bg-[#D4A04A] px-4 py-2 text-sm font-medium text-[#111113] transition-opacity hover:opacity-90 disabled:opacity-40"
+                className="rounded-[3px] bg-primary px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-40"
               >
                 Import
               </button>

@@ -29,11 +29,11 @@ export default function ResearchLandingPage() {
 
   return (
     <HydrateClient>
-      <div className="min-h-screen bg-[#111113] text-[#E8E4DF]">
+      <div className="min-h-screen bg-background text-foreground">
         <div className="mx-auto max-w-6xl px-3 py-6 md:px-6 md:py-10">
           <div className="mb-8">
-            <h1 className="font-serif text-2xl text-[#D4A04A]">Research</h1>
-            <p className="mt-1 text-sm text-[#8A8580]">
+            <h1 className="font-serif text-2xl text-primary">Research</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
               Vault-wide overview of findings, dives, and standing interests.
             </p>
           </div>
@@ -66,9 +66,9 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-[6px] border border-[#2A2A2F] bg-[#1A1A1E]">
-      <div className="border-b border-[#2A2A2F] px-4 py-3">
-        <h2 className="font-mono text-[11px] uppercase tracking-wider text-[#8A8580]">
+    <section className="rounded-[6px] border border-border bg-card">
+      <div className="border-b border-border px-4 py-3">
+        <h2 className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
           {title}
         </h2>
       </div>

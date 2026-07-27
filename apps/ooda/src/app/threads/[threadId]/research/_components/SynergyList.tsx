@@ -33,7 +33,7 @@ export function SynergyList({ threadId }: SynergyListProps) {
   );
 
   if (linksQuery.isLoading) {
-    return <div className="p-3 text-xs text-[#5A5855]">Loading synergies…</div>;
+    return <div className="p-3 text-xs text-subtle">Loading synergies…</div>;
   }
   if (linksQuery.isError) {
     return (
@@ -45,7 +45,7 @@ export function SynergyList({ threadId }: SynergyListProps) {
       ?.items ?? [];
   if (items.length === 0) {
     return (
-      <div className="p-3 text-xs text-[#5A5855]">No cross-thread links.</div>
+      <div className="p-3 text-xs text-subtle">No cross-thread links.</div>
     );
   }
 
@@ -54,17 +54,17 @@ export function SynergyList({ threadId }: SynergyListProps) {
       {items.map((item, idx) => (
         <div
           key={`${item.otherThreadId}-${item.kind}-${idx}`}
-          className="rounded-[4px] border border-[#2A2A2F] bg-[#1A1A1E] p-3"
+          className="rounded-[4px] border border-border bg-card p-3"
         >
           <div className="mb-1 flex items-center justify-between gap-2">
-            <div className="min-w-0 flex-1 truncate text-sm text-[#E8E4DF]">
+            <div className="min-w-0 flex-1 truncate text-sm text-foreground">
               {item.otherThreadTitle ?? item.otherThreadId}
             </div>
-            <span className="rounded-[2px] bg-[#D4A04A]/10 px-1.5 py-0.5 font-mono text-[10px] text-[#D4A04A]">
+            <span className="rounded-[2px] bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] text-primary">
               {KIND_LABEL[item.kind] ?? item.kind}
             </span>
           </div>
-          <div className="flex items-center gap-2 font-mono text-[10px] text-[#5A5855]">
+          <div className="flex items-center gap-2 font-mono text-[10px] text-subtle">
             {item.score !== null && <span>score {item.score.toFixed(2)}</span>}
             {item.discoveredAt && (
               <span>

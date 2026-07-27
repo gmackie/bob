@@ -26,7 +26,7 @@ export function ColdThreadUpdates({ threadId }: ColdThreadUpdatesProps) {
 
   if (updatesQuery.isLoading) {
     return (
-      <div className="p-3 text-xs text-[#5A5855]">
+      <div className="p-3 text-xs text-subtle">
         Checking for updates on cold threads…
       </div>
     );
@@ -43,7 +43,7 @@ export function ColdThreadUpdates({ threadId }: ColdThreadUpdatesProps) {
       ?.items ?? [];
   if (items.length === 0) {
     return (
-      <div className="p-3 text-xs text-[#5A5855]">
+      <div className="p-3 text-xs text-subtle">
         No updates for cold threads.
       </div>
     );
@@ -54,13 +54,13 @@ export function ColdThreadUpdates({ threadId }: ColdThreadUpdatesProps) {
       {items.map((item) => (
         <div
           key={item.sourceId}
-          className="rounded-[4px] border border-[#2A2A2F] bg-[#1A1A1E] p-3"
+          className="rounded-[4px] border border-border bg-card p-3"
         >
           <div className="mb-1 flex items-start justify-between gap-2">
-            <div className="min-w-0 flex-1 truncate text-sm text-[#E8E4DF]">
+            <div className="min-w-0 flex-1 truncate text-sm text-foreground">
               {item.title || "(untitled)"}
             </div>
-            <span className="shrink-0 font-mono text-[10px] text-[#5A5855]">
+            <span className="shrink-0 font-mono text-[10px] text-subtle">
               {item.foundAt ? new Date(item.foundAt).toLocaleDateString() : ""}
             </span>
           </div>
@@ -78,7 +78,7 @@ export function ColdThreadUpdates({ threadId }: ColdThreadUpdatesProps) {
                 seeds: [String(item.sourceId)],
               })
             }
-            className="rounded-[3px] border border-[#2A2A2F] bg-[#D4A04A]/10 px-2 py-1 font-mono text-[10px] text-[#D4A04A] hover:bg-[#D4A04A]/20 disabled:opacity-50"
+            className="rounded-[3px] border border-border bg-primary/10 px-2 py-1 font-mono text-[10px] text-primary hover:bg-primary/20 disabled:opacity-50"
           >
             {diveMutation.isPending ? "Spawning…" : "Spawn dive"}
           </button>

@@ -29,47 +29,47 @@ export default function HealthPage() {
   const downCount = connectors.filter((c) => c.status === "down").length;
 
   return (
-    <div className="min-h-screen bg-[#111113] text-[#E8E4DF]">
+    <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto max-w-4xl p-4 md:p-8">
-        <h1 className="font-serif text-2xl text-[#D4A04A]">
+        <h1 className="font-serif text-2xl text-primary">
           Source Health Dashboard
         </h1>
-        <p className="mt-1 text-sm text-[#8A8580]">
+        <p className="mt-1 text-sm text-muted-foreground">
           Real-time connector status and rate limit monitoring.
         </p>
 
         {/* Summary bar */}
-        <div className="mt-4 flex items-center gap-4 rounded-[6px] border border-[#2A2A2F] bg-[#1A1A1E] px-4 py-2.5 text-sm font-mono">
+        <div className="mt-4 flex items-center gap-4 rounded-[6px] border border-border bg-card px-4 py-2.5 text-sm font-mono">
           {healthQuery.isLoading ? (
-            <span className="text-[#5A5855]">Loading...</span>
+            <span className="text-subtle">Loading...</span>
           ) : healthQuery.isError ? (
-            <span className="text-[#C45454]">Health check unavailable</span>
+            <span className="text-destructive">Health check unavailable</span>
           ) : (
             <>
               <span className="text-[#4A9E6B]">{upCount} up</span>
-              <span className="text-[#5A5855]">/</span>
+              <span className="text-subtle">/</span>
               <span className="text-[#C49A3C]">{degradedCount} degraded</span>
-              <span className="text-[#5A5855]">/</span>
-              <span className="text-[#C45454]">{downCount} down</span>
+              <span className="text-subtle">/</span>
+              <span className="text-destructive">{downCount} down</span>
             </>
           )}
         </div>
 
         {healthQuery.isError ? (
-          <div className="mt-6 rounded-[6px] border border-[#C45454]/30 bg-[#C45454]/5 px-4 py-6 text-center">
-            <p className="text-sm text-[#C45454]">
+          <div className="mt-6 rounded-[6px] border border-destructive/30 bg-destructive/5 px-4 py-6 text-center">
+            <p className="text-sm text-destructive">
               Couldn&apos;t reach the runner health endpoint.
             </p>
-            <p className="mt-1 text-xs text-[#8A8580]">
+            <p className="mt-1 text-xs text-muted-foreground">
               {healthQuery.error instanceof Error
                 ? healthQuery.error.message
                 : "Retrying every 5 seconds."}
             </p>
           </div>
         ) : !healthQuery.isLoading && connectors.length === 0 ? (
-          <div className="mt-6 rounded-[6px] border border-[#2A2A2F] bg-[#1A1A1E] px-4 py-10 text-center">
-            <p className="text-sm text-[#8A8580]">No connectors configured yet.</p>
-            <p className="mt-1 text-xs text-[#5A5855]">
+          <div className="mt-6 rounded-[6px] border border-border bg-card px-4 py-10 text-center">
+            <p className="text-sm text-muted-foreground">No connectors configured yet.</p>
+            <p className="mt-1 text-xs text-subtle">
               Connector status will appear here once a runner registers a source.
             </p>
           </div>

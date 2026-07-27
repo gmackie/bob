@@ -40,7 +40,7 @@ export function ActiveDives() {
   );
 
   if (divesQuery.isLoading) {
-    return <div className="text-xs text-[#5A5855]">Loading dives…</div>;
+    return <div className="text-xs text-subtle">Loading dives…</div>;
   }
   if (divesQuery.isError) {
     return <div className="text-xs text-red-400">Failed to load dives.</div>;
@@ -49,7 +49,7 @@ export function ActiveDives() {
     (divesQuery.data as unknown as { items: RecentDive[] } | undefined)?.items ??
     [];
   if (items.length === 0) {
-    return <div className="text-xs text-[#5A5855]">No recent dives.</div>;
+    return <div className="text-xs text-subtle">No recent dives.</div>;
   }
 
   return (
@@ -68,7 +68,7 @@ export function ActiveDives() {
         return (
           <div
             key={dive.id}
-            className="rounded-[4px] border border-[#2A2A2F] bg-[#111113] p-3"
+            className="rounded-[4px] border border-border bg-background p-3"
           >
             <div className="mb-1.5 flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2">
@@ -77,7 +77,7 @@ export function ActiveDives() {
                   className="h-2 w-2 shrink-0 rounded-full"
                   style={{ backgroundColor: color }}
                 />
-                <div className="truncate font-mono text-[11px] text-[#E8E4DF]">
+                <div className="truncate font-mono text-[11px] text-foreground">
                   {seedPreview}
                   {extraSeeds}
                 </div>
@@ -89,7 +89,7 @@ export function ActiveDives() {
                 {dive.status}
               </span>
             </div>
-            <div className="flex items-center gap-3 font-mono text-[10px] text-[#5A5855]">
+            <div className="flex items-center gap-3 font-mono text-[10px] text-subtle">
               <span>elapsed {formatElapsed(dive.elapsedMs)}</span>
               <span>
                 budget {dive.budgetPapers} papers / {budgetSecs}s

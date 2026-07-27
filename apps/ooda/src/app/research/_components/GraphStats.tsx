@@ -18,7 +18,7 @@ export function GraphStats() {
   const statsQuery = useQuery(trpc.research.graphStats.queryOptions({}));
 
   if (statsQuery.isLoading) {
-    return <div className="text-xs text-[#5A5855]">Loading graph stats…</div>;
+    return <div className="text-xs text-subtle">Loading graph stats…</div>;
   }
   if (statsQuery.isError) {
     return (
@@ -27,7 +27,7 @@ export function GraphStats() {
   }
   const data = statsQuery.data as unknown as GraphStatsData | undefined;
   if (!data) {
-    return <div className="text-xs text-[#5A5855]">No graph data yet.</div>;
+    return <div className="text-xs text-subtle">No graph data yet.</div>;
   }
 
   const kinds = Object.entries(data.edgesByKind).sort(
@@ -42,11 +42,11 @@ export function GraphStats() {
         <Counter label="Edges" value={data.totalEdges} />
       </div>
       <div>
-        <div className="mb-2 font-mono text-[10px] uppercase tracking-wider text-[#5A5855]">
+        <div className="mb-2 font-mono text-[10px] uppercase tracking-wider text-subtle">
           Edges by kind
         </div>
         {kinds.length === 0 ? (
-          <div className="text-xs text-[#5A5855]">No edges yet.</div>
+          <div className="text-xs text-subtle">No edges yet.</div>
         ) : (
           <div className="space-y-1.5">
             {kinds.map(([kind, n]) => (
@@ -54,10 +54,10 @@ export function GraphStats() {
                 key={kind}
                 className="flex items-center justify-between gap-2"
               >
-                <span className="font-mono text-[11px] text-[#E8E4DF]">
+                <span className="font-mono text-[11px] text-foreground">
                   {kind}
                 </span>
-                <span className="font-mono text-[11px] text-[#D4A04A]">
+                <span className="font-mono text-[11px] text-primary">
                   {n.toLocaleString()}
                 </span>
               </div>
@@ -71,11 +71,11 @@ export function GraphStats() {
 
 function Counter({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-[4px] border border-[#2A2A2F] bg-[#111113] p-3">
-      <div className="font-mono text-[10px] uppercase tracking-wider text-[#5A5855]">
+    <div className="rounded-[4px] border border-border bg-background p-3">
+      <div className="font-mono text-[10px] uppercase tracking-wider text-subtle">
         {label}
       </div>
-      <div className="mt-1 font-serif text-xl text-[#E8E4DF]">
+      <div className="mt-1 font-serif text-xl text-foreground">
         {value.toLocaleString()}
       </div>
     </div>
