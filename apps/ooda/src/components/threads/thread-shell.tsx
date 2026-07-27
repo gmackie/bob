@@ -36,6 +36,7 @@ export function ThreadShell({ thread }: ThreadShellProps) {
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [adapterA, setAdapterA] = useState("");
   const [adapterB, setAdapterB] = useState("");
+  const [comparePrompt, setComparePrompt] = useState("");
   const [comparisonSessions, setComparisonSessions] = useState<
     [ComparisonSession, ComparisonSession] | null
   >(null);
@@ -66,9 +67,10 @@ export function ThreadShell({ thread }: ThreadShellProps) {
   const handleRunComparison = () => {
     if (!adapterA || !adapterB || !firstRunner) return;
 
-    // Send prompt twice with different adapters
-    // We use a fixed comparison prompt for now; in practice the user would type one
-    const prompt = "Compare adapters"; // placeholder — the user's last chat input would be better
+    // Run the same user-authored prompt through both adapters so the
+    // side-by-side view actually compares them on the question at hand.
+    const prompt = comparePrompt.trim();
+    if (!prompt) return;
 
     // Fire both mutations
     sendPromptMutation.mutate(
@@ -110,6 +112,7 @@ export function ThreadShell({ thread }: ThreadShellProps) {
     setShowCompareBar(false);
     setAdapterA("");
     setAdapterB("");
+    setComparePrompt("");
   };
 
   return (
@@ -178,12 +181,21 @@ export function ThreadShell({ thread }: ThreadShellProps) {
               </option>
             ))}
           </select>
+          <input
+            type="text"
+            value={comparePrompt}
+            onChange={(e) => setComparePrompt(e.target.value)}
+            placeholder="Prompt to run through both…"
+            aria-label="Comparison prompt"
+            className="min-w-0 flex-1 basis-48 rounded-[3px] border border-[#D4A04A]/30 bg-[#1A1A1E] px-2 py-1 font-mono text-xs text-[#E8E4DF] placeholder-[#5A5855] outline-none focus:border-[#D4A04A]"
+          />
           <button
             onClick={handleRunComparison}
             disabled={
               !adapterA ||
               !adapterB ||
               adapterA === adapterB ||
+              !comparePrompt.trim() ||
               sendPromptMutation.isPending
             }
             className="rounded-[3px] bg-[#D4A04A] px-3 py-1 font-mono text-xs font-medium text-[#111113] transition-opacity hover:opacity-90 disabled:opacity-50"

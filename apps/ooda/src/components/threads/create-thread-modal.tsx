@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTRPC } from "~/trpc/react";
 
@@ -40,6 +40,17 @@ export function CreateThreadModal({
 
   const selectedPack = domainPacks.find((p) => p.id === domainPackId);
 
+  // Close on Escape while the dialog is open (parity with the shared Dialog's
+  // keyboard affordances, without pulling in the Bob-themed component).
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -56,9 +67,21 @@ export function CreateThreadModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-full max-w-md rounded-[6px] border border-[#2A2A2F] bg-[#1A1A1E] p-6 shadow-xl">
-        <h2 className="font-serif text-lg text-[#E8E4DF]">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-thread-title"
+        className="w-full max-w-md rounded-[6px] border border-[#2A2A2F] bg-[#1A1A1E] p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2
+          id="create-thread-title"
+          className="font-serif text-lg text-[#E8E4DF]"
+        >
           New Research Thread
         </h2>
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">

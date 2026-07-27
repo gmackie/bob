@@ -24,6 +24,29 @@ export default function CapturePage() {
     }),
   );
 
+  const noteMutation = useMutation(
+    trpc.vault.write.mutationOptions({
+      onSuccess: () => {
+        setNote("");
+      },
+    }),
+  );
+
+  function saveNote() {
+    const body = note.trim();
+    if (!body) return;
+    // Filename-safe timestamp; capture notes land under capture/ in the
+    // research vault as plain markdown so they flow through the same
+    // extraction pipeline as imported sources.
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    noteMutation.mutate({
+      vaultKind: "research",
+      filePath: `capture/note-${stamp}.md`,
+      content: body,
+      frontmatter: { source: "capture", createdAt: new Date().toISOString() },
+    });
+  }
+
   return (
     <div className="min-h-screen bg-[#111113] text-[#E8E4DF]">
       <div className="mx-auto max-w-3xl px-3 py-6 md:px-6 md:py-10">
@@ -71,12 +94,26 @@ export default function CapturePage() {
               className="w-full resize-none rounded-[6px] border border-[#2A2A2F] bg-[#1A1A1E] px-4 py-3 text-sm text-[#E8E4DF] placeholder-[#5A5855] focus:border-[#D4A04A]/50 focus:outline-none"
               rows={8}
             />
-            <div className="mt-3 flex justify-end">
+            <div className="mt-3 flex items-center justify-between">
+              <span
+                className="text-xs text-[#5A5855]"
+                role="status"
+                aria-live="polite"
+              >
+                {noteMutation.isPending
+                  ? "Saving..."
+                  : noteMutation.isSuccess
+                    ? "Saved to vault"
+                    : noteMutation.isError
+                      ? `Error: ${noteMutation.error.message}`
+                      : ""}
+              </span>
               <button
-                disabled={!note.trim()}
+                onClick={saveNote}
+                disabled={!note.trim() || noteMutation.isPending}
                 className="rounded-[3px] bg-[#D4A04A] px-4 py-2 text-sm font-medium text-[#111113] transition-opacity hover:opacity-90 disabled:opacity-40"
               >
-                Save Note
+                {noteMutation.isPending ? "Saving..." : "Save Note"}
               </button>
             </div>
           </div>
