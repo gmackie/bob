@@ -1,7 +1,7 @@
 import type { RouterRecord } from "@trpc/server/unstable-core-do-not-import";
 import { z } from "zod";
 
-import { eq, and, gt } from "@gmacko/ooda/db";
+import { eq, and, gt, lt, inArray, sql } from "@gmacko/ooda/db";
 import { runnerDevice, runnerSession, sessionEvent } from "@gmacko/ooda/db/schema";
 
 import { authedProcedure, publicProcedure, runnerProcedure } from "../trpc";
@@ -324,5 +324,44 @@ export const runnerRouter = {
         })
         .returning();
       return event;
+    }),
+
+  // Terminalize runner_session rows that never reached a terminal state — the
+  // self-healing companion to the manual cleanup. A session stuck in
+  // pending/running whose coalesce(startedAt, createdAt) is past a long grace
+  // was left behind by a runner that died mid-run (there is no heartbeat
+  // column to key off, so age is the only signal — hence a deliberately long
+  // default grace of 6h to never reap a legitimately long research/comparison
+  // run). Called periodically by the runner process.
+  reapStaleSessions: runnerProcedure
+    .meta({ openapi: { method: "POST", path: "/api/runner/reap-stale-sessions", tags: ["runner"], protect: true } })
+    .input(
+      z
+        .object({ graceMinutes: z.number().int().positive().default(360) })
+        .optional(),
+    )
+    .output(z.any())
+    .mutation(async ({ ctx, input }) => {
+      const graceMs = (input?.graceMinutes ?? 360) * 60_000;
+      const cutoff = new Date(Date.now() - graceMs);
+      const reaped = await ctx.db
+        .update(runnerSession)
+        .set({ status: "failed", completedAt: new Date() })
+        .where(
+          and(
+            inArray(runnerSession.status, ["pending", "running"]),
+            lt(
+              sql`coalesce(${runnerSession.startedAt}, ${runnerSession.createdAt})`,
+              cutoff,
+            ),
+          ),
+        )
+        .returning({ id: runnerSession.id });
+      if (reaped.length > 0) {
+        console.log(
+          `[runner] Reaped ${reaped.length} stale runner_session(s) past ${graceMs / 60_000}m grace`,
+        );
+      }
+      return { reaped: reaped.length, ids: reaped.map((r) => r.id) };
     }),
 } satisfies RouterRecord;
