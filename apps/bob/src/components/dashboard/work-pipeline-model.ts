@@ -1,3 +1,9 @@
+import {
+  getRotationProviders,
+  getProvider as getProviderMeta,
+  normalizeProviderId,
+} from "~/lib/providers";
+
 export interface WorkPipelineAgentStatus {
   sessionId: string;
   status: string;
@@ -20,17 +26,16 @@ export interface WorkPipelineItem {
 export type ProviderKey = "claude" | "codex" | "grok" | "cursor-agent";
 export type DashboardTone = "default" | "warning" | "danger" | "success";
 
-// Every agent Bob rotates through (see autoDrain AGENT_ROTATION). The dashboard
-// shows one capacity card per provider, in dispatch-rotation order. Claude and
-// Grok run on subscriptions (no metered API quota), so their cards report
+// Every agent Bob rotates through — sourced from the canonical provider
+// registry (single source of truth) in dispatch-rotation order. Claude and
+// Grok run on subscriptions (registry `metered: false`), so their cards report
 // live active/queued counts without the usage bars that Codex/Cursor expose.
-const PROVIDER_ORDER: ProviderKey[] = ["claude", "codex", "grok", "cursor-agent"];
-const PROVIDER_LABELS: Record<ProviderKey, string> = {
-  claude: "Claude",
-  grok: "Grok",
-  codex: "Codex",
-  "cursor-agent": "Cursor",
-};
+const PROVIDER_ORDER: ProviderKey[] = getRotationProviders().map(
+  (p) => p.id,
+) as ProviderKey[];
+const PROVIDER_LABELS: Record<ProviderKey, string> = Object.fromEntries(
+  getRotationProviders().map((p) => [p.id, p.label]),
+) as Record<ProviderKey, string>;
 
 export interface ProviderSessionSummary {
   id: string;
@@ -507,12 +512,13 @@ function getRecentlyCompletedStatusTone(status: string): DashboardTone {
 }
 
 function getProvider(agentType: string): ProviderKey {
-  const normalized = agentType.toLowerCase();
-  if (normalized.includes("cursor")) return "cursor-agent";
-  if (normalized.includes("claude")) return "claude";
-  if (normalized.includes("grok")) return "grok";
-  // Default to codex — it's the historical default and covers "codex"/unknown.
-  return "codex";
+  // Normalize via the registry (handles cursor→cursor-agent etc.), then narrow
+  // to a rotation provider — non-rotation agents (gemini, opencode…) and
+  // unknowns fold into codex, the historical default.
+  const id = normalizeProviderId(agentType);
+  return (PROVIDER_ORDER as string[]).includes(id)
+    ? (id as ProviderKey)
+    : "codex";
 }
 
 function buildProviderCapacitySummary(
@@ -526,7 +532,8 @@ function buildProviderCapacitySummary(
   const startingCount = matching.filter((session) => STARTING_AGENT_STATUSES.has(session.status)).length;
   const hasFailure = matching.some((session) => FAILED_AGENT_STATUSES.has(session.status));
   const usageLimits = snapshot?.usageLimits ?? getDefaultProviderUsageLimits(provider);
-  const isSubscription = provider === "claude" || provider === "grok";
+  // Subscription providers have no metered API quota (registry `metered: false`).
+  const isSubscription = !getProviderMeta(provider)?.metered;
 
   return {
     provider,
