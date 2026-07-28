@@ -44,6 +44,8 @@ export async function integrationGet(
     hasWebhookSecret: !!integration.webhookSigningSecret,
     linearTeamId: integration.linearTeamId,
     linearWebBaseUrl: integration.linearWebBaseUrl,
+    lastSyncedAt: integration.lastSyncedAt,
+    lastSyncResult: integration.lastSyncResult,
     createdAt: integration.createdAt,
   };
 }

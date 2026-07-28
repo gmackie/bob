@@ -17,6 +17,8 @@ type LinearIntegrationRecord = {
   hasApiKey: boolean;
   hasWebhookSecret: boolean;
   linearTeamId: string | null;
+  lastSyncedAt?: string | null;
+  lastSyncResult?: string | null;
 };
 type LinearSyncResult = {
   projectsCreated: number;
@@ -25,6 +27,18 @@ type LinearSyncResult = {
   projectsTruncated?: boolean;
   issuesTruncated?: boolean;
 };
+
+/** Compact relative time for the "last synced" line. */
+function formatSyncTime(value: string): string {
+  const then = new Date(value).getTime();
+  if (Number.isNaN(then)) return "recently";
+  const diffMin = Math.floor((Date.now() - then) / 60_000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  return new Date(value).toLocaleDateString();
+}
 
 export function IntegrationsSection() {
   const rpc = useBobRpcClient();
@@ -234,6 +248,14 @@ function LinearIntegration({ workspaceId }: { workspaceId: string }) {
           {syncResult && (
             <p className="text-xs text-foreground">{syncResult}</p>
           )}
+          {integration.lastSyncedAt ? (
+            <p className="text-[11px] text-muted-foreground">
+              Last synced {formatSyncTime(integration.lastSyncedAt)}
+              {integration.lastSyncResult
+                ? ` · ${integration.lastSyncResult}`
+                : ""}
+            </p>
+          ) : null}
         </div>
       ) : (
         <div className="space-y-3">

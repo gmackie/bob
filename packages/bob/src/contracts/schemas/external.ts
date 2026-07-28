@@ -193,6 +193,8 @@ export const IntegrationRecordSchema = Schema.Struct({
   hasWebhookSecret: Schema.Boolean,
   linearTeamId: Schema.NullOr(Schema.String),
   linearWebBaseUrl: Schema.NullOr(Schema.String),
+  lastSyncedAt: Schema.optional(Schema.NullOr(Schema.Unknown)),
+  lastSyncResult: Schema.optional(Schema.NullOr(Schema.String)),
   createdAt: Schema.optional(Schema.Unknown),
 });
 
