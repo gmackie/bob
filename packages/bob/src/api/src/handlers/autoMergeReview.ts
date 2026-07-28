@@ -28,10 +28,11 @@ import { and, desc, eq, inArray } from "@bob/db";
 import { db } from "@bob/db/client";
 import { pullRequests, taskRuns } from "@bob/db/schema";
 import {
-  type RepairReason,
+  
   dispatchRepairSession,
-  dispatchReviewSession,
+  dispatchReviewSession
 } from "@bob/execution/runtime/taskExecutor";
+import type {RepairReason} from "@bob/execution/runtime/taskExecutor";
 
 import type { GitProvider } from "../services/git/providers/types";
 import {
@@ -178,7 +179,7 @@ async function getRepairState(
   return {
     active: runs.some((r) => ACTIVE_RUN_STATUSES.includes(r.status)),
     doneAtHead: runs.some((r) =>
-      (r.planningItemIdentifier ?? "").endsWith(`@${head8}`),
+      r.planningItemIdentifier.endsWith(`@${head8}`),
     ),
     attempts: runs.length,
   };
@@ -447,7 +448,7 @@ export async function autoReviewAndMerge(
             number: pr.number,
             instanceUrl: pr.instanceUrl,
             headSha,
-            headBranch: pr.headBranch ?? null,
+            headBranch: pr.headBranch,
             title: remote.title,
             body: remote.body,
             reviewToken: cfg.reviewForgejoToken,
