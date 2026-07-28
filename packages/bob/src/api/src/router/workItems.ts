@@ -244,6 +244,9 @@ export const workItemRouter = {
         // Optional: when omitted, resolved from the work-item override ->
         // project default -> workspace default -> "claude" hierarchy.
         agentType: z.string().optional(),
+        // Optional persona to run under — pins the adapter and applies the
+        // persona's model / system-prompt / tools / autonomy at execution.
+        personaId: z.string().uuid().optional(),
       }),
     )
     .mutation(({ ctx, input }) =>

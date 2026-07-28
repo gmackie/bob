@@ -10,6 +10,7 @@ import { inArray } from "@bob/db";
 import type { Db } from "@bob/db/client";
 import {
   activities,
+  agentPersonas,
   agentRuns,
   chatConversations,
   comments,
@@ -1056,7 +1057,7 @@ export async function workItemsTaskRunExecute(
 
 export async function workItemsDispatch(
   ctx: HandlerContext,
-  input: { workItemId: string; agentType?: string },
+  input: { workItemId: string; agentType?: string; personaId?: string },
 ) {
   const workItem = await loadAccessibleWorkItem(
     ctx.db,
@@ -1100,8 +1101,36 @@ export async function workItemsDispatch(
         columns: { defaultAgentType: true },
       })
     : null;
+  // A chosen persona pins the adapter + carries model/prompt/tools/autonomy.
+  // personaMetadata is stored on the session; the gateway reads it and the
+  // daemon applies it to the agent command (see relay.ts + taskExecutor daemon).
+  let personaMetadata: Record<string, unknown> | null = null;
+  let personaAdapter: string | null = null;
+  if (input.personaId) {
+    const [persona] = await ctx.db
+      .select()
+      .from(agentPersonas)
+      .where(eq(agentPersonas.id, input.personaId))
+      .limit(1);
+    if (!persona) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: `Persona ${input.personaId} not found`,
+      });
+    }
+    personaAdapter = persona.adapterId;
+    personaMetadata = {
+      model: persona.model ?? undefined,
+      systemPrompt: persona.systemPrompt ?? undefined,
+      allowedTools: persona.allowedTools ?? undefined,
+      autonomyLevel: persona.autonomyLevel ?? undefined,
+      metadata: persona.metadata ?? undefined,
+    };
+  }
+
   const agentType =
     input.agentType ??
+    personaAdapter ??
     resolveAgentType({
       workItemOverride: workItem.agentTypeOverride,
       projectDefault: project?.defaultAgentType ?? null,
@@ -1134,6 +1163,8 @@ export async function workItemsDispatch(
       title: `${identifier}: ${workItem.title}`,
       workItemId: workItem.id,
       workItemIdentifierSnapshot: identifier,
+      personaId: input.personaId ?? null,
+      personaMetadata,
     })
     .returning();
 

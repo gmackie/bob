@@ -254,6 +254,11 @@ export async function executeTask(
     contextPreamble?: string;
     agentType?: string;
     planningProvider?: string;
+    // Persona to run under. personaId is recorded on the session; personaMetadata
+    // (model / systemPrompt / allowedTools / autonomyLevel) is read by the
+    // gateway → daemon and applied to the agent command at execution time.
+    personaId?: string;
+    personaMetadata?: Record<string, unknown> | null;
   },
 ): Promise<TaskExecutionResult> {
   // Resolve the planning provider and snapshot fresh task details.
@@ -329,6 +334,8 @@ export async function executeTask(
       workItemIdentifierSnapshot: task.identifier,
       gitBranch: branch,
       planningTaskId: task.id,
+      personaId: options?.personaId ?? null,
+      personaMetadata: options?.personaMetadata ?? null,
     })
     .returning();
   const insertedSession = expectInsertedRow(
