@@ -1,3 +1,5 @@
+import { normalizeProviderId } from "~/lib/providers";
+
 // Run-history providers are independent of work-pipeline capacity planning:
 // Grok runs appear in Recent Outcomes but have no capacity model, so we keep a
 // local key union here instead of widening work-pipeline-model's ProviderKey.
@@ -83,10 +85,12 @@ export function normalizeProviderParam(value: string | null): ProviderRunFilter 
 }
 
 export function getRunProvider(run: ProviderRunLike): RunProviderKey {
-  const agentType = run.agentType?.toLowerCase() ?? "";
-  if (agentType.includes("claude")) return "claude";
-  if (agentType.includes("grok")) return "grok";
-  if (agentType.includes("cursor")) return "cursor";
+  // Normalize via the canonical registry, then map to this model's key set
+  // (which uses "cursor" for the URL param, not the registry's "cursor-agent").
+  const id = normalizeProviderId(run.agentType ?? "");
+  if (id === "claude") return "claude";
+  if (id === "grok") return "grok";
+  if (id === "cursor-agent") return "cursor";
   return "codex";
 }
 
