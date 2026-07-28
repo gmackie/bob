@@ -97,6 +97,8 @@ describe("authedProcedure — API key path", () => {
     expect(validateApiKeyMock).toHaveBeenCalledWith(
       { __marker: "ooda-db" },
       "bob_validkey",
+      undefined,
+      null,
     );
   });
 
@@ -111,6 +113,8 @@ describe("authedProcedure — API key path", () => {
     expect(validateApiKeyMock).toHaveBeenCalledWith(
       { __marker: "ooda-db" },
       "bob_validkey",
+      undefined,
+      null,
     );
   });
 
