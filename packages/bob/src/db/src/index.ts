@@ -12,6 +12,7 @@ export {
   lt,
   lte,
   ne,
+  notLike,
   or,
   sql,
 } from "drizzle-orm";

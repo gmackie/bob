@@ -24,7 +24,7 @@
 //    re-runs and the PR converges to a merge instead of sitting reviewed-but-
 //    stuck forever. Gated (repairEnabled) with per-PR + per-run guards.
 
-import { and, desc, eq, inArray } from "@bob/db";
+import { and, desc, eq, inArray, notLike } from "@bob/db";
 import { db } from "@bob/db/client";
 import { pullRequests, taskRuns } from "@bob/db/schema";
 import {
@@ -212,8 +212,17 @@ export async function autoReviewAndMerge(
   let mergesSpent = 0;
   let repairsSpent = 0;
 
+  // Exclude Bob's own internal work branches. Repair/review sessions run on
+  // throwaway `bob/repair/*` / `bob/review/*` branches; when a repair agent's
+  // session branch gets auto-turned into a PR by the runner, it's an (often
+  // empty) artifact — not a feature PR. Left in the scan they clog the
+  // newest-first window and fail to merge, starving real PRs. Skip them here.
   const openPrs = await db.query.pullRequests.findMany({
-    where: eq(pullRequests.status, "open"),
+    where: and(
+      eq(pullRequests.status, "open"),
+      notLike(pullRequests.headBranch, "bob/repair/%"),
+      notLike(pullRequests.headBranch, "bob/review/%"),
+    ),
     orderBy: [desc(pullRequests.createdAt)],
     limit: scanLimit,
   });
@@ -518,14 +527,17 @@ export async function autoReviewAndMerge(
         });
         continue;
       }
-      mergesSpent++;
-
       await client.mergePullRequest(
         pr.remoteOwner,
         pr.remoteName,
         pr.number,
         "squash",
       );
+      // Only count a merge that actually happened. A failed merge (e.g. a git
+      // host 500) throws above and is caught below WITHOUT consuming budget —
+      // otherwise a handful of un-mergeable PRs at the front exhaust the merge
+      // budget every run and starve the good approved+green PRs behind them.
+      mergesSpent++;
       await db
         .update(pullRequests)
         .set({ status: "merged", mergedAt: new Date().toISOString() })
