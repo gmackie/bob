@@ -15,6 +15,7 @@ import {
 import { toast } from "@gmacko/core/ui/toast";
 
 import { formatLabel } from "~/lib/design/colors";
+import { getLaunchableProviders } from "~/lib/providers";
 import { useChatPanel } from "~/components/chat/chat-panel-provider";
 import { useBobRpcClient } from "~/rpc/react";
 
@@ -73,14 +74,9 @@ function formatDuration(ms: number): string {
   return `${Math.floor(abs / 3600_000)}h ${Math.floor((abs % 3600_000) / 60_000)}m`;
 }
 
-const AGENT_OPTIONS = [
-  "claude",
-  "codex",
-  "opencode",
-  "gemini",
-  "kiro",
-  "cursor-agent",
-] as const;
+// Launchable providers from the canonical registry — previously a hardcoded
+// list that had drifted (grok + cursor were missing from dispatch).
+const AGENT_OPTIONS = getLaunchableProviders();
 
 interface DispatchPlanProps {
   batchId: string;
@@ -303,8 +299,8 @@ export function DispatchPlan({ batchId }: DispatchPlanProps) {
                       </SelectTrigger>
                       <SelectContent>
                         {AGENT_OPTIONS.map((agent) => (
-                          <SelectItem key={agent} value={agent}>
-                            {agent}
+                          <SelectItem key={agent.id} value={agent.id}>
+                            {agent.icon} {agent.label}
                           </SelectItem>
                         ))}
                       </SelectContent>

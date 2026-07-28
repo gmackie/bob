@@ -3,6 +3,8 @@
  * Used to gate features between web and mobile platforms
  */
 
+import { getLaunchableProviders } from "~/lib/providers";
+
 /**
  * Check if the current platform is mobile
  * Uses user agent detection (can be enhanced with device detection libraries)
@@ -30,24 +32,11 @@ export function getAvailableAgentTypes(): Array<{
   label: string;
   icon: string;
 }> {
-  const allAgents = [
-    { value: "opencode", label: "OpenCode", icon: "💻" },
-    { value: "elevenlabs", label: "ElevenLabs Voice", icon: "🎤" },
-    { value: "claude", label: "Claude", icon: "🤖" },
-    { value: "codex", label: "Codex", icon: "📝" },
-    { value: "gemini", label: "Gemini", icon: "✨" },
-    { value: "grok", label: "Grok Build", icon: "⚡" },
-    { value: "kiro", label: "Kiro", icon: "🔮" },
-    { value: "cursor-agent", label: "Cursor Agent", icon: "🖱️" },
-  ];
-
-  if (isMobilePlatform()) {
-    // Mobile: only chat and voice agents
-    return allAgents.filter(
-      (agent) => agent.value === "opencode" || agent.value === "elevenlabs",
-    );
-  }
-
-  // Web: all agents
-  return allAgents;
+  // Sourced from the canonical provider registry (single source of truth).
+  // Web: all launchable agents. Mobile: chat/voice only (registry `mobile` flag).
+  return getLaunchableProviders({ mobile: isMobilePlatform() }).map((p) => ({
+    value: p.id,
+    label: p.label,
+    icon: p.icon,
+  }));
 }

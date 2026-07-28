@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 
-type AgentType =
-  | "claude"
-  | "codex"
-  | "cursor-agent"
-  | "gemini"
-  | "kiro"
-  | "opencode";
+import { getWorktreeProviders } from "~/lib/providers";
+
+// agentType is a canonical provider id (see ~/lib/providers). Kept as a string
+// so the option list is driven entirely by the registry.
+type AgentType = string;
+
+const LAUNCH_PROVIDERS = getWorktreeProviders();
 
 interface AgentLauncherProps {
   onLaunch: (branchName: string, agentType: AgentType) => void;
@@ -41,15 +41,14 @@ export function AgentLauncher({ onLaunch, disabled }: AgentLauncherProps) {
         />
         <select
           value={agentType}
-          onChange={(e) => setAgentType(e.target.value as AgentType)}
+          onChange={(e) => setAgentType(e.target.value)}
           className="rounded-2xl border border-border bg-popover px-4 py-3 text-sm text-foreground outline-none transition focus:border-sky-400/50"
         >
-          <option value="opencode">OpenCode</option>
-          <option value="codex">Codex</option>
-          <option value="claude">Claude</option>
-          <option value="gemini">Gemini</option>
-          <option value="kiro">Kiro</option>
-          <option value="cursor-agent">Cursor Agent</option>
+          {LAUNCH_PROVIDERS.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.label}
+            </option>
+          ))}
         </select>
         <button
           type="button"
