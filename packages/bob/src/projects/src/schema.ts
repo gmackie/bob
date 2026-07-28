@@ -141,6 +141,10 @@ export const workspaceIntegrations = pgTable(
      * as Kanbanger (https://tasks.gmac.io/graphql) instead.
      */
     linearApiUrl: t.text(),
+    // Sync-health: when this integration last synced + a one-line outcome, so
+    // it's visible in-app instead of only in cron console logs.
+    lastSyncedAt: t.timestamp({ mode: "string", withTimezone: true }),
+    lastSyncResult: t.text(),
     createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
     updatedAt: t
       .timestamp({ mode: "string", withTimezone: true })

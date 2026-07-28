@@ -246,6 +246,7 @@ export async function syncLinearProjects(
           status: mapLinearStatusToBob(stateType),
           externalId: issue.id,
           externalProvider: "linear",
+          externalUrl: issue.url ?? null,
         });
         issuesImported++;
       }
@@ -256,6 +257,22 @@ export async function syncLinearProjects(
       );
     }
   }
+
+  // Record sync-health on the integration so it's visible in-app, not just in
+  // cron console logs.
+  const syncResult = `${projectsCreated} created · ${projectsExisting} existing · ${issuesImported} issues`;
+  await ctx.db
+    .update(workspaceIntegrations)
+    .set({
+      lastSyncedAt: new Date().toISOString(),
+      lastSyncResult: syncResult,
+    })
+    .where(
+      and(
+        eq(workspaceIntegrations.workspaceId, input.workspaceId),
+        eq(workspaceIntegrations.provider, "linear"),
+      ),
+    );
 
   return {
     projectsCreated,

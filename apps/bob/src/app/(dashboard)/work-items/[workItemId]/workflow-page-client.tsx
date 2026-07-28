@@ -26,6 +26,8 @@ interface WorkflowPageClientProps {
       status: string;
       agentType?: string | null;
     } | null;
+    externalProvider?: string | null;
+    externalUrl?: string | null;
   };
   workspaceId: string;
   requirements: WorkflowPageProps["requirements"];
@@ -70,10 +72,30 @@ export function WorkflowPageClient({
   );
   const [dispatching, setDispatching] = useState(false);
 
+  // Deep-link back to the source issue (e.g. Linear) when this work item was
+  // synced from an external provider. Rendered above both the task and the
+  // epic/issue views.
+  const externalLink =
+    workItem.externalProvider && workItem.externalUrl ? (
+      <a
+        href={workItem.externalUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mb-4 inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <span className="capitalize">{workItem.externalProvider}</span>
+        <span aria-hidden="true">↗</span>
+        <span className="sr-only">
+          Open this issue in {workItem.externalProvider}
+        </span>
+      </a>
+    ) : null;
+
   // For tasks, keep the existing detail view
   if (workItem.kind === "task") {
     return (
       <>
+        {externalLink}
         <WorkItemDetailInteractive
           workItem={workItem}
           childCount={childCount}
@@ -89,6 +111,7 @@ export function WorkflowPageClient({
   // For epics and issues, show the workflow view
   return (
     <>
+      {externalLink}
       <WorkflowPage
         workItem={workItem}
         requirements={requirements}

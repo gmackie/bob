@@ -145,6 +145,8 @@ export default async function WorkItemPage({ params, searchParams }: WorkItemPag
     queueSortOrder: detail.workItem.queueSortOrder ?? null,
     workspaceId: detail.workItem.workspaceId,
     agentStatus: detail.workItem.agentStatus ?? null,
+    externalProvider: detail.workItem.externalProvider ?? null,
+    externalUrl: detail.workItem.externalUrl ?? null,
     dependencies: detail.workItem.dependencies ?? [],
     dependents: detail.workItem.dependents ?? [],
     project: detail.workItem.project

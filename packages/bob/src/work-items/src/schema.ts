@@ -517,6 +517,9 @@ export const workItems = pgTable("work_items", (t) => ({
   agentTypeOverride: t.varchar({ length: 50 }),
   externalId: t.text(),
   externalProvider: t.varchar({ length: 20 }),
+  // Canonical link back to the source issue (e.g. a Linear issue URL) for
+  // deep-linking from the work-item detail view.
+  externalUrl: t.text(),
   createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t
     .timestamp({ mode: "string", withTimezone: true })
