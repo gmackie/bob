@@ -1,10 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "@gmacko/core/ui/toast";
 import { Badge } from "@gmacko/core/ui/badge";
+
+import { useBobRpcClient } from "~/rpc/react";
 
 import { ErrorBoundary } from "@gmacko/core/ui/error-boundary";
 import { OpenChatPanelButton } from "~/components/chat/open-chat-panel-button";
@@ -95,6 +98,18 @@ export function WorkItemDetailInteractive({
 }: WorkItemDetailInteractiveProps) {
   const router = useRouter();
   const trpc = useTRPC();
+  const rpc = useBobRpcClient();
+
+  // Personas available to run this dispatch under (empty for workspaces with
+  // none configured — the picker then stays hidden).
+  const [personaId, setPersonaId] = useState<string>("");
+  const { data: personas } = useQuery({
+    queryKey: ["rpc", "agent.persona.list", { active: true }],
+    queryFn: () =>
+      rpc.agent.persona.list({ active: true }) as Promise<
+        Array<{ id: string; name: string; adapterId: string }>
+      >,
+  });
 
   const updateTask = useMutation(
     trpc.planning.updateTask.mutationOptions({
@@ -188,14 +203,37 @@ export function WorkItemDetailInteractive({
                   {entryAction.label}
                 </Link>
               ) : entryAction?.kind === "dispatch" || entryAction?.kind === "rerun" ? (
-                <button
-                  type="button"
-                  onClick={() => dispatchWork.mutate({ workItemId: workItem.id })}
-                  disabled={dispatchWork.isPending}
-                  className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {dispatchWork.isPending ? "Starting..." : entryAction.label}
-                </button>
+                <>
+                  {personas && personas.length > 0 ? (
+                    <select
+                      value={personaId}
+                      onChange={(e) => setPersonaId(e.target.value)}
+                      disabled={dispatchWork.isPending}
+                      aria-label="Persona"
+                      className="rounded-md border border-border bg-card px-2 py-1.5 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    >
+                      <option value="">No persona</option>
+                      {personas.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      dispatchWork.mutate({
+                        workItemId: workItem.id,
+                        ...(personaId ? { personaId } : {}),
+                      })
+                    }
+                    disabled={dispatchWork.isPending}
+                    className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {dispatchWork.isPending ? "Starting..." : entryAction.label}
+                  </button>
+                </>
               ) : null}
               <Link
                 href={entryContext.backHref}
