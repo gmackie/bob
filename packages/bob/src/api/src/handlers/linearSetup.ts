@@ -246,7 +246,7 @@ export async function syncLinearProjects(
           status: mapLinearStatusToBob(stateType),
           externalId: issue.id,
           externalProvider: "linear",
-          externalUrl: issue.url ?? null,
+          externalUrl: issue.url,
         });
         issuesImported++;
       }

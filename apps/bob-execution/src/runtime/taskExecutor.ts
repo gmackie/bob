@@ -538,7 +538,7 @@ function buildPrReviewPrompt(
     "## Hard rules",
     "- Do NOT commit, push, or open/modify any pull request. Review only.",
     "- Make no changes to the working tree. Your only side effect is the single review POST above.",
-    `- The review MUST include \"commit_id\":\"${input.headSha}\" so it binds to the current head.`,
+    `- The review MUST include "commit_id":"${input.headSha}" so it binds to the current head.`,
     "- Never print or echo the reviewer token.",
   ].join("\n");
 }
@@ -561,7 +561,7 @@ export async function dispatchReviewSession(
   const repo = await db.query.repositories.findFirst({
     where: eq(repositories.id, input.repositoryId),
   });
-  if (!repo || !repo.workspaceId || !repo.path) return null;
+  if (!repo?.workspaceId || !repo.path) return null;
 
   const workspaceId = repo.workspaceId;
   const workingDirectory = repo.path;
@@ -755,7 +755,7 @@ export async function dispatchRepairSession(
   const repo = await db.query.repositories.findFirst({
     where: eq(repositories.id, input.repositoryId),
   });
-  if (!repo || !repo.workspaceId || !repo.path) return null;
+  if (!repo?.workspaceId || !repo.path) return null;
 
   const workspaceId = repo.workspaceId;
   const workingDirectory = repo.path;
