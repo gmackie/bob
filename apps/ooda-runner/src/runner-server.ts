@@ -26,6 +26,9 @@ import { BobRunReporter } from "./bob-run-reporter";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const POLL_INTERVAL_MS = 2_000;
+// Sweep stale runner_session rows (runner died mid-run) periodically. Long
+// interval — the server-side grace is 6h, so there's no value polling often.
+const REAP_INTERVAL_MS = 30 * 60_000;
 
 type PromotionKind =
   | "observation"
@@ -90,6 +93,7 @@ export class RunnerServer {
   private runnerId: string | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private reapTimer: ReturnType<typeof setInterval> | null = null;
   private activeSessions = new Set<string>();
   private activePromotions = new Set<string>();
   private bobGateway: BobGatewayConnector | null = null;
@@ -194,6 +198,11 @@ export class RunnerServer {
     this.pollTimer = setInterval(() => {
       void this.pollForSessions();
     }, POLL_INTERVAL_MS);
+
+    // Start stale-session reaper loop
+    this.reapTimer = setInterval(() => {
+      void this.reapStaleSessions();
+    }, REAP_INTERVAL_MS);
 
     // Start Bob gateway connector if configured
     if (this.bobGateway) {
@@ -564,6 +573,19 @@ export class RunnerServer {
     return this.trpc;
   }
 
+  private async reapStaleSessions(): Promise<void> {
+    try {
+      const result = (await this.trpc.runner.reapStaleSessions.mutate({})) as {
+        reaped: number;
+      };
+      if (result?.reaped > 0) {
+        console.log(`[runner] reaped ${result.reaped} stale runner session(s)`);
+      }
+    } catch (err) {
+      console.error("[runner] stale-session reap failed (will retry):", err);
+    }
+  }
+
   async stop(): Promise<void> {
     console.log("[runner] shutting down");
     if (this.heartbeatTimer) {
@@ -573,6 +595,10 @@ export class RunnerServer {
     if (this.pollTimer) {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
+    }
+    if (this.reapTimer) {
+      clearInterval(this.reapTimer);
+      this.reapTimer = null;
     }
     if (this.bobGateway) {
       this.bobGateway.stop();
