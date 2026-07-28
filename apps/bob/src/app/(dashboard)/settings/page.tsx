@@ -11,6 +11,7 @@ import { DeviceHeartbeatsSection } from "./_components/device-heartbeats";
 import { GitProvidersSection } from "./_components/git-providers";
 import { IntegrationsSection } from "./_components/integrations";
 import { PreferencesSection } from "./_components/preferences";
+import { PersonasSection } from "./_components/personas";
 import { WebhooksSection } from "./_components/webhooks";
 import { WorkspaceAgentsSection } from "./_components/workspace-agents";
 
@@ -39,6 +40,9 @@ export default function SettingsPage() {
         </CollapsibleSection>
         <CollapsibleSection title="Workspace Agents" sectionId="workspace-agents" defaultOpen={false} forceOpen={openSection === "workspace-agents"}>
           <WorkspaceAgentsSection />
+        </CollapsibleSection>
+        <CollapsibleSection title="Personas" sectionId="personas" defaultOpen={false} forceOpen={openSection === "personas"}>
+          <PersonasSection />
         </CollapsibleSection>
         <CollapsibleSection title="Integrations" sectionId="integrations" defaultOpen forceOpen={openSection === "integrations"}>
           <IntegrationsSection />
