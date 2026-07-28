@@ -51,6 +51,16 @@
     // three gates — CI green AND an approving AI review AND no merge conflict.
     // Whatever can't clear the bar stays in review for a human. maxPerRun caps
     // the merge/deploy fan-out per cron run so it clears the backlog steadily.
-    "BOB_AUTO_MERGE_DRY_RUN": "false"
+    "BOB_AUTO_MERGE_DRY_RUN": "false",
+    // Auto-repair (2026-07-27): close the review→repair→merge loop. When a
+    // reviewed PR is stuck (CI failing / merge conflict / changes requested), a
+    // runner agent (codex) checks out the PR branch, fixes it, and pushes back
+    // so CI re-runs and it can converge to a merge. Guards: one repair in flight
+    // per PR, one attempt per head SHA, a per-PR attempt cap, and a per-run
+    // budget. Conservative budgets — repair mutates PR branches.
+    "BOB_AUTO_REPAIR_ENABLED": "true",
+    "BOB_AUTO_REPAIR_AGENT": "codex",
+    "BOB_AUTO_REPAIR_MAX_PER_RUN": "3",
+    "BOB_AUTO_REPAIR_MAX_ATTEMPTS_PER_PR": "3"
   }
 }

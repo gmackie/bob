@@ -650,6 +650,202 @@ export async function dispatchReviewSession(
   };
 }
 
+/** Why an open PR is blocked from merging — drives the repair prompt's focus. */
+export type RepairReason = "ci-failure" | "conflict" | "changes-requested";
+
+export interface RepairDispatchInput {
+  /** Bob's pullRequests.id (uuid) for the PR to repair. */
+  pullRequestId: string;
+  /** Bob's repositories.id (uuid) — resolves the runner checkout + workspace. */
+  repositoryId: string;
+  remoteOwner: string;
+  remoteName: string;
+  number: number;
+  /** e.g. https://git.forgegraf.com — null for github.com. */
+  instanceUrl: string | null;
+  /** Head commit SHA the repair targets (used to de-dupe one repair per head). */
+  headSha: string;
+  /** The PR's head branch — REQUIRED: the fix is committed and pushed to it. */
+  headBranch: string;
+  title: string;
+  body: string | null;
+  /** What's blocking the merge — focuses the agent (fix CI / resolve conflict). */
+  reason: RepairReason;
+  /** The reviewer's REQUEST_CHANGES body, when reason is "changes-requested". */
+  requestedChangesBody?: string | null;
+}
+
+export interface RepairDispatchResult {
+  sessionId: string;
+  taskRunId: string;
+}
+
+/**
+ * Build the repair prompt handed to the runner agent. Unlike the reviewer (which
+ * only reads and posts a verdict), the repair agent CHECKS OUT the PR's head
+ * branch, fixes what blocks the merge (CI failures / merge conflicts / requested
+ * changes), and pushes back to the SAME branch so the existing PR updates and CI
+ * re-runs. It pushes as the PR author using the checkout's own origin
+ * credentials — no separate token, and no new PR.
+ */
+function buildPrRepairPrompt(
+  input: RepairDispatchInput,
+  baseBranch: string,
+): string {
+  const reasonLine =
+    input.reason === "conflict"
+      ? `This PR has a MERGE CONFLICT with ${baseBranch}. Resolving it is the priority.`
+      : input.reason === "changes-requested"
+        ? "The reviewer requested changes on this PR. Address them and make CI pass."
+        : "This PR's CI is FAILING. Make it pass.";
+  const lines = [
+    `You are fixing pull request #${input.number} in ${input.remoteOwner}/${input.remoteName} so it can merge.`,
+    `PR title: ${input.title}`,
+    input.body ? `PR description:\n${input.body}` : "PR description: (none)",
+    "",
+    "## Why it's blocked",
+    reasonLine,
+  ];
+  if (input.reason === "changes-requested" && input.requestedChangesBody) {
+    lines.push("", "Reviewer feedback:", input.requestedChangesBody);
+  }
+  lines.push(
+    "",
+    "## What to do",
+    `1. Get onto the PR's head branch in this worktree:`,
+    `   git fetch origin ${input.headBranch}`,
+    `   git checkout ${input.headBranch} || git checkout -b ${input.headBranch} origin/${input.headBranch}`,
+    `2. If there is a conflict with the base, merge it in and resolve every conflict (keep both the PR's intent and the base changes):`,
+    `   git fetch origin ${baseBranch} && git merge --no-edit origin/${baseBranch}`,
+    `3. Install deps (NOT --frozen-lockfile — if package.json changed, let it update pnpm-lock.yaml and commit the lockfile):`,
+    `   pnpm install`,
+    `4. Make CI pass. Run each and fix the real cause of any failure:`,
+    `   pnpm typecheck`,
+    `   pnpm lint`,
+    `   pnpm test`,
+    `5. Commit and push to the SAME branch so the existing PR updates and CI re-runs:`,
+    `   git add -A && git commit -m "fix: resolve merge blockers for #${input.number}"`,
+    `   git push origin ${input.headBranch}`,
+    "",
+    "## Hard rules",
+    `- Work ONLY on ${input.headBranch}. Do NOT open a new PR, do NOT close this one, do NOT touch ${baseBranch} or any other branch.`,
+    "- Do NOT delete tests, weaken assertions, or disable typecheck/lint to go green — fix the real cause.",
+    "- Do NOT force-push or reset the branch. Only add commits on top.",
+    "- The push uses the checkout's existing origin credentials — do not add or print any token.",
+    "- If you genuinely cannot fix it (needs external secrets, or the failure is unrelated to the code), stop and explain rather than making unrelated changes.",
+  );
+  return lines.join("\n");
+}
+
+/**
+ * Dispatch a PR *repair* to a runner agent (subscription-authed CLI — NOT a
+ * metered model API). Mirrors dispatchReviewSession, but the agent checks out the
+ * PR head branch, fixes the merge blockers (CI / conflict / requested changes),
+ * and pushes back to the same branch — closing the review→repair→merge loop so
+ * the pipeline converges instead of accumulating un-mergeable reviewed PRs.
+ *
+ * Returns null (dispatches nothing) if the repo can't be resolved or has no
+ * workspace — the caller logs a skip.
+ */
+export async function dispatchRepairSession(
+  userId: string,
+  input: RepairDispatchInput,
+  agentType = "codex",
+): Promise<RepairDispatchResult | null> {
+  const repo = await db.query.repositories.findFirst({
+    where: eq(repositories.id, input.repositoryId),
+  });
+  if (!repo || !repo.workspaceId || !repo.path) return null;
+
+  const workspaceId = repo.workspaceId;
+  const workingDirectory = repo.path;
+  const baseBranch = repo.mainBranch || "main";
+  // A throwaway branch for the worktree — the agent switches to the PR head
+  // branch itself (a `-B` checkout on the head branch would reset it to base).
+  // The unique suffix avoids a `git worktree add -B` collision with a leftover
+  // worktree from an earlier attempt.
+  const uniq = crypto.randomUUID().slice(0, 8);
+  const workBranch = `bob/repair/${input.remoteName}-${input.number}-${input.headSha.slice(0, 8)}-${uniq}`;
+  // Identifier encodes the head SHA so the reaper can de-dupe to one repair per
+  // head commit (a successful repair changes the head SHA, unblocking a retry).
+  const identifier = `repair-${input.remoteName}#${input.number}@${input.headSha.slice(0, 8)}`;
+  const title = `Repair: ${input.remoteOwner}/${input.remoteName}#${input.number}`;
+
+  const [session] = await db
+    .insert(chatConversations)
+    .values({
+      userId,
+      repositoryId: input.repositoryId,
+      workingDirectory,
+      agentType,
+      title,
+      status: "pending",
+      gitBranch: workBranch,
+      sessionType: "execution",
+      planningWorkspaceId: workspaceId,
+    })
+    .returning();
+  const insertedSession = expectInsertedRow(
+    session,
+    "Failed to create repair session",
+  );
+
+  const [taskRun] = await db
+    .insert(taskRuns)
+    .values({
+      userId,
+      planningWorkspaceId: workspaceId,
+      planningItemId: input.pullRequestId,
+      planningItemIdentifier: identifier,
+      planningProvider: "internal",
+      sessionId: insertedSession.id,
+      repositoryId: input.repositoryId,
+      status: "starting",
+      branch: workBranch,
+      runPhase: "repair",
+      pullRequestId: input.pullRequestId,
+      workItemIdentifierSnapshot: identifier,
+    })
+    .returning();
+  const insertedTaskRun = expectInsertedRow(
+    taskRun,
+    "Failed to create repair task run",
+  );
+
+  const description = buildPrRepairPrompt(input, baseBranch);
+  const gatewayUrl = getGatewayUrl();
+  const nudgeSecret = getNudgeSecret();
+  if (nudgeSecret) {
+    try {
+      await fetch(`${gatewayUrl}/internal/nudge`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${nudgeSecret}`,
+        },
+        body: JSON.stringify({
+          sessionId: insertedSession.id,
+          workspaceId,
+          workingDirectory,
+          agentType,
+          title,
+          sessionType: "execution",
+          description,
+          identifier,
+          branch: workBranch,
+        }),
+      });
+    } catch (err) {
+      console.warn("[repairDispatch] nudge failed:", err);
+    }
+  }
+
+  return {
+    sessionId: insertedSession.id,
+    taskRunId: insertedTaskRun.id,
+  };
+}
+
 export async function markTaskBlocked(
   taskRunId: string,
   reason: string,

@@ -18,11 +18,20 @@
 //    taskRun for the PR) suppresses re-dispatch so we don't spawn duplicates.
 //  - Only gitea/Forgejo providers are handled (that's where all of Bob's PRs
 //    live); PRs on providers without review/status support are skipped.
+//  - Auto-repair closes the loop: a reviewed PR that can't merge (CI failing,
+//    merge conflict, or reviewer requested changes) gets a runner agent
+//    (dispatchRepairSession) dispatched to fix its branch and push back, so CI
+//    re-runs and the PR converges to a merge instead of sitting reviewed-but-
+//    stuck forever. Gated (repairEnabled) with per-PR + per-run guards.
 
 import { and, desc, eq, inArray } from "@bob/db";
 import { db } from "@bob/db/client";
 import { pullRequests, taskRuns } from "@bob/db/schema";
-import { dispatchReviewSession } from "@bob/execution/runtime/taskExecutor";
+import {
+  type RepairReason,
+  dispatchRepairSession,
+  dispatchReviewSession,
+} from "@bob/execution/runtime/taskExecutor";
 
 import type { GitProvider } from "../services/git/providers/types";
 import {
@@ -30,9 +39,10 @@ import {
   getConnection,
 } from "../services/git/providerConnectionService";
 
-// task_run statuses that mean a review session is still in flight for a PR — a
-// verdict hasn't been posted yet, so we must not dispatch another reviewer.
-const ACTIVE_REVIEW_STATUSES = [
+// task_run statuses that mean a session is still in flight for a PR — for a
+// review, the verdict hasn't posted yet; for a repair, the fix hasn't landed —
+// so we must not dispatch another one of the same phase.
+const ACTIVE_RUN_STATUSES = [
   "pending",
   "provisioning",
   "starting",
@@ -91,16 +101,34 @@ export interface AutoMergeConfig {
    * this identity at the head SHA. Defaults to "bob-reviewer".
    */
   reviewerLogin?: string;
+  /**
+   * Close the loop: when a reviewed PR is stuck (CI failing, merge conflict, or
+   * the reviewer requested changes), dispatch a runner agent to fix the PR branch
+   * so it can converge to a merge. Off unless explicitly enabled — repair pushes
+   * commits to PR branches (a real mutation), unlike review which only reads.
+   */
+  repairEnabled?: boolean;
+  /** Runner agent used for the repair session. Defaults to "codex". */
+  repairAgentType?: string;
+  /** Max fresh repair dispatches per run (heavier than review — keep small). Defaults to 3. */
+  maxRepairsPerRun?: number;
+  /**
+   * Cap on total repair attempts per PR across head SHAs. A repair that pushes a
+   * fix changes the head SHA (a new attempt is allowed); this bounds a PR that
+   * keeps failing so it can't loop forever. Defaults to 3.
+   */
+  maxRepairAttemptsPerPr?: number;
 }
 
 export interface AutoMergeResult {
   scanned: number;
   reviewed: number;
+  repaired: number;
   merged: number;
   skipped: number;
   items: {
     pr: string;
-    action: "merged" | "reviewed" | "skipped";
+    action: "merged" | "reviewed" | "repaired" | "skipped";
     reason?: string;
   }[];
 }
@@ -111,11 +139,49 @@ async function hasActiveReview(pullRequestId: string): Promise<boolean> {
     where: and(
       eq(taskRuns.pullRequestId, pullRequestId),
       eq(taskRuns.runPhase, "review"),
-      inArray(taskRuns.status, ACTIVE_REVIEW_STATUSES),
+      inArray(taskRuns.status, ACTIVE_RUN_STATUSES),
     ),
     columns: { id: true },
   });
   return !!existing;
+}
+
+interface RepairState {
+  /** A repair session is currently in flight for this PR. */
+  active: boolean;
+  /** A repair has already been dispatched for this exact head SHA. */
+  doneAtHead: boolean;
+  /** Total repair attempts for this PR (across all head SHAs). */
+  attempts: number;
+}
+
+/**
+ * Repair dispatch state for a PR. One query drives all three loop guards:
+ *  - `active`     → don't run two repairs at once,
+ *  - `doneAtHead` → don't re-repair a head SHA a prior repair couldn't fix
+ *                   (a successful repair changes the SHA, so this clears itself),
+ *  - `attempts`   → cap total tries so a persistently-broken PR can't loop.
+ * The head SHA is encoded in the repair run's identifier as `@<sha8>`.
+ */
+async function getRepairState(
+  pullRequestId: string,
+  headSha: string,
+): Promise<RepairState> {
+  const runs = await db.query.taskRuns.findMany({
+    where: and(
+      eq(taskRuns.pullRequestId, pullRequestId),
+      eq(taskRuns.runPhase, "repair"),
+    ),
+    columns: { status: true, planningItemIdentifier: true },
+  });
+  const head8 = headSha.slice(0, 8);
+  return {
+    active: runs.some((r) => ACTIVE_RUN_STATUSES.includes(r.status)),
+    doneAtHead: runs.some((r) =>
+      (r.planningItemIdentifier ?? "").endsWith(`@${head8}`),
+    ),
+    attempts: runs.length,
+  };
 }
 
 export async function autoReviewAndMerge(
@@ -124,6 +190,7 @@ export async function autoReviewAndMerge(
   const result: AutoMergeResult = {
     scanned: 0,
     reviewed: 0,
+    repaired: 0,
     merged: 0,
     skipped: 0,
     items: [],
@@ -138,8 +205,11 @@ export async function autoReviewAndMerge(
   const scanLimit = cfg.scanLimit ?? cfg.maxPerRun * 12;
   const reviewBudget = cfg.maxReviewsPerRun ?? cfg.maxPerRun;
   const mergeBudget = cfg.maxMergesPerRun ?? cfg.maxPerRun;
+  const repairBudget = cfg.maxRepairsPerRun ?? 3;
+  const repairAttemptCap = cfg.maxRepairAttemptsPerPr ?? 3;
   let reviewsSpent = 0;
   let mergesSpent = 0;
+  let repairsSpent = 0;
 
   const openPrs = await db.query.pullRequests.findMany({
     where: eq(pullRequests.status, "open"),
@@ -242,6 +312,87 @@ export async function autoReviewAndMerge(
           (r.state === "APPROVED" || r.state === "REQUEST_CHANGES"),
       );
 
+      // Close the loop: a PR blocked from merging (CI failing / conflict /
+      // changes requested) gets a runner agent dispatched to FIX its branch, so
+      // the pipeline converges instead of piling up un-mergeable reviewed PRs.
+      // Records exactly one result item and is a no-op (just notes the blocked
+      // state) when repair is disabled or not possible. Guards: one repair in
+      // flight at a time, one attempt per head SHA, a per-PR attempt cap, and a
+      // per-run budget.
+      const tryRepair = async (
+        reason: RepairReason,
+        blockedNote: string,
+      ): Promise<void> => {
+        const repositoryId = pr.repositoryId;
+        const headBranch = pr.headBranch;
+        if (!cfg.repairEnabled || !repositoryId || !headBranch) {
+          result.items.push({ pr: label, action: "reviewed", reason: blockedNote });
+          return;
+        }
+        const rs = await getRepairState(pr.id, headSha);
+        if (rs.active) {
+          result.items.push({ pr: label, action: "reviewed", reason: "repair in flight" });
+          return;
+        }
+        if (rs.doneAtHead) {
+          result.items.push({
+            pr: label,
+            action: "reviewed",
+            reason: `${blockedNote} (repair made no fix at this head)`,
+          });
+          return;
+        }
+        if (rs.attempts >= repairAttemptCap) {
+          result.items.push({
+            pr: label,
+            action: "reviewed",
+            reason: `${blockedNote} (repair cap ${repairAttemptCap} reached)`,
+          });
+          return;
+        }
+        if (repairsSpent >= repairBudget) {
+          result.items.push({
+            pr: label,
+            action: "skipped",
+            reason: "repair budget exhausted (deferred)",
+          });
+          return;
+        }
+        const dispatched = await dispatchRepairSession(
+          pr.userId,
+          {
+            pullRequestId: pr.id,
+            repositoryId,
+            remoteOwner: pr.remoteOwner,
+            remoteName: pr.remoteName,
+            number: pr.number,
+            instanceUrl: pr.instanceUrl,
+            headSha,
+            headBranch,
+            title: remote.title,
+            body: remote.body,
+            reason,
+          },
+          cfg.repairAgentType ?? "codex",
+        );
+        if (!dispatched) {
+          result.skipped++;
+          result.items.push({
+            pr: label,
+            action: "skipped",
+            reason: "repo has no runner checkout/workspace for repair",
+          });
+          return;
+        }
+        repairsSpent++;
+        result.repaired++;
+        result.items.push({
+          pr: label,
+          action: "repaired",
+          reason: `repair dispatched (${reason})`,
+        });
+      };
+
       // Review once per head SHA. If a verdict already exists at this commit,
       // use it for the merge gate below. Otherwise the review is done by a Bob
       // runner agent — dispatch a review session (once) and move on; the verdict
@@ -323,7 +474,7 @@ export async function autoReviewAndMerge(
       }
 
       if (ownReviewAtHead.state !== "APPROVED") {
-        result.items.push({ pr: label, action: "reviewed", reason: "changes requested" });
+        await tryRepair("changes-requested", "changes requested");
         continue;
       }
 
@@ -335,15 +486,21 @@ export async function autoReviewAndMerge(
       );
       const ciGreen = ci.state === "success" && ci.total > 0;
       if (!ciGreen) {
-        result.items.push({
-          pr: label,
-          action: "reviewed",
-          reason: `approved, waiting CI (${ci.state}/${ci.total})`,
-        });
+        // A genuine CI failure is repairable; "pending"/absent means CI is still
+        // running (or not wired) — wait, don't dispatch a repair against it.
+        if (ci.state === "failure" || ci.state === "error") {
+          await tryRepair("ci-failure", `approved, CI ${ci.state} (${ci.total})`);
+        } else {
+          result.items.push({
+            pr: label,
+            action: "reviewed",
+            reason: `approved, waiting CI (${ci.state}/${ci.total})`,
+          });
+        }
         continue;
       }
       if (remote.mergeable === false) {
-        result.items.push({ pr: label, action: "reviewed", reason: "approved, has conflict" });
+        await tryRepair("conflict", "approved, has conflict");
         continue;
       }
 
