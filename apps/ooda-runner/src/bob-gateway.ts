@@ -1011,13 +1011,22 @@ export class BobGatewayConnector {
     // Commits ahead ≠ a real change. A repair/review session pushes its actual
     // fix to the PR's OWN branch and can leave only a merge commit (from pulling
     // base in to resolve conflicts) on this throwaway session branch — which is
-    // ahead-of-base but has an EMPTY net diff. Opening a PR from it produces an
-    // empty, un-mergeable artifact that clogs the auto-merge queue. Skip when the
-    // net diff vs base is empty (`git diff --quiet` exits 0 → no diff).
+    // ahead-of-base but has an EMPTY net diff, producing an empty, un-mergeable
+    // artifact PR that clogs the auto-merge queue.
+    //
+    // Re-fetch base first: it can advance while the agent runs for minutes, so
+    // the worktree's origin/<base> is stale by now. Then compare TREES with a
+    // two-dot `git diff origin/<base> HEAD` — this matches what the git host
+    // computes for the PR (0 files), unlike a three-dot merge-base diff against
+    // a stale ref, which is why v1 (PR #58) still let empty PRs through.
+    await this.git(worktree.path, ["fetch", "origin", worktree.baseBranch]).catch(
+      () => {},
+    );
     const emptyDiff = await this.git(worktree.path, [
       "diff",
       "--quiet",
-      `origin/${worktree.baseBranch}...HEAD`,
+      `origin/${worktree.baseBranch}`,
+      "HEAD",
     ])
       .then(() => true)
       .catch(() => false);
