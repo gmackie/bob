@@ -1008,6 +1008,26 @@ export class BobGatewayConnector {
       return null;
     }
 
+    // Commits ahead ≠ a real change. A repair/review session pushes its actual
+    // fix to the PR's OWN branch and can leave only a merge commit (from pulling
+    // base in to resolve conflicts) on this throwaway session branch — which is
+    // ahead-of-base but has an EMPTY net diff. Opening a PR from it produces an
+    // empty, un-mergeable artifact that clogs the auto-merge queue. Skip when the
+    // net diff vs base is empty (`git diff --quiet` exits 0 → no diff).
+    const emptyDiff = await this.git(worktree.path, [
+      "diff",
+      "--quiet",
+      `origin/${worktree.baseBranch}...HEAD`,
+    ])
+      .then(() => true)
+      .catch(() => false);
+    if (emptyDiff) {
+      console.log(
+        `[bob-gw] No net diff on ${worktree.branch} vs ${worktree.baseBranch}; skipping PR`,
+      );
+      return null;
+    }
+
     await this.git(worktree.path, ["push", "-u", "origin", worktree.branch, "--force"]);
 
     const remote = (
