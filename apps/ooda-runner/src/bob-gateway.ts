@@ -996,6 +996,23 @@ export class BobGatewayConnector {
     session: ServerSessionAvailable,
     worktree: WorktreeContext,
   ): Promise<string | null> {
+    // Internal repair/review sessions must NEVER open a PR from their throwaway
+    // session branch: a repair pushes its fix to the TARGET PR's own branch and a
+    // review only posts a git-host review — the `bob/repair/*` / `bob/review/*`
+    // worktree branch is scratch. Opening a PR from it created hundreds of empty,
+    // un-mergeable artifacts that clogged the auto-merge queue (the diff-based
+    // guards were unreliable — base advances mid-session, refs go stale). Gate on
+    // the branch prefix, which is unambiguous.
+    if (
+      worktree.branch.startsWith("bob/repair/") ||
+      worktree.branch.startsWith("bob/review/")
+    ) {
+      console.log(
+        `[bob-gw] ${worktree.branch} is an internal repair/review session branch; skipping PR (work lands on the target PR's own branch)`,
+      );
+      return null;
+    }
+
     const ahead = (
       await this.git(worktree.path, [
         "rev-list",
