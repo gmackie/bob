@@ -730,7 +730,7 @@ function buildPrRepairPrompt(
     `   pnpm typecheck`,
     `   pnpm lint`,
     `   pnpm test`,
-    `5. Commit and push to the SAME branch so the existing PR updates and CI re-runs:`,
+    `5. ONLY IF you made a real change that addresses the failure, commit and push to the SAME branch so the existing PR updates and CI re-runs:`,
     `   git add -A && git commit -m "fix: resolve merge blockers for #${input.number}"`,
     `   git push origin ${input.headBranch}`,
     "",
@@ -739,7 +739,8 @@ function buildPrRepairPrompt(
     "- Do NOT delete tests, weaken assertions, or disable typecheck/lint to go green — fix the real cause.",
     "- Do NOT force-push or reset the branch. Only add commits on top.",
     "- The push uses the checkout's existing origin credentials — do not add or print any token.",
-    "- If you genuinely cannot fix it (needs external secrets, or the failure is unrelated to the code), stop and explain rather than making unrelated changes.",
+    "- NEVER push an EMPTY commit. If `git status` shows no staged change (the branch already had the fix, or you couldn't fix it), do NOT commit or push — just report what's blocking and stop. An empty commit changes the head SHA, which needlessly re-triggers review+repair with no progress.",
+    "- If you genuinely cannot fix it (needs external secrets, a deploy/wrangler/Node-version issue, or the failure is unrelated to the code), stop and explain rather than making unrelated or empty changes.",
   );
   return lines.join("\n");
 }
