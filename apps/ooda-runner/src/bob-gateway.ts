@@ -1312,10 +1312,27 @@ export class BobGatewayConnector {
       const { command, args } = buildCliCommand(session.agentType || "claude", prompt, session);
       console.log(`[bob-gw] Spawning: ${command} ${args.join(" ").slice(0, 80)}...`);
 
+      // Give the agent a working toolchain PATH. The runner service itself runs
+      // on the system Node (currently 20), but the fleet's pnpm (10.x) fails on
+      // Node 20 with ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING — so review/repair
+      // agents couldn't run `pnpm typecheck/lint/test` to verify their fixes,
+      // gutting repair effectiveness. Prepend a Node-22 bin (set via
+      // BOB_AGENT_PATH_PREPEND, e.g. ~/.nvm/versions/node/v22.x/bin) so the
+      // agent's pnpm/node resolve to 22. No-op when the var is unset.
+      const childEnv: NodeJS.ProcessEnv = {
+        ...process.env,
+        CI: "true",
+        TERM: "dumb",
+      };
+      const pathPrepend = process.env.BOB_AGENT_PATH_PREPEND;
+      if (pathPrepend) {
+        childEnv.PATH = `${pathPrepend}:${process.env.PATH ?? ""}`;
+      }
+
       const child = spawn(command, args, {
         cwd: workDir,
         stdio: ["ignore", "pipe", "pipe"],
-        env: { ...process.env, CI: "true", TERM: "dumb" },
+        env: childEnv,
       });
 
       this.activeSessions.set(session.sessionId, child);
