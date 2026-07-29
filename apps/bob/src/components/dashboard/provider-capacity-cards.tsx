@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { HostSnapshotWire } from "@bob/ws";
 
 import { cn } from "@gmacko/core/ui";
 
 import { useBobRpcClient } from "~/rpc/react";
+import { useSessionSocket } from "~/hooks/use-session-socket";
 import { useTRPC } from "~/trpc/react";
 import {
   buildProviderCapacitySummaries,
@@ -143,11 +145,28 @@ export function ProviderCapacityCards({ workspaceId }: ProviderCapacityCardsProp
       refetchInterval: 30_000,
     }),
   );
-  const { data: hostSnapshot } = useQuery<HostSnapshotWire | null>({
-    queryKey: ["hostSnapshot", workspaceId ?? ""],
-    queryFn: () => Promise.resolve(null),
-    enabled: false,
+  // Live per-provider health (installed / authenticated / ready / degraded)
+  // from the execution host, streamed over the gateway WS. The snapshot lives
+  // in-memory on the gateway (not persisted), so we subscribe to the workspace
+  // to receive the current snapshot on connect + broadcasts on change.
+  const [hostSnapshot, setHostSnapshot] = useState<HostSnapshotWire | null>(
+    null,
+  );
+  const { data: gatewayInfo } = useQuery(
+    trpc.session.getGatewayWebSocketUrl.queryOptions(undefined, {
+      enabled: Boolean(workspaceId),
+    }),
+  );
+  const { connectionState, subscribeWorkspace } = useSessionSocket({
+    gatewayUrl: gatewayInfo?.url ?? "",
+    token: gatewayInfo?.token ?? "",
+    enabled: Boolean(workspaceId && gatewayInfo?.url && gatewayInfo?.token),
+    onHostSnapshot: (_ws, snapshot) => setHostSnapshot(snapshot),
   });
+  useEffect(() => {
+    if (connectionState.status !== "connected" || !workspaceId) return;
+    subscribeWorkspace(undefined, workspaceId);
+  }, [connectionState.status, workspaceId, subscribeWorkspace]);
 
   const cards = buildProviderCapacitySummaries({
     sessions: runs.map(
