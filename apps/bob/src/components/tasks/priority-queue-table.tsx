@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Badge } from "@gmacko/core/ui/badge";
 
+import { useBobRpcClient } from "~/rpc/react";
 import { useTRPC } from "~/trpc/react";
 import {
   buildPriorityQueueRows,
@@ -37,7 +39,19 @@ function statusVariant(status: string): "default" | "slate" | "blue" | "amber" |
 
 export function PriorityQueueTable({ workspaceId }: PriorityQueueTableProps) {
   const trpc = useTRPC();
+  const rpc = useBobRpcClient();
   const queryClient = useQueryClient();
+
+  // Queue-level persona applied to every Start in this view (the run adopts the
+  // persona's adapter + model + prompt + tools). Empty = provider hierarchy.
+  const [personaId, setPersonaId] = useState<string>("");
+  const { data: personas } = useQuery({
+    queryKey: ["rpc", "agent.persona.list", { active: true }],
+    queryFn: () =>
+      rpc.agent.persona.list({ active: true }) as Promise<
+        Array<{ id: string; name: string }>
+      >,
+  });
   // Fetch only dispatchable statuses so the queue isn't starved by a workspace
   // full of in_review/terminal items overflowing the row cap.
   const listInput = {
@@ -109,6 +123,24 @@ export function PriorityQueueTable({ workspaceId }: PriorityQueueTableProps) {
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {personas && personas.length > 0 ? (
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              Persona:
+              <select
+                value={personaId}
+                onChange={(e) => setPersonaId(e.target.value)}
+                aria-label="Persona for dispatches"
+                className="rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <option value="">None</option>
+                {personas.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <span className="text-xs text-muted-foreground">
             {reorderQueue.isPending ? "Saving..." : "Queue saved"}
           </span>
@@ -226,7 +258,12 @@ export function PriorityQueueTable({ workspaceId }: PriorityQueueTableProps) {
                       ) : action.kind === "dispatch" ? (
                         <button
                           type="button"
-                          onClick={() => dispatchWork.mutate({ workItemId: item.id })}
+                          onClick={() =>
+                            dispatchWork.mutate({
+                              workItemId: item.id,
+                              ...(personaId ? { personaId } : {}),
+                            })
+                          }
                           disabled={rowBusy}
                           className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                         >
