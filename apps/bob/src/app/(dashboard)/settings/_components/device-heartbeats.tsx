@@ -30,9 +30,15 @@ interface DeviceHeartbeatResponse {
 export function DeviceHeartbeatsSection({
   title,
   description,
+  onlyWhenOnline = false,
 }: {
   title?: string;
   description?: string;
+  // When true, the whole section self-hides unless at least one device is
+  // currently online. Used on surfaces like /runs where a weeks-stale
+  // "Offline" handheld would otherwise sit as a hero card above the feed.
+  // Settings omits the flag and always lists every device that has checked in.
+  onlyWhenOnline?: boolean;
 } = {}) {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
@@ -71,6 +77,9 @@ export function DeviceHeartbeatsSection({
   });
 
   if (isLoading) {
+    // Don't flash a skeleton for the self-hiding variant — it would pop in and
+    // then vanish once we learn no device is online.
+    if (onlyWhenOnline) return null;
     return (
       <section className="rounded-lg border p-6">
         <div className="animate-pulse space-y-4">
@@ -83,6 +92,9 @@ export function DeviceHeartbeatsSection({
 
   const devices = data?.devices ?? [];
   const sessions = data?.sessions ?? [];
+
+  // Self-hide when nothing is reachable (see prop doc above).
+  if (onlyWhenOnline && !devices.some((device) => device.online)) return null;
 
   return (
     <section className="rounded-lg border p-6">
