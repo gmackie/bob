@@ -441,6 +441,7 @@ export default function RunsPage() {
       <DeviceHeartbeatsSection
         title="Handheld"
         description="Choose the Bob session currently controlled by the Whisplay device."
+        onlyWhenOnline
       />
 
       {/* Runs List */}
