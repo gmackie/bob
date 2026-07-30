@@ -58,7 +58,7 @@ function ProviderCard({
   return (
     <Link
       href={getProviderCapacityHref(card.provider, workspaceId)}
-      className="rounded-2xl border border-border bg-card p-5 transition-colors hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      className="rounded-2xl border border-border bg-card p-6 transition-colors hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
     >
       <div className="flex items-center justify-between gap-3">
         <h2 className="font-display text-base font-semibold text-foreground">
@@ -95,7 +95,7 @@ function ProviderCard({
                 />
               </div>
               {limit.resetLabel ? (
-                <div className="mt-1 text-[10px] text-muted-foreground">
+                <div className="mt-1.5 text-xs text-muted-foreground">
                   {limit.resetLabel}
                 </div>
               ) : null}
@@ -198,8 +198,8 @@ export function ProviderCapacityCards({ workspaceId }: ProviderCapacityCardsProp
       : null;
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground" data-testid="host-status">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground" data-testid="host-status">
         <span className="font-semibold text-foreground">{host?.hostId ?? "Execution host"}</span>
         <span>{host?.statusLabel ?? "Waiting for heartbeat"}</span>
         {host ? <span>{host.queueLabel}</span> : null}

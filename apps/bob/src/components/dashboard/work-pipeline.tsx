@@ -100,10 +100,10 @@ export function WorkPipeline({ workspaceId }: WorkPipelineProps) {
   const header = getWorkPipelineHeaderModel();
 
   return (
-    <section className="rounded-2xl border border-border bg-card p-5">
+    <section className="rounded-2xl border border-border bg-card p-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h2 className="font-display text-base font-semibold text-foreground">
+          <h2 className="font-display text-lg font-semibold text-foreground">
             {header.title}
           </h2>
           {header.subtitle ? (
@@ -121,19 +121,19 @@ export function WorkPipeline({ workspaceId }: WorkPipelineProps) {
       </div>
 
       {isLoading ? (
-        <div className="mt-4 grid gap-2 md:grid-cols-4">
+        <div className="mt-5 grid gap-3 md:grid-cols-4">
           {[1, 2, 3, 4].map((lane) => (
-            <div key={lane} className="h-14 animate-pulse rounded-lg bg-muted/40" />
+            <div key={lane} className="h-16 animate-pulse rounded-lg bg-muted/40" />
           ))}
         </div>
       ) : (
         <>
-          <div className="mt-4 grid gap-2 md:grid-cols-4">
+          <div className="mt-5 grid gap-3 md:grid-cols-4">
             {laneSummaries.map((lane) => (
               <Link
                 key={lane.key}
                 href={laneHref(lane.key, workspaceId)}
-                className="min-w-0 rounded-lg border border-border/70 bg-background/40 px-3 py-2.5 transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                className="min-w-0 rounded-lg border border-border/70 bg-background/40 px-4 py-3 transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-2">
@@ -153,8 +153,8 @@ export function WorkPipeline({ workspaceId }: WorkPipelineProps) {
             ))}
           </div>
 
-          <div className="mt-5 border-t border-border pt-4">
-            <div className="mb-3 flex items-center justify-between">
+          <div className="mt-6 border-t border-border pt-5">
+            <div className="mb-4 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-foreground">
                 Recently Completed
               </h3>
@@ -175,7 +175,7 @@ export function WorkPipeline({ workspaceId }: WorkPipelineProps) {
                     <Link
                       key={item.id}
                       href={getRecentlyCompletedWorkItemHref(item.id, workspaceId)}
-                      className="flex items-center justify-between gap-3 px-3 py-2.5 transition-colors hover:bg-muted/30"
+                      className="flex items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-muted/30"
                     >
                       <div className="min-w-0">
                         <div className="truncate text-sm font-medium text-foreground">

@@ -57,10 +57,10 @@ export function LinearProgress({ workspaceId }: LinearProgressProps) {
   const pct = Math.round((doneCount / total) * 100);
 
   return (
-    <section className="rounded-2xl border border-border bg-card p-5">
+    <section className="rounded-2xl border border-border bg-card p-6">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <h2 className="font-display text-sm font-semibold text-foreground">
+          <h2 className="font-display text-base font-semibold text-foreground">
             Linear Issues
           </h2>
           <span className="text-xs font-semibold tabular-nums text-muted-foreground">

@@ -24,13 +24,13 @@ export default function TasksDashboardPage() {
   const header = getTaskDashboardHeaderModel();
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-10">
-      <div className="mb-8">
+    <main className="mx-auto max-w-7xl px-6 py-12">
+      <div className="mb-10">
         <h1 className="font-display text-4xl font-bold tracking-tight leading-[1.15] text-foreground">
           {header.title}
         </h1>
         {header.subtitle ? (
-          <p className="mt-1 text-sm text-muted-foreground">{header.subtitle}</p>
+          <p className="mt-2 text-base text-muted-foreground">{header.subtitle}</p>
         ) : null}
       </div>
 

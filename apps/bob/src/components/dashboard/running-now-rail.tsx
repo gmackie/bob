@@ -75,9 +75,9 @@ export function RunningNowRail({ workspaceId }: { workspaceId?: string | null })
   const loading = isLoading || workItemsLoading;
 
   return (
-    <aside className="rounded-2xl border border-border bg-card p-5">
+    <aside className="rounded-2xl border border-border bg-card p-6">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="font-display text-sm font-semibold text-foreground">
+        <h3 className="font-display text-base font-semibold text-foreground">
           Running Now
         </h3>
         <span className="rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
@@ -86,33 +86,33 @@ export function RunningNowRail({ workspaceId }: { workspaceId?: string | null })
       </div>
 
       {loading ? (
-        <div className="mt-3 space-y-2">
+        <div className="mt-4 space-y-2">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-10 animate-pulse rounded bg-muted/50" />
+            <div key={i} className="h-12 animate-pulse rounded bg-muted/50" />
           ))}
         </div>
       ) : visibleRuns.length === 0 ? (
-        <p className="mt-3 text-xs text-muted-foreground">
+        <p className="mt-4 text-sm text-muted-foreground">
           No execution sessions are currently in progress.
         </p>
       ) : (
-        <div className="mt-3 flex flex-col gap-1.5">
+        <div className="mt-4 flex flex-col gap-2">
           {visibleRuns.map((run) => (
             <Link
               key={run.id}
               href={run.href}
-              className="rounded-md px-2 py-2 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              className="rounded-lg px-3 py-2.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
               <div className="flex items-center gap-2">
                 <span className={`size-2 rounded-full animate-pulse ${STATUS_DOT_CLASS[run.statusTone]}`} />
-                <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
+                <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
                   {run.title}
                 </span>
-                <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${STATUS_BADGE_CLASS[run.statusTone]}`}>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_BADGE_CLASS[run.statusTone]}`}>
                   {run.statusLabel}
                 </span>
               </div>
-              <div className="mt-1 flex min-w-0 items-center gap-1.5 pl-4 text-[10px] text-muted-foreground">
+              <div className="mt-1.5 flex min-w-0 items-center gap-1.5 pl-4 text-xs text-muted-foreground">
                 <span className="truncate rounded-full bg-muted px-1.5 py-0.5 font-semibold" translate="no">
                   {run.agentLabel}
                 </span>
