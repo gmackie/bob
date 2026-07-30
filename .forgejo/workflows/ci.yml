@@ -46,7 +46,14 @@ jobs:
         run: pnpm exec turbo run typecheck --concurrency=1
 
       - name: Lint
-        run: pnpm lint
+        # Serialize for the same reason as typecheck above: `pnpm lint` is
+        # `turbo run lint --continue`, which fans out one eslint process per
+        # package with no concurrency cap. Each is 600-800MB, so a full fan-out
+        # exhausted RAM *and* swap on the shared runner host — load average
+        # reached 150 with every eslint stuck in uninterruptible sleep, which
+        # degraded the Forgejo instance sharing that box until the processes
+        # were killed. Serial lint cannot collectively exhaust memory.
+        run: pnpm exec turbo run lint --continue --concurrency=1
 
       - name: Start emulated Postgres (@gmacko/emulate)
         # `drizzle-kit push` below runs as its own step, outside vitest's
