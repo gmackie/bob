@@ -40,7 +40,7 @@ export function PendingApproval({ workspaceId }: { workspaceId?: string | null }
   if (rows.length === 0) return null;
 
   return (
-    <section className="rounded-2xl border border-amber-500/40 bg-amber-500/[0.06] p-5 shadow-[0_0_0_1px_rgba(245,158,11,0.10)]">
+    <section className="rounded-2xl border border-amber-500/40 bg-amber-500/[0.06] p-6 shadow-[0_0_0_1px_rgba(245,158,11,0.10)]">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="relative flex size-2.5">
@@ -56,24 +56,24 @@ export function PendingApproval({ workspaceId }: { workspaceId?: string | null }
         </span>
       </div>
 
-      <p className="mt-1 text-xs text-muted-foreground">
+      <p className="mt-2 text-sm text-muted-foreground">
         {rows.length === 1
           ? "A run is paused waiting for your yes/no. It holds a slot until you answer."
           : `${rows.length} runs are paused waiting for your yes/no. Each holds a slot until answered.`}
       </p>
 
-      <div className="mt-4 flex flex-col gap-2">
+      <div className="mt-5 flex flex-col gap-2">
         {rows.map((row) => (
           <Link
             key={row.id}
             href={row.href}
-            className="flex items-center gap-3 rounded-xl border border-amber-500/25 bg-card/60 px-3 py-2.5 transition-colors hover:border-amber-500/50 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40"
+            className="flex items-center gap-3 rounded-xl border border-amber-500/25 bg-card/60 px-4 py-3 transition-colors hover:border-amber-500/50 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40"
           >
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-foreground">
                 {row.title}
               </p>
-              <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
                 <span
                   className="rounded-full bg-muted px-1.5 py-0.5 font-semibold"
                   translate="no"

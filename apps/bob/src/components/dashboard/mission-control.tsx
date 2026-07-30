@@ -21,7 +21,7 @@ export function MissionControl({ workspaceId }: MissionControlProps) {
   const sections = getMissionControlSections();
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-8">
       {/* Top billing: the "needs you" approvals. Self-hides when none are
           pending, so it only ever appears to demand action. */}
       <ErrorBoundary section="Pending approvals">
@@ -34,15 +34,15 @@ export function MissionControl({ workspaceId }: MissionControlProps) {
         </ErrorBoundary>
       ) : null}
 
-      <div className="grid gap-5 xl:grid-cols-[1fr_22rem]">
-        <div className="flex min-w-0 flex-col gap-5">
+      <div className="grid gap-6 xl:grid-cols-[1fr_22rem]">
+        <div className="flex min-w-0 flex-col gap-6">
           {workspaceId && sections.includes("work-pipeline") ? (
             <ErrorBoundary section="Work pipeline">
               <WorkPipeline workspaceId={workspaceId} />
             </ErrorBoundary>
           ) : null}
         </div>
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-6">
           {workspaceId ? (
             <ErrorBoundary section="Linear progress">
               {/* Self-hides when the workspace has no Linear-synced issues. */}
