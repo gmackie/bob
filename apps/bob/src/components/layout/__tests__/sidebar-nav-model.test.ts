@@ -76,10 +76,34 @@ describe("sidebar nav model", () => {
     expect(getSidebarScopedHref("/onboarding", "workspace-1")).toBe(
       "/onboarding?workspace=workspace-1",
     );
+    // /runs is intentionally left un-scoped so the Recent Outcomes tab keeps
+    // landing on the cross-workspace "All" feed that its badge now counts.
     expect(getSidebarScopedHref("/runs?provider=codex", "workspace-1")).toBe(
-      "/runs?provider=codex&workspace=workspace-1",
+      "/runs?provider=codex",
     );
     expect(getSidebarScopedHref("/nodes", "workspace-1")).toBe("/nodes");
+  });
+
+  it("counts the cross-workspace /runs feed for the Recent Outcomes badge when given listAll rows", () => {
+    // recentOutcomeRuns (agentRun.listAll) takes precedence over the
+    // workspace-scoped statusCounts tally so the badge matches the /runs feed.
+    expect(
+      buildSidebarTabBadges({
+        workItems: [],
+        // Workspace-scoped tally would read 0 here — but the badge should
+        // reflect the cross-workspace runs below.
+        statusCounts: {},
+        recentOutcomeRuns: [
+          { id: "r1", status: "completed", agentType: "claude" },
+          { id: "r2", status: "failed", agentType: "codex" },
+          { id: "r3", status: "in_review", agentType: "cursor" },
+          // Still-running work is not an outcome and must not be counted.
+          { id: "r4", status: "running", agentType: "grok" },
+        ],
+        planningSessions: [],
+        projects: [],
+      })["recent-outcomes"],
+    ).toBe(3);
   });
 
   it("builds realtime badge counts for mode-scoped rail tabs", () => {

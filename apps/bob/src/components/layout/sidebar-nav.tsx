@@ -182,6 +182,15 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
       { enabled: Boolean(workspaceId), refetchInterval: 10_000 },
     ),
   );
+  // Cross-workspace runs for the recent-outcomes badge. The tab links to the
+  // /runs "All" feed, so the badge counts what that feed renders instead of the
+  // workspace-scoped tally (which read 0 while /runs showed every workspace).
+  const { data: recentOutcomeRuns } = useQuery(
+    trpc.agentRun.listAll.queryOptions(
+      { limit: 50 },
+      { refetchInterval: 10_000 },
+    ),
+  );
   const { data: planningSessions } = useQuery(
     trpc.planSession.list.queryOptions(
       { workspaceId, limit: 50 },
@@ -198,6 +207,7 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
     workItems: (workItems ?? []) as SidebarTabBadgeInput["workItems"],
     dispatchableItems: (dispatchableItems ?? []) as SidebarTabBadgeInput["dispatchableItems"],
     statusCounts: (statusCounts ?? undefined) as SidebarTabBadgeInput["statusCounts"],
+    recentOutcomeRuns: (recentOutcomeRuns ?? []) as SidebarTabBadgeInput["recentOutcomeRuns"],
     executionSessions: (executionSessions ?? []) as SidebarTabBadgeInput["executionSessions"],
     planningSessions: (planningSessions ?? []) as SidebarTabBadgeInput["planningSessions"],
     projects: buildSidebarProjectSummaries((projects ?? []) as SidebarProjectEntry[]),
