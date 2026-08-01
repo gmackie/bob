@@ -5,7 +5,6 @@ import { ErrorBoundary } from "@gmacko/core/ui/error-boundary";
 import { LinearProgress } from "./linear-progress";
 import { PendingApproval } from "./pending-approval";
 import { ProviderCapacityCards } from "./provider-capacity-cards";
-import { RunningNowRail } from "./running-now-rail";
 import { WorkPipeline } from "./work-pipeline";
 import { getMissionControlSections } from "./mission-control-model";
 
@@ -34,28 +33,21 @@ export function MissionControl({ workspaceId }: MissionControlProps) {
         </ErrorBoundary>
       ) : null}
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_22rem]">
-        <div className="flex min-w-0 flex-col gap-6">
-          {workspaceId && sections.includes("work-pipeline") ? (
-            <ErrorBoundary section="Work pipeline">
-              <WorkPipeline workspaceId={workspaceId} />
-            </ErrorBoundary>
-          ) : null}
-        </div>
-        <div className="flex flex-col gap-6">
-          {workspaceId ? (
-            <ErrorBoundary section="Linear progress">
-              {/* Self-hides when the workspace has no Linear-synced issues. */}
-              <LinearProgress workspaceId={workspaceId} />
-            </ErrorBoundary>
-          ) : null}
-          {sections.includes("running-now") ? (
-            <ErrorBoundary section="Running now">
-              <RunningNowRail workspaceId={workspaceId} />
-            </ErrorBoundary>
-          ) : null}
-        </div>
-      </div>
+      {/* Single full-width column. The former right rail is gone: "Running now"
+          folded into the WorkPipeline card as its top band, and LinearProgress
+          (which self-hides without Linear issues) stacks below full-width — so
+          no empty 22rem gutter sits beside the pipeline in the common case. */}
+      {workspaceId && sections.includes("work-pipeline") ? (
+        <ErrorBoundary section="Work pipeline">
+          <WorkPipeline workspaceId={workspaceId} />
+        </ErrorBoundary>
+      ) : null}
+      {workspaceId ? (
+        <ErrorBoundary section="Linear progress">
+          {/* Self-hides when the workspace has no Linear-synced issues. */}
+          <LinearProgress workspaceId={workspaceId} />
+        </ErrorBoundary>
+      ) : null}
     </div>
   );
 }
