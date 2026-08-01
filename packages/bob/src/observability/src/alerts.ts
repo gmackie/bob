@@ -94,6 +94,19 @@ export const OBSERVABILITY_ALERTS: readonly ObservabilityAlertDefinition[] = [
     runbook:
       "Review worker scheduled handler logs, BOB_AUTO_DRAIN_ENABLED, and database/Hyperdrive bindings.",
   },
+  {
+    id: "auto-merge-auth-failure",
+    name: "Auto-merge git-host auth failure (silent dead loop)",
+    service: "bob-worker",
+    surface: "job",
+    severity: "high",
+    description:
+      "The auto-merge reaper is failing git-host auth (401/403) on most or all scanned PRs — the review→repair→merge loop is effectively dead while the cron keeps firing. Distinguishes a revoked/expired shared Forgejo token from ordinary per-PR skips, which otherwise look identical in the [auto-merge] counters.",
+    sentryTag: "surface:job",
+    posthogEvent: "critical_job_failure",
+    runbook:
+      "The BOB_FORGEJO_TOKEN (and/or BOB_REVIEW_FORGEJO_TOKEN) worker secret is likely revoked/expired. Verify against git.forgegraf.com, rotate via `wrangler secret put`, and update the hetzner-bob runner git auth. See ForgeGraph docs/ops/2026-07-29-forgejo-token-revocation-bob-dispatch-outage.md.",
+  },
 ] as const;
 
 export function getAlertsForSurface(
