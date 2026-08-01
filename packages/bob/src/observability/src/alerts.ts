@@ -107,6 +107,19 @@ export const OBSERVABILITY_ALERTS: readonly ObservabilityAlertDefinition[] = [
     runbook:
       "The BOB_FORGEJO_TOKEN (and/or BOB_REVIEW_FORGEJO_TOKEN) worker secret is likely revoked/expired. Verify against git.forgegraf.com, rotate via `wrangler secret put`, and update the hetzner-bob runner git auth. See ForgeGraph docs/ops/2026-07-29-forgejo-token-revocation-bob-dispatch-outage.md.",
   },
+  {
+    id: "session-reap-spike",
+    name: "Stuck-session reap spike (runner failing to claim work)",
+    service: "bob-worker",
+    surface: "job",
+    severity: "high",
+    description:
+      "The stuck-session reaper cleared an abnormal number of sessions in a single cron tick. Steady-state reaps 0; a spike means many sessions went dead at once — typically a runner crashed, restarted, or (as in the 2026-07-29 outage) kept dispatching-but-never-claiming while its git auth was broken. Early warning that a runner is unhealthy, before the backlog visibly starves.",
+    sentryTag: "surface:job",
+    posthogEvent: "critical_job_failure",
+    runbook:
+      "Check runner_leases.last_heartbeat_at for stale/restarted runners, and the hetzner-bob/vanuc ooda-runner services. The reaped sessions are tagged last_error.code='reaped_stuck_session'; group them by workspace/agent_type to find which runner failed. See [[bob-runner-dispatch-ops]] and the 2026-07-29 token-outage ops note.",
+  },
 ] as const;
 
 export function getAlertsForSurface(

@@ -163,6 +163,39 @@ export default Sentry.withSentry(
                     .join(",")}`,
                 );
               }
+              // Early-warning: steady-state reaps 0. A spike (many sessions dead
+              // at once) means a runner crashed/restarted or is dispatching-but-
+              // never-claiming (the 2026-07-29 outage cleared 16 at once). Alert
+              // so an unhealthy runner surfaces before the backlog visibly
+              // starves. Observability only — never affects dispatch.
+              const reapAlertThreshold = Number(
+                runtimeEnv.BOB_SESSION_REAP_ALERT_THRESHOLD ?? 5,
+              );
+              if (reap.reaped >= reapAlertThreshold) {
+                const { buildFailurePayload, getFailureSentryTags } =
+                  await import("@bob/observability/failures");
+                const failure = {
+                  surface: "job" as const,
+                  operation: "reap_stuck_sessions",
+                  error: new Error(
+                    `stuck-session reaper cleared ${reap.reaped} sessions in one tick (>= ${reapAlertThreshold}) — a runner is likely unhealthy (crashed/restarted or claiming no work)`,
+                  ),
+                  alertId: "session-reap-spike",
+                  tenant: runtimeEnv.BOB_TENANT_ID
+                    ? { tenantId: String(runtimeEnv.BOB_TENANT_ID) }
+                    : undefined,
+                };
+                console.error(
+                  "[session-reap] SPIKE — runner likely unhealthy",
+                  buildFailurePayload(failure),
+                );
+                Sentry.withScope((scope) => {
+                  scope.setLevel("error");
+                  scope.setTags(getFailureSentryTags(failure));
+                  scope.setContext("failure", buildFailurePayload(failure));
+                  Sentry.captureException(failure.error);
+                });
+              }
             } catch (err) {
               console.error("[session-reap] failed:", err);
             }
