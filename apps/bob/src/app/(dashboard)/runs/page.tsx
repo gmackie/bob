@@ -141,7 +141,7 @@ function ProviderRunRow({
             </div>
           )}
         </div>
-        {run.workItemId ? (
+        {run.workItemId && run.workItemId !== row.title ? (
           <span className="hidden max-w-[10rem] truncate text-xs text-muted-foreground md:inline">
             {run.workItemId}
           </span>
