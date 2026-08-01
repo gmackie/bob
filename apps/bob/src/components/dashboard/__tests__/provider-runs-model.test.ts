@@ -33,9 +33,10 @@ describe("provider runs model", () => {
       { id: "claude", agentType: "claude" },
     ];
 
+    // claude normalizes to its own provider now, so it no longer falls through
+    // to the codex bucket — the codex filter returns only genuine codex runs.
     expect(filterRunsByProvider(runs, "codex").map((run) => run.id)).toEqual([
       "codex",
-      "claude",
     ]);
     expect(filterRunsByProvider(runs, "cursor").map((run) => run.id)).toEqual([
       "cursor",
