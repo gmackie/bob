@@ -127,11 +127,41 @@ export interface AutoMergeResult {
   repaired: number;
   merged: number;
   skipped: number;
+  /**
+   * How many PRs failed with a git-host AUTH error (401/403 / revoked token)
+   * this run. These also land in `skipped`, but are counted separately because
+   * a token-wide auth failure is a silent-dead-loop signal, not per-PR noise:
+   * when it dominates, the whole review→repair→merge pipeline is down even
+   * though the cron keeps firing and the counters look "healthy" (all skipped).
+   * The worker escalates on this — see the `auto-merge-auth-failure` alert.
+   */
+  authFailures: number;
   items: {
     pr: string;
     action: "merged" | "reviewed" | "repaired" | "skipped";
     reason?: string;
   }[];
+}
+
+/**
+ * Does this error look like a git-host authentication/authorization failure
+ * (revoked/expired token, bad credentials) rather than a per-PR problem? Used
+ * to distinguish a fleet-wide dead token from ordinary skips. Matches the shape
+ * Forgejo/Gitea returns for a dead token: `Gitea API error (401): {"message":
+ * "access token does not exist [...]"}`, plus generic 401/403/credential text.
+ */
+export function isAuthError(err: unknown): boolean {
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return (
+    msg.includes("(401)") ||
+    msg.includes("(403)") ||
+    msg.includes("status 401") ||
+    msg.includes("status 403") ||
+    msg.includes("access token does not exist") ||
+    msg.includes("unauthorized") ||
+    msg.includes("credentials are incorrect") ||
+    msg.includes("token does not exist")
+  );
 }
 
 /** Is a review session already in flight for this PR? (suppresses re-dispatch) */
@@ -194,6 +224,7 @@ export async function autoReviewAndMerge(
     repaired: 0,
     merged: 0,
     skipped: 0,
+    authFailures: 0,
     items: [],
   };
 
@@ -546,6 +577,7 @@ export async function autoReviewAndMerge(
       result.items.push({ pr: label, action: "merged" });
     } catch (err) {
       result.skipped++;
+      if (isAuthError(err)) result.authFailures++;
       result.items.push({
         pr: label,
         action: "skipped",

@@ -137,6 +137,37 @@ export default Sentry.withSentry(
         }
         // 1. Dispatch backlog work.
         if (autoDrainOn) {
+          // 1a. Reap zombie sessions FIRST so freed slots are usable this tick.
+          // A session whose runner died lingers in an active status forever and
+          // permanently consumes an autoDrain slot; enough of them starve the
+          // whole pipeline ("no free slots"). Gated so it can be disabled with a
+          // var change, no redeploy. Best-effort — a reaper failure must not
+          // block dispatch, so it's caught and logged, never thrown.
+          if (String(runtimeEnv.BOB_SESSION_REAP_ENABLED ?? "true") !== "false") {
+            try {
+              const { reapStuckSessions } = await import(
+                "@bob/api/handlers/reapStuckSessions"
+              );
+              const reap = await reapStuckSessions({
+                leaseGraceMs: runtimeEnv.BOB_SESSION_REAP_LEASE_GRACE_MS
+                  ? Number(runtimeEnv.BOB_SESSION_REAP_LEASE_GRACE_MS)
+                  : undefined,
+                hardTimeoutMs: runtimeEnv.BOB_SESSION_REAP_HARD_TIMEOUT_MS
+                  ? Number(runtimeEnv.BOB_SESSION_REAP_HARD_TIMEOUT_MS)
+                  : undefined,
+              });
+              if (reap.reaped > 0) {
+                console.log(
+                  `[session-reap] reaped=${reap.reaped} sessions=${reap.sessions
+                    .map((s) => `${s.id.slice(0, 8)}:${s.status}`)
+                    .join(",")}`,
+                );
+              }
+            } catch (err) {
+              console.error("[session-reap] failed:", err);
+            }
+          }
+
           const { autoDrainBacklog } = await import(
             "@bob/api/handlers/autoDrain"
           );
@@ -213,10 +244,48 @@ export default Sentry.withSentry(
           });
           console.log(
             `[auto-merge] scanned=${r.scanned} reviewed=${r.reviewed} repaired=${r.repaired} merged=${r.merged} skipped=${r.skipped}` +
+              (r.authFailures ? ` authFailures=${r.authFailures}` : "") +
               (r.items.length
                 ? ` items=${r.items.map((i) => `${i.pr}:${i.action}${i.reason ? `(${i.reason})` : ""}`).join(", ")}`
                 : ""),
           );
+          // Silent-dead-loop guard: a revoked/expired shared Forgejo token makes
+          // EVERY PR 401 and get counted as an ordinary "skip", so the counters
+          // look healthy (scanned=N skipped=N) while the review→repair→merge loop
+          // is fully dead — exactly the 2026-07-29 outage that went unnoticed for
+          // ~23h. Escalate loudly when auth failures dominate a run that produced
+          // no forward progress. Threshold (not >0) so a single expired per-user
+          // OAuth connection doesn't page.
+          const authDominates =
+            r.authFailures > 0 &&
+            r.reviewed + r.repaired + r.merged === 0 &&
+            r.authFailures >= Math.max(3, Math.floor(r.scanned / 2));
+          if (authDominates) {
+            const { buildFailurePayload, getFailureSentryTags } = await import(
+              "@bob/observability/failures"
+            );
+            const failure = {
+              surface: "job" as const,
+              operation: "auto_merge_review",
+              error: new Error(
+                `auto-merge git-host auth failing on ${r.authFailures}/${r.scanned} PRs with 0 forward progress — shared Forgejo token likely revoked/expired`,
+              ),
+              alertId: "auto-merge-auth-failure",
+              tenant: runtimeEnv.BOB_TENANT_ID
+                ? { tenantId: String(runtimeEnv.BOB_TENANT_ID) }
+                : undefined,
+            };
+            console.error(
+              "[auto-merge] AUTH FAILURE — dispatch loop is dead",
+              buildFailurePayload(failure),
+            );
+            Sentry.withScope((scope) => {
+              scope.setLevel("error");
+              scope.setTags(getFailureSentryTags(failure));
+              scope.setContext("failure", buildFailurePayload(failure));
+              Sentry.captureException(failure.error);
+            });
+          }
         }
       });
       ctx.waitUntil(work);
