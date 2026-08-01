@@ -91,6 +91,11 @@ function SettingsActionGrid({
 function AccountSection() {
   const queryClient = useQueryClient();
 
+  const clearLocalSession = () => {
+    queryClient.clear();
+    router.replace("/");
+  };
+
   const handleLogout = () => {
     Alert.alert("Log out", "Sign out of Bob on this device?", [
       { text: "Cancel", style: "cancel" },
@@ -100,13 +105,40 @@ function AccountSection() {
         onPress: () => {
           void AsyncStorage.removeItem(SELECTED_WORKSPACE_KEY)
             .then(() => authClient.signOut())
-            .finally(() => {
-              queryClient.clear();
-              router.replace("/");
-            });
+            .finally(clearLocalSession);
         },
       },
     ]);
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete account",
+      "Permanently delete your Bob account and sign out on this device?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete Account",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              try {
+                const result = await authClient.deleteUser({});
+                if (result.error) throw result.error;
+                await AsyncStorage.removeItem(SELECTED_WORKSPACE_KEY);
+                await authClient.signOut().catch(() => undefined);
+                clearLocalSession();
+              } catch {
+                Alert.alert(
+                  "Account not deleted",
+                  "Bob could not delete your account. Please try again.",
+                );
+              }
+            })();
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -115,12 +147,24 @@ function AccountSection() {
       <Text className="mt-2 text-sm text-muted">
         Manage the active session on this device.
       </Text>
-      <Pressable
-        onPress={handleLogout}
-        className="border-danger/40 mt-4 self-start rounded-md border px-4 py-2"
-      >
-        <Text className="font-medium text-danger">Log out</Text>
-      </Pressable>
+      <View className="mt-4 flex-row flex-wrap gap-3">
+        <Pressable
+          onPress={handleLogout}
+          className="border-danger/40 self-start rounded-md border px-4 py-2"
+        >
+          <Text className="font-medium text-danger">Log out</Text>
+        </Pressable>
+        <Pressable
+          testID="settings-delete-account"
+          onPress={handleDeleteAccount}
+          accessibilityRole="button"
+          accessibilityLabel="Delete Account"
+          className="self-start rounded-md px-4 py-2"
+          style={{ backgroundColor: colors.danger }}
+        >
+          <Text className="font-medium text-background">Delete Account</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }

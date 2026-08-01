@@ -100,6 +100,11 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
     });
   };
 
+  const clearLocalSession = () => {
+    queryClient.clear();
+    router.replace("/");
+  };
+
   const handleLogout = () => {
     Alert.alert("Log out", "Sign out of Bob on this device?", [
       { text: "Cancel", style: "cancel" },
@@ -109,13 +114,40 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
         onPress: () => {
           void AsyncStorage.removeItem(SELECTED_WORKSPACE_KEY)
             .then(() => authClient.signOut())
-            .finally(() => {
-              queryClient.clear();
-              router.replace("/");
-            });
+            .finally(clearLocalSession);
         },
       },
     ]);
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete account",
+      "Permanently delete your Bob account and sign out on this device?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete Account",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              try {
+                const result = await authClient.deleteUser({});
+                if (result.error) throw result.error;
+                await AsyncStorage.removeItem(SELECTED_WORKSPACE_KEY);
+                await authClient.signOut().catch(() => undefined);
+                clearLocalSession();
+              } catch {
+                Alert.alert(
+                  "Account not deleted",
+                  "Bob could not delete your account. Please try again.",
+                );
+              }
+            })();
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -249,6 +281,18 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
         >
           <Text className="text-xs font-semibold" style={{ color: colors.danger }}>
             Log out
+          </Text>
+        </Pressable>
+        <Pressable
+          testID="settings-delete-account"
+          onPress={handleDeleteAccount}
+          accessibilityRole="button"
+          accessibilityLabel="Delete Account"
+          className="mt-3 self-start rounded-md px-3 py-2 active:opacity-80"
+          style={{ backgroundColor: colors.danger }}
+        >
+          <Text className="text-xs font-semibold" style={{ color: colors.background }}>
+            Delete Account
           </Text>
         </Pressable>
       </View>
