@@ -48,69 +48,48 @@ const TONE_CLASS: Record<DashboardTone, string> = {
   success: "bg-emerald-500",
 };
 
-function ProviderCard({
+// Compact capacity chip: one slim pill per provider (tone dot · label ·
+// primary-limit % · active/queued). Replaces the former hero-sized usage-bar
+// card so the strip no longer pushes the work pipeline below the fold — the
+// full per-limit breakdown lives on the provider detail page this links to.
+function ProviderCapacityChip({
   card,
   workspaceId,
 }: {
   card: ProviderCapacitySummary;
   workspaceId?: string | null;
 }) {
+  const primary = card.usageLimits[0];
+  const remainingLabel = primary
+    ? primary.valueLabel ??
+      (primary.remainingPercent === null
+        ? "Unavailable"
+        : `${primary.remainingPercent}%`)
+    : null;
+  const hasActivity = card.activeCount > 0 || card.queuedOrStartingCount > 0;
+
   return (
     <Link
       href={getProviderCapacityHref(card.provider, workspaceId)}
-      className="rounded-2xl border border-border bg-card p-6 transition-colors hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      title={getProviderCapacityStatusLine(card)}
+      className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 text-xs transition-colors hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
     >
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="font-display text-base font-semibold text-foreground">
-          {card.label}
-        </h2>
-        <span
-          className={cn("size-2 rounded-full", TONE_CLASS[card.tone])}
-          aria-hidden="true"
-        />
-      </div>
-      <div className="mt-5 space-y-4">
-        {card.usageLimits.map((limit) => {
-          const barPercent = limit.barPercent ?? limit.remainingPercent ?? 0;
-          const valueLabel =
-            limit.valueLabel ??
-            (limit.remainingPercent === null
-              ? "Unavailable"
-              : `${limit.remainingPercent}% remaining`);
-
-          return (
-            <div key={limit.label}>
-              <div className="mb-2 flex items-center justify-between gap-3 text-xs">
-                <span className="font-medium text-muted-foreground">
-                  {limit.label}
-                </span>
-                <span className="font-semibold text-foreground">
-                  {valueLabel}
-                </span>
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-emerald-500"
-                  style={{ width: `${barPercent}%` }}
-                />
-              </div>
-              {limit.resetLabel ? (
-                <div className="mt-1.5 text-xs text-muted-foreground">
-                  {limit.resetLabel}
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-      <div className="mt-5 flex items-center justify-between gap-3 text-xs">
-        <span className="text-muted-foreground">
-          {card.activeCount} active · {card.queuedOrStartingCount} queued/starting
+      <span
+        className={cn("size-2 shrink-0 rounded-full", TONE_CLASS[card.tone])}
+        aria-hidden="true"
+      />
+      <span className="font-semibold text-foreground">{card.label}</span>
+      {remainingLabel ? (
+        <span className="text-muted-foreground">{remainingLabel}</span>
+      ) : null}
+      {hasActivity ? (
+        <span className="tabular-nums text-muted-foreground">
+          · {card.activeCount} active
+          {card.queuedOrStartingCount > 0
+            ? ` · ${card.queuedOrStartingCount} queued`
+            : ""}
         </span>
-        <span className="font-medium text-foreground">
-          {getProviderCapacityStatusLine(card)}
-        </span>
-      </div>
+      ) : null}
     </Link>
   );
 }
@@ -198,7 +177,7 @@ export function ProviderCapacityCards({ workspaceId }: ProviderCapacityCardsProp
       : null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground" data-testid="host-status">
         <span className="font-semibold text-foreground">{host?.hostId ?? "Execution host"}</span>
         <span>{host?.statusLabel ?? "Waiting for heartbeat"}</span>
@@ -209,9 +188,9 @@ export function ProviderCapacityCards({ workspaceId }: ProviderCapacityCardsProp
           </span>
         ))}
       </div>
-      <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+      <section className="flex flex-wrap gap-2" aria-label="Provider capacity">
         {cards.map((card) => (
-          <ProviderCard key={card.provider} card={card} workspaceId={workspaceId} />
+          <ProviderCapacityChip key={card.provider} card={card} workspaceId={workspaceId} />
         ))}
       </section>
     </div>
