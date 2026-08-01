@@ -25,7 +25,16 @@ const STATUS_BADGE_CLASS: Record<RunningNowRailStatusTone, string> = {
   default: "bg-muted text-muted-foreground",
 };
 
-export function RunningNowRail({ workspaceId }: { workspaceId?: string | null }) {
+export function RunningNowRail({
+  workspaceId,
+  // When embedded, render as a plain section (no card chrome) so it can sit
+  // inside the WorkPipeline card as its top "what's running now" band instead
+  // of as a standalone sidebar panel.
+  embedded = false,
+}: {
+  workspaceId?: string | null;
+  embedded?: boolean;
+}) {
   const rpc = useBobRpcClient();
   const scope = getRunningNowScope(workspaceId);
   const { data: runs, isLoading } = useQuery({
@@ -74,10 +83,27 @@ export function RunningNowRail({ workspaceId }: { workspaceId?: string | null })
   });
   const loading = isLoading || workItemsLoading;
 
+  // Embedded variant only ever appears with real rows: inside the pipeline card
+  // an "in progress · 0" band (or a skeleton that then vanishes) would just be
+  // noise. The standalone sidebar panel keeps its skeleton + empty state.
+  if (embedded && (loading || visibleRuns.length === 0)) return null;
+
+  const Wrapper = embedded ? "div" : "aside";
+
   return (
-    <aside className="rounded-2xl border border-border bg-card p-6">
+    <Wrapper
+      className={
+        embedded ? "mt-5" : "rounded-2xl border border-border bg-card p-6"
+      }
+    >
       <div className="flex items-center justify-between gap-3">
-        <h3 className="font-display text-base font-semibold text-foreground">
+        <h3
+          className={
+            embedded
+              ? "text-sm font-semibold text-foreground"
+              : "font-display text-base font-semibold text-foreground"
+          }
+        >
           Running Now
         </h3>
         <span className="rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
@@ -124,6 +150,6 @@ export function RunningNowRail({ workspaceId }: { workspaceId?: string | null })
           ))}
         </div>
       )}
-    </aside>
+    </Wrapper>
   );
 }

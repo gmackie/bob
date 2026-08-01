@@ -29,6 +29,7 @@ const RECENTLY_COMPLETED_STATUSES = [
   "error",
 ];
 import { getPriorityQueueHref, getTaskLaneHref } from "~/components/tasks/task-shell-model";
+import { RunningNowRail } from "./running-now-rail";
 
 interface WorkPipelineProps {
   workspaceId: string;
@@ -119,6 +120,11 @@ export function WorkPipeline({ workspaceId }: WorkPipelineProps) {
           Priority Queue
         </Link>
       </div>
+
+      {/* What's running now, folded in above the backlog lanes so the pipeline
+          reads top-to-bottom: in progress → queued lanes → recently completed.
+          Self-hides (incl. its own top margin) when nothing is running. */}
+      <RunningNowRail workspaceId={workspaceId} embedded />
 
       {isLoading ? (
         <div className="mt-5 grid gap-3 md:grid-cols-4">
