@@ -121,6 +121,11 @@ async function deliverToConfig(
       await sleep(delay);
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      DELIVERY_TIMEOUT_MS,
+    );
     try {
       const response = await fetch(config.url, {
         method: "POST",
@@ -131,7 +136,7 @@ async function deliverToConfig(
           "X-Webhook-Event": eventType,
         },
         body,
-        signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS) as any,
+        signal: controller.signal,
       });
 
       lastStatusCode = response.status;
@@ -157,6 +162,8 @@ async function deliverToConfig(
       lastError = `HTTP ${response.status}: ${await response.text().catch(() => "")}`;
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 

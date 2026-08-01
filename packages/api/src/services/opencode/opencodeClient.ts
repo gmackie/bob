@@ -198,7 +198,7 @@ export class OpenCodeClient {
   private async *parseStreamResponse(
     body: ReadableStream<Uint8Array>,
   ): AsyncIterable<OpenCodeResponse> {
-    const text = await new Response(body).text();
+    const text = await readStreamText(body);
 
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -229,6 +229,26 @@ export class OpenCodeClient {
         continue;
       }
     }
+  }
+}
+
+async function readStreamText(
+  body: ReadableStream<Uint8Array>,
+): Promise<string> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+    return text;
+  } finally {
+    reader.releaseLock();
   }
 }
 
