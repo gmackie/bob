@@ -5,6 +5,10 @@ import {
   type WorkPipelineItem,
 } from "../dashboard/work-pipeline-model";
 import {
+  filterRecentOutcomeRuns,
+  type ProviderRunLike,
+} from "../dashboard/provider-runs-model";
+import {
   buildPriorityQueueRows,
   formatTaskPriority,
   getPriorityQueueWorkItemHref,
@@ -87,6 +91,11 @@ export interface SidebarTabBadgeInput {
   // Uncapped per-status counts for an accurate recent-outcomes badge (the
   // capped list clamps it to the page size, e.g. 99).
   statusCounts?: Record<string, number>;
+  // Cross-workspace agent runs (agentRun.listAll) for an "All"-scope
+  // recent-outcomes badge that matches the default /runs feed. When provided it
+  // takes precedence over the workspace-scoped statusCounts/session tally, so
+  // the badge no longer reads 0 while /runs shows every workspace's runs.
+  recentOutcomeRuns?: ProviderRunLike[];
   executionSessions?: SidebarExecutionSessionSummary[];
   planningSessions: PlanningDashboardSession[];
   projects: SidebarProjectSummary[];
@@ -164,7 +173,9 @@ const WORKSPACE_SCOPED_NAV_PATHS = new Set([
   "/onboarding",
   "/tasks",
   "/tasks/queue",
-  "/runs",
+  // NOTE: /runs is intentionally NOT scoped. Its "Recent Outcomes" tab links to
+  // the cross-workspace "All" feed so it matches the (now cross-workspace)
+  // recent-outcomes badge; scoping it would filter the feed to one workspace.
   "/planning",
   "/planning/projects",
 ]);
@@ -270,14 +281,18 @@ export function buildSidebarTabBadges(input: SidebarTabBadgeInput): SidebarTabBa
     Number.MAX_SAFE_INTEGER,
   );
 
-  // Prefer the uncapped statusCounts / dispatchable-scoped fetch when provided,
-  // so the badges match the (now status-scoped) queue and outcome views.
-  const outcomeCount = input.statusCounts
-    ? OUTCOME_BADGE_STATUSES.reduce(
-        (total, status) => total + (input.statusCounts?.[status] ?? 0),
-        0,
-      ) + sessionOnlyOutcomes.length
-    : recentOutcomeItems.length + sessionOnlyOutcomes.length;
+  // The recent-outcomes tab links to the cross-workspace /runs "All" feed, so
+  // prefer counting exactly what that feed renders when the caller supplies the
+  // same agentRun.listAll rows. Fall back to the workspace-scoped tally
+  // (uncapped statusCounts, else the recency-capped list) otherwise.
+  const outcomeCount = input.recentOutcomeRuns
+    ? filterRecentOutcomeRuns(input.recentOutcomeRuns).length
+    : input.statusCounts
+      ? OUTCOME_BADGE_STATUSES.reduce(
+          (total, status) => total + (input.statusCounts?.[status] ?? 0),
+          0,
+        ) + sessionOnlyOutcomes.length
+      : recentOutcomeItems.length + sessionOnlyOutcomes.length;
 
   const priorityQueueCount = buildPriorityQueueRows(
     input.dispatchableItems ?? input.workItems,
