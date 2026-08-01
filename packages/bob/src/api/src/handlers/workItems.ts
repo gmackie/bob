@@ -1124,7 +1124,9 @@ export async function workItemsDispatch(
       systemPrompt: persona.systemPrompt ?? undefined,
       allowedTools: persona.allowedTools ?? undefined,
       autonomyLevel: persona.autonomyLevel ?? undefined,
-      metadata: persona.metadata ?? undefined,
+      // `metadata` is a non-null jsonb column (defaults to {}), so `?? undefined`
+      // is a no-op the `no-unnecessary-condition` lint rule (correctly) rejects.
+      metadata: persona.metadata,
     };
   }
 
