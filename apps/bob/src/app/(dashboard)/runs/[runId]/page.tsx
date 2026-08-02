@@ -13,8 +13,10 @@ import {
 import { cn } from "@gmacko/core/ui";
 import { Badge } from "@gmacko/core/ui/badge";
 import { Card } from "@gmacko/core/ui/card";
+import { ErrorBoundary } from "@gmacko/core/ui/error-boundary";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
+import { RunLiveControls } from "~/components/runs/run-live-controls";
 import {
   collapseSessionEventsToMessages,
   formatSessionLogArtifactText,
@@ -24,6 +26,7 @@ import {
 import {
   getRunDetailBackHref,
   getRunDetailWorkItemHref,
+  isActiveRunStatus,
 } from "~/components/dashboard/provider-runs-model";
 import { useTRPC } from "~/trpc/react";
 
@@ -207,6 +210,15 @@ export default function RunDetailPage({
           <ArrowLeftIcon className="size-3.5" /> All runs
         </Link>
       </div>
+
+      {/* Live controls — Stop / approve / steer — only while the run is active
+          and has a session. Error-bounded so a socket hiccup can't break the
+          read-only run view below. */}
+      {run.sessionId && isActiveRunStatus(run.status) ? (
+        <ErrorBoundary section="Live run controls">
+          <RunLiveControls sessionId={run.sessionId} />
+        </ErrorBoundary>
+      ) : null}
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-border">
