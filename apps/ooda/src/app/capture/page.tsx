@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useTRPC } from "~/trpc/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
+import { VoiceCaptureButton } from "./voice-capture-button";
+
 export default function CapturePage() {
   const [note, setNote] = useState("");
   const [importJson, setImportJson] = useState("");
@@ -132,13 +134,20 @@ export default function CapturePage() {
                       ? `Error: ${noteMutation.error.message}`
                       : ""}
               </span>
-              <button
-                onClick={saveNote}
-                disabled={!note.trim() || noteMutation.isPending}
-                className="rounded-[3px] bg-primary px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-40"
-              >
-                {noteMutation.isPending ? "Saving..." : "Save Note"}
-              </button>
+              <div className="flex items-center gap-2">
+                <VoiceCaptureButton
+                  onTranscript={(text) =>
+                    setNote((prev) => (prev ? `${prev} ${text}` : text))
+                  }
+                />
+                <button
+                  onClick={saveNote}
+                  disabled={!note.trim() || noteMutation.isPending}
+                  className="rounded-[3px] bg-primary px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-40"
+                >
+                  {noteMutation.isPending ? "Saving..." : "Save Note"}
+                </button>
+              </div>
             </div>
           </div>
         )}
