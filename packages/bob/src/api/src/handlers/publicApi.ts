@@ -527,8 +527,10 @@ export async function publicApiDispatchExecution(
       title: `${identifier}: ${input.title}`,
       workItemId: workItem.id,
       workItemIdentifierSnapshot: identifier,
-      // Opaque correlation passthrough for read-back (M2). Never interpreted here.
-      personaMetadata: input.ooda ? { ooda: input.ooda } : undefined,
+      // Opaque correlation passthrough for read-back (M2). Nested under
+      // `metadata` because that is the only sub-object the gateway forwards to
+      // the runner as personaConfig.metadata (relay.ts session_available).
+      personaMetadata: input.ooda ? { metadata: { ooda: input.ooda } } : undefined,
     })
     .returning();
   if (!session) {
