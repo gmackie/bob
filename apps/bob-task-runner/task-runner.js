@@ -48,7 +48,6 @@ const DEFAULT_REPOS = {
   controlsfoundry: "/home/bob/dev/controlsfoundry",
   gentrellis: "/home/bob/dev/gentrellis",
   bob: "/home/bob/dev/bob",
-  bizpulse: "/home/bob/dev/bob",
 };
 
 // Startup slug -> Linear project ID.
@@ -82,6 +81,48 @@ function parseJsonEnv(name, fallback) {
 const REPOS = parseJsonEnv("BOB_RUNNER_REPOS", DEFAULT_REPOS);
 const PROJECTS = parseJsonEnv("BOB_RUNNER_PROJECTS", DEFAULT_PROJECTS);
 const TEAM_ID = process.env.LINEAR_TEAM_ID || "5027d80c-70dc-4c48-b88b-40053c03aec3";
+
+
+// --- Agent preference & health ---
+const AGENT_PREFERENCE = (process.env.BOB_AGENT_PREFERENCE || "claude,codex,grok").split(",").map(s => s.trim());
+
+function checkAgentHealth() {
+  const results = [];
+  for (const agent of AGENT_PREFERENCE) {
+    try {
+      const out = require("child_process").execSync(
+        "node /opt/bob/scripts/agent-health.js --agent " + agent,
+        { encoding: "utf8", timeout: 30000 }
+      );
+      const report = JSON.parse(out);
+      const a = report.agents[0];
+      results.push(a);
+      const icon = a.status === "ok" ? "OK" : a.status === "rate_limited" ? "LIMIT" : a.status === "auth_expired" ? "EXPIRED" : "FAIL";
+      console.log("[runner] Agent " + icon + " " + a.name + " " + (a.version || "") + " - " + a.status + (a.reason ? " (" + a.reason + ")" : ""));
+    } catch (e) {
+      results.push({ name: agent, status: "error", reason: e.message.split("\n")[0] });
+      console.log("[runner] Agent FAIL " + agent + " - check failed");
+    }
+  }
+  return results;
+}
+
+let _agentHealthCache = null;
+let _agentHealthTs = 0;
+const HEALTH_CACHE_MS = 10 * 60 * 1000;
+
+function pickAgent() {
+  const now = Date.now();
+  if (!_agentHealthCache || now - _agentHealthTs > HEALTH_CACHE_MS) {
+    _agentHealthCache = checkAgentHealth();
+    _agentHealthTs = now;
+  }
+  const available = _agentHealthCache.find(a => a.status === "ok");
+  if (available) return available.name;
+  console.log("[runner] WARNING No healthy agents, falling back to " + AGENT_PREFERENCE[0]);
+  return AGENT_PREFERENCE[0];
+}
+// --- end agent health ---
 
 // Parse args
 const args = process.argv.slice(2);
@@ -126,7 +167,7 @@ async function bobStartRun(issue, slug) {
     agentConfig: { title: issue.title, slug },
   });
   const id = run && run.id;
-  const agentType = (run && run.agentType) || "codex";
+  const agentType = pickAgent();
   if (id) await bobApi("PATCH", "/api/v1/runs/" + id, { status: "running" });
   return { id: id || null, agentType };
 }
@@ -148,7 +189,7 @@ async function bobFinishRun(runId, status, summary) {
 // --- end Bob run reporting ---
 
 async function linearQuery(query, variables = {}) {
-  const resp = await fetch("https://api.linear.app/graphql", {
+  const resp = await fetch("https://tasks.gmac.io/graphql", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -325,7 +366,75 @@ async function runAgent(agentType, repoDir, prompt, logFile) {
   });
 }
 
+// [pulse] playbook issues (GTM research etc.) are operating work, not code
+// work: the issue body carries the full agent instructions, success is an API
+// side effect (batch POSTed, run transitioned), and no commits are expected.
+async function processPlaybookIssue(issue, slug, repoDir) {
+  const logFile = join(LOG_DIR, `${issue.identifier}-${Date.now()}.txt`);
+
+  console.log(`[runner] Processing playbook issue ${issue.identifier}: ${issue.title}`);
+
+  if (DRY_RUN) {
+    console.log(`[runner] DRY RUN -- would run playbook agent here`);
+    return "dry_run";
+  }
+
+  const { id: bobRunId, agentType } = await bobStartRun(issue, slug);
+
+  try {
+    await updateIssueState(issue.id, "started");
+    await addIssueComment(issue.id, `🤖 Bob agent claiming this playbook issue.\n\nRunner: ${agentType}`);
+  } catch (e) {
+    console.log(`[runner] Failed to update Linear: ${e.message}`);
+  }
+
+  const prompt = `You are an AI agent executing a BizPulse playbook run for the ${slug} startup.
+
+The issue description below contains your full instructions. Follow them exactly, including the curl/CLI commands. Environment you can rely on:
+- PULSE_SERVICE_SECRET is set (for the GTM ingest endpoint Authorization header)
+- PULSE_API_KEY and PULSE_API_URL are set (the \`pulse\` CLI is installed and authenticates with them)
+
+## Issue
+**${issue.title}**
+
+${issue.description || "No description provided."}
+
+## Ground rules
+- This is operating work, NOT code work: do not modify or commit repository files.
+- Verify each API call succeeded from its response before moving on.
+- End your final message with exactly one line: "PLAYBOOK_RESULT: ok" if every required step succeeded, or "PLAYBOOK_RESULT: failed — <short reason>" otherwise.`;
+
+  console.log(`[runner] Starting playbook agent...`);
+  const result = await runAgent(agentType, repoDir, prompt, logFile);
+  console.log(`[runner] Agent exited with code ${result.exitCode}`);
+  await bobPushLog(bobRunId, result.output);
+  try { writeFileSync(logFile, result.output); } catch {}
+
+  const succeeded = result.exitCode === 0 && /PLAYBOOK_RESULT:\s*ok/i.test(result.output);
+  const tail = result.output.length > 1500 ? result.output.slice(-1500) : result.output;
+
+  if (succeeded) {
+    try {
+      await addIssueComment(issue.id, `✅ Bob agent completed this playbook run.\n\n\`\`\`\n${tail}\n\`\`\``);
+      await updateIssueState(issue.id, "completed");
+    } catch {}
+    await bobFinishRun(bobRunId, "completed", { exitCode: result.exitCode });
+    return "completed";
+  }
+
+  try {
+    await addIssueComment(issue.id, `⚠️ Bob agent did not report success on this playbook run.\n\n\`\`\`\n${tail}\n\`\`\`\nLog: ${logFile}`);
+    await updateIssueState(issue.id, "unstarted");
+  } catch {}
+  await bobFinishRun(bobRunId, "failed", { exitCode: result.exitCode, reason: "no_success_marker" });
+  return "no_success";
+}
+
 async function processIssue(issue, slug, repoDir) {
+  if (issue.title.startsWith("[pulse]")) {
+    return processPlaybookIssue(issue, slug, repoDir);
+  }
+
   const branchName = `bob/${issue.identifier.toLowerCase()}`;
   const logFile = join(LOG_DIR, `${issue.identifier}-${Date.now()}.txt`);
 
@@ -496,6 +605,8 @@ async function main() {
   console.log(`[runner] Bob Task Runner starting`);
   console.log(`[runner] Mode: ${DRY_RUN ? "dry-run" : "live"}, Once: ${ONCE}, Filter: ${STARTUP_FILTER || "all"}`);
   console.log(`[runner] Bob reporting: ${BOB_REPORT ? "on" : "off"}`);
+  console.log("[runner] Checking agent health...");
+  checkAgentHealth();
 
   if (ONCE) {
     await runOnce();
