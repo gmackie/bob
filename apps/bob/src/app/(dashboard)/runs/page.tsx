@@ -268,6 +268,9 @@ export default function RunsPage() {
         ) : null}
       </div>
 
+      {/* Provider + workspace filters share one wrapping row instead of two
+          stacked control bars, so the feed sits closer to the top. */}
+      <div className="flex flex-wrap items-center gap-3">
       <div className="flex w-fit items-center gap-1 rounded-lg border border-border bg-card p-1">
         {[
           { key: "all", label: "All" },
@@ -336,6 +339,7 @@ export default function RunsPage() {
           ))}
         </div>
       )}
+      </div>
 
       {/* Fleet Status Bar */}
       <button
