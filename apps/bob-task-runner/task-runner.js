@@ -121,10 +121,13 @@ function remoteEntry(slug) {
   if (!r || !r.projectId || !r.repoSlug) return null;
   const dir =
     r.localPath || "/home/bob/dev/" + r.repoSlug.split("/").pop();
-  // forgegraph repos mirror on github, and bob's ssh key auths there —
-  // one clone base regardless of provider.
-  const cloneUrl = "git@github.com:" + r.repoSlug + ".git";
-  return { projectId: r.projectId, repoDir: dir, cloneUrl };
+  // The forge is canonical (several repos exist ONLY there); github is a
+  // mirror for some. Try in that order.
+  const cloneUrls = [
+    "git@git.forgegraf.com:" + r.repoSlug + ".git",
+    "git@github.com:" + r.repoSlug + ".git",
+  ];
+  return { projectId: r.projectId, repoDir: dir, cloneUrls };
 }
 
 function effectiveProjects() {
@@ -141,26 +144,38 @@ function effectiveRepoDir(slug) {
   return getRepoDir(slug);
 }
 
+// Slugs whose clone failed this process: skipped until restart so a repo
+// that exists nowhere (stale startup_repo row) can't burn a scan slot
+// every cycle.
+const _cloneFailed = new Set();
+
 // Clone a missing repo at claim time so provisioning a new company needs
 // zero host access. Returns true when the dir exists (already or after
-// cloning).
+// cloning). Tries the forge first (canonical), then the github mirror.
 function ensureRepoDir(slug) {
   const remote = remoteEntry(slug);
   const dir = remote ? remote.repoDir : getRepoDir(slug);
   if (!dir) return false;
   if (existsSync(dir)) return true;
   if (!remote) return false;
-  try {
-    console.log(`[runner] cloning ${remote.cloneUrl} -> ${dir}`);
-    execSync(`git clone --depth 20 ${remote.cloneUrl} ${dir}`, {
-      stdio: "pipe",
-      timeout: 300000,
-    });
-    return existsSync(dir);
-  } catch (e) {
-    console.log(`[runner] clone failed for ${slug}: ${e.message}`);
-    return false;
+  for (const url of remote.cloneUrls) {
+    try {
+      console.log(`[runner] cloning ${url} -> ${dir}`);
+      execSync(`git clone --depth 20 ${url} ${dir}`, {
+        stdio: "pipe",
+        timeout: 300000,
+        env: {
+          ...process.env,
+          GIT_SSH_COMMAND: "ssh -o StrictHostKeyChecking=accept-new",
+        },
+      });
+      if (existsSync(dir)) return true;
+    } catch (e) {
+      console.log(`[runner] clone failed (${url}): ${e.message.split("\n")[0]}`);
+    }
   }
+  _cloneFailed.add(slug);
+  return false;
 }
 // --- end remote config -------------------------------------------------
 const TEAM_ID = process.env.LINEAR_TEAM_ID || "5027d80c-70dc-4c48-b88b-40053c03aec3";
@@ -384,6 +399,12 @@ function markDone(issueId, status) {
     claimed[issueId].status = status;
     claimed[issueId].completedAt = new Date().toISOString();
   }
+  saveClaimed(claimed);
+}
+
+function unclaim(issueId) {
+  const claimed = loadClaimed();
+  delete claimed[issueId];
   saveClaimed(claimed);
 }
 
@@ -720,8 +741,12 @@ async function runOnce() {
   markClaimed(issue.id, slug);
 
   if (!ensureRepoDir(slug)) {
-    console.log(`[runner] ${issue.identifier} -> error (repo dir unavailable for ${slug})`);
-    markDone(issue.id, "error");
+    // Repo unavailable is an infrastructure failure, not a verdict on the
+    // issue: UNCLAIM it so a future process (after the repo exists or the
+    // config is fixed) can pick it up. The slug goes on _cloneFailed, so
+    // this process won't thrash on it.
+    console.log(`[runner] ${issue.identifier} unclaimed (repo unavailable for ${slug})`);
+    unclaim(issue.id);
     return true;
   }
 
