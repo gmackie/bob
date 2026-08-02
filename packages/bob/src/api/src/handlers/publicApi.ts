@@ -457,7 +457,7 @@ export async function publicApiDispatchExecution(
     title: string;
     description?: string;
     agentType?: string;
-    ooda?: { threadId: string; callbackUrl?: string };
+    ooda?: { threadId?: string; threadSlug?: string };
   },
 ) {
   if (process.env.BOB_OODA_DISPATCH_ENABLED !== "true") {

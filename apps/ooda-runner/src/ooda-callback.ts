@@ -1,26 +1,25 @@
 // Read-back correlation for OODA-dispatched Bob runs (Phase 5 M2).
 //
 // A session dispatched via publicApi.dispatchExecution carries an opaque
-// { ooda: { threadId, callbackUrl } } under personaConfig.metadata (forwarded
-// by the gateway's session_available). On completion the runner POSTs the run
-// outcome back to callbackUrl so it can land in the originating OODA thread.
+// { ooda: { threadId?, threadSlug? } } under personaConfig.metadata (forwarded
+// by the gateway's session_available). On completion the runner writes the run
+// outcome back into the originating OODA thread via promoteNote.
 //
-// Kept pure + side-effect-free so it's unit-testable without a live session.
-// It's naturally dark: it returns null for any session that doesn't carry a
-// valid ooda callback (i.e. every session except an OODA-dispatched one), so
-// the completion hook no-ops until Phase 5 M1 dispatch is actually enabled.
+// The write happens on the RUNNER, not over an HTTP callback: promoteNote does
+// filesystem writes + a git commit, which the OODA web app (Cloudflare Workers,
+// no fs/git) cannot do but the runner — which already owns the thread
+// workspaces on disk — can. So the gateway connector extracts the correlation
+// here and hands it to a runner-provided handler that calls promoteNote.
+//
+// Pure + side-effect-free so it's unit-testable. Naturally dark: returns null
+// for any session without an ooda correlation (every session until Phase 5 M1
+// dispatch is enabled), so the completion hook no-ops.
 
-export interface OodaCallback {
-  threadId: string;
-  callbackUrl: string;
-}
-
-export interface OodaOutcome {
-  externalSessionId: string;
-  status: "completed" | "failed";
-  title?: string | null;
-  pullRequestUrl?: string | null;
-  branch?: string | null;
+export interface OodaCorrelation {
+  /** Thread workspace directory name (what resolveThreadPath expects). */
+  threadSlug: string;
+  /** Thread UUID, for entity extraction / provenance (optional). */
+  threadId?: string;
 }
 
 type SessionLike = {
@@ -28,40 +27,52 @@ type SessionLike = {
 };
 
 /**
- * Extract a valid OODA callback from a session, or null. Requires both a
- * non-empty threadId and an http(s) callbackUrl — anything else is treated as
- * "no callback" (dark).
+ * Extract a valid OODA correlation from a session, or null. Requires a
+ * resolvable thread identifier: `threadSlug` if present, else `threadId` used as
+ * the slug. Anything else is treated as "not an OODA run" (dark).
  */
-export function oodaCallbackFrom(session: SessionLike): OodaCallback | null {
+export function oodaCorrelationFrom(session: SessionLike): OodaCorrelation | null {
   const ooda = session.personaConfig?.metadata?.ooda as
-    | { threadId?: unknown; callbackUrl?: unknown }
+    | { threadId?: unknown; threadSlug?: unknown }
     | undefined;
   if (!ooda || typeof ooda !== "object") return null;
 
   const threadId =
     typeof ooda.threadId === "string" && ooda.threadId.trim().length > 0
       ? ooda.threadId
-      : null;
-  const callbackUrl =
-    typeof ooda.callbackUrl === "string" && /^https?:\/\//.test(ooda.callbackUrl)
-      ? ooda.callbackUrl
-      : null;
+      : undefined;
+  const rawSlug =
+    typeof ooda.threadSlug === "string" && ooda.threadSlug.trim().length > 0
+      ? ooda.threadSlug
+      : undefined;
 
-  if (!threadId || !callbackUrl) return null;
-  return { threadId, callbackUrl };
+  const threadSlug = rawSlug ?? threadId;
+  if (!threadSlug) return null;
+  return { threadSlug, threadId };
 }
 
-/** Build the JSON body POSTed to the OODA callback. */
-export function buildOodaOutcomeBody(
-  callback: OodaCallback,
-  outcome: OodaOutcome,
-): Record<string, unknown> {
-  return {
-    threadId: callback.threadId,
-    externalSessionId: outcome.externalSessionId,
-    status: outcome.status,
-    title: outcome.title ?? null,
-    pullRequestUrl: outcome.pullRequestUrl ?? null,
-    branch: outcome.branch ?? null,
-  };
+export interface BobRunOutcome {
+  sessionId: string;
+  status: "completed" | "failed";
+  title?: string | null;
+  pullRequestUrl?: string | null;
+  branch?: string | null;
+}
+
+/** Build the note title + markdown body promoteNote writes for a Bob outcome. */
+export function buildOutcomeNote(outcome: BobRunOutcome): {
+  title: string;
+  content: string;
+} {
+  const label = outcome.status === "completed" ? "completed" : "failed";
+  const title = `Bob run ${label}: ${outcome.title ?? outcome.sessionId}`;
+  const lines = [
+    `A Bob run dispatched from this thread ${label}.`,
+    "",
+    `- Session: \`${outcome.sessionId}\``,
+    `- Status: **${outcome.status}**`,
+  ];
+  if (outcome.branch) lines.push(`- Branch: \`${outcome.branch}\``);
+  if (outcome.pullRequestUrl) lines.push(`- Pull request: ${outcome.pullRequestUrl}`);
+  return { title, content: lines.join("\n") };
 }

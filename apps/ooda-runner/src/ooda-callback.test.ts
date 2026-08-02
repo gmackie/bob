@@ -1,71 +1,58 @@
 import { describe, it, expect } from "vitest";
 
-import { oodaCallbackFrom, buildOodaOutcomeBody } from "./ooda-callback.js";
+import { oodaCorrelationFrom, buildOutcomeNote } from "./ooda-callback.js";
 
-describe("oodaCallbackFrom", () => {
-  it("extracts a valid callback nested under personaConfig.metadata.ooda", () => {
+describe("oodaCorrelationFrom", () => {
+  it("prefers threadSlug and keeps threadId", () => {
     expect(
-      oodaCallbackFrom({
-        personaConfig: {
-          metadata: { ooda: { threadId: "t1", callbackUrl: "https://ooda.example/cb" } },
-        },
+      oodaCorrelationFrom({
+        personaConfig: { metadata: { ooda: { threadId: "uuid-1", threadSlug: "my-thread" } } },
       }),
-    ).toEqual({ threadId: "t1", callbackUrl: "https://ooda.example/cb" });
+    ).toEqual({ threadSlug: "my-thread", threadId: "uuid-1" });
   });
 
-  // Dark by default: any session without a proper ooda callback → null → no-op.
+  it("falls back to threadId as the slug when threadSlug is absent", () => {
+    expect(
+      oodaCorrelationFrom({ personaConfig: { metadata: { ooda: { threadId: "uuid-1" } } } }),
+    ).toEqual({ threadSlug: "uuid-1", threadId: "uuid-1" });
+  });
+
+  // Dark by default: any session without an ooda correlation → null → no-op.
   it("returns null for a session with no ooda metadata (the common case)", () => {
-    expect(oodaCallbackFrom({})).toBeNull();
-    expect(oodaCallbackFrom({ personaConfig: {} })).toBeNull();
-    expect(oodaCallbackFrom({ personaConfig: { metadata: {} } })).toBeNull();
-    expect(oodaCallbackFrom({ personaConfig: { metadata: { bizpulse: {} } } })).toBeNull();
+    expect(oodaCorrelationFrom({})).toBeNull();
+    expect(oodaCorrelationFrom({ personaConfig: {} })).toBeNull();
+    expect(oodaCorrelationFrom({ personaConfig: { metadata: {} } })).toBeNull();
+    expect(oodaCorrelationFrom({ personaConfig: { metadata: { bizpulse: {} } } })).toBeNull();
   });
 
-  it("rejects a missing/blank threadId", () => {
-    expect(
-      oodaCallbackFrom({ personaConfig: { metadata: { ooda: { callbackUrl: "https://x/cb" } } } }),
-    ).toBeNull();
-    expect(
-      oodaCallbackFrom({ personaConfig: { metadata: { ooda: { threadId: "  ", callbackUrl: "https://x/cb" } } } }),
-    ).toBeNull();
-  });
-
-  it("rejects a non-http callbackUrl (no javascript:/file:/relative)", () => {
-    for (const callbackUrl of ["javascript:alert(1)", "file:///etc", "/relative", "ftp://x", "", 123]) {
-      expect(
-        oodaCallbackFrom({ personaConfig: { metadata: { ooda: { threadId: "t1", callbackUrl } } } }),
-      ).toBeNull();
-    }
+  it("returns null when neither threadSlug nor threadId is a usable string", () => {
+    expect(oodaCorrelationFrom({ personaConfig: { metadata: { ooda: {} } } })).toBeNull();
+    expect(oodaCorrelationFrom({ personaConfig: { metadata: { ooda: { threadId: "  " } } } })).toBeNull();
+    expect(oodaCorrelationFrom({ personaConfig: { metadata: { ooda: { threadId: 123 } } } })).toBeNull();
   });
 });
 
-describe("buildOodaOutcomeBody", () => {
-  it("carries threadId + outcome, defaulting optionals to null", () => {
-    expect(
-      buildOodaOutcomeBody(
-        { threadId: "t1", callbackUrl: "https://x/cb" },
-        { externalSessionId: "s1", status: "completed", title: "Do X", pullRequestUrl: "https://pr/1", branch: "b" },
-      ),
-    ).toEqual({
-      threadId: "t1",
-      externalSessionId: "s1",
+describe("buildOutcomeNote", () => {
+  it("renders a completed run with PR + branch", () => {
+    const note = buildOutcomeNote({
+      sessionId: "s1",
       status: "completed",
       title: "Do X",
-      pullRequestUrl: "https://pr/1",
-      branch: "b",
+      pullRequestUrl: "https://git/pr/1",
+      branch: "feat/x",
     });
-    expect(
-      buildOodaOutcomeBody(
-        { threadId: "t1", callbackUrl: "https://x/cb" },
-        { externalSessionId: "s1", status: "failed" },
-      ),
-    ).toEqual({
-      threadId: "t1",
-      externalSessionId: "s1",
-      status: "failed",
-      title: null,
-      pullRequestUrl: null,
-      branch: null,
-    });
+    expect(note.title).toBe("Bob run completed: Do X");
+    expect(note.content).toContain("Status: **completed**");
+    expect(note.content).toContain("Branch: `feat/x`");
+    expect(note.content).toContain("Pull request: https://git/pr/1");
+    expect(note.content).toContain("Session: `s1`");
+  });
+
+  it("renders a failed run and omits absent PR/branch lines", () => {
+    const note = buildOutcomeNote({ sessionId: "s2", status: "failed" });
+    expect(note.title).toBe("Bob run failed: s2");
+    expect(note.content).toContain("Status: **failed**");
+    expect(note.content).not.toContain("Pull request:");
+    expect(note.content).not.toContain("Branch:");
   });
 });
