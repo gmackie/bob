@@ -19,7 +19,11 @@ import {
   writeConsumedOffset,
   type RunMeta,
 } from "./supervisor";
-import { oodaCallbackFrom, buildOodaOutcomeBody } from "./ooda-callback.js";
+import {
+  oodaCorrelationFrom,
+  type OodaCorrelation,
+  type BobRunOutcome,
+} from "./ooda-callback.js";
 
 const RECONNECT_DELAY_MS = 5_000;
 const HEARTBEAT_INTERVAL_MS = 25_000;
@@ -65,6 +69,17 @@ export interface BobGatewayConfig {
   workspaceId: string;
   devDir: string;
   maxConcurrent: number;
+  /**
+   * Phase 5 M2 read-back. Called when an OODA-dispatched run finishes so the
+   * runner (which owns the thread workspaces on disk) can write the outcome
+   * back via promoteNote. Undefined = read-back off (the default). Only invoked
+   * for sessions that carry an ooda correlation, so it's dark until M1 dispatch
+   * is enabled.
+   */
+  onBobOutcome?: (
+    correlation: OodaCorrelation,
+    outcome: BobRunOutcome,
+  ) => void | Promise<void>;
 }
 
 interface WorktreeContext {
@@ -1492,25 +1507,19 @@ export class BobGatewayConnector {
     status: "completed" | "failed",
     outcome?: { pullRequestUrl?: string | null; branch?: string | null },
   ): Promise<void> {
-    const callback = oodaCallbackFrom(session);
-    if (!callback) return;
+    const correlation = oodaCorrelationFrom(session);
+    if (!correlation || !this.config.onBobOutcome) return;
     try {
-      await fetch(callback.callbackUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          buildOodaOutcomeBody(callback, {
-            externalSessionId: session.sessionId,
-            status,
-            title: session.title ?? null,
-            pullRequestUrl: outcome?.pullRequestUrl ?? null,
-            branch: outcome?.branch ?? null,
-          }),
-        ),
+      await this.config.onBobOutcome(correlation, {
+        sessionId: session.sessionId,
+        status,
+        title: session.title ?? null,
+        pullRequestUrl: outcome?.pullRequestUrl ?? null,
+        branch: outcome?.branch ?? null,
       });
       console.log(`[bob-gw] OODA outcome reported for session ${session.sessionId}`);
     } catch (err) {
-      console.warn(`[bob-gw] OODA report failed:`, err instanceof Error ? err.message : err);
+      console.warn(`[bob-gw] OODA read-back failed:`, err instanceof Error ? err.message : err);
     }
   }
 

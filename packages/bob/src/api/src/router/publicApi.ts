@@ -70,10 +70,16 @@ export const publicApiRouter = {
         title: z.string().min(1).max(500),
         description: z.string().max(20000).optional(),
         agentType: z.string().min(1).max(64).optional(),
+        // Opaque OODA correlation for M2 read-back. threadSlug is the thread
+        // workspace directory (what the runner resolves); threadId is the UUID
+        // for provenance/entity extraction. At least one is required.
         ooda: z
           .object({
-            threadId: z.string().min(1).max(200),
-            callbackUrl: z.string().url().max(2000).optional(),
+            threadId: z.string().min(1).max(200).optional(),
+            threadSlug: z.string().min(1).max(200).optional(),
+          })
+          .refine((o) => Boolean(o.threadId || o.threadSlug), {
+            message: "ooda requires threadId or threadSlug",
           })
           .optional(),
       }),

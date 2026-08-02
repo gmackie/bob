@@ -14,6 +14,7 @@ import type { AgentAdapter } from "@gmacko/ooda/agent-adapters";
 import { generateRunnerToken } from "./auth/auth";
 import { promoteNote } from "@gmacko/ooda/thread-workspace";
 import { resolveThreadPath } from "@gmacko/ooda/thread-model";
+import { buildOutcomeNote } from "./ooda-callback.js";
 import {
   createRunnerTRPCClient,
   createResearchSurface,
@@ -143,6 +144,32 @@ export class RunnerServer {
           workspaceId: config.bobWorkspaceId,
           devDir: config.bobDevDir,
           maxConcurrent: config.bobMaxConcurrent,
+          // Phase 5 M2: write an OODA-dispatched run's outcome back into its
+          // originating thread as a provenance-stamped note. Only fires for
+          // sessions carrying an ooda correlation (dark until M1 is enabled).
+          onBobOutcome: async (correlation, outcome) => {
+            const threadDir = resolveThreadPath(
+              this.config.storageRoot,
+              correlation.threadSlug,
+            );
+            const { title, content } = buildOutcomeNote(outcome);
+            await promoteNote({
+              storageRoot: this.config.storageRoot,
+              threadDir,
+              sessionId: outcome.sessionId,
+              kind: "action",
+              title,
+              content,
+              threadId: correlation.threadId,
+              provenance: {
+                capabilityId: "bob-run",
+                operationId: `bob-run-${outcome.sessionId}`,
+                sourceType: "agent",
+                queryOrInputRef: `bobRun:${outcome.sessionId}`,
+                canonicalSourceRef: outcome.pullRequestUrl ?? undefined,
+              },
+            });
+          },
         },
         this.adapters,
       );
