@@ -84,6 +84,85 @@ function parseJsonEnv(name, fallback) {
 
 const REPOS = parseJsonEnv("BOB_RUNNER_REPOS", DEFAULT_REPOS);
 const PROJECTS = parseJsonEnv("BOB_RUNNER_PROJECTS", DEFAULT_PROJECTS);
+
+// --- Remote slug→{project, repo} map served by Pulse ------------------
+// Source of truth is Pulse's startup/connector/startup_repo rows (company
+// factory Q4): provisioning writes rows there and this runner picks them
+// up on the next scan — no more SSH hand-edits. Remote entries win over
+// the hardcoded defaults; the defaults remain the fallback when Pulse is
+// unreachable. Repos missing on disk are cloned lazily at claim time.
+const REMOTE_CONFIG_URL =
+  (process.env.PULSE_API_URL || "https://bizpulse.cc") +
+  "/api/gtm/runner-config";
+let _remoteRepos = {}; // slug -> { projectId, provider, repoSlug, localPath }
+
+async function refreshRemoteConfig() {
+  const secret = process.env.PULSE_SERVICE_SECRET;
+  if (!secret) return;
+  try {
+    const res = await fetch(REMOTE_CONFIG_URL, {
+      headers: { Authorization: "Bearer " + secret },
+    });
+    if (!res.ok) {
+      console.log(`[runner] remote config fetch -> ${res.status}`);
+      return;
+    }
+    const data = await res.json();
+    if (data && typeof data.repos === "object" && data.repos !== null) {
+      _remoteRepos = data.repos;
+    }
+  } catch (e) {
+    console.log(`[runner] remote config fetch failed: ${e.message}`);
+  }
+}
+
+function remoteEntry(slug) {
+  const r = _remoteRepos[slug];
+  if (!r || !r.projectId || !r.repoSlug) return null;
+  const dir =
+    r.localPath || "/home/bob/dev/" + r.repoSlug.split("/").pop();
+  // forgegraph repos mirror on github, and bob's ssh key auths there —
+  // one clone base regardless of provider.
+  const cloneUrl = "git@github.com:" + r.repoSlug + ".git";
+  return { projectId: r.projectId, repoDir: dir, cloneUrl };
+}
+
+function effectiveProjects() {
+  const merged = { ...PROJECTS };
+  for (const [slug, r] of Object.entries(_remoteRepos)) {
+    if (r && r.projectId) merged[slug] = r.projectId;
+  }
+  return merged;
+}
+
+function effectiveRepoDir(slug) {
+  const remote = remoteEntry(slug);
+  if (remote) return remote.repoDir;
+  return getRepoDir(slug);
+}
+
+// Clone a missing repo at claim time so provisioning a new company needs
+// zero host access. Returns true when the dir exists (already or after
+// cloning).
+function ensureRepoDir(slug) {
+  const remote = remoteEntry(slug);
+  const dir = remote ? remote.repoDir : getRepoDir(slug);
+  if (!dir) return false;
+  if (existsSync(dir)) return true;
+  if (!remote) return false;
+  try {
+    console.log(`[runner] cloning ${remote.cloneUrl} -> ${dir}`);
+    execSync(`git clone --depth 20 ${remote.cloneUrl} ${dir}`, {
+      stdio: "pipe",
+      timeout: 300000,
+    });
+    return existsSync(dir);
+  } catch (e) {
+    console.log(`[runner] clone failed for ${slug}: ${e.message}`);
+    return false;
+  }
+}
+// --- end remote config -------------------------------------------------
 const TEAM_ID = process.env.LINEAR_TEAM_ID || "5027d80c-70dc-4c48-b88b-40053c03aec3";
 
 
@@ -220,7 +299,7 @@ async function getUnstartedIssues(projectId) {
         orderBy: updatedAt
       ) {
         nodes {
-          id identifier title description priority
+          id identifier title description priority updatedAt
           state { name type }
           labels { nodes { name } }
         }
@@ -564,17 +643,21 @@ async function sendHeartbeat() {
 async function runOnce() {
   console.log(`[runner] Scanning for work...`);
   void sendHeartbeat();
+  await refreshRemoteConfig();
 
-  const targetSlugs = STARTUP_FILTER ? [STARTUP_FILTER] : Object.keys(PROJECTS);
+  const projects = effectiveProjects();
+  const targetSlugs = STARTUP_FILTER ? [STARTUP_FILTER] : Object.keys(projects);
 
   // Collect all issues across all startups, then pick the highest priority globally
   const allCandidates = [];
 
   for (const slug of targetSlugs) {
-    const projectId = PROJECTS[slug];
-    const repoDir = getRepoDir(slug);
+    const projectId = projects[slug];
+    const repoDir = effectiveRepoDir(slug);
     if (!projectId || !repoDir) continue;
-    if (!existsSync(repoDir)) continue;
+    // Missing dirs are fine when the remote config can clone them at claim
+    // time; only skip when we'd have no way to materialize the repo.
+    if (!existsSync(repoDir) && !remoteEntry(slug)) continue;
 
     try {
       const issues = await getUnstartedIssues(projectId);
@@ -592,6 +675,19 @@ async function runOnce() {
         ) {
           continue;
         }
+        // STALE issues are never auto-claimed when the claim only became
+        // possible today (remote-config slugs, freshly clonable repos):
+        // month-old [pulse] work orders and backlog need a deliberate
+        // re-dispatch (the roadmap's ↻ refresh) before an agent acts on
+        // them — GMA-385/364 both started as silent stale-claims. Rules:
+        // [pulse]-titled operating work orders: fresh-only EVERYWHERE;
+        // remote-only slugs: fresh-only for everything.
+        const ageMs = issue.updatedAt
+          ? Date.now() - Date.parse(issue.updatedAt)
+          : Infinity;
+        const stale = ageMs > 14 * 86_400_000;
+        if (stale && issue.title.startsWith("[pulse]")) continue;
+        if (stale && !(slug in DEFAULT_PROJECTS)) continue;
         if (!isClaimed(issue.id)) {
           allCandidates.push({ issue, slug, repoDir });
         }
@@ -622,6 +718,12 @@ async function runOnce() {
   console.log(`[runner] ${allCandidates.length} total unclaimed issues across ${targetSlugs.length} startups`);
 
   markClaimed(issue.id, slug);
+
+  if (!ensureRepoDir(slug)) {
+    console.log(`[runner] ${issue.identifier} -> error (repo dir unavailable for ${slug})`);
+    markDone(issue.id, "error");
+    return true;
+  }
 
   try {
     const status = await processIssue(issue, slug, repoDir);
