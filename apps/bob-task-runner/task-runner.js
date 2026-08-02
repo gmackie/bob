@@ -48,6 +48,10 @@ const DEFAULT_REPOS = {
   controlsfoundry: "/home/bob/dev/controlsfoundry",
   gentrellis: "/home/bob/dev/gentrellis",
   bob: "/home/bob/dev/bob",
+  // Playbook lane ONLY (see runOnce): the pulse checkout exists so
+  // growth.offer_synthesis can deliver docs/ai/OFFER_CANDIDATES.md, not so
+  // the runner starts coding pulse backlog issues unsupervised.
+  bizpulse: "/home/bob/dev/pulse",
 };
 
 // Startup slug -> Linear project ID.
@@ -400,7 +404,7 @@ The issue description below contains your full instructions. Follow them exactly
 ${issue.description || "No description provided."}
 
 ## Ground rules
-- This is operating work, NOT code work: do not modify or commit repository files.
+- This is operating work by default: do NOT modify repository files unless the issue instructions explicitly call for a repository deliverable. When they do, commit it on a branch named bob/${issue.identifier.toLowerCase()} and push that branch — never commit to master.
 - Verify each API call succeeded from its response before moving on.
 - End your final message with exactly one line: "PLAYBOOK_RESULT: ok" if every required step succeeded, or "PLAYBOOK_RESULT: failed — <short reason>" otherwise.`;
 
@@ -555,6 +559,19 @@ async function runOnce() {
     try {
       const issues = await getUnstartedIssues(projectId);
       for (const issue of issues) {
+        // The bizpulse project holds founder/ops work orders that are NOT
+        // for autonomous execution — only genuine GTM playbook dispatches
+        // may be claimed there. Title alone is not enough: July's bulk
+        // objective work orders are also [pulse]-titled, and letting an
+        // agent execute one ended with it self-grading a business
+        // objective 'achieved' (GMA-385). The GTM instruction marker only
+        // appears in issues built by buildGtmPlaybookInstructions.
+        if (
+          slug === "bizpulse" &&
+          !(issue.description || "").includes("## Agent Instructions — growth.")
+        ) {
+          continue;
+        }
         if (!isClaimed(issue.id)) {
           allCandidates.push({ issue, slug, repoDir });
         }
