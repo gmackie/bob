@@ -19,6 +19,7 @@ import {
   writeConsumedOffset,
   type RunMeta,
 } from "./supervisor";
+import { oodaCallbackFrom, buildOodaOutcomeBody } from "./ooda-callback.js";
 
 const RECONNECT_DELAY_MS = 5_000;
 const HEARTBEAT_INTERVAL_MS = 25_000;
@@ -493,6 +494,10 @@ export class BobGatewayConnector {
       status: "completed",
       pullRequestUrl: prUrl ?? undefined,
     });
+    void this.reportOodaOutcome(session, "completed", {
+      pullRequestUrl: prUrl,
+      branch: meta.worktree?.branch ?? null,
+    });
   }
 
   /**
@@ -884,6 +889,10 @@ export class BobGatewayConnector {
         .finishRun(bobRunId, "completed", { pullRequestUrl: prUrl ?? undefined })
         .catch(() => {});
       void this.reportToBizPulse(session, "completed", Date.now() - startTime);
+      void this.reportOodaOutcome(session, "completed", {
+        pullRequestUrl: prUrl,
+        branch: worktree?.branch ?? null,
+      });
     } catch (err) {
       // A user-requested stop kills the process, which surfaces here as a
       // non-zero exit — that's an interruption, not an agent failure.
@@ -905,6 +914,7 @@ export class BobGatewayConnector {
       await this.bobReporter.pushLog(bobRunId, runOutput).catch(() => {});
       await this.bobReporter.finishRun(bobRunId, "failed", { error: errMsg }).catch(() => {});
       void this.reportToBizPulse(session, "failed", Date.now() - startTime);
+      void this.reportOodaOutcome(session, "failed");
     } finally {
       if (worktree) await this.removeWorktree(worktree).catch(() => {});
       this.activeSessions.delete(session.sessionId);
@@ -1467,6 +1477,40 @@ export class BobGatewayConnector {
       console.log(`[bob-gw] BizPulse report sent for session ${session.sessionId}`);
     } catch (err) {
       console.warn(`[bob-gw] BizPulse report failed:`, err instanceof Error ? err.message : err);
+    }
+  }
+
+  /**
+   * Read-back for an OODA-dispatched run (Phase 5 M2). If the session carries an
+   * ooda callback (personaConfig.metadata.ooda, set by publicApi.dispatchExecution),
+   * POST the outcome so it can land in the originating thread. Naturally dark:
+   * oodaCallbackFrom returns null for every non-OODA session, so this no-ops
+   * until Phase 5 M1 dispatch is enabled. Best-effort, mirrors reportToBizPulse.
+   */
+  private async reportOodaOutcome(
+    session: ServerSessionAvailable,
+    status: "completed" | "failed",
+    outcome?: { pullRequestUrl?: string | null; branch?: string | null },
+  ): Promise<void> {
+    const callback = oodaCallbackFrom(session);
+    if (!callback) return;
+    try {
+      await fetch(callback.callbackUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          buildOodaOutcomeBody(callback, {
+            externalSessionId: session.sessionId,
+            status,
+            title: session.title ?? null,
+            pullRequestUrl: outcome?.pullRequestUrl ?? null,
+            branch: outcome?.branch ?? null,
+          }),
+        ),
+      });
+      console.log(`[bob-gw] OODA outcome reported for session ${session.sessionId}`);
+    } catch (err) {
+      console.warn(`[bob-gw] OODA report failed:`, err instanceof Error ? err.message : err);
     }
   }
 
