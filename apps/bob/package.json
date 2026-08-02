@@ -9,6 +9,7 @@
     "start": "vinext start",
     "predeploy": "bash ../../scripts/migrate-hetzner.sh",
     "deploy": "vinext deploy",
+    "preflight": "bash ../../scripts/preflight-deploy.sh",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
