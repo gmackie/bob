@@ -30,6 +30,7 @@ import type { SessionEventRecord } from "./persistence.js";
 import { pushToUser } from "./push.js";
 import { enqueueTransition } from "./outbox.js";
 import { parsePrUrl } from "./pr-url.js";
+import { orphanReapCutoffs } from "./reap-orphans.js";
 
 const REPLAY_LIMIT = 500;
 
@@ -55,12 +56,12 @@ const STOPPABLE_STATUSES = [
 ] as const;
 
 // Orphan reaper: a run stuck in an active status (queued/running) with NO
-// session for longer than this has never been claimed (a real claim attaches a
-// session at once) — a crashed dispatch, a retired daemon, or an ancient dev
-// artifact. 60 min is far beyond the seconds a dispatch→claim actually takes,
-// so legitimate just-dispatched runs are never touched. Runs WITH a session are
-// the lease sweep's domain (host_unknown), never the reaper's.
-const REAP_ORPHAN_GRACE_MS = 60 * 60_000;
+// session past its grace was never claimed — a crashed dispatch, a retired
+// daemon, or an ancient dev artifact. Runs WITH a session are the lease sweep's
+// domain (host_unknown), never the reaper's. Grace differs by status (see
+// reap-orphans.ts): `running`+no-session is clearly stuck (1h), but
+// `queued`+no-session may be legitimately waiting for a concurrency slot, so it
+// gets a much longer grace to avoid false-failing a capped-but-alive run.
 const REAP_INTERVAL_MS = 5 * 60_000;
 /**
  * How long an unanswered approval may hold its slot before we call it abandoned.
@@ -187,7 +188,7 @@ export class Relay {
    * WITH a session are untouched here — those are the lease sweep's job.
    */
   private async reapOrphanedRuns(): Promise<void> {
-    const cutoff = new Date(Date.now() - REAP_ORPHAN_GRACE_MS).toISOString();
+    const { runningCutoff, queuedCutoff } = orphanReapCutoffs();
     const reaped = await db
       .update(agentRuns)
       .set({
@@ -197,9 +198,14 @@ export class Relay {
       })
       .where(
         and(
-          inArray(agentRuns.status, ["queued", "running"]),
           isNull(agentRuns.sessionId),
-          lt(agentRuns.createdAt, cutoff),
+          or(
+            // running + no session → clearly stuck (short grace).
+            and(eq(agentRuns.status, "running"), lt(agentRuns.createdAt, runningCutoff)),
+            // queued + no session → may be waiting for a slot; long grace so a
+            // concurrency-capped but alive run isn't false-failed.
+            and(eq(agentRuns.status, "queued"), lt(agentRuns.createdAt, queuedCutoff)),
+          ),
         ),
       )
       .returning({ id: agentRuns.id });
