@@ -542,8 +542,28 @@ Do NOT modify unrelated files. Stay focused on this specific issue.`;
   }
 }
 
+// Dead-man heartbeat: the watchdog on the BizPulse side alerts when this
+// goes silent past its threshold. Best-effort — never blocks the loop.
+async function sendHeartbeat() {
+  const secret = process.env.PULSE_SERVICE_SECRET;
+  if (!secret) return;
+  try {
+    await fetch("https://bizpulse.cc/api/gtm/runner-heartbeat", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + secret,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ runner: "bob-task-runner" }),
+    });
+  } catch (e) {
+    console.log(`[runner] heartbeat failed: ${e.message}`);
+  }
+}
+
 async function runOnce() {
   console.log(`[runner] Scanning for work...`);
+  void sendHeartbeat();
 
   const targetSlugs = STARTUP_FILTER ? [STARTUP_FILTER] : Object.keys(PROJECTS);
 
