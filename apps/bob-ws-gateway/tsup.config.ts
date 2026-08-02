@@ -22,6 +22,13 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   dts: false,
+  // ESM output has no CommonJS `require`, so any dynamic `require()` in a bundled
+  // dependency (e.g. the observability/OTel instrumentation) throws "Dynamic
+  // require of X is not supported" at runtime and crash-loops the service.
+  // Re-create `require` from the ESM entry so those calls resolve.
+  banner: {
+    js: "import { createRequire as __createRequire } from 'module'; const require = __createRequire(import.meta.url);",
+  },
   noExternal: [/^@bob\//, /^@gmacko\//],
   external: [
     "@vercel/postgres",
