@@ -31,6 +31,11 @@ import { pushToUser } from "./push.js";
 import { enqueueTransition } from "./outbox.js";
 import { parsePrUrl } from "./pr-url.js";
 import { orphanReapCutoffs } from "./reap-orphans.js";
+import {
+  ACTIVE_AGENT_RUN_STATUSES,
+  TERMINAL_SESSION_STATUSES,
+  reconciledRunStatus,
+} from "./reconcile-runs.js";
 
 const REPLAY_LIMIT = 500;
 
@@ -170,6 +175,9 @@ export class Relay {
       this.sweepAbandonedApprovals().catch((err) => {
         console.error("[Relay] Abandoned-approval sweep failed (will retry next interval):", err);
       });
+      this.reconcileTerminalRuns().catch((err) => {
+        console.error("[Relay] Terminal-run reconciliation failed (will retry next interval):", err);
+      });
     }, REAP_INTERVAL_MS);
     this.pendingDeliveryTimer = setInterval(() => {
       this.deliverPendingTick().catch((err) => {
@@ -212,6 +220,59 @@ export class Relay {
     if (reaped.length > 0) {
       console.log(
         `[Relay] Reaped ${reaped.length} orphaned run(s): active status with no session past grace`,
+      );
+    }
+  }
+
+  /**
+   * Reconcile agent_runs that lag their session. The session is the source of
+   * truth and applySessionStatus terminalizes the run inline when a session goes
+   * terminal, but a dropped write / crash between the two commits can leave a run
+   * stuck active while its session is already terminal — over-counting "what's
+   * running" forever. This backstop finalizes the run to the status its
+   * ALREADY-terminal session implies.
+   *
+   * Safe by construction: it only matches active runs whose session is terminal
+   * (a live run's session is non-terminal, so it's never touched), only moves
+   * active → terminal, and re-checks the run is still active in the UPDATE to
+   * avoid stomping a status that moved between the read and the write.
+   */
+  private async reconcileTerminalRuns(): Promise<void> {
+    const lagging = await db
+      .select({ runId: agentRuns.id, sessionStatus: chatConversations.status })
+      .from(agentRuns)
+      .innerJoin(chatConversations, eq(agentRuns.sessionId, chatConversations.id))
+      .where(
+        and(
+          inArray(agentRuns.status, [...ACTIVE_AGENT_RUN_STATUSES]),
+          inArray(chatConversations.status, [...TERMINAL_SESSION_STATUSES]),
+        ),
+      )
+      .limit(200);
+
+    let reconciled = 0;
+    for (const row of lagging) {
+      const target = reconciledRunStatus(row.sessionStatus);
+      if (!target) continue;
+      const res = await db
+        .update(agentRuns)
+        .set({
+          status: sql`${target}::agent_run_status`,
+          completedAt: new Date(),
+          summary: sql`(coalesce(${agentRuns.summary}::jsonb, '{}'::jsonb) || jsonb_build_object('reconciled', true, 'reconcile_reason', 'session terminal, run lagged active'))::json`,
+        })
+        .where(
+          and(
+            eq(agentRuns.id, row.runId),
+            inArray(agentRuns.status, [...ACTIVE_AGENT_RUN_STATUSES]),
+          ),
+        )
+        .returning({ id: agentRuns.id });
+      reconciled += res.length;
+    }
+    if (reconciled > 0) {
+      console.log(
+        `[Relay] Reconciled ${reconciled} run(s): session terminal but run lagged active`,
       );
     }
   }
