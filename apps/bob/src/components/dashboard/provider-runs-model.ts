@@ -75,6 +75,13 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const WORK_ITEM_IDENTIFIER_PATTERN = /^[A-Za-z][A-Za-z0-9]*-\d+$/;
 
+// A run is "active" (still alive / needs you) when its status is not terminal.
+// Includes blocked (needs you) and host_unknown (contact lost, fate unknown) —
+// so callers stop under-counting live work as just `status === "running"`.
+export function isActiveRunStatus(status: string | null | undefined): boolean {
+  return ACTIVE_RUN_STATUSES.has(status ?? "");
+}
+
 export function normalizeProviderParam(value: string | null): ProviderRunFilter {
   return value === "claude" ||
     value === "codex" ||

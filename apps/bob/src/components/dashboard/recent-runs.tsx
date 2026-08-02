@@ -9,9 +9,26 @@ import { useBobRpcClient } from "~/rpc/react";
 
 const STATUS_DOT: Record<string, string> = {
   queued: "bg-neutral-400",
+  starting: "bg-neutral-400",
+  provisioning: "bg-neutral-400",
+  pending: "bg-neutral-400",
   running: "bg-amber-500 animate-pulse",
+  stopping: "bg-amber-500 animate-pulse",
+  "awaiting-input": "bg-amber-500 animate-pulse",
+  awaiting_input: "bg-amber-500 animate-pulse",
+  // Needs a human yes/no — pulse so it reads as demanding attention.
+  blocked: "bg-amber-500 animate-pulse",
+  in_review: "bg-amber-500",
+  review: "bg-amber-500",
+  // Contact lost, fate unknown — not a failure, so not red.
+  host_unknown: "bg-neutral-400",
   completed: "bg-green-500",
+  done: "bg-green-500",
   failed: "bg-red-500",
+  error: "bg-red-500",
+  cancelled: "bg-orange-400",
+  canceled: "bg-orange-400",
+  stopped: "bg-orange-400",
   interrupted: "bg-orange-400",
 };
 

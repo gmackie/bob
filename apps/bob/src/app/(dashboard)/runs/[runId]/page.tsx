@@ -29,19 +29,49 @@ import { useTRPC } from "~/trpc/react";
 
 // ── Constants ─────────────────────────────────────────────────────────
 
+const C_NEUTRAL = "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-300";
+const C_AMBER = "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300";
+const C_GREEN = "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+const C_RED = "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300";
+const C_ORANGE = "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300";
+
 const STATUS_COLORS: Record<string, string> = {
-  queued: "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-300",
-  running: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-  completed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-  failed: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-  interrupted: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
+  queued: C_NEUTRAL,
+  starting: C_NEUTRAL,
+  provisioning: C_NEUTRAL,
+  pending: C_NEUTRAL,
+  running: C_AMBER,
+  stopping: C_AMBER,
+  "awaiting-input": C_AMBER,
+  awaiting_input: C_AMBER,
+  blocked: C_AMBER,
+  in_review: C_AMBER,
+  review: C_AMBER,
+  // Contact lost, process fate unknown — not a failure. Neutral, not red.
+  host_unknown: C_NEUTRAL,
+  completed: C_GREEN,
+  done: C_GREEN,
+  failed: C_RED,
+  error: C_RED,
+  cancelled: C_ORANGE,
+  canceled: C_ORANGE,
+  stopped: C_ORANGE,
+  interrupted: C_ORANGE,
 };
 
 const STATUS_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   completed: CheckCircledIcon,
+  done: CheckCircledIcon,
   failed: CrossCircledIcon,
+  error: CrossCircledIcon,
   running: ClockIcon,
   queued: ClockIcon,
+  starting: ClockIcon,
+  stopping: ClockIcon,
+  blocked: ClockIcon,
+  "awaiting-input": ClockIcon,
+  awaiting_input: ClockIcon,
+  host_unknown: ClockIcon,
 };
 
 function formatDuration(ms: number): string {

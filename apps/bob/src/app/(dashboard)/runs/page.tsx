@@ -18,19 +18,41 @@ import {
   getProviderRunsEmptyState,
   getProviderRunsHeaderModel,
   getProviderRunsFilterHref,
+  isActiveRunStatus,
   normalizeProviderParam,
 } from "~/components/dashboard/provider-runs-model";
 import { useTRPC } from "~/trpc/react";
 import { DeviceHeartbeatsSection } from "../settings/_components/device-heartbeats";
 
+const AMBER = "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300";
+const GREEN = "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+const RED = "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300";
+const ORANGE = "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300";
+const NEUTRAL = "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-300";
+
 const STATUS_COLORS: Record<string, string> = {
-  queued: "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-300",
-  running: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-  "awaiting-input": "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-  awaiting_input: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-  completed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-  failed: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-  interrupted: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
+  queued: NEUTRAL,
+  starting: NEUTRAL,
+  provisioning: NEUTRAL,
+  pending: NEUTRAL,
+  running: AMBER,
+  stopping: AMBER,
+  "awaiting-input": AMBER,
+  awaiting_input: AMBER,
+  // Needs a human yes/no — the most time-sensitive live state.
+  blocked: AMBER,
+  in_review: AMBER,
+  review: AMBER,
+  // Contact lost, process fate unknown — NOT a failure. Neutral, not red.
+  host_unknown: NEUTRAL,
+  completed: GREEN,
+  done: GREEN,
+  failed: RED,
+  error: RED,
+  cancelled: ORANGE,
+  canceled: ORANGE,
+  stopped: ORANGE,
+  interrupted: ORANGE,
 };
 
 const ROW_STATUS_COLORS: Record<string, string> = {
@@ -246,7 +268,10 @@ export default function RunsPage() {
 
   // Fleet stats
   const onlineNodes = workspaces.filter((w: any) => isNodeOnline(w.lastHeartbeat));
-  const activeRuns = filteredRuns.filter((r: any) => r.status === "running");
+  // Count everything still alive, not just "running": blocked (needs you),
+  // starting/stopping, and host_unknown are all active. The old exact-match
+  // silently under-reported the fleet's "N running" chip.
+  const activeRuns = filteredRuns.filter((r: any) => isActiveRunStatus(r.status));
   const todayRuns = filteredRuns.filter((r: any) => {
     const created = new Date(r.createdAt);
     const today = new Date();
@@ -344,7 +369,7 @@ export default function RunsPage() {
       {/* Fleet Status Bar */}
       <button
         aria-expanded={fleetExpanded}
-        aria-label={`Fleet status: ${onlineNodes.length} nodes online, ${activeRuns.length} running. ${fleetExpanded ? "Collapse" : "Expand"} details.`}
+        aria-label={`Fleet status: ${onlineNodes.length} nodes online, ${activeRuns.length} active. ${fleetExpanded ? "Collapse" : "Expand"} details.`}
         onClick={() => setFleetExpanded((p) => !p)}
         className="flex items-center gap-4 rounded-lg border border-border bg-card px-4 py-3 text-left transition-colors hover:bg-accent/50"
       >
@@ -359,7 +384,7 @@ export default function RunsPage() {
         </div>
         <span className="text-muted-foreground text-xs">·</span>
         <span className="text-sm">
-          {activeRuns.length} running
+          {activeRuns.length} active
         </span>
         <span className="text-muted-foreground text-xs">·</span>
         <span className="text-sm text-muted-foreground">
