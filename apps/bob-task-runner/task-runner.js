@@ -613,7 +613,9 @@ Do NOT modify unrelated files. Stay focused on this specific issue.`;
   if (hasCommits) {
     console.log(`[runner] Commits found, pushing branch`);
     try {
-      execSync(`git push -u origin ${branchName} --force`, { cwd: repoDir, stdio: "pipe" });
+      // Plain push: --force is both unnecessary (branches are per-issue) and
+      // rejected by some repos (preflight-app blocks force pushes).
+      execSync(`git push -u origin ${branchName}`, { cwd: repoDir, stdio: "pipe" });
     } catch (e) {
       console.log(`[runner] Push failed: ${e.message}`);
     }
