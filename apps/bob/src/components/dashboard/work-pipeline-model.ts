@@ -347,9 +347,12 @@ export function getProviderCapacityHref(
   provider: ProviderKey,
   workspaceId?: string | null,
 ): string {
-  const params = new URLSearchParams({ provider });
+  const params = new URLSearchParams();
   if (workspaceId) params.set("workspace", workspaceId);
-  return `/runs?${params.toString()}`;
+  const query = params.toString();
+  return query
+    ? `/providers/${provider}?${query}`
+    : `/providers/${provider}`;
 }
 
 export function getRunningNowScope(workspaceId?: string | null): RunningNowScope {

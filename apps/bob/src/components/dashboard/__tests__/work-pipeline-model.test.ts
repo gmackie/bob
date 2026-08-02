@@ -758,10 +758,12 @@ describe("work pipeline model", () => {
   });
 
   it("keeps provider drilldowns and running rail scoped to the selected workspace", () => {
+    // Capacity chips now link to the dedicated provider detail page (still
+    // workspace-scoped), not the filtered runs list.
     expect(getProviderCapacityHref("codex", "workspace-1")).toBe(
-      "/runs?provider=codex&workspace=workspace-1",
+      "/providers/codex?workspace=workspace-1",
     );
-    expect(getProviderCapacityHref("cursor-agent", null)).toBe("/runs?provider=cursor-agent");
+    expect(getProviderCapacityHref("cursor-agent", null)).toBe("/providers/cursor-agent");
     expect(getRunningNowScope("workspace-1")).toEqual({
       mode: "workspace",
       workspaceId: "workspace-1",
