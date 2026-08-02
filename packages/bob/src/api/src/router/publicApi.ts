@@ -10,6 +10,7 @@ import {
 import {
   publicApiRegisterWorkspace,
   publicApiCreateRun,
+  publicApiDispatchExecution,
   publicApiUpdateRun,
   publicApiCreateArtifact,
   publicApiGetRun,
@@ -54,6 +55,31 @@ export const publicApiRouter = {
     )
     .mutation(({ ctx, input }) =>
       publicApiCreateRun(
+        { db: ctx.db, userId: ctx.session.user.id },
+        input,
+      ),
+    ),
+
+  // POST /dispatch — create an EXECUTABLE session (gated: BOB_OODA_DISPATCH_ENABLED).
+  // Unlike createRun (record-only), this runs the agent. Carries an opaque `ooda`
+  // correlation for read-back. See publicApiDispatchExecution for the security model.
+  dispatchExecution: apiKeyWriteProcedure
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+        title: z.string().min(1).max(500),
+        description: z.string().max(20000).optional(),
+        agentType: z.string().min(1).max(64).optional(),
+        ooda: z
+          .object({
+            threadId: z.string().min(1).max(200),
+            callbackUrl: z.string().url().max(2000).optional(),
+          })
+          .optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      publicApiDispatchExecution(
         { db: ctx.db, userId: ctx.session.user.id },
         input,
       ),

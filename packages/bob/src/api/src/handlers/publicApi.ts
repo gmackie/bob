@@ -7,11 +7,12 @@
 import { randomBytes, createHash } from "node:crypto";
 
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, inArray } from "@bob/db";
+import { and, desc, eq, inArray, sql } from "@bob/db";
 import type { Db } from "@bob/db/client";
 import {
   agentRuns,
   apiKeys,
+  chatConversations,
   discoveredDirs,
   projects,
   repositories,
@@ -428,6 +429,143 @@ export async function publicApiCreateRun(
   });
 
   return run;
+}
+
+/**
+ * Dispatch an EXECUTABLE Bob session from an external caller (e.g. an OODA
+ * thread action). Unlike publicApiCreateRun — which only *records* an
+ * agent_runs row and never executes — this creates a live `pending` execution
+ * session that the runner picks up and RUNS.
+ *
+ * That expands what a public API key can do beyond the record-only surface, so
+ * it is deliberately conservative:
+ *   - Gated behind BOB_OODA_DISPATCH_ENABLED (default off): the capability is
+ *     dark until explicitly enabled, so merging/deploying this can't expose
+ *     code execution before it's intended.
+ *   - Tenant-scoped exactly like the rest of the public API (assertTenantAccess
+ *     on the workspace's tenant), so a key can only dispatch into its own tenant.
+ *   - Counts against the same taskRuns + activeAgents quotas.
+ *   - Carries the caller's opaque correlation (e.g. an OODA threadId) through
+ *     personaMetadata.ooda untouched, for the M2 read-back loop.
+ * Reuses the proven headless-dispatch shape (work item -> pending execution
+ * session -> gateway nudge) from dispatch.ts.
+ */
+export async function publicApiDispatchExecution(
+  ctx: HandlerContext,
+  input: {
+    workspaceId: string;
+    title: string;
+    description?: string;
+    agentType?: string;
+    ooda?: { threadId: string; callbackUrl?: string };
+  },
+) {
+  if (process.env.BOB_OODA_DISPATCH_ENABLED !== "true") {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message:
+        "OODA dispatch is disabled. Set BOB_OODA_DISPATCH_ENABLED=true to enable executable dispatch via API key.",
+    });
+  }
+
+  const workspace = await ctx.db.query.workspaces.findFirst({
+    where: eq(workspaces.id, input.workspaceId),
+  });
+  if (!workspace?.tenantId) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+  await assertTenantAccess(ctx.db, ctx.userId, workspace.tenantId);
+
+  const { assertWithinQuotaOrThrow } = await import("../services/quotas/index.js");
+  await assertWithinQuotaOrThrow({ db: ctx.db, tenantId: workspace.tenantId, metric: "taskRuns" });
+  await assertWithinQuotaOrThrow({
+    db: ctx.db,
+    tenantId: workspace.tenantId,
+    metric: "activeAgents",
+  });
+
+  const agentType =
+    input.agentType ??
+    resolveAgentType({
+      workItemOverride: null,
+      projectDefault: null,
+      workspaceDefault: workspace.defaultAgentType,
+    });
+
+  const [{ n } = { n: 0 }] = await ctx.db
+    .select({ n: sql<number>`count(*)` })
+    .from(workItems)
+    .where(eq(workItems.workspaceId, input.workspaceId));
+  const sequenceNumber = Number(n) + 1;
+
+  const [workItem] = await ctx.db
+    .insert(workItems)
+    .values({
+      ownerUserId: ctx.userId,
+      workspaceId: input.workspaceId,
+      kind: "task",
+      title: input.title,
+      description: input.description ?? null,
+      status: "in_progress",
+      sequenceNumber,
+    })
+    .returning();
+  if (!workItem) {
+    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to create work item" });
+  }
+  const identifier = workItem.id.slice(0, 8);
+
+  const workingDirectory = "/home/bob/dev/gmacko-bob";
+  const [session] = await ctx.db
+    .insert(chatConversations)
+    .values({
+      userId: ctx.userId,
+      workingDirectory,
+      agentType,
+      sessionType: "execution",
+      status: "pending",
+      title: `${identifier}: ${input.title}`,
+      workItemId: workItem.id,
+      workItemIdentifierSnapshot: identifier,
+      // Opaque correlation passthrough for read-back (M2). Never interpreted here.
+      personaMetadata: input.ooda ? { ooda: input.ooda } : undefined,
+    })
+    .returning();
+  if (!session) {
+    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to create execution session" });
+  }
+
+  // Nudge the gateway to dispatch immediately. Best-effort: the daemon also
+  // polls pending sessions, so a failed nudge only delays, never drops.
+  const gatewayUrl = process.env.GATEWAY_URL;
+  const nudgeSecret = process.env.NUDGE_SHARED_SECRET;
+  if (gatewayUrl && nudgeSecret) {
+    try {
+      await fetch(`${gatewayUrl}/internal/nudge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${nudgeSecret}` },
+        body: JSON.stringify({
+          sessionId: session.id,
+          workspaceId: input.workspaceId,
+          workingDirectory,
+          agentType,
+          title: session.title,
+          sessionType: "execution",
+          description: input.description ?? undefined,
+          identifier,
+        }),
+      });
+    } catch {
+      // best-effort; the daemon's pending-session poll is the backstop.
+    }
+  }
+
+  return {
+    sessionId: session.id,
+    workItemId: workItem.id,
+    identifier,
+    status: session.status,
+  };
 }
 
 export async function publicApiUpdateRun(
