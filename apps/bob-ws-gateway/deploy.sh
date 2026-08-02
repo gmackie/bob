@@ -24,6 +24,22 @@ echo "==> Building ws-gateway..."
 cd "${SCRIPT_DIR}"
 pnpm build
 
+# Boot smoke test — BEFORE anything touches production. A bad ESM bundle (e.g. a
+# dependency doing a dynamic require() the ESM output can't resolve) crashes at
+# module init and would crash-loop the service on restart. Since deploy.sh does
+# an rsync --delete with no auto-rollback, catch it here instead. Run the bundle
+# with a dummy DB + ephemeral port for a few seconds and fail if it dies with a
+# module-initialization error (it's fine for it to fail later on the DB connect).
+echo "==> Smoke-testing that the built bundle boots..."
+SMOKE_OUT="$(DATABASE_URL="postgres://smoke:smoke@127.0.0.1:1/smoke" WS_GATEWAY_PORT=0 \
+  timeout 8 node dist/index.js 2>&1 || true)"
+if echo "${SMOKE_OUT}" | grep -qiE "Dynamic require of|Cannot find module|ERR_MODULE_NOT_FOUND|ERR_REQUIRE_ESM|SyntaxError|is not supported"; then
+  echo "ERROR: gateway bundle fails to initialize — aborting BEFORE touching production." >&2
+  echo "${SMOKE_OUT}" | grep -iE "Dynamic require of|Cannot find module|ERR_MODULE_NOT_FOUND|ERR_REQUIRE_ESM|SyntaxError|is not supported" | head -3 >&2
+  exit 1
+fi
+echo "==> Bundle boots clean."
+
 echo "==> Applying pending DB migrations..."
 HETZNER_HOST="${HOST}" HETZNER_SSH_USER="${USER}" \
   "${REPO_ROOT}/scripts/migrate-hetzner.sh"
