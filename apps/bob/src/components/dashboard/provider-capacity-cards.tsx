@@ -48,16 +48,31 @@ const TONE_CLASS: Record<DashboardTone, string> = {
   success: "bg-emerald-500",
 };
 
+// A provider is "healthy" when the execution host reports it ready. Any other
+// state (needs sign-in, degraded, unavailable) is actionable and surfaces on
+// the chip; "Ready" is left implicit (the green tone dot already says it) so
+// the strip isn't a wall of "Ready".
+const ACTIONABLE_HEALTH_CLASS: Record<string, string> = {
+  "Sign in required": "text-amber-500",
+  Degraded: "text-amber-500",
+  Unavailable: "text-rose-500",
+};
+
 // Compact capacity chip: one slim pill per provider (tone dot · label ·
-// primary-limit % · active/queued). Replaces the former hero-sized usage-bar
-// card so the strip no longer pushes the work pipeline below the fold — the
-// full per-limit breakdown lives on the provider detail page this links to.
+// primary-limit % · active/queued · actionable-health). Replaces the former
+// hero-sized usage-bar card so the strip no longer pushes the work pipeline
+// below the fold — the full per-limit breakdown lives on the provider detail
+// page this links to.
 function ProviderCapacityChip({
   card,
   workspaceId,
+  healthLabel,
 }: {
   card: ProviderCapacitySummary;
   workspaceId?: string | null;
+  // Live host health for this provider (e.g. "Ready", "Sign in required").
+  // Undefined when the host snapshot doesn't cover it.
+  healthLabel?: string;
 }) {
   const primary = card.usageLimits[0];
   const remainingLabel = primary
@@ -67,11 +82,28 @@ function ProviderCapacityChip({
         : `${primary.remainingPercent}%`)
     : null;
   const hasActivity = card.activeCount > 0 || card.queuedOrStartingCount > 0;
+  const actionableHealth =
+    healthLabel && healthLabel !== "Ready" ? healthLabel : null;
+  const activityText = hasActivity
+    ? `${card.activeCount} active${
+        card.queuedOrStartingCount > 0
+          ? ` · ${card.queuedOrStartingCount} queued`
+          : ""
+      }`
+    : null;
 
   return (
     <Link
       href={getProviderCapacityHref(card.provider, workspaceId)}
       title={getProviderCapacityStatusLine(card)}
+      aria-label={[
+        card.label,
+        healthLabel,
+        remainingLabel ? `${remainingLabel} remaining` : null,
+        activityText,
+      ]
+        .filter(Boolean)
+        .join(", ")}
       className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 text-xs transition-colors hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
     >
       <span
@@ -82,12 +114,17 @@ function ProviderCapacityChip({
       {remainingLabel ? (
         <span className="text-muted-foreground">{remainingLabel}</span>
       ) : null}
-      {hasActivity ? (
-        <span className="tabular-nums text-muted-foreground">
-          · {card.activeCount} active
-          {card.queuedOrStartingCount > 0
-            ? ` · ${card.queuedOrStartingCount} queued`
-            : ""}
+      {activityText ? (
+        <span className="tabular-nums text-muted-foreground">· {activityText}</span>
+      ) : null}
+      {actionableHealth ? (
+        <span
+          className={cn(
+            "font-medium",
+            ACTIONABLE_HEALTH_CLASS[actionableHealth] ?? "text-amber-500",
+          )}
+        >
+          · {actionableHealth}
         </span>
       ) : null}
     </Link>
@@ -176,21 +213,30 @@ export function ProviderCapacityCards({ workspaceId }: ProviderCapacityCardsProp
         })
       : null;
 
+  // Per-provider health from the live host snapshot, folded into each capacity
+  // chip below instead of repeated as a second row above them.
+  const providerHealth = new Map<string, string>(
+    (host?.providers ?? []).map((provider) => [
+      String(provider.provider),
+      String(provider.statusLabel),
+    ]),
+  );
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground" data-testid="host-status">
         <span className="font-semibold text-foreground">{host?.hostId ?? "Execution host"}</span>
         <span>{host?.statusLabel ?? "Waiting for heartbeat"}</span>
         {host ? <span>{host.queueLabel}</span> : null}
-        {host?.providers.map((provider) => (
-          <span key={provider.provider} title={`Controls: ${provider.controls.join(", ") || "none"}`}>
-            {provider.label}: {provider.statusLabel}
-          </span>
-        ))}
       </div>
       <section className="flex flex-wrap gap-2" aria-label="Provider capacity">
         {cards.map((card) => (
-          <ProviderCapacityChip key={card.provider} card={card} workspaceId={workspaceId} />
+          <ProviderCapacityChip
+            key={card.provider}
+            card={card}
+            workspaceId={workspaceId}
+            healthLabel={providerHealth.get(card.provider)}
+          />
         ))}
       </section>
     </div>
