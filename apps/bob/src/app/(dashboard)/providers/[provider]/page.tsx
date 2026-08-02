@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeftIcon } from "@radix-ui/react-icons";
 
 import { cn } from "@gmacko/core/ui";
+import { Badge } from "@gmacko/core/ui/badge";
 import { Card } from "@gmacko/core/ui/card";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
@@ -22,6 +23,18 @@ import {
   type ProviderSessionSummary,
   type WorkPipelineItem,
 } from "~/components/dashboard/work-pipeline-model";
+import {
+  buildProviderRunRow,
+  filterRunsByProvider,
+  normalizeProviderParam,
+} from "~/components/dashboard/provider-runs-model";
+
+const ROW_STATUS_COLORS: Record<string, string> = {
+  default: "bg-muted text-muted-foreground",
+  success: "bg-emerald-500/10 text-emerald-500",
+  warning: "bg-amber-500/10 text-amber-500",
+  danger: "bg-rose-500/10 text-rose-500",
+};
 
 const TONE_TEXT: Record<DashboardTone, string> = {
   default: "text-muted-foreground",
@@ -122,9 +135,14 @@ export default function ProviderDetailPage({
   // Match on the normalized provider key (cards are keyed by ProviderKey).
   const card = cards.find((c) => c.provider === def?.id || c.provider === providerParam);
 
-  const runsHref = `/runs?provider=${encodeURIComponent(
+  // "cursor-agent" is the registry id; the runs filter uses the "cursor" param.
+  const runsFilter = normalizeProviderParam(
     providerParam === "cursor-agent" ? "cursor" : providerParam,
-  )}${workspaceId ? `&workspace=${encodeURIComponent(workspaceId)}` : ""}`;
+  );
+  const providerRuns = filterRunsByProvider(runs as any[], runsFilter).slice(0, 8);
+  const runsHref = `/runs?provider=${encodeURIComponent(runsFilter)}${
+    workspaceId ? `&workspace=${encodeURIComponent(workspaceId)}` : ""
+  }`;
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -213,13 +231,44 @@ export default function ProviderDetailPage({
             </div>
           </Card>
 
-          <Link
-            href={runsHref}
-            className="hover:border-primary/30 flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-5 py-4 transition-colors"
-          >
-            <span className="text-sm font-medium">Recent {def.label} runs</span>
-            <span className="text-sm text-primary">View runs →</span>
-          </Link>
+          <Card className="p-6">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="font-display text-base font-semibold text-foreground">
+                Recent {def.label} runs
+              </h2>
+              <Link href={runsHref} className="text-sm text-primary hover:underline">
+                View all →
+              </Link>
+            </div>
+            {providerRuns.length === 0 ? (
+              <p className="mt-4 text-sm text-muted-foreground">
+                No recent {def.label} runs.
+              </p>
+            ) : (
+              <div className="mt-4 divide-y divide-border rounded-lg border border-border/70">
+                {(providerRuns as any[]).map((run) => {
+                  const row = buildProviderRunRow(run, workspaceId || null);
+                  return (
+                    <Link
+                      key={run.id}
+                      href={row.href}
+                      className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/30"
+                    >
+                      <Badge className={cn("shrink-0 text-xs font-medium", ROW_STATUS_COLORS[row.statusTone])}>
+                        {row.statusLabel}
+                      </Badge>
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                        {row.title}
+                      </span>
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {row.lastUpdatedLabel}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
         </>
       )}
     </div>
