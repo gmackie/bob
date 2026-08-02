@@ -1,3 +1,4 @@
+import { bobRouter } from "./router/bob";
 import { importsRouter } from "./router/imports";
 import { oracleRouter } from "./router/oracle";
 import { publishRouter } from "./router/publish";
@@ -15,6 +16,7 @@ export const appRouter = createTRPCRouter({
   publish: publishRouter,
   imports: importsRouter,
   oracle: oracleRouter,
+  bob: bobRouter,
 });
 
 export type AppRouter = typeof appRouter;
