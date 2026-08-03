@@ -577,6 +577,109 @@ export async function publicApiDispatchExecution(
   };
 }
 
+/**
+ * POST /projects — create a Bob (linear-clone) project and seed backlog tasks.
+ *
+ * The OODA "Make it a project" path: a discussion becomes a real project with a
+ * generated key and an initial backlog. Tenant-scoped exactly like the rest of
+ * the public API. Seeded tasks land in "backlog" (excluded from auto-drain), so
+ * nothing auto-executes without the user promoting it. The create-gmacko-app
+ * scaffold is a separate executable dispatch (publicApiDispatchExecution),
+ * kicked by the caller when requested.
+ */
+export async function publicApiCreateProject(
+  ctx: HandlerContext,
+  input: {
+    workspaceId: string;
+    name: string;
+    description?: string;
+    color?: string;
+    tasks?: string[];
+  },
+) {
+  const workspace = await ctx.db.query.workspaces.findFirst({
+    where: eq(workspaces.id, input.workspaceId),
+  });
+  if (!workspace?.tenantId) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+  await assertTenantAccess(ctx.db, ctx.userId, workspace.tenantId);
+
+  // Unique project key (<=16 chars), collision-suffixed within the workspace.
+  const baseKey =
+    input.name
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 12) || "PROJ";
+  let key = baseKey;
+  for (let suffix = 2; suffix <= 99; suffix++) {
+    const conflict = await ctx.db.query.projects.findFirst({
+      where: and(
+        eq(projects.workspaceId, input.workspaceId),
+        eq(projects.key, key),
+      ),
+      columns: { id: true },
+    });
+    if (!conflict) break;
+    key = `${baseKey}${suffix}`.slice(0, 16);
+  }
+
+  const [project] = await ctx.db
+    .insert(projects)
+    .values({
+      workspaceId: input.workspaceId,
+      name: input.name,
+      key,
+      description: input.description ?? null,
+      color: input.color ?? null,
+      status: "active",
+    })
+    .returning();
+  if (!project) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to create project",
+    });
+  }
+
+  // Seed backlog tasks.
+  const taskTitles = (input.tasks ?? [])
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .slice(0, 20);
+  const createdWorkItems: { id: string; title: string }[] = [];
+  if (taskTitles.length > 0) {
+    const [{ n } = { n: 0 }] = await ctx.db
+      .select({ n: sql<number>`count(*)` })
+      .from(workItems)
+      .where(eq(workItems.workspaceId, input.workspaceId));
+    let seq = Number(n);
+    for (const title of taskTitles) {
+      seq += 1;
+      const [wi] = await ctx.db
+        .insert(workItems)
+        .values({
+          ownerUserId: ctx.userId,
+          workspaceId: input.workspaceId,
+          projectId: project.id,
+          kind: "task",
+          title: title.slice(0, 256),
+          status: "backlog",
+          sequenceNumber: seq,
+        })
+        .returning({ id: workItems.id, title: workItems.title });
+      if (wi) createdWorkItems.push(wi);
+    }
+  }
+
+  return {
+    projectId: project.id,
+    key: project.key,
+    name: project.name,
+    workItems: createdWorkItems,
+  };
+}
+
 export async function publicApiUpdateRun(
   ctx: HandlerContext,
   input: {

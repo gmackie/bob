@@ -70,4 +70,104 @@ export const bobRouter = {
         status: string;
       };
     }),
+
+  // "Make it a project": create a Bob (linear-clone) project + seed backlog
+  // tasks, and optionally scaffold a new app via create-gmacko-app as an
+  // executable Bob dispatch. Same config/env as dispatch.
+  createProject: authedProcedure
+    .meta({
+      openapi: {
+        method: "POST",
+        path: "/api/bob/create-project",
+        tags: ["bob"],
+        protect: true,
+      },
+    })
+    .input(
+      z.object({
+        threadSlug: z.string().min(1).max(200),
+        threadId: z.string().max(200).optional(),
+        name: z.string().min(1).max(128),
+        description: z.string().max(20000).optional(),
+        tasks: z.array(z.string().min(1).max(256)).max(20).optional(),
+        scaffold: z.boolean().optional(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const config = resolveBobDispatchConfig(process.env);
+      if (!config) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message:
+            "Bob dispatch is not configured. Set BOB_API_URL, BOB_API_KEY (a bob_live_* key), and BOB_WORKSPACE_ID.",
+        });
+      }
+
+      // 1. Create the project + seed backlog tasks.
+      const res = await fetch(`${config.apiUrl}/api/v1/projects`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.apiKey}`,
+        },
+        body: JSON.stringify({
+          workspaceId: config.workspaceId,
+          name: input.name,
+          description: input.description,
+          tasks: input.tasks,
+        }),
+      });
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        throw new TRPCError({
+          code: res.status === 403 ? "FORBIDDEN" : "BAD_GATEWAY",
+          message: `Bob project create failed (${res.status}): ${detail.slice(0, 300)}`,
+        });
+      }
+      const project = (await res.json()) as {
+        projectId: string;
+        key: string;
+        name: string;
+        workItems: { id: string; title: string }[];
+      };
+
+      // 2. Optionally scaffold a new app via create-gmacko-app, as an executable
+      // dispatch. Non-fatal: a scaffold failure leaves the project + tasks intact.
+      let scaffold:
+        | { sessionId: string; identifier: string; status: string }
+        | null = null;
+      if (input.scaffold) {
+        try {
+          const dres = await fetch(`${config.apiUrl}/api/v1/dispatch`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${config.apiKey}`,
+            },
+            body: JSON.stringify({
+              workspaceId: config.workspaceId,
+              title: `Scaffold ${input.name} (${project.key})`,
+              description:
+                `Scaffold a new gmacko app named "${input.name}" using create-gmacko-app ` +
+                "(the create-gmacko-app-workflow skill / `npm create gmacko-app`). Set up the " +
+                "standard monorepo structure (apps, packages/ui|api|db, docs/ai). This is the " +
+                `scaffold for project ${project.key}.`,
+              agentType: "claude",
+              ooda: { threadSlug: input.threadSlug, threadId: input.threadId },
+            }),
+          });
+          if (dres.ok) {
+            scaffold = (await dres.json()) as {
+              sessionId: string;
+              identifier: string;
+              status: string;
+            };
+          }
+        } catch {
+          // Leave scaffold null; the project + tasks already succeeded.
+        }
+      }
+
+      return { ...project, scaffold };
+    }),
 } satisfies RouterRecord;
