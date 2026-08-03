@@ -555,6 +555,13 @@ export async function publicApiDispatchExecution(
           sessionType: "execution",
           description: input.description ?? undefined,
           identifier,
+          // Carry the OODA correlation on the nudge path too. The gateway's
+          // nudgeSession() forwards `personaConfig` verbatim from this payload
+          // (relay.ts) and marks the session delivered, which dedupes the
+          // DB-reading deliverPendingSessionsToDaemon path. Without this, a
+          // nudge-delivered session reaches the runner with no
+          // personaConfig.metadata.ooda, so the M2 read-back silently no-ops.
+          personaConfig: input.ooda ? { metadata: { ooda: input.ooda } } : undefined,
         }),
       });
     } catch {
