@@ -8,6 +8,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { ChatPanel } from "./chat-panel";
 import { WorkspacePanel } from "./workspace-panel";
 import { ComparisonView } from "./comparison-view";
+import { BobDispatchBar } from "./bob-dispatch-bar";
 
 interface ThreadShellProps {
   thread: {
@@ -33,6 +34,7 @@ interface ComparisonSession {
 
 export function ThreadShell({ thread }: ThreadShellProps) {
   const [showCompareBar, setShowCompareBar] = useState(false);
+  const [showDispatchBar, setShowDispatchBar] = useState(false);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [adapterA, setAdapterA] = useState("");
   const [adapterB, setAdapterB] = useState("");
@@ -129,6 +131,16 @@ export function ThreadShell({ thread }: ThreadShellProps) {
           {thread.status}
         </span>
         <button
+          onClick={() => setShowDispatchBar((v) => !v)}
+          className={`shrink-0 rounded-[3px] border px-3 py-1.5 font-mono text-xs transition-colors focus-visible:ring-2 focus-visible:ring-[#D4A04A] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111113] ${
+            showDispatchBar
+              ? "border-[#D4A04A] bg-[#D4A04A]/15 text-[#D4A04A]"
+              : "border-[#2A2A2F] text-[#8A8580] hover:border-[#D4A04A] hover:text-[#D4A04A]"
+          }`}
+        >
+          Dispatch to Bob
+        </button>
+        <button
           onClick={() => setShowCompareBar((v) => !v)}
           className={`shrink-0 rounded-[3px] border px-3 py-1.5 font-mono text-xs transition-colors focus-visible:ring-2 focus-visible:ring-[#D4A04A] focus-visible:ring-offset-2 focus-visible:ring-offset-[#111113] ${
             showCompareBar || comparisonSessions
@@ -139,6 +151,14 @@ export function ThreadShell({ thread }: ThreadShellProps) {
           Compare
         </button>
       </header>
+
+      {showDispatchBar && !comparisonSessions && (
+        <BobDispatchBar
+          threadSlug={thread.slug}
+          threadId={thread.id}
+          onClose={() => setShowDispatchBar(false)}
+        />
+      )}
 
       {/* Comparison config bar */}
       {showCompareBar && !comparisonSessions && (
