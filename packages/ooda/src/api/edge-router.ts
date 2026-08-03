@@ -14,6 +14,7 @@ import { runnerRouter } from "./router/runner";
 import { researchRouter } from "./router/research";
 import { oracleRouter } from "./router/oracle";
 import { importsRouter } from "./router/imports";
+import { bobRouter } from "./router/bob";
 import { createTRPCRouter } from "./trpc";
 
 const edgeRouterRecord = {
@@ -22,6 +23,9 @@ const edgeRouterRecord = {
   research: researchRouter,
   imports: importsRouter,
   oracle: oracleRouter,
+  // bob.dispatch is a pure fetch() to Bob's public API (no Node fs), so it is
+  // edge-safe and belongs on the worker that the thread UI actually talks to.
+  bob: bobRouter,
 } satisfies TRPCRouterRecord;
 
 export const edgeRouter = createTRPCRouter(edgeRouterRecord);
