@@ -80,6 +80,15 @@ export default function OraclePage() {
     staleTime: 60_000,
   });
 
+  // Recent research threads — "what you've been chatting about". Public query,
+  // powers the landing state so an empty Oracle greets you with your work-in-
+  // progress instead of a bare search box.
+  const threadsQuery = useQuery({
+    ...trpc.threads.list.queryOptions(),
+    staleTime: 30_000,
+  });
+  const recentThreads = (threadsQuery.data as any[] | undefined)?.slice(0, 8) ?? [];
+
   const result = oracleQuery.data as OracleResult | undefined;
 
   const filteredChunks = result?.chunks.filter((c) => {
@@ -359,15 +368,10 @@ export default function OraclePage() {
           {/* Results list */}
           <div ref={resultsRef} className="flex-1 p-3">
             {!submittedQuery && !oracleQuery.isFetching && (
-              <div className="flex h-full flex-col items-center justify-center text-[#4A4845]">
-                <div className="text-lg font-medium">Oracle</div>
-                <div className="mt-1 text-sm">
-                  Search your knowledge base with{" "}
-                  <kbd className="rounded border border-[#3A3835] bg-[#2A2825] px-1 py-px text-[10px]">
-                    /
-                  </kbd>
-                </div>
-              </div>
+              <RecentThreadsLanding
+                threads={recentThreads}
+                loading={threadsQuery.isLoading}
+              />
             )}
 
             {filteredChunks.map((chunk, i) => (
@@ -544,6 +548,93 @@ export default function OraclePage() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+const THREAD_STATUS_COLOR: Record<string, string> = {
+  active: "bg-[#6BBF59]",
+  paused: "bg-[#D4A04A]",
+  completed: "bg-[#55ACEE]",
+  archived: "bg-[#4A4845]",
+};
+
+// Landing state for an unqueried Oracle: surface the research threads you've
+// most recently been working in, so the home screen is "continue where you
+// left off" rather than an empty search box. Search stays one keystroke away.
+function RecentThreadsLanding({
+  threads,
+  loading,
+}: {
+  threads: any[];
+  loading: boolean;
+}) {
+  return (
+    <div className="mx-auto flex h-full w-full max-w-2xl flex-col justify-center py-8">
+      <div className="mb-1 text-[10px] uppercase tracking-[2px] text-[#6B6560]">
+        Continue where you left off
+      </div>
+      <h2 className="mb-4 font-serif text-2xl text-[#E8E4DF]">Recent Threads</h2>
+
+      {loading && (
+        <div className="text-sm text-[#4A4845]">Loading threads&hellip;</div>
+      )}
+
+      {!loading && threads.length === 0 && (
+        <div className="rounded-lg border border-[#2A2825] bg-[#151517] p-6 text-center">
+          <div className="text-sm text-[#8A8580]">
+            No research threads yet.
+          </div>
+          <a
+            href="/threads"
+            className="mt-2 inline-block text-sm text-[#D4A04A] hover:underline"
+          >
+            Start your first thread &rarr;
+          </a>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-1.5">
+        {threads.map((t) => (
+          <a
+            key={t.id}
+            href={`/threads/${t.slug}`}
+            className="group flex items-center gap-3 rounded-md border border-[#2A2825] bg-[#151517] px-3 py-2.5 transition-colors hover:border-[#D4A04A]/50 hover:bg-[#1A1915]"
+          >
+            <span
+              className={`h-2 w-2 shrink-0 rounded-full ${
+                THREAD_STATUS_COLOR[t.status] ?? "bg-[#4A4845]"
+              }`}
+              title={t.status}
+            />
+            <span className="min-w-0 flex-1 truncate text-sm text-[#D0CAC4] group-hover:text-[#E8E4DF]">
+              {t.title || "Untitled thread"}
+            </span>
+            {t.domainPackId && (
+              <span className="shrink-0 rounded border border-[#2A2825] px-1.5 py-0.5 font-mono text-[10px] text-[#6B6560]">
+                {t.domainPackId}
+              </span>
+            )}
+            <span className="shrink-0 text-[11px] tabular-nums text-[#5A5550]">
+              {t.createdAt ? formatRelativeTime(new Date(t.createdAt)) : ""}
+            </span>
+          </a>
+        ))}
+      </div>
+
+      {threads.length > 0 && (
+        <div className="mt-5 flex items-center justify-between text-[11px] text-[#5A5550]">
+          <a href="/threads" className="text-[#D4A04A] hover:underline">
+            All threads &rarr;
+          </a>
+          <span>
+            Or search your knowledge base with{" "}
+            <kbd className="rounded border border-[#3A3835] bg-[#2A2825] px-1 py-px text-[10px]">
+              /
+            </kbd>
+          </span>
+        </div>
+      )}
     </div>
   );
 }
