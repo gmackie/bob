@@ -1,5 +1,11 @@
 import type { ImportFormat, ImportedConversation } from "./types";
-import { parseChatGPT, parseClaude, parseOodaNative } from "./parsers/index";
+import {
+  parseChatGPT,
+  parseClaude,
+  parseOodaNative,
+  parseGrok,
+  looksLikeGenericConversation,
+} from "./parsers/index";
 
 function hasKey(obj: unknown, key: string): boolean {
   return typeof obj === "object" && obj !== null && key in (obj as object);
@@ -53,6 +59,11 @@ export function detectFormat(data: unknown): ImportFormat | null {
     if (hasKey(data, "mapping")) return "chatgpt";
   }
 
+  // Last resort: Grok has no documented export schema, so anything that still
+  // looks like a conversation (messages with role/content) is parsed by the
+  // lenient generic/grok parser rather than rejected.
+  if (looksLikeGenericConversation(data)) return "grok";
+
   return null;
 }
 
@@ -79,6 +90,9 @@ export function normalizeImport(data: unknown): {
       break;
     case "ooda-native":
       conversations = parseOodaNative(data);
+      break;
+    case "grok":
+      conversations = parseGrok(data);
       break;
   }
 
