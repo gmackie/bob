@@ -41,6 +41,8 @@ export function detectFormat(data: unknown): ImportFormat | null {
       // Fallback: arrays of conversations with messages — ambiguous, prefer claude
       if ("messages" in first || "title" in first) return "claude";
     }
+    // Flat array of messages, or other conversation-shaped arrays → generic/grok.
+    if (looksLikeGenericConversation(data)) return "grok";
     return null;
   }
 
