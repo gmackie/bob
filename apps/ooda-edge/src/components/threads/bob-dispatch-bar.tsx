@@ -48,7 +48,7 @@ export function BobDispatchBar({
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[#D4A04A]/40 bg-[#2E2A1A] px-4 py-2">
       <span className="shrink-0 font-mono text-xs text-[#D4A04A]">
-        Dispatch to Bob:
+        Make it a project:
       </span>
       <input
         type="text"
@@ -57,8 +57,8 @@ export function BobDispatchBar({
         onKeyDown={(e) => {
           if (e.key === "Enter" && !dispatchMutation.isPending) submit();
         }}
-        placeholder="What should Bob build?"
-        aria-label="Bob run title"
+        placeholder="What should Bob build for this project?"
+        aria-label="Project task title"
         className="min-w-0 flex-1 basis-56 rounded-[3px] border border-[#D4A04A]/30 bg-[#1A1A1E] px-2 py-1 font-mono text-xs text-[#E8E4DF] placeholder-[#5A5855] outline-none focus:border-[#D4A04A]"
       />
       <input

@@ -138,7 +138,7 @@ export function ThreadShell({ thread }: ThreadShellProps) {
               : "border-[#2A2A2F] text-[#8A8580] hover:border-[#D4A04A] hover:text-[#D4A04A]"
           }`}
         >
-          Dispatch to Bob
+          Make it a project
         </button>
         <button
           onClick={() => setShowCompareBar((v) => !v)}
