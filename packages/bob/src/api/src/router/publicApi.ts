@@ -11,6 +11,7 @@ import {
   publicApiRegisterWorkspace,
   publicApiCreateRun,
   publicApiDispatchExecution,
+  publicApiCreateProject,
   publicApiUpdateRun,
   publicApiCreateArtifact,
   publicApiGetRun,
@@ -86,6 +87,29 @@ export const publicApiRouter = {
     )
     .mutation(({ ctx, input }) =>
       publicApiDispatchExecution(
+        { db: ctx.db, userId: ctx.session.user.id },
+        input,
+      ),
+    ),
+
+  // POST /projects — create a (linear-clone) project + seed backlog tasks.
+  // The OODA "Make it a project" path. Scaffolding (create-gmacko-app) is a
+  // separate dispatchExecution call by the caller.
+  createProject: apiKeyWriteProcedure
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+        name: z.string().min(1).max(128),
+        description: z.string().max(20000).optional(),
+        color: z
+          .string()
+          .regex(/^#[0-9a-fA-F]{6}$/)
+          .optional(),
+        tasks: z.array(z.string().min(1).max(256)).max(20).optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      publicApiCreateProject(
         { db: ctx.db, userId: ctx.session.user.id },
         input,
       ),
