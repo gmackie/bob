@@ -140,6 +140,35 @@ export function ChatPanel({ threadId, runnerId, onPromoted }: ChatPanelProps) {
     });
   };
 
+  // "Remember this conversation" — the default keep gesture. Flags the whole
+  // discussion as worth keeping: the runner folds it into the vault + KB with a
+  // link back to this thread. Phase 1 promotes the transcript verbatim; the
+  // agent-distilled summary lands in a follow-up. Keyed off the latest
+  // assistant turn's session so the runner has the thread context.
+  const handleRememberConversation = () => {
+    if (!availableRunner || messages.length === 0) return;
+    const lastAssistant = [...messages]
+      .reverse()
+      .find((m) => m.role === "assistant");
+    const sessionId = lastAssistant?.id ?? activeSessionId;
+    if (!sessionId) return;
+
+    const transcript = messages
+      .map((m) => `**${m.role === "user" ? "You" : "OODA"}:** ${m.content}`)
+      .join("\n\n");
+    const firstUser = messages.find((m) => m.role === "user")?.content;
+    const title = (firstUser?.split("\n")[0]?.slice(0, 100) ?? "Remembered conversation").trim();
+
+    promoteMutation.mutate({
+      sessionId,
+      runnerId: availableRunner,
+      threadId,
+      kind: "source-extract",
+      title: title || "Remembered conversation",
+      content: transcript,
+    });
+  };
+
   const isRunning = !!activeSessionId;
 
   return (
@@ -193,6 +222,25 @@ export function ChatPanel({ threadId, runnerId, onPromoted }: ChatPanelProps) {
         {!availableRunner && (
           <div className="mb-2 rounded-[3px] bg-[#2E2A1A] px-3 py-1.5 text-xs text-amber-400">
             No runner connected. Start the runner with pnpm dev.
+          </div>
+        )}
+        {messages.length > 0 && (
+          <div className="mb-2 flex items-center justify-between gap-2 rounded-[3px] border border-[#2A2A2F] bg-[#151517] px-3 py-1.5">
+            <span className="min-w-0 truncate text-[11px] text-[#8A8580]">
+              {promoteMutation.isSuccess
+                ? "✓ Kept — folding into your vault + KB."
+                : "Worth keeping? Fold this into your vault + knowledge base."}
+            </span>
+            <button
+              type="button"
+              onClick={handleRememberConversation}
+              disabled={promoteMutation.isPending}
+              className="shrink-0 rounded-[3px] border border-[#D4A04A] bg-[#D4A04A]/15 px-3 py-1 font-mono text-xs text-[#D4A04A] transition-colors hover:bg-[#D4A04A]/25 disabled:opacity-50"
+            >
+              {promoteMutation.isPending
+                ? "Remembering…"
+                : "★ Remember this"}
+            </button>
           </div>
         )}
         <div className="flex gap-2">
