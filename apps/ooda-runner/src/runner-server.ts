@@ -87,6 +87,62 @@ function parsePromotionRequest(content: string): PromotionRequestPayload | null 
   };
 }
 
+// Phase 2: distill a "Remember this" conversation transcript into a durable
+// vault note via a one-shot Anthropic call. Direct fetch (no SDK dep). Always
+// returns *something* — falls back to the verbatim transcript when the API key
+// is absent, the input is trivially short, or the call fails, so a note is
+// never lost. The full transcript is folded under a collapsed section for
+// provenance/recall. Model is overridable via OODA_DISTILL_MODEL.
+async function distillConversation(
+  transcript: string,
+  title: string,
+): Promise<{ content: string; distilled: boolean }> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const raw = { content: transcript, distilled: false };
+  if (!apiKey || transcript.trim().length < 200) return raw;
+
+  const model = process.env.OODA_DISTILL_MODEL ?? "claude-sonnet-5";
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 1200,
+        system:
+          "You distill a conversation into a durable research note for a personal Obsidian knowledge vault. " +
+          "Output GitHub-flavored markdown only, no preamble: a one-line **Summary**, a **Key points** bullet list (3-7), " +
+          "any **Decisions** or **Open questions** if present, and a final `Topics:` line of 3-8 lowercase hashtags. " +
+          "Be faithful and concise; capture what is worth remembering, not filler.",
+        messages: [
+          {
+            role: "user",
+            content: `Conversation titled "${title}":\n\n${transcript.slice(0, 24000)}`,
+          },
+        ],
+      }),
+    });
+    if (!res.ok) return raw;
+    const data = (await res.json()) as {
+      content?: { type: string; text?: string }[];
+    };
+    const text = (data.content ?? [])
+      .filter((b) => b.type === "text" && typeof b.text === "string")
+      .map((b) => b.text)
+      .join("\n")
+      .trim();
+    if (!text) return raw;
+    const note = `${text}\n\n---\n\n<details>\n<summary>Full transcript</summary>\n\n${transcript}\n\n</details>\n`;
+    return { content: note, distilled: true };
+  } catch {
+    return raw;
+  }
+}
+
 export class RunnerServer {
   public readonly sessions: SessionManager;
   private adapters: Map<string, AgentAdapter>;
@@ -560,13 +616,23 @@ export class RunnerServer {
       params.threadSlug,
     );
 
+    // "Remember this conversation" (source-extract) → have the agent distill the
+    // raw transcript into a clean vault note before committing. Falls back to the
+    // verbatim transcript if distillation is unavailable or fails, so a note is
+    // always written. Other promotion kinds (single observation/etc.) stay raw.
+    let noteContent = params.content;
+    if (params.kind === "source-extract") {
+      const distilled = await distillConversation(params.content, params.title);
+      noteContent = distilled.content;
+    }
+
     const result = await promoteNote({
       storageRoot: this.config.storageRoot,
       threadDir,
       sessionId: params.sessionId,
       kind: params.kind,
       title: params.title,
-      content: params.content,
+      content: noteContent,
       threadId: params.threadId,
       provenance: {
         capabilityId: "chat-promote",

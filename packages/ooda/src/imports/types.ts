@@ -14,4 +14,4 @@ export interface ImportedConversation {
   updatedAt?: string;
 }
 
-export type ImportFormat = "claude" | "chatgpt" | "ooda-native";
+export type ImportFormat = "claude" | "chatgpt" | "ooda-native" | "grok";
