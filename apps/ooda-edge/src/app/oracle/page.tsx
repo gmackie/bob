@@ -1,8 +1,60 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useTRPC } from "~/trpc/react";
+
+// Stopwords + Twitter noise stripped before building the topic cloud. Kept
+// lean: common English function words plus a few social-media artifacts.
+const STOPWORDS = new Set(
+  ("the a an and or but if then else for while of to in on at by with from into over "
+    + "under this that these those it its is are was were be been being have has had do "
+    + "does did will would shall should can could may might must not no yes you your our "
+    + "we they them their his her him she he i me my mine ours yours as so than too very "
+    + "just about after before between out off up down again once here there all any both "
+    + "each few more most other some such only own same what which who whom whose why how "
+    + "when where what get got make made like want need know think see new now one two get "
+    + "https http com www amp rt via re thread threads follow retweet please thanks thank "
+    + "going really actually literally basically today tomorrow yesterday people time day "
+    + "week year good great big small first last next best right way lot bit every still")
+    .split(/\s+/),
+);
+
+function extractTopicTerms(
+  sources: { title?: string | null; body?: string | null }[],
+): { term: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const s of sources) {
+    const raw = `${s.title ?? ""} ${s.body ?? ""}`
+      .replace(/https?:\/\/\S+/g, " ") // urls
+      .replace(/@\w+/g, " ") // handles
+      .toLowerCase();
+    const words = raw.match(/[a-z][a-z'-]{3,}/g) ?? [];
+    const seenInSource = new Set<string>();
+    for (let w of words) {
+      w = w.replace(/^[-']+|[-']+$/g, "");
+      if (w.length < 4 || STOPWORDS.has(w)) continue;
+      // Count once per source so one ranty tweet can't dominate the cloud.
+      if (seenInSource.has(w)) continue;
+      seenInSource.add(w);
+      counts.set(w, (counts.get(w) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .filter(([, c]) => c >= 2)
+    .map(([term, count]) => ({ term, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 42);
+}
+
+function slugifyTopic(term: string): string {
+  const base = term
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 100);
+  return `${base || "topic"}-${Date.now().toString(36)}`;
+}
 
 type SourceKindFilter = "x-bookmark" | "chat" | "paper" | "file";
 
@@ -87,7 +139,46 @@ export default function OraclePage() {
     ...trpc.threads.list.queryOptions(),
     staleTime: 30_000,
   });
-  const recentThreads = (threadsQuery.data as any[] | undefined)?.slice(0, 8) ?? [];
+  const recentThreads = (threadsQuery.data as any[] | undefined)?.slice(0, 6) ?? [];
+
+  // Topic cloud, derived from source content already loaded for the sidebar —
+  // no extra round-trip. "What you've been exploring", weighted by how many
+  // sources mention each term.
+  const topicTerms = useMemo(
+    () => extractTopicTerms((sourcesQuery.data as any[] | undefined) ?? []),
+    [sourcesQuery.data],
+  );
+
+  // Click a topic → start the next discussion. Create a research thread seeded
+  // with the term and jump into it. If we are not authenticated (public
+  // preview), fall back to running a knowledge-base search for the term.
+  const createThreadMutation = useMutation(
+    trpc.threads.create.mutationOptions({
+      onSuccess: (rows: any) => {
+        const created = Array.isArray(rows) ? rows[0] : rows;
+        if (created?.slug) window.location.assign(`/threads/${created.slug}`);
+      },
+    }),
+  );
+
+  const startDiscussion = useCallback(
+    (term: string) => {
+      const title = term.charAt(0).toUpperCase() + term.slice(1);
+      createThreadMutation.mutate(
+        { title, slug: slugifyTopic(term) },
+        {
+          onError: () => {
+            // Not authenticated (or create failed): fall back to search so the
+            // click is never a dead end.
+            setQuery(term);
+            setSubmittedQuery(term);
+            setSelectedIndex(0);
+          },
+        },
+      );
+    },
+    [createThreadMutation],
+  );
 
   const result = oracleQuery.data as OracleResult | undefined;
 
@@ -368,9 +459,13 @@ export default function OraclePage() {
           {/* Results list */}
           <div ref={resultsRef} className="flex-1 p-3">
             {!submittedQuery && !oracleQuery.isFetching && (
-              <RecentThreadsLanding
+              <ExploreLanding
+                terms={topicTerms}
                 threads={recentThreads}
-                loading={threadsQuery.isLoading}
+                loadingThreads={threadsQuery.isLoading}
+                loadingTerms={sourcesQuery.isLoading}
+                onPickTopic={startDiscussion}
+                starting={createThreadMutation.isPending}
               />
             )}
 
@@ -559,82 +654,168 @@ const THREAD_STATUS_COLOR: Record<string, string> = {
   archived: "bg-[#4A4845]",
 };
 
-// Landing state for an unqueried Oracle: surface the research threads you've
-// most recently been working in, so the home screen is "continue where you
-// left off" rather than an empty search box. Search stays one keystroke away.
-function RecentThreadsLanding({
+// Landing state for an unqueried Oracle: a topic cloud of what you've been
+// exploring (click a word to open the next discussion), with a compact strip
+// of recent threads underneath. Search stays one keystroke away.
+function ExploreLanding({
+  terms,
   threads,
-  loading,
+  loadingThreads,
+  loadingTerms,
+  onPickTopic,
+  starting,
 }: {
+  terms: { term: string; count: number }[];
   threads: any[];
-  loading: boolean;
+  loadingThreads: boolean;
+  loadingTerms: boolean;
+  onPickTopic: (term: string) => void;
+  starting: boolean;
 }) {
   return (
-    <div className="mx-auto flex h-full w-full max-w-2xl flex-col justify-center py-8">
-      <div className="mb-1 text-[10px] uppercase tracking-[2px] text-[#6B6560]">
-        Continue where you left off
+    <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-center py-10">
+      <div className="text-center">
+        <div className="text-[10px] uppercase tracking-[3px] text-[#6B6560]">
+          What you&rsquo;ve been exploring
+        </div>
+        <h2 className="mt-1 font-serif text-[28px] leading-tight text-[#E8E4DF]">
+          Pick a thread of thought
+        </h2>
+        <p className="mt-1.5 text-xs text-[#6B6560]">
+          Every word is a live topic from your sources. Click one to start the
+          next discussion.
+        </p>
       </div>
-      <h2 className="mb-4 font-serif text-2xl text-[#E8E4DF]">Recent Threads</h2>
 
-      {loading && (
-        <div className="text-sm text-[#4A4845]">Loading threads&hellip;</div>
+      <WordCloud
+        terms={terms}
+        loading={loadingTerms}
+        onPick={onPickTopic}
+        disabled={starting}
+      />
+
+      {starting && (
+        <div className="mt-2 text-center text-xs text-[#D4A04A]">
+          Opening a new discussion&hellip;
+        </div>
       )}
 
-      {!loading && threads.length === 0 && (
-        <div className="rounded-lg border border-[#2A2825] bg-[#151517] p-6 text-center">
-          <div className="text-sm text-[#8A8580]">
-            No research threads yet.
+      {/* Recent threads strip */}
+      <div className="mt-8 border-t border-[#2A2825] pt-5">
+        <div className="mb-2 flex items-center justify-between">
+          <div className="text-[10px] uppercase tracking-[2px] text-[#6B6560]">
+            Continue where you left off
           </div>
           <a
             href="/threads"
-            className="mt-2 inline-block text-sm text-[#D4A04A] hover:underline"
+            className="text-[11px] text-[#D4A04A] hover:underline"
           >
-            Start your first thread &rarr;
-          </a>
-        </div>
-      )}
-
-      <div className="flex flex-col gap-1.5">
-        {threads.map((t) => (
-          <a
-            key={t.id}
-            href={`/threads/${t.slug}`}
-            className="group flex items-center gap-3 rounded-md border border-[#2A2825] bg-[#151517] px-3 py-2.5 transition-colors hover:border-[#D4A04A]/50 hover:bg-[#1A1915]"
-          >
-            <span
-              className={`h-2 w-2 shrink-0 rounded-full ${
-                THREAD_STATUS_COLOR[t.status] ?? "bg-[#4A4845]"
-              }`}
-              title={t.status}
-            />
-            <span className="min-w-0 flex-1 truncate text-sm text-[#D0CAC4] group-hover:text-[#E8E4DF]">
-              {t.title || "Untitled thread"}
-            </span>
-            {t.domainPackId && (
-              <span className="shrink-0 rounded border border-[#2A2825] px-1.5 py-0.5 font-mono text-[10px] text-[#6B6560]">
-                {t.domainPackId}
-              </span>
-            )}
-            <span className="shrink-0 text-[11px] tabular-nums text-[#5A5550]">
-              {t.createdAt ? formatRelativeTime(new Date(t.createdAt)) : ""}
-            </span>
-          </a>
-        ))}
-      </div>
-
-      {threads.length > 0 && (
-        <div className="mt-5 flex items-center justify-between text-[11px] text-[#5A5550]">
-          <a href="/threads" className="text-[#D4A04A] hover:underline">
             All threads &rarr;
           </a>
-          <span>
-            Or search your knowledge base with{" "}
-            <kbd className="rounded border border-[#3A3835] bg-[#2A2825] px-1 py-px text-[10px]">
-              /
-            </kbd>
-          </span>
         </div>
-      )}
+        {loadingThreads && (
+          <div className="text-xs text-[#4A4845]">Loading threads&hellip;</div>
+        )}
+        {!loadingThreads && threads.length === 0 && (
+          <div className="text-xs text-[#4A4845]">
+            No discussions yet &mdash; pick a topic above to start one.
+          </div>
+        )}
+        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+          {threads.map((t) => (
+            <a
+              key={t.id}
+              href={`/threads/${t.slug}`}
+              className="group flex items-center gap-2.5 rounded-md border border-[#2A2825] bg-[#151517] px-3 py-2 transition-colors hover:border-[#D4A04A]/50 hover:bg-[#1A1915]"
+            >
+              <span
+                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                  THREAD_STATUS_COLOR[t.status] ?? "bg-[#4A4845]"
+                }`}
+                title={t.status}
+              />
+              <span className="min-w-0 flex-1 truncate text-xs text-[#C0BAB4] group-hover:text-[#E8E4DF]">
+                {t.title || "Untitled thread"}
+              </span>
+              <span className="shrink-0 text-[10px] tabular-nums text-[#5A5550]">
+                {t.createdAt ? formatRelativeTime(new Date(t.createdAt)) : ""}
+              </span>
+            </a>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Weighted topic cloud. Font size + warmth scale with how many sources mention
+// the term; hover lifts and brightens. Clicking opens the next discussion.
+function WordCloud({
+  terms,
+  loading,
+  onPick,
+  disabled,
+}: {
+  terms: { term: string; count: number }[];
+  loading: boolean;
+  onPick: (term: string) => void;
+  disabled: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="flex min-h-[220px] items-center justify-center text-sm text-[#4A4845]">
+        Reading your sources&hellip;
+      </div>
+    );
+  }
+  if (terms.length === 0) {
+    return (
+      <div className="flex min-h-[220px] flex-col items-center justify-center gap-2 text-center">
+        <div className="text-sm text-[#8A8580]">
+          Not enough source content yet to map your topics.
+        </div>
+        <a
+          href="/capture"
+          className="text-sm text-[#D4A04A] hover:underline"
+        >
+          Import sources &rarr;
+        </a>
+      </div>
+    );
+  }
+
+  const max = terms[0]!.count;
+  const min = terms[terms.length - 1]!.count;
+  const span = Math.max(1, max - min);
+  // Bigger, warmer terms for higher counts. Weight in [0,1].
+  const styleFor = (count: number) => {
+    const w = (count - min) / span;
+    const size = 13 + Math.round(w * 33); // 13px … 46px
+    // Warm ramp: dim taupe → bright amber as weight rises.
+    const shades = ["#6B6560", "#8A7B55", "#B08A3E", "#D4A04A", "#F0B860"];
+    const color = shades[Math.min(shades.length - 1, Math.round(w * (shades.length - 1)))]!;
+    const weight = w > 0.66 ? 600 : w > 0.33 ? 500 : 400;
+    return { fontSize: `${size}px`, color, fontWeight: weight };
+  };
+
+  return (
+    <div className="mt-6 flex flex-wrap items-baseline justify-center gap-x-4 gap-y-2 px-2">
+      {terms.map(({ term, count }) => {
+        const s = styleFor(count);
+        return (
+          <button
+            key={term}
+            type="button"
+            disabled={disabled}
+            onClick={() => onPick(term)}
+            title={`${count} source${count === 1 ? "" : "s"} — start a discussion`}
+            style={s}
+            className="cursor-pointer font-serif leading-none tracking-tight transition-all duration-150 hover:-translate-y-0.5 hover:brightness-125 disabled:cursor-wait disabled:opacity-60"
+          >
+            {term}
+          </button>
+        );
+      })}
     </div>
   );
 }
