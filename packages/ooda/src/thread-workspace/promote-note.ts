@@ -1,5 +1,5 @@
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { writeFileSync, mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { execSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 
@@ -53,6 +53,9 @@ promotedAt: ${new Date().toISOString()}
 
 ${input.content}
 `;
+  // Ensure the notes/ dir exists — a thread whose notes were pruned (or a brand
+  // new thread dir) would otherwise ENOENT here.
+  mkdirSync(dirname(notePath), { recursive: true });
   writeFileSync(notePath, noteContent);
 
   // Write provenance record
@@ -70,6 +73,7 @@ ${input.content}
 
   const provenanceFilename = `${noteId}.provenance.json`;
   const provenancePath = join(input.threadDir, "sources", provenanceFilename);
+  mkdirSync(dirname(provenancePath), { recursive: true });
   writeFileSync(provenancePath, JSON.stringify(provRecord, null, 2));
 
   // Atomic git commit: both note and provenance together
