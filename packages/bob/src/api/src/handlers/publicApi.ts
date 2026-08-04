@@ -450,6 +450,20 @@ export async function publicApiCreateRun(
  * Reuses the proven headless-dispatch shape (work item -> pending execution
  * session -> gateway nudge) from dispatch.ts.
  */
+/**
+ * Constrain a caller-supplied working directory to a safe root. Dispatched
+ * agents run with elevated permissions, so the workingDirectory must stay under
+ * /home/bob/dev (where projects + scaffolds live) and contain no `..` segments.
+ * Returns the path if allowed, else undefined (caller falls back to default).
+ */
+function safeWorkingDirectory(dir: string | undefined): string | undefined {
+  if (!dir) return undefined;
+  const trimmed = dir.trim();
+  if (!trimmed.startsWith("/home/bob/dev/")) return undefined;
+  if (trimmed.includes("..")) return undefined;
+  return trimmed;
+}
+
 export async function publicApiDispatchExecution(
   ctx: HandlerContext,
   input: {
@@ -457,6 +471,7 @@ export async function publicApiDispatchExecution(
     title: string;
     description?: string;
     agentType?: string;
+    workingDirectory?: string;
     ooda?: { threadId?: string; threadSlug?: string };
   },
 ) {
@@ -515,7 +530,8 @@ export async function publicApiDispatchExecution(
   }
   const identifier = workItem.id.slice(0, 8);
 
-  const workingDirectory = "/home/bob/dev/gmacko-bob";
+  const workingDirectory =
+    safeWorkingDirectory(input.workingDirectory) ?? "/home/bob/dev/gmacko-bob";
   const [session] = await ctx.db
     .insert(chatConversations)
     .values({

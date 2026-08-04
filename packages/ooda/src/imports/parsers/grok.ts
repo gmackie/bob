@@ -15,7 +15,11 @@ function asString(v: unknown): string {
 
 function normalizeRole(v: unknown): ImportedMessage["role"] {
   const s = asString(v).trim().toLowerCase();
-  if (["assistant", "ai", "grok", "bot", "model"].includes(s)) return "assistant";
+  if (
+    ["assistant", "ai", "grok", "bot", "model", "agent", "gpt"].includes(s)
+  ) {
+    return "assistant";
+  }
   if (s === "system") return "system";
   return "user"; // human / user / unknown
 }

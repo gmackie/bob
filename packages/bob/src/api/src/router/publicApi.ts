@@ -71,6 +71,10 @@ export const publicApiRouter = {
         title: z.string().min(1).max(500),
         description: z.string().max(20000).optional(),
         agentType: z.string().min(1).max(64).optional(),
+        // Optional working directory for the run (validated server-side to stay
+        // under /home/bob/dev). Used by "Make it a project" scaffolds so
+        // create-gmacko-app runs in a fresh project dir, not the bob monorepo.
+        workingDirectory: z.string().max(512).optional(),
         // Opaque OODA correlation for M2 read-back. threadSlug is the thread
         // workspace directory (what the runner resolves); threadId is the UUID
         // for provenance/entity extraction. At least one is required.
