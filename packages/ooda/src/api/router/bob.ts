@@ -147,11 +147,15 @@ export const bobRouter = {
             body: JSON.stringify({
               workspaceId: config.workspaceId,
               title: `Scaffold ${input.name} (${project.key})`,
+              // Fresh per-project dir, outside the bob monorepo (so the scaffold
+              // creates a standalone app and no stray PR against bob).
+              workingDirectory: "/home/bob/dev/projects",
               description:
-                `Scaffold a new gmacko app named "${input.name}" using create-gmacko-app ` +
-                "(the create-gmacko-app-workflow skill / `npm create gmacko-app`). Set up the " +
-                "standard monorepo structure (apps, packages/ui|api|db, docs/ai). This is the " +
-                `scaffold for project ${project.key}.`,
+                `You are in /home/bob/dev/projects. Create a new subdirectory named ` +
+                `"${project.key.toLowerCase()}" and scaffold a new gmacko app named "${input.name}" ` +
+                "inside it using create-gmacko-app (the create-gmacko-app-workflow skill / " +
+                "`npm create gmacko-app`). Set up the standard monorepo structure " +
+                `(apps, packages/ui|api|db, docs/ai). This is the scaffold for project ${project.key}.`,
               agentType: "claude",
               ooda: { threadSlug: input.threadSlug, threadId: input.threadId },
             }),
