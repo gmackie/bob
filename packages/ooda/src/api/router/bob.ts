@@ -155,7 +155,14 @@ export const bobRouter = {
                 `"${project.key.toLowerCase()}" and scaffold a new gmacko app named "${input.name}" ` +
                 "inside it using create-gmacko-app (the create-gmacko-app-workflow skill / " +
                 "`npm create gmacko-app`). Set up the standard monorepo structure " +
-                `(apps, packages/ui|api|db, docs/ai). This is the scaffold for project ${project.key}.`,
+                `(apps, packages/ui|api|db, docs/ai).\n\n` +
+                `Then make it its own project: (1) \`git init\` the new app dir and make an initial ` +
+                `commit; (2) register it as a ForgeGraph app named "${project.key.toLowerCase()}" with ` +
+                `the fg CLI (\`~/.forgegraph/bin/fg app create ${project.key.toLowerCase()}\` — check ` +
+                `\`~/.forgegraph/bin/fg app create --help\` for exact flags) and create its git repo on ` +
+                `git.forgegraf.com, pushing the initial commit. If the fg CLI or its credentials are ` +
+                `unavailable, stop and report that clearly rather than guessing. This is the scaffold ` +
+                `for project ${project.key}.`,
               agentType: "claude",
               ooda: { threadSlug: input.threadSlug, threadId: input.threadId },
             }),
