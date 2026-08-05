@@ -15,9 +15,13 @@ import { researchRouter } from "./router/research";
 import { oracleRouter } from "./router/oracle";
 import { importsRouter } from "./router/imports";
 import { bobRouter } from "./router/bob";
+import { conversationsRouter } from "./router/conversations";
+import { eventsRouter } from "./router/events";
 import { createTRPCRouter } from "./trpc";
 
 const edgeRouterRecord = {
+  conversations: conversationsRouter,
+  events: eventsRouter,
   threads: threadsEdgeRouter,
   runner: runnerRouter,
   research: researchRouter,

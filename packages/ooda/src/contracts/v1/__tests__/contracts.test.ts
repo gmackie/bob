@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ArchiveConversationInputV1Schema,
   AgentJobV1Schema,
+  AppendConversationEventResultV1Schema,
   ApprovalDecisionV1Schema,
   ContextPackV1Schema,
+  ConversationDetailV1Schema,
   ConversationEventV1Schema,
+  ConversationListInputV1Schema,
   ConversationV1Schema,
+  CreateConversationResultV1Schema,
   ExternalLinkV1Schema,
+  ForkConversationInputV1Schema,
   MemorySeedV1Schema,
   ProblemV1Schema,
   ProposalV1Schema,
@@ -37,6 +43,60 @@ describe("OODA V1 contracts", () => {
     ).toBe(false);
   });
 
+  it("defines cursor-paged conversation commands and replay receipts", () => {
+    const conversation = {
+      id: "conversation-1",
+      ownerId: "owner-1",
+      title: "A new thought",
+      status: "active",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      activeBranchId: "branch-1",
+      lastSequence: "7",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      createdAt: occurredAt,
+      updatedAt: occurredAt,
+    };
+    const branch = {
+      id: "branch-1",
+      conversationId: "conversation-1",
+      name: "main",
+      createdAt: occurredAt,
+      updatedAt: occurredAt,
+    };
+
+    expect(
+      ConversationListInputV1Schema.parse({ limit: 25, status: "active" }),
+    ).toEqual({ limit: 25, status: "active" });
+    expect(
+      CreateConversationResultV1Schema.parse({
+        conversation,
+        branch,
+        replayed: false,
+      }),
+    ).toEqual({ conversation, branch, replayed: false });
+    expect(
+      ConversationDetailV1Schema.parse({ conversation, branches: [branch] }),
+    ).toEqual({ conversation, branches: [branch] });
+    expect(
+      ForkConversationInputV1Schema.safeParse({
+        conversationId: "conversation-1",
+        parentBranchId: "branch-1",
+        forkEventId: "event-1",
+        name: "alternate",
+        reason: "Explore a second path",
+        idempotencyKey: "device-fork-1",
+      }).success,
+    ).toBe(true);
+    expect(
+      ArchiveConversationInputV1Schema.safeParse({
+        conversationId: "conversation-1",
+        idempotencyKey: "device-archive-1",
+      }).success,
+    ).toBe(true);
+  });
+
   it("accepts a versioned conversation event and rejects malformed sequence values", () => {
     const event = {
       id: "event-1",
@@ -58,6 +118,9 @@ describe("OODA V1 contracts", () => {
     expect(
       ConversationEventV1Schema.safeParse({ ...event, type: "future_event" }).success,
     ).toBe(false);
+    expect(
+      AppendConversationEventResultV1Schema.parse({ event, replayed: true }),
+    ).toEqual({ event, replayed: true });
   });
 
   it("requires exact proposal and single-delivery approval shapes", () => {

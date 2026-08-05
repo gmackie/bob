@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { SensitivityV1Schema } from "./conversation";
+import { CursorPageInfoV1Schema, CursorV1Schema } from "./conversation";
 
 export const ConversationEventTypeV1Schema = z.enum([
   "user_turn",
@@ -66,6 +67,29 @@ export type AppendConversationEventInputV1 = z.infer<
   typeof AppendConversationEventInputV1Schema
 >;
 
+export const AppendConversationEventResultV1Schema = z
+  .object({
+    event: ConversationEventV1Schema,
+    replayed: z.boolean(),
+  })
+  .strict();
+
+export const ConversationEventListInputV1Schema = z
+  .object({
+    conversationId: z.string().min(1),
+    branchId: z.string().min(1).optional(),
+    cursor: CursorV1Schema.optional(),
+    limit: z.number().int().min(1).max(250).default(100),
+  })
+  .strict();
+
+export const ConversationEventListPageV1Schema = z
+  .object({
+    items: z.array(ConversationEventV1Schema),
+    pageInfo: CursorPageInfoV1Schema,
+  })
+  .strict();
+
 export const CorrectConversationEventInputV1Schema = z
   .object({
     conversationId: z.string().min(1),
@@ -79,3 +103,16 @@ export const CorrectConversationEventInputV1Schema = z
     occurredAt: z.iso.datetime({ offset: true }),
   })
   .strict();
+
+export type AppendConversationEventResultV1 = z.infer<
+  typeof AppendConversationEventResultV1Schema
+>;
+export type ConversationEventListInputV1 = z.infer<
+  typeof ConversationEventListInputV1Schema
+>;
+export type ConversationEventListPageV1 = z.infer<
+  typeof ConversationEventListPageV1Schema
+>;
+export type CorrectConversationEventInputV1 = z.infer<
+  typeof CorrectConversationEventInputV1Schema
+>;

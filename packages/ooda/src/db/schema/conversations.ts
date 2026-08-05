@@ -39,6 +39,8 @@ export const conversations = oodaSchema.table(
     lastSequence: t.bigint({ mode: "number" }).notNull().default(0),
     sensitivityCeiling: sensitivityEnum().notNull().default("personal"),
     ttsPolicy: ttsPolicyEnum().notNull().default("allowed"),
+    creationIdempotencyKey: t.text(),
+    creationFingerprint: t.text(),
     migrationMetadata: t.jsonb().$type<Record<string, unknown>>(),
     createdAt: t.timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: t
@@ -50,6 +52,10 @@ export const conversations = oodaSchema.table(
   (t) => [
     index("conversations_owner_updated_idx").on(t.ownerId, t.updatedAt),
     index("conversations_owner_status_idx").on(t.ownerId, t.status),
+    uniqueIndex("conversations_owner_creation_idempotency_uidx").on(
+      t.ownerId,
+      t.creationIdempotencyKey,
+    ),
   ],
 );
 
@@ -68,6 +74,8 @@ export const conversationBranches = oodaSchema.table(
     forkEventId: t.uuid(),
     name: t.varchar({ length: 256 }).notNull(),
     reason: t.text(),
+    idempotencyKey: t.text(),
+    commandFingerprint: t.text(),
     migrationMetadata: t.jsonb().$type<Record<string, unknown>>(),
     createdAt: t.timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: t
@@ -81,6 +89,10 @@ export const conversationBranches = oodaSchema.table(
     uniqueIndex("conversation_branches_conversation_name_uidx").on(
       t.conversationId,
       t.name,
+    ),
+    uniqueIndex("conversation_branches_conversation_idempotency_uidx").on(
+      t.conversationId,
+      t.idempotencyKey,
     ),
   ],
 );

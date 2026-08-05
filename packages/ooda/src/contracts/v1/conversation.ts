@@ -79,3 +79,89 @@ export const CursorPageInfoV1Schema = z
   .strict();
 
 export type CursorPageInfoV1 = z.infer<typeof CursorPageInfoV1Schema>;
+
+export const ConversationListInputV1Schema = z
+  .object({
+    cursor: CursorV1Schema.optional(),
+    limit: z.number().int().min(1).max(100).default(50),
+    status: ConversationStatusV1Schema.optional(),
+    query: z.string().trim().min(1).max(256).optional(),
+  })
+  .strict();
+
+export const ConversationListPageV1Schema = z
+  .object({
+    items: z.array(ConversationV1Schema),
+    pageInfo: CursorPageInfoV1Schema,
+  })
+  .strict();
+
+export const ConversationDetailV1Schema = z
+  .object({
+    conversation: ConversationV1Schema,
+    branches: z.array(ConversationBranchV1Schema),
+  })
+  .strict();
+
+export const CreateConversationResultV1Schema = z
+  .object({
+    conversation: ConversationV1Schema,
+    branch: ConversationBranchV1Schema,
+    replayed: z.boolean(),
+  })
+  .strict();
+
+export const ForkConversationInputV1Schema = z
+  .object({
+    conversationId: z.string().min(1),
+    parentBranchId: z.string().min(1),
+    forkEventId: z.string().min(1),
+    name: z.string().min(1).max(256),
+    reason: z.string().max(2_000).optional(),
+    idempotencyKey: z.string().min(1).max(256),
+  })
+  .strict();
+
+export const ForkConversationResultV1Schema = z
+  .object({
+    branch: ConversationBranchV1Schema,
+    replayed: z.boolean(),
+  })
+  .strict();
+
+export const ArchiveConversationInputV1Schema = z
+  .object({
+    conversationId: z.string().min(1),
+    idempotencyKey: z.string().min(1).max(256),
+  })
+  .strict();
+
+export const ArchiveConversationResultV1Schema = z
+  .object({
+    conversation: ConversationV1Schema,
+    replayed: z.boolean(),
+  })
+  .strict();
+
+export type ConversationListInputV1 = z.infer<
+  typeof ConversationListInputV1Schema
+>;
+export type ConversationListPageV1 = z.infer<
+  typeof ConversationListPageV1Schema
+>;
+export type ConversationDetailV1 = z.infer<typeof ConversationDetailV1Schema>;
+export type CreateConversationResultV1 = z.infer<
+  typeof CreateConversationResultV1Schema
+>;
+export type ForkConversationInputV1 = z.infer<
+  typeof ForkConversationInputV1Schema
+>;
+export type ForkConversationResultV1 = z.infer<
+  typeof ForkConversationResultV1Schema
+>;
+export type ArchiveConversationInputV1 = z.infer<
+  typeof ArchiveConversationInputV1Schema
+>;
+export type ArchiveConversationResultV1 = z.infer<
+  typeof ArchiveConversationResultV1Schema
+>;

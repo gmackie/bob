@@ -1,6 +1,17 @@
-import { generateOpenApiDocument } from "trpc-to-openapi";
+import {
+  createOpenApiFetchHandler,
+  generateOpenApiDocument,
+} from "trpc-to-openapi";
 
+import { edgeRouter } from "./edge-router";
 import { appRouter } from "./root";
+import type { createTRPCContext } from "./trpc";
+
+type OodaApiContext = Awaited<ReturnType<typeof createTRPCContext>>;
+type HttpHandlerInput = {
+  request: Request;
+  createContext: () => Promise<OodaApiContext> | OodaApiContext;
+};
 
 export function generateOodaOpenApiDocument(opts: { baseUrl?: string } = {}) {
   const baseUrl = opts.baseUrl ?? "http://localhost:3001";
@@ -20,5 +31,23 @@ export function generateOodaOpenApiDocument(opts: { baseUrl?: string } = {}) {
         description: "OODA_RUNNER_SECRET shared secret",
       },
     },
+  });
+}
+
+export function handleOodaV1HttpRequest(input: HttpHandlerInput) {
+  return createOpenApiFetchHandler({
+    endpoint: "/",
+    router: appRouter,
+    req: input.request,
+    createContext: input.createContext,
+  });
+}
+
+export function handleOodaV1EdgeHttpRequest(input: HttpHandlerInput) {
+  return createOpenApiFetchHandler({
+    endpoint: "/",
+    router: edgeRouter,
+    req: input.request,
+    createContext: input.createContext,
   });
 }
