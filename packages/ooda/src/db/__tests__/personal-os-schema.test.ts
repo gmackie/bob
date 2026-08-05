@@ -1,0 +1,121 @@
+import { getTableConfig } from "drizzle-orm/pg-core";
+import { describe, expect, it } from "vitest";
+
+import {
+  conversationBranches,
+  conversationEvents,
+  conversations,
+} from "../schema/conversations";
+import {
+  deadLetters,
+  deliveryAttempts,
+  externalLinks,
+  integrationOutbox,
+} from "../schema/integrations";
+import {
+  attentionReviews,
+  memoryEdges,
+  memorySeeds,
+} from "../schema/memory";
+import {
+  agentJobEvents,
+  agentJobs,
+  approvalDecisions,
+  contextItems,
+  contextPacks,
+  proposals,
+} from "../schema/orchestration";
+
+const config = (table: Parameters<typeof getTableConfig>[0]) =>
+  getTableConfig(table);
+
+describe("OODA personal operating system schema", () => {
+  it("keeps every canonical table in the ooda schema", () => {
+    const tables = [
+      conversations,
+      conversationBranches,
+      conversationEvents,
+      memorySeeds,
+      memoryEdges,
+      attentionReviews,
+      agentJobs,
+      agentJobEvents,
+      contextPacks,
+      contextItems,
+      proposals,
+      approvalDecisions,
+      externalLinks,
+      integrationOutbox,
+      deliveryAttempts,
+      deadLetters,
+    ];
+
+    expect(tables.map((table) => config(table).schema)).toEqual(
+      tables.map(() => "ooda"),
+    );
+  });
+
+  it("enforces one monotonic sequence and one idempotency key per conversation", () => {
+    const events = config(conversationEvents);
+    const names = events.indexes.map((index) => index.config.name);
+
+    expect(names).toContain("conversation_events_conversation_sequence_uidx");
+    expect(names).toContain("conversation_events_conversation_idempotency_uidx");
+    expect(events.columns.find((column) => column.name === "sequence")?.notNull).toBe(
+      true,
+    );
+    expect(
+      events.columns.find((column) => column.name === "payload")?.getSQLType(),
+    ).toBe("jsonb");
+  });
+
+  it("preserves source IDs in explicit migration metadata", () => {
+    expect(
+      config(conversations).columns.find(
+        (column) => column.name === "migrationMetadata",
+      )?.getSQLType(),
+    ).toBe("jsonb");
+    expect(
+      config(conversationBranches).columns.find(
+        (column) => column.name === "migrationMetadata",
+      )?.getSQLType(),
+    ).toBe("jsonb");
+  });
+
+  it("stores memory embeddings as pgvector rather than bytea", () => {
+    const seeds = config(memorySeeds);
+    const embedding = seeds.columns.find((column) => column.name === "embedding");
+
+    expect(embedding?.getSQLType()).toBe("vector(1536)");
+    expect(embedding?.getSQLType()).not.toBe("bytea");
+    expect(seeds.indexes.map((index) => index.config.name)).toContain(
+      "memory_seeds_embedding_hnsw_idx",
+    );
+  });
+
+  it("records immutable approval decisions separately from mutable proposal state", () => {
+    const proposal = config(proposals);
+    const approvals = config(approvalDecisions);
+
+    expect(proposal.columns.find((column) => column.name === "version")?.default).toBe(
+      1,
+    );
+    expect(
+      approvals.columns.find((column) => column.name === "expectedVersion")?.notNull,
+    ).toBe(true);
+    expect(
+      approvals.columns.find((column) => column.name === "scope")?.default,
+    ).toBe("single_delivery");
+  });
+
+  it("supports transactional delivery, reconciliation, and dead-letter repair", () => {
+    expect(config(integrationOutbox).indexes.map((index) => index.config.name)).toContain(
+      "integration_outbox_idempotency_uidx",
+    );
+    expect(config(deliveryAttempts).foreignKeys).toHaveLength(1);
+    expect(config(deadLetters).columns.find((column) => column.name === "repairedAt")).toBeDefined();
+    expect(config(externalLinks).indexes.map((index) => index.config.name)).toContain(
+      "external_links_destination_idempotency_uidx",
+    );
+  });
+});

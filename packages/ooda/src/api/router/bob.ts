@@ -5,6 +5,32 @@ import { z } from "zod";
 import { authedProcedure } from "../trpc";
 import { resolveBobDispatchConfig } from "./bob-config.js";
 
+const BobDispatchOutputSchema = z.object({
+  sessionId: z.string(),
+  workItemId: z.string(),
+  identifier: z.string(),
+  status: z.string(),
+});
+
+const BobProjectOutputSchema = z.object({
+  projectId: z.string(),
+  key: z.string(),
+  name: z.string(),
+  workItems: z.array(
+    z.object({
+      id: z.string(),
+      title: z.string(),
+    }),
+  ),
+  scaffold: z
+    .object({
+      sessionId: z.string(),
+      identifier: z.string(),
+      status: z.string(),
+    })
+    .nullable(),
+});
+
 // OODA -> Bob dispatch caller (Phase 5 M1, OODA side). A thread action dispatches
 // an executable Bob run via Bob's public REST endpoint. The reverse direction
 // (Bob run outcome -> OODA thread note) is handled runner-side by promoteNote.
@@ -29,6 +55,7 @@ export const bobRouter = {
         agentType: z.string().min(1).max(64).optional(),
       }),
     )
+    .output(BobDispatchOutputSchema)
     .mutation(async ({ input }) => {
       const config = resolveBobDispatchConfig(process.env);
       if (!config) {
@@ -93,6 +120,7 @@ export const bobRouter = {
         scaffold: z.boolean().optional(),
       }),
     )
+    .output(BobProjectOutputSchema)
     .mutation(async ({ input }) => {
       const config = resolveBobDispatchConfig(process.env);
       if (!config) {

@@ -31,3 +31,8 @@ export {
 export { users, sessions } from "./schema/auth";
 
 export { oracleQueryLog } from "./schema/oracle";
+
+export * from "./schema/conversations";
+export * from "./schema/memory";
+export * from "./schema/orchestration";
+export * from "./schema/integrations";
