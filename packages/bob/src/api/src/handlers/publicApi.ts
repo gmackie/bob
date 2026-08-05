@@ -456,7 +456,7 @@ export async function publicApiCreateRun(
  * /home/bob/dev (where projects + scaffolds live) and contain no `..` segments.
  * Returns the path if allowed, else undefined (caller falls back to default).
  */
-function safeWorkingDirectory(dir: string | undefined): string | undefined {
+export function safeWorkingDirectory(dir: string | undefined): string | undefined {
   if (!dir) return undefined;
   const trimmed = dir.trim();
   if (!trimmed.startsWith("/home/bob/dev/")) return undefined;
