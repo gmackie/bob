@@ -5,6 +5,7 @@ import { ThemeSwitcher } from "@gmacko/core/ui";
 
 import { TRPCReactProvider } from "~/trpc/react";
 import { AppShell } from "~/components/app-shell";
+import { PublicAliasNotice } from "~/components/public-alias-notice";
 
 import "~/app/globals.css";
 
@@ -50,6 +51,7 @@ export default function RootLayout(props: { children: React.ReactNode }) {
       >
         <ThemeProvider defaultTheme="ooda">
           <TRPCReactProvider>
+            <PublicAliasNotice />
             <AppShell>{props.children}</AppShell>
           </TRPCReactProvider>
           <div className="absolute right-4 bottom-4">
