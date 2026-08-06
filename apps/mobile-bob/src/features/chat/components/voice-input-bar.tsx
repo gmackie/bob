@@ -12,10 +12,13 @@ import { KeyboardInput } from "./keyboard-input";
 import { useSpeechRecognition } from "../hooks/use-speech-recognition";
 import type { VoiceGestureSnapshot } from "../voice-state-machine";
 import { reduceVoiceGesture } from "../voice-state-machine";
+import { transcriptDisposition } from "../transcript-review";
+import { beginVoiceCapture } from "../barge-in";
 
 interface VoiceInputBarProps {
   onSend: (text: string) => void;
   disabled?: boolean;
+  onBargeIn?: () => Promise<void> | void;
 }
 
 const emptySnapshot: VoiceGestureSnapshot = {
@@ -24,11 +27,12 @@ const emptySnapshot: VoiceGestureSnapshot = {
   interimTranscript: "",
 };
 
-export function VoiceInputBar({ onSend, disabled = false }: VoiceInputBarProps) {
+export function VoiceInputBar({ onSend, disabled = false, onBargeIn }: VoiceInputBarProps) {
   const speech = useSpeechRecognition();
   const [snapshot, setSnapshot] = useState<VoiceGestureSnapshot>(emptySnapshot);
   const snapshotRef = useRef<VoiceGestureSnapshot>(emptySnapshot);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [reviewDraft, setReviewDraft] = useState<string | null>(null);
   const [panHandlers, setPanHandlers] = useState<GestureResponderHandlers>({});
 
   const setVoiceSnapshot = useCallback((nextSnapshot: VoiceGestureSnapshot) => {
@@ -51,18 +55,29 @@ export function VoiceInputBar({ onSend, disabled = false }: VoiceInputBarProps) 
   }, [setVoiceSnapshot, speech]);
 
   const finish = useCallback(async () => {
-    const stoppedText = await speech.stop();
-    const text = stoppedText.trim();
+    const stopped = await speech.stop();
     setVoiceSnapshot(emptySnapshot);
-    if (text) onSend(text);
+    const disposition = transcriptDisposition(stopped);
+    if (disposition.action === "send") onSend(disposition.text);
+    if (disposition.action === "review") {
+      setReviewDraft(disposition.text);
+      setKeyboardOpen(true);
+    }
   }, [onSend, setVoiceSnapshot, speech]);
 
-  const start = useCallback(() => {
+  const start = useCallback(async () => {
     if (disabled) return;
     const reduction = reduceVoiceGesture(snapshotRef.current, { type: "press" });
     setVoiceSnapshot(reduction.snapshot);
-    void speech.start();
-  }, [disabled, setVoiceSnapshot, speech]);
+    try {
+      await beginVoiceCapture({
+        stopPlayback: onBargeIn,
+        startRecognition: speech.start,
+      });
+    } catch {
+      setVoiceSnapshot(emptySnapshot);
+    }
+  }, [disabled, onBargeIn, setVoiceSnapshot, speech]);
 
   const release = useCallback(() => {
     if (snapshotRef.current.phase === "recording") {
@@ -93,8 +108,18 @@ export function VoiceInputBar({ onSend, disabled = false }: VoiceInputBarProps) 
   if (keyboardOpen) {
     return (
       <KeyboardInput
-        onSend={onSend}
-        onClose={() => setKeyboardOpen(false)}
+        key={reviewDraft ?? "keyboard"}
+        initialValue={reviewDraft ?? ""}
+        reviewLabel={reviewDraft ? "Check the transcript before sending" : undefined}
+        onSend={(text) => {
+          onSend(text);
+          setReviewDraft(null);
+          setKeyboardOpen(false);
+        }}
+        onClose={() => {
+          setReviewDraft(null);
+          setKeyboardOpen(false);
+        }}
         disabled={disabled}
       />
     );
@@ -122,7 +147,7 @@ export function VoiceInputBar({ onSend, disabled = false }: VoiceInputBarProps) 
       <View className="flex-row items-center gap-2">
         <Pressable
           {...panHandlers}
-          onPressIn={start}
+          onPressIn={() => void start()}
           onPressOut={release}
           disabled={disabled || snapshot.phase === "locked"}
           className={`flex-1 rounded-2xl py-4 active:opacity-80 disabled:opacity-50 ${

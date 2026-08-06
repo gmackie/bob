@@ -616,6 +616,9 @@ importers:
       '@gmacko/bob-client':
         specifier: workspace:*
         version: link:../../packages/bob-client
+      '@gmacko/ooda-client':
+        specifier: workspace:*
+        version: link:../../packages/ooda-client
       '@legendapp/list':
         specifier: ^2.0.14
         version: 2.0.19(react-native@0.83.9(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.1.17)(react@19.2.5))(react@19.2.5)
@@ -2027,9 +2030,25 @@ importers:
 
   packages/ooda-client:
     dependencies:
+      '@gmacko/ooda':
+        specifier: workspace:*
+        version: link:../ooda
       openapi-fetch:
         specifier: 'catalog:'
         version: 0.17.0
+    devDependencies:
+      '@gmacko/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.19.17
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.0
+        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.17)(@vitest/coverage-v8@4.1.5)(jsdom@26.1.0)(vite@8.0.8(@types/node@22.19.17)(esbuild@0.27.7)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
 
   tooling/bob-eslint:
     dependencies:

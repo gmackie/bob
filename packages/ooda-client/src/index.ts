@@ -1,5 +1,7 @@
 import createClient from "openapi-fetch";
 
+export * from "./v1";
+
 // TODO: Once openapi-typescript generates schema.d.ts from dist/openapi/ooda.json,
 // import the paths type and pass it as the generic parameter:
 //   import type { paths } from "../schema";

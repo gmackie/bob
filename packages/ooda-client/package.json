@@ -5,9 +5,21 @@
   "license": "MIT",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./v1": "./src/v1/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@gmacko/ooda": "workspace:*",
     "openapi-fetch": "catalog:"
+  },
+  "devDependencies": {
+    "@gmacko/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "^4.0.0"
   }
 }

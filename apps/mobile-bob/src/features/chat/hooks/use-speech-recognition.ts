@@ -11,12 +11,13 @@ import type {
 
 export interface SpeechRecognitionHook {
   start: () => Promise<void>;
-  stop: () => Promise<string>;
+  stop: () => Promise<{ text: string; confidence: number | null }>;
   cancel: () => void;
   transcript: string;
   interimTranscript: string;
   isListening: boolean;
   error: string | null;
+  confidence: number | null;
 }
 
 function joinTranscript(finalText: string, interimText: string): string {
@@ -28,6 +29,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   const [interimTranscript, setInterimTranscript] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confidence, setConfidence] = useState<number | null>(null);
   const transcriptRef = useRef("");
   const interimRef = useRef("");
 
@@ -59,6 +61,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
 
     if (event.isFinal) {
       setFinalTranscript(joinTranscript(transcriptRef.current, text));
+      setConfidence(firstResult.confidence);
       setInterim("");
       return;
     }
@@ -76,6 +79,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     setError(null);
     setFinalTranscript("");
     setInterim("");
+    setConfidence(null);
 
     if (!ExpoSpeechRecognitionModule.isRecognitionAvailable()) {
       setError("Speech recognition is not available on this device.");
@@ -107,14 +111,18 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   const stop = useCallback(() => {
     ExpoSpeechRecognitionModule.stop();
     setIsListening(false);
-    return Promise.resolve(joinTranscript(transcriptRef.current, interimRef.current));
-  }, []);
+    return Promise.resolve({
+      text: joinTranscript(transcriptRef.current, interimRef.current),
+      confidence,
+    });
+  }, [confidence]);
 
   const cancel = useCallback(() => {
     ExpoSpeechRecognitionModule.abort();
     setFinalTranscript("");
     setInterim("");
     setIsListening(false);
+    setConfidence(null);
   }, [setFinalTranscript, setInterim]);
 
   return useMemo(
@@ -126,7 +134,8 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       interimTranscript,
       isListening,
       error,
+      confidence,
     }),
-    [cancel, error, interimTranscript, isListening, start, stop, transcript],
+    [cancel, confidence, error, interimTranscript, isListening, start, stop, transcript],
   );
 }
