@@ -27,6 +27,7 @@ export const CreateHostTurnResultV1Schema = z
     provider: HostProviderV1Schema,
     model: z.string().min(1).max(256),
     providerResponseId: z.string().min(1).max(1_024),
+    contextPackId: z.string().min(1).optional(),
     replayed: z.boolean(),
     fallback: z
       .object({

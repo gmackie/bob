@@ -3,6 +3,7 @@ import type {
   AppendConversationEventResultV1,
   ArchiveConversationInputV1,
   ArchiveConversationResultV1,
+  ContextPackV1,
   ConversationDetailV1,
   ConversationEventListInputV1,
   ConversationEventListPageV1,
@@ -69,13 +70,16 @@ function isProblemV1(value: unknown): value is ProblemV1 {
 }
 
 function fallbackProblem(response: Response, body: unknown): ProblemV1 {
-  const record = body && typeof body === "object" ? body as Record<string, unknown> : {};
-  const error = record.error && typeof record.error === "object"
-    ? record.error as Record<string, unknown>
-    : {};
-  const data = error.data && typeof error.data === "object"
-    ? error.data as Record<string, unknown>
-    : {};
+  const record =
+    body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const error =
+    record.error && typeof record.error === "object"
+      ? (record.error as Record<string, unknown>)
+      : {};
+  const data =
+    error.data && typeof error.data === "object"
+      ? (error.data as Record<string, unknown>)
+      : {};
   const message =
     (typeof error.message === "string" && error.message) ||
     (typeof record.message === "string" && record.message) ||
@@ -107,7 +111,10 @@ function addQuery(url: URL, values: Record<string, unknown>): void {
 }
 
 export function createOodaV1Client(options: OodaV1ClientOptions = {}) {
-  const baseUrl = (options.baseUrl ?? "https://ooda.blder.bot").replace(/\/$/, "");
+  const baseUrl = (options.baseUrl ?? "https://ooda.blder.bot").replace(
+    /\/$/,
+    "",
+  );
   const fetchFn = options.fetch ?? globalThis.fetch;
 
   async function resolveHeaders(accept = "application/json") {
@@ -119,16 +126,21 @@ export function createOodaV1Client(options: OodaV1ClientOptions = {}) {
 
   async function request<T>(
     path: string,
-    input?: { method?: "GET" | "POST"; body?: unknown; query?: Record<string, unknown> },
+    input?: {
+      method?: "GET" | "POST";
+      body?: unknown;
+      query?: Record<string, unknown>;
+    },
   ): Promise<T> {
     const url = new URL(`${baseUrl}${path}`);
     if (input?.query) addQuery(url, input.query);
     const headers = await resolveHeaders();
     const init: RequestInit = {
       method: input?.method ?? "GET",
-      headers: input?.body === undefined
-        ? headers
-        : { ...headers, "Content-Type": "application/json" },
+      headers:
+        input?.body === undefined
+          ? headers
+          : { ...headers, "Content-Type": "application/json" },
     };
     if (input?.body !== undefined) init.body = JSON.stringify(input.body);
 
@@ -174,10 +186,13 @@ export function createOodaV1Client(options: OodaV1ClientOptions = {}) {
         });
       },
       archive(input: ArchiveConversationInputV1) {
-        return request<ArchiveConversationResultV1>("/api/v1/conversations/archive", {
-          method: "POST",
-          body: input,
-        });
+        return request<ArchiveConversationResultV1>(
+          "/api/v1/conversations/archive",
+          {
+            method: "POST",
+            body: input,
+          },
+        );
       },
     },
     events: {
@@ -193,10 +208,13 @@ export function createOodaV1Client(options: OodaV1ClientOptions = {}) {
         });
       },
       correct(input: CorrectConversationEventInputV1) {
-        return request<AppendConversationEventResultV1>("/api/v1/events/correct", {
-          method: "POST",
-          body: input,
-        });
+        return request<AppendConversationEventResultV1>(
+          "/api/v1/events/correct",
+          {
+            method: "POST",
+            body: input,
+          },
+        );
       },
       async streamRequest(input: {
         conversationId: string;
@@ -225,6 +243,13 @@ export function createOodaV1Client(options: OodaV1ClientOptions = {}) {
           method: "POST",
           body: input,
         });
+      },
+    },
+    context: {
+      get(id: string) {
+        return request<ContextPackV1>(
+          `/api/v1/context-packs/${encodeURIComponent(id)}`,
+        );
       },
     },
     voice: {

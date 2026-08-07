@@ -16,16 +16,22 @@ export const DisclosureDecisionV1Schema = z.enum([
   "denied",
 ]);
 
+export const ContextSourceTypeV1Schema = z.enum([
+  "conversation_event",
+  "memory_seed",
+  "obsidian_note",
+  "external_link",
+  "user_instruction",
+  "bob_work_item",
+  "kanbanger_issue",
+  "bizpulse_venture",
+  "forgegraph_changeset",
+]);
+
 export const ContextItemV1Schema = z
   .object({
     id: z.string().min(1),
-    sourceType: z.enum([
-      "conversation_event",
-      "memory_seed",
-      "obsidian_note",
-      "external_link",
-      "user_instruction",
-    ]),
+    sourceType: ContextSourceTypeV1Schema,
     sourceId: z.string().min(1),
     sensitivity: SensitivityV1Schema,
     decision: DisclosureDecisionV1Schema,
@@ -52,6 +58,13 @@ export const ContextItemV1Schema = z
   });
 
 export type ContextItemV1 = z.infer<typeof ContextItemV1Schema>;
+export type ContextSourceTypeV1 = z.infer<typeof ContextSourceTypeV1Schema>;
+
+export const GetContextPackInputV1Schema = z
+  .object({ id: z.string().min(1) })
+  .strict();
+
+export type GetContextPackInputV1 = z.infer<typeof GetContextPackInputV1Schema>;
 
 export const ContextPackV1Schema = z
   .object({

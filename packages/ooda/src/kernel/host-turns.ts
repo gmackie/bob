@@ -7,6 +7,9 @@ import type {
 import type { db as database } from "../db/client";
 import { conversationEvents, conversations } from "../db/schema/conversations";
 import { hostTurnExecutions } from "../db/schema/host";
+import { contextPacks } from "../db/schema/orchestration";
+import { buildHostContextPack } from "./context-packs";
+import type { ConversationContextSource } from "./context-sources";
 import { appendConversationEvent } from "./events";
 import {
   HostRoutingError,
@@ -70,6 +73,9 @@ async function completedResult(
     provider: providerId(execution.provider),
     model: execution.model,
     providerResponseId: execution.providerResponseId,
+    ...(typeof event.payload.contextPackId === "string"
+      ? { contextPackId: event.payload.contextPackId }
+      : {}),
     replayed: true,
     ...(execution.fallback
       ? { fallback: execution.fallback as CreateHostTurnResultV1["fallback"] }
@@ -157,6 +163,9 @@ async function recoverPersistedAssistant(
     provider,
     model,
     providerResponseId,
+    ...(typeof event.payload.contextPackId === "string"
+      ? { contextPackId: event.payload.contextPackId }
+      : {}),
     replayed: true,
     ...(execution.fallback
       ? { fallback: execution.fallback as CreateHostTurnResultV1["fallback"] }
@@ -251,6 +260,7 @@ export async function createHostTurn(
   input: CreateHostTurnInputV1,
   options: {
     providers: HostProviderClient[];
+    contextSources?: ConversationContextSource[];
     now?: Date;
     signal?: AbortSignal;
   },
@@ -313,13 +323,33 @@ export async function createHostTurn(
   });
 
   try {
-    const completion = await routeHostCompletion({
-      preferredProvider: providerId(source.conversation.hostProvider),
-      providers: options.providers,
-      messages,
-      system: HOST_SYSTEM_PROMPT,
+    const preferredProvider = providerId(source.conversation.hostProvider);
+    const context = await buildHostContextPack(db, ownerId, {
+      conversationId: input.conversationId,
+      provider: preferredProvider,
+      query: payloadText(source.event.payload) ?? "",
+      sources: options.contextSources ?? [],
+      now,
       signal: options.signal,
     });
+    const systemPrompt = context.promptContext
+      ? `${HOST_SYSTEM_PROMPT}\n\n${context.promptContext}`
+      : HOST_SYSTEM_PROMPT;
+
+    const completion = await routeHostCompletion({
+      preferredProvider,
+      providers: options.providers,
+      messages,
+      system: systemPrompt,
+      signal: options.signal,
+    });
+
+    if (completion.provider !== preferredProvider) {
+      await db
+        .update(contextPacks)
+        .set({ provider: completion.provider })
+        .where(eq(contextPacks.id, context.pack.id));
+    }
 
     if (completion.fallback) {
       await appendConversationEvent(db, ownerId, {
@@ -350,6 +380,7 @@ export async function createHostTurn(
         provider: completion.provider,
         model: completion.model,
         providerResponseId: completion.providerResponseId,
+        contextPackId: context.pack.id,
       },
       sensitivity: source.event.sensitivity,
       correlationId: source.event.correlationId,
@@ -377,6 +408,7 @@ export async function createHostTurn(
       provider: completion.provider,
       model: completion.model,
       providerResponseId: completion.providerResponseId,
+      contextPackId: context.pack.id,
       replayed: false,
       ...(completion.fallback ? { fallback: completion.fallback } : {}),
     };
@@ -407,6 +439,16 @@ export async function createHostTurn(
         .set({
           status: "failed",
           errorCode: "HOST_UNAVAILABLE",
+          leaseExpiresAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(hostTurnExecutions.id, claim.execution.id));
+    } else {
+      await db
+        .update(hostTurnExecutions)
+        .set({
+          status: "failed",
+          errorCode: "HOST_TURN_FAILED",
           leaseExpiresAt: new Date(),
           updatedAt: new Date(),
         })

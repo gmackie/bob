@@ -477,6 +477,116 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     ]);
   });
 
+  it("persists an inspectable disclosure pack and supplies only disclosed project context to the host", async () => {
+    const created = await createConversation(db!, "owner-host-context", {
+      title: "Context-aware host",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "create-conversation-host-context",
+    });
+    const user = await appendConversationEvent(db!, "owner-host-context", {
+      conversationId: created.conversation.id,
+      branchId: created.branch.id,
+      type: "user_turn",
+      actor: { type: "user", id: "owner-host-context" },
+      payload: { display: "What should we do next on OODA?" },
+      sensitivity: "personal",
+      correlationId: "host-context-proof",
+      idempotencyKey: "host-context-user",
+      occurredAt: "2026-08-07T12:00:00.000Z",
+    });
+    let receivedSystem = "";
+
+    const result = await createHostTurn(
+      db!,
+      "owner-host-context",
+      {
+        conversationId: created.conversation.id,
+        userEventId: user.event.id,
+        idempotencyKey: "host-context-turn",
+      },
+      {
+        providers: [
+          {
+            id: "grok",
+            complete: ({ system }) => {
+              receivedSystem = system;
+              return Promise.resolve({
+                providerResponseId: "host-context-response",
+                model: "grok-4.5",
+                text: '{"display":"Ship the context inspector","speakable":"Ship the context inspector"}',
+              });
+            },
+          },
+        ],
+        contextSources: [
+          {
+            id: "project-systems",
+            inspect: () =>
+              Promise.resolve([
+                {
+                  sourceType: "kanbanger_issue" as const,
+                  sourceId: "OOD-7",
+                  sensitivity: "general" as const,
+                  content: "OOD-7 - in progress - Add the context inspector",
+                },
+                {
+                  sourceType: "bizpulse_venture" as const,
+                  sourceId: "venture-secret",
+                  sensitivity: "sensitive" as const,
+                  content: "Confidential runway is six months",
+                },
+              ]),
+          },
+        ],
+      },
+    );
+
+    expect(result.contextPackId).toBeTruthy();
+    expect(receivedSystem).toContain("OOD-7");
+    expect(receivedSystem).not.toContain("six months");
+
+    const [pack] = await db!
+      .select()
+      .from(schema.contextPacks)
+      .where(eq(schema.contextPacks.id, result.contextPackId!));
+    const items = await db!
+      .select()
+      .from(schema.contextItems)
+      .where(eq(schema.contextItems.contextPackId, result.contextPackId!));
+    expect(pack).toMatchObject({
+      conversationId: created.conversation.id,
+      provider: "grok",
+      purpose: "host_turn",
+      policySnapshot: {
+        sourceReceipts: expect.arrayContaining([
+          expect.objectContaining({
+            source: "bizpulse",
+            status: "unavailable",
+            reason: "Source not configured",
+          }),
+        ]),
+      },
+    });
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceType: "kanbanger_issue",
+          sourceId: "OOD-7",
+          decision: "disclosed",
+        }),
+        expect.objectContaining({
+          sourceType: "bizpulse_venture",
+          sourceId: "venture-secret",
+          decision: "denied",
+          content: null,
+        }),
+      ]),
+    );
+  });
+
   it("replays identical event writes and rejects reuse with changed content", async () => {
     const created = await createConversation(db!, "owner-a", {
       title: "Replay",

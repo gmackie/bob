@@ -4,7 +4,12 @@ import {
   CreateHostTurnInputV1Schema,
   CreateHostTurnResultV1Schema,
 } from "../../contracts/v1";
-import { createHostProviderClients, createHostTurn } from "../../kernel";
+import {
+  createConfiguredContextSources,
+  createHostProviderClients,
+  createHostTurn,
+  resolveContextSourceConfig,
+} from "../../kernel";
 import { authedProcedure } from "../trpc";
 import { runKernel } from "./_kernel-error";
 
@@ -31,6 +36,9 @@ export const hostRouter = {
             claudeModel: process.env.OODA_CLAUDE_HOST_MODEL,
             openaiModel: process.env.OODA_OPENAI_HOST_MODEL,
           }),
+          contextSources: createConfiguredContextSources(
+            resolveContextSourceConfig(process.env),
+          ),
           signal: AbortSignal.timeout(90_000),
         }),
       ),

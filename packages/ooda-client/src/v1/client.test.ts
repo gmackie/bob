@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  OodaV1ClientError,
-  createOodaV1Client,
-} from "./client";
+import { OodaV1ClientError, createOodaV1Client } from "./client";
 
 const conversation = {
   id: "conversation-1",
@@ -118,7 +115,9 @@ describe("OODA V1 client", () => {
     };
     const client = createOodaV1Client({
       baseUrl: "https://ooda.example.test",
-      fetch: vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(problem, 401)),
+      fetch: vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(jsonResponse(problem, 401)),
     });
 
     const error = await client.conversations
@@ -153,23 +152,28 @@ describe("OODA V1 client", () => {
   it("creates an event-bound TTS grant and an authenticated audio source", async () => {
     const grant = {
       grantId: "grant-1",
-      streamUrl: "https://ooda.example.test/api/v1/tts-streams/grant-1.signature",
+      streamUrl:
+        "https://ooda.example.test/api/v1/tts-streams/grant-1.signature",
       expiresAt: "2026-08-06T12:02:00.000Z",
       replayed: false,
     };
-    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(grant, 201));
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(grant, 201));
     const client = createOodaV1Client({
       baseUrl: "https://ooda.example.test",
       fetch: fetchFn,
       headers: () => ({ Authorization: "Bearer device-token" }),
     });
 
-    await expect(client.voice.createGrant({
-      conversationId: "conversation-1",
-      eventId: "event-1",
-      requestMode: "manual",
-      idempotencyKey: "device-tts-1",
-    })).resolves.toEqual(grant);
+    await expect(
+      client.voice.createGrant({
+        conversationId: "conversation-1",
+        eventId: "event-1",
+        requestMode: "manual",
+        idempotencyKey: "device-tts-1",
+      }),
+    ).resolves.toEqual(grant);
     await expect(client.voice.audioSource(grant.streamUrl)).resolves.toEqual({
       uri: grant.streamUrl,
       headers: {
@@ -199,5 +203,37 @@ describe("OODA V1 client", () => {
     const [url, init] = fetchFn.mock.calls[0]!;
     expect(String(url)).toBe("https://ooda.example.test/api/v1/host-turns");
     expect(init).toMatchObject({ method: "POST" });
+  });
+
+  it("retrieves the exact disclosure receipt for a host turn", async () => {
+    const pack = {
+      id: "context-pack-1",
+      conversationId: "conversation-1",
+      provider: "grok",
+      purpose: "host_turn" as const,
+      policySnapshot: { version: "host-context-v1" },
+      items: [
+        {
+          id: "context-item-1",
+          sourceType: "kanbanger_issue" as const,
+          sourceId: "OOD-7",
+          sensitivity: "general" as const,
+          decision: "disclosed" as const,
+          reason: "Read-only project summary permitted for this host turn",
+          content: "OOD-7 | in progress | Add context inspector",
+        },
+      ],
+      createdAt: "2026-08-07T12:00:00.000Z",
+    };
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(pack));
+    const client = createOodaV1Client({
+      baseUrl: "https://ooda.example.test",
+      fetch: fetchFn,
+    });
+
+    await expect(client.context.get(pack.id)).resolves.toEqual(pack);
+    expect(String(fetchFn.mock.calls[0]![0])).toBe(
+      "https://ooda.example.test/api/v1/context-packs/context-pack-1",
+    );
   });
 });

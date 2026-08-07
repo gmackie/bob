@@ -5,6 +5,7 @@ import {
   AgentJobV1Schema,
   AppendConversationEventResultV1Schema,
   ApprovalDecisionV1Schema,
+  ContextItemV1Schema,
   ContextPackV1Schema,
   ConversationDetailV1Schema,
   ConversationEventV1Schema,
@@ -43,7 +44,8 @@ describe("OODA V1 contracts", () => {
 
     expect(ConversationV1Schema.parse(conversation)).toEqual(conversation);
     expect(
-      ConversationV1Schema.safeParse({ ...conversation, surprise: true }).success,
+      ConversationV1Schema.safeParse({ ...conversation, surprise: true })
+        .success,
     ).toBe(false);
   });
 
@@ -117,10 +119,12 @@ describe("OODA V1 contracts", () => {
 
     expect(ConversationEventV1Schema.parse(event)).toEqual(event);
     expect(
-      ConversationEventV1Schema.safeParse({ ...event, sequence: "4.2" }).success,
+      ConversationEventV1Schema.safeParse({ ...event, sequence: "4.2" })
+        .success,
     ).toBe(false);
     expect(
-      ConversationEventV1Schema.safeParse({ ...event, type: "future_event" }).success,
+      ConversationEventV1Schema.safeParse({ ...event, type: "future_event" })
+        .success,
     ).toBe(false);
     expect(
       AppendConversationEventResultV1Schema.parse({ event, replayed: true }),
@@ -228,6 +232,28 @@ describe("OODA V1 contracts", () => {
     expect(ExternalLinkV1Schema.safeParse(link).success).toBe(true);
   });
 
+  it("distinguishes project-system context sources in disclosure receipts", () => {
+    const base = {
+      id: "context-item-1",
+      sourceId: "source-record-1",
+      sensitivity: "general" as const,
+      decision: "disclosed" as const,
+      reason: "Permitted read-only project context",
+      content: "Project OODA has one in-progress task.",
+    };
+
+    for (const sourceType of [
+      "bob_work_item",
+      "kanbanger_issue",
+      "bizpulse_venture",
+      "forgegraph_changeset",
+    ] as const) {
+      expect(ContextItemV1Schema.parse({ ...base, sourceType })).toMatchObject({
+        sourceType,
+      });
+    }
+  });
+
   it("uses one strict versioned problem envelope", () => {
     const problem = {
       version: "v1",
@@ -240,9 +266,9 @@ describe("OODA V1 contracts", () => {
     };
 
     expect(ProblemV1Schema.parse(problem)).toEqual(problem);
-    expect(
-      ProblemV1Schema.safeParse({ ...problem, status: 200 }).success,
-    ).toBe(false);
+    expect(ProblemV1Schema.safeParse({ ...problem, status: 200 }).success).toBe(
+      false,
+    );
     expect(
       ProblemV1Schema.safeParse({ ...problem, debugStack: "secret" }).success,
     ).toBe(false);
@@ -296,6 +322,7 @@ describe("OODA V1 contracts", () => {
       provider: "claude",
       model: "claude-opus-4-6",
       providerResponseId: "provider-response-1",
+      contextPackId: "context-pack-1",
       replayed: false,
       fallback: {
         preferredProvider: "grok",
