@@ -1,0 +1,10 @@
+DROP INDEX IF EXISTS "ooda"."agent_jobs_status_lease_idx";
+DROP INDEX IF EXISTS "ooda"."agent_job_events_job_idempotency_uidx";
+ALTER TABLE "ooda"."agent_job_events" DROP COLUMN IF EXISTS "idempotency_key";
+ALTER TABLE "ooda"."agent_jobs" DROP COLUMN IF EXISTS "tokens_used";
+ALTER TABLE "ooda"."agent_jobs" DROP COLUMN IF EXISTS "cancel_idempotency_key";
+ALTER TABLE "ooda"."agent_jobs" DROP COLUMN IF EXISTS "cancellation_requested_at";
+ALTER TABLE "ooda"."agent_jobs" DROP COLUMN IF EXISTS "last_heartbeat_at";
+ALTER TABLE "ooda"."agent_jobs" DROP COLUMN IF EXISTS "lease_expires_at";
+ALTER TABLE "ooda"."agent_jobs" DROP COLUMN IF EXISTS "claimed_by";
+ALTER TABLE "ooda"."agent_jobs" DROP COLUMN IF EXISTS "last_sequence";

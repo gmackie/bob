@@ -6,6 +6,7 @@ import type {
   AdapterCommand,
   AdapterEvent,
   BuildCommandOptions,
+  ExecuteOptions,
   McpServerConfigLike,
 } from "./types";
 
@@ -66,18 +67,40 @@ export class CodexAdapter implements AgentAdapter {
   async execute(
     command: AdapterCommand,
     onEvent: (event: AdapterEvent) => void,
+    options?: ExecuteOptions,
   ): Promise<{ exitCode: number }> {
     const child = spawn(command.binary, command.args, {
       cwd: command.cwd,
-      env: { ...process.env, ...command.env },
+      env: (options?.environment ?? {
+        ...process.env,
+        ...command.env,
+      }) as NodeJS.ProcessEnv,
       stdio: ["ignore", "pipe", "pipe"] as const,
     });
+
+    let killTimer: NodeJS.Timeout | undefined;
+    const handle = {
+      write: () => false,
+      kill: () => {
+        child.kill("SIGTERM");
+        killTimer ??= setTimeout(() => {
+          if (child.exitCode === null) child.kill("SIGKILL");
+        }, 5_000);
+        killTimer.unref?.();
+      },
+    };
+    options?.onSpawn?.(handle);
+    const abort = () => handle.kill();
+    options?.signal?.addEventListener("abort", abort, { once: true });
+    if (options?.signal?.aborted) abort();
 
     return new Promise((resolve) => {
       let settled = false;
       const finish = (exitCode: number) => {
         if (settled) return;
         settled = true;
+        if (killTimer) clearTimeout(killTimer);
+        options?.signal?.removeEventListener("abort", abort);
         resolve({ exitCode });
       };
 

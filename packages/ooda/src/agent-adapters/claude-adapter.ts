@@ -67,8 +67,10 @@ export class ClaudeAdapter implements AgentAdapter {
     // has produced its result, so single-prompt runs exit exactly as before.
     const args: string[] = [
       "-p",
-      "--input-format", "stream-json",
-      "--output-format", "stream-json",
+      "--input-format",
+      "stream-json",
+      "--output-format",
+      "stream-json",
       "--verbose",
     ];
 
@@ -86,7 +88,8 @@ export class ClaudeAdapter implements AgentAdapter {
       args.push("--dangerously-skip-permissions");
     } else {
       const promptArgs = (
-        process.env.CLAUDE_PERMISSION_PROMPT_ARGS ?? "--permission-prompt-tool stdio"
+        process.env.CLAUDE_PERMISSION_PROMPT_ARGS ??
+        "--permission-prompt-tool stdio"
       )
         .split(" ")
         .filter(Boolean);
@@ -111,10 +114,15 @@ export class ClaudeAdapter implements AgentAdapter {
     this.mcpConfigPath = null;
     if (this.mcpServers.length > 0) {
       const configPath = join(tmpdir(), `ooda-mcp-${randomUUID()}.json`);
-      writeFileSync(configPath, buildClaudeMcpConfigFile(this.mcpServers), "utf8");
+      writeFileSync(
+        configPath,
+        buildClaudeMcpConfigFile(this.mcpServers),
+        "utf8",
+      );
       this.mcpConfigPath = configPath;
       args.push("--mcp-config", configPath, "--strict-mcp-config");
-      for (const server of this.mcpServers) allowedTools.push(`mcp__${server.name}`);
+      for (const server of this.mcpServers)
+        allowedTools.push(`mcp__${server.name}`);
     }
 
     if (allowedTools.length) {
@@ -158,11 +166,17 @@ export class ClaudeAdapter implements AgentAdapter {
     const child: SpawnedProcessLike = options?.spawnImpl
       ? options.spawnImpl(command.binary, command.args, {
           cwd: command.cwd,
-          env: { ...process.env, ...command.env },
+          env: (options?.environment ?? {
+            ...process.env,
+            ...command.env,
+          }) as NodeJS.ProcessEnv,
         })
       : (spawn(command.binary, command.args, {
           cwd: command.cwd,
-          env: { ...process.env, ...command.env },
+          env: (options?.environment ?? {
+            ...process.env,
+            ...command.env,
+          }) as NodeJS.ProcessEnv,
           stdio: [interactive ? "pipe" : "ignore", "pipe", "pipe"] as const,
         }) as unknown as SpawnedProcessLike);
 
@@ -368,7 +382,7 @@ export class ClaudeAdapter implements AgentAdapter {
       });
 
       child.on("close", (exitCode: number | null) => {
-        const resolvedExitCode = killed ? 130 : exitCode ?? 1;
+        const resolvedExitCode = killed ? 130 : (exitCode ?? 1);
         onEvent({
           type: "exit",
           data: "",

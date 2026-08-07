@@ -1,6 +1,12 @@
 import type {
   AppendConversationEventInputV1,
   AppendConversationEventResultV1,
+  AgentJobListInputV1,
+  AgentJobListPageV1,
+  AgentJobMutationResultV1,
+  AgentJobV1,
+  ApprovalDecisionResultV1,
+  ApprovalDecisionV1,
   ArchiveConversationInputV1,
   ArchiveConversationResultV1,
   ContextPackV1,
@@ -14,11 +20,17 @@ import type {
   CreateConversationResultV1,
   CreateHostTurnInputV1,
   CreateHostTurnResultV1,
+  CreateAgentJobInputV1,
+  CreateAgentJobResultV1,
+  CreateProposalInputV1,
+  CreateProposalResultV1,
   CreateTtsGrantInputV1,
   CreateTtsGrantResultV1,
   ForkConversationInputV1,
   ForkConversationResultV1,
   ProblemV1,
+  ProposalListInputV1,
+  ProposalV1,
 } from "@gmacko/ooda/contracts/v1";
 
 type MaybePromise<T> = T | Promise<T>;
@@ -249,6 +261,51 @@ export function createOodaV1Client(options: OodaV1ClientOptions = {}) {
       get(id: string) {
         return request<ContextPackV1>(
           `/api/v1/context-packs/${encodeURIComponent(id)}`,
+        );
+      },
+    },
+    jobs: {
+      list(input: Partial<AgentJobListInputV1> & { conversationId: string }) {
+        return request<AgentJobListPageV1>("/api/v1/jobs", { query: input });
+      },
+      get(jobId: string) {
+        return request<AgentJobV1>(`/api/v1/jobs/${encodeURIComponent(jobId)}`);
+      },
+      create(input: CreateAgentJobInputV1) {
+        return request<CreateAgentJobResultV1>("/api/v1/jobs", {
+          method: "POST",
+          body: input,
+        });
+      },
+      cancel(input: { jobId: string; idempotencyKey: string }) {
+        return request<AgentJobMutationResultV1>(
+          `/api/v1/jobs/${encodeURIComponent(input.jobId)}/cancel`,
+          { method: "POST", body: input },
+        );
+      },
+    },
+    proposals: {
+      list(input: Partial<ProposalListInputV1> & { conversationId: string }) {
+        return request<{
+          items: ProposalV1[];
+          pageInfo: { hasMore: boolean; nextCursor?: string };
+        }>("/api/v1/proposals", { query: input });
+      },
+      get(proposalId: string) {
+        return request<ProposalV1>(
+          `/api/v1/proposals/${encodeURIComponent(proposalId)}`,
+        );
+      },
+      create(input: CreateProposalInputV1) {
+        return request<CreateProposalResultV1>("/api/v1/proposals", {
+          method: "POST",
+          body: input,
+        });
+      },
+      decide(input: ApprovalDecisionV1) {
+        return request<ApprovalDecisionResultV1>(
+          `/api/v1/proposals/${encodeURIComponent(input.proposalId)}/decisions`,
+          { method: "POST", body: input },
         );
       },
     },

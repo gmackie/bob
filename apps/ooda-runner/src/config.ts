@@ -1,4 +1,4 @@
-import { homedir, hostname } from "node:os";
+import { homedir, hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { z } from "zod";
@@ -16,6 +16,8 @@ export const RunnerConfigSchema = z.object({
   bobWorkspaceId: z.string().optional(),
   bobDevDir: z.string().default(join(homedir(), "dev")),
   bobMaxConcurrent: z.coerce.number().default(2),
+  agentJobScratchRoot: z.string().default(join(tmpdir(), "ooda-agent-jobs")),
+  agentJobMaxConcurrent: z.coerce.number().int().min(1).max(3).default(3),
 });
 
 export type RunnerConfig = z.infer<typeof RunnerConfigSchema>;
@@ -33,5 +35,7 @@ export function loadConfig(): RunnerConfig {
     bobWorkspaceId: process.env.BOB_WORKSPACE_ID,
     bobDevDir: process.env.BOB_DEV_DIR,
     bobMaxConcurrent: process.env.BOB_MAX_CONCURRENT,
+    agentJobScratchRoot: process.env.OODA_AGENT_JOB_SCRATCH_ROOT,
+    agentJobMaxConcurrent: process.env.OODA_AGENT_JOB_MAX_CONCURRENT,
   });
 }

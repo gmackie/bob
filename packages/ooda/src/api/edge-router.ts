@@ -18,12 +18,16 @@ import { bobRouter } from "./router/bob";
 import { conversationsRouter } from "./router/conversations";
 import { eventsRouter } from "./router/events";
 import { hostRouter } from "./router/host";
+import { jobsRouter } from "./router/jobs";
+import { proposalsRouter } from "./router/proposals";
 import { createTRPCRouter } from "./trpc";
 
 const edgeRouterRecord = {
   conversations: conversationsRouter,
   events: eventsRouter,
   host: hostRouter,
+  jobs: jobsRouter,
+  proposals: proposalsRouter,
   threads: threadsEdgeRouter,
   runner: runnerRouter,
   research: researchRouter,

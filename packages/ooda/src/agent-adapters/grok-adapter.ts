@@ -13,6 +13,7 @@ import type {
   AdapterCommand,
   AdapterEvent,
   BuildCommandOptions,
+  ExecuteOptions,
   McpServerConfigLike,
 } from "./types";
 
@@ -94,18 +95,39 @@ export class GrokAdapter implements AgentAdapter {
   async execute(
     command: AdapterCommand,
     onEvent: (event: AdapterEvent) => void,
+    options?: ExecuteOptions,
   ): Promise<{ exitCode: number }> {
     const child = spawn(command.binary, command.args, {
       cwd: command.cwd,
-      env: { ...process.env, ...command.env },
+      env: (options?.environment ?? {
+        ...process.env,
+        ...command.env,
+      }) as NodeJS.ProcessEnv,
       stdio: ["pipe", "pipe", "pipe"] as const,
     });
+
+    let killTimer: NodeJS.Timeout | undefined;
+    const handle = {
+      write: (text: string) => child.stdin.write(text),
+      kill: () => {
+        child.kill("SIGTERM");
+        killTimer ??= setTimeout(() => {
+          if (child.exitCode === null) child.kill("SIGKILL");
+        }, 5_000);
+        killTimer.unref?.();
+      },
+    };
+    options?.onSpawn?.(handle);
+    const abort = () => handle.kill();
+    options?.signal?.addEventListener("abort", abort, { once: true });
+    if (options?.signal?.aborted) abort();
 
     const client = new AcpClient({
       write: (data) => child.stdin.write(data),
       onNotification: (method, params) => {
         if (method !== "session/update") return;
-        const update = (params as { update?: SessionUpdate } | undefined)?.update;
+        const update = (params as { update?: SessionUpdate } | undefined)
+          ?.update;
         if (!update) return;
         const event = mapSessionUpdate(update);
         if (event) onEvent(event);
@@ -117,12 +139,20 @@ export class GrokAdapter implements AgentAdapter {
     child.stdout.on("data", (data: Buffer) => client.feed(data.toString()));
 
     child.stderr.on("data", (data: Buffer) => {
-      onEvent({ type: "stderr", data: data.toString(), timestamp: new Date().toISOString() });
+      onEvent({
+        type: "stderr",
+        data: data.toString(),
+        timestamp: new Date().toISOString(),
+      });
     });
 
     // Surface a hard spawn failure (e.g. `grok` not on PATH) and unblock the session.
     child.on("error", (error: Error) => {
-      onEvent({ type: "error", data: error.message, timestamp: new Date().toISOString() });
+      onEvent({
+        type: "error",
+        data: error.message,
+        timestamp: new Date().toISOString(),
+      });
       client.rejectAll(error);
     });
 
@@ -155,7 +185,14 @@ export class GrokAdapter implements AgentAdapter {
       child.stdin.end();
     }
 
-    onEvent({ type: "exit", data: "", timestamp: new Date().toISOString(), exitCode });
+    onEvent({
+      type: "exit",
+      data: "",
+      timestamp: new Date().toISOString(),
+      exitCode,
+    });
+    options?.signal?.removeEventListener("abort", abort);
+    if (killTimer) clearTimeout(killTimer);
     return { exitCode };
   }
 }

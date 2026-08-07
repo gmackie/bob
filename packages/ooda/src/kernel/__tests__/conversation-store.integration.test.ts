@@ -23,6 +23,14 @@ import { consumeTtsGrant, createTtsGrant } from "../tts-grants";
 import { createHostTurn } from "../host-turns";
 import { HostRoutingError } from "../host-routing";
 import { stableStringify } from "../serialization";
+import {
+  cancelAgentJob,
+  claimAgentJob,
+  createAgentJob,
+  getAgentJob,
+  recordAgentJobEvent,
+} from "../agent-jobs";
+import { createProposal, decideProposal, getProposal } from "../proposals";
 
 const DATABASE_URL = process.env.OODA_KERNEL_TEST_DATABASE_URL;
 const HAS_DB = Boolean(DATABASE_URL);
@@ -60,6 +68,8 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     await applyMigration(migration("0008_ooda_kernel_idempotency.sql"));
     await applyMigration(migration("0009_lethal_the_fury.sql"));
     await applyMigration(migration("0010_lying_scream.sql"));
+    await applyMigration(migration("0011_noisy_prodigy.sql"));
+    await applyMigration(migration("0012_typical_franklin_richards.sql"));
   });
 
   afterAll(async () => {
@@ -762,5 +772,181 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
       idempotencyKey: "archive-page-1",
     });
     expect(archived.conversation.status).toBe("archived");
+  });
+
+  it("creates, replays, claims, and completes a bounded agent job", async () => {
+    const conversation = await createConversation(db!, "owner-jobs", {
+      title: "Research then decide",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "jobs-conversation",
+    });
+    const input = {
+      conversationId: conversation.conversation.id,
+      class: "read_only_research" as const,
+      prompt: "Compare the two implementation approaches.",
+      capabilities: ["web.read", "project_context.read"],
+      idempotencyKey: "research-job-1",
+    };
+
+    const created = await createAgentJob(db!, "owner-jobs", input);
+    const replay = await createAgentJob(db!, "owner-jobs", input);
+    expect(created.replayed).toBe(false);
+    expect(replay).toEqual({ job: created.job, replayed: true });
+    expect(created.job).toMatchObject({
+      provider: "codex",
+      capabilities: ["project_context.read", "web.read"],
+      budget: { deadlineSeconds: 900, aggregateTokens: 150_000 },
+      status: "queued",
+    });
+
+    const claim = await claimAgentJob(db!, {
+      runnerId: "runner-a",
+      providers: ["codex"],
+      classes: ["read_only_research"],
+      leaseSeconds: 90,
+    });
+    expect(claim).toMatchObject({
+      job: { id: created.job.id, status: "running" },
+      prompt: input.prompt,
+    });
+
+    const completed = await recordAgentJobEvent(db!, {
+      jobId: created.job.id,
+      runnerId: "runner-a",
+      type: "completed",
+      payload: {
+        result: { summary: "Approach A is lower risk." },
+        tokensUsed: 42,
+      },
+      idempotencyKey: "runner-complete-1",
+      occurredAt: "2026-08-07T15:00:00.000Z",
+    });
+    const eventReplay = await recordAgentJobEvent(db!, {
+      jobId: created.job.id,
+      runnerId: "runner-a",
+      type: "completed",
+      payload: {
+        result: { summary: "Approach A is lower risk." },
+        tokensUsed: 42,
+      },
+      idempotencyKey: "runner-complete-1",
+      occurredAt: "2026-08-07T15:00:00.000Z",
+    });
+    expect(completed.job.status).toBe("completed");
+    expect(eventReplay).toEqual({ ...completed, replayed: true });
+    await expect(
+      getAgentJob(db!, "another-owner", created.job.id),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("limits active jobs and turns a running cancellation into runner control", async () => {
+    const conversation = await createConversation(db!, "owner-capacity", {
+      title: "Bounded autonomy",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "capacity-conversation",
+    });
+    for (let index = 0; index < 3; index += 1) {
+      await createAgentJob(db!, "owner-capacity", {
+        conversationId: conversation.conversation.id,
+        class: "read_only_research",
+        prompt: `Research lane ${index}`,
+        idempotencyKey: `capacity-job-${index}`,
+      });
+    }
+    await expect(
+      createAgentJob(db!, "owner-capacity", {
+        conversationId: conversation.conversation.id,
+        class: "read_only_research",
+        prompt: "This fourth lane must wait.",
+        idempotencyKey: "capacity-job-3",
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT", status: 409 });
+
+    const claim = await claimAgentJob(db!, {
+      runnerId: "runner-capacity",
+      providers: ["codex"],
+      classes: ["read_only_research"],
+      leaseSeconds: 90,
+    });
+    const cancelled = await cancelAgentJob(db!, "owner-capacity", {
+      jobId: claim!.job.id,
+      idempotencyKey: "cancel-running-job",
+    });
+    expect(cancelled.job.status).toBe("running");
+    expect(cancelled.job.cancellationRequestedAt).toBeDefined();
+  });
+
+  it("records approval and one Bob outbox delivery atomically", async () => {
+    const conversation = await createConversation(db!, "owner-proposals", {
+      title: "Turn this into a project",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "proposal-conversation",
+    });
+    const input = {
+      conversationId: conversation.conversation.id,
+      kind: "bob_project" as const,
+      destination: "bob",
+      risk: "durable_work" as const,
+      preview: {
+        name: "Voice inbox",
+        desiredOutcome: "Every spoken idea can become reviewed work.",
+        acceptanceCriteria: ["Approval creates one Bob project"],
+      },
+      rationale: "The user explicitly asked to make this durable.",
+      confidence: 0.91,
+      policySnapshot: { version: "proposal-policy-v1" },
+      idempotencyKey: "proposal-create-1",
+    };
+    const created = await createProposal(db!, "owner-proposals", input);
+    const replay = await createProposal(db!, "owner-proposals", input);
+    expect(created.proposal.status).toBe("awaiting_approval");
+    expect(replay).toEqual({ proposal: created.proposal, replayed: true });
+
+    const decision = {
+      proposalId: created.proposal.id,
+      decision: "approve" as const,
+      expectedVersion: 1,
+      scope: "single_delivery" as const,
+      rationale: "Proceed with this one project.",
+      decidedAt: "2026-08-07T16:00:00.000Z",
+    };
+    const approved = await decideProposal(db!, "owner-proposals", decision);
+    const decisionReplay = await decideProposal(
+      db!,
+      "owner-proposals",
+      decision,
+    );
+    expect(approved).toMatchObject({
+      proposal: { status: "approved", version: 2 },
+      replayed: false,
+    });
+    expect(approved.outboxId).toBeDefined();
+    expect(decisionReplay).toEqual({ ...approved, replayed: true });
+
+    const [outbox] = await db!
+      .select()
+      .from(schema.integrationOutbox)
+      .where(eq(schema.integrationOutbox.id, approved.outboxId!));
+    expect(outbox).toMatchObject({
+      proposalId: created.proposal.id,
+      destination: "bob",
+      status: "pending",
+      attemptCount: 0,
+    });
+    expect(outbox!.idempotencyKey).toBe(
+      `proposal:${created.proposal.id}:v1:single_delivery`,
+    );
+    await expect(
+      getProposal(db!, "another-owner", created.proposal.id),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 });

@@ -1,11 +1,7 @@
 import { sql } from "drizzle-orm";
 import { index, uniqueIndex } from "drizzle-orm/pg-core";
 
-import {
-  conversations,
-  oodaSchema,
-  sensitivityEnum,
-} from "./conversations";
+import { conversations, oodaSchema, sensitivityEnum } from "./conversations";
 
 export const agentJobs = oodaSchema.table(
   "agent_jobs",
@@ -24,6 +20,13 @@ export const agentJobs = oodaSchema.table(
     contextPackId: t.uuid(),
     correlationId: t.text().notNull(),
     idempotencyKey: t.text().notNull(),
+    lastSequence: t.bigint({ mode: "number" }).notNull().default(0),
+    claimedBy: t.text(),
+    leaseExpiresAt: t.timestamp({ withTimezone: true }),
+    lastHeartbeatAt: t.timestamp({ withTimezone: true }),
+    cancellationRequestedAt: t.timestamp({ withTimezone: true }),
+    cancelIdempotencyKey: t.text(),
+    tokensUsed: t.integer().notNull().default(0),
     sandboxRef: t.text(),
     error: t.text(),
     result: t.jsonb().$type<Record<string, unknown>>(),
@@ -42,10 +45,8 @@ export const agentJobs = oodaSchema.table(
       t.conversationId,
       t.idempotencyKey,
     ),
-    index("agent_jobs_conversation_status_idx").on(
-      t.conversationId,
-      t.status,
-    ),
+    index("agent_jobs_conversation_status_idx").on(t.conversationId, t.status),
+    index("agent_jobs_status_lease_idx").on(t.status, t.leaseExpiresAt),
   ],
 );
 
@@ -60,6 +61,7 @@ export const agentJobEvents = oodaSchema.table(
     sequence: t.bigint({ mode: "bigint" }).notNull(),
     type: t.varchar({ length: 64 }).notNull(),
     payload: t.jsonb().$type<Record<string, unknown>>().notNull(),
+    idempotencyKey: t.text().notNull(),
     occurredAt: t.timestamp({ withTimezone: true }).notNull(),
     recordedAt: t.timestamp({ withTimezone: true }).notNull().defaultNow(),
   }),
@@ -67,6 +69,10 @@ export const agentJobEvents = oodaSchema.table(
     uniqueIndex("agent_job_events_job_sequence_uidx").on(
       t.agentJobId,
       t.sequence,
+    ),
+    uniqueIndex("agent_job_events_job_idempotency_uidx").on(
+      t.agentJobId,
+      t.idempotencyKey,
     ),
   ],
 );
@@ -85,7 +91,12 @@ export const contextPacks = oodaSchema.table(
     createdAt: t.timestamp({ withTimezone: true }).notNull().defaultNow(),
     expiresAt: t.timestamp({ withTimezone: true }),
   }),
-  (t) => [index("context_packs_conversation_created_idx").on(t.conversationId, t.createdAt)],
+  (t) => [
+    index("context_packs_conversation_created_idx").on(
+      t.conversationId,
+      t.createdAt,
+    ),
+  ],
 );
 
 export const contextItems = oodaSchema.table(
@@ -129,6 +140,8 @@ export const proposals = oodaSchema.table(
     rationale: t.text().notNull(),
     confidence: t.real().notNull(),
     policySnapshot: t.jsonb().$type<Record<string, unknown>>().notNull(),
+    idempotencyKey: t.text().notNull(),
+    commandFingerprint: t.text().notNull(),
     version: t.integer().notNull().default(1),
     expiresAt: t.timestamp({ withTimezone: true }),
     createdAt: t.timestamp({ withTimezone: true }).notNull().defaultNow(),
@@ -141,6 +154,10 @@ export const proposals = oodaSchema.table(
   (t) => [
     index("proposals_conversation_status_idx").on(t.conversationId, t.status),
     index("proposals_destination_status_idx").on(t.destination, t.status),
+    uniqueIndex("proposals_conversation_idempotency_uidx").on(
+      t.conversationId,
+      t.idempotencyKey,
+    ),
   ],
 );
 

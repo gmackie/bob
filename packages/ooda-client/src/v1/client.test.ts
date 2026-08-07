@@ -236,4 +236,54 @@ describe("OODA V1 client", () => {
       "https://ooda.example.test/api/v1/context-packs/context-pack-1",
     );
   });
+
+  it("creates bounded jobs and approval-gated Bob proposals", async () => {
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ job: {}, replayed: false }))
+      .mockResolvedValueOnce(jsonResponse({ proposal: {}, replayed: false }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          proposal: {},
+          decisionId: "decision-1",
+          outboxId: "outbox-1",
+          replayed: false,
+        }),
+      );
+    const client = createOodaV1Client({
+      baseUrl: "https://ooda.example.test",
+      fetch: fetchFn,
+    });
+
+    await client.jobs.create({
+      conversationId: "conversation-1",
+      class: "read_only_research",
+      prompt: "Research this without creating durable work.",
+      idempotencyKey: "job-create-1",
+    });
+    await client.proposals.create({
+      conversationId: "conversation-1",
+      kind: "bob_task",
+      destination: "bob",
+      risk: "durable_work",
+      preview: { title: "Ship it", acceptanceCriteria: ["Tests pass"] },
+      rationale: "Ready for execution.",
+      confidence: 0.9,
+      policySnapshot: { version: "v1" },
+      idempotencyKey: "proposal-create-1",
+    });
+    await client.proposals.decide({
+      proposalId: "proposal-1",
+      decision: "approve",
+      expectedVersion: 1,
+      scope: "single_delivery",
+      decidedAt: "2026-08-07T16:00:00.000Z",
+    });
+
+    expect(fetchFn.mock.calls.map(([url]) => String(url))).toEqual([
+      "https://ooda.example.test/api/v1/jobs",
+      "https://ooda.example.test/api/v1/proposals",
+      "https://ooda.example.test/api/v1/proposals/proposal-1/decisions",
+    ]);
+  });
 });

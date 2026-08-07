@@ -13,11 +13,7 @@ import {
   integrationOutbox,
 } from "../schema/integrations";
 import { hostTurnExecutions } from "../schema/host";
-import {
-  attentionReviews,
-  memoryEdges,
-  memorySeeds,
-} from "../schema/memory";
+import { attentionReviews, memoryEdges, memorySeeds } from "../schema/memory";
 import {
   agentJobEvents,
   agentJobs,
@@ -92,10 +88,12 @@ describe("OODA personal operating system schema", () => {
     const names = events.indexes.map((index) => index.config.name);
 
     expect(names).toContain("conversation_events_conversation_sequence_uidx");
-    expect(names).toContain("conversation_events_conversation_idempotency_uidx");
-    expect(events.columns.find((column) => column.name === "sequence")?.notNull).toBe(
-      true,
+    expect(names).toContain(
+      "conversation_events_conversation_idempotency_uidx",
     );
+    expect(
+      events.columns.find((column) => column.name === "sequence")?.notNull,
+    ).toBe(true);
     expect(
       events.columns.find((column) => column.name === "payload")?.getSQLType(),
     ).toBe("jsonb");
@@ -103,20 +101,22 @@ describe("OODA personal operating system schema", () => {
 
   it("preserves source IDs in explicit migration metadata", () => {
     expect(
-      config(conversations).columns.find(
-        (column) => column.name === "migrationMetadata",
-      )?.getSQLType(),
+      config(conversations)
+        .columns.find((column) => column.name === "migrationMetadata")
+        ?.getSQLType(),
     ).toBe("jsonb");
     expect(
-      config(conversationBranches).columns.find(
-        (column) => column.name === "migrationMetadata",
-      )?.getSQLType(),
+      config(conversationBranches)
+        .columns.find((column) => column.name === "migrationMetadata")
+        ?.getSQLType(),
     ).toBe("jsonb");
   });
 
   it("stores memory embeddings as pgvector rather than bytea", () => {
     const seeds = config(memorySeeds);
-    const embedding = seeds.columns.find((column) => column.name === "embedding");
+    const embedding = seeds.columns.find(
+      (column) => column.name === "embedding",
+    );
 
     expect(embedding?.getSQLType()).toBe("vector(1536)");
     expect(embedding?.getSQLType()).not.toBe("bytea");
@@ -129,25 +129,60 @@ describe("OODA personal operating system schema", () => {
     const proposal = config(proposals);
     const approvals = config(approvalDecisions);
 
-    expect(proposal.columns.find((column) => column.name === "version")?.default).toBe(
-      1,
-    );
     expect(
-      approvals.columns.find((column) => column.name === "expectedVersion")?.notNull,
+      proposal.columns.find((column) => column.name === "version")?.default,
+    ).toBe(1);
+    expect(
+      approvals.columns.find((column) => column.name === "expectedVersion")
+        ?.notNull,
     ).toBe(true);
     expect(
       approvals.columns.find((column) => column.name === "scope")?.default,
     ).toBe("single_delivery");
+    expect(
+      proposal.columns.find((column) => column.name === "idempotencyKey"),
+    ).toBeDefined();
+    expect(proposal.indexes.map((index) => index.config.name)).toContain(
+      "proposals_conversation_idempotency_uidx",
+    );
+  });
+
+  it("leases agent jobs and allocates replay-safe progress sequences", () => {
+    const jobs = config(agentJobs);
+    const events = config(agentJobEvents);
+
+    for (const column of [
+      "lastSequence",
+      "claimedBy",
+      "leaseExpiresAt",
+      "lastHeartbeatAt",
+      "cancellationRequestedAt",
+      "cancelIdempotencyKey",
+    ]) {
+      expect(
+        jobs.columns.find((candidate) => candidate.name === column),
+      ).toBeDefined();
+    }
+    expect(
+      events.columns.find((column) => column.name === "idempotencyKey"),
+    ).toBeDefined();
+    expect(events.indexes.map((index) => index.config.name)).toContain(
+      "agent_job_events_job_idempotency_uidx",
+    );
   });
 
   it("supports transactional delivery, reconciliation, and dead-letter repair", () => {
-    expect(config(integrationOutbox).indexes.map((index) => index.config.name)).toContain(
-      "integration_outbox_idempotency_uidx",
-    );
+    expect(
+      config(integrationOutbox).indexes.map((index) => index.config.name),
+    ).toContain("integration_outbox_idempotency_uidx");
     expect(config(deliveryAttempts).foreignKeys).toHaveLength(1);
-    expect(config(deadLetters).columns.find((column) => column.name === "repairedAt")).toBeDefined();
-    expect(config(externalLinks).indexes.map((index) => index.config.name)).toContain(
-      "external_links_destination_idempotency_uidx",
-    );
+    expect(
+      config(deadLetters).columns.find(
+        (column) => column.name === "repairedAt",
+      ),
+    ).toBeDefined();
+    expect(
+      config(externalLinks).indexes.map((index) => index.config.name),
+    ).toContain("external_links_destination_idempotency_uidx");
   });
 });

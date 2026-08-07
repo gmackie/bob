@@ -126,6 +126,10 @@ export interface SpawnedProcessLike {
 export interface ExecuteOptions {
   /** Called once the agent process is live, with its control handle. */
   onSpawn?: (handle: AdapterProcessHandle) => void;
+  /** Complete child environment. When omitted, adapters retain legacy inheritance. */
+  environment?: Record<string, string | undefined>;
+  /** Abort the process-backed execution. */
+  signal?: AbortSignal;
   /**
    * Spawn injection: when set, adapters create the agent process through
    * this instead of child_process.spawn — the runner uses it to run agents

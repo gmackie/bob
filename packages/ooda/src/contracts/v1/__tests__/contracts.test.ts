@@ -3,8 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   ArchiveConversationInputV1Schema,
   AgentJobV1Schema,
+  CancelAgentJobInputV1Schema,
+  ClaimAgentJobInputV1Schema,
+  ClaimAgentJobResultV1Schema,
   AppendConversationEventResultV1Schema,
   ApprovalDecisionV1Schema,
+  ApprovalDecisionResultV1Schema,
   ContextItemV1Schema,
   ContextPackV1Schema,
   ConversationDetailV1Schema,
@@ -16,11 +20,16 @@ import {
   CreateConversationResultV1Schema,
   CreateHostTurnInputV1Schema,
   CreateHostTurnResultV1Schema,
+  CreateAgentJobInputV1Schema,
+  CreateAgentJobResultV1Schema,
+  CreateProposalInputV1Schema,
+  CreateProposalResultV1Schema,
   ExternalLinkV1Schema,
   ForkConversationInputV1Schema,
   MemorySeedV1Schema,
   ProblemV1Schema,
   ProposalV1Schema,
+  RecordAgentJobEventInputV1Schema,
 } from "../index";
 
 const occurredAt = "2026-08-05T18:00:00.000Z";
@@ -166,6 +175,32 @@ describe("OODA V1 contracts", () => {
     expect(
       ProposalV1Schema.safeParse({ ...proposal, confidence: 1.1 }).success,
     ).toBe(false);
+    const create = {
+      conversationId: "conversation-1",
+      kind: "bob_project" as const,
+      destination: "bob",
+      risk: "durable_work" as const,
+      preview: {
+        name: "Voice inbox",
+        acceptanceCriteria: ["Captures offline"],
+      },
+      rationale: "The idea has passed opportunity review.",
+      confidence: 0.86,
+      policySnapshot: { version: "policy-1" },
+      idempotencyKey: "proposal-create-1",
+    };
+    expect(CreateProposalInputV1Schema.parse(create)).toEqual(create);
+    expect(
+      CreateProposalResultV1Schema.parse({ proposal, replayed: false }),
+    ).toEqual({ proposal, replayed: false });
+    expect(
+      ApprovalDecisionResultV1Schema.safeParse({
+        proposal: { ...proposal, status: "approved", version: 4 },
+        decisionId: "decision-1",
+        outboxId: "outbox-1",
+        replayed: false,
+      }).success,
+    ).toBe(true);
   });
 
   it("validates disclosed context, memory, jobs, and external lineage", () => {
@@ -230,6 +265,67 @@ describe("OODA V1 contracts", () => {
     expect(MemorySeedV1Schema.safeParse(memory).success).toBe(true);
     expect(AgentJobV1Schema.safeParse(job).success).toBe(true);
     expect(ExternalLinkV1Schema.safeParse(link).success).toBe(true);
+  });
+
+  it("defines a bounded, resumable worker protocol without durable-write capabilities", () => {
+    const create = {
+      conversationId: "conversation-1",
+      class: "scratch_prototype",
+      prompt: "Prototype this only in disposable storage.",
+      capabilities: ["scratch.write", "process.execute"],
+      idempotencyKey: "device-job-1",
+    };
+    expect(CreateAgentJobInputV1Schema.parse(create)).toEqual(create);
+    expect(
+      CreateAgentJobInputV1Schema.safeParse({
+        ...create,
+        capabilities: ["bob.project.create"],
+      }).success,
+    ).toBe(true); // The server policy, not a brittle client enum, denies expansion.
+
+    const job = AgentJobV1Schema.parse({
+      id: "job-1",
+      conversationId: "conversation-1",
+      class: "scratch_prototype",
+      status: "queued",
+      provider: "codex",
+      capabilities: ["process.execute", "scratch.write"],
+      budget: { deadlineSeconds: 1_800, aggregateTokens: 250_000 },
+      createdAt: occurredAt,
+      updatedAt: occurredAt,
+    });
+    expect(
+      CreateAgentJobResultV1Schema.parse({ job, replayed: false }),
+    ).toEqual({
+      job,
+      replayed: false,
+    });
+    expect(
+      ClaimAgentJobInputV1Schema.safeParse({
+        runnerId: "runner-1",
+        providers: ["codex"],
+        classes: ["scratch_prototype"],
+      }).success,
+    ).toBe(true);
+    expect(
+      ClaimAgentJobResultV1Schema.parse({ job, prompt: create.prompt }),
+    ).toEqual({ job, prompt: create.prompt });
+    expect(
+      RecordAgentJobEventInputV1Schema.safeParse({
+        jobId: "job-1",
+        runnerId: "runner-1",
+        type: "progress",
+        payload: { display: "Installing dependencies" },
+        idempotencyKey: "runner-event-1",
+        occurredAt,
+      }).success,
+    ).toBe(true);
+    expect(
+      CancelAgentJobInputV1Schema.safeParse({
+        jobId: "job-1",
+        idempotencyKey: "device-cancel-1",
+      }).success,
+    ).toBe(true);
   });
 
   it("distinguishes project-system context sources in disclosure receipts", () => {

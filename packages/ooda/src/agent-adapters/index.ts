@@ -3,6 +3,7 @@ export {
   type AdapterCapability,
   type AdapterCommand,
   type AdapterEvent,
+  type BuildCommandOptions,
   type AdapterProcessHandle,
   type AgentAdapter,
   type ExecuteOptions,

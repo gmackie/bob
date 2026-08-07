@@ -24,6 +24,7 @@ import { CapabilityRegistry } from "@gmacko/ooda/capability-registry";
 import type { ResearchTRPCSurface } from "@gmacko/ooda/buddy-tools";
 import { BobGatewayConnector } from "./bob-gateway";
 import { BobRunReporter } from "./bob-run-reporter";
+import { AgentJobWorker } from "./agent-jobs/agent-job-worker";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const POLL_INTERVAL_MS = 2_000;
@@ -62,7 +63,9 @@ function isPromotionKind(value: unknown): value is PromotionKind {
   );
 }
 
-function parsePromotionRequest(content: string): PromotionRequestPayload | null {
+function parsePromotionRequest(
+  content: string,
+): PromotionRequestPayload | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(content);
@@ -73,10 +76,14 @@ function parsePromotionRequest(content: string): PromotionRequestPayload | null 
   if (!parsed || typeof parsed !== "object") return null;
   const payload = parsed as Record<string, unknown>;
   if (!isPromotionKind(payload.kind)) return null;
-  if (typeof payload.title !== "string" || payload.title.length === 0) return null;
-  if (typeof payload.content !== "string" || payload.content.length === 0) return null;
-  if (typeof payload.threadId !== "string" || payload.threadId.length === 0) return null;
-  if (typeof payload.runnerId !== "string" || payload.runnerId.length === 0) return null;
+  if (typeof payload.title !== "string" || payload.title.length === 0)
+    return null;
+  if (typeof payload.content !== "string" || payload.content.length === 0)
+    return null;
+  if (typeof payload.threadId !== "string" || payload.threadId.length === 0)
+    return null;
+  if (typeof payload.runnerId !== "string" || payload.runnerId.length === 0)
+    return null;
 
   return {
     kind: payload.kind,
@@ -158,6 +165,7 @@ export class RunnerServer {
   private research: ResearchTRPCSurface;
   private capabilityRegistry: CapabilityRegistry;
   private buddyMcpServer: BuddyMcpServer;
+  private agentJobWorker: AgentJobWorker | null = null;
 
   constructor(private config: RunnerConfig) {
     this.sessions = new SessionManager();
@@ -280,6 +288,7 @@ export class RunnerServer {
     // Start session polling loop
     this.pollTimer = setInterval(() => {
       void this.pollForSessions();
+      void this.agentJobWorker?.poll();
     }, POLL_INTERVAL_MS);
 
     // Start stale-session reaper loop
@@ -306,6 +315,19 @@ export class RunnerServer {
 
       if (device) {
         this.runnerId = device.id;
+        if (!this.agentJobWorker) {
+          this.agentJobWorker = new AgentJobWorker({
+            runnerId: device.id,
+            scratchRoot: this.config.agentJobScratchRoot,
+            adapters: this.adapters,
+            maxConcurrent: this.config.agentJobMaxConcurrent,
+            api: {
+              claim: (input) => this.trpc.jobs.claim.mutate(input),
+              recordEvent: (input) => this.trpc.jobs.recordEvent.mutate(input),
+              control: (input) => this.trpc.jobs.control.query(input),
+            },
+          });
+        }
         console.log(
           `[runner] registered as device ${device.id} (${hostname()})`,
         );
@@ -388,8 +410,11 @@ export class RunnerServer {
       for (const event of events) {
         if (event.type !== "promotion_available") continue;
         try {
-          const content = JSON.parse(event.content) as { sourceEventId?: string };
-          if (content.sourceEventId) completedPromotionIds.add(content.sourceEventId);
+          const content = JSON.parse(event.content) as {
+            sourceEventId?: string;
+          };
+          if (content.sourceEventId)
+            completedPromotionIds.add(content.sourceEventId);
         } catch {
           // Ignore legacy/invalid promotion events.
         }
@@ -457,7 +482,9 @@ export class RunnerServer {
       const events = await this.trpc.runner.getSessionEvents.query({
         sessionId: session.id,
       });
-      const promptEvent = events.find((e: { type: string }) => e.type === "prompt");
+      const promptEvent = events.find(
+        (e: { type: string }) => e.type === "prompt",
+      );
       if (!promptEvent) {
         throw new Error("No prompt found for session");
       }
@@ -607,7 +634,12 @@ export class RunnerServer {
     threadSlug: string;
     /** Thread UUID for entity extraction. */
     threadId?: string;
-    kind: "observation" | "hypothesis" | "action" | "reflection" | "source-extract";
+    kind:
+      | "observation"
+      | "hypothesis"
+      | "action"
+      | "reflection"
+      | "source-extract";
     title: string;
     content: string;
   }): Promise<{ noteId: string; artifactId: string }> {
@@ -696,6 +728,8 @@ export class RunnerServer {
     if (this.bobGateway) {
       this.bobGateway.stop();
     }
+    await this.agentJobWorker?.stop();
+    this.agentJobWorker = null;
     await this.buddyMcpServer.stop();
   }
 }

@@ -1,4 +1,5 @@
 export * from "./conversations";
+export * from "./agent-jobs";
 export * from "./events";
 export * from "./host-routing";
 export * from "./host-providers";
@@ -9,6 +10,7 @@ export * from "./elevenlabs-tts";
 export * from "./legacy-compatibility";
 export * from "./problems";
 export * from "./projections";
+export * from "./proposals";
 export * from "./tts-policy";
 export * from "./tts-grant-token";
 export * from "./tts-grants";
