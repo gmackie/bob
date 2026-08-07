@@ -5,6 +5,7 @@ import {
   parseOodaNative,
   parseGrok,
   looksLikeGenericConversation,
+  isGrokBackendExport,
 } from "./parsers/index";
 
 function hasKey(obj: unknown, key: string): boolean {
@@ -16,6 +17,11 @@ function hasKey(obj: unknown, key: string): boolean {
  * the structure does not match any known format.
  */
 export function detectFormat(data: unknown): ImportFormat | null {
+  // Real Grok account export: { conversations: [{ conversation, responses }] }.
+  // Checked first because its `conversations` key would otherwise be misread as
+  // ChatGPT.
+  if (isGrokBackendExport(data)) return "grok";
+
   // OODA native: flat array where entries have sessionId + type + content
   if (Array.isArray(data)) {
     const first = data[0];

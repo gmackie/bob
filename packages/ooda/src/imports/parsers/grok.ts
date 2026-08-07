@@ -157,7 +157,98 @@ export function looksLikeGenericConversation(data: unknown): boolean {
   return false;
 }
 
+// --- Real Grok account-export ("prod-grok-backend") format --------------------
+// Shape: { conversations: [ { conversation: {id,title,create_time,...},
+//   responses: [ { response: {message, sender, create_time, model, ...} } ] } ] }
+// Roles: sender is "human" | "assistant" (any case). Message text is a string on
+// `response.message`. Responses form a tree (parent_response_id/path) but we
+// keep every response that carries text, in listed order — good enough for KB
+// ingestion, and avoids dropping regenerated branches.
+
+interface GrokBackendEntry {
+  conversation?: Record<string, unknown>;
+  responses?: unknown[];
+}
+
+/** True for the real Grok account export (nested conversation/responses). */
+export function isGrokBackendExport(data: unknown): boolean {
+  if (!data || typeof data !== "object") return false;
+  const convs = (data as Record<string, unknown>).conversations;
+  if (!Array.isArray(convs) || convs.length === 0) return false;
+  const first = convs[0];
+  return (
+    !!first &&
+    typeof first === "object" &&
+    "conversation" in first &&
+    "responses" in first
+  );
+}
+
+function grokBackendTime(v: unknown): string | undefined {
+  if (typeof v === "string") return v;
+  // Mongo extended JSON: { $date: { $numberLong: "…ms" } }
+  if (v && typeof v === "object") {
+    const d = (v as Record<string, unknown>).$date;
+    const ms =
+      d && typeof d === "object"
+        ? (d as Record<string, unknown>).$numberLong
+        : undefined;
+    if (typeof ms === "string" && /^\d+$/.test(ms)) {
+      return new Date(Number(ms)).toISOString();
+    }
+  }
+  return undefined;
+}
+
+function parseGrokBackend(data: unknown): ImportedConversation[] {
+  const convs = (data as Record<string, unknown>).conversations as unknown[];
+  const out: ImportedConversation[] = [];
+
+  convs.forEach((raw, idx) => {
+    if (!raw || typeof raw !== "object") return;
+    const entry = raw as GrokBackendEntry;
+    const conv = (entry.conversation ?? {}) as Record<string, unknown>;
+    const responses = Array.isArray(entry.responses) ? entry.responses : [];
+
+    const messages: ImportedMessage[] = [];
+    for (const r of responses) {
+      const resp =
+        r && typeof r === "object"
+          ? ((r as Record<string, unknown>).response as
+              | Record<string, unknown>
+              | undefined)
+          : undefined;
+      if (!resp) continue;
+      const content = asString(resp.message).trim();
+      if (!content) continue;
+      messages.push({
+        role: normalizeRole(resp.sender),
+        content,
+        timestamp: grokBackendTime(resp.create_time),
+      });
+    }
+    if (messages.length === 0) return;
+
+    const title =
+      asString(conv.title) ||
+      messages[0]!.content.split("\n")[0]!.slice(0, 80) ||
+      `Grok conversation ${idx + 1}`;
+    out.push({
+      provider: "grok",
+      conversationId: asString(conv.id) || `grok-${idx}`,
+      title,
+      messages,
+      createdAt: grokBackendTime(conv.create_time),
+    });
+  });
+
+  return out;
+}
+
 export function parseGrok(data: unknown): ImportedConversation[] {
+  // Real account export first.
+  if (isGrokBackendExport(data)) return parseGrokBackend(data);
+
   const out: ImportedConversation[] = [];
 
   if (Array.isArray(data)) {
