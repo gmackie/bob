@@ -1,6 +1,7 @@
 export * from "./context";
 export * from "./conversation";
 export * from "./events";
+export * from "./host";
 export * from "./integrations";
 export * from "./jobs";
 export * from "./memory";

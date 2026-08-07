@@ -214,4 +214,61 @@ describe("OODA conversation outbox", () => {
     await expect(Promise.all([first, second])).resolves.toBeDefined();
     expect(appendEvent).toHaveBeenCalledOnce();
   });
+
+  it("keeps a delivered user turn durable until its host turn completes", async () => {
+    const persisted = memoryStorage();
+    let finishHost: (() => void) | undefined;
+    const outbox = new OodaConversationOutbox({
+      storage: persisted.storage,
+      appendEvent: (input) => Promise.resolve(deliveryResult(input)),
+      completeTurn: () => new Promise<void>((resolve) => {
+        finishHost = resolve;
+      }),
+      createId: ids("event-1", "correlation-1"),
+      now: () => "2026-08-06T12:00:00.000Z",
+    });
+    await outbox.enqueueTurn({
+      conversationId: "conversation-1",
+      branchId: "branch-1",
+      text: "Do not lose the answer request",
+    });
+
+    const flush = outbox.flush();
+    await vi.waitFor(() => expect(finishHost).toBeDefined());
+    expect(outbox.snapshot()).toMatchObject([{ id: "event-1", status: "syncing" }]);
+    expect(persisted.read()).toContain("Do not lose the answer request");
+
+    finishHost?.();
+    await flush;
+    expect(outbox.snapshot()).toEqual([]);
+  });
+
+  it("requeues an accepted user turn while its host lease is still running", async () => {
+    const persisted = memoryStorage();
+    const outbox = new OodaConversationOutbox({
+      storage: persisted.storage,
+      appendEvent: (input) => Promise.resolve(deliveryResult(input)),
+      completeTurn: () => Promise.reject(Object.assign(
+        new Error("This user turn is already being answered"),
+        { status: 409, code: "HOST_TURN_IN_PROGRESS" },
+      )),
+      createId: ids("event-1", "correlation-1"),
+      now: () => "2026-08-06T12:00:00.000Z",
+      maxAttempts: 3,
+    });
+    await outbox.enqueueTurn({
+      conversationId: "conversation-1",
+      branchId: "branch-1",
+      text: "Resume this answer after restart",
+    });
+
+    await outbox.flush();
+
+    expect(outbox.snapshot()).toMatchObject([{
+      id: "event-1",
+      status: "queued",
+      attempts: 1,
+      error: "This user turn is already being answered",
+    }]);
+  });
 });

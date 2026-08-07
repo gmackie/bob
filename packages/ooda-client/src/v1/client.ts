@@ -11,6 +11,8 @@ import type {
   CorrectConversationEventInputV1,
   CreateConversationInputV1,
   CreateConversationResultV1,
+  CreateHostTurnInputV1,
+  CreateHostTurnResultV1,
   CreateTtsGrantInputV1,
   CreateTtsGrantResultV1,
   ForkConversationInputV1,
@@ -215,6 +217,14 @@ export function createOodaV1Client(options: OodaV1ClientOptions = {}) {
               : {}),
           },
         };
+      },
+    },
+    host: {
+      createTurn(input: CreateHostTurnInputV1) {
+        return request<CreateHostTurnResultV1>("/api/v1/host-turns", {
+          method: "POST",
+          body: input,
+        });
       },
     },
     voice: {

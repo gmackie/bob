@@ -1,6 +1,7 @@
 import { bobRouter } from "./router/bob";
 import { conversationsRouter } from "./router/conversations";
 import { eventsRouter } from "./router/events";
+import { hostRouter } from "./router/host";
 import { importsRouter } from "./router/imports";
 import { oracleRouter } from "./router/oracle";
 import { publishRouter } from "./router/publish";
@@ -13,6 +14,7 @@ import { createTRPCRouter } from "./trpc";
 export const appRouter = createTRPCRouter({
   conversations: conversationsRouter,
   events: eventsRouter,
+  host: hostRouter,
   threads: threadsRouter,
   runner: runnerRouter,
   research: researchRouter,

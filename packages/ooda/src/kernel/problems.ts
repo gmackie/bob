@@ -5,6 +5,7 @@ export type OodaKernelProblemCode =
   | "CONFLICT"
   | "IDEMPOTENCY_CONFLICT"
   | "NOT_FOUND"
+  | "HOST_TURN_IN_PROGRESS"
   | "TTS_DISCLOSURE_DENIED"
   | "TTS_GRANT_UNAVAILABLE"
   | "VALIDATION_FAILED";
@@ -14,6 +15,7 @@ const titles: Record<OodaKernelProblemCode, string> = {
   CONFLICT: "Conflict",
   IDEMPOTENCY_CONFLICT: "Idempotency conflict",
   NOT_FOUND: "Not found",
+  HOST_TURN_IN_PROGRESS: "Host turn in progress",
   TTS_DISCLOSURE_DENIED: "Text-to-speech disclosure denied",
   TTS_GRANT_UNAVAILABLE: "Text-to-speech grant unavailable",
   VALIDATION_FAILED: "Validation failed",

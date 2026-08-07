@@ -43,6 +43,10 @@ export interface OodaConversationOutboxOptions {
   appendEvent: (
     input: AppendConversationEventInputV1,
   ) => Promise<AppendConversationEventResultV1>;
+  completeTurn?: (
+    item: OodaOutboxItem,
+    result: AppendConversationEventResultV1,
+  ) => Promise<void>;
   createId?: () => string;
   now?: () => string;
   maxAttempts?: number;
@@ -208,13 +212,18 @@ export class OodaConversationOutbox {
       item.updatedAt = this.now();
       await this.persist();
 
+      let eventAccepted = false;
       try {
         const result = await this.options.appendEvent(item.input);
+        eventAccepted = true;
+        await this.options.completeTurn?.(cloneItems([item])[0] ?? item, result);
         receipts.push({ item: cloneItems([item])[0] ?? item, result });
         this.items = this.items.filter((candidate) => candidate.id !== id);
         await this.persist();
       } catch (error) {
-        item.status = isPermanentFailure(error) || item.attempts >= this.maxAttempts
+        const hostStillRunning = eventAccepted && errorStatus(error) === 409;
+        item.status = (!hostStillRunning && isPermanentFailure(error))
+          || item.attempts >= this.maxAttempts
           ? "failed"
           : "queued";
         item.error = errorMessage(error);

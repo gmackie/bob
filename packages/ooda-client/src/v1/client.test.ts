@@ -182,4 +182,22 @@ describe("OODA V1 client", () => {
     expect(String(url)).toBe("https://ooda.example.test/api/v1/tts-grants");
     expect(JSON.parse(String(init?.body))).not.toHaveProperty("text");
   });
+
+  it("requests one host turn from a durable user event", async () => {
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({}));
+    const client = createOodaV1Client({
+      baseUrl: "https://ooda.example.test",
+      fetch: fetchFn,
+    });
+
+    await client.host.createTurn({
+      conversationId: "conversation-1",
+      userEventId: "event-user-1",
+      idempotencyKey: "device-event-1:host",
+    });
+
+    const [url, init] = fetchFn.mock.calls[0]!;
+    expect(String(url)).toBe("https://ooda.example.test/api/v1/host-turns");
+    expect(init).toMatchObject({ method: "POST" });
+  });
 });

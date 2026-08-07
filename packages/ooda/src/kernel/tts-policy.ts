@@ -22,6 +22,17 @@ export type TtsDisclosureDecision =
         | "SPEAKABLE_TEXT_TOO_LONG";
     };
 
+export function isSafeSpeakableText(text: string): boolean {
+  if (text.length > 5_000) return false;
+  const unsafeSpeechPatterns = [
+    /```/u,
+    /^\s*\|.+\|\s*$[\s\S]*^\s*\|?\s*:?-{3,}/mu,
+    /\bAuthorization\s*:\s*Bearer\s+\S+/iu,
+    /\b(?:api[_-]?key|access[_-]?token|secret)\s*[:=]\s*\S+/iu,
+  ];
+  return !unsafeSpeechPatterns.some((pattern) => pattern.test(text));
+}
+
 export function resolveTtsSpeakable(input: {
   event: ConversationEventV1;
   ttsPolicy: ConversationTtsPolicy;
@@ -58,13 +69,7 @@ export function resolveTtsSpeakable(input: {
     return { allowed: false, code: "SPEAKABLE_TEXT_TOO_LONG" };
   }
 
-  const unsafeSpeechPatterns = [
-    /```/u,
-    /^\s*\|.+\|\s*$[\s\S]*^\s*\|?\s*:?-{3,}/mu,
-    /\bAuthorization\s*:\s*Bearer\s+\S+/iu,
-    /\b(?:api[_-]?key|access[_-]?token|secret)\s*[:=]\s*\S+/iu,
-  ];
-  if (unsafeSpeechPatterns.some((pattern) => pattern.test(speakable))) {
+  if (!isSafeSpeakableText(speakable)) {
     return { allowed: false, code: "SPEAKABLE_TEXT_UNSAFE" };
   }
 

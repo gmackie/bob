@@ -66,6 +66,11 @@ export function useOodaConversation() {
     () => new OodaConversationOutbox({
       storage: AsyncStorage,
       appendEvent: (input) => client.events.append(input),
+      completeTurn: (item, result) => client.host.createTurn({
+        conversationId: item.conversationId,
+        userEventId: result.event.id,
+        idempotencyKey: `${item.idempotencyKey}:host`,
+      }).then(() => undefined),
     }),
     [client],
   );
@@ -145,8 +150,10 @@ export function useOodaConversation() {
         receipts.map((receipt) => receipt.result.event),
       ));
       await refreshConversations();
+      const activeConversationId = selectedConversationRef.current;
+      if (activeConversationId) await refreshEvents(activeConversationId);
     }
-  }, [outbox, refreshConversations]);
+  }, [outbox, refreshConversations, refreshEvents]);
 
   useEffect(() => outbox.subscribe(setOutboxItems), [outbox]);
 

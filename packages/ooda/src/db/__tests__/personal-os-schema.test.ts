@@ -12,6 +12,7 @@ import {
   externalLinks,
   integrationOutbox,
 } from "../schema/integrations";
+import { hostTurnExecutions } from "../schema/host";
 import {
   attentionReviews,
   memoryEdges,
@@ -50,6 +51,7 @@ describe("OODA personal operating system schema", () => {
       deliveryAttempts,
       deadLetters,
       ttsGrants,
+      hostTurnExecutions,
     ];
 
     expect(tables.map((table) => config(table).schema)).toEqual(
@@ -69,6 +71,20 @@ describe("OODA personal operating system schema", () => {
     expect(columns).toContain("usedAt");
     expect(indexes).toContain("tts_grants_token_hash_uidx");
     expect(indexes).toContain("tts_grants_owner_idempotency_uidx");
+  });
+
+  it("claims one host execution per durable user event", () => {
+    const hostTurns = config(hostTurnExecutions);
+    const indexes = hostTurns.indexes.map((index) => index.config.name);
+
+    expect(indexes).toContain("host_turn_executions_user_event_uidx");
+    expect(indexes).toContain("host_turn_executions_owner_idempotency_uidx");
+    expect(
+      hostTurns.columns.find((column) => column.name === "leaseExpiresAt"),
+    ).toBeDefined();
+    expect(
+      hostTurns.columns.find((column) => column.name === "assistantEventId"),
+    ).toBeDefined();
   });
 
   it("enforces one monotonic sequence and one idempotency key per conversation", () => {

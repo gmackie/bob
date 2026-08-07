@@ -13,6 +13,8 @@ import {
   CreateTtsGrantInputV1Schema,
   CreateTtsGrantResultV1Schema,
   CreateConversationResultV1Schema,
+  CreateHostTurnInputV1Schema,
+  CreateHostTurnResultV1Schema,
   ExternalLinkV1Schema,
   ForkConversationInputV1Schema,
   MemorySeedV1Schema,
@@ -268,5 +270,40 @@ describe("OODA V1 contracts", () => {
         text: "A client-selected secret",
       }).success,
     ).toBe(false);
+  });
+
+  it("binds host inference to one durable user event", () => {
+    const input = {
+      conversationId: "conversation-1",
+      userEventId: "event-user-1",
+      idempotencyKey: "device-host-1",
+    };
+    const assistantEvent = {
+      id: "event-assistant-1",
+      conversationId: "conversation-1",
+      branchId: "branch-1",
+      sequence: "2",
+      type: "assistant_turn",
+      actor: { type: "host", id: "claude" },
+      payload: { display: "Full answer", speakable: "Short answer" },
+      sensitivity: "personal",
+      correlationId: "correlation-1",
+      causationId: "event-user-1",
+      occurredAt,
+    };
+    const result = {
+      assistantEvent,
+      provider: "claude",
+      model: "claude-opus-4-6",
+      providerResponseId: "provider-response-1",
+      replayed: false,
+      fallback: {
+        preferredProvider: "grok",
+        failures: [{ provider: "grok", code: "PROVIDER_FAILED" }],
+      },
+    };
+
+    expect(CreateHostTurnInputV1Schema.parse(input)).toEqual(input);
+    expect(CreateHostTurnResultV1Schema.parse(result)).toEqual(result);
   });
 });

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -19,14 +20,15 @@ import {
   listConversationEvents,
 } from "../events";
 import { consumeTtsGrant, createTtsGrant } from "../tts-grants";
+import { createHostTurn } from "../host-turns";
+import { HostRoutingError } from "../host-routing";
+import { stableStringify } from "../serialization";
 
 const DATABASE_URL = process.env.OODA_KERNEL_TEST_DATABASE_URL;
 const HAS_DB = Boolean(DATABASE_URL);
 
 const sql = HAS_DB ? postgres(DATABASE_URL!, { max: 20 }) : null;
-const db = sql
-  ? drizzle({ client: sql, schema, casing: "snake_case" })
-  : null;
+const db = sql ? drizzle({ client: sql, schema, casing: "snake_case" }) : null;
 
 function migration(name: string): string {
   return readFileSync(
@@ -36,7 +38,16 @@ function migration(name: string): string {
 }
 
 async function applyMigration(source: string) {
-  for (const statement of source.split("--> statement-breakpoint")) {
+  const statements = source.split("--> statement-breakpoint");
+  for (let statement of statements) {
+    if (process.env.OODA_KERNEL_TEST_DISABLE_VECTOR === "1") {
+      if (
+        statement.includes("CREATE EXTENSION IF NOT EXISTS vector") ||
+        statement.includes("memory_seeds_embedding_hnsw_idx")
+      )
+        continue;
+      statement = statement.replace("vector(1536)", "double precision[]");
+    }
     if (statement.trim()) await sql!.unsafe(statement);
   }
 }
@@ -48,6 +59,7 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     await applyMigration(migration("0007_wet_surge.sql"));
     await applyMigration(migration("0008_ooda_kernel_idempotency.sql"));
     await applyMigration(migration("0009_lethal_the_fury.sql"));
+    await applyMigration(migration("0010_lying_scream.sql"));
   });
 
   afterAll(async () => {
@@ -105,7 +117,9 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
       .map(({ event }) => Number(event.sequence))
       .sort((a, b) => a - b);
 
-    expect(sequences).toEqual(Array.from({ length: 24 }, (_, index) => index + 1));
+    expect(sequences).toEqual(
+      Array.from({ length: 24 }, (_, index) => index + 1),
+    );
     expect(new Set(sequences)).toHaveLength(24);
   });
 
@@ -146,19 +160,321 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
 
     const first = await createTtsGrant(db!, "owner-voice", input, options);
     const replay = await createTtsGrant(db!, "owner-voice", input, options);
-    const token = decodeURIComponent(new URL(first.streamUrl).pathname.split("/").at(-1)!);
+    const token = decodeURIComponent(
+      new URL(first.streamUrl).pathname.split("/").at(-1)!,
+    );
 
     expect(replay).toEqual({ ...first, replayed: true });
     await expect(
       consumeTtsGrant(db!, "owner-voice", token, {
         now: new Date("2026-08-05T18:00:02.000Z"),
       }),
-    ).resolves.toEqual({ text: "A concise spoken answer.", grantId: first.grantId });
+    ).resolves.toEqual({
+      text: "A concise spoken answer.",
+      grantId: first.grantId,
+    });
     await expect(
       consumeTtsGrant(db!, "owner-voice", token, {
         now: new Date("2026-08-05T18:00:03.000Z"),
       }),
     ).rejects.toMatchObject({ code: "TTS_GRANT_UNAVAILABLE", status: 410 });
+  });
+
+  it("answers one durable user event exactly once across client retries", async () => {
+    const created = await createConversation(db!, "owner-host", {
+      title: "Canonical host response",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "create-conversation-host",
+    });
+    const user = await appendConversationEvent(db!, "owner-host", {
+      conversationId: created.conversation.id,
+      branchId: created.branch.id,
+      type: "user_turn",
+      actor: { type: "user", id: "owner-host" },
+      payload: { display: "Help me think this through" },
+      sensitivity: "personal",
+      correlationId: "host-proof",
+      idempotencyKey: "host-user-event",
+      occurredAt: "2026-08-05T18:00:00.000Z",
+    });
+    let calls = 0;
+    const provider = {
+      id: "grok" as const,
+      complete: () => {
+        calls += 1;
+        return Promise.resolve({
+          providerResponseId: "grok-response-1",
+          model: "grok-4.5",
+          text: '{"display":"Full considered answer","speakable":"Short answer"}',
+        });
+      },
+    };
+    const input = {
+      conversationId: created.conversation.id,
+      userEventId: user.event.id,
+      idempotencyKey: "host-turn-1",
+    };
+
+    const first = await createHostTurn(db!, "owner-host", input, {
+      providers: [provider],
+    });
+    const replay = await createHostTurn(db!, "owner-host", input, {
+      providers: [provider],
+    });
+
+    expect(first.assistantEvent.payload).toMatchObject({
+      display: "Full considered answer",
+      speakable: "Short answer",
+      provider: "grok",
+    });
+    expect(replay).toEqual({ ...first, replayed: true });
+    expect(calls).toBe(1);
+  });
+
+  it("repairs a host execution after the assistant event was persisted before a crash", async () => {
+    const created = await createConversation(db!, "owner-host-recovery", {
+      title: "Recover persisted host response",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "create-conversation-host-recovery",
+    });
+    const user = await appendConversationEvent(db!, "owner-host-recovery", {
+      conversationId: created.conversation.id,
+      branchId: created.branch.id,
+      type: "user_turn",
+      actor: { type: "user", id: "owner-host-recovery" },
+      payload: { display: "Do not answer this twice" },
+      sensitivity: "personal",
+      correlationId: "host-recovery-proof",
+      idempotencyKey: "host-recovery-user-event",
+      occurredAt: "2026-08-05T18:00:00.000Z",
+    });
+    const input = {
+      conversationId: created.conversation.id,
+      userEventId: user.event.id,
+      idempotencyKey: "host-recovery-turn",
+    };
+    const [execution] = await db!
+      .insert(schema.hostTurnExecutions)
+      .values({
+        ownerId: "owner-host-recovery",
+        conversationId: created.conversation.id,
+        userEventId: user.event.id,
+        idempotencyKey: input.idempotencyKey,
+        commandFingerprint: stableStringify(input),
+        status: "running",
+        leaseExpiresAt: new Date("2026-08-05T18:10:00.000Z"),
+        startedAt: new Date("2026-08-05T18:00:00.000Z"),
+      })
+      .returning();
+    const assistant = await appendConversationEvent(
+      db!,
+      "owner-host-recovery",
+      {
+        conversationId: created.conversation.id,
+        branchId: created.branch.id,
+        type: "assistant_turn",
+        actor: { type: "host", id: "grok" },
+        payload: {
+          display: "The already-persisted answer",
+          speakable: "The persisted answer",
+          provider: "grok",
+          model: "grok-4.5",
+          providerResponseId: "grok-recovery-response",
+        },
+        sensitivity: "personal",
+        correlationId: "host-recovery-proof",
+        causationId: user.event.id,
+        idempotencyKey: `${input.idempotencyKey}:assistant`,
+        occurredAt: "2026-08-05T18:00:01.000Z",
+      },
+    );
+    let calls = 0;
+
+    const result = await createHostTurn(db!, "owner-host-recovery", input, {
+      now: new Date("2026-08-05T18:00:02.000Z"),
+      providers: [
+        {
+          id: "grok",
+          complete: () => {
+            calls += 1;
+            return Promise.reject(new Error("provider must not be called"));
+          },
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      assistantEvent: { id: assistant.event.id },
+      provider: "grok",
+      model: "grok-4.5",
+      providerResponseId: "grok-recovery-response",
+      replayed: true,
+    });
+    expect(calls).toBe(0);
+    const [repaired] = await db!
+      .select()
+      .from(schema.hostTurnExecutions)
+      .where(eq(schema.hostTurnExecutions.id, execution!.id));
+    expect(repaired).toMatchObject({
+      status: "completed",
+      assistantEventId: assistant.event.id,
+      provider: "grok",
+      model: "grok-4.5",
+      providerResponseId: "grok-recovery-response",
+    });
+  });
+
+  it("preserves the host-routing failure when a retry replays an older failure event", async () => {
+    const created = await createConversation(db!, "owner-host-failure", {
+      title: "Retry provider failures",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "create-conversation-host-failure",
+    });
+    const user = await appendConversationEvent(db!, "owner-host-failure", {
+      conversationId: created.conversation.id,
+      branchId: created.branch.id,
+      type: "user_turn",
+      actor: { type: "user", id: "owner-host-failure" },
+      payload: { display: "Try the available hosts" },
+      sensitivity: "personal",
+      correlationId: "host-failure-proof",
+      idempotencyKey: "host-failure-user-event",
+      occurredAt: "2026-08-05T18:00:00.000Z",
+    });
+    const input = {
+      conversationId: created.conversation.id,
+      userEventId: user.event.id,
+      idempotencyKey: "host-failure-turn",
+    };
+
+    await expect(
+      createHostTurn(db!, "owner-host-failure", input, {
+        now: new Date("2026-08-05T18:00:01.000Z"),
+        providers: [],
+      }),
+    ).rejects.toBeInstanceOf(HostRoutingError);
+    await expect(
+      createHostTurn(db!, "owner-host-failure", input, {
+        now: new Date("2026-08-05T18:00:02.000Z"),
+        providers: [
+          {
+            id: "grok",
+            complete: () =>
+              Promise.reject(new Error("temporarily unavailable")),
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(HostRoutingError);
+
+    const [execution] = await db!
+      .select()
+      .from(schema.hostTurnExecutions)
+      .where(eq(schema.hostTurnExecutions.userEventId, user.event.id));
+    expect(execution).toMatchObject({
+      status: "failed",
+      errorCode: "HOST_UNAVAILABLE",
+    });
+  });
+
+  it("answers a fork with ancestor context through the branch fork event", async () => {
+    const created = await createConversation(db!, "owner-host-branch", {
+      title: "Branch-aware host context",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "create-conversation-host-branch",
+    });
+    const rootUser = await appendConversationEvent(db!, "owner-host-branch", {
+      conversationId: created.conversation.id,
+      branchId: created.branch.id,
+      type: "user_turn",
+      actor: { type: "user", id: "owner-host-branch" },
+      payload: { display: "I am considering a bakery" },
+      sensitivity: "personal",
+      correlationId: "host-branch-proof",
+      idempotencyKey: "host-branch-root-user",
+      occurredAt: "2026-08-05T18:00:00.000Z",
+    });
+    const rootAssistant = await appendConversationEvent(
+      db!,
+      "owner-host-branch",
+      {
+        conversationId: created.conversation.id,
+        branchId: created.branch.id,
+        type: "assistant_turn",
+        actor: { type: "host", id: "grok" },
+        payload: { display: "Start with customer interviews" },
+        sensitivity: "personal",
+        correlationId: "host-branch-proof",
+        causationId: rootUser.event.id,
+        idempotencyKey: "host-branch-root-assistant",
+        occurredAt: "2026-08-05T18:00:01.000Z",
+      },
+    );
+    const fork = await forkConversation(db!, "owner-host-branch", {
+      conversationId: created.conversation.id,
+      parentBranchId: created.branch.id,
+      forkEventId: rootAssistant.event.id,
+      name: "wholesale-path",
+      reason: "Explore wholesale separately",
+      idempotencyKey: "host-branch-fork",
+    });
+    const childUser = await appendConversationEvent(db!, "owner-host-branch", {
+      conversationId: created.conversation.id,
+      branchId: fork.branch.id,
+      type: "user_turn",
+      actor: { type: "user", id: "owner-host-branch" },
+      payload: { display: "What about wholesale first?" },
+      sensitivity: "personal",
+      correlationId: "host-branch-proof",
+      idempotencyKey: "host-branch-child-user",
+      occurredAt: "2026-08-05T18:00:02.000Z",
+    });
+    let receivedMessages: Array<{
+      role: "user" | "assistant";
+      content: string;
+    }> = [];
+
+    await createHostTurn(
+      db!,
+      "owner-host-branch",
+      {
+        conversationId: created.conversation.id,
+        userEventId: childUser.event.id,
+        idempotencyKey: "host-branch-turn",
+      },
+      {
+        providers: [
+          {
+            id: "grok",
+            complete: ({ messages }) => {
+              receivedMessages = messages;
+              return Promise.resolve({
+                providerResponseId: "host-branch-response",
+                model: "grok-4.5",
+                text: '{"display":"Test wholesale demand","speakable":"Test wholesale demand"}',
+              });
+            },
+          },
+        ],
+      },
+    );
+
+    expect(receivedMessages).toEqual([
+      { role: "user", content: "I am considering a bakery" },
+      { role: "assistant", content: "Start with customer interviews" },
+      { role: "user", content: "What about wholesale first?" },
+    ]);
   });
 
   it("replays identical event writes and rejects reuse with changed content", async () => {
@@ -219,12 +535,17 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     };
 
     const results = await Promise.all(
-      Array.from({ length: 12 }, () => appendConversationEvent(db!, "owner-a", input)),
+      Array.from({ length: 12 }, () =>
+        appendConversationEvent(db!, "owner-a", input),
+      ),
     );
 
     expect(new Set(results.map(({ event }) => event.id))).toHaveLength(1);
     expect(results.filter(({ replayed }) => !replayed)).toHaveLength(1);
-    expect((await getConversation(db!, "owner-a", created.conversation.id)).conversation.lastSequence).toBe("1");
+    expect(
+      (await getConversation(db!, "owner-a", created.conversation.id))
+        .conversation.lastSequence,
+    ).toBe("1");
   });
 
   it("forks from a real event and records corrections without mutating history", async () => {
@@ -318,7 +639,9 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     expect(first.items).toHaveLength(2);
     expect(first.pageInfo.hasMore).toBe(true);
     expect(second.items).toHaveLength(1);
-    expect(new Set([...first.items, ...second.items].map((item) => item.id))).toHaveLength(3);
+    expect(
+      new Set([...first.items, ...second.items].map((item) => item.id)),
+    ).toHaveLength(3);
 
     await expect(
       getConversation(db!, "not-the-owner", first.items[0]!.id),

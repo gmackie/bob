@@ -17,6 +17,8 @@ const { setPlaceholder, kernel } = vi.hoisted(() => {
       appendConversationEvent: vi.fn(),
       correctConversationEvent: vi.fn(),
       listConversationEventsCompatible: vi.fn(),
+      createHostProviderClients: vi.fn(() => []),
+      createHostTurn: vi.fn(),
     },
   };
 });
@@ -98,6 +100,7 @@ describe("personal OS routers", () => {
       "events.append",
       "events.correct",
       "events.paginate",
+      "host.createTurn",
     ];
     const nodeProcedures = Object.keys(appRouter._def.procedures);
     const edgeProcedures = Object.keys(edgeRouter._def.procedures);
