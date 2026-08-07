@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 
-import type { AgentAdapter, AdapterEvent, BuddyMcpServer } from "@gmacko/ooda/agent-adapters";
+import type { AgentAdapter, AdapterEvent, BuddyMcpServer, PromptImage } from "@gmacko/ooda/agent-adapters";
 import {
   createBuddyToolDescriptors,
   registerTools,
@@ -60,6 +60,8 @@ export interface ExecuteSessionInput {
   threadTitle: string;
   sessionId: string;
   prompt: string;
+  /** Images attached to the prompt (vision); passed to the first message. */
+  images?: PromptImage[];
   toolProfileId: string;
   /**
    * Thread id the buddy-tool handlers thread through their tRPC calls.
@@ -120,6 +122,7 @@ export class SessionExecutor {
         prompt: input.prompt,
         workspaceRoot: threadDir,
         systemPrompt: input.systemPrompt,
+        images: input.images,
       });
 
       // Capture output

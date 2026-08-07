@@ -7,6 +7,7 @@ export {
   type AgentAdapter,
   type ExecuteOptions,
   type McpServerConfigLike,
+  type PromptImage,
   type SpawnedProcessLike,
   type ToolDescriptorLike,
 } from "./types";

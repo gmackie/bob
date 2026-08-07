@@ -115,6 +115,16 @@ export const runnerRouter = {
         adapterId: z.string(),
         toolProfileId: z.string(),
         prompt: z.string().min(1),
+        // Images attached to the prompt (vision). Base64 (no data: prefix).
+        images: z
+          .array(
+            z.object({
+              mimeType: z.string().max(64),
+              dataBase64: z.string(),
+            }),
+          )
+          .max(6)
+          .optional(),
       }),
     )
     .output(z.any())
@@ -131,13 +141,21 @@ export const runnerRouter = {
         })
         .returning();
 
-      // Store the prompt as the first event
+      // Store the prompt as the first event; images as a sibling event so the
+      // runner can attach them to the first message (see executeSession).
       if (session) {
         await ctx.db.insert(sessionEvent).values({
           sessionId: session.id,
           type: "prompt",
           content: input.prompt,
         });
+        if (input.images && input.images.length > 0) {
+          await ctx.db.insert(sessionEvent).values({
+            sessionId: session.id,
+            type: "prompt_images",
+            content: JSON.stringify(input.images),
+          });
+        }
       }
 
       return session;

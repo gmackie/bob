@@ -33,7 +33,42 @@ export default function CapturePage() {
   const [debounced, setDebounced] = useState("");
   const [showImport, setShowImport] = useState(false);
   const [importJson, setImportJson] = useState("");
+  const [images, setImages] = useState<
+    { mimeType: string; dataBase64: string; preview: string }[]
+  >([]);
   const trpc = useTRPC();
+
+  // Paste a cropped screenshot straight into the capture box.
+  const addImageFile = (file: File) => {
+    if (!file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result);
+      const comma = dataUrl.indexOf(",");
+      if (comma < 0) return;
+      setImages((prev) =>
+        prev.length >= 6
+          ? prev
+          : [
+              ...prev,
+              {
+                mimeType: file.type,
+                dataBase64: dataUrl.slice(comma + 1),
+                preview: dataUrl,
+              },
+            ],
+      );
+    };
+    reader.readAsDataURL(file);
+  };
+  const handlePaste = (e: React.ClipboardEvent) => {
+    for (const it of Array.from(e.clipboardData?.items ?? [])) {
+      if (it.kind === "file" && it.type.startsWith("image/")) {
+        const f = it.getAsFile();
+        if (f) addImageFile(f);
+      }
+    }
+  };
 
   // Debounce the capture text before searching the KB.
   useEffect(() => {
@@ -62,9 +97,25 @@ export default function CapturePage() {
           | { slug?: string }
           | undefined;
         if (t?.slug) {
-          window.location.assign(
-            `/threads/${t.slug}?prompt=${encodeURIComponent(text.trim())}`,
-          );
+          // Hand the capture (text + screenshots) to the new thread. Images are
+          // too big for a URL param, so ride sessionStorage; ChatPanel consumes
+          // it on mount and auto-sends.
+          try {
+            sessionStorage.setItem(
+              "ooda-capture-seed",
+              JSON.stringify({
+                prompt: text.trim(),
+                images: images.map((i) => ({
+                  mimeType: i.mimeType,
+                  dataBase64: i.dataBase64,
+                })),
+                ts: Date.now(),
+              }),
+            );
+          } catch {
+            // fall back to a text-only URL seed below
+          }
+          window.location.assign(`/threads/${t.slug}`);
         }
       },
     }),
@@ -100,6 +151,7 @@ export default function CapturePage() {
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
+          onPaste={handlePaste}
           onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
               e.preventDefault();
@@ -107,17 +159,40 @@ export default function CapturePage() {
             }
           }}
           autoFocus
-          placeholder="What's on your mind? Drop a thought, a question, a link…"
+          placeholder="What's on your mind? Paste a screenshot, drop a thought or a link…"
           className="w-full resize-none rounded-[8px] border border-[#2A2A2F] bg-[#1A1A1E] px-4 py-4 text-[15px] leading-relaxed text-[#E8E4DF] placeholder-[#5A5855] focus:border-[#D4A04A]/50 focus:outline-none"
           rows={5}
         />
+        {images.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {images.map((img, i) => (
+              <div key={i} className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={img.preview}
+                  alt="screenshot"
+                  className="h-16 w-16 rounded-[4px] border border-[#2A2A2F] object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setImages((prev) => prev.filter((_, j) => j !== i))
+                  }
+                  className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#111113] text-[10px] text-[#8A8580] hover:text-[#E8E4DF]"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="mt-3 flex items-center justify-between">
           <span className="text-xs text-[#5A5855]">
             {createThread.isPending
               ? "Opening conversation…"
               : createThread.isError
                 ? `Error: ${createThread.error.message}`
-                : "Screenshots + agent vision are coming next."}
+                : "Paste a screenshot — the agent can see it and can file tasks in your projects."}
           </span>
           <button
             onClick={startConversation}
