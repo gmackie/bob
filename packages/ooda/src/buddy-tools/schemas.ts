@@ -472,12 +472,70 @@ export const cp_open_url = {
 } as const;
 
 // ---------------------------------------------------------------------------
+// Bob / Kanbanger — turn a conversation into project work. Handlers call Bob's
+// public API directly (runner env: BOB_API_URL/BOB_API_KEY/BOB_WORKSPACE_ID).
+// ---------------------------------------------------------------------------
+
+export const bob_list_projects = {
+  name: "bob_list_projects",
+  description:
+    "List the user's Bob (Kanbanger) projects. Use this to find an existing project to file a task against before creating a new one.",
+  args: z.object({}),
+  result: z.object({
+    projects: z.array(
+      z.object({
+        id: z.string(),
+        key: z.string(),
+        name: z.string(),
+        status: z.string().nullable(),
+      }),
+    ),
+  }),
+} as const;
+
+export const bob_create_task = {
+  name: "bob_create_task",
+  description:
+    "Create a task in Bob (Kanbanger). Optionally file it under an existing project (projectId from bob_list_projects). New tasks land in the backlog. Use this to turn something from the conversation into a task.",
+  args: z.object({
+    title: z.string().min(1).max(256),
+    description: z.string().max(20000).optional(),
+    projectId: z.string().optional(),
+  }),
+  result: z.object({
+    workItemId: z.string(),
+    title: z.string(),
+    status: z.string(),
+  }),
+} as const;
+
+export const bob_create_project = {
+  name: "bob_create_project",
+  description:
+    "Create a new project in Bob (Kanbanger), optionally seeding an initial backlog of tasks. Use this to start a new project from the conversation.",
+  args: z.object({
+    name: z.string().min(1).max(128),
+    description: z.string().max(20000).optional(),
+    tasks: z.array(z.string().min(1).max(256)).max(20).optional(),
+  }),
+  result: z.object({
+    projectId: z.string(),
+    key: z.string(),
+    name: z.string(),
+    taskCount: z.number().int(),
+  }),
+} as const;
+
+// ---------------------------------------------------------------------------
 // Registry
 // ---------------------------------------------------------------------------
 
 // Tools with real backing (tRPC procedures exist; the handler resolves).
 // This is what agents should see in their tool surface today.
 export const TOOLS_IMPLEMENTED = {
+  bob_list_projects,
+  bob_create_task,
+  bob_create_project,
   dive_spawn,
   dive_status,
   dive_results,
