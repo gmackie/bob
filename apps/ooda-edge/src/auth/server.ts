@@ -19,6 +19,8 @@ export function getAuth(): AuthInstance {
       "https://blder.bot",
       "https://bob.blder.bot",
       "https://ooda.blder.bot",
+      // Public alias — SSO-linked to ooda.blder.bot via /api/sso/*.
+      "https://ooda.gmac.io",
       ...(process.env.TRUSTED_ORIGINS?.split(",").map((o) => o.trim()) ?? []),
     ];
 
