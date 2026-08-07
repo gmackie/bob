@@ -22,12 +22,24 @@ export interface AdapterCommand {
    * CLI-spawn adapters bake the prompt into `args` and leave this unset.
    */
   prompt?: string;
+  /** Images to attach to the first user message (vision). Claude adapter only. */
+  images?: PromptImage[];
+}
+
+/** An image attached to a prompt (base64), passed to the model as vision. */
+export interface PromptImage {
+  /** MIME type, e.g. "image/png" or "image/jpeg". */
+  mimeType: string;
+  /** Base64-encoded image bytes (no data: prefix). */
+  dataBase64: string;
 }
 
 export interface BuildCommandOptions {
   prompt: string;
   workspaceRoot: string;
   systemPrompt?: string;
+  /** Images to attach to the first user message (vision). */
+  images?: PromptImage[];
   /** Persona-selected model (e.g. a specific Claude model id). */
   model?: string;
   /** Persona-restricted tool allowlist passed to the agent CLI. */

@@ -13,6 +13,7 @@ import type {
   BuildCommandOptions,
   ExecuteOptions,
   McpServerConfigLike,
+  PromptImage,
   SpawnedProcessLike,
 } from "./types";
 
@@ -126,6 +127,7 @@ export class ClaudeAdapter implements AgentAdapter {
       args,
       cwd: opts.workspaceRoot,
       prompt: opts.prompt,
+      images: opts.images,
     };
   }
 
@@ -232,7 +234,10 @@ export class ClaudeAdapter implements AgentAdapter {
       return true;
     };
 
-    const writeUserMessage = (text: string): boolean => {
+    const writeUserMessage = (
+      text: string,
+      images?: PromptImage[],
+    ): boolean => {
       if (!stdinOpen || !child.stdin || child.stdin.destroyed) return false;
       // A new message cancels any pending close — it either joins the current
       // turn or starts the next one; the next `result` re-arms the timer.
@@ -240,10 +245,27 @@ export class ClaudeAdapter implements AgentAdapter {
         clearTimeout(idleCloseTimer);
         idleCloseTimer = null;
       }
+      // Attach images as stream-json content blocks on the first message.
+      // Verified: the claude CLI reads image blocks over --input-format
+      // stream-json stdin and the model sees them.
+      const content =
+        images && images.length > 0
+          ? [
+              { type: "text", text },
+              ...images.map((img) => ({
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: img.mimeType,
+                  data: img.dataBase64,
+                },
+              })),
+            ]
+          : text;
       child.stdin.write(
         JSON.stringify({
           type: "user",
-          message: { role: "user", content: text },
+          message: { role: "user", content },
         }) + "\n",
       );
       return true;
@@ -266,7 +288,7 @@ export class ClaudeAdapter implements AgentAdapter {
     };
 
     if (interactive && command.prompt) {
-      writeUserMessage(command.prompt);
+      writeUserMessage(command.prompt, command.images);
     }
     options?.onSpawn?.(handle);
 
