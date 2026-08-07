@@ -13,4 +13,8 @@ export {
   encodeConversationEventSse,
   resolveAfterSequence,
 } from "./conversation-event-stream";
+export {
+  createTtsGrantHttpResponse,
+  createTtsStreamHttpResponse,
+} from "./tts-http";
 export type { RouterInputs, RouterOutputs };

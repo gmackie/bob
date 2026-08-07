@@ -10,6 +10,8 @@ import {
   ConversationEventV1Schema,
   ConversationListInputV1Schema,
   ConversationV1Schema,
+  CreateTtsGrantInputV1Schema,
+  CreateTtsGrantResultV1Schema,
   CreateConversationResultV1Schema,
   ExternalLinkV1Schema,
   ForkConversationInputV1Schema,
@@ -241,6 +243,30 @@ describe("OODA V1 contracts", () => {
     ).toBe(false);
     expect(
       ProblemV1Schema.safeParse({ ...problem, debugStack: "secret" }).success,
+    ).toBe(false);
+  });
+
+  it("requires TTS grants to reference canonical events instead of client text", () => {
+    const input = {
+      conversationId: "conversation-1",
+      eventId: "event-1",
+      requestMode: "manual",
+      idempotencyKey: "device-tts-1",
+    };
+    const result = {
+      grantId: "grant-1",
+      streamUrl: "https://ooda.example/api/v1/tts-streams/opaque-token",
+      expiresAt: occurredAt,
+      replayed: false,
+    };
+
+    expect(CreateTtsGrantInputV1Schema.parse(input)).toEqual(input);
+    expect(CreateTtsGrantResultV1Schema.parse(result)).toEqual(result);
+    expect(
+      CreateTtsGrantInputV1Schema.safeParse({
+        ...input,
+        text: "A client-selected secret",
+      }).success,
     ).toBe(false);
   });
 });

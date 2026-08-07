@@ -25,6 +25,7 @@ import {
   contextPacks,
   proposals,
 } from "../schema/orchestration";
+import { ttsGrants } from "../schema/voice";
 
 const config = (table: Parameters<typeof getTableConfig>[0]) =>
   getTableConfig(table);
@@ -48,11 +49,26 @@ describe("OODA personal operating system schema", () => {
       integrationOutbox,
       deliveryAttempts,
       deadLetters,
+      ttsGrants,
     ];
 
     expect(tables.map((table) => config(table).schema)).toEqual(
       tables.map(() => "ooda"),
     );
+  });
+
+  it("stores only hashed, expiring, one-use TTS grants", () => {
+    const grants = config(ttsGrants);
+    const columns = grants.columns.map((column) => column.name);
+    const indexes = grants.indexes.map((index) => index.config.name);
+
+    expect(columns).toContain("tokenHash");
+    expect(columns).not.toContain("token");
+    expect(columns).not.toContain("text");
+    expect(columns).toContain("expiresAt");
+    expect(columns).toContain("usedAt");
+    expect(indexes).toContain("tts_grants_token_hash_uidx");
+    expect(indexes).toContain("tts_grants_owner_idempotency_uidx");
   });
 
   it("enforces one monotonic sequence and one idempotency key per conversation", () => {

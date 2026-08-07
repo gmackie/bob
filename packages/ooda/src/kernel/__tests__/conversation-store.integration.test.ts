@@ -18,6 +18,7 @@ import {
   correctConversationEvent,
   listConversationEvents,
 } from "../events";
+import { consumeTtsGrant, createTtsGrant } from "../tts-grants";
 
 const DATABASE_URL = process.env.OODA_KERNEL_TEST_DATABASE_URL;
 const HAS_DB = Boolean(DATABASE_URL);
@@ -46,6 +47,7 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     await applyMigration(migration("0006_clean_viper.sql"));
     await applyMigration(migration("0007_wet_surge.sql"));
     await applyMigration(migration("0008_ooda_kernel_idempotency.sql"));
+    await applyMigration(migration("0009_lethal_the_fury.sql"));
   });
 
   afterAll(async () => {
@@ -105,6 +107,58 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
 
     expect(sequences).toEqual(Array.from({ length: 24 }, (_, index) => index + 1));
     expect(new Set(sequences)).toHaveLength(24);
+  });
+
+  it("issues replay-safe TTS grants that can be consumed exactly once", async () => {
+    const created = await createConversation(db!, "owner-voice", {
+      title: "Speak this response",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "create-conversation-voice",
+    });
+    const response = await appendConversationEvent(db!, "owner-voice", {
+      conversationId: created.conversation.id,
+      branchId: created.branch.id,
+      type: "assistant_turn",
+      actor: { type: "host", id: "grok" },
+      payload: {
+        display: "A longer answer for the display.",
+        speakable: "A concise spoken answer.",
+      },
+      sensitivity: "personal",
+      correlationId: "voice-proof",
+      idempotencyKey: "voice-assistant-event",
+      occurredAt: "2026-08-05T18:00:00.000Z",
+    });
+    const input = {
+      conversationId: created.conversation.id,
+      eventId: response.event.id,
+      requestMode: "automatic" as const,
+      idempotencyKey: "voice-grant-1",
+    };
+    const options = {
+      baseUrl: "https://ooda.example",
+      grantSecret: "0123456789abcdef0123456789abcdef",
+      now: new Date("2026-08-05T18:00:01.000Z"),
+    };
+
+    const first = await createTtsGrant(db!, "owner-voice", input, options);
+    const replay = await createTtsGrant(db!, "owner-voice", input, options);
+    const token = decodeURIComponent(new URL(first.streamUrl).pathname.split("/").at(-1)!);
+
+    expect(replay).toEqual({ ...first, replayed: true });
+    await expect(
+      consumeTtsGrant(db!, "owner-voice", token, {
+        now: new Date("2026-08-05T18:00:02.000Z"),
+      }),
+    ).resolves.toEqual({ text: "A concise spoken answer.", grantId: first.grantId });
+    await expect(
+      consumeTtsGrant(db!, "owner-voice", token, {
+        now: new Date("2026-08-05T18:00:03.000Z"),
+      }),
+    ).rejects.toMatchObject({ code: "TTS_GRANT_UNAVAILABLE", status: 410 });
   });
 
   it("replays identical event writes and rejects reuse with changed content", async () => {

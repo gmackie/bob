@@ -149,4 +149,37 @@ describe("OODA V1 client", () => {
       "Last-Event-ID": "42",
     });
   });
+
+  it("creates an event-bound TTS grant and an authenticated audio source", async () => {
+    const grant = {
+      grantId: "grant-1",
+      streamUrl: "https://ooda.example.test/api/v1/tts-streams/grant-1.signature",
+      expiresAt: "2026-08-06T12:02:00.000Z",
+      replayed: false,
+    };
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(grant, 201));
+    const client = createOodaV1Client({
+      baseUrl: "https://ooda.example.test",
+      fetch: fetchFn,
+      headers: () => ({ Authorization: "Bearer device-token" }),
+    });
+
+    await expect(client.voice.createGrant({
+      conversationId: "conversation-1",
+      eventId: "event-1",
+      requestMode: "manual",
+      idempotencyKey: "device-tts-1",
+    })).resolves.toEqual(grant);
+    await expect(client.voice.audioSource(grant.streamUrl)).resolves.toEqual({
+      uri: grant.streamUrl,
+      headers: {
+        Accept: "audio/mpeg",
+        Authorization: "Bearer device-token",
+      },
+    });
+
+    const [url, init] = fetchFn.mock.calls[0]!;
+    expect(String(url)).toBe("https://ooda.example.test/api/v1/tts-grants");
+    expect(JSON.parse(String(init?.body))).not.toHaveProperty("text");
+  });
 });

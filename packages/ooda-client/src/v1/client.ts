@@ -11,6 +11,8 @@ import type {
   CorrectConversationEventInputV1,
   CreateConversationInputV1,
   CreateConversationResultV1,
+  CreateTtsGrantInputV1,
+  CreateTtsGrantResultV1,
   ForkConversationInputV1,
   ForkConversationResultV1,
   ProblemV1,
@@ -212,6 +214,23 @@ export function createOodaV1Client(options: OodaV1ClientOptions = {}) {
               ? { "Last-Event-ID": input.afterSequence }
               : {}),
           },
+        };
+      },
+    },
+    voice: {
+      createGrant(input: CreateTtsGrantInputV1) {
+        return request<CreateTtsGrantResultV1>("/api/v1/tts-grants", {
+          method: "POST",
+          body: input,
+        });
+      },
+      async audioSource(streamUrl: string): Promise<{
+        uri: string;
+        headers: Record<string, string>;
+      }> {
+        return {
+          uri: streamUrl,
+          headers: await resolveHeaders("audio/mpeg"),
         };
       },
     },

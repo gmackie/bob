@@ -27,6 +27,7 @@
     "./api/edge": "./src/api/edge-router.ts",
     "./api/openapi": "./src/api/openapi.ts",
     "./api/conversation-event-stream": "./src/api/conversation-event-stream.ts",
+    "./api/tts-http": "./src/api/tts-http.ts",
     "./kernel": "./src/kernel/index.ts",
     "./oracle": "./src/oracle/index.ts",
     "./contracts/v1": "./src/contracts/v1/index.ts"

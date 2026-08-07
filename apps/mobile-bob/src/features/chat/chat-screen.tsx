@@ -1,5 +1,5 @@
 import { Redirect, router } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import { Screen } from "~/components/ui";
@@ -10,19 +10,46 @@ import { MessageList } from "./components/message-list";
 import { VaultBrowser } from "./components/vault-browser";
 import { VoiceInputBar } from "./components/voice-input-bar";
 import { useOodaConversation } from "./hooks/use-ooda-conversation";
+import { useOodaTts } from "./hooks/use-ooda-tts";
 import { useVaultBrowser } from "./hooks/use-vault-browser";
 
 export function ChatScreen() {
   const { data: session, isPending } = authClient.useSession();
   const chat = useOodaConversation();
+  const tts = useOodaTts(chat.requestTtsSource);
   const vault = useVaultBrowser();
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [vaultVisible, setVaultVisible] = useState(false);
+  const lastSubmittedAtRef = useRef<number | null>(null);
+  const spokenEventIdsRef = useRef(new Set<string>());
 
   const send = chat.send;
   const handleSend = useCallback((text: string) => {
+    lastSubmittedAtRef.current = Date.now();
     void send(text);
   }, [send]);
+
+  const playTts = tts.play;
+  useEffect(() => {
+    lastSubmittedAtRef.current = null;
+    spokenEventIdsRef.current.clear();
+  }, [chat.selectedConversationId]);
+
+  useEffect(() => {
+    const submittedAt = lastSubmittedAtRef.current;
+    if (!submittedAt || chat.selectedConversation?.ttsPolicy !== "allowed") return;
+    const latest = [...chat.timeline].reverse().find((item) =>
+      item.kind === "message"
+      && item.role === "assistant"
+      && item.event?.type === "assistant_turn"
+      && Boolean(item.speakable)
+      && new Date(item.timestamp).getTime() >= submittedAt - 5_000
+      && !spokenEventIdsRef.current.has(item.event.id),
+    );
+    if (!latest?.event) return;
+    spokenEventIdsRef.current.add(latest.event.id);
+    void playTts(latest.event.id, "automatic");
+  }, [chat.selectedConversation?.ttsPolicy, chat.timeline, playTts]);
 
   if (isPending || chat.isLoading) {
     return (
@@ -92,8 +119,35 @@ export function ChatScreen() {
             ? "Speak or type naturally. Accepted turns are saved before delivery."
             : "Create a new thought to begin your durable conversation history."}
           onRetry={(outboxId) => void chat.retry(outboxId)}
+          onSpeak={(item) => {
+            if (item.event) void tts.play(item.event.id, "manual");
+          }}
         />
       </View>
+
+      {tts.activeEventId ? (
+        <View className="mb-2 flex-row items-center gap-2 rounded-xl border border-border bg-card px-3 py-2">
+          <Text className="min-w-0 flex-1 text-xs font-semibold text-muted" numberOfLines={1}>
+            {tts.error ?? (tts.isBuffering
+                ? "Preparing voice…"
+                : tts.isPlaying
+                  ? "OODA is speaking"
+                  : "Voice ready to replay")}
+          </Text>
+          {tts.isPlaying || tts.isBuffering ? (
+            <Pressable onPress={() => void tts.stop()} className="active:opacity-70">
+              <Text className="text-xs font-semibold text-accent">Stop</Text>
+            </Pressable>
+          ) : (
+            <Pressable onPress={() => void tts.replay()} className="active:opacity-70">
+              <Text className="text-xs font-semibold text-accent">Replay</Text>
+            </Pressable>
+          )}
+          <Pressable onPress={tts.cycleRate} className="active:opacity-70">
+            <Text className="text-xs font-semibold text-accent">{tts.rate}×</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       {!chat.selectedConversation ? (
         <Pressable
@@ -107,7 +161,11 @@ export function ChatScreen() {
         </Pressable>
       ) : (
         <View className="pb-3 pt-2">
-          <VoiceInputBar onSend={handleSend} disabled={!chat.canSend} />
+          <VoiceInputBar
+            onSend={handleSend}
+            disabled={!chat.canSend}
+            onBargeIn={tts.stop}
+          />
         </View>
       )}
 

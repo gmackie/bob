@@ -231,6 +231,21 @@ export function useOodaConversation() {
     if (isOnline) await flushOutbox();
   }, [flushOutbox, isOnline, outbox]);
 
+  const requestTtsSource = useCallback(async (
+    eventId: string,
+    requestMode: "automatic" | "manual",
+  ) => {
+    const conversationId = selectedConversationRef.current;
+    if (!conversationId) throw new Error("No active conversation");
+    const grant = await client.voice.createGrant({
+      conversationId,
+      eventId,
+      requestMode,
+      idempotencyKey: uuidv4(),
+    });
+    return client.voice.audioSource(grant.streamUrl);
+  }, [client]);
+
   const togglePin = useCallback((conversationId: string) => {
     setPinnedIds((current) => {
       const next = current.includes(conversationId)
@@ -290,6 +305,7 @@ export function useOodaConversation() {
     refreshConversations,
     send,
     retry,
+    requestTtsSource,
     togglePin,
   };
 }

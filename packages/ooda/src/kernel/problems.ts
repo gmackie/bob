@@ -5,6 +5,8 @@ export type OodaKernelProblemCode =
   | "CONFLICT"
   | "IDEMPOTENCY_CONFLICT"
   | "NOT_FOUND"
+  | "TTS_DISCLOSURE_DENIED"
+  | "TTS_GRANT_UNAVAILABLE"
   | "VALIDATION_FAILED";
 
 const titles: Record<OodaKernelProblemCode, string> = {
@@ -12,13 +14,15 @@ const titles: Record<OodaKernelProblemCode, string> = {
   CONFLICT: "Conflict",
   IDEMPOTENCY_CONFLICT: "Idempotency conflict",
   NOT_FOUND: "Not found",
+  TTS_DISCLOSURE_DENIED: "Text-to-speech disclosure denied",
+  TTS_GRANT_UNAVAILABLE: "Text-to-speech grant unavailable",
   VALIDATION_FAILED: "Validation failed",
 };
 
 export class OodaKernelProblem extends Error {
   constructor(
     readonly code: OodaKernelProblemCode,
-    readonly status: 400 | 404 | 409 | 422,
+    readonly status: 400 | 403 | 404 | 409 | 410 | 422,
     message: string,
   ) {
     super(message);

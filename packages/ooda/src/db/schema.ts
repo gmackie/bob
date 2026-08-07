@@ -36,3 +36,4 @@ export * from "./schema/conversations";
 export * from "./schema/memory";
 export * from "./schema/orchestration";
 export * from "./schema/integrations";
+export * from "./schema/voice";
