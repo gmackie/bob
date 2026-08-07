@@ -12,6 +12,8 @@ import {
   publicApiCreateRun,
   publicApiDispatchExecution,
   publicApiCreateProject,
+  publicApiListProjects,
+  publicApiCreateWorkItem,
   publicApiUpdateRun,
   publicApiCreateArtifact,
   publicApiGetRun,
@@ -114,6 +116,34 @@ export const publicApiRouter = {
     )
     .mutation(({ ctx, input }) =>
       publicApiCreateProject(
+        { db: ctx.db, userId: ctx.session.user.id },
+        input,
+      ),
+    ),
+
+  // GET /projects — list a workspace's projects (for agents to file tasks).
+  listProjects: apiKeyReadProcedure
+    .input(z.object({ workspaceId: z.string().uuid() }))
+    .query(({ ctx, input }) =>
+      publicApiListProjects(
+        { db: ctx.db, userId: ctx.session.user.id },
+        input,
+      ),
+    ),
+
+  // POST /work-items — create a single task (optionally under a project).
+  createWorkItem: apiKeyWriteProcedure
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+        projectId: z.string().uuid().optional(),
+        title: z.string().min(1).max(256),
+        description: z.string().max(20000).optional(),
+        status: z.string().max(40).optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      publicApiCreateWorkItem(
         { db: ctx.db, userId: ctx.session.user.id },
         input,
       ),

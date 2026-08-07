@@ -696,6 +696,101 @@ export async function publicApiCreateProject(
   };
 }
 
+/**
+ * GET /projects — list a workspace's (linear-clone) projects. Lets an agent /
+ * caller discover active projects to file tasks against.
+ */
+export async function publicApiListProjects(
+  ctx: HandlerContext,
+  input: { workspaceId: string },
+) {
+  const workspace = await ctx.db.query.workspaces.findFirst({
+    where: eq(workspaces.id, input.workspaceId),
+  });
+  if (!workspace?.tenantId) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+  await assertTenantAccess(ctx.db, ctx.userId, workspace.tenantId);
+
+  const rows = await ctx.db.query.projects.findMany({
+    where: eq(projects.workspaceId, input.workspaceId),
+    columns: { id: true, key: true, name: true, status: true },
+    orderBy: desc(projects.createdAt),
+    limit: 100,
+  });
+  return { projects: rows };
+}
+
+/**
+ * POST /work-items — create a single task, optionally under an existing project.
+ * The in-conversation "file this as a task" path. Defaults to "backlog" status
+ * (excluded from auto-drain), so nothing auto-executes without promotion.
+ */
+export async function publicApiCreateWorkItem(
+  ctx: HandlerContext,
+  input: {
+    workspaceId: string;
+    projectId?: string;
+    title: string;
+    description?: string;
+    status?: string;
+  },
+) {
+  const workspace = await ctx.db.query.workspaces.findFirst({
+    where: eq(workspaces.id, input.workspaceId),
+  });
+  if (!workspace?.tenantId) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+  await assertTenantAccess(ctx.db, ctx.userId, workspace.tenantId);
+
+  if (input.projectId) {
+    const proj = await ctx.db.query.projects.findFirst({
+      where: and(
+        eq(projects.id, input.projectId),
+        eq(projects.workspaceId, input.workspaceId),
+      ),
+      columns: { id: true },
+    });
+    if (!proj) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "project not found in workspace",
+      });
+    }
+  }
+
+  const [{ n } = { n: 0 }] = await ctx.db
+    .select({ n: sql<number>`count(*)` })
+    .from(workItems)
+    .where(eq(workItems.workspaceId, input.workspaceId));
+
+  const [wi] = await ctx.db
+    .insert(workItems)
+    .values({
+      ownerUserId: ctx.userId,
+      workspaceId: input.workspaceId,
+      projectId: input.projectId ?? null,
+      kind: "task",
+      title: input.title.slice(0, 256),
+      description: input.description ?? null,
+      status: input.status ?? "backlog",
+      sequenceNumber: Number(n) + 1,
+    })
+    .returning({
+      id: workItems.id,
+      title: workItems.title,
+      status: workItems.status,
+    });
+  if (!wi) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to create work item",
+    });
+  }
+  return { workItemId: wi.id, title: wi.title, status: wi.status };
+}
+
 export async function publicApiUpdateRun(
   ctx: HandlerContext,
   input: {

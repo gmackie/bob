@@ -23,3 +23,18 @@ export async function POST(request: Request) {
     }
   });
 }
+
+// GET /api/v1/projects?workspaceId=… — list a workspace's projects.
+export async function GET(request: Request) {
+  return withApiRateLimit(request, async () => {
+    try {
+      const caller = await createPublicApiCaller(request);
+      const workspaceId =
+        new URL(request.url).searchParams.get("workspaceId") ?? "";
+      const result = await caller.publicApi.listProjects({ workspaceId });
+      return NextResponse.json(result);
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+}
