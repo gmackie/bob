@@ -55,6 +55,7 @@ export const integrationOutbox = oodaSchema.table(
     claimedAt: t.timestamp({ withTimezone: true }),
     claimedBy: t.text(),
     deliveredAt: t.timestamp({ withTimezone: true }),
+    lastError: t.text(),
     createdAt: t.timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: t
       .timestamp({ withTimezone: true })
@@ -108,9 +109,13 @@ export const deadLetters = oodaSchema.table(
     repairedAt: t.timestamp({ withTimezone: true }),
     repairedBy: t.text(),
     repairNote: t.text(),
+    repairIdempotencyKey: t.text(),
   }),
   (t) => [
-    uniqueIndex("dead_letters_outbox_uidx").on(t.outboxId),
+    index("dead_letters_outbox_idx").on(t.outboxId),
+    uniqueIndex("dead_letters_repair_idempotency_uidx").on(
+      t.repairIdempotencyKey,
+    ),
     index("dead_letters_unrepaired_idx").on(t.repairedAt),
   ],
 );

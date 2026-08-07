@@ -24,6 +24,9 @@ import {
   CreateAgentJobResultV1Schema,
   CreateProposalInputV1Schema,
   CreateProposalResultV1Schema,
+  ClaimIntegrationDeliveryResultV1Schema,
+  IntegrationDeliveryV1Schema,
+  RepairDeadLetterInputV1Schema,
   ExternalLinkV1Schema,
   ForkConversationInputV1Schema,
   MemorySeedV1Schema,
@@ -265,6 +268,55 @@ describe("OODA V1 contracts", () => {
     expect(MemorySeedV1Schema.safeParse(memory).success).toBe(true);
     expect(AgentJobV1Schema.safeParse(job).success).toBe(true);
     expect(ExternalLinkV1Schema.safeParse(link).success).toBe(true);
+  });
+
+  it("pins strict delivery, runner-claim, and repair contracts", () => {
+    const delivery = {
+      id: "outbox-1",
+      proposalId: "proposal-1",
+      destination: "bob",
+      idempotencyKey: "delivery-1",
+      status: "delivering",
+      attemptCount: 1,
+      availableAt: occurredAt,
+      claimedAt: occurredAt,
+      claimedBy: "runner-1",
+      createdAt: occurredAt,
+      updatedAt: occurredAt,
+    };
+    const proposal = {
+      id: "proposal-1",
+      conversationId: "conversation-1",
+      kind: "bob_task",
+      destination: "bob",
+      status: "approved",
+      risk: "durable_work",
+      preview: { title: "Ship it", acceptanceCriteria: ["One task"] },
+      rationale: "Approved by the user.",
+      confidence: 0.9,
+      policySnapshot: {},
+      version: 2,
+      createdAt: occurredAt,
+      updatedAt: occurredAt,
+    };
+
+    expect(IntegrationDeliveryV1Schema.parse(delivery)).toEqual(delivery);
+    expect(
+      IntegrationDeliveryV1Schema.safeParse({ ...delivery, surprise: true })
+        .success,
+    ).toBe(false);
+    expect(
+      ClaimIntegrationDeliveryResultV1Schema.safeParse({ delivery, proposal })
+        .success,
+    ).toBe(true);
+    expect(
+      RepairDeadLetterInputV1Schema.safeParse({
+        deadLetterId: "dead-letter-1",
+        note: "Configuration repaired.",
+        idempotencyKey: "repair-1",
+        repairedAt: occurredAt,
+      }).success,
+    ).toBe(true);
   });
 
   it("defines a bounded, resumable worker protocol without durable-write capabilities", () => {

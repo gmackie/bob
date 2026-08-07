@@ -31,6 +31,13 @@ import {
   recordAgentJobEvent,
 } from "../agent-jobs";
 import { createProposal, decideProposal, getProposal } from "../proposals";
+import {
+  claimIntegrationDelivery,
+  completeIntegrationDelivery,
+  failIntegrationDelivery,
+  listDeadLetters,
+  repairDeadLetter,
+} from "../integration-deliveries";
 
 const DATABASE_URL = process.env.OODA_KERNEL_TEST_DATABASE_URL;
 const HAS_DB = Boolean(DATABASE_URL);
@@ -70,6 +77,7 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     await applyMigration(migration("0010_lying_scream.sql"));
     await applyMigration(migration("0011_noisy_prodigy.sql"));
     await applyMigration(migration("0012_typical_franklin_richards.sql"));
+    await applyMigration(migration("0013_nasty_rogue.sql"));
   });
 
   afterAll(async () => {
@@ -948,5 +956,204 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     await expect(
       getProposal(db!, "another-owner", created.proposal.id),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    const ledgerClaim = await claimIntegrationDelivery(
+      db!,
+      { runnerId: "ledger-runner", destinations: ["bob"], leaseSeconds: 90 },
+      { now: new Date("2026-08-07T16:00:01.000Z") },
+    );
+    await completeIntegrationDelivery(
+      db!,
+      {
+        outboxId: ledgerClaim!.delivery.id,
+        runnerId: "ledger-runner",
+        receipt: {
+          destination: "bob",
+          externalType: "project",
+          externalId: "11111111-1111-4111-8111-111111111111",
+          deepLink:
+            "https://bob.example.com/projects/11111111-1111-4111-8111-111111111111",
+          idempotencyKey: ledgerClaim!.delivery.idempotencyKey,
+          status: "accepted",
+          metadata: {},
+          recordedAt: "2026-08-07T16:00:02.000Z",
+        },
+      },
+      { now: new Date("2026-08-07T16:00:02.000Z") },
+    );
+  });
+
+  it("claims and completes one approved delivery with a durable external link", async () => {
+    const conversation = await createConversation(db!, "owner-delivery", {
+      title: "Deliver this project",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "delivery-conversation",
+    });
+    const created = await createProposal(db!, "owner-delivery", {
+      conversationId: conversation.conversation.id,
+      kind: "bob_project",
+      destination: "bob",
+      risk: "durable_work",
+      preview: {
+        name: "Delivery proof",
+        acceptanceCriteria: ["One Bob project exists"],
+      },
+      rationale: "Approved end-to-end proof.",
+      confidence: 0.95,
+      policySnapshot: { version: "v1" },
+      idempotencyKey: "delivery-proposal",
+    });
+    const approved = await decideProposal(db!, "owner-delivery", {
+      proposalId: created.proposal.id,
+      decision: "approve",
+      expectedVersion: 1,
+      scope: "single_delivery",
+      decidedAt: "2026-08-07T17:00:00.000Z",
+    });
+    const claim = await claimIntegrationDelivery(
+      db!,
+      { runnerId: "delivery-runner", destinations: ["bob"], leaseSeconds: 90 },
+      { now: new Date("2026-08-07T17:00:01.000Z") },
+    );
+    expect(claim).toMatchObject({
+      delivery: {
+        id: approved.outboxId,
+        status: "delivering",
+        attemptCount: 1,
+      },
+      proposal: { id: created.proposal.id, status: "approved" },
+    });
+
+    const completed = await completeIntegrationDelivery(
+      db!,
+      {
+        outboxId: claim!.delivery.id,
+        runnerId: "delivery-runner",
+        receipt: {
+          destination: "bob",
+          externalType: "project",
+          externalId: "22222222-2222-4222-8222-222222222222",
+          deepLink:
+            "https://bob.example.com/projects/22222222-2222-4222-8222-222222222222",
+          idempotencyKey: claim!.delivery.idempotencyKey,
+          status: "accepted",
+          metadata: { key: "DELIVERY" },
+          recordedAt: "2026-08-07T17:00:02.000Z",
+        },
+      },
+      { now: new Date("2026-08-07T17:00:02.000Z") },
+    );
+    expect(completed).toMatchObject({
+      delivery: { status: "delivered" },
+      externalLink: {
+        proposalId: created.proposal.id,
+        externalId: "22222222-2222-4222-8222-222222222222",
+      },
+    });
+    await expect(
+      getProposal(db!, "owner-delivery", created.proposal.id),
+    ).resolves.toMatchObject({
+      status: "delivered",
+    });
+  });
+
+  it("dead-letters a permanent failure and repairs it without changing approval", async () => {
+    const conversation = await createConversation(db!, "owner-repair", {
+      title: "Repair delivery",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "repair-conversation",
+    });
+    const created = await createProposal(db!, "owner-repair", {
+      conversationId: conversation.conversation.id,
+      kind: "bob_task",
+      destination: "bob",
+      risk: "durable_work",
+      preview: {
+        title: "Repair me",
+        acceptanceCriteria: ["Repair is replay-safe"],
+      },
+      rationale: "Delivery repair proof.",
+      confidence: 0.9,
+      policySnapshot: { version: "v1" },
+      idempotencyKey: "repair-proposal",
+    });
+    await decideProposal(db!, "owner-repair", {
+      proposalId: created.proposal.id,
+      decision: "approve",
+      expectedVersion: 1,
+      scope: "single_delivery",
+      decidedAt: "2026-08-07T18:00:00.000Z",
+    });
+    const claim = await claimIntegrationDelivery(
+      db!,
+      { runnerId: "repair-runner", destinations: ["bob"], leaseSeconds: 90 },
+      { now: new Date("2026-08-07T18:00:01.000Z") },
+    );
+    const failureInput = {
+      outboxId: claim!.delivery.id,
+      runnerId: "repair-runner",
+      classification: "failed" as const,
+      error: "Proposal is invalid for the destination",
+      retryable: false,
+    };
+    const failed = await failIntegrationDelivery(db!, failureInput, {
+      now: new Date("2026-08-07T18:00:02.000Z"),
+    });
+    const failureReplay = await failIntegrationDelivery(db!, failureInput, {
+      now: new Date("2026-08-07T18:00:03.000Z"),
+    });
+    expect(failed.delivery.status).toBe("dead_letter");
+    expect(failureReplay).toEqual(failed);
+    const page = await listDeadLetters(db!, "owner-repair", {
+      conversationId: conversation.conversation.id,
+      limit: 10,
+    });
+    expect(page.items).toHaveLength(1);
+
+    const input = {
+      deadLetterId: page.items[0]!.id,
+      note: "Destination config was corrected.",
+      idempotencyKey: "repair-decision-1",
+      repairedAt: "2026-08-07T18:01:00.000Z",
+    };
+    const repaired = await repairDeadLetter(db!, "owner-repair", input);
+    const replay = await repairDeadLetter(db!, "owner-repair", input);
+    expect(repaired).toMatchObject({
+      delivery: { status: "pending" },
+      replayed: false,
+    });
+    expect(replay).toEqual({ ...repaired, replayed: true });
+    await expect(
+      repairDeadLetter(db!, "not-owner", input),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+    const claims = await Promise.all([
+      claimIntegrationDelivery(
+        db!,
+        {
+          runnerId: "repair-runner-a",
+          destinations: ["bob"],
+          leaseSeconds: 90,
+        },
+        { now: new Date("2026-08-07T18:01:01.000Z") },
+      ),
+      claimIntegrationDelivery(
+        db!,
+        {
+          runnerId: "repair-runner-b",
+          destinations: ["bob"],
+          leaseSeconds: 90,
+        },
+        { now: new Date("2026-08-07T18:01:01.000Z") },
+      ),
+    ]);
+    expect(claims.filter(Boolean)).toHaveLength(1);
+    expect(claims.find(Boolean)?.delivery.id).toBe(repaired.delivery.id);
   });
 });

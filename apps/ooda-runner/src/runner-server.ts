@@ -25,6 +25,8 @@ import type { ResearchTRPCSurface } from "@gmacko/ooda/buddy-tools";
 import { BobGatewayConnector } from "./bob-gateway";
 import { BobRunReporter } from "./bob-run-reporter";
 import { AgentJobWorker } from "./agent-jobs/agent-job-worker";
+import { BobDomainAdapter } from "@gmacko/ooda/integrations";
+import { IntegrationDeliveryWorker } from "./integrations/integration-delivery-worker";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const POLL_INTERVAL_MS = 2_000;
@@ -166,6 +168,7 @@ export class RunnerServer {
   private capabilityRegistry: CapabilityRegistry;
   private buddyMcpServer: BuddyMcpServer;
   private agentJobWorker: AgentJobWorker | null = null;
+  private integrationDeliveryWorker: IntegrationDeliveryWorker | null = null;
 
   constructor(private config: RunnerConfig) {
     this.sessions = new SessionManager();
@@ -289,6 +292,7 @@ export class RunnerServer {
     this.pollTimer = setInterval(() => {
       void this.pollForSessions();
       void this.agentJobWorker?.poll();
+      void this.integrationDeliveryWorker?.poll();
     }, POLL_INTERVAL_MS);
 
     // Start stale-session reaper loop
@@ -325,6 +329,33 @@ export class RunnerServer {
               claim: (input) => this.trpc.jobs.claim.mutate(input),
               recordEvent: (input) => this.trpc.jobs.recordEvent.mutate(input),
               control: (input) => this.trpc.jobs.control.query(input),
+            },
+          });
+        }
+        if (
+          !this.integrationDeliveryWorker &&
+          this.config.bobDeliveryEnabled &&
+          this.config.bobApiUrl &&
+          this.config.bobApiKey &&
+          this.config.bobWorkspaceId
+        ) {
+          this.integrationDeliveryWorker = new IntegrationDeliveryWorker({
+            runnerId: device.id,
+            adapters: new Map([
+              [
+                "bob",
+                new BobDomainAdapter({
+                  apiUrl: this.config.bobApiUrl,
+                  apiKey: this.config.bobApiKey,
+                  workspaceId: this.config.bobWorkspaceId,
+                }),
+              ],
+            ]),
+            api: {
+              claim: (input) => this.trpc.integrations.claim.mutate(input),
+              complete: (input) =>
+                this.trpc.integrations.complete.mutate(input),
+              fail: (input) => this.trpc.integrations.fail.mutate(input),
             },
           });
         }
@@ -730,6 +761,8 @@ export class RunnerServer {
     }
     await this.agentJobWorker?.stop();
     this.agentJobWorker = null;
+    this.integrationDeliveryWorker?.stop();
+    this.integrationDeliveryWorker = null;
     await this.buddyMcpServer.stop();
   }
 }

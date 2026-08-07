@@ -4,11 +4,11 @@
  *
  * Phase 7B-4D-beta Task 6.
  */
-import { randomBytes, createHash } from "node:crypto";
-
+import { createHash, randomBytes } from "node:crypto";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, inArray, sql } from "@bob/db";
+
 import type { Db } from "@bob/db/client";
+import { and, desc, eq, inArray, sql } from "@bob/db";
 import {
   agentRuns,
   apiKeys,
@@ -17,11 +17,11 @@ import {
   projects,
   repositories,
   runArtifacts,
+  tenantMembers,
   tenants,
   workItems,
-  workspaces,
-  tenantMembers,
   workspaceMembers,
+  workspaces,
 } from "@bob/db/schema";
 import { resolveAgentType } from "@bob/work-items";
 
@@ -30,6 +30,57 @@ import type { HandlerContext } from "./context.js";
 /** Matches a canonical UUID, used to decide if a workItemId is joinable. */
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+interface OodaIntakeSource {
+  system: "ooda";
+  proposalId: string;
+  conversationId: string;
+  proposalVersion: number;
+  [key: string]: unknown;
+}
+
+interface OodaIntakeInput {
+  workspaceId: string;
+  idempotencyKey: string;
+  acceptanceCriteria: string[];
+  source: OodaIntakeSource;
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value)
+      .filter(([, item]) => item !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function intakeFingerprint(input: unknown): string {
+  return createHash("sha256").update(stableJson(input)).digest("hex");
+}
+
+function replayFingerprint(row: {
+  sourceMetadata?: Record<string, unknown> | null;
+}): string | null {
+  const value = row.sourceMetadata?.commandFingerprint;
+  return typeof value === "string" ? value : null;
+}
+
+function assertReplayMatches(
+  row: { sourceMetadata?: Record<string, unknown> | null },
+  fingerprint: string,
+): void {
+  if (replayFingerprint(row) !== fingerprint) {
+    throw new TRPCError({
+      code: "CONFLICT",
+      message:
+        "The idempotency key was already used for a different intake command",
+    });
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -364,7 +415,8 @@ export async function publicApiCreateRun(
   }
   await assertTenantAccess(ctx.db, ctx.userId, workspace.tenantId);
 
-  const { assertWithinQuotaOrThrow } = await import("../services/quotas/index.js");
+  const { assertWithinQuotaOrThrow } =
+    await import("../services/quotas/index.js");
   // A new run counts against monthly task-run volume and concurrent active agents.
   await assertWithinQuotaOrThrow({
     db: ctx.db,
@@ -491,8 +543,13 @@ export async function publicApiDispatchExecution(
   }
   await assertTenantAccess(ctx.db, ctx.userId, workspace.tenantId);
 
-  const { assertWithinQuotaOrThrow } = await import("../services/quotas/index.js");
-  await assertWithinQuotaOrThrow({ db: ctx.db, tenantId: workspace.tenantId, metric: "taskRuns" });
+  const { assertWithinQuotaOrThrow } =
+    await import("../services/quotas/index.js");
+  await assertWithinQuotaOrThrow({
+    db: ctx.db,
+    tenantId: workspace.tenantId,
+    metric: "taskRuns",
+  });
   await assertWithinQuotaOrThrow({
     db: ctx.db,
     tenantId: workspace.tenantId,
@@ -526,7 +583,10 @@ export async function publicApiDispatchExecution(
     })
     .returning();
   if (!workItem) {
-    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to create work item" });
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to create work item",
+    });
   }
   const identifier = workItem.id.slice(0, 8);
 
@@ -546,11 +606,16 @@ export async function publicApiDispatchExecution(
       // Opaque correlation passthrough for read-back (M2). Nested under
       // `metadata` because that is the only sub-object the gateway forwards to
       // the runner as personaConfig.metadata (relay.ts session_available).
-      personaMetadata: input.ooda ? { metadata: { ooda: input.ooda } } : undefined,
+      personaMetadata: input.ooda
+        ? { metadata: { ooda: input.ooda } }
+        : undefined,
     })
     .returning();
   if (!session) {
-    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to create execution session" });
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to create execution session",
+    });
   }
 
   // Nudge the gateway to dispatch immediately. Best-effort: the daemon also
@@ -561,7 +626,10 @@ export async function publicApiDispatchExecution(
     try {
       await fetch(`${gatewayUrl}/internal/nudge`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${nudgeSecret}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${nudgeSecret}`,
+        },
         body: JSON.stringify({
           sessionId: session.id,
           workspaceId: input.workspaceId,
@@ -577,7 +645,9 @@ export async function publicApiDispatchExecution(
           // DB-reading deliverPendingSessionsToDaemon path. Without this, a
           // nudge-delivered session reaches the runner with no
           // personaConfig.metadata.ooda, so the M2 read-back silently no-ops.
-          personaConfig: input.ooda ? { metadata: { ooda: input.ooda } } : undefined,
+          personaConfig: input.ooda
+            ? { metadata: { ooda: input.ooda } }
+            : undefined,
         }),
       });
     } catch {
@@ -605,7 +675,7 @@ export async function publicApiDispatchExecution(
  */
 export async function publicApiCreateProject(
   ctx: HandlerContext,
-  input: {
+  input: OodaIntakeInput & {
     workspaceId: string;
     name: string;
     description?: string;
@@ -621,78 +691,294 @@ export async function publicApiCreateProject(
   }
   await assertTenantAccess(ctx.db, ctx.userId, workspace.tenantId);
 
-  // Unique project key (<=16 chars), collision-suffixed within the workspace.
-  const baseKey =
-    input.name
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, "")
-      .slice(0, 12) || "PROJ";
-  let key = baseKey;
-  for (let suffix = 2; suffix <= 99; suffix++) {
-    const conflict = await ctx.db.query.projects.findFirst({
+  const commandFingerprint = intakeFingerprint(input);
+  const replay = await ctx.db.query.projects.findFirst({
+    where: and(
+      eq(projects.workspaceId, input.workspaceId),
+      eq(projects.externalProvider, "ooda"),
+      eq(projects.externalId, input.idempotencyKey),
+    ),
+  });
+  if (replay) {
+    assertReplayMatches(replay, commandFingerprint);
+    const replayItems = await ctx.db.query.workItems.findMany({
+      where: eq(workItems.projectId, replay.id),
+      columns: { id: true, title: true },
+    });
+    return {
+      kind: "project" as const,
+      id: replay.id,
+      projectId: replay.id,
+      key: replay.key,
+      name: replay.name,
+      status: replay.status,
+      workItems: replayItems,
+      replayed: true,
+    };
+  }
+
+  try {
+    return await ctx.db.transaction(async (tx) => {
+      // Unique project key (<=16 chars), collision-suffixed within the workspace.
+      const baseKey =
+        input.name
+          .toUpperCase()
+          .replace(/[^A-Z0-9]/g, "")
+          .slice(0, 12) || "PROJ";
+      let key = baseKey;
+      for (let suffix = 2; suffix <= 99; suffix++) {
+        const conflict = await tx.query.projects.findFirst({
+          where: and(
+            eq(projects.workspaceId, input.workspaceId),
+            eq(projects.key, key),
+          ),
+          columns: { id: true },
+        });
+        if (!conflict) break;
+        key = `${baseKey}${suffix}`.slice(0, 16);
+      }
+
+      const [project] = await tx
+        .insert(projects)
+        .values({
+          workspaceId: input.workspaceId,
+          name: input.name,
+          key,
+          description: input.description ?? null,
+          color: input.color ?? null,
+          status: "active",
+          externalProvider: "ooda",
+          externalId: input.idempotencyKey,
+          sourceMetadata: {
+            ...input.source,
+            acceptanceCriteria: input.acceptanceCriteria,
+            commandFingerprint,
+          },
+        })
+        .returning();
+      if (!project) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to create project",
+        });
+      }
+
+      // Project and seeded backlog are one commit: a replay never observes a
+      // durable project whose approved initial task set was only half written.
+      const taskTitles = (input.tasks ?? [])
+        .map((title) => title.trim())
+        .filter(Boolean)
+        .slice(0, 20);
+      const createdWorkItems: { id: string; title: string }[] = [];
+      if (taskTitles.length > 0) {
+        const [{ n } = { n: 0 }] = await tx
+          .select({ n: sql<number>`count(*)` })
+          .from(workItems)
+          .where(eq(workItems.workspaceId, input.workspaceId));
+        let sequence = Number(n);
+        for (const title of taskTitles) {
+          sequence += 1;
+          const [workItem] = await tx
+            .insert(workItems)
+            .values({
+              ownerUserId: ctx.userId,
+              workspaceId: input.workspaceId,
+              projectId: project.id,
+              kind: "task",
+              title: title.slice(0, 256),
+              status: "backlog",
+              sequenceNumber: sequence,
+            })
+            .returning({ id: workItems.id, title: workItems.title });
+          if (workItem) createdWorkItems.push(workItem);
+        }
+      }
+      return {
+        kind: "project" as const,
+        id: project.id,
+        projectId: project.id,
+        key: project.key,
+        name: project.name,
+        status: project.status,
+        workItems: createdWorkItems,
+        replayed: false,
+      };
+    });
+  } catch (error) {
+    // A concurrent delivery may have committed after our first replay check.
+    // Resolve the destination identity instead of surfacing its unique-index
+    // race as a failed delivery.
+    const concurrentReplay = await ctx.db.query.projects.findFirst({
       where: and(
         eq(projects.workspaceId, input.workspaceId),
-        eq(projects.key, key),
+        eq(projects.externalProvider, "ooda"),
+        eq(projects.externalId, input.idempotencyKey),
+      ),
+    });
+    if (!concurrentReplay) throw error;
+    assertReplayMatches(concurrentReplay, commandFingerprint);
+    const replayItems = await ctx.db.query.workItems.findMany({
+      where: eq(workItems.projectId, concurrentReplay.id),
+      columns: { id: true, title: true },
+    });
+    return {
+      kind: "project" as const,
+      id: concurrentReplay.id,
+      projectId: concurrentReplay.id,
+      key: concurrentReplay.key,
+      name: concurrentReplay.name,
+      status: concurrentReplay.status,
+      workItems: replayItems,
+      replayed: true,
+    };
+  }
+}
+
+/** Create one durable Bob backlog task from an approved OODA proposal. */
+export async function publicApiCreateTask(
+  ctx: HandlerContext,
+  input: OodaIntakeInput & {
+    title: string;
+    description?: string;
+    projectId?: string;
+  },
+) {
+  const workspace = await ctx.db.query.workspaces.findFirst({
+    where: eq(workspaces.id, input.workspaceId),
+  });
+  if (!workspace?.tenantId) throw new TRPCError({ code: "NOT_FOUND" });
+  await assertTenantAccess(ctx.db, ctx.userId, workspace.tenantId);
+
+  if (input.projectId) {
+    const project = await ctx.db.query.projects.findFirst({
+      where: and(
+        eq(projects.id, input.projectId),
+        eq(projects.workspaceId, input.workspaceId),
       ),
       columns: { id: true },
     });
-    if (!conflict) break;
-    key = `${baseKey}${suffix}`.slice(0, 16);
+    if (!project) throw new TRPCError({ code: "NOT_FOUND" });
   }
 
-  const [project] = await ctx.db
-    .insert(projects)
-    .values({
-      workspaceId: input.workspaceId,
-      name: input.name,
-      key,
-      description: input.description ?? null,
-      color: input.color ?? null,
-      status: "active",
-    })
-    .returning();
-  if (!project) {
-    throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "Failed to create project",
-    });
+  const commandFingerprint = intakeFingerprint(input);
+  const replay = await ctx.db.query.workItems.findFirst({
+    where: and(
+      eq(workItems.workspaceId, input.workspaceId),
+      eq(workItems.externalProvider, "ooda"),
+      eq(workItems.externalId, input.idempotencyKey),
+    ),
+  });
+  if (replay) {
+    assertReplayMatches(replay, commandFingerprint);
+    return {
+      kind: "work_item" as const,
+      id: replay.id,
+      title: replay.title,
+      status: replay.status,
+      replayed: true,
+    };
   }
 
-  // Seed backlog tasks.
-  const taskTitles = (input.tasks ?? [])
-    .map((t) => t.trim())
-    .filter(Boolean)
-    .slice(0, 20);
-  const createdWorkItems: { id: string; title: string }[] = [];
-  if (taskTitles.length > 0) {
-    const [{ n } = { n: 0 }] = await ctx.db
-      .select({ n: sql<number>`count(*)` })
-      .from(workItems)
-      .where(eq(workItems.workspaceId, input.workspaceId));
-    let seq = Number(n);
-    for (const title of taskTitles) {
-      seq += 1;
-      const [wi] = await ctx.db
-        .insert(workItems)
-        .values({
-          ownerUserId: ctx.userId,
-          workspaceId: input.workspaceId,
-          projectId: project.id,
-          kind: "task",
-          title: title.slice(0, 256),
-          status: "backlog",
-          sequenceNumber: seq,
-        })
-        .returning({ id: workItems.id, title: workItems.title });
-      if (wi) createdWorkItems.push(wi);
+  const [{ n } = { n: 0 }] = await ctx.db
+    .select({ n: sql<number>`count(*)` })
+    .from(workItems)
+    .where(eq(workItems.workspaceId, input.workspaceId));
+  try {
+    const [workItem] = await ctx.db
+      .insert(workItems)
+      .values({
+        ownerUserId: ctx.userId,
+        workspaceId: input.workspaceId,
+        projectId: input.projectId ?? null,
+        kind: "task",
+        title: input.title,
+        description: input.description ?? null,
+        status: "backlog",
+        sequenceNumber: Number(n) + 1,
+        externalProvider: "ooda",
+        externalId: input.idempotencyKey,
+        sourceMetadata: {
+          ...input.source,
+          acceptanceCriteria: input.acceptanceCriteria,
+          commandFingerprint,
+        },
+      })
+      .returning();
+    if (!workItem) {
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Failed to create work item",
+      });
     }
+    return {
+      kind: "work_item" as const,
+      id: workItem.id,
+      title: workItem.title,
+      status: workItem.status,
+      replayed: false,
+    };
+  } catch (error) {
+    const concurrentReplay = await ctx.db.query.workItems.findFirst({
+      where: and(
+        eq(workItems.workspaceId, input.workspaceId),
+        eq(workItems.externalProvider, "ooda"),
+        eq(workItems.externalId, input.idempotencyKey),
+      ),
+    });
+    if (!concurrentReplay) throw error;
+    assertReplayMatches(concurrentReplay, commandFingerprint);
+    return {
+      kind: "work_item" as const,
+      id: concurrentReplay.id,
+      title: concurrentReplay.title,
+      status: concurrentReplay.status,
+      replayed: true,
+    };
   }
+}
 
+/** Resolve Bob's durable destination record after an ambiguous caller timeout. */
+export async function publicApiLookupIntake(
+  ctx: HandlerContext,
+  input: { workspaceId: string; idempotencyKey: string },
+) {
+  const workspace = await ctx.db.query.workspaces.findFirst({
+    where: eq(workspaces.id, input.workspaceId),
+  });
+  if (!workspace?.tenantId) throw new TRPCError({ code: "NOT_FOUND" });
+  await assertTenantAccess(ctx.db, ctx.userId, workspace.tenantId);
+
+  const project = await ctx.db.query.projects.findFirst({
+    where: and(
+      eq(projects.workspaceId, input.workspaceId),
+      eq(projects.externalProvider, "ooda"),
+      eq(projects.externalId, input.idempotencyKey),
+    ),
+  });
+  if (project) {
+    return {
+      kind: "project" as const,
+      id: project.id,
+      key: project.key,
+      name: project.name,
+      status: project.status,
+      replayed: true,
+    };
+  }
+  const workItem = await ctx.db.query.workItems.findFirst({
+    where: and(
+      eq(workItems.workspaceId, input.workspaceId),
+      eq(workItems.externalProvider, "ooda"),
+      eq(workItems.externalId, input.idempotencyKey),
+    ),
+  });
+  if (!workItem) throw new TRPCError({ code: "NOT_FOUND" });
   return {
-    projectId: project.id,
-    key: project.key,
-    name: project.name,
-    workItems: createdWorkItems,
+    kind: "work_item" as const,
+    id: workItem.id,
+    title: workItem.title,
+    status: workItem.status,
+    replayed: true,
   };
 }
 
@@ -785,7 +1071,8 @@ export async function publicApiCreateArtifact(
     Number.isFinite(input.metadata.sizeBytes)
       ? Math.max(0, Math.floor(input.metadata.sizeBytes))
       : 1024;
-  const { assertWithinQuotaOrThrow } = await import("../services/quotas/index.js");
+  const { assertWithinQuotaOrThrow } =
+    await import("../services/quotas/index.js");
   await assertWithinQuotaOrThrow({
     db: ctx.db,
     tenantId: run.tenantId,

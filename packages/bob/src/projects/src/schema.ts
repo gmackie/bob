@@ -18,7 +18,7 @@
 // =============================================================================
 
 import { relations, sql } from "drizzle-orm";
-import { pgEnum, pgTable } from "drizzle-orm/pg-core";
+import { pgEnum, pgTable, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -84,42 +84,62 @@ export type LinkType = (typeof linkTypeEnum)[number];
 
 // --- Tables ---
 
-export const projects = pgTable("projects", (t) => ({
-  id: t.uuid().notNull().primaryKey().defaultRandom(),
-  workspaceId: t
-    .uuid()
-    .notNull()
-    .references(() => workspaces.id, { onDelete: "cascade" }),
-  leadUserId: t.text().references(() => user.id, { onDelete: "set null" }),
-  forgeGraphAppId: t.text().unique(), // 1:1 with ForgeGraph app
-  repoUrl: t.text(), // synced from ForgeGraph
-  defaultBranch: t.text(), // synced from ForgeGraph
-  name: t.varchar({ length: 128 }).notNull(),
-  key: t.varchar({ length: 16 }).notNull(),
-  description: t.text(),
-  color: t.varchar({ length: 7 }),
-  status: projectStatusEnum().notNull().default("planned"),
-  automationSettings: t
-    .jsonb()
-    .$type<{
-      autoDispatch?: boolean;
-      autoBranch?: boolean;
-      autoFeaturePR?: boolean;
-      ciTrigger?: boolean;
-      reactFrontend?: boolean;
-    }>()
-    .notNull()
-    .default({}),
-  planningProvider: t.varchar({ length: 20 }).notNull().default("internal"),
-  // Default agent for this project's work items; overrides the workspace
-  // default, overridden by a per-work-item agentTypeOverride. Nullable = unset.
-  defaultAgentType: t.varchar({ length: 50 }),
-  linearProjectId: t.text(),
-  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-  updatedAt: t
-    .timestamp({ mode: "string", withTimezone: true })
-    .$onUpdateFn(() => sql`now()`),
-}));
+export const projects = pgTable(
+  "projects",
+  (t) => ({
+    id: t.uuid().notNull().primaryKey().defaultRandom(),
+    workspaceId: t
+      .uuid()
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    leadUserId: t.text().references(() => user.id, { onDelete: "set null" }),
+    forgeGraphAppId: t.text().unique(), // 1:1 with ForgeGraph app
+    repoUrl: t.text(), // synced from ForgeGraph
+    defaultBranch: t.text(), // synced from ForgeGraph
+    name: t.varchar({ length: 128 }).notNull(),
+    key: t.varchar({ length: 16 }).notNull(),
+    description: t.text(),
+    color: t.varchar({ length: 7 }),
+    status: projectStatusEnum().notNull().default("planned"),
+    automationSettings: t
+      .jsonb()
+      .$type<{
+        autoDispatch?: boolean;
+        autoBranch?: boolean;
+        autoFeaturePR?: boolean;
+        ciTrigger?: boolean;
+        reactFrontend?: boolean;
+      }>()
+      .notNull()
+      .default({}),
+    planningProvider: t.varchar({ length: 20 }).notNull().default("internal"),
+    // Default agent for this project's work items; overrides the workspace
+    // default, overridden by a per-work-item agentTypeOverride. Nullable = unset.
+    defaultAgentType: t.varchar({ length: 50 }),
+    linearProjectId: t.text(),
+    // Durable source identity for approved cross-system intake. OODA supplies
+    // an immutable delivery key; the unique index makes retries collapse at the
+    // destination even if the caller timed out after Bob committed.
+    externalProvider: t.varchar({ length: 32 }),
+    externalId: t.text(),
+    sourceMetadata: t
+      .jsonb()
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
+    updatedAt: t
+      .timestamp({ mode: "string", withTimezone: true })
+      .$onUpdateFn(() => sql`now()`),
+  }),
+  (table) => [
+    uniqueIndex("projects_external_provider_id_uidx")
+      .on(table.externalProvider, table.externalId)
+      .where(
+        sql`${table.externalProvider} is not null and ${table.externalId} is not null`,
+      ),
+  ],
+);
 
 export const workspaceIntegrations = pgTable(
   "workspace_integrations",
@@ -190,11 +210,15 @@ export const repositories = pgTable("repositories", (t) => ({
   remoteName: t.text(),
   remoteInstanceUrl: t.text(),
   gitProviderConnectionId: t.uuid(),
-  workspaceId: t.uuid("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
+  workspaceId: t
+    .uuid("workspace_id")
+    .references(() => workspaces.id, { onDelete: "cascade" }),
   buildSystem: t.varchar("build_system", { length: 32 }),
   dirty: t.boolean().default(false),
   stale: t.boolean().default(false),
-  discoveryStatus: t.varchar("discovery_status", { length: 16 }).default("discovered"),
+  discoveryStatus: t
+    .varchar("discovery_status", { length: 16 })
+    .default("discovered"),
   createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t
     .timestamp({ mode: "string", withTimezone: true })
@@ -352,12 +376,15 @@ export const projectsRelations = relations(projects, ({ one }) => ({
   }),
 }));
 
-export const workspaceIntegrationsRelations = relations(workspaceIntegrations, ({ one }) => ({
-  workspace: one(workspaces, {
-    fields: [workspaceIntegrations.workspaceId],
-    references: [workspaces.id],
+export const workspaceIntegrationsRelations = relations(
+  workspaceIntegrations,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [workspaceIntegrations.workspaceId],
+      references: [workspaces.id],
+    }),
   }),
-}));
+);
 
 export const worktreesRelations = relations(worktrees, ({ one, many }) => ({
   user: one(user, {

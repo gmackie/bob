@@ -14,6 +14,9 @@ export const RunnerConfigSchema = z.object({
   bobApiUrl: z.string().optional(),
   bobApiKey: z.string().optional(),
   bobWorkspaceId: z.string().optional(),
+  bobDeliveryEnabled: z
+    .preprocess((value) => value === true || value === "true", z.boolean())
+    .default(false),
   bobDevDir: z.string().default(join(homedir(), "dev")),
   bobMaxConcurrent: z.coerce.number().default(2),
   agentJobScratchRoot: z.string().default(join(tmpdir(), "ooda-agent-jobs")),
@@ -33,6 +36,7 @@ export function loadConfig(): RunnerConfig {
     bobApiUrl: process.env.BOB_API_URL,
     bobApiKey: process.env.BOB_API_KEY,
     bobWorkspaceId: process.env.BOB_WORKSPACE_ID,
+    bobDeliveryEnabled: process.env.OODA_BOB_DELIVERY_ENABLED,
     bobDevDir: process.env.BOB_DEV_DIR,
     bobMaxConcurrent: process.env.BOB_MAX_CONCURRENT,
     agentJobScratchRoot: process.env.OODA_AGENT_JOB_SCRATCH_ROOT,

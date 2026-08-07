@@ -4,6 +4,7 @@ export * from "./events";
 export * from "./host-routing";
 export * from "./host-providers";
 export * from "./host-turns";
+export * from "./integration-deliveries";
 export * from "./context-packs";
 export * from "./context-sources";
 export * from "./elevenlabs-tts";

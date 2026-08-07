@@ -286,4 +286,36 @@ describe("OODA V1 client", () => {
       "https://ooda.example.test/api/v1/proposals/proposal-1/decisions",
     ]);
   });
+
+  it("lists delivery state and submits a replay-safe dead-letter repair", async () => {
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({ items: [], pageInfo: { hasMore: false } }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ deadLetter: {}, delivery: {}, replayed: false }),
+      );
+    const client = createOodaV1Client({
+      baseUrl: "https://ooda.example.test",
+      fetch: fetchFn,
+    });
+
+    await client.integrations.listDeliveries({
+      conversationId: "conversation-1",
+      status: "dead_letter",
+      limit: 10,
+    });
+    await client.integrations.repairDeadLetter({
+      deadLetterId: "dead-letter-1",
+      note: "Bob configuration was corrected.",
+      idempotencyKey: "repair-1",
+      repairedAt: "2026-08-07T18:00:00.000Z",
+    });
+
+    expect(fetchFn.mock.calls.map(([url]) => String(url))).toEqual([
+      "https://ooda.example.test/api/v1/integrations/deliveries?conversationId=conversation-1&status=dead_letter&limit=10",
+      "https://ooda.example.test/api/v1/integrations/dead-letters/dead-letter-1/repair",
+    ]);
+  });
 });

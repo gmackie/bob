@@ -28,6 +28,11 @@ import type {
   CreateTtsGrantResultV1,
   ForkConversationInputV1,
   ForkConversationResultV1,
+  IntegrationDeliveryListInputV1,
+  IntegrationDeliveryListPageV1,
+  DeadLetterV1,
+  RepairDeadLetterInputV1,
+  RepairDeadLetterResultV1,
   ProblemV1,
   ProposalListInputV1,
   ProposalV1,
@@ -305,6 +310,34 @@ export function createOodaV1Client(options: OodaV1ClientOptions = {}) {
       decide(input: ApprovalDecisionV1) {
         return request<ApprovalDecisionResultV1>(
           `/api/v1/proposals/${encodeURIComponent(input.proposalId)}/decisions`,
+          { method: "POST", body: input },
+        );
+      },
+    },
+    integrations: {
+      listDeliveries(
+        input: Partial<IntegrationDeliveryListInputV1> & {
+          conversationId: string;
+        },
+      ) {
+        return request<IntegrationDeliveryListPageV1>(
+          "/api/v1/integrations/deliveries",
+          { query: input },
+        );
+      },
+      listDeadLetters(input: {
+        conversationId: string;
+        cursor?: string;
+        limit?: number;
+      }) {
+        return request<{
+          items: DeadLetterV1[];
+          pageInfo: { hasMore: boolean; nextCursor?: string };
+        }>("/api/v1/integrations/dead-letters", { query: input });
+      },
+      repairDeadLetter(input: RepairDeadLetterInputV1) {
+        return request<RepairDeadLetterResultV1>(
+          `/api/v1/integrations/dead-letters/${encodeURIComponent(input.deadLetterId)}/repair`,
           { method: "POST", body: input },
         );
       },

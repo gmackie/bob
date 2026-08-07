@@ -19,6 +19,7 @@ import { conversationsRouter } from "./router/conversations";
 import { eventsRouter } from "./router/events";
 import { hostRouter } from "./router/host";
 import { jobsRouter } from "./router/jobs";
+import { integrationsRouter } from "./router/integrations";
 import { proposalsRouter } from "./router/proposals";
 import { createTRPCRouter } from "./trpc";
 
@@ -27,6 +28,7 @@ const edgeRouterRecord = {
   events: eventsRouter,
   host: hostRouter,
   jobs: jobsRouter,
+  integrations: integrationsRouter,
   proposals: proposalsRouter,
   threads: threadsEdgeRouter,
   runner: runnerRouter,

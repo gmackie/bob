@@ -30,7 +30,8 @@
     "./api/tts-http": "./src/api/tts-http.ts",
     "./kernel": "./src/kernel/index.ts",
     "./oracle": "./src/oracle/index.ts",
-    "./contracts/v1": "./src/contracts/v1/index.ts"
+    "./contracts/v1": "./src/contracts/v1/index.ts",
+    "./integrations": "./src/integrations/index.ts"
   },
   "scripts": {
     "test": "vitest run",
