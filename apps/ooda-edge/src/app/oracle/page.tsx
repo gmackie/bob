@@ -16,7 +16,10 @@ const STOPWORDS = new Set(
     + "when where what get got make made like want need know think see new now one two get "
     + "https http com www amp rt via re thread threads follow retweet please thanks thank "
     + "going really actually literally basically today tomorrow yesterday people time day "
-    + "week year good great big small first last next best right way lot bit every still")
+    + "week year good great big small first last next best right way lot bit every still "
+    // Chat/markup structural noise (from imported conversations + their titles).
+    + "user assistant human system chat conversation message reply response prompt "
+    + "guide overview intro summary part vol using used uses based your with about")
     .split(/\s+/),
 );
 
@@ -25,7 +28,10 @@ function extractTopicTerms(
 ): { term: string; count: number }[] {
   const counts = new Map<string, number>();
   for (const s of sources) {
-    const raw = `${s.title ?? ""} ${s.body ?? ""}`
+    // Titles only: they're clean topic labels (tweet text, chat titles),
+    // whereas bodies carry markdown/markup noise (### user, citation cards,
+    // render blocks) that would dominate the cloud once chat imports land.
+    const raw = `${s.title ?? ""}`
       .replace(/https?:\/\/\S+/g, " ") // urls
       .replace(/@\w+/g, " ") // handles
       .toLowerCase();
