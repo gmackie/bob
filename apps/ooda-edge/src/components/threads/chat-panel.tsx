@@ -96,9 +96,9 @@ export function ChatPanel({ threadId, runnerId, onPromoted }: ChatPanelProps) {
     }),
   );
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || !availableRunner) return;
+  const sendPromptText = (raw: string) => {
+    const prompt = raw.trim();
+    if (!prompt || !availableRunner) return;
 
     // Add user message immediately
     setMessages((prev) => [
@@ -106,12 +106,11 @@ export function ChatPanel({ threadId, runnerId, onPromoted }: ChatPanelProps) {
       {
         id: `user-${Date.now()}`,
         role: "user",
-        content: input.trim(),
+        content: prompt,
         timestamp: new Date().toLocaleTimeString(),
       },
     ]);
 
-    // Send to runner
     sendMutation.mutate({
       threadId,
       runnerId: availableRunner,
@@ -119,11 +118,41 @@ export function ChatPanel({ threadId, runnerId, onPromoted }: ChatPanelProps) {
         runners.find((runner) => runner.id === availableRunner),
       ),
       toolProfileId: "default",
-      prompt: input.trim(),
+      prompt,
     });
+  };
 
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || !availableRunner) return;
+    sendPromptText(input);
     setInput("");
   };
+
+  // Capture-first seeding: a thread opened from Capture carries the captured
+  // text as ?prompt=. Auto-send it once (when a runner is ready), then strip it
+  // from the URL so a refresh doesn't resend. If no runner is connected yet, it
+  // waits in the input box instead.
+  const seededRef = useRef(false);
+  const [pendingSeed, setPendingSeed] = useState<string | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const p = new URLSearchParams(window.location.search).get("prompt");
+    if (!p) return;
+    setPendingSeed(p);
+    setInput(p);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("prompt");
+    window.history.replaceState({}, "", url.toString());
+  }, []);
+  useEffect(() => {
+    if (seededRef.current || !pendingSeed || !availableRunner) return;
+    seededRef.current = true;
+    sendPromptText(pendingSeed);
+    setInput("");
+    setPendingSeed(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingSeed, availableRunner]);
 
   const handlePromote = (msg: ChatMessage) => {
     if (!availableRunner) return;
