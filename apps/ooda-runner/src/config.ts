@@ -48,6 +48,15 @@ export const RunnerConfigSchema = z.object({
     .default(false),
   veritasApiUrl: z.string().url().optional(),
   veritasApiToken: z.string().optional(),
+  preflightDeliveryEnabled: z
+    .preprocess((value) => value === true || value === "true", z.boolean())
+    .default(false),
+  preflightApiUrl: z.string().url().optional(),
+  preflightApiToken: z.string().optional(),
+  preflightWorkspaceId: z.string().optional(),
+  preflightReceiptRoot: z
+    .string()
+    .default(join(homedir(), ".ooda", "integration-receipts", "preflight")),
   bobDevDir: z.string().default(join(homedir(), "dev")),
   bobMaxConcurrent: z.coerce.number().default(2),
   agentJobScratchRoot: z.string().default(join(tmpdir(), "ooda-agent-jobs")),
@@ -98,6 +107,11 @@ export function loadConfig(): RunnerConfig {
     veritasDeliveryEnabled: process.env.OODA_VERITAS_DELIVERY_ENABLED,
     veritasApiUrl: process.env.OODA_VERITAS_API_URL,
     veritasApiToken: process.env.OODA_VERITAS_API_TOKEN,
+    preflightDeliveryEnabled: process.env.OODA_PREFLIGHT_DELIVERY_ENABLED,
+    preflightApiUrl: process.env.OODA_PREFLIGHT_API_URL,
+    preflightApiToken: process.env.OODA_PREFLIGHT_API_TOKEN,
+    preflightWorkspaceId: process.env.OODA_PREFLIGHT_WORKSPACE_ID,
+    preflightReceiptRoot: process.env.OODA_PREFLIGHT_RECEIPT_ROOT,
     bobDevDir: process.env.BOB_DEV_DIR,
     bobMaxConcurrent: process.env.BOB_MAX_CONCURRENT,
     agentJobScratchRoot: process.env.OODA_AGENT_JOB_SCRATCH_ROOT,

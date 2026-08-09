@@ -57,4 +57,12 @@ describe("RunnerConfigSchema", () => {
         .veritasDeliveryEnabled,
     ).toBe(true);
   });
+
+  it("keeps Preflight app registration behind an adapter kill switch", () => {
+    expect(RunnerConfigSchema.parse({}).preflightDeliveryEnabled).toBe(false);
+    expect(
+      RunnerConfigSchema.parse({ preflightDeliveryEnabled: "true" })
+        .preflightDeliveryEnabled,
+    ).toBe(true);
+  });
 });

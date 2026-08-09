@@ -79,4 +79,24 @@ describe("createDeliveryAdapters", () => {
     expect([...incomplete.keys()]).not.toContain("veritas");
     expect([...enabled.keys()]).toContain("veritas");
   });
+
+  it("registers Preflight only when its kill switch, workspace, token, and receipt store are present", () => {
+    const disabled = createDeliveryAdapters(RunnerConfigSchema.parse({}));
+    const incomplete = createDeliveryAdapters(
+      RunnerConfigSchema.parse({ preflightDeliveryEnabled: true }),
+    );
+    const enabled = createDeliveryAdapters(
+      RunnerConfigSchema.parse({
+        preflightDeliveryEnabled: true,
+        preflightApiUrl: "https://preflight.example",
+        preflightApiToken: "gmk_preflight_key",
+        preflightWorkspaceId: "workspace-1",
+        preflightReceiptRoot: "/tmp/preflight-receipts",
+      }),
+    );
+
+    expect([...disabled.keys()]).not.toContain("preflight");
+    expect([...incomplete.keys()]).not.toContain("preflight");
+    expect([...enabled.keys()]).toContain("preflight");
+  });
 });

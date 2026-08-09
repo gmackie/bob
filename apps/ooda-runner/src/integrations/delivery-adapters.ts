@@ -5,6 +5,7 @@ import {
   CreatorDomainAdapter,
   FabForgeDomainAdapter,
   ObsidianDomainAdapter,
+  PreflightDomainAdapter,
   VeritasDomainAdapter,
 } from "@gmacko/ooda/integrations";
 
@@ -13,6 +14,7 @@ import { createBizPulseClient } from "./bizpulse-client";
 import { createCreatorClient } from "./creator-client";
 import { createCreatorScaffolder } from "./creator-scaffolder";
 import { createFabForgeClient } from "./fabforge-client";
+import { createPreflightClient } from "./preflight-client";
 import { createVeritasClient } from "./veritas-client";
 
 export function createDeliveryAdapters(
@@ -112,6 +114,25 @@ export function createDeliveryAdapters(
         client: createVeritasClient({
           apiUrl: config.veritasApiUrl,
           apiToken: config.veritasApiToken,
+        }),
+      }),
+    );
+  }
+  if (
+    config.preflightDeliveryEnabled &&
+    config.preflightApiUrl &&
+    config.preflightApiToken &&
+    config.preflightWorkspaceId
+  ) {
+    adapters.set(
+      "preflight",
+      new PreflightDomainAdapter({
+        apiUrl: config.preflightApiUrl,
+        workspaceId: config.preflightWorkspaceId,
+        receiptRoot: config.preflightReceiptRoot,
+        client: createPreflightClient({
+          apiUrl: config.preflightApiUrl,
+          apiToken: config.preflightApiToken,
         }),
       }),
     );
