@@ -37,6 +37,12 @@ export const RunnerConfigSchema = z.object({
   creatorReceiptRoot: z
     .string()
     .default(join(homedir(), ".ooda", "integration-receipts", "creator")),
+  fabForgeDeliveryEnabled: z
+    .preprocess((value) => value === true || value === "true", z.boolean())
+    .default(false),
+  fabForgeApiUrl: z.string().url().optional(),
+  fabForgeApiToken: z.string().optional(),
+  fabForgeWorkspaceId: z.string().optional(),
   bobDevDir: z.string().default(join(homedir(), "dev")),
   bobMaxConcurrent: z.coerce.number().default(2),
   agentJobScratchRoot: z.string().default(join(tmpdir(), "ooda-agent-jobs")),
@@ -80,6 +86,10 @@ export function loadConfig(): RunnerConfig {
     creatorProjectRoot: process.env.OODA_CREATOR_PROJECT_ROOT,
     creatorTemplatePath: process.env.OODA_CREATOR_TEMPLATE_PATH,
     creatorReceiptRoot: process.env.OODA_CREATOR_RECEIPT_ROOT,
+    fabForgeDeliveryEnabled: process.env.OODA_FABFORGE_DELIVERY_ENABLED,
+    fabForgeApiUrl: process.env.OODA_FABFORGE_API_URL,
+    fabForgeApiToken: process.env.OODA_FABFORGE_API_TOKEN,
+    fabForgeWorkspaceId: process.env.OODA_FABFORGE_WORKSPACE_ID,
     bobDevDir: process.env.BOB_DEV_DIR,
     bobMaxConcurrent: process.env.BOB_MAX_CONCURRENT,
     agentJobScratchRoot: process.env.OODA_AGENT_JOB_SCRATCH_ROOT,

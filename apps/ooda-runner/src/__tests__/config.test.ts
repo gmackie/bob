@@ -41,4 +41,12 @@ describe("RunnerConfigSchema", () => {
         .creatorDeliveryEnabled,
     ).toBe(true);
   });
+
+  it("keeps FabForge candidate intake behind an adapter kill switch", () => {
+    expect(RunnerConfigSchema.parse({}).fabForgeDeliveryEnabled).toBe(false);
+    expect(
+      RunnerConfigSchema.parse({ fabForgeDeliveryEnabled: "true" })
+        .fabForgeDeliveryEnabled,
+    ).toBe(true);
+  });
 });

@@ -3,6 +3,7 @@ import {
   BizPulseDomainAdapter,
   BobDomainAdapter,
   CreatorDomainAdapter,
+  FabForgeDomainAdapter,
   ObsidianDomainAdapter,
 } from "@gmacko/ooda/integrations";
 
@@ -10,6 +11,7 @@ import type { RunnerConfig } from "../config";
 import { createBizPulseClient } from "./bizpulse-client";
 import { createCreatorClient } from "./creator-client";
 import { createCreatorScaffolder } from "./creator-scaffolder";
+import { createFabForgeClient } from "./fabforge-client";
 
 export function createDeliveryAdapters(
   config: RunnerConfig,
@@ -75,6 +77,24 @@ export function createDeliveryAdapters(
           apiKey: config.creatorApiKey,
         }),
         scaffold: createCreatorScaffolder(config.creatorTemplatePath),
+      }),
+    );
+  }
+  if (
+    config.fabForgeDeliveryEnabled &&
+    config.fabForgeApiUrl &&
+    config.fabForgeApiToken &&
+    config.fabForgeWorkspaceId
+  ) {
+    adapters.set(
+      "fabforge",
+      new FabForgeDomainAdapter({
+        apiUrl: config.fabForgeApiUrl,
+        workspaceId: config.fabForgeWorkspaceId,
+        client: createFabForgeClient({
+          apiUrl: config.fabForgeApiUrl,
+          apiToken: config.fabForgeApiToken,
+        }),
       }),
     );
   }

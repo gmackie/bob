@@ -42,4 +42,23 @@ describe("createDeliveryAdapters", () => {
     expect([...incomplete.keys()]).not.toContain("creator");
     expect([...enabled.keys()]).toContain("creator");
   });
+
+  it("registers FabForge only when its kill switch, token, and workspace are present", () => {
+    const disabled = createDeliveryAdapters(RunnerConfigSchema.parse({}));
+    const incomplete = createDeliveryAdapters(
+      RunnerConfigSchema.parse({ fabForgeDeliveryEnabled: true }),
+    );
+    const enabled = createDeliveryAdapters(
+      RunnerConfigSchema.parse({
+        fabForgeDeliveryEnabled: true,
+        fabForgeApiUrl: "https://fabforge.example",
+        fabForgeApiToken: "fft_ooda_token",
+        fabForgeWorkspaceId: "workspace-1",
+      }),
+    );
+
+    expect([...disabled.keys()]).not.toContain("fabforge");
+    expect([...incomplete.keys()]).not.toContain("fabforge");
+    expect([...enabled.keys()]).toContain("fabforge");
+  });
 });
