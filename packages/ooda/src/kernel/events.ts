@@ -13,7 +13,9 @@ import {
   conversationEvents,
   conversations,
 } from "../db/schema/conversations";
+import { memoryEdges, memorySeeds } from "../db/schema/memory";
 import { mapEvent } from "./mappers";
+import { deriveMemoryCapture } from "./memory-capture";
 import { OodaKernelProblem, idempotencyConflict, notFound } from "./problems";
 import {
   decodeCursor,
@@ -125,6 +127,60 @@ export async function appendConversationEvent(
         })
         .returning();
       if (!event) throw new Error("Event insert returned no row");
+
+      const capture = deriveMemoryCapture({
+        type: input.type,
+        payload: input.payload,
+      });
+      if (capture) {
+        const [seed] = await tx
+          .insert(memorySeeds)
+          .values({
+            conversationId: input.conversationId,
+            kind: capture.kind,
+            sourceEventId: event.id,
+            sourceSpanStart: capture.sourceSpan.start,
+            sourceSpanEnd: capture.sourceSpan.end,
+            normalizedText: capture.normalizedText,
+            entities: capture.entities,
+            sensitivity: input.sensitivity,
+            confidence: capture.confidence,
+            lifecycleState: "captured",
+            createdAt: new Date(input.occurredAt),
+            updatedAt: new Date(input.occurredAt),
+          })
+          .returning();
+
+        const correctedEventId = input.type === "correction"
+          && typeof input.payload.correctedEventId === "string"
+          ? input.payload.correctedEventId
+          : null;
+        if (seed && correctedEventId) {
+          const superseded = await tx
+            .update(memorySeeds)
+            .set({
+              supersededById: seed.id,
+              updatedAt: new Date(input.occurredAt),
+            })
+            .where(eq(memorySeeds.sourceEventId, correctedEventId))
+            .returning({ id: memorySeeds.id });
+          if (superseded.length) {
+            await tx.insert(memoryEdges).values(
+              superseded.map((prior) => ({
+                fromMemoryId: seed.id,
+                toMemoryId: prior.id,
+                kind: "supersedes" as const,
+                score: 1,
+                explanation: "A user correction supersedes the earlier captured wording.",
+                discoveryMethod: "conversation_correction",
+                feedbackState: "confirmed" as const,
+                createdAt: new Date(input.occurredAt),
+                updatedAt: new Date(input.occurredAt),
+              })),
+            );
+          }
+        }
+      }
       return { event: mapEvent(event), replayed: false };
     });
   } catch (error) {

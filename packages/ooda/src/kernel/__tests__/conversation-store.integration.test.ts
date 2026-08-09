@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { eq } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -24,10 +24,16 @@ import { createHostTurn } from "../host-turns";
 import { HostRoutingError } from "../host-routing";
 import { stableStringify } from "../serialization";
 import {
+  inspectMemory,
+  searchMemories,
+  submitMemoryFeedback,
+} from "../memories";
+import {
   cancelAgentJob,
   claimAgentJob,
   createAgentJob,
   getAgentJob,
+  inspectAgentJobControl,
   recordAgentJobEvent,
 } from "../agent-jobs";
 import { createProposal, decideProposal, getProposal } from "../proposals";
@@ -78,6 +84,8 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     await applyMigration(migration("0011_noisy_prodigy.sql"));
     await applyMigration(migration("0012_typical_franklin_richards.sql"));
     await applyMigration(migration("0013_nasty_rogue.sql"));
+    await applyMigration(migration("0014_puzzling_lady_bullseye.sql"));
+    await applyMigration(migration("0015_amazing_hellfire_club.sql"));
   });
 
   afterAll(async () => {
@@ -630,6 +638,15 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     const replay = await appendConversationEvent(db!, "owner-a", input);
 
     expect(replay).toEqual({ event: first.event, replayed: true });
+    const captured = await db!
+      .select()
+      .from(schema.memorySeeds)
+      .where(eq(schema.memorySeeds.sourceEventId, first.event.id));
+    expect(captured).toHaveLength(1);
+    expect(captured[0]).toMatchObject({
+      normalizedText: "Remember this",
+      lifecycleState: "captured",
+    });
     await expect(
       appendConversationEvent(db!, "owner-a", {
         ...input,
@@ -744,6 +761,60 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
       "correction",
     ]);
     expect(page.items[0]?.payload).toEqual({ display: "recpie idea" });
+
+    const seeds = await db!
+      .select()
+      .from(schema.memorySeeds)
+      .where(eq(schema.memorySeeds.conversationId, created.conversation.id));
+    const originalSeed = seeds.find(
+      (seed) => seed.sourceEventId === original.event.id,
+    );
+    const correctionSeed = seeds.find(
+      (seed) => seed.sourceEventId === correction.event.id,
+    );
+    expect(correctionSeed).toMatchObject({
+      kind: "correction",
+      normalizedText: "recipe idea",
+    });
+    expect(originalSeed?.supersededById).toBe(correctionSeed?.id);
+
+    const search = await searchMemories(db!, "owner-a", {
+      query: "recipe",
+      includeSuperseded: false,
+      limit: 10,
+    });
+    expect(search.items.map((memory) => memory.id)).toEqual([
+      correctionSeed!.id,
+    ]);
+
+    const detail = await inspectMemory(db!, "owner-a", correctionSeed!.id);
+    expect(detail.connections).toHaveLength(1);
+    expect(detail.connections[0]).toMatchObject({
+      direction: "outgoing",
+      edge: { kind: "supersedes", feedbackState: "confirmed" },
+      memory: { id: originalSeed!.id },
+    });
+
+    const feedbackInput = {
+      edgeId: detail.connections[0]!.edge.id,
+      feedbackState: "suppressed" as const,
+      idempotencyKey: "suppress-correction-edge",
+    };
+    const feedback = await submitMemoryFeedback(
+      db!,
+      "owner-a",
+      feedbackInput,
+    );
+    const feedbackReplay = await submitMemoryFeedback(
+      db!,
+      "owner-a",
+      feedbackInput,
+    );
+    expect(feedback).toMatchObject({
+      edge: { feedbackState: "suppressed" },
+      replayed: false,
+    });
+    expect(feedbackReplay).toMatchObject({ replayed: true });
   });
 
   it("uses opaque keyset cursors and enforces ownership", async () => {
@@ -819,11 +890,17 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     expect(claim).toMatchObject({
       job: { id: created.job.id, status: "running" },
       prompt: input.prompt,
+      attempt: 1,
+      contextItems: [],
     });
+    expect(claim?.leaseToken).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
 
     const completed = await recordAgentJobEvent(db!, {
       jobId: created.job.id,
       runnerId: "runner-a",
+      leaseToken: claim!.leaseToken,
       type: "completed",
       payload: {
         result: { summary: "Approach A is lower risk." },
@@ -835,6 +912,7 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     const eventReplay = await recordAgentJobEvent(db!, {
       jobId: created.job.id,
       runnerId: "runner-a",
+      leaseToken: claim!.leaseToken,
       type: "completed",
       payload: {
         result: { summary: "Approach A is lower risk." },
@@ -848,6 +926,196 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     await expect(
       getAgentJob(db!, "another-owner", created.job.id),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("freezes provider-specific disclosure before a job is claimed", async () => {
+    const conversation = await createConversation(db!, "owner-job-context", {
+      title: "Research with project context",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "job-context-conversation",
+    });
+    const created = await createAgentJob(
+      db!,
+      "owner-job-context",
+      {
+        conversationId: conversation.conversation.id,
+        class: "read_only_research",
+        prompt: "Review current implementation evidence",
+        idempotencyKey: "job-context-create",
+      },
+      {
+        now: new Date("2026-08-08T15:00:00.000Z"),
+        contextSources: [
+          {
+            id: "forgegraph",
+            inspect: () =>
+              Promise.resolve([
+                {
+                  sourceType: "forgegraph_changeset" as const,
+                  sourceId: "changeset-1",
+                  sensitivity: "general" as const,
+                  content: "CI passed for the OODA runtime changes.",
+                },
+                {
+                  sourceType: "forgegraph_changeset" as const,
+                  sourceId: "changeset-sensitive",
+                  sensitivity: "sensitive" as const,
+                  content: "secret deployment evidence",
+                },
+              ]),
+          },
+        ],
+      },
+    );
+
+    expect(created.job.contextPackId).toBeTruthy();
+    const [pack] = await db!
+      .select()
+      .from(schema.contextPacks)
+      .where(eq(schema.contextPacks.id, created.job.contextPackId!));
+    expect(pack).toMatchObject({
+      provider: "codex",
+      purpose: "agent_job",
+    });
+
+    const claim = await claimAgentJob(db!, {
+      runnerId: "runner-context",
+      providers: ["codex"],
+      classes: ["read_only_research"],
+      leaseSeconds: 90,
+    });
+    expect(claim?.contextItems).toEqual([
+      expect.objectContaining({
+        sourceId: "changeset-1",
+        decision: "disclosed",
+        content: "CI passed for the OODA runtime changes.",
+      }),
+      expect.objectContaining({
+        sourceId: "changeset-sensitive",
+        decision: "denied",
+      }),
+    ]);
+    expect(claim?.contextItems[1]).not.toHaveProperty("content");
+  });
+
+  it("reclaims an expired job and fences the stale runner lease", async () => {
+    const conversation = await createConversation(db!, "owner-job-lease", {
+      title: "Recover abandoned work",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "job-lease-conversation",
+    });
+    const created = await createAgentJob(db!, "owner-job-lease", {
+      conversationId: conversation.conversation.id,
+      class: "read_only_research",
+      prompt: "Recover this research job",
+      idempotencyKey: "job-lease-create",
+    });
+    const first = await claimAgentJob(
+      db!,
+      {
+        runnerId: "runner-old",
+        providers: ["codex"],
+        classes: ["read_only_research"],
+        leaseSeconds: 30,
+      },
+      { now: new Date("2026-08-08T15:00:00.000Z") },
+    );
+    const second = await claimAgentJob(
+      db!,
+      {
+        runnerId: "runner-new",
+        providers: ["codex"],
+        classes: ["read_only_research"],
+        leaseSeconds: 90,
+      },
+      { now: new Date("2026-08-08T15:00:31.000Z") },
+    );
+
+    expect(second).toMatchObject({
+      job: { id: created.job.id },
+      attempt: 2,
+    });
+    expect(second?.leaseToken).not.toBe(first?.leaseToken);
+    await expect(
+      recordAgentJobEvent(db!, {
+        jobId: created.job.id,
+        runnerId: "runner-old",
+        leaseToken: first!.leaseToken,
+        type: "completed",
+        payload: { result: { summary: "stale result" } },
+        idempotencyKey: "stale-runner-complete",
+        occurredAt: "2026-08-08T15:00:32.000Z",
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT", status: 409 });
+    await expect(
+      inspectAgentJobControl(db!, {
+        jobId: created.job.id,
+        runnerId: "runner-old",
+        leaseToken: first!.leaseToken,
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT", status: 409 });
+    await recordAgentJobEvent(db!, {
+      jobId: created.job.id,
+      runnerId: "runner-new",
+      leaseToken: second!.leaseToken,
+      type: "completed",
+      payload: { result: { summary: "reclaimed result" } },
+      idempotencyKey: "new-runner-complete",
+      occurredAt: "2026-08-08T15:00:33.000Z",
+    });
+  });
+
+  it("finalizes an abandoned cancellation instead of re-running the job", async () => {
+    const conversation = await createConversation(db!, "owner-job-cancel", {
+      title: "Cancel abandoned work",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "job-cancel-conversation",
+    });
+    const created = await createAgentJob(db!, "owner-job-cancel", {
+      conversationId: conversation.conversation.id,
+      class: "read_only_research",
+      prompt: "Stop this job",
+      idempotencyKey: "job-cancel-create",
+    });
+    await claimAgentJob(
+      db!,
+      {
+        runnerId: "runner-cancel-old",
+        providers: ["codex"],
+        classes: ["read_only_research"],
+        leaseSeconds: 30,
+      },
+      { now: new Date("2026-08-08T16:00:00.000Z") },
+    );
+    await cancelAgentJob(db!, "owner-job-cancel", {
+      jobId: created.job.id,
+      idempotencyKey: "job-cancel-request",
+    });
+
+    const reclaimed = await claimAgentJob(
+      db!,
+      {
+        runnerId: "runner-cancel-new",
+        providers: ["codex"],
+        classes: ["read_only_research"],
+        leaseSeconds: 90,
+      },
+      { now: new Date("2026-08-08T16:00:31.000Z") },
+    );
+
+    expect(reclaimed).toBeNull();
+    await expect(
+      getAgentJob(db!, "owner-job-cancel", created.job.id),
+    ).resolves.toMatchObject({ status: "cancelled" });
   });
 
   it("limits active jobs and turns a running cancellation into runner control", async () => {
@@ -867,14 +1135,26 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
         idempotencyKey: `capacity-job-${index}`,
       });
     }
+    const [packsBeforeRejection] = await db!
+      .select({ value: count() })
+      .from(schema.contextPacks);
     await expect(
-      createAgentJob(db!, "owner-capacity", {
-        conversationId: conversation.conversation.id,
-        class: "read_only_research",
-        prompt: "This fourth lane must wait.",
-        idempotencyKey: "capacity-job-3",
-      }),
+      createAgentJob(
+        db!,
+        "owner-capacity",
+        {
+          conversationId: conversation.conversation.id,
+          class: "read_only_research",
+          prompt: "This fourth lane must wait.",
+          idempotencyKey: "capacity-job-3",
+        },
+        { contextSources: [] },
+      ),
     ).rejects.toMatchObject({ code: "CONFLICT", status: 409 });
+    const [packsAfterRejection] = await db!
+      .select({ value: count() })
+      .from(schema.contextPacks);
+    expect(packsAfterRejection?.value).toBe(packsBeforeRejection?.value);
 
     const claim = await claimAgentJob(db!, {
       runnerId: "runner-capacity",

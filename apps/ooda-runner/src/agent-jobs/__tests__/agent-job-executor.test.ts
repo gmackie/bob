@@ -52,7 +52,83 @@ class BlockingAdapter implements AgentAdapter {
   }
 }
 
+class PermissionRequestingAdapter implements AgentAdapter {
+  id = "claude";
+  name = "Permission requesting adapter";
+  transport = "stdio" as const;
+  decisions: Array<{
+    requestId: string;
+    behavior: "allow" | "deny";
+    message?: string;
+  }> = [];
+
+  isAvailable() {
+    return true;
+  }
+
+  buildCommand(opts: BuildCommandOptions): AdapterCommand {
+    return { binary: "mock", args: [], cwd: opts.workspaceRoot };
+  }
+
+  async execute(
+    _command: AdapterCommand,
+    onEvent: (event: AdapterEvent) => void,
+    options?: ExecuteOptions,
+  ): Promise<{ exitCode: number }> {
+    options?.onSpawn?.({
+      write: () => false,
+      kill: () => {},
+      respondPermission: (requestId, behavior, message) => {
+        this.decisions.push({ requestId, behavior, message });
+        return true;
+      },
+    });
+    onEvent({
+      type: "permission_request",
+      data: "Bash requires approval",
+      timestamp: "2026-08-08T15:00:00.000Z",
+      permission: {
+        requestId: "permission-1",
+        toolName: "Bash",
+        input: { command: "cat ~/.ssh/config" },
+      },
+    });
+    return { exitCode: 0 };
+  }
+}
+
 describe("AgentJobExecutor", () => {
+  it("denies undeclared tool requests immediately instead of leaving a headless job blocked", async () => {
+    const root = join(tmpdir(), `ooda-job-permission-${crypto.randomUUID()}`);
+    const adapter = new PermissionRequestingAdapter();
+    const executor = new AgentJobExecutor({
+      adapter,
+      sandboxes: new ScratchSandboxManager(root),
+      environment: { PATH: "/usr/bin", HOME: "/Users/operator" },
+    });
+
+    await executor.execute({
+      jobId: "job-permission",
+      class: "read_only_research",
+      provider: "claude",
+      prompt: "Read the disclosed evidence",
+      billingPolicy: "subscription_only",
+      authMode: "subscription",
+      capabilities: ["project_context.read", "web.read"],
+      budget: { deadlineSeconds: 900, aggregateTokens: 150_000 },
+      onEvent: vi.fn(),
+    });
+
+    expect(adapter.decisions).toEqual([
+      {
+        requestId: "permission-1",
+        behavior: "deny",
+        message: "Tool is outside this OODA job's declared capabilities",
+      },
+    ]);
+    await new ScratchSandboxManager(root).cleanupRoot();
+  });
+
   it("kills cancelled work, scrubs credentials, and removes its sandbox", async () => {
     const root = join(tmpdir(), `ooda-job-executor-${crypto.randomUUID()}`);
     const adapter = new BlockingAdapter();
@@ -71,6 +147,8 @@ describe("AgentJobExecutor", () => {
       class: "read_only_research",
       provider: "codex",
       prompt: "Research only",
+      billingPolicy: "metered_allowed",
+      authMode: "api_key",
       capabilities: ["web.read"],
       budget: { deadlineSeconds: 900, aggregateTokens: 150_000 },
       signal: controller.signal,

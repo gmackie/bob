@@ -1,6 +1,15 @@
 import { z } from "zod";
 
 import { CursorPageInfoV1Schema, CursorV1Schema } from "./conversation";
+import { ContextItemV1Schema } from "./context";
+
+export const RuntimeBillingPolicyV1Schema = z.enum([
+  "subscription_only",
+  "subscription_preferred",
+  "metered_allowed",
+]);
+
+export const RuntimeAuthModeV1Schema = z.enum(["subscription", "api_key"]);
 
 export const AgentJobClassV1Schema = z.enum([
   "read_only_research",
@@ -34,6 +43,15 @@ export const AgentJobV1Schema = z
     class: AgentJobClassV1Schema,
     status: AgentJobStatusV1Schema,
     provider: z.string().min(1).max(64),
+    billingPolicy: RuntimeBillingPolicyV1Schema,
+    authMode: RuntimeAuthModeV1Schema.optional(),
+    runtimeSession: z
+      .object({
+        sessionId: z.string().min(1),
+        turnId: z.string().min(1).optional(),
+      })
+      .strict()
+      .optional(),
     capabilities: z.array(z.string().min(1).max(128)).max(100),
     budget: AgentJobBudgetV1Schema,
     contextPackId: z.string().min(1).optional(),
@@ -56,6 +74,7 @@ export const CreateAgentJobInputV1Schema = z
     class: AgentJobClassV1Schema,
     prompt: z.string().min(1).max(100_000),
     provider: z.string().min(1).max(64).optional(),
+    billingPolicy: RuntimeBillingPolicyV1Schema.optional(),
     capabilities: z.array(z.string().min(1).max(128)).max(100).optional(),
     budget: AgentJobBudgetV1Schema.partial().optional(),
     contextPackId: z.string().min(1).optional(),
@@ -121,7 +140,13 @@ export const ClaimAgentJobInputV1Schema = z
 export type ClaimAgentJobInputV1 = z.infer<typeof ClaimAgentJobInputV1Schema>;
 
 export const ClaimAgentJobResultV1Schema = z
-  .object({ job: AgentJobV1Schema, prompt: z.string().min(1).max(100_000) })
+  .object({
+    job: AgentJobV1Schema,
+    prompt: z.string().min(1).max(100_000),
+    attempt: z.number().int().positive(),
+    leaseToken: z.string().uuid(),
+    contextItems: z.array(ContextItemV1Schema).max(1_000),
+  })
   .strict()
   .nullable();
 export type ClaimAgentJobResultV1 = z.infer<typeof ClaimAgentJobResultV1Schema>;
@@ -132,6 +157,7 @@ export const AgentJobEventTypeV1Schema = z.enum([
   "progress",
   "tool_call",
   "tool_result",
+  "runtime_session",
   "artifact",
   "cancellation_requested",
   "cancelled",
@@ -144,6 +170,7 @@ export const RecordAgentJobEventInputV1Schema = z
   .object({
     jobId: z.string().min(1),
     runnerId: z.string().min(1).max(256),
+    leaseToken: z.string().uuid(),
     type: AgentJobEventTypeV1Schema.exclude([
       "queued",
       "claimed",
@@ -163,6 +190,7 @@ export const AgentJobControlV1Schema = z
     status: AgentJobStatusV1Schema,
     cancelRequested: z.boolean(),
     leaseExpiresAt: z.iso.datetime({ offset: true }).optional(),
+    attempt: z.number().int().nonnegative(),
   })
   .strict();
 
@@ -170,5 +198,6 @@ export const GetAgentJobControlInputV1Schema = z
   .object({
     jobId: z.string().min(1),
     runnerId: z.string().min(1).max(256),
+    leaseToken: z.string().uuid(),
   })
   .strict();

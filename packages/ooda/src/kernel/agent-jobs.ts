@@ -1,4 +1,6 @@
-import { and, asc, count, eq, gt, inArray, or, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+
+import { and, asc, count, eq, gt, inArray, lt, or, sql } from "drizzle-orm";
 
 import type {
   AgentJobClassV1,
@@ -11,10 +13,16 @@ import type {
   CreateAgentJobInputV1,
   CreateAgentJobResultV1,
   RecordAgentJobEventInputV1,
+  ContextItemV1,
 } from "../contracts/v1";
 import type { db as database } from "../db/client";
 import { conversations } from "../db/schema/conversations";
-import { agentJobEvents, agentJobs } from "../db/schema/orchestration";
+import {
+  agentJobEvents,
+  agentJobs,
+  contextItems,
+  contextPacks,
+} from "../db/schema/orchestration";
 import { OodaKernelProblem, idempotencyConflict, notFound } from "./problems";
 import {
   decodeCursor,
@@ -22,6 +30,8 @@ import {
   isUniqueViolation,
   stableStringify,
 } from "./serialization";
+import { buildAgentJobContextPack } from "./context-packs";
+import type { ConversationContextSource } from "./context-sources";
 
 type OodaDatabase = typeof database;
 
@@ -111,6 +121,18 @@ function mapAgentJob(row: typeof agentJobs.$inferSelect): AgentJobV1 {
     class: row.class as AgentJobV1["class"],
     status: row.status as AgentJobV1["status"],
     provider: row.provider,
+    billingPolicy: row.billingPolicy as AgentJobV1["billingPolicy"],
+    ...(row.authMode
+      ? { authMode: row.authMode as NonNullable<AgentJobV1["authMode"]> }
+      : {}),
+    ...(row.nativeSessionId
+      ? {
+          runtimeSession: {
+            sessionId: row.nativeSessionId,
+            ...(row.nativeTurnId ? { turnId: row.nativeTurnId } : {}),
+          },
+        }
+      : {}),
     capabilities: row.capabilities,
     budget: {
       deadlineSeconds: row.deadlineSeconds,
@@ -216,11 +238,30 @@ export async function createAgentJob(
   db: OodaDatabase,
   ownerId: string,
   input: CreateAgentJobInputV1,
+  options: {
+    contextSources?: ConversationContextSource[];
+    now?: Date;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<CreateAgentJobResultV1> {
   const replay = await findCreateReplay(db, ownerId, input);
   if (replay) return replay;
   const policy = effectiveJobPolicy(input);
-  const now = new Date();
+  const now = options.now ?? new Date();
+  let contextPackId = input.contextPackId;
+  let generatedContextPackId: string | undefined;
+  if (!contextPackId && options.contextSources) {
+    const context = await buildAgentJobContextPack(db, ownerId, {
+      conversationId: input.conversationId,
+      provider: policy.provider,
+      query: input.prompt,
+      sources: options.contextSources,
+      now,
+      signal: options.signal,
+    });
+    contextPackId = context.pack.id;
+    generatedContextPackId = context.pack.id;
+  }
 
   try {
     return await db.transaction(async (tx) => {
@@ -236,6 +277,34 @@ export async function createAgentJob(
         .for("update")
         .limit(1);
       if (!conversation) throw notFound("Conversation");
+
+      if (contextPackId) {
+        const [pack] = await tx
+          .select()
+          .from(contextPacks)
+          .where(
+            and(
+              eq(contextPacks.id, contextPackId),
+              eq(contextPacks.conversationId, input.conversationId),
+            ),
+          )
+          .limit(1);
+        if (!pack) throw notFound("Context pack");
+        if (pack.purpose !== "agent_job" || pack.provider !== policy.provider) {
+          throw new OodaKernelProblem(
+            "VALIDATION_FAILED",
+            422,
+            "The context pack was not disclosed for this agent-job provider and purpose",
+          );
+        }
+        if (pack.expiresAt && pack.expiresAt <= now) {
+          throw new OodaKernelProblem(
+            "VALIDATION_FAILED",
+            422,
+            "The context pack has expired",
+          );
+        }
+      }
 
       const [active] = await tx
         .select({ value: count() })
@@ -260,10 +329,11 @@ export async function createAgentJob(
           conversationId: input.conversationId,
           class: input.class,
           provider: policy.provider,
+          billingPolicy: input.billingPolicy ?? "subscription_only",
           capabilities: policy.capabilities,
           deadlineSeconds: policy.budget.deadlineSeconds,
           aggregateTokenBudget: policy.budget.aggregateTokens,
-          contextPackId: input.contextPackId,
+          contextPackId,
           correlationId: input.correlationId ?? input.idempotencyKey,
           idempotencyKey: input.idempotencyKey,
           lastSequence: 1,
@@ -291,6 +361,12 @@ export async function createAgentJob(
       return { job: mapAgentJob(job), replayed: false };
     });
   } catch (error) {
+    if (generatedContextPackId) {
+      await db
+        .delete(contextPacks)
+        .where(eq(contextPacks.id, generatedContextPackId))
+        .catch(() => undefined);
+    }
     if (!isUniqueViolation(error)) throw error;
     const concurrentReplay = await findCreateReplay(db, ownerId, input);
     if (concurrentReplay) return concurrentReplay;
@@ -438,12 +514,16 @@ export async function claimAgentJob(
 ): Promise<ClaimAgentJobResultV1> {
   const now = options.now ?? new Date();
   return db.transaction(async (tx) => {
+    const claimable = or(
+      eq(agentJobs.status, "queued"),
+      and(eq(agentJobs.status, "running"), lt(agentJobs.leaseExpiresAt, now)),
+    )!;
     const [candidate] = await tx
       .select()
       .from(agentJobs)
       .where(
         and(
-          eq(agentJobs.status, "queued"),
+          claimable,
           inArray(agentJobs.provider, input.providers),
           inArray(agentJobs.class, input.classes),
         ),
@@ -452,6 +532,35 @@ export async function claimAgentJob(
       .for("update", { skipLocked: true })
       .limit(1);
     if (!candidate) return null;
+    if (candidate.status === "running" && candidate.cancellationRequestedAt) {
+      const [cancelled] = await tx
+        .update(agentJobs)
+        .set({
+          status: "cancelled",
+          claimedBy: null,
+          leaseToken: null,
+          leaseExpiresAt: null,
+          lastHeartbeatAt: now,
+          lastSequence: sql`${agentJobs.lastSequence} + 1`,
+          completedAt: now,
+          updatedAt: now,
+        })
+        .where(and(eq(agentJobs.id, candidate.id), claimable))
+        .returning();
+      if (!cancelled) return null;
+      await tx.insert(agentJobEvents).values({
+        agentJobId: cancelled.id,
+        sequence: BigInt(cancelled.lastSequence),
+        type: "cancelled",
+        payload: {
+          reason: "Cancellation was finalized after the runner lease expired",
+          abandonedRunnerId: candidate.claimedBy,
+        },
+        idempotencyKey: `cancel-on-reclaim:${cancelled.id}:${cancelled.lastSequence}`,
+        occurredAt: now,
+      });
+      return null;
+    }
     const [queuedEvent] = await tx
       .select({ payload: agentJobEvents.payload })
       .from(agentJobEvents)
@@ -466,31 +575,61 @@ export async function claimAgentJob(
     if (typeof prompt !== "string" || !prompt) {
       throw new Error(`Agent job ${candidate.id} has no queued prompt`);
     }
+    const leaseToken = randomUUID();
+    const nextAttempt = candidate.attempt + 1;
+    const reclaimed = candidate.status === "running";
     const [claimed] = await tx
       .update(agentJobs)
       .set({
         status: "running",
         claimedBy: input.runnerId,
-        startedAt: now,
+        startedAt: candidate.startedAt ?? now,
+        attempt: nextAttempt,
+        leaseToken,
+        leaseDurationSeconds: input.leaseSeconds,
         lastHeartbeatAt: now,
         leaseExpiresAt: new Date(now.getTime() + input.leaseSeconds * 1_000),
         lastSequence: sql`${agentJobs.lastSequence} + 1`,
         updatedAt: now,
       })
-      .where(
-        and(eq(agentJobs.id, candidate.id), eq(agentJobs.status, "queued")),
-      )
+      .where(and(eq(agentJobs.id, candidate.id), claimable))
       .returning();
     if (!claimed) return null;
     await tx.insert(agentJobEvents).values({
       agentJobId: claimed.id,
       sequence: BigInt(claimed.lastSequence),
       type: "claimed",
-      payload: { runnerId: input.runnerId },
-      idempotencyKey: `claim:${input.runnerId}:${claimed.lastSequence}`,
+      payload: {
+        runnerId: input.runnerId,
+        attempt: nextAttempt,
+        reclaimed,
+      },
+      idempotencyKey: `claim:${claimed.id}:attempt:${nextAttempt}`,
       occurredAt: now,
     });
-    return { job: mapAgentJob(claimed), prompt };
+    const disclosedContext = claimed.contextPackId
+      ? await tx
+          .select()
+          .from(contextItems)
+          .where(eq(contextItems.contextPackId, claimed.contextPackId))
+          .orderBy(asc(contextItems.ordinal))
+      : [];
+    return {
+      job: mapAgentJob(claimed),
+      prompt,
+      attempt: nextAttempt,
+      leaseToken,
+      contextItems: disclosedContext.map((item) => ({
+        id: item.id,
+        sourceType: item.sourceType as ContextItemV1["sourceType"],
+        sourceId: item.sourceId,
+        sensitivity: item.sensitivity,
+        decision: item.decision as "disclosed" | "redacted" | "denied",
+        reason: item.reason,
+        ...(item.content === null ? {} : { content: item.content }),
+        ...(item.redaction === null ? {} : { redaction: item.redaction }),
+      })),
+    };
   });
 }
 
@@ -535,6 +674,13 @@ export async function recordAgentJobEvent(
         "The runner does not own this agent job",
       );
     }
+    if (current.leaseToken !== input.leaseToken) {
+      throw new OodaKernelProblem(
+        "CONFLICT",
+        409,
+        "The runner lease no longer owns this agent job",
+      );
+    }
     if (current.status !== "running") {
       throw new OodaKernelProblem(
         "CONFLICT",
@@ -571,6 +717,20 @@ export async function recordAgentJobEvent(
           )
         : current.tokensUsed;
     const occurredAt = new Date(input.occurredAt);
+    const runtime =
+      input.type === "runtime_session" &&
+      input.payload.runtimeSession &&
+      typeof input.payload.runtimeSession === "object"
+        ? (input.payload.runtimeSession as Record<string, unknown>)
+        : undefined;
+    const nativeSessionId =
+      typeof runtime?.sessionId === "string" ? runtime.sessionId : undefined;
+    const nativeTurnId =
+      typeof runtime?.turnId === "string" ? runtime.turnId : undefined;
+    const authMode =
+      runtime?.authMode === "subscription" || runtime?.authMode === "api_key"
+        ? runtime.authMode
+        : undefined;
     const [updated] = await tx
       .update(agentJobs)
       .set({
@@ -580,7 +740,12 @@ export async function recordAgentJobEvent(
         tokensUsed: tokens,
         leaseExpiresAt: terminal
           ? null
-          : new Date(occurredAt.getTime() + 90 * 1_000),
+          : new Date(
+              occurredAt.getTime() + current.leaseDurationSeconds * 1_000,
+            ),
+        ...(nativeSessionId ? { nativeSessionId } : {}),
+        ...(nativeTurnId ? { nativeTurnId } : {}),
+        ...(authMode ? { authMode } : {}),
         ...(terminal
           ? {
               completedAt: occurredAt,
@@ -590,7 +755,12 @@ export async function recordAgentJobEvent(
           : {}),
         updatedAt: occurredAt,
       })
-      .where(eq(agentJobs.id, input.jobId))
+      .where(
+        and(
+          eq(agentJobs.id, input.jobId),
+          eq(agentJobs.leaseToken, input.leaseToken),
+        ),
+      )
       .returning();
     if (!updated) throw notFound("Agent job");
     await tx.insert(agentJobEvents).values({
@@ -611,28 +781,47 @@ export async function recordAgentJobEvent(
 
 export async function inspectAgentJobControl(
   db: OodaDatabase,
-  input: { jobId: string; runnerId: string },
+  input: { jobId: string; runnerId: string; leaseToken: string },
 ): Promise<{
   status: AgentJobV1["status"];
   cancelRequested: boolean;
   leaseExpiresAt?: string;
+  attempt: number;
 }> {
   const [job] = await db
-    .select({
+    .update(agentJobs)
+    .set({
+      lastHeartbeatAt: sql`now()`,
+      leaseExpiresAt: sql`now() + (${agentJobs.leaseDurationSeconds} * interval '1 second')`,
+      updatedAt: sql`now()`,
+    })
+    .where(
+      and(
+        eq(agentJobs.id, input.jobId),
+        eq(agentJobs.claimedBy, input.runnerId),
+        eq(agentJobs.leaseToken, input.leaseToken),
+        eq(agentJobs.status, "running"),
+        gt(agentJobs.leaseExpiresAt, sql`now()`),
+      ),
+    )
+    .returning({
       status: agentJobs.status,
       claimedBy: agentJobs.claimedBy,
       cancellationRequestedAt: agentJobs.cancellationRequestedAt,
       leaseExpiresAt: agentJobs.leaseExpiresAt,
-    })
-    .from(agentJobs)
-    .where(eq(agentJobs.id, input.jobId))
-    .limit(1);
-  if (!job) throw notFound("Agent job");
-  if (job.claimedBy !== input.runnerId) {
+      attempt: agentJobs.attempt,
+    });
+  if (!job) {
+    const [existing] = await db
+      .select({ id: agentJobs.id })
+      .from(agentJobs)
+      .where(eq(agentJobs.id, input.jobId))
+      .limit(1);
+    if (!existing) throw notFound("Agent job");
     throw new OodaKernelProblem(
       "CONFLICT",
       409,
-      "The runner does not own this agent job",
+      "The runner lease is stale or no longer owns this agent job",
     );
   }
   return {
@@ -641,5 +830,6 @@ export async function inspectAgentJobControl(
     ...(job.leaseExpiresAt
       ? { leaseExpiresAt: job.leaseExpiresAt.toISOString() }
       : {}),
+    attempt: job.attempt,
   };
 }

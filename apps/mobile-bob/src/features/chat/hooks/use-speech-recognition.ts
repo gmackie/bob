@@ -9,6 +9,8 @@ import type {
   ExpoSpeechRecognitionResultEvent,
 } from "expo-speech-recognition";
 
+import { SpeechCaptureFinalizer } from "../speech-capture-finalizer";
+
 export interface SpeechRecognitionHook {
   start: () => Promise<void>;
   stop: () => Promise<{ text: string; confidence: number | null }>;
@@ -32,6 +34,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   const [confidence, setConfidence] = useState<number | null>(null);
   const transcriptRef = useRef("");
   const interimRef = useRef("");
+  const finalizerRef = useRef(new SpeechCaptureFinalizer());
 
   const setFinalTranscript = useCallback((value: string) => {
     transcriptRef.current = value;
@@ -50,6 +53,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
 
   useSpeechRecognitionEvent("end", () => {
     setIsListening(false);
+    finalizerRef.current.end();
   });
 
   useSpeechRecognitionEvent("result", (event: ExpoSpeechRecognitionResultEvent) => {
@@ -63,16 +67,23 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       setFinalTranscript(joinTranscript(transcriptRef.current, text));
       setConfidence(firstResult.confidence);
       setInterim("");
+      finalizerRef.current.acceptResult({
+        text,
+        isFinal: true,
+        confidence: firstResult.confidence,
+      });
       return;
     }
 
     setInterim(text);
+    finalizerRef.current.acceptResult({ text, isFinal: false, confidence: null });
   });
 
   useSpeechRecognitionEvent("error", (event: ExpoSpeechRecognitionErrorEvent) => {
     if (event.error === "aborted") return;
     setError(event.message || event.error);
     setIsListening(false);
+    finalizerRef.current.end();
   });
 
   const start = useCallback(async () => {
@@ -80,6 +91,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     setFinalTranscript("");
     setInterim("");
     setConfidence(null);
+    finalizerRef.current.reset();
 
     if (!ExpoSpeechRecognitionModule.isRecognitionAvailable()) {
       setError("Speech recognition is not available on this device.");
@@ -87,7 +99,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     }
 
     const onDeviceSupported =
-      Platform.OS === "ios" && ExpoSpeechRecognitionModule.supportsOnDeviceRecognition();
+      Platform.OS !== "web" && ExpoSpeechRecognitionModule.supportsOnDeviceRecognition();
     const permission = onDeviceSupported
       ? await ExpoSpeechRecognitionModule.requestMicrophonePermissionsAsync()
       : await ExpoSpeechRecognitionModule.requestPermissionsAsync();
@@ -109,13 +121,11 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   }, [setFinalTranscript, setInterim]);
 
   const stop = useCallback(() => {
+    const finalResult = finalizerRef.current.waitForEnd();
     ExpoSpeechRecognitionModule.stop();
     setIsListening(false);
-    return Promise.resolve({
-      text: joinTranscript(transcriptRef.current, interimRef.current),
-      confidence,
-    });
-  }, [confidence]);
+    return finalResult;
+  }, []);
 
   const cancel = useCallback(() => {
     ExpoSpeechRecognitionModule.abort();
@@ -123,6 +133,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     setInterim("");
     setIsListening(false);
     setConfidence(null);
+    finalizerRef.current.reset();
   }, [setFinalTranscript, setInterim]);
 
   return useMemo(

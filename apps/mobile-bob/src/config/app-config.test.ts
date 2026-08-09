@@ -49,6 +49,14 @@ describe("Expo app config", () => {
 
     expect(config.updates).toEqual(EXPECTED_UPDATES);
   });
+
+  it("routes preview builds to the hosted OODA API", () => {
+    const config = loadConfig({ APP_VARIANT: "preview", APP_ENV: "staging" }) as {
+      extra?: { OODA_API_URL?: string };
+    };
+
+    expect(config.extra?.OODA_API_URL).toBe("https://ooda.blder.bot");
+  });
 });
 
 describe("EAS build profiles", () => {
@@ -76,6 +84,18 @@ describe("EAS build profiles", () => {
     );
     expect(easConfig.build.beta?.channel).toBe("beta");
     expect(easConfig.build.production?.channel).toBe("production");
+  });
+
+  it("gives the physical development build a device-reachable OODA API", () => {
+    const easConfig = JSON.parse(
+      readFileSync(resolve(__dirname, "../../eas.json"), "utf8"),
+    ) as {
+      build: Record<string, { env?: Record<string, string> }>;
+    };
+
+    expect(easConfig.build["development:device"]?.env?.OODA_API_URL).toBe(
+      "https://ooda.blder.bot",
+    );
   });
 });
 

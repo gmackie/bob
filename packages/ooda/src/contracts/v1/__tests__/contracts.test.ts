@@ -30,6 +30,9 @@ import {
   ExternalLinkV1Schema,
   ForkConversationInputV1Schema,
   MemorySeedV1Schema,
+  MemorySearchInputV1Schema,
+  MemorySearchPageV1Schema,
+  SubmitMemoryFeedbackInputV1Schema,
   ProblemV1Schema,
   ProposalV1Schema,
   RecordAgentJobEventInputV1Schema,
@@ -246,6 +249,7 @@ describe("OODA V1 contracts", () => {
       class: "read_only_research",
       status: "queued",
       provider: "claude",
+      billingPolicy: "subscription_only",
       capabilities: ["web.read"],
       budget: { deadlineSeconds: 900, aggregateTokens: 150000 },
       createdAt: occurredAt,
@@ -319,6 +323,44 @@ describe("OODA V1 contracts", () => {
     ).toBe(true);
   });
 
+  it("defines cursor-paged memory search and explicit connection feedback", () => {
+    const memory = MemorySeedV1Schema.parse({
+      id: "memory-1",
+      conversationId: "conversation-1",
+      kind: "question",
+      sourceEventId: "event-1",
+      sourceSpan: { start: 0, end: 24 },
+      normalizedText: "Could mushrooms regulate it?",
+      entities: ["mushrooms"],
+      sensitivity: "personal",
+      confidence: 0.98,
+      lifecycleState: "captured",
+      createdAt: occurredAt,
+      updatedAt: occurredAt,
+    });
+
+    expect(
+      MemorySearchInputV1Schema.parse({ query: "mushrooms", limit: 20 }),
+    ).toEqual({
+      query: "mushrooms",
+      includeSuperseded: false,
+      limit: 20,
+    });
+    expect(
+      MemorySearchPageV1Schema.safeParse({
+        items: [memory],
+        pageInfo: { hasMore: false },
+      }).success,
+    ).toBe(true);
+    expect(
+      SubmitMemoryFeedbackInputV1Schema.safeParse({
+        edgeId: "edge-1",
+        feedbackState: "suppressed",
+        idempotencyKey: "device-feedback-1",
+      }).success,
+    ).toBe(true);
+  });
+
   it("defines a bounded, resumable worker protocol without durable-write capabilities", () => {
     const create = {
       conversationId: "conversation-1",
@@ -341,6 +383,7 @@ describe("OODA V1 contracts", () => {
       class: "scratch_prototype",
       status: "queued",
       provider: "codex",
+      billingPolicy: "subscription_only",
       capabilities: ["process.execute", "scratch.write"],
       budget: { deadlineSeconds: 1_800, aggregateTokens: 250_000 },
       createdAt: occurredAt,
@@ -360,12 +403,25 @@ describe("OODA V1 contracts", () => {
       }).success,
     ).toBe(true);
     expect(
-      ClaimAgentJobResultV1Schema.parse({ job, prompt: create.prompt }),
-    ).toEqual({ job, prompt: create.prompt });
+      ClaimAgentJobResultV1Schema.parse({
+        job,
+        prompt: create.prompt,
+        attempt: 1,
+        leaseToken: "11111111-1111-4111-8111-111111111111",
+        contextItems: [],
+      }),
+    ).toEqual({
+      job,
+      prompt: create.prompt,
+      attempt: 1,
+      leaseToken: "11111111-1111-4111-8111-111111111111",
+      contextItems: [],
+    });
     expect(
       RecordAgentJobEventInputV1Schema.safeParse({
         jobId: "job-1",
         runnerId: "runner-1",
+        leaseToken: "11111111-1111-4111-8111-111111111111",
         type: "progress",
         payload: { display: "Installing dependencies" },
         idempotencyKey: "runner-event-1",

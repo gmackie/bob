@@ -14,6 +14,13 @@ export const agentJobs = oodaSchema.table(
     class: t.varchar({ length: 64 }).notNull(),
     status: t.varchar({ length: 32 }).notNull().default("queued"),
     provider: t.varchar({ length: 64 }).notNull(),
+    billingPolicy: t
+      .varchar({ length: 32 })
+      .notNull()
+      .default("subscription_only"),
+    authMode: t.varchar({ length: 32 }),
+    nativeSessionId: t.text(),
+    nativeTurnId: t.text(),
     capabilities: t.text().array().notNull().default([]),
     deadlineSeconds: t.integer().notNull(),
     aggregateTokenBudget: t.integer().notNull(),
@@ -22,6 +29,9 @@ export const agentJobs = oodaSchema.table(
     idempotencyKey: t.text().notNull(),
     lastSequence: t.bigint({ mode: "number" }).notNull().default(0),
     claimedBy: t.text(),
+    attempt: t.integer().notNull().default(0),
+    leaseToken: t.uuid(),
+    leaseDurationSeconds: t.integer().notNull().default(90),
     leaseExpiresAt: t.timestamp({ withTimezone: true }),
     lastHeartbeatAt: t.timestamp({ withTimezone: true }),
     cancellationRequestedAt: t.timestamp({ withTimezone: true }),

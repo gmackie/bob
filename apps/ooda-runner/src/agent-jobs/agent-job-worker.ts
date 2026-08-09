@@ -5,6 +5,7 @@ import type {
   ClaimAgentJobInputV1,
   ClaimAgentJobResultV1,
   RecordAgentJobEventInputV1,
+  ContextItemV1,
 } from "@gmacko/ooda/contracts/v1";
 
 import { AgentJobExecutor } from "./agent-job-executor";
@@ -21,11 +22,39 @@ const JOB_CLASSES: AgentJobClassV1[] = [
 export type AgentJobWorkerApi = {
   claim(input: ClaimAgentJobInputV1): Promise<ClaimAgentJobResultV1>;
   recordEvent(input: RecordAgentJobEventInputV1): Promise<unknown>;
-  control(input: { jobId: string; runnerId: string }): Promise<{
+  control(input: {
+    jobId: string;
+    runnerId: string;
+    leaseToken: string;
+  }): Promise<{
     status: AgentJobV1["status"];
     cancelRequested: boolean;
+    attempt: number;
   }>;
 };
+
+export function buildAgentJobPrompt(
+  prompt: string,
+  items: ContextItemV1[],
+): string {
+  const disclosed = items.filter(
+    (item) =>
+      item.decision !== "denied" &&
+      typeof item.content === "string" &&
+      item.content.length > 0,
+  );
+  if (!disclosed.length) return prompt;
+  return [
+    prompt,
+    "",
+    "<ooda_disclosed_context>",
+    ...disclosed.map(
+      (item) =>
+        `[${item.sourceType}:${item.sourceId}; sensitivity=${item.sensitivity}; decision=${item.decision}]\n${item.content}`,
+    ),
+    "</ooda_disclosed_context>",
+  ].join("\n");
+}
 
 export class AgentJobWorker {
   private readonly active = new Map<
@@ -102,9 +131,10 @@ export class AgentJobWorker {
       const input: RecordAgentJobEventInputV1 = {
         jobId: claim.job.id,
         runnerId: this.config.runnerId,
+        leaseToken: claim.leaseToken,
         type,
         payload,
-        idempotencyKey: `${claim.job.id}:worker:${eventIndex}`,
+        idempotencyKey: `${claim.job.id}:attempt:${claim.attempt}:event:${eventIndex}`,
         occurredAt,
       };
       const deliver = async () => {
@@ -119,15 +149,28 @@ export class AgentJobWorker {
       return writes;
     };
 
+    let consecutiveControlFailures = 0;
     const controlTimer = setInterval(() => {
       void this.config.api
-        .control({ jobId: claim.job.id, runnerId: this.config.runnerId })
+        .control({
+          jobId: claim.job.id,
+          runnerId: this.config.runnerId,
+          leaseToken: claim.leaseToken,
+        })
         .then((control) => {
-          if (control.cancelRequested || control.status !== "running") {
+          consecutiveControlFailures = 0;
+          if (
+            control.cancelRequested ||
+            control.status !== "running" ||
+            control.attempt !== claim.attempt
+          ) {
             controller.abort();
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          consecutiveControlFailures += 1;
+          if (consecutiveControlFailures >= 3) controller.abort();
+        });
     }, this.config.controlPollMs ?? 1_000);
     controlTimer.unref?.();
 
@@ -136,7 +179,16 @@ export class AgentJobWorker {
         jobId: claim.job.id,
         class: claim.job.class,
         provider: claim.job.provider,
-        prompt: claim.prompt,
+        prompt: buildAgentJobPrompt(claim.prompt, claim.contextItems),
+        billingPolicy: claim.job.billingPolicy,
+        authMode: "subscription",
+        session: claim.job.runtimeSession
+          ? {
+              mode: "resume",
+              sessionId: claim.job.runtimeSession.sessionId,
+            }
+          : { mode: "start" },
+        correlationId: claim.job.correlationId ?? claim.job.id,
         capabilities: claim.job.capabilities,
         budget: claim.job.budget,
         signal: controller.signal,
@@ -159,6 +211,12 @@ export class AgentJobWorker {
               { tool: event.tool ?? event.data },
               event.timestamp,
             );
+          } else if (event.type === "runtime_session" && event.runtimeSession) {
+            void record(
+              "runtime_session",
+              { runtimeSession: event.runtimeSession },
+              event.timestamp,
+            );
           }
         },
       });
@@ -167,6 +225,9 @@ export class AgentJobWorker {
         await record("completed", {
           result: {
             response: result.response,
+            ...(result.runtimeSession
+              ? { runtimeSession: result.runtimeSession }
+              : {}),
             ...(result.artifactRef ? { artifactRef: result.artifactRef } : {}),
           },
         });
@@ -180,20 +241,32 @@ export class AgentJobWorker {
       let cancelled = false;
       if (controller.signal.aborted) {
         cancelled = await this.config.api
-          .control({ jobId: claim.job.id, runnerId: this.config.runnerId })
+          .control({
+            jobId: claim.job.id,
+            runnerId: this.config.runnerId,
+            leaseToken: claim.leaseToken,
+          })
           .then((control) => control.cancelRequested)
           .catch(() => false);
       }
-      await record(
-        cancelled
-          ? "cancelled"
-          : controller.signal.aborted
-            ? "timed_out"
-            : "failed",
-        {
-          error: error instanceof Error ? error.message : String(error),
-        },
-      );
+      try {
+        await record(
+          cancelled
+            ? "cancelled"
+            : controller.signal.aborted
+              ? "timed_out"
+              : "failed",
+          {
+            error: error instanceof Error ? error.message : String(error),
+          },
+        );
+      } catch (recordError) {
+        // A reclaimed lease deliberately fences the old runner from writing
+        // its terminal event. Once control loss has aborted this execution,
+        // that conflict is an expected stop condition—not a process-level
+        // unhandled rejection. Non-aborted delivery failures still surface.
+        if (!controller.signal.aborted) throw recordError;
+      }
     } finally {
       clearInterval(controlTimer);
     }

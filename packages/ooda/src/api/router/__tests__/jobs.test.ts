@@ -16,6 +16,8 @@ const { setPlaceholder, kernel } = vi.hoisted(() => {
       claimAgentJob: vi.fn(),
       recordAgentJobEvent: vi.fn(),
       inspectAgentJobControl: vi.fn(),
+      resolveContextSourceConfig: vi.fn().mockReturnValue({}),
+      createConfiguredContextSources: vi.fn().mockReturnValue([]),
     },
   };
 });
@@ -66,6 +68,7 @@ describe("jobs router", () => {
         class: "read_only_research",
         status: "queued",
         provider: "codex",
+        billingPolicy: "subscription_only",
         capabilities: ["web.read"],
         budget: { deadlineSeconds: 900, aggregateTokens: 150_000 },
         createdAt: "2026-08-07T15:00:00.000Z",
@@ -75,7 +78,15 @@ describe("jobs router", () => {
     });
 
     await caller().jobs.create(input);
-    expect(kernel.createAgentJob).toHaveBeenCalledWith({}, "owner-jobs", input);
+    expect(kernel.createAgentJob).toHaveBeenCalledWith(
+      {},
+      "owner-jobs",
+      input,
+      {
+        contextSources: [],
+        signal: expect.any(AbortSignal),
+      },
+    );
   });
 
   it("requires a configured runner secret for claims", async () => {

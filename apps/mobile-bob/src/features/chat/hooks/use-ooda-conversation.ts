@@ -21,6 +21,7 @@ import {
   OodaConversationOutbox,
 } from "../ooda-outbox";
 import type { OodaOutboxItem } from "../ooda-outbox";
+import { streamConversationEvents } from "../ooda-sse";
 import { buildOodaTimeline } from "../ooda-timeline";
 
 const LAST_CONVERSATION_KEY = "ooda:last-conversation:v1";
@@ -83,6 +84,7 @@ export function useOodaConversation() {
   const [pinnedIds, setPinnedIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(true);
+  const [isStreamConnected, setIsStreamConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const selectedConversationRef = useRef<string | null>(null);
 
@@ -194,12 +196,42 @@ export function useOodaConversation() {
   }), [flushOutbox, refreshEvents]);
 
   useEffect(() => {
-    if (!selectedConversationId || !isOnline) return;
-    const timer = setInterval(() => {
-      void refreshEvents(selectedConversationId);
-    }, 3_000);
-    return () => clearInterval(timer);
-  }, [isOnline, refreshEvents, selectedConversationId]);
+    if (!selectedConversationId || !isOnline) {
+      return;
+    }
+
+    const conversationId = selectedConversationId;
+    const controller = new AbortController();
+    void streamConversationEvents({
+      signal: controller.signal,
+      createRequest: (afterSequence) => client.events.streamRequest({
+        conversationId,
+        afterSequence,
+      }),
+      onEvent: (event) => {
+        if (selectedConversationRef.current !== conversationId) return;
+        setEvents((current) => mergeEvents(current, [event]));
+      },
+      onConnectionChange: (connected) => {
+        if (selectedConversationRef.current !== conversationId) return;
+        setIsStreamConnected(connected);
+        if (connected) setError(null);
+      },
+      onProblem: (problem) => {
+        if (selectedConversationRef.current !== conversationId) return;
+        const detail = problem && typeof problem === "object" && "detail" in problem
+          ? String(problem.detail)
+          : problem instanceof Error
+            ? problem.message
+            : "Live conversation sync is reconnecting.";
+        setError(detail);
+      },
+    });
+
+    return () => {
+      controller.abort();
+    };
+  }, [client, isOnline, selectedConversationId]);
 
   const createConversation = useCallback(async (title = "New thought") => {
     setError(null);
@@ -287,6 +319,8 @@ export function useOodaConversation() {
       ? "error"
       : isSyncing
         ? "syncing"
+        : selectedConversation && !isStreamConnected
+          ? "syncing"
         : "connected";
   const statusText = !isOnline
     ? `${selectedOutbox.length} turn${selectedOutbox.length === 1 ? "" : "s"} queued on this device`
@@ -304,6 +338,7 @@ export function useOodaConversation() {
     statusText,
     isLoading,
     isOnline,
+    isStreamConnected,
     isSyncing,
     canSend: Boolean(selectedConversation && selectedBranchId),
     openConversation,

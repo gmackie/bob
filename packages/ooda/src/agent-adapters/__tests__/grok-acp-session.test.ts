@@ -120,6 +120,56 @@ describe("runGrokAcpSession", () => {
     expect(methods).not.toContain("authenticate");
   });
 
+  it("resumes a provider-native session when ACP advertises loadSession", async () => {
+    const { client, methods } = scriptedClient((method) => {
+      switch (method) {
+        case "initialize":
+          return {
+            protocolVersion: 1,
+            authMethods: [],
+            agentCapabilities: { loadSession: true },
+          };
+        case "session/load":
+          return {};
+        case "session/prompt":
+          return { stopReason: "end_turn" };
+        default:
+          return {};
+      }
+    });
+
+    const result = await runGrokAcpSession({
+      client,
+      prompt: "continue the comparison",
+      cwd: "/tmp/ws",
+      apiKeyPresent: true,
+      existingSessionId: "grok-session-1",
+    });
+
+    expect(methods).toEqual(["initialize", "session/load", "session/prompt"]);
+    expect(result).toEqual({ exitCode: 0, sessionId: "grok-session-1" });
+  });
+
+  it("fails visibly instead of silently starting over when ACP cannot resume", async () => {
+    const { client, methods } = scriptedClient((method) => {
+      if (method === "initialize") {
+        return { protocolVersion: 1, authMethods: [], agentCapabilities: {} };
+      }
+      return {};
+    });
+
+    await expect(
+      runGrokAcpSession({
+        client,
+        prompt: "continue",
+        cwd: "/tmp/ws",
+        apiKeyPresent: true,
+        existingSessionId: "grok-session-1",
+      }),
+    ).rejects.toThrow(/does not support session resume/i);
+    expect(methods).toEqual(["initialize"]);
+  });
+
   it("returns a non-zero exit code when the prompt stops with a refusal", async () => {
     const { client } = scriptedClient((method) => {
       switch (method) {

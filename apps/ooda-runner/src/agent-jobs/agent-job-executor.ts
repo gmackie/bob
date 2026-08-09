@@ -6,17 +6,22 @@ import type {
 import type { AgentJobClassV1 } from "@gmacko/ooda/contracts/v1";
 
 import { extractAgentResponse } from "../pty-output-parser";
-import {
-  buildIsolatedAgentEnvironment,
-  type ScratchSandboxManager,
-} from "./scratch-sandbox";
+import { type ScratchSandboxManager } from "./scratch-sandbox";
 import { wrapInProcessSandbox } from "./process-sandbox";
+import { SubscriptionRuntimeBroker } from "./subscription-runtime-broker";
 
 export type ExecuteAgentJobInput = {
   jobId: string;
   class: AgentJobClassV1;
   provider: string;
   prompt: string;
+  billingPolicy:
+    | "subscription_only"
+    | "subscription_preferred"
+    | "metered_allowed";
+  authMode: "subscription" | "api_key";
+  session?: { mode: "start" | "resume"; sessionId?: string };
+  correlationId?: string;
   capabilities: string[];
   budget: { deadlineSeconds: number; aggregateTokens: number };
   signal?: AbortSignal;
@@ -36,6 +41,13 @@ export class AgentJobExecutor {
     exitCode: number;
     response: string;
     artifactRef?: string;
+    runtimeSession?: {
+      provider: string;
+      sessionId: string;
+      turnId?: string;
+      transport: "cli" | "app_server" | "acp";
+      authMode: "subscription" | "api_key";
+    };
   }> {
     const sandbox = await this.config.sandboxes.create(input.jobId);
     const controller = new AbortController();
@@ -54,6 +66,15 @@ export class AgentJobExecutor {
     controller.signal.addEventListener("abort", abortProcess, { once: true });
 
     try {
+      const prepared = new SubscriptionRuntimeBroker().prepare({
+        provider: input.provider,
+        jobClass: input.class,
+        capabilities: input.capabilities,
+        billingPolicy: input.billingPolicy,
+        authMode: input.authMode,
+        sandboxPath: sandbox.path,
+        source: this.config.environment,
+      });
       const requestedCommand = this.config.adapter.buildCommand({
         prompt: input.prompt,
         workspaceRoot: sandbox.path,
@@ -65,24 +86,37 @@ export class AgentJobExecutor {
           "Do not create durable Bob, KanBanger, BizPulse, ForgeGraph, repository, publishing, messaging, purchase, credential, or deployment mutations.",
           "Return structured findings and identify uncertainty.",
         ].join("\n"),
-        permissionMode: "skip",
+        permissionMode: prepared.permissionMode,
+        allowedTools: prepared.allowedTools,
+        billingPolicy: input.billingPolicy,
+        authMode: input.authMode,
+        session: input.session,
+        correlationId: input.correlationId,
       });
-      const command = await wrapInProcessSandbox(
-        requestedCommand,
-        sandbox.path,
-      );
+      const command = prepared.useOuterProcessSandbox
+        ? await wrapInProcessSandbox(requestedCommand, sandbox.path)
+        : requestedCommand;
       const result = await this.config.adapter.execute(
         command,
         (event) => {
           if (event.type === "stdout") output += event.data;
+          if (event.type === "permission_request" && event.permission) {
+            const resolved =
+              handle?.respondPermission?.(
+                event.permission.requestId,
+                "deny",
+                "Tool is outside this OODA job's declared capabilities",
+              ) ?? false;
+            // Headless jobs must never remain indefinitely paused at a tool
+            // prompt. Declared Claude tools are pre-allowed; anything that
+            // still asks is outside the bounded job grant and is denied. If
+            // the adapter cannot accept the decision, abort the job visibly.
+            if (!resolved) controller.abort();
+          }
           input.onEvent(event);
         },
         {
-          environment: buildIsolatedAgentEnvironment({
-            provider: input.provider,
-            sandboxPath: sandbox.path,
-            source: this.config.environment,
-          }),
+          environment: prepared.environment,
           signal: controller.signal,
           onSpawn: (spawned) => {
             handle = spawned;
@@ -101,6 +135,9 @@ export class AgentJobExecutor {
       return {
         exitCode: result.exitCode,
         response: extractAgentResponse(output),
+        ...(result.runtimeSession
+          ? { runtimeSession: result.runtimeSession }
+          : {}),
         ...(completed && input.class === "scratch_prototype"
           ? { artifactRef: sandbox.path }
           : {}),

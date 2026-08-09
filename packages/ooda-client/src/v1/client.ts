@@ -30,6 +30,11 @@ import type {
   ForkConversationResultV1,
   IntegrationDeliveryListInputV1,
   IntegrationDeliveryListPageV1,
+  MemoryDetailV1,
+  MemorySearchInputV1,
+  MemorySearchPageV1,
+  SubmitMemoryFeedbackInputV1,
+  SubmitMemoryFeedbackResultV1,
   DeadLetterV1,
   RepairDeadLetterInputV1,
   RepairDeadLetterResultV1,
@@ -266,6 +271,24 @@ export function createOodaV1Client(options: OodaV1ClientOptions = {}) {
       get(id: string) {
         return request<ContextPackV1>(
           `/api/v1/context-packs/${encodeURIComponent(id)}`,
+        );
+      },
+    },
+    memories: {
+      search(input: Partial<MemorySearchInputV1> = {}) {
+        return request<MemorySearchPageV1>("/api/v1/memories", {
+          query: input,
+        });
+      },
+      inspect(memoryId: string) {
+        return request<MemoryDetailV1>(
+          `/api/v1/memories/${encodeURIComponent(memoryId)}`,
+        );
+      },
+      feedback(input: SubmitMemoryFeedbackInputV1) {
+        return request<SubmitMemoryFeedbackResultV1>(
+          `/api/v1/memories/edges/${encodeURIComponent(input.edgeId)}/feedback`,
+          { method: "POST", body: input },
         );
       },
     },

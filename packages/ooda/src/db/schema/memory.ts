@@ -121,6 +121,8 @@ export const memoryEdges = oodaSchema.table(
     explanation: t.text().notNull(),
     discoveryMethod: t.varchar({ length: 128 }).notNull(),
     feedbackState: memoryFeedbackStateEnum().notNull().default("unreviewed"),
+    feedbackIdempotencyKey: t.text(),
+    feedbackFingerprint: t.text(),
     createdAt: t.timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: t
       .timestamp({ withTimezone: true })
@@ -135,6 +137,9 @@ export const memoryEdges = oodaSchema.table(
       t.kind,
     ),
     index("memory_edges_to_idx").on(t.toMemoryId),
+    uniqueIndex("memory_edges_feedback_idempotency_uidx").on(
+      t.feedbackIdempotencyKey,
+    ),
   ],
 );
 

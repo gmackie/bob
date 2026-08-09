@@ -101,6 +101,9 @@ describe("personal OS routers", () => {
       "events.correct",
       "events.paginate",
       "host.createTurn",
+      "memories.feedback",
+      "memories.inspect",
+      "memories.search",
     ];
     const nodeProcedures = Object.keys(appRouter._def.procedures);
     const edgeProcedures = Object.keys(edgeRouter._def.procedures);

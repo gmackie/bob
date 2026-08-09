@@ -18,7 +18,7 @@ function iso(value: Date): string {
   return value.toISOString();
 }
 
-export async function buildHostContextPack(
+async function buildDisclosedContextPack(
   db: OodaDatabase,
   ownerId: string,
   input: {
@@ -28,6 +28,7 @@ export async function buildHostContextPack(
     sources: ConversationContextSource[];
     now: Date;
     signal?: AbortSignal;
+    purpose: "host_turn" | "agent_job";
   },
 ): Promise<{ pack: ContextPackV1; promptContext: string }> {
   const [conversation] = await db
@@ -58,7 +59,10 @@ export async function buildHostContextPack(
       reason: "Source not configured",
     }));
   const policySnapshot = {
-    version: "host-context-v1",
+    version:
+      input.purpose === "host_turn"
+        ? "host-context-v1"
+        : "agent-job-context-v1",
     allowedSensitivities: ["general", "personal"],
     automaticSensitiveDisclosure: false,
     rawDiffsIncluded: false,
@@ -71,7 +75,7 @@ export async function buildHostContextPack(
       .values({
         conversationId: input.conversationId,
         provider: input.provider,
-        purpose: "host_turn",
+        purpose: input.purpose,
         policySnapshot,
         createdAt: input.now,
         expiresAt: new Date(input.now.getTime() + 24 * 60 * 60 * 1_000),
@@ -105,7 +109,7 @@ export async function buildHostContextPack(
       id: stored.pack.id,
       conversationId: stored.pack.conversationId,
       provider: stored.pack.provider,
-      purpose: "host_turn",
+      purpose: input.purpose,
       policySnapshot: stored.pack.policySnapshot,
       items: stored.inserted.map((item) => ({
         id: item.id,
@@ -125,6 +129,28 @@ export async function buildHostContextPack(
     },
     promptContext: formatDisclosedContext(decisions),
   };
+}
+
+export function buildHostContextPack(
+  db: OodaDatabase,
+  ownerId: string,
+  input: Omit<Parameters<typeof buildDisclosedContextPack>[2], "purpose">,
+) {
+  return buildDisclosedContextPack(db, ownerId, {
+    ...input,
+    purpose: "host_turn",
+  });
+}
+
+export function buildAgentJobContextPack(
+  db: OodaDatabase,
+  ownerId: string,
+  input: Omit<Parameters<typeof buildDisclosedContextPack>[2], "purpose">,
+) {
+  return buildDisclosedContextPack(db, ownerId, {
+    ...input,
+    purpose: "agent_job",
+  });
 }
 
 export async function getContextPack(

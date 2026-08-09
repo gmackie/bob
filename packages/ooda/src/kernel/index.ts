@@ -4,6 +4,8 @@ export * from "./events";
 export * from "./host-routing";
 export * from "./host-providers";
 export * from "./host-turns";
+export * from "./memory-capture";
+export * from "./memories";
 export * from "./integration-deliveries";
 export * from "./context-packs";
 export * from "./context-sources";
