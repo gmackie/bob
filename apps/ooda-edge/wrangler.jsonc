@@ -28,8 +28,9 @@
     "REQUIRE_AUTH": "true",
     "FRONTEND_URL": "https://ooda.blder.bot",
     "NODE_ENV": "production",
-    "OODA_ROLLOUT_STAGE": "shadow",
-    "OODA_ROLLOUT_OWNER_IDS": "",
+    "OODA_ROLLOUT_STAGE": "mobile_text",
+    "OODA_ROLLOUT_OWNER_IDS": "tkE66fMc4mevdYYjtq78ALErJ7QnhAge",
+    "OODA_DOGFOOD_STARTED_AT": "2026-08-09T15:44:45.000Z",
     "OODA_ROLLOUT_KILL_SWITCH": "false"
   }
 }
