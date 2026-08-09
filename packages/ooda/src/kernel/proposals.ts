@@ -89,6 +89,32 @@ export function validateProposalBoundary(input: CreateProposalInputV1): void {
       );
     }
   }
+  if (input.kind === "obsidian_note") {
+    const path = input.preview.path;
+    const title = input.preview.title;
+    const content = input.preview.content;
+    const allowedPath =
+      typeof path === "string" &&
+      path.endsWith(".md") &&
+      !path.startsWith("/") &&
+      !path.includes("..") &&
+      ["Captures/", "Areas/", "Resources/Chat Extractions/"].some((root) =>
+        path.startsWith(root),
+      );
+    if (
+      !allowedPath ||
+      typeof title !== "string" ||
+      !title.trim() ||
+      typeof content !== "string" ||
+      !content.trim()
+    ) {
+      throw new OodaKernelProblem(
+        "VALIDATION_FAILED",
+        422,
+        "Obsidian proposals require the exact path and content under a curated vault root",
+      );
+    }
+  }
   if (input.kind === "bizpulse_venture") {
     const preview = input.preview;
     const opportunityReviewId = preview.opportunityReviewId;
@@ -178,9 +204,7 @@ export async function createProposal(
         .limit(1);
       if (!conversation?.activeBranchId) throw notFound("Conversation");
 
-      let opportunityReview:
-        | { id: string; memorySeedId: string }
-        | undefined;
+      let opportunityReview: { id: string; memorySeedId: string } | undefined;
       if (input.kind === "bizpulse_venture") {
         const [review] = await tx
           .select({
@@ -190,10 +214,16 @@ export async function createProposal(
             proposalId: attentionReviews.proposalId,
           })
           .from(attentionReviews)
-          .innerJoin(memorySeeds, eq(memorySeeds.id, attentionReviews.memorySeedId))
+          .innerJoin(
+            memorySeeds,
+            eq(memorySeeds.id, attentionReviews.memorySeedId),
+          )
           .where(
             and(
-              eq(attentionReviews.id, String(input.preview.opportunityReviewId)),
+              eq(
+                attentionReviews.id,
+                String(input.preview.opportunityReviewId),
+              ),
               eq(memorySeeds.conversationId, input.conversationId),
             ),
           )
@@ -511,7 +541,8 @@ export async function decideProposal(
       await tx
         .update(memorySeeds)
         .set({
-          lifecycleState: input.decision === "approve" ? "committed" : "incubating",
+          lifecycleState:
+            input.decision === "approve" ? "committed" : "incubating",
           updatedAt: decidedAt,
         })
         .where(eq(memorySeeds.id, opportunityReview.memorySeedId));

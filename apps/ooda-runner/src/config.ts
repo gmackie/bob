@@ -17,6 +17,16 @@ export const RunnerConfigSchema = z.object({
   bobDeliveryEnabled: z
     .preprocess((value) => value === true || value === "true", z.boolean())
     .default(false),
+  obsidianDeliveryEnabled: z
+    .preprocess((value) => value === true || value === "true", z.boolean())
+    .default(false),
+  obsidianVaultPath: z.string().default(join(homedir(), "obsidian")),
+  obsidianVaultName: z.string().optional(),
+  bizPulseDeliveryEnabled: z
+    .preprocess((value) => value === true || value === "true", z.boolean())
+    .default(false),
+  bizPulseApiUrl: z.string().url().optional(),
+  bizPulseApiKey: z.string().optional(),
   bobDevDir: z.string().default(join(homedir(), "dev")),
   bobMaxConcurrent: z.coerce.number().default(2),
   agentJobScratchRoot: z.string().default(join(tmpdir(), "ooda-agent-jobs")),
@@ -48,6 +58,12 @@ export function loadConfig(): RunnerConfig {
     bobApiKey: process.env.BOB_API_KEY,
     bobWorkspaceId: process.env.BOB_WORKSPACE_ID,
     bobDeliveryEnabled: process.env.OODA_BOB_DELIVERY_ENABLED,
+    obsidianDeliveryEnabled: process.env.OODA_OBSIDIAN_DELIVERY_ENABLED,
+    obsidianVaultPath: process.env.OODA_OBSIDIAN_VAULT_PATH,
+    obsidianVaultName: process.env.OODA_OBSIDIAN_VAULT_NAME,
+    bizPulseDeliveryEnabled: process.env.OODA_BIZPULSE_DELIVERY_ENABLED,
+    bizPulseApiUrl: process.env.OODA_BIZPULSE_API_URL,
+    bizPulseApiKey: process.env.OODA_BIZPULSE_API_KEY,
     bobDevDir: process.env.BOB_DEV_DIR,
     bobMaxConcurrent: process.env.BOB_MAX_CONCURRENT,
     agentJobScratchRoot: process.env.OODA_AGENT_JOB_SCRATCH_ROOT,

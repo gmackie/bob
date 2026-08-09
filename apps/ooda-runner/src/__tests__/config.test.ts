@@ -17,4 +17,20 @@ describe("RunnerConfigSchema", () => {
       RunnerConfigSchema.parse({ hostTurnEnabled: "false" }).hostTurnEnabled,
     ).toBe(false);
   });
+
+  it("keeps Obsidian writes behind an adapter kill switch", () => {
+    expect(RunnerConfigSchema.parse({}).obsidianDeliveryEnabled).toBe(false);
+    expect(
+      RunnerConfigSchema.parse({ obsidianDeliveryEnabled: "true" })
+        .obsidianDeliveryEnabled,
+    ).toBe(true);
+  });
+
+  it("keeps BizPulse venture creation behind an adapter kill switch", () => {
+    expect(RunnerConfigSchema.parse({}).bizPulseDeliveryEnabled).toBe(false);
+    expect(
+      RunnerConfigSchema.parse({ bizPulseDeliveryEnabled: "true" })
+        .bizPulseDeliveryEnabled,
+    ).toBe(true);
+  });
 });

@@ -25,8 +25,8 @@ import type { ResearchTRPCSurface } from "@gmacko/ooda/buddy-tools";
 import { BobGatewayConnector } from "./bob-gateway";
 import { BobRunReporter } from "./bob-run-reporter";
 import { AgentJobWorker } from "./agent-jobs/agent-job-worker";
-import { BobDomainAdapter } from "@gmacko/ooda/integrations";
 import { IntegrationDeliveryWorker } from "./integrations/integration-delivery-worker";
+import { createDeliveryAdapters } from "./integrations/delivery-adapters";
 import { HostTurnWorker } from "./host-turns/host-turn-worker";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -359,32 +359,20 @@ export class RunnerServer {
             },
           });
         }
-        if (
-          !this.integrationDeliveryWorker &&
-          this.config.bobDeliveryEnabled &&
-          this.config.bobApiUrl &&
-          this.config.bobApiKey &&
-          this.config.bobWorkspaceId
-        ) {
-          this.integrationDeliveryWorker = new IntegrationDeliveryWorker({
-            runnerId: device.id,
-            adapters: new Map([
-              [
-                "bob",
-                new BobDomainAdapter({
-                  apiUrl: this.config.bobApiUrl,
-                  apiKey: this.config.bobApiKey,
-                  workspaceId: this.config.bobWorkspaceId,
-                }),
-              ],
-            ]),
-            api: {
-              claim: (input) => this.trpc.integrations.claim.mutate(input),
-              complete: (input) =>
-                this.trpc.integrations.complete.mutate(input),
-              fail: (input) => this.trpc.integrations.fail.mutate(input),
-            },
-          });
+        if (!this.integrationDeliveryWorker) {
+          const deliveryAdapters = createDeliveryAdapters(this.config);
+          if (deliveryAdapters.size > 0) {
+            this.integrationDeliveryWorker = new IntegrationDeliveryWorker({
+              runnerId: device.id,
+              adapters: deliveryAdapters,
+              api: {
+                claim: (input) => this.trpc.integrations.claim.mutate(input),
+                complete: (input) =>
+                  this.trpc.integrations.complete.mutate(input),
+                fail: (input) => this.trpc.integrations.fail.mutate(input),
+              },
+            });
+          }
         }
         console.log(
           `[runner] registered as device ${device.id} (${hostname()})`,
