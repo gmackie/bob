@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "recordedAt": "2026-08-09T01:16:31-04:00",
+  "recordedAt": "2026-08-09T02:21:28-04:00",
   "status": "parity_verification_in_progress",
   "canonical": {
     "repository": "/Volumes/dev/bob/bob",
     "worktree": "/Users/mackieg/.config/superpowers/worktrees/bob/feat/ooda-personal-os",
     "branch": "feat/ooda-personal-os",
     "baseCommit": "371b09aee71fced72aecee6189cd1fff6a3a24a5",
-    "latestVerifiedCommit": "bbf4e5fe6689fc9ec07e216f60efda0d270ed468",
+    "latestVerifiedCommit": "462a0f93832a2a9bc3c631b99cddb5a4d72d04a7",
     "webOwner": "apps/ooda-edge",
     "kernelOwner": "packages/ooda",
     "clientOwner": "packages/ooda-client",
@@ -28,7 +28,7 @@
     "archiveBlockers": [
       "The 14-day production dogfood gate has not completed.",
       "Production mobile and edge canonical-sequence parity has not yet been recorded.",
-      "The standalone 62,293-source vault import and pgvector backfill has not yet been promoted into canonical storage.",
+      "The complete 62,293-source copy has passed a disposable restore rehearsal, but production promotion and the full local pgvector backfill remain pending.",
       "User-owned dirty paths require a preserved patch or commit before archival."
     ]
   },
@@ -119,6 +119,26 @@
     {
       "commit": "bbf4e5fe6689fc9ec07e216f60efda0d270ed468",
       "capability": "Canonical edge conversation workspace and shared web view models"
+    },
+    {
+      "commit": "3cd15fb7",
+      "capability": "Legacy web route convergence"
+    },
+    {
+      "commit": "b9a6b022",
+      "capability": "Account-scoped staged production rollout"
+    },
+    {
+      "commit": "04ca7a24",
+      "capability": "Bob, KanBanger, and ForgeGraph execution evidence reconciliation"
+    },
+    {
+      "commit": "c1bd211a",
+      "capability": "Production dogfood readiness ledger"
+    },
+    {
+      "commit": "462a0f93832a2a9bc3c631b99cddb5a4d72d04a7",
+      "capability": "Resumable standalone vault copy and native pgvector retrieval"
     }
   ],
   "retirementGates": {
@@ -127,7 +147,7 @@
     "canonicalEdgeClient": "implemented_local_production_build",
     "legacyLinkResolution": "implemented_not_production_verified",
     "migrationRehearsal": "passed",
-    "standaloneVaultImport": "pending",
+    "standaloneVaultImport": "full_copy_rehearsal_passed_production_and_embedding_pending",
     "productionSequenceParity": "pending",
     "fourteenDayDogfood": "pending",
     "standaloneArchive": "blocked"
