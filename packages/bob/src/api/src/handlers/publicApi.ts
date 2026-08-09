@@ -14,9 +14,14 @@ import {
   apiKeys,
   chatConversations,
   discoveredDirs,
+  forgeBuilds,
+  forgeDeployments,
+  forgeRevisions,
+  forgeRunEvents,
   projects,
   repositories,
   runArtifacts,
+  taskRuns,
   tenantMembers,
   tenants,
   workItems,
@@ -80,6 +85,171 @@ function assertReplayMatches(
         "The idempotency key was already used for a different intake command",
     });
   }
+}
+
+type OodaExecutionEvidence = {
+  id: string;
+  source: "bob" | "kanbanger" | "forgegraph";
+  kind: "work_item" | "run" | "revision" | "build" | "deployment" | "run_event";
+  externalId: string;
+  title: string;
+  status: string;
+  path: string;
+  occurredAt: string;
+  metadata: Record<string, unknown>;
+};
+
+function timestamp(value: string | Date | null | undefined): string {
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "string" && !Number.isNaN(Date.parse(value))) {
+    return new Date(value).toISOString();
+  }
+  return new Date(0).toISOString();
+}
+
+async function readOodaExecutionEvidence(
+  db: Db,
+  workItemIds: string[],
+): Promise<OodaExecutionEvidence[]> {
+  if (workItemIds.length === 0) return [];
+  const items = await db.query.workItems.findMany({
+    where: inArray(workItems.id, workItemIds),
+    columns: { id: true, title: true, status: true, createdAt: true },
+  });
+  const itemById = new Map(items.map((item) => [item.id, item]));
+  const evidence: OodaExecutionEvidence[] = items.map((item) => ({
+    id: `kanbanger_work_item:${item.id}`,
+    source: "kanbanger",
+    kind: "work_item",
+    externalId: item.id,
+    title: item.title,
+    status: item.status,
+    path: `/work-items/${encodeURIComponent(item.id)}`,
+    occurredAt: timestamp(item.createdAt),
+    metadata: {},
+  }));
+  const runs = await db.query.taskRuns.findMany({
+    where: inArray(taskRuns.workItemId, workItemIds),
+  });
+  for (const run of runs) {
+    const item = run.workItemId ? itemById.get(run.workItemId) : undefined;
+    if (!item) continue;
+    evidence.push({
+      id: `bob_run:${run.id}`,
+      source: "bob",
+      kind: "run",
+      externalId: run.id,
+      title: `Bob run for ${item.title}`,
+      status: run.status,
+      path: `/work-items/${encodeURIComponent(item.id)}`,
+      occurredAt: timestamp(run.completedAt ?? run.updatedAt ?? run.createdAt),
+      metadata: {
+        planningItemIdentifier: run.planningItemIdentifier,
+        ...(run.branch ? { branch: run.branch } : {}),
+        ...(run.blockedReason ? { blockedReason: run.blockedReason } : {}),
+      },
+    });
+  }
+  const revisions = await db.query.forgeRevisions.findMany({
+    where: inArray(forgeRevisions.taskId, workItemIds),
+  });
+  const revisionById = new Map(
+    revisions.map((revision) => [revision.id, revision]),
+  );
+  for (const revision of revisions) {
+    if (!revision.taskId) continue;
+    evidence.push({
+      id: `forgegraph_revision:${revision.id}`,
+      source: "forgegraph",
+      kind: "revision",
+      externalId: revision.id,
+      title: `ForgeGraph revision ${revision.revId}`,
+      status: revision.status,
+      path: `/work-items/${encodeURIComponent(revision.taskId)}`,
+      occurredAt: timestamp(revision.updatedAt ?? revision.createdAt),
+      metadata: {
+        revId: revision.revId,
+        ...(revision.branch ? { branch: revision.branch } : {}),
+        gates: revision.gates ?? [],
+      },
+    });
+  }
+  const revisionIds = revisions.map((revision) => revision.id);
+  if (revisionIds.length === 0) return evidence;
+  const [buildRows, deploymentRows, eventRows] = await Promise.all([
+    db.query.forgeBuilds.findMany({
+      where: inArray(forgeBuilds.revisionId, revisionIds),
+    }),
+    db.query.forgeDeployments.findMany({
+      where: inArray(forgeDeployments.revisionId, revisionIds),
+    }),
+    db.query.forgeRunEvents.findMany({
+      where: inArray(forgeRunEvents.revisionId, revisionIds),
+    }),
+  ]);
+  for (const build of buildRows) {
+    const revision = revisionById.get(build.revisionId);
+    if (!revision?.taskId) continue;
+    evidence.push({
+      id: `forgegraph_build:${build.id}`,
+      source: "forgegraph",
+      kind: "build",
+      externalId: build.id,
+      title: "ForgeGraph build",
+      status: build.status,
+      path: `/work-items/${encodeURIComponent(revision.taskId)}`,
+      occurredAt: timestamp(
+        build.finishedAt ?? build.updatedAt ?? build.createdAt,
+      ),
+      metadata: {
+        ...(build.imageDigest ? { imageDigest: build.imageDigest } : {}),
+        ...(build.artifactManifestRef
+          ? { artifactManifestRef: build.artifactManifestRef }
+          : {}),
+        ...(build.externalJobId ? { externalJobId: build.externalJobId } : {}),
+      },
+    });
+  }
+  for (const deployment of deploymentRows) {
+    const revision = revisionById.get(deployment.revisionId);
+    if (!revision?.taskId) continue;
+    evidence.push({
+      id: `forgegraph_deployment:${deployment.id}`,
+      source: "forgegraph",
+      kind: "deployment",
+      externalId: deployment.id,
+      title: `ForgeGraph ${deployment.environment} deployment`,
+      status: deployment.status,
+      path: `/work-items/${encodeURIComponent(revision.taskId)}`,
+      occurredAt: timestamp(
+        deployment.deployedAt ?? deployment.updatedAt ?? deployment.createdAt,
+      ),
+      metadata: { environment: deployment.environment },
+    });
+  }
+  for (const event of eventRows) {
+    const revision = revisionById.get(event.revisionId);
+    if (!revision?.taskId) continue;
+    evidence.push({
+      id: `forgegraph_run_event:${event.id}`,
+      source: "forgegraph",
+      kind: "run_event",
+      externalId: event.id,
+      title: `ForgeGraph ${event.eventType.replaceAll("_", " ")}`,
+      status: event.testStatus ?? event.eventType,
+      path: `/work-items/${encodeURIComponent(revision.taskId)}`,
+      occurredAt: timestamp(event.createdAt),
+      metadata: {
+        eventType: event.eventType,
+        artifactRefs: event.artifactRefs ?? [],
+      },
+    });
+  }
+  return evidence.sort(
+    (left, right) =>
+      left.occurredAt.localeCompare(right.occurredAt) ||
+      left.id.localeCompare(right.id),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -956,6 +1126,10 @@ export async function publicApiLookupIntake(
     ),
   });
   if (project) {
+    const projectItems = await ctx.db.query.workItems.findMany({
+      where: eq(workItems.projectId, project.id),
+      columns: { id: true },
+    });
     return {
       kind: "project" as const,
       id: project.id,
@@ -963,6 +1137,10 @@ export async function publicApiLookupIntake(
       name: project.name,
       status: project.status,
       replayed: true,
+      evidence: await readOodaExecutionEvidence(
+        ctx.db,
+        projectItems.map((item) => item.id),
+      ),
     };
   }
   const workItem = await ctx.db.query.workItems.findFirst({
@@ -979,6 +1157,7 @@ export async function publicApiLookupIntake(
     title: workItem.title,
     status: workItem.status,
     replayed: true,
+    evidence: await readOodaExecutionEvidence(ctx.db, [workItem.id]),
   };
 }
 

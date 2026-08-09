@@ -28,6 +28,21 @@ export const ExternalLinkV1Schema = z
 
 export type ExternalLinkV1 = z.infer<typeof ExternalLinkV1Schema>;
 
+export const ExternalEvidenceV1Schema = z
+  .object({
+    id: z.string().min(1).max(1_024),
+    source: z.string().min(1).max(128),
+    kind: z.string().min(1).max(128),
+    externalId: z.string().min(1).max(1_024),
+    title: z.string().min(1).max(512),
+    status: z.string().min(1).max(128),
+    deepLink: z.string().url().max(4_096).optional(),
+    occurredAt: z.iso.datetime({ offset: true }),
+    metadata: z.record(z.string(), z.unknown()),
+  })
+  .strict();
+export type ExternalEvidenceV1 = z.infer<typeof ExternalEvidenceV1Schema>;
+
 export const ExternalReceiptV1Schema = z
   .object({
     destination: z.string().min(1).max(128),
@@ -79,6 +94,7 @@ export interface ExternalStatus {
   status: string;
   observedAt: string;
   metadata: Record<string, unknown>;
+  evidence?: ExternalEvidenceV1[];
 }
 
 export interface DomainAdapter {
@@ -175,6 +191,70 @@ export const IntegrationDeliveryMutationResultV1Schema = z
   .strict();
 export type IntegrationDeliveryMutationResultV1 = z.infer<
   typeof IntegrationDeliveryMutationResultV1Schema
+>;
+
+export const ClaimExternalStatusInputV1Schema = z
+  .object({
+    runnerId: z.string().min(1).max(256),
+    destinations: z.array(z.string().min(1).max(128)).min(1).max(32),
+    leaseSeconds: z.number().int().min(10).max(600).default(90),
+  })
+  .strict();
+export type ClaimExternalStatusInputV1 = z.infer<
+  typeof ClaimExternalStatusInputV1Schema
+>;
+
+export const ClaimExternalStatusResultV1Schema = z
+  .object({ link: ExternalLinkV1Schema })
+  .strict()
+  .nullable();
+export type ClaimExternalStatusResultV1 = z.infer<
+  typeof ClaimExternalStatusResultV1Schema
+>;
+
+export const ObservedExternalStatusV1Schema = z
+  .object({
+    status: z.string().min(1).max(128),
+    observedAt: z.iso.datetime({ offset: true }),
+    metadata: z.record(z.string(), z.unknown()),
+    evidence: z.array(ExternalEvidenceV1Schema).max(500).optional(),
+  })
+  .strict();
+export type ObservedExternalStatusV1 = z.infer<
+  typeof ObservedExternalStatusV1Schema
+>;
+
+export const CompleteExternalStatusInputV1Schema = z
+  .object({
+    externalLinkId: z.string().min(1),
+    runnerId: z.string().min(1).max(256),
+    status: ObservedExternalStatusV1Schema,
+  })
+  .strict();
+export type CompleteExternalStatusInputV1 = z.infer<
+  typeof CompleteExternalStatusInputV1Schema
+>;
+
+export const FailExternalStatusInputV1Schema = z
+  .object({
+    externalLinkId: z.string().min(1),
+    runnerId: z.string().min(1).max(256),
+    error: z.string().min(1).max(20_000),
+    retrySeconds: z.number().int().min(10).max(3_600),
+  })
+  .strict();
+export type FailExternalStatusInputV1 = z.infer<
+  typeof FailExternalStatusInputV1Schema
+>;
+
+export const ExternalStatusMutationResultV1Schema = z
+  .object({
+    link: ExternalLinkV1Schema,
+    newEvidenceCount: z.number().int().nonnegative(),
+  })
+  .strict();
+export type ExternalStatusMutationResultV1 = z.infer<
+  typeof ExternalStatusMutationResultV1Schema
 >;
 
 export const IntegrationDeliveryListInputV1Schema = z

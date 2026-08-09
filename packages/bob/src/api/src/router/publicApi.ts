@@ -40,6 +40,28 @@ const oodaIntakeReceiptSchema = z.object({
   title: z.string().optional(),
   status: z.string(),
   replayed: z.boolean(),
+  evidence: z
+    .array(
+      z.object({
+        id: z.string(),
+        source: z.enum(["bob", "kanbanger", "forgegraph"]),
+        kind: z.enum([
+          "work_item",
+          "run",
+          "revision",
+          "build",
+          "deployment",
+          "run_event",
+        ]),
+        externalId: z.string(),
+        title: z.string(),
+        status: z.string(),
+        path: z.string(),
+        occurredAt: z.string(),
+        metadata: z.record(z.string(), z.unknown()),
+      }),
+    )
+    .optional(),
 });
 
 export const publicApiRouter = {

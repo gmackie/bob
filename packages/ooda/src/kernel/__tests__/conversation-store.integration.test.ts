@@ -47,7 +47,9 @@ import {
 } from "../agent-jobs";
 import { createProposal, decideProposal, getProposal } from "../proposals";
 import {
+  claimExternalStatus,
   claimIntegrationDelivery,
+  completeExternalStatus,
   completeIntegrationDelivery,
   failIntegrationDelivery,
   listDeadLetters,
@@ -97,6 +99,7 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     await applyMigration(migration("0015_amazing_hellfire_club.sql"));
     await applyMigration(migration("0016_messy_jack_murdock.sql"));
     await applyMigration(migration("0017_workable_drax.sql"));
+    await applyMigration(migration("0018_external_status_reconciliation.sql"));
   });
 
   afterAll(async () => {
@@ -1605,6 +1608,75 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     ).resolves.toMatchObject({
       status: "delivered",
     });
+
+    const statusClaim = await claimExternalStatus(
+      db!,
+      { runnerId: "status-runner", destinations: ["bob"], leaseSeconds: 90 },
+      {
+        now: new Date("2099-08-07T17:01:00.000Z"),
+        ownerEligible: (ownerId) => ownerId === "owner-delivery",
+      },
+    );
+    expect(statusClaim?.link.id).toBe(completed.externalLink?.id);
+    const evidence = {
+      id: "forgegraph_build:build-1",
+      source: "forgegraph",
+      kind: "build",
+      externalId: "build-1",
+      title: "ForgeGraph build",
+      status: "passed",
+      deepLink: "https://bob.example.com/work-items/task-1",
+      occurredAt: "2099-08-07T17:00:30.000Z",
+      metadata: { imageDigest: "sha256:abc" },
+    };
+    const observed = await completeExternalStatus(
+      db!,
+      {
+        externalLinkId: statusClaim!.link.id,
+        runnerId: "status-runner",
+        status: {
+          status: "active",
+          observedAt: "2099-08-07T17:01:01.000Z",
+          metadata: { workItemStatus: "in_progress" },
+          evidence: [evidence],
+        },
+      },
+      { now: new Date("2099-08-07T17:01:01.000Z"), intervalSeconds: 60 },
+    );
+    expect(observed.newEvidenceCount).toBe(1);
+
+    const replayClaim = await claimExternalStatus(
+      db!,
+      { runnerId: "status-runner", destinations: ["bob"], leaseSeconds: 90 },
+      {
+        now: new Date("2099-08-07T17:02:02.000Z"),
+        ownerEligible: (ownerId) => ownerId === "owner-delivery",
+      },
+    );
+    const replayed = await completeExternalStatus(
+      db!,
+      {
+        externalLinkId: replayClaim!.link.id,
+        runnerId: "status-runner",
+        status: {
+          status: "active",
+          observedAt: "2099-08-07T17:02:02.000Z",
+          metadata: {},
+          evidence: [evidence],
+        },
+      },
+      { now: new Date("2099-08-07T17:02:02.000Z") },
+    );
+    expect(replayed.newEvidenceCount).toBe(0);
+    const evidenceEvents = await listConversationEvents(db!, "owner-delivery", {
+      conversationId: conversation.conversation.id,
+      limit: 100,
+    });
+    expect(
+      evidenceEvents.items.filter(
+        (event) => event.type === "external_evidence",
+      ),
+    ).toHaveLength(1);
   });
 
   it("dead-letters a permanent failure and repairs it without changing approval", async () => {

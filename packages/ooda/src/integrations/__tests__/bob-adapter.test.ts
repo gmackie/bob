@@ -143,6 +143,68 @@ describe("BobDomainAdapter", () => {
     );
   });
 
+  it("returns Bob, KanBanger, and ForgeGraph execution evidence from status reads", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            kind: "work_item",
+            id: "task-1",
+            title: "Wire delivery receipt",
+            status: "in_progress",
+            replayed: true,
+            evidence: [
+              {
+                id: "forgegraph_build:build-1",
+                source: "forgegraph",
+                kind: "build",
+                externalId: "build-1",
+                title: "ForgeGraph build",
+                status: "passed",
+                path: "/work-items/task-1",
+                occurredAt: "2026-08-09T12:00:00.000Z",
+                metadata: { imageDigest: "sha256:abc" },
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      ),
+    );
+    const adapter = new BobDomainAdapter({
+      apiUrl: "https://bob.example.com",
+      apiKey: "secret",
+      workspaceId: "11111111-1111-4111-8111-111111111111",
+    });
+
+    const observed = await adapter.readStatus({
+      id: "link-1",
+      conversationId: "conversation-1",
+      destination: "bob",
+      externalType: "work_item",
+      externalId: "task-1",
+      deepLink: "https://bob.example.com/work-items/task-1",
+      idempotencyKey: "delivery-key-2",
+      status: "active",
+      createdAt: "2026-08-09T11:00:00.000Z",
+      updatedAt: "2026-08-09T11:00:00.000Z",
+    });
+
+    expect(observed).toMatchObject({
+      status: "in_progress",
+      metadata: { title: "Wire delivery receipt" },
+      evidence: [
+        {
+          id: "forgegraph_build:build-1",
+          source: "forgegraph",
+          status: "passed",
+          deepLink: "https://bob.example.com/work-items/task-1",
+        },
+      ],
+    });
+  });
+
   it("returns null when Bob has no destination receipt", async () => {
     vi.stubGlobal(
       "fetch",

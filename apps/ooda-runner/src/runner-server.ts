@@ -26,6 +26,7 @@ import { BobGatewayConnector } from "./bob-gateway";
 import { BobRunReporter } from "./bob-run-reporter";
 import { AgentJobWorker } from "./agent-jobs/agent-job-worker";
 import { IntegrationDeliveryWorker } from "./integrations/integration-delivery-worker";
+import { ExternalStatusWorker } from "./integrations/external-status-worker";
 import { createDeliveryAdapters } from "./integrations/delivery-adapters";
 import { HostTurnWorker } from "./host-turns/host-turn-worker";
 
@@ -171,6 +172,7 @@ export class RunnerServer {
   private agentJobWorker: AgentJobWorker | null = null;
   private hostTurnWorker: HostTurnWorker | null = null;
   private integrationDeliveryWorker: IntegrationDeliveryWorker | null = null;
+  private externalStatusWorker: ExternalStatusWorker | null = null;
 
   constructor(private config: RunnerConfig) {
     this.sessions = new SessionManager();
@@ -296,6 +298,7 @@ export class RunnerServer {
       void this.agentJobWorker?.poll();
       void this.hostTurnWorker?.poll();
       void this.integrationDeliveryWorker?.poll();
+      void this.externalStatusWorker?.poll();
     }, POLL_INTERVAL_MS);
 
     // Start stale-session reaper loop
@@ -359,9 +362,9 @@ export class RunnerServer {
             },
           });
         }
-        if (!this.integrationDeliveryWorker) {
+        if (!this.integrationDeliveryWorker || !this.externalStatusWorker) {
           const deliveryAdapters = createDeliveryAdapters(this.config);
-          if (deliveryAdapters.size > 0) {
+          if (deliveryAdapters.size > 0 && !this.integrationDeliveryWorker) {
             this.integrationDeliveryWorker = new IntegrationDeliveryWorker({
               runnerId: device.id,
               adapters: deliveryAdapters,
@@ -370,6 +373,20 @@ export class RunnerServer {
                 complete: (input) =>
                   this.trpc.integrations.complete.mutate(input),
                 fail: (input) => this.trpc.integrations.fail.mutate(input),
+              },
+            });
+          }
+          if (deliveryAdapters.size > 0 && !this.externalStatusWorker) {
+            this.externalStatusWorker = new ExternalStatusWorker({
+              runnerId: device.id,
+              adapters: deliveryAdapters,
+              api: {
+                claimStatus: (input) =>
+                  this.trpc.integrations.claimStatus.mutate(input),
+                completeStatus: (input) =>
+                  this.trpc.integrations.completeStatus.mutate(input),
+                failStatus: (input) =>
+                  this.trpc.integrations.failStatus.mutate(input),
               },
             });
           }
@@ -780,6 +797,8 @@ export class RunnerServer {
     this.hostTurnWorker = null;
     this.integrationDeliveryWorker?.stop();
     this.integrationDeliveryWorker = null;
+    this.externalStatusWorker?.stop();
+    this.externalStatusWorker = null;
     await this.buddyMcpServer.stop();
   }
 }

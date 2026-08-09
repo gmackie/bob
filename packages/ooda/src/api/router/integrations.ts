@@ -3,10 +3,15 @@ import type { RouterRecord } from "@trpc/server/unstable-core-do-not-import";
 import {
   ClaimIntegrationDeliveryInputV1Schema,
   ClaimIntegrationDeliveryResultV1Schema,
+  ClaimExternalStatusInputV1Schema,
+  ClaimExternalStatusResultV1Schema,
   CompleteIntegrationDeliveryInputV1Schema,
+  CompleteExternalStatusInputV1Schema,
   DeadLetterListInputV1Schema,
   DeadLetterListPageV1Schema,
   FailIntegrationDeliveryInputV1Schema,
+  ExternalStatusMutationResultV1Schema,
+  FailExternalStatusInputV1Schema,
   IntegrationDeliveryListInputV1Schema,
   IntegrationDeliveryListPageV1Schema,
   IntegrationDeliveryMutationResultV1Schema,
@@ -15,11 +20,15 @@ import {
 } from "../../contracts/v1";
 import {
   claimIntegrationDelivery,
+  claimExternalStatus,
+  completeExternalStatus,
   completeIntegrationDelivery,
+  failExternalStatus,
   failIntegrationDelivery,
   listDeadLetters,
   listIntegrationDeliveries,
   repairDeadLetter,
+  resolveOodaRolloutPolicy,
 } from "../../kernel";
 import { rolloutProcedure, trustedRunnerProcedure } from "../trpc";
 import { runKernel } from "./_kernel-error";
@@ -84,5 +93,28 @@ export const integrationsRouter = {
     .output(IntegrationDeliveryMutationResultV1Schema)
     .mutation(({ ctx, input }) =>
       runKernel(() => failIntegrationDelivery(ctx.db, input)),
+    ),
+  claimStatus: trustedRunnerProcedure
+    .input(ClaimExternalStatusInputV1Schema)
+    .output(ClaimExternalStatusResultV1Schema)
+    .mutation(({ ctx, input }) =>
+      runKernel(() =>
+        claimExternalStatus(ctx.db, input, {
+          ownerEligible: (ownerId) =>
+            resolveOodaRolloutPolicy(ownerId).capabilities.portfolio_evidence,
+        }),
+      ),
+    ),
+  completeStatus: trustedRunnerProcedure
+    .input(CompleteExternalStatusInputV1Schema)
+    .output(ExternalStatusMutationResultV1Schema)
+    .mutation(({ ctx, input }) =>
+      runKernel(() => completeExternalStatus(ctx.db, input)),
+    ),
+  failStatus: trustedRunnerProcedure
+    .input(FailExternalStatusInputV1Schema)
+    .output(ExternalStatusMutationResultV1Schema)
+    .mutation(({ ctx, input }) =>
+      runKernel(() => failExternalStatus(ctx.db, input)),
     ),
 } satisfies RouterRecord;

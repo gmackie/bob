@@ -21,6 +21,14 @@ export const externalLinks = oodaSchema.table(
     idempotencyKey: t.text().notNull(),
     status: t.varchar({ length: 32 }).notNull().default("active"),
     metadata: t.jsonb().$type<Record<string, unknown>>().notNull().default({}),
+    statusObservedAt: t.timestamp({ withTimezone: true }),
+    statusClaimedAt: t.timestamp({ withTimezone: true }),
+    statusClaimedBy: t.text(),
+    statusError: t.text(),
+    nextStatusCheckAt: t
+      .timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow(),
     createdAt: t.timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: t
       .timestamp({ withTimezone: true })
@@ -35,6 +43,7 @@ export const externalLinks = oodaSchema.table(
     ),
     index("external_links_conversation_idx").on(t.conversationId),
     index("external_links_proposal_idx").on(t.proposalId),
+    index("external_links_status_check_idx").on(t.status, t.nextStatusCheckAt),
   ],
 );
 

@@ -2,7 +2,18 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { PgliteDbHandle } from "@bob/db/client-pglite";
 import { makePgliteDb } from "@bob/db/client-pglite";
-import { tenantMembers, tenants, user, workspaces } from "@bob/db/schema";
+import {
+  forgeBuilds,
+  forgeDeployments,
+  forgeRevisions,
+  forgeRunEvents,
+  repositories,
+  taskRuns,
+  tenantMembers,
+  tenants,
+  user,
+  workspaces,
+} from "@bob/db/schema";
 
 import {
   publicApiCreateProject,
@@ -142,6 +153,104 @@ describe("public OODA intake", () => {
       replayed: true,
       id: created.id,
     });
+
+    const [repository] = await handle.db
+      .insert(repositories)
+      .values({
+        userId: "user-1",
+        workspaceId,
+        name: "bob",
+        path: "/Volumes/dev/bob/bob",
+        branch: "feat/evidence",
+      })
+      .returning();
+    if (!repository) throw new Error("Repository fixture was not created");
+    const [run] = await handle.db
+      .insert(taskRuns)
+      .values({
+        userId: "user-1",
+        planningWorkspaceId: workspaceId,
+        planningItemId: created.id,
+        planningItemIdentifier: "BOB-1",
+        workItemId: created.id,
+        repositoryId: repository.id,
+        status: "completed",
+        branch: "feat/evidence",
+      })
+      .returning();
+    if (!run) throw new Error("Task run fixture was not created");
+    const [revision] = await handle.db
+      .insert(forgeRevisions)
+      .values({
+        repoId: repository.id,
+        revId: "abc123",
+        taskId: created.id,
+        taskRunId: run.id,
+        branch: "feat/evidence",
+        status: "merged",
+      })
+      .returning();
+    if (!revision) throw new Error("Revision fixture was not created");
+    const [build] = await handle.db
+      .insert(forgeBuilds)
+      .values({
+        revisionId: revision.id,
+        repoId: repository.id,
+        status: "passed",
+        idempotencyKey: "build-1",
+        imageDigest: "sha256:abc",
+      })
+      .returning();
+    if (!build) throw new Error("Build fixture was not created");
+    await handle.db.insert(forgeDeployments).values({
+      revisionId: revision.id,
+      buildId: build.id,
+      repoId: repository.id,
+      environment: "prod",
+      status: "healthy",
+    });
+    await handle.db.insert(forgeRunEvents).values({
+      runId: run.id,
+      repoId: repository.id,
+      revisionId: revision.id,
+      taskId: created.id,
+      eventType: "tests_finished",
+      testStatus: "passed",
+    });
+
+    const observed = await publicApiLookupIntake(ctx, {
+      workspaceId,
+      idempotencyKey: input.idempotencyKey,
+    });
+    expect(observed.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: "bob",
+          kind: "run",
+          status: "completed",
+        }),
+        expect.objectContaining({
+          source: "kanbanger",
+          kind: "work_item",
+          externalId: created.id,
+        }),
+        expect.objectContaining({
+          source: "forgegraph",
+          kind: "revision",
+          status: "merged",
+        }),
+        expect.objectContaining({
+          source: "forgegraph",
+          kind: "build",
+          status: "passed",
+        }),
+        expect.objectContaining({
+          source: "forgegraph",
+          kind: "deployment",
+          status: "healthy",
+        }),
+      ]),
+    );
   });
 
   it("returns NOT_FOUND for an unknown or foreign-tenant intake", async () => {

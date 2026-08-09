@@ -2,12 +2,18 @@ import { and, asc, eq, gt, inArray, lt, lte, or, sql } from "drizzle-orm";
 
 import {
   ExternalReceiptV1Schema,
+  ObservedExternalStatusV1Schema,
   ProposalV1Schema,
   type ClaimIntegrationDeliveryInputV1,
   type ClaimIntegrationDeliveryResultV1,
+  type ClaimExternalStatusInputV1,
+  type ClaimExternalStatusResultV1,
   type CompleteIntegrationDeliveryInputV1,
+  type CompleteExternalStatusInputV1,
   type DeadLetterV1,
   type FailIntegrationDeliveryInputV1,
+  type ExternalStatusMutationResultV1,
+  type FailExternalStatusInputV1,
   type IntegrationDeliveryMutationResultV1,
   type IntegrationDeliveryV1,
 } from "../contracts/v1";
@@ -72,6 +78,207 @@ function mapExternalLink(row: typeof externalLinks.$inferSelect) {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+export async function claimExternalStatus(
+  db: OodaDatabase,
+  input: ClaimExternalStatusInputV1,
+  options: {
+    now?: Date;
+    ownerEligible?: (ownerId: string) => boolean;
+  } = {},
+): Promise<ClaimExternalStatusResultV1> {
+  const now = options.now ?? new Date();
+  const staleBefore = new Date(now.getTime() - input.leaseSeconds * 1_000);
+  return db.transaction(async (tx) => {
+    const candidates = await tx
+      .select({ link: externalLinks, ownerId: conversations.ownerId })
+      .from(externalLinks)
+      .innerJoin(
+        conversations,
+        eq(conversations.id, externalLinks.conversationId),
+      )
+      .where(
+        and(
+          inArray(externalLinks.destination, input.destinations),
+          eq(externalLinks.status, "active"),
+          lte(externalLinks.nextStatusCheckAt, now),
+          or(
+            sql`${externalLinks.statusClaimedAt} is null`,
+            lt(externalLinks.statusClaimedAt, staleBefore),
+          ),
+        ),
+      )
+      .orderBy(
+        asc(externalLinks.nextStatusCheckAt),
+        asc(externalLinks.createdAt),
+      )
+      .for("update", { skipLocked: true })
+      .limit(20);
+    const candidate = candidates.find(
+      ({ ownerId }) => options.ownerEligible?.(ownerId) ?? true,
+    );
+    if (!candidate) return null;
+    const [claimed] = await tx
+      .update(externalLinks)
+      .set({
+        statusClaimedAt: now,
+        statusClaimedBy: input.runnerId,
+        statusError: null,
+        updatedAt: now,
+      })
+      .where(eq(externalLinks.id, candidate.link.id))
+      .returning();
+    return { link: mapExternalLink(claimed!) };
+  });
+}
+
+export async function completeExternalStatus(
+  db: OodaDatabase,
+  input: CompleteExternalStatusInputV1,
+  options: { now?: Date; intervalSeconds?: number } = {},
+): Promise<ExternalStatusMutationResultV1> {
+  const observed = ObservedExternalStatusV1Schema.parse(input.status);
+  const now = options.now ?? new Date();
+  const nextStatusCheckAt = new Date(
+    now.getTime() + (options.intervalSeconds ?? 60) * 1_000,
+  );
+  return db.transaction(async (tx) => {
+    const [link] = await tx
+      .select()
+      .from(externalLinks)
+      .where(eq(externalLinks.id, input.externalLinkId))
+      .for("update")
+      .limit(1);
+    if (!link) throw notFound("External link");
+    if (link.statusClaimedBy !== input.runnerId) {
+      throw new OodaKernelProblem(
+        "CONFLICT",
+        409,
+        "External status is not claimed by this runner",
+      );
+    }
+    const terminalStatus = ["completed", "cancelled", "failed"].includes(
+      observed.status,
+    )
+      ? (observed.status as "completed" | "cancelled" | "failed")
+      : link.status;
+    const [updated] = await tx
+      .update(externalLinks)
+      .set({
+        status: terminalStatus,
+        metadata: {
+          ...link.metadata,
+          ...observed.metadata,
+          externalStatus: observed.status,
+        },
+        statusObservedAt: new Date(observed.observedAt),
+        statusClaimedAt: null,
+        statusClaimedBy: null,
+        statusError: null,
+        nextStatusCheckAt,
+        updatedAt: now,
+      })
+      .where(eq(externalLinks.id, link.id))
+      .returning();
+
+    let newEvidenceCount = 0;
+    if (link.conversationId && observed.evidence?.length) {
+      const [conversation] = await tx
+        .select({ branchId: conversations.activeBranchId })
+        .from(conversations)
+        .where(eq(conversations.id, link.conversationId))
+        .for("update")
+        .limit(1);
+      if (!conversation?.branchId) throw notFound("Conversation");
+      for (const evidence of observed.evidence) {
+        const idempotencyKey = `external-evidence:${link.id}:${evidence.id}:${evidence.status}`;
+        const [existing] = await tx
+          .select({ id: conversationEvents.id })
+          .from(conversationEvents)
+          .where(
+            and(
+              eq(conversationEvents.conversationId, link.conversationId),
+              eq(conversationEvents.idempotencyKey, idempotencyKey),
+            ),
+          )
+          .limit(1);
+        if (existing) continue;
+        const [allocated] = await tx
+          .update(conversations)
+          .set({
+            lastSequence: sql`${conversations.lastSequence} + 1`,
+            updatedAt: now,
+          })
+          .where(eq(conversations.id, link.conversationId))
+          .returning({ sequence: conversations.lastSequence });
+        await tx.insert(conversationEvents).values({
+          conversationId: link.conversationId,
+          branchId: conversation.branchId,
+          sequence: BigInt(allocated!.sequence),
+          type: "external_evidence",
+          actorType: "integration",
+          actorId: evidence.source,
+          payload: {
+            externalLinkId: link.id,
+            destination: link.destination,
+            evidenceId: evidence.id,
+            source: evidence.source,
+            kind: evidence.kind,
+            externalId: evidence.externalId,
+            title: evidence.title,
+            status: evidence.status,
+            ...(evidence.deepLink ? { url: evidence.deepLink } : {}),
+            occurredAt: evidence.occurredAt,
+            metadata: evidence.metadata,
+          },
+          sensitivity: "general",
+          correlationId: link.proposalId ?? link.id,
+          causationId: link.id,
+          idempotencyKey,
+          occurredAt: new Date(evidence.occurredAt),
+        });
+        newEvidenceCount += 1;
+      }
+    }
+    return { link: mapExternalLink(updated!), newEvidenceCount };
+  });
+}
+
+export async function failExternalStatus(
+  db: OodaDatabase,
+  input: FailExternalStatusInputV1,
+  options: { now?: Date } = {},
+): Promise<ExternalStatusMutationResultV1> {
+  const now = options.now ?? new Date();
+  return db.transaction(async (tx) => {
+    const [link] = await tx
+      .select()
+      .from(externalLinks)
+      .where(eq(externalLinks.id, input.externalLinkId))
+      .for("update")
+      .limit(1);
+    if (!link) throw notFound("External link");
+    if (link.statusClaimedBy !== input.runnerId) {
+      throw new OodaKernelProblem(
+        "CONFLICT",
+        409,
+        "External status is not claimed by this runner",
+      );
+    }
+    const [updated] = await tx
+      .update(externalLinks)
+      .set({
+        statusClaimedAt: null,
+        statusClaimedBy: null,
+        statusError: input.error,
+        nextStatusCheckAt: new Date(now.getTime() + input.retrySeconds * 1_000),
+        updatedAt: now,
+      })
+      .where(eq(externalLinks.id, link.id))
+      .returning();
+    return { link: mapExternalLink(updated!), newEvidenceCount: 0 };
+  });
 }
 
 export async function claimIntegrationDelivery(

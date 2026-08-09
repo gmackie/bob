@@ -184,5 +184,20 @@ describe("OODA personal operating system schema", () => {
     expect(
       config(externalLinks).indexes.map((index) => index.config.name),
     ).toContain("external_links_destination_idempotency_uidx");
+    expect(
+      config(externalLinks).indexes.map((index) => index.config.name),
+    ).toContain("external_links_status_check_idx");
+    for (const column of [
+      "statusObservedAt",
+      "statusClaimedAt",
+      "statusClaimedBy",
+      "nextStatusCheckAt",
+    ]) {
+      expect(
+        config(externalLinks).columns.find(
+          (candidate) => candidate.name === column,
+        ),
+      ).toBeDefined();
+    }
   });
 });

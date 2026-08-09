@@ -29,7 +29,10 @@ import {
   CreateOpportunityReviewResultV1Schema,
   CreateProposalInputV1Schema,
   CreateProposalResultV1Schema,
+  ClaimExternalStatusResultV1Schema,
   ClaimIntegrationDeliveryResultV1Schema,
+  CompleteExternalStatusInputV1Schema,
+  ExternalEvidenceV1Schema,
   IntegrationDeliveryV1Schema,
   RepairDeadLetterInputV1Schema,
   ExternalLinkV1Schema,
@@ -324,6 +327,49 @@ describe("OODA V1 contracts", () => {
         note: "Configuration repaired.",
         idempotencyKey: "repair-1",
         repairedAt: occurredAt,
+      }).success,
+    ).toBe(true);
+  });
+
+  it("pins leased external status reconciliation and immutable evidence", () => {
+    const evidence = {
+      id: "forgegraph_build:build-1",
+      source: "forgegraph",
+      kind: "build",
+      externalId: "build-1",
+      title: "ForgeGraph build",
+      status: "passed",
+      deepLink: "https://bob.example.com/work-items/task-1",
+      occurredAt,
+      metadata: { imageDigest: "sha256:abc" },
+    };
+    expect(ExternalEvidenceV1Schema.parse(evidence)).toEqual(evidence);
+    expect(
+      CompleteExternalStatusInputV1Schema.safeParse({
+        externalLinkId: "link-1",
+        runnerId: "runner-1",
+        status: {
+          status: "active",
+          observedAt: occurredAt,
+          metadata: {},
+          evidence: [evidence],
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      ClaimExternalStatusResultV1Schema.safeParse({
+        link: {
+          id: "link-1",
+          conversationId: "conversation-1",
+          destination: "bob",
+          externalType: "work_item",
+          externalId: "task-1",
+          deepLink: "https://bob.example.com/work-items/task-1",
+          idempotencyKey: "delivery-1",
+          status: "active",
+          createdAt: occurredAt,
+          updatedAt: occurredAt,
+        },
       }).success,
     ).toBe(true);
   });

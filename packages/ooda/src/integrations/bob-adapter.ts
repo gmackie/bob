@@ -16,6 +16,19 @@ type BobIntakeReceipt = {
   title?: string;
   status: string;
   replayed: boolean;
+  evidence?: BobIntakeEvidence[];
+};
+
+type BobIntakeEvidence = {
+  id: string;
+  source: string;
+  kind: string;
+  externalId: string;
+  title: string;
+  status: string;
+  path?: string;
+  occurredAt: string;
+  metadata: Record<string, unknown>;
 };
 
 export type BobDomainAdapterConfig = {
@@ -50,6 +63,48 @@ function parseReceipt(value: unknown): BobIntakeReceipt {
     throw new Error("Bob returned an invalid intake receipt");
   }
   return row as BobIntakeReceipt;
+}
+
+function parseEvidence(
+  value: unknown,
+  baseUrl: string,
+): NonNullable<ExternalStatus["evidence"]> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const row = item as Record<string, unknown>;
+    if (
+      typeof row.id !== "string" ||
+      typeof row.source !== "string" ||
+      typeof row.kind !== "string" ||
+      typeof row.externalId !== "string" ||
+      typeof row.title !== "string" ||
+      typeof row.status !== "string" ||
+      typeof row.occurredAt !== "string" ||
+      Number.isNaN(Date.parse(row.occurredAt))
+    ) {
+      return [];
+    }
+    const path = typeof row.path === "string" ? row.path : undefined;
+    return [
+      {
+        id: row.id,
+        source: row.source,
+        kind: row.kind,
+        externalId: row.externalId,
+        title: row.title,
+        status: row.status,
+        ...(path?.startsWith("/")
+          ? { deepLink: new URL(path, baseUrl).toString() }
+          : {}),
+        occurredAt: new Date(row.occurredAt).toISOString(),
+        metadata:
+          row.metadata && typeof row.metadata === "object"
+            ? (row.metadata as Record<string, unknown>)
+            : {},
+      },
+    ];
+  });
 }
 
 export class BobDomainAdapter implements DomainAdapter {
@@ -166,9 +221,13 @@ export class BobDomainAdapter implements DomainAdapter {
   async readStatus(link: ExternalLinkV1): Promise<ExternalStatus> {
     const receipt = await this.lookupByIdempotencyKey(link.idempotencyKey);
     return {
-      status: receipt?.status ?? "missing",
+      status:
+        typeof receipt?.metadata.status === "string"
+          ? receipt.metadata.status
+          : (receipt?.status ?? "missing"),
       observedAt: new Date().toISOString(),
       metadata: receipt?.metadata ?? {},
+      evidence: parseEvidence(receipt?.metadata.evidence, this.baseUrl),
     };
   }
 
@@ -198,6 +257,7 @@ export class BobDomainAdapter implements DomainAdapter {
         ...(receipt.key ? { key: receipt.key } : {}),
         ...(receipt.name ? { name: receipt.name } : {}),
         ...(receipt.title ? { title: receipt.title } : {}),
+        ...(receipt.evidence ? { evidence: receipt.evidence } : {}),
       },
       recordedAt: new Date().toISOString(),
     };
