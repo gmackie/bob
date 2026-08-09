@@ -67,6 +67,32 @@ describe("GrokAdapter", () => {
     });
     expect(command.args).toContain("--always-approve");
   });
+
+  it("settles when the ACP child exits before answering a request", async () => {
+    const adapter = new GrokAdapter();
+    const command = adapter.buildCommand({
+      prompt: "hello",
+      workspaceRoot: process.cwd(),
+    });
+    command.binary = process.execPath;
+    command.args = ["-e", "process.exit(0)"];
+
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const didNotSettle = new Promise<never>((_, reject) => {
+      timeout = setTimeout(
+        () => reject(new Error("Grok adapter did not settle after child exit")),
+        1_500,
+      );
+    });
+
+    try {
+      await expect(
+        Promise.race([adapter.execute(command, () => {}), didNotSettle]),
+      ).resolves.toMatchObject({ exitCode: 1 });
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+  });
 });
 
 describe("mapSessionUpdate", () => {
