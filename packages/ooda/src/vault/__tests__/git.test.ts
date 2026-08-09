@@ -20,6 +20,7 @@ import {
 interface TestRepos {
   barePath: string;
   clonePath: string;
+  branch: string;
 }
 
 async function createTestRepos(): Promise<TestRepos> {
@@ -42,7 +43,10 @@ async function createTestRepos(): Promise<TestRepos> {
   await writeFile(join(seedPath, "README.md"), "# Test Vault\n", "utf-8");
   await seedRepo.add(".");
   await seedRepo.commit("initial commit");
-  await seedRepo.push("origin", "master");
+  const branch = "master";
+  await seedRepo.branch(["-M", branch]);
+  await seedRepo.push("origin", branch);
+  await simpleGit(barePath).raw(["symbolic-ref", "HEAD", `refs/heads/${branch}`]);
 
   // Clone for the actual test workspace
   await bareGit.clone(barePath, clonePath);
@@ -50,7 +54,7 @@ async function createTestRepos(): Promise<TestRepos> {
   await cloneGit.addConfig("user.email", "test@test.com");
   await cloneGit.addConfig("user.name", "Test");
 
-  return { barePath, clonePath };
+  return { barePath, clonePath, branch };
 }
 
 // ---------------------------------------------------------------------------
@@ -151,7 +155,7 @@ describe("git operations", () => {
       await writeFile(join(clone2Path, "new-file.md"), "hello\n", "utf-8");
       await clone2Git.add(".");
       await clone2Git.commit("add new file from clone2");
-      await clone2Git.push("origin", "master");
+      await clone2Git.push("origin", repos.branch);
 
       // Pull in the original clone
       const result = await pull(repos.clonePath);
