@@ -16,11 +16,11 @@ import {
   getProposal,
   listProposals,
 } from "../../kernel";
-import { authedProcedure } from "../trpc";
+import { authedProcedure, rolloutProcedure } from "../trpc";
 import { runKernel } from "./_kernel-error";
 
 export const proposalsRouter = {
-  list: authedProcedure
+  list: rolloutProcedure("conversation_read")
     .meta({
       openapi: {
         method: "GET",
@@ -34,7 +34,7 @@ export const proposalsRouter = {
     .query(({ ctx, input }) =>
       runKernel(() => listProposals(ctx.db, ctx.userId, input)),
     ),
-  get: authedProcedure
+  get: rolloutProcedure("conversation_read")
     .meta({
       openapi: {
         method: "GET",
@@ -48,7 +48,7 @@ export const proposalsRouter = {
     .query(({ ctx, input }) =>
       runKernel(() => getProposal(ctx.db, ctx.userId, input.proposalId)),
     ),
-  create: authedProcedure
+  create: rolloutProcedure("conversation_write")
     .meta({
       openapi: {
         method: "POST",

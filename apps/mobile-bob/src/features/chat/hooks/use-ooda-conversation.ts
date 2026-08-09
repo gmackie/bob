@@ -9,6 +9,7 @@ import {
 import type {
   ConversationBranchV1,
   ConversationEventV1,
+  OodaRolloutPolicyV1,
   ConversationV1,
 } from "@gmacko/ooda-client/v1";
 
@@ -86,6 +87,7 @@ export function useOodaConversation() {
   const [isOnline, setIsOnline] = useState(true);
   const [isStreamConnected, setIsStreamConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rollout, setRollout] = useState<OodaRolloutPolicyV1 | null>(null);
   const selectedConversationRef = useRef<string | null>(null);
 
   const loadAllEvents = useCallback(async (conversationId: string) => {
@@ -163,13 +165,22 @@ export function useOodaConversation() {
     const lifecycle = { cancelled: false };
     void (async () => {
       try {
-        const [lastConversationId, rawPins] = await Promise.all([
+        const [lastConversationId, rawPins, , rolloutPolicy] = await Promise.all([
           AsyncStorage.getItem(LAST_CONVERSATION_KEY),
           AsyncStorage.getItem(PINNED_CONVERSATIONS_KEY),
           outbox.hydrate(),
+          client.rollout.status(),
         ]);
         if (lifecycle.cancelled) return;
+        setRollout(rolloutPolicy);
         setPinnedIds(parsePinned(rawPins));
+        if (!rolloutPolicy.capabilities.conversation_read) {
+          setError(
+            rolloutPolicy.reasons[0]
+              ?? `OODA conversations are not enabled at rollout stage ${rolloutPolicy.stage}.`,
+          );
+          return;
+        }
         const available = await refreshConversations();
         const initial = available.find((item) => item.id === lastConversationId) ?? available[0];
         if (initial) await openConversation(initial.id);
@@ -234,6 +245,9 @@ export function useOodaConversation() {
   }, [client, isOnline, selectedConversationId]);
 
   const createConversation = useCallback(async (title = "New thought") => {
+    if (!rollout?.capabilities.conversation_write) {
+      throw new Error("Creating conversations is not enabled for this rollout stage.");
+    }
     setError(null);
     const created = await client.conversations.create({
       title: title.trim() || "New thought",
@@ -246,13 +260,13 @@ export function useOodaConversation() {
     await refreshConversations();
     await openConversation(created.conversation.id);
     return created.conversation;
-  }, [client, openConversation, refreshConversations]);
+  }, [client, openConversation, refreshConversations, rollout]);
 
   const send = useCallback(async (text: string) => {
     const conversation = conversations.find((item) => item.id === selectedConversationRef.current);
     const branchId = selectedBranchId ?? conversation?.activeBranchId;
     const trimmed = text.trim();
-    if (!conversation || !branchId || !trimmed) return;
+    if (!conversation || !branchId || !trimmed || !rollout?.capabilities.mobile_text) return;
     setError(null);
     await outbox.enqueueTurn({
       conversationId: conversation.id,
@@ -263,7 +277,7 @@ export function useOodaConversation() {
     const online = network.isConnected !== false && network.isInternetReachable !== false;
     setIsOnline(online);
     if (online) await flushOutbox();
-  }, [conversations, flushOutbox, outbox, selectedBranchId]);
+  }, [conversations, flushOutbox, outbox, rollout, selectedBranchId]);
 
   const retry = useCallback(async (outboxId: string) => {
     await outbox.retry(outboxId);
@@ -276,6 +290,9 @@ export function useOodaConversation() {
   ) => {
     const conversationId = selectedConversationRef.current;
     if (!conversationId) throw new Error("No active conversation");
+    if (!rollout?.capabilities.tts) {
+      throw new Error("Voice playback is not enabled for this rollout stage.");
+    }
     const grant = await client.voice.createGrant({
       conversationId,
       eventId,
@@ -283,7 +300,7 @@ export function useOodaConversation() {
       idempotencyKey: uuidv4(),
     });
     return client.voice.audioSource(grant.streamUrl);
-  }, [client]);
+  }, [client, rollout]);
 
   const togglePin = useCallback((conversationId: string) => {
     setPinnedIds((current) => {
@@ -340,7 +357,10 @@ export function useOodaConversation() {
     isOnline,
     isStreamConnected,
     isSyncing,
-    canSend: Boolean(selectedConversation && selectedBranchId),
+    canSend: Boolean(
+      selectedConversation && selectedBranchId && rollout?.capabilities.mobile_text,
+    ),
+    rollout,
     openConversation,
     selectBranch: setSelectedBranchId,
     createConversation,

@@ -23,6 +23,7 @@ import { jobsRouter } from "./router/jobs";
 import { integrationsRouter } from "./router/integrations";
 import { memoriesRouter } from "./router/memories";
 import { proposalsRouter } from "./router/proposals";
+import { rolloutRouter } from "./router/rollout";
 import { createTRPCRouter } from "./trpc";
 
 const edgeRouterRecord = {
@@ -34,6 +35,7 @@ const edgeRouterRecord = {
   integrations: integrationsRouter,
   memories: memoriesRouter,
   proposals: proposalsRouter,
+  rollout: rolloutRouter,
   threads: threadsEdgeRouter,
   runner: runnerRouter,
   research: researchRouter,

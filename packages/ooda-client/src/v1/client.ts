@@ -44,6 +44,7 @@ import type {
   ProblemV1,
   ProposalListInputV1,
   ProposalV1,
+  OodaRolloutPolicyV1,
 } from "@gmacko/ooda/contracts/v1";
 
 type MaybePromise<T> = T | Promise<T>;
@@ -377,6 +378,11 @@ export function createOodaV1Client(options: OodaV1ClientOptions = {}) {
           `/api/v1/integrations/dead-letters/${encodeURIComponent(input.deadLetterId)}/repair`,
           { method: "POST", body: input },
         );
+      },
+    },
+    rollout: {
+      status() {
+        return request<OodaRolloutPolicyV1>("/api/v1/rollout");
       },
     },
     voice: {

@@ -28,11 +28,11 @@ import {
   resolveContextSourceConfig,
   searchMemories,
 } from "../../kernel";
-import { authedProcedure, trustedRunnerProcedure } from "../trpc";
+import { rolloutProcedure, trustedRunnerProcedure } from "../trpc";
 import { runKernel } from "./_kernel-error";
 
 export const jobsRouter = {
-  list: authedProcedure
+  list: rolloutProcedure("conversation_read")
     .meta({
       openapi: {
         method: "GET",
@@ -46,7 +46,7 @@ export const jobsRouter = {
     .query(({ ctx, input }) =>
       runKernel(() => listAgentJobs(ctx.db, ctx.userId, input)),
     ),
-  get: authedProcedure
+  get: rolloutProcedure("conversation_read")
     .meta({
       openapi: {
         method: "GET",
@@ -60,7 +60,7 @@ export const jobsRouter = {
     .query(({ ctx, input }) =>
       runKernel(() => getAgentJob(ctx.db, ctx.userId, input.jobId)),
     ),
-  create: authedProcedure
+  create: rolloutProcedure("agent_jobs")
     .meta({
       openapi: {
         method: "POST",
@@ -88,7 +88,7 @@ export const jobsRouter = {
         }),
       ),
     ),
-  cancel: authedProcedure
+  cancel: rolloutProcedure("agent_jobs")
     .meta({
       openapi: {
         method: "POST",

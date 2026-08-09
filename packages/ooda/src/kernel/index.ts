@@ -15,6 +15,7 @@ export * from "./elevenlabs-tts";
 export * from "./legacy-compatibility";
 export * from "./problems";
 export * from "./projections";
+export * from "./rollout-policy";
 export * from "./proposals";
 export * from "./tts-policy";
 export * from "./tts-grant-token";

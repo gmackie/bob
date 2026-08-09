@@ -7,4 +7,5 @@ export * from "./jobs";
 export * from "./memory";
 export * from "./problems";
 export * from "./proposals";
+export * from "./rollout";
 export * from "./voice";

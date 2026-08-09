@@ -126,6 +126,7 @@ describe("personal OS routers", () => {
       "memories.getOpportunityReview",
       "memories.inspect",
       "memories.search",
+      "rollout.status",
     ];
     const nodeProcedures = Object.keys(appRouter._def.procedures);
     const edgeProcedures = Object.keys(edgeRouter._def.procedures);

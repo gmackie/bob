@@ -5,11 +5,11 @@ import {
   GetContextPackInputV1Schema,
 } from "../../contracts/v1";
 import { getContextPack } from "../../kernel";
-import { authedProcedure } from "../trpc";
+import { rolloutProcedure } from "../trpc";
 import { runKernel } from "./_kernel-error";
 
 export const contextRouter = {
-  get: authedProcedure
+  get: rolloutProcedure("conversation_read")
     .meta({
       openapi: {
         method: "GET",

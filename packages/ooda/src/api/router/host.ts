@@ -20,11 +20,11 @@ import {
   resolveContextSourceConfig,
   searchMemories,
 } from "../../kernel";
-import { authedProcedure, trustedRunnerProcedure } from "../trpc";
+import { rolloutProcedure, trustedRunnerProcedure } from "../trpc";
 import { runKernel } from "./_kernel-error";
 
 export const hostRouter = {
-  createTurn: authedProcedure
+  createTurn: rolloutProcedure("mobile_text")
     .meta({
       openapi: {
         method: "POST",

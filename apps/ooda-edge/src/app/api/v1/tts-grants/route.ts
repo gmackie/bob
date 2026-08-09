@@ -1,5 +1,5 @@
 import { createTtsGrantHttpResponse } from "@gmacko/ooda/api/tts-http";
-import { createTtsGrant } from "@gmacko/ooda/kernel";
+import { createTtsGrant, resolveOodaRolloutPolicy } from "@gmacko/ooda/kernel";
 import { auth } from "~/auth/server";
 import { db } from "~/lib/db-client-lazy";
 
@@ -15,6 +15,19 @@ export async function POST(request: Request): Promise<Response> {
       detail: "A valid OODA session is required",
       correlationId: crypto.randomUUID(),
     }, { status: 401 });
+  }
+
+  const rollout = resolveOodaRolloutPolicy(session.user.id);
+  if (!rollout.capabilities.tts) {
+    return Response.json({
+      version: "v1",
+      type: "https://ooda.local/problems/rollout-disabled",
+      title: "Voice playback is not enabled",
+      status: 403,
+      code: "ROLLOUT_DISABLED",
+      detail: `ElevenLabs TTS is disabled at rollout stage ${rollout.stage}.`,
+      correlationId: crypto.randomUUID(),
+    }, { status: 403 });
   }
 
   return createTtsGrantHttpResponse({

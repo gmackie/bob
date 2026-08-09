@@ -10,11 +10,11 @@ import {
   correctConversationEvent,
   listConversationEventsCompatible,
 } from "../../kernel";
-import { authedProcedure } from "../trpc";
+import { rolloutProcedure } from "../trpc";
 import { runKernel } from "./_kernel-error";
 
 export const eventsRouter = {
-  append: authedProcedure
+  append: rolloutProcedure("mobile_text")
     .meta({
       openapi: {
         method: "POST",
@@ -29,7 +29,7 @@ export const eventsRouter = {
       runKernel(() => appendConversationEvent(ctx.db, ctx.userId, input)),
     ),
 
-  correct: authedProcedure
+  correct: rolloutProcedure("mobile_text")
     .meta({
       openapi: {
         method: "POST",
@@ -44,7 +44,7 @@ export const eventsRouter = {
       runKernel(() => correctConversationEvent(ctx.db, ctx.userId, input)),
     ),
 
-  paginate: authedProcedure
+  paginate: rolloutProcedure("conversation_read")
     .meta({
       openapi: {
         method: "GET",
@@ -56,7 +56,9 @@ export const eventsRouter = {
     .input(ConversationEventListInputV1Schema)
     .output(ConversationEventListPageV1Schema)
     .query(({ ctx, input }) =>
-      runKernel(() => listConversationEventsCompatible(ctx.db, ctx.userId, input)),
+      runKernel(() =>
+        listConversationEventsCompatible(ctx.db, ctx.userId, input),
+      ),
     ),
 } satisfies RouterRecord;
 import type { RouterRecord } from "@trpc/server/unstable-core-do-not-import";

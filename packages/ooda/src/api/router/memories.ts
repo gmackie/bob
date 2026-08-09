@@ -19,11 +19,11 @@ import {
   searchMemories,
   submitMemoryFeedback,
 } from "../../kernel";
-import { authedProcedure } from "../trpc";
+import { rolloutProcedure } from "../trpc";
 import { runKernel } from "./_kernel-error";
 
 export const memoriesRouter = {
-  search: authedProcedure
+  search: rolloutProcedure("conversation_read")
     .meta({
       openapi: {
         method: "GET",
@@ -37,7 +37,7 @@ export const memoriesRouter = {
     .query(({ ctx, input }) =>
       runKernel(() => searchMemories(ctx.db, ctx.userId, input)),
     ),
-  inspect: authedProcedure
+  inspect: rolloutProcedure("conversation_read")
     .meta({
       openapi: {
         method: "GET",
@@ -51,7 +51,7 @@ export const memoriesRouter = {
     .query(({ ctx, input }) =>
       runKernel(() => inspectMemory(ctx.db, ctx.userId, input.memoryId)),
     ),
-  feedback: authedProcedure
+  feedback: rolloutProcedure("conversation_write")
     .meta({
       openapi: {
         method: "POST",
@@ -65,7 +65,7 @@ export const memoriesRouter = {
     .mutation(({ ctx, input }) =>
       runKernel(() => submitMemoryFeedback(ctx.db, ctx.userId, input)),
     ),
-  createOpportunityReview: authedProcedure
+  createOpportunityReview: rolloutProcedure("reviews")
     .meta({
       openapi: {
         method: "POST",
@@ -79,7 +79,7 @@ export const memoriesRouter = {
     .mutation(({ ctx, input }) =>
       runKernel(() => createOpportunityReview(ctx.db, ctx.userId, input)),
     ),
-  getOpportunityReview: authedProcedure
+  getOpportunityReview: rolloutProcedure("conversation_read")
     .meta({
       openapi: {
         method: "GET",

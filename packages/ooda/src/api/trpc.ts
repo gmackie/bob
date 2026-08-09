@@ -7,6 +7,9 @@ import type { AuthInstance } from "@gmacko/core/auth";
 import { validateApiKey } from "@gmacko/core/auth/validate-api-key";
 import { db } from "@gmacko/ooda/db/client";
 
+import type { OodaRolloutCapabilityV1 } from "../contracts/v1";
+import { resolveOodaRolloutPolicy } from "../kernel/rollout-policy";
+
 export const createTRPCContext = async (opts: {
   headers: Headers;
   auth?: AuthInstance;
@@ -163,3 +166,16 @@ export const authedProcedure = t.procedure.use(async ({ ctx, next }) => {
     message: "Not authenticated",
   });
 });
+
+export const rolloutProcedure = (capability: OodaRolloutCapabilityV1) =>
+  authedProcedure.use(({ ctx, next }) => {
+    const policy = resolveOodaRolloutPolicy(ctx.userId);
+    if (!policy.capabilities[capability]) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message:
+          `OODA rollout capability ${capability} is not enabled at stage ${policy.stage}. ${policy.reasons.join(" ")}`.trim(),
+      });
+    }
+    return next({ ctx: { ...ctx, rolloutPolicy: policy } });
+  });

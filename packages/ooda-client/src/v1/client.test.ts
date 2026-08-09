@@ -25,6 +25,41 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("OODA V1 client", () => {
+  it("retrieves the account-scoped rollout receipt", async () => {
+    const policy = {
+      stage: "mobile_text" as const,
+      eligible: true,
+      killed: false,
+      capabilities: {
+        shadow_projection: true,
+        conversation_read: true,
+        conversation_write: true,
+        mobile_text: true,
+        tts: false,
+        agent_jobs: false,
+        obsidian_delivery: false,
+        durable_work_delivery: false,
+        portfolio_evidence: false,
+        specialist_delivery: false,
+        reviews: false,
+        push: false,
+      },
+      reasons: [],
+    };
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(policy));
+    const client = createOodaV1Client({
+      baseUrl: "https://ooda.example.test",
+      fetch: fetchFn,
+    });
+
+    await expect(client.rollout.status()).resolves.toEqual(policy);
+    expect(String(fetchFn.mock.calls[0]![0])).toBe(
+      "https://ooda.example.test/api/v1/rollout",
+    );
+  });
+
   it("lists conversations with cursor parameters and current auth headers", async () => {
     const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse({

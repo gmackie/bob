@@ -19,11 +19,11 @@ import {
   getConversationCompatible,
   listConversations,
 } from "../../kernel";
-import { authedProcedure } from "../trpc";
+import { rolloutProcedure } from "../trpc";
 import { runKernel } from "./_kernel-error";
 
 export const conversationsRouter = {
-  list: authedProcedure
+  list: rolloutProcedure("conversation_read")
     .meta({
       openapi: {
         method: "GET",
@@ -38,7 +38,7 @@ export const conversationsRouter = {
       runKernel(() => listConversations(ctx.db, ctx.userId, input)),
     ),
 
-  create: authedProcedure
+  create: rolloutProcedure("conversation_write")
     .meta({
       openapi: {
         method: "POST",
@@ -53,7 +53,7 @@ export const conversationsRouter = {
       runKernel(() => createConversation(ctx.db, ctx.userId, input)),
     ),
 
-  retrieve: authedProcedure
+  retrieve: rolloutProcedure("conversation_read")
     .meta({
       openapi: {
         method: "GET",
@@ -70,7 +70,7 @@ export const conversationsRouter = {
       ),
     ),
 
-  fork: authedProcedure
+  fork: rolloutProcedure("conversation_write")
     .meta({
       openapi: {
         method: "POST",
@@ -85,7 +85,7 @@ export const conversationsRouter = {
       runKernel(() => forkConversation(ctx.db, ctx.userId, input)),
     ),
 
-  archive: authedProcedure
+  archive: rolloutProcedure("conversation_write")
     .meta({
       openapi: {
         method: "POST",

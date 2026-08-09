@@ -13,6 +13,7 @@ import {
   type DeadLetterV1,
   type IntegrationDeliveryV1,
   type MemorySeedV1,
+  type OodaRolloutPolicyV1,
   type ProposalV1,
 } from "@gmacko/ooda-client/v1";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -94,6 +95,7 @@ export function ConversationWorkspace() {
   const [memoryQuery, setMemoryQuery] = useState("");
   const [memories, setMemories] = useState<MemorySeedV1[]>([]);
   const [actionId, setActionId] = useState<string | null>(null);
+  const [rollout, setRollout] = useState<OodaRolloutPolicyV1 | null>(null);
 
   const selected = conversations.find((item) => item.id === selectedId) ?? null;
   const timeline = useMemo(
@@ -185,6 +187,9 @@ export function ConversationWorkspace() {
     let cancelled = false;
     void (async () => {
       try {
+        const rolloutPolicy = await client.rollout.status();
+        if (cancelled) return;
+        setRollout(rolloutPolicy);
         const search = new URLSearchParams(window.location.search);
         if (search.get("new") === "1") {
           const existingKey = sessionStorage.getItem(PENDING_NEW_THOUGHT_KEY);
@@ -384,6 +389,7 @@ export function ConversationWorkspace() {
             onOpen={(id) => void openConversation(id)}
             onNew={() => void createConversation()}
             creating={actionId === "new"}
+            canCreate={rollout?.capabilities.conversation_write ?? false}
           />
         </aside>
 
@@ -402,11 +408,15 @@ export function ConversationWorkspace() {
                   <span>· {branches.length} branches</span>
                 ) : null}
                 {selected ? <span>· {selected.hostProvider}</span> : null}
+                {rollout ? (
+                  <span>· {rollout.stage.replaceAll("_", " ")}</span>
+                ) : null}
               </div>
             </div>
             <button
               type="button"
               onClick={() => void createConversation()}
+              disabled={!rollout?.capabilities.conversation_write}
               className="rounded border border-[#D4A04A]/40 px-3 py-1.5 text-xs text-[#D4A04A] lg:hidden"
             >
               New thought
@@ -451,7 +461,9 @@ export function ConversationWorkspace() {
                     void send();
                   }
                 }}
-                disabled={!selected || isSending}
+                disabled={
+                  !selected || isSending || !rollout?.capabilities.mobile_text
+                }
                 rows={1}
                 placeholder={
                   selected
@@ -463,7 +475,12 @@ export function ConversationWorkspace() {
               <button
                 type="button"
                 onClick={() => void send()}
-                disabled={!selected || !composer.trim() || isSending}
+                disabled={
+                  !selected ||
+                  !composer.trim() ||
+                  isSending ||
+                  !rollout?.capabilities.mobile_text
+                }
                 className="rounded-lg bg-[#D4A04A] px-4 py-2.5 text-xs font-semibold text-[#111113] disabled:opacity-30"
               >
                 {isSending ? "Queuing…" : "Send"}
@@ -508,6 +525,7 @@ function ConversationDrawer(props: {
   onOpen: (id: string) => void;
   onNew: () => void;
   creating: boolean;
+  canCreate: boolean;
 }) {
   return (
     <>
@@ -521,7 +539,7 @@ function ConversationDrawer(props: {
         <button
           type="button"
           onClick={props.onNew}
-          disabled={props.creating}
+          disabled={props.creating || !props.canCreate}
           className="mt-4 w-full rounded-lg bg-[#D4A04A] px-3 py-2.5 text-sm font-semibold text-[#111113] disabled:opacity-50"
         >
           {props.creating ? "Creating…" : "+ New thought"}

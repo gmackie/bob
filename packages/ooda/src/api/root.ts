@@ -7,6 +7,7 @@ import { jobsRouter } from "./router/jobs";
 import { integrationsRouter } from "./router/integrations";
 import { memoriesRouter } from "./router/memories";
 import { proposalsRouter } from "./router/proposals";
+import { rolloutRouter } from "./router/rollout";
 import { importsRouter } from "./router/imports";
 import { oracleRouter } from "./router/oracle";
 import { publishRouter } from "./router/publish";
@@ -25,6 +26,7 @@ export const appRouter = createTRPCRouter({
   integrations: integrationsRouter,
   memories: memoriesRouter,
   proposals: proposalsRouter,
+  rollout: rolloutRouter,
   threads: threadsRouter,
   runner: runnerRouter,
   research: researchRouter,

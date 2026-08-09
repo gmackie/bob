@@ -21,11 +21,11 @@ import {
   listIntegrationDeliveries,
   repairDeadLetter,
 } from "../../kernel";
-import { authedProcedure, trustedRunnerProcedure } from "../trpc";
+import { rolloutProcedure, trustedRunnerProcedure } from "../trpc";
 import { runKernel } from "./_kernel-error";
 
 export const integrationsRouter = {
-  listDeliveries: authedProcedure
+  listDeliveries: rolloutProcedure("conversation_read")
     .meta({
       openapi: {
         method: "GET",
@@ -39,7 +39,7 @@ export const integrationsRouter = {
     .query(({ ctx, input }) =>
       runKernel(() => listIntegrationDeliveries(ctx.db, ctx.userId, input)),
     ),
-  listDeadLetters: authedProcedure
+  listDeadLetters: rolloutProcedure("conversation_read")
     .meta({
       openapi: {
         method: "GET",
@@ -53,7 +53,7 @@ export const integrationsRouter = {
     .query(({ ctx, input }) =>
       runKernel(() => listDeadLetters(ctx.db, ctx.userId, input)),
     ),
-  repairDeadLetter: authedProcedure
+  repairDeadLetter: rolloutProcedure("durable_work_delivery")
     .meta({
       openapi: {
         method: "POST",
