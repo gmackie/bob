@@ -16,6 +16,11 @@ const { setPlaceholder, kernel } = vi.hoisted(() => {
       claimAgentJob: vi.fn(),
       recordAgentJobEvent: vi.fn(),
       inspectAgentJobControl: vi.fn(),
+      searchMemories: vi.fn(),
+      createMemoryContextSource: vi.fn().mockReturnValue({
+        id: "memory",
+        inspect: vi.fn(),
+      }),
       resolveContextSourceConfig: vi.fn().mockReturnValue({}),
       createConfiguredContextSources: vi.fn().mockReturnValue([]),
     },
@@ -83,10 +88,14 @@ describe("jobs router", () => {
       "owner-jobs",
       input,
       {
-        contextSources: [],
+        contextSources: [expect.objectContaining({ id: "memory" })],
         signal: expect.any(AbortSignal),
       },
     );
+    expect(kernel.createMemoryContextSource).toHaveBeenCalledWith({
+      search: expect.any(Function),
+      excludeConversationId: "conversation-1",
+    });
   });
 
   it("requires a configured runner secret for claims", async () => {

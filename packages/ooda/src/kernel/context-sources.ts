@@ -211,6 +211,10 @@ function text(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function number(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 async function readJson(response: Response): Promise<unknown> {
   if (!response.ok)
     throw new Error(`Context source returned ${response.status}`);
@@ -407,51 +411,96 @@ function forgeGraphSource(
           ),
         })),
       );
-      const candidates = payloads.flatMap(
-        ({ appSlug, payload }): ContextCandidate[] => {
-          const rows = object(payload)?.changesets;
-          if (!Array.isArray(rows))
-            throw new Error("Invalid ForgeGraph context response");
-          return [...rows]
-            .sort((left, right) => {
-              const leftAt = Date.parse(text(object(left)?.createdAt) ?? "");
-              const rightAt = Date.parse(text(object(right)?.createdAt) ?? "");
-              return (
-                (Number.isNaN(rightAt) ? 0 : rightAt) -
-                (Number.isNaN(leftAt) ? 0 : leftAt)
-              );
-            })
-            .flatMap((value): ContextCandidate[] => {
-              const row = object(value);
-              const id = text(row?.id);
-              const title = text(row?.title);
-              if (!id || !title) return [];
-              return [
-                {
-                  sourceType: "forgegraph_changeset",
-                  sourceId: id,
-                  sensitivity: "general",
-                  content: [
-                    `app ${appSlug}`,
-                    `changeset ${title}`,
-                    text(row?.status) ? `status ${text(row?.status)}` : null,
-                    text(row?.createdAt)
-                      ? `created ${text(row?.createdAt)}`
-                      : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" | "),
-                },
-              ];
-            });
-        },
-      );
-      const relevant = candidates.filter((item) =>
+      const summaries = payloads.flatMap(({ appSlug, payload }) => {
+        const rows = object(payload)?.changesets;
+        if (!Array.isArray(rows))
+          throw new Error("Invalid ForgeGraph context response");
+        return [...rows]
+          .sort((left, right) => {
+            const leftAt = Date.parse(text(object(left)?.createdAt) ?? "");
+            const rightAt = Date.parse(text(object(right)?.createdAt) ?? "");
+            return (
+              (Number.isNaN(rightAt) ? 0 : rightAt) -
+              (Number.isNaN(leftAt) ? 0 : leftAt)
+            );
+          })
+          .flatMap((value) => {
+            const row = object(value);
+            const id = text(row?.id);
+            const title = text(row?.title);
+            if (!id || !title) return [];
+            return [
+              {
+                appSlug,
+                id,
+                content: [
+                  `app ${appSlug}`,
+                  `changeset ${title}`,
+                  text(row?.status) ? `status ${text(row?.status)}` : null,
+                  text(row?.createdAt)
+                    ? `created ${text(row?.createdAt)}`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(" | "),
+              },
+            ];
+          });
+      });
+      const relevant = summaries.filter((item) =>
         matchesQuery(item.content, query),
       );
-      return (relevant.length > 0 ? relevant : candidates).slice(
+      const selected = (relevant.length > 0 ? relevant : summaries).slice(
         0,
         limitPerSource,
+      );
+      return Promise.all(
+        selected.map(async (summary): Promise<ContextCandidate> => {
+          const detail = await fetcher(
+            `${trimUrl(config.apiUrl)}/api/fg/changesets/${encodeURIComponent(summary.id)}`,
+            { headers, signal },
+          )
+            .then(readJson)
+            .catch(() => null);
+          const row = object(detail);
+          const builds = Array.isArray(row?.builds) ? row.builds : [];
+          const testRuns = Array.isArray(row?.testRuns) ? row.testRuns : [];
+          const buildEvidence = builds.slice(0, 3).flatMap((value) => {
+            const build = object(value);
+            const name = text(build?.pipelineName);
+            const status = text(build?.status);
+            return name && status ? [`build ${name} ${status}`] : [];
+          });
+          const testEvidence = testRuns.slice(0, 3).flatMap((value) => {
+            const run = object(value);
+            const suite = text(run?.suiteName);
+            const status = text(run?.status);
+            const passed = number(run?.passedTests);
+            const total = number(run?.totalTests);
+            if (!suite || !status) return [];
+            return [
+              `tests ${suite} ${status}${passed !== null && total !== null ? ` ${passed}/${total}` : ""}`,
+            ];
+          });
+          return {
+            sourceType: "forgegraph_changeset",
+            sourceId: summary.id,
+            sensitivity: "general",
+            content: [
+              summary.content,
+              text(row?.sourceBranch)
+                ? `branch ${text(row?.sourceBranch)}`
+                : null,
+              text(row?.headSha)
+                ? `sha ${text(row?.headSha)!.slice(0, 12)}`
+                : null,
+              ...buildEvidence,
+              ...testEvidence,
+            ]
+              .filter(Boolean)
+              .join(" | "),
+          };
+        }),
       );
     },
   };
@@ -484,8 +533,8 @@ export function resolveContextSourceConfig(
       workspaceId: bobWorkspaceId,
     };
   }
-  const bizUrl = text(env.BIZPULSE_API_URL);
-  const bizKey = text(env.BIZPULSE_API_KEY);
+  const bizUrl = text(env.OODA_BIZPULSE_API_URL) ?? text(env.BIZPULSE_API_URL);
+  const bizKey = text(env.OODA_BIZPULSE_API_KEY) ?? text(env.BIZPULSE_API_KEY);
   if (bizUrl && bizKey) result.bizpulse = { apiUrl: bizUrl, apiKey: bizKey };
   const forgeUrl = text(env.FORGEGRAPH_API_URL);
   const forgeKey = text(env.FORGEGRAPH_API_KEY);

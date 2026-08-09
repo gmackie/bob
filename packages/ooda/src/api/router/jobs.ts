@@ -19,12 +19,14 @@ import {
   cancelAgentJob,
   claimAgentJob,
   createConfiguredContextSources,
+  createMemoryContextSource,
   createAgentJob,
   getAgentJob,
   inspectAgentJobControl,
   listAgentJobs,
   recordAgentJobEvent,
   resolveContextSourceConfig,
+  searchMemories,
 } from "../../kernel";
 import { authedProcedure, trustedRunnerProcedure } from "../trpc";
 import { runKernel } from "./_kernel-error";
@@ -72,9 +74,16 @@ export const jobsRouter = {
     .mutation(({ ctx, input }) =>
       runKernel(() =>
         createAgentJob(ctx.db, ctx.userId, input, {
-          contextSources: createConfiguredContextSources(
-            resolveContextSourceConfig(process.env),
-          ),
+          contextSources: [
+            createMemoryContextSource({
+              search: (searchInput) =>
+                searchMemories(ctx.db, ctx.userId, searchInput),
+              excludeConversationId: input.conversationId,
+            }),
+            ...createConfiguredContextSources(
+              resolveContextSourceConfig(process.env),
+            ),
+          ],
           signal: AbortSignal.timeout(30_000),
         }),
       ),

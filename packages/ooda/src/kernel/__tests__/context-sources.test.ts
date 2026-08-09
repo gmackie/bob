@@ -5,6 +5,7 @@ import {
   collectContextCandidates,
   createConfiguredContextSources,
   formatDisclosedContext,
+  resolveContextSourceConfig,
   type ContextCandidate,
   type ConversationContextSource,
 } from "../context-sources";
@@ -20,6 +21,20 @@ const candidate = (
 });
 
 describe("conversation context sources", () => {
+  it("reuses runner-only BizPulse credentials for read-only conversation context", () => {
+    expect(
+      resolveContextSourceConfig({
+        OODA_BIZPULSE_API_URL: "https://bizpulse.example",
+        OODA_BIZPULSE_API_KEY: "biz_private_key",
+      }),
+    ).toMatchObject({
+      bizpulse: {
+        apiUrl: "https://bizpulse.example",
+        apiKey: "biz_private_key",
+      },
+    });
+  });
+
   it("collects validated candidates without letting one unavailable source block the turn", async () => {
     const healthy: ConversationContextSource = {
       id: "bob",
@@ -180,6 +195,26 @@ describe("conversation context sources", () => {
           ],
         });
       }
+      if (url.endsWith("/api/fg/changesets/change-1")) {
+        return Response.json({
+          id: "change-1",
+          title: "Add context packs",
+          status: "open",
+          sourceBranch: "feat/context-packs",
+          headSha: "0123456789abcdef0123456789abcdef01234567",
+          createdAt: "2026-08-07T12:00:00.000Z",
+          builds: [{ pipelineName: "verify", status: "passed" }],
+          testRuns: [
+            {
+              suiteName: "unit",
+              status: "passed",
+              totalTests: 623,
+              passedTests: 623,
+              failedTests: 0,
+            },
+          ],
+        });
+      }
       return new Response("not found", { status: 404 });
     });
 
@@ -222,6 +257,9 @@ describe("conversation context sources", () => {
         expect.stringContaining("validation"),
         expect.stringContaining("dogfood"),
         expect.stringContaining("Add context packs"),
+        expect.stringContaining("branch feat/context-packs"),
+        expect.stringContaining("build verify passed"),
+        expect.stringContaining("tests unit passed 623/623"),
       ]),
     );
   });

@@ -14,9 +14,11 @@ import {
   claimHostTurn,
   completeHostTurn,
   createConfiguredContextSources,
+  createMemoryContextSource,
   enqueueHostTurn,
   failHostTurn,
   resolveContextSourceConfig,
+  searchMemories,
 } from "../../kernel";
 import { authedProcedure, trustedRunnerProcedure } from "../trpc";
 import { runKernel } from "./_kernel-error";
@@ -36,9 +38,16 @@ export const hostRouter = {
     .mutation(({ ctx, input }) =>
       runKernel(() =>
         enqueueHostTurn(ctx.db, ctx.userId, input, {
-          contextSources: createConfiguredContextSources(
-            resolveContextSourceConfig(process.env),
-          ),
+          contextSources: [
+            createMemoryContextSource({
+              search: (searchInput) =>
+                searchMemories(ctx.db, ctx.userId, searchInput),
+              excludeConversationId: input.conversationId,
+            }),
+            ...createConfiguredContextSources(
+              resolveContextSourceConfig(process.env),
+            ),
+          ],
           signal: AbortSignal.timeout(30_000),
         }),
       ),

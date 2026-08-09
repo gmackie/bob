@@ -2,10 +2,12 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 
 import type { AuthInstance } from "@gmacko/core/auth";
 
-const DATABASE_URL_PLACEHOLDER = "postgres://localhost/ooda-personal-os-router-test";
+const DATABASE_URL_PLACEHOLDER =
+  "postgres://localhost/ooda-personal-os-router-test";
 const { setPlaceholder, kernel } = vi.hoisted(() => {
   const setPlaceholder = !process.env.DATABASE_URL;
-  process.env.DATABASE_URL ??= "postgres://localhost/ooda-personal-os-router-test";
+  process.env.DATABASE_URL ??=
+    "postgres://localhost/ooda-personal-os-router-test";
   return {
     setPlaceholder,
     kernel: {
@@ -18,7 +20,12 @@ const { setPlaceholder, kernel } = vi.hoisted(() => {
       correctConversationEvent: vi.fn(),
       listConversationEventsCompatible: vi.fn(),
       createConfiguredContextSources: vi.fn(() => []),
+      createMemoryContextSource: vi.fn(() => ({
+        id: "memory",
+        inspect: vi.fn(),
+      })),
       resolveContextSourceConfig: vi.fn(() => ({})),
+      searchMemories: vi.fn(),
       enqueueHostTurn: vi.fn(),
       claimHostTurn: vi.fn(),
       completeHostTurn: vi.fn(),
@@ -37,6 +44,7 @@ afterAll(() => {
 
 import { conversationsRouter } from "../conversations";
 import { eventsRouter } from "../events";
+import { hostRouter } from "../host";
 import { edgeRouter } from "../../edge-router";
 import { handleOodaV1HttpRequest } from "../../openapi";
 import { appRouter } from "../../root";
@@ -78,7 +86,11 @@ const event = {
   occurredAt,
 };
 
-const router = t.router({ conversations: conversationsRouter, events: eventsRouter });
+const router = t.router({
+  conversations: conversationsRouter,
+  events: eventsRouter,
+  host: hostRouter,
+});
 const createCaller = t.createCallerFactory(router);
 const auth = {
   api: {
@@ -121,7 +133,11 @@ describe("personal OS routers", () => {
   });
 
   it("passes authenticated ownership into conversation commands", async () => {
-    kernel.createConversation.mockResolvedValue({ conversation, branch, replayed: false });
+    kernel.createConversation.mockResolvedValue({
+      conversation,
+      branch,
+      replayed: false,
+    });
     const input = {
       title: "New thought",
       idempotencyKey: "create-1",
@@ -136,11 +152,19 @@ describe("personal OS routers", () => {
       branch,
       replayed: false,
     });
-    expect(kernel.createConversation).toHaveBeenCalledWith({}, "owner-a", input);
+    expect(kernel.createConversation).toHaveBeenCalledWith(
+      {},
+      "owner-a",
+      input,
+    );
   });
 
   it("serves the same create contract through the versioned HTTP resource", async () => {
-    kernel.createConversation.mockResolvedValue({ conversation, branch, replayed: false });
+    kernel.createConversation.mockResolvedValue({
+      conversation,
+      branch,
+      replayed: false,
+    });
     const response = await handleOodaV1HttpRequest({
       request: new Request("https://ooda.test/api/v1/conversations", {
         method: "POST",
@@ -170,7 +194,10 @@ describe("personal OS routers", () => {
   });
 
   it("exposes paged event reads and append receipts", async () => {
-    kernel.appendConversationEvent.mockResolvedValue({ event, replayed: false });
+    kernel.appendConversationEvent.mockResolvedValue({
+      event,
+      replayed: false,
+    });
     kernel.listConversationEventsCompatible.mockResolvedValue({
       items: [event],
       pageInfo: { hasMore: false },
@@ -192,7 +219,35 @@ describe("personal OS routers", () => {
       replayed: false,
     });
     await expect(
-      caller().events.paginate({ conversationId: "conversation-1", limit: 100 }),
+      caller().events.paginate({
+        conversationId: "conversation-1",
+        limit: 100,
+      }),
     ).resolves.toEqual({ items: [event], pageInfo: { hasMore: false } });
+  });
+
+  it("adds relevant durable memory to queued host-turn context", async () => {
+    const input = {
+      conversationId: "conversation-1",
+      userEventId: "event-1",
+      idempotencyKey: "host-turn-1",
+    };
+    kernel.enqueueHostTurn.mockResolvedValue({
+      executionId: "execution-1",
+      status: "queued",
+      contextPackId: "context-pack-1",
+      replayed: false,
+    });
+
+    await caller().host.createTurn(input);
+
+    expect(kernel.createMemoryContextSource).toHaveBeenCalledWith({
+      search: expect.any(Function),
+      excludeConversationId: "conversation-1",
+    });
+    expect(kernel.enqueueHostTurn).toHaveBeenCalledWith({}, "owner-a", input, {
+      contextSources: [expect.objectContaining({ id: "memory" })],
+      signal: expect.any(AbortSignal),
+    });
   });
 });
