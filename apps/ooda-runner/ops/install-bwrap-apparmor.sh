@@ -68,11 +68,25 @@ fi
 install -m 0644 "${PROFILE_SOURCE}" "${PROFILE_TARGET}"
 /usr/sbin/apparmor_parser --replace --skip-cache "${PROFILE_TARGET}"
 
-runuser -u "${RUNNER_USER}" -- /usr/bin/bwrap \
-  --die-with-parent \
-  --ro-bind /usr /usr \
-  --proc /proc \
-  --dev /dev \
-  -- /usr/bin/true
+BWRAP_SMOKE_ARGS=(
+  --die-with-parent
+  --ro-bind /usr /usr
+)
+for system_path in /bin /sbin /lib /lib64; do
+  if [[ -e "${system_path}" ]]; then
+    BWRAP_SMOKE_ARGS+=(--ro-bind "${system_path}" "${system_path}")
+  fi
+done
+BWRAP_SMOKE_ARGS+=(
+  --proc /proc
+  --dev /dev
+  --
+  /usr/bin/true
+)
+
+# `/usr/bin/true` is dynamically linked on Ubuntu. The smoke must expose the
+# same loader/library roots as the real process sandbox or a correctly loaded
+# AppArmor profile is misreported as a failure with ENOENT.
+runuser -u "${RUNNER_USER}" -- /usr/bin/bwrap "${BWRAP_SMOKE_ARGS[@]}"
 
 echo "Bubblewrap AppArmor profile active for ${RUNNER_USER} on ${HOST_NAME}"
