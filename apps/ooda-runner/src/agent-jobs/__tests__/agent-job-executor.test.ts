@@ -164,8 +164,15 @@ describe("AgentJobExecutor", () => {
       OPENAI_API_KEY: "selected-provider-key",
     });
     expect(adapter.environment).not.toHaveProperty("DATABASE_URL");
-    expect(adapter.command?.binary).toBe("/usr/bin/sandbox-exec");
-    expect(adapter.command?.args.join(" ")).toContain("(deny file-write*)");
+    if (process.platform === "darwin") {
+      expect(adapter.command?.binary).toBe("/usr/bin/sandbox-exec");
+      expect(adapter.command?.args.join(" ")).toContain("(deny file-write*)");
+    } else if (process.platform === "linux") {
+      expect(adapter.command?.binary).toBe("/usr/bin/bwrap");
+      expect(adapter.command?.args).toEqual(
+        expect.arrayContaining(["--die-with-parent", "--cap-drop", "ALL"]),
+      );
+    }
     await expect(lstat(sandboxPath)).rejects.toMatchObject({ code: "ENOENT" });
     await new ScratchSandboxManager(root).cleanupRoot();
   });

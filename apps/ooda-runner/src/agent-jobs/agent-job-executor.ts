@@ -94,7 +94,9 @@ export class AgentJobExecutor {
         correlationId: input.correlationId,
       });
       const command = prepared.useOuterProcessSandbox
-        ? await wrapInProcessSandbox(requestedCommand, sandbox.path)
+        ? await wrapInProcessSandbox(requestedCommand, sandbox.path, {
+            environment: prepared.environment,
+          })
         : requestedCommand;
       const result = await this.config.adapter.execute(
         command,

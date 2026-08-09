@@ -1,35 +1,43 @@
 import { spawnSync } from "node:child_process";
-import { access, mkdir, rm } from "node:fs/promises";
+import { access, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 
 import { describe, expect, it } from "vitest";
 
 import { wrapInProcessSandbox } from "../process-sandbox";
 
-describe.runIf(process.platform === "darwin")(
+describe.runIf(process.platform === "darwin" || process.platform === "linux")(
   "agent-job process sandbox",
   () => {
-    it("allows scratch writes and denies writes outside the disposable root", async () => {
+    it("allows scratch writes and denies user-file reads and writes outside the disposable root", async () => {
       const scratch = join(
         tmpdir(),
         `ooda-process-sandbox-${crypto.randomUUID()}`,
       );
       const outside = join(
-        tmpdir(),
+        homedir(),
         `ooda-process-outside-${crypto.randomUUID()}`,
       );
       await Promise.all([
         mkdir(scratch, { recursive: true, mode: 0o700 }),
         mkdir(outside, { recursive: true, mode: 0o700 }),
       ]);
+      await writeFile(join(outside, "secret"), "must-not-leak", {
+        mode: 0o600,
+      });
       try {
         const command = await wrapInProcessSandbox(
           {
             binary: "/bin/sh",
             args: [
               "-c",
-              `set -e; printf allowed > ${JSON.stringify(join(scratch, "inside"))}; printf denied > ${JSON.stringify(join(outside, "outside"))}`,
+              [
+                "set -e",
+                `printf allowed > ${JSON.stringify(join(scratch, "inside"))}`,
+                `if leaked=$(cat ${JSON.stringify(join(outside, "secret"))} 2>/dev/null); then printf %s "$leaked" > ${JSON.stringify(join(scratch, "leaked"))}; exit 70; fi`,
+                `if printf denied > ${JSON.stringify(join(outside, "outside"))} 2>/dev/null; then exit 71; fi`,
+              ].join("; "),
             ],
             cwd: scratch,
           },
@@ -40,8 +48,11 @@ describe.runIf(process.platform === "darwin")(
           encoding: "utf8",
         });
 
-        expect(result.status).not.toBe(0);
+        expect(result.status).toBe(0);
         await expect(access(join(scratch, "inside"))).resolves.toBeUndefined();
+        await expect(access(join(scratch, "leaked"))).rejects.toMatchObject({
+          code: "ENOENT",
+        });
         await expect(access(join(outside, "outside"))).rejects.toMatchObject({
           code: "ENOENT",
         });
@@ -50,6 +61,27 @@ describe.runIf(process.platform === "darwin")(
           rm(scratch, { recursive: true, force: true }),
           rm(outside, { recursive: true, force: true }),
         ]);
+      }
+    });
+
+    it("fails closed for unsupported operating systems", async () => {
+      const scratch = join(
+        tmpdir(),
+        `ooda-process-sandbox-${crypto.randomUUID()}`,
+      );
+      await mkdir(scratch, { recursive: true, mode: 0o700 });
+      try {
+        await expect(
+          wrapInProcessSandbox(
+            { binary: "/bin/sh", args: [], cwd: scratch },
+            scratch,
+            { platform: "win32" },
+          ),
+        ).rejects.toThrow(
+          "No fail-closed OODA agent-job process sandbox is configured for win32",
+        );
+      } finally {
+        await rm(scratch, { recursive: true, force: true });
       }
     });
   },
