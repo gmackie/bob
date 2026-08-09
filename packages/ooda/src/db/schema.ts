@@ -38,3 +38,4 @@ export * from "./schema/orchestration";
 export * from "./schema/integrations";
 export * from "./schema/voice";
 export * from "./schema/host";
+export * from "./schema/migrations";

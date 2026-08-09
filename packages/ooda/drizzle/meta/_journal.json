@@ -134,6 +134,13 @@
       "when": 1786253997368,
       "tag": "0018_external_status_reconciliation",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1786255619140,
+      "tag": "0019_standalone_vault_pgvector",
+      "breakpoints": true
     }
   ]
 }

@@ -23,6 +23,7 @@ import {
   proposals,
 } from "../schema/orchestration";
 import { ttsGrants } from "../schema/voice";
+import { migrationRecords, migrationRuns } from "../schema/migrations";
 
 const config = (table: Parameters<typeof getTableConfig>[0]) =>
   getTableConfig(table);
@@ -48,11 +49,28 @@ describe("OODA personal operating system schema", () => {
       deadLetters,
       ttsGrants,
       hostTurnExecutions,
+      migrationRuns,
+      migrationRecords,
     ];
 
     expect(tables.map((table) => config(table).schema)).toEqual(
       tables.map(() => "ooda"),
     );
+  });
+
+  it("keeps resumable legacy imports in an explicit migration ledger", () => {
+    const runs = config(migrationRuns);
+    const records = config(migrationRecords);
+
+    expect(runs.indexes.map((index) => index.config.name)).toContain(
+      "migration_runs_source_fingerprint_uidx",
+    );
+    expect(records.indexes.map((index) => index.config.name)).toContain(
+      "migration_records_source_entity_uidx",
+    );
+    expect(
+      records.columns.find((column) => column.name === "contentHash"),
+    ).toBeDefined();
   });
 
   it("stores only hashed, expiring, one-use TTS grants", () => {

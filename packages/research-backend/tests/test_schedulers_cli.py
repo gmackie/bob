@@ -35,9 +35,13 @@ def _stub_synergy_wiring(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         cli_mod,
         "_build_llm_summarize",
-        lambda: (lambda *, prior_summary, turns, compact: "stub"),
+        lambda: lambda *, prior_summary, turns, compact: "stub",
     )
-    monkeypatch.setattr(cli_mod, "_build_embed_text", lambda: (lambda _t: [0.0]))
+    monkeypatch.setattr(
+        cli_mod,
+        "_build_embed_text",
+        lambda: ((lambda _t: [0.0]), "test-embedding-model"),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -265,28 +269,28 @@ def test_tick_exception_returns_one(monkeypatch, capsys):
     assert "simulated explosion" not in captured.out
 
 
-def test_embed_text_warns_once_and_returns_none(monkeypatch, caplog):
-    """The placeholder embedder returns ``None`` (not a zero-vec) and warns once.
+def test_embed_text_uses_configured_ollama_model(monkeypatch):
+    class _Settings:
+        ollama_base_url = "http://ollama.test"
+        ollama_embedding_model = "nomic-embed-text"
 
-    Returning ``None`` lets the synergy tick write
-    ``thread_memory.embedding = NULL`` + ``embedding_model = NULL`` so a
-    future "re-embed the placeholders" sweep can find exactly the rows
-    that need a real vector. A zero-vec would look like a real embedding
-    and silently poison cos-similarity comparisons once a real embedder
-    lands.
-    """
-    # Reset the module-level latch — other tests may have tripped it.
-    monkeypatch.setattr(cli_mod, "_EMBED_WARNING_EMITTED", False)
-    embedder = cli_mod._build_embed_text()
+    seen: dict = {}
 
-    with caplog.at_level("WARNING", logger=cli_mod.logger.name):
-        v1 = embedder("hello world")
-        v2 = embedder("another string")
+    def fake_embed(base_url, model, text):
+        seen.update(base_url=base_url, model=model, text=text)
+        return None
 
-    assert v1 is None
-    assert v2 is None
-    # Warning emitted exactly once regardless of call count.
-    warning_count = sum(
-        1 for r in caplog.records if "placeholder" in r.getMessage().lower()
-    )
-    assert warning_count == 1
+    from research_backend import config, embeddings
+
+    monkeypatch.setattr(config, "get_settings", lambda: _Settings())
+    monkeypatch.setattr(embeddings, "_ollama_embed_single", fake_embed)
+
+    embedder, model = cli_mod._build_embed_text()
+
+    assert embedder("hello world") is None
+    assert model == "nomic-embed-text"
+    assert seen == {
+        "base_url": "http://ollama.test",
+        "model": "nomic-embed-text",
+        "text": "hello world",
+    }

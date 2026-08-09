@@ -5,9 +5,9 @@ Two endpoints provide cosine-similarity search over pre-computed embeddings:
 - ``/api/search/thread-memory`` — search across thread rolling summaries
 - ``/api/search/papers`` — search across vault paper embeddings
 
-Both embed the query via Ollama, then rank rows by cosine similarity in
-Python.  When Ollama is unreachable the endpoints fall back to a simple
-text scan (``fallback: true`` in the response).
+Source/paper retrieval is ranked by pgvector in PostgreSQL so corpus size does
+not create a Python-side full scan. When Ollama is unreachable the endpoints
+fall back to a bounded text query (``fallback: true`` in the response).
 """
 
 from __future__ import annotations
@@ -131,15 +131,17 @@ def search_thread_memory(
 
     threads = []
     for score, row in scored:
-        threads.append({
-            "thread_id": str(row[0]),
-            "title": row[5],
-            "slug": row[6],
-            "rolling_summary_md": row[1],
-            "topic_fingerprint": row[3],
-            "updated_at": str(row[4]) if row[4] else None,
-            "score": round(score, 4),
-        })
+        threads.append(
+            {
+                "thread_id": str(row[0]),
+                "title": row[5],
+                "slug": row[6],
+                "rolling_summary_md": row[1],
+                "topic_fingerprint": row[3],
+                "updated_at": str(row[4]) if row[4] else None,
+                "score": round(score, 4),
+            }
+        )
 
     return {"threads": threads, "fallback": fallback}
 
@@ -173,69 +175,85 @@ def search_papers(
         max_retries=1,
     )
 
-    # ---- load papers with embeddings ----
-    # Schema name is validated above against the allowlist, so f-string
-    # interpolation is safe here.
-    rows = session.exec(
-        text(f"""
-            SELECT s.id, s.title, s.kind, s.url, s.author, s.source_ts,
-                   e.vec,
-                   gn.s2_paper_id, gn.doi, gn.influence_score
-              FROM {schema}.embeddings e
-              JOIN {schema}.sources s ON s.id = e.source_id
-         LEFT JOIN {schema}.graph_node gn ON gn.source_id = s.id
-             WHERE e.model = :model
-        """),
-        params={"model": settings.ollama_embedding_model},
-    ).all()
-
     fallback = query_vec is None
 
     if fallback:
-        # Text-match fallback.
-        query_lower = query.lower()
-        scored: list[tuple[float, Any]] = []
-        for row in rows:
-            title = row[1] or ""
-            if query_lower in title.lower():
-                scored.append((1.0, row))
-        scored = scored[:limit]
+        rows = session.exec(
+            text(f"""
+                SELECT s.id, s.title, s.kind, s.url, s.author, s.source_ts,
+                       gn.s2_paper_id, gn.doi, gn.influence_score,
+                       1.0::real AS score
+                  FROM {schema}.sources s
+             LEFT JOIN {schema}.graph_node gn ON gn.source_id = s.id
+                 WHERE s.title ILIKE :query
+                   AND (CAST(:year_from AS integer) IS NULL
+                        OR extract(year from s.source_ts) >= CAST(:year_from AS integer))
+                   AND (CAST(:min_influence AS real) IS NULL
+                        OR gn.influence_score >= CAST(:min_influence AS real))
+                 ORDER BY s.source_ts DESC NULLS LAST, s.id
+                 LIMIT :limit
+            """),
+            params={
+                "query": f"%{query}%",
+                "year_from": year_from,
+                "min_influence": min_influence,
+                "limit": limit,
+            },
+        ).all()
     else:
-        scored = []
-        for row in rows:
-            emb = _decode_vec(row[6])
-            if emb is None:
-                continue
-            score = _cosine(query_vec, emb)
-            scored.append((score, row))
-        scored.sort(key=lambda t: t[0], reverse=True)
-        scored = scored[:limit]
+        if len(query_vec) != 768:
+            return {
+                "error": f"Embedding model returned {len(query_vec)} dimensions; expected 768",
+                "papers": [],
+                "fallback": True,
+            }
+        query_embedding = "[" + ",".join(str(float(value)) for value in query_vec) + "]"
+        rows = session.exec(
+            text(f"""
+                SELECT s.id, s.title, s.kind, s.url, s.author, s.source_ts,
+                       gn.s2_paper_id, gn.doi, gn.influence_score,
+                       1 - (e.embedding <=> CAST(:query_embedding AS vector(768))) AS score
+                  FROM {schema}.source_embedding e
+                  JOIN {schema}.sources s ON s.id = e.source_id
+             LEFT JOIN {schema}.graph_node gn ON gn.source_id = s.id
+                 WHERE e.model = :model
+                   AND (CAST(:year_from AS integer) IS NULL
+                        OR extract(year from s.source_ts) >= CAST(:year_from AS integer))
+                   AND (CAST(:min_influence AS real) IS NULL
+                        OR gn.influence_score >= CAST(:min_influence AS real))
+                 ORDER BY e.embedding <=> CAST(:query_embedding AS vector(768))
+                 LIMIT :limit
+            """),
+            params={
+                "model": settings.ollama_embedding_model,
+                "query_embedding": query_embedding,
+                "year_from": year_from,
+                "min_influence": min_influence,
+                "limit": limit,
+            },
+        ).all()
 
     # Apply optional post-filters.
     papers: list[dict[str, Any]] = []
-    for score, row in scored:
+    for row in rows:
         source_ts = row[5]
-        influence = row[9]
+        influence = row[8]
+        score = row[9]
 
-        if year_from is not None and source_ts is not None:
-            if source_ts.year < year_from:
-                continue
-        if min_influence is not None:
-            if influence is None or influence < min_influence:
-                continue
-
-        papers.append({
-            "source_id": row[0],
-            "title": row[1],
-            "kind": row[2],
-            "url": row[3],
-            "author": row[4],
-            "source_ts": str(source_ts) if source_ts else None,
-            "s2_paper_id": row[7],
-            "doi": row[8],
-            "influence_score": float(influence) if influence is not None else None,
-            "score": round(score, 4),
-        })
+        papers.append(
+            {
+                "source_id": row[0],
+                "title": row[1],
+                "kind": row[2],
+                "url": row[3],
+                "author": row[4],
+                "source_ts": str(source_ts) if source_ts else None,
+                "s2_paper_id": row[6],
+                "doi": row[7],
+                "influence_score": float(influence) if influence is not None else None,
+                "score": round(score, 4),
+            }
+        )
 
     return {"papers": papers, "fallback": fallback}
 
@@ -316,15 +334,17 @@ def search_notes(
 
     notes = []
     for score, row in scored:
-        notes.append({
-            "note_index_id": str(row[0]),
-            "thread_id": str(row[1]),
-            "note_id": row[2],
-            "title": row[3],
-            "kind": row[4],
-            "thread_title": row[7],
-            "thread_slug": row[8],
-            "score": round(score, 4),
-        })
+        notes.append(
+            {
+                "note_index_id": str(row[0]),
+                "thread_id": str(row[1]),
+                "note_id": row[2],
+                "title": row[3],
+                "kind": row[4],
+                "thread_title": row[7],
+                "thread_slug": row[8],
+                "score": round(score, 4),
+            }
+        )
 
     return {"notes": notes, "fallback": fallback}
