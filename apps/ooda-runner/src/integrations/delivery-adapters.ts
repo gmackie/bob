@@ -5,6 +5,7 @@ import {
   CreatorDomainAdapter,
   FabForgeDomainAdapter,
   ObsidianDomainAdapter,
+  VeritasDomainAdapter,
 } from "@gmacko/ooda/integrations";
 
 import type { RunnerConfig } from "../config";
@@ -12,6 +13,7 @@ import { createBizPulseClient } from "./bizpulse-client";
 import { createCreatorClient } from "./creator-client";
 import { createCreatorScaffolder } from "./creator-scaffolder";
 import { createFabForgeClient } from "./fabforge-client";
+import { createVeritasClient } from "./veritas-client";
 
 export function createDeliveryAdapters(
   config: RunnerConfig,
@@ -94,6 +96,22 @@ export function createDeliveryAdapters(
         client: createFabForgeClient({
           apiUrl: config.fabForgeApiUrl,
           apiToken: config.fabForgeApiToken,
+        }),
+      }),
+    );
+  }
+  if (
+    config.veritasDeliveryEnabled &&
+    config.veritasApiUrl &&
+    config.veritasApiToken
+  ) {
+    adapters.set(
+      "veritas",
+      new VeritasDomainAdapter({
+        apiUrl: config.veritasApiUrl,
+        client: createVeritasClient({
+          apiUrl: config.veritasApiUrl,
+          apiToken: config.veritasApiToken,
         }),
       }),
     );

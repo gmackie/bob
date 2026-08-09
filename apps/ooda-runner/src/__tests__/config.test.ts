@@ -49,4 +49,12 @@ describe("RunnerConfigSchema", () => {
         .fabForgeDeliveryEnabled,
     ).toBe(true);
   });
+
+  it("keeps Veritas project intake behind an adapter kill switch", () => {
+    expect(RunnerConfigSchema.parse({}).veritasDeliveryEnabled).toBe(false);
+    expect(
+      RunnerConfigSchema.parse({ veritasDeliveryEnabled: "true" })
+        .veritasDeliveryEnabled,
+    ).toBe(true);
+  });
 });

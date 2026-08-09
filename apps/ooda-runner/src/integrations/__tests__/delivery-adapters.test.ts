@@ -61,4 +61,22 @@ describe("createDeliveryAdapters", () => {
     expect([...incomplete.keys()]).not.toContain("fabforge");
     expect([...enabled.keys()]).toContain("fabforge");
   });
+
+  it("registers Veritas only when its kill switch, URL, and token are present", () => {
+    const disabled = createDeliveryAdapters(RunnerConfigSchema.parse({}));
+    const incomplete = createDeliveryAdapters(
+      RunnerConfigSchema.parse({ veritasDeliveryEnabled: true }),
+    );
+    const enabled = createDeliveryAdapters(
+      RunnerConfigSchema.parse({
+        veritasDeliveryEnabled: true,
+        veritasApiUrl: "https://veritas.example",
+        veritasApiToken: "vrt_12345678_12345678901234567890123456789012",
+      }),
+    );
+
+    expect([...disabled.keys()]).not.toContain("veritas");
+    expect([...incomplete.keys()]).not.toContain("veritas");
+    expect([...enabled.keys()]).toContain("veritas");
+  });
 });

@@ -43,6 +43,11 @@ export const RunnerConfigSchema = z.object({
   fabForgeApiUrl: z.string().url().optional(),
   fabForgeApiToken: z.string().optional(),
   fabForgeWorkspaceId: z.string().optional(),
+  veritasDeliveryEnabled: z
+    .preprocess((value) => value === true || value === "true", z.boolean())
+    .default(false),
+  veritasApiUrl: z.string().url().optional(),
+  veritasApiToken: z.string().optional(),
   bobDevDir: z.string().default(join(homedir(), "dev")),
   bobMaxConcurrent: z.coerce.number().default(2),
   agentJobScratchRoot: z.string().default(join(tmpdir(), "ooda-agent-jobs")),
@@ -90,6 +95,9 @@ export function loadConfig(): RunnerConfig {
     fabForgeApiUrl: process.env.OODA_FABFORGE_API_URL,
     fabForgeApiToken: process.env.OODA_FABFORGE_API_TOKEN,
     fabForgeWorkspaceId: process.env.OODA_FABFORGE_WORKSPACE_ID,
+    veritasDeliveryEnabled: process.env.OODA_VERITAS_DELIVERY_ENABLED,
+    veritasApiUrl: process.env.OODA_VERITAS_API_URL,
+    veritasApiToken: process.env.OODA_VERITAS_API_TOKEN,
     bobDevDir: process.env.BOB_DEV_DIR,
     bobMaxConcurrent: process.env.BOB_MAX_CONCURRENT,
     agentJobScratchRoot: process.env.OODA_AGENT_JOB_SCRATCH_ROOT,
