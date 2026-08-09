@@ -2,11 +2,14 @@ import type { DomainAdapter } from "@gmacko/ooda/contracts/v1";
 import {
   BizPulseDomainAdapter,
   BobDomainAdapter,
+  CreatorDomainAdapter,
   ObsidianDomainAdapter,
 } from "@gmacko/ooda/integrations";
 
 import type { RunnerConfig } from "../config";
 import { createBizPulseClient } from "./bizpulse-client";
+import { createCreatorClient } from "./creator-client";
+import { createCreatorScaffolder } from "./creator-scaffolder";
 
 export function createDeliveryAdapters(
   config: RunnerConfig,
@@ -51,6 +54,27 @@ export function createDeliveryAdapters(
           apiUrl: config.bizPulseApiUrl,
           apiKey: config.bizPulseApiKey,
         }),
+      }),
+    );
+  }
+  if (
+    config.creatorDeliveryEnabled &&
+    config.creatorApiUrl &&
+    config.creatorApiKey &&
+    config.creatorProjectRoot &&
+    config.creatorTemplatePath
+  ) {
+    adapters.set(
+      "creator",
+      new CreatorDomainAdapter({
+        apiUrl: config.creatorApiUrl,
+        projectRoot: config.creatorProjectRoot,
+        receiptRoot: config.creatorReceiptRoot,
+        client: createCreatorClient({
+          apiUrl: config.creatorApiUrl,
+          apiKey: config.creatorApiKey,
+        }),
+        scaffold: createCreatorScaffolder(config.creatorTemplatePath),
       }),
     );
   }

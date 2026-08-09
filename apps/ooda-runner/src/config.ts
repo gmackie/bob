@@ -27,6 +27,16 @@ export const RunnerConfigSchema = z.object({
     .default(false),
   bizPulseApiUrl: z.string().url().optional(),
   bizPulseApiKey: z.string().optional(),
+  creatorDeliveryEnabled: z
+    .preprocess((value) => value === true || value === "true", z.boolean())
+    .default(false),
+  creatorApiUrl: z.string().url().optional(),
+  creatorApiKey: z.string().optional(),
+  creatorProjectRoot: z.string().optional(),
+  creatorTemplatePath: z.string().optional(),
+  creatorReceiptRoot: z
+    .string()
+    .default(join(homedir(), ".ooda", "integration-receipts", "creator")),
   bobDevDir: z.string().default(join(homedir(), "dev")),
   bobMaxConcurrent: z.coerce.number().default(2),
   agentJobScratchRoot: z.string().default(join(tmpdir(), "ooda-agent-jobs")),
@@ -64,6 +74,12 @@ export function loadConfig(): RunnerConfig {
     bizPulseDeliveryEnabled: process.env.OODA_BIZPULSE_DELIVERY_ENABLED,
     bizPulseApiUrl: process.env.OODA_BIZPULSE_API_URL,
     bizPulseApiKey: process.env.OODA_BIZPULSE_API_KEY,
+    creatorDeliveryEnabled: process.env.OODA_CREATOR_DELIVERY_ENABLED,
+    creatorApiUrl: process.env.OODA_CREATOR_API_URL,
+    creatorApiKey: process.env.OODA_CREATOR_API_KEY,
+    creatorProjectRoot: process.env.OODA_CREATOR_PROJECT_ROOT,
+    creatorTemplatePath: process.env.OODA_CREATOR_TEMPLATE_PATH,
+    creatorReceiptRoot: process.env.OODA_CREATOR_RECEIPT_ROOT,
     bobDevDir: process.env.BOB_DEV_DIR,
     bobMaxConcurrent: process.env.BOB_MAX_CONCURRENT,
     agentJobScratchRoot: process.env.OODA_AGENT_JOB_SCRATCH_ROOT,

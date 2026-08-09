@@ -33,4 +33,12 @@ describe("RunnerConfigSchema", () => {
         .bizPulseDeliveryEnabled,
     ).toBe(true);
   });
+
+  it("keeps Creator project creation behind an adapter kill switch", () => {
+    expect(RunnerConfigSchema.parse({}).creatorDeliveryEnabled).toBe(false);
+    expect(
+      RunnerConfigSchema.parse({ creatorDeliveryEnabled: "true" })
+        .creatorDeliveryEnabled,
+    ).toBe(true);
+  });
 });
