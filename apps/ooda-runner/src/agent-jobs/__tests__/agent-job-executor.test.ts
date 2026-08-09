@@ -135,6 +135,31 @@ describe("AgentJobExecutor", () => {
     const executor = new AgentJobExecutor({
       adapter,
       sandboxes: new ScratchSandboxManager(root),
+      processSandbox: async (command) =>
+        process.platform === "darwin"
+          ? {
+              ...command,
+              binary: "/usr/bin/sandbox-exec",
+              args: [
+                "-p",
+                "(deny file-write*)",
+                "--",
+                command.binary,
+                ...command.args,
+              ],
+            }
+          : {
+              ...command,
+              binary: "/usr/bin/bwrap",
+              args: [
+                "--die-with-parent",
+                "--cap-drop",
+                "ALL",
+                "--",
+                command.binary,
+                ...command.args,
+              ],
+            },
       environment: {
         PATH: "/usr/bin",
         OPENAI_API_KEY: "selected-provider-key",

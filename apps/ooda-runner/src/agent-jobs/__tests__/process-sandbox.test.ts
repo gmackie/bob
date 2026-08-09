@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { access, mkdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir, tmpdir } from "node:os";
 
@@ -87,6 +87,39 @@ describe.runIf(nativeSandboxCanLaunch())("agent-job process sandbox", () => {
 });
 
 describe("agent-job process sandbox contract", () => {
+  it("builds the Linux namespace command independently of a host Bubblewrap install", async () => {
+    const scratch = join(
+      tmpdir(),
+      `ooda-process-sandbox-${crypto.randomUUID()}`,
+    );
+    await mkdir(scratch, { recursive: true, mode: 0o700 });
+    try {
+      const command = await wrapInProcessSandbox(
+        { binary: "/bin/sh", args: ["-c", "true"], cwd: scratch },
+        scratch,
+        {
+          platform: "linux",
+          linuxSandboxBinary: "/usr/bin/true",
+          environment: { PATH: "/usr/bin:/bin" },
+        },
+      );
+
+      expect(command.binary).toBe("/usr/bin/true");
+      expect(command.args).toEqual(
+        expect.arrayContaining([
+          "--die-with-parent",
+          "--unshare-user",
+          "--cap-drop",
+          "ALL",
+          "--bind",
+          await realpath(scratch),
+        ]),
+      );
+    } finally {
+      await rm(scratch, { recursive: true, force: true });
+    }
+  });
+
   it("fails closed for unsupported operating systems", async () => {
     const scratch = join(
       tmpdir(),

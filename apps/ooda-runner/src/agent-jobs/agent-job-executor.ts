@@ -34,6 +34,7 @@ export class AgentJobExecutor {
       adapter: AgentAdapter;
       sandboxes: ScratchSandboxManager;
       environment?: Record<string, string | undefined>;
+      processSandbox?: typeof wrapInProcessSandbox;
     },
   ) {}
 
@@ -93,8 +94,9 @@ export class AgentJobExecutor {
         session: input.session,
         correlationId: input.correlationId,
       });
+      const processSandbox = this.config.processSandbox ?? wrapInProcessSandbox;
       const command = prepared.useOuterProcessSandbox
-        ? await wrapInProcessSandbox(requestedCommand, sandbox.path, {
+        ? await processSandbox(requestedCommand, sandbox.path, {
             environment: prepared.environment,
           })
         : requestedCommand;
