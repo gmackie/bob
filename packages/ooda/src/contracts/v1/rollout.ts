@@ -60,3 +60,43 @@ export const OodaRolloutPolicyV1Schema = z
   })
   .strict();
 export type OodaRolloutPolicyV1 = z.infer<typeof OodaRolloutPolicyV1Schema>;
+
+export const ProductionReadinessGateIdV1Schema = z.enum([
+  "dogfood_duration",
+  "accepted_turn_durability",
+  "duplicate_destinations",
+  "sensitive_disclosure",
+  "external_write_lineage",
+  "unrepaired_dead_letters",
+  "offline_reconciliation",
+  "end_to_end_execution",
+  "mobile_daily_driver",
+  "legacy_retirement",
+]);
+export const ProductionReadinessGateV1Schema = z
+  .object({
+    id: ProductionReadinessGateIdV1Schema,
+    status: z.enum(["pass", "fail", "pending"]),
+    observed: z.string().min(1).max(2_000),
+    requirement: z.string().min(1).max(2_000),
+  })
+  .strict();
+export type ProductionReadinessGateV1 = z.infer<
+  typeof ProductionReadinessGateV1Schema
+>;
+
+export const ProductionReadinessSnapshotV1Schema = z
+  .object({
+    generatedAt: z.iso.datetime({ offset: true }),
+    dogfoodStartedAt: z.iso.datetime({ offset: true }).optional(),
+    dogfoodElapsedDays: z.number().nonnegative(),
+    acceptedTurnCount: z.number().int().nonnegative(),
+    unresolvedTurnCount: z.number().int().nonnegative(),
+    externalWriteCount: z.number().int().nonnegative(),
+    gates: z.array(ProductionReadinessGateV1Schema).length(10),
+    ready: z.boolean(),
+  })
+  .strict();
+export type ProductionReadinessSnapshotV1 = z.infer<
+  typeof ProductionReadinessSnapshotV1Schema
+>;

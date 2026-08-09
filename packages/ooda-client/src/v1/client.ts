@@ -45,6 +45,7 @@ import type {
   ProposalListInputV1,
   ProposalV1,
   OodaRolloutPolicyV1,
+  ProductionReadinessSnapshotV1,
 } from "@gmacko/ooda/contracts/v1";
 
 type MaybePromise<T> = T | Promise<T>;
@@ -383,6 +384,9 @@ export function createOodaV1Client(options: OodaV1ClientOptions = {}) {
     rollout: {
       status() {
         return request<OodaRolloutPolicyV1>("/api/v1/rollout");
+      },
+      readiness() {
+        return request<ProductionReadinessSnapshotV1>("/api/v1/readiness");
       },
     },
     voice: {

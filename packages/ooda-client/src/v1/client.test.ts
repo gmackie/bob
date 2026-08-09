@@ -60,6 +60,47 @@ describe("OODA V1 client", () => {
     );
   });
 
+  it("retrieves the production dogfood readiness ledger", async () => {
+    const readiness = {
+      generatedAt: "2026-08-23T12:00:00.000Z",
+      dogfoodStartedAt: "2026-08-09T12:00:00.000Z",
+      dogfoodElapsedDays: 14,
+      acceptedTurnCount: 100,
+      unresolvedTurnCount: 0,
+      externalWriteCount: 3,
+      gates: Array.from({ length: 10 }, (_, index) => ({
+        id: [
+          "dogfood_duration",
+          "accepted_turn_durability",
+          "duplicate_destinations",
+          "sensitive_disclosure",
+          "external_write_lineage",
+          "unrepaired_dead_letters",
+          "offline_reconciliation",
+          "end_to_end_execution",
+          "mobile_daily_driver",
+          "legacy_retirement",
+        ][index],
+        status: "pass",
+        observed: "proven",
+        requirement: "required",
+      })),
+      ready: true,
+    };
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(readiness));
+    const client = createOodaV1Client({
+      baseUrl: "https://ooda.example.test",
+      fetch: fetchFn,
+    });
+
+    await expect(client.rollout.readiness()).resolves.toEqual(readiness);
+    expect(String(fetchFn.mock.calls[0]![0])).toBe(
+      "https://ooda.example.test/api/v1/readiness",
+    );
+  });
+
   it("lists conversations with cursor parameters and current auth headers", async () => {
     const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse({

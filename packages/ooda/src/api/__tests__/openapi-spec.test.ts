@@ -14,6 +14,7 @@ describe("OODA OpenAPI spec generation", () => {
     expect(doc.openapi).toBeDefined();
     expect(doc.info.title).toBe("OODA Research API");
     expect(doc.info.version).toBe("0.1.0");
+    expect(doc.paths).toHaveProperty("/api/v1/readiness");
   }, 30000);
 
   it("includes security schemes for session and runner auth", async () => {

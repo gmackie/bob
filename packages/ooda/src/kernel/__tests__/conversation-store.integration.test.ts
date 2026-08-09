@@ -46,6 +46,7 @@ import {
   recordAgentJobEvent,
 } from "../agent-jobs";
 import { createProposal, decideProposal, getProposal } from "../proposals";
+import { getProductionReadiness } from "../production-readiness";
 import {
   claimExternalStatus,
   claimIntegrationDelivery,
@@ -1775,5 +1776,63 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     ]);
     expect(claims.filter(Boolean)).toHaveLength(1);
     expect(claims.find(Boolean)?.delivery.id).toBe(repaired.delivery.id);
+  });
+
+  it("computes an owner-scoped production readiness snapshot from canonical records", async () => {
+    const created = await createConversation(db!, "owner-readiness", {
+      title: "Dogfood proof",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "readiness-conversation",
+    });
+    const user = await appendConversationEvent(db!, "owner-readiness", {
+      conversationId: created.conversation.id,
+      branchId: created.branch.id,
+      type: "user_turn",
+      actor: { type: "user", id: "owner-readiness" },
+      payload: { display: "Is this durable?" },
+      sensitivity: "general",
+      correlationId: "readiness-turn",
+      idempotencyKey: "readiness-user",
+      occurredAt: "2099-08-10T12:00:00.000Z",
+    });
+    await appendConversationEvent(db!, "owner-readiness", {
+      conversationId: created.conversation.id,
+      branchId: created.branch.id,
+      type: "assistant_turn",
+      actor: { type: "host", id: "grok" },
+      payload: { display: "Yes." },
+      sensitivity: "general",
+      correlationId: "readiness-turn",
+      causationId: user.event.id,
+      idempotencyKey: "readiness-assistant",
+      occurredAt: "2099-08-10T12:00:01.000Z",
+    });
+
+    const snapshot = await getProductionReadiness(db!, "owner-readiness", {
+      now: new Date("2099-08-23T12:00:00.000Z"),
+      env: {
+        NODE_ENV: "production",
+        OODA_ROLLOUT_STAGE: "reviews_push",
+        OODA_ROLLOUT_OWNER_IDS: "owner-readiness",
+        OODA_DOGFOOD_STARTED_AT: "2099-08-09T12:00:00.000Z",
+        OODA_OFFLINE_RECONCILIATION_CONFIRMED_AT: "2099-08-10T12:00:00.000Z",
+        OODA_MOBILE_DAILY_DRIVER_CONFIRMED_AT: "2099-08-20T12:00:00.000Z",
+      },
+    });
+
+    expect(snapshot).toMatchObject({
+      dogfoodElapsedDays: 14,
+      acceptedTurnCount: 1,
+      unresolvedTurnCount: 0,
+      externalWriteCount: 0,
+      ready: false,
+    });
+    expect(
+      snapshot.gates.find((gate) => gate.id === "external_write_lineage")
+        ?.status,
+    ).toBe("pending");
   });
 });

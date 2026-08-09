@@ -14,6 +14,7 @@ import {
   type IntegrationDeliveryV1,
   type MemorySeedV1,
   type OodaRolloutPolicyV1,
+  type ProductionReadinessSnapshotV1,
   type ProposalV1,
 } from "@gmacko/ooda-client/v1";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -55,10 +56,14 @@ function formatTime(value: string): string {
 
 function statusTone(status?: string): string {
   if (!status) return "border-[#34343a] text-[#8A8580]";
-  if (["failed", "dead_letter", "rejected", "timed_out"].includes(status)) {
+  if (
+    ["failed", "fail", "dead_letter", "rejected", "timed_out"].includes(status)
+  ) {
     return "border-[#C45454]/40 bg-[#C45454]/10 text-[#E68D8D]";
   }
-  if (["delivered", "completed", "approved", "accepted"].includes(status)) {
+  if (
+    ["pass", "delivered", "completed", "approved", "accepted"].includes(status)
+  ) {
     return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
   }
   return "border-[#D4A04A]/30 bg-[#D4A04A]/10 text-[#E0B96E]";
@@ -96,6 +101,8 @@ export function ConversationWorkspace() {
   const [memories, setMemories] = useState<MemorySeedV1[]>([]);
   const [actionId, setActionId] = useState<string | null>(null);
   const [rollout, setRollout] = useState<OodaRolloutPolicyV1 | null>(null);
+  const [readiness, setReadiness] =
+    useState<ProductionReadinessSnapshotV1 | null>(null);
 
   const selected = conversations.find((item) => item.id === selectedId) ?? null;
   const timeline = useMemo(
@@ -137,18 +144,25 @@ export function ConversationWorkspace() {
 
   const refreshActivity = useCallback(
     async (conversationId: string) => {
-      const [proposalPage, jobPage, deliveryPage, deadLetterPage] =
-        await Promise.all([
-          client.proposals.list({ conversationId, limit: 100 }),
-          client.jobs.list({ conversationId, limit: 100 }),
-          client.integrations.listDeliveries({ conversationId, limit: 100 }),
-          client.integrations.listDeadLetters({ conversationId, limit: 100 }),
-        ]);
+      const [
+        proposalPage,
+        jobPage,
+        deliveryPage,
+        deadLetterPage,
+        readinessSnapshot,
+      ] = await Promise.all([
+        client.proposals.list({ conversationId, limit: 100 }),
+        client.jobs.list({ conversationId, limit: 100 }),
+        client.integrations.listDeliveries({ conversationId, limit: 100 }),
+        client.integrations.listDeadLetters({ conversationId, limit: 100 }),
+        client.rollout.readiness(),
+      ]);
       if (selectedIdRef.current !== conversationId) return;
       setProposals(proposalPage.items);
       setJobs(jobPage.items);
       setDeliveries(deliveryPage.items);
       setDeadLetters(deadLetterPage.items);
+      setReadiness(readinessSnapshot);
     },
     [client],
   );
@@ -187,9 +201,13 @@ export function ConversationWorkspace() {
     let cancelled = false;
     void (async () => {
       try {
-        const rolloutPolicy = await client.rollout.status();
+        const [rolloutPolicy, readinessSnapshot] = await Promise.all([
+          client.rollout.status(),
+          client.rollout.readiness(),
+        ]);
         if (cancelled) return;
         setRollout(rolloutPolicy);
+        setReadiness(readinessSnapshot);
         const search = new URLSearchParams(window.location.search);
         if (search.get("new") === "1") {
           const existingKey = sessionStorage.getItem(PENDING_NEW_THOUGHT_KEY);
@@ -506,6 +524,7 @@ export function ConversationWorkspace() {
             jobs={jobs}
             deliveries={deliveries}
             deadLetters={deadLetters}
+            readiness={readiness}
             actionId={actionId}
             onDecision={(proposal, decision) =>
               void decideProposal(proposal, decision)
@@ -681,6 +700,7 @@ function Inspector(props: {
   jobs: AgentJobV1[];
   deliveries: IntegrationDeliveryV1[];
   deadLetters: DeadLetterV1[];
+  readiness: ProductionReadinessSnapshotV1 | null;
   actionId: string | null;
   onDecision: (proposal: ProposalV1, decision: "approve" | "reject") => void;
 }) {
@@ -845,7 +865,23 @@ function Inspector(props: {
           <div className="space-y-4">
             <InspectorHeading
               title="Execution evidence"
-              subtitle="Research jobs, durable deliveries, and repairable failures."
+              subtitle="Production gates, research jobs, durable deliveries, and repairable failures."
+            />
+            <ActivityGroup
+              title={
+                props.readiness?.ready
+                  ? "Production ready"
+                  : "Dogfood readiness"
+              }
+              empty="Readiness has not been evaluated."
+              items={
+                props.readiness?.gates.map((gate) => ({
+                  id: gate.id,
+                  title: gate.id.replaceAll("_", " "),
+                  status: gate.status,
+                  detail: `${gate.observed} · ${gate.requirement}`,
+                })) ?? []
+              }
             />
             <ActivityGroup
               title="Agent jobs"
