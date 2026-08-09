@@ -113,6 +113,7 @@ describe("personal OS routers", () => {
       "conversations.fork",
       "conversations.list",
       "conversations.retrieve",
+      "context.get",
       "events.append",
       "events.correct",
       "events.paginate",

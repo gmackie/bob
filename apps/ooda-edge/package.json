@@ -13,6 +13,7 @@
   "dependencies": {
     "@gmacko/core": "workspace:*",
     "@gmacko/ooda": "workspace:*",
+    "@gmacko/ooda-client": "workspace:*",
     "@tanstack/react-query": "catalog:",
     "@trpc/client": "catalog:",
     "@trpc/server": "catalog:",
