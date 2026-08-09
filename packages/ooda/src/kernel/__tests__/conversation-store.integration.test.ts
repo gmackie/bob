@@ -195,7 +195,7 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     };
     const options = {
       baseUrl: "https://ooda.example",
-      grantSecret: "0123456789abcdef0123456789abcdef",
+      grantSecret: "0123456789abcdef0123456789abcdef", // gitleaks:allow -- synthetic fixture
       now: new Date("2026-08-05T18:00:01.000Z"),
     };
 
@@ -1418,7 +1418,7 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
       rationale: "Promote the reviewed opportunity.",
       confidence: 0.87,
       policySnapshot: { version: "proposal-policy-v1" },
-      idempotencyKey: "venture-proposal-1",
+      idempotencyKey: "venture-proposal-1", // gitleaks:allow -- not a credential
     });
     expect(proposed.proposal.status).toBe("awaiting_approval");
     const [proposedSeed] = await db!

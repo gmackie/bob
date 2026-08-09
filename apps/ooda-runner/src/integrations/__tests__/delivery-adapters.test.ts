@@ -71,7 +71,7 @@ describe("createDeliveryAdapters", () => {
       RunnerConfigSchema.parse({
         veritasDeliveryEnabled: true,
         veritasApiUrl: "https://veritas.example",
-        veritasApiToken: "vrt_12345678_12345678901234567890123456789012",
+        veritasApiToken: "vrt_12345678_12345678901234567890123456789012", // gitleaks:allow -- synthetic fixture
       }),
     );
 

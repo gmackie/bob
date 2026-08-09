@@ -60,7 +60,7 @@ describe("ObsidianDomainAdapter", () => {
       destination: "obsidian",
       externalType: "note",
       externalId: "Captures/2026-08-08 - Voice First OODA.md",
-      idempotencyKey: "delivery-obsidian-1",
+      idempotencyKey: "delivery-obsidian-1", // gitleaks:allow -- not a credential
       status: "completed",
     });
     expect(ExternalReceiptV1Schema.parse(first)).toEqual(first);
@@ -71,7 +71,7 @@ describe("ObsidianDomainAdapter", () => {
       type: "conversation-capture",
       ooda_proposal_id: approved.id,
       ooda_conversation_id: approved.conversationId,
-      ooda_idempotency_key: "delivery-obsidian-1",
+      ooda_idempotency_key: "delivery-obsidian-1", // gitleaks:allow -- not a credential
     });
     await expect(
       adapter.lookupByIdempotencyKey("delivery-obsidian-1"),

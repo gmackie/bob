@@ -35,7 +35,7 @@ describe("createVeritasClient", () => {
     );
     const client = createVeritasClient({
       apiUrl: "https://veritas.example/",
-      apiToken: "vrt_12345678_12345678901234567890123456789012",
+      apiToken: "vrt_12345678_12345678901234567890123456789012", // gitleaks:allow -- synthetic fixture
       fetch: fetcher,
     });
 
@@ -59,7 +59,7 @@ describe("createVeritasClient", () => {
     expect(fetcher.mock.calls[2]?.[0].toString()).toContain("projects.create");
     for (const [, init] of fetcher.mock.calls) {
       expect(new Headers(init?.headers).get("authorization")).toBe(
-        "Bearer vrt_12345678_12345678901234567890123456789012",
+        "Bearer vrt_12345678_12345678901234567890123456789012", // gitleaks:allow -- synthetic fixture
       );
     }
     expect(String(fetcher.mock.calls[2]?.[1]?.body)).toContain(
@@ -70,7 +70,7 @@ describe("createVeritasClient", () => {
   it("returns null when Veritas reports that a linked project no longer exists", async () => {
     const client = createVeritasClient({
       apiUrl: "https://veritas.example",
-      apiToken: "vrt_12345678_12345678901234567890123456789012",
+      apiToken: "vrt_12345678_12345678901234567890123456789012", // gitleaks:allow -- synthetic fixture
       fetch: async () =>
         new Response(
           JSON.stringify({

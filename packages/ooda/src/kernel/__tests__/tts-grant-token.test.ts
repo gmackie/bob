@@ -1,13 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  createTtsGrantToken,
-  hashTtsGrantToken,
-} from "../tts-grant-token";
+import { createTtsGrantToken, hashTtsGrantToken } from "../tts-grant-token";
 
 describe("TTS grant tokens", () => {
   it("derives an opaque, replayable token without embedding the secret", async () => {
-    const secret = "0123456789abcdef0123456789abcdef";
+    const secret = "0123456789abcdef0123456789abcdef"; // gitleaks:allow -- synthetic fixture
     const grantId = "0198-tts-grant";
 
     const first = await createTtsGrantToken(grantId, secret);
