@@ -13,8 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@gmacko/ooda": "workspace:*",
-    "openapi-fetch": "catalog:"
+    "@gmacko/ooda": "workspace:*"
   },
   "devDependencies": {
     "@gmacko/tsconfig": "workspace:*",

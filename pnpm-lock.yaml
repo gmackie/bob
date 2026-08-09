@@ -2039,9 +2039,6 @@ importers:
       '@gmacko/ooda':
         specifier: workspace:*
         version: link:../ooda
-      openapi-fetch:
-        specifier: 'catalog:'
-        version: 0.17.0
     devDependencies:
       '@gmacko/tsconfig':
         specifier: workspace:*
