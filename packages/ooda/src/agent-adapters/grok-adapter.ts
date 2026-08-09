@@ -228,6 +228,14 @@ export class GrokAdapter implements AgentAdapter {
       },
     });
 
+    child.once("close", (code, signal) => {
+      client.rejectAll(
+        new Error(
+          `Grok ACP process closed before pending requests completed (code ${code ?? "null"}, signal ${signal ?? "none"})`,
+        ),
+      );
+    });
+
     child.stdout.on("data", (data: Buffer) => client.feed(data.toString()));
 
     child.stderr.on("data", (data: Buffer) => {
