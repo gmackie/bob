@@ -42,7 +42,11 @@ jobs:
         # in parallel, and the big Next.js app (@bob/blder) spikes enough memory
         # that a concurrent run intermittently OOM-kills one (exit 137) under
         # the runner's RAM+swap pressure. Serial typecheck can't collectively
-        # exhaust memory; same reasoning as the serialized test step below.
+        # exhaust memory. The runner deliberately defaults Node to a 1.5GB heap,
+        # but @bob/blder alone can exceed that ceiling, so this one serialized
+        # step receives headroom within the job's 5GB container limit.
+        env:
+          NODE_OPTIONS: --max-old-space-size=3072
         run: pnpm exec turbo run typecheck --concurrency=1
 
       - name: Lint
