@@ -87,7 +87,7 @@ function assertReplayMatches(
   }
 }
 
-type OodaExecutionEvidence = {
+interface OodaExecutionEvidence {
   id: string;
   source: "bob" | "kanbanger" | "forgegraph";
   kind: "work_item" | "run" | "revision" | "build" | "deployment" | "run_event";
@@ -97,7 +97,7 @@ type OodaExecutionEvidence = {
   path: string;
   occurredAt: string;
   metadata: Record<string, unknown>;
-};
+}
 
 function timestamp(value: string | Date | null | undefined): string {
   if (value instanceof Date) return value.toISOString();
@@ -678,7 +678,9 @@ export async function publicApiCreateRun(
  * /home/bob/dev (where projects + scaffolds live) and contain no `..` segments.
  * Returns the path if allowed, else undefined (caller falls back to default).
  */
-export function safeWorkingDirectory(dir: string | undefined): string | undefined {
+export function safeWorkingDirectory(
+  dir: string | undefined,
+): string | undefined {
   if (!dir) return undefined;
   const trimmed = dir.trim();
   if (!trimmed.startsWith("/home/bob/dev/")) return undefined;
