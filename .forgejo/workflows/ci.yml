@@ -68,8 +68,12 @@ jobs:
         # lets @bob/db and @bob/api's own vitest processes detect this
         # already-running instance instead of racing to start a second one.
         run: |
-          mkdir -p data/pglite
-          nohup npx @gmacko/emulate start -s postgres --seed emulate.config.yaml \
+          EMULATE_BIN="${PWD}/node_modules/.bin/emulate"
+          EMULATE_CONFIG="${PWD}/emulate.config.yaml"
+          EMULATE_STATE="$(mktemp -d /tmp/bob-emulate.XXXXXX)"
+          mkdir -p "${EMULATE_STATE}/data/pglite"
+          cd "${EMULATE_STATE}"
+          nohup "${EMULATE_BIN}" start -s postgres --seed "${EMULATE_CONFIG}" \
             > /tmp/emulate.log 2>&1 &
           echo "Waiting for emulated postgres wire protocol on :5432..."
           # A cold npx cache means @gmacko/emulate has to install and compile

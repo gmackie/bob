@@ -22,5 +22,9 @@ packages/research-backend/.venv/
 .wrangler/
 .deploy/
 
+# @gmacko/emulate runtime state. PGlite clusters are generated, platform-
+# specific database files and must never be committed or reused by CI.
+/data/pglite/
+
 # Preflight local build metadata
 .preflight/
