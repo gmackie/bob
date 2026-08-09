@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 type InspectorTab = "proposals" | "context" | "memory" | "activity";
 
 const LAST_CONVERSATION_KEY = "ooda:web:last-conversation:v1";
+const PENDING_NEW_THOUGHT_KEY = "ooda:web:pending-new-thought:v1";
 
 function makeId(): string {
   return globalThis.crypto.randomUUID();
@@ -184,11 +185,28 @@ export function ConversationWorkspace() {
     let cancelled = false;
     void (async () => {
       try {
+        const search = new URLSearchParams(window.location.search);
+        if (search.get("new") === "1") {
+          const existingKey = sessionStorage.getItem(PENDING_NEW_THOUGHT_KEY);
+          const idempotencyKey = existingKey ?? makeId();
+          sessionStorage.setItem(PENDING_NEW_THOUGHT_KEY, idempotencyKey);
+          const created = await client.conversations.create({
+            title: "New thought",
+            hostProvider: "grok",
+            hostProfile: "daily",
+            sensitivityCeiling: "personal",
+            ttsPolicy: "allowed",
+            idempotencyKey,
+          });
+          if (cancelled) return;
+          sessionStorage.removeItem(PENDING_NEW_THOUGHT_KEY);
+          await refreshConversations();
+          await openConversation(created.conversation.id);
+          return;
+        }
         const available = await refreshConversations();
         if (cancelled) return;
-        const requested = new URLSearchParams(window.location.search).get(
-          "conversation",
-        );
+        const requested = search.get("conversation");
         const last = localStorage.getItem(LAST_CONVERSATION_KEY);
         const initial =
           available.find((item) => item.id === requested) ??
@@ -204,7 +222,7 @@ export function ConversationWorkspace() {
     return () => {
       cancelled = true;
     };
-  }, [openConversation, refreshConversations]);
+  }, [client, openConversation, refreshConversations]);
 
   useEffect(() => {
     if (!selectedId) return;

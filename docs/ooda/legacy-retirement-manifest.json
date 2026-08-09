@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-08-09T01:16:31-04:00",
+  "status": "parity_verification_in_progress",
+  "canonical": {
+    "repository": "/Volumes/dev/bob/bob",
+    "worktree": "/Users/mackieg/.config/superpowers/worktrees/bob/feat/ooda-personal-os",
+    "branch": "feat/ooda-personal-os",
+    "baseCommit": "371b09aee71fced72aecee6189cd1fff6a3a24a5",
+    "latestVerifiedCommit": "bbf4e5fe6689fc9ec07e216f60efda0d270ed468",
+    "webOwner": "apps/ooda-edge",
+    "kernelOwner": "packages/ooda",
+    "clientOwner": "packages/ooda-client",
+    "runnerOwner": "apps/ooda-runner",
+    "mobileOwner": "apps/mobile-bob"
+  },
+  "standalone": {
+    "repository": "/Volumes/dev/bob/ooda",
+    "headCommit": "cb21395d8f61c4a3a11ec945b046a81b3d4217cb",
+    "branch": "main",
+    "archiveEligible": false,
+    "runtimeOwner": false,
+    "remoteCredentialsEmbedded": false,
+    "userOwnedDirtyPaths": [
+      ".forgegraph.yaml",
+      "docs/plans/2026-04-22-p1-backlog-plan.md"
+    ],
+    "archiveBlockers": [
+      "The 14-day production dogfood gate has not completed.",
+      "Production mobile and edge canonical-sequence parity has not yet been recorded.",
+      "The standalone 62,293-source vault import and pgvector backfill has not yet been promoted into canonical storage.",
+      "User-owned dirty paths require a preserved patch or commit before archival."
+    ]
+  },
+  "legacyRoutes": {
+    "/": "/conversations",
+    "/threads": "/conversations",
+    "/threads?new=1": "/conversations?new=1",
+    "/threads/:slug": "/conversations?conversation=:preserved-thread-id",
+    "/threads/:slug/research": "/conversations?conversation=:preserved-thread-id"
+  },
+  "migrationInvariants": {
+    "legacyResearchThreadIdIsConversationId": true,
+    "legacyResearchThreadIdIsInitialBranchId": true,
+    "bobExecutionRecordsRemainExternal": true,
+    "obsidianReceivesCuratedKnowledgeOnly": true,
+    "externalWritesRequireProposalApprovalReceipt": true,
+    "rawMicrophoneAudioRetainedByDefault": false
+  },
+  "canonicalCommitMap": [
+    {
+      "commit": "715108545c2df6cfbb2866baaa4a404ac08b62d1",
+      "capability": "V1 contracts, schema, migration, and event store"
+    },
+    {
+      "commit": "280497af4479e4ac1d31e80bcd2be9a34a01b898",
+      "capability": "Conversation kernel, projections, HTTP, and resumable SSE"
+    },
+    {
+      "commit": "754db5566008796f566e0c1d3d1b1af7b91934f6",
+      "capability": "Canonical mobile conversation foundation"
+    },
+    {
+      "commit": "e9a82849e10c3537539aca5d3a77bfc3377d6ab7",
+      "capability": "Secure ElevenLabs voice playback"
+    },
+    {
+      "commit": "dd49fcba2a497c3e646e78404609c451ebe427d5",
+      "capability": "Subscription-backed host routing"
+    },
+    {
+      "commit": "b87bebd9c9637022f4043affba4d89721da8ca77",
+      "capability": "Policy-gated Bob, KanBanger, BizPulse, and ForgeGraph context"
+    },
+    {
+      "commit": "fa7d85fcb04f3639c5dad196bc1da2ded11bf6f1",
+      "capability": "Bounded jobs and proposal approval ledger"
+    },
+    {
+      "commit": "b8d41ae8fecc75eb8b656121b71b14af983b5346",
+      "capability": "Approved Bob and KanBanger delivery"
+    },
+    {
+      "commit": "e623805f6db306516271af020f9af3e5fe3b436a",
+      "capability": "Voice privacy and durable memory capture"
+    },
+    {
+      "commit": "a55de8189d99e8985a0a7584a8e687fc89695dce",
+      "capability": "Opportunity review and attention lifecycle"
+    },
+    {
+      "commit": "3f972623cf2b053e3799cac9a5262e5d1a5c9652",
+      "capability": "Claude, Codex app-server, and Grok subscription runtimes"
+    },
+    {
+      "commit": "33023f20219201ea77b414264a71764dda074247",
+      "capability": "Approved Obsidian and BizPulse delivery"
+    },
+    {
+      "commit": "8be703149b826218be85a4aaa2cf77b425308904",
+      "capability": "Memory recall and ForgeGraph delivery evidence"
+    },
+    {
+      "commit": "552bf247f671f3c9a3f387b5c21a4017064c7268",
+      "capability": "Creator project delivery"
+    },
+    {
+      "commit": "2a60ae309ab2a9c1f023243230f76044b26d74fa",
+      "capability": "FabForge candidate intake"
+    },
+    {
+      "commit": "d46a27fe772506a365f4a15b2ab652b75aa0ca4e",
+      "capability": "Veritas validation intake"
+    },
+    {
+      "commit": "202f99a3e1249340fee9cf5ef146f27029e1c82d",
+      "capability": "Preflight mobile registration"
+    },
+    {
+      "commit": "bbf4e5fe6689fc9ec07e216f60efda0d270ed468",
+      "capability": "Canonical edge conversation workspace and shared web view models"
+    }
+  ],
+  "retirementGates": {
+    "canonicalContracts": "passed",
+    "canonicalMobileClient": "implemented_not_dogfooded",
+    "canonicalEdgeClient": "implemented_local_production_build",
+    "legacyLinkResolution": "implemented_not_production_verified",
+    "migrationRehearsal": "passed",
+    "standaloneVaultImport": "pending",
+    "productionSequenceParity": "pending",
+    "fourteenDayDogfood": "pending",
+    "standaloneArchive": "blocked"
+  }
+}

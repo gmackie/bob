@@ -25,11 +25,11 @@ export function CommandPalette() {
 
   const commands: Command[] = [
     {
-      id: "new-thread",
-      label: "New Thread",
+      id: "new-thought",
+      label: "New Thought",
       shortcut: "⌘N",
       handler: () => {
-        navigate("/threads?new=1");
+        navigate("/conversations?new=1");
       },
     },
     {
@@ -41,11 +41,11 @@ export function CommandPalette() {
       },
     },
     {
-      id: "go-threads",
-      label: "Go to Threads",
+      id: "go-conversations",
+      label: "Go to Conversations",
       shortcut: "⌘T",
       handler: () => {
-        navigate("/threads");
+        navigate("/conversations");
       },
     },
     {
@@ -81,13 +81,10 @@ export function CommandPalette() {
     }
   }, [open]);
 
-  const executeCommand = useCallback(
-    (command: Command) => {
-      setOpen(false);
-      command.handler();
-    },
-    [],
-  );
+  const executeCommand = useCallback((command: Command) => {
+    setOpen(false);
+    command.handler();
+  }, []);
 
   // Handle keyboard navigation inside the palette
   const handleKeyDown = useCallback(
@@ -121,8 +118,8 @@ export function CommandPalette() {
     {
       key: "n",
       meta: true,
-      handler: () => navigate("/threads?new=1"),
-      description: "New thread",
+      handler: () => navigate("/conversations?new=1"),
+      description: "New thought",
     },
     {
       key: "e",
@@ -135,8 +132,8 @@ export function CommandPalette() {
     {
       key: "t",
       meta: true,
-      handler: () => navigate("/threads"),
-      description: "Go to threads",
+      handler: () => navigate("/conversations"),
+      description: "Go to conversations",
     },
     {
       key: "h",
