@@ -20,7 +20,12 @@ import {
   listConversationEvents,
 } from "../events";
 import { consumeTtsGrant, createTtsGrant } from "../tts-grants";
-import { createHostTurn } from "../host-turns";
+import {
+  claimHostTurn,
+  completeHostTurn,
+  createHostTurn,
+  enqueueHostTurn,
+} from "../host-turns";
 import { HostRoutingError } from "../host-routing";
 import { stableStringify } from "../serialization";
 import {
@@ -91,6 +96,7 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     await applyMigration(migration("0014_puzzling_lady_bullseye.sql"));
     await applyMigration(migration("0015_amazing_hellfire_club.sql"));
     await applyMigration(migration("0016_messy_jack_murdock.sql"));
+    await applyMigration(migration("0017_workable_drax.sql"));
   });
 
   afterAll(async () => {
@@ -263,6 +269,124 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     });
     expect(replay).toEqual({ ...first, replayed: true });
     expect(calls).toBe(1);
+  });
+
+  it("queues a host turn for a subscription runner and persists its native session", async () => {
+    const created = await createConversation(db!, "owner-host-queue", {
+      title: "Subscription conversation",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "host-queue-conversation",
+    });
+    const user = await appendConversationEvent(db!, "owner-host-queue", {
+      conversationId: created.conversation.id,
+      branchId: created.branch.id,
+      type: "user_turn",
+      actor: { type: "user", id: "owner-host-queue" },
+      payload: {
+        display: "Help me turn this thought into a useful next step.",
+      },
+      sensitivity: "personal",
+      correlationId: "host-queue-proof",
+      idempotencyKey: "host-queue-user",
+      occurredAt: "2026-08-08T18:00:00.000Z",
+    });
+    const input = {
+      conversationId: created.conversation.id,
+      userEventId: user.event.id,
+      idempotencyKey: "host-queue-turn",
+    };
+
+    const queued = await enqueueHostTurn(db!, "owner-host-queue", input, {
+      contextSources: [],
+      now: new Date("2026-08-08T18:00:01.000Z"),
+    });
+    const replay = await enqueueHostTurn(db!, "owner-host-queue", input, {
+      contextSources: [],
+      now: new Date("2026-08-08T18:00:02.000Z"),
+    });
+    expect(queued).toMatchObject({ status: "queued", replayed: false });
+    expect(replay).toEqual({ ...queued, replayed: true });
+
+    const claim = await claimHostTurn(
+      db!,
+      {
+        runnerId: "runner-host-1",
+        providers: ["grok", "claude", "openai"],
+        leaseSeconds: 90,
+      },
+      { now: new Date("2026-08-08T18:00:03.000Z") },
+    );
+    expect(claim).toMatchObject({
+      executionId: queued.executionId,
+      preferredProvider: "grok",
+      providerOrder: ["grok", "claude", "openai"],
+      attempt: 1,
+      messages: [
+        {
+          role: "user",
+          content: "Help me turn this thought into a useful next step.",
+        },
+      ],
+    });
+    await expect(
+      claimHostTurn(
+        db!,
+        {
+          runnerId: "runner-host-2",
+          providers: ["grok"],
+          leaseSeconds: 90,
+        },
+        { now: new Date("2026-08-08T18:00:04.000Z") },
+      ),
+    ).resolves.toBeNull();
+
+    const completed = await completeHostTurn(db!, {
+      executionId: queued.executionId,
+      runnerId: "runner-host-1",
+      leaseToken: claim!.leaseToken,
+      provider: "grok",
+      model: "grok-subscription-default",
+      providerResponseId: "grok-session-1:turn-1",
+      response: JSON.stringify({
+        display:
+          "Start by naming the decision and the smallest reversible test.",
+        speakable:
+          "Name the decision, then choose the smallest reversible test.",
+      }),
+      runtimeSession: {
+        provider: "grok",
+        sessionId: "grok-session-1",
+        turnId: "turn-1",
+        transport: "acp",
+        authMode: "subscription",
+      },
+      failures: [],
+      idempotencyKey: "host-queue-complete-1",
+      occurredAt: "2026-08-08T18:00:04.000Z",
+    });
+    expect(completed).toMatchObject({
+      provider: "grok",
+      assistantEvent: {
+        payload: {
+          display:
+            "Start by naming the decision and the smallest reversible test.",
+        },
+      },
+    });
+    const [execution] = await db!
+      .select()
+      .from(schema.hostTurnExecutions)
+      .where(eq(schema.hostTurnExecutions.id, queued.executionId));
+    expect(execution).toMatchObject({
+      status: "completed",
+      authMode: "subscription",
+      nativeSessionId: "grok-session-1",
+      nativeTurnId: "turn-1",
+      runtimeTransport: "acp",
+    });
   });
 
   it("repairs a host execution after the assistant event was persisted before a crash", async () => {
@@ -805,11 +929,7 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
       feedbackState: "suppressed" as const,
       idempotencyKey: "suppress-correction-edge",
     };
-    const feedback = await submitMemoryFeedback(
-      db!,
-      "owner-a",
-      feedbackInput,
-    );
+    const feedback = await submitMemoryFeedback(db!, "owner-a", feedbackInput);
     const feedbackReplay = await submitMemoryFeedback(
       db!,
       "owner-a",
@@ -1189,7 +1309,10 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
       branchId: conversation.branch.id,
       type: "user_turn",
       actor: { type: "user", id: "owner-opportunity" },
-      payload: { display: "What if OODA turned good conversations into well-scoped work?" },
+      payload: {
+        display:
+          "What if OODA turned good conversations into well-scoped work?",
+      },
       sensitivity: "personal",
       correlationId: "opportunity-proof",
       idempotencyKey: "opportunity-turn",
@@ -1204,14 +1327,21 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     const opportunity = {
       problem: "Ideas get lost before they become appropriately scoped work.",
       audience: "A single operator managing several technical ventures.",
-      currentWorkaround: "Manually copy chat notes into several project systems.",
-      differentiation: "Preserve conversational provenance through approved execution.",
-      evidence: ["The operator already uses OODA, Bob, KanBanger, and BizPulse."],
-      strategicFit: "This is the central promise of the OODA personal operating system.",
+      currentWorkaround:
+        "Manually copy chat notes into several project systems.",
+      differentiation:
+        "Preserve conversational provenance through approved execution.",
+      evidence: [
+        "The operator already uses OODA, Bob, KanBanger, and BizPulse.",
+      ],
+      strategicFit:
+        "This is the central promise of the OODA personal operating system.",
       smallestTest: "Ship one approved conversation-to-project flow.",
       effort: "One focused implementation stream.",
       risks: ["Too much automation could create unwanted commitments."],
-      killCriteria: ["The flow duplicates durable objects or loses provenance."],
+      killCriteria: [
+        "The flow duplicates durable objects or loses provenance.",
+      ],
     };
     const reviewInput = {
       memorySeedId: seed!.id,

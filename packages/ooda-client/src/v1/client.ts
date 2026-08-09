@@ -19,7 +19,7 @@ import type {
   CreateConversationInputV1,
   CreateConversationResultV1,
   CreateHostTurnInputV1,
-  CreateHostTurnResultV1,
+  EnqueueHostTurnResultV1,
   CreateAgentJobInputV1,
   CreateAgentJobResultV1,
   CreateProposalInputV1,
@@ -264,7 +264,7 @@ export function createOodaV1Client(options: OodaV1ClientOptions = {}) {
     },
     host: {
       createTurn(input: CreateHostTurnInputV1) {
-        return request<CreateHostTurnResultV1>("/api/v1/host-turns", {
+        return request<EnqueueHostTurnResultV1>("/api/v1/host-turns", {
           method: "POST",
           body: input,
         });

@@ -21,6 +21,17 @@ export const RunnerConfigSchema = z.object({
   bobMaxConcurrent: z.coerce.number().default(2),
   agentJobScratchRoot: z.string().default(join(tmpdir(), "ooda-agent-jobs")),
   agentJobMaxConcurrent: z.coerce.number().int().min(1).max(3).default(3),
+  hostTurnEnabled: z
+    .preprocess(
+      (value) => value === undefined || value === true || value === "true",
+      z.boolean(),
+    )
+    .default(true),
+  hostTurnScratchRoot: z.string().default(join(tmpdir(), "ooda-host-turns")),
+  hostTurnMaxConcurrent: z.coerce.number().int().min(1).max(3).default(1),
+  grokHostModel: z.string().optional(),
+  claudeHostModel: z.string().optional(),
+  openaiHostModel: z.string().optional(),
 });
 
 export type RunnerConfig = z.infer<typeof RunnerConfigSchema>;
@@ -41,5 +52,11 @@ export function loadConfig(): RunnerConfig {
     bobMaxConcurrent: process.env.BOB_MAX_CONCURRENT,
     agentJobScratchRoot: process.env.OODA_AGENT_JOB_SCRATCH_ROOT,
     agentJobMaxConcurrent: process.env.OODA_AGENT_JOB_MAX_CONCURRENT,
+    hostTurnEnabled: process.env.OODA_HOST_TURN_ENABLED,
+    hostTurnScratchRoot: process.env.OODA_HOST_TURN_SCRATCH_ROOT,
+    hostTurnMaxConcurrent: process.env.OODA_HOST_TURN_MAX_CONCURRENT,
+    grokHostModel: process.env.OODA_GROK_HOST_MODEL,
+    claudeHostModel: process.env.OODA_CLAUDE_HOST_MODEL,
+    openaiHostModel: process.env.OODA_OPENAI_HOST_MODEL,
   });
 }

@@ -27,6 +27,7 @@ import { BobRunReporter } from "./bob-run-reporter";
 import { AgentJobWorker } from "./agent-jobs/agent-job-worker";
 import { BobDomainAdapter } from "@gmacko/ooda/integrations";
 import { IntegrationDeliveryWorker } from "./integrations/integration-delivery-worker";
+import { HostTurnWorker } from "./host-turns/host-turn-worker";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const POLL_INTERVAL_MS = 2_000;
@@ -168,6 +169,7 @@ export class RunnerServer {
   private capabilityRegistry: CapabilityRegistry;
   private buddyMcpServer: BuddyMcpServer;
   private agentJobWorker: AgentJobWorker | null = null;
+  private hostTurnWorker: HostTurnWorker | null = null;
   private integrationDeliveryWorker: IntegrationDeliveryWorker | null = null;
 
   constructor(private config: RunnerConfig) {
@@ -292,6 +294,7 @@ export class RunnerServer {
     this.pollTimer = setInterval(() => {
       void this.pollForSessions();
       void this.agentJobWorker?.poll();
+      void this.hostTurnWorker?.poll();
       void this.integrationDeliveryWorker?.poll();
     }, POLL_INTERVAL_MS);
 
@@ -329,6 +332,30 @@ export class RunnerServer {
               claim: (input) => this.trpc.jobs.claim.mutate(input),
               recordEvent: (input) => this.trpc.jobs.recordEvent.mutate(input),
               control: (input) => this.trpc.jobs.control.query(input),
+            },
+          });
+        }
+        if (!this.hostTurnWorker && this.config.hostTurnEnabled) {
+          this.hostTurnWorker = new HostTurnWorker({
+            runnerId: device.id,
+            scratchRoot: this.config.hostTurnScratchRoot,
+            adapters: this.adapters,
+            maxConcurrent: this.config.hostTurnMaxConcurrent,
+            models: {
+              ...(this.config.grokHostModel
+                ? { grok: this.config.grokHostModel }
+                : {}),
+              ...(this.config.claudeHostModel
+                ? { claude: this.config.claudeHostModel }
+                : {}),
+              ...(this.config.openaiHostModel
+                ? { openai: this.config.openaiHostModel }
+                : {}),
+            },
+            api: {
+              claim: (input) => this.trpc.host.claim.mutate(input),
+              complete: (input) => this.trpc.host.complete.mutate(input),
+              fail: (input) => this.trpc.host.fail.mutate(input),
             },
           });
         }
@@ -761,6 +788,8 @@ export class RunnerServer {
     }
     await this.agentJobWorker?.stop();
     this.agentJobWorker = null;
+    await this.hostTurnWorker?.stop();
+    this.hostTurnWorker = null;
     this.integrationDeliveryWorker?.stop();
     this.integrationDeliveryWorker = null;
     await this.buddyMcpServer.stop();

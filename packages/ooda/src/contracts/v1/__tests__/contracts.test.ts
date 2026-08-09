@@ -20,6 +20,9 @@ import {
   CreateConversationResultV1Schema,
   CreateHostTurnInputV1Schema,
   CreateHostTurnResultV1Schema,
+  ClaimHostTurnResultV1Schema,
+  CompleteHostTurnInputV1Schema,
+  EnqueueHostTurnResultV1Schema,
   CreateAgentJobInputV1Schema,
   CreateAgentJobResultV1Schema,
   CreateOpportunityReviewInputV1Schema,
@@ -596,5 +599,53 @@ describe("OODA V1 contracts", () => {
 
     expect(CreateHostTurnInputV1Schema.parse(input)).toEqual(input);
     expect(CreateHostTurnResultV1Schema.parse(result)).toEqual(result);
+  });
+
+  it("defines a fenced subscription-host queue without provider credentials", () => {
+    expect(
+      EnqueueHostTurnResultV1Schema.safeParse({
+        executionId: "execution-1",
+        status: "queued",
+        contextPackId: "context-1",
+        replayed: false,
+      }).success,
+    ).toBe(true);
+    expect(
+      ClaimHostTurnResultV1Schema.safeParse({
+        executionId: "execution-1",
+        conversationId: "conversation-1",
+        userEventId: "event-user-1",
+        contextPackId: "context-1",
+        preferredProvider: "grok",
+        providerOrder: ["grok", "claude", "openai"],
+        messages: [{ role: "user", content: "Hello" }],
+        system: "Return display and speakable JSON.",
+        sensitivity: "personal",
+        correlationId: "correlation-1",
+        attempt: 1,
+        leaseToken: "11111111-1111-4111-8111-111111111111",
+      }).success,
+    ).toBe(true);
+    expect(
+      CompleteHostTurnInputV1Schema.safeParse({
+        executionId: "execution-1",
+        runnerId: "runner-1",
+        leaseToken: "11111111-1111-4111-8111-111111111111",
+        provider: "openai",
+        model: "codex-subscription-default",
+        providerResponseId: "thread-1:turn-1",
+        response: '{"display":"Hello","speakable":"Hello"}',
+        runtimeSession: {
+          provider: "openai",
+          sessionId: "thread-1",
+          turnId: "turn-1",
+          transport: "app_server",
+          authMode: "subscription",
+        },
+        failures: [],
+        idempotencyKey: "complete-1",
+        occurredAt,
+      }).success,
+    ).toBe(true);
   });
 });

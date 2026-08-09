@@ -10,4 +10,11 @@ describe("RunnerConfigSchema", () => {
         .bobDeliveryEnabled,
     ).toBe(true);
   });
+
+  it("enables the subscription host worker by default and allows a kill switch", () => {
+    expect(RunnerConfigSchema.parse({}).hostTurnEnabled).toBe(true);
+    expect(
+      RunnerConfigSchema.parse({ hostTurnEnabled: "false" }).hostTurnEnabled,
+    ).toBe(false);
+  });
 });

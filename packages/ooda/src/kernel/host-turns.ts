@@ -1,18 +1,41 @@
-import { and, eq, lte, ne, or } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  isNotNull,
+  lt,
+  lte,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 
 import type {
+  ClaimHostTurnInputV1,
+  ClaimHostTurnResultV1,
+  CompleteHostTurnInputV1,
   CreateHostTurnInputV1,
   CreateHostTurnResultV1,
+  EnqueueHostTurnResultV1,
+  FailHostTurnInputV1,
 } from "../contracts/v1";
 import type { db as database } from "../db/client";
 import { conversationEvents, conversations } from "../db/schema/conversations";
 import { hostTurnExecutions } from "../db/schema/host";
-import { contextPacks } from "../db/schema/orchestration";
+import { contextItems, contextPacks } from "../db/schema/orchestration";
 import { buildHostContextPack } from "./context-packs";
-import type { ConversationContextSource } from "./context-sources";
+import {
+  formatDisclosedContext,
+  type ContextDecision,
+  type ConversationContextSource,
+} from "./context-sources";
 import { appendConversationEvent } from "./events";
 import {
   HostRoutingError,
+  normalizeHostOutput,
   routeHostCompletion,
   type HostMessage,
   type HostProviderClient,
@@ -456,4 +479,532 @@ export async function createHostTurn(
     }
     throw error;
   }
+}
+
+function queuedReceipt(
+  execution: typeof hostTurnExecutions.$inferSelect,
+  replayed: boolean,
+): EnqueueHostTurnResultV1 {
+  const status =
+    execution.status === "running" ||
+    execution.status === "completed" ||
+    execution.status === "failed"
+      ? execution.status
+      : "queued";
+  return {
+    executionId: execution.id,
+    status,
+    ...(execution.contextPackId
+      ? { contextPackId: execution.contextPackId }
+      : {}),
+    ...(execution.assistantEventId
+      ? { assistantEventId: execution.assistantEventId }
+      : {}),
+    replayed,
+  };
+}
+
+export async function enqueueHostTurn(
+  db: OodaDatabase,
+  ownerId: string,
+  input: CreateHostTurnInputV1,
+  options: {
+    contextSources?: ConversationContextSource[];
+    now?: Date;
+    signal?: AbortSignal;
+  } = {},
+): Promise<EnqueueHostTurnResultV1> {
+  const [source] = await db
+    .select({ conversation: conversations, event: conversationEvents })
+    .from(conversations)
+    .innerJoin(
+      conversationEvents,
+      and(
+        eq(conversationEvents.id, input.userEventId),
+        eq(conversationEvents.conversationId, conversations.id),
+      ),
+    )
+    .where(
+      and(
+        eq(conversations.id, input.conversationId),
+        eq(conversations.ownerId, ownerId),
+      ),
+    )
+    .limit(1);
+  if (!source || source.event.type !== "user_turn") throw notFound("User turn");
+
+  const fingerprint = stableStringify(input);
+  let execution = await findExecution(db, ownerId, input);
+  if (execution) {
+    if (execution.commandFingerprint !== fingerprint)
+      throw idempotencyConflict();
+    return queuedReceipt(execution, true);
+  }
+
+  const now = options.now ?? new Date();
+  try {
+    const [created] = await db
+      .insert(hostTurnExecutions)
+      .values({
+        ownerId,
+        conversationId: input.conversationId,
+        userEventId: input.userEventId,
+        idempotencyKey: input.idempotencyKey,
+        commandFingerprint: fingerprint,
+        status: "queued",
+        preferredProvider: providerId(source.conversation.hostProvider),
+        leaseExpiresAt: now,
+        startedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+    if (!created) throw new Error("Host turn queue insert returned no row");
+    execution = created;
+  } catch (error) {
+    if (!isUniqueViolation(error)) throw error;
+    execution = await findExecution(db, ownerId, input);
+    if (!execution) throw error;
+    if (execution.commandFingerprint !== fingerprint)
+      throw idempotencyConflict();
+    return queuedReceipt(execution, true);
+  }
+
+  try {
+    const context = await buildHostContextPack(db, ownerId, {
+      conversationId: input.conversationId,
+      provider: providerId(source.conversation.hostProvider),
+      query: payloadText(source.event.payload) ?? "",
+      sources: options.contextSources ?? [],
+      now,
+      signal: options.signal,
+    });
+    const [prepared] = await db
+      .update(hostTurnExecutions)
+      .set({ contextPackId: context.pack.id, updatedAt: now })
+      .where(eq(hostTurnExecutions.id, execution.id))
+      .returning();
+    return queuedReceipt(prepared ?? execution, false);
+  } catch (error) {
+    await db
+      .update(hostTurnExecutions)
+      .set({
+        status: "failed",
+        errorCode: "CONTEXT_PACK_FAILED",
+        error: error instanceof Error ? error.message : String(error),
+        updatedAt: now,
+      })
+      .where(eq(hostTurnExecutions.id, execution.id));
+    throw error;
+  }
+}
+
+export async function claimHostTurn(
+  db: OodaDatabase,
+  input: ClaimHostTurnInputV1,
+  options: { now?: Date } = {},
+): Promise<ClaimHostTurnResultV1> {
+  const now = options.now ?? new Date();
+  const claimed = await db.transaction(async (tx) => {
+    const claimable = or(
+      eq(hostTurnExecutions.status, "queued"),
+      and(
+        eq(hostTurnExecutions.status, "running"),
+        lt(hostTurnExecutions.leaseExpiresAt, now),
+      ),
+    )!;
+    const [candidate] = await tx
+      .select()
+      .from(hostTurnExecutions)
+      .where(and(claimable, isNotNull(hostTurnExecutions.contextPackId)))
+      .orderBy(asc(hostTurnExecutions.createdAt))
+      .for("update", { skipLocked: true })
+      .limit(1);
+    if (!candidate) return null;
+    const leaseToken = randomUUID();
+    const attempt = candidate.attempt + 1;
+    const [updated] = await tx
+      .update(hostTurnExecutions)
+      .set({
+        status: "running",
+        claimedBy: input.runnerId,
+        leaseToken,
+        attempt,
+        leaseDurationSeconds: input.leaseSeconds,
+        lastHeartbeatAt: now,
+        leaseExpiresAt: new Date(now.getTime() + input.leaseSeconds * 1_000),
+        startedAt: candidate.startedAt ?? now,
+        errorCode: null,
+        error: null,
+        updatedAt: now,
+      })
+      .where(and(eq(hostTurnExecutions.id, candidate.id), claimable))
+      .returning();
+    return updated ? { execution: updated, leaseToken, attempt } : null;
+  });
+  if (!claimed || !claimed.execution.contextPackId) return null;
+
+  const execution = claimed.execution;
+  const contextPackId = execution.contextPackId!;
+  const preferred = providerId(execution.preferredProvider ?? "grok");
+  const providerOrder = [
+    preferred,
+    ...(["grok", "claude", "openai"] as const).filter(
+      (provider) => provider !== preferred,
+    ),
+  ].filter((provider) => input.providers.includes(provider));
+  if (!providerOrder.length) return null;
+  const [source] = await db
+    .select()
+    .from(conversationEvents)
+    .where(eq(conversationEvents.id, execution.userEventId))
+    .limit(1);
+  if (!source) throw notFound("User turn");
+  const projection = await rebuildStoredConversationProjections(
+    db,
+    execution.ownerId,
+    execution.conversationId,
+    source.branchId,
+  );
+  const messages: HostMessage[] = projection.timeline.items.flatMap((item) => {
+    if (BigInt(item.event.sequence) > source.sequence) return [];
+    const content = payloadText(item.effectivePayload);
+    if (
+      !content ||
+      (item.event.type !== "user_turn" && item.event.type !== "assistant_turn")
+    )
+      return [];
+    return [
+      {
+        role:
+          item.event.type === "user_turn"
+            ? ("user" as const)
+            : ("assistant" as const),
+        content,
+      },
+    ];
+  });
+  const storedContext = await db
+    .select()
+    .from(contextItems)
+    .where(eq(contextItems.contextPackId, contextPackId))
+    .orderBy(asc(contextItems.ordinal));
+  const promptContext = formatDisclosedContext(
+    storedContext.map((item) => ({
+      sourceType: item.sourceType as ContextDecision["sourceType"],
+      sourceId: item.sourceId,
+      sensitivity: item.sensitivity,
+      decision: item.decision as ContextDecision["decision"],
+      reason: item.reason,
+      ...(item.content ? { content: item.content } : {}),
+      ...(item.redaction ? { redaction: item.redaction } : {}),
+    })),
+  );
+  const [previous] = await db
+    .select()
+    .from(hostTurnExecutions)
+    .where(
+      and(
+        eq(hostTurnExecutions.conversationId, execution.conversationId),
+        eq(hostTurnExecutions.status, "completed"),
+        isNotNull(hostTurnExecutions.nativeSessionId),
+      ),
+    )
+    .orderBy(desc(hostTurnExecutions.completedAt))
+    .limit(1);
+  const previousProvider = previous?.provider
+    ? persistedProviderId(previous.provider)
+    : null;
+  return {
+    executionId: execution.id,
+    conversationId: execution.conversationId,
+    userEventId: execution.userEventId,
+    contextPackId,
+    preferredProvider: preferred,
+    providerOrder,
+    messages,
+    system: promptContext
+      ? `${HOST_SYSTEM_PROMPT}\n\n${promptContext}`
+      : HOST_SYSTEM_PROMPT,
+    sensitivity: source.sensitivity,
+    correlationId: source.correlationId,
+    ...(previous && previousProvider && previous.nativeSessionId
+      ? {
+          runtimeSession: {
+            provider: previousProvider,
+            sessionId: previous.nativeSessionId,
+            ...(previous.nativeTurnId ? { turnId: previous.nativeTurnId } : {}),
+            transport:
+              previous.runtimeTransport === "app_server" ||
+              previous.runtimeTransport === "acp"
+                ? previous.runtimeTransport
+                : ("cli" as const),
+            authMode:
+              previous.authMode === "api_key"
+                ? ("api_key" as const)
+                : ("subscription" as const),
+          },
+        }
+      : {}),
+    attempt: claimed.attempt,
+    leaseToken: claimed.leaseToken,
+  };
+}
+
+export async function completeHostTurn(
+  db: OodaDatabase,
+  input: CompleteHostTurnInputV1,
+): Promise<CreateHostTurnResultV1> {
+  const fingerprint = stableStringify(input);
+  const [existing] = await db
+    .select()
+    .from(hostTurnExecutions)
+    .where(eq(hostTurnExecutions.id, input.executionId))
+    .limit(1);
+  if (!existing) throw notFound("Host turn");
+  if (existing.status === "completed") {
+    if (
+      existing.completionIdempotencyKey !== input.idempotencyKey ||
+      existing.completionFingerprint !== fingerprint
+    )
+      throw idempotencyConflict();
+    const replay = await completedResult(db, existing);
+    if (!replay) throw new Error("Completed host turn has no assistant event");
+    return replay;
+  }
+  if (
+    input.runtimeSession &&
+    input.runtimeSession.provider !== input.provider
+  ) {
+    throw new OodaKernelProblem(
+      "VALIDATION_FAILED",
+      422,
+      "Runtime session provider must match the completing provider",
+    );
+  }
+
+  return db.transaction(async (tx) => {
+    const [owned] = await tx
+      .select({ execution: hostTurnExecutions, source: conversationEvents })
+      .from(hostTurnExecutions)
+      .innerJoin(
+        conversationEvents,
+        eq(conversationEvents.id, hostTurnExecutions.userEventId),
+      )
+      .where(eq(hostTurnExecutions.id, input.executionId))
+      .for("update")
+      .limit(1);
+    if (!owned) throw notFound("Host turn");
+    if (
+      owned.execution.status !== "running" ||
+      owned.execution.claimedBy !== input.runnerId ||
+      owned.execution.leaseToken !== input.leaseToken
+    ) {
+      throw new OodaKernelProblem(
+        "CONFLICT",
+        409,
+        "The host turn lease is no longer active",
+      );
+    }
+    const now = new Date(input.occurredAt);
+    const output = normalizeHostOutput(input.response);
+    const preferred = providerId(owned.execution.preferredProvider ?? "grok");
+    const fallback = input.failures.length
+      ? { preferredProvider: preferred, failures: input.failures }
+      : undefined;
+
+    if (fallback) {
+      const [allocated] = await tx
+        .update(conversations)
+        .set({
+          lastSequence: sql`${conversations.lastSequence} + 1`,
+          updatedAt: now,
+        })
+        .where(eq(conversations.id, owned.execution.conversationId))
+        .returning({ sequence: conversations.lastSequence });
+      await tx.insert(conversationEvents).values({
+        conversationId: owned.execution.conversationId,
+        branchId: owned.source.branchId,
+        sequence: BigInt(allocated!.sequence),
+        type: "system_annotation",
+        actorType: "system",
+        actorId: "ooda",
+        payload: {
+          kind: "provider_fallback",
+          selectedProvider: input.provider,
+          ...fallback,
+        },
+        sensitivity: "general",
+        correlationId: owned.source.correlationId,
+        causationId: owned.source.id,
+        idempotencyKey: `${owned.execution.idempotencyKey}:fallback`,
+        occurredAt: now,
+      });
+    }
+
+    const [allocated] = await tx
+      .update(conversations)
+      .set({
+        lastSequence: sql`${conversations.lastSequence} + 1`,
+        updatedAt: now,
+      })
+      .where(eq(conversations.id, owned.execution.conversationId))
+      .returning({ sequence: conversations.lastSequence });
+    const [assistant] = await tx
+      .insert(conversationEvents)
+      .values({
+        conversationId: owned.execution.conversationId,
+        branchId: owned.source.branchId,
+        sequence: BigInt(allocated!.sequence),
+        type: "assistant_turn",
+        actorType: "host",
+        actorId: input.provider,
+        payload: {
+          ...output,
+          provider: input.provider,
+          model: input.model,
+          providerResponseId: input.providerResponseId,
+          contextPackId: owned.execution.contextPackId,
+        },
+        sensitivity: owned.source.sensitivity,
+        correlationId: owned.source.correlationId,
+        causationId: owned.source.id,
+        idempotencyKey: `${owned.execution.idempotencyKey}:assistant`,
+        occurredAt: now,
+      })
+      .returning();
+    if (!assistant)
+      throw new Error("Host assistant event insert returned no row");
+    await tx
+      .update(contextPacks)
+      .set({ provider: input.provider })
+      .where(eq(contextPacks.id, owned.execution.contextPackId!));
+    await tx
+      .update(hostTurnExecutions)
+      .set({
+        status: "completed",
+        assistantEventId: assistant.id,
+        provider: input.provider,
+        model: input.model,
+        providerResponseId: input.providerResponseId,
+        authMode: input.runtimeSession?.authMode ?? "subscription",
+        nativeSessionId: input.runtimeSession?.sessionId ?? null,
+        nativeTurnId: input.runtimeSession?.turnId ?? null,
+        runtimeTransport: input.runtimeSession?.transport ?? null,
+        fallback: fallback ?? null,
+        completionIdempotencyKey: input.idempotencyKey,
+        completionFingerprint: fingerprint,
+        completedAt: now,
+        leaseExpiresAt: now,
+        lastHeartbeatAt: now,
+        updatedAt: now,
+      })
+      .where(eq(hostTurnExecutions.id, owned.execution.id));
+    return {
+      assistantEvent: mapEvent(assistant),
+      provider: input.provider,
+      model: input.model,
+      providerResponseId: input.providerResponseId,
+      ...(owned.execution.contextPackId
+        ? { contextPackId: owned.execution.contextPackId }
+        : {}),
+      replayed: false,
+      ...(fallback ? { fallback } : {}),
+    };
+  });
+}
+
+export async function failHostTurn(
+  db: OodaDatabase,
+  input: FailHostTurnInputV1,
+): Promise<{ executionId: string; status: "failed"; replayed: boolean }> {
+  const [execution] = await db
+    .select()
+    .from(hostTurnExecutions)
+    .where(eq(hostTurnExecutions.id, input.executionId))
+    .limit(1);
+  if (!execution) throw notFound("Host turn");
+  if (execution.status === "failed") {
+    if (
+      execution.completionIdempotencyKey !== input.idempotencyKey ||
+      execution.completionFingerprint !== stableStringify(input)
+    )
+      throw idempotencyConflict();
+    return { executionId: execution.id, status: "failed", replayed: true };
+  }
+  return db.transaction(async (tx) => {
+    const [owned] = await tx
+      .select({ execution: hostTurnExecutions, source: conversationEvents })
+      .from(hostTurnExecutions)
+      .innerJoin(
+        conversationEvents,
+        eq(conversationEvents.id, hostTurnExecutions.userEventId),
+      )
+      .where(eq(hostTurnExecutions.id, input.executionId))
+      .for("update")
+      .limit(1);
+    if (!owned) throw notFound("Host turn");
+    if (
+      owned.execution.status !== "running" ||
+      owned.execution.claimedBy !== input.runnerId ||
+      owned.execution.leaseToken !== input.leaseToken
+    )
+      throw new OodaKernelProblem(
+        "CONFLICT",
+        409,
+        "The host turn lease is no longer active",
+      );
+    const now = new Date(input.occurredAt);
+    const [allocated] = await tx
+      .update(conversations)
+      .set({
+        lastSequence: sql`${conversations.lastSequence} + 1`,
+        updatedAt: now,
+      })
+      .where(eq(conversations.id, owned.execution.conversationId))
+      .returning({ sequence: conversations.lastSequence });
+    await tx.insert(conversationEvents).values({
+      conversationId: owned.execution.conversationId,
+      branchId: owned.source.branchId,
+      sequence: BigInt(allocated!.sequence),
+      type: "failure",
+      actorType: "system",
+      actorId: "ooda",
+      payload: {
+        kind: "host_unavailable",
+        failures: input.failures,
+        error: input.error,
+      },
+      sensitivity: "general",
+      correlationId: owned.source.correlationId,
+      causationId: owned.source.id,
+      idempotencyKey: `${owned.execution.idempotencyKey}:failure`,
+      occurredAt: now,
+    });
+    const [updated] = await tx
+      .update(hostTurnExecutions)
+      .set({
+        status: "failed",
+        errorCode: "HOST_UNAVAILABLE",
+        error: input.error,
+        fallback: {
+          preferredProvider: providerId(
+            owned.execution.preferredProvider ?? "grok",
+          ),
+          failures: input.failures,
+        },
+        completionIdempotencyKey: input.idempotencyKey,
+        completionFingerprint: stableStringify(input),
+        leaseExpiresAt: now,
+        completedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(hostTurnExecutions.id, owned.execution.id))
+      .returning();
+    return {
+      executionId: updated!.id,
+      status: "failed" as const,
+      replayed: false,
+    };
+  });
 }
