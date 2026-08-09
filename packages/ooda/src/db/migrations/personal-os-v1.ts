@@ -27,22 +27,62 @@ export function mapLegacySessionEvent(legacyType: string): {
 } {
   switch (legacyType) {
     case "prompt":
-      return { type: "user_turn", actorType: "user", sensitivity: "general", legacyType };
+      return {
+        type: "user_turn",
+        actorType: "user",
+        sensitivity: "general",
+        legacyType,
+      };
     case "stdout":
-      return { type: "assistant_turn", actorType: "host", sensitivity: "general", legacyType };
+      return {
+        type: "assistant_turn",
+        actorType: "host",
+        sensitivity: "general",
+        legacyType,
+      };
     case "stdout_chunk":
-      return { type: "assistant_delta", actorType: "host", sensitivity: "general", legacyType };
+      return {
+        type: "assistant_delta",
+        actorType: "host",
+        sensitivity: "general",
+        legacyType,
+      };
     case "stderr_chunk":
     case "error":
-      return { type: "failure", actorType: "system", sensitivity: "general", legacyType };
+      return {
+        type: "failure",
+        actorType: "system",
+        sensitivity: "general",
+        legacyType,
+      };
     case "thought":
-      return { type: "system_annotation", actorType: "host", sensitivity: "restricted", legacyType };
+      return {
+        type: "system_annotation",
+        actorType: "host",
+        sensitivity: "restricted",
+        legacyType,
+      };
     case "promotion_available":
-      return { type: "proposal", actorType: "system", sensitivity: "general", legacyType };
+      return {
+        type: "proposal",
+        actorType: "system",
+        sensitivity: "general",
+        legacyType,
+      };
     case "promote_request":
-      return { type: "proposal", actorType: "user", sensitivity: "general", legacyType };
+      return {
+        type: "proposal",
+        actorType: "user",
+        sensitivity: "general",
+        legacyType,
+      };
     default:
-      return { type: "system_annotation", actorType: "system", sensitivity: "general", legacyType };
+      return {
+        type: "system_annotation",
+        actorType: "system",
+        sensitivity: "general",
+        legacyType,
+      };
   }
 }
 
@@ -56,7 +96,7 @@ export function parseVerificationRows(
   return { ok: checks.every((check) => check.ok), checks };
 }
 
-const BACKFILL_SQL = `
+export const BACKFILL_SQL = `
 select pg_advisory_xact_lock(hashtext('ooda-personal-os-v1-backfill'));
 
 insert into ooda.conversations (
@@ -180,7 +220,8 @@ with ordered as (
   from session_event se
 )
 insert into ooda.agent_job_events (
-  id, agent_job_id, sequence, type, payload, occurred_at, recorded_at
+  id, agent_job_id, sequence, type, payload, idempotency_key,
+  occurred_at, recorded_at
 )
 select
   ordered.id,
@@ -195,6 +236,7 @@ select
       'legacyType', ordered.type
     )
   ),
+  'legacy-session-event:' || ordered.id::text,
   ordered.created_at,
   ordered.created_at
 from ordered
