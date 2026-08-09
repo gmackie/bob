@@ -14,6 +14,7 @@
 import type { ToolHandler } from "../handler";
 import type { ToolName } from "../schemas";
 
+import * as bob from "./bob";
 import * as cp from "./cp";
 import * as dive from "./dive";
 import * as graph from "./graph";
@@ -25,6 +26,9 @@ import * as papers from "./papers";
 import * as stubs from "./stubs";
 
 export const HANDLERS: Record<ToolName, ToolHandler<ToolName>> = {
+  bob_list_projects: bob.bob_list_projects as ToolHandler<ToolName>,
+  bob_create_task: bob.bob_create_task as ToolHandler<ToolName>,
+  bob_create_project: bob.bob_create_project as ToolHandler<ToolName>,
   dive_spawn: dive.dive_spawn as ToolHandler<ToolName>,
   dive_status: dive.dive_status as ToolHandler<ToolName>,
   dive_results: dive.dive_results as ToolHandler<ToolName>,
@@ -44,4 +48,4 @@ export const HANDLERS: Record<ToolName, ToolHandler<ToolName>> = {
   cp_open_url: cp.cp_open_url as ToolHandler<ToolName>,
 };
 
-export { cp, dive, graph, inbox, interests, kb, memory, papers, stubs };
+export { bob, cp, dive, graph, inbox, interests, kb, memory, papers, stubs };

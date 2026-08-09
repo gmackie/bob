@@ -10,7 +10,7 @@ import { CodexAdapter } from "@gmacko/ooda/agent-adapters";
 import { ClaudeAdapter } from "@gmacko/ooda/agent-adapters";
 import { GrokAdapter } from "@gmacko/ooda/agent-adapters";
 import { BuddyMcpServer } from "@gmacko/ooda/agent-adapters";
-import type { AgentAdapter } from "@gmacko/ooda/agent-adapters";
+import type { AgentAdapter, PromptImage } from "@gmacko/ooda/agent-adapters";
 import { generateRunnerToken } from "./auth/auth";
 import { promoteNote } from "@gmacko/ooda/thread-workspace";
 import { resolveThreadPath } from "@gmacko/ooda/thread-model";
@@ -552,6 +552,20 @@ export class RunnerServer {
         throw new Error("No prompt found for session");
       }
 
+      // Images attached to the prompt (vision), stored as a sibling event.
+      const imagesEvent = events.find(
+        (e: { type: string }) => e.type === "prompt_images",
+      ) as { content?: string } | undefined;
+      let promptImages: PromptImage[] | undefined;
+      if (imagesEvent?.content) {
+        try {
+          const parsed = JSON.parse(imagesEvent.content);
+          if (Array.isArray(parsed) && parsed.length > 0) promptImages = parsed;
+        } catch {
+          // malformed images blob — proceed text-only
+        }
+      }
+
       // Get thread info for workspace creation
       const thread = await this.trpc.threads.byId.query({
         id: session.threadId,
@@ -583,6 +597,7 @@ export class RunnerServer {
         sessionId: session.id,
         threadId: session.threadId,
         prompt: promptEvent.content,
+        images: promptImages,
         toolProfileId: session.toolProfileId,
         onEvent: (event) => {
           if (event.type === "stdout") {

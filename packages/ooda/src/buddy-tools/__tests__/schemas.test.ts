@@ -27,7 +27,7 @@ import {
   TOOLS_PLANNED,
 } from "../index";
 
-// All 17 tool schemas are now IMPLEMENTED — TOOLS_PLANNED is empty in
+// All 20 tool schemas are now IMPLEMENTED — TOOLS_PLANNED is empty in
 // V1.5. If a future schema lands without a backing procedure, add it to
 // TOOLS_PLANNED in schemas.ts and this assertion will surface the gap.
 const EXPECTED_TOOLS = [
@@ -48,14 +48,17 @@ const EXPECTED_TOOLS = [
   "inbox_triage",
   "kb_promote_request",
   "cp_open_url",
+  "bob_list_projects",
+  "bob_create_task",
+  "bob_create_project",
 ] as const;
 
 // A fixed v4 UUID used across tests.
 const UUID = "550e8400-e29b-41d4-a716-446655440000";
 
 describe("TOOLS registry", () => {
-  it("contains all 17 implemented tool names", () => {
-    expect(TOOL_NAMES.length).toBe(17);
+  it("contains all 20 implemented tool names", () => {
+    expect(TOOL_NAMES.length).toBe(20);
     expect(new Set(TOOL_NAMES)).toEqual(new Set(EXPECTED_TOOLS));
   });
 

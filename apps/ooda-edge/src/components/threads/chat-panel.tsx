@@ -25,6 +25,42 @@ export function ChatPanel({ threadId, runnerId, onPromoted }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [attachedImages, setAttachedImages] = useState<
+    { mimeType: string; dataBase64: string; preview: string }[]
+  >([]);
+
+  // Paste/drop a screenshot into the chat → attach it (vision).
+  const addImageFile = (file: File) => {
+    if (!file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result);
+      const comma = dataUrl.indexOf(",");
+      if (comma < 0) return;
+      setAttachedImages((prev) =>
+        prev.length >= 6
+          ? prev
+          : [
+              ...prev,
+              {
+                mimeType: file.type,
+                dataBase64: dataUrl.slice(comma + 1),
+                preview: dataUrl,
+              },
+            ],
+      );
+    };
+    reader.readAsDataURL(file);
+  };
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = Array.from(e.clipboardData?.items ?? []);
+    for (const it of items) {
+      if (it.kind === "file" && it.type.startsWith("image/")) {
+        const f = it.getAsFile();
+        if (f) addImageFile(f);
+      }
+    }
+  };
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const trpc = useTRPC();
@@ -96,34 +132,107 @@ export function ChatPanel({ threadId, runnerId, onPromoted }: ChatPanelProps) {
     }),
   );
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || !availableRunner) return;
+  const sendPromptText = (
+    raw: string,
+    imgs?: { mimeType: string; dataBase64: string }[],
+  ) => {
+    const prompt = raw.trim();
+    if (!prompt || !availableRunner) return;
 
-    // Add user message immediately
+    // Add user message immediately (note any attached images).
     setMessages((prev) => [
       ...prev,
       {
         id: `user-${Date.now()}`,
         role: "user",
-        content: input.trim(),
+        content:
+          prompt +
+          (imgs && imgs.length
+            ? `\n\n📎 ${imgs.length} image${imgs.length > 1 ? "s" : ""} attached`
+            : ""),
         timestamp: new Date().toLocaleTimeString(),
       },
     ]);
 
-    // Send to runner
     sendMutation.mutate({
       threadId,
       runnerId: availableRunner,
-      adapterId: chooseDefaultAdapter(
-        runners.find((runner) => runner.id === availableRunner),
-      ),
+      // Images need the vision-capable adapter (claude); text uses the default.
+      adapterId:
+        imgs && imgs.length
+          ? "claude"
+          : chooseDefaultAdapter(
+              runners.find((runner) => runner.id === availableRunner),
+            ),
       toolProfileId: "default",
-      prompt: input.trim(),
+      prompt,
+      ...(imgs && imgs.length ? { images: imgs } : {}),
     });
-
-    setInput("");
   };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || !availableRunner) return;
+    sendPromptText(
+      input,
+      attachedImages.map((i) => ({
+        mimeType: i.mimeType,
+        dataBase64: i.dataBase64,
+      })),
+    );
+    setInput("");
+    setAttachedImages([]);
+  };
+
+  // Capture-first seeding: a thread opened from Capture carries the captured
+  // text as ?prompt=. Auto-send it once (when a runner is ready), then strip it
+  // from the URL so a refresh doesn't resend. If no runner is connected yet, it
+  // waits in the input box instead.
+  const seededRef = useRef(false);
+  const [pendingSeed, setPendingSeed] = useState<string | null>(null);
+  const [pendingImages, setPendingImages] = useState<
+    { mimeType: string; dataBase64: string }[] | null
+  >(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // Rich capture seed (text + screenshots) handed off via sessionStorage —
+    // used when Capture passed images (too big for a URL param).
+    try {
+      const raw = sessionStorage.getItem("ooda-capture-seed");
+      if (raw) {
+        sessionStorage.removeItem("ooda-capture-seed");
+        const seed = JSON.parse(raw) as {
+          prompt?: string;
+          images?: { mimeType: string; dataBase64: string }[];
+          ts?: number;
+        };
+        if (seed.prompt && Date.now() - (seed.ts ?? 0) < 120_000) {
+          setPendingSeed(seed.prompt);
+          if (seed.images?.length) setPendingImages(seed.images);
+          setInput(seed.prompt);
+          return;
+        }
+      }
+    } catch {
+      // ignore malformed seed
+    }
+    const p = new URLSearchParams(window.location.search).get("prompt");
+    if (!p) return;
+    setPendingSeed(p);
+    setInput(p);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("prompt");
+    window.history.replaceState({}, "", url.toString());
+  }, []);
+  useEffect(() => {
+    if (seededRef.current || !pendingSeed || !availableRunner) return;
+    seededRef.current = true;
+    sendPromptText(pendingSeed, pendingImages ?? undefined);
+    setInput("");
+    setPendingSeed(null);
+    setPendingImages(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingSeed, availableRunner]);
 
   const handlePromote = (msg: ChatMessage) => {
     if (!availableRunner) return;
@@ -243,12 +352,42 @@ export function ChatPanel({ threadId, runnerId, onPromoted }: ChatPanelProps) {
             </button>
           </div>
         )}
+        {attachedImages.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {attachedImages.map((img, i) => (
+              <div key={i} className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={img.preview}
+                  alt="attachment"
+                  className="h-14 w-14 rounded-[3px] border border-[#2A2A2F] object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAttachedImages((prev) =>
+                      prev.filter((_, j) => j !== i),
+                    )
+                  }
+                  className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#111113] text-[10px] text-[#8A8580] hover:text-[#E8E4DF]"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="flex gap-2">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={isRunning ? "Agent is working..." : "Ask a research question..."}
+            onPaste={handlePaste}
+            placeholder={
+              isRunning
+                ? "Agent is working..."
+                : "Ask a research question… (paste a screenshot)"
+            }
             disabled={isRunning}
             className="flex-1 rounded-[3px] border border-[#2A2A2F] bg-[#1A1A1E] px-3 py-2.5 text-sm text-[#E8E4DF] placeholder-[#5A5855] outline-none focus:border-[#D4A04A] disabled:opacity-50"
           />

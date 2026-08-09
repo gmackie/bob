@@ -74,6 +74,69 @@ describe("parseGrok", () => {
   });
 });
 
+describe("parseGrok — real account export (prod-grok-backend)", () => {
+  const backend = {
+    conversations: [
+      {
+        conversation: {
+          id: "3fce291c-331b-4e90-ab32-ca1629034399",
+          title: "Enterprise AI Pricing",
+          create_time: "2026-08-06T11:49:24.823545Z",
+        },
+        responses: [
+          {
+            response: {
+              _id: "a1",
+              message: "what is enterprise ai pricing?",
+              sender: "human",
+              create_time: { $date: { $numberLong: "1786016990579" } },
+            },
+          },
+          {
+            response: {
+              _id: "a2",
+              message: "Direct agreements exist with the model vendors.",
+              sender: "ASSISTANT",
+              create_time: { $date: { $numberLong: "1786016995000" } },
+            },
+          },
+          // A response with no message (tool/empty) is skipped.
+          { response: { _id: "a3", message: "", sender: "assistant" } },
+        ],
+      },
+    ],
+  };
+
+  it("parses the nested conversation/responses shape", () => {
+    const convs = parseGrok(backend);
+    expect(convs).toHaveLength(1);
+    expect(convs[0]!.provider).toBe("grok");
+    expect(convs[0]!.title).toBe("Enterprise AI Pricing");
+    expect(convs[0]!.conversationId).toBe(
+      "3fce291c-331b-4e90-ab32-ca1629034399",
+    );
+    // 2 messages (the empty one is dropped); sender human→user, ASSISTANT→assistant
+    expect(convs[0]!.messages.map((m) => m.role)).toEqual(["user", "assistant"]);
+    expect(convs[0]!.messages[0]!.content).toBe(
+      "what is enterprise ai pricing?",
+    );
+  });
+
+  it("converts Mongo $date timestamps to ISO", () => {
+    const convs = parseGrok(backend);
+    expect(convs[0]!.messages[0]!.timestamp).toBe(
+      new Date(1786016990579).toISOString(),
+    );
+    expect(convs[0]!.createdAt).toBe("2026-08-06T11:49:24.823545Z");
+  });
+
+  it("normalizeImport detects the backend export as grok, not chatgpt", () => {
+    const { format, conversations } = normalizeImport(backend);
+    expect(format).toBe("grok");
+    expect(conversations[0]!.messages).toHaveLength(2);
+  });
+});
+
 describe("normalizeImport with grok fallback", () => {
   it("detects a generic conversation as grok", () => {
     const { format, conversations } = normalizeImport({

@@ -9,6 +9,7 @@ export {
   type AgentAdapter,
   type ExecuteOptions,
   type McpServerConfigLike,
+  type PromptImage,
   type RuntimeAuthMode,
   type RuntimeBillingPolicy,
   type RuntimeCapabilities,
