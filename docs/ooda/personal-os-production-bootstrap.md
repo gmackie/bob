@@ -69,6 +69,33 @@ application role can read and write every OODA table. Run the bootstrap command
 again without `--apply`; it must report `mode: complete`, 20 applied migrations,
 and no pending work.
 
+On Linux, metered jobs additionally require Bubblewrap to create unprivileged
+user namespaces. Prove this as the runner account before promotion:
+
+```sh
+sudo -u bob /usr/bin/bwrap \
+  --die-with-parent \
+  --ro-bind /usr /usr \
+  --proc /proc \
+  --dev /dev \
+  -- /usr/bin/true
+```
+
+Ubuntu hosts with `kernel.apparmor_restrict_unprivileged_userns=1` deny that
+operation until `/usr/bin/bwrap` receives an explicit AppArmor `userns` grant.
+The checked-in installer uses the same narrow grant as Ubuntu's standard
+rootless-tool profiles, refuses to overwrite a different profile, validates it
+before loading, and requires a host-specific confirmation:
+
+```sh
+sudo apps/ooda-runner/ops/install-bwrap-apparmor.sh \
+  --runner-user=bob \
+  --confirm="ENABLE-OODA-BWRAP:$(hostname -s)"
+```
+
+This is a separate just-in-time host mutation. Do not fold it into an
+unattended code deploy.
+
 After the reviewed branch has merged and the exact master SHA is green, promote
 the trusted runner without touching its live environment or systemd unit:
 
@@ -107,6 +134,18 @@ in an isolated PostgreSQL 17.10/pgvector 0.8.6 container.
 - Transcript hash `827bea056f0f37dddd5c16ee375b3c9b` and last-sequence hash
   `29b48319cd5e3f27a16e2c5520cba2c8` matched source and destination.
 - The `bob` role had schema usage and full DML privileges on all 20 OODA tables.
+
+A second rehearsal used a fresh production backup at
+`~/Library/Application Support/OODA/backups/production-20260809/bob-pre-ooda-personal-os.dump`
+(143 MB; SHA-256
+`f43109d2c270fab32f6e24e3b3cad24ef459479975af8768d032199913870e80`).
+The PostgreSQL 17/pgvector 0.8.6 restore matched the live source counts exactly:
+5,180 `agent_runs`, 2,592 `chat_conversations`, 38 `research_thread` rows,
+63 `runner_session` rows, 356 `session_event` rows, 269,753 `session_events`,
+461 `research_vault.sources`, 116 `research_vault.retrieval_unit` rows, and
+546 `work_items`. The full guarded bootstrap, two legacy backfills, transcript
+and sequence hashes, and application-role DML checks passed again. The
+disposable restore environment was removed after verification.
 
 ## Rollback boundary
 
