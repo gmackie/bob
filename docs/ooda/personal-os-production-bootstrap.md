@@ -83,6 +83,13 @@ updates. Untracked operator environment/backup files are preserved. It installs
 from the frozen lockfile and runs runner typecheck, tests, and build on the host
 before restarting the service.
 
+The OODA edge has a separate master-branch deployment job. It always builds but
+will not deploy unless the Forgejo repository secret
+`OODA_EDGE_DEPLOY_ENABLED` is exactly `true`. Enable it only after the database
+bootstrap/backfill verification and runner promotion pass; disable it again as
+the immediate code-deploy kill switch. Cloudflare secrets remain in the worker
+and are never copied into the repository or client bundle.
+
 ## Rehearsal evidence — 2026-08-09
 
 The procedure was exercised against the verified Phase 0 Bob backup
