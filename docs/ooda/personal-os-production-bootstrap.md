@@ -69,6 +69,20 @@ application role can read and write every OODA table. Run the bootstrap command
 again without `--apply`; it must report `mode: complete`, 20 applied migrations,
 and no pending work.
 
+After the reviewed branch has merged and the exact master SHA is green, promote
+the trusted runner without touching its live environment or systemd unit:
+
+```sh
+apps/ooda-runner/deploy-hetzner-bob.sh \
+  --sha="$MERGED_MASTER_SHA" \
+  --confirm="DEPLOY-OODA-RUNNER:$MERGED_MASTER_SHA"
+```
+
+The script rejects non-master SHAs, tracked live changes, and non-fast-forward
+updates. Untracked operator environment/backup files are preserved. It installs
+from the frozen lockfile and runs runner typecheck, tests, and build on the host
+before restarting the service.
+
 ## Rehearsal evidence — 2026-08-09
 
 The procedure was exercised against the verified Phase 0 Bob backup
