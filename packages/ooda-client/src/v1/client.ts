@@ -31,6 +31,9 @@ import type {
   IntegrationDeliveryListInputV1,
   IntegrationDeliveryListPageV1,
   MemoryDetailV1,
+  AttentionReviewV1,
+  CreateOpportunityReviewInputV1,
+  CreateOpportunityReviewResultV1,
   MemorySearchInputV1,
   MemorySearchPageV1,
   SubmitMemoryFeedbackInputV1,
@@ -289,6 +292,17 @@ export function createOodaV1Client(options: OodaV1ClientOptions = {}) {
         return request<SubmitMemoryFeedbackResultV1>(
           `/api/v1/memories/edges/${encodeURIComponent(input.edgeId)}/feedback`,
           { method: "POST", body: input },
+        );
+      },
+      createOpportunityReview(input: CreateOpportunityReviewInputV1) {
+        return request<CreateOpportunityReviewResultV1>(
+          "/api/v1/opportunity-reviews",
+          { method: "POST", body: input },
+        );
+      },
+      getOpportunityReview(reviewId: string) {
+        return request<AttentionReviewV1>(
+          `/api/v1/opportunity-reviews/${encodeURIComponent(reviewId)}`,
         );
       },
     },

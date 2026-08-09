@@ -101,7 +101,9 @@ describe("personal OS routers", () => {
       "events.correct",
       "events.paginate",
       "host.createTurn",
+      "memories.createOpportunityReview",
       "memories.feedback",
+      "memories.getOpportunityReview",
       "memories.inspect",
       "memories.search",
     ];

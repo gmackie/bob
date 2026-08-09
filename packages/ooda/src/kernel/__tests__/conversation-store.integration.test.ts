@@ -29,6 +29,10 @@ import {
   submitMemoryFeedback,
 } from "../memories";
 import {
+  createOpportunityReview,
+  getAttentionReview,
+} from "../opportunity-reviews";
+import {
   cancelAgentJob,
   claimAgentJob,
   createAgentJob,
@@ -86,6 +90,7 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     await applyMigration(migration("0013_nasty_rogue.sql"));
     await applyMigration(migration("0014_puzzling_lady_bullseye.sql"));
     await applyMigration(migration("0015_amazing_hellfire_club.sql"));
+    await applyMigration(migration("0016_messy_jack_murdock.sql"));
   });
 
   afterAll(async () => {
@@ -1168,6 +1173,139 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     });
     expect(cancelled.job.status).toBe("running");
     expect(cancelled.job.cancellationRequestedAt).toBeDefined();
+  });
+
+  it("gates a BizPulse venture on a complete, capacity-aware opportunity review", async () => {
+    const conversation = await createConversation(db!, "owner-opportunity", {
+      title: "Evaluate a venture",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "opportunity-conversation",
+    });
+    const turn = await appendConversationEvent(db!, "owner-opportunity", {
+      conversationId: conversation.conversation.id,
+      branchId: conversation.branch.id,
+      type: "user_turn",
+      actor: { type: "user", id: "owner-opportunity" },
+      payload: { display: "What if OODA turned good conversations into well-scoped work?" },
+      sensitivity: "personal",
+      correlationId: "opportunity-proof",
+      idempotencyKey: "opportunity-turn",
+      occurredAt: "2026-08-08T17:00:00.000Z",
+    });
+    const [seed] = await db!
+      .select()
+      .from(schema.memorySeeds)
+      .where(eq(schema.memorySeeds.sourceEventId, turn.event.id));
+    expect(seed).toBeDefined();
+
+    const opportunity = {
+      problem: "Ideas get lost before they become appropriately scoped work.",
+      audience: "A single operator managing several technical ventures.",
+      currentWorkaround: "Manually copy chat notes into several project systems.",
+      differentiation: "Preserve conversational provenance through approved execution.",
+      evidence: ["The operator already uses OODA, Bob, KanBanger, and BizPulse."],
+      strategicFit: "This is the central promise of the OODA personal operating system.",
+      smallestTest: "Ship one approved conversation-to-project flow.",
+      effort: "One focused implementation stream.",
+      risks: ["Too much automation could create unwanted commitments."],
+      killCriteria: ["The flow duplicates durable objects or loses provenance."],
+    };
+    const reviewInput = {
+      memorySeedId: seed!.id,
+      dimensionScores: {
+        expectedValue: 1,
+        strategicFit: 1,
+        evidence: 0.8,
+        timing: 0.8,
+        crossProjectSynergy: 0.9,
+        energyInterestFit: 0.9,
+        reversibilityLearningValue: 0.9,
+        opportunityCost: 0.2,
+      },
+      uncertainty: 0.15,
+      capacitySnapshot: {
+        activeVentureExperiments: 1,
+        majorImplementationStreams: 1,
+        dailyRecommendedActions: 2,
+      },
+      opportunity,
+      idempotencyKey: "opportunity-review-1",
+    };
+    const reviewed = await createOpportunityReview(
+      db!,
+      "owner-opportunity",
+      reviewInput,
+    );
+    const replay = await createOpportunityReview(
+      db!,
+      "owner-opportunity",
+      reviewInput,
+    );
+
+    expect(reviewed).toMatchObject({
+      replayed: false,
+      review: { overallScore: 0.87, recommendation: "propose", opportunity },
+    });
+    expect(replay).toEqual({ ...reviewed, replayed: true });
+    await expect(
+      getAttentionReview(db!, "owner-opportunity", reviewed.review.id),
+    ).resolves.toEqual(reviewed.review);
+    await expect(
+      getAttentionReview(db!, "another-owner", reviewed.review.id),
+    ).rejects.toMatchObject({ code: "NOT_FOUND", status: 404 });
+
+    await expect(
+      createProposal(db!, "owner-opportunity", {
+        conversationId: conversation.conversation.id,
+        kind: "bizpulse_venture",
+        destination: "bizpulse",
+        risk: "durable_work",
+        preview: { name: "Conversation-to-work" },
+        rationale: "Promote the reviewed opportunity.",
+        confidence: 0.87,
+        policySnapshot: { version: "proposal-policy-v1" },
+        idempotencyKey: "incomplete-venture-proposal",
+      }),
+    ).rejects.toMatchObject({ code: "VALIDATION_FAILED", status: 422 });
+
+    const proposed = await createProposal(db!, "owner-opportunity", {
+      conversationId: conversation.conversation.id,
+      kind: "bizpulse_venture",
+      destination: "bizpulse",
+      risk: "durable_work",
+      preview: {
+        name: "Conversation-to-work",
+        opportunityReviewId: reviewed.review.id,
+        ...opportunity,
+      },
+      rationale: "Promote the reviewed opportunity.",
+      confidence: 0.87,
+      policySnapshot: { version: "proposal-policy-v1" },
+      idempotencyKey: "venture-proposal-1",
+    });
+    expect(proposed.proposal.status).toBe("awaiting_approval");
+    const [proposedSeed] = await db!
+      .select()
+      .from(schema.memorySeeds)
+      .where(eq(schema.memorySeeds.id, seed!.id));
+    expect(proposedSeed?.lifecycleState).toBe("proposed");
+
+    const approved = await decideProposal(db!, "owner-opportunity", {
+      proposalId: proposed.proposal.id,
+      decision: "approve",
+      expectedVersion: 1,
+      scope: "single_delivery",
+      decidedAt: "2026-08-08T17:05:00.000Z",
+    });
+    expect(approved.outboxId).toBeDefined();
+    const [committedSeed] = await db!
+      .select()
+      .from(schema.memorySeeds)
+      .where(eq(schema.memorySeeds.id, seed!.id));
+    expect(committedSeed?.lifecycleState).toBe("committed");
   });
 
   it("records approval and one Bob outbox delivery atomically", async () => {

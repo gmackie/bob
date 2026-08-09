@@ -22,6 +22,8 @@ import {
   CreateHostTurnResultV1Schema,
   CreateAgentJobInputV1Schema,
   CreateAgentJobResultV1Schema,
+  CreateOpportunityReviewInputV1Schema,
+  CreateOpportunityReviewResultV1Schema,
   CreateProposalInputV1Schema,
   CreateProposalResultV1Schema,
   ClaimIntegrationDeliveryResultV1Schema,
@@ -357,6 +359,64 @@ describe("OODA V1 contracts", () => {
         edgeId: "edge-1",
         feedbackState: "suppressed",
         idempotencyKey: "device-feedback-1",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("requires a complete constitutional opportunity review", () => {
+    const input = {
+      memorySeedId: "memory-1",
+      dimensionScores: {
+        expectedValue: 1,
+        strategicFit: 0.9,
+        evidence: 0.8,
+        timing: 0.7,
+        crossProjectSynergy: 0.9,
+        energyInterestFit: 0.8,
+        reversibilityLearningValue: 0.8,
+        opportunityCost: 0.2,
+      },
+      uncertainty: 0.15,
+      capacitySnapshot: {
+        activeVentureExperiments: 1,
+        majorImplementationStreams: 1,
+      },
+      opportunity: {
+        problem: "Ideas disappear before they become useful work.",
+        audience: "A single operator.",
+        currentWorkaround: "Copy chat into task systems manually.",
+        differentiation: "Keep provenance and require approval.",
+        evidence: ["Existing tools are already used daily."],
+        strategicFit: "Central to OODA.",
+        smallestTest: "Deliver one project.",
+        effort: "One stream.",
+        risks: ["Unwanted work."],
+        killCriteria: ["Duplicate durable objects."],
+      },
+      idempotencyKey: "opportunity-review-1",
+    };
+    const parsed = CreateOpportunityReviewInputV1Schema.parse(input);
+    expect(parsed.capacitySnapshot.dailyRecommendedActions).toBe(0);
+    expect(
+      CreateOpportunityReviewInputV1Schema.safeParse({
+        ...input,
+        opportunity: { ...input.opportunity, killCriteria: [] },
+      }).success,
+    ).toBe(false);
+    expect(
+      CreateOpportunityReviewResultV1Schema.safeParse({
+        replayed: false,
+        review: {
+          id: "review-1",
+          memorySeedId: "memory-1",
+          dimensionScores: parsed.dimensionScores,
+          uncertainty: parsed.uncertainty,
+          overallScore: 0.82,
+          recommendation: "propose",
+          capacitySnapshot: parsed.capacitySnapshot,
+          opportunity: parsed.opportunity,
+          createdAt: occurredAt,
+        },
       }).success,
     ).toBe(true);
   });

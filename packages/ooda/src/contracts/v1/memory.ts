@@ -148,8 +148,10 @@ export const AttentionReviewV1Schema = z
     memorySeedId: z.string().min(1),
     dimensionScores: z.record(z.string(), z.number().min(-1).max(1)),
     uncertainty: z.number().min(0).max(1),
+    overallScore: z.number().min(-0.25).max(1),
     recommendation: z.enum(["incubate", "propose", "merge", "dismiss", "kill"]),
     capacitySnapshot: z.record(z.string(), z.unknown()),
+    opportunity: z.record(z.string(), z.unknown()),
     proposalId: z.string().min(1).optional(),
     dismissalReason: z.string().max(10_000).optional(),
     createdAt: z.iso.datetime({ offset: true }),
@@ -157,3 +159,68 @@ export const AttentionReviewV1Schema = z
   .strict();
 
 export type AttentionReviewV1 = z.infer<typeof AttentionReviewV1Schema>;
+
+export const OpportunityDimensionScoresV1Schema = z
+  .object({
+    expectedValue: z.number().min(0).max(1),
+    strategicFit: z.number().min(0).max(1),
+    evidence: z.number().min(0).max(1),
+    timing: z.number().min(0).max(1),
+    crossProjectSynergy: z.number().min(0).max(1),
+    energyInterestFit: z.number().min(0).max(1),
+    reversibilityLearningValue: z.number().min(0).max(1),
+    opportunityCost: z.number().min(0).max(1),
+  })
+  .strict();
+
+export const OpportunityCapacitySnapshotV1Schema = z
+  .object({
+    activeVentureExperiments: z.number().int().nonnegative(),
+    majorImplementationStreams: z.number().int().nonnegative(),
+    dailyRecommendedActions: z.number().int().nonnegative().default(0),
+  })
+  .strict();
+
+export const OpportunityReviewDataV1Schema = z
+  .object({
+    problem: z.string().min(1).max(20_000),
+    audience: z.string().min(1).max(10_000),
+    currentWorkaround: z.string().min(1).max(20_000),
+    differentiation: z.string().min(1).max(20_000),
+    evidence: z.array(z.string().min(1).max(10_000)).min(1).max(100),
+    strategicFit: z.string().min(1).max(20_000),
+    smallestTest: z.string().min(1).max(20_000),
+    effort: z.string().min(1).max(10_000),
+    risks: z.array(z.string().min(1).max(10_000)).min(1).max(100),
+    killCriteria: z.array(z.string().min(1).max(10_000)).min(1).max(100),
+  })
+  .strict();
+export type OpportunityReviewDataV1 = z.infer<
+  typeof OpportunityReviewDataV1Schema
+>;
+
+export const CreateOpportunityReviewInputV1Schema = z
+  .object({
+    memorySeedId: z.string().min(1),
+    dimensionScores: OpportunityDimensionScoresV1Schema,
+    uncertainty: z.number().min(0).max(1),
+    capacitySnapshot: OpportunityCapacitySnapshotV1Schema,
+    opportunity: OpportunityReviewDataV1Schema,
+    duplicateMemoryId: z.string().min(1).optional(),
+    idempotencyKey: z.string().min(1).max(256),
+  })
+  .strict();
+export type CreateOpportunityReviewInputV1 = z.infer<
+  typeof CreateOpportunityReviewInputV1Schema
+>;
+
+export const CreateOpportunityReviewResultV1Schema = z
+  .object({ review: AttentionReviewV1Schema, replayed: z.boolean() })
+  .strict();
+export type CreateOpportunityReviewResultV1 = z.infer<
+  typeof CreateOpportunityReviewResultV1Schema
+>;
+
+export const GetAttentionReviewInputV1Schema = z
+  .object({ reviewId: z.string().min(1) })
+  .strict();

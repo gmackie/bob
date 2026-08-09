@@ -7,9 +7,11 @@ import type {
   ProposalListInputV1,
   ProposalV1,
 } from "../contracts/v1";
+import { OpportunityReviewDataV1Schema } from "../contracts/v1";
 import type { db as database } from "../db/client";
 import { conversationEvents, conversations } from "../db/schema/conversations";
 import { integrationOutbox } from "../db/schema/integrations";
+import { attentionReviews, memorySeeds } from "../db/schema/memory";
 import { approvalDecisions, proposals } from "../db/schema/orchestration";
 import { OodaKernelProblem, idempotencyConflict, notFound } from "./problems";
 import {
@@ -87,6 +89,36 @@ export function validateProposalBoundary(input: CreateProposalInputV1): void {
       );
     }
   }
+  if (input.kind === "bizpulse_venture") {
+    const preview = input.preview;
+    const opportunityReviewId = preview.opportunityReviewId;
+    const name = preview.name;
+    const reviewData = {
+      problem: preview.problem,
+      audience: preview.audience,
+      currentWorkaround: preview.currentWorkaround,
+      differentiation: preview.differentiation,
+      evidence: preview.evidence,
+      strategicFit: preview.strategicFit,
+      smallestTest: preview.smallestTest,
+      effort: preview.effort,
+      risks: preview.risks,
+      killCriteria: preview.killCriteria,
+    };
+    if (
+      typeof opportunityReviewId !== "string" ||
+      !opportunityReviewId ||
+      typeof name !== "string" ||
+      !name.trim() ||
+      !OpportunityReviewDataV1Schema.safeParse(reviewData).success
+    ) {
+      throw new OodaKernelProblem(
+        "VALIDATION_FAILED",
+        422,
+        "BizPulse ventures require a named, complete opportunity review",
+      );
+    }
+  }
 }
 
 async function findCreateReplay(
@@ -146,6 +178,37 @@ export async function createProposal(
         .limit(1);
       if (!conversation?.activeBranchId) throw notFound("Conversation");
 
+      let opportunityReview:
+        | { id: string; memorySeedId: string }
+        | undefined;
+      if (input.kind === "bizpulse_venture") {
+        const [review] = await tx
+          .select({
+            id: attentionReviews.id,
+            memorySeedId: attentionReviews.memorySeedId,
+            recommendation: attentionReviews.recommendation,
+            proposalId: attentionReviews.proposalId,
+          })
+          .from(attentionReviews)
+          .innerJoin(memorySeeds, eq(memorySeeds.id, attentionReviews.memorySeedId))
+          .where(
+            and(
+              eq(attentionReviews.id, String(input.preview.opportunityReviewId)),
+              eq(memorySeeds.conversationId, input.conversationId),
+            ),
+          )
+          .limit(1);
+        if (!review) throw notFound("Opportunity review");
+        if (review.recommendation !== "propose" || review.proposalId) {
+          throw new OodaKernelProblem(
+            "CONFLICT",
+            409,
+            "The opportunity review is not eligible for a new venture proposal",
+          );
+        }
+        opportunityReview = review;
+      }
+
       const [proposal] = await tx
         .insert(proposals)
         .values({
@@ -174,6 +237,16 @@ export async function createProposal(
         })
         .returning();
       if (!proposal) throw new Error("Proposal insert returned no row");
+      if (opportunityReview) {
+        await tx
+          .update(attentionReviews)
+          .set({ proposalId: proposal.id })
+          .where(eq(attentionReviews.id, opportunityReview.id));
+        await tx
+          .update(memorySeeds)
+          .set({ lifecycleState: "proposed", updatedAt: now })
+          .where(eq(memorySeeds.id, opportunityReview.memorySeedId));
+      }
       const [allocated] = await tx
         .update(conversations)
         .set({
@@ -427,6 +500,21 @@ export async function decideProposal(
         })
         .returning({ id: integrationOutbox.id });
       outboxId = outbox?.id;
+    }
+
+    const [opportunityReview] = await tx
+      .select({ memorySeedId: attentionReviews.memorySeedId })
+      .from(attentionReviews)
+      .where(eq(attentionReviews.proposalId, updated.id))
+      .limit(1);
+    if (opportunityReview) {
+      await tx
+        .update(memorySeeds)
+        .set({
+          lifecycleState: input.decision === "approve" ? "committed" : "incubating",
+          updatedAt: decidedAt,
+        })
+        .where(eq(memorySeeds.id, opportunityReview.memorySeedId));
     }
 
     const [allocated] = await tx

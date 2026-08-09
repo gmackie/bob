@@ -153,8 +153,12 @@ export const attentionReviews = oodaSchema.table(
       .references(() => memorySeeds.id, { onDelete: "cascade" }),
     dimensionScores: t.jsonb().$type<Record<string, number>>().notNull(),
     uncertainty: t.real().notNull(),
+    overallScore: t.real().notNull(),
     recommendation: t.varchar({ length: 32 }).notNull(),
     capacitySnapshot: t.jsonb().$type<Record<string, unknown>>().notNull(),
+    opportunity: t.jsonb().$type<Record<string, unknown>>().notNull(),
+    idempotencyKey: t.text().notNull(),
+    commandFingerprint: t.text().notNull(),
     proposalId: t.uuid(),
     dismissalReason: t.text(),
     createdAt: t.timestamp({ withTimezone: true }).notNull().defaultNow(),
@@ -163,6 +167,10 @@ export const attentionReviews = oodaSchema.table(
     index("attention_reviews_memory_created_idx").on(
       t.memorySeedId,
       t.createdAt,
+    ),
+    uniqueIndex("attention_reviews_memory_idempotency_uidx").on(
+      t.memorySeedId,
+      t.idempotencyKey,
     ),
   ],
 );

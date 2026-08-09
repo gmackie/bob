@@ -237,6 +237,61 @@ describe("OODA V1 client", () => {
     );
   });
 
+  it("creates and retrieves an opportunity review through versioned resources", async () => {
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ review: {}, replayed: false }))
+      .mockResolvedValueOnce(jsonResponse({ id: "review/1" }));
+    const client = createOodaV1Client({
+      baseUrl: "https://ooda.example.test",
+      fetch: fetchFn,
+    });
+    const input = {
+      memorySeedId: "memory-1",
+      dimensionScores: {
+        expectedValue: 1,
+        strategicFit: 1,
+        evidence: 0.8,
+        timing: 0.8,
+        crossProjectSynergy: 0.9,
+        energyInterestFit: 0.9,
+        reversibilityLearningValue: 0.9,
+        opportunityCost: 0.2,
+      },
+      uncertainty: 0.15,
+      capacitySnapshot: {
+        activeVentureExperiments: 1,
+        majorImplementationStreams: 1,
+        dailyRecommendedActions: 2,
+      },
+      opportunity: {
+        problem: "Ideas get lost.",
+        audience: "One operator.",
+        currentWorkaround: "Manual copying.",
+        differentiation: "Provenance and approval.",
+        evidence: ["Existing daily workflow."],
+        strategicFit: "Central to OODA.",
+        smallestTest: "Deliver one project.",
+        effort: "One stream.",
+        risks: ["Unwanted work."],
+        killCriteria: ["Duplicate durable objects."],
+      },
+      idempotencyKey: "opportunity-review-1",
+    };
+
+    await client.memories.createOpportunityReview(input);
+    await client.memories.getOpportunityReview("review/1");
+
+    expect(String(fetchFn.mock.calls[0]![0])).toBe(
+      "https://ooda.example.test/api/v1/opportunity-reviews",
+    );
+    expect(fetchFn.mock.calls[0]![1]).toMatchObject({ method: "POST" });
+    expect(JSON.parse(String(fetchFn.mock.calls[0]![1]?.body))).toEqual(input);
+    expect(String(fetchFn.mock.calls[1]![0])).toBe(
+      "https://ooda.example.test/api/v1/opportunity-reviews/review%2F1",
+    );
+  });
+
   it("creates bounded jobs and approval-gated Bob proposals", async () => {
     const fetchFn = vi
       .fn<typeof fetch>()
