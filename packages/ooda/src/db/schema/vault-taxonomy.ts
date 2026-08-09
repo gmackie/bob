@@ -26,7 +26,8 @@ const bytea = customType<{ data: Buffer }>({
   },
 });
 
-const EMBEDDING_DIMS = 1536;
+export const SOURCE_EMBEDDING_DIMS = 768;
+const RETRIEVAL_EMBEDDING_DIMS = 1536;
 
 // --- Schema factory: one call per vault ---
 
@@ -89,6 +90,28 @@ function createVaultTaxonomyTables(schema: ReturnType<typeof pgSchema>) {
       createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     },
     (t) => [primaryKey({ columns: [t.sourceId, t.model] })],
+  );
+
+  // Additive replacement for the legacy bytea embeddings table. Keeping the
+  // old table readable makes rollback and migration verification possible;
+  // all new retrieval uses this native pgvector projection.
+  const sourceEmbedding = schema.table(
+    "source_embedding",
+    {
+      sourceId: integer()
+        .notNull()
+        .references(() => sources.id, { onDelete: "cascade" }),
+      model: text().notNull(),
+      embedding: vector({ dimensions: SOURCE_EMBEDDING_DIMS }).notNull(),
+      createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+      primaryKey({ columns: [t.sourceId, t.model] }),
+      index("source_embedding_vec_hnsw_idx").using(
+        "hnsw",
+        t.embedding.op("vector_cosine_ops"),
+      ),
+    ],
   );
 
   const topics = schema.table("topics", {
@@ -175,9 +198,7 @@ function createVaultTaxonomyTables(schema: ReturnType<typeof pgSchema>) {
         onDelete: "set null",
       }),
     },
-    (t) => [
-      index("graph_node_first_seen_idx").on(t.firstSeenExploration),
-    ],
+    (t) => [index("graph_node_first_seen_idx").on(t.firstSeenExploration)],
   );
 
   // Directed edge between two paper-sources. Composite PK keeps parallel
@@ -264,10 +285,7 @@ function createVaultTaxonomyTables(schema: ReturnType<typeof pgSchema>) {
       triageAt: timestamp({ withTimezone: true }),
     },
     (t) => [
-      index("findings_inbox_triage_found_idx").on(
-        t.triage,
-        t.foundAt.desc(),
-      ),
+      index("findings_inbox_triage_found_idx").on(t.triage, t.foundAt.desc()),
       // schedulers/standing_interests._process_interest issues a
       // per-hit dedup probe: WHERE standing_interest_id=? AND source_id=?
       // on every OpenAlex match. Composite index matches the probe exactly
@@ -328,19 +346,22 @@ function createVaultTaxonomyTables(schema: ReturnType<typeof pgSchema>) {
         .notNull()
         .references(() => retrievalUnit.id, { onDelete: "cascade" }),
       model: text().notNull(),
-      embedding: vector({ dimensions: EMBEDDING_DIMS }).notNull(),
+      embedding: vector({ dimensions: RETRIEVAL_EMBEDDING_DIMS }).notNull(),
       createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     },
     (t) => [
       primaryKey({ columns: [t.unitId, t.model] }),
-      index("retrieval_unit_embedding_vec_idx")
-        .using("hnsw", t.embedding.op("vector_cosine_ops")),
+      index("retrieval_unit_embedding_vec_idx").using(
+        "hnsw",
+        t.embedding.op("vector_cosine_ops"),
+      ),
     ],
   );
 
   return {
     sources,
     embeddings,
+    sourceEmbedding,
     topics,
     sourceTopics,
     kbs,
@@ -365,6 +386,7 @@ const personalTables = createVaultTaxonomyTables(personalVaultSchema);
 
 export const personalVaultSources = personalTables.sources;
 export const personalVaultEmbeddings = personalTables.embeddings;
+export const personalVaultSourceEmbeddings = personalTables.sourceEmbedding;
 export const personalVaultTopics = personalTables.topics;
 export const personalVaultSourceTopics = personalTables.sourceTopics;
 export const personalVaultKbs = personalTables.kbs;
@@ -389,6 +411,7 @@ const researchTables = createVaultTaxonomyTables(researchVaultSchema);
 
 export const researchVaultSources = researchTables.sources;
 export const researchVaultEmbeddings = researchTables.embeddings;
+export const researchVaultSourceEmbeddings = researchTables.sourceEmbedding;
 export const researchVaultTopics = researchTables.topics;
 export const researchVaultSourceTopics = researchTables.sourceTopics;
 export const researchVaultKbs = researchTables.kbs;
@@ -428,6 +451,10 @@ export const CreateFindingsInboxSchema = createInsertSchema(
   triageAt: true,
 });
 
-export const CreateGraphNodeSchema = createInsertSchema(researchVaultGraphNodes);
+export const CreateGraphNodeSchema = createInsertSchema(
+  researchVaultGraphNodes,
+);
 
-export const CreateGraphEdgeSchema = createInsertSchema(researchVaultGraphEdges);
+export const CreateGraphEdgeSchema = createInsertSchema(
+  researchVaultGraphEdges,
+);

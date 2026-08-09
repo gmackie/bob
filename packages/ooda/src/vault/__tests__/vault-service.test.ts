@@ -38,7 +38,10 @@ async function createTestEnv(): Promise<TestEnv> {
   await fsWriteFile(join(seedPath, "README.md"), "# Test Vault\n", "utf-8");
   await seedGit.add(".");
   await seedGit.commit("initial commit");
-  await seedGit.push("origin", "master");
+  const branch = "master";
+  await seedGit.branch(["-M", branch]);
+  await seedGit.push("origin", branch);
+  await simpleGit(barePath).raw(["symbolic-ref", "HEAD", `refs/heads/${branch}`]);
 
   // Clone for VaultService
   await bareGit.clone(barePath, clonePath);

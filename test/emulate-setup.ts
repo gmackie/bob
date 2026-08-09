@@ -1,19 +1,21 @@
 import type { ChildProcess } from "node:child_process";
 import { spawn } from "node:child_process";
-import { mkdirSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { createConnection } from "node:net";
-import { dirname, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// @gmacko/emulate's postgres mock is backed by PGlite, which persists to
-// disk at <cwd>/data/pglite. It does NOT create that directory itself
-// (mkdirSync without `recursive: true` internally) -- on a fresh CI
-// checkout this directory never exists, so the postgres component throws
-// ENOENT and never starts, while the emulate CLI's own control port comes up
-// fine. This looked like a slow/flaky startup (tests would hang until
-// vitest's timeout) but was actually a permanent, immediate failure that no
-// amount of waiting would fix. (Same issue documented in netcontrol's
-// test/emulate-setup.ts -- carried forward here verbatim.)
+// @gmacko/emulate persists PGlite below <cwd>/data/pglite and does not create
+// the parent directory itself. Always give an owned invocation a fresh temp
+// cwd: a PGlite cluster is generated, platform-specific runtime state, and a
+// stale or committed cluster can fail before the wire protocol starts.
 const PGLITE_DATA_DIR = "data/pglite";
 
 // This file lives at <repo-root>/test/emulate-setup.ts and is shared by
@@ -25,6 +27,7 @@ const LOCK = resolve(ROOT, ".turbo/.emulate-lock");
 
 let proc: ChildProcess | null = null;
 let ownsLock = false;
+let emulateStateDir: string | null = null;
 
 function isPortOpen(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -70,6 +73,35 @@ function releaseLock() {
   }
 }
 
+async function stopOwnedInstance(): Promise<void> {
+  const child = proc;
+  proc = null;
+  if (child && child.exitCode === null && child.signalCode === null) {
+    await new Promise<void>((resolveExit) => {
+      let settled = false;
+      let forceKillTimer: ReturnType<typeof setTimeout> | undefined;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        if (forceKillTimer) clearTimeout(forceKillTimer);
+        resolveExit();
+      };
+      child.once("exit", finish);
+      child.kill("SIGTERM");
+      forceKillTimer = setTimeout(() => {
+        if (child.exitCode === null && child.signalCode === null) {
+          child.kill("SIGKILL");
+        }
+        finish();
+      }, 5_000);
+    });
+  }
+  if (emulateStateDir) {
+    rmSync(emulateStateDir, { recursive: true, force: true });
+    emulateStateDir = null;
+  }
+}
+
 // packages/bob/src/db and packages/bob/src/api both share this globalSetup
 // and run concurrently via turbo (separate vitest OS processes). Only the
 // process that wins tryAcquireLock() starts emulate and waits for postgres
@@ -98,21 +130,21 @@ export async function setup() {
   // bob only needs the postgres wire-protocol mock -- no github/stripe/etc.
   // provider mocks are exercised by @bob/db or @bob/api's test suites.
   const services = ["postgres"];
-  mkdirSync(resolve(ROOT, PGLITE_DATA_DIR), { recursive: true });
+  emulateStateDir = mkdtempSync(join(tmpdir(), "bob-emulate-"));
+  mkdirSync(resolve(emulateStateDir, PGLITE_DATA_DIR), { recursive: true });
 
   proc = spawn(
-    "npx",
+    resolve(ROOT, "node_modules/.bin/emulate"),
     [
-      "@gmacko/emulate",
       "start",
       "-s",
       services.join(","),
       "--seed",
-      "emulate.config.yaml",
+      resolve(ROOT, "emulate.config.yaml"),
     ],
     {
       stdio: ["ignore", "pipe", "pipe"],
-      cwd: ROOT,
+      cwd: emulateStateDir,
     },
   );
 
@@ -122,10 +154,8 @@ export async function setup() {
   });
 
   try {
-    // A cold npx cache means @gmacko/emulate has to install (and, per
-    // netcontrol's notes, potentially compile bundled native deps) before
-    // ANY of its output appears, including opening its own control port
-    // (4000). Give both waits real headroom on a cold CI runner.
+    // Keep real headroom for PGlite initialization on a cold runner before
+    // either the control or wire-protocol port is available.
     await waitForPort(4000, 180_000);
     // Only the control port was awaited above. Postgres/PGlite can take
     // meaningfully longer to become query-ready than the control port --
@@ -133,15 +163,13 @@ export async function setup() {
     // the first real query would actually succeed.
     await waitForPort(5432, 180_000);
   } catch (err) {
+    await stopOwnedInstance();
     releaseLock();
     throw err;
   }
 }
 
 export async function teardown() {
-  if (proc) {
-    proc.kill("SIGTERM");
-    proc = null;
-  }
+  await stopOwnedInstance();
   releaseLock();
 }

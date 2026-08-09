@@ -7,6 +7,9 @@ import type { AuthInstance } from "@gmacko/core/auth";
 import { validateApiKey } from "@gmacko/core/auth/validate-api-key";
 import { db } from "@gmacko/ooda/db/client";
 
+import type { OodaRolloutCapabilityV1 } from "../contracts/v1";
+import { resolveOodaRolloutPolicy } from "../kernel/rollout-policy";
+
 export const createTRPCContext = async (opts: {
   headers: Headers;
   auth?: AuthInstance;
@@ -46,7 +49,33 @@ export const runnerProcedure = t.procedure.use(async ({ ctx, next }) => {
   if (!secret) return next();
   const bearer = ctx.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   if (!bearer || bearer !== secret) {
-    throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid runner secret" });
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "Invalid runner secret",
+    });
+  }
+  return next();
+});
+
+/**
+ * Agent jobs can execute tools in a trusted host environment, so unlike the
+ * legacy runner protocol this lane fails closed when no shared secret exists.
+ */
+export const trustedRunnerProcedure = t.procedure.use(async ({ ctx, next }) => {
+  const secret = process.env.OODA_RUNNER_SECRET?.trim();
+  if (!secret) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message:
+        "OODA_RUNNER_SECRET must be configured before agent jobs can run",
+    });
+  }
+  const bearer = ctx.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  if (bearer !== secret) {
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "Invalid runner secret",
+    });
   }
   return next();
 });
@@ -85,7 +114,10 @@ export const authedProcedure = t.procedure.use(async ({ ctx, next }) => {
   // revoked, or expired key falls through to UNAUTHORIZED below — no bypass.
   const apiKey =
     ctx.headers.get("x-api-key")?.trim() ||
-    ctx.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() ||
+    ctx.headers
+      .get("authorization")
+      ?.replace(/^Bearer\s+/i, "")
+      .trim() ||
     null;
 
   if (apiKey) {
@@ -106,7 +138,12 @@ export const authedProcedure = t.procedure.use(async ({ ctx, next }) => {
     // own getSession access holds. A missing/unreachable key therefore surfaces
     // as a 500 rather than 401 at the edge; the Node runtime path is unaffected.
     // Follow-up: route this lookup through the same connection better-auth uses.
-    const result = await validateApiKey(ctx.db as never, apiKey, undefined, null);
+    const result = await validateApiKey(
+      ctx.db as never,
+      apiKey,
+      undefined,
+      null,
+    );
     if (result.ok) {
       const email = result.value.email ?? "";
       return next({
@@ -129,3 +166,16 @@ export const authedProcedure = t.procedure.use(async ({ ctx, next }) => {
     message: "Not authenticated",
   });
 });
+
+export const rolloutProcedure = (capability: OodaRolloutCapabilityV1) =>
+  authedProcedure.use(({ ctx, next }) => {
+    const policy = resolveOodaRolloutPolicy(ctx.userId);
+    if (!policy.capabilities[capability]) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message:
+          `OODA rollout capability ${capability} is not enabled at stage ${policy.stage}. ${policy.reasons.join(" ")}`.trim(),
+      });
+    }
+    return next({ ctx: { ...ctx, rolloutPolicy: policy } });
+  });

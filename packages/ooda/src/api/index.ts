@@ -8,4 +8,13 @@ type RouterOutputs = inferRouterOutputs<AppRouter>;
 export { type AppRouter, appRouter } from "./root";
 export { type EdgeRouter, edgeRouter } from "./edge-router";
 export { createTRPCContext } from "./trpc";
+export {
+  createConversationEventStreamResponse,
+  encodeConversationEventSse,
+  resolveAfterSequence,
+} from "./conversation-event-stream";
+export {
+  createTtsGrantHttpResponse,
+  createTtsStreamHttpResponse,
+} from "./tts-http";
 export type { RouterInputs, RouterOutputs };

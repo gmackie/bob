@@ -40,6 +40,9 @@
     },
     "development:device": {
       "extends": "development",
+      "env": {
+        "OODA_API_URL": "https://ooda.blder.bot"
+      },
       "ios": {
         "simulator": false
       }

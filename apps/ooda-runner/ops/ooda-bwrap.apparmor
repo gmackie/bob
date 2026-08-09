@@ -1,0 +1,12 @@
+# Ubuntu restricts unprivileged user namespaces unless the launching binary
+# has an AppArmor profile with an explicit userns grant. Bubblewrap remains
+# responsible for constructing the per-job filesystem/process namespace.
+
+abi <abi/4.0>,
+include <tunables/global>
+
+profile ooda-bwrap /usr/bin/bwrap flags=(unconfined) {
+  userns,
+
+  include if exists <local/ooda-bwrap>
+}

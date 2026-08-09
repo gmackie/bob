@@ -9,24 +9,24 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
+import { router, Stack } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Stack, router } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import type {
+  MobileSettingsAction,
+  MobileSettingsSectionKey,
+} from "~/features/settings/settings-model";
 import {
   buildMobileSettingsActions,
   buildMobileSettingsDeviceSummary,
   buildMobileSettingsProviderRows,
   buildWorkspaceSettingRows,
 } from "~/features/settings/settings-model";
-import type {
-  MobileSettingsAction,
-  MobileSettingsSectionKey,
-} from "~/features/settings/settings-model";
 import { SELECTED_WORKSPACE_KEY } from "~/features/settings/workspace-selection";
 import { colors } from "~/lib/colors";
-import { authClient } from "~/utils/auth";
 import { trpc } from "~/utils/api";
+import { authClient } from "~/utils/auth";
 
 const PERMISSIONS = ["read", "write", "delete", "admin"] as const;
 
@@ -65,9 +65,8 @@ function SettingsActionGrid({
           accessibilityLabel={action.label}
           className="border-border rounded-lg border p-3 active:opacity-80"
           style={{
-            backgroundColor: action.kind === "logout"
-              ? colors.danger + "12"
-              : colors.card,
+            backgroundColor:
+              action.kind === "logout" ? colors.danger + "12" : colors.card,
             flexBasis: "48%",
             flexGrow: 1,
             minWidth: 150,
@@ -75,11 +74,14 @@ function SettingsActionGrid({
         >
           <Text
             className="text-sm font-semibold"
-            style={{ color: action.kind === "logout" ? colors.danger : colors.foreground }}
+            style={{
+              color:
+                action.kind === "logout" ? colors.danger : colors.foreground,
+            }}
           >
             {action.label}
           </Text>
-          <Text className="mt-2 text-xs leading-5 text-muted">
+          <Text className="text-muted mt-2 text-xs leading-5">
             {action.description}
           </Text>
         </Pressable>
@@ -124,7 +126,11 @@ function AccountSection() {
             void (async () => {
               try {
                 const result = await authClient.deleteUser({});
-                if (result.error) throw result.error;
+                if (result.error) {
+                  throw new Error(
+                    result.error.message ?? "Account deletion failed",
+                  );
+                }
                 await AsyncStorage.removeItem(SELECTED_WORKSPACE_KEY);
                 await authClient.signOut().catch(() => undefined);
                 clearLocalSession();
@@ -143,8 +149,8 @@ function AccountSection() {
 
   return (
     <View className="border-border bg-card mt-4 rounded-lg border p-4">
-      <Text className="text-lg font-semibold text-foreground">Account</Text>
-      <Text className="mt-2 text-sm text-muted">
+      <Text className="text-foreground text-lg font-semibold">Account</Text>
+      <Text className="text-muted mt-2 text-sm">
         Manage the active session on this device.
       </Text>
       <View className="mt-4 flex-row flex-wrap gap-3">
@@ -152,7 +158,7 @@ function AccountSection() {
           onPress={handleLogout}
           className="border-danger/40 self-start rounded-md border px-4 py-2"
         >
-          <Text className="font-medium text-danger">Log out</Text>
+          <Text className="text-danger font-medium">Log out</Text>
         </Pressable>
         <Pressable
           testID="settings-delete-account"
@@ -162,7 +168,7 @@ function AccountSection() {
           className="self-start rounded-md px-4 py-2"
           style={{ backgroundColor: colors.danger }}
         >
-          <Text className="font-medium text-background">Delete Account</Text>
+          <Text className="text-background font-medium">Delete Account</Text>
         </Pressable>
       </View>
     </View>
@@ -171,7 +177,9 @@ function AccountSection() {
 
 function WorkspacesSection() {
   const queryClient = useQueryClient();
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(
+    null,
+  );
   const { data: memberships, isLoading } = useQuery(
     trpc.workspace.list.queryOptions(undefined, { staleTime: 60_000 }),
   );
@@ -186,7 +194,7 @@ function WorkspacesSection() {
     () =>
       buildWorkspaceSettingRows({
         selectedWorkspaceId,
-        memberships: (memberships ?? []),
+        memberships: memberships ?? [],
       }),
     [memberships, selectedWorkspaceId],
   );
@@ -194,23 +202,29 @@ function WorkspacesSection() {
   const selectWorkspace = (workspaceId: string) => {
     setSelectedWorkspaceId(workspaceId);
     void AsyncStorage.setItem(SELECTED_WORKSPACE_KEY, workspaceId).then(() => {
-      void queryClient.invalidateQueries({ queryKey: trpc.workspace.list.queryKey() });
-      void queryClient.invalidateQueries({ queryKey: trpc.project.list.queryKey() });
-      void queryClient.invalidateQueries({ queryKey: trpc.workItem.list.queryKey() });
+      void queryClient.invalidateQueries({
+        queryKey: trpc.workspace.list.queryKey(),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: trpc.project.list.queryKey(),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: trpc.workItem.list.queryKey(),
+      });
     });
   };
 
   return (
     <View className="border-border bg-card rounded-lg border p-4">
-      <Text className="text-lg font-semibold text-foreground">Workspace</Text>
-      <Text className="mt-2 text-sm text-muted">
+      <Text className="text-foreground text-lg font-semibold">Workspace</Text>
+      <Text className="text-muted mt-2 text-sm">
         Choose the workspace used by the dashboard, planning, and project views.
       </Text>
 
       {isLoading ? (
-        <Text className="mt-4 text-muted">Loading workspaces...</Text>
+        <Text className="text-muted mt-4">Loading workspaces...</Text>
       ) : rows.length === 0 ? (
-        <Text className="mt-4 text-muted">No workspaces available.</Text>
+        <Text className="text-muted mt-4">No workspaces available.</Text>
       ) : (
         <View className="mt-4 gap-2">
           {rows.map((workspace) => (
@@ -225,16 +239,18 @@ function WorkspacesSection() {
               }}
             >
               <View className="min-w-0 flex-1">
-                <Text className="font-medium text-foreground" numberOfLines={1}>
+                <Text className="text-foreground font-medium" numberOfLines={1}>
                   {workspace.name}
                 </Text>
-                <Text className="mt-0.5 text-xs text-muted" numberOfLines={1}>
+                <Text className="text-muted mt-0.5 text-xs" numberOfLines={1}>
                   {workspace.slug}
                 </Text>
               </View>
               <Text
                 className="ml-3 text-xs font-semibold"
-                style={{ color: workspace.isSelected ? colors.primary : colors.muted }}
+                style={{
+                  color: workspace.isSelected ? colors.primary : colors.muted,
+                }}
               >
                 {workspace.isSelected ? "Current" : "Use"}
               </Text>
@@ -251,8 +267,8 @@ function ProvidersSection() {
 
   return (
     <View className="border-border bg-card mt-4 rounded-lg border p-4">
-      <Text className="text-lg font-semibold text-foreground">Providers</Text>
-      <Text className="mt-2 text-sm text-muted">
+      <Text className="text-foreground text-lg font-semibold">Providers</Text>
+      <Text className="text-muted mt-2 text-sm">
         Review Codex and Cursor capacity, limits, active sessions, and outcomes.
       </Text>
       <View className="mt-4 gap-2">
@@ -265,10 +281,10 @@ function ProvidersSection() {
             className="border-border rounded-lg border p-3 active:opacity-80"
             style={{ backgroundColor: colors.background }}
           >
-            <Text className="text-sm font-semibold text-foreground">
+            <Text className="text-foreground text-sm font-semibold">
               {row.label}
             </Text>
-            <Text className="mt-1 text-xs leading-5 text-muted">
+            <Text className="text-muted mt-1 text-xs leading-5">
               {row.description}
             </Text>
           </Pressable>
@@ -308,28 +324,30 @@ function PreferencesSection() {
         emailNotifications: !currentPreferences.emailNotifications,
       });
     } else {
-      updatePreferences({ pushNotifications: !currentPreferences.pushNotifications });
+      updatePreferences({
+        pushNotifications: !currentPreferences.pushNotifications,
+      });
     }
   };
 
   if (isLoading) {
     return (
       <View className="border-border bg-card rounded-lg border p-4">
-        <Text className="text-lg font-semibold text-foreground">
+        <Text className="text-foreground text-lg font-semibold">
           Preferences
         </Text>
-        <Text className="mt-2 text-muted">Loading...</Text>
+        <Text className="text-muted mt-2">Loading...</Text>
       </View>
     );
   }
 
   return (
     <View className="border-border bg-card rounded-lg border p-4">
-      <Text className="mb-4 text-lg font-semibold text-foreground">
+      <Text className="text-foreground mb-4 text-lg font-semibold">
         Preferences
       </Text>
 
-      <Text className="mb-2 text-sm font-medium text-foreground">Theme</Text>
+      <Text className="text-foreground mb-2 text-sm font-medium">Theme</Text>
       <View className="mb-4 flex-row gap-2">
         {(["light", "dark", "system"] as const).map((theme) => (
           <Pressable
@@ -355,7 +373,7 @@ function PreferencesSection() {
         ))}
       </View>
 
-      <Text className="mb-2 text-sm font-medium text-foreground">
+      <Text className="text-foreground mb-2 text-sm font-medium">
         Notifications
       </Text>
       <View className="gap-2">
@@ -399,15 +417,13 @@ function DeviceSection() {
 
   return (
     <View className="border-border bg-card mt-4 rounded-lg border p-4">
-      <Text className="text-lg font-semibold text-foreground">
+      <Text className="text-foreground text-lg font-semibold">
         {summary.title}
       </Text>
-      <Text className="mt-3 text-sm text-foreground">
+      <Text className="text-foreground mt-3 text-sm">
         {summary.primaryLabel}
       </Text>
-      <Text className="mt-1 text-sm text-muted">
-        {summary.detailLabel}
-      </Text>
+      <Text className="text-muted mt-1 text-sm">{summary.detailLabel}</Text>
     </View>
   );
 }
@@ -494,7 +510,7 @@ function ApiKeysSection() {
   return (
     <View className="border-border bg-card mt-4 rounded-lg border p-4">
       <View className="mb-4 flex-row items-center justify-between">
-        <Text className="text-lg font-semibold text-foreground">API Keys</Text>
+        <Text className="text-foreground text-lg font-semibold">API Keys</Text>
         {!showCreateForm && (
           <Pressable
             onPress={() => setShowCreateForm(true)}
@@ -517,7 +533,7 @@ function ApiKeysSection() {
             onPress={() => void copyToClipboard(newKey)}
             className="rounded bg-white p-2 dark:bg-gray-900"
           >
-            <Text className="font-mono text-xs text-foreground">{newKey}</Text>
+            <Text className="text-foreground font-mono text-xs">{newKey}</Text>
           </Pressable>
           <Pressable onPress={() => setNewKey(null)} className="mt-2">
             <Text className="text-sm text-green-700 dark:text-green-300">
@@ -529,7 +545,7 @@ function ApiKeysSection() {
 
       {showCreateForm && (
         <View className="border-border mb-4 rounded-lg border p-3">
-          <Text className="mb-2 font-medium text-foreground">
+          <Text className="text-foreground mb-2 font-medium">
             Create New API Key
           </Text>
 
@@ -537,11 +553,11 @@ function ApiKeysSection() {
             value={newKeyName}
             onChangeText={setNewKeyName}
             placeholder="Key name"
-            className="border-border bg-background mb-3 rounded-md border px-3 py-2 text-foreground"
+            className="border-border bg-background text-foreground mb-3 rounded-md border px-3 py-2"
             placeholderTextColor="#888"
           />
 
-          <Text className="mb-2 text-sm text-foreground">Permissions</Text>
+          <Text className="text-foreground mb-2 text-sm">Permissions</Text>
           <View className="mb-3 flex-row flex-wrap gap-2">
             {PERMISSIONS.map((permission) => (
               <Pressable
@@ -556,7 +572,7 @@ function ApiKeysSection() {
                       : "border-border bg-background"
                   }`}
                 />
-                <Text className="capitalize text-foreground">{permission}</Text>
+                <Text className="text-foreground capitalize">{permission}</Text>
               </Pressable>
             ))}
           </View>
@@ -599,13 +615,12 @@ function ApiKeysSection() {
               className="border-border flex-row items-center justify-between rounded-lg border p-3"
             >
               <View className="flex-1">
-                <Text className="font-medium text-foreground">{key.name}</Text>
-                <Text className="text-xs text-muted">
-                  {key.keyPrefix}... |{" "}
-                  {key.permissions.join(", ")}
+                <Text className="text-foreground font-medium">{key.name}</Text>
+                <Text className="text-muted text-xs">
+                  {key.keyPrefix}... | {key.permissions.join(", ")}
                 </Text>
                 {key.lastUsedAt && (
-                  <Text className="text-xs text-muted">
+                  <Text className="text-muted text-xs">
                     Last used: {new Date(key.lastUsedAt).toLocaleDateString()}
                   </Text>
                 )}
@@ -672,13 +687,19 @@ export default function SettingsScreen() {
   };
 
   return (
-    <View className="bg-background flex-1" style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}>
+    <View
+      className="bg-background flex-1"
+      style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
+    >
       <Stack.Screen options={{ title: "Settings" }} />
       <ScrollView ref={scrollRef} className="flex-1 p-4">
-        <Text className="mb-4 text-2xl font-bold text-foreground">
+        <Text className="text-foreground mb-4 text-2xl font-bold">
           Settings
         </Text>
-        <SettingsActionGrid actions={actions} onActionPress={handleActionPress} />
+        <SettingsActionGrid
+          actions={actions}
+          onActionPress={handleActionPress}
+        />
         <View
           onLayout={(event) => {
             sectionOffsets.current.workspace = event.nativeEvent.layout.y;

@@ -42,7 +42,7 @@ def get_stats(
 
     total = session.exec(text(f"SELECT count(*) FROM {schema}.sources")).scalar_one()
     embedded = session.exec(
-        text(f"SELECT count(*) FROM {schema}.embeddings WHERE model = :model"),
+        text(f"SELECT count(*) FROM {schema}.source_embedding WHERE model = :model"),
         params={"model": model},
     ).scalar_one()
     topic_count = session.exec(text(f"SELECT count(*) FROM {schema}.topics")).scalar_one()

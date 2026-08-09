@@ -3,15 +3,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { PgliteDatabase } from "drizzle-orm/pglite";
 import { PGlite } from "@electric-sql/pglite";
-import { drizzle  } from "drizzle-orm/pglite";
-import type {PgliteDatabase} from "drizzle-orm/pglite";
-import {
-  generateDrizzleJson,
-  generateMigration,
-} from "drizzle-kit/api";
-import * as schema from "./schema.js";
+import { generateDrizzleJson, generateMigration } from "drizzle-kit/api";
+import { drizzle } from "drizzle-orm/pglite";
+
 import { applyMigrations, noop } from "./migrate.js";
+import * as schema from "./schema.js";
 
 export interface PgliteDbOptions {
   /** `:memory:` for tests, or an absolute directory path for persistence. */
@@ -208,7 +206,9 @@ export async function bootstrapSchema(client: PGlite): Promise<void> {
   });
 }
 
-export async function makePgliteDb(options: PgliteDbOptions = {}): Promise<PgliteDbHandle> {
+export async function makePgliteDb(
+  options: PgliteDbOptions = {},
+): Promise<PgliteDbHandle> {
   const dataDir = options.dataDir ?? DEFAULT_DIR;
 
   if (dataDir !== ":memory:") {
@@ -238,7 +238,7 @@ export async function makePgliteDb(options: PgliteDbOptions = {}): Promise<Pglit
     });
   }
 
-  const db = drizzle(client, { schema });
+  const db = drizzle(client, { schema, casing: "snake_case" });
 
   return {
     db,
@@ -274,10 +274,7 @@ function gateOnReady(client: PGlite, ready: Promise<void>): PGlite {
       if (prop === "query" || prop === "exec" || prop === "transaction") {
         return async (...args: unknown[]) => {
           await ready;
-          return (original as (...a: unknown[]) => unknown).apply(
-            target,
-            args,
-          );
+          return (original as (...a: unknown[]) => unknown).apply(target, args);
         };
       }
 
@@ -332,7 +329,6 @@ export function makePgliteDbSync(
   // will reject with the underlying error, but if nothing ever calls the db
   // we still want the root cause visible in logs rather than silenced.
   ready.catch((err: unknown) => {
-
     console.error("[@bob/db] PGlite bootstrap failed:", err);
   });
 
@@ -347,7 +343,6 @@ export function makePgliteDbSync(
     try {
       await client.close();
     } catch (err) {
-
       console.error("[@bob/db] PGlite close failed:", err);
     }
   };
@@ -358,5 +353,5 @@ export function makePgliteDbSync(
   }
 
   const gatedClient = gateOnReady(client, ready);
-  return drizzle(gatedClient, { schema });
+  return drizzle(gatedClient, { schema, casing: "snake_case" });
 }

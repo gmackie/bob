@@ -26,7 +26,12 @@
     "./api": "./src/api/index.ts",
     "./api/edge": "./src/api/edge-router.ts",
     "./api/openapi": "./src/api/openapi.ts",
-    "./oracle": "./src/oracle/index.ts"
+    "./api/conversation-event-stream": "./src/api/conversation-event-stream.ts",
+    "./api/tts-http": "./src/api/tts-http.ts",
+    "./kernel": "./src/kernel/index.ts",
+    "./oracle": "./src/oracle/index.ts",
+    "./contracts/v1": "./src/contracts/v1/index.ts",
+    "./integrations": "./src/integrations/index.ts"
   },
   "scripts": {
     "test": "vitest run",
@@ -34,7 +39,11 @@
     "db:push": "dotenv -e ../../.env -- drizzle-kit push",
     "db:migrate": "dotenv -e ../../.env -- drizzle-kit migrate",
     "db:studio": "dotenv -e ../../.env -- drizzle-kit studio",
-    "db:seed": "dotenv -e ../../.env -- tsx src/db/seed.ts"
+    "db:seed": "dotenv -e ../../.env -- tsx src/db/seed.ts",
+    "db:backfill:personal-os-v1": "tsx scripts/backfill-personal-os-v1.ts",
+    "db:verify:personal-os-v1": "tsx scripts/verify-personal-os-v1.ts",
+    "db:bootstrap:personal-os-production": "tsx scripts/bootstrap-personal-os-production.ts",
+    "db:migrate:standalone-vault": "tsx scripts/migrate-standalone-vault.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",

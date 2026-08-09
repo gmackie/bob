@@ -1,0 +1,15 @@
+DROP INDEX IF EXISTS "ooda"."host_turn_executions_completion_idempotency_uidx";
+ALTER TABLE "ooda"."host_turn_executions" DROP COLUMN IF EXISTS "completion_fingerprint";
+ALTER TABLE "ooda"."host_turn_executions" DROP COLUMN IF EXISTS "completion_idempotency_key";
+ALTER TABLE "ooda"."host_turn_executions" DROP COLUMN IF EXISTS "last_heartbeat_at";
+ALTER TABLE "ooda"."host_turn_executions" DROP COLUMN IF EXISTS "lease_duration_seconds";
+ALTER TABLE "ooda"."host_turn_executions" DROP COLUMN IF EXISTS "attempt";
+ALTER TABLE "ooda"."host_turn_executions" DROP COLUMN IF EXISTS "lease_token";
+ALTER TABLE "ooda"."host_turn_executions" DROP COLUMN IF EXISTS "claimed_by";
+ALTER TABLE "ooda"."host_turn_executions" DROP COLUMN IF EXISTS "error";
+ALTER TABLE "ooda"."host_turn_executions" DROP COLUMN IF EXISTS "runtime_transport";
+ALTER TABLE "ooda"."host_turn_executions" DROP COLUMN IF EXISTS "native_turn_id";
+ALTER TABLE "ooda"."host_turn_executions" DROP COLUMN IF EXISTS "native_session_id";
+ALTER TABLE "ooda"."host_turn_executions" DROP COLUMN IF EXISTS "auth_mode";
+ALTER TABLE "ooda"."host_turn_executions" DROP COLUMN IF EXISTS "context_pack_id";
+ALTER TABLE "ooda"."host_turn_executions" DROP COLUMN IF EXISTS "preferred_provider";

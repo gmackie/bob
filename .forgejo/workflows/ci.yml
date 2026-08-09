@@ -42,7 +42,11 @@ jobs:
         # in parallel, and the big Next.js app (@bob/blder) spikes enough memory
         # that a concurrent run intermittently OOM-kills one (exit 137) under
         # the runner's RAM+swap pressure. Serial typecheck can't collectively
-        # exhaust memory; same reasoning as the serialized test step below.
+        # exhaust memory. The runner deliberately defaults Node to a 1.5GB heap,
+        # but @bob/blder alone can exceed that ceiling, so this one serialized
+        # step receives headroom within the job's 5GB container limit.
+        env:
+          NODE_OPTIONS: --max-old-space-size=3072
         run: pnpm exec turbo run typecheck --concurrency=1
 
       - name: Lint
@@ -64,8 +68,12 @@ jobs:
         # lets @bob/db and @bob/api's own vitest processes detect this
         # already-running instance instead of racing to start a second one.
         run: |
-          mkdir -p data/pglite
-          nohup npx @gmacko/emulate start -s postgres --seed emulate.config.yaml \
+          EMULATE_BIN="${PWD}/node_modules/.bin/emulate"
+          EMULATE_CONFIG="${PWD}/emulate.config.yaml"
+          EMULATE_STATE="$(mktemp -d /tmp/bob-emulate.XXXXXX)"
+          mkdir -p "${EMULATE_STATE}/data/pglite"
+          cd "${EMULATE_STATE}"
+          nohup "${EMULATE_BIN}" start -s postgres --seed "${EMULATE_CONFIG}" \
             > /tmp/emulate.log 2>&1 &
           echo "Waiting for emulated postgres wire protocol on :5432..."
           # A cold npx cache means @gmacko/emulate has to install and compile
@@ -187,3 +195,34 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm exec vinext deploy
+
+  # OODA is promoted independently from the Bob web worker and only after the
+  # guarded database bootstrap has completed. The repository secret is a
+  # deliberate kill switch: absent/false means the job succeeds without
+  # touching Cloudflare, so merging code can never race ahead of migrations.
+  deploy-ooda-edge:
+    name: Deploy OODA edge (approval-gated)
+    needs: ci
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: https://github.com/pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build and conditionally deploy OODA edge
+        working-directory: apps/ooda-edge
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          OODA_EDGE_DEPLOY_ENABLED: ${{ secrets.OODA_EDGE_DEPLOY_ENABLED }}
+        run: |
+          pnpm exec vinext build
+          if [ "${OODA_EDGE_DEPLOY_ENABLED}" != "true" ]; then
+            echo "OODA edge deploy disabled; set OODA_EDGE_DEPLOY_ENABLED=true only after the production schema bootstrap"
+            exit 0
+          fi
+          pnpm exec vinext deploy

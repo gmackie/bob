@@ -3,7 +3,11 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { ClaudeAdapter } from "../claude-adapter";
-import type { AdapterEvent, AdapterProcessHandle, McpServerConfigLike } from "../types";
+import type {
+  AdapterEvent,
+  AdapterProcessHandle,
+  McpServerConfigLike,
+} from "../types";
 
 // Fake claude CLI: for each stream-json user message on stdin, emits a
 // `result` line after a short delay; exits when stdin closes (mirroring
@@ -69,6 +73,12 @@ describe("ClaudeAdapter", () => {
     expect(adapter.id).toBe("claude");
     expect(adapter.name).toBe("Claude Code");
     expect(adapter.transport).toBe("api");
+    expect(adapter.capabilities()).toMatchObject({
+      transport: "cli",
+      supportsResume: true,
+      supportsFork: true,
+      supportsApprovals: true,
+    });
   });
 
   it("is available when ANTHROPIC_API_KEY is set", () => {
@@ -110,6 +120,26 @@ describe("ClaudeAdapter", () => {
     expect(command.args).not.toContain("Research sleep optimization");
     expect(command.prompt).toBe("Research sleep optimization");
     expect(command.cwd).toBe("/tmp/threads/sleep");
+    const sessionIdx = command.args.indexOf("--session-id");
+    expect(sessionIdx).toBeGreaterThan(-1);
+    expect(command.args[sessionIdx + 1]).toBe(
+      command.runtime?.session?.sessionId,
+    );
+  });
+
+  it("uses Claude native resume and fork flags", () => {
+    const adapter = new ClaudeAdapter();
+    const command = adapter.buildCommand({
+      prompt: "continue",
+      workspaceRoot: "/tmp/ws",
+      session: {
+        mode: "fork",
+        sessionId: "11111111-1111-4111-8111-111111111111",
+      },
+    });
+    expect(command.args).toContain("--resume");
+    expect(command.args).toContain("11111111-1111-4111-8111-111111111111");
+    expect(command.args).toContain("--fork-session");
   });
 
   it("applies persona model and allowedTools to the CLI args", () => {
@@ -158,7 +188,10 @@ describe("ClaudeAdapter", () => {
 
     it("adds no MCP flags when no servers are registered", () => {
       const adapter = new ClaudeAdapter();
-      const command = adapter.buildCommand({ prompt: "p", workspaceRoot: "/tmp/ws" });
+      const command = adapter.buildCommand({
+        prompt: "p",
+        workspaceRoot: "/tmp/ws",
+      });
       expect(command.args).not.toContain("--mcp-config");
       expect(command.args).not.toContain("--strict-mcp-config");
     });
@@ -167,7 +200,10 @@ describe("ClaudeAdapter", () => {
       const adapter = new ClaudeAdapter();
       adapter.registerMcpServers([mcpConfig]);
 
-      const command = adapter.buildCommand({ prompt: "p", workspaceRoot: "/tmp/ws" });
+      const command = adapter.buildCommand({
+        prompt: "p",
+        workspaceRoot: "/tmp/ws",
+      });
 
       // --strict-mcp-config so ONLY our in-process server is used.
       expect(command.args).toContain("--strict-mcp-config");
@@ -191,7 +227,9 @@ describe("ClaudeAdapter", () => {
       // Every tool from the server is allowed so calls aren't permission-gated.
       const allowIdx = command.args.indexOf("--allowedTools");
       expect(allowIdx).toBeGreaterThan(-1);
-      expect(command.args[allowIdx + 1]!.split(",")).toContain("mcp__ooda-buddy-tools");
+      expect(command.args[allowIdx + 1]!.split(",")).toContain(
+        "mcp__ooda-buddy-tools",
+      );
     });
 
     it("merges the MCP allowlist with persona allowedTools", () => {
@@ -218,7 +256,10 @@ describe("ClaudeAdapter", () => {
       adapter.registerMcpServers([mcpConfig]);
 
       // buildCommand writes the file; swap in the fake CLI to actually run it.
-      const built = adapter.buildCommand({ prompt: "hi", workspaceRoot: process.cwd() });
+      const built = adapter.buildCommand({
+        prompt: "hi",
+        workspaceRoot: process.cwd(),
+      });
       const path = mcpConfigPathFrom(built.args);
       expect(existsSync(path)).toBe(true);
 
@@ -343,7 +384,10 @@ rl.on('close', () => process.exit(0));
 
     it("defaults to prompt mode (no blanket bypass) and supports skip for full autonomy", () => {
       const adapter = new ClaudeAdapter();
-      const prompt = adapter.buildCommand({ prompt: "p", workspaceRoot: "/tmp" });
+      const prompt = adapter.buildCommand({
+        prompt: "p",
+        workspaceRoot: "/tmp",
+      });
       expect(prompt.args).not.toContain("--dangerously-skip-permissions");
 
       const skip = adapter.buildCommand({
@@ -356,7 +400,10 @@ rl.on('close', () => process.exit(0));
 
     it("routes prompt-mode permissions onto the control channel via --permission-prompt-tool stdio", () => {
       const adapter = new ClaudeAdapter();
-      const prompt = adapter.buildCommand({ prompt: "p", workspaceRoot: "/tmp" });
+      const prompt = adapter.buildCommand({
+        prompt: "p",
+        workspaceRoot: "/tmp",
+      });
 
       const idx = prompt.args.indexOf("--permission-prompt-tool");
       expect(idx).toBeGreaterThan(-1);
@@ -373,10 +420,14 @@ rl.on('close', () => process.exit(0));
 
     it("honors the CLAUDE_PERMISSION_PROMPT_ARGS override (version-probed CLI boundary)", () => {
       const prev = process.env.CLAUDE_PERMISSION_PROMPT_ARGS;
-      process.env.CLAUDE_PERMISSION_PROMPT_ARGS = "--permission-mode ask  --extra";
+      process.env.CLAUDE_PERMISSION_PROMPT_ARGS =
+        "--permission-mode ask  --extra";
       try {
         const adapter = new ClaudeAdapter();
-        const prompt = adapter.buildCommand({ prompt: "p", workspaceRoot: "/tmp" });
+        const prompt = adapter.buildCommand({
+          prompt: "p",
+          workspaceRoot: "/tmp",
+        });
         expect(prompt.args).toContain("--permission-mode");
         expect(prompt.args).toContain("ask");
         // double space must not inject empty argv entries
@@ -384,7 +435,8 @@ rl.on('close', () => process.exit(0));
         expect(prompt.args).not.toContain("");
         expect(prompt.args).not.toContain("--permission-prompt-tool");
       } finally {
-        if (prev === undefined) delete process.env.CLAUDE_PERMISSION_PROMPT_ARGS;
+        if (prev === undefined)
+          delete process.env.CLAUDE_PERMISSION_PROMPT_ARGS;
         else process.env.CLAUDE_PERMISSION_PROMPT_ARGS = prev;
       }
     });
@@ -426,7 +478,9 @@ rl.on('close', () => process.exit(0));
 
       const { exitCode } = await done;
       expect(exitCode).toBe(0);
-      expect(collectResults(events).some((l) => l.includes("decision:allow"))).toBe(true);
+      expect(
+        collectResults(events).some((l) => l.includes("decision:allow")),
+      ).toBe(true);
     });
 
     it("deny resolves the request with behavior deny", async () => {
@@ -448,10 +502,14 @@ rl.on('close', () => process.exit(0));
         check();
       });
 
-      expect(handle?.respondPermission?.("req-1", "deny", "not on my box")).toBe(true);
+      expect(
+        handle?.respondPermission?.("req-1", "deny", "not on my box"),
+      ).toBe(true);
       const { exitCode } = await done;
       expect(exitCode).toBe(0);
-      expect(collectResults(events).some((l) => l.includes("decision:deny"))).toBe(true);
+      expect(
+        collectResults(events).some((l) => l.includes("decision:deny")),
+      ).toBe(true);
     });
 
     it("respondPermission for an unknown request id returns false", async () => {

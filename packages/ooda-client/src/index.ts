@@ -1,19 +1,12 @@
-import createClient from "openapi-fetch";
+import { createOodaV1Client } from "./v1";
 
-// TODO: Once openapi-typescript generates schema.d.ts from dist/openapi/ooda.json,
-// import the paths type and pass it as the generic parameter:
-//   import type { paths } from "../schema";
-//   export function createOodaClient(baseUrl = "https://ooda.blder.bot") {
-//     return createClient<paths>({ baseUrl });
-//   }
+export * from "./v1";
 
 /**
- * Create an HTTP client for the OODA Research API.
- *
- * Currently untyped — run `openapi-typescript dist/openapi/ooda.json -o
- * packages/ooda-client/schema.d.ts` and add the `paths` generic to get
- * full request/response types.
+ * Compatibility entry point for the canonical, contract-typed OODA V1 client.
+ * New consumers may import `createOodaV1Client` directly when they need the
+ * asynchronous header provider or a custom fetch implementation.
  */
 export function createOodaClient(baseUrl = "https://ooda.blder.bot") {
-  return createClient({ baseUrl });
+  return createOodaV1Client({ baseUrl });
 }

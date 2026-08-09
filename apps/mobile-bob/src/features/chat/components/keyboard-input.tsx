@@ -7,14 +7,18 @@ interface KeyboardInputProps {
   onSend: (text: string) => void;
   onClose: () => void;
   disabled?: boolean;
+  initialValue?: string;
+  reviewLabel?: string;
 }
 
 export function KeyboardInput({
   onSend,
   onClose,
   disabled = false,
+  initialValue = "",
+  reviewLabel,
 }: KeyboardInputProps) {
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState(initialValue);
 
   const send = useCallback(() => {
     const trimmed = value.trim();
@@ -25,6 +29,9 @@ export function KeyboardInput({
 
   return (
     <View className="border-border bg-card-elevated rounded-2xl border p-3">
+      {reviewLabel ? (
+        <Text className="mb-2 text-xs font-semibold text-warning">{reviewLabel}</Text>
+      ) : null}
       <TextInput
         value={value}
         onChangeText={setValue}

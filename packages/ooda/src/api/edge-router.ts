@@ -15,9 +15,27 @@ import { researchRouter } from "./router/research";
 import { oracleRouter } from "./router/oracle";
 import { importsRouter } from "./router/imports";
 import { bobRouter } from "./router/bob";
+import { conversationsRouter } from "./router/conversations";
+import { contextRouter } from "./router/context";
+import { eventsRouter } from "./router/events";
+import { hostRouter } from "./router/host";
+import { jobsRouter } from "./router/jobs";
+import { integrationsRouter } from "./router/integrations";
+import { memoriesRouter } from "./router/memories";
+import { proposalsRouter } from "./router/proposals";
+import { rolloutRouter } from "./router/rollout";
 import { createTRPCRouter } from "./trpc";
 
 const edgeRouterRecord = {
+  conversations: conversationsRouter,
+  context: contextRouter,
+  events: eventsRouter,
+  host: hostRouter,
+  jobs: jobsRouter,
+  integrations: integrationsRouter,
+  memories: memoriesRouter,
+  proposals: proposalsRouter,
+  rollout: rolloutRouter,
   threads: threadsEdgeRouter,
   runner: runnerRouter,
   research: researchRouter,

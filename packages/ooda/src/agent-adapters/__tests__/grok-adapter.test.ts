@@ -9,6 +9,11 @@ describe("GrokAdapter", () => {
     expect(adapter.id).toBe("grok");
     expect(adapter.name).toBe("Grok Build");
     expect(adapter.transport).toBe("stdio");
+    expect(adapter.capabilities()).toMatchObject({
+      transport: "acp",
+      supportsResume: true,
+      supportsApprovals: true,
+    });
   });
 
   it("is available when XAI_API_KEY is set", () => {
@@ -34,20 +39,33 @@ describe("GrokAdapter", () => {
 
     expect(command.binary).toBe("grok");
     // grok's CLI grammar: top-level opts -> `agent` -> agent opts -> `stdio`.
-    // `--cwd` is top-level; `--always-approve` is an `agent` option. The
-    // `agent stdio` subcommand itself takes no flags. (Verified against
-    // grok 0.2.16 on hetzner-bob.)
+    // `--cwd` is top-level. Prompt-mode sessions intentionally omit
+    // `--always-approve` so ACP permission requests reach OODA.
     expect(command.args).toEqual([
       "--cwd",
       "/tmp/threads/api",
       "agent",
-      "--always-approve",
       "stdio",
     ]);
     expect(command.cwd).toBe("/tmp/threads/api");
     // The prompt is sent over ACP (session/prompt), not as a CLI arg.
     expect(command.args).not.toContain("Add a hello world endpoint");
     expect(command.prompt).toBe("Add a hello world endpoint");
+    expect(command.runtime).toMatchObject({
+      permissionMode: "prompt",
+      billingPolicy: "subscription_preferred",
+      session: { mode: "start" },
+    });
+  });
+
+  it("uses always-approve only for explicitly sandboxed full-autonomy jobs", () => {
+    const adapter = new GrokAdapter();
+    const command = adapter.buildCommand({
+      prompt: "prototype",
+      workspaceRoot: "/tmp/scratch",
+      permissionMode: "skip",
+    });
+    expect(command.args).toContain("--always-approve");
   });
 });
 
@@ -92,7 +110,9 @@ describe("mapSessionUpdate", () => {
       sessionUpdate: "tool_call_update",
       toolCallId: "tc_1",
       status: "completed",
-      content: [{ type: "content", content: { type: "text", text: "wrote 3 lines" } }],
+      content: [
+        { type: "content", content: { type: "text", text: "wrote 3 lines" } },
+      ],
     });
     expect(event?.type).toBe("tool_result");
     expect(event?.tool?.id).toBe("tc_1");

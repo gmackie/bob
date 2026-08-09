@@ -9,11 +9,14 @@ import type {
   AgentAdapter,
   AdapterCommand,
   AdapterEvent,
+  AdapterExecutionResult,
   AdapterProcessHandle,
   BuildCommandOptions,
   ExecuteOptions,
   McpServerConfigLike,
   PromptImage,
+  RuntimeCapabilities,
+  RuntimeSessionRef,
   SpawnedProcessLike,
 } from "./types";
 
@@ -50,6 +53,18 @@ export class ClaudeAdapter implements AgentAdapter {
     this.mcpServers = servers;
   }
 
+  capabilities(): RuntimeCapabilities {
+    return {
+      transport: "cli",
+      supportsResume: true,
+      supportsFork: true,
+      supportsSteering: true,
+      supportsApprovals: true,
+      supportsUsageInspection: false,
+      authModes: ["subscription", "api_key"],
+    };
+  }
+
   isAvailable(): boolean {
     // Check env var OR if the binary exists (it manages its own auth)
     if (process.env.ANTHROPIC_API_KEY) return true;
@@ -68,8 +83,10 @@ export class ClaudeAdapter implements AgentAdapter {
     // has produced its result, so single-prompt runs exit exactly as before.
     const args: string[] = [
       "-p",
-      "--input-format", "stream-json",
-      "--output-format", "stream-json",
+      "--input-format",
+      "stream-json",
+      "--output-format",
+      "stream-json",
       "--verbose",
     ];
 
@@ -87,7 +104,8 @@ export class ClaudeAdapter implements AgentAdapter {
       args.push("--dangerously-skip-permissions");
     } else {
       const promptArgs = (
-        process.env.CLAUDE_PERMISSION_PROMPT_ARGS ?? "--permission-prompt-tool stdio"
+        process.env.CLAUDE_PERMISSION_PROMPT_ARGS ??
+        "--permission-prompt-tool stdio"
       )
         .split(" ")
         .filter(Boolean);
@@ -101,6 +119,18 @@ export class ClaudeAdapter implements AgentAdapter {
       args.push("--model", opts.model);
     }
 
+    const requestedSession = opts.session ?? { mode: "start" as const };
+    const nativeSessionId = requestedSession.sessionId ?? randomUUID();
+    if (
+      requestedSession.mode === "resume" ||
+      requestedSession.mode === "fork"
+    ) {
+      args.push("--resume", nativeSessionId);
+      if (requestedSession.mode === "fork") args.push("--fork-session");
+    } else {
+      args.push("--session-id", nativeSessionId);
+    }
+
     const allowedTools = [...(opts.allowedTools ?? [])];
 
     // Buddy-tool MCP servers registered by the session executor for this
@@ -112,10 +142,15 @@ export class ClaudeAdapter implements AgentAdapter {
     this.mcpConfigPath = null;
     if (this.mcpServers.length > 0) {
       const configPath = join(tmpdir(), `ooda-mcp-${randomUUID()}.json`);
-      writeFileSync(configPath, buildClaudeMcpConfigFile(this.mcpServers), "utf8");
+      writeFileSync(
+        configPath,
+        buildClaudeMcpConfigFile(this.mcpServers),
+        "utf8",
+      );
       this.mcpConfigPath = configPath;
       args.push("--mcp-config", configPath, "--strict-mcp-config");
-      for (const server of this.mcpServers) allowedTools.push(`mcp__${server.name}`);
+      for (const server of this.mcpServers)
+        allowedTools.push(`mcp__${server.name}`);
     }
 
     if (allowedTools.length) {
@@ -128,6 +163,17 @@ export class ClaudeAdapter implements AgentAdapter {
       cwd: opts.workspaceRoot,
       prompt: opts.prompt,
       images: opts.images,
+      runtime: {
+        systemPrompt: opts.systemPrompt,
+        model: opts.model,
+        permissionMode: opts.permissionMode ?? "prompt",
+        session: { ...requestedSession, sessionId: nativeSessionId },
+        billingPolicy: opts.billingPolicy ?? "subscription_preferred",
+        authMode:
+          opts.authMode ??
+          (process.env.ANTHROPIC_API_KEY ? "api_key" : "subscription"),
+        correlationId: opts.correlationId,
+      },
     };
   }
 
@@ -135,7 +181,7 @@ export class ClaudeAdapter implements AgentAdapter {
     command: AdapterCommand,
     onEvent: (event: AdapterEvent) => void,
     options?: ExecuteOptions,
-  ): Promise<{ exitCode: number }> {
+  ): Promise<AdapterExecutionResult> {
     // Legacy callers may pass a command with the prompt baked into args and
     // no `prompt` field — run those exactly as before (no stdin).
     const interactive = command.prompt !== undefined;
@@ -157,14 +203,20 @@ export class ClaudeAdapter implements AgentAdapter {
     // ChildProcess structurally satisfies SpawnedProcessLike for everything
     // this method touches; the cast collapses the union so the shared code
     // below typechecks against one shape.
+    const childEnvironment = {
+      ...(options?.environment ?? process.env),
+      ...command.env,
+    };
+    if (command.runtime?.authMode === "subscription")
+      delete childEnvironment.ANTHROPIC_API_KEY;
     const child: SpawnedProcessLike = options?.spawnImpl
       ? options.spawnImpl(command.binary, command.args, {
           cwd: command.cwd,
-          env: { ...process.env, ...command.env },
+          env: childEnvironment,
         })
       : (spawn(command.binary, command.args, {
           cwd: command.cwd,
-          env: { ...process.env, ...command.env },
+          env: childEnvironment as NodeJS.ProcessEnv,
           stdio: [interactive ? "pipe" : "ignore", "pipe", "pipe"] as const,
         }) as unknown as SpawnedProcessLike);
 
@@ -296,8 +348,41 @@ export class ClaudeAdapter implements AgentAdapter {
     // `{"type":"control_request",...}` permission prompts; chunks are still
     // forwarded raw so consumers see the same stream.
     let lineBuffer = "";
+    let nativeSessionId = command.runtime?.session?.sessionId;
+    const sessionRef = (): RuntimeSessionRef | undefined =>
+      nativeSessionId
+        ? {
+            provider: this.id,
+            sessionId: nativeSessionId,
+            transport: "cli",
+            authMode: command.runtime?.authMode ?? "subscription",
+          }
+        : undefined;
+    const emitSession = () => {
+      const runtimeSession = sessionRef();
+      if (!runtimeSession) return;
+      onEvent({
+        type: "runtime_session",
+        data: runtimeSession.sessionId,
+        timestamp: new Date().toISOString(),
+        runtimeSession,
+      });
+    };
+    emitSession();
     const scanLine = (line: string) => {
       if (!line.startsWith("{")) return;
+      try {
+        const parsed = JSON.parse(line) as { session_id?: string };
+        if (
+          typeof parsed.session_id === "string" &&
+          parsed.session_id !== nativeSessionId
+        ) {
+          nativeSessionId = parsed.session_id;
+          emitSession();
+        }
+      } catch {
+        /* handled by the specialized parsers below */
+      }
       if (line.includes('"type":"result"')) {
         try {
           if ((JSON.parse(line) as { type?: string }).type === "result") {
@@ -354,7 +439,10 @@ export class ClaudeAdapter implements AgentAdapter {
         if (settled) return;
         settled = true;
         cleanupMcpConfig();
-        resolve({ exitCode });
+        resolve({
+          exitCode,
+          ...(sessionRef() ? { runtimeSession: sessionRef() } : {}),
+        });
       };
 
       child.stdin?.on("error", () => {
@@ -390,12 +478,13 @@ export class ClaudeAdapter implements AgentAdapter {
       });
 
       child.on("close", (exitCode: number | null) => {
-        const resolvedExitCode = killed ? 130 : exitCode ?? 1;
+        const resolvedExitCode = killed ? 130 : (exitCode ?? 1);
         onEvent({
           type: "exit",
           data: "",
           timestamp: new Date().toISOString(),
           exitCode: resolvedExitCode,
+          runtimeSession: sessionRef(),
         });
         finish(resolvedExitCode);
       });

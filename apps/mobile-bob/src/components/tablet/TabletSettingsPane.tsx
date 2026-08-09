@@ -1,28 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { router, useLocalSearchParams, usePathname } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { router, useLocalSearchParams, usePathname } from "expo-router";
 
+import type { MobileSettingsSectionKey } from "~/features/settings/settings-model";
+import type { ProviderKey } from "~/features/tablet/dashboard";
 import {
   buildMobileSettingsActions,
   buildWorkspaceSettingRows,
 } from "~/features/settings/settings-model";
-import type { MobileSettingsSectionKey } from "~/features/settings/settings-model";
 import {
   buildWorkspaceSelectionPath,
   SELECTED_WORKSPACE_KEY,
 } from "~/features/settings/workspace-selection";
-import type { ProviderKey } from "~/features/tablet/dashboard";
 import { colors } from "~/lib/colors";
-import { authClient } from "~/utils/auth";
 import { trpc } from "~/utils/api";
+import { authClient } from "~/utils/auth";
 
 interface TabletSettingsPaneProps {
   onOpenProvider?: (provider: ProviderKey) => void;
 }
 
-export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) {
+export function TabletSettingsPane({
+  onOpenProvider,
+}: TabletSettingsPaneProps) {
   const queryClient = useQueryClient();
   const pathname = usePathname();
   const searchParams = useLocalSearchParams();
@@ -34,7 +36,9 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
     app: 0,
     device: 0,
   });
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(
+    null,
+  );
   const { data: memberships, isLoading } = useQuery(
     trpc.workspace.list.queryOptions(undefined, { staleTime: 60_000 }),
   );
@@ -64,7 +68,7 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
     () =>
       buildWorkspaceSettingRows({
         selectedWorkspaceId,
-        memberships: (memberships ?? []),
+        memberships: memberships ?? [],
       }),
     [memberships, selectedWorkspaceId],
   );
@@ -76,14 +80,22 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
         pushNotifications?: boolean;
       }
     | undefined;
-  const apiKeyCount = Array.isArray(apiKeysQuery.data) ? apiKeysQuery.data.length : 0;
+  const apiKeyCount = Array.isArray(apiKeysQuery.data)
+    ? apiKeysQuery.data.length
+    : 0;
 
   const selectWorkspace = (workspaceId: string) => {
     setSelectedWorkspaceId(workspaceId);
     void AsyncStorage.setItem(SELECTED_WORKSPACE_KEY, workspaceId).then(() => {
-      void queryClient.invalidateQueries({ queryKey: trpc.workspace.list.queryKey() });
-      void queryClient.invalidateQueries({ queryKey: trpc.project.list.queryKey() });
-      void queryClient.invalidateQueries({ queryKey: trpc.workItem.list.queryKey() });
+      void queryClient.invalidateQueries({
+        queryKey: trpc.workspace.list.queryKey(),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: trpc.project.list.queryKey(),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: trpc.workItem.list.queryKey(),
+      });
       router.replace(
         buildWorkspaceSelectionPath(
           currentPath(pathname, searchParams),
@@ -133,7 +145,11 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
             void (async () => {
               try {
                 const result = await authClient.deleteUser({});
-                if (result.error) throw result.error;
+                if (result.error) {
+                  throw new Error(
+                    result.error.message ?? "Account deletion failed",
+                  );
+                }
                 await AsyncStorage.removeItem(SELECTED_WORKSPACE_KEY);
                 await authClient.signOut().catch(() => undefined);
                 clearLocalSession();
@@ -159,10 +175,10 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
     >
       <View className="flex-row items-start justify-between">
         <View className="flex-1" style={{ minWidth: 0 }}>
-          <Text className="text-3xl font-semibold tracking-tight text-foreground">
+          <Text className="text-foreground text-3xl font-semibold tracking-tight">
             Settings
           </Text>
-          <Text className="mt-1 text-sm text-muted" numberOfLines={1}>
+          <Text className="text-muted mt-1 text-sm" numberOfLines={1}>
             Workspace, account, providers, app, and device controls
           </Text>
         </View>
@@ -172,36 +188,42 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
         {actions.map((action) => {
           const targetSection = action.targetSection;
           return (
-          <Pressable
-            key={action.key}
-            onPress={
-              action.kind === "logout"
-                ? handleLogout
-                : targetSection
-                  ? () => scrollToSection(targetSection)
-                  : undefined
-            }
-            accessibilityRole="button"
-            accessibilityLabel={action.label}
-            className="rounded-lg border p-4 active:opacity-80"
-            style={{
-              borderColor: colors.border,
-              backgroundColor: action.kind === "logout" ? colors.danger + "12" : colors.card,
-              flexBasis: "31%",
-              flexGrow: 1,
-              minWidth: 180,
-            }}
-          >
-            <Text
-              className="text-sm font-semibold"
-              style={{ color: action.kind === "logout" ? colors.danger : colors.foreground }}
+            <Pressable
+              key={action.key}
+              onPress={
+                action.kind === "logout"
+                  ? handleLogout
+                  : targetSection
+                    ? () => scrollToSection(targetSection)
+                    : undefined
+              }
+              accessibilityRole="button"
+              accessibilityLabel={action.label}
+              className="rounded-lg border p-4 active:opacity-80"
+              style={{
+                borderColor: colors.border,
+                backgroundColor:
+                  action.kind === "logout" ? colors.danger + "12" : colors.card,
+                flexBasis: "31%",
+                flexGrow: 1,
+                minWidth: 180,
+              }}
             >
-              {action.label}
-            </Text>
-            <Text className="mt-2 text-xs leading-5 text-muted">
-              {action.description}
-            </Text>
-          </Pressable>
+              <Text
+                className="text-sm font-semibold"
+                style={{
+                  color:
+                    action.kind === "logout"
+                      ? colors.danger
+                      : colors.foreground,
+                }}
+              >
+                {action.label}
+              </Text>
+              <Text className="text-muted mt-2 text-xs leading-5">
+                {action.description}
+              </Text>
+            </Pressable>
           );
         })}
       </View>
@@ -213,13 +235,15 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
         }}
         style={{ borderColor: colors.border, backgroundColor: colors.card }}
       >
-        <Text className="text-sm font-semibold uppercase tracking-wider text-muted">
+        <Text className="text-muted text-sm font-semibold tracking-wider uppercase">
           Workspace
         </Text>
         {isLoading ? (
-          <Text className="mt-3 text-sm text-muted">Loading workspaces...</Text>
+          <Text className="text-muted mt-3 text-sm">Loading workspaces...</Text>
         ) : workspaceRows.length === 0 ? (
-          <Text className="mt-3 text-sm text-muted">No workspaces available.</Text>
+          <Text className="text-muted mt-3 text-sm">
+            No workspaces available.
+          </Text>
         ) : (
           <View className="mt-3 gap-2">
             {workspaceRows.map((workspace) => (
@@ -237,16 +261,21 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
                 }}
               >
                 <View className="min-w-0 flex-1">
-                  <Text className="text-sm font-semibold text-foreground" numberOfLines={1}>
+                  <Text
+                    className="text-foreground text-sm font-semibold"
+                    numberOfLines={1}
+                  >
                     {workspace.name}
                   </Text>
-                  <Text className="mt-0.5 text-xs text-muted" numberOfLines={1}>
+                  <Text className="text-muted mt-0.5 text-xs" numberOfLines={1}>
                     {workspace.slug}
                   </Text>
                 </View>
                 <Text
                   className="ml-3 text-xs font-semibold"
-                  style={{ color: workspace.isSelected ? colors.primary : colors.muted }}
+                  style={{
+                    color: workspace.isSelected ? colors.primary : colors.muted,
+                  }}
                 >
                   {workspace.isSelected ? "Current" : "Use"}
                 </Text>
@@ -263,13 +292,13 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
         }}
         style={{ borderColor: colors.border, backgroundColor: colors.card }}
       >
-        <Text className="text-sm font-semibold uppercase tracking-wider text-muted">
+        <Text className="text-muted text-sm font-semibold tracking-wider uppercase">
           Account
         </Text>
-        <Text className="mt-3 text-sm text-foreground">
+        <Text className="text-foreground mt-3 text-sm">
           Active signed-in session
         </Text>
-        <Text className="mt-1 text-xs text-muted">
+        <Text className="text-muted mt-1 text-xs">
           Manage the current account session on this device.
         </Text>
         <Pressable
@@ -279,7 +308,10 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
           className="mt-3 self-start rounded-md border px-3 py-2 active:opacity-80"
           style={{ borderColor: colors.danger + "66" }}
         >
-          <Text className="text-xs font-semibold" style={{ color: colors.danger }}>
+          <Text
+            className="text-xs font-semibold"
+            style={{ color: colors.danger }}
+          >
             Log out
           </Text>
         </Pressable>
@@ -291,7 +323,10 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
           className="mt-3 self-start rounded-md px-3 py-2 active:opacity-80"
           style={{ backgroundColor: colors.danger }}
         >
-          <Text className="text-xs font-semibold" style={{ color: colors.background }}>
+          <Text
+            className="text-xs font-semibold"
+            style={{ color: colors.background }}
+          >
             Delete Account
           </Text>
         </Pressable>
@@ -305,26 +340,28 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
           }}
           style={{ borderColor: colors.border, backgroundColor: colors.card }}
         >
-          <Text className="text-sm font-semibold uppercase tracking-wider text-muted">
+          <Text className="text-muted text-sm font-semibold tracking-wider uppercase">
             Providers
           </Text>
           <View className="mt-3 flex-row gap-2">
-            {(["claude", "codex", "grok", "cursor-agent"] as const).map((provider) => (
-              <Pressable
-                key={provider}
-                onPress={() => onOpenProvider?.(provider)}
-                accessibilityRole="button"
-                accessibilityLabel={`Open ${provider} provider detail`}
-                className="flex-1 rounded-md px-3 py-2 active:opacity-80"
-                style={{ backgroundColor: colors.secondary }}
-              >
-                <Text className="text-center text-xs font-semibold text-foreground">
-                  {provider === "cursor-agent"
-                    ? "Cursor"
-                    : provider.charAt(0).toUpperCase() + provider.slice(1)}
-                </Text>
-              </Pressable>
-            ))}
+            {(["claude", "codex", "grok", "cursor-agent"] as const).map(
+              (provider) => (
+                <Pressable
+                  key={provider}
+                  onPress={() => onOpenProvider?.(provider)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${provider} provider detail`}
+                  className="flex-1 rounded-md px-3 py-2 active:opacity-80"
+                  style={{ backgroundColor: colors.secondary }}
+                >
+                  <Text className="text-foreground text-center text-xs font-semibold">
+                    {provider === "cursor-agent"
+                      ? "Cursor"
+                      : provider.charAt(0).toUpperCase() + provider.slice(1)}
+                  </Text>
+                </Pressable>
+              ),
+            )}
           </View>
         </View>
 
@@ -335,14 +372,15 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
           }}
           style={{ borderColor: colors.border, backgroundColor: colors.card }}
         >
-          <Text className="text-sm font-semibold uppercase tracking-wider text-muted">
+          <Text className="text-muted text-sm font-semibold tracking-wider uppercase">
             App
           </Text>
-          <Text className="mt-3 text-sm text-foreground">
+          <Text className="text-foreground mt-3 text-sm">
             Theme: {preferences?.theme ?? "system"}
           </Text>
-          <Text className="mt-1 text-xs text-muted">
-            Email {preferences?.emailNotifications ? "on" : "off"} · Push {preferences?.pushNotifications ? "on" : "off"}
+          <Text className="text-muted mt-1 text-xs">
+            Email {preferences?.emailNotifications ? "on" : "off"} · Push{" "}
+            {preferences?.pushNotifications ? "on" : "off"}
           </Text>
           <View className="mt-3 flex-row gap-2">
             {(["light", "dark", "system"] as const).map((theme) => (
@@ -351,7 +389,10 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
                 onPress={() => updatePreferences.mutate({ theme })}
                 className="rounded-md px-3 py-2 active:opacity-80"
                 style={{
-                  backgroundColor: preferences?.theme === theme ? colors.primary : colors.secondary,
+                  backgroundColor:
+                    preferences?.theme === theme
+                      ? colors.primary
+                      : colors.secondary,
                 }}
               >
                 <Text
@@ -377,13 +418,13 @@ export function TabletSettingsPane({ onOpenProvider }: TabletSettingsPaneProps) 
           }}
           style={{ borderColor: colors.border, backgroundColor: colors.card }}
         >
-          <Text className="text-sm font-semibold uppercase tracking-wider text-muted">
+          <Text className="text-muted text-sm font-semibold tracking-wider uppercase">
             Device
           </Text>
-          <Text className="mt-3 text-sm text-foreground">
+          <Text className="text-foreground mt-3 text-sm">
             {apiKeyCount} API key{apiKeyCount === 1 ? "" : "s"} configured
           </Text>
-          <Text className="mt-1 text-xs text-muted">
+          <Text className="text-muted mt-1 text-xs">
             Device auth is tied to the current signed-in session.
           </Text>
         </View>

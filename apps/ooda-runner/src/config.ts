@@ -1,4 +1,4 @@
-import { homedir, hostname } from "node:os";
+import { homedir, hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { z } from "zod";
@@ -14,8 +14,64 @@ export const RunnerConfigSchema = z.object({
   bobApiUrl: z.string().optional(),
   bobApiKey: z.string().optional(),
   bobWorkspaceId: z.string().optional(),
+  bobDeliveryEnabled: z
+    .preprocess((value) => value === true || value === "true", z.boolean())
+    .default(false),
+  obsidianDeliveryEnabled: z
+    .preprocess((value) => value === true || value === "true", z.boolean())
+    .default(false),
+  obsidianVaultPath: z.string().default(join(homedir(), "obsidian")),
+  obsidianVaultName: z.string().optional(),
+  bizPulseDeliveryEnabled: z
+    .preprocess((value) => value === true || value === "true", z.boolean())
+    .default(false),
+  bizPulseApiUrl: z.string().url().optional(),
+  bizPulseApiKey: z.string().optional(),
+  creatorDeliveryEnabled: z
+    .preprocess((value) => value === true || value === "true", z.boolean())
+    .default(false),
+  creatorApiUrl: z.string().url().optional(),
+  creatorApiKey: z.string().optional(),
+  creatorProjectRoot: z.string().optional(),
+  creatorTemplatePath: z.string().optional(),
+  creatorReceiptRoot: z
+    .string()
+    .default(join(homedir(), ".ooda", "integration-receipts", "creator")),
+  fabForgeDeliveryEnabled: z
+    .preprocess((value) => value === true || value === "true", z.boolean())
+    .default(false),
+  fabForgeApiUrl: z.string().url().optional(),
+  fabForgeApiToken: z.string().optional(),
+  fabForgeWorkspaceId: z.string().optional(),
+  veritasDeliveryEnabled: z
+    .preprocess((value) => value === true || value === "true", z.boolean())
+    .default(false),
+  veritasApiUrl: z.string().url().optional(),
+  veritasApiToken: z.string().optional(),
+  preflightDeliveryEnabled: z
+    .preprocess((value) => value === true || value === "true", z.boolean())
+    .default(false),
+  preflightApiUrl: z.string().url().optional(),
+  preflightApiToken: z.string().optional(),
+  preflightWorkspaceId: z.string().optional(),
+  preflightReceiptRoot: z
+    .string()
+    .default(join(homedir(), ".ooda", "integration-receipts", "preflight")),
   bobDevDir: z.string().default(join(homedir(), "dev")),
   bobMaxConcurrent: z.coerce.number().default(2),
+  agentJobScratchRoot: z.string().default(join(tmpdir(), "ooda-agent-jobs")),
+  agentJobMaxConcurrent: z.coerce.number().int().min(1).max(3).default(3),
+  hostTurnEnabled: z
+    .preprocess(
+      (value) => value === undefined || value === true || value === "true",
+      z.boolean(),
+    )
+    .default(true),
+  hostTurnScratchRoot: z.string().default(join(tmpdir(), "ooda-host-turns")),
+  hostTurnMaxConcurrent: z.coerce.number().int().min(1).max(3).default(1),
+  grokHostModel: z.string().optional(),
+  claudeHostModel: z.string().optional(),
+  openaiHostModel: z.string().optional(),
 });
 
 export type RunnerConfig = z.infer<typeof RunnerConfigSchema>;
@@ -31,7 +87,40 @@ export function loadConfig(): RunnerConfig {
     bobApiUrl: process.env.BOB_API_URL,
     bobApiKey: process.env.BOB_API_KEY,
     bobWorkspaceId: process.env.BOB_WORKSPACE_ID,
+    bobDeliveryEnabled: process.env.OODA_BOB_DELIVERY_ENABLED,
+    obsidianDeliveryEnabled: process.env.OODA_OBSIDIAN_DELIVERY_ENABLED,
+    obsidianVaultPath: process.env.OODA_OBSIDIAN_VAULT_PATH,
+    obsidianVaultName: process.env.OODA_OBSIDIAN_VAULT_NAME,
+    bizPulseDeliveryEnabled: process.env.OODA_BIZPULSE_DELIVERY_ENABLED,
+    bizPulseApiUrl: process.env.OODA_BIZPULSE_API_URL,
+    bizPulseApiKey: process.env.OODA_BIZPULSE_API_KEY,
+    creatorDeliveryEnabled: process.env.OODA_CREATOR_DELIVERY_ENABLED,
+    creatorApiUrl: process.env.OODA_CREATOR_API_URL,
+    creatorApiKey: process.env.OODA_CREATOR_API_KEY,
+    creatorProjectRoot: process.env.OODA_CREATOR_PROJECT_ROOT,
+    creatorTemplatePath: process.env.OODA_CREATOR_TEMPLATE_PATH,
+    creatorReceiptRoot: process.env.OODA_CREATOR_RECEIPT_ROOT,
+    fabForgeDeliveryEnabled: process.env.OODA_FABFORGE_DELIVERY_ENABLED,
+    fabForgeApiUrl: process.env.OODA_FABFORGE_API_URL,
+    fabForgeApiToken: process.env.OODA_FABFORGE_API_TOKEN,
+    fabForgeWorkspaceId: process.env.OODA_FABFORGE_WORKSPACE_ID,
+    veritasDeliveryEnabled: process.env.OODA_VERITAS_DELIVERY_ENABLED,
+    veritasApiUrl: process.env.OODA_VERITAS_API_URL,
+    veritasApiToken: process.env.OODA_VERITAS_API_TOKEN,
+    preflightDeliveryEnabled: process.env.OODA_PREFLIGHT_DELIVERY_ENABLED,
+    preflightApiUrl: process.env.OODA_PREFLIGHT_API_URL,
+    preflightApiToken: process.env.OODA_PREFLIGHT_API_TOKEN,
+    preflightWorkspaceId: process.env.OODA_PREFLIGHT_WORKSPACE_ID,
+    preflightReceiptRoot: process.env.OODA_PREFLIGHT_RECEIPT_ROOT,
     bobDevDir: process.env.BOB_DEV_DIR,
     bobMaxConcurrent: process.env.BOB_MAX_CONCURRENT,
+    agentJobScratchRoot: process.env.OODA_AGENT_JOB_SCRATCH_ROOT,
+    agentJobMaxConcurrent: process.env.OODA_AGENT_JOB_MAX_CONCURRENT,
+    hostTurnEnabled: process.env.OODA_HOST_TURN_ENABLED,
+    hostTurnScratchRoot: process.env.OODA_HOST_TURN_SCRATCH_ROOT,
+    hostTurnMaxConcurrent: process.env.OODA_HOST_TURN_MAX_CONCURRENT,
+    grokHostModel: process.env.OODA_GROK_HOST_MODEL,
+    claudeHostModel: process.env.OODA_CLAUDE_HOST_MODEL,
+    openaiHostModel: process.env.OODA_OPENAI_HOST_MODEL,
   });
 }

@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OODA Personal Operating System — Implementation Plan</title>
+<style>
+  :root {
+    --bg: #07111a; --surface: #0d1c28; --surface-2: #112634; --ink: #eff7f4; --muted: #91a9b2;
+    --line: #1f3a48; --accent: #73e2bd; --accent-soft: #123c35; --info: #78c7ff; --info-soft: #123249;
+    --warn: #f2c66d; --warn-soft: #3c3018; --bad: #ff9a93; --bad-soft: #3d2425;
+    --hero: radial-gradient(circle at 78% 22%, #16495a 0, transparent 36%), linear-gradient(135deg, #0b2930, #07111a 58%, #12223d);
+    --display: "Avenir Next", "Segoe UI", sans-serif; --body: Iowan Old Style, Georgia, serif; --mono: Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.62 var(--body); }
+  main { max-width: 1020px; margin: 0 auto; padding: 0 1.5rem 5rem; }
+  header.hero { background: var(--hero); border-bottom: 1px solid var(--line); padding: 4.5rem 1.5rem 3rem; margin-bottom: 2rem; }
+  .hero-inner { max-width: 1020px; margin: 0 auto; }
+  h1 { font: 800 clamp(2.2rem, 5vw, 3.5rem)/1.08 var(--display); letter-spacing: -.035em; margin: 0 0 .8rem; max-width: 850px; }
+  h2 { font: 750 1.5rem var(--display); margin: 3rem 0 .8rem; padding-bottom: .4rem; border-bottom: 1px solid var(--line); }
+  h3 { font: 700 1.08rem var(--display); margin: 1.6rem 0 .45rem; }
+  p { margin: .5rem 0 1rem; }
+  .kicker { font: 700 .78rem var(--display); text-transform: uppercase; letter-spacing: .2em; color: var(--accent); margin-bottom: .8rem; }
+  .meta { color: var(--muted); font: .9rem var(--display); }
+  .meta span + span::before { content: "·"; margin: 0 .6rem; }
+  .badge { display: inline-block; padding: .14rem .62rem; border-radius: 999px; font: 700 .7rem var(--display); letter-spacing: .04em; vertical-align: middle; }
+  .badge.approved, .badge.done { background: var(--accent-soft); color: var(--accent); }
+  .badge.active { background: var(--info-soft); color: var(--info); }
+  .badge.todo { background: var(--line); color: var(--muted); }
+  .badge.risk { background: var(--warn-soft); color: var(--warn); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: .8rem; margin: 1.5rem 0; }
+  .stat, .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 1rem 1.2rem; }
+  .stat b { display: block; font: 800 2rem/1.1 var(--display); color: var(--accent); }
+  .stat span { color: var(--muted); font: .76rem var(--display); text-transform: uppercase; letter-spacing: .09em; }
+  .progress { display: flex; gap: 4px; height: 10px; margin: .8rem 0 2.2rem; }
+  .progress i { flex: 1; border-radius: 5px; background: var(--line); }
+  .progress i.active { background: var(--info); }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+  @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } .meta span { display: block; } .meta span + span::before { content: none; } }
+  table { width: 100%; border-collapse: collapse; margin: .8rem 0 1.3rem; font-size: .91rem; }
+  th { text-align: left; color: var(--muted); font: 700 .72rem var(--display); text-transform: uppercase; letter-spacing: .07em; }
+  th, td { padding: .58rem .68rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  code { background: var(--surface-2); border: 1px solid var(--line); border-radius: 5px; padding: .1rem .35rem; font: .84em var(--mono); }
+  pre { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 1rem; overflow-x: auto; font: .83rem/1.52 var(--mono); }
+  pre code { border: 0; background: none; padding: 0; }
+  ul, ol { padding-left: 1.35rem; }
+  details { border: 1px solid var(--line); border-radius: 11px; padding: .65rem .95rem; margin: .7rem 0; background: var(--surface); }
+  summary { cursor: pointer; font: 700 1em var(--display); }
+  .timeline { list-style: none; margin: 1rem 0; padding: 0 0 0 1.5rem; border-left: 2px solid var(--line); }
+  .timeline li { position: relative; padding: 0 0 1.15rem; }
+  .timeline li::before { content: ""; position: absolute; left: -1.85rem; top: .35rem; width: .68rem; height: .68rem; border-radius: 50%; background: var(--bg); border: 2px solid var(--muted); }
+  .timeline li.active::before { background: var(--info-soft); border-color: var(--info); }
+  .timeline b { font-family: var(--display); }
+  .callout { border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 11px 11px 0; padding: .8rem 1rem; margin: 1rem 0; }
+  figure.diagram { margin: 1.3rem 0 .3rem; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 1.3rem; overflow-x: auto; text-align: center; }
+  figure.diagram svg { max-width: 100%; height: auto; }
+  figure.diagram figcaption { color: var(--muted); font: .84rem var(--display); margin-top: .8rem; }
+  .constitution td:first-child { font-family: var(--display); color: var(--accent); white-space: nowrap; }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="hero-inner">
+    <div class="kicker">Approved implementation plan</div>
+    <h1>OODA Personal Operating System <span class="badge approved">Approved</span></h1>
+    <p class="meta"><span>2026-08-05</span><span>canonical repo: Bob monorepo</span><span>branch: <code>feat/ooda-personal-os</code></span></p>
+  </div>
+</header>
+<main>
+  <div class="stats">
+    <div class="stat"><b>10</b><span>Rollout phases</span></div>
+    <div class="stat"><b>9</b><span>Domain adapters</span></div>
+    <div class="stat"><b>14d</b><span>Dogfood gate</span></div>
+    <div class="stat"><b>0</b><span>Unresolved product decisions</span></div>
+  </div>
+  <div class="progress" aria-label="Phase progress"><i class="active"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+
+  <h2>North star</h2>
+  <p>OODA becomes the canonical personal deliberation layer inside Bob and the default daily LLM interface. Mobile and web share a durable conversation history, privacy-gated context, voice input, interruptible speech, bounded research and scratch workers, attention stewardship, and inspectable proposals that hand approved durable work to Bob.</p>
+  <div class="callout"><strong>Lifecycle:</strong> utterance → memory seed → enriched possibility → proposal → approved commitment → execution evidence → reflection. Most utterances stop before commitment.</div>
+
+  <h2>System architecture</h2>
+  <figure class="diagram">
+    <svg id="ooda-architecture" viewBox="0 0 930 500" width="930" role="img" aria-label="OODA personal operating system architecture">
+      <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#91a9b2"/></marker></defs>
+      <g fill="#112634" stroke="#73e2bd" stroke-width="2"><rect x="25" y="30" width="170" height="52" rx="10"/><rect x="25" y="103" width="170" height="52" rx="10"/><rect x="25" y="176" width="170" height="52" rx="10"/></g>
+      <g fill="#eff7f4" font-family="sans-serif" font-size="15" text-anchor="middle"><text x="110" y="62">Bob mobile</text><text x="110" y="135">OODA web / edge</text><text x="110" y="208">Future desktop</text></g>
+      <rect x="265" y="85" width="210" height="92" rx="14" fill="#123249" stroke="#78c7ff" stroke-width="2"/><text x="370" y="122" fill="#eff7f4" font-family="sans-serif" font-size="17" text-anchor="middle">Conversation API</text><text x="370" y="148" fill="#91a9b2" font-family="sans-serif" font-size="13" text-anchor="middle">tRPC · HTTP · resumable SSE</text>
+      <rect x="555" y="42" width="340" height="230" rx="18" fill="#0d1c28" stroke="#73e2bd" stroke-width="2"/><text x="725" y="76" fill="#73e2bd" font-family="sans-serif" font-size="18" font-weight="bold" text-anchor="middle">OODA Personal-OS Kernel</text>
+      <g fill="#112634" stroke="#1f3a48"><rect x="580" y="103" width="135" height="70" rx="10"/><rect x="735" y="103" width="135" height="70" rx="10"/><rect x="580" y="190" width="135" height="58" rx="10"/><rect x="735" y="190" width="135" height="58" rx="10"/></g>
+      <g fill="#eff7f4" font-family="sans-serif" font-size="13" text-anchor="middle"><text x="647" y="132">Event + memory</text><text x="647" y="151">store</text><text x="802" y="132">Policy + context</text><text x="802" y="151">disclosure</text><text x="647" y="224">Agent jobs</text><text x="802" y="216">Proposal +</text><text x="802" y="234">approval ledger</text></g>
+      <rect x="555" y="320" width="340" height="66" rx="12" fill="#3c3018" stroke="#f2c66d" stroke-width="2"/><text x="725" y="348" fill="#f2c66d" font-family="sans-serif" font-size="16" text-anchor="middle">Transactional outbox</text><text x="725" y="370" fill="#eff7f4" font-family="sans-serif" font-size="12" text-anchor="middle">idempotency · receipts · dead-letter repair</text>
+      <g fill="#112634" stroke="#78c7ff"><rect x="35" y="430" width="120" height="45" rx="9"/><rect x="177" y="430" width="120" height="45" rx="9"/><rect x="319" y="430" width="120" height="45" rx="9"/><rect x="461" y="430" width="120" height="45" rx="9"/><rect x="603" y="430" width="120" height="45" rx="9"/><rect x="745" y="430" width="150" height="45" rx="9"/></g>
+      <g fill="#eff7f4" font-family="sans-serif" font-size="12" text-anchor="middle"><text x="95" y="458">Obsidian</text><text x="237" y="458">BizPulse</text><text x="379" y="458">Bob / KanBanger</text><text x="521" y="458">ForgeGraph</text><text x="663" y="458">Creator</text><text x="820" y="450">FabForge · Veritas</text><text x="820" y="466">Preflight</text></g>
+      <g fill="none" stroke="#91a9b2" stroke-width="2" marker-end="url(#arrow)"><path d="M195 56 C230 56 230 108 265 108"/><path d="M195 129 L265 129"/><path d="M195 202 C230 202 230 152 265 152"/><path d="M475 131 L555 131"/><path d="M725 272 L725 320"/><path d="M725 386 L725 412 L95 412 L95 430"/><path d="M725 412 L237 412 L237 430"/><path d="M725 412 L379 412 L379 430"/><path d="M725 412 L521 412 L521 430"/><path d="M725 412 L663 412 L663 430"/><path d="M725 412 L820 412 L820 430"/></g>
+    </svg>
+    <figcaption>The kernel owns deliberation and lineage; destination systems retain their own operational facts.</figcaption>
+  </figure>
+  <details><summary>Diagram source (mermaid)</summary><pre><code>flowchart LR
+  Mobile[Bob mobile] --> API[Conversation API]
+  Web[OODA web / edge] --> API
+  Desktop[Future desktop] --> API
+  API --> Kernel[OODA Personal-OS Kernel]
+  Kernel --> Events[(Event + memory store)]
+  Kernel --> Policy[Policy/context disclosure]
+  Kernel --> Jobs[Agent-job runtime]
+  Kernel --> Ledger[Proposal + approval ledger]
+  Ledger --> Outbox[Transactional outbox]
+  Outbox --> Obsidian
+  Outbox --> BizPulse
+  Outbox --> Bob --> KanBanger
+  Outbox --> ForgeGraph
+  Outbox --> Domains[Creator / FabForge / Veritas / Preflight]</code></pre></details>
+
+  <h2>Product constitution</h2>
+  <table class="constitution"><thead><tr><th>System</th><th>Canonical responsibility</th></tr></thead><tbody>
+    <tr><td>OODA</td><td>Conversation, context graph, personal memory, research, reviews, proposals, approvals, and cross-system lineage.</td></tr>
+    <tr><td>Obsidian</td><td>Curated personal knowledge and authored reflections; never a mirror of every transcript.</td></tr>
+    <tr><td>BizPulse</td><td>Approved ventures, portfolio lifecycle, health, readiness, and attention ranking.</td></tr>
+    <tr><td>Bob</td><td>Planning, agent sessions, project scaffolding, repository mutation, and durable execution.</td></tr>
+    <tr><td>KanBanger</td><td>Committed projects, issues, dependencies, workflow, and task status.</td></tr>
+    <tr><td>ForgeGraph</td><td>Changesets, CI, artifacts, deployments, runtime evidence, and operational changelog.</td></tr>
+    <tr><td>Specialists</td><td>Creator owns video production; FabForge fabrication; Veritas hardware validation; Preflight mobile release lanes.</td></tr>
+  </tbody></table>
+
+  <h2>Core invariants</h2>
+  <div class="grid">
+    <div class="card"><h3>Durability</h3><ul><li>Event history is append-only and event-sourced.</li><li>All writes carry device idempotency keys.</li><li>Every projection is rebuildable.</li><li>Corrections supersede; they do not erase.</li></ul></div>
+    <div class="card"><h3>Privacy</h3><ul><li>Raw microphone audio is discarded after transcription.</li><li>Exact disclosed context is inspectable.</li><li>Sensitive cloud and speech disclosure is denied without applicable permission.</li><li>Credentials never reach client code or event payloads.</li></ul></div>
+    <div class="card"><h3>Autonomy</h3><ul><li>Bounded research and scratch jobs may run automatically.</li><li>Workers receive explicit paths, capabilities, budgets, and no inherited credentials.</li><li>Scratch artifacts expire unless promoted.</li></ul></div>
+    <div class="card"><h3>Commitment</h3><ul><li>Private proposals may be drafted automatically.</li><li>Durable or external work requires immutable approval.</li><li>Deploy, publish, purchase, credential, and destructive actions require just-in-time approval.</li></ul></div>
+  </div>
+
+  <h2>Canonical data model and contracts</h2>
+  <table><thead><tr><th>Area</th><th>Canonical records</th><th>Key guarantees</th></tr></thead><tbody>
+    <tr><td>Conversation</td><td><code>conversations</code>, <code>conversation_branches</code>, <code>conversation_events</code></td><td>Monotonic sequence allocation, versioned payloads, causal lineage, sensitivity labels.</td></tr>
+    <tr><td>Memory</td><td><code>memory_seeds</code>, <code>memory_edges</code>, <code>attention_reviews</code></td><td>Exact source span, pgvector embeddings, feedback, supersession, opportunity ranking.</td></tr>
+    <tr><td>Orchestration</td><td><code>agent_jobs</code>, <code>agent_job_events</code>, <code>context_packs</code>, <code>context_items</code></td><td>Budgets, deadlines, capabilities, disclosure receipts, cancellable disposable execution.</td></tr>
+    <tr><td>Delivery</td><td><code>proposals</code>, <code>approval_decisions</code>, <code>external_links</code>, <code>integration_outbox</code>, receipts and dead letters</td><td>Approval and outbox insertion in one transaction; repair without direct database edits.</td></tr>
+  </tbody></table>
+  <p>Versioned contracts live in <code>packages/ooda/src/contracts/v1</code>. Typed tRPC plus HTTP/SSE expose conversations, events, context previews, memories, jobs, proposals, decisions, links, and receipts. Lists use cursors; all failures share <code>ProblemV1</code>.</p>
+
+  <h2>Voice-first daily driver</h2>
+  <ul>
+    <li>Open to the last active conversation with a native searchable drawer, pins, branches, and “new thought.”</li>
+    <li>Keep hold, lock, and cancel STT gestures; make low-confidence transcripts editable before submission.</li>
+    <li>Persist an offline event outbox across app restarts with visible queued, syncing, and failed states.</li>
+    <li>Stop speech before barge-in recording begins. Store both full <code>display</code> and concise <code>speakable</code> responses.</li>
+    <li>Stream ElevenLabs audio through a short-lived authenticated server proxy; never ship its API key.</li>
+    <li>Suppress automatic speech for code, tables, credentials, and policy-blocked sensitive content.</li>
+  </ul>
+
+  <h2>Routing and worker boundaries</h2>
+  <table><thead><tr><th>Intent</th><th>Default</th><th>Fallback / boundary</th></tr></thead><tbody>
+    <tr><td>Conversation</td><td>Grok</td><td>Claude, then OpenAI; conversation identity remains stable.</td></tr>
+    <tr><td>Repository work</td><td>Codex</td><td>Disposable intent with explicit repository access.</td></tr>
+    <tr><td>Architecture / synthesis</td><td>Claude</td><td>Explicit comparison jobs when another model is requested.</td></tr>
+    <tr><td>Research</td><td>15 minutes / 150k aggregate tokens</td><td>Read-only; failure does not remove or block the user turn.</td></tr>
+    <tr><td>Scratch prototype</td><td>30 minutes / 250k aggregate tokens</td><td>Seven-day retention unless promoted.</td></tr>
+  </tbody></table>
+
+  <h2>Delivery contract</h2>
+  <pre><code>interface DomainAdapter {
+  inspect(input: InspectInput): Promise&lt;ContextReceipt&gt;;
+  validateProposal(proposal: ProposalV1): Promise&lt;ValidationReceipt&gt;;
+  commit(proposal: ProposalV1, idempotencyKey: string): Promise&lt;ExternalReceipt&gt;;
+  lookupByIdempotencyKey(key: string): Promise&lt;ExternalReceipt | null&gt;;
+  readStatus(link: ExternalLinkV1): Promise&lt;ExternalStatus&gt;;
+  cancel?(link: ExternalLinkV1): Promise&lt;ExternalReceipt&gt;;
+}</code></pre>
+  <p>Adapters land in order: Obsidian, Bob, KanBanger read/status, BizPulse, ForgeGraph, Creator, FabForge, Veritas, and Preflight. Every write is kill-switchable, validated against fixtures, and proven in a sandbox or staging environment before enablement.</p>
+
+  <h2>Implementation milestones</h2>
+  <ul class="timeline">
+    <li class="active"><b>Phase 0 — Safe foundation and source inventory</b><br>Pin the deployed base, isolate work, rehearse restore, record migration dispositions, and preserve every user change.</li>
+    <li><b>Phase 1 — Contracts, event store, and migrations</b><br>Ship V1 public types, canonical schemas, idempotent backfill, transcript hashes, rollback, and deterministic projections.</li>
+    <li><b>Phase 2 — Kernel API and stream</b><br>Add transactionally sequenced append, cursor reads, correction/fork semantics, resumable SSE, and edge/Node contract parity.</li>
+    <li><b>Phase 3 — Mobile daily driver and TTS</b><br>Unify chat, add offline reconciliation, typed virtual timeline, drawer, secure streaming TTS, and barge-in.</li>
+    <li><b>Phase 4 — Host routing, context policy, and workers</b><br>Provider continuity/fallback, disclosed context packs, explicit capabilities, disposable sandboxes, and bounded jobs.</li>
+    <li><b>Phase 5 — Memory, imports, and attention</b><br>Unify native and imported histories, pgvector search, deterministic callbacks, opportunity review, and review projections.</li>
+    <li><b>Phase 6 — Critical execution chain</b><br>Proposal → approval → Bob → KanBanger → agent run → ForgeGraph evidence → reflection.</li>
+    <li><b>Phase 7 — Portfolio and specialist adapters</b><br>Connect BizPulse and the Creator, fabrication, hardware, and mobile-release domains without copying their canonical facts.</li>
+    <li><b>Phase 8 — Web parity and legacy retirement</b><br>Share contracts/view models, redirect legacy routes, end dual writes, and archive the standalone implementation after parity.</li>
+    <li><b>Phase 9 — Production dogfood and expansion</b><br>Enable capabilities progressively and require a 14-day zero-loss dogfood period before Grok replacement is declared complete.</li>
+  </ul>
+
+  <h2>Attention stewardship</h2>
+  <p>Memory follows <code>captured → enriched → incubating → proposed → committed → completed → reflected</code>, with <code>dismissed</code>, <code>merged</code>, and <code>killed</code> exits. Opportunity scoring balances expected value, strategic fit, evidence, timing, synergy, energy, reversible learning, and an opportunity-cost penalty.</p>
+  <table><thead><tr><th>Capacity / proactivity default</th><th>Limit</th></tr></thead><tbody>
+    <tr><td>Active venture experiments</td><td>3</td></tr><tr><td>Major implementation streams</td><td>2</td></tr><tr><td>Daily recommended actions</td><td>5</td></tr>
+    <tr><td>In-chat callbacks</td><td>2, confidence ≥ 0.78</td></tr><tr><td>Push notifications</td><td>Only urgent deadlines, blocked active work, material production trouble, or a connection above 0.92</td></tr>
+  </tbody></table>
+
+  <h2>Verification matrix</h2>
+  <table><thead><tr><th>Surface</th><th>Required proof</th></tr></thead><tbody>
+    <tr><td>Contracts and migration</td><td>Valid/invalid fixtures, repeatable backfill, rollback, count and transcript-hash parity, deterministic projection rebuild.</td></tr>
+    <tr><td>Mobile and voice</td><td>Permission failures, low-confidence correction, locked/cancelled recording, offline restart/reboot, audio route changes, replay/rate/stop, and barge-in on real iPhone and Android.</td></tr>
+    <tr><td>Privacy and security</td><td>Denied sensitive disclosure, expiring one-use TTS grants, credential-leak scans, sandbox traversal/symlink/network tests, approval replay and scope-escalation tests.</td></tr>
+    <tr><td>Resilience</td><td>Provider outage/rate limit, worker timeout/cancel/malformed output, process restart, SSE resume, ambiguous destination commit, and dead-letter repair.</td></tr>
+    <tr><td>Cross-system</td><td>Research → curated note; opportunity → venture; idea → Bob/KanBanger; execution → ForgeGraph evidence; specialist project → originating OODA reflection.</td></tr>
+  </tbody></table>
+
+  <h2>Production success gates</h2>
+  <ul>
+    <li>Zero lost accepted turns, duplicate durable objects, or unauthorized sensitive disclosures during the 14-day dogfood window.</li>
+    <li>Every external write has a proposal, approval, idempotency key, receipt, and deep link.</li>
+    <li>Offline submissions reconcile automatically and the mobile app replaces Grok for routine daily conversations.</li>
+    <li>At least one real project completes the OODA → Bob → KanBanger → ForgeGraph → domain evidence loop.</li>
+    <li>The standalone OODA implementation retires only after verified data and behavior parity.</li>
+  </ul>
+
+  <h2>Risks and mitigations</h2>
+  <table><thead><tr><th>Risk</th><th>Severity</th><th>Mitigation</th></tr></thead><tbody>
+    <tr><td>Three legacy conversation models drift during migration</td><td><span class="badge risk">High</span></td><td>Disposition inventory, immutable source IDs, shadow reads, transcript hashes, and rollback rehearsal before cutover.</td></tr>
+    <tr><td>Voice convenience leaks sensitive context</td><td><span class="badge risk">High</span></td><td>Separate display/speakable payloads, disclosure policy snapshots, denied-by-default sensitive TTS, one-use proxy grants, and leak scans.</td></tr>
+    <tr><td>Autonomous work creates operational surprise</td><td><span class="badge risk">High</span></td><td>Disposable credential-free workers; immutable single-delivery approvals for durable writes; just-in-time approval for high-risk actions.</td></tr>
+    <tr><td>Cross-system facts acquire two owners</td><td><span class="badge risk">Medium</span></td><td>OODA stores links and evidence receipts while each domain retains its canonical operational state.</td></tr>
+    <tr><td>Big-bang replacement loses daily-driver trust</td><td><span class="badge risk">High</span></td><td>Shadow projections, account-scoped enablement, progressive capability rollout, 14-day dogfood, and legacy retirement only after parity.</td></tr>
+  </tbody></table>
+
+  <h2>Decisions</h2>
+  <div class="callout"><strong>No open product decisions.</strong> Personal-first tenancy seams, Bob as canonical monorepo, OODA as complete conversation store, curated-only Obsidian export, Grok-hosted turn-based voice, on-device STT, ElevenLabs-only TTS, offline capture, bounded autonomous research/scratch work, and approval-gated durable execution are approved defaults.</div>
+</main>
+</body>
+</html>

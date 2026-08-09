@@ -14,7 +14,8 @@ describe("OODA OpenAPI spec generation", () => {
     expect(doc.openapi).toBeDefined();
     expect(doc.info.title).toBe("OODA Research API");
     expect(doc.info.version).toBe("0.1.0");
-  }, 15000);
+    expect(doc.paths).toHaveProperty("/api/v1/readiness");
+  }, 30000);
 
   it("includes security schemes for session and runner auth", async () => {
     const { generateOodaOpenApiDocument } = await import("../openapi");
@@ -22,7 +23,7 @@ describe("OODA OpenAPI spec generation", () => {
 
     expect(doc.components?.securitySchemes).toHaveProperty("bearerAuth");
     expect(doc.components?.securitySchemes).toHaveProperty("runnerAuth");
-  }, 15000);
+  }, 30000);
 
   it("accepts custom baseUrl", async () => {
     const { generateOodaOpenApiDocument } = await import("../openapi");

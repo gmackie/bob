@@ -1,3 +1,4 @@
+import { getTableConfig } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 import {
   personalVaultSchema,
@@ -6,6 +7,8 @@ import {
   researchVaultSources,
   personalVaultEmbeddings,
   researchVaultEmbeddings,
+  personalVaultSourceEmbeddings,
+  researchVaultSourceEmbeddings,
   personalVaultTopics,
   researchVaultTopics,
   personalVaultSourceTopics,
@@ -33,6 +36,28 @@ describe("vault taxonomy schema", () => {
   it("exports embeddings tables for both schemas", () => {
     expect(personalVaultEmbeddings).toBeDefined();
     expect(researchVaultEmbeddings).toBeDefined();
+  });
+
+  it("stores source embeddings as indexed pgvector values", () => {
+    for (const table of [
+      personalVaultSourceEmbeddings,
+      researchVaultSourceEmbeddings,
+    ]) {
+      const tableConfig = getTableConfig(table);
+      expect(
+        tableConfig.columns
+          .find((column) => column.name === "embedding")
+          ?.getSQLType(),
+      ).toBe("vector(768)");
+      expect(tableConfig.indexes.map((index) => index.config.name)).toContain(
+        "source_embedding_vec_hnsw_idx",
+      );
+    }
+    expect(
+      getTableConfig(researchVaultEmbeddings)
+        .columns.find((column) => column.name === "vec")
+        ?.getSQLType(),
+    ).toBe("bytea");
   });
 
   it("exports topics, source_topics, kbs, kb_sources, import_jobs for both", () => {

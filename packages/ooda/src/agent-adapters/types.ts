@@ -11,6 +11,41 @@ export const AdapterCapabilitySchema = z.object({
 
 export type AdapterCapability = z.infer<typeof AdapterCapabilitySchema>;
 
+export type RuntimeBillingPolicy =
+  | "subscription_only"
+  | "subscription_preferred"
+  | "metered_allowed";
+
+export type RuntimeAuthMode = "subscription" | "api_key";
+
+export type RuntimeSessionRef = {
+  provider: string;
+  sessionId: string;
+  /** Provider-native child identifier, such as a Codex turn id. */
+  turnId?: string;
+  transport: "cli" | "app_server" | "acp";
+  authMode: RuntimeAuthMode;
+};
+
+export type RuntimeCapabilities = {
+  transport: RuntimeSessionRef["transport"];
+  supportsResume: boolean;
+  supportsFork: boolean;
+  supportsSteering: boolean;
+  supportsApprovals: boolean;
+  supportsUsageInspection: boolean;
+  authModes: RuntimeAuthMode[];
+};
+
+export type RuntimeUsageSnapshot = {
+  provider: string;
+  observedAt: string;
+  available: boolean;
+  rateLimits?: Record<string, unknown>;
+  usage?: Record<string, unknown>;
+  error?: string;
+};
+
 export interface AdapterCommand {
   binary: string;
   args: string[];
@@ -22,6 +57,16 @@ export interface AdapterCommand {
    * CLI-spawn adapters bake the prompt into `args` and leave this unset.
    */
   prompt?: string;
+  /** Native-runtime instructions that cannot be represented as CLI flags. */
+  runtime?: {
+    systemPrompt?: string;
+    model?: string;
+    permissionMode: "prompt" | "skip";
+    session?: { mode: "start" | "resume" | "fork"; sessionId?: string };
+    billingPolicy: RuntimeBillingPolicy;
+    authMode: RuntimeAuthMode;
+    correlationId?: string;
+  };
   /** Images to attach to the first user message (vision). Claude adapter only. */
   images?: PromptImage[];
 }
@@ -52,6 +97,14 @@ export interface BuildCommandOptions {
    * selected by personas with autonomyLevel "full".
    */
   permissionMode?: "prompt" | "skip";
+  /** Prefer authenticated subscription clients unless an explicit policy permits API billing. */
+  billingPolicy?: RuntimeBillingPolicy;
+  /** Authentication source selected by the trusted runtime broker. */
+  authMode?: RuntimeAuthMode;
+  /** Resume or fork an existing provider-native session. */
+  session?: { mode: "start" | "resume" | "fork"; sessionId?: string };
+  /** Stable OODA correlation propagated to provider metadata where supported. */
+  correlationId?: string;
 }
 
 export interface AdapterEvent {
@@ -66,6 +119,9 @@ export interface AdapterEvent {
     | "thought"
     | "tool_call"
     | "tool_result"
+    | "runtime_session"
+    | "usage"
+    | "rate_limit"
     // The agent is paused waiting for a human permission decision
     // (permissionMode "prompt"). Resolved via handle.respondPermission.
     | "permission_request";
@@ -89,7 +145,16 @@ export interface AdapterEvent {
     toolName?: string;
     input?: unknown;
   };
+  /** Provider-native session/turn identity. Never contains credentials. */
+  runtimeSession?: RuntimeSessionRef;
+  /** Sanitized provider usage or rate-limit payload. */
+  usage?: RuntimeUsageSnapshot;
 }
+
+export type AdapterExecutionResult = {
+  exitCode: number;
+  runtimeSession?: RuntimeSessionRef;
+};
 
 /**
  * Live control surface for a running agent, surfaced via
@@ -138,6 +203,10 @@ export interface SpawnedProcessLike {
 export interface ExecuteOptions {
   /** Called once the agent process is live, with its control handle. */
   onSpawn?: (handle: AdapterProcessHandle) => void;
+  /** Complete child environment. When omitted, adapters retain legacy inheritance. */
+  environment?: Record<string, string | undefined>;
+  /** Abort the process-backed execution. */
+  signal?: AbortSignal;
   /**
    * Spawn injection: when set, adapters create the agent process through
    * this instead of child_process.spawn — the runner uses it to run agents
@@ -163,7 +232,13 @@ export interface AgentAdapter {
     command: AdapterCommand,
     onEvent: (event: AdapterEvent) => void,
     options?: ExecuteOptions,
-  ): Promise<{ exitCode: number }>;
+  ): Promise<AdapterExecutionResult>;
+
+  /** Native runtime features available through this adapter. */
+  capabilities?(): RuntimeCapabilities;
+
+  /** Read subscription availability/usage without invoking a model turn. */
+  inspectUsage?(): Promise<RuntimeUsageSnapshot>;
 
   /**
    * Register tool descriptors for this adapter's upcoming ACP session.

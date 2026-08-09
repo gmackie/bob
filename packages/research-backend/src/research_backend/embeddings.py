@@ -1,4 +1,4 @@
-"""Embedding pipeline: generate vector embeddings for vault sources via Ollama."""
+"""Embedding pipeline: generate native pgvector embeddings via Ollama."""
 
 from __future__ import annotations
 
@@ -8,6 +8,19 @@ from typing import Callable
 import httpx
 import numpy as np
 from sqlmodel import Session, text
+
+SOURCE_EMBEDDING_DIMENSIONS = 768
+
+
+def vector_literal(vec: np.ndarray) -> str:
+    """Validate and serialize one vector for pgvector's text input."""
+    if vec.ndim != 1 or len(vec) != SOURCE_EMBEDDING_DIMENSIONS:
+        raise ValueError(
+            f"expected {SOURCE_EMBEDDING_DIMENSIONS} embedding dimensions, got {len(vec)}"
+        )
+    if not np.isfinite(vec).all():
+        raise ValueError("embedding contains a non-finite component")
+    return "[" + ",".join(str(float(value)) for value in vec) + "]"
 
 
 def embed_sources(
@@ -32,7 +45,7 @@ def embed_sources(
         text(f"""
             SELECT s.id, s.title, s.body
             FROM {schema}.sources s
-            LEFT JOIN {schema}.embeddings e
+            LEFT JOIN {schema}.source_embedding e
                 ON e.source_id = s.id AND e.model = :model
             WHERE e.source_id IS NULL
             ORDER BY s.id
@@ -46,7 +59,6 @@ def embed_sources(
         return 0
 
     log(f"Embedding {total} sources with {model}...")
-    dim = None
     count = 0
     skipped = 0
 
@@ -59,22 +71,24 @@ def embed_sources(
             skipped += 1
             continue
 
-        if dim is None:
-            dim = len(vec)
-        vec_bytes = vec.astype(np.float32).tobytes()
+        try:
+            embedding = vector_literal(vec)
+        except ValueError as exc:
+            skipped += 1
+            log(f"  Skipped source {source_id}: {exc}")
+            continue
 
         session.exec(
             text(f"""
-                INSERT INTO {schema}.embeddings (source_id, model, dim, vec)
-                VALUES (:source_id, :model, :dim, :vec)
+                INSERT INTO {schema}.source_embedding (source_id, model, embedding)
+                VALUES (:source_id, :model, CAST(:embedding AS vector(768)))
                 ON CONFLICT (source_id, model) DO UPDATE
-                    SET dim = :dim, vec = :vec, created_at = now()
+                    SET embedding = EXCLUDED.embedding, created_at = now()
             """),
             params={
                 "source_id": source_id,
                 "model": model,
-                "dim": dim,
-                "vec": vec_bytes,
+                "embedding": embedding,
             },
         )
         count += 1
@@ -84,7 +98,7 @@ def embed_sources(
             log(f"  Embedded {count}/{total} (skipped {skipped})")
 
     session.commit()
-    log(f"Done. Embedded {count} sources, skipped {skipped} (dim={dim}).")
+    log(f"Done. Embedded {count} sources, skipped {skipped} (dim={SOURCE_EMBEDDING_DIMENSIONS}).")
     return count
 
 

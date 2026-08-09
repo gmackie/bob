@@ -41,7 +41,9 @@ export interface SessionUpdate {
   rawInput?: unknown;
 }
 
-function textOf(content: ContentBlock | ToolCallContentItem[] | undefined): string {
+function textOf(
+  content: ContentBlock | ToolCallContentItem[] | undefined,
+): string {
   if (!content) return "";
   if (Array.isArray(content)) {
     return content
@@ -64,7 +66,12 @@ export function mapSessionUpdate(update: SessionUpdate): AdapterEvent | null {
     }
     case "agent_thought_chunk": {
       const text = textOf(update.content);
-      return { type: "thought", data: text, timestamp: now(), thought: { text } };
+      return {
+        type: "thought",
+        data: text,
+        timestamp: now(),
+        thought: { text },
+      };
     }
     case "tool_call": {
       return {
@@ -102,6 +109,7 @@ export function mapSessionUpdate(update: SessionUpdate): AdapterEvent | null {
 interface InitializeResult {
   protocolVersion?: number;
   authMethods?: Array<{ id?: string } | string>;
+  agentCapabilities?: { loadSession?: boolean };
 }
 
 interface NewSessionResult {
@@ -133,7 +141,9 @@ function requestWithTimeout(
 ): Promise<unknown> {
   return new Promise<unknown>((resolve, reject) => {
     const timer = setTimeout(() => {
-      reject(new Error(`ACP request timed out after ${timeoutMs}ms: ${method}`));
+      reject(
+        new Error(`ACP request timed out after ${timeoutMs}ms: ${method}`),
+      );
     }, timeoutMs);
     client.request(method, params).then(
       (value) => {
@@ -169,6 +179,7 @@ export async function runGrokAcpSession(opts: {
    * agent. Defaults to none.
    */
   mcpServers?: readonly McpServerConfigLike[];
+  existingSessionId?: string;
 }): Promise<{ exitCode: number; sessionId?: string }> {
   const { client, prompt, cwd, apiKeyPresent } = opts;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
@@ -189,11 +200,26 @@ export async function runGrokAcpSession(opts: {
     await request("authenticate", { methodId });
   }
 
-  const session = (await request("session/new", {
-    cwd,
-    mcpServers: opts.mcpServers ?? [],
-  })) as NewSessionResult;
-  const sessionId = session?.sessionId;
+  let sessionId: string | undefined;
+  if (opts.existingSessionId) {
+    if (!init.agentCapabilities?.loadSession) {
+      throw new Error(
+        "Installed Grok ACP runtime does not support session resume",
+      );
+    }
+    await request("session/load", {
+      sessionId: opts.existingSessionId,
+      cwd,
+      mcpServers: opts.mcpServers ?? [],
+    });
+    sessionId = opts.existingSessionId;
+  } else {
+    const session = (await request("session/new", {
+      cwd,
+      mcpServers: opts.mcpServers ?? [],
+    })) as NewSessionResult;
+    sessionId = session?.sessionId;
+  }
 
   const promptBlocks: ContentBlock[] = [];
   if (opts.systemPrompt) {
@@ -212,7 +238,10 @@ export async function runGrokAcpSession(opts: {
   return { exitCode, sessionId };
 }
 
-function resolveInWorkspace(workspaceRoot: string, path: string | undefined): string {
+function resolveInWorkspace(
+  workspaceRoot: string,
+  path: string | undefined,
+): string {
   const target = path ?? "";
   const abs = isAbsolute(target) ? target : resolve(workspaceRoot, target);
   const root = resolve(workspaceRoot);
@@ -269,7 +298,12 @@ export function handleAgentRequest(
   switch (method) {
     case "fs/read_text_file": {
       const p = params as { path?: string };
-      return { content: readFileSync(resolveInWorkspace(workspaceRoot, p.path), "utf8") };
+      return {
+        content: readFileSync(
+          resolveInWorkspace(workspaceRoot, p.path),
+          "utf8",
+        ),
+      };
     }
     case "fs/write_text_file": {
       const p = params as { path?: string; content?: string };
@@ -279,9 +313,12 @@ export function handleAgentRequest(
       return null;
     }
     case "session/request_permission": {
-      const p = params as { options?: Array<{ optionId?: string; kind?: string }> };
+      const p = params as {
+        options?: Array<{ optionId?: string; kind?: string }>;
+      };
       const options = p.options ?? [];
-      const allow = options.find((o) => o.kind?.startsWith("allow")) ?? options[0];
+      const allow =
+        options.find((o) => o.kind?.startsWith("allow")) ?? options[0];
       if (allow?.optionId) {
         return { outcome: { outcome: "selected", optionId: allow.optionId } };
       }
@@ -306,8 +343,10 @@ function dispatchToolCall(
 ): Promise<McpToolCallResult> {
   const p = (params ?? {}) as { name?: string; arguments?: unknown };
   const toolName = typeof p.name === "string" ? p.name : "";
-  return dispatchBuddyTool(descriptors, toolName, p.arguments).then((result) => ({
-    content: [{ type: "text" as const, text: JSON.stringify(result) }],
-    isError: !result.ok,
-  }));
+  return dispatchBuddyTool(descriptors, toolName, p.arguments).then(
+    (result) => ({
+      content: [{ type: "text" as const, text: JSON.stringify(result) }],
+      isError: !result.ok,
+    }),
+  );
 }

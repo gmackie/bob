@@ -57,15 +57,20 @@
 // keeps its name; the DB pgEnum is constructed from an inline literal.
 // =============================================================================
 
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
-import {  index, pgEnum, pgTable } from "drizzle-orm/pg-core";
-import type {AnyPgColumn} from "drizzle-orm/pg-core";
+import { index, pgEnum, pgTable, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
 import { user } from "@bob/auth/schema";
 import { pullRequests } from "@bob/git/schema";
-import { projects, repositories, worktreePlans, worktrees } from "@bob/projects/schema";
+import {
+  projects,
+  repositories,
+  worktreePlans,
+  worktrees,
+} from "@bob/projects/schema";
 import { workspaces } from "@bob/tenancy/schema";
 
 // -----------------------------------------------------------------------------
@@ -174,11 +179,7 @@ export const requirementCategory = [
 ] as const;
 export type RequirementCategory = (typeof requirementCategory)[number];
 
-export const requirementStatus = [
-  "pending",
-  "in_progress",
-  "done",
-] as const;
+export const requirementStatus = ["pending", "in_progress", "done"] as const;
 export type RequirementStatus = (typeof requirementStatus)[number];
 
 export const taskStatusEnum = [
@@ -432,7 +433,8 @@ export const listNotificationsOutputSchema = z.object({
   items: z.array(notificationRecordSchema),
 });
 export const createNotificationOutputSchema = notificationRecordSchema;
-export const markNotificationAsReadOutputSchema = notificationRecordSchema.nullable();
+export const markNotificationAsReadOutputSchema =
+  notificationRecordSchema.nullable();
 
 export const listChildArtifactGroupsOutputSchema = z.array(
   z.object({
@@ -469,7 +471,9 @@ export type ListChildArtifactGroupsInput = z.infer<
 export type ListChildArtifactGroupsResult = z.infer<
   typeof listChildArtifactGroupsOutputSchema
 >;
-export type ListNotificationsInput = z.infer<typeof listNotificationsInputSchema>;
+export type ListNotificationsInput = z.infer<
+  typeof listNotificationsInputSchema
+>;
 export type ListNotificationsResult = z.infer<
   typeof listNotificationsOutputSchema
 >;
@@ -496,35 +500,50 @@ export type MarkAllNotificationsAsReadResult = z.infer<
 // Drizzle tables
 // =============================================================================
 
-export const workItems = pgTable("work_items", (t) => ({
-  id: t.uuid().notNull().primaryKey().defaultRandom(),
-  parentId: t.uuid(),
-  ownerUserId: t
-    .text()
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  assigneeUserId: t.text(),
-  workspaceId: t.uuid(),
-  projectId: t.uuid(),
-  sequenceNumber: t.integer().notNull().default(0),
-  queueSortOrder: t.integer().notNull().default(0),
-  kind: workItemKindEnum().notNull(),
-  title: t.varchar({ length: 256 }).notNull(),
-  description: t.text(),
-  status: t.varchar({ length: 40 }).notNull().default("draft"),
-  // Per-work-item agent override; top of the resolveAgentType hierarchy.
-  // Nullable = inherit from project / workspace default.
-  agentTypeOverride: t.varchar({ length: 50 }),
-  externalId: t.text(),
-  externalProvider: t.varchar({ length: 20 }),
-  // Canonical link back to the source issue (e.g. a Linear issue URL) for
-  // deep-linking from the work-item detail view.
-  externalUrl: t.text(),
-  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-  updatedAt: t
-    .timestamp({ mode: "string", withTimezone: true })
-    .$onUpdateFn(() => sql`now()`),
-}));
+export const workItems = pgTable(
+  "work_items",
+  (t) => ({
+    id: t.uuid().notNull().primaryKey().defaultRandom(),
+    parentId: t.uuid(),
+    ownerUserId: t
+      .text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    assigneeUserId: t.text(),
+    workspaceId: t.uuid(),
+    projectId: t.uuid(),
+    sequenceNumber: t.integer().notNull().default(0),
+    queueSortOrder: t.integer().notNull().default(0),
+    kind: workItemKindEnum().notNull(),
+    title: t.varchar({ length: 256 }).notNull(),
+    description: t.text(),
+    status: t.varchar({ length: 40 }).notNull().default("draft"),
+    // Per-work-item agent override; top of the resolveAgentType hierarchy.
+    // Nullable = inherit from project / workspace default.
+    agentTypeOverride: t.varchar({ length: 50 }),
+    externalId: t.text(),
+    externalProvider: t.varchar({ length: 20 }),
+    // Canonical link back to the source issue (e.g. a Linear issue URL) for
+    // deep-linking from the work-item detail view.
+    externalUrl: t.text(),
+    sourceMetadata: t
+      .jsonb()
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
+    updatedAt: t
+      .timestamp({ mode: "string", withTimezone: true })
+      .$onUpdateFn(() => sql`now()`),
+  }),
+  (table) => [
+    uniqueIndex("work_items_external_provider_id_uidx")
+      .on(table.externalProvider, table.externalId)
+      .where(
+        sql`${table.externalProvider} is not null and ${table.externalId} is not null`,
+      ),
+  ],
+);
 
 export const CreateWorkItemSchema = createInsertSchema(workItems, {
   kind: z.enum(workItemKind),
@@ -556,9 +575,7 @@ export const planDrafts = pgTable(
       .timestamp({ mode: "string", withTimezone: true })
       .$onUpdateFn(() => sql`now()`),
   }),
-  (table) => [
-    { name: "plan_drafts_session_idx", columns: [table.sessionId] },
-  ],
+  (table) => [{ name: "plan_drafts_session_idx", columns: [table.sessionId] }],
 );
 
 export const planDraftDependencies = pgTable(
@@ -612,7 +629,10 @@ export const workItemDependencies = pgTable(
 
 export const dispatchBatches = pgTable("dispatch_batches", (t) => ({
   id: t.uuid().notNull().primaryKey().defaultRandom(),
-  userId: t.text().notNull().references(() => user.id, { onDelete: "cascade" }),
+  userId: t
+    .text()
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
   // sessionId FK to chatConversations.id dropped; re-enable in Task 14 (chat).
   sessionId: t.uuid(),
   workspaceId: t.text().notNull(),
@@ -624,14 +644,19 @@ export const dispatchBatches = pgTable("dispatch_batches", (t) => ({
   completedTasks: t.integer().notNull().default(0),
   failedTasks: t.integer().notNull().default(0),
   createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-  updatedAt: t.timestamp({ mode: "string", withTimezone: true }).$onUpdateFn(() => sql`now()`),
+  updatedAt: t
+    .timestamp({ mode: "string", withTimezone: true })
+    .$onUpdateFn(() => sql`now()`),
 }));
 
 export const dispatchItems = pgTable(
   "dispatch_items",
   (t) => ({
     id: t.uuid().notNull().primaryKey().defaultRandom(),
-    batchId: t.uuid().notNull().references(() => dispatchBatches.id, { onDelete: "cascade" }),
+    batchId: t
+      .uuid()
+      .notNull()
+      .references(() => dispatchBatches.id, { onDelete: "cascade" }),
     planningTaskId: t.text().notNull(),
     planningTaskIdentifier: t.text().notNull(),
     title: t.text().notNull(),
@@ -646,38 +671,34 @@ export const dispatchItems = pgTable(
     pipelineState: t.varchar({ length: 30 }),
     planningProvider: t.varchar({ length: 20 }).notNull().default("internal"),
     createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-    updatedAt: t.timestamp({ mode: "string", withTimezone: true }).$onUpdateFn(() => sql`now()`),
+    updatedAt: t
+      .timestamp({ mode: "string", withTimezone: true })
+      .$onUpdateFn(() => sql`now()`),
   }),
-  (table) => [
-    { name: "dispatch_items_batch_idx", columns: [table.batchId] },
-  ],
+  (table) => [{ name: "dispatch_items_batch_idx", columns: [table.batchId] }],
 );
 
 // =============================================================================
 // Requirements
 // =============================================================================
 
-export const requirements = pgTable("requirements", (t) => ({
-  id: t.uuid().notNull().primaryKey().defaultRandom(),
-  workItemId: t
-    .uuid()
-    .notNull()
-    .references(() => workItems.id, { onDelete: "cascade" }),
-  category: t
-    .text({ enum: requirementCategory })
-    .notNull()
-    .default("other"),
-  description: t.text().notNull(),
-  status: t
-    .text({ enum: requirementStatus })
-    .notNull()
-    .default("pending"),
-  linkedTaskId: t.uuid(),
-  sortOrder: t.integer().notNull().default(0),
-  createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
-}), (table) => [
-  index("requirements_work_item_id_idx").on(table.workItemId),
-]);
+export const requirements = pgTable(
+  "requirements",
+  (t) => ({
+    id: t.uuid().notNull().primaryKey().defaultRandom(),
+    workItemId: t
+      .uuid()
+      .notNull()
+      .references(() => workItems.id, { onDelete: "cascade" }),
+    category: t.text({ enum: requirementCategory }).notNull().default("other"),
+    description: t.text().notNull(),
+    status: t.text({ enum: requirementStatus }).notNull().default("pending"),
+    linkedTaskId: t.uuid(),
+    sortOrder: t.integer().notNull().default(0),
+    createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
+  }),
+  (table) => [index("requirements_work_item_id_idx").on(table.workItemId)],
+);
 
 // =============================================================================
 // Plan task items (worktree-plan-scoped tasks)
@@ -737,16 +758,22 @@ export const taskRuns = pgTable("task_runs", (t) => ({
     .uuid()
     .references(() => repositories.id, { onDelete: "set null" }),
   worktreeId: t.uuid().references(() => worktrees.id, { onDelete: "set null" }),
-  pullRequestId: t.uuid().references(() => pullRequests.id, { onDelete: "set null" }),
+  pullRequestId: t
+    .uuid()
+    .references(() => pullRequests.id, { onDelete: "set null" }),
   status: t.varchar({ length: 20 }).notNull(), // 'starting' | 'running' | 'blocked' | 'completed' | 'failed'
   blockedReason: t.text(),
   branch: t.text(), // The git branch created for this task run
   forgegraphRevisionId: t.text(), // VCS revision ID (commit SHA or jj change ID) for ForgeGraph tracking
-  parentTaskRunId: t.uuid().references((): AnyPgColumn => taskRuns.id, { onDelete: "set null" }),
+  parentTaskRunId: t
+    .uuid()
+    .references((): AnyPgColumn => taskRuns.id, { onDelete: "set null" }),
   runPhase: t.varchar({ length: 20 }).notNull().default("execute"),
   // runPhase values: "shape" | "plan" | "execute" | "review" | "ship"
   planningProvider: t.varchar({ length: 20 }).notNull().default("internal"),
-  syncFailures: t.jsonb().$type<{ method: string; error: string; timestamp: string }[]>(),
+  syncFailures: t
+    .jsonb()
+    .$type<{ method: string; error: string; timestamp: string }[]>(),
   createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t
     .timestamp({ mode: "string", withTimezone: true })
@@ -867,7 +894,9 @@ export const workItemSnapshots = pgTable(
     data: t.jsonb().notNull().default({}),
     createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   }),
-  (table) => [index("work_item_snapshots_work_item_id_idx").on(table.workItemId)],
+  (table) => [
+    index("work_item_snapshots_work_item_id_idx").on(table.workItemId),
+  ],
 );
 
 // =============================================================================
@@ -968,35 +997,29 @@ export const dispatchBatchesRelations = relations(
   }),
 );
 
-export const dispatchItemsRelations = relations(
-  dispatchItems,
-  ({ one }) => ({
-    batch: one(dispatchBatches, {
-      fields: [dispatchItems.batchId],
-      references: [dispatchBatches.id],
-    }),
-    taskRun: one(taskRuns, {
-      fields: [dispatchItems.taskRunId],
-      references: [taskRuns.id],
-    }),
+export const dispatchItemsRelations = relations(dispatchItems, ({ one }) => ({
+  batch: one(dispatchBatches, {
+    fields: [dispatchItems.batchId],
+    references: [dispatchBatches.id],
   }),
-);
+  taskRun: one(taskRuns, {
+    fields: [dispatchItems.taskRunId],
+    references: [taskRuns.id],
+  }),
+}));
 
-export const requirementsRelations = relations(
-  requirements,
-  ({ one }) => ({
-    workItem: one(workItems, {
-      fields: [requirements.workItemId],
-      references: [workItems.id],
-      relationName: "work_item_requirements",
-    }),
-    linkedTask: one(workItems, {
-      fields: [requirements.linkedTaskId],
-      references: [workItems.id],
-      relationName: "requirement_linked_task",
-    }),
+export const requirementsRelations = relations(requirements, ({ one }) => ({
+  workItem: one(workItems, {
+    fields: [requirements.workItemId],
+    references: [workItems.id],
+    relationName: "work_item_requirements",
   }),
-);
+  linkedTask: one(workItems, {
+    fields: [requirements.linkedTaskId],
+    references: [workItems.id],
+    relationName: "requirement_linked_task",
+  }),
+}));
 
 export const planTaskItemsRelations = relations(planTaskItems, ({ one }) => ({
   plan: one(worktreePlans, {

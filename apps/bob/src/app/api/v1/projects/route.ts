@@ -16,6 +16,13 @@ export async function POST(request: Request) {
       const body = (await request.json()) as Parameters<
         typeof caller.publicApi.createProject
       >[0];
+      const idempotencyKey = request.headers.get("idempotency-key");
+      if (!idempotencyKey || idempotencyKey !== body.idempotencyKey) {
+        return NextResponse.json(
+          { error: "Idempotency-Key must match the approved intake payload" },
+          { status: 400 },
+        );
+      }
       const result = await caller.publicApi.createProject(body);
       return NextResponse.json(result);
     } catch (error) {

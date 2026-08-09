@@ -3,25 +3,68 @@ import { z } from "zod/v4";
 import { agentRunStatusEnum } from "@bob/db/schema";
 
 import {
-  protectedProcedure,
-  apiKeyReadProcedure,
-  apiKeyWriteProcedure,
-} from "../trpc";
-import {
-  publicApiRegisterWorkspace,
-  publicApiCreateRun,
-  publicApiDispatchExecution,
-  publicApiCreateProject,
-  publicApiListProjects,
-  publicApiCreateWorkItem,
-  publicApiUpdateRun,
   publicApiCreateArtifact,
+  publicApiCreateProject,
+  publicApiCreateRun,
+  publicApiCreateTask,
+  publicApiCreateWorkItem,
+  publicApiDispatchExecution,
+  publicApiGenerateApiKey,
   publicApiGetRun,
+  publicApiHeartbeat,
+  publicApiListProjects,
   publicApiListRuns,
   publicApiListRunsByWorkItem,
-  publicApiHeartbeat,
-  publicApiGenerateApiKey,
+  publicApiLookupIntake,
+  publicApiRegisterWorkspace,
+  publicApiUpdateRun,
 } from "../handlers/publicApi";
+import {
+  apiKeyReadProcedure,
+  apiKeyWriteProcedure,
+  protectedProcedure,
+} from "../trpc";
+
+const oodaIntakeSourceSchema = z
+  .object({
+    system: z.literal("ooda"),
+    proposalId: z.string().min(1).max(200),
+    conversationId: z.string().min(1).max(200),
+    proposalVersion: z.number().int().positive(),
+  })
+  .catchall(z.unknown());
+
+const oodaIntakeReceiptSchema = z.object({
+  kind: z.enum(["project", "work_item"]),
+  id: z.string().uuid(),
+  key: z.string().optional(),
+  name: z.string().optional(),
+  title: z.string().optional(),
+  status: z.string(),
+  replayed: z.boolean(),
+  evidence: z
+    .array(
+      z.object({
+        id: z.string(),
+        source: z.enum(["bob", "kanbanger", "forgegraph"]),
+        kind: z.enum([
+          "work_item",
+          "run",
+          "revision",
+          "build",
+          "deployment",
+          "run_event",
+        ]),
+        externalId: z.string(),
+        title: z.string(),
+        status: z.string(),
+        path: z.string(),
+        occurredAt: z.string(),
+        metadata: z.record(z.string(), z.unknown()),
+      }),
+    )
+    .optional(),
+});
 
 export const publicApiRouter = {
   // POST /workspaces — register a workspace
@@ -57,10 +100,7 @@ export const publicApiRouter = {
       }),
     )
     .mutation(({ ctx, input }) =>
-      publicApiCreateRun(
-        { db: ctx.db, userId: ctx.session.user.id },
-        input,
-      ),
+      publicApiCreateRun({ db: ctx.db, userId: ctx.session.user.id }, input),
     ),
 
   // POST /dispatch — create an EXECUTABLE session (gated: BOB_OODA_DISPATCH_ENABLED).
@@ -85,7 +125,7 @@ export const publicApiRouter = {
             threadId: z.string().min(1).max(200).optional(),
             threadSlug: z.string().min(1).max(200).optional(),
           })
-          .refine((o) => Boolean(o.threadId || o.threadSlug), {
+          .refine((o) => Boolean(o.threadId ?? o.threadSlug), {
             message: "ooda requires threadId or threadSlug",
           })
           .optional(),
@@ -112,6 +152,12 @@ export const publicApiRouter = {
           .regex(/^#[0-9a-fA-F]{6}$/)
           .optional(),
         tasks: z.array(z.string().min(1).max(256)).max(20).optional(),
+        acceptanceCriteria: z
+          .array(z.string().min(1).max(2_000))
+          .min(1)
+          .max(50),
+        idempotencyKey: z.string().min(1).max(256),
+        source: oodaIntakeSourceSchema,
       }),
     )
     .mutation(({ ctx, input }) =>
@@ -121,14 +167,45 @@ export const publicApiRouter = {
       ),
     ),
 
+  // POST /tasks — create one backlog task from an approved OODA proposal.
+  createTask: apiKeyWriteProcedure
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+        title: z.string().min(1).max(256),
+        description: z.string().max(20_000).optional(),
+        projectId: z.string().uuid().optional(),
+        acceptanceCriteria: z
+          .array(z.string().min(1).max(2_000))
+          .min(1)
+          .max(50),
+        idempotencyKey: z.string().min(1).max(256),
+        source: oodaIntakeSourceSchema,
+      }),
+    )
+    .output(oodaIntakeReceiptSchema)
+    .mutation(({ ctx, input }) =>
+      publicApiCreateTask({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
+
+  // GET /intakes — destination-side reconciliation by immutable delivery key.
+  lookupIntake: apiKeyReadProcedure
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+        idempotencyKey: z.string().min(1).max(256),
+      }),
+    )
+    .output(oodaIntakeReceiptSchema)
+    .query(({ ctx, input }) =>
+      publicApiLookupIntake({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
+
   // GET /projects — list a workspace's projects (for agents to file tasks).
   listProjects: apiKeyReadProcedure
     .input(z.object({ workspaceId: z.string().uuid() }))
     .query(({ ctx, input }) =>
-      publicApiListProjects(
-        { db: ctx.db, userId: ctx.session.user.id },
-        input,
-      ),
+      publicApiListProjects({ db: ctx.db, userId: ctx.session.user.id }, input),
     ),
 
   // POST /work-items — create a single task (optionally under a project).
@@ -162,10 +239,7 @@ export const publicApiRouter = {
       }),
     )
     .mutation(({ ctx, input }) =>
-      publicApiUpdateRun(
-        { db: ctx.db, userId: ctx.session.user.id },
-        input,
-      ),
+      publicApiUpdateRun({ db: ctx.db, userId: ctx.session.user.id }, input),
     ),
 
   // POST /runs/:id/artifacts — upload artifact metadata
@@ -189,10 +263,7 @@ export const publicApiRouter = {
   getRun: apiKeyReadProcedure
     .input(z.object({ runId: z.string().uuid() }))
     .query(({ ctx, input }) =>
-      publicApiGetRun(
-        { db: ctx.db, userId: ctx.session.user.id },
-        input,
-      ),
+      publicApiGetRun({ db: ctx.db, userId: ctx.session.user.id }, input),
     ),
 
   // GET /runs — list runs for a workspace
@@ -204,10 +275,7 @@ export const publicApiRouter = {
       }),
     )
     .query(({ ctx, input }) =>
-      publicApiListRuns(
-        { db: ctx.db, userId: ctx.session.user.id },
-        input,
-      ),
+      publicApiListRuns({ db: ctx.db, userId: ctx.session.user.id }, input),
     ),
 
   // GET /work-items/:id/runs — list runs for a work item
@@ -249,10 +317,7 @@ export const publicApiRouter = {
       }),
     )
     .mutation(({ ctx, input }) =>
-      publicApiHeartbeat(
-        { db: ctx.db, userId: ctx.session.user.id },
-        input,
-      ),
+      publicApiHeartbeat({ db: ctx.db, userId: ctx.session.user.id }, input),
     ),
 
   // POST /api-keys — generate a new API key
