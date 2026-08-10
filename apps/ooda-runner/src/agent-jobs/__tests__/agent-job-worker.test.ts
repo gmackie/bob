@@ -1,7 +1,8 @@
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
   AdapterCommand,
@@ -12,6 +13,24 @@ import type {
 } from "@gmacko/ooda/agent-adapters";
 
 import { AgentJobWorker, buildAgentJobPrompt } from "../agent-job-worker";
+
+const testRoots: string[] = [];
+
+async function createSubscriptionTestEnvironment() {
+  const root = join(tmpdir(), `ooda-worker-${crypto.randomUUID()}`);
+  const trustedHome = join(root, "trusted-home");
+  await mkdir(join(trustedHome, ".codex"), { recursive: true });
+  await writeFile(
+    join(trustedHome, ".codex", "auth.json"),
+    "subscription-token",
+    { mode: 0o600 },
+  );
+  testRoots.push(root);
+  return {
+    scratchRoot: join(root, "scratch"),
+    environment: { PATH: "/usr/bin", HOME: trustedHome },
+  };
+}
 
 class SuccessfulAdapter implements AgentAdapter {
   id = "codex";
@@ -61,6 +80,14 @@ class LeaseLostAdapter implements AgentAdapter {
 }
 
 describe("AgentJobWorker", () => {
+  afterEach(async () => {
+    await Promise.all(
+      testRoots.splice(0).map((root) =>
+        rm(root, { recursive: true, force: true }),
+      ),
+    );
+  });
+
   it("passes only disclosed or redacted context to the provider prompt", () => {
     const prompt = buildAgentJobPrompt("Compare the options", [
       {
@@ -100,6 +127,7 @@ describe("AgentJobWorker", () => {
   });
 
   it("executes the disposable lane and records findings without a Bob run", async () => {
+    const testEnvironment = await createSubscriptionTestEnvironment();
     const claim = vi.fn().mockResolvedValueOnce({
       job: {
         id: "job-worker-1",
@@ -121,7 +149,7 @@ describe("AgentJobWorker", () => {
     const recordEvent = vi.fn().mockResolvedValue({ replayed: false });
     const worker = new AgentJobWorker({
       runnerId: "runner-worker-1",
-      scratchRoot: join(tmpdir(), `ooda-worker-${crypto.randomUUID()}`),
+      ...testEnvironment,
       adapters: new Map([["codex", new SuccessfulAdapter()]]),
       api: {
         claim,
@@ -134,6 +162,7 @@ describe("AgentJobWorker", () => {
       },
       maxConcurrent: 1,
       controlPollMs: 10,
+      processSandbox: async (command) => command,
     });
 
     await worker.poll();
@@ -168,6 +197,7 @@ describe("AgentJobWorker", () => {
   });
 
   it("stops quietly when lease fencing rejects control and terminal writes", async () => {
+    const testEnvironment = await createSubscriptionTestEnvironment();
     const claim = vi.fn().mockResolvedValueOnce({
       job: {
         id: "job-stale-lease",
@@ -189,7 +219,7 @@ describe("AgentJobWorker", () => {
     const recordEvent = vi.fn().mockRejectedValue(new Error("stale lease"));
     const worker = new AgentJobWorker({
       runnerId: "runner-stale",
-      scratchRoot: join(tmpdir(), `ooda-worker-${crypto.randomUUID()}`),
+      ...testEnvironment,
       adapters: new Map([["codex", new LeaseLostAdapter()]]),
       api: {
         claim,
@@ -198,6 +228,7 @@ describe("AgentJobWorker", () => {
       },
       maxConcurrent: 1,
       controlPollMs: 5,
+      processSandbox: async (command) => command,
     });
 
     await worker.poll();

@@ -1,4 +1,10 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -55,6 +61,20 @@ function waitFor(cond: () => boolean, timeoutMs = 15000): Promise<void> {
     };
     tick();
   });
+}
+
+function processIsRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    if (process.platform === "linux") {
+      const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+      const state = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[0];
+      if (state === "Z") return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 describe("supervisor", () => {
@@ -177,14 +197,7 @@ setInterval(() => {}, 1000);
       await waitFor(() => closed);
 
       try {
-        await waitFor(() => {
-          try {
-            process.kill(grandchildPid, 0);
-            return false;
-          } catch {
-            return true;
-          }
-        }, 2_000);
+        await waitFor(() => !processIsRunning(grandchildPid));
       } finally {
         try {
           process.kill(grandchildPid, "SIGKILL");
@@ -226,14 +239,7 @@ setTimeout(() => process.exit(0), 50);
       await waitFor(() => closed);
 
       try {
-        await waitFor(() => {
-          try {
-            process.kill(grandchildPid, 0);
-            return false;
-          } catch {
-            return true;
-          }
-        }, 2_000);
+        await waitFor(() => !processIsRunning(grandchildPid));
       } finally {
         try {
           process.kill(grandchildPid, "SIGKILL");
@@ -273,7 +279,10 @@ setTimeout(() => process.exit(0), 50);
       let closed = false;
       proc.on("close", () => (closed = true));
       try {
-        await waitFor(() => closed, 2_000);
+        // The supervisor deliberately permits a five-second SIGTERM grace
+        // period before escalating, so poll the actual close condition under
+        // the suite's broader guard instead of imposing a shorter deadline.
+        await waitFor(() => closed);
       } finally {
         proc.kill("SIGKILL");
         try {
