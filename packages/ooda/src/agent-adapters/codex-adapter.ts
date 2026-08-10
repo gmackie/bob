@@ -1,6 +1,7 @@
-import { execSync, spawn } from "node:child_process";
+import { execSync } from "node:child_process";
 
 import { buildCodexMcpConfigArgs } from "./mcp-config";
+import { killProcessTree, spawnAdapterProcess } from "./process-tree";
 import type {
   AdapterCommand,
   AdapterEvent,
@@ -28,7 +29,6 @@ type RpcMessage = {
 
 type PendingApproval = { rpcId: RpcId; method: string };
 
-const KILL_GRACE_MS = 5_000;
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object"
@@ -115,11 +115,11 @@ export class CodexAdapter implements AgentAdapter {
     const childEnvironment = { ...(options?.environment ?? process.env) };
     delete childEnvironment.OPENAI_API_KEY;
     const child: SpawnedProcessLike = options?.spawnImpl
-      ? options.spawnImpl("codex", ["app-server", "--stdio"], {
+      ? options.spawnImpl("codex", ["app-server"], {
           cwd: process.cwd(),
           env: childEnvironment,
         })
-      : (spawn("codex", ["app-server", "--stdio"], {
+      : (spawnAdapterProcess("codex", ["app-server"], {
           cwd: process.cwd(),
           env: childEnvironment as NodeJS.ProcessEnv,
           stdio: ["pipe", "pipe", "pipe"],
@@ -133,7 +133,7 @@ export class CodexAdapter implements AgentAdapter {
         settled = true;
         clearTimeout(timeout);
         child.stdin?.end();
-        child.kill("SIGTERM");
+        killProcessTree(child, "SIGTERM");
         resolve(snapshot);
       };
       const fail = (error: unknown) =>
@@ -211,7 +211,7 @@ export class CodexAdapter implements AgentAdapter {
   }
 
   buildCommand(opts: BuildCommandOptions): AdapterCommand {
-    const args = ["app-server", "--stdio"];
+    const args = ["app-server"];
     args.push(...buildCodexMcpConfigArgs(this.mcpServers));
     return {
       binary: "codex",
@@ -257,7 +257,7 @@ export class CodexAdapter implements AgentAdapter {
           cwd: command.cwd,
           env: childEnvironment,
         })
-      : (spawn(command.binary, command.args, {
+      : (spawnAdapterProcess(command.binary, command.args, {
           cwd: command.cwd,
           env: childEnvironment as NodeJS.ProcessEnv,
           stdio: ["pipe", "pipe", "pipe"],
@@ -270,7 +270,6 @@ export class CodexAdapter implements AgentAdapter {
     let turnActive = false;
     let completed = false;
     let sawAssistantDelta = false;
-    let killTimer: NodeJS.Timeout | undefined;
     const approvals = new Map<string, PendingApproval>();
 
     const now = () => new Date().toISOString();
@@ -397,12 +396,7 @@ export class CodexAdapter implements AgentAdapter {
         if (threadId && turnId && turnActive) {
           request("turn/interrupt", { threadId, turnId });
         }
-        child.kill("SIGTERM");
-        killTimer ??= setTimeout(() => {
-          if (child.exitCode === null && child.signalCode === null)
-            child.kill("SIGKILL");
-        }, KILL_GRACE_MS);
-        killTimer.unref?.();
+        killProcessTree(child, "SIGTERM");
       },
       respondPermission,
     };
@@ -578,7 +572,6 @@ export class CodexAdapter implements AgentAdapter {
       const finish = (exitCode: number) => {
         if (settled) return;
         settled = true;
-        if (killTimer) clearTimeout(killTimer);
         options?.signal?.removeEventListener("abort", abort);
         onEvent({
           type: "exit",
@@ -605,7 +598,7 @@ export class CodexAdapter implements AgentAdapter {
         if (!completed) return;
         clearInterval(completionPoll);
         child.stdin?.end();
-        child.kill("SIGTERM");
+        killProcessTree(child, "SIGTERM");
         finish(0);
       }, 10);
       completionPoll.unref?.();

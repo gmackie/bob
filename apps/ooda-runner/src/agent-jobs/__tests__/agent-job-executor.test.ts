@@ -1,4 +1,4 @@
-import { lstat } from "node:fs/promises";
+import { lstat, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -97,14 +97,187 @@ class PermissionRequestingAdapter implements AgentAdapter {
   }
 }
 
+class CompletingAdapter implements AgentAdapter {
+  id = "codex";
+  name = "Completing adapter";
+  transport = "stdio" as const;
+  environment: Record<string, string | undefined> | undefined;
+
+  isAvailable() {
+    return true;
+  }
+
+  buildCommand(opts: BuildCommandOptions): AdapterCommand {
+    return { binary: "mock", args: [], cwd: opts.workspaceRoot };
+  }
+
+  async execute(
+    _command: AdapterCommand,
+    _onEvent: (event: AdapterEvent) => void,
+    options?: ExecuteOptions,
+  ): Promise<{ exitCode: number }> {
+    this.environment = options?.environment;
+    return { exitCode: 0 };
+  }
+}
+
 describe("AgentJobExecutor", () => {
+  it("stages only the subscription credential before sandboxing and erases it after completion", async () => {
+    const root = join(tmpdir(), `ooda-job-subscription-${crypto.randomUUID()}`);
+    const trustedHome = join(root, "trusted-home");
+    const authPath = join(trustedHome, ".codex", "auth.json");
+    await mkdir(join(trustedHome, ".codex"), { recursive: true });
+    await writeFile(authPath, "subscription-token", { mode: 0o600 });
+    const adapter = new CompletingAdapter();
+    let stagedCredential: string | undefined;
+    let sandboxPath: string | undefined;
+    let credentialHomePath: string | undefined;
+    const executor = new AgentJobExecutor({
+      adapter,
+      sandboxes: new ScratchSandboxManager(join(root, "sandboxes")),
+      environment: { PATH: "/usr/bin", HOME: trustedHome },
+      processSandbox: async (command, scratchPath, options) => {
+        sandboxPath = scratchPath;
+        credentialHomePath = options?.writablePaths?.[0];
+        expect(options?.readOnlyPaths).toEqual([
+          join(credentialHomePath!, ".codex", "auth.json"),
+        ]);
+        stagedCredential = await readFile(
+          join(credentialHomePath!, ".codex", "auth.json"),
+          "utf8",
+        );
+        return command;
+      },
+    });
+
+    await executor.execute({
+      jobId: "job-subscription",
+      class: "read_only_research",
+      provider: "codex",
+      prompt: "Research only",
+      billingPolicy: "subscription_only",
+      authMode: "subscription",
+      capabilities: ["web.read"],
+      budget: { deadlineSeconds: 900, aggregateTokens: 150_000 },
+      onEvent: vi.fn(),
+    });
+
+    expect(stagedCredential).toBe("subscription-token");
+    expect(adapter.environment).toMatchObject({
+      HOME: credentialHomePath,
+      CODEX_HOME: join(credentialHomePath!, ".codex"),
+    });
+    expect(credentialHomePath!.startsWith(`${sandboxPath!}/`)).toBe(false);
+    expect(adapter.environment?.HOME).not.toBe(trustedHome);
+    await expect(lstat(credentialHomePath!)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(lstat(sandboxPath!)).rejects.toMatchObject({ code: "ENOENT" });
+    await new ScratchSandboxManager(root).cleanupRoot();
+  });
+
+  it("removes staged credentials while retaining successful scratch prototype artifacts", async () => {
+    const root = join(tmpdir(), `ooda-job-prototype-${crypto.randomUUID()}`);
+    const trustedHome = join(root, "trusted-home");
+    await mkdir(join(trustedHome, ".codex"), { recursive: true });
+    await writeFile(
+      join(trustedHome, ".codex", "auth.json"),
+      "subscription-token",
+      { mode: 0o600 },
+    );
+    const adapter = new CompletingAdapter();
+    const executor = new AgentJobExecutor({
+      adapter,
+      sandboxes: new ScratchSandboxManager(join(root, "sandboxes")),
+      environment: { PATH: "/usr/bin", HOME: trustedHome },
+      processSandbox: async (command, _scratchPath, options) => {
+        expect(options?.readOnlyPaths).toHaveLength(1);
+        expect(options?.writablePaths).toHaveLength(1);
+        return command;
+      },
+    });
+
+    const result = await executor.execute({
+      jobId: "job-prototype",
+      class: "scratch_prototype",
+      provider: "codex",
+      prompt: "Build only in scratch",
+      billingPolicy: "subscription_only",
+      authMode: "subscription",
+      capabilities: ["scratch.read", "scratch.write"],
+      budget: { deadlineSeconds: 1_800, aggregateTokens: 250_000 },
+      onEvent: vi.fn(),
+    });
+
+    expect(result.artifactRef).toBeDefined();
+    await expect(lstat(result.artifactRef!)).resolves.toBeDefined();
+    await expect(
+      lstat(join(result.artifactRef!, ".home", ".codex", "auth.json")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    await new ScratchSandboxManager(root).cleanupRoot();
+  });
+
+  it("discards retained artifacts when independent credential-home cleanup fails", async () => {
+    const root = join(
+      tmpdir(),
+      `ooda-job-cleanup-failure-${crypto.randomUUID()}`,
+    );
+    const trustedHome = join(root, "trusted-home");
+    const credentialHomePath = join(root, "credential-home");
+    await mkdir(join(trustedHome, ".codex"), { recursive: true });
+    await writeFile(
+      join(trustedHome, ".codex", "auth.json"),
+      "subscription-token",
+      { mode: 0o600 },
+    );
+    await mkdir(credentialHomePath, { recursive: true });
+    const executor = new AgentJobExecutor({
+      adapter: new CompletingAdapter(),
+      sandboxes: new ScratchSandboxManager(join(root, "sandboxes")),
+      environment: { PATH: "/usr/bin", HOME: trustedHome },
+      processSandbox: async (command) => command,
+      createCredentialHome: async () => ({
+        path: credentialHomePath,
+        cleanup: async () => {
+          throw new Error("credential cleanup failed");
+        },
+      }),
+    });
+
+    await expect(
+      executor.execute({
+        jobId: "job-cleanup-failure",
+        class: "scratch_prototype",
+        provider: "codex",
+        prompt: "Build only in scratch",
+        billingPolicy: "subscription_only",
+        authMode: "subscription",
+        capabilities: ["scratch.read", "scratch.write"],
+        budget: { deadlineSeconds: 1_800, aggregateTokens: 250_000 },
+        onEvent: vi.fn(),
+      }),
+    ).rejects.toThrow("credential cleanup failed");
+
+    const { readdir } = await import("node:fs/promises");
+    expect(await readdir(join(root, "sandboxes"))).toEqual([]);
+    await new ScratchSandboxManager(root).cleanupRoot();
+  });
+
   it("denies undeclared tool requests immediately instead of leaving a headless job blocked", async () => {
     const root = join(tmpdir(), `ooda-job-permission-${crypto.randomUUID()}`);
+    const trustedHome = join(root, "trusted-home");
+    await mkdir(join(trustedHome, ".claude"), { recursive: true });
+    await writeFile(
+      join(trustedHome, ".claude", ".credentials.json"),
+      "subscription-token",
+      { mode: 0o600 },
+    );
     const adapter = new PermissionRequestingAdapter();
     const executor = new AgentJobExecutor({
       adapter,
-      sandboxes: new ScratchSandboxManager(root),
-      environment: { PATH: "/usr/bin", HOME: "/Users/operator" },
+      sandboxes: new ScratchSandboxManager(join(root, "sandboxes")),
+      environment: { PATH: "/usr/bin", HOME: trustedHome },
+      processSandbox: async (command) => command,
     });
 
     await executor.execute({

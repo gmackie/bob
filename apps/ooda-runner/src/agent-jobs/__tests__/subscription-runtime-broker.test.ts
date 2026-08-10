@@ -11,6 +11,7 @@ describe("SubscriptionRuntimeBroker", () => {
       billingPolicy: "subscription_only",
       authMode: "subscription",
       sandboxPath: "/tmp/ooda-job",
+      credentialHomePath: "/tmp/ooda-credentials",
       source: {
         PATH: "/usr/bin",
         HOME: "/Users/operator",
@@ -22,12 +23,19 @@ describe("SubscriptionRuntimeBroker", () => {
     expect(prepared).toMatchObject({
       authMode: "subscription",
       permissionMode: "skip",
-      useOuterProcessSandbox: false,
+      useOuterProcessSandbox: true,
       environment: {
         PATH: "/usr/bin",
-        HOME: "/Users/operator",
+        HOME: "/tmp/ooda-credentials",
+        CODEX_HOME: "/tmp/ooda-credentials/.codex",
         TMPDIR: "/tmp/ooda-job/.tmp",
       },
+      credentialCopies: [
+        {
+          sourcePath: "/Users/operator/.codex/auth.json",
+          destinationPath: "/tmp/ooda-credentials/.codex/auth.json",
+        },
+      ],
     });
     expect(prepared.environment).not.toHaveProperty("OPENAI_API_KEY");
     expect(prepared.environment).not.toHaveProperty("DATABASE_URL");
@@ -41,6 +49,7 @@ describe("SubscriptionRuntimeBroker", () => {
       billingPolicy: "subscription_only",
       authMode: "subscription",
       sandboxPath: "/tmp/ooda-job",
+      credentialHomePath: "/tmp/ooda-credentials",
       source: { PATH: "/usr/bin", HOME: "/Users/operator" },
     });
     expect(prepared.permissionMode).toBe("prompt");
@@ -52,6 +61,41 @@ describe("SubscriptionRuntimeBroker", () => {
       "WebSearch",
     ]);
     expect(prepared.allowedTools).not.toContain("Bash");
+    expect(prepared).toMatchObject({
+      useOuterProcessSandbox: true,
+      environment: { HOME: "/tmp/ooda-credentials" },
+      credentialCopies: [
+        {
+          sourcePath: "/Users/operator/.claude/.credentials.json",
+          destinationPath:
+            "/tmp/ooda-credentials/.claude/.credentials.json",
+        },
+      ],
+    });
+  });
+
+  it("isolates the Grok subscription token from the trusted host home", () => {
+    const prepared = new SubscriptionRuntimeBroker().prepare({
+      provider: "grok",
+      jobClass: "read_only_research",
+      capabilities: ["web.read"],
+      billingPolicy: "subscription_only",
+      authMode: "subscription",
+      sandboxPath: "/tmp/ooda-job",
+      credentialHomePath: "/tmp/ooda-credentials",
+      source: { PATH: "/usr/bin", HOME: "/Users/operator" },
+    });
+
+    expect(prepared).toMatchObject({
+      useOuterProcessSandbox: true,
+      environment: { HOME: "/tmp/ooda-credentials" },
+      credentialCopies: [
+        {
+          sourcePath: "/Users/operator/.grok/auth.json",
+          destinationPath: "/tmp/ooda-credentials/.grok/auth.json",
+        },
+      ],
+    });
   });
 
   it("rejects metered credentials unless policy explicitly permits them", () => {

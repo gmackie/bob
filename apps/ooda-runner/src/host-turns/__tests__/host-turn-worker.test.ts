@@ -1,3 +1,4 @@
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -73,6 +74,19 @@ class HostAdapter implements AgentAdapter {
 
 describe("HostTurnWorker", () => {
   it("uses subscription CLIs in constitutional fallback order and records the native session", async () => {
+    const root = join(tmpdir(), `ooda-host-worker-${crypto.randomUUID()}`);
+    const trustedHome = join(root, "trusted-home");
+    await Promise.all([
+      mkdir(join(trustedHome, ".grok"), { recursive: true }),
+      mkdir(join(trustedHome, ".claude"), { recursive: true }),
+    ]);
+    await Promise.all([
+      writeFile(join(trustedHome, ".grok", "auth.json"), "grok-token"),
+      writeFile(
+        join(trustedHome, ".claude", ".credentials.json"),
+        "claude-token",
+      ),
+    ]);
     const grok = new HostAdapter("grok", new Error("Grok unavailable"));
     const claude = new HostAdapter(
       "claude",
@@ -85,12 +99,14 @@ describe("HostTurnWorker", () => {
     const fail = vi.fn().mockResolvedValue({});
     const worker = new HostTurnWorker({
       runnerId: "runner-host",
-      scratchRoot: join(tmpdir(), `ooda-host-worker-${crypto.randomUUID()}`),
+      scratchRoot: join(root, "scratch"),
       adapters: new Map([
         ["grok", grok],
         ["claude", claude],
       ]),
       maxConcurrent: 1,
+      environment: { PATH: "/usr/bin", HOME: trustedHome },
+      processSandbox: async (command) => command,
       api: {
         claim: vi.fn().mockResolvedValueOnce({
           executionId: "execution-1",
@@ -139,19 +155,35 @@ describe("HostTurnWorker", () => {
     );
     expect(fail).not.toHaveBeenCalled();
     await worker.stop();
+    await rm(root, { recursive: true, force: true });
   });
 
   it("maps the OpenAI host identity to the Codex app-server subscription", async () => {
+    const root = join(tmpdir(), `ooda-host-worker-${crypto.randomUUID()}`);
+    const trustedHome = join(root, "trusted-home");
+    await mkdir(join(trustedHome, ".codex"), { recursive: true });
+    await writeFile(
+      join(trustedHome, ".codex", "auth.json"),
+      "codex-token",
+    );
     const codex = new HostAdapter(
       "codex",
       JSON.stringify({ display: "Codex answer", speakable: "Codex answer" }),
     );
     const complete = vi.fn().mockResolvedValue({});
+    let sandboxOptions:
+      | { writablePaths?: string[]; readOnlyPaths?: string[] }
+      | undefined;
     const worker = new HostTurnWorker({
       runnerId: "runner-host",
-      scratchRoot: join(tmpdir(), `ooda-host-worker-${crypto.randomUUID()}`),
+      scratchRoot: join(root, "scratch"),
       adapters: new Map([["codex", codex]]),
       maxConcurrent: 1,
+      environment: { PATH: "/usr/bin", HOME: trustedHome },
+      processSandbox: async (command, _scratchPath, options) => {
+        sandboxOptions = options;
+        return command;
+      },
       api: {
         claim: vi.fn().mockResolvedValueOnce({
           executionId: "execution-openai",
@@ -186,6 +218,13 @@ describe("HostTurnWorker", () => {
         }),
       }),
     );
+    expect(sandboxOptions).toBeDefined();
+    const runtimeHome = sandboxOptions?.writablePaths?.[0];
+    expect(runtimeHome).toBeDefined();
+    expect(sandboxOptions?.readOnlyPaths).toEqual([
+      join(runtimeHome!, ".codex", "auth.json"),
+    ]);
     await worker.stop();
+    await rm(root, { recursive: true, force: true });
   });
 });

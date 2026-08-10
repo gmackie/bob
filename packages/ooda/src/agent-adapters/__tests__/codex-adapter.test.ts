@@ -153,7 +153,8 @@ describe("CodexAdapter", () => {
     });
 
     expect(command.binary).toBe("codex");
-    expect(command.args.slice(0, 2)).toEqual(["app-server", "--stdio"]);
+    expect(command.args[0]).toBe("app-server");
+    expect(command.args).not.toContain("--stdio");
     expect(command.args).not.toContain("Research sleep optimization");
     expect(command.prompt).toBe("Research sleep optimization");
     expect(command.runtime).toMatchObject({
@@ -258,7 +259,9 @@ describe("CodexAdapter", () => {
         HOME: "/Users/example",
         OPENAI_API_KEY: "must-not-leak",
       },
-      spawnImpl: (_binary, _args, options) => {
+      spawnImpl: (binary, args, options) => {
+        expect(binary).toBe("codex");
+        expect(args).toEqual(["app-server"]);
         expect(options.env.OPENAI_API_KEY).toBeUndefined();
         return fakeAppServer(sent);
       },

@@ -1,7 +1,26 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+const require = createRequire(import.meta.url);
+const { containSupervisorCommand } = require("./supervisor-containment.cjs") as {
+  containSupervisorCommand: (
+    config: { binary: string; args: string[]; cwd: string },
+    options: {
+      platform: NodeJS.Platform;
+      nodeEnv: string;
+      sandboxBinary: string;
+    },
+  ) => { binary: string; args: string[]; cwd: string };
+};
 
 import {
   spawnSupervised,
@@ -44,11 +63,64 @@ function waitFor(cond: () => boolean, timeoutMs = 15000): Promise<void> {
   });
 }
 
+function processIsRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    if (process.platform === "linux") {
+      const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+      const state = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[0];
+      if (state === "Z") return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 describe("supervisor", () => {
   let dir: string;
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "supervisor-"));
+  });
+
+  it("puts production Linux durable runs in a PID namespace with full host-path parity", () => {
+    const contained = containSupervisorCommand(
+      { binary: "codex", args: ["app-server"], cwd: "/repo" },
+      {
+        platform: "linux",
+        nodeEnv: "production",
+        sandboxBinary: "/usr/bin/bwrap",
+      },
+    );
+
+    expect(contained).toEqual({
+      binary: "/usr/bin/bwrap",
+      cwd: "/repo",
+      args: [
+        "--die-with-parent",
+        "--new-session",
+        "--unshare-user",
+        "--unshare-pid",
+        "--unshare-ipc",
+        "--unshare-uts",
+        "--cap-drop",
+        "ALL",
+        "--bind",
+        "/",
+        "/",
+        "--proc",
+        "/proc",
+        "--dev-bind",
+        "/dev",
+        "/dev",
+        "--chdir",
+        "/repo",
+        "--",
+        "codex",
+        "app-server",
+      ],
+    });
   });
 
   afterEach(() => {
@@ -92,6 +164,163 @@ describe("supervisor", () => {
     proc.kill("SIGTERM");
     await waitFor(() => closed);
   });
+
+  it.runIf(process.platform !== "win32")(
+    "kill() terminates commands spawned beneath the supervised agent",
+    async () => {
+      const childWithCommand = `
+const { spawn } = require('node:child_process');
+const command = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+process.stdout.write('grandchild:' + command.pid + '\\n');
+setInterval(() => {}, 1000);
+`;
+      const proc = spawnSupervised(
+        dir,
+        META,
+        process.execPath,
+        ["-e", childWithCommand],
+        { cwd: process.cwd(), env: process.env },
+      );
+      const chunks: string[] = [];
+      let closed = false;
+      proc.stdout!.on("data", (data: Buffer) => chunks.push(data.toString()));
+      proc.on("close", () => (closed = true));
+      await waitFor(() => chunks.join("").includes("grandchild:"));
+      const grandchildPid = Number(
+        chunks.join("").match(/grandchild:(\d+)/)?.[1],
+      );
+      if (!Number.isInteger(grandchildPid)) {
+        throw new Error("Supervised child did not report its command pid");
+      }
+
+      proc.kill("SIGTERM");
+      await waitFor(() => closed);
+
+      try {
+        await waitFor(() => !processIsRunning(grandchildPid));
+      } finally {
+        try {
+          process.kill(grandchildPid, "SIGKILL");
+        } catch {
+          // Already gone.
+        }
+      }
+    },
+  );
+
+  it.runIf(process.platform !== "win32")(
+    "normal agent exit cleans up a supervised background command",
+    async () => {
+      const childWithCommand = `
+const { spawn } = require('node:child_process');
+const command = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+process.stdout.write('grandchild:' + command.pid + '\\n', () => process.exit(0));
+`;
+      const proc = spawnSupervised(
+        dir,
+        META,
+        process.execPath,
+        ["-e", childWithCommand],
+        { cwd: process.cwd(), env: process.env },
+      );
+      const chunks: string[] = [];
+      let closed = false;
+      proc.stdout!.on("data", (data: Buffer) => chunks.push(data.toString()));
+      proc.on("close", () => (closed = true));
+      await waitFor(() => chunks.join("").includes("grandchild:"));
+      const grandchildPid = Number(
+        chunks.join("").match(/grandchild:(\d+)/)?.[1],
+      );
+      if (!Number.isInteger(grandchildPid)) {
+        throw new Error("Supervised child did not report its command pid");
+      }
+
+      await waitFor(() => closed);
+
+      try {
+        await waitFor(() => !processIsRunning(grandchildPid));
+      } finally {
+        try {
+          process.kill(grandchildPid, "SIGKILL");
+        } catch {
+          // Already gone.
+        }
+      }
+    },
+  );
+
+  it.runIf(process.platform !== "win32")(
+    "records normal exit when a descendant keeps the agent stdout pipe open",
+    async () => {
+      const childWithInheritedOutput = `
+const { spawn } = require('node:child_process');
+const command = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: ['ignore', 'inherit', 'ignore'] });
+process.stdout.write('grandchild:' + command.pid + '\\n', () => process.exit(0));
+`;
+      const proc = spawnSupervised(
+        dir,
+        META,
+        process.execPath,
+        ["-e", childWithInheritedOutput],
+        { cwd: process.cwd(), env: process.env },
+      );
+      const chunks: string[] = [];
+      let closed = false;
+      proc.stdout!.on("data", (data: Buffer) => chunks.push(data.toString()));
+      proc.on("close", () => (closed = true));
+      await waitFor(() => chunks.join("").includes("grandchild:"));
+      const grandchildPid = Number(
+        chunks.join("").match(/grandchild:(\d+)/)?.[1],
+      );
+      if (!Number.isInteger(grandchildPid)) {
+        throw new Error("Supervised child did not report its command pid");
+      }
+
+      try {
+        // The supervisor deliberately permits a five-second SIGTERM grace
+        // period before escalating, so poll the actual close condition under
+        // the suite's broader guard instead of imposing a shorter deadline.
+        await waitFor(() => closed);
+      } finally {
+        proc.kill("SIGKILL");
+        try {
+          process.kill(grandchildPid, "SIGKILL");
+        } catch {
+          // Already gone.
+        }
+      }
+    },
+  );
+
+  it.runIf(process.platform !== "win32")(
+    "publishes the terminal event only after descendant output pipes drain",
+    async () => {
+      const descendantWithLateOutput = `
+process.on('SIGTERM', () => {});
+setTimeout(() => process.stdout.write('tail\\n', () => process.exit(0)), 100);
+if (process.send) process.send('ready');
+`;
+      const childWithExitOutput = `
+const { spawn } = require('node:child_process');
+const command = spawn(process.execPath, ['-e', ${JSON.stringify(descendantWithLateOutput)}], { stdio: ['ignore', 'inherit', 'ignore', 'ipc'] });
+process.stdout.write('leader\\n');
+command.on('message', () => process.exit(0));
+`;
+      const proc = spawnSupervised(
+        dir,
+        META,
+        process.execPath,
+        ["-e", childWithExitOutput],
+        { cwd: process.cwd(), env: process.env },
+      );
+      const observed: string[] = [];
+      proc.stdout!.on("data", (data: Buffer) => observed.push(data.toString()));
+      proc.on("close", () => observed.push("<close>"));
+
+      await waitFor(() => observed.includes("<close>"));
+      expect(observed.join("")).toContain("tail\n<close>");
+    },
+  );
 
   it("ignores control ops from a client that has not proven the token", async () => {
     const { createConnection } = await import("node:net");

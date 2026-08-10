@@ -1,7 +1,8 @@
-import { execSync, spawn } from "node:child_process";
+import { execSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 
 import { AcpClient } from "./acp-client";
+import { killProcessTree, spawnAdapterProcess } from "./process-tree";
 import {
   handleAgentRequest,
   mapSessionUpdate,
@@ -127,13 +128,12 @@ export class GrokAdapter implements AgentAdapter {
     };
     if (command.runtime?.authMode === "subscription")
       delete childEnvironment.XAI_API_KEY;
-    const child = spawn(command.binary, command.args, {
+    const child = spawnAdapterProcess(command.binary, command.args, {
       cwd: command.cwd,
       env: childEnvironment as NodeJS.ProcessEnv,
       stdio: ["pipe", "pipe", "pipe"] as const,
     });
 
-    let killTimer: NodeJS.Timeout | undefined;
     const pendingPermissions = new Map<
       string,
       {
@@ -166,13 +166,9 @@ export class GrokAdapter implements AgentAdapter {
       return true;
     };
     const handle = {
-      write: (text: string) => child.stdin.write(text),
+      write: (text: string) => child.stdin!.write(text),
       kill: () => {
-        child.kill("SIGTERM");
-        killTimer ??= setTimeout(() => {
-          if (child.exitCode === null) child.kill("SIGKILL");
-        }, 5_000);
-        killTimer.unref?.();
+        killProcessTree(child, "SIGTERM");
       },
       respondPermission: (requestId: string, behavior: "allow" | "deny") =>
         resolvePermission(requestId, behavior),
@@ -183,7 +179,7 @@ export class GrokAdapter implements AgentAdapter {
     if (options?.signal?.aborted) abort();
 
     const client = new AcpClient({
-      write: (data) => child.stdin.write(data),
+      write: (data) => child.stdin!.write(data),
       onNotification: (method, params) => {
         if (method !== "session/update") return;
         const update = (params as { update?: SessionUpdate } | undefined)
@@ -236,9 +232,9 @@ export class GrokAdapter implements AgentAdapter {
       );
     });
 
-    child.stdout.on("data", (data: Buffer) => client.feed(data.toString()));
+    child.stdout!.on("data", (data: Buffer) => client.feed(data.toString()));
 
-    child.stderr.on("data", (data: Buffer) => {
+    child.stderr!.on("data", (data: Buffer) => {
       onEvent({
         type: "stderr",
         data: data.toString(),
@@ -298,14 +294,9 @@ export class GrokAdapter implements AgentAdapter {
       exitCode = 1;
       // A timeout/protocol error means the agent is wedged — terminate it
       // rather than leaking the process. SIGTERM, then SIGKILL as backstop.
-      if (!child.killed) {
-        child.kill("SIGTERM");
-        setTimeout(() => {
-          if (!child.killed) child.kill("SIGKILL");
-        }, 5000).unref();
-      }
+      handle.kill();
     } finally {
-      child.stdin.end();
+      child.stdin!.end();
     }
 
     onEvent({
@@ -315,7 +306,6 @@ export class GrokAdapter implements AgentAdapter {
       exitCode,
     });
     options?.signal?.removeEventListener("abort", abort);
-    if (killTimer) clearTimeout(killTimer);
     return {
       exitCode,
       ...(nativeSessionId

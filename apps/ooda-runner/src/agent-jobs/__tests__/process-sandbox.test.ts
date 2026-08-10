@@ -1,5 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { access, mkdir, realpath, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { homedir, tmpdir } from "node:os";
 
@@ -84,6 +91,65 @@ describe.runIf(nativeSandboxCanLaunch())("agent-job process sandbox", () => {
       ]);
     }
   });
+
+  it("keeps disposable CLI state writable while credential files stay read-only", async () => {
+    const scratch = join(
+      tmpdir(),
+      `ooda-process-sandbox-${crypto.randomUUID()}`,
+    );
+    const runtimeHome = join(
+      tmpdir(),
+      `ooda-runtime-home-${crypto.randomUUID()}`,
+    );
+    const credential = join(runtimeHome, ".codex", "auth.json");
+    await Promise.all([
+      mkdir(scratch, { recursive: true, mode: 0o700 }),
+      mkdir(join(runtimeHome, ".codex"), { recursive: true, mode: 0o700 }),
+    ]);
+    await writeFile(credential, "subscription-token", { mode: 0o600 });
+
+    try {
+      const command = await wrapInProcessSandbox(
+        {
+          binary: "/bin/sh",
+          args: [
+            "-c",
+            [
+              "set -e",
+              `printf state > ${JSON.stringify(
+                join(runtimeHome, ".codex", "state.json"),
+              )}`,
+              `test "$(cat ${JSON.stringify(credential)})" = subscription-token`,
+              `if printf replaced > ${JSON.stringify(credential)} 2>/dev/null; then exit 72; fi`,
+            ].join("; "),
+          ],
+          cwd: scratch,
+        },
+        scratch,
+        {
+          writablePaths: [runtimeHome],
+          readOnlyPaths: [credential],
+        },
+      );
+      const result = spawnSync(command.binary, command.args, {
+        cwd: command.cwd,
+        encoding: "utf8",
+      });
+
+      expect(result.status, result.stderr).toBe(0);
+      await expect(
+        access(join(runtimeHome, ".codex", "state.json")),
+      ).resolves.toBeUndefined();
+      await expect(readFile(credential, "utf8")).resolves.toBe(
+        "subscription-token",
+      );
+    } finally {
+      await Promise.all([
+        rm(scratch, { recursive: true, force: true }),
+        rm(runtimeHome, { recursive: true, force: true }),
+      ]);
+    }
+  });
 });
 
 describe("agent-job process sandbox contract", () => {
@@ -92,7 +158,19 @@ describe("agent-job process sandbox contract", () => {
       tmpdir(),
       `ooda-process-sandbox-${crypto.randomUUID()}`,
     );
-    await mkdir(scratch, { recursive: true, mode: 0o700 });
+    const credentialHome = join(
+      tmpdir(),
+      `ooda-credential-home-${crypto.randomUUID()}`,
+    );
+    const credential = join(credentialHome, ".codex", "auth.json");
+    await Promise.all([
+      mkdir(scratch, { recursive: true, mode: 0o700 }),
+      mkdir(join(credentialHome, ".codex"), {
+        recursive: true,
+        mode: 0o700,
+      }),
+    ]);
+    await writeFile(credential, "subscription-token", { mode: 0o600 });
     try {
       const command = await wrapInProcessSandbox(
         { binary: "/bin/sh", args: ["-c", "true"], cwd: scratch },
@@ -101,6 +179,8 @@ describe("agent-job process sandbox contract", () => {
           platform: "linux",
           linuxSandboxBinary: "/usr/bin/true",
           environment: { PATH: "/usr/bin:/bin" },
+          readOnlyPaths: [credential],
+          writablePaths: [credentialHome],
         },
       );
 
@@ -108,15 +188,34 @@ describe("agent-job process sandbox contract", () => {
       expect(command.args).toEqual(
         expect.arrayContaining([
           "--die-with-parent",
+          "--new-session",
           "--unshare-user",
+          "--unshare-pid",
           "--cap-drop",
           "ALL",
-          "--bind",
-          await realpath(scratch),
         ]),
       );
+      const writableMount = command.args.lastIndexOf(
+        await realpath(credentialHome),
+      );
+      const credentialMount = command.args.lastIndexOf(
+        await realpath(credential),
+      );
+      expect(command.args.slice(writableMount - 1, writableMount + 1)).toEqual([
+        await realpath(credentialHome),
+        await realpath(credentialHome),
+      ]);
+      expect(command.args[writableMount - 2]).toBe("--bind");
+      expect(
+        command.args.slice(credentialMount - 1, credentialMount + 1),
+      ).toEqual([await realpath(credential), await realpath(credential)]);
+      expect(command.args[credentialMount - 2]).toBe("--ro-bind");
+      expect(credentialMount).toBeGreaterThan(writableMount);
     } finally {
-      await rm(scratch, { recursive: true, force: true });
+      await Promise.all([
+        rm(scratch, { recursive: true, force: true }),
+        rm(credentialHome, { recursive: true, force: true }),
+      ]);
     }
   });
 

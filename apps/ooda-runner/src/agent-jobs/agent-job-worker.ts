@@ -9,6 +9,7 @@ import type {
 } from "@gmacko/ooda/contracts/v1";
 
 import { AgentJobExecutor } from "./agent-job-executor";
+import { wrapInProcessSandbox } from "./process-sandbox";
 import { ScratchSandboxManager } from "./scratch-sandbox";
 
 const JOB_CLASSES: AgentJobClassV1[] = [
@@ -74,6 +75,7 @@ export class AgentJobWorker {
       maxConcurrent: number;
       controlPollMs?: number;
       environment?: Record<string, string | undefined>;
+      processSandbox?: typeof wrapInProcessSandbox;
     },
   ) {
     this.sandboxes = new ScratchSandboxManager(config.scratchRoot);
@@ -119,6 +121,7 @@ export class AgentJobWorker {
       adapter,
       sandboxes: this.sandboxes,
       environment: this.config.environment,
+      processSandbox: this.config.processSandbox,
     });
     let eventIndex = 0;
     let writes = Promise.resolve();

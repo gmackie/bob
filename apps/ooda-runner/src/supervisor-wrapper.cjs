@@ -40,6 +40,7 @@ const { chmodSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, wr
 const net = require("node:net");
 const { join } = require("node:path");
 const crypto = require("node:crypto");
+const { containSupervisorCommand } = require("./supervisor-containment.cjs");
 
 // Cap the output journal so a runaway/chatty agent cannot fill the disk shared
 // with Postgres (hetzner-bob has ENOSPC history). Past the cap, output "data"
@@ -63,6 +64,7 @@ function tokenMatches(a, b) {
 }
 
 const KILL_GRACE_MS = 5000;
+const GROUP_POLL_MS = 50;
 const LINGER_MS = Number(process.env.BOB_SUPERVISOR_LINGER_MS || 10000);
 
 function argValue(flag) {
@@ -87,10 +89,14 @@ const token = crypto.randomBytes(16).toString("hex");
 
 let childExit = null; // {exitCode, signal} once the child exits
 
-const child = spawn(config.binary, config.args, {
+const containedCommand = containSupervisorCommand(config);
+const child = spawn(containedCommand.binary, containedCommand.args, {
   cwd: config.cwd,
   env: config.env,
   stdio: ["pipe", "pipe", "pipe"],
+  // The agent must lead its own group so timeout/cancel can terminate every
+  // command it spawned without also signalling this long-lived wrapper.
+  detached: process.platform !== "win32",
 });
 
 writeFileSync(
@@ -188,10 +194,70 @@ child.stderr.on("data", onData("stderr"));
 child.on("error", (err) => {
   journal({ t: Date.now(), ev: "data", stream: "stderr", b64: Buffer.from(`spawn error: ${err.message}\n`).toString("base64") });
 });
-child.on("close", (exitCode, signal) => {
-  childExit = { exitCode, signal: signal || null };
-  journal({ t: Date.now(), ev: "exit", exitCode, signal: signal || null });
-  broadcast({ ev: "exit", exitCode, signal: signal || null });
+let escalationTimer = null;
+
+function childGroupExists() {
+  if (process.platform === "win32" || !child.pid) return false;
+  try {
+    process.kill(-child.pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function scheduleChildGroupEscalation() {
+  if (escalationTimer || process.platform === "win32" || !child.pid) return;
+  const startedAt = Date.now();
+  escalationTimer = setInterval(() => {
+    if (!childGroupExists()) {
+      clearInterval(escalationTimer);
+      escalationTimer = null;
+      return;
+    }
+    if (Date.now() - startedAt < KILL_GRACE_MS) return;
+    clearInterval(escalationTimer);
+    escalationTimer = null;
+    try {
+      process.kill(-child.pid, "SIGKILL");
+    } catch {
+      /* group already empty */
+    }
+  }, GROUP_POLL_MS);
+  escalationTimer.unref();
+}
+
+function terminateChild(signal) {
+  try {
+    if (process.platform !== "win32" && child.pid) {
+      process.kill(-child.pid, signal);
+      if (signal !== "SIGKILL") scheduleChildGroupEscalation();
+    } else {
+      child.kill(signal);
+    }
+  } catch {
+    try {
+      child.kill(signal);
+    } catch {
+      return;
+    }
+  }
+}
+
+let observedLeaderExit = null;
+
+function beginChildCleanup(exitCode, signal) {
+  if (observedLeaderExit !== null) return;
+  observedLeaderExit = { exitCode, signal: signal || null };
+  terminateChild("SIGTERM");
+}
+
+function recordChildClose(exitCode, signal) {
+  if (childExit !== null) return;
+  beginChildCleanup(exitCode, signal);
+  childExit = observedLeaderExit;
+  journal({ t: Date.now(), ev: "exit", ...childExit });
+  broadcast({ ev: "exit", ...childExit });
   // Give a (re)connecting runner a moment to hear the exit live, then go.
   setTimeout(() => {
     try {
@@ -201,23 +267,18 @@ child.on("close", (exitCode, signal) => {
     }
     process.exit(0);
   }, LINGER_MS).unref();
-});
+}
+
+// `exit` observes the leader itself. `close` waits for every inherited stdio
+// descriptor to close, which a background command can hold indefinitely.
+child.on("exit", beginChildCleanup);
+// Publish terminal state only once all stdio pipes have drained. A spawn
+// failure may emit close without exit, so close also begins cleanup.
+child.on("close", recordChildClose);
 
 function killChild(signal) {
-  try {
-    child.kill(signal || "SIGTERM");
-  } catch {
-    return;
-  }
-  setTimeout(() => {
-    if (childExit === null) {
-      try {
-        child.kill("SIGKILL");
-      } catch {
-        /* gone */
-      }
-    }
-  }, KILL_GRACE_MS).unref();
+  const requestedSignal = signal || "SIGTERM";
+  terminateChild(requestedSignal);
 }
 
 if (existsSync(sockPath)) {
