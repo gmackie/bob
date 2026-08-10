@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { afterEach, describe, expect, it } from "vitest";
 
 import { killProcessTree, spawnAdapterProcess } from "../process-tree";
@@ -5,6 +7,11 @@ import { killProcessTree, spawnAdapterProcess } from "../process-tree";
 function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
+    if (process.platform === "linux") {
+      const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+      const state = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[0];
+      if (state === "Z") return false;
+    }
     return true;
   } catch {
     return false;
@@ -70,6 +77,70 @@ describe("killProcessTree", () => {
 
       await Promise.all([waitForExit(leaderPid), waitForExit(childPid)]);
       survivors.delete(leaderPid);
+      survivors.delete(childPid);
+    },
+  );
+
+  it.runIf(process.platform !== "win32")(
+    "cleans up when a descendant keeps the leader stdout pipe open",
+    async () => {
+      const leader = spawnAdapterProcess(
+        process.execPath,
+        [
+          "-e",
+          [
+            'const { spawn } = require("node:child_process");',
+            'const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: ["ignore", "inherit", "ignore"] });',
+            'process.stdout.write(String(child.pid) + "\\n");',
+            "setTimeout(() => process.exit(0), 50);",
+          ].join(" "),
+        ],
+        { stdio: ["ignore", "pipe", "ignore"] },
+      );
+      const childPid = await new Promise<number>((resolve, reject) => {
+        leader.stdout!.once("data", (data: Buffer) =>
+          resolve(Number(data.toString().trim())),
+        );
+        leader.once("error", reject);
+      });
+      survivors.add(childPid);
+
+      await new Promise<void>((resolve, reject) => {
+        leader.once("exit", () => resolve());
+        leader.once("error", reject);
+      });
+      await waitForExit(childPid);
+      survivors.delete(childPid);
+    },
+  );
+
+  it.runIf(process.platform !== "win32")(
+    "escalates when a descendant ignores SIGTERM",
+    async () => {
+      const leader = spawnAdapterProcess(
+        process.execPath,
+        [
+          "-e",
+          [
+            'const { spawn } = require("node:child_process");',
+            'const child = spawn(process.execPath, ["-e", "process.on(\\"SIGTERM\\", () => {}); process.send(\\"ready\\"); setInterval(() => {}, 1000)"], { stdio: ["ignore", "ignore", "ignore", "ipc"] });',
+            'child.once("message", () => { process.stdout.write(String(child.pid) + "\\n"); });',
+            "setInterval(() => {}, 1000);",
+          ].join(" "),
+        ],
+        { stdio: ["ignore", "pipe", "ignore"] },
+      );
+      const childPid = await new Promise<number>((resolve, reject) => {
+        leader.stdout!.once("data", (data: Buffer) =>
+          resolve(Number(data.toString().trim())),
+        );
+        leader.once("error", reject);
+      });
+      survivors.add(childPid);
+
+      killProcessTree(leader, "SIGTERM");
+
+      await waitForExit(childPid);
       survivors.delete(childPid);
     },
   );

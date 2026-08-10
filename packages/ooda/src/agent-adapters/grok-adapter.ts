@@ -134,7 +134,6 @@ export class GrokAdapter implements AgentAdapter {
       stdio: ["pipe", "pipe", "pipe"] as const,
     });
 
-    let killTimer: NodeJS.Timeout | undefined;
     const pendingPermissions = new Map<
       string,
       {
@@ -170,10 +169,6 @@ export class GrokAdapter implements AgentAdapter {
       write: (text: string) => child.stdin!.write(text),
       kill: () => {
         killProcessTree(child, "SIGTERM");
-        killTimer ??= setTimeout(() => {
-          if (child.exitCode === null) killProcessTree(child, "SIGKILL");
-        }, 5_000);
-        killTimer.unref?.();
       },
       respondPermission: (requestId: string, behavior: "allow" | "deny") =>
         resolvePermission(requestId, behavior),
@@ -311,7 +306,6 @@ export class GrokAdapter implements AgentAdapter {
       exitCode,
     });
     options?.signal?.removeEventListener("abort", abort);
-    if (killTimer) clearTimeout(killTimer);
     return {
       exitCode,
       ...(nativeSessionId

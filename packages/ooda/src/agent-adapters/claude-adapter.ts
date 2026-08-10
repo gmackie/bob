@@ -21,7 +21,6 @@ import type {
   SpawnedProcessLike,
 } from "./types";
 
-const KILL_GRACE_MS = 5_000;
 // After a turn's `result`, wait this long for a follow-up user message before
 // closing stdin (which ends the CLI session). Env-tunable for tests.
 const STDIN_IDLE_CLOSE_MS = () =>
@@ -330,12 +329,6 @@ export class ClaudeAdapter implements AgentAdapter {
         killed = true;
         closeStdin();
         killProcessTree(child, "SIGTERM");
-        const escalate = setTimeout(() => {
-          if (child.exitCode === null && child.signalCode === null) {
-            killProcessTree(child, "SIGKILL");
-          }
-        }, KILL_GRACE_MS);
-        escalate.unref?.();
       },
       respondPermission,
     };

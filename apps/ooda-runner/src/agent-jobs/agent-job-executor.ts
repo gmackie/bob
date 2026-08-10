@@ -1,3 +1,5 @@
+import { dirname } from "node:path";
+
 import type {
   AdapterEvent,
   AdapterProcessHandle,
@@ -8,6 +10,11 @@ import type { AgentJobClassV1 } from "@gmacko/ooda/contracts/v1";
 import { extractAgentResponse } from "../pty-output-parser";
 import { type ScratchSandboxManager } from "./scratch-sandbox";
 import { wrapInProcessSandbox } from "./process-sandbox";
+import {
+  createSubscriptionCredentialHome,
+  materializeCredentialCopies,
+  type SubscriptionCredentialHome,
+} from "./subscription-credentials";
 import { SubscriptionRuntimeBroker } from "./subscription-runtime-broker";
 
 export type ExecuteAgentJobInput = {
@@ -35,6 +42,9 @@ export class AgentJobExecutor {
       sandboxes: ScratchSandboxManager;
       environment?: Record<string, string | undefined>;
       processSandbox?: typeof wrapInProcessSandbox;
+      createCredentialHome?: (
+        parentPath: string,
+      ) => Promise<SubscriptionCredentialHome>;
     },
   ) {}
 
@@ -63,10 +73,16 @@ export class AgentJobExecutor {
     let handle: AdapterProcessHandle | undefined;
     let completed = false;
     let output = "";
+    let credentialHome: SubscriptionCredentialHome | undefined;
     const abortProcess = () => handle?.kill();
     controller.signal.addEventListener("abort", abortProcess, { once: true });
 
     try {
+      if (input.authMode === "subscription") {
+        const createCredentialHome =
+          this.config.createCredentialHome ?? createSubscriptionCredentialHome;
+        credentialHome = await createCredentialHome(dirname(sandbox.path));
+      }
       const prepared = new SubscriptionRuntimeBroker().prepare({
         provider: input.provider,
         jobClass: input.class,
@@ -74,6 +90,7 @@ export class AgentJobExecutor {
         billingPolicy: input.billingPolicy,
         authMode: input.authMode,
         sandboxPath: sandbox.path,
+        credentialHomePath: credentialHome?.path,
         source: this.config.environment,
       });
       const requestedCommand = this.config.adapter.buildCommand({
@@ -94,10 +111,20 @@ export class AgentJobExecutor {
         session: input.session,
         correlationId: input.correlationId,
       });
+      if (credentialHome) {
+        await materializeCredentialCopies(
+          credentialHome.path,
+          prepared.credentialCopies,
+        );
+      }
       const processSandbox = this.config.processSandbox ?? wrapInProcessSandbox;
       const command = prepared.useOuterProcessSandbox
         ? await processSandbox(requestedCommand, sandbox.path, {
             environment: prepared.environment,
+            readOnlyPaths: prepared.credentialCopies.map(
+              (copy) => copy.destinationPath,
+            ),
+            writablePaths: credentialHome ? [credentialHome.path] : [],
           })
         : requestedCommand;
       const result = await this.config.adapter.execute(
@@ -150,8 +177,16 @@ export class AgentJobExecutor {
       clearTimeout(deadline);
       input.signal?.removeEventListener("abort", externalAbort);
       controller.signal.removeEventListener("abort", abortProcess);
+      let credentialCleanupError: unknown;
+      try {
+        await credentialHome?.cleanup();
+      } catch (error) {
+        completed = false;
+        credentialCleanupError = error;
+      }
       if (!completed || input.class !== "scratch_prototype")
         await sandbox.cleanup();
+      if (credentialCleanupError) throw credentialCleanupError;
     }
   }
 }

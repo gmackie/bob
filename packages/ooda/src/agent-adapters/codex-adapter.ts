@@ -29,7 +29,6 @@ type RpcMessage = {
 
 type PendingApproval = { rpcId: RpcId; method: string };
 
-const KILL_GRACE_MS = 5_000;
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object"
@@ -271,7 +270,6 @@ export class CodexAdapter implements AgentAdapter {
     let turnActive = false;
     let completed = false;
     let sawAssistantDelta = false;
-    let killTimer: NodeJS.Timeout | undefined;
     const approvals = new Map<string, PendingApproval>();
 
     const now = () => new Date().toISOString();
@@ -399,11 +397,6 @@ export class CodexAdapter implements AgentAdapter {
           request("turn/interrupt", { threadId, turnId });
         }
         killProcessTree(child, "SIGTERM");
-        killTimer ??= setTimeout(() => {
-          if (child.exitCode === null && child.signalCode === null)
-            killProcessTree(child, "SIGKILL");
-        }, KILL_GRACE_MS);
-        killTimer.unref?.();
       },
       respondPermission,
     };
@@ -579,7 +572,6 @@ export class CodexAdapter implements AgentAdapter {
       const finish = (exitCode: number) => {
         if (settled) return;
         settled = true;
-        if (killTimer) clearTimeout(killTimer);
         options?.signal?.removeEventListener("abort", abort);
         onEvent({
           type: "exit",

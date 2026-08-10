@@ -19,6 +19,8 @@ type ProcessSandboxOptions = {
   platform?: NodeJS.Platform;
   environment?: Record<string, string | undefined>;
   linuxSandboxBinary?: string;
+  readOnlyPaths?: string[];
+  writablePaths?: string[];
 };
 
 function isInside(root: string, candidate: string): boolean {
@@ -69,6 +71,8 @@ async function linuxSandboxArgs(input: {
   command: AdapterCommand;
   scratchPath: string;
   environment: Record<string, string | undefined>;
+  readOnlyPaths: string[];
+  writablePaths: string[];
 }): Promise<string[]> {
   const executable = await resolveExecutable(
     input.command.binary,
@@ -106,6 +110,13 @@ async function linuxSandboxArgs(input: {
   const sandboxExecutable = executableIsSystem
     ? executable
     : "/run/ooda/agent-cli";
+  const namespaceParents = [
+    input.scratchPath,
+    ...input.writablePaths,
+    ...input.readOnlyPaths,
+  ]
+    .flatMap(parentDirectories)
+    .filter((path, index, paths) => paths.indexOf(path) === index);
 
   return [
     "--die-with-parent",
@@ -126,10 +137,12 @@ async function linuxSandboxArgs(input: {
     "/dev",
     "--tmpfs",
     "/tmp",
-    ...parentDirectories(input.scratchPath).flatMap((path) => ["--dir", path]),
+    ...namespaceParents.flatMap((path) => ["--dir", path]),
     "--bind",
     input.scratchPath,
     input.scratchPath,
+    ...input.writablePaths.flatMap((path) => ["--bind", path, path]),
+    ...input.readOnlyPaths.flatMap((path) => ["--ro-bind", path, path]),
     ...(!executableIsSystem
       ? [
           "--dir",
@@ -167,6 +180,32 @@ export async function wrapInProcessSandbox(
       "Agent command working directory escapes its scratch sandbox",
     );
   }
+  const canonicalReadOnlyPaths = await Promise.all(
+    (options.readOnlyPaths ?? []).map((path) => realpath(path)),
+  );
+  const canonicalWritablePaths = await Promise.all(
+    (options.writablePaths ?? []).map((path) => realpath(path)),
+  );
+  for (const path of canonicalReadOnlyPaths) {
+    if (
+      isInside(canonicalScratchPath, path) ||
+      isInside(path, canonicalScratchPath)
+    ) {
+      throw new Error(
+        "Agent read-only mount must be outside its artifact workspace",
+      );
+    }
+  }
+  for (const path of canonicalWritablePaths) {
+    if (
+      isInside(canonicalScratchPath, path) ||
+      isInside(path, canonicalScratchPath)
+    ) {
+      throw new Error(
+        "Agent writable mount must be outside its artifact workspace",
+      );
+    }
+  }
 
   if (platform === "linux") {
     const binary = options.linuxSandboxBinary ?? "/usr/bin/bwrap";
@@ -180,6 +219,8 @@ export async function wrapInProcessSandbox(
         command: { ...command, cwd: canonicalCwd },
         scratchPath: canonicalScratchPath,
         environment: options.environment ?? process.env,
+        readOnlyPaths: canonicalReadOnlyPaths,
+        writablePaths: canonicalWritablePaths,
       }),
       cwd: canonicalCwd,
     };
@@ -191,7 +232,17 @@ export async function wrapInProcessSandbox(
     '(deny file-read* file-write* (subpath "/Users") (subpath "/Volumes"))',
     "(deny file-write*)",
     `(allow file-read* (subpath ${schemeString(canonicalScratchPath)}))`,
+    ...canonicalReadOnlyPaths.map(
+      (path) => `(allow file-read* (subpath ${schemeString(path)}))`,
+    ),
     `(allow file-write* (subpath ${schemeString(canonicalScratchPath)}) (literal \"/dev/null\"))`,
+    ...canonicalWritablePaths.map(
+      (path) =>
+        `(allow file-read* file-write* (subpath ${schemeString(path)}))`,
+    ),
+    ...canonicalReadOnlyPaths.map(
+      (path) => `(deny file-write* (literal ${schemeString(path)}))`,
+    ),
   ].join("\n");
   return {
     ...command,

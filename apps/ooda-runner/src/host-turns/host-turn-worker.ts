@@ -1,3 +1,5 @@
+import { dirname } from "node:path";
+
 import type {
   AdapterEvent,
   AdapterProcessHandle,
@@ -14,6 +16,12 @@ import type {
 
 import { SubscriptionRuntimeBroker } from "../agent-jobs/subscription-runtime-broker";
 import { ScratchSandboxManager } from "../agent-jobs/scratch-sandbox";
+import { wrapInProcessSandbox } from "../agent-jobs/process-sandbox";
+import {
+  createSubscriptionCredentialHome,
+  materializeCredentialCopies,
+  type SubscriptionCredentialHome,
+} from "../agent-jobs/subscription-credentials";
 import { extractAgentResponse } from "../pty-output-parser";
 
 type HostProvider = HostProviderV1;
@@ -63,6 +71,10 @@ export class HostTurnWorker {
       deadlineSeconds?: number;
       environment?: Record<string, string | undefined>;
       models?: Partial<Record<HostProvider, string>>;
+      processSandbox?: typeof wrapInProcessSandbox;
+      createCredentialHome?: (
+        parentPath: string,
+      ) => Promise<SubscriptionCredentialHome>;
     },
   ) {
     this.sandboxes = new ScratchSandboxManager(config.scratchRoot);
@@ -135,7 +147,13 @@ export class HostTurnWorker {
       let handle: AdapterProcessHandle | undefined;
       let output = "";
       let runtimeSession: RuntimeSessionRef | undefined;
+      let credentialHome: SubscriptionCredentialHome | undefined;
+      let completion: CompleteHostTurnInputV1 | undefined;
+      let credentialCleanupError: unknown;
       try {
+        const createCredentialHome =
+          this.config.createCredentialHome ?? createSubscriptionCredentialHome;
+        credentialHome = await createCredentialHome(dirname(sandbox.path));
         const prepared = new SubscriptionRuntimeBroker().prepare({
           provider: adapter.id,
           jobClass: "synthesis",
@@ -143,8 +161,13 @@ export class HostTurnWorker {
           billingPolicy: "subscription_only",
           authMode: "subscription",
           sandboxPath: sandbox.path,
+          credentialHomePath: credentialHome.path,
           source: this.config.environment,
         });
+        await materializeCredentialCopies(
+          credentialHome.path,
+          prepared.credentialCopies,
+        );
         const resumable =
           claim.runtimeSession?.provider === provider
             ? claim.runtimeSession
@@ -166,8 +189,17 @@ export class HostTurnWorker {
             : { mode: "start" },
           correlationId: claim.correlationId,
         });
+        const processSandbox =
+          this.config.processSandbox ?? wrapInProcessSandbox;
+        const containedCommand = await processSandbox(command, sandbox.path, {
+          environment: prepared.environment,
+          readOnlyPaths: prepared.credentialCopies.map(
+            (copy) => copy.destinationPath,
+          ),
+          writablePaths: [credentialHome.path],
+        });
         const result = await adapter.execute(
-          command,
+          containedCommand,
           (event: AdapterEvent) => {
             if (event.type === "stdout") output += event.data;
             if (event.type === "runtime_session" && event.runtimeSession)
@@ -198,7 +230,7 @@ export class HostTurnWorker {
             `Subscription host exited with code ${result.exitCode}`,
           );
         }
-        await this.config.api.complete({
+        completion = {
           executionId: claim.executionId,
           runnerId: this.config.runnerId,
           leaseToken: claim.leaseToken,
@@ -226,15 +258,33 @@ export class HostTurnWorker {
           failures,
           idempotencyKey: `${claim.executionId}:attempt:${claim.attempt}:complete`,
           occurredAt: new Date().toISOString(),
-        });
-        return;
+        };
       } catch (error) {
         lastError = error instanceof Error ? error.message : String(error);
         failures.push({ provider, code: "PROVIDER_FAILED" });
       } finally {
         clearTimeout(deadline);
         workerController.signal.removeEventListener("abort", abortAttempt);
+        try {
+          await credentialHome?.cleanup();
+        } catch (error) {
+          credentialCleanupError = error;
+        }
         await sandbox.cleanup();
+      }
+      if (credentialCleanupError) {
+        lastError =
+          credentialCleanupError instanceof Error
+            ? credentialCleanupError.message
+            : String(credentialCleanupError);
+        if (!failures.some((failure) => failure.provider === provider)) {
+          failures.push({ provider, code: "PROVIDER_FAILED" });
+        }
+        break;
+      }
+      if (completion) {
+        await this.config.api.complete(completion);
+        return;
       }
       if (workerController.signal.aborted) break;
     }
