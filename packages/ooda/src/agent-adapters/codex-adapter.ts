@@ -1,6 +1,7 @@
-import { execSync, spawn } from "node:child_process";
+import { execSync } from "node:child_process";
 
 import { buildCodexMcpConfigArgs } from "./mcp-config";
+import { killProcessTree, spawnAdapterProcess } from "./process-tree";
 import type {
   AdapterCommand,
   AdapterEvent,
@@ -119,7 +120,7 @@ export class CodexAdapter implements AgentAdapter {
           cwd: process.cwd(),
           env: childEnvironment,
         })
-      : (spawn("codex", ["app-server", "--stdio"], {
+      : (spawnAdapterProcess("codex", ["app-server", "--stdio"], {
           cwd: process.cwd(),
           env: childEnvironment as NodeJS.ProcessEnv,
           stdio: ["pipe", "pipe", "pipe"],
@@ -133,7 +134,7 @@ export class CodexAdapter implements AgentAdapter {
         settled = true;
         clearTimeout(timeout);
         child.stdin?.end();
-        child.kill("SIGTERM");
+        killProcessTree(child, "SIGTERM");
         resolve(snapshot);
       };
       const fail = (error: unknown) =>
@@ -257,7 +258,7 @@ export class CodexAdapter implements AgentAdapter {
           cwd: command.cwd,
           env: childEnvironment,
         })
-      : (spawn(command.binary, command.args, {
+      : (spawnAdapterProcess(command.binary, command.args, {
           cwd: command.cwd,
           env: childEnvironment as NodeJS.ProcessEnv,
           stdio: ["pipe", "pipe", "pipe"],
@@ -397,10 +398,10 @@ export class CodexAdapter implements AgentAdapter {
         if (threadId && turnId && turnActive) {
           request("turn/interrupt", { threadId, turnId });
         }
-        child.kill("SIGTERM");
+        killProcessTree(child, "SIGTERM");
         killTimer ??= setTimeout(() => {
           if (child.exitCode === null && child.signalCode === null)
-            child.kill("SIGKILL");
+            killProcessTree(child, "SIGKILL");
         }, KILL_GRACE_MS);
         killTimer.unref?.();
       },
@@ -605,7 +606,7 @@ export class CodexAdapter implements AgentAdapter {
         if (!completed) return;
         clearInterval(completionPoll);
         child.stdin?.end();
-        child.kill("SIGTERM");
+        killProcessTree(child, "SIGTERM");
         finish(0);
       }, 10);
       completionPoll.unref?.();

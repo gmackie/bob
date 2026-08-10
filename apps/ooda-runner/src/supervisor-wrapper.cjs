@@ -91,6 +91,9 @@ const child = spawn(config.binary, config.args, {
   cwd: config.cwd,
   env: config.env,
   stdio: ["pipe", "pipe", "pipe"],
+  // The agent must lead its own group so timeout/cancel can terminate every
+  // command it spawned without also signalling this long-lived wrapper.
+  detached: process.platform !== "win32",
 });
 
 writeFileSync(
@@ -190,6 +193,23 @@ child.on("error", (err) => {
 });
 child.on("close", (exitCode, signal) => {
   childExit = { exitCode, signal: signal || null };
+  // The agent may exit while a tool command it started is still alive. Those
+  // commands share the agent's process group, so clean the remainder before
+  // this wrapper lingers and exits.
+  if (process.platform !== "win32" && child.pid) {
+    try {
+      process.kill(-child.pid, "SIGTERM");
+    } catch {
+      /* group already empty */
+    }
+    setTimeout(() => {
+      try {
+        process.kill(-child.pid, "SIGKILL");
+      } catch {
+        /* group already empty */
+      }
+    }, KILL_GRACE_MS).unref();
+  }
   journal({ t: Date.now(), ev: "exit", exitCode, signal: signal || null });
   broadcast({ ev: "exit", exitCode, signal: signal || null });
   // Give a (re)connecting runner a moment to hear the exit live, then go.
@@ -204,17 +224,34 @@ child.on("close", (exitCode, signal) => {
 });
 
 function killChild(signal) {
+  const requestedSignal = signal || "SIGTERM";
   try {
-    child.kill(signal || "SIGTERM");
+    if (process.platform !== "win32" && child.pid) {
+      process.kill(-child.pid, requestedSignal);
+    } else {
+      child.kill(requestedSignal);
+    }
   } catch {
-    return;
+    try {
+      child.kill(requestedSignal);
+    } catch {
+      return;
+    }
   }
   setTimeout(() => {
     if (childExit === null) {
       try {
-        child.kill("SIGKILL");
+        if (process.platform !== "win32" && child.pid) {
+          process.kill(-child.pid, "SIGKILL");
+        } else {
+          child.kill("SIGKILL");
+        }
       } catch {
-        /* gone */
+        try {
+          child.kill("SIGKILL");
+        } catch {
+          /* gone */
+        }
       }
     }
   }, KILL_GRACE_MS).unref();

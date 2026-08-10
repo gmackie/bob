@@ -93,6 +93,105 @@ describe("supervisor", () => {
     await waitFor(() => closed);
   });
 
+  it.runIf(process.platform !== "win32")(
+    "kill() terminates commands spawned beneath the supervised agent",
+    async () => {
+      const childWithCommand = `
+const { spawn } = require('node:child_process');
+const command = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+process.stdout.write('grandchild:' + command.pid + '\\n');
+setInterval(() => {}, 1000);
+`;
+      const proc = spawnSupervised(
+        dir,
+        META,
+        process.execPath,
+        ["-e", childWithCommand],
+        { cwd: process.cwd(), env: process.env },
+      );
+      const chunks: string[] = [];
+      proc.stdout!.on("data", (data: Buffer) => chunks.push(data.toString()));
+      await waitFor(() => chunks.join("").includes("grandchild:"));
+      const grandchildPid = Number(
+        chunks.join("").match(/grandchild:(\d+)/)?.[1],
+      );
+      if (!Number.isInteger(grandchildPid)) {
+        throw new Error("Supervised child did not report its command pid");
+      }
+
+      let closed = false;
+      proc.on("close", () => (closed = true));
+      proc.kill("SIGTERM");
+      await waitFor(() => closed);
+
+      try {
+        await waitFor(() => {
+          try {
+            process.kill(grandchildPid, 0);
+            return false;
+          } catch {
+            return true;
+          }
+        }, 2_000);
+      } finally {
+        try {
+          process.kill(grandchildPid, "SIGKILL");
+        } catch {
+          // Already gone.
+        }
+      }
+    },
+  );
+
+  it.runIf(process.platform !== "win32")(
+    "normal agent exit cleans up a supervised background command",
+    async () => {
+      const childWithCommand = `
+const { spawn } = require('node:child_process');
+const command = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+process.stdout.write('grandchild:' + command.pid + '\\n');
+setTimeout(() => process.exit(0), 50);
+`;
+      const proc = spawnSupervised(
+        dir,
+        META,
+        process.execPath,
+        ["-e", childWithCommand],
+        { cwd: process.cwd(), env: process.env },
+      );
+      const chunks: string[] = [];
+      proc.stdout!.on("data", (data: Buffer) => chunks.push(data.toString()));
+      await waitFor(() => chunks.join("").includes("grandchild:"));
+      const grandchildPid = Number(
+        chunks.join("").match(/grandchild:(\d+)/)?.[1],
+      );
+      if (!Number.isInteger(grandchildPid)) {
+        throw new Error("Supervised child did not report its command pid");
+      }
+
+      let closed = false;
+      proc.on("close", () => (closed = true));
+      await waitFor(() => closed);
+
+      try {
+        await waitFor(() => {
+          try {
+            process.kill(grandchildPid, 0);
+            return false;
+          } catch {
+            return true;
+          }
+        }, 2_000);
+      } finally {
+        try {
+          process.kill(grandchildPid, "SIGKILL");
+        } catch {
+          // Already gone.
+        }
+      }
+    },
+  );
+
   it("ignores control ops from a client that has not proven the token", async () => {
     const { createConnection } = await import("node:net");
     const proc = spawnSupervised(dir, META, process.execPath, ["-e", HANG_CHILD], {

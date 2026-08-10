@@ -1,10 +1,11 @@
-import { execSync, spawn } from "node:child_process";
+import { execSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { buildClaudeMcpConfigFile } from "./mcp-config";
+import { killProcessTree, spawnAdapterProcess } from "./process-tree";
 import type {
   AgentAdapter,
   AdapterCommand,
@@ -214,7 +215,7 @@ export class ClaudeAdapter implements AgentAdapter {
           cwd: command.cwd,
           env: childEnvironment,
         })
-      : (spawn(command.binary, command.args, {
+      : (spawnAdapterProcess(command.binary, command.args, {
           cwd: command.cwd,
           env: childEnvironment as NodeJS.ProcessEnv,
           stdio: [interactive ? "pipe" : "ignore", "pipe", "pipe"] as const,
@@ -328,10 +329,10 @@ export class ClaudeAdapter implements AgentAdapter {
       kill: () => {
         killed = true;
         closeStdin();
-        child.kill("SIGTERM");
+        killProcessTree(child, "SIGTERM");
         const escalate = setTimeout(() => {
           if (child.exitCode === null && child.signalCode === null) {
-            child.kill("SIGKILL");
+            killProcessTree(child, "SIGKILL");
           }
         }, KILL_GRACE_MS);
         escalate.unref?.();
