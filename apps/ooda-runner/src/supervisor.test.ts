@@ -182,7 +182,9 @@ setInterval(() => {}, 1000);
         { cwd: process.cwd(), env: process.env },
       );
       const chunks: string[] = [];
+      let closed = false;
       proc.stdout!.on("data", (data: Buffer) => chunks.push(data.toString()));
+      proc.on("close", () => (closed = true));
       await waitFor(() => chunks.join("").includes("grandchild:"));
       const grandchildPid = Number(
         chunks.join("").match(/grandchild:(\d+)/)?.[1],
@@ -191,8 +193,6 @@ setInterval(() => {}, 1000);
         throw new Error("Supervised child did not report its command pid");
       }
 
-      let closed = false;
-      proc.on("close", () => (closed = true));
       proc.kill("SIGTERM");
       await waitFor(() => closed);
 
@@ -214,8 +214,7 @@ setInterval(() => {}, 1000);
       const childWithCommand = `
 const { spawn } = require('node:child_process');
 const command = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
-process.stdout.write('grandchild:' + command.pid + '\\n');
-setTimeout(() => process.exit(0), 50);
+process.stdout.write('grandchild:' + command.pid + '\\n', () => process.exit(0));
 `;
       const proc = spawnSupervised(
         dir,
@@ -225,7 +224,9 @@ setTimeout(() => process.exit(0), 50);
         { cwd: process.cwd(), env: process.env },
       );
       const chunks: string[] = [];
+      let closed = false;
       proc.stdout!.on("data", (data: Buffer) => chunks.push(data.toString()));
+      proc.on("close", () => (closed = true));
       await waitFor(() => chunks.join("").includes("grandchild:"));
       const grandchildPid = Number(
         chunks.join("").match(/grandchild:(\d+)/)?.[1],
@@ -234,8 +235,6 @@ setTimeout(() => process.exit(0), 50);
         throw new Error("Supervised child did not report its command pid");
       }
 
-      let closed = false;
-      proc.on("close", () => (closed = true));
       await waitFor(() => closed);
 
       try {
@@ -256,8 +255,7 @@ setTimeout(() => process.exit(0), 50);
       const childWithInheritedOutput = `
 const { spawn } = require('node:child_process');
 const command = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: ['ignore', 'inherit', 'ignore'] });
-process.stdout.write('grandchild:' + command.pid + '\\n');
-setTimeout(() => process.exit(0), 50);
+process.stdout.write('grandchild:' + command.pid + '\\n', () => process.exit(0));
 `;
       const proc = spawnSupervised(
         dir,
@@ -267,7 +265,9 @@ setTimeout(() => process.exit(0), 50);
         { cwd: process.cwd(), env: process.env },
       );
       const chunks: string[] = [];
+      let closed = false;
       proc.stdout!.on("data", (data: Buffer) => chunks.push(data.toString()));
+      proc.on("close", () => (closed = true));
       await waitFor(() => chunks.join("").includes("grandchild:"));
       const grandchildPid = Number(
         chunks.join("").match(/grandchild:(\d+)/)?.[1],
@@ -276,8 +276,6 @@ setTimeout(() => process.exit(0), 50);
         throw new Error("Supervised child did not report its command pid");
       }
 
-      let closed = false;
-      proc.on("close", () => (closed = true));
       try {
         // The supervisor deliberately permits a five-second SIGTERM grace
         // period before escalating, so poll the actual close condition under
