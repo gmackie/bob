@@ -116,11 +116,11 @@ export class CodexAdapter implements AgentAdapter {
     const childEnvironment = { ...(options?.environment ?? process.env) };
     delete childEnvironment.OPENAI_API_KEY;
     const child: SpawnedProcessLike = options?.spawnImpl
-      ? options.spawnImpl("codex", ["app-server", "--stdio"], {
+      ? options.spawnImpl("codex", ["app-server"], {
           cwd: process.cwd(),
           env: childEnvironment,
         })
-      : (spawnAdapterProcess("codex", ["app-server", "--stdio"], {
+      : (spawnAdapterProcess("codex", ["app-server"], {
           cwd: process.cwd(),
           env: childEnvironment as NodeJS.ProcessEnv,
           stdio: ["pipe", "pipe", "pipe"],
@@ -212,7 +212,7 @@ export class CodexAdapter implements AgentAdapter {
   }
 
   buildCommand(opts: BuildCommandOptions): AdapterCommand {
-    const args = ["app-server", "--stdio"];
+    const args = ["app-server"];
     args.push(...buildCodexMcpConfigArgs(this.mcpServers));
     return {
       binary: "codex",
