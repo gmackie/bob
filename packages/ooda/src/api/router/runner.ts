@@ -1,7 +1,7 @@
 import type { RouterRecord } from "@trpc/server/unstable-core-do-not-import";
 import { z } from "zod";
 
-import { eq, and, gt, lt, inArray, sql } from "@gmacko/ooda/db";
+import { eq, and, gt, lt, sql } from "@gmacko/ooda/db";
 import { runnerDevice, runnerSession, sessionEvent } from "@gmacko/ooda/db/schema";
 
 import { authedProcedure, publicProcedure, runnerProcedure } from "../trpc";
@@ -349,7 +349,13 @@ export const runnerRouter = {
         .set({ status: "failed", completedAt: new Date() })
         .where(
           and(
-            inArray(runnerSession.status, ["pending", "running"]),
+            // Cast the enum column to text for the IN comparison. Over
+            // Hyperdrive (the ooda-edge worker's driver) Drizzle binds these
+            // values as untyped text, and Postgres has no `session_status =
+            // text` operator — so `inArray(status, [...])` 500s the whole
+            // reapStaleSessions call. Casting to text sidesteps the enum
+            // operator entirely. (The literal statuses are safe, not input.)
+            sql`${runnerSession.status}::text in ('pending', 'running')`,
             lt(
               sql`coalesce(${runnerSession.startedAt}, ${runnerSession.createdAt})`,
               cutoff,
