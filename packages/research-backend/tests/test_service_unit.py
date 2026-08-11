@@ -54,6 +54,7 @@ def test_ollama_unit_is_loopback_only_and_keeps_models_in_owned_state() -> None:
     assert "Group=ollama" in unit
     assert "OLLAMA_HOST=127.0.0.1:11434" in unit
     assert "OLLAMA_MODELS=/var/lib/ooda-ollama/models" in unit
+    assert "OLLAMA_NO_CLOUD=1" in unit
     assert "ExecStart=/usr/local/bin/ollama serve" in unit
     assert "StateDirectory=ooda-ollama" in unit
     assert "ReadWritePaths=/var/lib/ooda-ollama" in unit
