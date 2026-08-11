@@ -1057,6 +1057,140 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 
+  it("scopes runner claims by owner and cancels active work when rollout eligibility is removed", async () => {
+    const deniedConversation = await createConversation(db!, "owner-denied", {
+      title: "Must stay queued",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "jobs-rollout-denied-conversation",
+    });
+    const denied = await createAgentJob(db!, "owner-denied", {
+      conversationId: deniedConversation.conversation.id,
+      class: "read_only_research",
+      prompt: "Do not claim this job during the rollout.",
+      idempotencyKey: "jobs-rollout-denied-job",
+    });
+    const allowedConversation = await createConversation(db!, "owner-allowed", {
+      title: "May run during rollout",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "jobs-rollout-allowed-conversation",
+    });
+    const allowed = await createAgentJob(db!, "owner-allowed", {
+      conversationId: allowedConversation.conversation.id,
+      class: "read_only_research",
+      prompt: "Run this bounded rollout proof.",
+      idempotencyKey: "jobs-rollout-allowed-job",
+    });
+    const claimedAt = new Date();
+    const claimInput = {
+      runnerId: "runner-rollout",
+      providers: ["codex"],
+      classes: ["read_only_research" as const],
+      leaseSeconds: 90,
+    };
+
+    await expect(
+      claimAgentJob(db!, claimInput, {
+        now: claimedAt,
+        eligibleOwnerIds: [],
+      }),
+    ).resolves.toBeNull();
+    const claim = await claimAgentJob(db!, claimInput, {
+      now: claimedAt,
+      eligibleOwnerIds: ["owner-allowed"],
+    });
+    expect(claim?.job.id).toBe(allowed.job.id);
+    await expect(
+      getAgentJob(db!, "owner-denied", denied.job.id),
+    ).resolves.toMatchObject({ status: "queued" });
+    await cancelAgentJob(db!, "owner-denied", {
+      jobId: denied.job.id,
+      idempotencyKey: "jobs-rollout-denied-cleanup",
+    });
+
+    const killedAt = new Date(claimedAt.getTime() + 1_000);
+    const firstControl = await inspectAgentJobControl(
+      db!,
+      {
+        jobId: allowed.job.id,
+        runnerId: claimInput.runnerId,
+        leaseToken: claim!.leaseToken,
+      },
+      { now: killedAt, eligibleOwnerIds: [] },
+    );
+    expect(firstControl).toMatchObject({
+      status: "running",
+      cancelRequested: true,
+      attempt: 1,
+    });
+    expect(firstControl.leaseExpiresAt).toBe(
+      new Date(claimedAt.getTime() + 90_000).toISOString(),
+    );
+    await expect(
+      recordAgentJobEvent(db!, {
+        jobId: allowed.job.id,
+        runnerId: claimInput.runnerId,
+        leaseToken: claim!.leaseToken,
+        type: "progress",
+        payload: { display: "Buffered after cancellation" },
+        idempotencyKey: "jobs-rollout-late-progress",
+        occurredAt: new Date(killedAt.getTime() + 250).toISOString(),
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT", status: 409 });
+    await expect(
+      recordAgentJobEvent(db!, {
+        jobId: allowed.job.id,
+        runnerId: claimInput.runnerId,
+        leaseToken: claim!.leaseToken,
+        type: "completed",
+        payload: { result: { response: "Late success" } },
+        idempotencyKey: "jobs-rollout-late-completed",
+        occurredAt: new Date(killedAt.getTime() + 500).toISOString(),
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT", status: 409 });
+
+    const secondControl = await inspectAgentJobControl(
+      db!,
+      {
+        jobId: allowed.job.id,
+        runnerId: claimInput.runnerId,
+        leaseToken: claim!.leaseToken,
+      },
+      {
+        now: new Date(killedAt.getTime() + 1_000),
+        eligibleOwnerIds: [],
+      },
+    );
+    expect(secondControl.cancelRequested).toBe(true);
+    const [cancellationEvents] = await db!
+      .select({ value: count() })
+      .from(schema.agentJobEvents)
+      .where(
+        eq(
+          schema.agentJobEvents.idempotencyKey,
+          `rollout-cancel:${allowed.job.id}`,
+        ),
+      );
+    expect(cancellationEvents?.value).toBe(1);
+
+    await expect(
+      recordAgentJobEvent(db!, {
+        jobId: allowed.job.id,
+        runnerId: claimInput.runnerId,
+        leaseToken: claim!.leaseToken,
+        type: "cancelled",
+        payload: { reason: "Rollout disabled" },
+        idempotencyKey: "jobs-rollout-runner-cancelled",
+        occurredAt: new Date(killedAt.getTime() + 2_000).toISOString(),
+      }),
+    ).resolves.toMatchObject({ job: { status: "cancelled" } });
+  });
+
   it("freezes provider-specific disclosure before a job is claimed", async () => {
     const conversation = await createConversation(db!, "owner-job-context", {
       title: "Research with project context",

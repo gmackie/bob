@@ -21,6 +21,15 @@ const { setPlaceholder, kernel } = vi.hoisted(() => {
         id: "memory",
         inspect: vi.fn(),
       }),
+      resolveAgentJobPolicy: vi.fn().mockImplementation((jobClass: string) => ({
+        provider: ["comparison", "synthesis", "opportunity_review"].includes(
+          jobClass,
+        )
+          ? "claude"
+          : "codex",
+        capabilities: [],
+        budget: { deadlineSeconds: 900, aggregateTokens: 150_000 },
+      })),
       resolveContextSourceConfig: vi.fn().mockReturnValue({}),
       createConfiguredContextSources: vi.fn().mockReturnValue([]),
     },
@@ -113,6 +122,14 @@ describe("jobs router", () => {
 
   it("accepts an authenticated trusted runner claim", async () => {
     vi.stubEnv("OODA_RUNNER_SECRET", "runner-secret");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("OODA_ROLLOUT_STAGE", "jobs");
+    vi.stubEnv("OODA_ROLLOUT_OWNER_IDS", "owner-jobs");
+    vi.stubEnv("OODA_AGENT_JOB_ENABLED_PROVIDERS", "codex");
+    vi.stubEnv(
+      "OODA_AGENT_JOB_ENABLED_CLASSES",
+      "read_only_research,scratch_prototype",
+    );
     kernel.claimAgentJob.mockResolvedValue(null);
     const input = {
       runnerId: "runner-1",
@@ -126,6 +143,206 @@ describe("jobs router", () => {
         input,
       ),
     ).resolves.toBeNull();
-    expect(kernel.claimAgentJob).toHaveBeenCalledWith({}, input);
+    expect(kernel.claimAgentJob).toHaveBeenCalledWith({}, input, {
+      eligibleOwnerIds: ["owner-jobs"],
+    });
+  });
+
+  it("does not let a trusted runner claim jobs after rollback", async () => {
+    vi.stubEnv("OODA_RUNNER_SECRET", "runner-secret");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("OODA_ROLLOUT_STAGE", "tts");
+    vi.stubEnv("OODA_ROLLOUT_OWNER_IDS", "owner-jobs");
+
+    await expect(
+      caller(new Headers({ authorization: "Bearer runner-secret" })).jobs.claim(
+        {
+          runnerId: "runner-1",
+          providers: ["codex"],
+          classes: ["read_only_research"],
+          leaseSeconds: 90,
+        },
+      ),
+    ).resolves.toBeNull();
+    expect(kernel.claimAgentJob).not.toHaveBeenCalled();
+  });
+
+  it("narrows trusted runner claims to enabled classes and providers", async () => {
+    vi.stubEnv("OODA_RUNNER_SECRET", "runner-secret");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("OODA_ROLLOUT_STAGE", "jobs");
+    vi.stubEnv("OODA_ROLLOUT_OWNER_IDS", "owner-jobs");
+    vi.stubEnv("OODA_AGENT_JOB_ENABLED_PROVIDERS", "codex");
+    vi.stubEnv(
+      "OODA_AGENT_JOB_ENABLED_CLASSES",
+      "read_only_research,scratch_prototype",
+    );
+    kernel.claimAgentJob.mockResolvedValue(null);
+    const headers = new Headers({ authorization: "Bearer runner-secret" });
+
+    await caller(headers).jobs.claim({
+      runnerId: "runner-1",
+      providers: ["codex", "claude"],
+      classes: ["read_only_research", "comparison"],
+      leaseSeconds: 90,
+    });
+    expect(kernel.claimAgentJob).toHaveBeenCalledWith(
+      {},
+      {
+        runnerId: "runner-1",
+        providers: ["codex"],
+        classes: ["read_only_research"],
+        leaseSeconds: 90,
+      },
+      { eligibleOwnerIds: ["owner-jobs"] },
+    );
+
+    vi.clearAllMocks();
+    await expect(
+      caller(headers).jobs.claim({
+        runnerId: "runner-1",
+        providers: ["claude"],
+        classes: ["comparison"],
+        leaseSeconds: 90,
+      }),
+    ).resolves.toBeNull();
+    expect(kernel.claimAgentJob).not.toHaveBeenCalled();
+  });
+
+  it("forces active runner control toward cancellation when killed", async () => {
+    vi.stubEnv("OODA_RUNNER_SECRET", "runner-secret");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("OODA_ROLLOUT_STAGE", "jobs");
+    vi.stubEnv("OODA_ROLLOUT_OWNER_IDS", "owner-jobs");
+    vi.stubEnv("OODA_ROLLOUT_KILL_SWITCH", "true");
+    vi.stubEnv("OODA_AGENT_JOB_ENABLED_PROVIDERS", "codex");
+    vi.stubEnv(
+      "OODA_AGENT_JOB_ENABLED_CLASSES",
+      "read_only_research,scratch_prototype",
+    );
+    const input = {
+      jobId: "job-1",
+      runnerId: "runner-1",
+      leaseToken: "11111111-1111-4111-8111-111111111111",
+    };
+    kernel.inspectAgentJobControl.mockResolvedValue({
+      status: "running",
+      cancelRequested: true,
+      attempt: 1,
+    });
+
+    await expect(
+      caller(
+        new Headers({ authorization: "Bearer runner-secret" }),
+      ).jobs.control(input),
+    ).resolves.toMatchObject({ cancelRequested: true });
+    expect(kernel.inspectAgentJobControl).toHaveBeenCalledWith({}, input, {
+      eligibleOwnerIds: [],
+      enabledProviders: ["codex"],
+      enabledClasses: ["read_only_research", "scratch_prototype"],
+    });
+  });
+
+  it("keeps owner cancellation available while the kill switch is active", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("OODA_ROLLOUT_STAGE", "jobs");
+    vi.stubEnv("OODA_ROLLOUT_OWNER_IDS", "owner-jobs");
+    vi.stubEnv("OODA_ROLLOUT_KILL_SWITCH", "true");
+    const input = { jobId: "job-1", idempotencyKey: "cancel-job-1" };
+    kernel.cancelAgentJob.mockResolvedValue({
+      job: {
+        id: "job-1",
+        conversationId: "conversation-1",
+        class: "read_only_research",
+        status: "cancelled",
+        provider: "codex",
+        billingPolicy: "subscription_only",
+        capabilities: [],
+        budget: { deadlineSeconds: 900, aggregateTokens: 150_000 },
+        createdAt: "2026-08-07T15:00:00.000Z",
+        updatedAt: "2026-08-07T15:00:00.000Z",
+      },
+      replayed: false,
+    });
+
+    await expect(caller().jobs.cancel(input)).resolves.toMatchObject({
+      job: { status: "cancelled" },
+    });
+    expect(kernel.cancelAgentJob).toHaveBeenCalledWith({}, "owner-jobs", input);
+  });
+
+  it("restricts the initial jobs rollout to proven classes and providers", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("OODA_ROLLOUT_STAGE", "jobs");
+    vi.stubEnv("OODA_ROLLOUT_OWNER_IDS", "owner-jobs");
+    vi.stubEnv("OODA_AGENT_JOB_ENABLED_PROVIDERS", "codex");
+    vi.stubEnv(
+      "OODA_AGENT_JOB_ENABLED_CLASSES",
+      "read_only_research,scratch_prototype",
+    );
+
+    await expect(
+      caller().jobs.create({
+        conversationId: "conversation-1",
+        class: "comparison",
+        prompt: "Compare models",
+        idempotencyKey: "job-comparison",
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      caller().jobs.create({
+        conversationId: "conversation-1",
+        class: "read_only_research",
+        provider: "claude",
+        prompt: "Research this",
+        idempotencyKey: "job-claude",
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(kernel.createAgentJob).not.toHaveBeenCalled();
+  });
+
+  it("fails closed without runtime allowlists and accepts an enabled Codex class", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("OODA_ROLLOUT_STAGE", "jobs");
+    vi.stubEnv("OODA_ROLLOUT_OWNER_IDS", "owner-jobs");
+    vi.stubEnv("OODA_AGENT_JOB_ENABLED_PROVIDERS", "");
+    vi.stubEnv("OODA_AGENT_JOB_ENABLED_CLASSES", "");
+    const input = {
+      conversationId: "conversation-1",
+      class: "read_only_research" as const,
+      prompt: "Research this",
+      idempotencyKey: "job-codex-rollout",
+    };
+
+    await expect(caller().jobs.create(input)).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+    expect(kernel.createAgentJob).not.toHaveBeenCalled();
+
+    vi.stubEnv("OODA_AGENT_JOB_ENABLED_PROVIDERS", "codex");
+    vi.stubEnv(
+      "OODA_AGENT_JOB_ENABLED_CLASSES",
+      "read_only_research,scratch_prototype",
+    );
+    kernel.createAgentJob.mockResolvedValue({
+      job: {
+        id: "job-codex-rollout",
+        conversationId: "conversation-1",
+        class: "read_only_research",
+        status: "queued",
+        provider: "codex",
+        billingPolicy: "subscription_only",
+        capabilities: [],
+        budget: { deadlineSeconds: 900, aggregateTokens: 150_000 },
+        createdAt: "2026-08-10T20:00:00.000Z",
+        updatedAt: "2026-08-10T20:00:00.000Z",
+      },
+      replayed: false,
+    });
+
+    await expect(caller().jobs.create(input)).resolves.toMatchObject({
+      job: { provider: "codex", class: "read_only_research" },
+    });
+    expect(kernel.createAgentJob).toHaveBeenCalledTimes(1);
   });
 });

@@ -2,7 +2,7 @@ import type { RouterRecord } from "@trpc/server/unstable-core-do-not-import";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
-import { authedProcedure } from "../trpc";
+import { rolloutProcedure } from "../trpc";
 import { resolveBobDispatchConfig } from "./bob-config.js";
 
 const BobDispatchOutputSchema = z.object({
@@ -35,14 +35,19 @@ const BobProjectOutputSchema = z.object({
 // an executable Bob run via Bob's public REST endpoint. The reverse direction
 // (Bob run outcome -> OODA thread note) is handled runner-side by promoteNote.
 //
-// Config-driven and dark until configured: dispatch requires BOB_API_URL,
-// BOB_API_KEY (a bob_live_* key), and BOB_WORKSPACE_ID. Missing any -> a clear
-// PRECONDITION_FAILED, so the procedure exists but can't fire until wired up.
+// This durable-write lane requires both the rollout capability and Bob runtime
+// configuration: BOB_API_URL, BOB_API_KEY (a bob_live_* key), and
+// BOB_WORKSPACE_ID. Missing configuration produces PRECONDITION_FAILED.
 
 export const bobRouter = {
-  dispatch: authedProcedure
+  dispatch: rolloutProcedure("durable_work_delivery")
     .meta({
-      openapi: { method: "POST", path: "/api/bob/dispatch", tags: ["bob"], protect: true },
+      openapi: {
+        method: "POST",
+        path: "/api/bob/dispatch",
+        tags: ["bob"],
+        protect: true,
+      },
     })
     .input(
       z.object({
@@ -101,7 +106,7 @@ export const bobRouter = {
   // "Make it a project": create a Bob (linear-clone) project + seed backlog
   // tasks, and optionally scaffold a new app via create-gmacko-app as an
   // executable Bob dispatch. Same config/env as dispatch.
-  createProject: authedProcedure
+  createProject: rolloutProcedure("durable_work_delivery")
     .meta({
       openapi: {
         method: "POST",
@@ -161,9 +166,11 @@ export const bobRouter = {
 
       // 2. Optionally scaffold a new app via create-gmacko-app, as an executable
       // dispatch. Non-fatal: a scaffold failure leaves the project + tasks intact.
-      let scaffold:
-        | { sessionId: string; identifier: string; status: string }
-        | null = null;
+      let scaffold: {
+        sessionId: string;
+        identifier: string;
+        status: string;
+      } | null = null;
       if (input.scaffold) {
         try {
           const dres = await fetch(`${config.apiUrl}/api/v1/dispatch`, {
