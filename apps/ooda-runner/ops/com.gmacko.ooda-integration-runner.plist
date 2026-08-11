@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.gmacko.ooda-integration-runner</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/mackieg/.local/share/ooda-integration-runner/current/apps/ooda-runner/ops/run-integration-only-macos.sh</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/mackieg/.local/share/ooda-integration-runner/current/apps/ooda-runner</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>/Users/mackieg</string>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>NODE_ENV</key>
+    <string>production</string>
+    <key>OODA_SERVER_URL</key>
+    <string>https://ooda.blder.bot</string>
+    <key>OODA_RUNNER_NAME</key>
+    <string>ooda-integrations-mackieg-mac</string>
+    <key>OODA_INTEGRATION_RUNNER_ROOT</key>
+    <string>/Users/mackieg/.local/share/ooda-integration-runner/current</string>
+    <key>OODA_OBSIDIAN_DELIVERY_ENABLED</key>
+    <string>true</string>
+    <key>OODA_OBSIDIAN_VAULT_PATH</key>
+    <string>/Users/mackieg/obsidian</string>
+  </dict>
+  <key>KeepAlive</key>
+  <true/>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>StandardOutPath</key>
+  <string>/Users/mackieg/Library/Logs/OODA/integration-runner.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/mackieg/Library/Logs/OODA/integration-runner.err.log</string>
+</dict>
+</plist>

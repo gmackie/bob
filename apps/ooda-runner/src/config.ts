@@ -3,76 +3,87 @@ import { join } from "node:path";
 
 import { z } from "zod";
 
-export const RunnerConfigSchema = z.object({
-  storageRoot: z.string().default(join(homedir(), ".ooda", "threads")),
-  serverUrl: z.string().url().default("http://localhost:3000"),
-  runnerToken: z.string().optional(),
-  runnerName: z.string().default(`runner-${hostname()}`),
-  port: z.coerce.number().default(3001),
-  bobGatewayUrl: z.string().optional(),
-  /** Bob HTTP base URL for the public run API (e.g. https://bob.blder.bot). */
-  bobApiUrl: z.string().optional(),
-  bobApiKey: z.string().optional(),
-  bobWorkspaceId: z.string().optional(),
-  bobDeliveryEnabled: z
-    .preprocess((value) => value === true || value === "true", z.boolean())
-    .default(false),
-  obsidianDeliveryEnabled: z
-    .preprocess((value) => value === true || value === "true", z.boolean())
-    .default(false),
-  obsidianVaultPath: z.string().default(join(homedir(), "obsidian")),
-  obsidianVaultName: z.string().optional(),
-  bizPulseDeliveryEnabled: z
-    .preprocess((value) => value === true || value === "true", z.boolean())
-    .default(false),
-  bizPulseApiUrl: z.string().url().optional(),
-  bizPulseApiKey: z.string().optional(),
-  creatorDeliveryEnabled: z
-    .preprocess((value) => value === true || value === "true", z.boolean())
-    .default(false),
-  creatorApiUrl: z.string().url().optional(),
-  creatorApiKey: z.string().optional(),
-  creatorProjectRoot: z.string().optional(),
-  creatorTemplatePath: z.string().optional(),
-  creatorReceiptRoot: z
-    .string()
-    .default(join(homedir(), ".ooda", "integration-receipts", "creator")),
-  fabForgeDeliveryEnabled: z
-    .preprocess((value) => value === true || value === "true", z.boolean())
-    .default(false),
-  fabForgeApiUrl: z.string().url().optional(),
-  fabForgeApiToken: z.string().optional(),
-  fabForgeWorkspaceId: z.string().optional(),
-  veritasDeliveryEnabled: z
-    .preprocess((value) => value === true || value === "true", z.boolean())
-    .default(false),
-  veritasApiUrl: z.string().url().optional(),
-  veritasApiToken: z.string().optional(),
-  preflightDeliveryEnabled: z
-    .preprocess((value) => value === true || value === "true", z.boolean())
-    .default(false),
-  preflightApiUrl: z.string().url().optional(),
-  preflightApiToken: z.string().optional(),
-  preflightWorkspaceId: z.string().optional(),
-  preflightReceiptRoot: z
-    .string()
-    .default(join(homedir(), ".ooda", "integration-receipts", "preflight")),
-  bobDevDir: z.string().default(join(homedir(), "dev")),
-  bobMaxConcurrent: z.coerce.number().default(2),
-  agentJobScratchRoot: z.string().default(join(tmpdir(), "ooda-agent-jobs")),
-  agentJobMaxConcurrent: z.coerce.number().int().min(1).max(3).default(3),
-  hostTurnEnabled: z
-    .preprocess(
-      (value) => value === undefined || value === true || value === "true",
-      z.boolean(),
-    )
-    .default(true),
-  hostTurnScratchRoot: z.string().default(join(tmpdir(), "ooda-host-turns")),
-  hostTurnMaxConcurrent: z.coerce.number().int().min(1).max(3).default(1),
-  grokHostModel: z.string().optional(),
-  claudeHostModel: z.string().optional(),
-  openaiHostModel: z.string().optional(),
-});
+export const RunnerConfigSchema = z
+  .object({
+    storageRoot: z.string().default(join(homedir(), ".ooda", "threads")),
+    serverUrl: z.string().url().default("http://localhost:3000"),
+    runnerToken: z.string().optional(),
+    runnerName: z.string().default(`runner-${hostname()}`),
+    port: z.coerce.number().default(3001),
+    bobGatewayUrl: z.string().optional(),
+    /** Bob HTTP base URL for the public run API (e.g. https://bob.blder.bot). */
+    bobApiUrl: z.string().optional(),
+    bobApiKey: z.string().optional(),
+    bobWorkspaceId: z.string().optional(),
+    bobDeliveryEnabled: z
+      .preprocess((value) => value === true || value === "true", z.boolean())
+      .default(false),
+    obsidianDeliveryEnabled: z
+      .preprocess((value) => value === true || value === "true", z.boolean())
+      .default(false),
+    obsidianVaultPath: z.string().min(1).optional(),
+    obsidianVaultName: z.string().optional(),
+    bizPulseDeliveryEnabled: z
+      .preprocess((value) => value === true || value === "true", z.boolean())
+      .default(false),
+    bizPulseApiUrl: z.string().url().optional(),
+    bizPulseApiKey: z.string().optional(),
+    creatorDeliveryEnabled: z
+      .preprocess((value) => value === true || value === "true", z.boolean())
+      .default(false),
+    creatorApiUrl: z.string().url().optional(),
+    creatorApiKey: z.string().optional(),
+    creatorProjectRoot: z.string().optional(),
+    creatorTemplatePath: z.string().optional(),
+    creatorReceiptRoot: z
+      .string()
+      .default(join(homedir(), ".ooda", "integration-receipts", "creator")),
+    fabForgeDeliveryEnabled: z
+      .preprocess((value) => value === true || value === "true", z.boolean())
+      .default(false),
+    fabForgeApiUrl: z.string().url().optional(),
+    fabForgeApiToken: z.string().optional(),
+    fabForgeWorkspaceId: z.string().optional(),
+    veritasDeliveryEnabled: z
+      .preprocess((value) => value === true || value === "true", z.boolean())
+      .default(false),
+    veritasApiUrl: z.string().url().optional(),
+    veritasApiToken: z.string().optional(),
+    preflightDeliveryEnabled: z
+      .preprocess((value) => value === true || value === "true", z.boolean())
+      .default(false),
+    preflightApiUrl: z.string().url().optional(),
+    preflightApiToken: z.string().optional(),
+    preflightWorkspaceId: z.string().optional(),
+    preflightReceiptRoot: z
+      .string()
+      .default(join(homedir(), ".ooda", "integration-receipts", "preflight")),
+    bobDevDir: z.string().default(join(homedir(), "dev")),
+    bobMaxConcurrent: z.coerce.number().default(2),
+    agentJobScratchRoot: z.string().default(join(tmpdir(), "ooda-agent-jobs")),
+    agentJobMaxConcurrent: z.coerce.number().int().min(1).max(3).default(3),
+    hostTurnEnabled: z
+      .preprocess(
+        (value) => value === undefined || value === true || value === "true",
+        z.boolean(),
+      )
+      .default(true),
+    hostTurnScratchRoot: z.string().default(join(tmpdir(), "ooda-host-turns")),
+    hostTurnMaxConcurrent: z.coerce.number().int().min(1).max(3).default(1),
+    grokHostModel: z.string().optional(),
+    claudeHostModel: z.string().optional(),
+    openaiHostModel: z.string().optional(),
+  })
+  .superRefine((config, context) => {
+    if (config.obsidianDeliveryEnabled && !config.obsidianVaultPath) {
+      context.addIssue({
+        code: "custom",
+        path: ["obsidianVaultPath"],
+        message:
+          "Obsidian delivery requires an explicit OODA_OBSIDIAN_VAULT_PATH",
+      });
+    }
+  });
 
 export type RunnerConfig = z.infer<typeof RunnerConfigSchema>;
 

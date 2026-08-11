@@ -36,7 +36,7 @@ export function createDeliveryAdapters(
       }),
     );
   }
-  if (config.obsidianDeliveryEnabled) {
+  if (config.obsidianDeliveryEnabled && config.obsidianVaultPath) {
     adapters.set(
       "obsidian",
       new ObsidianDomainAdapter({
