@@ -5,15 +5,27 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=mackieg
-Group=users
-ExecStart=/usr/bin/podman run --rm --name ooda-research-backend \
-  -p 127.0.0.1:8000:8000 \
-  --env-file /opt/ooda-runner/.env.research \
-  localhost/ooda-research-backend:latest
-ExecStop=/usr/bin/podman stop ooda-research-backend
+User=bob
+Group=bob
+WorkingDirectory=/opt/ooda-research-backend/current
+EnvironmentFile=/etc/ooda/research-backend.env
+ExecStart=/usr/bin/env \
+  HOME=/var/lib/ooda-research-backend \
+  RESEARCH_VAULT_PATH=/var/lib/ooda-research-backend/vault \
+  SOURCES_DIR=/var/lib/ooda-research-backend/vault/sources \
+  KBS_DIR=/var/lib/ooda-research-backend/vault/kbs \
+  /opt/ooda-research-backend/current/.venv/bin/uvicorn \
+  research_backend.main:app --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=10
+
+StateDirectory=ooda-research-backend
+ReadWritePaths=/var/lib/ooda-research-backend
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
 
 LimitNOFILE=65536
 MemoryMax=2G

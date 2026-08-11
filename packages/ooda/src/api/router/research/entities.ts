@@ -5,6 +5,10 @@ import { and, count, desc, eq } from "@gmacko/ooda/db";
 import { noteEntity, noteIndex, researchThread } from "@gmacko/ooda/db/schema";
 
 import { SearchNotesResponse } from "../../clients/sidecar-schemas";
+import {
+  researchServiceHeaders,
+  resolveResearchSidecarConfig,
+} from "../../../research-sidecar";
 import { vaultScopedProcedure } from "../../middleware/vault-scope";
 
 export const entitiesRouter = {
@@ -22,7 +26,13 @@ export const entitiesRouter = {
    * the dashboard can link back to the originating thread.
    */
   notesByEntity: vaultScopedProcedure
-    .meta({ openapi: { method: "GET", path: "/api/research/entities/notes", tags: ["research.entities"] } })
+    .meta({
+      openapi: {
+        method: "GET",
+        path: "/api/research/entities/notes",
+        tags: ["research.entities"],
+      },
+    })
     .input(
       z.object({
         entityName: z.string().min(1),
@@ -89,7 +99,13 @@ export const entitiesRouter = {
    * an empty list when the sidecar is unreachable or unconfigured.
    */
   relatedNotes: vaultScopedProcedure
-    .meta({ openapi: { method: "GET", path: "/api/research/entities/related", tags: ["research.entities"] } })
+    .meta({
+      openapi: {
+        method: "GET",
+        path: "/api/research/entities/related",
+        tags: ["research.entities"],
+      },
+    })
     .input(
       z.object({
         noteId: z.string().min(1),
@@ -98,8 +114,8 @@ export const entitiesRouter = {
     )
     .output(z.any())
     .query(async ({ input }) => {
-      const apiUrl = process.env.RESEARCH_API_URL;
-      if (!apiUrl) {
+      const sidecar = resolveResearchSidecarConfig(process.env);
+      if (!sidecar) {
         return { notes: [] };
       }
 
@@ -109,7 +125,8 @@ export const entitiesRouter = {
           limit: String(input.limit),
         });
         const res = await fetch(
-          `${apiUrl.replace(/\/+$/, "")}/api/search/notes?${params}`,
+          `${sidecar.apiUrl.replace(/\/+$/, "")}/api/search/notes?${params}`,
+          { headers: researchServiceHeaders(sidecar.serviceToken) },
         );
         if (res.ok) {
           const data = SearchNotesResponse.parse(await res.json());
@@ -138,7 +155,13 @@ export const entitiesRouter = {
    * Optionally filter to a single entity type.
    */
   entityIndex: vaultScopedProcedure
-    .meta({ openapi: { method: "GET", path: "/api/research/entities", tags: ["research.entities"] } })
+    .meta({
+      openapi: {
+        method: "GET",
+        path: "/api/research/entities",
+        tags: ["research.entities"],
+      },
+    })
     .input(
       z.object({
         entityType: z

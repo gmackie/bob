@@ -560,6 +560,7 @@ describe("OODA V1 contracts", () => {
       "kanbanger_issue",
       "bizpulse_venture",
       "forgegraph_changeset",
+      "research_vault_source",
     ] as const) {
       expect(ContextItemV1Schema.parse({ ...base, sourceType })).toMatchObject({
         sourceType,

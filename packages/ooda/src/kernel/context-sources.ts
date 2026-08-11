@@ -6,6 +6,10 @@ import {
   type ContextItemV1,
   type ContextSourceTypeV1,
 } from "../contracts/v1";
+import {
+  resolveResearchSidecarConfig,
+  type ResearchSidecarConfig,
+} from "../research-sidecar";
 
 const ContextCandidateSchema = z
   .object({
@@ -96,14 +100,21 @@ export async function collectContextCandidates(
   );
 
   const seen = new Set<string>();
-  const candidates = settled.flatMap(({ candidates: items }) =>
-    items.filter((item) => {
-      const key = `${item.sourceType}:${item.sourceId}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    }),
+  const candidates: ContextCandidate[] = [];
+  const longestSource = Math.max(
+    0,
+    ...settled.map(({ candidates: items }) => items.length),
   );
+  for (let index = 0; index < longestSource; index += 1) {
+    for (const { candidates: items } of settled) {
+      const item = items[index];
+      if (!item) continue;
+      const key = `${item.sourceType}:${item.sourceId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      candidates.push(item);
+    }
+  }
 
   return {
     candidates,
@@ -197,9 +208,11 @@ export interface ContextSourceConfig {
   bob?: BobSourceConfig;
   bizpulse?: BizPulseSourceConfig;
   forgegraph?: ForgeGraphSourceConfig;
+  researchVault?: ResearchSidecarConfig;
 }
 
 const trimUrl = (value: string) => value.replace(/\/+$/, "");
+const RESEARCH_CONTEXT_QUERY_MAX_LENGTH = 4_000;
 
 function object(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -230,6 +243,68 @@ function trpcData(payload: unknown): unknown {
 function trpcQueryUrl(baseUrl: string, procedure: string): string {
   const input = encodeURIComponent(JSON.stringify({ json: null }));
   return `${trimUrl(baseUrl)}/api/trpc/${procedure}?input=${input}`;
+}
+
+const ResearchVaultSearchResponseSchema = z
+  .object({
+    fallback: z.boolean(),
+    sources: z.array(
+      z
+        .object({
+          source_id: z.number().int().nonnegative(),
+          kind: z.string().min(1).max(64),
+          title: z.string().nullable(),
+          excerpt: z.string().max(20_000),
+          url: z.string().nullable(),
+          author: z.string().nullable(),
+          source_ts: z.string().nullable(),
+          score: z.number(),
+          sensitivity: SensitivityV1Schema,
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+
+function researchVaultSource(
+  config: ResearchSidecarConfig,
+  fetcher: typeof fetch,
+): ConversationContextSource {
+  return {
+    id: "research-vault",
+    async inspect({ query, limitPerSource, signal }) {
+      const params = new URLSearchParams({
+        query: query.slice(0, RESEARCH_CONTEXT_QUERY_MAX_LENGTH),
+        limit: String(Math.min(limitPerSource, 20)),
+      });
+      const response = await readJson(
+        await fetcher(
+          `${trimUrl(config.apiUrl)}/api/search/sources?${params.toString()}`,
+          {
+            headers: { Authorization: `Bearer ${config.serviceToken}` },
+            signal,
+          },
+        ),
+      );
+      const parsed = ResearchVaultSearchResponseSchema.parse(response);
+      return parsed.sources.map((source) => ({
+        sourceType: "research_vault_source" as const,
+        sourceId: String(source.source_id),
+        sensitivity: source.sensitivity,
+        content: [
+          source.title,
+          `kind ${source.kind}`,
+          source.author ? `author ${source.author}` : null,
+          source.source_ts ? `date ${source.source_ts}` : null,
+          source.url,
+          source.excerpt,
+          `similarity ${source.score.toFixed(4)}`,
+        ]
+          .filter(Boolean)
+          .join(" | "),
+      }));
+    },
+  };
 }
 
 function matchesQuery(content: string, query: string): boolean {
@@ -544,6 +619,9 @@ export function createConfiguredContextSources(
     ...(config.forgegraph
       ? [forgeGraphSource(config.forgegraph, fetcher)]
       : []),
+    ...(config.researchVault
+      ? [researchVaultSource(config.researchVault, fetcher)]
+      : []),
   ];
 }
 
@@ -577,6 +655,8 @@ export function resolveContextSourceConfig(
         .filter(Boolean),
     };
   }
+  const researchVault = resolveResearchSidecarConfig(env);
+  if (researchVault) result.researchVault = researchVault;
   return result;
 }
 

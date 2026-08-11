@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     api_port: int = Field(default=8000, alias="API_PORT")
     api_base_url: str = Field(default="http://localhost:8000", alias="API_BASE_URL")
     database_url: str = Field(alias="DATABASE_URL")
+    research_service_token: str = Field(default="", alias="RESEARCH_SERVICE_TOKEN")
     research_vault_path: str = Field(default="", alias="RESEARCH_VAULT_PATH")
     kbs_dir: str = Field(default="", alias="KBS_DIR")
     sources_dir: str = Field(default="", alias="SOURCES_DIR")
@@ -25,9 +26,7 @@ class Settings(BaseSettings):
     ollama_generation_model: str = Field(
         default="qwen2.5:14b-instruct", alias="OLLAMA_GENERATION_MODEL"
     )
-    ollama_embedding_model: str = Field(
-        default="nomic-embed-text", alias="OLLAMA_EMBEDDING_MODEL"
-    )
+    ollama_embedding_model: str = Field(default="nomic-embed-text", alias="OLLAMA_EMBEDDING_MODEL")
     unpaywall_email: str = Field(default="", alias="UNPAYWALL_EMAIL")
     semantic_scholar_api_key: str = Field(default="", alias="SEMANTIC_SCHOLAR_API_KEY")
     openalex_api_key: str = Field(default="", alias="OPENALEX_API_KEY")

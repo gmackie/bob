@@ -35,6 +35,25 @@ describe("conversation context sources", () => {
     });
   });
 
+  it("configures authenticated research-vault context only when URL and token are both present", () => {
+    expect(
+      resolveContextSourceConfig({
+        RESEARCH_API_URL: "https://research.example/",
+        RESEARCH_SERVICE_TOKEN: "research-secret",
+      }),
+    ).toMatchObject({
+      researchVault: {
+        apiUrl: "https://research.example/",
+        serviceToken: "research-secret",
+      },
+    });
+    expect(
+      resolveContextSourceConfig({
+        RESEARCH_API_URL: "https://research.example",
+      }),
+    ).not.toHaveProperty("researchVault");
+  });
+
   it("collects validated candidates without letting one unavailable source block the turn", async () => {
     const healthy: ConversationContextSource = {
       id: "bob",
@@ -74,6 +93,45 @@ describe("conversation context sources", () => {
         reason: "Source unavailable",
       },
     ]);
+  });
+
+  it("balances candidate order so the global context cap retains every source", async () => {
+    const sources = ["memory", "bob", "bizpulse", "research"].map(
+      (sourceName, sourceIndex): ConversationContextSource => ({
+        id: sourceName,
+        inspect: () =>
+          Promise.resolve(
+            Array.from({ length: 8 }, (_, itemIndex) =>
+              candidate({
+                sourceId: `${sourceName}-${itemIndex}`,
+                content: `${sourceName} candidate ${itemIndex}`,
+                sourceType:
+                  sourceIndex === 0
+                    ? "memory_seed"
+                    : sourceIndex === 1
+                      ? "bob_work_item"
+                      : sourceIndex === 2
+                        ? "bizpulse_venture"
+                        : "research_vault_source",
+              }),
+            ),
+          ),
+      }),
+    );
+
+    const collected = await collectContextCandidates(sources, {
+      query: "candidate",
+      limitPerSource: 8,
+    });
+    const globallyCapped = collected.candidates.slice(0, 24);
+
+    for (const sourceName of ["memory", "bob", "bizpulse", "research"]) {
+      expect(
+        globallyCapped.filter(({ sourceId }) =>
+          sourceId.startsWith(`${sourceName}-`),
+        ),
+      ).toHaveLength(6);
+    }
   });
 
   it("denies sensitive and restricted candidates before prompt formatting", () => {
@@ -248,10 +306,10 @@ describe("conversation context sources", () => {
     expect(result.receipts).toHaveLength(3);
     expect(result.candidates.map(({ sourceType }) => sourceType)).toEqual([
       "bob_work_item",
-      "kanbanger_issue",
-      "bizpulse_venture",
       "bizpulse_venture",
       "forgegraph_changeset",
+      "kanbanger_issue",
+      "bizpulse_venture",
     ]);
     expect(result.candidates.map(({ content }) => content)).toEqual(
       expect.arrayContaining([
@@ -322,5 +380,92 @@ describe("conversation context sources", () => {
     expect(
       result.filter(({ sourceId }) => !sourceId.startsWith("focus:")),
     ).toHaveLength(4);
+  });
+
+  it("normalizes authenticated research-vault results with server-classified sensitivity", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (request, init) => {
+      const url = new URL(String(request));
+      expect(url.pathname).toBe("/api/search/sources");
+      expect(url.searchParams.get("query")).toBe("voice memory");
+      expect(url.searchParams.get("limit")).toBe("8");
+      expect(init?.headers).toMatchObject({
+        Authorization: "Bearer research-secret",
+      });
+      return Response.json({
+        fallback: false,
+        sources: [
+          {
+            source_id: 41,
+            kind: "youtube",
+            title: "Voice interfaces",
+            excerpt: "Public research about conversational interfaces.",
+            url: "https://youtube.example/watch?v=41",
+            author: "Researcher",
+            source_ts: "2026-08-01T12:00:00+00:00",
+            score: 0.91,
+            sensitivity: "general",
+          },
+          {
+            source_id: 42,
+            kind: "chat-import",
+            title: "Prior private brainstorm",
+            excerpt: "A personal note about voice-first memory.",
+            url: null,
+            author: null,
+            source_ts: null,
+            score: 0.88,
+            sensitivity: "personal",
+          },
+        ],
+      });
+    });
+    const [source] = createConfiguredContextSources(
+      {
+        researchVault: {
+          apiUrl: "https://research.example",
+          serviceToken: "research-secret",
+        },
+      },
+      fetchMock,
+    );
+
+    const result = await source!.inspect({
+      query: "voice memory",
+      limitPerSource: 8,
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        sourceType: "research_vault_source",
+        sourceId: "41",
+        sensitivity: "general",
+        content: expect.stringContaining("Voice interfaces"),
+      }),
+      expect.objectContaining({
+        sourceType: "research_vault_source",
+        sourceId: "42",
+        sensitivity: "personal",
+        content: expect.stringContaining("Prior private brainstorm"),
+      }),
+    ]);
+  });
+
+  it("bounds research-vault queries before crossing the service boundary", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (request) => {
+      const url = new URL(String(request));
+      expect(url.searchParams.get("query")).toHaveLength(4_000);
+      return Response.json({ fallback: true, sources: [] });
+    });
+    const [source] = createConfiguredContextSources(
+      {
+        researchVault: {
+          apiUrl: "https://research.example",
+          serviceToken: "research-secret",
+        },
+      },
+      fetchMock,
+    );
+
+    await source!.inspect({ query: "q".repeat(8_000), limitPerSource: 8 });
   });
 });

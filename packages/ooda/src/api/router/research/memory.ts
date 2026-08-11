@@ -2,17 +2,14 @@ import type { RouterRecord } from "@trpc/server/unstable-core-do-not-import";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
-import {
-  and,
-  arrayOverlaps,
-  desc,
-  eq,
-  ilike,
-  or,
-} from "@gmacko/ooda/db";
+import { and, arrayOverlaps, desc, eq, ilike, or } from "@gmacko/ooda/db";
 import { researchThread, threadMemory } from "@gmacko/ooda/db/schema";
 
 import { SearchThreadMemoryResponse } from "../../clients/sidecar-schemas";
+import {
+  researchServiceHeaders,
+  resolveResearchSidecarConfig,
+} from "../../../research-sidecar";
 import {
   vaultScopedAuthedProcedure,
   vaultScopedProcedure,
@@ -41,7 +38,13 @@ export const memoryRouter = {
    *     land alongside multi-user support).
    */
   threadMemorySearch: vaultScopedProcedure
-    .meta({ openapi: { method: "GET", path: "/api/research/memory/search", tags: ["research.memory"] } })
+    .meta({
+      openapi: {
+        method: "GET",
+        path: "/api/research/memory/search",
+        tags: ["research.memory"],
+      },
+    })
     .input(
       z.object({
         query: z.string().min(1),
@@ -64,8 +67,8 @@ export const memoryRouter = {
       }
 
       // Try semantic search via research-backend
-      const apiUrl = process.env.RESEARCH_API_URL;
-      if (apiUrl) {
+      const sidecar = resolveResearchSidecarConfig(process.env);
+      if (sidecar) {
         try {
           const params = new URLSearchParams({
             query,
@@ -74,7 +77,8 @@ export const memoryRouter = {
           if (scope === "this" && threadId) params.set("thread_id", threadId);
 
           const res = await fetch(
-            `${apiUrl.replace(/\/+$/, "")}/api/search/thread-memory?${params}`,
+            `${sidecar.apiUrl.replace(/\/+$/, "")}/api/search/thread-memory?${params}`,
+            { headers: researchServiceHeaders(sidecar.serviceToken) },
           );
           if (res.ok) {
             const data = SearchThreadMemoryResponse.parse(await res.json());
@@ -98,9 +102,7 @@ export const memoryRouter = {
 
       // Fallback: ILIKE text search
       const pattern = `%${query}%`;
-      const queryTokens = query
-        .split(/\s+/)
-        .filter((t) => t.length > 0);
+      const queryTokens = query.split(/\s+/).filter((t) => t.length > 0);
 
       const conditions = [
         or(
@@ -123,10 +125,7 @@ export const memoryRouter = {
           updatedAt: threadMemory.updatedAt,
         })
         .from(threadMemory)
-        .leftJoin(
-          researchThread,
-          eq(researchThread.id, threadMemory.threadId),
-        )
+        .leftJoin(researchThread, eq(researchThread.id, threadMemory.threadId))
         .where(and(...conditions))
         .orderBy(desc(threadMemory.updatedAt))
         .limit(limit);
@@ -152,7 +151,14 @@ export const memoryRouter = {
    * memories alongside scheduler-authored ones.
    */
   threadMemoryUpdate: vaultScopedAuthedProcedure
-    .meta({ openapi: { method: "POST", path: "/api/research/memory/update", tags: ["research.memory"], protect: true } })
+    .meta({
+      openapi: {
+        method: "POST",
+        path: "/api/research/memory/update",
+        tags: ["research.memory"],
+        protect: true,
+      },
+    })
     .input(
       z.object({
         threadId: z.string().uuid(),

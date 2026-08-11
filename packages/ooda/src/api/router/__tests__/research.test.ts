@@ -140,24 +140,27 @@ const mockAuth = {
   },
 } as unknown as import("@gmacko/core/auth").AuthInstance;
 
-const t = initTRPC.context<{ db: unknown; headers: Headers; auth?: unknown }>().create();
+const t = initTRPC
+  .context<{ db: unknown; headers: Headers; auth?: unknown }>()
+  .create();
 const testRouter = t.router({ research: researchRouter });
 const createCallerRaw = t.createCallerFactory(testRouter);
 
 // Default headers for test callers. The mock auth above makes
 // `api.getSession` resolve for every request, so no real session is needed.
 const defaultHeaders = () => new Headers({ host: "localhost:3100" });
-const createCaller = (
-  ctx: { db: unknown; headers?: Headers; auth?: unknown },
-) => createCallerRaw({ headers: defaultHeaders(), auth: mockAuth, ...ctx });
+const createCaller = (ctx: {
+  db: unknown;
+  headers?: Headers;
+  auth?: unknown;
+}) => createCallerRaw({ headers: defaultHeaders(), auth: mockAuth, ...ctx });
 
 // --- Task 4.5: vault-scope middleware -----------------------------------
 
 describe("withVaultScope middleware (Task 4.5)", () => {
   it("attaches ctx.vaultSchema = 'research_vault' for vaultScopedProcedure calls", async () => {
-    const { vaultScopedProcedure } = await import(
-      "../../middleware/vault-scope"
-    );
+    const { vaultScopedProcedure } =
+      await import("../../middleware/vault-scope");
     // Ad-hoc probe: a vault-scoped procedure that just echoes ctx.vaultSchema
     // so we can observe what the middleware attached.
     const probeRouter = t.router({
@@ -174,9 +177,8 @@ describe("withVaultScope middleware (Task 4.5)", () => {
   });
 
   it("pins to 'research_vault' regardless of threadId in input (V1.5 scope)", async () => {
-    const { vaultScopedProcedure } = await import(
-      "../../middleware/vault-scope"
-    );
+    const { vaultScopedProcedure } =
+      await import("../../middleware/vault-scope");
     const { z: zod } = await import("zod");
     const probeRouter = t.router({
       probe: vaultScopedProcedure
@@ -219,14 +221,17 @@ function notFoundResponse(): Response {
 
 describe("research.dive* procedures", () => {
   const OLD_ENV = process.env.RESEARCH_API_URL;
+  const OLD_SERVICE_TOKEN = process.env.RESEARCH_SERVICE_TOKEN;
 
   beforeEach(() => {
     process.env.RESEARCH_API_URL = "http://test.local";
+    process.env.RESEARCH_SERVICE_TOKEN = "research-service-secret";
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
     process.env.RESEARCH_API_URL = OLD_ENV;
+    process.env.RESEARCH_SERVICE_TOKEN = OLD_SERVICE_TOKEN;
   });
 
   // ---- diveSpawn --------------------------------------------------------
@@ -257,11 +262,9 @@ describe("research.dive* procedures", () => {
     expect(call[1]).toMatchObject({ method: "POST" });
     expect(call[1].headers).toMatchObject({
       "Content-Type": "application/json",
+      Authorization: "Bearer research-service-secret",
     });
-    const body = JSON.parse(call[1].body as string) as Record<
-      string,
-      unknown
-    >;
+    const body = JSON.parse(call[1].body as string) as Record<string, unknown>;
     expect(body).toEqual({
       thread_id: "d0ae8aa6-4845-4088-af5f-bf63efd6b439",
       seeds: ["10.1234/foo", "arxiv:2401.00001"],
@@ -1106,9 +1109,8 @@ describe("researchRouter write procedures (Task 4.3)", () => {
  * `@gmacko/ooda/vault`'s own `listDrafts` to read back the file we just wrote.
  */
 
-const { mkdtempSync: realMkdtempSync, rmSync: realRmSync } = await import(
-  "node:fs"
-);
+const { mkdtempSync: realMkdtempSync, rmSync: realRmSync } =
+  await import("node:fs");
 const { tmpdir: realTmpdir } = await import("node:os");
 const { join: realJoin } = await import("node:path");
 const vaultModule = await import("@gmacko/ooda/vault");
