@@ -18,12 +18,30 @@ describe("RunnerConfigSchema", () => {
     ).toBe(false);
   });
 
-  it("keeps Obsidian writes behind an adapter kill switch", () => {
+  it("keeps Obsidian writes behind an adapter kill switch with an explicit vault", () => {
     expect(RunnerConfigSchema.parse({}).obsidianDeliveryEnabled).toBe(false);
     expect(
-      RunnerConfigSchema.parse({ obsidianDeliveryEnabled: "true" })
-        .obsidianDeliveryEnabled,
+      RunnerConfigSchema.parse({
+        obsidianDeliveryEnabled: "true",
+        obsidianVaultPath: "/Users/operator/obsidian",
+      }).obsidianDeliveryEnabled,
     ).toBe(true);
+  });
+
+  it("fails closed when Obsidian delivery is enabled without an explicit vault", () => {
+    const result = RunnerConfigSchema.safeParse({
+      obsidianDeliveryEnabled: "true",
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toContainEqual(
+        expect.objectContaining({
+          path: ["obsidianVaultPath"],
+          message: expect.stringContaining("explicit"),
+        }),
+      );
+    }
   });
 
   it("keeps BizPulse venture creation behind an adapter kill switch", () => {

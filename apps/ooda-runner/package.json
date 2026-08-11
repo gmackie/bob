@@ -8,6 +8,7 @@
     "clean": "git clean -xdf .cache .turbo dist node_modules coverage",
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
+    "start:integrations": "tsx src/integration-only.ts",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"

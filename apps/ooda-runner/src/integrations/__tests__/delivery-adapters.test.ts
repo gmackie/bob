@@ -4,6 +4,19 @@ import { RunnerConfigSchema } from "../../config";
 import { createDeliveryAdapters } from "../delivery-adapters";
 
 describe("createDeliveryAdapters", () => {
+  it("registers Obsidian only when its kill switch and explicit vault are present", () => {
+    const disabled = createDeliveryAdapters(RunnerConfigSchema.parse({}));
+    const enabled = createDeliveryAdapters(
+      RunnerConfigSchema.parse({
+        obsidianDeliveryEnabled: true,
+        obsidianVaultPath: "/Users/operator/obsidian",
+      }),
+    );
+
+    expect([...disabled.keys()]).not.toContain("obsidian");
+    expect([...enabled.keys()]).toContain("obsidian");
+  });
+
   it("registers BizPulse only when its kill switch and credentials are present", () => {
     const disabled = createDeliveryAdapters(RunnerConfigSchema.parse({}));
     const incomplete = createDeliveryAdapters(
