@@ -4,6 +4,49 @@ export type PostgresClient = ReturnType<typeof postgres>;
 
 const MIGRATION_SOURCE = "standalone-ooda-vault-v1";
 export const STANDALONE_SOURCE_EMBEDDING_DIMENSIONS = 768;
+export const STANDALONE_EMBEDDING_INPUT_CHARACTERS = 4_000;
+
+export function parseLegacyFloat32Embedding(
+  value: Uint8Array,
+  dimensions: number,
+): number[] {
+  const expectedBytes =
+    STANDALONE_SOURCE_EMBEDDING_DIMENSIONS * Float32Array.BYTES_PER_ELEMENT;
+  if (
+    dimensions !== STANDALONE_SOURCE_EMBEDDING_DIMENSIONS ||
+    value.byteLength !== expectedBytes
+  ) {
+    throw new Error(
+      `Legacy embedding must contain ${STANDALONE_SOURCE_EMBEDDING_DIMENSIONS} dimensions in ${expectedBytes} bytes`,
+    );
+  }
+
+  const bytes = Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+  const embedding = Array.from(
+    { length: STANDALONE_SOURCE_EMBEDDING_DIMENSIONS },
+    (_, index) => bytes.readFloatLE(index * Float32Array.BYTES_PER_ELEMENT),
+  );
+  if (!embedding.every(Number.isFinite)) {
+    throw new Error("Legacy embedding contains a non-finite component");
+  }
+  return embedding;
+}
+
+export function buildStandaloneEmbeddingInput(
+  title: string | null,
+  body: string,
+): string {
+  const input = [title, body].filter(Boolean).join("\n\n");
+  if (input.length <= STANDALONE_EMBEDDING_INPUT_CHARACTERS) return input;
+
+  const omission = "\n\n[...]\n\n";
+  const available = STANDALONE_EMBEDDING_INPUT_CHARACTERS - omission.length;
+  const openingCharacters = Math.ceil(available * 0.7);
+  const closingCharacters = available - openingCharacters;
+  return `${input.slice(0, openingCharacters)}${omission}${input.slice(
+    -closingCharacters,
+  )}`;
+}
 
 export type StandaloneVaultInventory = {
   sources: number;
@@ -666,9 +709,14 @@ export async function backfillStandaloneVaultEmbeddings(
         (options.maxSources ?? Number.POSITIVE_INFINITY) - embedded,
       );
       const rows = await target<
-        Array<{ sourceId: number; title: string | null; body: string }>
+        Array<{
+          legacySourceId: number;
+          sourceId: number;
+        }>
       >`
-        select sources.id as "sourceId", sources.title, sources.body
+        select
+          records.source_id::integer as "legacySourceId",
+          sources.id as "sourceId"
         from ooda.migration_records records
         join research_vault.sources sources
           on sources.id = records.destination_id::integer
@@ -682,18 +730,83 @@ export async function backfillStandaloneVaultEmbeddings(
         limit ${limit}
       `;
       if (rows.length === 0) break;
-      const vectors = await requestOllamaEmbeddings(
-        options.baseUrl ?? "http://127.0.0.1:11434",
-        model,
-        rows.map((row) =>
-          [row.title, row.body.slice(0, 8_000)].filter(Boolean).join("\n\n"),
-        ),
-        fetchFn,
+
+      const legacyRows = await source<
+        Array<{ sourceId: number; dimensions: number; vector: Uint8Array }>
+      >`
+        with requested as (
+          select *
+          from jsonb_to_recordset(${source.json(
+            rows.map((row) => ({ source_id: row.legacySourceId })),
+          )}::jsonb) as value(source_id integer)
+        )
+        select
+          embeddings.source_id as "sourceId",
+          embeddings.dim as dimensions,
+          embeddings.vec as vector
+        from research_vault.embeddings embeddings
+        join requested on requested.source_id = embeddings.source_id
+        where embeddings.model = ${model}
+      `;
+      const legacyBySourceId = new Map(
+        legacyRows.map((row) => [row.sourceId, row] as const),
       );
-      const payload = rows.map((row, index) => ({
-        source_id: row.sourceId,
-        embedding: `[${vectors[index]!.join(",")}]`,
-      }));
+      const missingRows = rows.filter(
+        (row) => !legacyBySourceId.has(row.legacySourceId),
+      );
+      const missingDetails =
+        missingRows.length > 0
+          ? await target<
+              Array<{
+                legacySourceId: number;
+                title: string | null;
+                body: string;
+              }>
+            >`
+              with requested as (
+                select *
+                from jsonb_to_recordset(${target.json(missingRows)}::jsonb)
+                  as value("legacySourceId" integer, "sourceId" integer)
+              )
+              select
+                requested."legacySourceId" as "legacySourceId",
+                sources.title,
+                sources.body
+              from requested
+              join research_vault.sources sources
+                on sources.id = requested."sourceId"
+              order by requested."legacySourceId"
+            `
+          : [];
+      if (missingDetails.length !== missingRows.length) {
+        throw new Error("Could not load every source missing a legacy embedding");
+      }
+      const generatedVectors =
+        missingDetails.length > 0
+          ? await requestOllamaEmbeddings(
+              options.baseUrl ?? "http://127.0.0.1:11434",
+              model,
+              missingDetails.map((row) =>
+                buildStandaloneEmbeddingInput(row.title, row.body),
+              ),
+              fetchFn,
+            )
+          : [];
+      const generatedBySourceId = new Map(
+        missingDetails.map(
+          (row, index) => [row.legacySourceId, generatedVectors[index]!] as const,
+        ),
+      );
+      const payload = rows.map((row) => {
+        const legacy = legacyBySourceId.get(row.legacySourceId);
+        const vector = legacy
+          ? parseLegacyFloat32Embedding(legacy.vector, legacy.dimensions)
+          : generatedBySourceId.get(row.legacySourceId)!;
+        return {
+          source_id: row.sourceId,
+          embedding: `[${vector.join(",")}]`,
+        };
+      });
       await target`
         with incoming as (
           select * from jsonb_to_recordset(${target.json(payload)}::jsonb) as value(

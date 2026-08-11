@@ -44,3 +44,19 @@ release path. The unit intentionally blocks home-directory access so the
 sidecar cannot inherit Claude, Codex, Grok, or other operator credentials;
 subscription-backed agent work belongs to the separately contained OODA
 runner.
+
+The companion `ooda-ollama.service` supplies local embeddings to the sidecar
+and migration tooling. It runs as the dedicated `ollama` user, listens only on
+`127.0.0.1:11434`, and stores models beneath `/var/lib/ooda-ollama`. Install
+the checked-in unit at `/etc/systemd/system/ooda-ollama.service`, enable it,
+and pull only the configured embedding model (currently
+`nomic-embed-text`). Verify `/api/embeddings` returns exactly 768 finite
+components before starting a production backfill. Do not bind this service to
+a public or Tailscale address.
+
+The standalone-vault migration losslessly converts existing
+`nomic-embed-text` bytea values (768 little-endian float32 components) into
+native pgvector rows before asking Ollama to generate anything. Invalid legacy
+dimensions, byte lengths, or non-finite values fail closed; Ollama is used only
+for sources that genuinely have no legacy vector. This keeps historical search
+geometry intact and makes the backfill resumable with `ON CONFLICT` semantics.
