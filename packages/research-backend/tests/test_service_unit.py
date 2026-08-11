@@ -45,3 +45,22 @@ def test_production_state_root_derives_writable_legacy_paths(tmp_path: Path) -> 
         target.write_text("stateful route write", encoding="utf-8")
         assert target.read_text(encoding="utf-8") == "stateful route write"
         assert target.is_relative_to(state_root)
+
+
+def test_ollama_unit_is_loopback_only_and_keeps_models_in_owned_state() -> None:
+    unit = (Path(__file__).parents[1] / "ooda-ollama.service").read_text()
+
+    assert "User=ollama" in unit
+    assert "Group=ollama" in unit
+    assert "OLLAMA_HOST=127.0.0.1:11434" in unit
+    assert "OLLAMA_MODELS=/var/lib/ooda-ollama/models" in unit
+    assert "OLLAMA_NO_CLOUD=1" in unit
+    assert "ExecStart=/usr/local/bin/ollama serve" in unit
+    assert "StateDirectory=ooda-ollama" in unit
+    assert "ReadWritePaths=/var/lib/ooda-ollama" in unit
+    assert "UMask=0077" in unit
+    assert "NoNewPrivileges=true" in unit
+    assert "PrivateTmp=true" in unit
+    assert "ProtectSystem=strict" in unit
+    assert "ProtectHome=true" in unit
+    assert "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6" in unit
