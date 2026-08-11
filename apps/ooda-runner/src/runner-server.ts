@@ -315,12 +315,78 @@ export class RunnerServer {
     console.log("[runner] healthy");
   }
 
+  private credHealthCache?: {
+    at: number;
+    value: {
+      credHealth?: Record<string, { status: string; detail?: string }>;
+      credHealthOk?: boolean;
+    };
+  };
+
+  /**
+   * Read per-adapter credential health from the host's `adapter-cred-health`
+   * script so an expired adapter OAuth surfaces in the Nodes dashboard instead
+   * of silently failing runs. Cached 5 min; never throws (returns {} on any
+   * failure, so older hosts without the script just omit the field). The script
+   * exits non-zero when a credential is expired but still prints JSON to stdout,
+   * so we read stdout even on a thrown (non-zero) exit.
+   */
+  private readCredHealth(): {
+    credHealth?: Record<string, { status: string; detail?: string }>;
+    credHealthOk?: boolean;
+  } {
+    const TTL = 5 * 60_000;
+    if (this.credHealthCache && Date.now() - this.credHealthCache.at < TTL) {
+      return this.credHealthCache.value;
+    }
+    const bin =
+      process.env.ADAPTER_CRED_HEALTH_BIN ?? "/home/bob/bin/adapter-cred-health";
+    let out = "";
+    try {
+      out = execSync(`${bin} --json`, {
+        timeout: 45_000,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+    } catch (e) {
+      const so = (e as { stdout?: Buffer | string }).stdout;
+      if (so) out = so.toString();
+      else return {};
+    }
+    let value: {
+      credHealth?: Record<string, { status: string; detail?: string }>;
+      credHealthOk?: boolean;
+    } = {};
+    try {
+      const parsed = JSON.parse(out) as Record<string, unknown> & {
+        ok?: boolean;
+      };
+      const { ok, ...adapters } = parsed;
+      const credHealth: Record<string, { status: string; detail?: string }> = {};
+      for (const [k, v] of Object.entries(adapters)) {
+        if (v && typeof v === "object" && "status" in v) {
+          const rec = v as { status: unknown; detail?: unknown };
+          credHealth[k] = {
+            status: String(rec.status),
+            ...(rec.detail != null ? { detail: String(rec.detail) } : {}),
+          };
+        }
+      }
+      value = { credHealth, credHealthOk: ok !== false };
+    } catch {
+      return {};
+    }
+    this.credHealthCache = { at: Date.now(), value };
+    return value;
+  }
+
   private async register(): Promise<void> {
     try {
       const [device] = await this.trpc.runner.register.mutate({
         name: this.config.runnerName,
         hostname: hostname(),
         capabilities: [...this.adapters.keys()],
+        ...this.readCredHealth(),
       });
 
       if (device) {
@@ -414,6 +480,7 @@ export class RunnerServer {
     try {
       await this.trpc.runner.heartbeat.mutate({
         runnerId: this.runnerId,
+        ...this.readCredHealth(),
       });
       console.log("[runner] heartbeat OK");
     } catch (err) {

@@ -6,6 +6,12 @@ import { runnerDevice, runnerSession, sessionEvent } from "@gmacko/ooda/db/schem
 
 import { authedProcedure, publicProcedure, runnerProcedure } from "../trpc";
 
+// Per-adapter credential health map reported by the runner, e.g.
+// { claude: { status: "EXPIRED", detail: "OAuth session expired" }, grok: { status: "OK" } }
+const credHealthSchema = z.record(
+  z.object({ status: z.string(), detail: z.string().optional() }),
+);
+
 export function buildStaleRunnerSessionPredicate(cutoff: Date) {
   // Hyperdrive cannot serialize a Date bound through an untyped SQL
   // expression reliably: it forwards Date.toString(), which Postgres rejects
@@ -23,10 +29,22 @@ export const runnerRouter = {
         name: z.string(),
         hostname: z.string().optional(),
         capabilities: z.array(z.string()).default([]),
+        // Per-adapter credential health from the runner host's
+        // `adapter-cred-health --json`. Optional so older runners still register.
+        credHealth: credHealthSchema.optional(),
+        credHealthOk: z.boolean().optional(),
       }),
     )
     .output(z.any())
     .mutation(async ({ ctx, input }) => {
+      const credFields =
+        input.credHealth !== undefined
+          ? {
+              credHealth: input.credHealth,
+              credHealthOk: input.credHealthOk ?? null,
+              credHealthAt: new Date(),
+            }
+          : {};
       // Upsert by name — avoid creating duplicate devices on runner restart
       const existing = await ctx.db.query.runnerDevice.findFirst({
         where: eq(runnerDevice.name, input.name),
@@ -39,6 +57,7 @@ export const runnerRouter = {
             capabilities: input.capabilities,
             lastHeartbeatAt: new Date(),
             status: "online",
+            ...credFields,
           })
           .where(eq(runnerDevice.id, existing.id))
           .returning();
@@ -50,13 +69,20 @@ export const runnerRouter = {
           hostname: input.hostname,
           capabilities: input.capabilities,
           lastHeartbeatAt: new Date(),
+          ...credFields,
         })
         .returning();
     }),
 
   heartbeat: runnerProcedure
     .meta({ openapi: { method: "POST", path: "/api/runner/heartbeat", tags: ["runner"], protect: true } })
-    .input(z.object({ runnerId: z.string() }))
+    .input(
+      z.object({
+        runnerId: z.string(),
+        credHealth: credHealthSchema.optional(),
+        credHealthOk: z.boolean().optional(),
+      }),
+    )
     .output(z.any())
     .mutation(({ ctx, input }) => {
       return ctx.db
@@ -64,6 +90,13 @@ export const runnerRouter = {
         .set({
           lastHeartbeatAt: new Date(),
           status: "online",
+          ...(input.credHealth !== undefined
+            ? {
+                credHealth: input.credHealth,
+                credHealthOk: input.credHealthOk ?? null,
+                credHealthAt: new Date(),
+              }
+            : {}),
         })
         .where(eq(runnerDevice.id, input.runnerId))
         .returning();
