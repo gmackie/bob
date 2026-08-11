@@ -243,6 +243,30 @@ function matchesQuery(content: string, query: string): boolean {
   );
 }
 
+function selectBalancedCandidates(
+  groups: ContextCandidate[][],
+  query: string,
+  limit: number,
+): ContextCandidate[] {
+  const eligibleGroups = groups.map((group) => {
+    const relevant = group.filter((item) => matchesQuery(item.content, query));
+    return relevant.length > 0 ? relevant : group;
+  });
+  const selected: ContextCandidate[] = [];
+  for (let index = 0; selected.length < limit; index += 1) {
+    let added = false;
+    for (const group of eligibleGroups) {
+      const item = group[index];
+      if (!item) continue;
+      selected.push(item);
+      added = true;
+      if (selected.length === limit) break;
+    }
+    if (!added) break;
+  }
+  return selected;
+}
+
 function bobSource(
   config: BobSourceConfig,
   fetcher: typeof fetch,
@@ -260,8 +284,10 @@ function bobSource(
           body: JSON.stringify({
             workspaceId: config.workspaceId,
             statuses: [
+              "draft",
               "backlog",
               "todo",
+              "planned",
               "ready",
               "in_progress",
               "in_review",
@@ -339,13 +365,13 @@ function bizPulseSource(
       if (!Array.isArray(ventures) || !Array.isArray(focus)) {
         throw new Error("Invalid BizPulse context response");
       }
-      const candidates: ContextCandidate[] = [];
+      const ventureCandidates: ContextCandidate[] = [];
       for (const value of ventures) {
         const row = object(value);
         const id = text(row?.id);
         const name = text(row?.name);
         if (!id || !name) continue;
-        candidates.push({
+        ventureCandidates.push({
           sourceType: "bizpulse_venture",
           sourceId: id,
           sensitivity: "personal",
@@ -362,11 +388,12 @@ function bizPulseSource(
             .join(" | "),
         });
       }
+      const focusCandidates: ContextCandidate[] = [];
       for (const value of focus) {
         const row = object(value);
         const id = text(row?.id);
         if (!id) continue;
-        candidates.push({
+        focusCandidates.push({
           sourceType: "bizpulse_venture",
           sourceId: `focus:${id}`,
           sensitivity: "personal",
@@ -381,11 +408,12 @@ function bizPulseSource(
             .join(" | "),
         });
       }
-      const relevant = candidates.filter((item) =>
-        matchesQuery(item.content, query),
-      );
-      return (relevant.length > 0 ? relevant : candidates).slice(
-        0,
+      // Portfolio focus is an attention signal, not merely another venture.
+      // Interleave it with matching venture state so a common word such as
+      // "venture" cannot consume the entire bounded context budget.
+      return selectBalancedCandidates(
+        [focusCandidates, ventureCandidates],
+        query,
         limitPerSource,
       );
     },

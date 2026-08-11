@@ -123,6 +123,9 @@ describe("conversation context sources", () => {
         expect(init?.headers).toMatchObject({
           Authorization: "Bearer bob-key",
         });
+        expect(JSON.parse(String(init?.body))).toMatchObject({
+          statuses: expect.arrayContaining(["draft", "planned"]),
+        });
         return Response.json([
           {
             id: "bob-1",
@@ -262,5 +265,62 @@ describe("conversation context sources", () => {
         expect.stringContaining("tests unit passed 623/623"),
       ]),
     );
+  });
+
+  it("keeps BizPulse focus work in a bounded pack when venture keywords also match", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (request) => {
+      const url = String(request);
+      if (url.includes("/api/trpc/startup.list")) {
+        return Response.json({
+          result: {
+            data: {
+              json: Array.from({ length: 12 }, (_, index) => ({
+                id: `venture-${index + 1}`,
+                name: `Startup ${index + 1}`,
+                lifecycleStage: "active",
+                portfolioRole: "venture",
+              })),
+            },
+          },
+        });
+      }
+      if (url.includes("/api/trpc/focusQueue.list")) {
+        return Response.json({
+          result: {
+            data: {
+              json: Array.from({ length: 10 }, (_, index) => ({
+                id: `focus-${index + 1}`,
+                startupName: `Startup ${index + 1}`,
+                priority: "high",
+                question: `What is the next portfolio focus ${index + 1}?`,
+              })),
+            },
+          },
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    const [source] = createConfiguredContextSources(
+      {
+        bizpulse: {
+          apiUrl: "https://pulse.example",
+          apiKey: "biz-key",
+        },
+      },
+      fetchMock,
+    );
+
+    const result = await source!.inspect({
+      query: "venture",
+      limitPerSource: 8,
+    });
+
+    expect(result).toHaveLength(8);
+    expect(
+      result.filter(({ sourceId }) => sourceId.startsWith("focus:")),
+    ).toHaveLength(4);
+    expect(
+      result.filter(({ sourceId }) => !sourceId.startsWith("focus:")),
+    ).toHaveLength(4);
   });
 });
