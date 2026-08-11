@@ -10,7 +10,9 @@ def test_systemd_unit_runs_native_sidecar_as_unprivileged_bob_user() -> None:
     assert "Group=bob" in unit
     assert "EnvironmentFile=/etc/ooda/research-backend.env" in unit
     assert "127.0.0.1" in unit
-    assert "/opt/ooda-research-backend/current/.venv/bin/uvicorn" in unit
+    assert "/opt/ooda-research-backend/current/.venv/bin/python" in unit
+    assert "  -m uvicorn \\\n" in unit
+    assert "/opt/ooda-research-backend/current/.venv/bin/uvicorn" not in unit
     assert "StateDirectory=ooda-research-backend" in unit
     assert "ExecStart=/usr/bin/env" in unit
     assert "HOME=/var/lib/ooda-research-backend" in unit

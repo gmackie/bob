@@ -15,6 +15,7 @@ import {
   IntegrationDeliveryListInputV1Schema,
   IntegrationDeliveryListPageV1Schema,
   IntegrationDeliveryMutationResultV1Schema,
+  ProposalKindV1Schema,
   RepairDeadLetterInputV1Schema,
   RepairDeadLetterResultV1Schema,
 } from "../../contracts/v1";
@@ -28,10 +29,44 @@ import {
   listDeadLetters,
   listIntegrationDeliveries,
   repairDeadLetter,
+  proposalKindRolloutCapability,
   resolveOodaRolloutPolicy,
 } from "../../kernel";
 import { rolloutProcedure, trustedRunnerProcedure } from "../trpc";
 import { runKernel } from "./_kernel-error";
+
+function configuredRolloutOwnerIds(
+  env: Record<string, string | undefined> = process.env,
+): string[] | undefined {
+  const configured = (env.OODA_ROLLOUT_OWNER_IDS ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (configured.length === 0) {
+    const probe = resolveOodaRolloutPolicy(
+      "__trusted_delivery_rollout_probe__",
+      env,
+    );
+    return probe.eligible ? undefined : [];
+  }
+  return configured.filter(
+    (ownerId) => resolveOodaRolloutPolicy(ownerId, env).eligible,
+  );
+}
+
+function enabledDeliveryProposalKinds(
+  env: Record<string, string | undefined> = process.env,
+) {
+  const configuredOwners = configuredRolloutOwnerIds(env);
+  if (configuredOwners?.length === 0) return [];
+  const policy = resolveOodaRolloutPolicy(
+    configuredOwners?.[0] ?? "__trusted_delivery_rollout_probe__",
+    env,
+  );
+  return ProposalKindV1Schema.options.filter(
+    (kind) => policy.capabilities[proposalKindRolloutCapability(kind)],
+  );
+}
 
 export const integrationsRouter = {
   listDeliveries: rolloutProcedure("conversation_read")
@@ -79,9 +114,28 @@ export const integrationsRouter = {
   claim: trustedRunnerProcedure
     .input(ClaimIntegrationDeliveryInputV1Schema)
     .output(ClaimIntegrationDeliveryResultV1Schema)
-    .mutation(({ ctx, input }) =>
-      runKernel(() => claimIntegrationDelivery(ctx.db, input)),
-    ),
+    .mutation(({ ctx, input }) => {
+      const eligibleOwnerIds = configuredRolloutOwnerIds();
+      const eligibleProposalKinds = enabledDeliveryProposalKinds();
+      if (
+        eligibleOwnerIds?.length === 0 ||
+        eligibleProposalKinds.length === 0
+      ) {
+        return null;
+      }
+      return runKernel(() =>
+        claimIntegrationDelivery(ctx.db, input, {
+          eligibleOwnerIds,
+          eligibleProposalKinds,
+          ownerEligible: (ownerId, proposal) => {
+            const rollout = resolveOodaRolloutPolicy(ownerId);
+            return rollout.capabilities[
+              proposalKindRolloutCapability(proposal.kind)
+            ];
+          },
+        }),
+      );
+    }),
   complete: trustedRunnerProcedure
     .input(CompleteIntegrationDeliveryInputV1Schema)
     .output(IntegrationDeliveryMutationResultV1Schema)

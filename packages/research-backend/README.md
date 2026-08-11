@@ -36,7 +36,12 @@ The checked-in `ooda-research-backend.service` runs a release-local virtualenv
 as the unprivileged `bob` user, binds only `127.0.0.1:8000`, and reads secrets
 from `/etc/ooda/research-backend.env`. Install each release under
 `/opt/ooda-research-backend/releases/<git-sha>`, point the `current` symlink at
-the verified release, then restart the service. Mutable imports, source notes,
+the verified release, then restart the service. Create the final release
+directory before running `uv sync --extra dev` there; do not build a virtualenv
+in a staging path and then move it because console-script shebangs embed the
+original absolute path. The unit starts Uvicorn through the release-local
+Python module entry point so the service remains valid when only the `current`
+symlink changes. Mutable imports, source notes,
 and compiled knowledge bases are pinned beneath
 `/var/lib/ooda-research-backend/vault`, the unit's only writable state root;
 do not override `RESEARCH_VAULT_PATH`, `SOURCES_DIR`, or `KBS_DIR` to a home or

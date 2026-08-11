@@ -14,7 +14,8 @@ ExecStart=/usr/bin/env \
   RESEARCH_VAULT_PATH=/var/lib/ooda-research-backend/vault \
   SOURCES_DIR=/var/lib/ooda-research-backend/vault/sources \
   KBS_DIR=/var/lib/ooda-research-backend/vault/kbs \
-  /opt/ooda-research-backend/current/.venv/bin/uvicorn \
+  /opt/ooda-research-backend/current/.venv/bin/python \
+  -m uvicorn \
   research_backend.main:app --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=10

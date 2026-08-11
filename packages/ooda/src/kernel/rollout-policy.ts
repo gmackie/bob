@@ -3,7 +3,10 @@ import {
   type OodaRolloutCapabilityV1,
   type OodaRolloutPolicyV1,
   type OodaRolloutStageV1,
+  type ProposalV1,
 } from "../contracts/v1";
+
+type ProposalKindV1 = ProposalV1["kind"];
 
 type RolloutEnvironment = Record<string, string | undefined>;
 
@@ -34,6 +37,24 @@ const MINIMUM_STAGE: Record<OodaRolloutCapabilityV1, OodaRolloutStageV1> = {
   reviews: "reviews_push",
   push: "reviews_push",
 };
+
+const PROPOSAL_KIND_CAPABILITY = {
+  obsidian_note: "obsidian_delivery",
+  research_job: "agent_jobs",
+  bob_task: "durable_work_delivery",
+  bob_project: "durable_work_delivery",
+  bizpulse_venture: "portfolio_evidence",
+  content_project: "specialist_delivery",
+  fabrication_project: "specialist_delivery",
+  hardware_validation: "specialist_delivery",
+  mobile_release: "specialist_delivery",
+} satisfies Record<ProposalKindV1, OodaRolloutCapabilityV1>;
+
+export function proposalKindRolloutCapability(
+  kind: ProposalKindV1,
+): OodaRolloutCapabilityV1 {
+  return PROPOSAL_KIND_CAPABILITY[kind];
+}
 
 function enabled(value: string | undefined): boolean {
   return value === "1" || value?.toLowerCase() === "true";

@@ -1819,6 +1819,91 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     ).toHaveLength(1);
   });
 
+  it("skips rollout-ineligible deliveries without starving an eligible owner", async () => {
+    const createApproved = async (
+      ownerId: string,
+      idempotencySuffix: string,
+      decidedAt: string,
+    ) => {
+      const conversation = await createConversation(db!, ownerId, {
+        title: `Delivery guard ${ownerId}`,
+        hostProvider: "grok",
+        hostProfile: "daily",
+        sensitivityCeiling: "personal",
+        ttsPolicy: "allowed",
+        idempotencyKey: `delivery-guard-conversation-${idempotencySuffix}`,
+      });
+      const created = await createProposal(db!, ownerId, {
+        conversationId: conversation.conversation.id,
+        kind: "bob_project",
+        destination: "bob",
+        risk: "durable_work",
+        preview: {
+          name: `Guarded ${ownerId}`,
+          acceptanceCriteria: ["Only rollout-eligible work is claimed"],
+        },
+        rationale: "Prove owner rollout eligibility at claim time.",
+        confidence: 0.9,
+        policySnapshot: { version: "v1" },
+        idempotencyKey: `delivery-guard-proposal-${idempotencySuffix}`,
+      });
+      return decideProposal(db!, ownerId, {
+        proposalId: created.proposal.id,
+        decision: "approve",
+        expectedVersion: 1,
+        scope: "single_delivery",
+        decidedAt,
+      });
+    };
+
+    const denied = [];
+    for (let index = 0; index < 21; index += 1) {
+      denied.push(
+        await createApproved(
+          `owner-delivery-denied-${index}`,
+          `denied-${index}`,
+          `2026-08-11T18:10:${String(index).padStart(2, "0")}.000Z`,
+        ),
+      );
+    }
+    const eligible = await createApproved(
+      "owner-delivery-eligible",
+      "eligible",
+      "2026-08-11T18:10:30.000Z",
+    );
+
+    const claim = await claimIntegrationDelivery(
+      db!,
+      { runnerId: "guard-runner", destinations: ["bob"], leaseSeconds: 90 },
+      {
+        now: new Date("2026-08-11T18:10:31.000Z"),
+        eligibleOwnerIds: ["owner-delivery-eligible"],
+        ownerEligible: (ownerId, proposal) =>
+          ownerId === "owner-delivery-eligible" &&
+          proposal.kind === "bob_project",
+      },
+    );
+    expect(claim?.delivery.id).toBe(eligible.outboxId);
+    expect(denied.map(({ outboxId }) => outboxId)).not.toContain(
+      claim?.delivery.id,
+    );
+
+    await expect(
+      claimIntegrationDelivery(
+        db!,
+        {
+          runnerId: "guard-runner-2",
+          destinations: ["bob"],
+          leaseSeconds: 90,
+        },
+        {
+          now: new Date("2026-08-11T18:10:32.000Z"),
+          ownerEligible: () => false,
+        },
+      ),
+    ).resolves.toBeNull();
+  });
+
   it("dead-letters a permanent failure and repairs it without changing approval", async () => {
     const conversation = await createConversation(db!, "owner-repair", {
       title: "Repair delivery",
