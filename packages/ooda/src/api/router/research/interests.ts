@@ -167,16 +167,118 @@ export const interestsRouter = {
         .orderBy(desc(threadLink.discoveredAt))
         .limit(input.limit);
 
+      if (rows.length > 0) {
+        return {
+          items: rows.map((r) => {
+            const isFrom = r.fromThreadId === input.threadId;
+            return {
+              otherThreadId: isFrom ? r.toThreadId : r.fromThreadId,
+              otherThreadTitle: (isFrom ? r.toTitle : r.fromTitle) ?? null,
+              kind: r.kind,
+              score: r.score ?? null,
+              reasonMd: r.reasonMd ?? null,
+              discoveredAt: r.discoveredAt,
+            };
+          }),
+        };
+      }
+
+      // --- Computed fallback: topic-overlap synergies -------------------
+      //
+      // `thread_link` is only written by the Python synergy tick, which is
+      // not yet deployed — so the persisted table is empty in production and
+      // SynergyList always degraded to "No cross-thread links". Rather than
+      // wait on that tick, compute related threads on the fly from
+      // `thread_memory.topic_fingerprint` (a text[] of topic terms that
+      // agents DO populate via the research.memory.update buddy tool). This
+      // mirrors `coldThreadUpdatesByThread`'s "compute dashboard-side"
+      // approach and returns rows shaped exactly like the persisted reader
+      // above, so the UI lights up with zero new infrastructure.
+      //
+      // Hyperdrive note: the only DB predicate is `arrayOverlaps` on the
+      // typed `text[]` column `topic_fingerprint` — the same operator
+      // coldThreadUpdatesByThread already runs safely over Hyperdrive. There
+      // is no untyped Date or pgEnum bind here (the `kind` string is a
+      // literal in JS, never bound), so the known 500-inducing patterns are
+      // avoided.
+      const selfMemory = await ctx.db
+        .select({ topicFingerprint: threadMemory.topicFingerprint })
+        .from(threadMemory)
+        .where(eq(threadMemory.threadId, input.threadId))
+        .limit(1);
+
+      const selfTopics = selfMemory[0]?.topicFingerprint ?? [];
+      if (selfTopics.length === 0) {
+        return { items: [] };
+      }
+
+      // Normalise self topics (trim + case-insensitive) while preserving one
+      // display-cased representative per term for the reason string.
+      const selfByKey = new Map<string, string>();
+      for (const topic of selfTopics) {
+        const key = topic.trim().toLowerCase();
+        if (key.length > 0 && !selfByKey.has(key)) selfByKey.set(key, topic.trim());
+      }
+      if (selfByKey.size === 0) {
+        return { items: [] };
+      }
+
+      // Candidate OTHER threads whose fingerprint overlaps ours. `&&`
+      // (arrayOverlaps) narrows the scan to real overlaps; self is included
+      // by the operator (a set overlaps itself) and filtered out in JS.
+      const candidates = await ctx.db
+        .select({
+          threadId: threadMemory.threadId,
+          title: researchThread.title,
+          topicFingerprint: threadMemory.topicFingerprint,
+        })
+        .from(threadMemory)
+        .leftJoin(researchThread, eq(researchThread.id, threadMemory.threadId))
+        .where(arrayOverlaps(threadMemory.topicFingerprint, selfTopics))
+        .limit(200);
+
+      const computed = candidates
+        .filter((c) => c.threadId !== input.threadId)
+        .map((c) => {
+          const otherTopics = c.topicFingerprint ?? [];
+          const sharedDisplay: string[] = [];
+          const otherKeys = new Set<string>();
+          for (const topic of otherTopics) {
+            const key = topic.trim().toLowerCase();
+            if (key.length === 0) continue;
+            otherKeys.add(key);
+            const display = selfByKey.get(key);
+            if (display !== undefined && !sharedDisplay.includes(display)) {
+              sharedDisplay.push(display);
+            }
+          }
+          // Jaccard over the two topic sets: |A ∩ B| / |A ∪ B|.
+          const unionSize = new Set([...selfByKey.keys(), ...otherKeys]).size;
+          const score = unionSize > 0 ? sharedDisplay.length / unionSize : 0;
+          return { c, sharedDisplay, score };
+        })
+        // Require a minimum overlap so a single incidental shared term
+        // doesn't surface noise.
+        .filter((r) => r.sharedDisplay.length >= 2)
+        .sort(
+          (a, b) =>
+            b.sharedDisplay.length - a.sharedDisplay.length ||
+            b.score - a.score,
+        )
+        .slice(0, 5);
+
       return {
-        items: rows.map((r) => {
-          const isFrom = r.fromThreadId === input.threadId;
+        items: computed.map((r) => {
+          const preview = r.sharedDisplay.slice(0, 3).join(", ");
           return {
-            otherThreadId: isFrom ? r.toThreadId : r.fromThreadId,
-            otherThreadTitle: (isFrom ? r.toTitle : r.fromTitle) ?? null,
-            kind: r.kind,
-            score: r.score ?? null,
-            reasonMd: r.reasonMd ?? null,
-            discoveredAt: r.discoveredAt,
+            otherThreadId: r.c.threadId,
+            otherThreadTitle: r.c.title ?? null,
+            kind: "topic_overlap" as const,
+            // Round the Jaccard score to 2dp — SynergyList renders it via
+            // `score.toFixed(2)` but a tidy stored value keeps API output clean.
+            score: Math.round(r.score * 100) / 100,
+            reasonMd: `shares ${r.sharedDisplay.length} topics: ${preview}`,
+            discoveredAt: null,
           };
         }),
       };
