@@ -1,10 +1,5 @@
-import { describe, expect, it, afterEach } from "vitest";
-import {
-  mkdtempSync,
-  existsSync,
-  readFileSync,
-  rmSync,
-} from "node:fs";
+import { describe, expect, it, afterEach, vi } from "vitest";
+import { mkdtempSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
@@ -14,20 +9,28 @@ import { promoteNote } from "../promote-note";
 
 function initVaultRepo(root: string) {
   execSync("git init", { cwd: root, stdio: "pipe" });
-  execSync('git -c user.name="Test" -c user.email="test@test" commit --allow-empty -m "init"', {
-    cwd: root,
-    stdio: "pipe",
-  });
+  execSync(
+    'git -c user.name="Test" -c user.email="test@test" commit --allow-empty -m "init"',
+    {
+      cwd: root,
+      stdio: "pipe",
+    },
+  );
 }
 
 describe("promoteNote", () => {
   const tempDirs: string[] = [];
+  const originalResearchApiUrl = process.env.RESEARCH_API_URL;
+  const originalResearchServiceToken = process.env.RESEARCH_SERVICE_TOKEN;
 
   afterEach(() => {
     for (const dir of tempDirs) {
       rmSync(dir, { recursive: true, force: true });
     }
     tempDirs.length = 0;
+    process.env.RESEARCH_API_URL = originalResearchApiUrl;
+    process.env.RESEARCH_SERVICE_TOKEN = originalResearchServiceToken;
+    vi.unstubAllGlobals();
   });
 
   it("writes note and provenance atomically in a single git commit", async () => {
@@ -123,5 +126,44 @@ describe("promoteNote", () => {
 
     // Same content = same artifact ID
     expect(result1.artifactId).toBe(result2.artifactId);
+  });
+
+  it("authenticates fire-and-forget extraction calls to the research sidecar", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ooda-sidecar-auth-"));
+    tempDirs.push(root);
+    initVaultRepo(root);
+    const { threadDir } = await createThreadWorkspace({
+      storageRoot: root,
+      slug: "sidecar-auth",
+      title: "Sidecar Auth",
+    });
+    process.env.RESEARCH_API_URL = "https://research.example";
+    process.env.RESEARCH_SERVICE_TOKEN = "research-service-secret";
+    const fetchMock = vi.fn<typeof fetch>(() =>
+      Promise.resolve(Response.json({ accepted: true })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await promoteNote({
+      storageRoot: root,
+      threadDir,
+      threadId: "11111111-1111-4111-8111-111111111111",
+      sessionId: "session_1",
+      kind: "observation",
+      title: "Authenticated extraction",
+      content: "This note should reach only the authenticated sidecar.",
+      provenance: {
+        capabilityId: "user",
+        operationId: "promote",
+        sourceType: "user",
+        queryOrInputRef: "sidecar auth test",
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0]![1]?.headers).toMatchObject({
+      "Content-Type": "application/json",
+      Authorization: "Bearer research-service-secret",
+    });
   });
 });

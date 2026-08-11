@@ -50,8 +50,7 @@ const OPTIONAL_VARS = [
   },
   {
     name: "PERSONAL_WEBSITE_PATH",
-    problem:
-      "PERSONAL_WEBSITE_PATH is not set. Publish action is disabled.",
+    problem: "PERSONAL_WEBSITE_PATH is not set. Publish action is disabled.",
     cause: "No local clone of the personalWebsite repo is configured.",
     fix: "Clone the repo and set PERSONAL_WEBSITE_PATH in .env. See docs/SETUP.md#publishing.",
   },
@@ -73,6 +72,20 @@ export function validateEnvironment(): ValidationResult {
     if (!value || value.trim() === "") {
       warnings.push({ variable: v.name, ...v });
     }
+  }
+
+  if (
+    process.env.RESEARCH_API_URL?.trim() &&
+    !process.env.RESEARCH_SERVICE_TOKEN?.trim()
+  ) {
+    errors.push({
+      variable: "RESEARCH_SERVICE_TOKEN",
+      problem:
+        "RESEARCH_SERVICE_TOKEN is required when RESEARCH_API_URL is configured.",
+      cause:
+        "The research sidecar rejects unauthenticated API requests and must never rely on tunnel obscurity.",
+      fix: "Generate one service token and configure the same value on OODA and the research sidecar.",
+    });
   }
 
   return { errors, warnings };

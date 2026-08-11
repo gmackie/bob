@@ -3,9 +3,16 @@ import { dirname, join } from "node:path";
 import { execSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 
-import { generateArtifactId, createProvenanceRecord } from "@gmacko/ooda/provenance";
+import {
+  generateArtifactId,
+  createProvenanceRecord,
+} from "@gmacko/ooda/provenance";
 
 import type { NoteKind } from "@gmacko/ooda/thread-model";
+import {
+  researchServiceHeaders,
+  resolveResearchSidecarConfig,
+} from "../research-sidecar";
 
 export interface PromoteNoteInput {
   storageRoot: string;
@@ -90,11 +97,13 @@ ${input.content}
   }
 
   // Fire-and-forget extraction via research-backend sidecar
-  const researchApiUrl = process.env.RESEARCH_API_URL;
-  if (researchApiUrl && input.threadId) {
-    fetch(`${researchApiUrl.replace(/\/+$/, "")}/api/extraction/note`, {
+  const sidecar = resolveResearchSidecarConfig(process.env);
+  if (sidecar && input.threadId) {
+    fetch(`${sidecar.apiUrl.replace(/\/+$/, "")}/api/extraction/note`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: researchServiceHeaders(sidecar.serviceToken, {
+        "Content-Type": "application/json",
+      }),
       body: JSON.stringify({
         thread_id: input.threadId,
         note_id: noteId,

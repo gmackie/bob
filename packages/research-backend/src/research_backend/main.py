@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session
 
+from research_backend.auth import ResearchServiceAuthMiddleware
 from research_backend.config import Settings
 from research_backend.db import build_engine, init_db
 from research_backend.dive.scheduler import DiveScheduler
@@ -29,9 +30,7 @@ def create_app(overrides: dict[str, str] | None = None) -> FastAPI:
         app.state.settings = settings
         app.state.engine = engine
 
-        scheduler_enabled = (
-            os.getenv("DIVE_SCHEDULER_ENABLED", "true").lower() == "true"
-        )
+        scheduler_enabled = os.getenv("DIVE_SCHEDULER_ENABLED", "true").lower() == "true"
         dive_scheduler = DiveScheduler(
             session_factory=lambda: Session(engine),
             enabled=scheduler_enabled,
@@ -46,6 +45,11 @@ def create_app(overrides: dict[str, str] | None = None) -> FastAPI:
             engine.dispose()
 
     app = FastAPI(title="OODA Research Backend", version="0.1.0", lifespan=lifespan)
+
+    app.add_middleware(
+        ResearchServiceAuthMiddleware,
+        service_token=settings.research_service_token,
+    )
 
     app.add_middleware(
         CORSMiddleware,

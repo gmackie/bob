@@ -726,6 +726,11 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
             status: "unavailable",
             reason: "Source not configured",
           }),
+          expect.objectContaining({
+            source: "research-vault",
+            status: "unavailable",
+            reason: "Source not configured",
+          }),
         ]),
       },
     });
