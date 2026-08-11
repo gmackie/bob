@@ -1,4 +1,5 @@
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
 
 import type { AuthInstance } from "@gmacko/core/auth";
 
@@ -27,7 +28,7 @@ afterAll(() => {
   }
 });
 
-import { runnerRouter } from "../runner";
+import { buildStaleRunnerSessionPredicate, runnerRouter } from "../runner";
 import { t } from "../../trpc";
 
 const testRouter = t.router({ runner: runnerRouter });
@@ -133,5 +134,18 @@ describe("runnerRouter user-facing enqueue mutations", () => {
         }),
       },
     ]);
+  });
+});
+
+describe("buildStaleRunnerSessionPredicate", () => {
+  it("binds the cutoff as an ISO timestamptz value", () => {
+    const predicate = buildStaleRunnerSessionPredicate(
+      new Date("2026-08-10T18:38:12.989Z"),
+    );
+    const query = new PgDialect().sqlToQuery(predicate);
+
+    expect(query.sql).toContain("< $1::timestamptz");
+    expect(query.params).toEqual(["2026-08-10T18:38:12.989Z"]);
+    expect(query.params[0]).not.toBeInstanceOf(Date);
   });
 });
