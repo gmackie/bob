@@ -9,6 +9,7 @@ import { authedProcedure, publicProcedure, runnerProcedure } from "../trpc";
 // Per-adapter credential health map reported by the runner, e.g.
 // { claude: { status: "EXPIRED", detail: "OAuth session expired" }, grok: { status: "OK" } }
 const credHealthSchema = z.record(
+  z.string(),
   z.object({ status: z.string(), detail: z.string().optional() }),
 );
 
