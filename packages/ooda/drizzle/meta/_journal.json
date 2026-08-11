@@ -141,6 +141,13 @@
       "when": 1786255619140,
       "tag": "0019_standalone_vault_pgvector",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1786476478004,
+      "tag": "0020_reconcile_migrated_agent_jobs",
+      "breakpoints": true
     }
   ]
 }
