@@ -6,12 +6,12 @@
   "workers_dev": false,
   "routes": [
     { "pattern": "ooda.blder.bot", "custom_domain": true },
-    { "pattern": "ooda.gmac.io", "custom_domain": true }
+    { "pattern": "ooda.gmac.io", "custom_domain": true },
   ],
   "assets": {
     "directory": "dist/client",
     "binding": "ASSETS",
-    "not_found_handling": "none"
+    "not_found_handling": "none",
   },
   "hyperdrive": [
     {
@@ -21,18 +21,20 @@
       // (b053c840…) was pruned at the CF 25-Hyperdrive account cap, taking the
       // whole edge DB down; the separate `ooda_production` DB is unused.
       "binding": "HYPERDRIVE",
-      "id": "c1f467f772dc4ce99d99e572df74c121"
-    }
+      "id": "c1f467f772dc4ce99d99e572df74c121",
+    },
   ],
   "vars": {
     "REQUIRE_AUTH": "true",
     "FRONTEND_URL": "https://ooda.blder.bot",
     "NODE_ENV": "production",
-    "OODA_ROLLOUT_STAGE": "tts",
+    "OODA_ROLLOUT_STAGE": "jobs",
     "OODA_ROLLOUT_OWNER_IDS": "tkE66fMc4mevdYYjtq78ALErJ7QnhAge",
     "OODA_DOGFOOD_STARTED_AT": "2026-08-09T15:44:45.000Z",
     "OODA_ROLLOUT_KILL_SWITCH": "false",
+    "OODA_AGENT_JOB_ENABLED_PROVIDERS": "codex",
+    "OODA_AGENT_JOB_ENABLED_CLASSES": "read_only_research,scratch_prototype",
     "ELEVENLABS_TTS_MODEL": "eleven_flash_v2_5",
-    "ELEVENLABS_TTS_OUTPUT_FORMAT": "mp3_44100_128"
-  }
+    "ELEVENLABS_TTS_OUTPUT_FORMAT": "mp3_44100_128",
+  },
 }

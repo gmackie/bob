@@ -510,27 +510,33 @@ export async function cancelAgentJob(
 export async function claimAgentJob(
   db: OodaDatabase,
   input: ClaimAgentJobInputV1,
-  options: { now?: Date } = {},
+  options: { now?: Date; eligibleOwnerIds?: string[] } = {},
 ): Promise<ClaimAgentJobResultV1> {
+  if (options.eligibleOwnerIds?.length === 0) return null;
   const now = options.now ?? new Date();
   return db.transaction(async (tx) => {
     const claimable = or(
       eq(agentJobs.status, "queued"),
       and(eq(agentJobs.status, "running"), lt(agentJobs.leaseExpiresAt, now)),
     )!;
-    const [candidate] = await tx
-      .select()
+    const [candidateRow] = await tx
+      .select({ job: agentJobs })
       .from(agentJobs)
+      .innerJoin(conversations, eq(conversations.id, agentJobs.conversationId))
       .where(
         and(
           claimable,
           inArray(agentJobs.provider, input.providers),
           inArray(agentJobs.class, input.classes),
+          options.eligibleOwnerIds
+            ? inArray(conversations.ownerId, options.eligibleOwnerIds)
+            : undefined,
         ),
       )
       .orderBy(asc(agentJobs.createdAt))
       .for("update", { skipLocked: true })
       .limit(1);
+    const candidate = candidateRow?.job;
     if (!candidate) return null;
     if (candidate.status === "running" && candidate.cancellationRequestedAt) {
       const [cancelled] = await tx
@@ -688,6 +694,13 @@ export async function recordAgentJobEvent(
         "The agent job is not running",
       );
     }
+    if (current.cancellationRequestedAt && input.type !== "cancelled") {
+      throw new OodaKernelProblem(
+        "CONFLICT",
+        409,
+        "The agent job is draining cancellation and only accepts a cancelled terminal event",
+      );
+    }
     if (input.type === "cancelled" && !current.cancellationRequestedAt) {
       throw new OodaKernelProblem(
         "CONFLICT",
@@ -782,54 +795,108 @@ export async function recordAgentJobEvent(
 export async function inspectAgentJobControl(
   db: OodaDatabase,
   input: { jobId: string; runnerId: string; leaseToken: string },
+  options: {
+    now?: Date;
+    eligibleOwnerIds?: string[];
+    enabledProviders?: string[];
+    enabledClasses?: string[];
+  } = {},
 ): Promise<{
   status: AgentJobV1["status"];
   cancelRequested: boolean;
   leaseExpiresAt?: string;
   attempt: number;
 }> {
-  const [job] = await db
-    .update(agentJobs)
-    .set({
-      lastHeartbeatAt: sql`now()`,
-      leaseExpiresAt: sql`now() + (${agentJobs.leaseDurationSeconds} * interval '1 second')`,
-      updatedAt: sql`now()`,
-    })
-    .where(
-      and(
-        eq(agentJobs.id, input.jobId),
-        eq(agentJobs.claimedBy, input.runnerId),
-        eq(agentJobs.leaseToken, input.leaseToken),
-        eq(agentJobs.status, "running"),
-        gt(agentJobs.leaseExpiresAt, sql`now()`),
-      ),
-    )
-    .returning({
-      status: agentJobs.status,
-      claimedBy: agentJobs.claimedBy,
-      cancellationRequestedAt: agentJobs.cancellationRequestedAt,
-      leaseExpiresAt: agentJobs.leaseExpiresAt,
-      attempt: agentJobs.attempt,
-    });
-  if (!job) {
-    const [existing] = await db
-      .select({ id: agentJobs.id })
+  const now = options.now ?? new Date();
+  return db.transaction(async (tx) => {
+    const [current] = await tx
+      .select({ job: agentJobs, ownerId: conversations.ownerId })
       .from(agentJobs)
+      .innerJoin(conversations, eq(conversations.id, agentJobs.conversationId))
       .where(eq(agentJobs.id, input.jobId))
+      .for("update")
       .limit(1);
-    if (!existing) throw notFound("Agent job");
-    throw new OodaKernelProblem(
-      "CONFLICT",
-      409,
-      "The runner lease is stale or no longer owns this agent job",
-    );
-  }
-  return {
-    status: job.status as AgentJobV1["status"],
-    cancelRequested: Boolean(job.cancellationRequestedAt),
-    ...(job.leaseExpiresAt
-      ? { leaseExpiresAt: job.leaseExpiresAt.toISOString() }
-      : {}),
-    attempt: job.attempt,
-  };
+    if (!current) throw notFound("Agent job");
+    if (
+      current.job.claimedBy !== input.runnerId ||
+      current.job.leaseToken !== input.leaseToken ||
+      current.job.status !== "running" ||
+      !current.job.leaseExpiresAt ||
+      current.job.leaseExpiresAt <= now
+    ) {
+      throw new OodaKernelProblem(
+        "CONFLICT",
+        409,
+        "The runner lease is stale or no longer owns this agent job",
+      );
+    }
+
+    const ownerEnabled =
+      options.eligibleOwnerIds === undefined ||
+      options.eligibleOwnerIds.includes(current.ownerId);
+    const providerEnabled =
+      options.enabledProviders === undefined ||
+      options.enabledProviders.includes(current.job.provider);
+    const classEnabled =
+      options.enabledClasses === undefined ||
+      options.enabledClasses.includes(current.job.class);
+    const rolloutEnabled = ownerEnabled && providerEnabled && classEnabled;
+    const firstRolloutCancellation =
+      !rolloutEnabled && !current.job.cancellationRequestedAt;
+    const [job] = await tx
+      .update(agentJobs)
+      .set({
+        lastHeartbeatAt: now,
+        ...(rolloutEnabled
+          ? {
+              leaseExpiresAt: new Date(
+                now.getTime() + current.job.leaseDurationSeconds * 1_000,
+              ),
+            }
+          : {}),
+        ...(firstRolloutCancellation
+          ? {
+              cancellationRequestedAt: now,
+              lastSequence: sql`${agentJobs.lastSequence} + 1`,
+            }
+          : {}),
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(agentJobs.id, input.jobId),
+          eq(agentJobs.claimedBy, input.runnerId),
+          eq(agentJobs.leaseToken, input.leaseToken),
+        ),
+      )
+      .returning();
+    if (!job) {
+      throw new OodaKernelProblem(
+        "CONFLICT",
+        409,
+        "The runner lease is stale or no longer owns this agent job",
+      );
+    }
+    if (firstRolloutCancellation) {
+      await tx.insert(agentJobEvents).values({
+        agentJobId: job.id,
+        sequence: BigInt(job.lastSequence),
+        type: "cancellation_requested",
+        payload: {
+          requestedBy: "system",
+          reason: "OODA agent-job rollout or runtime is disabled for this job",
+        },
+        idempotencyKey: `rollout-cancel:${job.id}`,
+        occurredAt: now,
+      });
+    }
+    return {
+      status: job.status as AgentJobV1["status"],
+      cancelRequested: Boolean(job.cancellationRequestedAt),
+      ...(job.leaseExpiresAt
+        ? { leaseExpiresAt: job.leaseExpiresAt.toISOString() }
+        : {}),
+      attempt: job.attempt,
+    };
+  });
 }
