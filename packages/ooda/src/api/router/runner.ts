@@ -1,10 +1,19 @@
 import type { RouterRecord } from "@trpc/server/unstable-core-do-not-import";
 import { z } from "zod";
 
-import { eq, and, gt, lt, sql } from "@gmacko/ooda/db";
+import { eq, and, gt, sql } from "@gmacko/ooda/db";
 import { runnerDevice, runnerSession, sessionEvent } from "@gmacko/ooda/db/schema";
 
 import { authedProcedure, publicProcedure, runnerProcedure } from "../trpc";
+
+export function buildStaleRunnerSessionPredicate(cutoff: Date) {
+  // Hyperdrive cannot serialize a Date bound through an untyped SQL
+  // expression reliably: it forwards Date.toString(), which Postgres rejects
+  // as timestamptz. Normalize the boundary and cast it explicitly.
+  return sql`${runnerSession.status}::text in ('pending', 'running')
+    and coalesce(${runnerSession.startedAt}, ${runnerSession.createdAt})
+      < ${cutoff.toISOString()}::timestamptz`;
+}
 
 export const runnerRouter = {
   register: runnerProcedure
@@ -365,21 +374,7 @@ export const runnerRouter = {
       const reaped = await ctx.db
         .update(runnerSession)
         .set({ status: "failed", completedAt: new Date() })
-        .where(
-          and(
-            // Cast the enum column to text for the IN comparison. Over
-            // Hyperdrive (the ooda-edge worker's driver) Drizzle binds these
-            // values as untyped text, and Postgres has no `session_status =
-            // text` operator — so `inArray(status, [...])` 500s the whole
-            // reapStaleSessions call. Casting to text sidesteps the enum
-            // operator entirely. (The literal statuses are safe, not input.)
-            sql`${runnerSession.status}::text in ('pending', 'running')`,
-            lt(
-              sql`coalesce(${runnerSession.startedAt}, ${runnerSession.createdAt})`,
-              cutoff,
-            ),
-          ),
-        )
+        .where(buildStaleRunnerSessionPredicate(cutoff))
         .returning({ id: runnerSession.id });
       if (reaped.length > 0) {
         console.log(
