@@ -5,6 +5,7 @@ import {
   buildStandaloneVaultFingerprint,
   parseLegacyFloat32Embedding,
   parseOllamaEmbeddings,
+  resolveStandaloneMigrationRunState,
   STANDALONE_EMBEDDING_INPUT_CHARACTERS,
   STANDALONE_SOURCE_EMBEDDING_DIMENSIONS,
 } from "../standalone-vault";
@@ -72,5 +73,18 @@ describe("standalone vault migration", () => {
     expect(input).toMatch(/^Important title\n\nopening-/);
     expect(input).toContain("\n\n[...]\n\n");
     expect(input).toMatch(/-closing$/);
+  });
+
+  it("clears stale failures after a successful verification", () => {
+    expect(resolveStandaloneMigrationRunState(true, true)).toEqual({
+      status: "completed",
+      phase: "completed",
+      lastError: null,
+    });
+    expect(resolveStandaloneMigrationRunState(true, false)).toEqual({
+      status: "embedding",
+      phase: "embedding",
+      lastError: null,
+    });
   });
 });

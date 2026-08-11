@@ -80,6 +80,18 @@ export type StandaloneVaultVerification = {
   embeddingComplete: boolean;
 };
 
+export function resolveStandaloneMigrationRunState(
+  copyOk: boolean,
+  embeddingComplete: boolean,
+): {
+  status: "completed" | "embedding";
+  phase: "completed" | "embedding";
+  lastError: null;
+} {
+  const phase = copyOk && embeddingComplete ? "completed" : "embedding";
+  return { status: phase, phase, lastError: null };
+}
+
 type MigrationRun = {
   id: string;
   cursor: string | null;
@@ -648,6 +660,10 @@ export async function verifyStandaloneVault(
       checks.sourceHash,
     embeddingComplete: checks.nativeEmbeddings,
   };
+  const runState = resolveStandaloneMigrationRunState(
+    receipt.copyOk,
+    receipt.embeddingComplete,
+  );
   await target`
     update ooda.migration_runs
     set destination_counts = ${target.json({
@@ -657,8 +673,9 @@ export async function verifyStandaloneVault(
       nativeEmbeddings: destinationWithModel.nativeEmbeddings,
     })},
         verification = ${target.json(receipt)},
-        status = ${receipt.copyOk && receipt.embeddingComplete ? "completed" : "embedding"}::ooda.migration_run_status,
-        phase = ${receipt.copyOk && receipt.embeddingComplete ? "completed" : "embedding"},
+        status = ${runState.status}::ooda.migration_run_status,
+        phase = ${runState.phase},
+        last_error = ${runState.lastError},
         completed_at = ${receipt.copyOk && receipt.embeddingComplete ? new Date() : null},
         updated_at = now()
     where id = ${runId}::uuid
