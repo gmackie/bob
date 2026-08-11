@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AuthInstance } from "@gmacko/core/auth";
 
@@ -44,6 +44,11 @@ const caller = () =>
   createCaller({ headers: new Headers(), auth, db: {} as never });
 
 describe("proposals router", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.clearAllMocks();
+  });
+
   it("binds proposal creation and approval to the authenticated owner", async () => {
     const createInput = {
       conversationId: "conversation-1",
@@ -92,6 +97,7 @@ describe("proposals router", () => {
       scope: "single_delivery" as const,
       decidedAt: "2026-08-07T16:01:00.000Z",
     };
+    kernel.getProposal.mockResolvedValue(proposal);
     kernel.decideProposal.mockResolvedValue({
       proposal: {
         ...proposal,
@@ -108,5 +114,123 @@ describe("proposals router", () => {
       "owner-proposals",
       decision,
     );
+  });
+
+  it("denies a new approval when the proposal destination is beyond the rollout stage", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("OODA_ROLLOUT_STAGE", "jobs");
+    vi.stubEnv("OODA_ROLLOUT_OWNER_IDS", "owner-proposals");
+    kernel.getProposal.mockResolvedValue({
+      id: "proposal-guarded",
+      conversationId: "conversation-1",
+      kind: "bob_project",
+      destination: "bob",
+      risk: "durable_work",
+      preview: { name: "Guarded project" },
+      rationale: "Wait for the durable-work rollout stage.",
+      confidence: 0.9,
+      policySnapshot: { version: "v1" },
+      status: "awaiting_approval",
+      version: 1,
+      createdAt: "2026-08-11T18:00:00.000Z",
+      updatedAt: "2026-08-11T18:00:00.000Z",
+    });
+
+    await expect(
+      caller().proposals.decide({
+        proposalId: "proposal-guarded",
+        decision: "approve",
+        expectedVersion: 1,
+        scope: "single_delivery",
+        decidedAt: "2026-08-11T18:01:00.000Z",
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(kernel.decideProposal).not.toHaveBeenCalled();
+  });
+
+  it("keeps rejection available while the global rollout kill switch is active", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("OODA_ROLLOUT_STAGE", "reviews_push");
+    vi.stubEnv("OODA_ROLLOUT_OWNER_IDS", "owner-proposals");
+    vi.stubEnv("OODA_ROLLOUT_KILL_SWITCH", "true");
+    const decision = {
+      proposalId: "proposal-rejected",
+      decision: "reject" as const,
+      expectedVersion: 1,
+      scope: "single_delivery" as const,
+      decidedAt: "2026-08-11T18:02:00.000Z",
+    };
+    kernel.decideProposal.mockResolvedValue({
+      proposal: {
+        id: decision.proposalId,
+        conversationId: "conversation-1",
+        kind: "bob_project",
+        destination: "bob",
+        risk: "durable_work",
+        preview: { name: "Rejected project" },
+        rationale: "Do not proceed.",
+        confidence: 0.9,
+        policySnapshot: { version: "v1" },
+        status: "rejected",
+        version: 2,
+        createdAt: "2026-08-11T18:00:00.000Z",
+        updatedAt: decision.decidedAt,
+      },
+      decisionId: "decision-rejected",
+      replayed: false,
+    });
+
+    await expect(caller().proposals.decide(decision)).resolves.toMatchObject({
+      proposal: { status: "rejected" },
+    });
+    expect(kernel.getProposal).not.toHaveBeenCalled();
+    expect(kernel.decideProposal).toHaveBeenCalledWith(
+      {},
+      "owner-proposals",
+      decision,
+    );
+  });
+
+  it("keeps an already-recorded approval replayable after rollout rollback", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("OODA_ROLLOUT_STAGE", "jobs");
+    vi.stubEnv("OODA_ROLLOUT_OWNER_IDS", "owner-proposals");
+    const decision = {
+      proposalId: "proposal-approved",
+      decision: "approve" as const,
+      expectedVersion: 1,
+      scope: "single_delivery" as const,
+      decidedAt: "2026-08-11T18:03:00.000Z",
+    };
+    const approvedProposal = {
+      id: decision.proposalId,
+      conversationId: "conversation-1",
+      kind: "bob_project" as const,
+      destination: "bob",
+      risk: "durable_work" as const,
+      preview: {
+        name: "Already approved",
+        acceptanceCriteria: ["Idempotent replay remains available"],
+      },
+      rationale: "The immutable decision already exists.",
+      confidence: 0.9,
+      policySnapshot: { version: "v1" },
+      status: "approved" as const,
+      version: 2,
+      createdAt: "2026-08-11T18:00:00.000Z",
+      updatedAt: decision.decidedAt,
+    };
+    kernel.getProposal.mockResolvedValue(approvedProposal);
+    kernel.decideProposal.mockResolvedValue({
+      proposal: approvedProposal,
+      decisionId: "decision-approved",
+      outboxId: "outbox-approved",
+      replayed: true,
+    });
+
+    await expect(caller().proposals.decide(decision)).resolves.toMatchObject({
+      replayed: true,
+      proposal: { status: "approved" },
+    });
   });
 });

@@ -16,6 +16,7 @@ import {
   type FailExternalStatusInputV1,
   type IntegrationDeliveryMutationResultV1,
   type IntegrationDeliveryV1,
+  type ProposalV1,
 } from "../contracts/v1";
 import type { db as database } from "../db/client";
 import { conversationEvents, conversations } from "../db/schema/conversations";
@@ -30,6 +31,7 @@ import { OodaKernelProblem, idempotencyConflict, notFound } from "./problems";
 import { decodeCursor, encodeCursor } from "./serialization";
 
 type OodaDatabase = typeof database;
+type ProposalKindV1 = ProposalV1["kind"];
 const MAX_ATTEMPTS_PER_REPAIR = 5;
 
 function mapDelivery(
@@ -284,17 +286,39 @@ export async function failExternalStatus(
 export async function claimIntegrationDelivery(
   db: OodaDatabase,
   input: ClaimIntegrationDeliveryInputV1,
-  options: { now?: Date } = {},
+  options: {
+    now?: Date;
+    eligibleOwnerIds?: string[];
+    eligibleProposalKinds?: ProposalKindV1[];
+    ownerEligible?: (ownerId: string, proposal: ProposalV1) => boolean;
+  } = {},
 ): Promise<ClaimIntegrationDeliveryResultV1> {
+  if (
+    options.eligibleOwnerIds?.length === 0 ||
+    options.eligibleProposalKinds?.length === 0
+  ) {
+    return null;
+  }
   const now = options.now ?? new Date();
   const staleBefore = new Date(now.getTime() - input.leaseSeconds * 1_000);
   return db.transaction(async (tx) => {
-    const [candidate] = await tx
-      .select({ delivery: integrationOutbox })
+    const candidates = await tx
+      .select({ delivery: integrationOutbox, ownerId: conversations.ownerId })
       .from(integrationOutbox)
+      .innerJoin(proposals, eq(proposals.id, integrationOutbox.proposalId))
+      .innerJoin(
+        conversations,
+        eq(conversations.id, proposals.conversationId),
+      )
       .where(
         and(
           inArray(integrationOutbox.destination, input.destinations),
+          options.eligibleOwnerIds
+            ? inArray(conversations.ownerId, options.eligibleOwnerIds)
+            : undefined,
+          options.eligibleProposalKinds
+            ? inArray(proposals.kind, options.eligibleProposalKinds)
+            : undefined,
           lte(integrationOutbox.availableAt, now),
           or(
             eq(integrationOutbox.status, "pending"),
@@ -310,12 +334,18 @@ export async function claimIntegrationDelivery(
         asc(integrationOutbox.createdAt),
       )
       .for("update", { skipLocked: true })
-      .limit(1);
+      .limit(20);
+    const eligibleCandidates = candidates.map((candidate) => ({
+      ...candidate,
+      proposal: ProposalV1Schema.parse(candidate.delivery.payload.proposal),
+    }));
+    const candidate = eligibleCandidates.find(
+      ({ ownerId, proposal }) =>
+        options.ownerEligible?.(ownerId, proposal) ?? true,
+    );
     if (!candidate) return null;
 
-    const proposalValue = ProposalV1Schema.parse(
-      candidate.delivery.payload.proposal,
-    );
+    const proposalValue = candidate.proposal;
     const attempt = candidate.delivery.attemptCount + 1;
     const [claimed] = await tx
       .update(integrationOutbox)

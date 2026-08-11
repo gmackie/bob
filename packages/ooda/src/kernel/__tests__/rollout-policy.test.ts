@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   assertOodaRolloutCapability,
+  proposalKindRolloutCapability,
   resolveOodaRolloutPolicy,
 } from "../rollout-policy";
 
@@ -69,6 +70,34 @@ describe("OODA production rollout policy", () => {
     ).not.toThrow();
     expect(() => assertOodaRolloutCapability(policy, "tts")).toThrowError(
       /tts is not enabled/i,
+    );
+  });
+
+  it("maps every proposal kind to the capability that authorizes its destination", () => {
+    expect(proposalKindRolloutCapability("obsidian_note")).toBe(
+      "obsidian_delivery",
+    );
+    expect(proposalKindRolloutCapability("research_job")).toBe("agent_jobs");
+    expect(proposalKindRolloutCapability("bob_task")).toBe(
+      "durable_work_delivery",
+    );
+    expect(proposalKindRolloutCapability("bob_project")).toBe(
+      "durable_work_delivery",
+    );
+    expect(proposalKindRolloutCapability("bizpulse_venture")).toBe(
+      "portfolio_evidence",
+    );
+    expect(proposalKindRolloutCapability("content_project")).toBe(
+      "specialist_delivery",
+    );
+    expect(proposalKindRolloutCapability("fabrication_project")).toBe(
+      "specialist_delivery",
+    );
+    expect(proposalKindRolloutCapability("hardware_validation")).toBe(
+      "specialist_delivery",
+    );
+    expect(proposalKindRolloutCapability("mobile_release")).toBe(
+      "specialist_delivery",
     );
   });
 });
