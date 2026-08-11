@@ -147,6 +147,78 @@ def search_thread_memory(
 
 
 # ---------------------------------------------------------------------------
+# GET /api/search/sources
+# ---------------------------------------------------------------------------
+
+
+@router.get("/sources")
+def search_sources(
+    request: Request,
+    query: str = Query(..., min_length=1, max_length=4000, description="Search query text"),
+    limit: int = Query(8, ge=1, le=20, description="Max results"),
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """Search canonical research-vault sources for OODA context packs."""
+    settings = request.app.state.settings
+    query_vec = _ollama_embed_single(
+        settings.ollama_base_url,
+        settings.ollama_embedding_model,
+        query,
+        max_retries=1,
+    )
+    fallback = query_vec is None or len(query_vec) != 768
+
+    if fallback:
+        rows = session.exec(
+            text("""
+                SELECT s.id, s.kind, s.title, left(s.body, 4000) AS excerpt,
+                       s.url, s.author, s.source_ts, 1.0::real AS score
+                  FROM research_vault.sources s
+                 WHERE s.title ILIKE :query OR s.body ILIKE :query
+                 ORDER BY s.source_ts DESC NULLS LAST, s.id
+                 LIMIT :limit
+            """),
+            params={"query": f"%{query}%", "limit": limit},
+        ).all()
+    else:
+        query_embedding = "[" + ",".join(str(float(value)) for value in query_vec) + "]"
+        rows = session.exec(
+            text("""
+                SELECT s.id, s.kind, s.title, left(s.body, 4000) AS excerpt,
+                       s.url, s.author, s.source_ts,
+                       1 - (e.embedding <=> CAST(:query_embedding AS vector(768))) AS score
+                  FROM research_vault.source_embedding e
+                  JOIN research_vault.sources s ON s.id = e.source_id
+                 WHERE e.model = :model
+                 ORDER BY e.embedding <=> CAST(:query_embedding AS vector(768))
+                 LIMIT :limit
+            """),
+            params={
+                "model": settings.ollama_embedding_model,
+                "query_embedding": query_embedding,
+                "limit": limit,
+            },
+        ).all()
+
+    public_kinds = {"youtube", "paper-s2", "paper-openalex"}
+    sources = [
+        {
+            "source_id": row[0],
+            "kind": row[1],
+            "title": row[2],
+            "excerpt": row[3] or "",
+            "url": row[4],
+            "author": row[5],
+            "source_ts": str(row[6]) if row[6] else None,
+            "score": round(float(row[7]), 4),
+            "sensitivity": "general" if row[1] in public_kinds else "personal",
+        }
+        for row in rows
+    ]
+    return {"sources": sources, "fallback": fallback}
+
+
+# ---------------------------------------------------------------------------
 # GET /api/search/papers
 # ---------------------------------------------------------------------------
 

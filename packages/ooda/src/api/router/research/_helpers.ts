@@ -2,6 +2,10 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import { ResearchBackendClient } from "../../clients/research-backend";
+import {
+  researchServiceHeaders,
+  resolveResearchSidecarConfig,
+} from "../../../research-sidecar";
 
 // Dashboard-facing caps documented in Task 4.2: we pull at most this many
 // graph nodes/edges per thread in a single request. The dashboard expects
@@ -11,20 +15,28 @@ export const GRAPH_NODE_LIMIT = 500;
 export const GRAPH_EDGE_LIMIT = 2000;
 
 export function getResearchApiUrl(): string {
-  const url = process.env.RESEARCH_API_URL;
-  if (!url || url.trim() === "") {
+  const config = resolveResearchSidecarConfig(process.env);
+  if (!config) {
     throw new TRPCError({
       code: "PRECONDITION_FAILED",
       message:
-        "Research backend not configured. Set RESEARCH_API_URL in .env. See docs/SETUP.md#research-backend.",
+        "Research backend not configured. Set RESEARCH_API_URL and RESEARCH_SERVICE_TOKEN in .env. See docs/SETUP.md#research-backend.",
     });
   }
-  return url;
+  return config.apiUrl;
+}
+
+export function getResearchServiceToken(): string {
+  const config = resolveResearchSidecarConfig(process.env);
+  if (!config) getResearchApiUrl();
+  return config!.serviceToken;
 }
 
 export async function sidecarGet<T>(path: string): Promise<T> {
   const base = getResearchApiUrl();
-  const res = await fetch(`${base}${path}`);
+  const res = await fetch(`${base}${path}`, {
+    headers: researchServiceHeaders(getResearchServiceToken()),
+  });
   if (!res.ok) {
     throw new TRPCError({
       code: "INTERNAL_SERVER_ERROR",
@@ -34,14 +46,13 @@ export async function sidecarGet<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export async function sidecarPost<T>(
-  path: string,
-  body?: unknown,
-): Promise<T> {
+export async function sidecarPost<T>(path: string, body?: unknown): Promise<T> {
   const base = getResearchApiUrl();
   const res = await fetch(`${base}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: researchServiceHeaders(getResearchServiceToken(), {
+      "Content-Type": "application/json",
+    }),
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
@@ -79,7 +90,10 @@ export async function sidecarPostValidated<T>(
 }
 
 export function getBackendClient(): ResearchBackendClient {
-  return new ResearchBackendClient(getResearchApiUrl());
+  return new ResearchBackendClient(
+    getResearchApiUrl(),
+    getResearchServiceToken(),
+  );
 }
 
 export const DiveSpawnInput = z.object({
@@ -87,7 +101,5 @@ export const DiveSpawnInput = z.object({
   seeds: z.array(z.string()).min(1).max(20),
   budgetPapers: z.number().int().min(5).max(300).default(60),
   budgetSeconds: z.number().int().min(30).max(900).default(180),
-  focus: z
-    .enum(["balanced", "recent", "foundational"])
-    .default("balanced"),
+  focus: z.enum(["balanced", "recent", "foundational"]).default("balanced"),
 });

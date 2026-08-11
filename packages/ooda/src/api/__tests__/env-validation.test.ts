@@ -40,4 +40,20 @@ describe("validateEnvironment", () => {
       true,
     );
   });
+
+  it("fails validation when a research sidecar URL has no service token", async () => {
+    vi.stubEnv("DATABASE_URL", "postgresql://localhost/test");
+    vi.stubEnv("OODA_STORAGE_ROOT", "/tmp/ooda");
+    vi.stubEnv("RESEARCH_API_URL", "https://research.example");
+    vi.stubEnv("RESEARCH_SERVICE_TOKEN", "");
+
+    const { validateEnvironment } = await import("../env-validation");
+    const result = validateEnvironment();
+
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ variable: "RESEARCH_SERVICE_TOKEN" }),
+      ]),
+    );
+  });
 });

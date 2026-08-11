@@ -4,6 +4,10 @@ import { z } from "zod";
 import { and, desc, eq, gte, ilike, or } from "@gmacko/ooda/db";
 
 import { SearchPapersResponse } from "../../clients/sidecar-schemas";
+import {
+  researchServiceHeaders,
+  resolveResearchSidecarConfig,
+} from "../../../research-sidecar";
 import { vaultScopedProcedure } from "../../middleware/vault-scope";
 
 export const papersRouter = {
@@ -29,7 +33,13 @@ export const papersRouter = {
    * keeps those fields so we can wire them in when the data lands.
    */
   papersSearchVault: vaultScopedProcedure
-    .meta({ openapi: { method: "GET", path: "/api/research/papers/search", tags: ["research.papers"] } })
+    .meta({
+      openapi: {
+        method: "GET",
+        path: "/api/research/papers/search",
+        tags: ["research.papers"],
+      },
+    })
     .input(
       z.object({
         query: z.string().min(1),
@@ -44,8 +54,8 @@ export const papersRouter = {
       const { query, yearFrom, minInfluence, limit } = input;
 
       // Try semantic search via research-backend
-      const apiUrl = process.env.RESEARCH_API_URL;
-      if (apiUrl) {
+      const sidecar = resolveResearchSidecarConfig(process.env);
+      if (sidecar) {
         try {
           const params = new URLSearchParams({
             query,
@@ -57,7 +67,8 @@ export const papersRouter = {
             params.set("min_influence", String(minInfluence));
 
           const res = await fetch(
-            `${apiUrl.replace(/\/+$/, "")}/api/search/papers?${params}`,
+            `${sidecar.apiUrl.replace(/\/+$/, "")}/api/search/papers?${params}`,
+            { headers: researchServiceHeaders(sidecar.serviceToken) },
           );
           if (res.ok) {
             const data = SearchPapersResponse.parse(await res.json());
@@ -90,7 +101,9 @@ export const papersRouter = {
         or(ilike(t.sources.title, pattern), ilike(t.sources.body, pattern)),
       ];
       if (yearFrom !== undefined) {
-        conditions.push(gte(t.sources.sourceTs, new Date(Date.UTC(yearFrom, 0, 1))));
+        conditions.push(
+          gte(t.sources.sourceTs, new Date(Date.UTC(yearFrom, 0, 1))),
+        );
       }
       if (minInfluence !== undefined) {
         conditions.push(gte(t.graphNode.influenceScore, minInfluence));
@@ -142,7 +155,13 @@ export const papersRouter = {
    *   - otherwise     → fallback to sources.external_id
    */
   paperById: vaultScopedProcedure
-    .meta({ openapi: { method: "GET", path: "/api/research/papers/get", tags: ["research.papers"] } })
+    .meta({
+      openapi: {
+        method: "GET",
+        path: "/api/research/papers/get",
+        tags: ["research.papers"],
+      },
+    })
     .input(
       z.object({
         id: z.string().min(1),

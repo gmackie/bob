@@ -9,6 +9,43 @@ env:
   NODE_VERSION: "22"
 
 jobs:
+  research-backend:
+    name: Research backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: https://github.com/astral-sh/setup-uv@v6
+
+      - name: Install locked Python dependencies
+        working-directory: packages/research-backend
+        run: uv sync --extra dev --frozen
+
+      - name: Test database-independent research behavior
+        working-directory: packages/research-backend
+        run: env -u DATABASE_URL uv run pytest --ignore=tests/test_health.py
+
+      - name: Test fail-closed service authentication
+        working-directory: packages/research-backend
+        env:
+          DATABASE_URL: postgresql://unused
+        run: uv run pytest tests/test_health.py
+
+      - name: Lint the hardened sidecar boundary
+        working-directory: packages/research-backend
+        # The legacy sidecar has a tracked Ruff backlog outside this boundary.
+        # Keep every file in the production auth/search slice clean while that
+        # broader cleanup proceeds independently.
+        run: >-
+          uv run ruff check
+          src/research_backend/auth.py
+          src/research_backend/config.py
+          src/research_backend/main.py
+          src/research_backend/routes/search.py
+          tests/test_health.py
+          tests/test_pgvector_search.py
+          tests/test_service_unit.py
+
   ci:
     # No longer needs the forgegraf-docker label / docker-in-docker: postgres
     # is now provided by @gmacko/emulate (a PGlite-backed wire-protocol mock

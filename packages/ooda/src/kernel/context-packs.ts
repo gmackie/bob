@@ -50,7 +50,12 @@ async function buildDisclosedContextPack(
   });
   const decisions = applyHostContextPolicy(collected.candidates).slice(0, 24);
   const configuredSourceIds = new Set(input.sources.map((source) => source.id));
-  const unconfiguredReceipts = ["bob-kanbanger", "bizpulse", "forgegraph"]
+  const unconfiguredReceipts = [
+    "bob-kanbanger",
+    "bizpulse",
+    "forgegraph",
+    "research-vault",
+  ]
     .filter((source) => !configuredSourceIds.has(source))
     .map((source) => ({
       source,

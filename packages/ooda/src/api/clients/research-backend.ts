@@ -24,6 +24,8 @@
  */
 import { z } from "zod";
 
+import { researchServiceHeaders } from "../../research-sidecar";
+
 export const DiveStatusSchema = z.object({
   id: z.string().uuid(),
   thread_id: z.string().uuid(),
@@ -67,7 +69,10 @@ export interface DiveResults {
 }
 
 export class ResearchBackendClient {
-  constructor(private readonly baseUrl: string) {}
+  constructor(
+    private readonly baseUrl: string,
+    private readonly serviceToken: string,
+  ) {}
 
   private url(path: string): string {
     // Trim a trailing slash on baseUrl so `${baseUrl}/dives` works whether
@@ -79,35 +84,32 @@ export class ResearchBackendClient {
   async spawnDive(body: SpawnDiveBody): Promise<SpawnDiveResponse> {
     const res = await fetch(this.url("/dives"), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: researchServiceHeaders(this.serviceToken, {
+        "Content-Type": "application/json",
+      }),
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      throw new Error(
-        `spawn dive failed: ${res.status} ${await res.text()}`,
-      );
+      throw new Error(`spawn dive failed: ${res.status} ${await res.text()}`);
     }
     return (await res.json()) as SpawnDiveResponse;
   }
 
   async getDiveStatus(id: string): Promise<DiveStatus | null> {
-    const res = await fetch(this.url(`/dives/${id}`));
+    const res = await fetch(this.url(`/dives/${id}`), {
+      headers: researchServiceHeaders(this.serviceToken),
+    });
     if (res.status === 404) return null;
     if (!res.ok) {
-      throw new Error(
-        `get dive failed: ${res.status} ${await res.text()}`,
-      );
+      throw new Error(`get dive failed: ${res.status} ${await res.text()}`);
     }
     return DiveStatusSchema.parse(await res.json());
   }
 
-  async getDiveResults(
-    id: string,
-    topK = 10,
-  ): Promise<DiveResults | null> {
-    const res = await fetch(
-      this.url(`/dives/${id}/results?top_k=${topK}`),
-    );
+  async getDiveResults(id: string, topK = 10): Promise<DiveResults | null> {
+    const res = await fetch(this.url(`/dives/${id}/results?top_k=${topK}`), {
+      headers: researchServiceHeaders(this.serviceToken),
+    });
     if (res.status === 404) return null;
     if (!res.ok) {
       throw new Error(

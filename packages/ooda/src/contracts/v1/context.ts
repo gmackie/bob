@@ -26,6 +26,7 @@ export const ContextSourceTypeV1Schema = z.enum([
   "kanbanger_issue",
   "bizpulse_venture",
   "forgegraph_changeset",
+  "research_vault_source",
 ]);
 
 export const ContextItemV1Schema = z
