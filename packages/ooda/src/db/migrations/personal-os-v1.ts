@@ -174,7 +174,7 @@ on conflict (id) do nothing;
 insert into ooda.agent_jobs (
   id, conversation_id, class, status, provider, capabilities,
   deadline_seconds, aggregate_token_budget, correlation_id, idempotency_key,
-  result, created_at, updated_at, started_at, completed_at
+  result, error, created_at, updated_at, started_at, completed_at
 )
 select
   rs.id,
@@ -182,7 +182,7 @@ select
   'read_only_research',
   case rs.status::text
     when 'pending' then 'queued'
-    when 'running' then 'running'
+    when 'running' then 'failed'
     when 'completed' then 'completed'
     when 'failed' then 'failed'
     when 'cancelled' then 'cancelled'
@@ -204,10 +204,17 @@ select
       'comparisonId', rs.comparison_id
     )
   ),
+  case when rs.status::text = 'running'
+    then 'Migration could not adopt a live runner process'
+    else null
+  end,
   rs.created_at,
   coalesce(rs.completed_at, rs.started_at, rs.created_at),
   rs.started_at,
-  rs.completed_at
+  case when rs.status::text = 'running'
+    then coalesce(rs.completed_at, rs.started_at, rs.created_at)
+    else rs.completed_at
+  end
 from runner_session rs
 on conflict (id) do nothing;
 
@@ -241,6 +248,52 @@ select
   ordered.created_at
 from ordered
 on conflict (id) do nothing;
+
+update ooda.agent_jobs aj
+set last_sequence = migrated.last_sequence
+from (
+  select
+    aj.id,
+    coalesce(max(aje.sequence), 0)::bigint as last_sequence
+  from ooda.agent_jobs aj
+  left join ooda.agent_job_events aje on aje.agent_job_id = aj.id
+  where aj.result #>> '{migration,source}' = 'runner_session'
+  group by aj.id
+) migrated
+where aj.id = migrated.id;
+
+insert into ooda.agent_job_events (
+  id, agent_job_id, sequence, type, payload, idempotency_key,
+  occurred_at, recorded_at
+)
+select
+  gen_random_uuid(),
+  aj.id,
+  aj.last_sequence + 1,
+  'failed',
+  jsonb_build_object(
+    'message', 'Migration could not adopt a live runner process',
+    'migration', jsonb_build_object(
+      'source', 'runner_session_reconciliation',
+      'sourceId', rs.id::text,
+      'legacyStatus', rs.status::text
+    )
+  ),
+  'legacy-session-reconciliation:' || rs.id::text,
+  coalesce(rs.completed_at, rs.started_at, rs.created_at),
+  coalesce(rs.completed_at, rs.started_at, rs.created_at)
+from ooda.agent_jobs aj
+join runner_session rs on rs.id = aj.id
+where aj.result #>> '{migration,source}' = 'runner_session'
+  and rs.status::text = 'running'
+on conflict (agent_job_id, idempotency_key) do nothing;
+
+update ooda.agent_jobs aj
+set last_sequence = reconciliation.sequence
+from ooda.agent_job_events reconciliation
+where reconciliation.agent_job_id = aj.id
+  and reconciliation.idempotency_key =
+    'legacy-session-reconciliation:' || aj.id::text;
 
 with ordered as (
   select
