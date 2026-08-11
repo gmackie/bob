@@ -51,6 +51,16 @@ export const runnerDevice = pgTable("runner_device", (t) => ({
   status: t.varchar({ length: 32 }).notNull().default("online"),
   lastHeartbeatAt: t.timestamp({ mode: "date", withTimezone: true }),
   capabilities: t.json().$type<string[]>().notNull().default([]),
+  // Per-adapter credential health, reported by the runner on register/heartbeat
+  // (source: the runner host's `adapter-cred-health --json`). Surfaced in the
+  // Nodes dashboard so an expired adapter OAuth never silently goes cold.
+  credHealth: t
+    .json()
+    .$type<Record<string, { status: string; detail?: string }>>()
+    .notNull()
+    .default({}),
+  credHealthOk: t.boolean(),
+  credHealthAt: t.timestamp({ mode: "date", withTimezone: true }),
   registeredAt: t.timestamp().defaultNow().notNull(),
 }));
 

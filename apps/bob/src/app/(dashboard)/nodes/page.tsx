@@ -44,6 +44,23 @@ export default function NodesPage() {
     workspaceId: string | null;
   }>;
 
+  const { data: runnerDevices } = useQuery(
+    trpc.runner.listDevices.queryOptions(undefined, { staleTime: 10_000, refetchInterval: 15_000 }),
+  );
+
+  const devices = (runnerDevices ?? []) as Array<{
+    id: string;
+    name: string;
+    capabilities: string[];
+    credHealth: Record<string, { status: string; detail?: string }> | null;
+    credHealthOk: boolean | null;
+    credHealthAt: string | null;
+  }>;
+  // Only surface devices that have actually reported credential health.
+  const credDevices = devices.filter(
+    (d) => d.credHealth && Object.keys(d.credHealth).length > 0,
+  );
+
   const onlineCount = workspaces.filter((w: any) => isNodeOnline(w.lastHeartbeat)).length;
 
   return (
@@ -133,6 +150,71 @@ export default function NodesPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {credDevices.length > 0 && (
+        <section className="mt-10">
+          <h2 className="font-display text-lg font-semibold text-foreground">
+            Adapter credentials
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Per-agent auth health reported by each runner. An expired credential
+            silently fails that adapter&apos;s runs until it&apos;s re-authed.
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {credDevices.map((d) => (
+              <Card key={d.id} className="p-4">
+                <div className="flex items-center justify-between">
+                  <span className="font-display font-semibold text-foreground">
+                    {d.name}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-xs font-medium",
+                      d.credHealthOk === false ? "text-red-500" : "text-emerald-600",
+                    )}
+                  >
+                    {d.credHealthOk === false ? "needs attention" : "all ok"}
+                  </span>
+                </div>
+                <div className="mt-3 flex flex-col gap-1.5">
+                  {Object.entries(d.credHealth ?? {}).map(([adapter, h]) => {
+                    const ok = h.status === "OK";
+                    const bad = h.status === "EXPIRED" || h.status === "MISSING";
+                    return (
+                      <div
+                        key={adapter}
+                        className="flex items-center justify-between text-sm"
+                        title={h.detail}
+                      >
+                        <span className="font-mono text-muted-foreground">{adapter}</span>
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1.5",
+                            ok ? "text-emerald-600" : bad ? "text-red-500" : "text-amber-500",
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "size-2 rounded-full",
+                              ok ? "bg-emerald-500" : bad ? "bg-red-500" : "bg-amber-500",
+                            )}
+                          />
+                          {h.status}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {d.credHealthAt && (
+                  <p className="mt-3 text-[11px] text-muted-foreground">
+                    checked {formatRelative(d.credHealthAt)}
+                  </p>
+                )}
+              </Card>
+            ))}
+          </div>
+        </section>
       )}
     </main>
   );
