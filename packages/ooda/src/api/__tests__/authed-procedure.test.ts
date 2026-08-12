@@ -37,10 +37,13 @@ const router = createTRPCRouter({
 function makeCaller(opts: {
   headers?: Record<string, string>;
   session?: { user: { id: string; email: string } } | null;
+  getSession?: () => Promise<
+    { user: { id: string; email: string } } | null
+  >;
 }) {
   const headers = new Headers(opts.headers ?? {});
   const auth = {
-    api: { getSession: async () => opts.session ?? null },
+    api: { getSession: opts.getSession ?? (async () => opts.session ?? null) },
   } as never;
   const ctx = { db: { __marker: "ooda-db" }, headers, auth } as unknown as Awaited<
     ReturnType<typeof createTRPCContext>
@@ -82,6 +85,22 @@ describe("authedProcedure — cookie path (unchanged)", () => {
 });
 
 describe("authedProcedure — API key path", () => {
+  it("does not open a session lookup for a key-only machine request", async () => {
+    validateApiKeyMock.mockResolvedValue(VALID);
+    const getSession = vi.fn(async () => {
+      throw new Error("session lookup must not run for key-only requests");
+    });
+    const caller = makeCaller({
+      headers: { "x-api-key": "bob_validkey" },
+      getSession,
+    });
+
+    await expect(caller.whoami()).resolves.toMatchObject({
+      userId: "user_abc",
+    });
+    expect(getSession).not.toHaveBeenCalled();
+  });
+
   it("authenticates a valid key via x-api-key", async () => {
     validateApiKeyMock.mockResolvedValue(VALID);
     const caller = makeCaller({
@@ -122,7 +141,10 @@ describe("authedProcedure — API key path", () => {
     validateApiKeyMock.mockResolvedValue(VALID);
     const caller = makeCaller({
       session: { user: { id: "cookie_user", email: "cookie@example.com" } },
-      headers: { "x-api-key": "bob_validkey" },
+      headers: {
+        cookie: "better-auth.session_token=browser-session",
+        "x-api-key": "bob_validkey",
+      },
     });
     const res = await caller.whoami();
     expect(res.userId).toBe("cookie_user");
