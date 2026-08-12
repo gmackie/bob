@@ -39,6 +39,16 @@ test("deploy jobs skip unrelated Electron binary downloads", () => {
   }
 });
 
+test("the primary CI install skips the Electron runtime download", () => {
+  const ciJob = jobSection("\n  ci:\n", "\n  deploy:\n");
+
+  assert.match(
+    ciJob,
+    /ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile/,
+    "CI compiles and tests desktop source without launching Electron",
+  );
+});
+
 test("the full CI job enforces the deploy install-scope regression test", () => {
   assert.match(workflow, /name: Validate deploy install scope/);
   assert.match(

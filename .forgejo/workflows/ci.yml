@@ -75,7 +75,7 @@ jobs:
       - name: Validate deploy install scope
         run: node --test scripts/verify-ci-deploy-install-scope.test.mjs
 
-      - run: pnpm install --frozen-lockfile
+      - run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile
 
       - name: Typecheck
         # Run one tsc at a time. The default turbo concurrency runs many tscs
