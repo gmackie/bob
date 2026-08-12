@@ -501,7 +501,8 @@ function forgeGraphSource(
 ): ConversationContextSource {
   return {
     id: "forgegraph",
-    async inspect({ query, limitPerSource, signal }) {
+    async inspect({ query, limitPerSource, signal, timeoutMs }) {
+      const startedAt = Date.now();
       const headers = { Authorization: `Bearer ${config.apiKey}` };
       const payloads = await Promise.all(
         config.appSlugs.slice(0, 12).map(async (appSlug) => ({
@@ -557,54 +558,93 @@ function forgeGraphSource(
         0,
         limitPerSource,
       );
-      return Promise.all(
-        selected.map(async (summary): Promise<ContextCandidate> => {
-          const detail = await fetcher(
-            `${trimUrl(config.apiUrl)}/api/fg/changesets/${encodeURIComponent(summary.id)}`,
-            { headers, signal },
-          )
-            .then(readJson)
-            .catch(() => null);
-          const row = object(detail);
-          const builds = Array.isArray(row?.builds) ? row.builds : [];
-          const testRuns = Array.isArray(row?.testRuns) ? row.testRuns : [];
-          const buildEvidence = builds.slice(0, 3).flatMap((value) => {
-            const build = object(value);
-            const name = text(build?.pipelineName);
-            const status = text(build?.status);
-            return name && status ? [`build ${name} ${status}`] : [];
-          });
-          const testEvidence = testRuns.slice(0, 3).flatMap((value) => {
-            const run = object(value);
-            const suite = text(run?.suiteName);
-            const status = text(run?.status);
-            const passed = number(run?.passedTests);
-            const total = number(run?.totalTests);
-            if (!suite || !status) return [];
-            return [
-              `tests ${suite} ${status}${passed !== null && total !== null ? ` ${passed}/${total}` : ""}`,
-            ];
-          });
-          return {
-            sourceType: "forgegraph_changeset",
-            sourceId: summary.id,
-            sensitivity: "general",
-            content: [
-              summary.content,
-              text(row?.sourceBranch)
-                ? `branch ${text(row?.sourceBranch)}`
-                : null,
-              text(row?.headSha)
-                ? `sha ${text(row?.headSha)!.slice(0, 12)}`
-                : null,
-              ...buildEvidence,
-              ...testEvidence,
-            ]
-              .filter(Boolean)
-              .join(" | "),
-          };
-        }),
+
+      const toCandidate = (
+        summary: (typeof selected)[number],
+        detail: unknown,
+      ): ContextCandidate => {
+        const row = object(detail);
+        const builds = Array.isArray(row?.builds) ? row.builds : [];
+        const testRuns = Array.isArray(row?.testRuns) ? row.testRuns : [];
+        const buildEvidence = builds.slice(0, 3).flatMap((value) => {
+          const build = object(value);
+          const name = text(build?.pipelineName);
+          const status = text(build?.status);
+          return name && status ? [`build ${name} ${status}`] : [];
+        });
+        const testEvidence = testRuns.slice(0, 3).flatMap((value) => {
+          const run = object(value);
+          const suite = text(run?.suiteName);
+          const status = text(run?.status);
+          const passed = number(run?.passedTests);
+          const total = number(run?.totalTests);
+          if (!suite || !status) return [];
+          return [
+            `tests ${suite} ${status}${passed !== null && total !== null ? ` ${passed}/${total}` : ""}`,
+          ];
+        });
+        return {
+          sourceType: "forgegraph_changeset",
+          sourceId: summary.id,
+          sensitivity: "general",
+          content: [
+            summary.content,
+            text(row?.sourceBranch)
+              ? `branch ${text(row?.sourceBranch)}`
+              : null,
+            text(row?.headSha)
+              ? `sha ${text(row?.headSha)!.slice(0, 12)}`
+              : null,
+            ...buildEvidence,
+            ...testEvidence,
+          ]
+            .filter(Boolean)
+            .join(" | "),
+        };
+      };
+
+      // The list response is already useful context. Detail/build enrichment
+      // is best-effort and must finish before collectContextCandidates' outer
+      // deadline; otherwise one slow ForgeGraph detail endpoint would discard
+      // every list summary. Reserve 10% (up to 250ms) for validation/return.
+      const sourceBudgetMs = timeoutMs ?? 2_500;
+      const returnReserveMs = Math.min(
+        250,
+        Math.max(10, Math.floor(sourceBudgetMs * 0.1)),
       );
+      const detailBudgetMs =
+        sourceBudgetMs - (Date.now() - startedAt) - returnReserveMs;
+      if (detailBudgetMs <= 0) {
+        return selected.map((summary) => toCandidate(summary, null));
+      }
+
+      const detailController = new AbortController();
+      const abortFromParent = () => detailController.abort(signal?.reason);
+      if (signal?.aborted) abortFromParent();
+      else signal?.addEventListener("abort", abortFromParent, { once: true });
+      const detailTimeout = setTimeout(
+        () =>
+          detailController.abort(
+            new Error("ForgeGraph detail budget expired"),
+          ),
+        detailBudgetMs,
+      );
+      try {
+        return await Promise.all(
+          selected.map(async (summary): Promise<ContextCandidate> => {
+            const detail = await fetcher(
+              `${trimUrl(config.apiUrl)}/api/fg/changesets/${encodeURIComponent(summary.id)}`,
+              { headers, signal: detailController.signal },
+            )
+              .then(readJson)
+              .catch(() => null);
+            return toCandidate(summary, detail);
+          }),
+        );
+      } finally {
+        clearTimeout(detailTimeout);
+        signal?.removeEventListener("abort", abortFromParent);
+      }
     },
   };
 }
