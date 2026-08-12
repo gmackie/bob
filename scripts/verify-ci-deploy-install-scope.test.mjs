@@ -9,6 +9,10 @@ const workflow = readFileSync(
   resolve(repositoryRoot, ".forgejo/workflows/ci.yml"),
   "utf8",
 );
+const oodaWrangler = readFileSync(
+  resolve(repositoryRoot, "apps/ooda-edge/wrangler.jsonc"),
+  "utf8",
+);
 
 function jobSection(start, end) {
   const startIndex = workflow.indexOf(start);
@@ -40,5 +44,26 @@ test("the full CI job enforces the deploy install-scope regression test", () => 
   assert.match(
     workflow,
     /node --test scripts\/verify-ci-deploy-install-scope\.test\.mjs/,
+  );
+});
+
+test("OODA deploys with bounded ForgeGraph context configuration", () => {
+  const oodaDeploy = jobSection("\n  deploy-ooda-edge:\n");
+
+  assert.match(
+    oodaWrangler,
+    /"FORGEGRAPH_API_URL": "https:\/\/forgegraf\.com"/,
+  );
+  assert.match(
+    oodaWrangler,
+    /"FORGEGRAPH_CONTEXT_APPS": "ooda,bob,bizpulse,kanbanger"/,
+  );
+  assert.match(
+    oodaDeploy,
+    /FORGEGRAPH_API_KEY: \$\{\{ secrets\.FORGEGRAPH_API_KEY \}\}/,
+  );
+  assert.match(
+    oodaDeploy,
+    /wrangler secret put FORGEGRAPH_API_KEY --name ooda-blder-bot/,
   );
 });

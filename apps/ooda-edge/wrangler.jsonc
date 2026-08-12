@@ -34,6 +34,8 @@
     "OODA_ROLLOUT_KILL_SWITCH": "false",
     "OODA_AGENT_JOB_ENABLED_PROVIDERS": "codex",
     "OODA_AGENT_JOB_ENABLED_CLASSES": "read_only_research,scratch_prototype",
+    "FORGEGRAPH_API_URL": "https://forgegraf.com",
+    "FORGEGRAPH_CONTEXT_APPS": "ooda,bob,bizpulse,kanbanger",
     "ELEVENLABS_TTS_MODEL": "eleven_flash_v2_5",
     "ELEVENLABS_TTS_OUTPUT_FORMAT": "mp3_44100_128",
   },

@@ -261,10 +261,13 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           OODA_EDGE_DEPLOY_ENABLED: ${{ secrets.OODA_EDGE_DEPLOY_ENABLED }}
+          FORGEGRAPH_API_KEY: ${{ secrets.FORGEGRAPH_API_KEY }}
         run: |
           pnpm exec vinext build
           if [ "${OODA_EDGE_DEPLOY_ENABLED}" != "true" ]; then
             echo "OODA edge deploy disabled; set OODA_EDGE_DEPLOY_ENABLED=true only after the production schema bootstrap"
             exit 0
           fi
+          test -n "${FORGEGRAPH_API_KEY}"
+          printf '%s' "${FORGEGRAPH_API_KEY}" | pnpm exec wrangler secret put FORGEGRAPH_API_KEY --name ooda-blder-bot
           pnpm exec vinext deploy
