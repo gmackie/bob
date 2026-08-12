@@ -25,7 +25,7 @@ env:
   PREFLIGHT_API: https://preflight.forgegraf.com
   WORKSPACE_ID: 00000000-0000-4000-8000-000000000001
   # ---- per-app identity ---------------------------------------------------
-  APP_ID: pfapp_bob_mobile
+  APP_ID: pfapp_bob
   APP_PACKAGE_PATH: apps/mobile-bob
   APP_EXPO_SLUG: bob
   APP_IOS_BUNDLE_ID: com.gmacko.bob.dev
@@ -79,4 +79,9 @@ jobs:
             -d "${BODY}")
           echo "${RESP}" | head -c 1200; echo
           echo "${RESP}" | grep -q '"workflow"' || { echo "::error::Preflight did not queue the build"; exit 1; }
+          QUEUED_APP_ID=$(printf '%s' "${RESP}" | jq -r '.data.workflow.appId // empty')
+          if [ "${QUEUED_APP_ID}" != "${APP_ID}" ]; then
+            echo "::error::Preflight queued app ${QUEUED_APP_ID:-<missing>}; expected ${APP_ID}"
+            exit 1
+          fi
           echo "Queued Preflight build for ${REPO}"
