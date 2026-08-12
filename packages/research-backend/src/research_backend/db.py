@@ -14,16 +14,15 @@ from collections.abc import Iterator
 from fastapi import Request
 from sqlmodel import Session, SQLModel, create_engine
 
-from research_backend.config import Settings
-
 # Ensure all SQLModel table classes are imported so metadata.create_all
 # picks them up.  The db_models package re-exports every table class.
 import research_backend.db_models as _models  # noqa: F401
+from research_backend.config import Settings
 
 
 def build_engine(settings: Settings):
     """Create a SQLAlchemy/SQLModel engine from *settings.database_url*."""
-    return create_engine(settings.database_url, echo=False)
+    return create_engine(settings.database_url, echo=False, pool_pre_ping=True)
 
 
 def init_db(engine) -> None:
