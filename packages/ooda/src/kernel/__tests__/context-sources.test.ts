@@ -325,6 +325,60 @@ describe("conversation context sources", () => {
     );
   });
 
+  it("keeps ForgeGraph list summaries when detail enrichment exceeds the source budget", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (request, init) => {
+      const url = String(request);
+      if (url.includes("/api/fg/changesets?app=ooda")) {
+        return Response.json({
+          changesets: [
+            {
+              id: "change-slow",
+              title: "Ship OODA context",
+              status: "merged",
+              createdAt: "2026-08-12T12:00:00.000Z",
+            },
+          ],
+        });
+      }
+      if (url.endsWith("/api/fg/changesets/change-slow")) {
+        return new Promise<Response>((_resolve, reject) => {
+          const abort = () =>
+            reject(init?.signal?.reason ?? new Error("detail aborted"));
+          if (init?.signal?.aborted) abort();
+          else init?.signal?.addEventListener("abort", abort, { once: true });
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    const [source] = createConfiguredContextSources(
+      {
+        forgegraph: {
+          apiUrl: "https://forge.example",
+          apiKey: "forge-key",
+          appSlugs: ["ooda"],
+        },
+      },
+      fetchMock,
+    );
+
+    const result = await collectContextCandidates([source!], {
+      query: "OODA changesets",
+      limitPerSource: 5,
+      timeoutMs: 50,
+    });
+
+    expect(result.receipts).toEqual([
+      { source: "forgegraph", status: "available", itemCount: 1 },
+    ]);
+    expect(result.candidates).toEqual([
+      expect.objectContaining({
+        sourceType: "forgegraph_changeset",
+        sourceId: "change-slow",
+        content: expect.stringContaining("Ship OODA context"),
+      }),
+    ]);
+  });
+
   it("keeps BizPulse focus work in a bounded pack when venture keywords also match", async () => {
     const fetchMock = vi.fn<typeof fetch>(async (request) => {
       const url = String(request);
