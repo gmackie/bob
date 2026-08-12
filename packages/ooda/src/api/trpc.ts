@@ -88,11 +88,25 @@ export const authedProcedure = t.procedure.use(async ({ ctx, next }) => {
     });
   }
 
-  // Primary path: a browser better-auth session cookie. Unchanged — this is
-  // still the only credential a browser client presents.
-  const session = await ctx.auth.api.getSession({
-    headers: ctx.headers,
-  });
+  // Extract the machine credential before consulting better-auth. At the edge,
+  // Hyperdrive clients are request-scoped; opening a session lookup before the
+  // API-key lookup can consume/lose that binding even though a key-only caller
+  // has no browser session to resolve. Cookie-bearing requests still consult
+  // better-auth first so browser identity keeps precedence when both
+  // credentials are present.
+  const apiKey =
+    ctx.headers.get("x-api-key")?.trim() ||
+    ctx.headers
+      .get("authorization")
+      ?.replace(/^Bearer\s+/i, "")
+      .trim() ||
+    null;
+  const hasCookie = Boolean(ctx.headers.get("cookie")?.trim());
+
+  const session =
+    !apiKey || hasCookie
+      ? await ctx.auth.api.getSession({ headers: ctx.headers })
+      : null;
 
   if (session?.user) {
     return next({
@@ -112,14 +126,6 @@ export const authedProcedure = t.procedure.use(async ({ ctx, next }) => {
   // `api_keys` table + algorithm as Bob's `ApiKeys.validateKey` (exact sha256
   // hash match, revoked + expired enforced). A missing, malformed, unknown,
   // revoked, or expired key falls through to UNAUTHORIZED below — no bypass.
-  const apiKey =
-    ctx.headers.get("x-api-key")?.trim() ||
-    ctx.headers
-      .get("authorization")
-      ?.replace(/^Bearer\s+/i, "")
-      .trim() ||
-    null;
-
   if (apiKey) {
     // `db as never` — OODA's drizzle instance is structurally compatible with
     // the validator's `PgDatabase` param, but resolves to a different copy of
@@ -132,12 +138,9 @@ export const authedProcedure = t.procedure.use(async ({ ctx, next }) => {
     // type-clashes the core `users` (uuid) table and fails the join query.
     // Identity is established by `userId`; email is best-effort (empty when the
     // join is skipped) and not used for authorization.
-    // NOTE (edge): on ooda-edge this db lookup currently fails with
-    // "Hyperdrive config not found" (pg 58000) — the apiKey query opens a db
-    // connection outside the request's Hyperdrive-bound path that better-auth's
-    // own getSession access holds. A missing/unreachable key therefore surfaces
-    // as a 500 rather than 401 at the edge; the Node runtime path is unaffected.
-    // Follow-up: route this lookup through the same connection better-auth uses.
+    // Key-only edge requests deliberately skip the unrelated better-auth
+    // lookup above, keeping this validation on the request-bound Hyperdrive
+    // client. Cookie-bearing requests preserve browser-session precedence.
     const result = await validateApiKey(
       ctx.db as never,
       apiKey,
