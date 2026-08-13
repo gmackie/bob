@@ -40,6 +40,7 @@ vi.mock("@bob/db/schema", () => ({
 }));
 
 import {
+  buildExecutionPersonaMetadata,
   buildIssueContextUpdateMessage,
   forwardIssueContextUpdate,
 } from "./taskExecutor";
@@ -75,6 +76,25 @@ describe("execution task runtime helpers", () => {
         },
       ]),
     ).toContain("projectId: project-1 -> project-2");
+  });
+
+  it("records the selected execution target without discarding persona metadata", () => {
+    expect(
+      buildExecutionPersonaMetadata({
+        personaMetadata: { model: "gpt-5.6", autonomyLevel: "full" },
+        executionTargetId: "t3-environment-1",
+      }),
+    ).toEqual({
+      model: "gpt-5.6",
+      autonomyLevel: "full",
+      executionTargetId: "t3-environment-1",
+    });
+    expect(
+      buildExecutionPersonaMetadata({
+        personaMetadata: null,
+        executionTargetId: undefined,
+      }),
+    ).toBeNull();
   });
 
   it("forwards issue context updates into the current Bob session", async () => {

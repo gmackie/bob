@@ -1002,7 +1002,11 @@ export async function workItemsTaskRunListByWorkItem(
 
 export async function workItemsTaskRunExecute(
   ctx: HandlerContext,
-  input: { workItemId: string; agentType?: string },
+  input: {
+    workItemId: string;
+    agentType?: string;
+    executionTargetId?: string;
+  },
 ) {
   const workItem = await loadAccessibleWorkItem(
     ctx.db,
@@ -1053,6 +1057,7 @@ export async function workItemsTaskRunExecute(
     },
     {
       agentType: input.agentType ?? "claude",
+      executionTargetId: input.executionTargetId,
     },
   );
 

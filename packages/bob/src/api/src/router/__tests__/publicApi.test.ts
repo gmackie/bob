@@ -1,8 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { createTRPCRouter } from "../../trpc.js";
+import type { createTRPCContext, createTRPCRouter } from "../../trpc.js";
 import type { publicApiRouter } from "../publicApi.js";
-import type { createTRPCContext } from "../../trpc.js";
 
 process.env.DATABASE_URL ??= "postgres://postgres:postgres@localhost:5432/test";
 
@@ -11,7 +10,9 @@ process.env.DATABASE_URL ??= "postgres://postgres:postgres@localhost:5432/test";
 // these handlers actually call, cast through `unknown` (not `any`) at the
 // single construction site so every caller.* call below stays fully typed.
 type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
-type TestRouter = ReturnType<typeof createTRPCRouter<{ publicApi: typeof publicApiRouter }>>;
+type TestRouter = ReturnType<
+  typeof createTRPCRouter<{ publicApi: typeof publicApiRouter }>
+>;
 
 type MockDb = ReturnType<typeof createMockDb>;
 
@@ -381,11 +382,10 @@ describe("publicApi router tenant isolation", () => {
 
   it("registerWorkspace adds the caller as an owner workspace member", async () => {
     const db = createMockDb();
-    db.query.tenantMembers.findFirst
-      .mockResolvedValueOnce({
-        tenantId: "tenant-1",
-        tenant: { id: "tenant-1" },
-      });
+    db.query.tenantMembers.findFirst.mockResolvedValueOnce({
+      tenantId: "tenant-1",
+      tenant: { id: "tenant-1" },
+    });
     db.__mock.insertReturning
       .mockResolvedValueOnce([
         {
@@ -469,6 +469,63 @@ describe("publicApi router tenant isolation", () => {
             repositoryIds: ["repo-1"],
           },
         }),
+      }),
+    );
+  });
+
+  it("persists typed T3 runtime and provider health from an environment heartbeat", async () => {
+    const db = createMockDb();
+    db.query.tenantMembers.findMany.mockResolvedValueOnce([
+      { tenantId: "tenant-1" },
+    ]);
+    db.query.workspaces.findFirst.mockResolvedValueOnce({
+      id: "77777777-7777-4777-8777-777777777777",
+      tenantId: "tenant-1",
+    });
+
+    const caller = createCaller(db);
+
+    await caller.publicApi.heartbeat({
+      workspaceId: "77777777-7777-4777-8777-777777777777",
+      runtime: {
+        kind: "t3",
+        version: "0.18.0",
+        connectionMode: "tunnel",
+      },
+      providers: [
+        {
+          type: "codex",
+          status: "ready",
+          capabilities: ["approval", "follow-up", "resume", "cancel"],
+        },
+        {
+          type: "claude",
+          status: "unauthenticated",
+          capabilities: ["approval", "cancel"],
+        },
+      ],
+    });
+
+    expect(db.__mock.updateSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentConfigs: {
+          codex: {
+            available: true,
+            status: "ready",
+            runtime: "t3",
+            runtimeVersion: "0.18.0",
+            connectionMode: "tunnel",
+            capabilities: ["approval", "follow-up", "resume", "cancel"],
+          },
+          claude: {
+            available: false,
+            status: "unauthenticated",
+            runtime: "t3",
+            runtimeVersion: "0.18.0",
+            connectionMode: "tunnel",
+            capabilities: ["approval", "cancel"],
+          },
+        },
       }),
     );
   });

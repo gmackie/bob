@@ -347,6 +347,7 @@ export const taskRunRouter = {
       z.object({
         workItemId: z.string().uuid(),
         agentType: z.string().default("claude"),
+        executionTargetId: z.string().min(1).max(200).optional(),
       }),
     )
     .mutation(({ ctx, input }) =>

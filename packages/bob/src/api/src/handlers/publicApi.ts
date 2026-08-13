@@ -1503,6 +1503,22 @@ export async function publicApiHeartbeat(
   input: {
     workspaceId: string;
     agentTypes?: string[];
+    runtime?: {
+      kind: "bob" | "t3";
+      version?: string;
+      connectionMode?: "local" | "remote" | "tunnel";
+    };
+    providers?: {
+      type: string;
+      status: "ready" | "unavailable" | "unauthenticated" | "degraded";
+      capabilities?: (
+        | "approval"
+        | "follow-up"
+        | "resume"
+        | "cancel"
+        | "structured-usage"
+      )[];
+    }[];
     forgeAvailable?: boolean;
     repos?: {
       name: string;
@@ -1528,10 +1544,38 @@ export async function publicApiHeartbeat(
     lastHeartbeat: new Date().toISOString(),
   };
 
-  if (input.agentTypes && input.agentTypes.length > 0) {
+  if (input.providers && input.providers.length > 0) {
+    const runtime = input.runtime?.kind ?? "bob";
+    updates.agentConfigs = Object.fromEntries(
+      input.providers.map((provider) => [
+        provider.type,
+        {
+          available: provider.status === "ready",
+          status: provider.status,
+          runtime,
+          ...(input.runtime?.version
+            ? { runtimeVersion: input.runtime.version }
+            : {}),
+          ...(input.runtime?.connectionMode
+            ? { connectionMode: input.runtime.connectionMode }
+            : {}),
+          capabilities: provider.capabilities ?? [],
+        },
+      ]),
+    );
+  } else if (input.agentTypes && input.agentTypes.length > 0) {
     const agentConfigs: Record<string, unknown> = {};
     for (const agent of input.agentTypes) {
-      agentConfigs[agent] = { available: true };
+      agentConfigs[agent] = {
+        available: true,
+        runtime: input.runtime?.kind ?? "bob",
+        ...(input.runtime?.version
+          ? { runtimeVersion: input.runtime.version }
+          : {}),
+        ...(input.runtime?.connectionMode
+          ? { connectionMode: input.runtime.connectionMode }
+          : {}),
+      };
     }
     updates.agentConfigs = agentConfigs;
   }
