@@ -77,3 +77,21 @@ test("OODA deploys with bounded ForgeGraph context configuration", () => {
     /wrangler secret put FORGEGRAPH_API_KEY --name ooda-blder-bot/,
   );
 });
+
+test("OODA deploys with authenticated research-vault context configuration", () => {
+  const oodaDeploy = jobSection("\n  deploy-ooda-edge:\n");
+
+  assert.match(
+    oodaWrangler,
+    /"RESEARCH_API_URL": "https:\/\/research\.gmac\.io"/,
+  );
+  assert.match(
+    oodaDeploy,
+    /RESEARCH_SERVICE_TOKEN: \$\{\{ secrets\.RESEARCH_SERVICE_TOKEN \}\}/,
+  );
+  assert.match(oodaDeploy, /test -n "\$\{RESEARCH_SERVICE_TOKEN\}"/);
+  assert.match(
+    oodaDeploy,
+    /wrangler secret put RESEARCH_SERVICE_TOKEN --name ooda-blder-bot/,
+  );
+});
