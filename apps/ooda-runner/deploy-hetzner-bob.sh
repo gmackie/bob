@@ -109,8 +109,8 @@ require_node_24() {
   node_major="${node_version#v}"
   node_major="${node_major%%.*}"
   if [[ ! "$node_major" =~ ^[0-9]+$ ]] || (( node_major < 24 )); then
-    echo "Refusing deployment: ${runtime_label} resolved ${node_version}; Node 24+ is required" >&2
-    exit 1
+    echo "Waiting for Node 24+: ${runtime_label} resolved ${node_version}" >&2
+    return 1
   fi
   echo "${runtime_label} resolved ${node_version}"
 }
@@ -125,8 +125,9 @@ for _ in {1..30}; do
   if systemctl is-active --quiet ooda-runner.service; then
     main_pid="$(systemctl show -p MainPID --value ooda-runner.service)"
     if [[ "$main_pid" =~ ^[1-9][0-9]*$ ]]; then
-      require_node_24 "active service" "/proc/${main_pid}/exe"
-      exit 0
+      if require_node_24 "active service" "/proc/${main_pid}/exe"; then
+        exit 0
+      fi
     fi
   fi
   sleep 1
