@@ -22,6 +22,28 @@ export function extractAgentResponse(fullOutput: string): string {
   const cleaned = stripAnsi(fullOutput);
   const lines = cleaned.split("\n");
 
+  // Claude's non-interactive streaming transport emits one JSON object per
+  // line and puts the canonical final answer in the terminal `result` event.
+  // Read that event before applying the legacy PTY marker heuristics; otherwise
+  // the whole protocol transcript becomes the assistant's visible message.
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const line = lines[i]!.trim();
+    if (!line.startsWith("{")) continue;
+    try {
+      const event = JSON.parse(line) as { type?: unknown; result?: unknown };
+      if (
+        event.type === "result" &&
+        typeof event.result === "string" &&
+        event.result.trim()
+      ) {
+        return event.result.trim();
+      }
+    } catch {
+      // Ordinary text (including model-authored JSON fragments) continues to
+      // the established marker/fallback parser below.
+    }
+  }
+
   // Find the last "codex" or "claude" marker — everything after it is the final answer
   let lastAgentIdx = -1;
   for (let i = lines.length - 1; i >= 0; i--) {
