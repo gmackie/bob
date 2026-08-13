@@ -5,6 +5,21 @@ import { z } from "zod";
 import { rolloutProcedure } from "../trpc";
 import { resolveBobDispatchConfig } from "./bob-config.js";
 
+// These procedures remain in the router only so the legacy thread clients can
+// fail with an actionable response while they are redirected to canonical
+// conversations. Durable Bob work must flow through proposal approval and the
+// transactional integration outbox; a rollout stage must never reactivate the
+// old direct-write lane.
+const retiredBobDirectWriteProcedure = rolloutProcedure(
+  "durable_work_delivery",
+).use(() => {
+  throw new TRPCError({
+    code: "FORBIDDEN",
+    message:
+      "Direct Bob writes are retired. Create and approve a single-delivery OODA proposal instead.",
+  });
+});
+
 const BobDispatchOutputSchema = z.object({
   sessionId: z.string(),
   workItemId: z.string(),
@@ -40,7 +55,7 @@ const BobProjectOutputSchema = z.object({
 // BOB_WORKSPACE_ID. Missing configuration produces PRECONDITION_FAILED.
 
 export const bobRouter = {
-  dispatch: rolloutProcedure("durable_work_delivery")
+  dispatch: retiredBobDirectWriteProcedure
     .meta({
       openapi: {
         method: "POST",
@@ -106,7 +121,7 @@ export const bobRouter = {
   // "Make it a project": create a Bob (linear-clone) project + seed backlog
   // tasks, and optionally scaffold a new app via create-gmacko-app as an
   // executable Bob dispatch. Same config/env as dispatch.
-  createProject: rolloutProcedure("durable_work_delivery")
+  createProject: retiredBobDirectWriteProcedure
     .meta({
       openapi: {
         method: "POST",
