@@ -177,6 +177,62 @@ function ensureRepoDir(slug) {
   _cloneFailed.add(slug);
   return false;
 }
+
+// --- Candidate gates (pure, exported for tests) ------------------------
+// These mirror the per-slug and per-issue filtering the scan loop applies.
+// They are pure so the selection rules can be regression-tested without the
+// network / filesystem / git the runner otherwise needs.
+
+// A slug is eligible to be scanned this cycle when it has a project + repo,
+// hasn't failed to clone earlier THIS process, and either exists on disk or
+// can be lazily cloned from the remote config.
+//
+// The `cloneFailed` guard is the fix for the head-of-line stall: without it,
+// a single un-clonable high-priority issue (a stale/wrong startup_repo row
+// pointing at a repo that exists nowhere — e.g. `gmackie/classcheck`) is
+// re-selected every cycle, unclaimed when the clone fails, then re-selected
+// again, starving every other startup's work forever. ensureRepoDir populates
+// _cloneFailed on a failed clone; this is the read the claim-time guard always
+// assumed existed ("the slug goes on _cloneFailed, so this process won't
+// thrash on it").
+function slugEligible(slug, { projectId, repoDir, cloneFailed, repoExists, hasRemote }) {
+  if (!projectId || !repoDir) return false;
+  if (cloneFailed.has(slug)) return false;
+  // Missing dirs are fine when the remote config can clone them at claim
+  // time; only skip when we'd have no way to materialize the repo.
+  if (!repoExists && !hasRemote) return false;
+  return true;
+}
+
+// An individual issue is claimable when it passes the bizpulse growth-marker
+// gate and the staleness gate. `defaultSlugs` is the set of hardcoded slugs.
+//
+// bizpulse project holds founder/ops work orders that are NOT for autonomous
+// execution — only genuine GTM playbook dispatches (which carry the marker
+// emitted by buildGtmPlaybookInstructions) may be claimed there. Title alone
+// is not enough: July's bulk objective work orders are also [pulse]-titled,
+// and letting an agent execute one ended with it self-grading a business
+// objective 'achieved' (GMA-385).
+//
+// STALE issues are never auto-claimed when the claim only became possible
+// today (remote-config slugs, freshly clonable repos): month-old [pulse] work
+// orders and backlog need a deliberate re-dispatch (the roadmap's ↻ refresh)
+// before an agent acts on them — GMA-385/364 both started as silent
+// stale-claims. Rules: [pulse]-titled operating work orders are fresh-only
+// EVERYWHERE; remote-only slugs are fresh-only for everything.
+function issueClaimable(slug, issue, { now, defaultSlugs }) {
+  if (
+    slug === "bizpulse" &&
+    !(issue.description || "").includes("## Agent Instructions — growth.")
+  ) {
+    return false;
+  }
+  const ageMs = issue.updatedAt ? now - Date.parse(issue.updatedAt) : Infinity;
+  const stale = ageMs > 14 * 86_400_000;
+  if (stale && issue.title.startsWith("[pulse]")) return false;
+  if (stale && !defaultSlugs.has(slug)) return false;
+  return true;
+}
 // --- end remote config -------------------------------------------------
 const TEAM_ID = process.env.LINEAR_TEAM_ID || "5027d80c-70dc-4c48-b88b-40053c03aec3";
 
@@ -674,43 +730,26 @@ async function runOnce() {
   // Collect all issues across all startups, then pick the highest priority globally
   const allCandidates = [];
 
+  const defaultSlugs = new Set(Object.keys(DEFAULT_PROJECTS));
   for (const slug of targetSlugs) {
     const projectId = projects[slug];
     const repoDir = effectiveRepoDir(slug);
-    if (!projectId || !repoDir) continue;
-    // Missing dirs are fine when the remote config can clone them at claim
-    // time; only skip when we'd have no way to materialize the repo.
-    if (!existsSync(repoDir) && !remoteEntry(slug)) continue;
+    if (
+      !slugEligible(slug, {
+        projectId,
+        repoDir,
+        cloneFailed: _cloneFailed,
+        repoExists: repoDir ? existsSync(repoDir) : false,
+        hasRemote: !!remoteEntry(slug),
+      })
+    ) {
+      continue;
+    }
 
     try {
       const issues = await getUnstartedIssues(projectId);
       for (const issue of issues) {
-        // The bizpulse project holds founder/ops work orders that are NOT
-        // for autonomous execution — only genuine GTM playbook dispatches
-        // may be claimed there. Title alone is not enough: July's bulk
-        // objective work orders are also [pulse]-titled, and letting an
-        // agent execute one ended with it self-grading a business
-        // objective 'achieved' (GMA-385). The GTM instruction marker only
-        // appears in issues built by buildGtmPlaybookInstructions.
-        if (
-          slug === "bizpulse" &&
-          !(issue.description || "").includes("## Agent Instructions — growth.")
-        ) {
-          continue;
-        }
-        // STALE issues are never auto-claimed when the claim only became
-        // possible today (remote-config slugs, freshly clonable repos):
-        // month-old [pulse] work orders and backlog need a deliberate
-        // re-dispatch (the roadmap's ↻ refresh) before an agent acts on
-        // them — GMA-385/364 both started as silent stale-claims. Rules:
-        // [pulse]-titled operating work orders: fresh-only EVERYWHERE;
-        // remote-only slugs: fresh-only for everything.
-        const ageMs = issue.updatedAt
-          ? Date.now() - Date.parse(issue.updatedAt)
-          : Infinity;
-        const stale = ageMs > 14 * 86_400_000;
-        if (stale && issue.title.startsWith("[pulse]")) continue;
-        if (stale && !(slug in DEFAULT_PROJECTS)) continue;
+        if (!issueClaimable(slug, issue, { now: Date.now(), defaultSlugs })) continue;
         if (!isClaimed(issue.id)) {
           allCandidates.push({ issue, slug, repoDir });
         }
@@ -788,7 +827,14 @@ async function main() {
   }
 }
 
-main().catch(e => {
-  console.error(`[runner] Fatal: ${e.message}`);
-  process.exit(1);
-});
+// Exported for regression tests. Only auto-run the poller when invoked
+// directly (node task-runner.js), so requiring the module in a test does not
+// start the 2-minute scan loop.
+module.exports = { slugEligible, issueClaimable };
+
+if (require.main === module) {
+  main().catch(e => {
+    console.error(`[runner] Fatal: ${e.message}`);
+    process.exit(1);
+  });
+}
