@@ -379,6 +379,63 @@ describe("conversation context sources", () => {
     ]);
   });
 
+  it("keeps completed ForgeGraph app lists when another app exceeds the source budget", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (request, init) => {
+      const url = String(request);
+      if (url.includes("/api/fg/changesets?app=ooda")) {
+        return Response.json({
+          changesets: [
+            {
+              id: "change-available",
+              title: "Preserve available app context",
+              status: "merged",
+              createdAt: "2026-08-13T00:00:00.000Z",
+            },
+          ],
+        });
+      }
+      if (url.includes("/api/fg/changesets?app=bob")) {
+        return new Promise<Response>((_resolve, reject) => {
+          const abort = () =>
+            reject(init?.signal?.reason ?? new Error("list aborted"));
+          if (init?.signal?.aborted) abort();
+          else init?.signal?.addEventListener("abort", abort, { once: true });
+        });
+      }
+      if (url.endsWith("/api/fg/changesets/change-available")) {
+        return Response.json({ id: "change-available" });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    const [source] = createConfiguredContextSources(
+      {
+        forgegraph: {
+          apiUrl: "https://forge.example",
+          apiKey: "forge-key",
+          appSlugs: ["ooda", "bob"],
+        },
+      },
+      fetchMock,
+    );
+
+    const result = await collectContextCandidates([source!], {
+      query: "OODA context",
+      limitPerSource: 5,
+      timeoutMs: 50,
+    });
+
+    expect(result.receipts).toEqual([
+      { source: "forgegraph", status: "available", itemCount: 1 },
+    ]);
+    expect(result.candidates).toEqual([
+      expect.objectContaining({
+        sourceType: "forgegraph_changeset",
+        sourceId: "change-available",
+        content: expect.stringContaining("Preserve available app context"),
+      }),
+    ]);
+  });
+
   it("keeps BizPulse focus work in a bounded pack when venture keywords also match", async () => {
     const fetchMock = vi.fn<typeof fetch>(async (request) => {
       const url = String(request);
