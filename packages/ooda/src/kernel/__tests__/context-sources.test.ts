@@ -584,6 +584,32 @@ describe("conversation context sources", () => {
     ]);
   });
 
+  it("gives the research vault enough time for embedding-backed search", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      return Response.json({ fallback: false, sources: [] });
+    });
+    const [source] = createConfiguredContextSources(
+      {
+        researchVault: {
+          apiUrl: "https://research.example",
+          serviceToken: "research-secret",
+        },
+      },
+      fetchMock,
+    );
+
+    const result = await collectContextCandidates([source!], {
+      query: "voice memory",
+      limitPerSource: 8,
+      timeoutMs: 5,
+    });
+
+    expect(result.receipts).toEqual([
+      { source: "research-vault", status: "available", itemCount: 0 },
+    ]);
+  });
+
   it("bounds research-vault queries before crossing the service boundary", async () => {
     const fetchMock = vi.fn<typeof fetch>(async (request) => {
       const url = new URL(String(request));
