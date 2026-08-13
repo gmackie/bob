@@ -262,6 +262,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           OODA_EDGE_DEPLOY_ENABLED: ${{ secrets.OODA_EDGE_DEPLOY_ENABLED }}
           FORGEGRAPH_API_KEY: ${{ secrets.FORGEGRAPH_API_KEY }}
+          RESEARCH_SERVICE_TOKEN: ${{ secrets.RESEARCH_SERVICE_TOKEN }}
         run: |
           pnpm exec vinext build
           if [ "${OODA_EDGE_DEPLOY_ENABLED}" != "true" ]; then
@@ -269,5 +270,7 @@ jobs:
             exit 0
           fi
           test -n "${FORGEGRAPH_API_KEY}"
+          test -n "${RESEARCH_SERVICE_TOKEN}"
           printf '%s' "${FORGEGRAPH_API_KEY}" | pnpm exec wrangler secret put FORGEGRAPH_API_KEY --name ooda-blder-bot
+          printf '%s' "${RESEARCH_SERVICE_TOKEN}" | pnpm exec wrangler secret put RESEARCH_SERVICE_TOKEN --name ooda-blder-bot
           pnpm exec vinext deploy
