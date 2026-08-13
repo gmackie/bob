@@ -71,4 +71,40 @@ describe("extractAgentResponse", () => {
     const result = extractAgentResponse(output);
     expect(result).toContain("Just some raw text");
   });
+
+  it("extracts the final result from Claude stream-json output", () => {
+    const output = [
+      JSON.stringify({ type: "system", subtype: "init", session_id: "session-1" }),
+      JSON.stringify({
+        type: "assistant",
+        message: {
+          content: [{ type: "text", text: '{"display":"Earlier partial","speakable":null}' }],
+        },
+      }),
+      JSON.stringify({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        result: '{"display":"Final answer","speakable":"Final answer"}',
+      }),
+    ].join("\n");
+
+    expect(extractAgentResponse(output)).toBe(
+      '{"display":"Final answer","speakable":"Final answer"}',
+    );
+  });
+
+  it("returns a Claude stream-json error instead of raw protocol output", () => {
+    const output = [
+      JSON.stringify({ type: "system", subtype: "init" }),
+      JSON.stringify({
+        type: "result",
+        subtype: "success",
+        is_error: true,
+        result: "Failed to authenticate",
+      }),
+    ].join("\n");
+
+    expect(extractAgentResponse(output)).toBe("Failed to authenticate");
+  });
 });
