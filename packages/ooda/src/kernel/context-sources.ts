@@ -32,6 +32,7 @@ export interface ContextInspectInput {
 
 export interface ConversationContextSource {
   id: string;
+  timeoutMs?: number;
   inspect(input: ContextInspectInput): Promise<ContextCandidate[]>;
 }
 
@@ -64,7 +65,7 @@ export async function collectContextCandidates(
           const error = new Error("Context source timed out");
           controller.abort(error);
           reject(error);
-        }, input.timeoutMs ?? 2_500);
+        }, source.timeoutMs ?? input.timeoutMs ?? 2_500);
       });
       try {
         const raw = await Promise.race([
@@ -302,6 +303,10 @@ function researchVaultSource(
 ): ConversationContextSource {
   return {
     id: "research-vault",
+    // Embedding-backed searches on the production sidecar normally take
+    // 2-5 seconds. Keep the tighter default for other context providers while
+    // allowing this bounded source to finish inside the host turn's 30s cap.
+    timeoutMs: 8_000,
     async inspect({ query, limitPerSource, signal }) {
       const params = new URLSearchParams({
         query: query.slice(0, RESEARCH_CONTEXT_QUERY_MAX_LENGTH),
