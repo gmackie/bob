@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AuthInstance } from "@gmacko/core/auth";
 
@@ -24,6 +24,13 @@ function caller() {
   return createCaller({ headers: new Headers(), auth, db: {} as never });
 }
 
+beforeEach(() => {
+  vi.mocked(auth.api.getSession).mockResolvedValue({
+    user: { id: "owner-bob", email: "owner@example.test" },
+    session: { id: "session-1" },
+  } as never);
+});
+
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
@@ -34,6 +41,25 @@ describe("Bob rollout gates", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("OODA_ROLLOUT_STAGE", "jobs");
     vi.stubEnv("OODA_ROLLOUT_OWNER_IDS", "owner-bob");
+    vi.stubEnv("BOB_API_URL", "https://bob.example.test");
+    vi.stubEnv("BOB_API_KEY", "configured-but-must-not-be-used");
+    vi.stubEnv("BOB_WORKSPACE_ID", "workspace-1");
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+
+    await expect(
+      caller().bob.dispatch({ threadSlug: "thread-1", title: "Do work" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      caller().bob.createProject({ threadSlug: "thread-1", name: "Project" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps legacy direct Bob writes dark during durable-work rollout", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("OODA_ROLLOUT_STAGE", "durable_work");
+    vi.stubEnv("OODA_ROLLOUT_OWNER_IDS", "owner-bob");
+    vi.stubEnv("OODA_ROLLOUT_KILL_SWITCH", "false");
     vi.stubEnv("BOB_API_URL", "https://bob.example.test");
     vi.stubEnv("BOB_API_KEY", "configured-but-must-not-be-used");
     vi.stubEnv("BOB_WORKSPACE_ID", "workspace-1");
