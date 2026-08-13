@@ -144,6 +144,26 @@ function effectiveRepoDir(slug) {
   return getRepoDir(slug);
 }
 
+// A startup present in the remote config with a Linear project but NO repoSlug
+// is a repo-optional (knowledge/ops) target — e.g. a portfolio company with no
+// code repo whose only agent work is "Refresh stale KB entries" and similar
+// targetSystem:"manual" tasks. Its issues are claimed and run in a scratch dir
+// with no clone, no branch, no commit. remoteEntry() returns null for these
+// (it requires repoSlug), so we detect them straight off the raw config.
+function isRepoOptional(slug) {
+  const r = _remoteRepos[slug];
+  return !!(r && r.projectId && !r.repoSlug);
+}
+
+// A throwaway working directory for repo-optional issues. The agent gets its
+// instructions from the issue description and does API/CLI work; the dir is
+// just a cwd it doesn't need to be a repo.
+function scratchDirFor(slug) {
+  const dir = join(STATE_DIR, "scratch", slug);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
 // Slugs whose clone failed this process: skipped until restart so a repo
 // that exists nowhere (stale startup_repo row) can't burn a scan slot
 // every cycle.
@@ -195,9 +215,14 @@ function ensureRepoDir(slug) {
 // _cloneFailed on a failed clone; this is the read the claim-time guard always
 // assumed existed ("the slug goes on _cloneFailed, so this process won't
 // thrash on it").
-function slugEligible(slug, { projectId, repoDir, cloneFailed, repoExists, hasRemote }) {
-  if (!projectId || !repoDir) return false;
+function slugEligible(slug, { projectId, repoDir, cloneFailed, repoExists, hasRemote, repoOptional }) {
+  if (!projectId) return false;
   if (cloneFailed.has(slug)) return false;
+  // Repo-optional (knowledge/ops) startups have a Linear project but no code
+  // repo; their issues run in a scratch dir with no clone, so they need neither
+  // a repoDir nor a remote to be materializable.
+  if (repoOptional) return true;
+  if (!repoDir) return false;
   // Missing dirs are fine when the remote config can clone them at claim
   // time; only skip when we'd have no way to materialize the repo.
   if (!repoExists && !hasRemote) return false;
@@ -529,6 +554,72 @@ async function runAgent(agentType, repoDir, prompt, logFile) {
 // [pulse] playbook issues (GTM research etc.) are operating work, not code
 // work: the issue body carries the full agent instructions, success is an API
 // side effect (batch POSTed, run transitioned), and no commits are expected.
+// Repo-optional lane: knowledge/ops tasks (e.g. "Refresh stale KB entries")
+// on startups with no code repo. Runs the agent in a scratch dir with the
+// issue description as instructions — no clone, no branch, no commit. Success
+// is the agent printing "TASK_RESULT: ok". Mirrors processPlaybookIssue's
+// no-git flow but with a generic operating prompt instead of the GTM one.
+async function processRepoOptionalIssue(issue, slug, workDir) {
+  const logFile = join(LOG_DIR, `${issue.identifier}-${Date.now()}.txt`);
+
+  console.log(`[runner] Processing repo-optional issue ${issue.identifier}: ${issue.title}`);
+
+  if (DRY_RUN) {
+    console.log(`[runner] DRY RUN -- would run repo-optional agent here`);
+    return "dry_run";
+  }
+
+  const { id: bobRunId, agentType } = await bobStartRun(issue, slug);
+
+  try {
+    await updateIssueState(issue.id, "started");
+    await addIssueComment(issue.id, `🤖 Bob agent claiming this issue (repo-optional).\n\nRunner: ${agentType}`);
+  } catch (e) {
+    console.log(`[runner] Failed to update Linear: ${e.message}`);
+  }
+
+  const prompt = `You are an AI agent executing an operating task for the ${slug} startup in the BizPulse portfolio.
+
+This is a knowledge/operations task with NO code repository. You are running in a scratch working directory (${workDir}); do NOT expect a checked-out repo, and do NOT create git branches or commits. The issue description below contains your full instructions. Environment you can rely on:
+- PULSE_SERVICE_SECRET is set (Authorization: Bearer for BizPulse service endpoints)
+- PULSE_API_KEY and PULSE_API_URL are set (the \`pulse\` CLI is installed and authenticates with them)
+
+## Issue
+**${issue.title}**
+
+${issue.description || "No description provided."}
+
+## Ground rules
+- Do the work described using the pulse CLI / BizPulse API. Verify each call succeeded from its response before moving on.
+- Do NOT modify or create any git repository.
+- End your final message with exactly one line: "TASK_RESULT: ok" if every required step succeeded, or "TASK_RESULT: failed — <short reason>" otherwise.`;
+
+  console.log(`[runner] Starting repo-optional agent...`);
+  const result = await runAgent(agentType, workDir, prompt, logFile);
+  console.log(`[runner] Agent exited with code ${result.exitCode}`);
+  await bobPushLog(bobRunId, result.output);
+  try { writeFileSync(logFile, result.output); } catch {}
+
+  const succeeded = result.exitCode === 0 && /TASK_RESULT:\s*ok/i.test(result.output);
+  const tail = result.output.length > 1500 ? result.output.slice(-1500) : result.output;
+
+  if (succeeded) {
+    try {
+      await addIssueComment(issue.id, `✅ Bob agent completed this task.\n\n\`\`\`\n${tail}\n\`\`\``);
+      await updateIssueState(issue.id, "completed");
+    } catch {}
+    await bobFinishRun(bobRunId, "completed", { exitCode: result.exitCode });
+    return "completed";
+  }
+
+  try {
+    await addIssueComment(issue.id, `⚠️ Bob agent did not report success on this task.\n\n\`\`\`\n${tail}\n\`\`\`\nLog: ${logFile}`);
+    await updateIssueState(issue.id, "unstarted");
+  } catch {}
+  await bobFinishRun(bobRunId, "failed", { exitCode: result.exitCode, reason: "no_success_marker" });
+  return "no_success";
+}
+
 async function processPlaybookIssue(issue, slug, repoDir) {
   const logFile = join(LOG_DIR, `${issue.identifier}-${Date.now()}.txt`);
 
@@ -733,6 +824,7 @@ async function runOnce() {
   const defaultSlugs = new Set(Object.keys(DEFAULT_PROJECTS));
   for (const slug of targetSlugs) {
     const projectId = projects[slug];
+    const repoOptional = isRepoOptional(slug);
     const repoDir = effectiveRepoDir(slug);
     if (
       !slugEligible(slug, {
@@ -741,6 +833,7 @@ async function runOnce() {
         cloneFailed: _cloneFailed,
         repoExists: repoDir ? existsSync(repoDir) : false,
         hasRemote: !!remoteEntry(slug),
+        repoOptional,
       })
     ) {
       continue;
@@ -751,7 +844,7 @@ async function runOnce() {
       for (const issue of issues) {
         if (!issueClaimable(slug, issue, { now: Date.now(), defaultSlugs })) continue;
         if (!isClaimed(issue.id)) {
-          allCandidates.push({ issue, slug, repoDir });
+          allCandidates.push({ issue, slug, repoDir, repoOptional });
         }
       }
     } catch (e) {
@@ -775,24 +868,45 @@ async function runOnce() {
     return nb - na;
   });
 
-  const { issue, slug, repoDir } = allCandidates[0];
+  const { issue, slug, repoDir, repoOptional } = allCandidates[0];
   console.log(`[runner] Found: ${issue.identifier} (P${issue.priority}) - ${issue.title} [${slug}]`);
   console.log(`[runner] ${allCandidates.length} total unclaimed issues across ${targetSlugs.length} startups`);
 
   markClaimed(issue.id, slug);
 
-  if (!ensureRepoDir(slug)) {
-    // Repo unavailable is an infrastructure failure, not a verdict on the
-    // issue: UNCLAIM it so a future process (after the repo exists or the
-    // config is fixed) can pick it up. The slug goes on _cloneFailed, so
-    // this process won't thrash on it.
-    console.log(`[runner] ${issue.identifier} unclaimed (repo unavailable for ${slug})`);
-    unclaim(issue.id);
-    return true;
+  let workDir;
+  if (repoOptional) {
+    // Knowledge/ops task on a startup with no repo: run in a scratch dir, no
+    // clone. This is what makes "Refresh stale KB entries" and other
+    // targetSystem:"manual" audit issues claimable instead of failing on a
+    // repo they never needed.
+    workDir = scratchDirFor(slug);
+    console.log(`[runner] ${issue.identifier} is repo-optional (${slug} has no repo) — scratch dir ${workDir}`);
+  } else {
+    if (!ensureRepoDir(slug)) {
+      // Repo unavailable is an infrastructure failure, not a verdict on the
+      // issue: UNCLAIM it so a future process (after the repo exists or the
+      // config is fixed) can pick it up. The slug goes on _cloneFailed, so
+      // this process won't thrash on it.
+      console.log(`[runner] ${issue.identifier} unclaimed (repo unavailable for ${slug})`);
+      unclaim(issue.id);
+      return true;
+    }
+    workDir = repoDir;
   }
 
   try {
-    const status = await processIssue(issue, slug, repoDir);
+    let status;
+    if (repoOptional) {
+      // A [pulse]-titled playbook that happens to land on a repo-optional slug
+      // still runs through the playbook lane (also no-git); everything else is
+      // a generic operating task.
+      status = issue.title.startsWith("[pulse]")
+        ? await processPlaybookIssue(issue, slug, workDir)
+        : await processRepoOptionalIssue(issue, slug, workDir);
+    } else {
+      status = await processIssue(issue, slug, workDir);
+    }
     markDone(issue.id, status);
     console.log(`[runner] ${issue.identifier} -> ${status}`);
     return true;

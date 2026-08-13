@@ -60,6 +60,29 @@ test("slugEligible: no local dir and no remote means unmaterializable, skip", ()
   );
 });
 
+test("slugEligible: a repo-optional slug is claimable with no repo at all", () => {
+  // Knowledge/ops startup: has a Linear project but no repoSlug -> runs in a
+  // scratch dir, so no repoDir and no remote are required.
+  assert.equal(
+    slugEligible("classcheck", {
+      projectId: "proj-1",
+      repoDir: null,
+      cloneFailed: new Set(),
+      repoExists: false,
+      hasRemote: false,
+      repoOptional: true,
+    }),
+    true,
+  );
+});
+
+test("slugEligible: a repo-optional slug still needs a project", () => {
+  assert.equal(
+    slugEligible("x", { projectId: undefined, cloneFailed: new Set(), repoOptional: true }),
+    false,
+  );
+});
+
 test("poison-pill: one un-clonable slug does not starve the rest of the queue", () => {
   // The scan sees two startups. classcheck's repo does not exist, so after the
   // first cycle its slug is on _cloneFailed. On the next cycle the loop must
