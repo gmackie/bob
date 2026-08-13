@@ -504,17 +504,46 @@ function forgeGraphSource(
     async inspect({ query, limitPerSource, signal, timeoutMs }) {
       const startedAt = Date.now();
       const headers = { Authorization: `Bearer ${config.apiKey}` };
-      const payloads = await Promise.all(
-        config.appSlugs.slice(0, 12).map(async (appSlug) => ({
-          appSlug,
-          payload: await readJson(
-            await fetcher(
-              `${trimUrl(config.apiUrl)}/api/fg/changesets?app=${encodeURIComponent(appSlug)}`,
-              { headers, signal },
-            ),
-          ),
-        })),
+      const sourceBudgetMs = timeoutMs ?? 2_500;
+      const returnReserveMs = Math.min(
+        250,
+        Math.max(10, Math.floor(sourceBudgetMs * 0.1)),
       );
+      const listController = new AbortController();
+      const abortListsFromParent = () => listController.abort(signal?.reason);
+      if (signal?.aborted) abortListsFromParent();
+      else
+        signal?.addEventListener("abort", abortListsFromParent, {
+          once: true,
+        });
+      const listTimeout = setTimeout(
+        () =>
+          listController.abort(new Error("ForgeGraph list budget expired")),
+        Math.max(1, sourceBudgetMs - returnReserveMs),
+      );
+      let payloads: Array<{ appSlug: string; payload: unknown }>;
+      try {
+        const settledLists = await Promise.allSettled(
+          config.appSlugs.slice(0, 12).map(async (appSlug) => ({
+            appSlug,
+            payload: await readJson(
+              await fetcher(
+                `${trimUrl(config.apiUrl)}/api/fg/changesets?app=${encodeURIComponent(appSlug)}`,
+                { headers, signal: listController.signal },
+              ),
+            ),
+          })),
+        );
+        payloads = settledLists.flatMap((result) =>
+          result.status === "fulfilled" ? [result.value] : [],
+        );
+      } finally {
+        clearTimeout(listTimeout);
+        signal?.removeEventListener("abort", abortListsFromParent);
+      }
+      if (payloads.length === 0) {
+        throw new Error("ForgeGraph context lists were unavailable");
+      }
       const summaries = payloads.flatMap(({ appSlug, payload }) => {
         const rows = object(payload)?.changesets;
         if (!Array.isArray(rows))
@@ -607,11 +636,6 @@ function forgeGraphSource(
       // is best-effort and must finish before collectContextCandidates' outer
       // deadline; otherwise one slow ForgeGraph detail endpoint would discard
       // every list summary. Reserve 10% (up to 250ms) for validation/return.
-      const sourceBudgetMs = timeoutMs ?? 2_500;
-      const returnReserveMs = Math.min(
-        250,
-        Math.max(10, Math.floor(sourceBudgetMs * 0.1)),
-      );
       const detailBudgetMs =
         sourceBudgetMs - (Date.now() - startedAt) - returnReserveMs;
       if (detailBudgetMs <= 0) {
