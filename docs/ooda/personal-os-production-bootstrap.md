@@ -97,7 +97,9 @@ This is a separate just-in-time host mutation. Do not fold it into an
 unattended code deploy.
 
 After the reviewed branch has merged and the exact master SHA is green, promote
-the trusted runner without touching its live environment or systemd unit:
+the trusted runner without touching its live environment. The deployment
+installs the checked-in `20-node24.conf` systemd drop-in so both the build and
+the service select the host's supported Nix Node 24 runtime:
 
 ```sh
 apps/ooda-runner/deploy-hetzner-bob.sh \
@@ -105,10 +107,12 @@ apps/ooda-runner/deploy-hetzner-bob.sh \
   --confirm="DEPLOY-OODA-RUNNER:$MERGED_MASTER_SHA"
 ```
 
-The script rejects non-master SHAs, tracked live changes, and non-fast-forward
-updates. Untracked operator environment/backup files are preserved. It installs
-from the frozen lockfile and runs runner typecheck, tests, and build on the host
-before restarting the service.
+The script rejects non-master SHAs, tracked live changes, non-fast-forward
+updates, and Node runtimes older than 24. Untracked operator environment/backup
+files are preserved. It installs from the frozen lockfile and runs runner
+typecheck, tests, and build on the host before restarting the service, then
+checks the executable behind the active systemd process and the exact deployed
+Git SHA.
 
 The OODA edge has a separate master-branch deployment job. It always builds but
 will not deploy unless the Forgejo repository secret

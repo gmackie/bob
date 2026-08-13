@@ -75,6 +75,9 @@ jobs:
       - name: Validate deploy install scope
         run: node --test scripts/verify-ci-deploy-install-scope.test.mjs
 
+      - name: Validate OODA runner Node runtime
+        run: node --test scripts/verify-ooda-runner-node-runtime.test.mjs
+
       - run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile
 
       - name: Typecheck
