@@ -29,7 +29,7 @@ test("the Hetzner runner deploy refuses unsupported build and service runtimes",
   );
   assert.match(
     deployScript,
-    /require_node_24 "active service" "\/proc\/\$\{main_pid\}\/exe"/,
+    /if require_node_24 "active service" "\/proc\/\$\{main_pid\}\/exe"; then\s+exit 0\s+fi/,
   );
 });
 
