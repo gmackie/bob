@@ -13,6 +13,7 @@ import {
   planDraftDependencies,
   planDrafts,
   planningSessionMessages,
+  planTaskItems,
   projects,
   repositories,
   runLifecycleEvents,
@@ -21,12 +22,15 @@ import {
   workItemDependencies,
   workItems,
   workspaceMembers,
+  worktreePlans,
+  worktrees,
 } from "@bob/db/schema";
 import type { WorkItemKind } from "@bob/db/schema";
 
 import { resolvePlanningProvider } from "../services/integrations/planningProvider.js";
 
 import type { HandlerContext } from "./context.js";
+import type { GateSpec } from "./advanceChecklist-core";
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -804,6 +808,10 @@ export async function planSessionCreateDraft(
     kind: WorkItemKind;
     priority: string;
     sortOrder: number;
+    // Per-item definition-of-done the planner may author; carried into
+    // planTaskItems when committed as a gated checklist.
+    gate?: GateSpec | null;
+    acceptanceCriteria?: string | null;
   },
 ) {
   await loadOwnedPlanningSession(ctx.db, ctx.userId, input.sessionId);
@@ -819,6 +827,8 @@ export async function planSessionCreateDraft(
       kind: input.kind,
       priority: input.priority,
       sortOrder: input.sortOrder,
+      gate: input.gate ?? null,
+      acceptanceCriteria: input.acceptanceCriteria ?? null,
     })
     .returning();
 
@@ -853,6 +863,8 @@ export async function planSessionUpdateDraft(
     kind?: WorkItemKind;
     priority?: string;
     sortOrder?: number;
+    gate?: GateSpec | null;
+    acceptanceCriteria?: string | null;
   },
 ) {
   const { id, ...updates } = input;
@@ -1244,4 +1256,96 @@ export async function planSessionCommitPlanLocal(
     workItems: result.created,
     dependencies: result.depCount,
   };
+}
+
+/**
+ * Commit a planning session's drafts as a GATED CHECKLIST — the bridge from
+ * planning (planDrafts) to the live execution model (worktreePlans +
+ * planTaskItems) that the advanceChecklist driver walks. Unlike
+ * planSessionCommitPlanLocal (which produces workItems), this creates an ACTIVE
+ * worktreePlan + ordered planTaskItems carrying each draft's gate +
+ * acceptanceCriteria, so the driver picks the plan up on its next tick and walks
+ * it one gated item at a time.
+ *
+ * The worktree is provided by the caller (the RPC resolves the repo's worktree /
+ * the planning session's worktree); auto-provisioning a fresh worktree per plan
+ * is a thin follow-on.
+ */
+export async function planSessionCommitAsChecklist(
+  ctx: HandlerContext,
+  input: {
+    sessionId: string;
+    worktreeId: string;
+    title?: string;
+    goal?: string;
+  },
+) {
+  const drafts = await ctx.db.query.planDrafts.findMany({
+    where: and(
+      eq(planDrafts.sessionId, input.sessionId),
+      eq(planDrafts.status, "draft"),
+    ),
+    orderBy: [planDrafts.sortOrder, planDrafts.createdAt],
+  });
+  if (drafts.length === 0) {
+    return { planId: null, items: 0 };
+  }
+
+  const wt = await ctx.db.query.worktrees.findFirst({
+    where: and(
+      eq(worktrees.id, input.worktreeId),
+      eq(worktrees.userId, ctx.userId),
+    ),
+    columns: { id: true },
+  });
+  if (!wt) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Worktree not found" });
+  }
+
+  return ctx.db.transaction(async (tx) => {
+    const [plan] = await tx
+      .insert(worktreePlans)
+      .values({
+        worktreeId: input.worktreeId,
+        userId: ctx.userId,
+        filePath: "checklist.md",
+        title: input.title ?? "Checklist",
+        goal: input.goal,
+        // The advanceChecklist driver only walks status="active" plans.
+        status: "active",
+        lastSyncedAt: new Date().toISOString(),
+      })
+      .returning({ id: worktreePlans.id });
+    if (!plan) {
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Failed to create checklist plan",
+      });
+    }
+
+    const itemValues = drafts.map((draft, i) => ({
+      planId: plan.id,
+      taskKey: `T${i + 1}`,
+      content: draft.description
+        ? `${draft.title}\n\n${draft.description}`
+        : draft.title,
+      status: "pending" as const,
+      sortOrder: i,
+      gate: draft.gate,
+      acceptanceCriteria: draft.acceptanceCriteria,
+    }));
+    await tx.insert(planTaskItems).values(itemValues);
+
+    await tx
+      .update(planDrafts)
+      .set({ status: "committed" })
+      .where(
+        and(
+          eq(planDrafts.sessionId, input.sessionId),
+          eq(planDrafts.status, "draft"),
+        ),
+      );
+
+    return { planId: plan.id, items: itemValues.length };
+  });
 }

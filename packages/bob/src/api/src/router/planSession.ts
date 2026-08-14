@@ -22,7 +22,19 @@ import {
   planSessionRemoveDependency,
   planSessionCommitPlan,
   planSessionCommitPlanLocal,
+  planSessionCommitAsChecklist,
 } from "../handlers/planSession";
+
+// Per-draft gate (definition-of-done) the planner may author. Mirrors
+// gateSpecSchema in advanceChecklist-core; kept local to avoid a runtime import
+// of the driver into the router bundle.
+const gateInputSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("test"), command: z.string().min(1) }),
+  z.object({ kind: z.literal("build"), command: z.string().min(1).optional() }),
+  z.object({ kind: z.literal("ci") }),
+  z.object({ kind: z.literal("reviewer"), criteria: z.string().optional() }),
+  z.object({ kind: z.literal("human"), prompt: z.string().optional() }),
+]);
 
 const planningLaunchContextSchema = z.object({
   intent: z.enum(["shape", "breakdown"]),
@@ -230,6 +242,8 @@ export const planSessionRouter = {
           .enum(["no_priority", "urgent", "high", "medium", "low"])
           .default("no_priority"),
         sortOrder: z.number().int().default(0),
+        gate: gateInputSchema.nullish(),
+        acceptanceCriteria: z.string().nullish(),
       }),
     )
     .mutation(({ ctx, input }) =>
@@ -247,6 +261,8 @@ export const planSessionRouter = {
           .enum(["no_priority", "urgent", "high", "medium", "low"])
           .optional(),
         sortOrder: z.number().int().optional(),
+        gate: gateInputSchema.nullish(),
+        acceptanceCriteria: z.string().nullish(),
       }),
     )
     .mutation(({ ctx, input }) =>
@@ -298,5 +314,23 @@ export const planSessionRouter = {
     )
     .mutation(({ ctx, input }) =>
       planSessionCommitPlanLocal({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
+
+  // Bridge: commit the session's drafts as an ACTIVE gated checklist
+  // (worktreePlan + planTaskItems) that the advanceChecklist driver walks.
+  commitAsChecklist: protectedProcedure
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        worktreeId: z.string().uuid(),
+        title: z.string().optional(),
+        goal: z.string().optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      planSessionCommitAsChecklist(
+        { db: ctx.db, userId: ctx.session.user.id },
+        input,
+      ),
     ),
 } satisfies TRPCRouterRecord;

@@ -570,6 +570,12 @@ export const planDrafts = pgTable(
     sortOrder: t.integer().notNull().default(0),
     status: t.varchar({ length: 20 }).notNull().default("draft"),
     // status: "draft" | "committed" | "discarded"
+    // Per-draft gate (definition-of-done) + acceptance criteria the planner
+    // agent may author; carried into planTaskItems.gate/acceptanceCriteria when
+    // the plan is committed as a gated checklist (validated by gateSpecSchema at
+    // the API boundary). Null = the checklist's default gate.
+    gate: t.jsonb(),
+    acceptanceCriteria: t.text(),
     createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
     updatedAt: t
       .timestamp({ mode: "string", withTimezone: true })
