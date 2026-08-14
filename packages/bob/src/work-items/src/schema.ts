@@ -737,6 +737,10 @@ export const planTaskItems = pgTable("plan_task_items", (t) => ({
   // Reported outcome of this item's gate for the current attempt, set by the
   // execution side once the agent + gate have run: "pass" | "fail" | null.
   gateOutcome: t.varchar({ length: 10 }),
+  // For reviewer-kind gates: the review session dispatched to judge this item's
+  // work. The driver reads that session's terminal outcome (finished-ok → pass,
+  // failed → fail) to resolve gateOutcome. Reset alongside gateOutcome on repair.
+  gateReviewSessionId: t.uuid(),
   priority: t.varchar({ length: 10 }).notNull().default("medium"),
   parentTaskKey: t.varchar({ length: 20 }),
   sortOrder: t.integer().notNull().default(0),
