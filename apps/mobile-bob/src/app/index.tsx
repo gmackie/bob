@@ -1,9 +1,9 @@
-import { Redirect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
+import { Redirect } from "expo-router";
 
 import { Button, Card, Screen } from "~/components/ui";
-import { getTabletDashboardHref } from "~/features/tablet/navigation";
+import { getAuthenticatedHomeHref } from "~/features/chat/navigation";
 import { ONBOARDING_SLIDES } from "~/features/planning/onboarding-copy";
 import { hasSeenOnboarding, setOnboardingComplete } from "~/lib/storage";
 import { authClient } from "~/utils/auth";
@@ -38,7 +38,7 @@ function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
       <View className="flex-row justify-end">
         {currentSlide < ONBOARDING_SLIDES.length - 1 ? (
           <Pressable onPress={handleSkip} className="active:opacity-70">
-            <Text className="text-base text-muted">Skip</Text>
+            <Text className="text-muted text-base">Skip</Text>
           </Pressable>
         ) : null}
       </View>
@@ -56,9 +56,7 @@ function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
           {slide?.bullets.map((bullet) => (
             <View key={bullet} className="flex-row items-start">
               <View className="bg-primary mt-2 mr-3 h-1.5 w-1.5 rounded-full" />
-              <Text className="text-muted flex-1 text-base">
-                {bullet}
-              </Text>
+              <Text className="text-muted flex-1 text-base">{bullet}</Text>
             </View>
           ))}
         </View>
@@ -87,22 +85,25 @@ function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
 function SignInScreen() {
   const [signingIn, setSigningIn] = useState<string | null>(null);
 
-  const handleSignIn = useCallback(async (provider: "apple" | "google" | "github") => {
-    if (signingIn) return;
-    setSigningIn(provider);
-    try {
-      const WebBrowser = await import("expo-web-browser");
-      await dismissExistingAuthBrowser(WebBrowser.dismissBrowser);
-      await authClient.signIn.social({
-        provider,
-        callbackURL: getMobileOAuthCallbackPath(),
-      });
-    } catch (error: unknown) {
-      console.error("Sign in error:", error);
-    } finally {
-      setSigningIn(null);
-    }
-  }, [signingIn]);
+  const handleSignIn = useCallback(
+    async (provider: "apple" | "google" | "github") => {
+      if (signingIn) return;
+      setSigningIn(provider);
+      try {
+        const WebBrowser = await import("expo-web-browser");
+        await dismissExistingAuthBrowser(WebBrowser.dismissBrowser);
+        await authClient.signIn.social({
+          provider,
+          callbackURL: getMobileOAuthCallbackPath(),
+        });
+      } catch (error: unknown) {
+        console.error("Sign in error:", error);
+      } finally {
+        setSigningIn(null);
+      }
+    },
+    [signingIn],
+  );
 
   return (
     <Screen className="pt-16 pb-10">
@@ -252,5 +253,11 @@ export default function Index() {
     return <SignInScreen />;
   }
 
-  return <Redirect href={getTabletDashboardHref() as never} />;
+  return (
+    <Redirect
+      href={getAuthenticatedHomeHref({
+        isTablet: Platform.OS === "ios" && Platform.isPad,
+      })}
+    />
+  );
 }

@@ -43,6 +43,8 @@
   },
   "devDependencies": {
     "@gmacko/emulate": "^0.5.3",
+    "@oxlint/plugins": "1.78.0",
+    "oxlint": "1.78.0",
     "tsx": "catalog:",
     "turbo": "^2.8.0",
     "typescript": "^5.9.0"

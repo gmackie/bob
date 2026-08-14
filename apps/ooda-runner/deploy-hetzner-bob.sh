@@ -47,6 +47,22 @@ deploy_dir="$1"
 deploy_branch="$2"
 deploy_sha="$3"
 
+require_node_24() {
+  local runtime_label="$1"
+  local node_binary="$2"
+  local node_version
+  local node_major
+
+  node_version="$("$node_binary" --version)"
+  node_major="${node_version#v}"
+  node_major="${node_major%%.*}"
+  if [[ ! "$node_major" =~ ^[0-9]+$ ]] || (( node_major < 24 )); then
+    echo "Refusing deployment: ${runtime_label} resolved ${node_version}; Node 24+ is required" >&2
+    exit 1
+  fi
+  echo "${runtime_label} resolved ${node_version}"
+}
+
 cd "$deploy_dir"
 
 if [[ -n "$(git status --short --untracked-files=no)" ]]; then
@@ -70,14 +86,57 @@ fi
 
 git merge --ff-only "$deploy_sha"
 
-export PATH="/home/bob/.local/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
+export PATH="/nix/var/nix/profiles/default/bin:/home/bob/.local/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
+require_node_24 "deploy toolchain" "node"
 pnpm install --frozen-lockfile --filter @gmacko/ooda-runner...
 pnpm --filter @gmacko/ooda-runner typecheck
 pnpm --filter @gmacko/ooda-runner test
 pnpm --filter @gmacko/ooda-runner build
 REMOTE_SCRIPT
 
-ssh "$DEPLOY_HOST" sudo systemctl restart ooda-runner.service
+ssh "$DEPLOY_HOST" sudo bash -s -- "$DEPLOY_DIR" <<'REMOTE_SERVICE'
+set -euo pipefail
+
+deploy_dir="$1"
+
+require_node_24() {
+  local runtime_label="$1"
+  local node_binary="$2"
+  local node_version
+  local node_major
+
+  node_version="$("$node_binary" --version)"
+  node_major="${node_version#v}"
+  node_major="${node_major%%.*}"
+  if [[ ! "$node_major" =~ ^[0-9]+$ ]] || (( node_major < 24 )); then
+    echo "Waiting for Node 24+: ${runtime_label} resolved ${node_version}" >&2
+    return 1
+  fi
+  echo "${runtime_label} resolved ${node_version}"
+}
+
+install -D -m 0644 \
+  "${deploy_dir}/apps/ooda-runner/ops/ooda-runner-node24.conf" \
+  /etc/systemd/system/ooda-runner.service.d/20-node24.conf
+systemctl daemon-reload
+systemctl restart ooda-runner.service
+
+for _ in {1..30}; do
+  if systemctl is-active --quiet ooda-runner.service; then
+    main_pid="$(systemctl show -p MainPID --value ooda-runner.service)"
+    if [[ "$main_pid" =~ ^[1-9][0-9]*$ ]]; then
+      if require_node_24 "active service" "/proc/${main_pid}/exe"; then
+        exit 0
+      fi
+    fi
+  fi
+  sleep 1
+done
+
+echo "OODA runner did not start with Node 24+" >&2
+journalctl -u ooda-runner.service -n 100 --no-pager >&2
+exit 1
+REMOTE_SERVICE
 
 for _ in {1..30}; do
   if ssh "$DEPLOY_HOST" systemctl is-active --quiet ooda-runner.service; then

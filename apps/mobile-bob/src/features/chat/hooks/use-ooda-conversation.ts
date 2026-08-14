@@ -15,12 +15,15 @@ import { env } from "~/config/env";
 import { authClient } from "~/utils/auth";
 import { getMobileAuthHeaders } from "~/utils/auth-headers";
 import { isDevAuthBypassEnabled } from "~/utils/dev-auth-bypass";
+import {
+  cacheOodaOfflineShell,
+  hydrateOodaLocalStartup,
+  OODA_PINNED_CONVERSATIONS_STORAGE_KEY,
+  rememberOodaConversation,
+} from "../ooda-offline-shell";
 import { OodaConversationOutbox } from "../ooda-outbox";
 import { streamConversationEvents } from "../ooda-sse";
 import { buildOodaTimeline } from "../ooda-timeline";
-
-const LAST_CONVERSATION_KEY = "ooda:last-conversation:v1";
-const PINNED_CONVERSATIONS_KEY = "ooda:pinned-conversations:v1";
 
 function mergeEvents(
   current: ConversationEventV1[],
@@ -33,18 +36,6 @@ function mergeEvents(
     const b = BigInt(right.sequence);
     return a < b ? -1 : a > b ? 1 : 0;
   });
-}
-
-function parsePinned(raw: string | null): string[] {
-  if (!raw) return [];
-  try {
-    const value: unknown = JSON.parse(raw);
-    return Array.isArray(value)
-      ? value.filter((item): item is string => typeof item === "string")
-      : [];
-  } catch {
-    return [];
-  }
 }
 
 export function useOodaConversation() {
@@ -91,6 +82,7 @@ export function useOodaConversation() {
   const [error, setError] = useState<string | null>(null);
   const [rollout, setRollout] = useState<OodaRolloutPolicyV1 | null>(null);
   const selectedConversationRef = useRef<string | null>(null);
+  const rolloutRef = useRef<OodaRolloutPolicyV1 | null>(null);
 
   const loadAllEvents = useCallback(
     async (conversationId: string) => {
@@ -132,7 +124,7 @@ export function useOodaConversation() {
       setSelectedConversationId(conversationId);
       setEvents([]);
       setError(null);
-      await AsyncStorage.setItem(LAST_CONVERSATION_KEY, conversationId);
+      await rememberOodaConversation(AsyncStorage, conversationId);
       try {
         const [detail, nextEvents] = await Promise.all([
           client.conversations.retrieve(conversationId),
@@ -142,6 +134,15 @@ export function useOodaConversation() {
         setBranches(detail.branches);
         setSelectedBranchId(detail.conversation.activeBranchId);
         setEvents(nextEvents);
+        const currentRollout = rolloutRef.current;
+        if (currentRollout) {
+          await cacheOodaOfflineShell(AsyncStorage, {
+            conversation: detail.conversation,
+            branches: detail.branches,
+            rollout: currentRollout,
+            cachedAt: new Date().toISOString(),
+          });
+        }
       } catch (caught) {
         if (selectedConversationRef.current === conversationId) {
           setError(caught instanceof Error ? caught.message : String(caught));
@@ -179,18 +180,33 @@ export function useOodaConversation() {
 
   useEffect(() => {
     const lifecycle = { cancelled: false };
+    const isCancelled = () => lifecycle.cancelled;
     void (async () => {
+      let hasOfflineShell = false;
       try {
-        const [lastConversationId, rawPins, , rolloutPolicy] =
-          await Promise.all([
-            AsyncStorage.getItem(LAST_CONVERSATION_KEY),
-            AsyncStorage.getItem(PINNED_CONVERSATIONS_KEY),
-            outbox.hydrate(),
-            client.rollout.status(),
-          ]);
-        if (lifecycle.cancelled) return;
+        const local = await hydrateOodaLocalStartup(AsyncStorage, () =>
+          outbox.hydrate(),
+        );
+        if (isCancelled()) return;
+        setPinnedIds(local.pinnedIds);
+        if (local.shell) {
+          hasOfflineShell = true;
+          rolloutRef.current = local.shell.rollout;
+          setRollout(local.shell.rollout);
+          setConversations([local.shell.conversation]);
+          setBranches(local.shell.branches);
+          selectedConversationRef.current = local.shell.conversation.id;
+          setSelectedConversationId(local.shell.conversation.id);
+          setSelectedBranchId(local.shell.conversation.activeBranchId);
+          // Render the durable local shell immediately. Live rollout and
+          // transcript refresh continue below without blocking offline use.
+          setIsLoading(false);
+        }
+
+        const rolloutPolicy = await client.rollout.status();
+        if (isCancelled()) return;
+        rolloutRef.current = rolloutPolicy;
         setRollout(rolloutPolicy);
-        setPinnedIds(parsePinned(rawPins));
         if (!rolloutPolicy.capabilities.conversation_read) {
           setError(
             rolloutPolicy.reasons[0] ??
@@ -200,14 +216,14 @@ export function useOodaConversation() {
         }
         const available = await refreshConversations();
         const initial =
-          available.find((item) => item.id === lastConversationId) ??
+          available.find((item) => item.id === local.lastConversationId) ??
           available[0];
         if (initial) await openConversation(initial.id);
       } catch (caught) {
-        if (!lifecycle.cancelled)
+        if (!isCancelled() && !hasOfflineShell)
           setError(caught instanceof Error ? caught.message : String(caught));
       } finally {
-        if (!lifecycle.cancelled) setIsLoading(false);
+        if (!isCancelled()) setIsLoading(false);
       }
     })();
     return () => {
@@ -356,7 +372,10 @@ export function useOodaConversation() {
       const next = current.includes(conversationId)
         ? current.filter((id) => id !== conversationId)
         : [...current, conversationId];
-      void AsyncStorage.setItem(PINNED_CONVERSATIONS_KEY, JSON.stringify(next));
+      void AsyncStorage.setItem(
+        OODA_PINNED_CONVERSATIONS_STORAGE_KEY,
+        JSON.stringify(next),
+      );
       return next;
     });
   }, []);
